@@ -61,6 +61,7 @@ template<class Authority> inline bool CurrentPhysicalWeaponCycleTarget(const Phy
 // Mechanism claim. It never writes ammunition, invokes native code or decides
 // that an unsupported weapon is admitted.
 template<class Authority> class PhysicalWeaponCycleT {
+    template<class> friend class PhysicalWeaponCycleT;
 public:
     using WeaponCycleLease=Authority;
     using WeaponCycleRelease=WeaponCycleReleaseT<Authority>;
@@ -78,6 +79,23 @@ public:
         profile_=profile;identity_=lease;target_.reset();submitted_=false;adoptSupport_=weapon_cycle_detail::InitialHeldAdoption(lease);
         previousGrip_=true;lastInput_=0;return true;
     }
+    std::optional<WeaponCycleReloadPause> PauseForReload(const WeaponCycleInput& input,HandInteraction& hands)noexcept {
+        if(submitted_||awaitingOutcome_)return {};
+        const auto pause=policy_.PauseForReload(input);if(!pause)return {};
+        Drop(input.source,hands);adoptSupport_=false;previousGrip_=false;lastInput_=input.source.sequence;return pause;
+    }
+    template<class Previous> bool CanResumeAfterReload(const PhysicalWeaponCycleT<Previous>& previous,
+        const WeaponCycleLease& lease,const HandInteractionSample& neutral)const noexcept {
+        return !mechanism_&&!awaitingOutcome_&&!previous.mechanism_&&!previous.awaitingOutcome_&&
+            policy_.CanResumeAfterReload(previous.policy_,lease,neutral);
+    }
+    template<class Previous> bool ResumeAfterReload(PhysicalWeaponCycleT<Previous>& previous,
+        const WeaponCycleLease& lease,const HandInteractionSample& neutral)noexcept {
+        if(!CanResumeAfterReload(previous,lease,neutral)||!policy_.ResumeAfterReload(previous.policy_,lease,neutral))return false;
+        profile_=previous.profile_;identity_=lease;target_.reset();submitted_=false;adoptSupport_=false;
+        previousGrip_=false;lastInput_=neutral.sequence;return true;
+    }
+    const auto& ReloadPause()const noexcept{return policy_.ReloadPause();}
     bool ObserveReady(const WeaponCycleReady& ready,std::int64_t now)noexcept {
         if(!submitted_||!policy_.Complete(ready,now))return false;
         target_.reset();awaitingOutcome_=false;return true;
@@ -140,6 +158,7 @@ public:
     PhysicalWeaponCycleResult Update(const PhysicalWeaponCycleSample& sample,HandInteraction& hands)noexcept {
         using namespace weapon_cycle_detail;const auto& s=sample.source;
         auto phase=policy_.Phase();
+        if(phase==WeaponCyclePhase::ReloadPaused){Drop(s,hands);return Output(policy_.PollNative(s.nowNs),sample,hands);}
         // An inactive mechanism owns no custody. Other consumers can already
         // have advanced the arbiter clock with this same controller packet.
         // Do not replay this caller's earlier processing time over their shell,
@@ -212,7 +231,7 @@ public:
         if(phase==WeaponCyclePhase::AwaitingGrip&&!mechanism_){
             const bool contactOkay=sample.contact.key==identity_.mechanism&&sample.contact.inputSequence==original.sequence&&
                 sample.contact.deadlineNs>s.nowNs&&sample.contact.deadlineNs<=original.deadlineNs&&sample.contact.eligible&&
-                feed_mechanism_detail::Pose(sample.rawContact)&&Distance(sample.rawContact,profile_.closedContact)<=profile_.contactRadius;
+                feed_mechanism_detail::Pose(sample.rawContact)&&Distance(sample.rawContact,policy_.AcquisitionContact())<=profile_.contactRadius;
             const auto old=hands.Current(profile_.hands.mechanism);
             // Support may retain an earlier still-live render packet while
             // Gather has advanced. TransferFrom checks new contact evidence

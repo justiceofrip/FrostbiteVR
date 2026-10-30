@@ -4,6 +4,7 @@ using namespace interaction;
 void Bc2BoltPlayerCustody::Invalidate()noexcept {
     if(debt_&&references_)recoveryReferences_=references_;
     references_.reset();candidate_.reset();lastContact_.reset();wristMapping_.reset();mappedCustody_.reset();stableAt_=0;lastRaw_=0;previous_={};returnPress_=0;neutral_=0;rightArmed_=rightHeld_=false;
+    mappedAttachment_.reset();preparedWrists_.reset();preparedInput_={};reloadPress_.reset();
     if(debt_)retirementRequired_=true;
 }
 void Bc2BoltPlayerCustody::Capture(const Bc2BoltPlayerInput& in)noexcept {
@@ -80,10 +81,13 @@ std::optional<Bc2PhysicalBoltSample> Bc2BoltPlayerCustody::Prepare(const Bc2Bolt
         references_=recoveryReferences_;retirementRequired_=false;custody_=BoltCustodyPhase::Manipulating;
         submitted_=neutral_=returnPress_=0;
     }
-    const auto wrists=missing&&established?MapBoltCustodyWrists(*wristMapping_,*controls,s,in.body):
+    const bool late=established&&(missing||(in.contact.raw.input.owner==s.owner&&
+        in.contact.raw.input.sequence<=s.sequence&&in.contact.raw.input.observedNs<=s.observedNs&&
+        s.nowNs>=in.contact.raw.input.deadlineNs));
+    const auto wrists=late?MapBoltCustodyWrists(*wristMapping_,*controls,s,in.body):
         MapBoltTrackedWrists(in.contact,*controls,s,in.body);
     if(!wrists)return {};
-    if(!(missing&&established)){
+    if(!late){
         lastContact_=in.contact;
         wristMapping_=Bc2BoltWristMapping{in.contact.raw.nativeOwner,in.contact.raw.input.owner,
             in.contact.raw.rigFingerprint,in.contact.wristToGrip,in.contact.units};
@@ -98,6 +102,9 @@ std::optional<Bc2PhysicalBoltSample> Bc2BoltPlayerCustody::Prepare(const Bc2Bolt
     }
     if(submitted_&&fresh&&s.sequence>submitted_&&s.released[1]){neutral_=s.sequence;returnPress_=0;}
     if(neutral_&&press&&s.sequence>neutral_)returnPress_=s.sequence;
+    if(custody_!=BoltCustodyPhase::ReloadPaused||s.released[1]||
+       (reloadPress_&&!weapon_cycle_detail::Window(reloadPress_->observedNs,reloadPress_->deadlineNs,s.nowNs)))reloadPress_.reset();
+    if(custody_==BoltCustodyPhase::ReloadPaused&&press)reloadPress_=s;
     Bc2PhysicalBoltSample out;out.nativeOwner=in.owner;out.input=s;out.item=in.item;out.asset=in.asset;out.mesh=in.mesh;
     out.raw=in.contact.raw;out.wristWorld=*wrists;out.grip=rightHeld_;
     if(established)out.controllerCustody=mappedCustody_;
@@ -105,16 +112,33 @@ std::optional<Bc2PhysicalBoltSample> Bc2BoltPlayerCustody::Prepare(const Bc2Bolt
         in.native->held->owner==s.owner&&in.native->held->item==in.item&&
         in.native->held->mechanism==HandInteractionKey{calibration_->profile.id,in.item.generation}&&
         weapon_cycle_detail::Lease(*in.native->held,s.nowNs);
-    if(references_&&!retirementRequired_&&!(missing&&established)){
-        const bool enter=release&&held&&custody_!=BoltCustodyPhase::Manipulating;
+    if(references_&&!retirementRequired_){
+        const bool paused=custody_==BoltCustodyPhase::ReloadPaused||custody_==BoltCustodyPhase::Reloading||
+            custody_==BoltCustodyPhase::ReloadResumePending;
+        const bool enter=release&&held&&custody_!=BoltCustodyPhase::Manipulating&&!paused;
         const bool back=custody_==BoltCustodyPhase::Manipulating&&returnPress_&&!s.released[1]&&
             in.contact.raw.input.sequence>=returnPress_&&!in.contact.raw.input.released[1];
-        if(enter||back){
+        if(!late&&(enter||back)){
             out.custodyTransfer=BuildBoltCustodyTransfer(s,in.item,in.contact,*references_,hands,enter,back,intent,enter);
             if(out.custodyTransfer&&enter){
                 const auto weapon=ReprojectBoltCustodyWeapon(in.contact,*wrists,InteractionHand::Left);
                 if(weapon)out.weaponWorld=*weapon;else out.custodyTransfer.reset();
             }
+        }
+        if(custody_==BoltCustodyPhase::Manipulating&&mechanismPhase_==WeaponCyclePhase::Forward&&release)
+            out.reloadIntent=BoltReloadCustodyIntent::Pause;
+        if(!late&&custody_==BoltCustodyPhase::ReloadPaused&&reloadPress_&&!s.released[1]&&
+           in.contact.raw.input.sequence>=reloadPress_->sequence&&!in.contact.raw.input.released[1]){
+            out.reloadIntent=BoltReloadCustodyIntent::Pause;
+            out.custodyTransfer=BuildBoltReloadCustodyTransfer(s,in.item,in.contact,*references_,hands,*out.reloadIntent,intent);
+        }
+        if(custody_==BoltCustodyPhase::Reloading&&release){
+            out.reloadIntent=BoltReloadCustodyIntent::Resume;
+            if(established&&mappedAttachment_)
+                out.custodyTransfer=BuildBoltMappedReloadResume(s,in.item,*mappedCustody_,
+                    Multiply(*mappedAttachment_,(*wrists)[weapon_cycle_detail::HandIndex(mappedCustody_->hand)]),
+                    *wrists,*references_,hands,intent);
+            else if(!late)out.custodyTransfer=BuildBoltReloadCustodyTransfer(s,in.item,in.contact,*references_,hands,*out.reloadIntent,intent);
         }
     }
     for(unsigned hand=0;hand<2;++hand){
@@ -124,6 +148,7 @@ std::optional<Bc2PhysicalBoltSample> Bc2BoltPlayerCustody::Prepare(const Bc2Bolt
     if(out.custodyTransfer){const auto& request=out.custodyTransfer->nextGun.request;
         out.gunContacts[weapon_cycle_detail::HandIndex(request.hand)]={request.contact.key,s.sequence,s.deadlineNs,true};}
     if(fresh)previous_=s;
+    preparedInput_=s;preparedWrists_=wrists;
     if(retirementRequired_)out.cancel=true;
     return out;
 }
@@ -133,14 +158,26 @@ void Bc2BoltPlayerCustody::Observe(const Bc2PhysicalBoltResult& result)noexcept 
     if(result.tracking.weapon&&result.tracking.gun&&wristMapping_&&
        result.tracking.nativeOwner==owner_&&result.tracking.input.owner==wristMapping_->owner&&
        CurrentBoltCustodyWeaponTarget(*result.tracking.weapon,result.tracking.input,*result.tracking.gun))
-        mappedCustody_=result.tracking.gun->token;
+    {
+        const auto token=result.tracking.gun->token;
+        if(!mappedCustody_||*mappedCustody_!=token)mappedAttachment_.reset();
+        mappedCustody_=token;
+        if(preparedWrists_&&preparedInput_.owner==result.tracking.input.owner&&
+           preparedInput_.sequence==result.tracking.input.sequence&&preparedInput_.observedNs==result.tracking.input.observedNs){
+            const auto inverse=InverseRigid((*preparedWrists_)[weapon_cycle_detail::HandIndex(token.hand)]);
+            if(inverse)mappedAttachment_=Multiply(result.tracking.weapon->weaponInWorld,*inverse);
+        }
+    }
     if(result.tracking.held)debtLease_=result.tracking.held;
     if(result.tracking.gun&&result.tracking.gun->token.hand==InteractionHand::Left&&
        result.tracking.gun->token.kind==HandClaimKind::GunHold)leftCustody_=result.tracking.gun->token;
     if(result.tracking.held||result.tracking.recovery||result.settled||result.recovered||
-       result.tracking.custody==BoltCustodyPhase::Manipulating)debt_=true;
+       result.tracking.custody==BoltCustodyPhase::Manipulating||result.tracking.custody==BoltCustodyPhase::ReloadPaused||
+       result.tracking.custody==BoltCustodyPhase::Reloading||result.tracking.custody==BoltCustodyPhase::ReloadResumePending)debt_=true;
     if(result.tracking.enabled){
         custody_=result.tracking.custody;
+        if(custody_!=BoltCustodyPhase::ReloadPaused)reloadPress_.reset();
+        mechanismPhase_=result.tracking.mechanismPhase;
         if(result.tracking.mechanismPhase==WeaponCyclePhase::AwaitingNative&&!submitted_)
             submitted_=result.tracking.input.sequence;
     }

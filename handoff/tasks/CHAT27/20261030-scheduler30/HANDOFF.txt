@@ -1,0 +1,13 @@
+DoneY: bounded static scheduling investigation complete; InitializationAssignmentJoinY; SchedulerInstanceJoinN; SourcefixN; selected-view authority unproved.
+Supplied HEAD6c42c3fd6d39715d47a07584061697b2be8a678e; EXE SHA2563911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258 verified file-only; no Git queried.
+Owned HANDOFF.txt, cinematic_scheduler.py, proof01.json; scratch reports/coordinator-20261030-cinematic-scheduler30; proof SHA25675b8ad96767dc70e2da7705fb7e2749df65875f5922b9efe7000b4c912dfb397.
+Owner27 proof431f6a4cf5abbc28cae8029ad6bc3a506baeafeac55d46d00a22cd8e9f47b37c and manager18 proof4ff54dcefc7901926869f376322a023b438a8f1ab1f3477afdd421579936a432 reused with all referenced decode hashes/bytes verified.
+Eight NEW complete functions:435c60,16e3c0,188af0,16f580,3ff060,429b00,141230,141380;10027 range bytes,9943 instruction bytes,84 explicitly jumped inline-data bytes;327 internal branch targets valid; zero partial/adjacent spill.
+Raw435cc1 is now admitted:435c60 invokes3b5a00 with M=[C+88], arguments(arg1,arg1,arg4);16eb6c supplies C=[P+34]. No original-queue or downstream evaluator re-decodes.
+Outer16fa98 supplies P=[Q+b4];16fa20/16fa26 install G=3ff060()=RVA11713d8 using188af0, verified KERNEL32!TlsSetValue with inherited getter188b10's same TLS index. Setter success is not checked.
+Initializer429b00 stores its manager in C+88 and429cd7 copies that exact pointer to G+14. Preparation141230 initializes that C and retains it at P+68;141380 publishes the same C to P+34, the scheduler's source.
+Inherited companion+80 registration remains [188b10()+14]->3b1800 and retains the interface. The assignment/scheduler relation is conditional on the same C/P generation and context retaining that assignment.
+LIMIT: publication releases old nonnull P+34 via virtual slot0, then invokes3ff110(new C). Its context effects are outside this cap; creation-time G+14 equality does not prove manager identity after replacement or at registration/update.
+ONE next edge: admitted14140a ->3ff110 with ECX=new C=[P+34]; admit complete helper and establish its exact G+14/C+88 reconciliation after old-object release.
+No native thread/object/registration/route capture, selected view, composition, HUD, entry/skip/exit, gameplay-return or continuous-head-rotation claim. Integration/install held; transform29 functions/descendants untouched.
+Initial proof assembly rejected pin16fa73, corrected to saved instruction16fa74 without further decoding. All final byte/hash/call/import/coverage checks pass. No production writes, Git, builds/tests, process/game, input/XR, install or subagents. Frozen and retired.

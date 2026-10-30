@@ -1,0 +1,60 @@
+{
+  "schema": "fvr.bc2.shotgun_equipment_validation.v1",
+  "level": "deterministic_source_tests",
+  "completed_configurations": 25,
+  "independent_geometry_groups": 4,
+  "test_command": "py -3.12 -B -m unittest discover -s tests -p test_bc2_shotgun_equipment.py -v",
+  "tests_passed": 8,
+  "tests_failed": 0,
+  "header_regeneration_byte_exact": true,
+  "native_admission_changed": false,
+  "compiled_by_this_agent": false,
+  "game_checked": false,
+  "headset_checked": false,
+  "files": {
+    "profiles/weapons43/ShotgunEquipment.generated.h": {
+      "sha256": "0797406c4e818c6f197c02953223dec0cd5ee3748863032df133f5950260e36e",
+      "bytes": 325625
+    },
+    "tools/bc2_shotgun_equipment.py": {
+      "sha256": "24be287a17bbb900edb86211182ff593ec15dfcef52006dd349d15a91d48518c",
+      "bytes": 21209
+    },
+    "tests/test_bc2_shotgun_equipment.py": {
+      "sha256": "41f733c01d5921a6b759e748032982da406faff13c4386ee7f7c13366f8ce830",
+      "bytes": 5954
+    },
+    "src/games/bc2/Bc2PhysicalPump.h": {
+      "sha256": "53255f406c4444377ae42d7756a621f0c0acc01f12ea063ccb928d1519a82009",
+      "bytes": 9135
+    },
+    "src/games/bc2/Bc2PhysicalPump.cpp": {
+      "sha256": "0c3f817728853b5848f5eb3f87960f2563c4f50e09fbc74fd591dee507ed475b",
+      "bytes": 37841
+    },
+    "handoff/tasks/WEAPONS/20261030-shotgun44/sample_source.py": {
+      "sha256": "efcb777f44a3dbbbd0de7b2982dbccb10340442018ca0d52a6d7152532e478b8",
+      "bytes": 5738
+    },
+    "handoff/tasks/WEAPONS/20261030-shotgun44/samples.json": {
+      "sha256": "32b2f9c2677fe39d451d30f08ea75e030dec3518362ba4f080e6cf96c917c9a5",
+      "bytes": 4982973
+    },
+    "handoff/tasks/WEAPONS/20261030-shotgun44/equipment.json": {
+      "sha256": "bf7925cb045700dcc50928dbdc4a48d55645ea0845e7321375c90ca1efe842c0",
+      "bytes": 276371
+    },
+    "handoff/tasks/WEAPONS/20261030-shotgun44/storage.json": {
+      "sha256": "5e0476aae7e8beac3e74795c2d680035fccba98447e0d8236ba886806cce3a5a",
+      "bytes": 543
+    },
+    "handoff/tasks/WEAPONS/20261030-shotgun44/storage-pass.json": {
+      "sha256": "8ea1aefbb90a6022589989f398bda08d46b433809aec6fd7e700b559b4012376",
+      "bytes": 2743
+    },
+    "handoff/tasks/WEAPONS/20261030-shotgun44/HANDOFF.txt": {
+      "sha256": "c3b9e67137c705ee8f19b5319c0434be2e326e017ad7c9b8641d134a52527b2b",
+      "bytes": 4306
+    }
+  }
+}

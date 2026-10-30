@@ -1,0 +1,33 @@
+BC2 VR work13 — validated offline evidence batch; integration/install held
+Base:08300e6d53575b39598c67e602ac2e2d3bd2af63. Unaffected work12 checks reused.
+All one-shot agents retired; all source ownership returned to root.
+User continued after PC crash; offline-only and integration hold remain.
+
+BUG017-06 fire_evidence13 DoneY: bounded late-weapon ServerShoot summaries.
+Existing detailed64 prefix/read cap retained;16 observed-identity cohorts retain
+later callbacks, original input metadata and latest/worst spans/gaps with omissions.
+No new native reads/hooks/writes, trigger inference or fire-policy change.
+Gap witnesses include unknown user pauses; no cadence, shot or hit acknowledgement.
+Independent fire_review13 found no actionable issue in frozen source.
+Root Muzzle suite:8 groups pass x86/x64. Combined Gameplay normal-feature x86 syntax passes.
+Results: reports/coordinator-20261029-work13/{muzzle-x86-check01,muzzle-x64-check01,gameplay-syntax01}.
+No unchanged suites or shared builds repeated; full normal builds await integration.
+
+BUG017-02-04 cinematic_binding13 DoneY: exact static reflected camera preparation.
+Seven classes/31 fields verified; script and13KiB proof retained beside task handoff.
+No verified live player/view -> active cinematic owner relationship; no observer enabled.
+Root verified proof/script/reader hashes. Gameplay fingerprint is historical: its
+new firing-observation changes leave the cited Resolve owner path unchanged.
+No repeated executable/archive extraction; authored fields do not establish runtime selection.
+
+Crash recovery: header/Gameplay survived; pending test patch was absent and old
+host tool sessions/cell were lost. Agent confirmed stale cell before applying only
+missing tests/final QPC/report fixes. Recovery receipt retained; no duplicate patch.
+Root retained the same coordinator lease/worktree/branch throughout recovery.
+
+No native/headset session or performance/fire/cutscene repair is claimed.
+Prior staged C4/grip/sight fixes and diagnostics remain on the coordinator branch.
+Remaining cards need their recorded native/asset/headset inputs; excluded/reserved IDs untouched.
+Next authorized integration: combine latest canonical, normal x86/x64 builds,
+then required bounded native/headset tests and install only when gates permit.
+No canonical merge, push, profile change or installation in this batch.

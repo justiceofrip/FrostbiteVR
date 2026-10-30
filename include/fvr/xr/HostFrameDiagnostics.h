@@ -119,6 +119,14 @@ struct HostFrameDiagnostics {
     std::array<HostFrameObservation,Capacity> rows{};
     std::array<std::uint64_t,unsigned(HostStage::Count)> maxStageNs{};
     std::array<HostStageAggregate,unsigned(HostStage::Count)> stageAggregates{};
+    // Keep a bounded summary of renderable non-menu frames while the user is
+    // present and focused. Runtime-loss/idle tail frames can overwrite the ring
+    // and dominate the unfiltered aggregates. This scope is not proof of native
+    // gameplay, GPU execution time or physical headset presentation.
+    std::uint64_t focusedRenderFrames=0,focusedRenderWorldFrames=0,focusedRenderMaxFrameNs=0;
+    std::array<std::uint64_t,unsigned(HostStage::Count)> focusedRenderMaxStageNs{};
+    std::array<HostStageAggregate,unsigned(HostStage::Count)> focusedRenderStageAggregates{};
+    HostFrameObservation worstFocusedRenderFrame{};
     std::array<std::uint64_t,16> noWorldReasonFrames{};
     std::uint64_t frames=0,noWorldFrames=0,zeroLayerFrames=0,menuOnlyFrames=0,failedFrames=0;
     std::uint64_t inputAttempts=0,inputSuccesses=0,inputFailures=0,inputUnknown=0;
@@ -204,11 +212,19 @@ struct HostFrameDiagnostics {
             (copyObserved&&(f.copyResult!=previousCopyResult||f.copyError!=previousCopyError));
         const auto elapsed=f.endedNs>=f.startedNs?std::uint64_t(f.endedNs-f.startedNs):0;
         maxFrameNs=(std::max)(maxFrameNs,elapsed);maxGapBeforeNs=(std::max)(maxGapBeforeNs,std::uint64_t(f.gapBeforeNs));
+        const bool focusedRender=f.focused&&f.present&&f.shouldRender&&!f.menu;
+        const bool retainFocused=focusedRender&&(!focusedRenderFrames||elapsed>focusedRenderMaxFrameNs);
+        if(focusedRender){++focusedRenderFrames;if(f.worldLayer)++focusedRenderWorldFrames;
+            focusedRenderMaxFrameNs=(std::max)(focusedRenderMaxFrameNs,elapsed);}
         bool slow=elapsed>=SlowFrameNs||std::uint64_t(f.gapBeforeNs)>=SlowFrameNs;
         for(unsigned i=0;i<f.stageNs.size();++i){maxStageNs[i]=(std::max)(maxStageNs[i],f.stageNs[i]);
+            if(focusedRender){focusedRenderMaxStageNs[i]=(std::max)(focusedRenderMaxStageNs[i],f.stageNs[i]);
+                if(f.stageNs[i]||(f.stageObservedMask&(1u<<i)))
+                    focusedRenderStageAggregates[i].Observe(f.stageNs[i],(f.stageSaturatedMask&(1u<<i))!=0);}
             if(f.stageNs[i]||(f.stageObservedMask&(1u<<i)))
                 stageAggregates[i].Observe(f.stageNs[i],(f.stageSaturatedMask&(1u<<i))!=0);
             if(f.stageNs[i]>=SlowStageNs)slow=true;else f.stageNs[i]=0;}
+        if(retainFocused)worstFocusedRenderFrame=f;
         if(!firstInputSuccessGapNs&&f.inputAttempted&&f.inputKnown&&f.inputSucceeded&&
            f.priorInputSuccessGeneration&&f.priorInputSuccessReturnedNs>0&&
            f.inputGeneration==f.lastInputSuccessGeneration&&f.inputReturnedNs==f.lastInputSuccessReturnedNs&&
@@ -260,13 +276,16 @@ struct HostFrameDiagnostics {
         out<<"],\"max_stage_ns\":[";for(unsigned i=0;i<maxStageNs.size();++i){if(i)out<<',';out<<maxStageNs[i];}
         out<<"],\"stage_aggregate_kind\":\"per_observed_frame_elapsed_sum\",\"stage_histogram_upper_ns\":[";
         for(unsigned i=0;i<HostStageHistogramUpperNs.size();++i){if(i)out<<',';out<<HostStageHistogramUpperNs[i];}
-        out<<"],\"stage_histogram_last_bucket\":\"above_last_upper_limit\",\"stage_aggregates\":[";
-        for(unsigned i=0;i<stageAggregates.size();++i){if(i)out<<',';const auto& aggregate=stageAggregates[i];
-            out<<"{\"frames\":"<<aggregate.frames<<",\"total_ns\":"<<aggregate.totalNs
-               <<",\"saturated\":"<<(aggregate.saturated?"true":"false")<<",\"histogram\":[";
-            for(unsigned bucket=0;bucket<aggregate.histogram.size();++bucket){if(bucket)out<<',';out<<aggregate.histogram[bucket];}
-            out<<"]}";}
-        out<<"],\"rows\":[";
+        out<<"],\"stage_histogram_last_bucket\":\"above_last_upper_limit\",\"stage_aggregates\":";
+        WriteStageAggregates(out,stageAggregates);
+        out<<",\"focused_render\":{\"selection\":\"focused && present && should_render && !menu\""
+           <<",\"frames\":"<<focusedRenderFrames<<",\"world_frames\":"<<focusedRenderWorldFrames
+           <<",\"max_frame_ns\":"<<focusedRenderMaxFrameNs<<",\"max_stage_ns\":[";
+        for(unsigned i=0;i<focusedRenderMaxStageNs.size();++i){if(i)out<<',';out<<focusedRenderMaxStageNs[i];}
+        out<<"],\"stage_aggregates\":";WriteStageAggregates(out,focusedRenderStageAggregates);
+        out<<",\"worst_frame\":";
+        if(focusedRenderFrames)WriteFrame(out,worstFocusedRenderFrame);else out<<"null";
+        out<<"},\"rows\":[";
         for(unsigned i=0;i<count;++i){if(i)out<<',';WriteFrame(out,Row(i));}
         out<<"],\"first_rejected_frame\":";
         if(firstRejectedFrame.pairRejected)WriteFrame(out,firstRejectedFrame);else out<<"null";
@@ -274,6 +293,16 @@ struct HostFrameDiagnostics {
            <<",\"first_input_success_gap\":";
         if(firstInputSuccessGapNs)WriteFrame(out,firstInputSuccessGap);else out<<"null";
         out<<'}';
+    }
+    static void WriteStageAggregates(std::ostream& out,
+        const std::array<HostStageAggregate,unsigned(HostStage::Count)>& aggregates){
+        out<<'[';
+        for(unsigned i=0;i<aggregates.size();++i){if(i)out<<',';const auto& aggregate=aggregates[i];
+            out<<"{\"frames\":"<<aggregate.frames<<",\"total_ns\":"<<aggregate.totalNs
+               <<",\"saturated\":"<<(aggregate.saturated?"true":"false")<<",\"histogram\":[";
+            for(unsigned bucket=0;bucket<aggregate.histogram.size();++bucket){if(bucket)out<<',';out<<aggregate.histogram[bucket];}
+            out<<"]}";}
+        out<<']';
     }
     static void WriteCopy(std::ostream& out,const HostCopyObservation& f){
             out<<"\"copy_submitted\":"<<f.copySubmitted<<",\"copy_pending\":"<<f.copyPending

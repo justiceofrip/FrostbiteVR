@@ -1,0 +1,263 @@
+{
+  "schema": "fvr.bc2.body_ammo_assets",
+  "version": 1,
+  "profiles": [
+    {
+      "asset": "MP412",
+      "archive": "Dist/win32/async/weapon/mec_hg_mp412rex-00.fbrb",
+      "archive_index_sha256": "acda9b6d001d6343ca433cc8038e12468f5852d3a441fc861386975673fb325c",
+      "mesh": "Objects/Weapons/Handheld/MEC_hg_MP412rex/MEC_hg_MP412rex_Mesh",
+      "mesh_sha256": "719d45565f4db0fe8d1152f8ce10c9030b51205d93938510e97346903f99d4f3",
+      "lod_sha256": "018f35b8f5523251f269d1390eb7a20ddc865c2b8393537e6b784e7a4a35beed",
+      "part": "jntWpn_13",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpn_13_Ammo",
+          "count": 1260,
+          "stride": 64,
+          "palette_size": 1,
+          "part_palette_index": 0,
+          "position": "Float3",
+          "vertex_skin_hash": "92aef109c2b92f7b",
+          "position_hash": "3d1fe0d936ec4b47",
+          "part_triangles": 420
+        }
+      ]
+    },
+    {
+      "asset": "MP412",
+      "archive": "Dist/win32/async/weapon/mec_hg_mp412rex-00.fbrb",
+      "archive_index_sha256": "acda9b6d001d6343ca433cc8038e12468f5852d3a441fc861386975673fb325c",
+      "mesh": "Objects/Weapons/Handheld/MEC_hg_MP412rex/MEC_hg_MP412rex_Mesh",
+      "mesh_sha256": "719d45565f4db0fe8d1152f8ce10c9030b51205d93938510e97346903f99d4f3",
+      "lod_sha256": "018f35b8f5523251f269d1390eb7a20ddc865c2b8393537e6b784e7a4a35beed",
+      "part": "jntWpnwpnJnt_14",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpn_1_BrushedMetal",
+          "count": 3348,
+          "stride": 64,
+          "palette_size": 2,
+          "part_palette_index": 1,
+          "position": "Float3",
+          "vertex_skin_hash": "a56acefd653f57de",
+          "position_hash": "3d8bae35df69468a",
+          "part_triangles": 302
+        },
+        {
+          "section": "jntWpn_3_FlatMetal",
+          "count": 4470,
+          "stride": 64,
+          "palette_size": 5,
+          "part_palette_index": 4,
+          "position": "Float3",
+          "vertex_skin_hash": "23237df573346bb0",
+          "position_hash": "97a738b28cc7e980",
+          "part_triangles": 52
+        }
+      ]
+    },
+    {
+      "asset": "Garand",
+      "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+      "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965",
+      "mesh": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Mesh",
+      "mesh_sha256": "b41fe39886444763ab02e562e2fe429d4289461871a0f1ab1c913d56322b190c",
+      "lod_sha256": "6cbb612e03b33c3e9ce9acd10ecce129be56bb17677936931c0a9a7431c53258",
+      "part": "jntWpn_12",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpn_1_M1Garand_Main",
+          "count": 6015,
+          "stride": 48,
+          "palette_size": 4,
+          "part_palette_index": 1,
+          "position": "Float3",
+          "vertex_skin_hash": "eae1582767130c1f",
+          "position_hash": "f3a419b3181270e0",
+          "part_triangles": 290
+        }
+      ]
+    },
+    {
+      "asset": "Garand",
+      "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+      "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965",
+      "mesh": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Mesh",
+      "mesh_sha256": "b41fe39886444763ab02e562e2fe429d4289461871a0f1ab1c913d56322b190c",
+      "lod_sha256": "6cbb612e03b33c3e9ce9acd10ecce129be56bb17677936931c0a9a7431c53258",
+      "part": "jntWpn_13",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpn_1_M1Garand_Main",
+          "count": 6015,
+          "stride": 48,
+          "palette_size": 4,
+          "part_palette_index": 3,
+          "position": "Float3",
+          "vertex_skin_hash": "eae1582767130c1f",
+          "position_hash": "f3a419b3181270e0",
+          "part_triangles": 488
+        }
+      ]
+    },
+    {
+      "asset": "Garand",
+      "archive": "Dist/win32/levels/sp_01/level-00.fbrb",
+      "archive_index_sha256": "9693feb53337f1a83c49d725eab25d146e91469394c3b93e7bf62214ecc8a44f",
+      "mesh": "Objects/Weapons/Handheld/Beach/Jap_Type5/Jap_Type5_Mesh",
+      "mesh_sha256": "959d6b9ffdd542616c0fa1e2df389eae11aec4223ed0e72d3e157133b03dbe3b",
+      "lod_sha256": "3a28d8d0b0b64571ecaffc28278c98a6eaa66af4c71d39425f9743df24c2452f",
+      "part": "jntWpn_12",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpn_1_Jap_Type5",
+          "count": 14244,
+          "stride": 48,
+          "palette_size": 7,
+          "part_palette_index": 2,
+          "position": "Float3",
+          "vertex_skin_hash": "127e22c3bc06b863",
+          "position_hash": "9a9e8c2b5d41cd7f",
+          "part_triangles": 290
+        }
+      ]
+    },
+    {
+      "asset": "Garand",
+      "archive": "Dist/win32/levels/sp_01/level-00.fbrb",
+      "archive_index_sha256": "9693feb53337f1a83c49d725eab25d146e91469394c3b93e7bf62214ecc8a44f",
+      "mesh": "Objects/Weapons/Handheld/Beach/Jap_Type5/Jap_Type5_Mesh",
+      "mesh_sha256": "959d6b9ffdd542616c0fa1e2df389eae11aec4223ed0e72d3e157133b03dbe3b",
+      "lod_sha256": "3a28d8d0b0b64571ecaffc28278c98a6eaa66af4c71d39425f9743df24c2452f",
+      "part": "jntWpn_13",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpn_1_Jap_Type5",
+          "count": 14244,
+          "stride": 48,
+          "palette_size": 7,
+          "part_palette_index": 6,
+          "position": "Float3",
+          "vertex_skin_hash": "127e22c3bc06b863",
+          "position_hash": "9a9e8c2b5d41cd7f",
+          "part_triangles": 488
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1590 @@
+{
+  "schema": "fvr.bc2.magazine_descriptor_jobs",
+  "schema_version": 1,
+  "runtime_enabled": false,
+  "registry_change": false,
+  "existing_baselines": [],
+  "descriptors": [
+    {
+      "key": "bc2:magazine-descriptor:f0ba77c5dac946388c9b5ee4fbe2a390e67ef76dc137e810e67ca024f68349e3",
+      "identity": {
+        "assetName": "S20K",
+        "assetPath": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Assault_FRAG",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Assault_FRAG.dbx",
+          "sha256": "ddcbc54c5caa89654ac3709613b7011e4444952c187343a7384686e6396f4829",
+          "guid": "4b7a97a0-ad3b-4eb4-b761-88d72fe68654"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_FRAG_Firing.dbx",
+          "sha256": "9b8e791b3c1d6d366144dadd18d021f8565059cd9c5b676c10747854528e83ad",
+          "guid": "b2c9e24f-aab5-44ac-9d5f-7bfe2ad7b332"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_FRAG_Firing.dbx",
+          "sha256": "9b8e791b3c1d6d366144dadd18d021f8565059cd9c5b676c10747854528e83ad",
+          "guid": "d1478da3-88ba-4770-b848-6a99a7f50dbb"
+        }
+      },
+      "configuration": {
+        "assetName": "S20K",
+        "assetPath": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Assault_FRAG",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 6,
+          "numberOfMagazines": 6,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.166999816894531,
+          "reloadThreshold": 0.49000000953674316,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1056629064,
+            "expected_bits": "3efae148",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1082480656,
+            "expected_bits": "40855810",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcShotgun",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4866999817,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "8eeb03ccfdc0a41566957b382ef3c9d94917e1b90af9170375aad698c7053b81",
+      "source": {
+        "path": "G:/Unity/VRMMO/bc2vr-recovery/pistol-sniper-shotgun-mechanisms-candidate/selected-configurations.json",
+        "sha256": "462c5287e8dc2ec000bbc66f393cd4797482e1d9fbf6115caf19d2ef2488aa23",
+        "pointer": "/rows/1"
+      },
+      "prior_descriptor_digest": "75e2c92b01801ac5e993c2ba8c622ddd793beef67db6cabc55e06d104cc1b393",
+      "singlefire_magazine_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "jobs": [
+        "independent_singlefire_native_family_review",
+        "exact_magazine_hand_contact",
+        "slide_ready_and_chamber_boundary"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:532dcb822624624fe213eae324e06dfacfb4543a504e06ac1e2ad06425facf67",
+      "identity": {
+        "assetName": "S20K",
+        "assetPath": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12.dbx",
+          "sha256": "f5191a7b1d3b363822a22069fc1a579ec258fa1dd079fe0e1191c62ea4dfe975",
+          "guid": "db8383ba-6059-4192-b0a4-bf2ecb36f3a2"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_firing.dbx",
+          "sha256": "cbe74bb64b10f6860767926a06d5d5318897ad119417bc5b561089cb5ae6dc0c",
+          "guid": "106f8faf-2524-4dd9-a4e4-0d81e398d475"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_firing.dbx",
+          "sha256": "cbe74bb64b10f6860767926a06d5d5318897ad119417bc5b561089cb5ae6dc0c",
+          "guid": "734a41bf-f5b4-40c4-8303-3bec7fe2dd85"
+        }
+      },
+      "configuration": {
+        "assetName": "S20K",
+        "assetPath": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 6,
+          "numberOfMagazines": 6,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.166999816894531,
+          "reloadThreshold": 0.49000000953674316,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1056629064,
+            "expected_bits": "3efae148",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1082480656,
+            "expected_bits": "40855810",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcShotgun",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4866999817,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "16b713d46db6e950d1165e9c30713ab1b7689fec6f4fbee1b3bb5a308767ce14",
+      "source": {
+        "path": "G:/Unity/VRMMO/bc2vr-recovery/pistol-sniper-shotgun-mechanisms-candidate/selected-configurations.json",
+        "sha256": "462c5287e8dc2ec000bbc66f393cd4797482e1d9fbf6115caf19d2ef2488aa23",
+        "pointer": "/rows/2"
+      },
+      "prior_descriptor_digest": "55738cb78bc5399076acec2c3fb8000118a1a8250fe8764dd99838a505dfddf0",
+      "singlefire_magazine_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "jobs": [
+        "independent_singlefire_native_family_review",
+        "exact_magazine_hand_contact",
+        "slide_ready_and_chamber_boundary"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:a1b6899b5c924f7fa3535f73c11981dbaa045b6042774e8b12739da094603a95",
+      "identity": {
+        "assetName": "USAS12",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12.dbx",
+          "sha256": "1cdfbbf7748f99704503655a30dc0b2c6804892b612a41e8ff428a40dd6a64ee",
+          "guid": "89f16a61-39ca-4572-980c-0bc602a9b498"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Firing.dbx",
+          "sha256": "9f219641b1aa9ecafe0b15a8fe64cd5af5ada635a4e17d2da2e923a1df052419",
+          "guid": "fa418c73-f6da-4faf-b114-45fc1426d426"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Firing.dbx",
+          "sha256": "9f219641b1aa9ecafe0b15a8fe64cd5af5ada635a4e17d2da2e923a1df052419",
+          "guid": "44f5c9dc-9b8a-4e4d-9541-8132716acea7"
+        }
+      },
+      "configuration": {
+        "assetName": "USAS12",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 6,
+          "numberOfMagazines": 6,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.0,
+          "reloadThreshold": 0.6000000238418579,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1058642330,
+            "expected_bits": "3f19999a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1082130432,
+            "expected_bits": "40800000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltAutomaticFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcShotgun",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4700000000,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "5ab04207c57bc62f5981bab7adde750ed59bb99ff8d63a24752992bdc468cdce",
+      "source": {
+        "path": "G:/Unity/VRMMO/bc2vr-recovery/pistol-sniper-shotgun-mechanisms-candidate/selected-configurations.json",
+        "sha256": "462c5287e8dc2ec000bbc66f393cd4797482e1d9fbf6115caf19d2ef2488aa23",
+        "pointer": "/rows/9"
+      }
+    },
+    {
+      "key": "bc2:magazine-descriptor:54b19bb731eaa114d765c82b4974c6e579d23760b17f470f95f4014bb8912959",
+      "identity": {
+        "assetName": "S20K",
+        "assetPath": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_FRAG",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_FRAG.dbx",
+          "sha256": "5eca8a51c6400190fa05991ad4a21e4e910a9e5223418b5229a654f598acc516",
+          "guid": "8770594f-da9a-494e-bdcb-1279b4964ed2"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_FRAG_Firing.dbx",
+          "sha256": "9b8e791b3c1d6d366144dadd18d021f8565059cd9c5b676c10747854528e83ad",
+          "guid": "b2c9e24f-aab5-44ac-9d5f-7bfe2ad7b332"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_FRAG_Firing.dbx",
+          "sha256": "9b8e791b3c1d6d366144dadd18d021f8565059cd9c5b676c10747854528e83ad",
+          "guid": "d1478da3-88ba-4770-b848-6a99a7f50dbb"
+        }
+      },
+      "configuration": {
+        "assetName": "S20K",
+        "assetPath": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_FRAG",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 6,
+          "numberOfMagazines": 6,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.166999816894531,
+          "reloadThreshold": 0.49000000953674316,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1056629064,
+            "expected_bits": "3efae148",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1082480656,
+            "expected_bits": "40855810",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcShotgun",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4866999817,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "016b48cbbd7656cb43d720f4e934de9a2abb72ac34fab5a2fabee58819e91e59",
+      "source": {
+        "path": "G:/Unity/VRMMO/bc2vr-recovery/pistol-sniper-shotgun-mechanisms-candidate/selected-configurations.json",
+        "sha256": "462c5287e8dc2ec000bbc66f393cd4797482e1d9fbf6115caf19d2ef2488aa23",
+        "pointer": "/rows/12"
+      },
+      "prior_descriptor_digest": "da2df7ee10b35d10a312067a4eba08c7a0abe7cae144ea0b3c1e41460f5038fe",
+      "singlefire_magazine_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "jobs": [
+        "independent_singlefire_native_family_review",
+        "exact_magazine_hand_contact",
+        "slide_ready_and_chamber_boundary"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:5466a21edab829ec521ed15ff209d0cae1202e1c9720c981ec80504016da7813",
+      "identity": {
+        "assetName": "S20K",
+        "assetPath": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Assault_Slug",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Assault_Slug.dbx",
+          "sha256": "73b99cb95f1dec1c6725c946fa355f4ed6f4318ae97e8a1347a99036798bb25e",
+          "guid": "1bbc17e3-d8c2-4033-a348-d69910d0135e"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Slug_Firing.dbx",
+          "sha256": "3e5d3dc7d692f60633b19097756c26b2061f2711f615d93b0d4ed0a603c3c58e",
+          "guid": "2124335e-0f6e-4444-9829-f0f093f8ab9b"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Slug_Firing.dbx",
+          "sha256": "3e5d3dc7d692f60633b19097756c26b2061f2711f615d93b0d4ed0a603c3c58e",
+          "guid": "1aa9f5ff-bd19-47aa-bcc0-dcc92c4ebd7c"
+        }
+      },
+      "configuration": {
+        "assetName": "S20K",
+        "assetPath": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Assault_Slug",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 6,
+          "numberOfMagazines": 6,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.166999816894531,
+          "reloadThreshold": 0.49000000953674316,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1056629064,
+            "expected_bits": "3efae148",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1082480656,
+            "expected_bits": "40855810",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcShotgun",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4866999817,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "3be1da697ecf48453a86d75dbd8f1bf830ee2a8638cb6994ba0839969064965f",
+      "source": {
+        "path": "G:/Unity/VRMMO/bc2vr-recovery/pistol-sniper-shotgun-mechanisms-candidate/selected-configurations.json",
+        "sha256": "462c5287e8dc2ec000bbc66f393cd4797482e1d9fbf6115caf19d2ef2488aa23",
+        "pointer": "/rows/15"
+      },
+      "prior_descriptor_digest": "5543706f3b93679b3b1de72aea452b47fbdad12bc12e3e3f9e859fdbb53963f0",
+      "singlefire_magazine_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "jobs": [
+        "independent_singlefire_native_family_review",
+        "exact_magazine_hand_contact",
+        "slide_ready_and_chamber_boundary"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:3dd7ed1f40eab21d2653a52e11f86a4ab1b7925c7c2d5a3678a5b1932add1ea8",
+      "identity": {
+        "assetName": "S20K",
+        "assetPath": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Slug",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Slug.dbx",
+          "sha256": "139fadbefafb09b9d55957f5188b35e440c6e362bc39545bbe6d89197608414b",
+          "guid": "dbb3b8ba-a5c4-41b8-b877-ba832455ad3c"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Slug_Firing.dbx",
+          "sha256": "3e5d3dc7d692f60633b19097756c26b2061f2711f615d93b0d4ed0a603c3c58e",
+          "guid": "2124335e-0f6e-4444-9829-f0f093f8ab9b"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Slug_Firing.dbx",
+          "sha256": "3e5d3dc7d692f60633b19097756c26b2061f2711f615d93b0d4ed0a603c3c58e",
+          "guid": "1aa9f5ff-bd19-47aa-bcc0-dcc92c4ebd7c"
+        }
+      },
+      "configuration": {
+        "assetName": "S20K",
+        "assetPath": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Slug",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 6,
+          "numberOfMagazines": 6,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.166999816894531,
+          "reloadThreshold": 0.49000000953674316,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1056629064,
+            "expected_bits": "3efae148",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1082480656,
+            "expected_bits": "40855810",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcShotgun",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4866999817,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "fb7c05e5c1290cce890aeb13e8b8c68d8f04cdf5d1c448eb85c811416a973826",
+      "source": {
+        "path": "G:/Unity/VRMMO/bc2vr-recovery/pistol-sniper-shotgun-mechanisms-candidate/selected-configurations.json",
+        "sha256": "462c5287e8dc2ec000bbc66f393cd4797482e1d9fbf6115caf19d2ef2488aa23",
+        "pointer": "/rows/24"
+      },
+      "prior_descriptor_digest": "899c703722e9635b7545bddc3f4b5d03c8b6af50d9629b178495682b7f99327f",
+      "singlefire_magazine_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "jobs": [
+        "independent_singlefire_native_family_review",
+        "exact_magazine_hand_contact",
+        "slide_ready_and_chamber_boundary"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:151bc7f5db908e412bf589f90ad27e6d36a982a8f66c448463735e4663bfbac1",
+      "identity": {
+        "assetName": "S20K",
+        "assetPath": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Assault",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Assault.dbx",
+          "sha256": "120d8793ba985e2012ab3a6a98ffc00cfc86a1efe75d071cda5824e573fe0aa8",
+          "guid": "e0bf1bc3-97a6-4480-bfb6-7aabc3b298d5"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_firing.dbx",
+          "sha256": "cbe74bb64b10f6860767926a06d5d5318897ad119417bc5b561089cb5ae6dc0c",
+          "guid": "106f8faf-2524-4dd9-a4e4-0d81e398d475"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_firing.dbx",
+          "sha256": "cbe74bb64b10f6860767926a06d5d5318897ad119417bc5b561089cb5ae6dc0c",
+          "guid": "734a41bf-f5b4-40c4-8303-3bec7fe2dd85"
+        }
+      },
+      "configuration": {
+        "assetName": "S20K",
+        "assetPath": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Assault",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 6,
+          "numberOfMagazines": 6,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.166999816894531,
+          "reloadThreshold": 0.49000000953674316,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1056629064,
+            "expected_bits": "3efae148",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1082480656,
+            "expected_bits": "40855810",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcShotgun",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4866999817,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "5115f44235a3a88813a2a0a5f5a6d42afa76d28e4807bf2d877b9385acb02b10",
+      "source": {
+        "path": "G:/Unity/VRMMO/bc2vr-recovery/pistol-sniper-shotgun-mechanisms-candidate/selected-configurations.json",
+        "sha256": "462c5287e8dc2ec000bbc66f393cd4797482e1d9fbf6115caf19d2ef2488aa23",
+        "pointer": "/rows/28"
+      },
+      "prior_descriptor_digest": "159d6d87cdc7e6c02298464f09f31e6ce801619bd26b2a95a10aab58115aff51",
+      "singlefire_magazine_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "jobs": [
+        "independent_singlefire_native_family_review",
+        "exact_magazine_hand_contact",
+        "slide_ready_and_chamber_boundary"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:ec450e4890813d6ee9d3d5e7351fd7a9843e5bd67adbc47fd5561e4be0735012",
+      "identity": {
+        "assetName": "USAS12",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Slug",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Slug.dbx",
+          "sha256": "b87e1b6005cbca3da6c4781b44430234d7b01e4d89833fb481496929180cb968",
+          "guid": "fff06977-349e-47d7-8d79-55ca2b59ce2b"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Slug_Firing.dbx",
+          "sha256": "4fcaeb833d600b1f8340c360fd6688e4ba577cccf6af424358769cd61ecde60e",
+          "guid": "af344682-8672-43fc-95f7-078d0980d543"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Slug_Firing.dbx",
+          "sha256": "4fcaeb833d600b1f8340c360fd6688e4ba577cccf6af424358769cd61ecde60e",
+          "guid": "1abe552f-6e0b-4c6d-8530-4b0d24736f5d"
+        }
+      },
+      "configuration": {
+        "assetName": "USAS12",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Slug",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 6,
+          "numberOfMagazines": 6,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.0,
+          "reloadThreshold": 0.6000000238418579,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1058642330,
+            "expected_bits": "3f19999a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1082130432,
+            "expected_bits": "40800000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltAutomaticFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcShotgun",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4700000000,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "bb4bddcc7411bf6e9d5be8db689d747fdcb935c0756d2961cd82b08a30469445",
+      "source": {
+        "path": "G:/Unity/VRMMO/bc2vr-recovery/pistol-sniper-shotgun-mechanisms-candidate/selected-configurations.json",
+        "sha256": "462c5287e8dc2ec000bbc66f393cd4797482e1d9fbf6115caf19d2ef2488aa23",
+        "pointer": "/rows/31"
+      }
+    },
+    {
+      "key": "bc2:magazine-descriptor:12b76e77e43b05585b0ca6f08026907dd14bc97197cbf3b5b78f78c87678237c",
+      "identity": {
+        "assetName": "USAS12",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Assault_FRAG",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Assault_FRAG.dbx",
+          "sha256": "a7ef1ca22f890e14b05dd72a12979bff8f421f5ebbcc1f7ad7a835c506a4bb98",
+          "guid": "f41eaaa9-a29f-4c59-ba6e-d1763491d3df"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_FRAG_Firing.dbx",
+          "sha256": "35e112576346347670098a2fef163178c975b23780b8e257d0879a2d1a9bd318",
+          "guid": "0859fe5b-9480-4b0c-80dc-e687eec72554"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_FRAG_Firing.dbx",
+          "sha256": "35e112576346347670098a2fef163178c975b23780b8e257d0879a2d1a9bd318",
+          "guid": "f41469e3-9afe-47b3-ad99-6a9aee9d5487"
+        }
+      },
+      "configuration": {
+        "assetName": "USAS12",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Assault_FRAG",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 6,
+          "numberOfMagazines": 6,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.0,
+          "reloadThreshold": 0.6000000238418579,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1058642330,
+            "expected_bits": "3f19999a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1082130432,
+            "expected_bits": "40800000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltAutomaticFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcShotgun",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4700000000,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "554393b345ef9ccd39e7ca28dbe9dc2e4013f15729941bea631883f73816987a",
+      "source": {
+        "path": "G:/Unity/VRMMO/bc2vr-recovery/pistol-sniper-shotgun-mechanisms-candidate/selected-configurations.json",
+        "sha256": "462c5287e8dc2ec000bbc66f393cd4797482e1d9fbf6115caf19d2ef2488aa23",
+        "pointer": "/rows/39"
+      }
+    },
+    {
+      "key": "bc2:magazine-descriptor:c3ab6f330c842ea16af3b5a4015571cde4381ae4b321078ff26f2a647d932bc5",
+      "identity": {
+        "assetName": "USAS12",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Assault",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Assault.dbx",
+          "sha256": "d08173d4b684960f0508244018dd3c499196971321a01469de086f4753f8026a",
+          "guid": "0ed33dbf-5c18-4dc6-adfc-38d2864e5405"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Firing.dbx",
+          "sha256": "9f219641b1aa9ecafe0b15a8fe64cd5af5ada635a4e17d2da2e923a1df052419",
+          "guid": "fa418c73-f6da-4faf-b114-45fc1426d426"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Firing.dbx",
+          "sha256": "9f219641b1aa9ecafe0b15a8fe64cd5af5ada635a4e17d2da2e923a1df052419",
+          "guid": "44f5c9dc-9b8a-4e4d-9541-8132716acea7"
+        }
+      },
+      "configuration": {
+        "assetName": "USAS12",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Assault",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 6,
+          "numberOfMagazines": 6,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.0,
+          "reloadThreshold": 0.6000000238418579,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1058642330,
+            "expected_bits": "3f19999a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1082130432,
+            "expected_bits": "40800000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltAutomaticFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcShotgun",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4700000000,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "b04be6ebddc37e0a8efc269b6c5a17f5759ee027f955727990b567835702860b",
+      "source": {
+        "path": "G:/Unity/VRMMO/bc2vr-recovery/pistol-sniper-shotgun-mechanisms-candidate/selected-configurations.json",
+        "sha256": "462c5287e8dc2ec000bbc66f393cd4797482e1d9fbf6115caf19d2ef2488aa23",
+        "pointer": "/rows/42"
+      }
+    },
+    {
+      "key": "bc2:magazine-descriptor:8ca3da8433642bcf2b7ca657f390511c761b21ab9b3b0f7c5da10e6fb993f020",
+      "identity": {
+        "assetName": "USAS12",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_FRAG",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_FRAG.dbx",
+          "sha256": "336a8989c46ee61b75c5b95aed09f47566da3ff65ce95c0e1c2e8c3a665322a9",
+          "guid": "c25f723c-0d6f-44b4-be51-59245538727e"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_FRAG_Firing.dbx",
+          "sha256": "35e112576346347670098a2fef163178c975b23780b8e257d0879a2d1a9bd318",
+          "guid": "0859fe5b-9480-4b0c-80dc-e687eec72554"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_FRAG_Firing.dbx",
+          "sha256": "35e112576346347670098a2fef163178c975b23780b8e257d0879a2d1a9bd318",
+          "guid": "f41469e3-9afe-47b3-ad99-6a9aee9d5487"
+        }
+      },
+      "configuration": {
+        "assetName": "USAS12",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_FRAG",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 6,
+          "numberOfMagazines": 6,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.0,
+          "reloadThreshold": 0.6000000238418579,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1058642330,
+            "expected_bits": "3f19999a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1082130432,
+            "expected_bits": "40800000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltAutomaticFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcShotgun",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4700000000,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "b19a5db7b3a945384722842232431451edc1a37d3b72177785dbc4b0ab8c1be9",
+      "source": {
+        "path": "G:/Unity/VRMMO/bc2vr-recovery/pistol-sniper-shotgun-mechanisms-candidate/selected-configurations.json",
+        "sha256": "462c5287e8dc2ec000bbc66f393cd4797482e1d9fbf6115caf19d2ef2488aa23",
+        "pointer": "/rows/49"
+      }
+    },
+    {
+      "key": "bc2:magazine-descriptor:eb0fceccd26374a67136958d96b498977123553d6b263b1b0ebc148918eb3d95",
+      "identity": {
+        "assetName": "USAS12",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Assault_Slug",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Assault_Slug.dbx",
+          "sha256": "aec18843cbba6f0fbba03fe82a13dd974040b49e7d112c6cee91ae478de59418",
+          "guid": "c85c2005-302e-48e0-b7d6-42105037ebfb"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Slug_Firing.dbx",
+          "sha256": "4fcaeb833d600b1f8340c360fd6688e4ba577cccf6af424358769cd61ecde60e",
+          "guid": "af344682-8672-43fc-95f7-078d0980d543"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Slug_Firing.dbx",
+          "sha256": "4fcaeb833d600b1f8340c360fd6688e4ba577cccf6af424358769cd61ecde60e",
+          "guid": "1abe552f-6e0b-4c6d-8530-4b0d24736f5d"
+        }
+      },
+      "configuration": {
+        "assetName": "USAS12",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Assault_Slug",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 6,
+          "numberOfMagazines": 6,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.0,
+          "reloadThreshold": 0.6000000238418579,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1058642330,
+            "expected_bits": "3f19999a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1082130432,
+            "expected_bits": "40800000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltAutomaticFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcShotgun",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4700000000,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "4692f00c70273976a5ad4fe6357e00041c535951892f9396944caeab9c22866b",
+      "source": {
+        "path": "G:/Unity/VRMMO/bc2vr-recovery/pistol-sniper-shotgun-mechanisms-candidate/selected-configurations.json",
+        "sha256": "462c5287e8dc2ec000bbc66f393cd4797482e1d9fbf6115caf19d2ef2488aa23",
+        "pointer": "/rows/57"
+      }
+    },
+    {
+      "key": "bc2:magazine-descriptor:6df97060141bc51570d34af7a1de8835fc1f1b4585ff103186af72382a91237a",
+      "identity": {
+        "assetName": "USAS12_sp_s",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_USAS-12/SP_shg_USAS12_Slug",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/SP_shg_USAS12_Slug.dbx",
+          "sha256": "7b347c663723d2090b07945677143ad80920513be4eb3da8cdb8bfc8d3b031f3",
+          "guid": "e7a66774-66c8-42fa-a2d0-1c6afdda5ccf"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Slug_Firing.dbx",
+          "sha256": "4fcaeb833d600b1f8340c360fd6688e4ba577cccf6af424358769cd61ecde60e",
+          "guid": "af344682-8672-43fc-95f7-078d0980d543"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Slug_Firing.dbx",
+          "sha256": "4fcaeb833d600b1f8340c360fd6688e4ba577cccf6af424358769cd61ecde60e",
+          "guid": "1abe552f-6e0b-4c6d-8530-4b0d24736f5d"
+        }
+      },
+      "configuration": {
+        "assetName": "USAS12_sp_s",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_USAS-12/SP_shg_USAS12_Slug",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 6,
+          "numberOfMagazines": 6,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.0,
+          "reloadThreshold": 0.6000000238418579,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1058642330,
+            "expected_bits": "3f19999a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1082130432,
+            "expected_bits": "40800000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltAutomaticFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcShotgun",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4700000000,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "8d0631732c1352c7cda26e16bcce05e4d5da516776db3ae13545a96485c7e01d",
+      "source": {
+        "path": "G:/Unity/VRMMO/bc2vr-recovery/pistol-sniper-shotgun-mechanisms-candidate/selected-configurations.json",
+        "sha256": "462c5287e8dc2ec000bbc66f393cd4797482e1d9fbf6115caf19d2ef2488aa23",
+        "pointer": "/rows/61"
+      }
+    },
+    {
+      "key": "bc2:magazine-descriptor:4f97e7ec41ac74889c14dcd775d64a586b69ff7cdb3977e9cdc38a7500ede30c",
+      "identity": {
+        "assetName": "USAS12_sp",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_USAS-12/SP_shg_USAS12",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/SP_shg_USAS12.dbx",
+          "sha256": "6ba93fd079c7725723f5712d58a28b1d173da108350da5d0bd3c6a281e446a29",
+          "guid": "8daacbdd-6a60-4631-b0b6-d99655d7cf55"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Firing.dbx",
+          "sha256": "9f219641b1aa9ecafe0b15a8fe64cd5af5ada635a4e17d2da2e923a1df052419",
+          "guid": "fa418c73-f6da-4faf-b114-45fc1426d426"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Firing.dbx",
+          "sha256": "9f219641b1aa9ecafe0b15a8fe64cd5af5ada635a4e17d2da2e923a1df052419",
+          "guid": "44f5c9dc-9b8a-4e4d-9541-8132716acea7"
+        }
+      },
+      "configuration": {
+        "assetName": "USAS12_sp",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_USAS-12/SP_shg_USAS12",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 6,
+          "numberOfMagazines": 6,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.0,
+          "reloadThreshold": 0.6000000238418579,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1058642330,
+            "expected_bits": "3f19999a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1082130432,
+            "expected_bits": "40800000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltAutomaticFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcShotgun",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4700000000,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "802da22d82a0ed998adcd4e31f8406615d9f3787246cc9227273a199892ce048",
+      "source": {
+        "path": "G:/Unity/VRMMO/bc2vr-recovery/pistol-sniper-shotgun-mechanisms-candidate/selected-configurations.json",
+        "sha256": "462c5287e8dc2ec000bbc66f393cd4797482e1d9fbf6115caf19d2ef2488aa23",
+        "pointer": "/rows/70"
+      }
+    }
+  ],
+  "rejected": [],
+  "summary": {
+    "descriptors": 14,
+    "deferred": 0
+  },
+  "singlefire_candidate_extension": {
+    "proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee",
+    "rows_reclassified": 6,
+    "runtime_enabled": false,
+    "chamber_knowledge": "Unknown",
+    "limits": [
+      "Isolated original instructions, synthetic objects and empty listeners only.",
+      "No native owners, three-copy convergence, shot, chamber or slide readiness receipt."
+    ]
+  }
+}

@@ -1,7 +1,8 @@
 #include "Bc2AmmoSupply.h"
+#include "Bc2ShotgunEquipment.h"
 namespace fvr::bc2 {
 using namespace interaction;
-std::optional<AmmoSupplySource> SpasAmmoSupplySource(const Bc2ReloadInteractionSample& sample,
+std::optional<AmmoSupplySource> ShotgunAmmoSupplySource(const Bc2ReloadInteractionSample& sample,
     const Bc2AmmoReserveLease& native)noexcept {
     const auto& s=sample.insertion;
     const auto& p=s.identity.owner;const auto& n=native.identity.owner;const auto& f=native.identity.firing;
@@ -15,27 +16,27 @@ std::optional<AmmoSupplySource> SpasAmmoSupplySource(const Bc2ReloadInteractionS
         !p.equipGeneration||p.space!=n.space||s.identity.weapon.id!=n.weapon||s.identity.weapon.generation!=p.equipGeneration||
         !s.identity.trackingEpoch||native.reserve<0||
         native.loaded<0||native.capacity<=0||native.loaded>native.capacity||
-        sample.assetName!=SpasReloadAsset||sample.meshPath!=SpasReloadMesh||sample.rigFingerprint!=SpasReloadRig||
-        !sample.selectedMeshIdentityVerified)return {};
-    const auto profile=SpasReloadInsertionProfile();
+        !ShotgunInteractionMatches(sample))return {};
+    const auto& profile=*KnownShotgunEquipment(sample.equipment)->shellInsertion;
     const HandInteractionKey pool{native.identity.serverItem,native.identity.owner.equipGeneration};
     return AmmoSupplySource{{p,s.identity.weapon,{profile.id,profile.revision},pool,s.identity.trackingEpoch},
         ReloadInsertionFamily::SingleShell,static_cast<std::uint32_t>(native.reserve),1,native.sequence,
         native.observedNs,native.deadlineNs,true};
 }
-std::optional<AmmoSupplySource> SpasAmmoSupplySource(const Bc2ReloadInteractionSample& sample,
+std::optional<AmmoSupplySource> ShotgunAmmoSupplySource(const Bc2ReloadInteractionSample& sample,
     const ReloadRoundLease& native)noexcept {
-    return SpasAmmoSupplySource(sample,Bc2AmmoReserveLease{native.identity,native.sequence,native.observedNs,
+    return ShotgunAmmoSupplySource(sample,Bc2AmmoReserveLease{native.identity,native.sequence,native.observedNs,
         native.deadlineNs,native.loaded,native.reserve,native.capacity,native.nativeBindingVerified});
 }
 bool SameAmmoReservation(const AmmoSupplyReservation& supply,const Bc2ReloadReservedItem& native)noexcept {
     return supply.item==native.item&&supply.claim==native.claim&&supply.seat==native.seat&&
         supply.request==native.request&&supply.cycle==native.cycle;
 }
-std::optional<AmmoSupplyReceipt> SpasAmmoSupplyReceipt(const AmmoSupplyReservation& supply,
+std::optional<AmmoSupplyReceipt> ShotgunAmmoSupplyReceipt(const ShotgunReloadEquipmentProfile* equipment,const AmmoSupplyReservation& supply,
     const Bc2ReloadOwnerMap& original,const Bc2ReloadBridgeResult& bridge,const Bc2ReloadAckEvidence& evidence,
     const ReloadRoundLease& native,const Bc2AmmoReserveLease& reserve,std::int64_t now)noexcept {
-    const auto p=SpasReloadInsertionProfile();
+    const auto* row=KnownShotgunEquipment(equipment);if(!row)return {};
+    const auto& p=*row->shellInsertion;
     const auto& ack=evidence.acknowledgement;
     const auto current=BindBc2ReloadOwners(original.physical,original.weapon,native,now);
     if(!current||*current!=original||original.physical!=supply.identity.owner||original.weapon!=supply.identity.weapon||
@@ -62,6 +63,19 @@ std::optional<AmmoSupplyReceipt> SpasAmmoSupplyReceipt(const AmmoSupplyReservati
     return AmmoSupplyReceipt{supply,*bridge.acknowledged,
         {supply.identity,ReloadInsertionFamily::SingleShell,static_cast<std::uint32_t>(reserve.reserve),1,reserve.sequence,
             reserve.observedNs,reserve.deadlineNs,true},ack.serverInvocation,evidence.observedNs,evidence.deadlineNs,true};
+}
+std::optional<AmmoSupplySource> SpasAmmoSupplySource(const Bc2ReloadInteractionSample& s,const Bc2AmmoReserveLease& n)noexcept {
+    if(KnownShotgunEquipment(s.equipment)!=DefaultSpasShotgunEquipment())return {};
+    return ShotgunAmmoSupplySource(s,n);
+}
+std::optional<AmmoSupplySource> SpasAmmoSupplySource(const Bc2ReloadInteractionSample& s,const ReloadRoundLease& n)noexcept {
+    if(KnownShotgunEquipment(s.equipment)!=DefaultSpasShotgunEquipment())return {};
+    return ShotgunAmmoSupplySource(s,n);
+}
+std::optional<AmmoSupplyReceipt> SpasAmmoSupplyReceipt(const AmmoSupplyReservation& supply,
+    const Bc2ReloadOwnerMap& original,const Bc2ReloadBridgeResult& bridge,const Bc2ReloadAckEvidence& evidence,
+    const ReloadRoundLease& native,const Bc2AmmoReserveLease& reserve,std::int64_t now)noexcept {
+    return ShotgunAmmoSupplyReceipt(DefaultSpasShotgunEquipment(),supply,original,bridge,evidence,native,reserve,now);
 }
 std::optional<AmmoSupplyReceipt> SpasAmmoSupplyReceipt(const AmmoSupplyReservation& supply,
     const Bc2ReloadOwnerMap& original,const Bc2ReloadBridgeResult& bridge,const Bc2ReloadAckEvidence& evidence,

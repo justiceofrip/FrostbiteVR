@@ -439,5 +439,11 @@ int PlayerCurrentCustodyOverlap(){
 }
 
 }
-int main(){if(PlayerMappedCustodyRenderGap())return 1;if(PlayerCurrentCustodyOverlap())return 1;if(SameLeftCustodyRecoveryRequiresTypedAuthority())return 1;CHECK(!OrdinaryBoltCompiled);if(RendererAndPlayerShareCurrentBodyBase()||StartupBlockDoesNotInventOwedAction()||RebasedHeadAndCurrentBodyAnchor()||MappingRejectsStaleOrMismatchedFrame()||StableReferencesFreezeAndRecenterInvalidates()||PlayerReleaseUsesActualAdapterAndImmutableControls()||PlayerReleaseUsesActualAdapterAndImmutableControls(true))return 1;
-    std::puts("7 ordinary bolt mapping/reference/recovery/real-adapter groups passed; default OFF, original packets immutable.");return 0;}
+int main(){if(PlayerMappedCustodyRenderGap())return 1;if(PlayerCurrentCustodyOverlap())return 1;if(SameLeftCustodyRecoveryRequiresTypedAuthority())return 1;
+#ifdef FVR_BC2_ORDINARY_BOLT
+    CHECK(OrdinaryBoltCompiled);
+#else
+    CHECK(!OrdinaryBoltCompiled);
+#endif
+    if(RendererAndPlayerShareCurrentBodyBase()||StartupBlockDoesNotInventOwedAction()||RebasedHeadAndCurrentBodyAnchor()||MappingRejectsStaleOrMismatchedFrame()||StableReferencesFreezeAndRecenterInvalidates()||PlayerReleaseUsesActualAdapterAndImmutableControls()||PlayerReleaseUsesActualAdapterAndImmutableControls(true))return 1;
+    std::puts("Ordinary bolt mapping/reference/recovery/real-adapter groups passed; compile-time admission checked, original packets immutable.");return 0;}

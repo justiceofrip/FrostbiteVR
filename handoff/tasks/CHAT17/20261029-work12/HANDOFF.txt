@@ -1,0 +1,30 @@
+CHAT17 work12 - bounded sniper magazine / owed-bolt contract check
+Done N: no supported open-bolt magazine overlap and no bounded defect found in assigned files.
+Base: dfc0e507be635769dade167c1d642e3716443835. Source/test files unchanged.
+The existing M95 5/5 result includes STOCK refill and proves no manual-magazine combination.
+Concrete source boundaries:
+1. Bc2BoltCustodyBridge.h:34-42 requires right GunHold + left WeaponSupport to enter;
+   a held magazine cannot be consumed as the companion or as the returning gun hand.
+2. include/fvr/interaction/BoltWeaponCustody.h:203-212 requires submitted stroke,
+   later neutral and exact original contacts before returning the gun to the right.
+3. Bc2BoltPlayerCustody.cpp:99-113 mirrors that post-submission return barrier.
+4. Bc2MagazineResourceReload.cpp:194-200 requires a CURRENT right GunHold;
+   its original/replacement magazine hand is Left. Open-bolt custody holds gun Left.
+5. Bc2NativeCycleService.cpp:508-522 permits passive magazine count changes ONLY
+   after native bolt completion; pending debt/Ready explicitly cannot use it.
+6. Bc2PhysicalBolt.cpp:153-157 cancellation retains cycle/pending fire debt;
+   Bc2BoltPlayerCustody.cpp:4-7 retains debt on interruption/identity invalidation.
+   Recovery at :74-81 requires the same live left claim and exact typed cycle/shot.
+Allowing the requested overlap needs a new hand/native integration contract, outside this job.
+No native dispatcher/chamber writes, operation grants, source edits, builds or tests performed.
+Next native sequence (root only; existing ordinary controls and accepted exact M95 selector):
+Use L>=2/R for partial, or separate L=1/R empty episode; establish references/support.
+Fire once to L-1/R; transfer Left; unlock/pull rear. Attempt right regrip, magazine removal,
+and shoulder stow once each: expect refusal, same debt/root, unchanged all-three counts.
+Interrupt only right tracking for one packet while Left stays current; require same cycle/shot
+typed recovery and retained Left token before resuming; if unavailable, stop with debt recorded.
+Finish ordered stroke, neutral/regrip and exact Ready; require current right GunHold.
+Only if the existing magazine selector is admitted, remove/return original, then replace:
+L-1/R -> 0/R -> L-1/R -> 0/R -> capacity/(R-capacity); join exact resource IDs/receipts.
+After retirement stow/draw, verify same ammo owner/counts, then one shot. Stop at any unexpected
+admission/refusal/count change; never enable a new capability to get past a gate.

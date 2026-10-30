@@ -19,7 +19,11 @@ struct BodyAmmoRenderSource {
     std::string asset,mesh,part;
     std::uint64_t rigFingerprint=0;
     std::shared_ptr<const BodyAmmoTracking> authority;
+    bool assemblyPart=false;
 };
+// Expands the root supply pose in row-vector order. Every part carries the
+// original source/clock; expansion supplies no pickup or native authority.
+std::vector<BodyAmmoRenderSource> ExpandBodyAmmoRenderSource(const BodyAmmoRenderSource&);
 struct BodyAmmoGeometry {
     graphics::RigidPropGeometryKey key{};
     std::string asset,mesh,part;

@@ -1,0 +1,702 @@
+[
+  {
+    "key": "bc2:magazine-descriptor:54aea2c982ef3d9305f89d21cf188f4eb646ca844736a5e3e7f804b229385888",
+    "descriptor_digest": "065aaef2ff48f30b75c86bef524b74eedf721d26509f0a37ac4d6f264521ddcd",
+    "family_proof": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+  },
+  {
+    "key": "bc2:magazine-descriptor:e0eb4b211e7e45faa687c0998e8c55d1dd849a75e8fbb01379afc8be01b56862",
+    "descriptor_digest": "a41b1cc9989872459ea546ce31399b814998c464de576107e1ed9d6617c50b7a",
+    "family_proof": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+  },
+  {
+    "key": "bc2:magazine-descriptor:c607fff81b24f15b148070723fccedf2649d4fb685bbd1ddc815d2b825852203",
+    "descriptor_digest": "ba2ff561a9d4cc54833efe64d2cc24af9e102b63b6c9ac1a6a9ddb4981726929",
+    "family_proof": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+  },
+  {
+    "key": "bc2:magazine-descriptor:df92ffe911bb808043e97940248688ac618cd39cad1c6b27770853381c9831a3",
+    "descriptor_digest": "1dd674865210588fad3c65f9508204caf627012b6175c65de527f55083e47933",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:62f8c84e9ebce6830e22def87e0993c41af8f80c9eff50bd4db968586f2f5d68",
+    "descriptor_digest": "35cd8b0f85e5dff1d47722ba2802e67ec826e8c58688944e3115302383e2c46d",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:00dd2c9e5d97a56a4866ed8969b6d76b8885aae79facaa02c15d0fdd08ea3ebe",
+    "descriptor_digest": "0c13f57d22f0856774d0dea7bb577581a799c9e619fbff9d84d9afa6996c70d4",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:7fddce96ae850bb34700694a6ca212e9bd2b8eaf3164f68ea6532c7b90103bfe",
+    "descriptor_digest": "2c7db5ddffa18a2ba2774b537546f0eb34d033bb1121f03344a3cef312679286",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:9c0e1d6ef3b018b3449d16b5835731f0473e504a20d0c330c5db747d0ce94882",
+    "descriptor_digest": "3648e76e0438b903eb33253ada7e230aa39430bd72ef841bce5396052ff2ab08",
+    "family_proof": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+  },
+  {
+    "key": "bc2:magazine-descriptor:137333396af845c526e0c4133d7b1ebef35b6e6b88afeee86dcf4eca2e23ca12",
+    "descriptor_digest": "766b119e69be4d1087da848c3f43205026a36ef325677c43fe16e125f6e14ace",
+    "family_proof": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+  },
+  {
+    "key": "bc2:magazine-descriptor:d7526d6782bf33307bf98410184fe08f6480ceff5377df4047c7c917e60a21b9",
+    "descriptor_digest": "e7dc22e698882a00b7dff7b05a57a405d6d8f00d1ee188ef201b45901eb7db2e",
+    "family_proof": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+  },
+  {
+    "key": "bc2:magazine-descriptor:193029c00fbe121e066512ba9f1b132fbe9c42666217cb6fbabccd7a483ae3c0",
+    "descriptor_digest": "067915fccd3d0d0eb5adebe90c27ec7f6ab1dca22befc9a9c489b1d8ecd41b9d",
+    "family_proof": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+  },
+  {
+    "key": "bc2:magazine-descriptor:fb95624902ba5bab0cc29643cb0eecdf5cc22210e53c36ea80c1c03e4c1513a0",
+    "descriptor_digest": "fecbb42d6170cd4ed92f15b5df011cafde87e795f83c9cba3510fc50b2e4cb72",
+    "family_proof": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+  },
+  {
+    "key": "bc2:magazine-descriptor:1099ee5b921992241708f3f5956340a9d2d905daf76e9a04386b479d1dae8818",
+    "descriptor_digest": "48daa10c8fa4918e73acd985e65f4fb32e64345dd199116690cc12274b2ac5af",
+    "family_proof": "bc2.singlefire-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+  },
+  {
+    "key": "bc2:magazine-descriptor:ffe465b3e39d55fe94d0eb5aa7f9d6c5265c0ce412130589a6632190ba8567b6",
+    "descriptor_digest": "7dd3539d563a2a5bc705d6d5d49a6e267b76f4c254f3d79743ca76259299a22a",
+    "family_proof": "bc2.singlefire-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+  },
+  {
+    "key": "bc2:magazine-descriptor:6877ac14cd00fadc4c2ebbd1b212a03ebd5a2d91de168016224e3cfe26da565d",
+    "descriptor_digest": "e9e3bca24aee3f3355341311050582dc86a8fdf872d3eb10cfb4fb20349012f7",
+    "family_proof": "bc2.singlefire-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+  },
+  {
+    "key": "bc2:magazine-descriptor:f1b468bfcba270dd085492a5093190267a2aec160df2ead87308947af5a760ef",
+    "descriptor_digest": "221c53ba5232e60374454d1db5e94a892713686015126f838f3a8c791cdea944",
+    "family_proof": "bc2.singlefire-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+  },
+  {
+    "key": "bc2:magazine-descriptor:821e8a22afc26c4a6164fe5f6690eb089ef40e9cd811cdaa5360207bc7bac8eb",
+    "descriptor_digest": "4de4a3d32e4ce3a2489679f6cc614eb02984821fa0743af8a96e9172d9bcd369",
+    "family_proof": "bc2.singlefire-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+  },
+  {
+    "key": "bc2:magazine-descriptor:1a9677a741508f9651487efe7eecd5f825ec4a67d2f1ca7e7649125c5e467ea5",
+    "descriptor_digest": "c6ea54dcdf0cb2d38fb42aec0e37ca617cbc84017e492dbf9f5ecbbbc23720d2",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:61ed1947ca0bbf24439a2dcfcff5519f320d04b065ca5932088c9abb623349c1",
+    "descriptor_digest": "514eb693b159cdc39a1bb140e61ad2493e03bccce59c580a08bc1c552be2e95a",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:c28491138d60417a2682b2b136e16eb15443dbb8492941dc9dd00f79cb81128b",
+    "descriptor_digest": "a735a2655948dea436bfe51cf0281c84a2ccd2891ce14333015b8818dfb1fd0a",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:9eb61decaaf8f1bafd230fe090ec624a0c4ba7d71298ae2e3d18b6845eec0774",
+    "descriptor_digest": "c5522196bc7ba1fdf909eb2455345207dbcc6938f953bd868a0eef140242ff35",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:dbd63631c3bbd5e3825c9fbef9d478b5b2f0f35cf2cce2b9978d95bd0533952b",
+    "descriptor_digest": "e1dab96ceeb8417717eb5547bb84c1f6fea1375bf8aaa5f86e787c8e770abead",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:5c55193f7c6059983df900538081454b7f1b28b7c95647f3a08f799f0728f0bb",
+    "descriptor_digest": "bd21cf9db55f9ed7f6e5c031d764c5a8dd643b94e4ecec20bb01c3bbd48a2a51",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:d75314cc75e395e6d0eafa3ea8fd67f254f751534848b21b29986d30b94939e7",
+    "descriptor_digest": "861f5754604d1e0ce99fbf8644a67f9b5c7c64f8501d2974799cf34f0848c8f5",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:a7abb6254e1f53a5bc9f5ecae8481be94380dd72b6f05bb379bb5c5c83056133",
+    "descriptor_digest": "acf60ac2e3b6cb1ae436a96195e0fb4aef76888ba7d1d922300179409657d80d",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:6019d3973c2ef13f248106f3863a1ad1d4a64ba7b89f6041ebe0ae5cd800ce74",
+    "descriptor_digest": "3bb227f006ddb8326624eb3efb93f58c5c760f9761034792f93b4db1e24e3c7f",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:82fc18dabdc421e1b89e62c7394a6364723e5a2397f9fc3131f931041d218f38",
+    "descriptor_digest": "29ee6a4cdd1bc395cb82367e00cd1c4ff0368a92f03f6cca7898c3b4f7703f92",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:d2ee3e2255136b7eba413c440457b5be5da8dbbc8434fccd93593cc1ee476af9",
+    "descriptor_digest": "3428684ecfe0760031b57f7030a6a6088a3e763b6cbf5982f70173e90cb7676c",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:686ec6e168f3234c814b9fb3a48a372f8da821ac42eebd0de737888b1e1cfc75",
+    "descriptor_digest": "5601f63aee627def5be6918ad875c7f3b5707ab0274a1adbcd63e573c1b72ebb",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:caafb2a8249c50b118b4cc3244308afb99c696df61bf5668963eee6183b4326b",
+    "descriptor_digest": "ec5b65e992082fd7e3b8e3d3ee4679860df158812a933e3ec11013d6cb217779",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:5d03adf713d506ca6b5f871855d69bd3765b04257c14dcbf352147e261924e3b",
+    "descriptor_digest": "1a6a85fc965158ca25d30628441ce3b43e08335e26f9473190a533ee073104f9",
+    "family_proof": "bc2.bolt-action-magazine-reload.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:ff9317c5dfaf5869c3ed99563a1a64d5c3bcdb6aaee3b4308309399c2e46343e",
+    "descriptor_digest": "22b3e5a3dfdda753d6c6d547caada7704d286e0b906e9346a5037ac3890e9fe5",
+    "family_proof": "bc2.bolt-action-magazine-reload.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:d04de1419a64d72e192261b29f20f384188a69431eb6073febb17908b3d6a637",
+    "descriptor_digest": "50cecc5912ec1ddf4cf28e1b09be8c8e25685f6345109629b1fc789d3d3a3567",
+    "family_proof": "bc2.bolt-action-magazine-reload.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:9d997f5df5985bfb26a4219f09b93c220e875c5cd22659d07c4830b22b071a49",
+    "descriptor_digest": "47658581152515dfb9c01bae78f7382391df206262b40d2c1fee855224cd435f",
+    "family_proof": "bc2.singlefire-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+  },
+  {
+    "key": "bc2:magazine-descriptor:517ac4ed68c905e171599163d0c502698363f4b838a3de31f9b3ea63c2ab2dff",
+    "descriptor_digest": "e8d7685c7e694170cfcb33b13c392112d2a1ec7d369ff28fee2b5318ced2accf",
+    "family_proof": "bc2.singlefire-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+  },
+  {
+    "key": "bc2:magazine-descriptor:acd7d5fc6757741ecab81865e03711bbc4ae54ae1cad8a87b292989edea8c5d6",
+    "descriptor_digest": "d60756d3aad633e8602909e9cfbb306cae9e4f2d356a6129fba5114f119d6f09",
+    "family_proof": "bc2.singlefire-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+  },
+  {
+    "key": "bc2:magazine-descriptor:555d420b597c1c38f88c1ec54388b7b8e7bc0a9e51d9b185ee9915b9c3646724",
+    "descriptor_digest": "3653198f36490d216ceeb21885b260fb3a64e6db0b74b83a44b5502f2a60547c",
+    "family_proof": "bc2.singlefire-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+  },
+  {
+    "key": "bc2:magazine-descriptor:371ec684be3ddbc8425a79205d61be91657a896370e4a363bfc280be4bb96fc3",
+    "descriptor_digest": "6ae9fb963107911a72bf1d87d52c1cbfc7813a609fabc9c975865e6488adeb9a",
+    "family_proof": "bc2.singlefire-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+  },
+  {
+    "key": "bc2:magazine-descriptor:cd3e5189d7339655017c75ce9f051d082b0e45b51aef04e49580a3ca4e7ca422",
+    "descriptor_digest": "49dc59b99be72f20eaf418618a66ce263d900832f92e618c64258cd98da0b9e6",
+    "family_proof": "bc2.singlefire-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+  },
+  {
+    "key": "bc2:magazine-descriptor:ae252d073136692f790560e7d4403808fa35821233e692d3a7cbcb9db55850f1",
+    "descriptor_digest": "cec932f340b478987079843337cdf087616bae2f15287c5cf7a696173639bf54",
+    "family_proof": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+  },
+  {
+    "key": "bc2:magazine-descriptor:e23e559810ac92ba9fbea095c4f39fe279f2ad3234d813dbd0b2e368c72a3329",
+    "descriptor_digest": "58996f6a50cdccc03c50090854f60d617927b1ccd0aa640369c9f546916b6ebd",
+    "family_proof": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+  },
+  {
+    "key": "bc2:magazine-descriptor:259c5c2b7e53b42c311349557358351e1da7cf2675f7e0c0378044db956a55d8",
+    "descriptor_digest": "c98494e638829382f481cfc09344a0209836c9624784e063bbf923595f8d960d",
+    "family_proof": "bc2.bolt-action-magazine-reload.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:c962eb86f971bad5c255beff1bcc94213820c6bd949e5c9af72b559e2f17ed18",
+    "descriptor_digest": "4b6e995cf5587068bb4730f66655269aa52c66d280ac39cd565a27ccfadf7c2a",
+    "family_proof": "bc2.bolt-action-magazine-reload.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:33eb81fa3a6b0e81dbf6ff92d34e69f21d074aa88e37b74ed1d57c4ce57ec879",
+    "descriptor_digest": "ef0ccdfd529120beda44a721690000517f0de337a98dbc1f0f8e16b2d7257e88",
+    "family_proof": "bc2.bolt-action-magazine-reload.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:7d196898b6b8cd8f1e5774314c84c743518ed76fc4bb45526cab346ae1b004a6",
+    "descriptor_digest": "9fa12a3eb02cd394a4c5a931148532d390e3473e40ab0952521b7e479b18b08f",
+    "family_proof": "bc2.bolt-action-magazine-reload.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:cc628606789b8f2d73e796913c36c4dfdc89cd6f8e279414aa19729df39311e9",
+    "descriptor_digest": "fed73ae3024064ada4de4f325181e1d03326ec8e1eb1811ddad5bde0090c7999",
+    "family_proof": "bc2.bolt-action-magazine-reload.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:a9127353cf9b7c7389e53ddbae6327bcdf107517c6f0a90e3f266fa0d22e47f8",
+    "descriptor_digest": "c2bc403c8dfd6b8aedd5fd84fe2c4d7f39772e34a74f507330940cfb43a152e0",
+    "family_proof": "bc2.bolt-action-magazine-reload.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:e17eaa72190fcc4eb01e36801d41a6d771ac15c038708092165ed90c36adac33",
+    "descriptor_digest": "ba6256ff27a55659b51d7c7b64d208aa87040e930d0dfe566c7f02df32b69046",
+    "family_proof": "bc2.bolt-action-magazine-reload.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:2bd0524c9604bea44d5c1d45bec1ee876835a2afece03964de21bfe7eb6162e5",
+    "descriptor_digest": "5a2f025edf2a827282316f00b7274dfb202906ebb94502961e767b538f2dedcd",
+    "family_proof": "bc2.bolt-action-magazine-reload.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:a3c42977e56f5a56f4031113a7f6edc9db9587c3c5ae572d84fea6d5c93a00ac",
+    "descriptor_digest": "d13ca4efa5ca91469b11684600a2df1eed08a25e8473de06bbee029918299ec6",
+    "family_proof": "bc2.bolt-action-magazine-reload.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:834d88aeef8ffcec1480b7c64656ded44d321457a414e6d1902aeef1fad00276",
+    "descriptor_digest": "a85fe8094ad4141eca8ceeeee27aa4793101d60fb116d31a59631309846b7a12",
+    "family_proof": "bc2.bolt-action-magazine-reload.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:5134eb56c4274cc78b53f5b2fc10f3064d064800d51a5d014cff11ea21ed8afd",
+    "descriptor_digest": "60edac4f8c59b46f4f5e8e849046a4b3b7a6f0dac13df29798babe66e4d5daaf",
+    "family_proof": "bc2.bolt-action-magazine-reload.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:545e31af17e617544d388a21fc5fe6218dcc788fa48e9f46ef77791fda0aa5b8",
+    "descriptor_digest": "07b1128eb9cbf41d6da440b942b2b7aab43999fb072ebd44c6af31ec1b817f33",
+    "family_proof": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:7aa7592b0312ca3195604e7797aa200fc22b64b2009be98a94a1ede39451711d",
+    "descriptor_digest": "ea0a73deabed320d308f821ec96cef662f8d957415b31ed7daac605564bea664",
+    "family_proof": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:4a8f0b274238635d732abd2cc11fd663760d4ce612ced9272691fa84190fdc58",
+    "descriptor_digest": "fc5ef416f67ccb322b54d0296dd8cfb27d9ea15eaa8f7e5067f2575099917372",
+    "family_proof": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:3f8bc0cd10418e563b7c74ec9e5b7d88a6caa178bd6b9e8785c5fe9b7567ce25",
+    "descriptor_digest": "a6b49427207fff3a94e9a0792bd220954550295f02623f6f2b520ff38a5013ea",
+    "family_proof": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:41f9670a90c1b089f3fe239e5d1bd9fda05eecd0b0019136d5f986f65dceeee3",
+    "descriptor_digest": "92d492943ef8cda632ae142973c09fcffb3307a1a7af2180f34ec1ec3d0be66a",
+    "family_proof": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:778d8e81e10cb929091000a375535d88c2e93fb66375e6476d5b6efcc1cf1d13",
+    "descriptor_digest": "44c1248607c8eba53303aa821271fa0e5fc099cab0b8fa7aa271178e907beb75",
+    "family_proof": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:d5192f6f7e611fddcf8af969a5a4fb4d656788a6086f8f1d82c07939c809aa69",
+    "descriptor_digest": "f123651287aa4a8cb65e0a775a795bea04c5ce38e05b508be2b46e9e6d092ea2",
+    "family_proof": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+  },
+  {
+    "key": "bc2:magazine-descriptor:6683eecdf056217377c7bdfc8b8248a9b953505d95a8d581a0bff048e5358755",
+    "descriptor_digest": "c6dac68e52b24a2ac8e4626c9fb571a12bce2fef41c4920ec7406951b879d46a",
+    "family_proof": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+  },
+  {
+    "key": "bc2:magazine-descriptor:c350d350a994fe9fb6a7ee3fc46b70b419f37e1a809359b325bd9cfa326d1414",
+    "descriptor_digest": "9045d9e9a075ddc6bc512947aa9f7ab0e35dc6bfc0284a26816d91955a30705f",
+    "family_proof": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+  },
+  {
+    "key": "bc2:magazine-descriptor:37a2fd9255b12bf5e47a226dd41ff1d52ec5df704075c3ceec70cd3426d5e975",
+    "descriptor_digest": "320052b7dae11af43d47487ba2314c3130468074c6d212ec8b0c65836a746bd5",
+    "family_proof": "bc2.singlefire-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+  },
+  {
+    "key": "bc2:magazine-descriptor:323395ccfdcc4682df390ce420c13358df6d0a1dfa31c126566f31f4d066bb30",
+    "descriptor_digest": "0c156eb4c9b54bb2c904e79007cfe35bab94712b70492f88cd32e2d6b0ef1239",
+    "family_proof": "bc2.singlefire-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+  },
+  {
+    "key": "bc2:magazine-descriptor:82679abf3c9a5f5679bd565b1c53d14199480ab35ad94aa0b71eddfbac797fd2",
+    "descriptor_digest": "ba2e9b015db68b3feb07745c3da0163b12b19c9a7e731b3e2dd5fc5a5c9eae94",
+    "family_proof": "bc2.singlefire-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+  },
+  {
+    "key": "bc2:magazine-descriptor:675f72ae9b9bc4c2dbae796fd61cec112cf70ddae2717ba3784e3dd433eef270",
+    "descriptor_digest": "8684b4a28f81b2db750994b285cb63adb17f8be1ccfd33336df3e462cc061a43",
+    "family_proof": "bc2.singlefire-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+  },
+  {
+    "key": "bc2:magazine-descriptor:14ca5aad5b706a1b9dc454c65f4934a55382e9232456226a15a6d96a58c572dc",
+    "descriptor_digest": "6a4351b8534c57268515783cb8b93a8b0deb1a527164d370ec1579435d807d97",
+    "family_proof": "bc2.singlefire-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+  },
+  {
+    "key": "bc2:magazine-descriptor:532dcb822624624fe213eae324e06dfacfb4543a504e06ac1e2ad06425facf67",
+    "descriptor_digest": "16b713d46db6e950d1165e9c30713ab1b7689fec6f4fbee1b3bb5a308767ce14",
+    "family_proof": "bc2.singlefire-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+  },
+  {
+    "key": "bc2:magazine-descriptor:151bc7f5db908e412bf589f90ad27e6d36a982a8f66c448463735e4663bfbac1",
+    "descriptor_digest": "5115f44235a3a88813a2a0a5f5a6d42afa76d28e4807bf2d877b9385acb02b10",
+    "family_proof": "bc2.singlefire-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+  },
+  {
+    "key": "bc2:magazine-descriptor:f0ba77c5dac946388c9b5ee4fbe2a390e67ef76dc137e810e67ca024f68349e3",
+    "descriptor_digest": "8eeb03ccfdc0a41566957b382ef3c9d94917e1b90af9170375aad698c7053b81",
+    "family_proof": "bc2.singlefire-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+  },
+  {
+    "key": "bc2:magazine-descriptor:5466a21edab829ec521ed15ff209d0cae1202e1c9720c981ec80504016da7813",
+    "descriptor_digest": "3be1da697ecf48453a86d75dbd8f1bf830ee2a8638cb6994ba0839969064965f",
+    "family_proof": "bc2.singlefire-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+  },
+  {
+    "key": "bc2:magazine-descriptor:54b19bb731eaa114d765c82b4974c6e579d23760b17f470f95f4014bb8912959",
+    "descriptor_digest": "016b48cbbd7656cb43d720f4e934de9a2abb72ac34fab5a2fabee58819e91e59",
+    "family_proof": "bc2.singlefire-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+  },
+  {
+    "key": "bc2:magazine-descriptor:3dd7ed1f40eab21d2653a52e11f86a4ab1b7925c7c2d5a3678a5b1932add1ea8",
+    "descriptor_digest": "fb7c05e5c1290cce890aeb13e8b8c68d8f04cdf5d1c448eb85c811416a973826",
+    "family_proof": "bc2.singlefire-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+  },
+  {
+    "key": "bc2:magazine-descriptor:98da580d445de61d73ac71da960a19f846bc4d9b0956ed99c0db3ddc412eb158",
+    "descriptor_digest": "3d137b1fbf5627fc990aff365d8af87074d270f12045c4c02fff4efb7d06e2bd",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:7e41a821f675656317c4fd3441a7449bd3c8256a7d63cfe9036b9474e748742e",
+    "descriptor_digest": "aee06acc2e5e7106b107d9f8105cddefbbfd54203cc0d1ffa565f70df105a6ec",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:bbdf00b7b5c94d833086717bb9346d028b3a05c185d7385c29789674d09b4dc2",
+    "descriptor_digest": "9ae27a565772942901686d9dcf8a5d7158e69512056e78b7b35906844aacafd8",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:11860d9f0259e76ad07b316c34dec70a6dbd72fd731b581317c8473a48d30f85",
+    "descriptor_digest": "827c338d56fe15c8f17289885b60bfcbe68f73271b8f2b3007132cda1bae8722",
+    "family_proof": "bc2.bolt-action-magazine-reload.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:58f0ad65f6576ba7f6666f1b5dbd06f7373304d9265e189d39c3f76513520307",
+    "descriptor_digest": "46ccf1ab87741d489b2f5c19ff7cea0762bfed50e7ae0ff138d534a60cceb121",
+    "family_proof": "bc2.bolt-action-magazine-reload.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:c3502874bea7c799efbd7d810661e5b25c5b0d1c6c6d0cf90e77cfb8bf307565",
+    "descriptor_digest": "65c2a2b1f7e12f666faac301f033ba09ff802d3256fb745e4780d1d82e0ad62b",
+    "family_proof": "bc2.bolt-action-magazine-reload.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:04e2e2d372322fd7118521ffc0fc716005dbbb8f05669ceaafb78a28ef3f35c4",
+    "descriptor_digest": "93c7544bfb70aaa9803180020ac7aa8dd97b57c9971a4c8f4c154c9feb259494",
+    "family_proof": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:8313e354ee7e05964b8dbe326625db2340bde01970fe81cdd79ab94bd3f6624f",
+    "descriptor_digest": "1c04bd6d3cf54830aa980ff2f397b527b0a39626e82d8136be389c55e8e1b768",
+    "family_proof": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:912363965c8217cac287a4cd9a8171cc1f6ef6e301d8d0952bf2f974bfbce1b3",
+    "descriptor_digest": "62b0462ffde2c45fffb5d5e766050726dcce782cc7dd83ba03e211279bc78ee6",
+    "family_proof": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  {
+    "key": "bc2:magazine-descriptor:d8c12ee5fdb3d7010d506a6d35ccb7a4659b922df4b91086d53a3720c02574e7",
+    "descriptor_digest": "525af5240a80c30e8c8b289d8a894bec8978dfec009df47532a5a6e2f0fe5e39",
+    "family_proof": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+  },
+  {
+    "key": "bc2:magazine-descriptor:a0cd7ccfe9530e190af53ca7a74bc47cf775e4ff3fe8797c9785075776c81553",
+    "descriptor_digest": "eb99584c5649b0745259fadf59de7562c0d58f75a87e9538f82691b779249b5b",
+    "family_proof": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+  },
+  {
+    "key": "bc2:magazine-descriptor:d803188a5f4f780d2a338a532f61a49c1825af07d2ea85d592916b7008d314ed",
+    "descriptor_digest": "b85a35ea2fcfef19f8e546dcc2e22e55a806974d7521c40e6f60b07083a0161b",
+    "family_proof": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+  },
+  {
+    "key": "bc2:magazine-descriptor:d3d4611105dd3a73998b6a3b1c9a07b81cbca4ee7a4c3388b1391038cce84eb1",
+    "descriptor_digest": "785d0e4357bc6d6b82f690f77dccad214219dad423f287a169f114306497b794",
+    "family_proof": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+  },
+  {
+    "key": "bc2:magazine-descriptor:51433e30a3e6b097035ab4924f7c3a28d0361479b33be0e10e1614c133961297",
+    "descriptor_digest": "f80000605bde3ac4cfae20444a3f9ebef7a885d19780f6f19fc30c1fd84f9a00",
+    "family_proof": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+  },
+  {
+    "key": "bc2:magazine-descriptor:37d95e7c9c8d29f4ba3cfce885933531e185d1de7626e18f2c256b07488394ca",
+    "descriptor_digest": "213ba474253272a23ffef3a45601fd3de03c3052d464ca416462862cf87eccd7",
+    "family_proof": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+  },
+  {
+    "key": "bc2:magazine-descriptor:a1b6899b5c924f7fa3535f73c11981dbaa045b6042774e8b12739da094603a95",
+    "descriptor_digest": "5ab04207c57bc62f5981bab7adde750ed59bb99ff8d63a24752992bdc468cdce",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:c3ab6f330c842ea16af3b5a4015571cde4381ae4b321078ff26f2a647d932bc5",
+    "descriptor_digest": "b04be6ebddc37e0a8efc269b6c5a17f5759ee027f955727990b567835702860b",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:12b76e77e43b05585b0ca6f08026907dd14bc97197cbf3b5b78f78c87678237c",
+    "descriptor_digest": "554393b345ef9ccd39e7ca28dbe9dc2e4013f15729941bea631883f73816987a",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:eb0fceccd26374a67136958d96b498977123553d6b263b1b0ebc148918eb3d95",
+    "descriptor_digest": "4692f00c70273976a5ad4fe6357e00041c535951892f9396944caeab9c22866b",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:8ca3da8433642bcf2b7ca657f390511c761b21ab9b3b0f7c5da10e6fb993f020",
+    "descriptor_digest": "b19a5db7b3a945384722842232431451edc1a37d3b72177785dbc4b0ab8c1be9",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:ec450e4890813d6ee9d3d5e7351fd7a9843e5bd67adbc47fd5561e4be0735012",
+    "descriptor_digest": "bb4bddcc7411bf6e9d5be8db689d747fdcb935c0756d2961cd82b08a30469445",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:4f97e7ec41ac74889c14dcd775d64a586b69ff7cdb3977e9cdc38a7500ede30c",
+    "descriptor_digest": "802da22d82a0ed998adcd4e31f8406615d9f3787246cc9227273a199892ce048",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:6df97060141bc51570d34af7a1de8835fc1f1b4585ff103186af72382a91237a",
+    "descriptor_digest": "8d0631732c1352c7cda26e16bcce05e4d5da516776db3ae13545a96485c7e01d",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:dc48ab96e370e3bd6b60d02fd97e6d3d2597f8290320692ffd9b7b7cf8e63565",
+    "descriptor_digest": "d98a7423295caf7e7b1a668b80ff8e9120e5a13f39b1058c5ed6e0ed365e6a84",
+    "family_proof": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+  },
+  {
+    "key": "bc2:magazine-descriptor:2f12ae7620d188380483d36e391c24f5d98899b9bfee0afcf69dab5f810f44ed",
+    "descriptor_digest": "21dfe24c26c4493677495f0af0246bd56805f9c529ef3469f9d99ff8d3c398de",
+    "family_proof": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+  },
+  {
+    "key": "bc2:magazine-descriptor:1e83842f6aa6f5f5f41423710b85c69ca25b2613bb1f0b208e7b6e09940f8670",
+    "descriptor_digest": "56c9205b9a508c0933fb509d6c715545052ed8ade11558b25d137fde14404283",
+    "family_proof": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e",
+    "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+  },
+  {
+    "key": "bc2:magazine-descriptor:4d31138736cae6e33c17a4777efdd9cc5bb77dc69f6ab62a65f354b8a193169d",
+    "descriptor_digest": "ffb4d28d1fccde456951adc75e9b19a66d9371a6ed1b00e5071b27512e395049",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:121a7426a50ef627a9f5fb69ea0efcf400f4085d7604b8b9045f75124f2068c0",
+    "descriptor_digest": "c83926c1ff2566fc21a8ef7ca8de861744751f66e08173faea050d9998517603",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:45f398e90f6d7fcc4a601b92328fdee4383d5337e341bad287a33ca7037a6c64",
+    "descriptor_digest": "ee4ae55665eff5ede7825215dfde7df137cfb477bce04b3e1e5b108f91865e7d",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:e274022c3fe42e2cac5bb7767f978f695ac5ce8b99e666c1c5bf89119c64572c",
+    "descriptor_digest": "b2456755518854bcbffb7f53dc43d19fee8423c98ab9b40c6b113f3317956a02",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:bf703cc6c898cb9c9acadf69f7c91693973213997ed3e40941e34c182d61c1cb",
+    "descriptor_digest": "7fe4f80d5f880ab0f8abff61fc61b593d120106d8537c537f7bd6bb8a5e2b3d4",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:4f4cd5de7565ff110c07a825713010edd3291f421fb6afaa68c13d2da20c4012",
+    "descriptor_digest": "b6d8cc07abf4f50dceb5fdbfb354c4384c56057302343d6df2cdc4fb22d8d598",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  },
+  {
+    "key": "bc2:magazine-descriptor:98ec12b73655a4883c20dbe4e9f73ec1b1eed3b61efa50bb9630cd9421cf88f0",
+    "descriptor_digest": "00c1e4398d18f3f29ac5af6e878fe16705ebd6e2e171c5cc902f8507f1366c95",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "f99359e6662e989072850e6325c9473af050e55cce0eee2dff5096fd18c3443e"
+  }
+]

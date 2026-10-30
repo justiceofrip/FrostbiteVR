@@ -1,0 +1,21 @@
+Done: Y (portable source composition; root x86/x64 checks and review passed).
+Source: include/fvr/interaction/FeedReloadSession.h
+Tests: tests/FeedReloadSessionTests.cpp
+Owns one immutable-lifetime FeedInteraction + retained FeedReload instance.
+Update joins actual current contact/gesture to exactly one coordinator update.
+Only result.reload.dispatch is adapter dispatch authority; pending is inspection.
+Binding must match exact owner, mechanism, profile and operation capability.
+Binding changes interrupt the grasp; dispatch locks the binding for the lifetime.
+Pending/applied-wait/complete/retired state suppresses physical recognition.
+Same-frame acknowledgement resolution cannot supply neutral or a new completion.
+Tracking/stow interruptions retain pending requests and accepted native effects.
+Retirement requires exact old-request reconciliation and a fresh old-owner snapshot.
+17 deterministic cases include all nine linear/hinge/return measured gestures.
+Cases cover separate native ack/post-state, no duplicate dispatch, binding swaps,
+tracking/stow loss with accepted effect pending, stale packets and owner retirement.
+Root reports all17 cases passed: feedsession-x86-check03 and feedsession-x64-check01.
+Two earlier test-expectation failures are retained; production header unchanged.
+Root review found no actionable source issue; this worker did not execute builds/tests.
+No frozen dependency, native integration, profile, package or install edits.
+Limitation: supplied test geometry/authority is synthetic; verified BC2 binding,
+actual-game operation/resource evidence and headset acceptance remain unproved.

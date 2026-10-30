@@ -1,0 +1,10 @@
+Done Y: assigned portable retained-bolt reload contract and player intentions implemented.
+Done N: root-owned native/PhysicalBolt/ReloadFlowRuntime adapter wiring and execution validation.
+Added explicit rear/open pause, RightGun/LeftMagazine custody, fresh support resume and remaining Forward/Lock.
+Completed magazine receipt provenance permits full-capacity retained debt; legacy shot admission stays strict.
+One-command convergence retains dispatched operations and receipts across interruption, invalidating old grants/votes.
+Thirty-second total bounded pause preserves remaining active-stroke budget without renewing input/native leases.
+Eight focused regression cases added in tests/BoltReloadDebtTests.cpp; root registers and runs target.
+Root must add Bc2PhysicalBoltSample.reloadIntent and consume new APIs as specified in IMPLEMENTATION.txt.
+Lost hand roots remain unresolved until explicit fresh-custody/owner recovery; no stale auto-rearm.
+No Git, build/test execution, game, install or recursive agents used.

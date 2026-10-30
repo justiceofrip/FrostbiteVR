@@ -1,0 +1,6 @@
+Camera31 static evidence committedd1e69f7; normal source last changed6c42c3f.
+All27-33 workers frozen/retired; no outstanding file ownership.
+Context/service closure: handoff/integrations/coordinator-20261030-camera33/README.txt.
+Unknown N_i type and selected-camera/view identity remain parked.
+No further generic listener/container investigation or unchanged desktop/XR retries.
+Canonical integration/push/install held;0.1.17 unchanged. Full campaign list incomplete.

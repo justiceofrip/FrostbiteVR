@@ -1,0 +1,14 @@
+Done Y: bounded read-only five-config feed dependency preparation; source unchanged, no tests/build/game/XR/install/native executable analysis.
+Already fully enrolled: M9 N; M9-3 N; M1911 N; MP443 N; MP443_sp Y. This is magazine enrollment, not slide/chamber/headset acceptance.
+Canonical FrostbiteVR/build/{x86,x64}/CMakeCache.txt selects opening426/CombinedRegistry.h + CombinedGeometry.h and RESOURCE_MAGAZINES=ON; bare CMake defaults both optional headers empty.
+Existing native exact row: MP443_sp only, resource-enrollment295-pistol/PistolRegistry.h. Four new exact-key/digest SingleFire family reviews/rows required; existing reflected proof supports shared generation, not automatic per-config approval.
+Existing magazine geometry: experimental-pistol-sampled242/exact-geometry.json profiles0 M9,1 MP443_sp; both jntWpn_12 complete rigid assemblies + sampled authored paths. M9 is currently unreachable without native enrollment.
+Missing exact geometry rows: M9-3, M1911, MP443. Original magazine-candidates.json has contact gaps for M9/M9-3/MP443/MP443_sp; these are superseded only for the exact M9/SP rows above.
+M1911 old batch binding gap was packed-position support; mesh312-research/reference-bindings.json profile0 + mp-mesh-bindings.json weapon66 already repair it. All5 exact reference/mesh inputs available; no new parser/mechanics code identified.
+MP443_sp semantic contact review is exact to SP; MP443 needs its own reviewed semantic/contact row if generic selection remains ambiguous. M9-3/M1911 outputs must pass existing contact/assembly/path checks; no renamed reviews or copied geometry.
+Missing cache/catalog records: detached magazine + configured whole body for M9,M9-3,M1911,MP443 (8 records;49->57 if all succeed). Existing SP records44/45 remain; cache generation retains16MiB/64-profile limits.
+Visibility: MP443 and MP443_sp exact rows already in Bc2VisibilityDescriptorData.h; M9/M9-3/M1911 rows absent. Generate full exact5 visibility report for enrollment join, then merge only missing rows.
+Run cached input preparation: py -3.12 -B handoff/tasks/CHAT16/20261030-feedbatch38/prepare_inputs.py --output reports/coordinator-20261030-feedbatch38 (optional --jobs ROOT_CONSOLIDATED_JOBS).
+input-plan.json contains pinned exact rows, existing shared geometry command, visibility command with explicit saved-rig-trace prerequisite, shared cache-generation APIs and enrollment/export commands. Root executes; preparation does not create four missing reviews.
+Integrate generated native/geometry/catalog/visibility data into current combined inputs; preserve existing SP profile digest because its detached cache binds that exact digest. Geometry alone cannot reach an after-feed owner.
+Evidence level: cached authored/static source inspection only. MP443_sp prior scoped native magazine receipt is recorded in CURRENT; it proves no slide/chamber extension. Retired.

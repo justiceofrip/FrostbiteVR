@@ -1,0 +1,30 @@
+DoneY: bounded pistol readiness preparation complete; no supported source correction found.
+Worktree: campaign-coordinator-20261028-r1; assigned base dfc0e507be635769dade167c1d642e3716443835.
+Agent wrote this handoff and reports/coordinator-20261029-work12/pistol/ only.
+No Git/build/game/XR/input/profile/install/shared-document operation was performed.
+Existing shared gate: occupied tactical feed selects no action; empty feed requires
+the declared after-feed action; unknown chamber refuses admission. Slide deliberately
+has no gesture mapping and cannot borrow NativeAfterShot Pump/Bolt readiness.
+No native-loaded count, stock reload completion or authored pose supplies chamber proof.
+Root retained probe, tests and unchanged preparation02.json beside this handoff.
+prepare reads the exact installed image plus two hash-pinned MP443_sp DBX resources.
+preparation02.json records four reflected structs / 64 fields, identities and reader hashes.
+The authored ReadinessStates field is Relaxed=false, Alert=false, not chamber state.
+WaitForTriggerRelease=true; bolt delay/time are zero; magazine capacity is 17.
+None of the four inspected reflected structs names chamber/slide state. This does
+not establish absence of other native runtime state. No capability was enabled.
+Report SHA256: 0ae8203ae1f190ebdc8b0d1bfc293cdd9f8a1e256e89da2f94e6da48ba78ae55.
+observe reuses existing Inspector + client/server capture readers; no new state offsets.
+It admits exact MP443_sp shape, reads two nonaliasing client copies plus server,
+checks identity bookends and survey lifetime, retains the first rejection and stops.
+Root-only invocation after its StorageBudget/session approval:
+py -3.12 -B handoff/tasks/CHAT16/20261029-work12/pistol_readiness_probe.py observe --exe "G:/New folder (2)/Battlefield Bad Company 2/BFBC2Game.exe" --pid <PID> --stage empty-after --output <new-scratch.json>
+Stage labels: tactical-before, tactical-after, empty-before, empty-after; labels do
+not prove events. Maximum 16 samples / 3.75s sleep / 256KiB output; no input or writes.
+Tests: py -3.12 -B handoff/tasks/CHAT16/20261029-work12/test_pistol_readiness_probe.py
+Seven synthetic observer/metadata checks PASS. First five-test run failed one
+incorrect fixture expectation (Alert=true); actual extracted false retained and
+expectation corrected. preparation01.json remains as initial extraction evidence.
+No live observe run or new MP443 native/headset qualification. Root owns future
+event-correlated native observation; no repeating the already qualified magazine run.
+Retired. Root relocation:7/7 pass after retaining missing receipt; initial failure kept.

@@ -1,0 +1,52 @@
+{
+  "schema": "fvr.bc2.exact_m60_geometry_visual_review.v1",
+  "evidence_level": "offline_decoded_mesh_and_authored_clip_visual_review",
+  "geometry_evidence_sha256": "6ecb026b1278c4e71fefc7da08a68c9dba97f66d64f4fd9d78d472ed8e889876",
+  "private_render_receipt": "reports/coordinator-20261030-implementation15/m60-geometry/render-receipt.json",
+  "render_receipt_sha256": "83bd4a9a1f1a436a4c3d14f0b7c75eeeef4bd5d9cbe35d05a39628df59629d88",
+  "reviewed_frames": ["frame00.png", "frame01.png", "frame02.png", "frame03.png", "frame04.png"],
+  "runtime_enabled": false,
+  "native_admission": false,
+  "presentation_classifications": [
+    {
+      "role": "top_cover",
+      "bone": "jntWpn_9",
+      "status": "supported_authored_presentation_geometry",
+      "evidence": "Frame00: thin panel lies over the colored linked rounds and receiver. Frame01: the same rigid panel rotates about the fixed front pivot while the authored left hand stays on its surface. Frame03: it stands upright above the exposed rounds. Frame04: it lies over them again.",
+      "usable": "Fixed pivot, opening axis, panel bounds, decoded angular range and stable authored local wrist matrix are recorded in geometry-evidence.json.",
+      "not_established": "Native cover state, latch, authored interaction threshold, stage command, acknowledgement or required ordering."
+    },
+    {
+      "role": "ammunition_container_pouch",
+      "bone": "jntWpn_6",
+      "status": "supported_authored_presentation_geometry",
+      "evidence": "Frame00: the Fabrics-weighted pouch is under the linked rounds beside the receiver. Frame02: that same independent geometry is detached and held by the authored left hand, with the linked rounds above it. Frame03: the pouch is beside the receiver again.",
+      "usable": "Independent rigid mesh bounds and authored baseline transform are recorded. At2.1s the left knuckle centroid lies7.1964mm from an actual pouch mesh vertex.",
+      "not_established": "A rigid pouch-plus-belt assembly, static carry grip window, insertion socket, resource ownership, ammunition count or transfer boundary."
+    },
+    {
+      "role": "linked_ammunition_belt",
+      "bones": ["jntWpn_12", "jntWpn_13", "jntWpnwpnJnt_14", "jntWpn_15"],
+      "status": "supported_authored_presentation_geometry",
+      "evidence": "Ammo material, repeated cartridge-shaped mesh sections, the exact parent chain and frame00/02/03 poses agree. The strip travels with the carried pouch and later lies across the exposed receiver under the raised cover.",
+      "usable": "Four separately weighted rigid segments and their exact authored parent transforms; the chain must retain articulation.",
+      "not_established": "A single rigid feed object, authored feed-seat contact/socket, independent feed command, native belt identity, round count or completion acknowledgement."
+    },
+    {
+      "role": "side_pull_actuator",
+      "bone": "jntWpn_4",
+      "status": "supported_authored_presentation_geometry_charge_semantics_unassigned",
+      "evidence": "Frame00 shows the cyan side rail. Frame04 shows its rearward displacement with the authored left hand at its moved front end after the top panel has returned. Its decoded local translation is a straight233.5956691mm stroke with constant orientation.",
+      "usable": "Baseline origin, +Z rail axis, local mesh bounds and exact offline spline extrema; these define an unassigned slider.",
+      "not_established": "Charge/chamber/bolt semantics or a mandatory charging step. The clip has no semantic charging track name; a reload pose does not prove those gameplay effects."
+    }
+  ],
+  "unsupported_roles": {
+    "latch": "No independently moving mesh-weighted latch or authored latch label/contact was identified. Static small parts are not assigned latch semantics.",
+    "native_cover": "Presentation only; no native cover state or command.",
+    "native_container": "Presentation only; no resource instance or custody/transfer proof.",
+    "feed_interaction": "Visible belt presentation only; no verified feed socket, insertion contract or completion predicate.",
+    "charge_interaction": "Unassigned slider only; no charging/chamber authority."
+  },
+  "implementation_input": "Shared offline hinge and slider math can use these measured frames without enabling a game profile. Any exact M60 profile implementation needs an explicit grant and separate selected contact/tolerance and authority decisions."
+}

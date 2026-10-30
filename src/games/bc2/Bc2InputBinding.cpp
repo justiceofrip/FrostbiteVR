@@ -25,6 +25,31 @@ std::optional<EntryAction> VerifiedSelectedFireAction(const ReloadStateSnapshot&
        exact(c.assetPath,"Objects/Weapons/Handheld/Knife_Equipable/Knife_Equipable"))return EntryAction::MeleeAttack;
     return {};
 }
+std::optional<EntryAction> VerifiedSelectedReloadAction(const ReloadStateSnapshot& s,
+    const ReloadStateOwner& owner,std::uint64_t sequence,std::int64_t now) noexcept {
+    if(!owner.player||!owner.soldier||!owner.weak||!owner.weapon||!owner.actorGeneration||
+       !owner.equipGeneration||!owner.space||s.owner!=owner||!sequence||s.sequence!=sequence||
+       s.observedNs<=0||now<s.observedNs||now-s.observedNs>100000000||!s.inventory||
+       !s.config.weaponData||!s.config.firingData||!s.config.primaryFire)return {};
+    const auto& c=s.config;
+    if(c.reloadInputAction==29)return EntryAction::Reload;
+    const auto exact=[](const auto& bytes,std::string_view text)noexcept {
+        return text.size()<bytes.size()&&std::equal(text.begin(),text.end(),bytes.begin())&&bytes[text.size()]=='\0';
+    };
+    // Authored opening426 Expack_Firing: Fire=EiaFire, Reload=EiaZoom,
+    // capacity1/unlimited reserve. Require the live configuration as well as
+    // exact selected asset identity; a display-name match grants no route.
+    if(c.fireInputAction==8&&c.reloadInputAction==14&&c.baseCapacity==1&&c.numberOfMagazines==-1&&
+       exact(c.assetName,"Expack_US")&&exact(c.assetPath,"Objects/Weapons/Handheld/Beach/Expack/Expack"))return EntryAction::Zoom;
+    return {};
+}
+void ApplySelectedReloadRoute(interaction::ActionOutput& action,std::optional<EntryAction> route) noexcept {
+    if(route==EntryAction::Reload)return;
+    for(auto* level:{&action.held,&action.pressed,&action.released}){
+        const bool reload=(*level&interaction::Reload)!=0;*level&=~interaction::Reload;
+        if(reload&&route==EntryAction::Zoom)*level|=interaction::AlternateFire;
+    }
+}
 bool InputOverride::Apply(std::span<std::byte> cache,const interaction::ActionOutput& action,std::optional<bool> diagnosticGrenade,std::optional<bool> diagnosticCycle,std::optional<EntryAction> verifiedWeaponMode,bool verifiedContextUseVehicleAlias,EntryAction verifiedFireAction) noexcept {
     if(active_||cache.size()<InputBytes||!action.active||!action.owner||
        !std::isfinite(action.forward)||!std::isfinite(action.strafe)||

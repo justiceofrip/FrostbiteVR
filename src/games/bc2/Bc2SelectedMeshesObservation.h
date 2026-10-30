@@ -1,6 +1,7 @@
 #pragma once
 #include "Bc2SelectedMeshes1p.h"
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <ostream>
@@ -36,7 +37,7 @@ public:
     SelectedMeshesObservation(const SelectedMeshesObservation&)=delete;
     SelectedMeshesObservation& operator=(const SelectedMeshesObservation&)=delete;
     bool Install(std::span<const std::byte>,const engine::PeImage&,std::uint32_t imageBase,
-        ReloadStateMemory,bool enabled=false,bool persistent=false)noexcept;
+        ReloadStateMemory,bool enabled=false,bool persistent=false,std::string_view exactZoomConfigurationPath={})noexcept;
     bool Observe(const ReloadStateSnapshot&,std::int64_t nowNs)noexcept;
     std::shared_ptr<const SelectedMeshesSnapshot> Read(const ReloadStateOwner&,std::int64_t nowNs)const noexcept;
     // Discovery consumer: original immutable lease; caller must recheck native
@@ -73,5 +74,21 @@ private:
     std::array<IdentitySample,IdentityCapacity> identities_{};
     unsigned identityCount_=0;
     std::uint64_t identityDropped_=0;
+    // Allocated only by the finite exact-path diagnostic opt-in. Historical
+    // authored data has no getter and cannot enter selected render consumers.
+    struct ZoomSample {
+        std::shared_ptr<const SelectedMeshZoomSnapshot> snapshot;
+        std::uint64_t generation=0,firstSequence=0,observations=0;
+    };
+    struct ZoomDiagnostic {
+        std::array<char,512> configurationPath{};
+        SelectedObservationCounters counters{};
+        std::array<ZoomSample,IdentityCapacity> samples{};
+        unsigned count=0;
+        std::uint64_t dropped=0,configurationSkipped=0;
+    };
+    std::shared_ptr<ZoomDiagnostic> zoom_;
+    void ObserveZoom(const std::shared_ptr<ZoomDiagnostic>&,const std::shared_ptr<const BindingStorage>&,
+        std::uint64_t generation,const SelectedMeshesSnapshot&,std::int64_t nowNs,std::chrono::steady_clock::time_point started)noexcept;
 };
 } // namespace fvr::bc2

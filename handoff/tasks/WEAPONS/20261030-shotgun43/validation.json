@@ -1,0 +1,32 @@
+{
+  "schema": "fvr.bc2.shotgun_batch_data_checks.v1",
+  "data_checks_passed": true,
+  "header_sha256": "3408bd2fd6c6d6574566b82eea0472e09a7b579b2d0815aba8f6cd2183c3691a",
+  "summary": {
+    "configurations": 39,
+    "tube_pump": 25,
+    "automatic_magazine": 8,
+    "singlefire_magazine": 6,
+    "mechanical_records": 153,
+    "geometry_content_groups": 24,
+    "new_native_acceptance": false
+  },
+  "common_magazine_export": {
+    "rows": 14,
+    "enabled": 0,
+    "omitted_unreviewed_or_builtin": 0
+  },
+  "negative_checks": [
+    "foreign_key",
+    "foreign_descriptor_digest",
+    "foreign_proof",
+    "foreign_family",
+    "duplicate_selector",
+    "changed_scalar"
+  ],
+  "compiled": false,
+  "actual_game": false,
+  "headset": false,
+  "default_new_native_admissions": 0,
+  "default_existing_SPAS_admission_preserved": true
+}

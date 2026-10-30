@@ -1,0 +1,14 @@
+DoneY: bounded NEW queue-consumer continuation complete. OriginalBOwnerN; SourcefixN; selected-view authority unproved.
+Worktree campaign-coordinator-20261028-r1; supplied base77b9926 plus frozen pistol source; root reported local pistol commit e507fce during a queue25 write freeze; no Git queried.
+EXE SHA2563911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258 verified file-only.
+Owned HANDOFF.txt, cinematic_queue.py, proof01.json; scratch reports/coordinator-20261030-cinematic-queue25; proof SHA25609a31eea86970d877e406ae258273f1188910571f494e6539e8c6c701b2772ab.
+Inherited child21 proof SHA256c553d972c6fc54623be7e2222ec9426481d66f5e62b6116e1ff132a2cbd6d110; constructor20 exact delegate/table evidence reused.
+Five NEW complete functions/1097 bytes:3b3270,424370,b6c520,b505c0,b6bb00;566 reused bytes; no adjacent spill; limits8 functions/64KB satisfied.
+Verified count xref3b327c clears B+720. Complete caller424370 owns stack-local B, resets it through3b3270, appends through inherited b50630, then passes exactly B to b6c520 at424419.
+When global byte RVA14949d8 is zero, b6bb00 reads R=[B]+i*70 and calls b6b9c0 at b6bc20 with ECX=[R+40], arguments(T,[R+44],R,byte[R+4d],W); target effects remain undecoded.
+Consumers use begin/end length ([B+4]-[B])/70, not insertion count+720; b6bb00 caps iteration at32 records. Other global branch reaches b505c0, which calls virtual+4 on [[R+40]+2c].
+PROVENANCE LIMIT:424370 is a separate caller with its own stack queue. Its B is NOT proved identical to original39cd30 incoming B; queue structure/consumer discovery does not close the cinematic ownership chain.
+ONE next edge:3b2436 ->39cd30(receiver=companion+80, second argument B forwarded by3b23c0 at assigned table102c974+14). Identify that incoming B and join the same object to the verified consumer.
+No matrix-composition, selected local-player view, HUD, entry/skip/exit, gameplay-return, or continuous head-rotation authority follows; no production/API proposal.
+Three reset-bound refusals before saved decode are retained in proof; final exact bytes/hashes, call targets, complete coverage and ABI checks pass. No neighboring function decoded.
+No production writes, Git, builds/tests, game/process access, input/XR, profiles, installs/packages or subagents. Frozen and retired.

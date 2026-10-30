@@ -34,8 +34,8 @@ int MeasuredUnscopedVariant(){
  f.Word(f.inventory+0x14c,1);f.changeCurrent=true;CHECK(!ResolveWeaponMode(f.Memory(),f.soldier,f.rifle));
  WeaponSightObservation s;s.assetName=profile.primaryAsset;s.rootName=s.sightParentName="jntWpn_1";s.sightName="jntWpn_9";
  s.skeletonFingerprint=adapter->opposed->skeletonFingerprint;s.generation=12;s.deadline=34;
- s.attachmentReady=s.palmValid=true;
- for(auto m:{&s.nativeWeapon,&s.nativeSight,&s.placedWeapon,&s.rawLeftTarget})for(unsigned n=0;n<4;++n)m->values[n][n]=1;
+ s.attachmentReady=s.palmValid=s.frontValid=true;
+ for(auto m:{&s.nativeWeapon,&s.nativeSight,&s.nativeFront,&s.placedWeapon,&s.rawLeftTarget})for(unsigned n=0;n<4;++n)m->values[n][n]=1;
  s.nativeSight.values[3]={.1f,.2f,.3f,1};s.rawLeftTarget.values[3]={.1f,.2f,.245f,1};
  CHECK(!MeasureWeaponSightContact(s).valid); // Standalone scoped admission is unchanged.
  const auto contact=MeasureOpposedSightAdapterContact(*adapter,s,profile.primaryConfiguration);
@@ -47,6 +47,45 @@ int MeasuredUnscopedVariant(){
  ++s.skeletonFingerprint;CHECK(!MeasureOpposedSightAdapterContact(*adapter,s,profile.secondaryConfiguration).valid);--s.skeletonFingerprint;
  s.hidden=true;CHECK(!MeasureOpposedSightAdapterContact(*adapter,s,profile.secondaryConfiguration).valid);s.hidden=false;
  s.sightParentName="foreign";CHECK(!MeasureOpposedSightAdapterContact(*adapter,s,profile.secondaryConfiguration).valid);
+ return 0;
+}
+int CompleteOpposedGraspRequired(){
+ // A raw rear-ladder measurement is useful by itself, but the interaction
+ // adapter must not claim the hand for an assembly it cannot pose.
+ for(unsigned familyIndex:{0u,2u})for(bool secondary:{false,true}){
+  const auto& adapter=SightAdapterProfiles[familyIndex];const auto& family=*adapter.family;
+  WeaponSightObservation s;s.assetName=secondary?family.secondaryAsset:family.primaryAsset;
+  const auto configuration=secondary?family.secondaryConfiguration:family.primaryConfiguration;
+  s.rootName=s.sightParentName=adapter.root;s.sightName=adapter.rear;
+  s.skeletonFingerprint=adapter.opposed->skeletonFingerprint;s.generation=12;s.deadline=34;
+  s.attachmentReady=s.palmValid=s.frontValid=s.visualHandValid=true;
+  s.nativeWeapon=s.placedWeapon=At();s.nativeSight=At(.1f,.2f,.3f);s.nativeFront=At(.1f,.2f,.5f);
+  s.rawLeftTarget=s.visualLeftTarget=At(.1f,.2f,.245f);
+  const auto complete=MeasureOpposedSightAdapterContact(adapter,s,configuration);
+  CHECK(complete.valid&&complete.previewValid);
+  CHECK(SightGraspBinding::Begin(complete.pivotMeters,complete.axis,complete.sightLocalMeters,
+      complete.handLocalFrameMeters,complete.graspPointMeters,complete.palmPointWristMeters,adapter.travelRadians));
+  for(unsigned missing=0;missing<7;++missing){
+   auto incomplete=s;
+   if(missing==0)incomplete.frontValid=false; // Missing, hidden or non-leaf front.
+   if(missing==1)incomplete.nativeFront={};
+   if(missing==2)incomplete.visualPointWristMeters.x=std::numeric_limits<float>::quiet_NaN();
+   if(missing==3)incomplete.nativeSight.values[1][1]=-1;
+   if(missing==4)incomplete.visualLeftTarget.values[0][0]=-1;
+   if(missing==5)incomplete.nativeFront.values[0][0]=-1;
+   if(missing==6)incomplete.rawLeftTarget.values[0][0]=-1;
+   // Preserve the standalone reader's measurement-only contract. Before this
+   // fix the adapter forwarded all seven as valid interaction evidence.
+   CHECK(MeasureWeaponSightContact(incomplete,*adapter.opposed).valid);
+   const auto rejected=MeasureOpposedSightAdapterContact(adapter,incomplete,configuration);
+   CHECK(!rejected.valid&&!rejected.previewValid&&!rejected.generation&&!rejected.deadline);
+  }
+  // A complete recovery uses the exact current publication again.
+  ++s.generation;++s.deadline;
+  const auto recovered=MeasureOpposedSightAdapterContact(adapter,s,configuration);
+  CHECK(recovered.valid&&recovered.previewValid&&recovered.generation==s.generation&&recovered.deadline==s.deadline);
+ }
+ CHECK(!SightAdapterEnabled(SightAdapterProfiles[1])); // GP30 geometry grants no admission.
  return 0;
 }
 int ExactFamilyAndGate(){
@@ -116,5 +155,5 @@ int InterruptionAndHandHandoff(){
 }
 int main(int argc,char** argv){
  if(argc==2&&std::string_view(argv[1])=="--variant-only")return MeasuredUnscopedVariant();
- CHECK(!MeasuredUnscopedVariant());CHECK(!ExistingModeTests());CHECK(!ExistingAuthoredTests());CHECK(!ExactFamilyAndGate());CHECK(!ActualAssemblyConsumer());CHECK(!InterruptionAndHandHandoff());
+ CHECK(!MeasuredUnscopedVariant());CHECK(!CompleteOpposedGraspRequired());CHECK(!ExistingModeTests());CHECK(!ExistingAuthoredTests());CHECK(!ExactFamilyAndGate());CHECK(!ActualAssemblyConsumer());CHECK(!InterruptionAndHandHandoff());
  std::puts("Sight adapter: exact family gate, descendant plan and interrupted hand handoff passed; no native admission");return 0;}

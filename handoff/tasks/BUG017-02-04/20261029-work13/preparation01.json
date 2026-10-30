@@ -1,0 +1,399 @@
+{
+  "schema": "bug017.cinematic_static_preparation.v1",
+  "evidence_level": "offline static file examination",
+  "executable_sha256": "3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258",
+  "preferred_base": 4194304,
+  "reader_source_sha256": {
+    "handoff\\tasks\\CHAT16\\20261029-work12\\pistol_readiness_probe.py": "00fc61d7127c69430d959234d3774ea9c4cea5fdb9dd08e07c3fc1bd002d82a9",
+    "tools\\capture_reload_state.py": "94db343a4d568c5c6c784aa70b74a508ab936187f63eb95c778359a15294ca88",
+    "tools\\read_bc2.py": "aa03949aaa09f68534498cbc57f174f91f9843fd6a7ce1b3b86ca4127bffd45b",
+    "src\\games\\bc2\\Bc2Profile.h": "0c014f858cf8787517f84048380dfaa68f934628def85a805e6989f1a329a5ae",
+    "src\\games\\bc2\\Bc2Profile.cpp": "160fada6334677d6a50c5f0e5bbb3e6cc03e1a3466b2a823f85a8e357f34099c",
+    "src\\games\\bc2\\Bc2Gameplay.cpp": "dec8bc8d77f30fff6ddf67ba05a2a08b845973350c3907e803df4c6da0cb893c"
+  },
+  "script_sha256": "d5191b671d57de43c72e4dd68db2cc510bee5db51d73f6b9b2e0988e490c144d",
+  "constructor": {
+    "rva": 1050208,
+    "verified_existing_signature_unique": true,
+    "size": 62,
+    "sha256": "4784ee28d616c7b117818737620a224b790fa065b21f3ea12769d763ff9bd09d",
+    "parent_type_info_offset": 20,
+    "fields_type_info_offset": 36
+  },
+  "reflected_classes": [
+    {
+      "name": "ClientCutsceneCameraEntity",
+      "string_rva": 16990504,
+      "metadata_rva": 25118920,
+      "metadata_sha256": "b8f1cb54903a1f5b785ff4e0ee4a9757f38442c14cbda621d4ac072ecb57d297",
+      "flags": 53,
+      "size": 240,
+      "own_field_count": 0,
+      "initializer_rva": 16204640,
+      "initializer_size": 24,
+      "initializer_sha256": "5a81b9072b0640aa3a4ef2e4ac2e16cb126479f40acc6d53545c9ae8c257b512",
+      "type_info_storage_rva": 25119992,
+      "parent_type_info_storage_rva": 25120160,
+      "wrapper": null,
+      "fields": [],
+      "table_rva": null,
+      "table_sha256": null,
+      "getter_rvas": [
+        4685440
+      ],
+      "getter_sha256": [
+        "e0c1fa8bf03108463e7f9eea94bf7f104f6c3e7c708cdd28080eff62ee8ab483"
+      ]
+    },
+    {
+      "name": "ClientCutsceneEntity",
+      "string_rva": 16990480,
+      "metadata_rva": 25118944,
+      "metadata_sha256": "a4792a176fc4bde7f3ea046a5ce91bcd20aae2ff5fed94f30e4d3a5ddc71e9b0",
+      "flags": 53,
+      "size": 268,
+      "own_field_count": 0,
+      "initializer_rva": 16204688,
+      "initializer_size": 24,
+      "initializer_sha256": "77ad7d0f91ee2b3dc94bdc75bef006ecaac6491f1b5a9f75716464f58f2d608a",
+      "type_info_storage_rva": 25120048,
+      "parent_type_info_storage_rva": 25119656,
+      "wrapper": null,
+      "fields": [],
+      "table_rva": null,
+      "table_sha256": null,
+      "getter_rvas": [
+        4685552
+      ],
+      "getter_sha256": [
+        "a72508625e7ce550fe2850583b1942016fc8e9dfc3d58bde9d172efe4865cb66"
+      ]
+    },
+    {
+      "name": "ServerCutsceneCameraEntity",
+      "string_rva": 16912576,
+      "metadata_rva": 25108432,
+      "metadata_sha256": "86447051b24fee63b569a9e71ba763857177356729790e9a5a932b6b47d71144",
+      "flags": 53,
+      "size": 188,
+      "own_field_count": 0,
+      "initializer_rva": 16192832,
+      "initializer_size": 24,
+      "initializer_sha256": "0bf67189758016d25b14d6e6a6e02a93aaa1190d236ae9d5e2bc62327120660e",
+      "type_info_storage_rva": 25110736,
+      "parent_type_info_storage_rva": 25110904,
+      "wrapper": null,
+      "fields": [],
+      "table_rva": null,
+      "table_sha256": null,
+      "getter_rvas": [
+        2688064
+      ],
+      "getter_sha256": [
+        "02483ce93311835ac4671520748479ae7c4737a2cc9b561ee720f93d84316ea0"
+      ]
+    },
+    {
+      "name": "CutsceneCameraEntityData",
+      "string_rva": 17201156,
+      "metadata_rva": 25170204,
+      "metadata_sha256": "7b682061e4b105619fd7e6f9a88c50659fcd309628c7ca5ea417a05e1a6defd5",
+      "flags": 53,
+      "size": 240,
+      "own_field_count": 2,
+      "initializer_rva": 16492976,
+      "initializer_size": 30,
+      "initializer_sha256": "a1ecf11eb52def671c86e954d15f41fa436b6b6a2457fc3ac2ac1039e9550022",
+      "type_info_storage_rva": 25170640,
+      "parent_type_info_storage_rva": 25170396,
+      "wrapper": {
+        "rva": 1050752,
+        "size": 42,
+        "sha256": "f4fbb16ff794a98a9f39e3311e70ba96bd0b542c671854d29d2e1ea76a6e6d4f",
+        "forwards_arguments_unchanged": true
+      },
+      "fields": [
+        {
+          "name": "Camera",
+          "type_relative_offset": 224
+        },
+        {
+          "name": "ActiveFromStart",
+          "type_relative_offset": 228
+        }
+      ],
+      "table_rva": 25342360,
+      "table_sha256": "61b6621d7d71dc57996f5253cd0689abf360ad2199c6c9bede176dea14299fa6",
+      "getter_rvas": [
+        3134672,
+        3149920,
+        4780832,
+        16490208
+      ],
+      "getter_sha256": [
+        "a1ac263a132ef35bbcc42d50d8c6b3bfff96b48a640cc60eb0a0403e63d9c492",
+        "a1ac263a132ef35bbcc42d50d8c6b3bfff96b48a640cc60eb0a0403e63d9c492",
+        "a1ac263a132ef35bbcc42d50d8c6b3bfff96b48a640cc60eb0a0403e63d9c492",
+        "a1ac263a132ef35bbcc42d50d8c6b3bfff96b48a640cc60eb0a0403e63d9c492"
+      ]
+    },
+    {
+      "name": "CutsceneEntityData",
+      "string_rva": 17202116,
+      "metadata_rva": 25170056,
+      "metadata_sha256": "9885fa3c0bc02577db7b63304fa756ad6286cf53a1f1ea06ba8468bd39a22e51",
+      "flags": 53,
+      "size": 208,
+      "own_field_count": 20,
+      "initializer_rva": 16492704,
+      "initializer_size": 30,
+      "initializer_sha256": "28da597659aa20d9b6738af703278ca8875696fc8d6ff5c12385f7910ed7b5e5",
+      "type_info_storage_rva": 25170340,
+      "parent_type_info_storage_rva": 25146020,
+      "wrapper": {
+        "rva": 1050752,
+        "size": 42,
+        "sha256": "f4fbb16ff794a98a9f39e3311e70ba96bd0b542c671854d29d2e1ea76a6e6d4f",
+        "forwards_arguments_unchanged": true
+      },
+      "fields": [
+        {
+          "name": "Camera",
+          "type_relative_offset": 156
+        },
+        {
+          "name": "CameraEntitySpace",
+          "type_relative_offset": 160
+        },
+        {
+          "name": "ScreenFade",
+          "type_relative_offset": 152
+        },
+        {
+          "name": "Sound",
+          "type_relative_offset": 196
+        },
+        {
+          "name": "LocalizedSound",
+          "type_relative_offset": 176
+        },
+        {
+          "name": "SoundTemplate",
+          "type_relative_offset": 164
+        },
+        {
+          "name": "Sequence",
+          "type_relative_offset": 136
+        },
+        {
+          "name": "Radius",
+          "type_relative_offset": 132
+        },
+        {
+          "name": "SoundLength",
+          "type_relative_offset": 128
+        },
+        {
+          "name": "Subtitle",
+          "type_relative_offset": 148
+        },
+        {
+          "name": "IsSkippable",
+          "type_relative_offset": 205
+        },
+        {
+          "name": "MuteGameSound",
+          "type_relative_offset": 204
+        },
+        {
+          "name": "MuteVoiceOver",
+          "type_relative_offset": 202
+        },
+        {
+          "name": "ForceMuteSoundSetting",
+          "type_relative_offset": 207
+        },
+        {
+          "name": "KeepGameSoundMuted",
+          "type_relative_offset": 206
+        },
+        {
+          "name": "NormalizedTimeEnabled",
+          "type_relative_offset": 203
+        },
+        {
+          "name": "FreezeOnFinish",
+          "type_relative_offset": 200
+        },
+        {
+          "name": "AllowAllAnimationsHeaps",
+          "type_relative_offset": 201
+        },
+        {
+          "name": "CutsceneMenuId",
+          "type_relative_offset": 144
+        },
+        {
+          "name": "AfterCutsceneMenuId",
+          "type_relative_offset": 140
+        }
+      ],
+      "table_rva": 25342408,
+      "table_sha256": "93dd35b4b883dd81b51877eb1601152f23ef6751fa357dd39b57219ef0315820",
+      "getter_rvas": [
+        2955472,
+        2955680,
+        3134176,
+        3149856,
+        4780128,
+        16488640
+      ],
+      "getter_sha256": [
+        "578b9266dc7827d8187b1cc05befe2f1f19dbc24fc46f1fcbaa89ce2f3217f42",
+        "578b9266dc7827d8187b1cc05befe2f1f19dbc24fc46f1fcbaa89ce2f3217f42",
+        "578b9266dc7827d8187b1cc05befe2f1f19dbc24fc46f1fcbaa89ce2f3217f42",
+        "578b9266dc7827d8187b1cc05befe2f1f19dbc24fc46f1fcbaa89ce2f3217f42",
+        "578b9266dc7827d8187b1cc05befe2f1f19dbc24fc46f1fcbaa89ce2f3217f42",
+        "578b9266dc7827d8187b1cc05befe2f1f19dbc24fc46f1fcbaa89ce2f3217f42"
+      ]
+    },
+    {
+      "name": "CutsceneEntityCameraData",
+      "string_rva": 17202608,
+      "metadata_rva": 25170008,
+      "metadata_sha256": "98e4b6eed2615f156c91fa710e2d9708dbe475aed12ab9bd7b7364de4d648fec",
+      "flags": 53,
+      "size": 160,
+      "own_field_count": 3,
+      "initializer_rva": 16492608,
+      "initializer_size": 30,
+      "initializer_sha256": "8d3251a876e85edc57718ae36c84ca0af5177bae46309d5c822b305627efde78",
+      "type_info_storage_rva": 25170228,
+      "parent_type_info_storage_rva": 25177392,
+      "wrapper": {
+        "rva": 1050752,
+        "size": 42,
+        "sha256": "f4fbb16ff794a98a9f39e3311e70ba96bd0b542c671854d29d2e1ea76a6e6d4f",
+        "forwards_arguments_unchanged": true
+      },
+      "fields": [
+        {
+          "name": "PeekAroundMaxYaw",
+          "type_relative_offset": 148
+        },
+        {
+          "name": "PeekAroundMaxPitch",
+          "type_relative_offset": 144
+        },
+        {
+          "name": "PeekAroundSnapBack",
+          "type_relative_offset": 152
+        }
+      ],
+      "table_rva": 25341112,
+      "table_sha256": "64f447b2e60f12d905f7f6996124142a8232acaee002f3360c39042a84364820",
+      "getter_rvas": [
+        16488336
+      ],
+      "getter_sha256": [
+        "27eab184c2e740a3af24399ba0257edb2633fbbcba83f84848eddc4fdd4c9fbe"
+      ]
+    },
+    {
+      "name": "CutsceneCameraData",
+      "string_rva": 17216688,
+      "metadata_rva": 25176856,
+      "metadata_sha256": "2f9210118df277472fe2c7f8d4e1eda803d3ff1211269ec3dde697fe6392860b",
+      "flags": 53,
+      "size": 144,
+      "own_field_count": 6,
+      "initializer_rva": 16525040,
+      "initializer_size": 30,
+      "initializer_sha256": "de26d0735cbd917e81c812a6cf4506d89ea950d754da8ee156af71af0ea4e325",
+      "type_info_storage_rva": 25177392,
+      "parent_type_info_storage_rva": 25177316,
+      "wrapper": {
+        "rva": 1050752,
+        "size": 42,
+        "sha256": "f4fbb16ff794a98a9f39e3311e70ba96bd0b542c671854d29d2e1ea76a6e6d4f",
+        "forwards_arguments_unchanged": true
+      },
+      "fields": [
+        {
+          "name": "Animation",
+          "type_relative_offset": 120
+        },
+        {
+          "name": "DofBone",
+          "type_relative_offset": 124
+        },
+        {
+          "name": "UseDof",
+          "type_relative_offset": 136
+        },
+        {
+          "name": "AnimTree",
+          "type_relative_offset": 96
+        },
+        {
+          "name": "TotalLength",
+          "type_relative_offset": 100
+        },
+        {
+          "name": "CameraLeaps",
+          "type_relative_offset": 104
+        }
+      ],
+      "table_rva": 25358512,
+      "table_sha256": "70c631df4e19fbf0a77358c59dcee79e4e74a8d534899d018fae947980d20cd1",
+      "getter_rvas": [
+        3739712,
+        16520400
+      ],
+      "getter_sha256": [
+        "bf63afe6a9080f80226b8de958e9f85b2d04502d4bd2a9c50f4c689ecfb48b3d",
+        "bf63afe6a9080f80226b8de958e9f85b2d04502d4bd2a9c50f4c689ecfb48b3d"
+      ]
+    }
+  ],
+  "labels_only": [
+    {
+      "name": "CameraController",
+      "string_rvas": [
+        17571120
+      ]
+    },
+    {
+      "name": "CutsceneCamera",
+      "string_rvas": [
+        16959188
+      ]
+    },
+    {
+      "name": "PlayingCutscene",
+      "string_rvas": [
+        16957616
+      ]
+    },
+    {
+      "name": "IsCutscene",
+      "string_rvas": [
+        17215628
+      ]
+    }
+  ],
+  "static_relationship": "CutsceneEntityCameraData parent TypeInfo storage equals CutsceneCameraData TypeInfo storage; no runtime instance asserted.",
+  "existing_root_paths": [
+    "Bc2Profile.cpp:281 DiscoverGameplay: context -> manager -> local player / soldier weak; input cache",
+    "Bc2Profile.cpp:315 DiscoverInputBinding: controlled getter, input cache, router",
+    "Bc2Gameplay.cpp:576 Resolve: verifies local player, soldier owner, controlled entry and cache",
+    "Bc2Profile.h:39 ViewLayoutCandidates: view request and RenderView copies; no cinematic owner field"
+  ],
+  "missing_dynamic_join": "No verified existing relationship from the admitted local player or active render-view/request to a live ClientCutsceneCameraEntity/ClientCutsceneEntity and its currently selected camera/sequence. Type metadata and class hierarchy do not establish active ownership, blending, local-player scope or lifetime.",
+  "field_limits": "Offsets are declared-type relative metadata, not candidate runtime owner offsets. ActiveFromStart is authored configuration; PeekAround fields and Camera names do not prove live selection. Zero own fields does not exclude inherited or unreflected state.",
+  "observer_prepared": false,
+  "stop_reason": "No verified existing object relationship reaches an active cinematic owner; stop before inventing offsets or an ownership classifier.",
+  "process_opened": false,
+  "archives_read": 0,
+  "native_capability_changed": false
+}

@@ -193,12 +193,56 @@ int NoImpliedCompletion(){
     for(unsigned n=0;n<100;++n)CHECK(f.Contact(c,h).status==Status::ContactMatch);
     CHECK(f.Query().candidate==c&&f.s.latch==FeedLatchState::Engaged&&f.s.cycle==FeedCycleState::Required);return 0;
 }
+void Replenishment(Fixture& f){
+    f.p.sameContainerReplenishment=f.p.coupledContainerDetach=true;f.p.detachNeedsUnseated=false;
+    f.p.latch=f.p.charge=false;f.p.contacts[1]=f.p.contacts[4]={};
+    f.s.latch=FeedLatchState::Absent;f.s.cycle=FeedCycleState::Absent;
+    f.desired=f.old;f.s.supply.key=f.desired;f.s.refill={FeedRefillState::Required,500,0};
+}
+int SameContainerFiveStages(){
+    Fixture f;Replenishment(f);
+    for(const auto op:{Op::OpenCover,Op::DetachContainer,Op::AttachContainer,Op::SeatFeed,Op::CloseCover}){
+        const auto q=f.Query();CHECK(q.candidate&&q.candidate->operation==op&&q.candidate->goal==f.old);
+        CHECK(q.candidate->coupledContainerDetach);
+        f.Observe(op);
+        if(op==Op::DetachContainer){f.s.feed=FeedSeatState::Unseated;f.s.seated={};}
+        if(op==Op::AttachContainer){
+            CHECK(f.Query().candidate->operation==Op::DetachContainer); // Pose alone never proves refill.
+            f.s.refill={FeedRefillState::Applied,500,3};
+        }
+    }
+    CHECK(f.Query().status==Status::NoPhysicalStep);return 0;
+}
+int ReplenishmentRequiresExplicitIntentAndCoherentPolicy(){
+    Fixture f;Replenishment(f);f.s.refill={FeedRefillState::NotRequired,0,0};
+    CHECK(f.Query().status==Status::NoPhysicalStep); // An already loaded goal never force-opens.
+    f.s.refill={};CHECK(f.Query().status==Status::UnknownState);
+    f.s.refill={FeedRefillState::Required,500,1};CHECK(f.Query().status==Status::InvalidSnapshot);
+    f.s.refill={FeedRefillState::Applied,500,0};CHECK(f.Query().status==Status::InvalidSnapshot);
+    f.s.refill={FeedRefillState::Required,500,0};f.p.detachNeedsUnseated=true;
+    CHECK(f.Query().status==Status::InvalidProfile);f.p.detachNeedsUnseated=false;
+    f.s.container=FeedContainerState::Detached;f.s.attached={};CHECK(f.Query().status==Status::InvalidSnapshot);
+    f.s.feed=FeedSeatState::Unseated;f.s.seated={};CHECK(f.Query().candidate->operation==Op::OpenCover);
+    f.s.cover=FeedCoverState::Open;CHECK(f.Query().candidate->operation==Op::AttachContainer);
+    f.s.refill={FeedRefillState::Applied,500,3};CHECK(f.Query().status==Status::InvalidSnapshot);
+    Fixture separate;Replenishment(separate);separate.s.cover=FeedCoverState::Open;separate.p.coupledContainerDetach=false;
+    CHECK(separate.Query().candidate->operation==Op::WithdrawFeed);return 0;
+}
+int CoupledReplacementIsExplicitAndKeepsOriginalResource(){
+    Fixture f;f.p.coupledContainerDetach=true;f.p.detachNeedsUnseated=false;
+    f.Observe(Op::ReleaseLatch);f.Observe(Op::OpenCover);
+    CHECK(f.Query().candidate->operation==Op::DetachContainer&&f.Query().candidate->supply==f.old);
+    f.p.coupledContainerDetach=false;
+    CHECK(f.Query().candidate->operation==Op::WithdrawFeed);return 0;
+}
 }
 int main(){
     if(SyntheticReplacement()||PartialContinuation()||RetainedFeed()||NoContainerFamily()||AccessFreeFamily()||
        ConflictingFeedAndContainer()||ClosureBeforeCharge()||AlreadyNativeReady()||PendingNativeCycle()||MagazineExcluded()||DefaultDisabled()||WrongSupply()||UnavailableSupply()||
        UnknownStates()||ContradictoryProfile()||MalformedSnapshots()||InterruptedReconciliation()||Freshness()||
        ContactTranslationAndAngle()||IdentityInvalidatesCandidate()||StateChangeInvalidatesCandidate()||CoherentRawContact()||
-       HandOwnership()||GeometryValidation()||ChangedContactRole()||ForgedCandidate()||NoImpliedCompletion())return 1;
-    std::puts("FeedMechanism: 27 deterministic cases passed (physical candidates only; no native binding).");return 0;
+       HandOwnership()||GeometryValidation()||ChangedContactRole()||ForgedCandidate()||NoImpliedCompletion()||
+       SameContainerFiveStages()||ReplenishmentRequiresExplicitIntentAndCoherentPolicy()||
+       CoupledReplacementIsExplicitAndKeepsOriginalResource())return 1;
+    std::puts("FeedMechanism: 30 deterministic cases passed (physical candidates only; no native binding).");return 0;
 }

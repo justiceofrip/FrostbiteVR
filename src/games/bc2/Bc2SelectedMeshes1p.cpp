@@ -60,6 +60,15 @@ struct Reader {
         }return false;
     }
 };
+bool BindingMatches(Reader& r,std::uint32_t imageBase){const auto& b=r.binding;
+    if(!CompleteOperationBinding(b.operationBinding)||b.operationBinding.imageBase!=imageBase||
+       b.operationBinding.imageBytes!=b.pe.imageSize||b.operationBinding.executableBytes!=b.executable.size())return false;
+    for(unsigned i=0;i<4;++i){const auto& c=b.code[i];const auto off=Offset(b,imageBase+c.rva,c.size,true);
+        if(b.operationBinding.codeRva[i]!=c.rva||b.operationBinding.codeBytes[i]!=c.size||
+           b.operationBinding.codeFingerprint[i]!=c.fingerprint)return false;
+        if(c.size!=sizes[i]||!off||Hash(b.executable.subspan(*off,c.size))!=c.fingerprint||!r.SameFile(imageBase+c.rva,c.size,true))return false;}
+    return true;
+}
 struct Type {std::uint32_t address=0,metadata=0,fields=0;std::uint16_t flags=0,size=0;std::uint8_t count=0;std::array<char,192> name{};};
 bool Info(Reader& r,std::uint32_t at,Type& t){
     t={};t.address=at;std::uint32_t name=0;
@@ -143,6 +152,12 @@ struct Config {
     std::uint8_t count=0;
     bool operator==(const Config&)const=default;
 };
+bool MeshRead(Reader& r,std::uint32_t address,std::uint32_t meshInfo,SelectedMeshAsset& asset){
+    Type actual;asset.address=address;
+    if(!Object(r,asset.address,"SkinnedMeshAsset",actual)||actual.address!=meshInfo||
+       !r.Get(std::uint64_t(asset.address)+0xc,asset.namePointer)||!r.Text(asset.namePointer,asset.assetPath)||!std::strchr(asset.assetPath.data(),'/'))return false;
+    asset.typeInfo=actual.address;asset.kind=ClassifySelectedMeshPath(asset.assetPath.data());return true;
+}
 bool ConfigRead(Reader& r,std::uint32_t weapon,Config& out){
     if(!r.Get(std::uint64_t(weapon)+4,out.data)||!Reflect(r,out.data,out.reflection)||
        !r.Get(std::uint64_t(out.data)+0xc,out.namePointer)||!r.Text(out.namePointer,out.name)||
@@ -172,12 +187,38 @@ bool ConfigRead(Reader& r,std::uint32_t weapon,Config& out){
         if(count>8||count>capacity||capacity>1024||(count&&(items<0x10000||std::uint64_t(items)+count*4>UINT32_MAX))){r.error=SelectedMeshesStatus::ArrayBounds;return false;}
         state.count=std::uint8_t(count);std::array<std::uint32_t,8> pointers{};
         if(count&&!r.Read(items,pointers.data(),count*4))return false;
-        for(unsigned j=0;j<count;++j){auto& asset=state.meshes[j];Type actual;asset.address=pointers[j];
-            if(!Object(r,asset.address,"SkinnedMeshAsset",actual)||actual.address!=out.reflection.meshInfo||
-               !r.Get(std::uint64_t(asset.address)+0xc,asset.namePointer)||!r.Text(asset.namePointer,asset.assetPath)||!std::strchr(asset.assetPath.data(),'/'))return false;
-            asset.typeInfo=actual.address;asset.kind=ClassifySelectedMeshPath(asset.assetPath.data());
-        }
+        for(unsigned j=0;j<count;++j)if(!MeshRead(r,pointers[j],out.reflection.meshInfo,state.meshes[j]))return false;
     }return true;
+}
+bool ZoomRead(Reader& r,const Config& config,std::array<SelectedZoomMeshState,8>& out){
+    Type state;Field zoom;unsigned matches=0;
+    // Installed PE32 metadata: WeaponStateData MeshZoom1p is a scalar
+    // SkinnedMeshAsset reference at +0x94, immediately after Meshes1p's header.
+    // Check immutable descriptors against the supplied executable; TypeInfo
+    // storage itself is initialized at registration and is not file-compared.
+    if(!Info(r,config.reflection.stateInfo,state)||state.flags!=0x29||state.size!=0xc8||
+       std::strcmp(state.name.data(),"WeaponStateData")||!r.SameFile(state.metadata,28)||
+       !FieldNamed(r,state,"MeshZoom1p",zoom,matches)||matches!=1||
+       !FieldType(r,zoom,"SkinnedMeshAsset",0x94)||zoom.words[2]!=config.reflection.meshInfo||
+       zoom.words[1]||zoom.words[3]||zoom.words[5])return false;
+    for(unsigned n=0;n<state.count;++n){const auto at=std::uint64_t(state.fields)+n*24;
+        if(at+24>UINT32_MAX||!r.SameFile(std::uint32_t(at),24))return false;
+    }
+    if(!r.SameFile(zoom.words[0],sizeof("MeshZoom1p")))return false;
+    for(unsigned n=0;n<config.count;++n){auto& value=out[n];value.state=config.states[n].state;
+        value.field=value.state+zoom.words[4];std::uint32_t mesh=0;
+        if(!r.Get(value.field,mesh)||(mesh&&!MeshRead(r,mesh,config.reflection.meshInfo,value.mesh)))return false;
+    }return true;
+}
+SelectedMeshesSnapshot Snapshot(const SelectedMeshesBinding& b,const ReloadStateOwner& owner,
+    std::uint64_t sequence,std::int64_t observedNs,std::int64_t deadlineNs,const Config& first,const OwnerBytes& initial){
+    SelectedMeshesSnapshot s;s.owner=owner;s.sequence=sequence;s.observedNs=observedNs;s.deadlineNs=deadlineNs;
+    s.operationBinding=b.operationBinding;
+    s.weaponData=first.data;s.stateTypeInfo=first.reflection.stateInfo;s.meshTypeInfo=first.reflection.meshInfo;
+    s.inventory=initial.inventory;s.selectedSlot=initial.slot;s.weaponName=first.name;s.states=first.states;s.stateCount=first.count;
+    s.configurationPath=first.configurationPath;s.configurationPathVerified=first.configurationPathPointer!=0;s.configurationPathPointer=first.configurationPathPointer;
+    if(s.stateCount==1)s.soleConfiguredArray=s.states[0].array;
+    return s;
 }
 }
 std::optional<SelectedMeshesBinding> DiscoverSelectedMeshes1p(std::span<const std::byte> bytes,const engine::PeImage& pe){
@@ -207,25 +248,34 @@ SelectedMeshesResult ReadSelectedMeshes1p(const ReloadStateMemory& memory,const 
        observedNs<=0||deadlineNs<=observedNs||deadlineNs-observedNs>250000000||imageBase!=b.preferredBase||imageBase!=0x400000||!b.pe.imageSize)return {SelectedMeshesStatus::InvalidArguments};
     Reader r{memory,b};auto fail=[&](SelectedMeshesStatus status){return SelectedMeshesResult{
         r.error==SelectedMeshesStatus::ReadFailure||r.error==SelectedMeshesStatus::ReadBudget?r.error:status,{},r.calls,r.bytes};};
-    if(!CompleteOperationBinding(b.operationBinding)||b.operationBinding.imageBase!=imageBase||
-       b.operationBinding.imageBytes!=b.pe.imageSize||b.operationBinding.executableBytes!=b.executable.size())return fail(SelectedMeshesStatus::BindingMismatch);
-    for(unsigned i=0;i<4;++i){const auto& c=b.code[i];const auto off=Offset(b,imageBase+c.rva,c.size,true);
-        if(b.operationBinding.codeRva[i]!=c.rva||b.operationBinding.codeBytes[i]!=c.size||
-           b.operationBinding.codeFingerprint[i]!=c.fingerprint)return fail(SelectedMeshesStatus::BindingMismatch);
-        if(c.size!=sizes[i]||!off||Hash(b.executable.subspan(*off,c.size))!=c.fingerprint||!r.SameFile(imageBase+c.rva,c.size,true))return fail(SelectedMeshesStatus::BindingMismatch);}
+    if(!BindingMatches(r,imageBase))return fail(SelectedMeshesStatus::BindingMismatch);
     OwnerBytes initial{},final{};if(!Owner(r,owner,initial))return fail(SelectedMeshesStatus::OwnerMismatch);
     Config first{},second{};if(!ConfigRead(r,owner.weapon,first))return fail(r.error);
     r.error=SelectedMeshesStatus::MalformedMetadata;
     if(!ConfigRead(r,owner.weapon,second)||second!=first)return fail(SelectedMeshesStatus::ChangedDuringRead);
     if(!Owner(r,owner,final)||final!=initial)return fail(SelectedMeshesStatus::ChangedDuringRead);
-    SelectedMeshesSnapshot s;s.owner=owner;s.sequence=sequence;s.observedNs=observedNs;s.deadlineNs=deadlineNs;
-    s.operationBinding=b.operationBinding;
-    s.weaponData=first.data;s.stateTypeInfo=first.reflection.stateInfo;s.meshTypeInfo=first.reflection.meshInfo;
-    s.inventory=initial.inventory;s.selectedSlot=initial.slot;s.weaponName=first.name;s.states=first.states;s.stateCount=first.count;
     // Config equality above includes BOTH path pointer and complete text; the
     // complete native owner/inventory is also repeated before publication.
-    s.configurationPath=first.configurationPath;s.configurationPathVerified=first.configurationPathPointer!=0;s.configurationPathPointer=first.configurationPathPointer;
-    if(s.stateCount==1)s.soleConfiguredArray=s.states[0].array;
+    return {SelectedMeshesStatus::Observed,Snapshot(b,owner,sequence,observedNs,deadlineNs,first,initial),r.calls,r.bytes};
+}
+SelectedMeshZoomResult ReadSelectedMeshZoom1p(const ReloadStateMemory& memory,const SelectedMeshesBinding& b,std::uint32_t imageBase,
+    const ReloadStateOwner& owner,std::string_view exactConfigurationPath,std::uint64_t sequence,
+    std::int64_t observedNs,std::int64_t deadlineNs,bool enabled)noexcept {
+    if(!enabled)return {};
+    if(!memory.read||!sequence||!owner.player||!owner.soldier||!owner.weak||!owner.weapon||!owner.actorGeneration||!owner.equipGeneration||!owner.space||
+       observedNs<=0||deadlineNs<=observedNs||deadlineNs-observedNs>250000000||imageBase!=b.preferredBase||imageBase!=0x400000||!b.pe.imageSize||
+       exactConfigurationPath.empty()||exactConfigurationPath.size()>=512||exactConfigurationPath.find('\0')!=std::string_view::npos)return {SelectedMeshesStatus::InvalidArguments};
+    Reader r{memory,b};auto fail=[&](SelectedMeshesStatus status){return SelectedMeshZoomResult{
+        r.error==SelectedMeshesStatus::ReadFailure||r.error==SelectedMeshesStatus::ReadBudget?r.error:status,{},r.calls,r.bytes};};
+    if(!BindingMatches(r,imageBase))return fail(SelectedMeshesStatus::BindingMismatch);
+    OwnerBytes initial{},final{};if(!Owner(r,owner,initial))return fail(SelectedMeshesStatus::OwnerMismatch);
+    Config first{},second{};std::array<SelectedZoomMeshState,8> zoom{},repeated{};
+    if(!ConfigRead(r,owner.weapon,first))return fail(r.error);
+    if(!first.configurationPathPointer||std::string_view(first.configurationPath.data())!=exactConfigurationPath)return fail(SelectedMeshesStatus::ConfigurationMismatch);
+    if(!ZoomRead(r,first,zoom))return fail(r.error);
+    if(!ConfigRead(r,owner.weapon,second)||second!=first||!ZoomRead(r,second,repeated)||repeated!=zoom||
+       !Owner(r,owner,final)||final!=initial)return fail(SelectedMeshesStatus::ChangedDuringRead);
+    SelectedMeshZoomSnapshot s;s.selected=Snapshot(b,owner,sequence,observedNs,deadlineNs,first,initial);s.states=zoom;
     return {SelectedMeshesStatus::Observed,s,r.calls,r.bytes};
 }
 CarriedMeshesResult ReadCarriedMeshes1p(const ReloadStateMemory& memory,const SelectedMeshesBinding& b,std::uint32_t imageBase,

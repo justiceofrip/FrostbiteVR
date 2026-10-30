@@ -1,0 +1,25 @@
+{
+  "schema": "fvr.bc2.sniper43.proposed_bolt_reload_handoff.v1",
+  "status": "implementation_contract_only_not_native_admission",
+  "types": {
+    "BoltReloadPauseIntent": ["exact native scope and descriptor", "physical owner/item/mechanism", "cycle/shot/guardEpoch", "verified rear/open milestone and retained progress", "original gun/support contacts", "current raw/input contact proof", "atomic Left-to-Right GunHold transfer"],
+    "BoltReloadPermit": ["pause id", "unchanged debt identity", "callback drain revision", "two rounds of all3 own-idle updates", "exact ammo resource owner/context", "original source observed/deadline bounds"],
+    "BoltReloadCommand": ["permit id", "AmmunitionCommand including before/after/operation/original", "native identity firing[3] and server links", "original admission/completion deadlines", "continuous fire guard epoch"],
+    "BoltReloadAmmoRebase": ["matching dispatched command", "AmmoResourceCompletion AmmunitionReceipt", "server helper invocation", "distinct completed own-Update rows for branches0/1/2", "callback drain revision", "old and new debt counts", "monotonic applied command high-water mark"],
+    "BoltReloadResume": ["same cycle/shot and new receipt-bearing debt authority", "fresh two-round all3 idle proof after rebase", "current exact gun/support custody transfer", "new neutral/press evidence", "no held magazine or unresolved ammo command", "retained gesture milestone"]
+  },
+  "service_methods": {
+    "PrepareBoltReload": "Converge through existing original native callbacks, retain debt/fire guard; never call generic YieldForReload or issue Ready.",
+    "BeginBoltReloadCommand": "Under callback exclusion admit one exact resource command and suspend only conflicting old count comparison; preserve guard, scope and debt.",
+    "ApplyBoltReloadReceipt": "Consume the completed ledger receipt exactly once; update expected ammo, invalidate old grants/votes, retain cycle/shot/progress.",
+    "ResumeBoltAfterReload": "Require fresh typed native and hand authority, then resume remaining gesture; no inferred chamber or completion."
+  },
+  "count_rules": {
+    "remove": "(L,R,C) -> (0,R,C), exact original resource stores L",
+    "return_original": "(0,R,C) -> (original.rounds,R,C), exact original consumed once",
+    "replacement": "(0,R,C) -> (min(C,R),R-min(C,R),C), original explicitly discarded first",
+    "full_magazine_debt": "L==C allowed only on the new receipt-bearing retained-debt authority; legacy post-shot Begin and authorities keep L<C",
+    "stroke": "No count change and no additional chamber round"
+  },
+  "forbidden_shortcuts": ["static proof as live owner evidence", "asset-name family admission", "generic passive count-change exception while debt pending", "state/timer/whole-firing-object writes", "new Begin to erase old debt", "reset on repeated input or tracking loss", "rollback of completed ammo transfer", "old deadline renewal", "magazine claim consumed as support"]
+}

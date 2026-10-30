@@ -3,6 +3,7 @@
 #include "Bc2ReloadKeepAlive.h"
 #include "Bc2ReloadStart.h"
 #pragma once
+#include "Bc2ShotgunEquipment.h"
 #include "Bc2AmmoSupply.h"
 #include "Bc2MagazineInteraction.h"
 #include "Bc2ReloadPreview.h"
@@ -60,6 +61,7 @@ struct PhysicalReloadSample {
     // Current read-only identity mapping for a different held magazine-family
     // item. Used only to retire an old SPAS action block, never shell authority.
     std::optional<MagazineFamilyEvidence> replacementFamily;
+    const ShotgunReloadEquipmentProfile* equipment=nullptr;
 };
 struct PhysicalReloadResult {
     ReloadTracking tracking{};
@@ -120,6 +122,7 @@ private:
     void Retire(const PhysicalReloadSample&,interaction::HandInteraction&,const std::optional<interaction::AmmoSupplySource>&)noexcept;
     Bc2ReloadInteractionSample Interaction(const PhysicalReloadSample&,const Evidence*,const ReloadRoundLease&,std::int64_t)const noexcept;
     bool enabled_=false,active_=false,retiring_=false,beltEnabled_=false;
+    const ShotgunReloadEquipmentProfile* equipment_=DefaultSpasShotgunEquipment();
     interaction::HeldActionSupportReturn supportReturn_;
     // Durable exact callback-drain fact, not a native ammo/pose receipt. Pending
     // resource credit stays quarantined until the ordinary fresh rebaseline.

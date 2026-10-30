@@ -2,13 +2,14 @@
 #include "fvr/interaction/HandInteraction.h"
 #include "fvr/interaction/FeedMechanism.h"
 #include <numbers>
+#include <type_traits>
 #include "fvr/interaction/WeaponCycleRecoveryAuthority.h"
 
 namespace fvr::interaction {
 // A physical gesture and a native cycle are separate authorities. This policy
 // never grants ammunition, advances a native timer, or makes a weapon ready.
 enum class WeaponCycleFamily : unsigned { Pump, Bolt };
-enum class WeaponCyclePhase : unsigned { Idle, AwaitingGrip, Unlock, Rear, Forward, Lock, AwaitingNative, Complete, Cancelled };
+enum class WeaponCyclePhase : unsigned { Idle, AwaitingGrip, Unlock, Rear, Forward, Lock, AwaitingNative, Complete, Cancelled, ReloadPaused };
 enum class WeaponCycleFailure : unsigned { None, Invalid, Expired, Owner, Evidence, Tracking, Released, Geometry, NativeRejected };
 struct WeaponCycleHandAssignment {
     InteractionHand mechanism=InteractionHand::Left,gun=InteractionHand::Right;
@@ -53,6 +54,16 @@ struct WeaponCycleInput {
     HandInteractionSample source{};
     math::Matrix4 rawContact{};
     bool grip=false,mechanismClaim=false;
+};
+// A retained physical milestone, never a release or a native capability. The
+// original active-stroke deadline and source packet are immutable. Reload may
+// suspend the active budget for at most thirty seconds total for this cycle.
+struct WeaponCycleReloadPause {
+    HandInteractionOwner owner{};HandInteractionKey item{},mechanism{};
+    std::uint64_t cycle=0,shot=0,pause=0,profile=0,revision=0,inputSequence=0;
+    std::int64_t observedNs=0,deadlineNs=0,cycleDeadlineNs=0,pausedNs=0,pauseDeadlineNs=0;
+    float travel=0,rotation=0;
+    bool operator==(const WeaponCycleReloadPause&)const=default;
 };
 template<class Authority> struct WeaponCycleReleaseT {
     Authority cycle{};
@@ -121,10 +132,44 @@ inline bool Lease(const WeaponCycleLease& p,std::int64_t now){
 inline bool Same(const WeaponCycleIdleDebtLease& a,const WeaponCycleIdleDebtLease& b){
     return a.owner==b.owner&&a.item==b.item&&a.mechanism==b.mechanism&&a.cycle==b.cycle&&a.shot==b.shot&&a.grant==b.grant;
 }
+inline bool MagazineCommand(const AmmunitionCommand& c){
+    const auto& b=c.before;const auto& a=c.after;const auto& r=c.context.resource;
+    if(!r.actor||!r.actorGeneration||!r.weapon||!r.weaponGeneration||!c.context.equipGeneration||!c.context.space||
+       !c.id||!c.sourceSequence||c.requestedNs<=0||c.admissionDeadlineNs<=c.requestedNs||
+       c.deadlineNs<c.admissionDeadlineNs||c.deadlineNs-c.requestedNs>2000000000ll||
+       b.capacity<=0||b.loaded<0||b.loaded>b.capacity||b.reserve<0||a.capacity!=b.capacity||
+       a.loaded<0||a.loaded>a.capacity||a.reserve<0||c.mutationRequired!=(a!=b))return false;
+    switch(c.operation){
+    case AmmunitionOperation::RemoveMagazine:return !c.original&&a.loaded==0&&a.reserve==b.reserve;
+    case AmmunitionOperation::ReturnMagazine:return c.original&&c.original->id&&c.original->owner==r&&
+        c.original->capacity==b.capacity&&c.original->rounds>=0&&c.original->rounds<=b.capacity&&
+        b.loaded==0&&a.loaded==c.original->rounds&&a.reserve==b.reserve;
+    case AmmunitionOperation::RefillMagazine:return !c.original&&b.loaded==0&&b.reserve>0&&
+        a.loaded==std::min(b.capacity,b.reserve)&&a.reserve==b.reserve-a.loaded;
+    default:return false;
+    }
+}
+inline bool AmmoRebase(const WeaponCycleDebt& d){
+    if(!d.ammunitionRebase)return false;
+    const auto& p=*d.ammunitionRebase;const auto& r=p.receipt;const auto& c=r.command;const auto& o=c.context;
+    // The adapter proved inventory actor/equip -> hand actor/equip mapping at
+    // PrepareReload. The receipt retains the original inventory context verbatim.
+    if(p.owner!=d.owner||p.item!=d.item||p.mechanism!=d.mechanism||p.cycle!=d.cycle||p.shot!=d.shot||
+       !p.pause||!p.previousGuardEpoch||p.guardEpoch<=p.previousGuardEpoch||p.guardEpoch!=d.guardEpoch||!p.drainRevision||
+       !MagazineCommand(c)||o.resource.actorGeneration!=d.owner.actorGeneration||
+       o.resource.weapon!=d.item.id||!o.equipGeneration||o.space!=d.owner.space||
+       !r.authorityVerified||!r.copiesVerified||!r.authorityInvocation||r.beganNs<c.requestedNs||
+       r.beganNs>=c.admissionDeadlineNs||r.completedNs<r.beganNs||r.completedNs>=c.deadlineNs||
+       r.before!=c.before||r.after!=c.after||r.after!=AmmunitionCounts{d.loaded,d.reserve,d.capacity})return false;
+    for(unsigned b=0;b<3;++b){if(!p.ownUpdates[b])return false;
+        for(unsigned a=0;a<b;++a)if(p.ownUpdates[a]==p.ownUpdates[b])return false;}
+    return true;
+}
 inline bool Lease(const WeaponCycleIdleDebtLease& p,std::int64_t now){
     const auto& g=p.grant;const auto& d=g.debt;const auto& n=g.neutral;
     if(!Owner(p.owner)||!Key(p.item)||!Key(p.mechanism)||!p.cycle||!p.shot||!p.sequence||
-       !Window(p.observedNs,p.deadlineNs,now)||!g.nonce||!d.guardEpoch||d.loaded<0||d.reserve<0||d.capacity<=0||d.loaded>=d.capacity||
+       !Window(p.observedNs,p.deadlineNs,now)||!g.nonce||!d.guardEpoch||d.loaded<0||d.reserve<0||d.capacity<=0||d.loaded>d.capacity||
+       (d.ammunitionRebase?!AmmoRebase(d):d.loaded>=d.capacity)||
        d.owner!=p.owner||d.item!=p.item||d.mechanism!=p.mechanism||d.cycle!=p.cycle||d.shot!=p.shot||
        n.owner!=p.owner||!n.sequence||!n.focused||!n.tracked[0]||!n.tracked[1]||
        !Window(n.observedNs,n.deadlineNs,n.nowNs)||n.observedNs>p.observedNs)return false;
@@ -166,12 +211,14 @@ inline math::Matrix4 Target(const WeaponCycleProfile& p,float travel,float angle
 }
 }
 template<class Authority> class WeaponCycleT {
+    template<class> friend class WeaponCycleT;
 public:
     using WeaponCycleLease=Authority;
     using WeaponCycleRelease=WeaponCycleReleaseT<Authority>;
     using WeaponCycleReady=WeaponCycleReadyT<Authority>;
     using WeaponCycleResult=WeaponCycleResultT<Authority>;
     static constexpr std::int64_t MaximumInputGapNs=150000000;
+    static constexpr std::int64_t MaximumReloadPauseNs=30000000000ll;
     bool Begin(const WeaponCycleProfile& profile,const WeaponCycleLease& lease,std::int64_t now)noexcept {
         using namespace weapon_cycle_detail;
         if((phase_!=WeaponCyclePhase::Idle&&phase_!=WeaponCyclePhase::Complete&&phase_!=WeaponCyclePhase::Cancelled)||
@@ -179,7 +226,55 @@ public:
            (identity_.cycle&&Same(identity_,lease)))return false;
         profile_=profile;identity_=lease;latest_=lease;deadline_=now+profile.maximumCycleNs;
         phase_=WeaponCyclePhase::AwaitingGrip;failure_=WeaponCycleFailure::None;neutral_=false;
-        lastSequence_=0;lastObserved_=0;endpoint_=0;release_.reset();travel_=rotation_=0;return true;
+        lastSequence_=0;lastObserved_=0;endpoint_=0;pausedBudgetNs_=0;release_.reset();pause_.reset();resumeOpen_=false;travel_=rotation_=0;return true;
+    }
+    std::optional<WeaponCycleReloadPause> PauseForReload(const WeaponCycleInput& input)noexcept {
+        using namespace weapon_cycle_detail;const auto& s=input.source;
+        if(phase_!=WeaponCyclePhase::Forward||profile_.family!=WeaponCycleFamily::Bolt||release_||
+           travel_<profile_.stroke-profile_.rearTolerance||std::abs(rotation_-profile_.unlockRadians)>profile_.rotationTolerance||
+           s.owner!=identity_.owner||s.nowNs>=deadline_||!s.focused||!s.tracked[0]||!s.tracked[1]||input.grip||
+           !s.released[HandIndex(profile_.hands.mechanism)]||s.released[HandIndex(profile_.hands.gun)]||
+           s.sequence<=lastSequence_||s.observedNs<=lastObserved_||s.observedNs-lastObserved_>MaximumInputGapNs||
+           !Window(s.observedNs,s.deadlineNs,s.nowNs)||pauseNonce_==UINT64_MAX||pausedBudgetNs_>=MaximumReloadPauseNs||
+           s.nowNs>INT64_MAX-(MaximumReloadPauseNs-pausedBudgetNs_))return {};
+        pause_=WeaponCycleReloadPause{identity_.owner,identity_.item,identity_.mechanism,identity_.cycle,identity_.shot,
+            ++pauseNonce_,profile_.id,profile_.revision,s.sequence,s.observedNs,s.deadlineNs,deadline_,
+            s.nowNs,s.nowNs+MaximumReloadPauseNs-pausedBudgetNs_,travel_,rotation_};
+        lastSequence_=s.sequence;lastObserved_=s.observedNs;phase_=WeaponCyclePhase::ReloadPaused;return pause_;
+    }
+    template<class Previous> bool CanResumeAfterReload(const WeaponCycleT<Previous>& previous,
+        const WeaponCycleLease& lease,const HandInteractionSample& neutral)const noexcept {
+        using namespace weapon_cycle_detail;
+        if constexpr(!std::is_same_v<Authority,WeaponCycleIdleDebtLease>)return false;
+        else {
+            const auto& p=previous.pause_;const auto& d=lease.grant.debt;
+            return (phase_==WeaponCyclePhase::Idle||phase_==WeaponCyclePhase::AwaitingGrip)&&
+                previous.phase_==WeaponCyclePhase::ReloadPaused&&p&&AmmoRebase(d)&&d.ammunitionRebase->pause==p->pause&&
+                lease.owner==p->owner&&lease.item==p->item&&lease.mechanism==p->mechanism&&lease.cycle==p->cycle&&lease.shot==p->shot&&
+                Lease(lease,neutral.nowNs)&&AuthorityForHands(lease,previous.profile_.hands)&&neutral.nowNs>=p->pausedNs&&
+                neutral.nowNs<p->pauseDeadlineNs&&neutral.nowNs<=INT64_MAX-(p->cycleDeadlineNs-p->pausedNs)&&
+                neutral.owner==p->owner&&neutral.sequence>p->inputSequence&&neutral.observedNs>p->observedNs&&
+                neutral.sequence>=lease.grant.neutral.sequence&&neutral.observedNs>=lease.grant.neutral.observedNs&&
+                neutral.focused&&neutral.tracked[0]&&neutral.tracked[1]&&
+                neutral.released[HandIndex(previous.profile_.hands.mechanism)]&&!neutral.released[HandIndex(previous.profile_.hands.gun)]&&
+                Window(neutral.observedNs,neutral.deadlineNs,neutral.nowNs);
+        }
+    }
+    template<class Previous> bool ResumeAfterReload(WeaponCycleT<Previous>& previous,
+        const WeaponCycleLease& lease,const HandInteractionSample& neutral)noexcept {
+        if(!CanResumeAfterReload(previous,lease,neutral))return false;
+        const auto elapsed=neutral.nowNs-previous.pause_->pausedNs;
+        profile_=previous.profile_;identity_=latest_=lease;deadline_=previous.deadline_+elapsed;
+        pausedBudgetNs_=previous.pausedBudgetNs_+elapsed;
+        grabbed_=previous.grabbed_;previous_=previous.previous_;travel_=previous.travel_;rotation_=previous.rotation_;
+        nextRequest_=std::max(nextRequest_,previous.nextRequest_);pauseNonce_=std::max(pauseNonce_,previous.pauseNonce_);
+        lastSequence_=neutral.sequence;lastObserved_=neutral.observedNs;endpoint_=0;neutral_=true;resumeOpen_=true;
+        release_.reset();pause_=previous.pause_;phase_=WeaponCyclePhase::AwaitingGrip;failure_=WeaponCycleFailure::None;
+        previous.pause_.reset();previous.phase_=WeaponCyclePhase::Cancelled;previous.failure_=WeaponCycleFailure::Released;return true;
+    }
+    const std::optional<WeaponCycleReloadPause>& ReloadPause()const noexcept{return pause_;}
+    math::Matrix4 AcquisitionContact()const noexcept {
+        return resumeOpen_?weapon_cycle_detail::Target(profile_,travel_,rotation_):profile_.closedContact;
     }
     // A current arbiter-issued Mechanism claim can enter without a regrip.
     // The adapter may transfer existing WeaponSupport through the arbiter;
@@ -244,7 +339,7 @@ private:
 public:
     WeaponCycleResult Update(const WeaponCycleInput& in,const WeaponCycleLease& lease)noexcept {
         using namespace weapon_cycle_detail;const auto& s=in.source;
-        if(phase_==WeaponCyclePhase::Idle||phase_==WeaponCyclePhase::Complete||phase_==WeaponCyclePhase::Cancelled)return Result();
+        if(phase_==WeaponCyclePhase::Idle||phase_==WeaponCyclePhase::Complete||phase_==WeaponCyclePhase::Cancelled||phase_==WeaponCyclePhase::ReloadPaused)return Result();
         if(s.nowNs>=deadline_)return Cancel(WeaponCycleFailure::Expired);
         if(!Same(identity_,lease)||s.owner!=identity_.owner)return Cancel(WeaponCycleFailure::Owner);
         if(!CurrentLease(lease,s.nowNs))return Cancel(WeaponCycleFailure::Evidence);
@@ -260,8 +355,10 @@ public:
         lastSequence_=s.sequence;lastObserved_=s.observedNs;
         if(phase_==WeaponCyclePhase::AwaitingGrip){
             if(!in.grip){neutral_=true;return Result();}
-            if(!neutral_||!in.mechanismClaim||Distance(in.rawContact,profile_.closedContact)>profile_.contactRadius)return Result();
-            grabbed_=previous_=in.rawContact;phase_=profile_.family==WeaponCycleFamily::Pump?WeaponCyclePhase::Rear:WeaponCyclePhase::Unlock;
+            if(!neutral_||!in.mechanismClaim||Distance(in.rawContact,AcquisitionContact())>profile_.contactRadius)return Result();
+            previous_=in.rawContact;
+            if(resumeOpen_){resumeOpen_=false;phase_=WeaponCyclePhase::Forward;}
+            else {grabbed_=in.rawContact;phase_=profile_.family==WeaponCycleFamily::Pump?WeaponCyclePhase::Rear:WeaponCyclePhase::Unlock;}
             return Result(true);
         }
         if(!in.grip||!in.mechanismClaim)return Cancel(WeaponCycleFailure::Released);
@@ -342,7 +439,9 @@ public:
            !Window(ready.observedNs,ready.deadlineNs,ready.observedNs))return false;
         phase_=WeaponCyclePhase::Complete;failure_=WeaponCycleFailure::None;return true;
     }
-    WeaponCycleResult Cancel(WeaponCycleFailure why)noexcept {phase_=WeaponCyclePhase::Cancelled;failure_=why;release_.reset();return Result();}
+    WeaponCycleResult Cancel(WeaponCycleFailure why)noexcept {
+        if(phase_==WeaponCyclePhase::ReloadPaused)return Result();
+        phase_=WeaponCyclePhase::Cancelled;failure_=why;release_.reset();return Result();}
     WeaponCyclePhase Phase()const noexcept{return phase_;}
 private:
     void Release(const HandInteractionSample& source)noexcept {
@@ -359,10 +458,11 @@ private:
     WeaponCycleProfile profile_{};WeaponCycleLease identity_{},latest_{};
     WeaponCyclePhase phase_=WeaponCyclePhase::Idle;WeaponCycleFailure failure_=WeaponCycleFailure::None;
     std::optional<WeaponCycleRelease> release_;
+    std::optional<WeaponCycleReloadPause> pause_;
     math::Matrix4 grabbed_{},previous_{};
-    std::uint64_t lastSequence_=0,nextRequest_=0;
-    std::int64_t deadline_=0,lastObserved_=0,endpoint_=0;
-    bool neutral_=false;float travel_=0,rotation_=0;
+    std::uint64_t lastSequence_=0,nextRequest_=0,pauseNonce_=0;
+    std::int64_t deadline_=0,lastObserved_=0,endpoint_=0,pausedBudgetNs_=0;
+    bool neutral_=false,resumeOpen_=false;float travel_=0,rotation_=0;
 };
 using WeaponCycle=WeaponCycleT<WeaponCycleLease>;
 using WeaponCycleIdleDebt=WeaponCycleT<WeaponCycleIdleDebtLease>;

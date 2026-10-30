@@ -1,9 +1,9 @@
+#pragma once
 #include "Bc2ReloadObservation.h"
 #include "Bc2ReloadOwnerLoss.h"
 #include "Bc2PreholdEntryObservation.h"
 #include "Bc2ReloadKeepAlive.h"
 #include "Bc2ReloadStart.h"
-#pragma once
 #include "Bc2OwnerPublication.h"
 #include "Bc2NativeCycleInputGuard.h"
 #include "Bc2ReloadFlow.h"
@@ -17,6 +17,8 @@
 #include "Bc2ReloadRetirement.h"
 #include "Bc2AmmoResourceBinding.h"
 #include "Bc2AmmoResourceService.h"
+#include "Bc2FeedEquipmentAdapter.h"
+#include "Bc2PistolAfterFeedEvidence.h"
 #include <atomic>
 #include <memory>
 #include <ostream>
@@ -30,6 +32,7 @@ struct ReloadFlowBoundary {
     std::uint8_t branch=0,soldierFlags=0;
     std::uint32_t current=0,previous=0,next=0;
     float timer=0;std::int32_t loaded=0,reserve=0;std::uint8_t flagsA8=0;
+    PistolAfterFeedNativeBits pistol{};bool pistolFiniteAmmo=false;
 };
 bool ReloadReserveCopiesAgree(const ReloadHoldIdentity&,const std::array<ReloadFlowBoundary,3>&,
     const std::array<ReloadFlowBoundary,3>&,const std::array<int,3>&,const std::array<int,3>&)noexcept;
@@ -74,6 +77,8 @@ struct ReloadFlowEventEnd {
     std::array<std::byte,0x30> copiedContext{};bool contextCopied=false;
     ReloadDeltaOverride hold{};bool holdRequested=false;
     NativeCycleInputGuard cycleGuard{};std::uint64_t cycleGuardEpoch=0;unsigned cycleGuardSteps=0,cycleGuardRejected=0;
+    PistolAfterFeedInputReceipt pistolInput{};
+    FixedContainerInputGuard fixedInput{};
 };
 // True only for a fully captured owner-retained restore whose output matches
 // the captured source fields and whose source bytes did not change. No authority
@@ -338,7 +343,35 @@ bool ResourceHandsEnabled()noexcept;
 std::optional<AmmoResourceView> ReadAmmoResourceView(const ReloadStateOwner&,std::int64_t now)noexcept;
 AmmoResourceRead ReadAmmoResourceObserved(const ReloadStateOwner&,std::int64_t now)noexcept;
 bool SubmitAmmoResourceRequest(const AmmoResourceRequest&)noexcept;
+// Explicit fixed-container backend; exact descriptors and physical policy are
+// separate admissions. The callback is synchronous under the resource gate.
+bool EnableFixedContainerReload()noexcept;
+bool PublishFixedContainerGate(const FixedContainerGate&)noexcept;
+std::optional<FixedContainerGate> ReadFixedContainerGate(const interaction::AmmoResourceIdentity&)noexcept;
+bool WithAmmoResourceLedger(const AmmoResourceBinding&,const interaction::HandInteractionOwner&,
+    void*,bool (*)(void*,interaction::AmmunitionLedger&)noexcept)noexcept;
 std::optional<AmmoResourceOutcome> ReadAmmoResourceOutcome(std::uint64_t,const interaction::AmmoResourceContext&)noexcept;
+// Durable MP443 admission/terminal lineage and per-resource veto. Reading a
+// state never renews a receipt or supplies missing own-Update evidence.
+// Opt in only when the normal physical owner is constructed, before Start.
+bool EnablePistolAfterFeedPolicy()noexcept;
+std::optional<PistolAfterFeedEvent> ReadPistolAfterFeedEvent(std::uint64_t afterEvent)noexcept;
+std::optional<PistolAfterFeedResourceState> ReadPistolAfterFeedState(const interaction::AmmoResourceIdentity&,std::int64_t now)noexcept;
+bool ReleasePistolAfterFeedGate(const PistolAfterFeedRelease&)noexcept;
+std::optional<PistolAfterFeedActorRetirement> ReadPistolAfterFeedActorRetirement(std::uint64_t afterEvent)noexcept;
+// Separate belt backend. A native view grants counts/identity only; callers
+// must supply the exact selected physical profile and original input evidence.
+// A false submit has not queued/called native work and supplies no fake receipt.
+std::optional<FeedEquipmentNativeView> ReadFeedEquipmentView(const ReloadStateOwner&,std::int64_t now)noexcept;
+std::optional<FeedEquipmentNativeView> ReadFeedEquipmentViewAt(const ReloadStateOwner&,std::int64_t inputObservedNs,std::int64_t processingNow)noexcept;
+FeedEquipmentSubmitResult SubmitFeedEquipmentCommandResult(const FeedEquipmentSubmission&,bool noEntryOnly=false)noexcept;
+bool SubmitFeedEquipmentCommand(const FeedEquipmentSubmission&)noexcept;
+std::optional<interaction::FeedAmmunitionReceipt> ReadFeedEquipmentReceipt(std::uint64_t lifetime,std::uint64_t request)noexcept;
+bool PublishFeedEquipmentGate(const FeedEquipmentGate&)noexcept;
+std::optional<FeedEquipmentGate> ReadFeedEquipmentGate(const interaction::AmmoResourceIdentity&)noexcept;
+// Earliest retained actor-retirement event after the supplied cursor. This is
+// lifetime evidence only; release old claims before reclaiming exact old slots.
+std::optional<FeedEquipmentActorRetirement> ReadFeedEquipmentActorRetirement(std::uint64_t afterEvent)noexcept;
 // One bounded recording session, at most20 seconds; no automatic reset/rearm.
 void Start()noexcept;
 // Disables only these hooks, drains for at most2s, retains trampolines/module.

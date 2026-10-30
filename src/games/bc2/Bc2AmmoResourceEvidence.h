@@ -100,6 +100,13 @@ private:
         case AmmunitionOperation::ReturnMagazine:return c.original&&c.original->id&&c.original->owner==c.context.resource&&
             c.original->capacity==b.capacity&&c.original->rounds>=0&&c.original->rounds<=b.capacity&&
             b.loaded==0&&a.loaded==c.original->rounds&&a.reserve==b.reserve;
+        case AmmunitionOperation::InsertRounds:{
+            // A fixed container retains its unfired rounds. The exact command
+            // and native receipt carry the requested bounded transfer.
+            const int transferred=a.loaded-b.loaded;
+            return !c.original&&transferred>0&&transferred<=b.capacity-b.loaded&&
+                transferred<=b.reserve&&a.reserve==b.reserve-transferred;
+        }
         case AmmunitionOperation::RefillMagazine:case AmmunitionOperation::InsertRound:{
             if(c.original||(c.operation==AmmunitionOperation::RefillMagazine&&b.loaded!=0))return false;
             const auto p=PlanNativeAmmoRefill(b.loaded,b.reserve,b.capacity,c.operation==AmmunitionOperation::RefillMagazine?1:0);

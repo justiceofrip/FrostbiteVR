@@ -1,0 +1,14 @@
+Done Y: feed owner36 source preparation complete; frozen after handoff.
+Owned only Bc2PhysicalFeed.h/.cpp, Bc2PhysicalFeedTests.cpp and this handoff.
+Read AGENTS.md, CURRENT.md, ARCHITECTURE contracts and registry35 handoff/targeted headers.
+Each retained equipment owns a const reference to the exact immutable Bc2FeedRegistration selected from the live native configuration.
+Selection additionally joins that row with exact asset/configuration/mesh/rig; a different row cannot replace an existing resource's profile or clear its debt.
+Owner consumes registered mechanism, interaction policy, measured poses, hinge travel and geometry; no M60 geometry/policy/mechanism dependency remains.
+Presentation carries registrationKey, chainCount, chain[8] and uint16 carried mask; articulation and carry support active chain counts1..8 and signed hinge travel.
+Submission geometry includes the exact registration key. Binding/mechanism and stage/contact identities derive from the row key with nonzero stage keys.
+Receipt reconciliation, original issued native/raw history and deadlines, hand claim ownership, actual pickup identity, stow migration and equipment debt remain retained.
+Diagnostics report registered_feed plus current and last-selected registration keys, preserving supported refusal/debt observations across other selections.
+Removed obsolete Bc2M60FeedInteractionPolicy API; its only callers were the updated owned test fixture.
+Tests authored now14 groups: actual builtin row fixture, exact native/geometry rejection, wrong key/profile/rig authority rejection, retained debt and registered diagnostics, plus prior owner cases.
+No synthetic production enrollment or broader weapon coverage claim. No Git/build/test/game/XR/install/subagent/shared-doc action ran.
+Evidence level is source preparation/static inspection only. Root owns deterministic and architecture builds; native/headset acceptance remains separate.

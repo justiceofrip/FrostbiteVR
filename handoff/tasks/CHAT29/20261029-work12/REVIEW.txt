@@ -1,0 +1,14 @@
+Done: Y. Independent focused review; no correctness findings.
+Scope: uncommitted Bc2SelectedMeshes1p.cpp/.h and Bc2SelectedMeshes1pTests.cpp; baseline dfc0e507.
+Read AGENTS.md, CURRENT.md, architecture contracts and work12 HANDOFF.txt.
+Exact configuration: required nonempty bounded path, no embedded NUL, exact copied-path equality; absent path fails.
+Reflection: scalar MeshZoom1p offset 0x94 and exact mesh TypeInfo; metadata, all field records and target field name match executable bytes.
+Coherency: both configuration reads and both zoom reads compare state/address/type/name-pointer/copied-path data; full native owner/inventory repeats.
+Null zoom remains explicit; multiple authored states remain separate and unselected.
+Addresses remain within the validated state span; memory reads, field counts, strings, arrays and total work are bounded.
+Original freshness lease is preserved; consumers must enforce its deadline and identical owner as documented.
+Normal reader changes are equivalent helper extraction for binding, mesh identity and snapshot construction.
+Added groups cover exact/null paths, metadata/asset rejection, mutations, multiple states, binding/owner and lease rejection.
+Evidence: source review only; root reports 17 selected-mesh and 13 selected-configuration groups passed on x86/x64.
+No builds, executable/asset rereads, game/input/XR/install/profile actions or implementation edits performed.
+Actual-game observation and headset acceptance remain pending; all added authority flags remain false.

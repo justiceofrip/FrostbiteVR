@@ -1,0 +1,15 @@
+DoneY: bounded b6ba71->b5d3f0 continuation complete; direct scalar/workspace outputs established, final transform preservation/composition unresolved. SourcefixN.
+Worktree campaign-coordinator-20261028-r1; supplied HEAD6c42c3fd6d39715d47a07584061697b2be8a678e; no Git queried.
+EXE SHA2563911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258 verified file-only; inherited evaluate28 proof SHAfff1adb965c7d90422cc84bfd0bedf0c1667a0d8de2ae461a29e8cb006f8138e.
+Owned HANDOFF.txt,cinematic_transform.py,proof01.json; scratch reports/coordinator-20261030-cinematic-transform29; proof SHA256d647b5efc88343a496689c96a13247a9b2c6cb5f6da4406bee99f22e355396c2.
+Four complete NEW functions/1326 reachable bytes: b5d3f0,b5d310,b59460,b5a380;1579 reused bytes; no adjacent spill/generic scan. Six unreachable alignment bytes were skipped.
+Let M=W+10,O=W+c0,H=[W],U_i=[W+2d0]+i*bb0,K=local scalar accumulator descriptor. b5d3f0(W) is cdecl and loops unsigned i<[W+2d4], calling b5d310(M,O,U_i,K),then b59460([[W+b0]+4],O).
+b5d310 writes U_i+b90=[U_i+8],U_i+20=K,K+4=[U_i+10],W+b0=U_i+20,W+2c8=U_i+40. It calls b5a380 with ECX=N_i=[[D_i]],D_i=[U_i+8],arguments(float[U_i+18],M,O,local descriptor,local zero-vector).
+No decoded body directly multiplies or stores the twelve copied transform floats. The same M reaches conditional virtual+8; opaque calls/pointer aliases prevent a whole-call preservation or composed-transform claim.
+b5a380 derives weight w=float[N_i+4]*float[U_i+18] after opaque b48c80; a nonnegative signed16 index in C_i=[N_i+14] maps through a signed byte into K's scalar array. It stores old when ordered old>w,otherwise w; mapping bounds/object identity remain unproved.
+K's scalar array starts at -1; b5d4c1 publishes ordered values>=0 to [H+10]+4*j for j<[H+14],skipping negative/NaN values. This is a scalar output route,not a selected camera transform.
+b59460 receives O; direct outputs include a child flag and scalar subtraction/clamps at O+108+index*90,or O+108/O+198 for negative indices. Opaque callees also receive O+1f8/+1fc/+200 output pointers; exact callee effects remain unproved.
+ONE next edge: b5a464 -> [[N_i]+8],ECX=N_i,arguments(w,M=W+10,O=W+c0,descriptor,zero-vector),gate byte[[N_i+14]+1a]!=0. Establish this exact receiver/vtable identity and target before decoding its M/O effects; do not choose a guessed implementation.
+Parent separately reports original B=P+8e0 route through3b5a00 conditional record virtual+14 ->3b23c0/39cd30 ->b6bb00; not re-decoded here. Scheduler-instance equivalence/selected-view ownership remain unproved; no camera/HUD/cutscene/headset fix claim.
+All four exact-target decodes and executable/inherited/saved-byte/hash/CFG/nonoverlap/rel32 validation passed; no rejected decode or failed proof assembly.
+No production writes,Git,builds/tests,game/process access,input/XR,profiles,installs/packages or subagents. Frozen and retired.

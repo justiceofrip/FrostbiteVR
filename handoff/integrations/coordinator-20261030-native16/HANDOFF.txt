@@ -1,0 +1,14 @@
+Native16 bounded check: no M60 reload acceptance.
+User authorized one10min PC window; integration/install remained held.
+Installed0.1.17 and all staged source unchanged; no mod injected or XR attempted.
+Stock BC2 launched with original profiles/graphics; exact process identity retained.
+One guarded desktop capture was black; no blind menu/gameplay input sent.
+Prepared M60 read observer ended with0valid samples/923Read out of bounds rejections.
+No native firing owner or M60 scene established; no reload/transfer/fire claim.
+BC2 closed normally, exit0; all3profiles restored exactly, no helper remains.
+Lease interval05:21:58Z through close05:25:21Z, within the authorized10minutes.
+Evidence: reports/coordinator-20261030-native16/scene01 and m60-observation01.json.
+Portable source batch7d408db remains local, x86/x64 22+25+17 cases pass.
+Latest user direction: no more desktop-only PC requests or black-screen investigation.
+Continue offline source work; user will test in headset after implementation is ready.
+Native/headset acceptance remains separate; the full task list/manual LMG is not complete.

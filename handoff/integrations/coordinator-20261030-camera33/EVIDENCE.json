@@ -1,0 +1,20 @@
+{
+  "base": "d1e69f7b67ded2a558b5c27e0d5a30230cd40b74",
+  "proofs": [
+    {
+      "task": "context32",
+      "proof": "handoff/tasks/CHAT27/20261030-context32/proof01.json",
+      "sha256": "566a2562acc27a5dc0cd725ca496cb395c87abc77ae29a5712ac64b27f4ffea9",
+      "script_sha256": "b37856af506f4b8a30ab2f185c08322001677467478adbd3db9d2fd303149f3a"
+    },
+    {
+      "task": "service33",
+      "proof": "handoff/tasks/CHAT27/20261030-service33/proof01.json",
+      "sha256": "6a13f5e6daf4bb93c18187018886d82e94dd4d9d824368ce85c9b36c144c34e4",
+      "script_sha256": "fbca49c4db35c8fe7f73f835fc187b68e5efd965d40105ea2881dc6bc0fd77ca"
+    }
+  ],
+  "evidence_level": "offline static code only",
+  "production_changes": false,
+  "game_or_headset_check": false
+}

@@ -6,7 +6,7 @@
 #include <fstream>
 namespace fvr::bc2 {
 namespace {
-constexpr std::size_t MaxBytes=16*1024*1024;
+constexpr std::size_t MaxBytes=64*1024*1024;
 struct Reader {
     std::span<const std::byte> bytes;std::size_t at=0;bool okay=true;
     std::span<const std::byte> Take(std::size_t count)noexcept {

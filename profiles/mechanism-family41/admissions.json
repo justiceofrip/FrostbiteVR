@@ -1,0 +1,356 @@
+{
+  "schema": "fvr.bc2.mechanism_admission_reviews.v1",
+  "reviews": [
+    {
+      "profile_digest": "88cd12319081fab64cf2221daf7db5811700a4200f52a891d08f3748f8679bb8",
+      "descriptor_key": "bc2:magazine-descriptor:b5d5869089005d9252bd83368918d18444ae3e3ff8fa125513fba1d3b87684d5",
+      "descriptor_digest": "0f25ed29efad6553dd69370612a3c3d991c39b78f7d6c2112a7a6c644e09ffaf",
+      "native_class": "SingleFireMagazineZeroBolt",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/0"
+      }
+    },
+    {
+      "profile_digest": "4cc650cf8b6bab07917d2918f1dcf29256fec4188321a53cf38c3332e7dd7112",
+      "descriptor_key": "bc2:magazine-descriptor:304a17ade6eb3c26fcd32b44430cb4e896bc77432d6229a5789b6d53db23f64f",
+      "descriptor_digest": "f595da54b7c72f1e6e405ce0bcedbfef2d6f5f9870ffb597ec4ab8c85a12347e",
+      "native_class": "SingleFireMagazineZeroBolt",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/1"
+      }
+    },
+    {
+      "profile_digest": "621d2804ba9d9749ddde00e12094985746a0a823fe8c08fc6e234a5adead6e8a",
+      "descriptor_key": "bc2:magazine-descriptor:463b9ae5b99b03ae6ccf70a09a19ff158221f5e0814bc33b242004d11bdd092d",
+      "descriptor_digest": "ea5fade07d27daa7857d83e667169502b1028c404d1195c34066197dbe95383a",
+      "native_class": "SingleFireMagazineZeroBolt",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/2"
+      }
+    },
+    {
+      "profile_digest": "a642f11eeac99fba6c30c8a524dd282e23140ed81d2e799dbb795d7649224d57",
+      "descriptor_key": "bc2:magazine-descriptor:2d6471a03056b3b2e4e13f2a59baf212565aefa56dccc33895ee43c076b5abb0",
+      "descriptor_digest": "2f97016d0246f46271f24ebed552289fd6e89162ef16d891488d64bb265cfa0c",
+      "native_class": "SingleFireMagazineZeroBolt",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/3"
+      }
+    },
+    {
+      "profile_digest": "799a1817fdefb3b79c90b196b123d948042f94781e89a76ef6e1255bc95a3481",
+      "descriptor_key": "bc2:magazine-descriptor:9541e55a524bc896fb311579681393e3e8399913e23eaa12f49304c1b77a08bd",
+      "descriptor_digest": "0a90b171035b96e43948d7f6107dbcbbb7ddb1e8ecd54649eb6665f75485966a",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/4"
+      }
+    },
+    {
+      "profile_digest": "3479e5e7e7659610ef031d3b171e941480852aec9afe9a1c4c17e038ec721405",
+      "descriptor_key": "bc2:magazine-descriptor:9d2a5b73b2d86db27ba73aecc04884756c7c41f7866312d06c6542b4985c7d78",
+      "descriptor_digest": "6a46b57c25cafc76184a2cfdd21812db8d33e75fabe9b5b3ea10239d33a238b9",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/5"
+      }
+    },
+    {
+      "profile_digest": "08dafed95370990c958cbada018da159116c8ee603c21fd9914cb240a335db97",
+      "descriptor_key": "bc2:magazine-descriptor:ed61f93b9649b451711a26dd989887a838f50836a2f127e3c3e8323dfced5e88",
+      "descriptor_digest": "e5a3a71e3374a00a5853fe6cb5b30eefe7a48fd00ebec259145e815b1c67f2b9",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/6"
+      }
+    },
+    {
+      "profile_digest": "4930f2d2571a23a957230f4b049a58ce26b9dae952d3802951ce7b9078d307f8",
+      "descriptor_key": "bc2:magazine-descriptor:3327ed5d49d19216e64395bda737a124b272fd5c53cb6eb3a4945637e8f22f4e",
+      "descriptor_digest": "0dcf6f4f9e883f143656074626bc91c60016e076e3e1621d7ac975980f333490",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/7"
+      }
+    },
+    {
+      "profile_digest": "a8764ad621ab3d5b5f0a1a234cb5e773380603699321352386fdf968e8811193",
+      "descriptor_key": "bc2:magazine-descriptor:3d34e98de9c99fe9098603548856b48f15a5028b02d075ff6dfe160b1b0ef995",
+      "descriptor_digest": "a1ee9fe13d10447292d2193c2a0c1ff2e93fd8d7ec100ac350126e9451de48bb",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/8"
+      }
+    },
+    {
+      "profile_digest": "0eb7ae5991e48d24b377597c2fee9a160c74153ada6ab7071b0056bb021e4886",
+      "descriptor_key": "bc2:magazine-descriptor:7ad9e8aedea68626ea7742c7ec69bf034976bd5a465cf3244568862589473b68",
+      "descriptor_digest": "701dd5db3efa12a0ae9be5c56db9cbf6f2f18c7e376ad88eb37aeea2c239fb8c",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/9"
+      }
+    },
+    {
+      "profile_digest": "7eacc1cac3518728b38c3d7381e3cca1d29a14b41f19def30f157df91b50fbdc",
+      "descriptor_key": "bc2:magazine-descriptor:280d9ee64ec00ebeccaa3726f9bd400f4ee2bf737eeb2fd3bb457b5a07035bac",
+      "descriptor_digest": "a93caacb638d0d695ae815c8fc629c96ed80217e5fae651606dddef3a24d69b4",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/10"
+      }
+    },
+    {
+      "profile_digest": "694398ce21fbbdec51232e35fd2cbd87e9741c3df20d2f74a4da8b9b386fab89",
+      "descriptor_key": "bc2:magazine-descriptor:8bdb6ad412066df74e28ef0076eb2046388e51bd5494399f2efe08e84e811d91",
+      "descriptor_digest": "95b738d323bb2cc51db27be52a19c6c7c9b36df471c0b90a30c4e60f0f172efb",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/11"
+      }
+    },
+    {
+      "profile_digest": "f1070a361c59972017cf4ed2c391e7f51a64034e6c1c622343922f42b2d37b92",
+      "descriptor_key": "bc2:magazine-descriptor:0180359a55abe60c12075d4d7129c36432401d6d59fdac75051d2aa1624d6d46",
+      "descriptor_digest": "474d69a0d84d01ab93c808d49ddb58a25f10d1d24c9d070531eeeeff7fbe42ca",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/12"
+      }
+    },
+    {
+      "profile_digest": "3f8ef5959918618691edb5957ef7ac63769d5aff12147242f8ff836c8ec55390",
+      "descriptor_key": "bc2:magazine-descriptor:2b72eea82134305423456788ce5ca3b3a9879432ee9ac0ea2b8e00c873a25156",
+      "descriptor_digest": "b41c31716f6607aec4894f223392a050c62e3c2e584ee26365aa4695aaf4a139",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/13"
+      }
+    },
+    {
+      "profile_digest": "da3751c85d05b250b8ddec166d7b74a2f6faaae5d3b8cae23d763109ef59a36c",
+      "descriptor_key": "bc2:magazine-descriptor:9904586f0ef31a801eb21d2c7e837cdb53182fc785e1c7d7b46c22fcde8013c9",
+      "descriptor_digest": "1bcc29e7659fe74b8cc7ec6263b234aafb534ee0ad7122e4c3de20c5a69bca64",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/14"
+      }
+    },
+    {
+      "profile_digest": "5c0280bf60ada9b0022dc2b1ce77a2af8f85e65dd23b471b1da74af888fe96da",
+      "descriptor_key": "bc2:magazine-descriptor:21d7db31a43c1c93e00100c9f76f817155805ca65bf800410d484623d1d7f49a",
+      "descriptor_digest": "99f50a82adf6b0d9fe2ebec86edd5efc7d5482081b36bb29d9e64d1fb3ba4728",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/15"
+      }
+    },
+    {
+      "profile_digest": "4f711fdc4c0f78fd5620fe3db573b3dfc81beb3aea407cbe81d8dd89fc78ad66",
+      "descriptor_key": "bc2:magazine-descriptor:5fec50eaad08f83a41e34573b8ec4341fbbb85c0d933b3d2097916f19d92e08f",
+      "descriptor_digest": "09bcca7ed34506a7e70c4a8e7c58b791f55de17a001552d882ab917c5c0c49b3",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/16"
+      }
+    },
+    {
+      "profile_digest": "6a5c0f596007f2b4b75fd81fc4867bac08c080e4ddaad7f0e2942bb2e8238327",
+      "descriptor_key": "bc2:magazine-descriptor:f65dbc64c1432ca431614a1f9793cb1d1a1811db628f0c5cb3f0a6db3be967dd",
+      "descriptor_digest": "3b03962cbe75cc23107fc803fe63266e2a964a0dc07f42a358ffd70950112a29",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/17"
+      }
+    },
+    {
+      "profile_digest": "48c65980981896ae0386f5a9a4b87879d64da9767bfc2c5237a434e22172b26a",
+      "descriptor_key": "bc2:magazine-descriptor:d80febf74cb2b158690b9e89c0ac3670fbb41deb3c973534e9dcb9bac87f92a0",
+      "descriptor_digest": "d4563139fddcef4fcaf8dc3d0b955a44c23b5e188bad8a5b8dcc31320f9c5c08",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/18"
+      }
+    },
+    {
+      "profile_digest": "0c53aca2bca7e964735feef13f90594681d68ca09bb4877df63b33a88fdae7b7",
+      "descriptor_key": "bc2:magazine-descriptor:b07b718776133f97bff4adc7e67750282a271d9b8dc102870b641f160dbe61d7",
+      "descriptor_digest": "c98a9bbca22295f6a256a73106ea0e3654d392d8d8e42e7dc96c192d5df874c8",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/19"
+      }
+    },
+    {
+      "profile_digest": "58d99b1d6ecc6af8b6da78ab57ad044b92d2115cbe8f40517a7447cb391bf87b",
+      "descriptor_key": "bc2:magazine-descriptor:61dcf19b4aa4479fb2400fae748ff794e5c96543aef1bbaa15c7f0fd43f8212a",
+      "descriptor_digest": "f6f1e0f2649a6920c9d5e50710ed1d2d3dd350a4160efeff9e4e19ee323a8568",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/20"
+      }
+    },
+    {
+      "profile_digest": "232c99a8aa2567eda2e8260bfa096b7e6d5aadb4c89c77269390502be7c61401",
+      "descriptor_key": "bc2:magazine-descriptor:b91bfb494c8eb5341c48ed73ecc9be8057fb576fb1247ddd900c18b846c339da",
+      "descriptor_digest": "a0265dbb8c84d6f331d02f82f8740f6a3e812636984953f18319d8ab039cef08",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/21"
+      }
+    },
+    {
+      "profile_digest": "4a5eea15f7904948e6e06cdb21bb89becc5421cae8c15fc1ff08162d294bd3c4",
+      "descriptor_key": "bc2:magazine-descriptor:1643591677dee7102b7a9553f6a75ad4e8a8290d26f79f40c92aeffec2dfd7e3",
+      "descriptor_digest": "1caa7c417da8553f4edde00b0384cc3f871ebb813200a31beb963d4cdd69e1c1",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/22"
+      }
+    },
+    {
+      "profile_digest": "0e3238ce19456745c92bc3450d514b9fb3ccf964abdbc5785490d6337145f0d0",
+      "descriptor_key": "bc2:magazine-descriptor:8c4fb1fb10d63744bf8d1cd8537ee557d4151722f7befe180b50006964c7e4cd",
+      "descriptor_digest": "7b793719af41ef0ef2447cb324f319e2d2a91ae77ddcc5dcaa7f2fbeea9ee0c7",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/23"
+      }
+    },
+    {
+      "profile_digest": "8a12e4047fb4f79f4fbef501035afc48c45e6b6a8321880a10f484857ccc5d01",
+      "descriptor_key": "bc2:magazine-descriptor:2e907a5781437c8d857df9c56b3c7cbb85fd31e40d7a00cea4e6853292d4553b",
+      "descriptor_digest": "0c3e487bc8a09eee0cb2e5c460b917481116af5ff41f0c40276167e7bf77755b",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/24"
+      }
+    },
+    {
+      "profile_digest": "00e724fbec83d0af696ed5aed42da9c3c499e71b98c15e70a3c4f1b57b0d8a89",
+      "descriptor_key": "bc2:magazine-descriptor:c1a74a0b4d07ae614a7c3a48455c0eb361714404263f88327da8ec710a2dd4d9",
+      "descriptor_digest": "8775a60a29e8bc0f073726be12c82a5e2fd772365843c44fce8ef3460c7657d3",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/25"
+      }
+    },
+    {
+      "profile_digest": "f69e2217b71ef80ee7746a029d603e1ec1523ad4a4a2a362529f8d3b88ea1d1d",
+      "descriptor_key": "bc2:magazine-descriptor:7bb572fe1e1efe193567d5aae46d68fe9c7865cabe79c95897cc3ca228f1f4e2",
+      "descriptor_digest": "2695de08dbfb4877d1c0ed41d45cd71e8072a8c5b60f316fc7d20514357f24d5",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "physical_reviewed": true,
+      "native_reviewed": true,
+      "reviewer": "coordinator pipeline34 / enrollment41",
+      "evidence": {
+        "source": "family_source_review",
+        "pointer": "/rows/26"
+      }
+    }
+  ]
+}

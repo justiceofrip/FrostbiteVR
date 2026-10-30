@@ -1,0 +1,22 @@
+DoneY: bounded NEW helper follow-up complete; source-implementable cinematic-owner correction remains unproved.
+Assigned worktree campaign-coordinator-20261028-r1; supplied HEAD1909038; no Git queried.
+Read AGENTS/CURRENT and exact work14 proof/script; inherited work14 eight units by proof hash, not reexecuted.
+Exact installed EXE SHA2563911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258 verified.
+Evidence: offline file-backed code using existing dumpbin; no desktop/game/process/XR/input/build/test execution.
+Production source readonly; no packages/profiles/install/archive survey/subagents; integration remains held.
+Files: cinematic_service.py, proof01.json (8916 bytes), this handoff; three small decoded ranges in assigned scratch.
+Proof SHA25654fe3d0b5c1eb60d0134be8b5a2e04f0f78e6b9ea56ca2d3ad9cfed60994904e.
+Primary helper0x826900 plus three immediate related functions0x826990,0x3ff720,0x823ed0.
+Initial range crossed helper return and exposed adjacent0x8269a0; counted fifth observed unit, no owner claim from it.
+Helper0x826900 registers node P in service S: list head/tail S+4/+8; node backward/forward links+4/+8.
+It writes 16-bit node+0xc serial from S+0x20, increments it, and renumbers list nodes on zero wrap.
+It writes 16-bit node+0xe index from (S+0x10-S+0xc)/4 and appends P to S+0xc/+0x10/+0x14 pointer array.
+The only direct callee0x823ed0 inserts/grows the four-byte-value array; no selected-owner join established.
+Exact caller0x3ff720 supplies incoming this+0x4c through the same admitted context getter -> context+0x40 service.
+Work14 cutscene setup supplies this+0x98. Shared registry nodes therefore do not justify universal node-minus0x98.
+All36 helper direct-call byte candidates retained, only selected decoded call instructions promoted; no caller survey.
+NEW precise missing edge: registry node -> verified cinematic owner/subobject conversion -> current selection
+authoritatively joined to admitted local player or active view/request. Membership and serial/index do not select it.
+No native read chain/signature/adapter prepared; local-player scope, lifetime, synchronization and blend remain unproved.
+Static verifier passed exact hashes/instructions/calls; initial invalid dumpbin RANGE error1147 is disclosed in proof.
+No supported source defect or adapter read found; no production ownership requested. Stopped within allowance. Retired.

@@ -16,6 +16,13 @@ inline constexpr std::size_t InputBytes=0xa0;
 // This supplies input semantics, never attack/custody/damage authority.
 std::optional<EntryAction> VerifiedSelectedFireAction(const ReloadStateSnapshot&,
     const ReloadStateOwner&,std::uint64_t inputSequence,std::int64_t nowNs) noexcept;
+// Opening Expack authors ReloadInputAction=Zoom14. Resolve its existing Reload
+// request from current selected metadata; Fire8 and controller bindings stay put.
+std::optional<EntryAction> VerifiedSelectedReloadAction(const ReloadStateSnapshot&,
+    const ReloadStateOwner&,std::uint64_t inputSequence,std::int64_t nowNs) noexcept;
+// Project only an existing request after the caller checks all attack gates.
+// A denied/missing route drops Reload without creating an alternate attack.
+void ApplySelectedReloadRoute(interaction::ActionOutput&,std::optional<EntryAction>) noexcept;
 // Native gather has already run. Stage a command in its current input buffer.
 // Commit transfers this tick's fields to BC2: later native consumers need them.
 // Next original gather rebuilds all 49 actions, including on stale XR input.

@@ -1,0 +1,23 @@
+DoneY: FeedAmmunition.h and FeedAmmunitionTests.cpp source prepared.
+Validation: root owns registration/builds/tests; this agent executed none.
+Scope: portable belt ammunition conservation, no native binding or acceptance.
+One immutable owner/mechanism/profile/goal/lifetime joins FeedReloadRequest.
+Resource and container generations remain independently identified.
+Native loaded/reserve and retained belt rounds are disjoint bounded stores.
+Explicit authority selects PhysicalOnly, ExtractLoaded, AcquireReserve,
+LoadSupply, ReturnSupply or atomic RefillLoaded; default is Unavailable.
+No physical stage selects a transfer or infers stock full/empty behavior.
+Atomic refill conserves reserve plus loaded without an invented interim write.
+Candidate/count snapshots require the same coherent observation sequence.
+Dispatch is once per request; pending is inspection, never dispatch permission.
+Receipts join exact request/command/ack, invocation and observed post counts.
+Invocations are nonzero and increasing within the immutable lifetime.
+Suspension retains dispatched effects and extracted rounds; late exact receipts
+can reconcile after their original admission deadline without redispatch.
+Retirement requires fresh unchanged old-owner counts and no pending effect;
+retained resources and accepted receipts remain available for inspection.
+15 synthetic test cases cover partial/empty/remainder/return, atomic refill,
+wrong identity/aliases, repeated packets, exact receipts, interruptions,
+retirement, count bounds and unavailable operation authority.
+No game/process/XR/input/profile/install/package/Git changes or subagents.
+Native transfer semantics, callback/copy evidence and headset acceptance remain open.

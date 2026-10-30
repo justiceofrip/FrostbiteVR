@@ -1,0 +1,25 @@
+Done Y: new-session prerequisite analysis and concrete offline observation join prepared.
+Base supplied: dfc0e507be635769dade167c1d642e3716443835; runtime source unchanged.
+Read-only source: BC2VR-Launcher/data/runtime/sessions/20261029-174056-341-41f3c366.
+Evidence level: actual-game native rows from user's headset session; offline checks only.
+Milestones21-28 join actor520529387112623712, vehicle1039318256, entry1039328528.
+Sixteen gather rows verify role2 gunner, camera1039340992, one weapon, permissions1888.
+Sixteen camera rows10838-10916/space3 span500ms; all applied_mask3.
+Independent existing matrix algebra: planned/applied exactly equal; max pose error17um.
+Stable inferred anchor verified; initial anchor creation and delivered eyes unproved.
+Session:320 ordinary seat views,0 PBL views,0 stale waits,4 unsupported camera frames.
+Frame admission blocked0; restore/GPU failures0. No supported camera/runtime correction.
+Preserved first non-consumed10822: same first render owner, both captures/restored/staged,
+then abandoned/unpublished; no camera row or retained cause for that frame.
+Later complete_pair failure50291/space4 is outside the retained seat camera window.
+Host/native terminal rings no longer contain the16 early seat tracking/frame keys.
+No native level/asset/slot/checkpoint fields; text search cannot name an exact campaign seat.
+Thus Kurogane, jeepRideStart, full ride and headset visual acceptance remain unqualified.
+evidence.json pins sources, exact joins, limits, failures and observation mechanism.
+reports/coordinator-20261029-work12/jeep/analyze_session.py passes on the actual session.
+It also accepts existing map-before/seat-capture/map-after receipts, validates the
+canonical coverage auditor and joins process lifetime, runtime slot and overlapping camera.
+Reuse pinned ReadLoadedLevel399 + CaptureVehicle; their exact asset limitation is explicit.
+Next binding begins with already observed component/data/type joins and bounded reflection;
+requires verified resource getter plus rereads, and separately a live save/event owner join.
+No guessed blueprint offset, native launch, XR, build, Git, input, profile or install action.

@@ -1,0 +1,3721 @@
+{
+  "schema": "fvr.bc2.exact_cycle_static_review.v1",
+  "evidence_level": "static native instruction/configuration review",
+  "source_files": [
+    {
+      "path": "handoff/tasks/WEAPONS/20261030-sniper43/descriptor-jobs.json",
+      "sha256": "b8dd29acf8e9d0c28b18dc8c1e29b1bfa7b6c16e7c43b62e6b38115995e6f032"
+    },
+    {
+      "path": "handoff/tasks/WEAPONS/20261030-sniper43/static-proof.json",
+      "sha256": "e2bd8d39a8f94dbf342885184c20249458bc14612d9506a4c2f46f7ee07faeca"
+    },
+    {
+      "path": "handoff/tasks/WEAPONS/20261030-shotgun43/batch.json",
+      "sha256": "1d063afd2be147d8531d6a1a4210971a777e4d3d72715b3cef92edc5f3c3dba0"
+    }
+  ],
+  "reviewer": "cycle45 native-cycle service source review",
+  "reviews": [
+    {
+      "key": "bc2:magazine-descriptor:11860d9f0259e76ad07b316c34dec70a6dbd72fd731b581317c8473a48d30f85",
+      "configuration": {
+        "assetName": "SV98",
+        "assetPath": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 10,
+          "numberOfMagazines": 3,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.800000190734863,
+          "reloadThreshold": 0.5299999713897705,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 1.600000023841858,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1057467924,
+            "expected_bits": "3f07ae14",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1083808154,
+            "expected_bits": "4099999a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "SV98",
+        "assetPath": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98.dbx",
+          "sha256": "aaab64e3c8c783167e401e9c27a240135aa69bbc54a1cb40b1b2e1efb30d696e",
+          "guid": "33f9e790-e758-4468-b3db-00cd6c3b1a4d"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Firing.dbx",
+          "sha256": "08042a1e9b72eec73f50a1d3bd2fdcddfdae46529db46b5089e686cae6618423",
+          "guid": "397ac28b-b817-4310-9068-20f1f8f070bd"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Firing.dbx",
+          "sha256": "08042a1e9b72eec73f50a1d3bd2fdcddfdae46529db46b5089e686cae6618423",
+          "guid": "d75d1484-38f6-4283-a5f5-6a37ed19c96e"
+        }
+      },
+      "descriptor_digest": "827c338d56fe15c8f17289885b60bfcbe68f73271b8f2b3007132cda1bae8722",
+      "family": "Bolt",
+      "instruction_proof_digest": "e2bd8d39a8f94dbf342885184c20249458bc14612d9506a4c2f46f7ee07faeca",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        8,
+        7,
+        1
+      ],
+      "positive_maximum": 1.600000023841858,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:259c5c2b7e53b42c311349557358351e1da7cf2675f7e0c0378044db956a55d8",
+      "configuration": {
+        "assetName": "M24",
+        "assetPath": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 5.0,
+          "reloadThreshold": 0.5600000023841858,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 1.649999976158142,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1057971241,
+            "expected_bits": "3f0f5c29",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1084227584,
+            "expected_bits": "40a00000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "M24",
+        "assetPath": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24.dbx",
+          "sha256": "84252e7fa90e376d2cfe3131a1e83423a00d9a1dda52d0974b5d4d8d3d8de82c",
+          "guid": "3632d971-d742-493d-8962-358ade024c39"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Firing.dbx",
+          "sha256": "ea30a393d55f51ba3fe669b96b200ac8a6bbcce8dfd7862760f1551122eaa753",
+          "guid": "1a067483-9412-4f7b-802e-1639f0147613"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Firing.dbx",
+          "sha256": "ea30a393d55f51ba3fe669b96b200ac8a6bbcce8dfd7862760f1551122eaa753",
+          "guid": "fa209e0a-0e88-422c-9335-ae03fffd727d"
+        }
+      },
+      "descriptor_digest": "c98494e638829382f481cfc09344a0209836c9624784e063bbf923595f8d960d",
+      "family": "Bolt",
+      "instruction_proof_digest": "e2bd8d39a8f94dbf342885184c20249458bc14612d9506a4c2f46f7ee07faeca",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        8,
+        7,
+        1
+      ],
+      "positive_maximum": 1.649999976158142,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:2bd0524c9604bea44d5c1d45bec1ee876835a2afece03964de21bfe7eb6162e5",
+      "configuration": {
+        "assetName": "M95_sp_s",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95_Scoped",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 6.900000095367432,
+          "reloadThreshold": 0.6700000166893005,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 2.299999952316284,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059816735,
+            "expected_bits": "3f2b851f",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1088212173,
+            "expected_bits": "40dccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "M95_sp_s",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95_Scoped",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95_Scoped.dbx",
+          "sha256": "e395944e3978c6847bc5c66d033d265a7571477c5a588deba1aafde822e6c4b9",
+          "guid": "1378ecef-dc5f-4728-81e5-a5dd7e9b10da"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_ScopeFiring.dbx",
+          "sha256": "d0d7c904eee1adc4e63f464b388ed5cd3a4d1201972400e3f1c37dde334256c6",
+          "guid": "e5a899a7-cb35-4926-a8f5-39d69e485528"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_ScopeFiring.dbx",
+          "sha256": "d0d7c904eee1adc4e63f464b388ed5cd3a4d1201972400e3f1c37dde334256c6",
+          "guid": "2d52ac1d-a729-4eaa-9fc2-ab089e561912"
+        }
+      },
+      "descriptor_digest": "5a2f025edf2a827282316f00b7274dfb202906ebb94502961e767b538f2dedcd",
+      "family": "Bolt",
+      "instruction_proof_digest": "e2bd8d39a8f94dbf342885184c20249458bc14612d9506a4c2f46f7ee07faeca",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        8,
+        7,
+        1
+      ],
+      "positive_maximum": 2.299999952316284,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:33eb81fa3a6b0e81dbf6ff92d34e69f21d074aa88e37b74ed1d57c4ce57ec879",
+      "configuration": {
+        "assetName": "M24",
+        "assetPath": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Scoped",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 5.0,
+          "reloadThreshold": 0.5600000023841858,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 1.649999976158142,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1057971241,
+            "expected_bits": "3f0f5c29",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1084227584,
+            "expected_bits": "40a00000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "M24",
+        "assetPath": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Scoped",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Scoped.dbx",
+          "sha256": "942be844e1a6392fb1a21eec3127be36b453357c53af1258b371cdc5615420b8",
+          "guid": "3f35373a-9cc7-44bc-94b6-23dcfb1af196"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_ScopeFiring.dbx",
+          "sha256": "476cffb4e9d0b62bae3d31d2dc7a35414603499227d962c618da835c9a3f5370",
+          "guid": "628355ba-9d95-483b-8464-14f98997d8ca"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_ScopeFiring.dbx",
+          "sha256": "476cffb4e9d0b62bae3d31d2dc7a35414603499227d962c618da835c9a3f5370",
+          "guid": "8dd6df2e-fd69-4a52-82f8-473385af3efe"
+        }
+      },
+      "descriptor_digest": "ef0ccdfd529120beda44a721690000517f0de337a98dbc1f0f8e16b2d7257e88",
+      "family": "Bolt",
+      "instruction_proof_digest": "e2bd8d39a8f94dbf342885184c20249458bc14612d9506a4c2f46f7ee07faeca",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        8,
+        7,
+        1
+      ],
+      "positive_maximum": 1.649999976158142,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:5134eb56c4274cc78b53f5b2fc10f3064d064800d51a5d014cff11ea21ed8afd",
+      "configuration": {
+        "assetName": "M95k",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95_Scoped",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 6.900000095367432,
+          "reloadThreshold": 0.6700000166893005,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 2.299999952316284,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059816735,
+            "expected_bits": "3f2b851f",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1088212173,
+            "expected_bits": "40dccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "M95k",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95_Scoped",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95_Scoped.dbx",
+          "sha256": "ba7fae3e042aa8c991074b4477e7c986d97af6888b82a55d86863a8d494fed95",
+          "guid": "8fb1cb9c-b070-459b-9260-bf4b0f713af4"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_ScopeFiring.dbx",
+          "sha256": "d0d7c904eee1adc4e63f464b388ed5cd3a4d1201972400e3f1c37dde334256c6",
+          "guid": "e5a899a7-cb35-4926-a8f5-39d69e485528"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_ScopeFiring.dbx",
+          "sha256": "d0d7c904eee1adc4e63f464b388ed5cd3a4d1201972400e3f1c37dde334256c6",
+          "guid": "2d52ac1d-a729-4eaa-9fc2-ab089e561912"
+        }
+      },
+      "descriptor_digest": "60edac4f8c59b46f4f5e8e849046a4b3b7a6f0dac13df29798babe66e4d5daaf",
+      "family": "Bolt",
+      "instruction_proof_digest": "e2bd8d39a8f94dbf342885184c20249458bc14612d9506a4c2f46f7ee07faeca",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        8,
+        7,
+        1
+      ],
+      "positive_maximum": 2.299999952316284,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:58f0ad65f6576ba7f6666f1b5dbd06f7373304d9265e189d39c3f76513520307",
+      "configuration": {
+        "assetName": "SV98",
+        "assetPath": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Kobra",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 10,
+          "numberOfMagazines": 3,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.800000190734863,
+          "reloadThreshold": 0.5299999713897705,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 1.600000023841858,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1057467924,
+            "expected_bits": "3f07ae14",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1083808154,
+            "expected_bits": "4099999a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "SV98",
+        "assetPath": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Kobra",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Kobra.dbx",
+          "sha256": "e0e734e4aa30889c95baff9d75e4d808828c72fd1067ccfa238c5696504fa9e7",
+          "guid": "3261b232-3a20-4aee-bd73-090f92cb4cac"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_ScopeFiring.dbx",
+          "sha256": "3d5122abe442313b0e81b329539334cbc835cee9d9f8f39f38f82056c65654d7",
+          "guid": "4592ba14-4a56-4250-80de-4ba306c87139"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_ScopeFiring.dbx",
+          "sha256": "3d5122abe442313b0e81b329539334cbc835cee9d9f8f39f38f82056c65654d7",
+          "guid": "3aca3254-5a16-4dbc-a195-7544b8a875e4"
+        }
+      },
+      "descriptor_digest": "46ccf1ab87741d489b2f5c19ff7cea0762bfed50e7ae0ff138d534a60cceb121",
+      "family": "Bolt",
+      "instruction_proof_digest": "e2bd8d39a8f94dbf342885184c20249458bc14612d9506a4c2f46f7ee07faeca",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        8,
+        7,
+        1
+      ],
+      "positive_maximum": 1.600000023841858,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:5d03adf713d506ca6b5f871855d69bd3765b04257c14dcbf352147e261924e3b",
+      "configuration": {
+        "assetName": "GOL",
+        "assetPath": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.800000190734863,
+          "reloadThreshold": 0.6700000166893005,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 1.7999999523162842,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059816735,
+            "expected_bits": "3f2b851f",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1083808154,
+            "expected_bits": "4099999a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "GOL",
+        "assetPath": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL.dbx",
+          "sha256": "c10e29215b23d814f1c75dcc3782da6a96c78340ac6eef48a203cdc87d93cac7",
+          "guid": "7d1dfd60-085c-4e0a-9feb-80a40d11eb2e"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/Mec_sni_GOL_Firing.dbx",
+          "sha256": "3563596034d9aec9f5409d460cf1082d8943fc87837b4f0b437fd86517b2e5f1",
+          "guid": "34f10ef9-1da4-4147-991c-0612f36bf5e6"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/Mec_sni_GOL_Firing.dbx",
+          "sha256": "3563596034d9aec9f5409d460cf1082d8943fc87837b4f0b437fd86517b2e5f1",
+          "guid": "9123c429-2528-455b-8c43-c17e0f6ec77c"
+        }
+      },
+      "descriptor_digest": "1a6a85fc965158ca25d30628441ce3b43e08335e26f9473190a533ee073104f9",
+      "family": "Bolt",
+      "instruction_proof_digest": "e2bd8d39a8f94dbf342885184c20249458bc14612d9506a4c2f46f7ee07faeca",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        8,
+        7,
+        1
+      ],
+      "positive_maximum": 1.7999999523162842,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:7d196898b6b8cd8f1e5774314c84c743518ed76fc4bb45526cab346ae1b004a6",
+      "configuration": {
+        "assetName": "M95",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 6.900000095367432,
+          "reloadThreshold": 0.6700000166893005,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 2.299999952316284,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059816735,
+            "expected_bits": "3f2b851f",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1088212173,
+            "expected_bits": "40dccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "M95",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95.dbx",
+          "sha256": "992535507a1b074634772678f5cd6bc8a71a90a599ac5b469c71d1c7bfd560a3",
+          "guid": "cb2a15fe-8f0a-4772-9102-64548e0db3b6"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Firing.dbx",
+          "sha256": "4154044cea216e2803840dcf8ff5d2eb1343448d14e63a9b142e55f7858fa66d",
+          "guid": "a65b2cbb-05f1-488b-8dd1-9895f2b60ac5"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Firing.dbx",
+          "sha256": "4154044cea216e2803840dcf8ff5d2eb1343448d14e63a9b142e55f7858fa66d",
+          "guid": "aca0193a-bc85-4a6e-9809-a2e9fdd57b10"
+        }
+      },
+      "descriptor_digest": "9fa12a3eb02cd394a4c5a931148532d390e3473e40ab0952521b7e479b18b08f",
+      "family": "Bolt",
+      "instruction_proof_digest": "e2bd8d39a8f94dbf342885184c20249458bc14612d9506a4c2f46f7ee07faeca",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        8,
+        7,
+        1
+      ],
+      "positive_maximum": 2.299999952316284,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:834d88aeef8ffcec1480b7c64656ded44d321457a414e6d1902aeef1fad00276",
+      "configuration": {
+        "assetName": "M95k",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95_Kobra",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 6.900000095367432,
+          "reloadThreshold": 0.6700000166893005,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 2.299999952316284,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059816735,
+            "expected_bits": "3f2b851f",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1088212173,
+            "expected_bits": "40dccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "M95k",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95_Kobra",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95_Kobra.dbx",
+          "sha256": "b977410ca5f1378221df8f4cf96c8a328a3392ecc55cd26411cfd4f6ca4a3af3",
+          "guid": "8cfa632a-bf58-48b7-bd8b-75760bfc7843"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_ScopeFiring.dbx",
+          "sha256": "d0d7c904eee1adc4e63f464b388ed5cd3a4d1201972400e3f1c37dde334256c6",
+          "guid": "e5a899a7-cb35-4926-a8f5-39d69e485528"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_ScopeFiring.dbx",
+          "sha256": "d0d7c904eee1adc4e63f464b388ed5cd3a4d1201972400e3f1c37dde334256c6",
+          "guid": "2d52ac1d-a729-4eaa-9fc2-ab089e561912"
+        }
+      },
+      "descriptor_digest": "a85fe8094ad4141eca8ceeeee27aa4793101d60fb116d31a59631309846b7a12",
+      "family": "Bolt",
+      "instruction_proof_digest": "e2bd8d39a8f94dbf342885184c20249458bc14612d9506a4c2f46f7ee07faeca",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        8,
+        7,
+        1
+      ],
+      "positive_maximum": 2.299999952316284,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:a3c42977e56f5a56f4031113a7f6edc9db9587c3c5ae572d84fea6d5c93a00ac",
+      "configuration": {
+        "assetName": "M95k",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 6.900000095367432,
+          "reloadThreshold": 0.6700000166893005,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 2.299999952316284,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059816735,
+            "expected_bits": "3f2b851f",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1088212173,
+            "expected_bits": "40dccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "M95k",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95.dbx",
+          "sha256": "b0d0fefba512071700dac709af898f4d0554b3dce272dffe6774bf845fe95bc8",
+          "guid": "bc0f37ac-a57f-4899-b393-3b669a18b3bd"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Firing.dbx",
+          "sha256": "4154044cea216e2803840dcf8ff5d2eb1343448d14e63a9b142e55f7858fa66d",
+          "guid": "a65b2cbb-05f1-488b-8dd1-9895f2b60ac5"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Firing.dbx",
+          "sha256": "4154044cea216e2803840dcf8ff5d2eb1343448d14e63a9b142e55f7858fa66d",
+          "guid": "aca0193a-bc85-4a6e-9809-a2e9fdd57b10"
+        }
+      },
+      "descriptor_digest": "d13ca4efa5ca91469b11684600a2df1eed08a25e8473de06bbee029918299ec6",
+      "family": "Bolt",
+      "instruction_proof_digest": "e2bd8d39a8f94dbf342885184c20249458bc14612d9506a4c2f46f7ee07faeca",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        8,
+        7,
+        1
+      ],
+      "positive_maximum": 2.299999952316284,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:a9127353cf9b7c7389e53ddbae6327bcdf107517c6f0a90e3f266fa0d22e47f8",
+      "configuration": {
+        "assetName": "M95",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Scoped",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 6.900000095367432,
+          "reloadThreshold": 0.6700000166893005,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 2.299999952316284,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059816735,
+            "expected_bits": "3f2b851f",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1088212173,
+            "expected_bits": "40dccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "M95",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Scoped",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Scoped.dbx",
+          "sha256": "14366feb18371c96bded4aa417cf614b5e62e75634e6b6afabfb67132385974c",
+          "guid": "812f8f83-616d-48a2-a6c8-1d2b55fa5165"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_ScopeFiring.dbx",
+          "sha256": "d0d7c904eee1adc4e63f464b388ed5cd3a4d1201972400e3f1c37dde334256c6",
+          "guid": "e5a899a7-cb35-4926-a8f5-39d69e485528"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_ScopeFiring.dbx",
+          "sha256": "d0d7c904eee1adc4e63f464b388ed5cd3a4d1201972400e3f1c37dde334256c6",
+          "guid": "2d52ac1d-a729-4eaa-9fc2-ab089e561912"
+        }
+      },
+      "descriptor_digest": "c2bc403c8dfd6b8aedd5fd84fe2c4d7f39772e34a74f507330940cfb43a152e0",
+      "family": "Bolt",
+      "instruction_proof_digest": "e2bd8d39a8f94dbf342885184c20249458bc14612d9506a4c2f46f7ee07faeca",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        8,
+        7,
+        1
+      ],
+      "positive_maximum": 2.299999952316284,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:c3502874bea7c799efbd7d810661e5b25c5b0d1c6c6d0cf90e77cfb8bf307565",
+      "configuration": {
+        "assetName": "SV98",
+        "assetPath": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Scoped",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 10,
+          "numberOfMagazines": 3,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.800000190734863,
+          "reloadThreshold": 0.5299999713897705,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 1.600000023841858,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1057467924,
+            "expected_bits": "3f07ae14",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1083808154,
+            "expected_bits": "4099999a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "SV98",
+        "assetPath": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Scoped",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Scoped.dbx",
+          "sha256": "45f85b1f1c6a508bf88dee3de04b6d56c85a19f976d3fddb681f8ecaddf18b8f",
+          "guid": "67d1700a-ffec-4296-916f-4e7d8429eaa0"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_ScopeFiring.dbx",
+          "sha256": "3d5122abe442313b0e81b329539334cbc835cee9d9f8f39f38f82056c65654d7",
+          "guid": "4592ba14-4a56-4250-80de-4ba306c87139"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_ScopeFiring.dbx",
+          "sha256": "3d5122abe442313b0e81b329539334cbc835cee9d9f8f39f38f82056c65654d7",
+          "guid": "3aca3254-5a16-4dbc-a195-7544b8a875e4"
+        }
+      },
+      "descriptor_digest": "65c2a2b1f7e12f666faac301f033ba09ff802d3256fb745e4780d1d82e0ad62b",
+      "family": "Bolt",
+      "instruction_proof_digest": "e2bd8d39a8f94dbf342885184c20249458bc14612d9506a4c2f46f7ee07faeca",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        8,
+        7,
+        1
+      ],
+      "positive_maximum": 1.600000023841858,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:c962eb86f971bad5c255beff1bcc94213820c6bd949e5c9af72b559e2f17ed18",
+      "configuration": {
+        "assetName": "M24",
+        "assetPath": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Kobra",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 5.0,
+          "reloadThreshold": 0.5600000023841858,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 1.649999976158142,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1057971241,
+            "expected_bits": "3f0f5c29",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1084227584,
+            "expected_bits": "40a00000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "M24",
+        "assetPath": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Kobra",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Kobra.dbx",
+          "sha256": "12d56fe4e39fd8b9d3a6c42ebd18eab4bf8e4a4c5b5a2296b7dfbd73ec9cd6a8",
+          "guid": "de784d39-793f-49c9-b389-6f4b2358617e"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_ScopeFiring.dbx",
+          "sha256": "476cffb4e9d0b62bae3d31d2dc7a35414603499227d962c618da835c9a3f5370",
+          "guid": "628355ba-9d95-483b-8464-14f98997d8ca"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_ScopeFiring.dbx",
+          "sha256": "476cffb4e9d0b62bae3d31d2dc7a35414603499227d962c618da835c9a3f5370",
+          "guid": "8dd6df2e-fd69-4a52-82f8-473385af3efe"
+        }
+      },
+      "descriptor_digest": "4b6e995cf5587068bb4730f66655269aa52c66d280ac39cd565a27ccfadf7c2a",
+      "family": "Bolt",
+      "instruction_proof_digest": "e2bd8d39a8f94dbf342885184c20249458bc14612d9506a4c2f46f7ee07faeca",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        8,
+        7,
+        1
+      ],
+      "positive_maximum": 1.649999976158142,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:cc628606789b8f2d73e796913c36c4dfdc89cd6f8e279414aa19729df39311e9",
+      "configuration": {
+        "assetName": "M95",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Kobra",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 6.900000095367432,
+          "reloadThreshold": 0.6700000166893005,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 2.299999952316284,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059816735,
+            "expected_bits": "3f2b851f",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1088212173,
+            "expected_bits": "40dccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "M95",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Kobra",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Kobra.dbx",
+          "sha256": "6b5bfe1065253189c3bc18a0f1b974927ca1d65a94218a8b76a0037639e898d3",
+          "guid": "dcd9e585-21bb-419a-aad4-0b80295f287f"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_ScopeFiring.dbx",
+          "sha256": "d0d7c904eee1adc4e63f464b388ed5cd3a4d1201972400e3f1c37dde334256c6",
+          "guid": "e5a899a7-cb35-4926-a8f5-39d69e485528"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_ScopeFiring.dbx",
+          "sha256": "d0d7c904eee1adc4e63f464b388ed5cd3a4d1201972400e3f1c37dde334256c6",
+          "guid": "2d52ac1d-a729-4eaa-9fc2-ab089e561912"
+        }
+      },
+      "descriptor_digest": "fed73ae3024064ada4de4f325181e1d03326ec8e1eb1811ddad5bde0090c7999",
+      "family": "Bolt",
+      "instruction_proof_digest": "e2bd8d39a8f94dbf342885184c20249458bc14612d9506a4c2f46f7ee07faeca",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        8,
+        7,
+        1
+      ],
+      "positive_maximum": 2.299999952316284,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:d04de1419a64d72e192261b29f20f384188a69431eb6073febb17908b3d6a637",
+      "configuration": {
+        "assetName": "GOL",
+        "assetPath": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Scoped",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.800000190734863,
+          "reloadThreshold": 0.6700000166893005,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 1.7999999523162842,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059816735,
+            "expected_bits": "3f2b851f",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1083808154,
+            "expected_bits": "4099999a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "GOL",
+        "assetPath": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Scoped",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Scoped.dbx",
+          "sha256": "b413a709fda2431c4e10085ca02db20344f2e21ab71ab77940b489807142e2c5",
+          "guid": "82f7222d-dc86-4d46-82f3-444b9f6d6c12"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_ScopeFiring.dbx",
+          "sha256": "951235c5d75d05462c7aca061dd224d7fd77e205ac61733896db49d65c3bc0e5",
+          "guid": "bab5b639-db08-49a2-b049-891d202b3dcb"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_ScopeFiring.dbx",
+          "sha256": "951235c5d75d05462c7aca061dd224d7fd77e205ac61733896db49d65c3bc0e5",
+          "guid": "8aba0d99-96fe-4d31-b39a-422e2cc74c87"
+        }
+      },
+      "descriptor_digest": "50cecc5912ec1ddf4cf28e1b09be8c8e25685f6345109629b1fc789d3d3a3567",
+      "family": "Bolt",
+      "instruction_proof_digest": "e2bd8d39a8f94dbf342885184c20249458bc14612d9506a4c2f46f7ee07faeca",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        8,
+        7,
+        1
+      ],
+      "positive_maximum": 1.7999999523162842,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:e17eaa72190fcc4eb01e36801d41a6d771ac15c038708092165ed90c36adac33",
+      "configuration": {
+        "assetName": "M95_sp",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 6.900000095367432,
+          "reloadThreshold": 0.6700000166893005,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 2.299999952316284,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059816735,
+            "expected_bits": "3f2b851f",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1088212173,
+            "expected_bits": "40dccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "M95_sp",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95.dbx",
+          "sha256": "8f8494c4d007bb3955485d740372bd521ff6fb4fa437f1df81602c29023ec298",
+          "guid": "7717ea86-49ed-4aa8-b401-7e62d8ade339"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Firing.dbx",
+          "sha256": "4154044cea216e2803840dcf8ff5d2eb1343448d14e63a9b142e55f7858fa66d",
+          "guid": "a65b2cbb-05f1-488b-8dd1-9895f2b60ac5"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Firing.dbx",
+          "sha256": "4154044cea216e2803840dcf8ff5d2eb1343448d14e63a9b142e55f7858fa66d",
+          "guid": "aca0193a-bc85-4a6e-9809-a2e9fdd57b10"
+        }
+      },
+      "descriptor_digest": "ba6256ff27a55659b51d7c7b64d208aa87040e930d0dfe566c7f02df32b69046",
+      "family": "Bolt",
+      "instruction_proof_digest": "e2bd8d39a8f94dbf342885184c20249458bc14612d9506a4c2f46f7ee07faeca",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        8,
+        7,
+        1
+      ],
+      "positive_maximum": 2.299999952316284,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:ff9317c5dfaf5869c3ed99563a1a64d5c3bcdb6aaee3b4308309399c2e46343e",
+      "configuration": {
+        "assetName": "GOL",
+        "assetPath": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Kobra",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.800000190734863,
+          "reloadThreshold": 0.6700000166893005,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 1.7999999523162842,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059816735,
+            "expected_bits": "3f2b851f",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1083808154,
+            "expected_bits": "4099999a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "GOL",
+        "assetPath": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Kobra",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Kobra.dbx",
+          "sha256": "12c0e163971af2fac10e58e70ce5035dbeb9ff816ed5127296661035816a2e6e",
+          "guid": "0ca52687-d93d-4160-acf0-63bfed5fad88"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_ScopeFiring.dbx",
+          "sha256": "951235c5d75d05462c7aca061dd224d7fd77e205ac61733896db49d65c3bc0e5",
+          "guid": "bab5b639-db08-49a2-b049-891d202b3dcb"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_ScopeFiring.dbx",
+          "sha256": "951235c5d75d05462c7aca061dd224d7fd77e205ac61733896db49d65c3bc0e5",
+          "guid": "8aba0d99-96fe-4d31-b39a-422e2cc74c87"
+        }
+      },
+      "descriptor_digest": "22b3e5a3dfdda753d6c6d547caada7704d286e0b906e9346a5037ac3890e9fe5",
+      "family": "Bolt",
+      "instruction_proof_digest": "e2bd8d39a8f94dbf342885184c20249458bc14612d9506a4c2f46f7ee07faeca",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        8,
+        7,
+        1
+      ],
+      "positive_maximum": 1.7999999523162842,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:01f4b349ca1a1216de9b652e22de1cb9ec6aa3b2fefb4254e122737a6ebed822",
+      "configuration": {
+        "assetName": "T194",
+        "assetPath": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.05999999865889549,
+          "reloadTime": 0.6499999761581421,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 1.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1059481190,
+            "expected_bits": "3f266666",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "T194",
+        "assetPath": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194.dbx",
+          "sha256": "6268186190de2603cbcf9c3b943e7b8230e4f5c22384a77b45c201053a1c16a2",
+          "guid": "ed6c98b7-205e-4488-857d-2408528ef2aa"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Firing.dbx",
+          "sha256": "50bb9ca4c5619c43676bab375be689edf60f115b0d016f8adcba4bc55e98ee9d",
+          "guid": "e6b6caa7-7568-46a8-9215-7a84f34df6c5"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Firing.dbx",
+          "sha256": "50bb9ca4c5619c43676bab375be689edf60f115b0d016f8adcba4bc55e98ee9d",
+          "guid": "3577df60-399c-452c-b42a-4e9e34754831"
+        }
+      },
+      "descriptor_digest": "675013dfc689f8dc8cf57f08f9cd5b80b55e3af61f7cfe25548eb9ecd4b554e2",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:0ea1d3877d6991fbc1cdf3005496f41647ff0c62a1b6f4e9df77752354140a78",
+      "configuration": {
+        "assetName": "SPAS12",
+        "assetPath": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_FRAG",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.05999999865889549,
+          "reloadTime": 0.6499999761581421,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 1.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1059481190,
+            "expected_bits": "3f266666",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "SPAS12",
+        "assetPath": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_FRAG",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_FRAG.dbx",
+          "sha256": "9582fdca2069d67b88372b0d375c259f5ffa29a87d143ee1f6ae3a82ec093a60",
+          "guid": "3cd79520-d9c4-4ec6-ba5f-370da9fcf789"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_FRAG_Firing.dbx",
+          "sha256": "4acc89bb4ef866f187959c2c3fe04d67bebb9452a6521f5eea5246c80a6295fd",
+          "guid": "35ca1d5b-ffa8-42b2-885c-4e9d596b3775"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_FRAG_Firing.dbx",
+          "sha256": "4acc89bb4ef866f187959c2c3fe04d67bebb9452a6521f5eea5246c80a6295fd",
+          "guid": "ffc8b6f0-6259-4105-9a00-838220f840c8"
+        }
+      },
+      "descriptor_digest": "2c894fdb26677df5a59551eb6088a6a82115bfeaaed4b4af64b989bd1be79ddd",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:1155d5895d06e64ea7d36bd993ac8fb1702c315e3b47f00d667551d906d57740",
+      "configuration": {
+        "assetName": "SPAS12_sp_s",
+        "assetPath": "Objects/Weapons/Handheld/UL_shg_SPAS12/SP_shg_SPAS12_Slug",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.05999999865889549,
+          "reloadTime": 0.7200000286102295,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 1.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1060655596,
+            "expected_bits": "3f3851ec",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "SPAS12_sp_s",
+        "assetPath": "Objects/Weapons/Handheld/UL_shg_SPAS12/SP_shg_SPAS12_Slug",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/SP_shg_SPAS12_Slug.dbx",
+          "sha256": "d63b873bc98ae672b9fd6176894329c691a7d3172585eb8090e7020a7c9739eb",
+          "guid": "c8312ba4-443e-40b1-b0ae-3ea3c71773c0"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Slug_Firing.dbx",
+          "sha256": "38972aea6e4154a4515399b8c849c424b31755ed6f295fe5f5c78d220a0d9989",
+          "guid": "950cf8a8-5a8c-4ae0-9d43-36723ca7d0e1"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Slug_Firing.dbx",
+          "sha256": "38972aea6e4154a4515399b8c849c424b31755ed6f295fe5f5c78d220a0d9989",
+          "guid": "c3ceaa1b-7335-4766-a882-656ad6b149da"
+        }
+      },
+      "descriptor_digest": "35b58563baa5e5b7028fc5ebb4ea1c73273397f3f95f1ef8690225d45edf3bd6",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:24b8944f7765bee7eddbcbe819b51ce39b8c3b293f8f530a08de897047388ae8",
+      "configuration": {
+        "assetName": "NS2000",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Assault_FRAG",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.10000000149011612,
+          "reloadTime": 0.5299999713897705,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 2.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1057467924,
+            "expected_bits": "3f07ae14",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "NS2000",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Assault_FRAG",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Assault_FRAG.dbx",
+          "sha256": "dce0c07f5b24268b0fefc22d5a14d70eae13b8437324c499d44b036a7c9fd1c8",
+          "guid": "c3a330f8-9446-47c0-bb51-c7231b0bceee"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_FRAG_Firing.dbx",
+          "sha256": "d4f6e41ee9e6170f45304ff0102504262545a7fd59714d2171739d9766e36ef5",
+          "guid": "36b584a5-7eab-4e5a-8cb9-d021d6735ad3"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_FRAG_Firing.dbx",
+          "sha256": "d4f6e41ee9e6170f45304ff0102504262545a7fd59714d2171739d9766e36ef5",
+          "guid": "58cd7f2a-93b3-4d8c-96a4-819205183bb1"
+        }
+      },
+      "descriptor_digest": "b4ff108ff25b9d73acf5475745849c1bf2adc6795af56bf54d2f2b53c2af0a8e",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:2c242d8e066ec95d47bc138bc9b68f26bc2f9df3f6466edc72371d6cf9046058",
+      "configuration": {
+        "assetName": "T194",
+        "assetPath": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_FRAG",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.05999999865889549,
+          "reloadTime": 0.6499999761581421,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 1.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1059481190,
+            "expected_bits": "3f266666",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "T194",
+        "assetPath": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_FRAG",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_FRAG.dbx",
+          "sha256": "d089ce4a92cf6396ac2a5afbbb9e82e0d794aa812c95b796cd7f09b1fc2b6ba5",
+          "guid": "e3457eac-015f-4982-974b-92543a2bf010"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_FRAG_Firing.dbx",
+          "sha256": "1c28954dae7ce5df4f7237c092fa24831cea2a2e1de357267a841f35df8e1537",
+          "guid": "37dc115e-0fd0-4af0-955a-6fcb8d5ae71a"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_FRAG_Firing.dbx",
+          "sha256": "1c28954dae7ce5df4f7237c092fa24831cea2a2e1de357267a841f35df8e1537",
+          "guid": "12c79b75-b70b-412d-8c87-23cf9461514e"
+        }
+      },
+      "descriptor_digest": "1072c799334176cce75eb567c48522db1e0f03ca94d07e5ca169db37f422885c",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:2f63ac5d18eecae1fa16bb3a8e8bda5a74298b038735b16e05c60e2fde517dcc",
+      "configuration": {
+        "assetName": "SPAS12",
+        "assetPath": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Assault_Slug",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.05999999865889549,
+          "reloadTime": 0.7200000286102295,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 1.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1060655596,
+            "expected_bits": "3f3851ec",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "SPAS12",
+        "assetPath": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Assault_Slug",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Assault_Slug.dbx",
+          "sha256": "d187bcc483224b2651944dfa5682f0e41f6d3530f2bc05bd575a50dee0c959ae",
+          "guid": "75af4bef-8d9e-4dc9-ba62-2a73b2473bc0"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Slug_Firing.dbx",
+          "sha256": "38972aea6e4154a4515399b8c849c424b31755ed6f295fe5f5c78d220a0d9989",
+          "guid": "950cf8a8-5a8c-4ae0-9d43-36723ca7d0e1"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Slug_Firing.dbx",
+          "sha256": "38972aea6e4154a4515399b8c849c424b31755ed6f295fe5f5c78d220a0d9989",
+          "guid": "c3ceaa1b-7335-4766-a882-656ad6b149da"
+        }
+      },
+      "descriptor_digest": "dd65bb8b590bb2b47b6f6fc5fa93bec4c322bb15ebbfe360e271e573beeae4ca",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:36b3820d5f26704d2dda107d3f509cc662c7c93ca1f51d3d3302c0d6edc6807d",
+      "configuration": {
+        "assetName": "SPAS12",
+        "assetPath": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Slug",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.05999999865889549,
+          "reloadTime": 0.7200000286102295,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 1.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1060655596,
+            "expected_bits": "3f3851ec",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "SPAS12",
+        "assetPath": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Slug",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Slug.dbx",
+          "sha256": "3dadfa119ecbe20609bd38190e00e9620b09c4ec76103d3caf892a2779b1b806",
+          "guid": "590cc282-3deb-44d9-aa6f-3a14c723d7b3"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Slug_Firing.dbx",
+          "sha256": "38972aea6e4154a4515399b8c849c424b31755ed6f295fe5f5c78d220a0d9989",
+          "guid": "950cf8a8-5a8c-4ae0-9d43-36723ca7d0e1"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Slug_Firing.dbx",
+          "sha256": "38972aea6e4154a4515399b8c849c424b31755ed6f295fe5f5c78d220a0d9989",
+          "guid": "c3ceaa1b-7335-4766-a882-656ad6b149da"
+        }
+      },
+      "descriptor_digest": "f2546c2137bfaa08d55ac7d69e4a48f7696ee2ab0bb5e8d54c264cd766dbae46",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:36c4c62ab5c1ff0e25cc654e989268b82ceeada2715176d6cd5b3c5da0a49bad",
+      "configuration": {
+        "assetName": "NS2000",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Assault",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.10000000149011612,
+          "reloadTime": 0.5299999713897705,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 2.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1057467924,
+            "expected_bits": "3f07ae14",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "NS2000",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Assault",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Assault.dbx",
+          "sha256": "5c312c2830b93daced609debc1bb1b139d1d898f1435ee2c178b0c22563aa853",
+          "guid": "61f036c8-6593-4358-a83b-ee421d5d4129"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Firing.dbx",
+          "sha256": "676055a82d4d7519e586d0a9cf35b7835636fd1ad77eaa47183f911aeef33d46",
+          "guid": "28e925e3-6fb8-411b-a8c7-db3601be6a41"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Firing.dbx",
+          "sha256": "676055a82d4d7519e586d0a9cf35b7835636fd1ad77eaa47183f911aeef33d46",
+          "guid": "4b3f106d-223d-4068-9eb6-cf007a9be7c2"
+        }
+      },
+      "descriptor_digest": "4f1b8154998fe38a546854e18f5a65f1cb9f4068bba930cf1a19492800cb2be3",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:3910ff1fefaa73b6009d48302af297a29b007c0ae5fcde913e2580a08b2ce8e1",
+      "configuration": {
+        "assetName": "SPAS12",
+        "assetPath": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Assault",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.05999999865889549,
+          "reloadTime": 0.7200000286102295,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 1.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1060655596,
+            "expected_bits": "3f3851ec",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "SPAS12",
+        "assetPath": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Assault",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Assault.dbx",
+          "sha256": "a4e3a566430ca38f9afad5939a4be2d07aa7db06a7d89afee06c45cb60da0cfa",
+          "guid": "b6875190-00bc-45d2-87da-663d798e4b6f"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Firing.dbx",
+          "sha256": "4e131d3a731775549b335cdb109124545df02fbb00b5b144d9ae581b2c398fdc",
+          "guid": "0fa21af3-f250-4027-9850-7f2ea64c08bc"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Firing.dbx",
+          "sha256": "4e131d3a731775549b335cdb109124545df02fbb00b5b144d9ae581b2c398fdc",
+          "guid": "fa0f96c6-7299-4c46-8075-84b51a57e0bc"
+        }
+      },
+      "descriptor_digest": "4705c92ddf24b585edc3a7e1652dcf65d17980a0f448770d63858059cc384d30",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:3aae6bc9618c782e9e09827464c42903c127866c2da5ca86f62016181797188c",
+      "configuration": {
+        "assetName": "870MCS",
+        "assetPath": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_Remington870MCS",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.05999999865889549,
+          "reloadTime": 0.6949999928474426,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 1.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1060236165,
+            "expected_bits": "3f31eb85",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "870MCS",
+        "assetPath": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_Remington870MCS",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_Remington870MCS.dbx",
+          "sha256": "5b205a695ea01761b0c21727655967f554a5b0db0c826317e24efb7f4fde8925",
+          "guid": "fbcc489e-acc3-448f-998a-ddfb85582047"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_Remington870MCS_Firing.dbx",
+          "sha256": "b85242bcb959cd424012580733b8cd3e738bb9031d88cdf5707a4ccc10e65cdc",
+          "guid": "c2de2bb1-2de3-4b0f-8f3f-5b609691d286"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_Remington870MCS_Firing.dbx",
+          "sha256": "b85242bcb959cd424012580733b8cd3e738bb9031d88cdf5707a4ccc10e65cdc",
+          "guid": "beaab0d8-16d1-4827-9a72-591c12570817"
+        }
+      },
+      "descriptor_digest": "8dc87be1abd7fede0d5b6abb6b580ce6c192401a0151fcbbcd145ab970e4b8e0",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:445055683b0d60de9760403b64c81c32c409e301e57a348b30bfb8f733c810fd",
+      "configuration": {
+        "assetName": "NS2000",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_FRAG",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.10000000149011612,
+          "reloadTime": 0.5299999713897705,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 2.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1057467924,
+            "expected_bits": "3f07ae14",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "NS2000",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_FRAG",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_FRAG.dbx",
+          "sha256": "c266a0ddfca04718d4ae949701844e756d9053c743d9f93d8f88e788aca82bce",
+          "guid": "9c30014c-cd01-49bb-85a6-fcc609ed7a93"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_FRAG_Firing.dbx",
+          "sha256": "d4f6e41ee9e6170f45304ff0102504262545a7fd59714d2171739d9766e36ef5",
+          "guid": "36b584a5-7eab-4e5a-8cb9-d021d6735ad3"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_FRAG_Firing.dbx",
+          "sha256": "d4f6e41ee9e6170f45304ff0102504262545a7fd59714d2171739d9766e36ef5",
+          "guid": "58cd7f2a-93b3-4d8c-96a4-819205183bb1"
+        }
+      },
+      "descriptor_digest": "820807588493ae0561cab22894a4bbb67bd07e0f57b1eaae0a68a0d5ebc2d593",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:63fb8b620c0eb9699bf1f50ea30be73304eda68960493974b7a9abf18508f9f7",
+      "configuration": {
+        "assetName": "NS2000",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Assault_Slug",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.10000000149011612,
+          "reloadTime": 0.5299999713897705,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 2.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1057467924,
+            "expected_bits": "3f07ae14",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "NS2000",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Assault_Slug",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Assault_Slug.dbx",
+          "sha256": "7b5f7bfb8f6af035019b244d9c51e6507ae334c2f5230e45229dbd29169cf90c",
+          "guid": "0a8ab56a-8527-4130-af03-3471643c0676"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Slug_Firing.dbx",
+          "sha256": "1fe507875ccc3e441ac521a231679276638fa8468b9dadbf203f8a56546d0e31",
+          "guid": "23eff9ff-5671-469d-ad34-d65157fc8daa"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Slug_Firing.dbx",
+          "sha256": "1fe507875ccc3e441ac521a231679276638fa8468b9dadbf203f8a56546d0e31",
+          "guid": "6cd5ba42-9291-4ab6-9e8b-72f2b3b699fb"
+        }
+      },
+      "descriptor_digest": "e55d1b6a027c6defb91bd5fc7b21dbce1378620ee0885c2f3e5095ae755dd620",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:6bf49ba8999b4247ce1bbd89b9147d86e8369ba3e187ff156a1ee9927af66325",
+      "configuration": {
+        "assetName": "SPAS12_sp",
+        "assetPath": "Objects/Weapons/Handheld/UL_shg_SPAS12/SP_shg_SPAS12",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.05999999865889549,
+          "reloadTime": 0.7200000286102295,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 1.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1060655596,
+            "expected_bits": "3f3851ec",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "SPAS12_sp",
+        "assetPath": "Objects/Weapons/Handheld/UL_shg_SPAS12/SP_shg_SPAS12",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/SP_shg_SPAS12.dbx",
+          "sha256": "800b46aead4e2704cb771176e5d7ae58f72838beb89fe4cb3f9d7192089f2113",
+          "guid": "cd43bc40-bbd7-4bab-b3d6-8ae934374944"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Firing.dbx",
+          "sha256": "4e131d3a731775549b335cdb109124545df02fbb00b5b144d9ae581b2c398fdc",
+          "guid": "0fa21af3-f250-4027-9850-7f2ea64c08bc"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Firing.dbx",
+          "sha256": "4e131d3a731775549b335cdb109124545df02fbb00b5b144d9ae581b2c398fdc",
+          "guid": "fa0f96c6-7299-4c46-8075-84b51a57e0bc"
+        }
+      },
+      "descriptor_digest": "07e9c9d9b5ab40516490dd99687452cb6574c3aa8027671455943451ef45a624",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:6cb99d5ef6b967ce3d3d898027453adcc08cae51e5bf4ffdc19167412aa951d4",
+      "configuration": {
+        "assetName": "NS2000",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Slug",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.10000000149011612,
+          "reloadTime": 0.5299999713897705,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 2.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1057467924,
+            "expected_bits": "3f07ae14",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "NS2000",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Slug",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Slug.dbx",
+          "sha256": "c8ed51bcf4349807da7c0f0ef5bbd6237cc6765fb76925aebda34e42e883f4cf",
+          "guid": "7d149c91-41dd-42d9-98bf-f591203eb1b8"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Slug_Firing.dbx",
+          "sha256": "1fe507875ccc3e441ac521a231679276638fa8468b9dadbf203f8a56546d0e31",
+          "guid": "23eff9ff-5671-469d-ad34-d65157fc8daa"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Slug_Firing.dbx",
+          "sha256": "1fe507875ccc3e441ac521a231679276638fa8468b9dadbf203f8a56546d0e31",
+          "guid": "6cd5ba42-9291-4ab6-9e8b-72f2b3b699fb"
+        }
+      },
+      "descriptor_digest": "918cebe9787081f5ecb91da64ecdd2a0a95209905e55616890f35e06b5352799",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:7920e4da9e75170bb720228faf40d595241926380d481b2b927c5ac213c3b5bc",
+      "configuration": {
+        "assetName": "870MCS",
+        "assetPath": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Assault",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.05999999865889549,
+          "reloadTime": 0.6949999928474426,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 1.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1060236165,
+            "expected_bits": "3f31eb85",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "870MCS",
+        "assetPath": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Assault",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Assault.dbx",
+          "sha256": "c53414fb9184ef6ba633d9b6f701345121102bc689e7727be75e5fb30a822319",
+          "guid": "79070ff4-8a66-47ca-b53f-49a8ee2a7b17"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_Remington870MCS_Firing.dbx",
+          "sha256": "b85242bcb959cd424012580733b8cd3e738bb9031d88cdf5707a4ccc10e65cdc",
+          "guid": "c2de2bb1-2de3-4b0f-8f3f-5b609691d286"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_Remington870MCS_Firing.dbx",
+          "sha256": "b85242bcb959cd424012580733b8cd3e738bb9031d88cdf5707a4ccc10e65cdc",
+          "guid": "beaab0d8-16d1-4827-9a72-591c12570817"
+        }
+      },
+      "descriptor_digest": "09d52d512966fcdaa820818338829fc848f3dbe704df926575a042cdabb22e3d",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:7e6b71caaf3fd0ecfbd3c06df78273c3ce4f3ac5d950576283b7db51f2fe48c9",
+      "configuration": {
+        "assetName": "SPAS12",
+        "assetPath": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Assault_FRAG",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.05999999865889549,
+          "reloadTime": 0.6499999761581421,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 1.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1059481190,
+            "expected_bits": "3f266666",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "SPAS12",
+        "assetPath": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Assault_FRAG",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Assault_FRAG.dbx",
+          "sha256": "78faf84c33640d3e08135ff3150adc409c1175b9ba422258e1bfc6808405e6f9",
+          "guid": "275ef8e3-24e9-4bb3-b9b8-3402ad82eb40"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_FRAG_Firing.dbx",
+          "sha256": "4acc89bb4ef866f187959c2c3fe04d67bebb9452a6521f5eea5246c80a6295fd",
+          "guid": "35ca1d5b-ffa8-42b2-885c-4e9d596b3775"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_FRAG_Firing.dbx",
+          "sha256": "4acc89bb4ef866f187959c2c3fe04d67bebb9452a6521f5eea5246c80a6295fd",
+          "guid": "ffc8b6f0-6259-4105-9a00-838220f840c8"
+        }
+      },
+      "descriptor_digest": "aa4ae297743dc3a430a932ae4d8cb23abb17ab18a02329e3aa8fd67a57845920",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:7f55c91785da9a6b97da0489aa32f873b1c6b342d77ef30e655f7eff2ee71352",
+      "configuration": {
+        "assetName": "T194_sp",
+        "assetPath": "Objects/Weapons/Handheld/MEC_shg_TOZ194/SP_shg_TOZ194",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.05999999865889549,
+          "reloadTime": 0.6499999761581421,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 1.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1059481190,
+            "expected_bits": "3f266666",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "T194_sp",
+        "assetPath": "Objects/Weapons/Handheld/MEC_shg_TOZ194/SP_shg_TOZ194",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/SP_shg_TOZ194.dbx",
+          "sha256": "22f193d20ccc49b898ae09b92530de4db8e0f49f5a541e7971431e48186ca446",
+          "guid": "5cf68976-bf6c-4744-bda5-71a954679ff9"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Firing.dbx",
+          "sha256": "50bb9ca4c5619c43676bab375be689edf60f115b0d016f8adcba4bc55e98ee9d",
+          "guid": "e6b6caa7-7568-46a8-9215-7a84f34df6c5"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Firing.dbx",
+          "sha256": "50bb9ca4c5619c43676bab375be689edf60f115b0d016f8adcba4bc55e98ee9d",
+          "guid": "3577df60-399c-452c-b42a-4e9e34754831"
+        }
+      },
+      "descriptor_digest": "e0e03ee624a29cd7afc5306e83cbddb99fe05358c78cded02aac070fbdb110e9",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:80f4fa5087129683136a22a7b93ac5118ae68e306a9708a75d1a0d4c3d7e6c4a",
+      "configuration": {
+        "assetName": "870MCS",
+        "assetPath": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Frag",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.05999999865889549,
+          "reloadTime": 0.7200000286102295,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 1.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1060655596,
+            "expected_bits": "3f3851ec",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "870MCS",
+        "assetPath": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Frag",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Frag.dbx",
+          "sha256": "61ec8e695b5a478eeeab775482d8bbda289644861952a3318d7aac8f37f7d9a5",
+          "guid": "beb9cf28-56b9-487a-baf2-a396c5bd6ab2"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Frag_firing.dbx",
+          "sha256": "86503c85d28794aaf78dcf60cd4fd6847a8122f7e010dd72d06decbdc9f3abf7",
+          "guid": "250407a1-bf8e-4181-8b3d-42844b3d08e5"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Frag_firing.dbx",
+          "sha256": "86503c85d28794aaf78dcf60cd4fd6847a8122f7e010dd72d06decbdc9f3abf7",
+          "guid": "873b0317-e299-4151-a3b9-b2addc0494b9"
+        }
+      },
+      "descriptor_digest": "5983bf9c07a655042e38eec87890118af8f14ade4c6805fda82f0724b20b7c53",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:910126ea544002b8fafd594802123e3271e505df080ae9756e8e26f3b8529506",
+      "configuration": {
+        "assetName": "870MCS",
+        "assetPath": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Frag_Assault",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.05999999865889549,
+          "reloadTime": 0.7200000286102295,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 1.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1060655596,
+            "expected_bits": "3f3851ec",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "870MCS",
+        "assetPath": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Frag_Assault",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Frag_Assault.dbx",
+          "sha256": "3f6acf30377a14e0bca381bcdefc6831a273b465825f5b2cb9cd6e45043ac0ca",
+          "guid": "fc6342c8-7834-47cf-86f9-d2c79de732a6"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Frag_firing.dbx",
+          "sha256": "86503c85d28794aaf78dcf60cd4fd6847a8122f7e010dd72d06decbdc9f3abf7",
+          "guid": "250407a1-bf8e-4181-8b3d-42844b3d08e5"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Frag_firing.dbx",
+          "sha256": "86503c85d28794aaf78dcf60cd4fd6847a8122f7e010dd72d06decbdc9f3abf7",
+          "guid": "873b0317-e299-4151-a3b9-b2addc0494b9"
+        }
+      },
+      "descriptor_digest": "8201a311bc803393d77369e535fe07a9395d56baddd9c3d5246c588f80f6ea1d",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:98ff1564f1d4bffa9fdf47682e31faad13d98d3a29c33fa5eb4fa27408cc3312",
+      "configuration": {
+        "assetName": "870MCS",
+        "assetPath": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Slug",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.05999999865889549,
+          "reloadTime": 0.6949999928474426,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 1.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1060236165,
+            "expected_bits": "3f31eb85",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "870MCS",
+        "assetPath": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Slug",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Slug.dbx",
+          "sha256": "65122fbbe334e603a05faae1fcf324733751584928942450398793e6d2bd8b16",
+          "guid": "5b7eb1b8-df24-4369-a6cd-b3edad30f385"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Slug_firing.dbx",
+          "sha256": "d1dcb0b711955aee2c4fbd07cea3669a39bebf7ecf9c55c13fc955f8123985ca",
+          "guid": "9bf6a0b3-5012-44b6-af48-e3e321a2df61"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Slug_firing.dbx",
+          "sha256": "d1dcb0b711955aee2c4fbd07cea3669a39bebf7ecf9c55c13fc955f8123985ca",
+          "guid": "0964135f-65da-451b-8855-499c616bcd10"
+        }
+      },
+      "descriptor_digest": "5d0ba224eb0d3a247627f287fbbe4cff076728c8a2963d1e32d213103eda53f9",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:a0df776ae67ced225ed7f00abba6dd4c398dce7496d7a933aebe05ebfcca29c9",
+      "configuration": {
+        "assetName": "NS2000",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.10000000149011612,
+          "reloadTime": 0.5299999713897705,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 2.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1057467924,
+            "expected_bits": "3f07ae14",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "NS2000",
+        "assetPath": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead.dbx",
+          "sha256": "4638204867c64ed0ed5179619c53677b75839223ed72f016067fe853f76ce15b",
+          "guid": "f9633dfa-3fa8-44ee-811c-0fa88a6771a5"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Firing.dbx",
+          "sha256": "676055a82d4d7519e586d0a9cf35b7835636fd1ad77eaa47183f911aeef33d46",
+          "guid": "28e925e3-6fb8-411b-a8c7-db3601be6a41"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Firing.dbx",
+          "sha256": "676055a82d4d7519e586d0a9cf35b7835636fd1ad77eaa47183f911aeef33d46",
+          "guid": "4b3f106d-223d-4068-9eb6-cf007a9be7c2"
+        }
+      },
+      "descriptor_digest": "bff921157d1c64bf4bfa46c79fffa326d66e0eb998a13ee628ca980d0583a34b",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:a14161799c500ae594d3b74a439a78b1d480347b235d605349e87f70a63e830e",
+      "configuration": {
+        "assetName": "T194",
+        "assetPath": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Slug",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.05999999865889549,
+          "reloadTime": 0.6499999761581421,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 1.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1059481190,
+            "expected_bits": "3f266666",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "T194",
+        "assetPath": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Slug",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Slug.dbx",
+          "sha256": "32cb52f0ac88e3e87b7b02e74938de8323679ef4da0a9fcb14c12a34567183fd",
+          "guid": "f00e6142-a931-4010-9136-e1fdf29b53c9"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Slug_Firing.dbx",
+          "sha256": "f2fca9f46fbeb4c1a5f0feda20d6a58b8d202137731c78283e34b3fa966f1214",
+          "guid": "802672c1-10b3-4350-8c42-64dacc0e4407"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Slug_Firing.dbx",
+          "sha256": "f2fca9f46fbeb4c1a5f0feda20d6a58b8d202137731c78283e34b3fa966f1214",
+          "guid": "e229814f-b34e-4936-8147-ef305f8193a8"
+        }
+      },
+      "descriptor_digest": "ca1b616ce051bd5f80a535730aa60818feee0c512c0e3b717610275f69652df3",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:b5bf742884d4a484cb701b2e5d021c12926ad6ee3646df967a73e75daf82774e",
+      "configuration": {
+        "assetName": "870MCS",
+        "assetPath": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Assault_Slug",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.05999999865889549,
+          "reloadTime": 0.6949999928474426,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 1.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1060236165,
+            "expected_bits": "3f31eb85",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "870MCS",
+        "assetPath": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Assault_Slug",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Assault_Slug.dbx",
+          "sha256": "c9d3fe797f72919b3b3f4eca87c3721b8708923813614312143c7a1593c6be52",
+          "guid": "1c67174a-686d-4be7-87c7-ce34db5beaa3"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Slug_firing.dbx",
+          "sha256": "d1dcb0b711955aee2c4fbd07cea3669a39bebf7ecf9c55c13fc955f8123985ca",
+          "guid": "9bf6a0b3-5012-44b6-af48-e3e321a2df61"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Slug_firing.dbx",
+          "sha256": "d1dcb0b711955aee2c4fbd07cea3669a39bebf7ecf9c55c13fc955f8123985ca",
+          "guid": "0964135f-65da-451b-8855-499c616bcd10"
+        }
+      },
+      "descriptor_digest": "5aa9d1626fa4db2f04a0e5a548f451d80b0c023a4b5dfa0ff17cbdf476f10211",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:c3704e014b26619621daee509cfa72d06f0e27f4d24f35cd190553c058ed9cdf",
+      "configuration": {
+        "assetName": "SPAS12",
+        "assetPath": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.05999999865889549,
+          "reloadTime": 0.7200000286102295,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 1.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1060655596,
+            "expected_bits": "3f3851ec",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "SPAS12",
+        "assetPath": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12.dbx",
+          "sha256": "0061306f908e68bfc2ee6cec5bc1cc00507469713d2a7a2eea8394ddc5f87fb7",
+          "guid": "f236287b-f276-485a-a3e6-1c7d4530f407"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Firing.dbx",
+          "sha256": "4e131d3a731775549b335cdb109124545df02fbb00b5b144d9ae581b2c398fdc",
+          "guid": "0fa21af3-f250-4027-9850-7f2ea64c08bc"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Firing.dbx",
+          "sha256": "4e131d3a731775549b335cdb109124545df02fbb00b5b144d9ae581b2c398fdc",
+          "guid": "fa0f96c6-7299-4c46-8075-84b51a57e0bc"
+        }
+      },
+      "descriptor_digest": "73b6d5a13e4cecb6b3b00b6ccdc4d3cbd77834953057144c3d3cf8703235211f",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    },
+    {
+      "key": "bc2:shotgun-descriptor:d1dfa65cf58c1122caef53b060a6ef8dba426205ebeb7a8d4befc99a2e7e8828",
+      "configuration": {
+        "assetName": "T194_sp_s",
+        "assetPath": "Objects/Weapons/Handheld/MEC_shg_TOZ194/SP_shg_TOZ194_Slug",
+        "values": {
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 4,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.05999999865889549,
+          "reloadTime": 0.6499999761581421,
+          "reloadThreshold": 1.0,
+          "postReloadTime": 1.0,
+          "boltDelay": 0.5,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1,
+          "reloadType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1065353216,
+            "expected_bits": "3f800000",
+            "comparison": "Float"
+          },
+          {
+            "offset": 24,
+            "expected": 1059481190,
+            "expected_bits": "3f266666",
+            "comparison": "Float"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "identity": {
+        "assetName": "T194_sp_s",
+        "assetPath": "Objects/Weapons/Handheld/MEC_shg_TOZ194/SP_shg_TOZ194_Slug",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/SP_shg_TOZ194_Slug.dbx",
+          "sha256": "0d23262d8a7450c67aa22a8bdf41bf97891945c34017bf364f2f0b7d794eadcf",
+          "guid": "361c0419-96a4-4e20-96ca-7b386c57eee6"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_FRAG_Firing.dbx",
+          "sha256": "1c28954dae7ce5df4f7237c092fa24831cea2a2e1de357267a841f35df8e1537",
+          "guid": "37dc115e-0fd0-4af0-955a-6fcb8d5ae71a"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_FRAG_Firing.dbx",
+          "sha256": "1c28954dae7ce5df4f7237c092fa24831cea2a2e1de357267a841f35df8e1537",
+          "guid": "12c79b75-b70b-412d-8c87-23cf9461514e"
+        }
+      },
+      "descriptor_digest": "65c907e1494efa27b37241270608384a6bb2d963bdffa9f0bbe37c4934f62dd4",
+      "family": "Pump",
+      "instruction_proof_digest": "5f3eab1c7222a55e3f6ac4955caee07b57cf53ac5a30cfc21298f534af7b750c",
+      "native_cycle_admission": true,
+      "review": "Exact complete scalar/object-chain selector; shared type-1 Step state7/8 or empty6 dispatch only",
+      "positive_boundary": [
+        7,
+        6,
+        8
+      ],
+      "positive_maximum": 0.5,
+      "empty_boundary": [
+        6,
+        5,
+        1
+      ],
+      "empty_maximum": 1,
+      "actual_game_acceptance": false,
+      "headset_acceptance": false,
+      "physical_geometry_admission": false
+    }
+  ],
+  "excluded": [
+    {
+      "key": "bc2:magazine-descriptor:04e2e2d372322fd7118521ffc0fc716005dbbb8f05669ceaafb78a28ef3f35c4",
+      "assetPath": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU",
+      "reason": "Exact native dispatch is not fltSingleFireWithBoltAction"
+    },
+    {
+      "key": "bc2:magazine-descriptor:121a7426a50ef627a9f5fb69ea0efcf400f4085d7604b8b9045f75124f2068c0",
+      "assetPath": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Kobra",
+      "reason": "Exact native dispatch is not fltSingleFireWithBoltAction"
+    },
+    {
+      "key": "bc2:magazine-descriptor:14ca5aad5b706a1b9dc454c65f4934a55382e9232456226a15a6d96a58c572dc",
+      "assetPath": "Objects/Weapons/Handheld/BU_sni_QBY88/SP_sni_QBU88_Kobra",
+      "reason": "Exact native dispatch is not fltSingleFireWithBoltAction"
+    },
+    {
+      "key": "bc2:magazine-descriptor:323395ccfdcc4682df390ce420c13358df6d0a1dfa31c126566f31f4d066bb30",
+      "assetPath": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Kobra",
+      "reason": "Exact native dispatch is not fltSingleFireWithBoltAction"
+    },
+    {
+      "key": "bc2:magazine-descriptor:37a2fd9255b12bf5e47a226dd41ff1d52ec5df704075c3ceec70cd3426d5e975",
+      "assetPath": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88",
+      "reason": "Exact native dispatch is not fltSingleFireWithBoltAction"
+    },
+    {
+      "key": "bc2:magazine-descriptor:45f398e90f6d7fcc4a601b92328fdee4383d5337e341bad287a33ca7037a6c64",
+      "assetPath": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Scoped",
+      "reason": "Exact native dispatch is not fltSingleFireWithBoltAction"
+    },
+    {
+      "key": "bc2:magazine-descriptor:4d31138736cae6e33c17a4777efdd9cc5bb77dc69f6ab62a65f354b8a193169d",
+      "assetPath": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores",
+      "reason": "Exact native dispatch is not fltSingleFireWithBoltAction"
+    },
+    {
+      "key": "bc2:magazine-descriptor:675f72ae9b9bc4c2dbae796fd61cec112cf70ddae2717ba3784e3dd433eef270",
+      "assetPath": "Objects/Weapons/Handheld/BU_sni_QBY88/SP_sni_QBU88",
+      "reason": "Exact native dispatch is not fltSingleFireWithBoltAction"
+    },
+    {
+      "key": "bc2:magazine-descriptor:82679abf3c9a5f5679bd565b1c53d14199480ab35ad94aa0b71eddfbac797fd2",
+      "assetPath": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Scoped",
+      "reason": "Exact native dispatch is not fltSingleFireWithBoltAction"
+    },
+    {
+      "key": "bc2:magazine-descriptor:8313e354ee7e05964b8dbe326625db2340bde01970fe81cdd79ab94bd3f6624f",
+      "assetPath": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Kobra",
+      "reason": "Exact native dispatch is not fltSingleFireWithBoltAction"
+    },
+    {
+      "key": "bc2:magazine-descriptor:912363965c8217cac287a4cd9a8171cc1f6ef6e301d8d0952bf2f974bfbce1b3",
+      "assetPath": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Scoped",
+      "reason": "Exact native dispatch is not fltSingleFireWithBoltAction"
+    }
+  ],
+  "limits": "No per-gun live or headset result; physical geometry and loaded-asset proof remain separate gates."
+}

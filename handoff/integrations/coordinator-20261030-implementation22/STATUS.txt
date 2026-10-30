@@ -1,0 +1,8 @@
+Batch22 source/checks committed locally e507fce3bed8fdc25e78f9005c90962571d847c6. Base77b9926.
+All pistol22/23/24 and review25 agents retired; root owns their source.
+20 focused passes; CHECKS.json pins relevant inputs. Failures retained.
+MP443 after-feed slide policy/gate/owner/render connected; M60 idle debt stow fixed.
+No native chamber, all-pistol/all-LMG, actual-game or headset acceptance claim.
+Canonical integration/push/install HELD; installed0.1.17 unchanged.
+Cinematic queue25 separate bounded static continuation; own handoff only.
+Next: follow supported queue consumer findings; source remains unintegrated.

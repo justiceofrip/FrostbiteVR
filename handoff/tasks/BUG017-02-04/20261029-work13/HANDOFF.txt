@@ -1,0 +1,29 @@
+DoneY: one bounded offline cinematic metadata preparation complete; ownership discriminator UNPROVEN.
+Assigned worktree campaign-coordinator-20261028-r1, base08300e6 (not independently queried).
+Source READONLY; no Git/build/game/XR/process/input/profile/install/archive/shared-doc work.
+Files: this handoff, prepare.py, preparation01.json; no executable/asset bytes exported.
+Installed EXE SHA2563911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258 verified.
+Reuses CHAT16/work12 image_for/locations plus existing Image and ClassInfo signature.
+Evidence level: static file-backed metadata/code relationships; no new actual-game evidence.
+Verified seven named classes,31 own declared fields; report13345bytes, SHA256
+5e077a868ad1eb55d7c3a35d2110a9b936f036b3564d27f47c39e821ca54eaef.
+Unique existing ClassInfo ctor RVA0x100660; wrapper0x100880 forwards all four args unchanged.
+Initializer/getter/header/table hashes and reader/source hashes are retained in the report.
+ClientCutsceneCameraEntity size240, ClientCutsceneEntity268, ServerCutsceneCameraEntity188:
+each declares zero own reflected fields; inherited/unreflected runtime state is not excluded.
+CutsceneCameraEntityData size240: Camera@224,ActiveFromStart@228 (authored fields only).
+CutsceneEntityData size208:20fields, including Camera@156,CameraEntitySpace@160,Sequence@136.
+CutsceneEntityCameraData size160: PeekAroundMaxPitch@144,MaxYaw@148,SnapBack@152.
+Its declared parent TypeInfo is exactly CutsceneCameraData (size144,six own fields).
+CutsceneCameraData fields: Animation,DofBone,UseDof,AnimTree,TotalLength,CameraLeaps.
+CameraController/CutsceneCamera/PlayingCutscene/IsCutscene are retained as labels only.
+No field-name similarity, ActiveFromStart setting or declared parent proves current ownership.
+Existing verified paths resolve context/manager/local-player/soldier/controlled-entry/input-cache;
+view profiles identify request ownership and RenderView copies, not an active cinematic owner.
+Missing join: admitted local-player or active view/request -> live cutscene camera/entity ->
+currently selected camera/sequence, with local-player scope, blend state and lifetime evidence.
+No existing verified relationship supplies that join; no runtime observer/offset/classifier added.
+Root-only future work needs independently verified ownership plus a named entry/exit/skip episode.
+Check: py -3.12 -B handoff/tasks/BUG017-02-04/20261029-work13/prepare.py --exe <exact EXE> --output <new JSON beside script>
+Static preparation passed; exclusive output,32KiB bound, no process access or archive reads.
+No runtime source/capability grant. Cutscene symptom remains OPEN; retired.

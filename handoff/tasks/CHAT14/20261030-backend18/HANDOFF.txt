@@ -1,0 +1,24 @@
+DoneY: bounded retained M60 backend integration source; root owns validation and production acceptance.
+Exclusive edits: Bc2FeedEquipmentAdapter.h; Bc2ReloadFlowRuntime.h/.cpp; Bc2FeedEquipmentAdapterTests.cpp.
+ReadFeedEquipmentViewAt(owner,inputObservedNs,processingNow) selects latest actual observation <= original input and fresh at native processing time.
+Legacy ReadFeedEquipmentView now delegates to ReadAt; 64 bounded coherent source views retain exact owner/resource/config and original deadlines.
+TryFeedEquipment publishes max(contextObservedNs, completed coherent reads in.nowNs, resource.observedNs); neutral votes keep original context timestamps.
+SubmitFeedEquipmentCommandResult(submission,noEntryOnly=false) returns Submitted, NoEntryRetained, RetentionBusy, or Invalid.
+After RetentionBusy caller retains exact submission and retries only noEntryOnly=true; never retry native transfer admission.
+Invalid provenance/owner/count debt remains unresolved; no submission return or elapsed time fabricates a receipt.
+Sixteen bounded refused entries retain exact command and source. Later genuine own-server and both client Updates must observe unchanged owner/counts, neutral idle and fresh exact current resource.
+Rejected receipts use actual server invocation/begin, original command, observed completion, and noTransferEntry=true; no synthetic native Call/Transfer occurs.
+Actual count/owner changes retain uncertainty. Temporary nonneutral observations invalidate that branch vote until later neutral input.
+Existing accepted-command expiry rejection also sets noTransferEntry; all Applied receipts leave it false. Sixty-four historical receipts survive selection/input loss.
+FeedEquipmentGate {AmmoResourceIdentity resource; uint64 lifetime,revision; bool blocksFire,closedVerified} retains resource lifetime independently of equip/space/input age.
+PublishFeedEquipmentGate and ReadFeedEquipmentGate require the exact stable resource including weaponGeneration; gate reads never expire.
+Frontend must block stock Reload for any selected enrolled resource, even closed idle, and retain local debt on gate-read contention/null.
+Every submitted/retained command sets fire debt. Clearing requires verified caller close plus a real Applied CloseCover receipt and no unresolved command debt.
+Resource revisions strictly increase. New globally higher session lifetime is allowed only after prior verified closed idle and fresh actual resource evidence.
+Sixteen enrollment slots never evict live debt. RetireAmmoForReplacementActor passes genuine existing AmmoResourceService drained actor-retirement proof to adapter Retire.
+That proof reclaims only exact old native actor/generation slots; stow/recenter/tracking loss never reclaim. Feed-only actors lacking that service proof retain bounded slots conservatively.
+Exactly eight named native-runtime functions touched; no new hook, native offset, thread, transfer capability or stock mechanism-readiness inference.
+Fourteen deterministic adapter test cases present, including historical input, no-entry, bounded pressure, persistent gates and retirement; NOT EXECUTED here.
+Runtime owner integrates Gameplay persistent fire/held-input and stock Reload suppression via existing verified input path; core owner implements fresh-neutral endpoint retry.
+No Git/build/test/game/input/process/XR/install or shared-document action by this worker. Source uninstalled; no actual-game/headset success claimed.
+Frozen for coordinator checks; remaining actual gap is combined validation and native/headset acceptance of the integrated frontend/backend path.

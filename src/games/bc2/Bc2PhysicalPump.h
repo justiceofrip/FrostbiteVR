@@ -13,7 +13,8 @@
 #include <mutex>
 namespace fvr::bc2 {
 // Explicit measured calibration; there is deliberately no default accepted row.
-// Canonical weapon-local metres, from the original state-labelled native rig.
+// Canonical weapon-local metres. Native measurements and an explicitly
+// reviewed authored interaction policy retain separate evidence flags.
 struct Bc2PumpCalibration {
     std::uint64_t revision=0,rigFingerprint=0;
     math::Matrix4 closedPart{},closedWrist{};
@@ -25,6 +26,7 @@ struct Bc2PumpCalibration {
     Bc2PumpGeometry geometry{};
     std::span<const Bc2PumpFixedPart> fixedParts{}; // Static adapter-owned lifetime.
     std::span<const Bc2PumpCompanionPart> companions{}; // Spatial presentation only.
+    bool authoredReviewed=false; // Authored geometry/mod policy; never native boundary proof.
 };
 bool PumpCalibrationValid(const Bc2PumpCalibration&)noexcept;
 struct Bc2PumpRawContact {

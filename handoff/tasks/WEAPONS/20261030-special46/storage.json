@@ -1,0 +1,89 @@
+{
+  "schema": "fvr.storage-admission.v1",
+  "operation": "Session",
+  "checked_utc": "2026-10-30T13:41:16.2300813Z",
+  "output_path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-special46",
+  "planned_bytes": 67108864,
+  "raw_capture_bytes": 0,
+  "max_raw_capture_bytes": 536870912,
+  "max_generated_bytes": 42949672960,
+  "min_free_bytes": 16106127360,
+  "generated": {
+    "bytes": 36913487925,
+    "allocated_bytes": 36913487925,
+    "logical_bytes": 82822183704,
+    "files": 255638,
+    "accounting": "GetCompressedFileSizeW",
+    "roots": [
+      {
+        "path": "G:\\BC2VR",
+        "bytes": 3190918157,
+        "allocated_bytes": 3190918157,
+        "logical_bytes": 5743389433,
+        "files": 36280
+      },
+      {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-recovery",
+        "bytes": 33513397871,
+        "allocated_bytes": 33513397871,
+        "logical_bytes": 76869622374,
+        "files": 217468
+      },
+      {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\bc2vr-recovery",
+        "bytes": 0,
+        "allocated_bytes": 0,
+        "logical_bytes": 0,
+        "files": 0
+      },
+      {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\build",
+        "bytes": 0,
+        "allocated_bytes": 0,
+        "logical_bytes": 0,
+        "files": 0
+      },
+      {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\dist",
+        "bytes": 0,
+        "allocated_bytes": 0,
+        "logical_bytes": 0,
+        "files": 0
+      },
+      {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-special46",
+        "bytes": 0,
+        "allocated_bytes": 0,
+        "logical_bytes": 0,
+        "files": 0
+      },
+      {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\release",
+        "bytes": 476599,
+        "allocated_bytes": 476599,
+        "logical_bytes": 476599,
+        "files": 29
+      },
+      {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports",
+        "bytes": 208695298,
+        "allocated_bytes": 208695298,
+        "logical_bytes": 208695298,
+        "files": 1861
+      },
+      {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\test-temp",
+        "bytes": 0,
+        "allocated_bytes": 0,
+        "logical_bytes": 0,
+        "files": 0
+      }
+    ]
+  },
+  "volumes": [
+    {
+      "root": "G:\\",
+      "free_bytes": 56148303872
+    }
+  ]
+}

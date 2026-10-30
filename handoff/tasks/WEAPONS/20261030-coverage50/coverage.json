@@ -1,0 +1,4755 @@
+{
+  "schema": "fvr.bc2.exact_firearm_coverage.v1",
+  "summary": {
+    "configurations": 181,
+    "asset_names": 77,
+    "metadata_complete": 181,
+    "families": {
+      "belt_feed": 24,
+      "bolt_magazine": 17,
+      "clip_or_exact_configuration_review": 3,
+      "detachable_magazine": 111,
+      "revolver_cylinder": 1,
+      "tube_pump": 25
+    },
+    "support_profiles": 78,
+    "body_selectors": 181,
+    "cache_records": 252,
+    "magazine_profiles": 128,
+    "pump_profiles": 25,
+    "bolt_profiles": 17,
+    "feed_profiles": 24,
+    "pistol_slide_profiles": 5,
+    "fixed_container_profiles": 4
+  },
+  "complete": true,
+  "evidence_level": "exact metadata/header reference join; compilation and runtime checks are separate",
+  "installed": false,
+  "headset_accepted": false,
+  "inputs": {
+    "handoff/tasks/WEAPONS/20261030-roster43/roster.json": "deb0bbe2155ad573719846fbd90dd5fbd7b42ef5af37e55785b9047b349dd4e1",
+    "config/body-ammo-assets.json": "f6d69eb5fe9b2758965e935a7391d0355fb206f4be98e70719cd18c5705e97e7",
+    "src/games/bc2/Bc2BodyEquipmentProfiles.h": "4e6841e65d33c8fe3be727d059b5b65990daeeba32147610c60c4f6fb34470a2",
+    "profiles/weapons43/CombinedSupport.h": "f671cb9352484220914eef45550ac10a2dab9c9776c7a418e90ae16351d1c765",
+    "profiles/checkpoint202/Bc2AuthoredSupports.generated.h": "6e4be268a9be780aa729da50deabce32bd784e6031a135b6e2e005b2bbeadc69",
+    "profiles/support312/StaticSupports.generated.h": "84a0fa0fc6736c834e3a713510f82fd7cc40e44ede633cd3cc4a6abb9250ee70",
+    "profiles/bounded-support372/CandidateSupports.generated.h": "907113d906034dd0a9e04b5d35a91d3211f3a100693461232396e78803384c07",
+    "profiles/opening426/NambuSupport.generated.h": "12812c3137a5db48c67c5c2f0a3bf94055e08e3dcf28741f873422f7e654f7e7",
+    "profiles/weapons43/Support.additions.generated.h": "ff4b5c8cefbe7654f5b3efb5baba5a890cbe7d142c6e81e4c1bba2ebdb4a6d27",
+    "profiles/weapons43/Support.completion.generated.h": "1ed7e4db94598476ce46ed6482c24999e694dfd3e32fe7ded0ba9adac6878bf0",
+    "profiles/weapons45-magazines/batch.json": "5b2478c9111798b328b3585f738d1ef634249185bb8c3222384f55240e4d6ad5",
+    "profiles/weapons45-magazines/enrollment.json": "e38a76a229f65da62ddeb7d80530b415d7a5adefe07ce78d7fd921a3cdb1817c",
+    "profiles/weapons45-magazines/geometry.json": "da8726c3d3aea6be16f38b6ce963ce225b9b362fb47b40e11ea07890aaa52fe9",
+    "profiles/weapons45-magazines/CombinedRegistry.h": "8319980c7b742897014de1f5432825f4d271ac5c21b64131fa9aa33149dd5348",
+    "profiles/resource-enrollment233/ReviewedResourceRegistry.h": "49a9f9008bb72a821d1c8752aa9028ca007fa5473667169853c81c65180b4279",
+    "profiles/resource-enrollment235-scar/ScarRegistry.h": "da30782bf99adc2908d737683df0e557dbb09c0780a693da33ca3c742f28eb06",
+    "profiles/resource-enrollment240-f2000/F2000Registry.h": "ee53f501d2fca908a16d186cb191412c90790f4b9b3b309058079ee086e778cb",
+    "profiles/resource-enrollment295-pistol/PistolRegistry.h": "83d702b09e8bc77a4ec0cce6d85debd4f53f1974b5ec684a8c34eb1d8b516c1e",
+    "profiles/opening426/NambuRegistry.generated.h": "efa06431aabd9b5f5fbd33ba2ceba8f654b070b5793c6e8d33a100300244e8fc",
+    "profiles/mechanism-family41/PistolRegistry.generated.h": "35788f970906a64f6299aae8bb602cda1cb5f8fad1d4399b9bcde440a7681cb5",
+    "profiles/weapons45-magazines/Registry.additions.generated.h": "84f419daed8f0f2214c672a9109334c70f4fe72c7fec1cb60d9f86e601343bf7",
+    "profiles/weapons45-magazines/CombinedGeometry.h": "49cccfe1632d840dac63db809a765db1d2e6890b28ac7088cdf3bed306bd430e",
+    "profiles/resource-batch227/zero-bolt-batch/BaselineGeometry.h": "52a571282e3e9bd2214f25ff5331d48e0a7f1543f278b0fa9e645e0914f03c98",
+    "profiles/resource-batch227/zero-bolt-batch/ZeroBoltGeometry.h": "17c019a405bc373b66ab804b237b2c4c814f507ba4bdce00f9f628754f1e7654",
+    "profiles/resource-enrollment235-scar/ScarGeometry.h": "9a6bd64fefc9fa7d41b1ff812df1151d6b104d45391dd33e92e5271b82b1faaf",
+    "profiles/resource-enrollment240-f2000/F2000Geometry.h": "05cb4eb5ff6b4fe0c0578bb929e9c91176108e83a8914b244196e3667be5ae09",
+    "profiles/experimental-pistol-sampled242/PistolGeometry.h": "9ece8f2543c6b9187b37125f22e0b924dba0924b8bfc91da682c77174f7d7e52",
+    "profiles/opening426/NambuGeometry.generated.h": "3a1c34caa82a41bb1379418e5c07ffbca6d19ba723cead5dac2f59875cc322d2",
+    "profiles/mechanism-family41/PistolGeometry.generated.h": "9af78f3b4dca1ce9d2e103c912a1a3e12f75e2cb3cf1ffc72705232f83a84e1a",
+    "profiles/weapons45-magazines/Geometry.additions.generated.h": "66dfd02c5d66b71d3dac7312777aad866c3e1b7bf8a41c1df916eeda283d476b",
+    "src/games/bc2/Bc2MagazineNativeProfile.h": "9f49bd7a983e19307aaaeb37edde26862965e47e3a3196888be63029b9ee9eb7",
+    "src/games/bc2/Bc2ReloadConfigDescriptor.h": "10445a3c10491f0a12d226b6b8cdff2f6d0d1f8a066b393012ecd0021f6c8d81",
+    "src/games/bc2/Bc2ReloadState.h": "8cce0c4348ff2d38eef333e8d29a85fd91cbedcee95040b07e57e9201e196b89",
+    "src/games/bc2/Bc2MagazineGeometryProfile.cpp": "ac80347128da913812d873e72931842b4be531b21b6e1fe282b27c1193fa7a01",
+    "handoff/tasks/WEAPONS/20261030-shotgun44/equipment.json": "bf7925cb045700dcc50928dbdc4a48d55645ea0845e7321375c90ca1efe842c0",
+    "profiles/weapons43/ShotgunEquipment.generated.h": "0797406c4e818c6f197c02953223dec0cd5ee3748863032df133f5950260e36e",
+    "src/games/bc2/Bc2ShotgunReloadRegistry.h": "3408bd2fd6c6d6574566b82eea0472e09a7b579b2d0815aba8f6cd2183c3691a",
+    "profiles/weapons45-cycles/exact-cycle-reviews.json": "e456517059f6fe059813f873b74899947d2c1758154f41450cb46f24cb583ca4",
+    "src/games/bc2/Bc2BoltActionNativeProfile.h": "ab90d1c20e2a3d1b9107a0c48e0cf8530d462616d6f37d4a70f2c458b0a80e08",
+    "profiles/weapons43/BoltEquipment.generated.h": "65586c2b12059fa22f484a7f313ab363f5557d925c740086d2078cfbe3a7b2e6",
+    "profiles/mechanism-family41/Feed.generated.h": "8df231795f3bac32179eb122b48616ba57000ea976b13a84c849e070d1828d09",
+    "src/games/bc2/Bc2FeedEquipmentProfile.h": "98b9bcc1103892353ba957c4a979aa23fca2c01c03a5782a8c9ce6765fa23ba9",
+    "profiles/mechanism-family41/Slide.generated.h": "b1da6877683128bcb8085a3eaaaeb53c0017cb3c65f40dcc9de20b6be7d83f22",
+    "src/games/bc2/Bc2PistolSlideProfile.h": "5a41dc6150f9e9c9897dde1949397bc5d904412dea20e64bc386f553be855e7d",
+    "profiles/weapons46-special/geometry.json": "68284149401013b4aa8d40b55604fdce5d7ae0b020467af24a71faf8d0d2b939",
+    "profiles/weapons46-special/FixedContainer.generated.h": "e357360ae72bf8b3da6a8b782cde01e6eca28a8609688831128a73e409f6f69a",
+    "src/games/bc2/Bc2FixedContainerNative.h": "1fb93d71419042efd37d51f3931f20cb4586e95fca52b412a815f38df5f978bc"
+  },
+  "rows": [
+    {
+      "asset": "M249",
+      "configuration": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M249",
+        "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Mesh",
+        "body_holstered_735d0d648c062561",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "profiles/mechanism-family41/Feed.generated.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "M249",
+      "configuration": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Kobra",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M249",
+        "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Mesh",
+        "body_holstered_0b66e3ff1817aa81",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "profiles/mechanism-family41/Feed.generated.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "M249",
+      "configuration": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Scoped",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M249",
+        "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Mesh",
+        "body_holstered_dc61355dc2d6d3ae",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "profiles/mechanism-family41/Feed.generated.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "M60",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M60",
+        "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Mesh",
+        "body_holstered_44202e2b8d0560ec",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "profiles/mechanism-family41/Feed.generated.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "M60",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Kobra",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M60",
+        "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Mesh",
+        "body_holstered_164ee6892cd99a44",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "profiles/mechanism-family41/Feed.generated.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "M60",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Scoped",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M60",
+        "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Mesh",
+        "body_holstered_7b9590cd057c7a8f",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "profiles/mechanism-family41/Feed.generated.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "M60_sp",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_M60/SP_lmg_M60",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M60_sp",
+        "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Mesh",
+        "body_holstered_50d2cb95c1d7ff7b",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "src/games/bc2/Bc2FeedEquipmentProfile.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "M60_sp_s",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_M60/SP_lmg_M60_Scope",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M60_sp_s",
+        "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Mesh",
+        "body_holstered_35bcc211ad86f77c",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "profiles/mechanism-family41/Feed.generated.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "MG3",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "MG3",
+        "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+        "body_holstered_ad8c2e2da4bae74f",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "profiles/mechanism-family41/Feed.generated.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "MG3",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Kobra",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "MG3",
+        "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+        "body_holstered_50d4d6d0a0411caf",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "profiles/mechanism-family41/Feed.generated.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "MG3",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Scoped",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "MG3",
+        "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+        "body_holstered_0ba399d1abbfd75e",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "profiles/mechanism-family41/Feed.generated.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "MG3_sp",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_MG3/SP_lmg_MG3",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "MG3_sp",
+        "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+        "body_holstered_ab3e567ba90eb161",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "profiles/mechanism-family41/Feed.generated.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "MG3_sp_k",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_MG3/SP_lmg_MG3_Kobra",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "MG3_sp_k",
+        "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+        "body_holstered_760cc304775ee81d",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "profiles/mechanism-family41/Feed.generated.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "MG3k",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "MG3k",
+        "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+        "body_holstered_7ce1ee5996163315",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "profiles/mechanism-family41/Feed.generated.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "MG3k",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3_Kobra",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "MG3k",
+        "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+        "body_holstered_d5a44488e46cb288",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "profiles/mechanism-family41/Feed.generated.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "MG3k",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3_Scoped",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "MG3k",
+        "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+        "body_holstered_95a4889d36c0af39",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "profiles/mechanism-family41/Feed.generated.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "PKM",
+      "configuration": "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "PKM",
+        "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Mesh",
+        "body_holstered_71ef53437cc4aff3",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "profiles/mechanism-family41/Feed.generated.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "PKM",
+      "configuration": "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Kobra",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "PKM",
+        "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Mesh",
+        "body_holstered_f9ba309ee7d309c5",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "profiles/mechanism-family41/Feed.generated.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "PKM",
+      "configuration": "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Scoped",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "PKM",
+        "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Mesh",
+        "body_holstered_38760c7ea54eeee9",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "profiles/mechanism-family41/Feed.generated.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "QJU88",
+      "configuration": "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "QJU88",
+        "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Mesh",
+        "body_holstered_b8cb99a3ca90b624",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "profiles/mechanism-family41/Feed.generated.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "QJU88",
+      "configuration": "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Kobra",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "QJU88",
+        "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Mesh",
+        "body_holstered_cb056535ddc3f35b",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "profiles/mechanism-family41/Feed.generated.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "QJU88",
+      "configuration": "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Scoped",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "QJU88",
+        "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Mesh",
+        "body_holstered_85cfef1bd081c98e",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "profiles/mechanism-family41/Feed.generated.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "QJU88_sp",
+      "configuration": "Objects/Weapons/Handheld/MEC_lmg_QJY88/SP_lmg_QJY88",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "QJU88_sp",
+        "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Mesh",
+        "body_holstered_23a4bc7c863b6d91",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "profiles/mechanism-family41/Feed.generated.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "QJU88_sp_k",
+      "configuration": "Objects/Weapons/Handheld/MEC_lmg_QJY88/SP_lmg_QJY88_Kobra",
+      "family": "belt_feed",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "QJU88_sp_k",
+        "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Mesh",
+        "body_holstered_5f5428f8be615ed6",
+        12101763329092097707
+      ],
+      "manual_reload": "belt_feed",
+      "mechanism": "feed_cover_container_chain",
+      "supply_geometry": "profiles/mechanism-family41/Feed.generated.h",
+      "supply_render": "owned_native_palette"
+    },
+    {
+      "asset": "GOL",
+      "configuration": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL",
+      "family": "bolt_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "GOL",
+        "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Mesh",
+        "body_holstered_3cc0923132998c82",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.bolt-action-magazine-reload.v1",
+      "supply_keys": [
+        [
+          "GOL",
+          "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "fa3de72294a5298169c20296370b65ad7e22d579512cbafa47bc8f1f76d306d6",
+      "cycle_descriptor": "1a6a85fc965158ca25d30628441ce3b43e08335e26f9473190a533ee073104f9",
+      "mechanism": "bolt"
+    },
+    {
+      "asset": "GOL",
+      "configuration": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Kobra",
+      "family": "bolt_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "GOL",
+        "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Mesh",
+        "body_holstered_998d1f40f782a284",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.bolt-action-magazine-reload.v1",
+      "supply_keys": [
+        [
+          "GOL",
+          "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "2b5d116e03a3390928efd94d99fae20af61ee599a3418be2f40fcbf07b94d2b6",
+      "cycle_descriptor": "22b3e5a3dfdda753d6c6d547caada7704d286e0b906e9346a5037ac3890e9fe5",
+      "mechanism": "bolt"
+    },
+    {
+      "asset": "GOL",
+      "configuration": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Scoped",
+      "family": "bolt_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "GOL",
+        "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Mesh",
+        "body_holstered_9868e495c3fcb3a4",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.bolt-action-magazine-reload.v1",
+      "supply_keys": [
+        [
+          "GOL",
+          "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "31f300ee9c2cb26d29dbbb18ab3ab25a77214f10be63cf874aa86b7dd602b4bf",
+      "cycle_descriptor": "50cecc5912ec1ddf4cf28e1b09be8c8e25685f6345109629b1fc789d3d3a3567",
+      "mechanism": "bolt"
+    },
+    {
+      "asset": "M24",
+      "configuration": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24",
+      "family": "bolt_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M24",
+        "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Mesh",
+        "body_holstered_dee150ea77508e03",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.bolt-action-magazine-reload.v1",
+      "supply_keys": [
+        [
+          "M24",
+          "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "6e477420b9b12d5629ce73ff11fa9e75c9d89fa4ac0127e69d444febb59f99d7",
+      "cycle_descriptor": "c98494e638829382f481cfc09344a0209836c9624784e063bbf923595f8d960d",
+      "mechanism": "bolt"
+    },
+    {
+      "asset": "M24",
+      "configuration": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Kobra",
+      "family": "bolt_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M24",
+        "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Mesh",
+        "body_holstered_c61f80f2937a1b0e",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.bolt-action-magazine-reload.v1",
+      "supply_keys": [
+        [
+          "M24",
+          "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "3af29bc7210da09ecf7e7e510875eb00bf3574cd077134364d72a26d33712245",
+      "cycle_descriptor": "4b6e995cf5587068bb4730f66655269aa52c66d280ac39cd565a27ccfadf7c2a",
+      "mechanism": "bolt"
+    },
+    {
+      "asset": "M24",
+      "configuration": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Scoped",
+      "family": "bolt_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M24",
+        "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Mesh",
+        "body_holstered_7e54f8ce720642e4",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.bolt-action-magazine-reload.v1",
+      "supply_keys": [
+        [
+          "M24",
+          "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "ac80320b45fd06c1b7e8df8010c745704bf497d642b85c86bc2f2732d9e55639",
+      "cycle_descriptor": "ef0ccdfd529120beda44a721690000517f0de337a98dbc1f0f8e16b2d7257e88",
+      "mechanism": "bolt"
+    },
+    {
+      "asset": "M95",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95",
+      "family": "bolt_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M95",
+        "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Mesh",
+        "body_holstered_78615cd022788fc7",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.bolt-action-magazine-reload.v1",
+      "supply_keys": [
+        [
+          "M95",
+          "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "9e239280055daa5a7816e77dc2f77e214b89f89c45bfa95a2cfcb7845842b50e",
+      "cycle_descriptor": "9fa12a3eb02cd394a4c5a931148532d390e3473e40ab0952521b7e479b18b08f",
+      "mechanism": "bolt"
+    },
+    {
+      "asset": "M95",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Kobra",
+      "family": "bolt_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M95",
+        "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Mesh",
+        "body_holstered_df0e5bc288cad6f5",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.bolt-action-magazine-reload.v1",
+      "supply_keys": [
+        [
+          "M95",
+          "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "c194ec433fd53a9de6910abf9ccc6dc9b90c1f1a051ee549839bdbdd252b65c1",
+      "cycle_descriptor": "fed73ae3024064ada4de4f325181e1d03326ec8e1eb1811ddad5bde0090c7999",
+      "mechanism": "bolt"
+    },
+    {
+      "asset": "M95",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Scoped",
+      "family": "bolt_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M95",
+        "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Mesh",
+        "body_holstered_d992ce8f2e7bf3b0",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.bolt-action-magazine-reload.v1",
+      "supply_keys": [
+        [
+          "M95",
+          "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "96a262995d0d94287222562dba0dd5abbad439eceff31dc1603272f5ead1bdc4",
+      "cycle_descriptor": "c2bc403c8dfd6b8aedd5fd84fe2c4d7f39772e34a74f507330940cfb43a152e0",
+      "mechanism": "bolt"
+    },
+    {
+      "asset": "M95_sp",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95",
+      "family": "bolt_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M95_sp",
+        "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Mesh",
+        "body_holstered_afa816b42eb0588d",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.bolt-action-magazine-reload.v1",
+      "supply_keys": [
+        [
+          "M95_sp",
+          "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "74c47c6acea59713d1133ab493701844eb5a1fffbeb02293d496e5b72555f4c3",
+      "cycle_descriptor": "ba6256ff27a55659b51d7c7b64d208aa87040e930d0dfe566c7f02df32b69046",
+      "mechanism": "bolt"
+    },
+    {
+      "asset": "M95_sp_s",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95_Scoped",
+      "family": "bolt_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M95_sp_s",
+        "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Mesh",
+        "body_holstered_1b8d97ff9a12f514",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.bolt-action-magazine-reload.v1",
+      "supply_keys": [
+        [
+          "M95_sp_s",
+          "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "7cc70d91d87c0db680823ba8b749f244afe7821baefe35673b2a374b7352e60f",
+      "cycle_descriptor": "5a2f025edf2a827282316f00b7274dfb202906ebb94502961e767b538f2dedcd",
+      "mechanism": "bolt"
+    },
+    {
+      "asset": "M95k",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95",
+      "family": "bolt_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M95k",
+        "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Mesh",
+        "body_holstered_f6a229bcea5573d6",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.bolt-action-magazine-reload.v1",
+      "supply_keys": [
+        [
+          "M95k",
+          "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "9a6d8ed2db0e479498bae148c898070a2dbc8857e0c5dc470bd8b87b28610a92",
+      "cycle_descriptor": "d13ca4efa5ca91469b11684600a2df1eed08a25e8473de06bbee029918299ec6",
+      "mechanism": "bolt"
+    },
+    {
+      "asset": "M95k",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95_Kobra",
+      "family": "bolt_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M95k",
+        "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Mesh",
+        "body_holstered_ee5b3bbbd53ffd87",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.bolt-action-magazine-reload.v1",
+      "supply_keys": [
+        [
+          "M95k",
+          "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "62b6a020c0cb0f1feb61ab8d5828cc2ae0ecc9153454deb516774e93e9f7ac17",
+      "cycle_descriptor": "a85fe8094ad4141eca8ceeeee27aa4793101d60fb116d31a59631309846b7a12",
+      "mechanism": "bolt"
+    },
+    {
+      "asset": "M95k",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95_Scoped",
+      "family": "bolt_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M95k",
+        "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Mesh",
+        "body_holstered_a2d91a1543cbce1c",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.bolt-action-magazine-reload.v1",
+      "supply_keys": [
+        [
+          "M95k",
+          "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "83c3973aad51143c22aa5db42dcb89145cbc20ff38c53eb4bdb14a9f829785a8",
+      "cycle_descriptor": "60edac4f8c59b46f4f5e8e849046a4b3b7a6f0dac13df29798babe66e4d5daaf",
+      "mechanism": "bolt"
+    },
+    {
+      "asset": "SV98",
+      "configuration": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98",
+      "family": "bolt_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "SV98",
+        "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Mesh",
+        "body_holstered_527c539d099a16ce",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.bolt-action-magazine-reload.v1",
+      "supply_keys": [
+        [
+          "SV98",
+          "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "e14fe1f6082d846f31c9d8bb7d642d2ee3401e355d52497c4646193b2937ff0b",
+      "cycle_descriptor": "827c338d56fe15c8f17289885b60bfcbe68f73271b8f2b3007132cda1bae8722",
+      "mechanism": "bolt"
+    },
+    {
+      "asset": "SV98",
+      "configuration": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Kobra",
+      "family": "bolt_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "SV98",
+        "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Mesh",
+        "body_holstered_c4dc4b21f87aa094",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.bolt-action-magazine-reload.v1",
+      "supply_keys": [
+        [
+          "SV98",
+          "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "930421e996f82378e6bd780e6464f712b42abec64264e1f03d656c611f530178",
+      "cycle_descriptor": "46ccf1ab87741d489b2f5c19ff7cea0762bfed50e7ae0ff138d534a60cceb121",
+      "mechanism": "bolt"
+    },
+    {
+      "asset": "SV98",
+      "configuration": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Scoped",
+      "family": "bolt_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "SV98",
+        "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Mesh",
+        "body_holstered_5036cc079f0ee152",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.bolt-action-magazine-reload.v1",
+      "supply_keys": [
+        [
+          "SV98",
+          "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "60d2c46bc3bb395dd6dabec9e240c5082827c650affacc795388b4515f81bf98",
+      "cycle_descriptor": "65c2a2b1f7e12f666faac301f033ba09ff802d3256fb745e4780d1d82e0ad62b",
+      "mechanism": "bolt"
+    },
+    {
+      "asset": "Garand",
+      "configuration": "Objects/Weapons/Handheld/Beach/Jap_Type5/Type5",
+      "family": "clip_or_exact_configuration_review",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/weapons43/Support.additions.generated.h"
+      ],
+      "body_cache_key": [
+        "Garand",
+        "Objects/Weapons/Handheld/Beach/Jap_Type5/Jap_Type5_Mesh",
+        "body_holstered_42f20447f5130950",
+        12101763329092097707
+      ],
+      "manual_reload": "EnBlocClip",
+      "mechanism": "Type5",
+      "supply_keys": [
+        [
+          "Garand",
+          "Objects/Weapons/Handheld/Beach/Jap_Type5/Jap_Type5_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ],
+        [
+          "Garand",
+          "Objects/Weapons/Handheld/Beach/Jap_Type5/Jap_Type5_Mesh",
+          "jntWpn_13",
+          12101763329092097707
+        ]
+      ]
+    },
+    {
+      "asset": "Garand",
+      "configuration": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand",
+      "family": "clip_or_exact_configuration_review",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/weapons43/Support.additions.generated.h"
+      ],
+      "body_cache_key": [
+        "Garand",
+        "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Mesh",
+        "body_holstered_23813d846aa9b520",
+        12101763329092097707
+      ],
+      "manual_reload": "EnBlocClip",
+      "mechanism": "M1Garand",
+      "supply_keys": [
+        [
+          "Garand",
+          "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ],
+        [
+          "Garand",
+          "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Mesh",
+          "jntWpn_13",
+          12101763329092097707
+        ]
+      ]
+    },
+    {
+      "asset": "Garand",
+      "configuration": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Assault",
+      "family": "clip_or_exact_configuration_review",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/weapons43/Support.additions.generated.h"
+      ],
+      "body_cache_key": [
+        "Garand",
+        "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Mesh",
+        "body_holstered_fdd5fb814a34862f",
+        12101763329092097707
+      ],
+      "manual_reload": "EnBlocClip",
+      "mechanism": "M1Garand",
+      "supply_keys": [
+        [
+          "Garand",
+          "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ],
+        [
+          "Garand",
+          "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Mesh",
+          "jntWpn_13",
+          12101763329092097707
+        ]
+      ]
+    },
+    {
+      "asset": "9A91",
+      "configuration": "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "9A91",
+        "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Mesh",
+        "body_holstered_134edd749c400dcd",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "9A91",
+          "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "cc83f5144d5c201b210e7452c9940250cfab854f17e90af7c1f1746dd0a85157"
+    },
+    {
+      "asset": "9A91",
+      "configuration": "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "9A91",
+        "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Mesh",
+        "body_holstered_6eab56126bd2abc1",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "9A91",
+          "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "4df802369a482c552b87ed958e50e9e307579056f74cfc2b718c5206582911eb"
+    },
+    {
+      "asset": "9A91",
+      "configuration": "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "9A91",
+        "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Mesh",
+        "body_holstered_297b44a3a0f2d880",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "9A91",
+          "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "832837fac9289b8a176eebf29136374d1e675a703d88d2f8cce120c1e02c96bb"
+    },
+    {
+      "asset": "AEK971",
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "AEK971",
+        "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh",
+        "body_holstered_1e27fd5d89287cc2",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "AEK971",
+          "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "695508d78c619eef7138fad4c4f490c680ec70c441eef1987c4551d7b817a5ac"
+    },
+    {
+      "asset": "AEK971",
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "AEK971",
+        "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh",
+        "body_holstered_dc7ffb2cfb1e1cdd",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "AEK971",
+          "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "2b46bd8fc01e49ff80ab1336d234121bf66acff4d0477fc96cd9391dc854a811"
+    },
+    {
+      "asset": "AEK971",
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "AEK971",
+        "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh",
+        "body_holstered_0439fb9c6728f1ee",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "AEK971",
+          "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "0993e5b6ce0e00735539ef1448c42010847fd7953ffebe25245e8d01e02dcee5"
+    },
+    {
+      "asset": "AEK971_sp",
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "AEK971_sp",
+        "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh",
+        "body_holstered_6c0173ef00ec4869",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "AEK971_sp",
+          "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "f59b7ad5a4f46a500198b19e513d8fd51df9cd89264c301f264a7344d4c130f6"
+    },
+    {
+      "asset": "AEK971_sp_k",
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "AEK971_sp_k",
+        "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh",
+        "body_holstered_3b6e1aeaf11114eb",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "AEK971_sp_k",
+          "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "e560197fd8b982c767593e94a7c80731978b3bf21c77017c3c1430559cc19187"
+    },
+    {
+      "asset": "AKS74u",
+      "configuration": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74U_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "AKS74u",
+        "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Mesh",
+        "body_holstered_65d73bf6233c924f",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "AKS74u",
+          "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "da21d512223d42e479d7699ff33df6b6b571b2a678058d15232ba5871045a8bb"
+    },
+    {
+      "asset": "AKS74u",
+      "configuration": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "AKS74u",
+        "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Mesh",
+        "body_holstered_a3b80a23c6974867",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "AKS74u",
+          "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "0dadc8d2f3770c87d166f3e7ccbcea31acba53f31ec13d1447c5d2d74868207b"
+    },
+    {
+      "asset": "AKS74u",
+      "configuration": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "AKS74u",
+        "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Mesh",
+        "body_holstered_80340880730de84c",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "AKS74u",
+          "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "69c441ba9d9848eae95f6005ec1f19ec05268bb8293e06a2420c6aa38d99909a"
+    },
+    {
+      "asset": "AKS74u_sp",
+      "configuration": "Objects/Weapons/Handheld/RU_rif_AKS74u/SP_rif_AKS74u",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "AKS74u_sp",
+        "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Mesh",
+        "body_holstered_fdfc904b6fe8520e",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "AKS74u_sp",
+          "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "ed5b334f706863b82ae386e4605b340ab5f6e8ed12ae7c591461a2f1bfad7c62"
+    },
+    {
+      "asset": "AKS74u_sp_k",
+      "configuration": "Objects/Weapons/Handheld/RU_rif_AKS74u/SP_rif_AKS74u_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "AKS74u_sp_k",
+        "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Mesh",
+        "body_holstered_f56f2d59b7b1c9f3",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "AKS74u_sp_k",
+          "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "67c1c65edf8b522ed1a38098d995b7b427069e463018112872af1ebdc288bdbb"
+    },
+    {
+      "asset": "AN94",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/weapons43/Support.additions.generated.h"
+      ],
+      "body_cache_key": [
+        "AN94",
+        "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh",
+        "body_holstered_d247b53d0a9e1c7b",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "AN94",
+          "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "9f6d52c4d0a36e98ba2a40d322391cee514f5cee57ebbea0bf4e4a720cc5fb57"
+    },
+    {
+      "asset": "AN94",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/weapons43/Support.additions.generated.h"
+      ],
+      "body_cache_key": [
+        "AN94",
+        "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh",
+        "body_holstered_01acd150446a0897",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "AN94",
+          "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "ffebf9b3febb124c8a5f5a8f80f6072809715abe6b549461782ed11c59422f96"
+    },
+    {
+      "asset": "AN94",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/weapons43/Support.additions.generated.h"
+      ],
+      "body_cache_key": [
+        "AN94",
+        "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh",
+        "body_holstered_3b59d1fcae8b1e35",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "AN94",
+          "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "0dfcfe72444c860c9da5ed72d5e4253565ae15cb5fe337d2df290840e8a12690"
+    },
+    {
+      "asset": "AN94_sp_k",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rif_AN94_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/weapons43/Support.additions.generated.h"
+      ],
+      "body_cache_key": [
+        "AN94_sp_k",
+        "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh",
+        "body_holstered_932aa3ce82835f7f",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "AN94_sp_k",
+          "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "b926919b5275c5e81dc91be40b516575d0efb03dfd818f8d993b3e7fde337595"
+    },
+    {
+      "asset": "AN94_sp_s",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rif_AN94_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/weapons43/Support.additions.generated.h"
+      ],
+      "body_cache_key": [
+        "AN94_sp_s",
+        "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh",
+        "body_holstered_33e4490d54a9fa45",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "AN94_sp_s",
+          "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "6c4df67d997234fc4ccc2be433f6f4584a788d90db41a71bf7a255b3060cdb7c"
+    },
+    {
+      "asset": "AUG",
+      "configuration": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "AUG",
+        "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Mesh",
+        "body_holstered_a60a634147393412",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "AUG",
+          "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "1f80cdf5529c43649ec8f8d251302d3ff16a9b95f36d9c715f2f39642b11bff9"
+    },
+    {
+      "asset": "AUG",
+      "configuration": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "AUG",
+        "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Mesh",
+        "body_holstered_78f161a0d730119a",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "AUG",
+          "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "42538f95446b6cadfff8e8dad703f1bb60a9ee7da5e2f6423af8e321b9ecdd5e"
+    },
+    {
+      "asset": "AUG",
+      "configuration": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "AUG",
+        "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Mesh",
+        "body_holstered_43fef0a377d2df84",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "AUG",
+          "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "2060da3f3729bdb51b8af5e33d7623123d39bdad8026f943e4c80f9ecf8680bb"
+    },
+    {
+      "asset": "F2000",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "F2000",
+        "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh",
+        "body_holstered_5f08606778ac195b",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "F2000",
+          "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh",
+          "jntWpnwpnJnt_16",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "d394dd34a343a4e7eaf1ac367da15e653d30f4298c4284b9fd9c605debfab7ce"
+    },
+    {
+      "asset": "F2000",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "F2000",
+        "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh",
+        "body_holstered_a8805597afd7c40c",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "F2000",
+          "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh",
+          "jntWpnwpnJnt_16",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "5e67a14afa7e087c7e71a570f904277621b34848ed990beaeb3c531f034a0f05"
+    },
+    {
+      "asset": "F2000",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "F2000",
+        "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh",
+        "body_holstered_ca5d8ac14012df6b",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "F2000",
+          "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh",
+          "jntWpnwpnJnt_16",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "0a76fa67230b9b30c734e6c101520fb75af22a6c175928eeb9088fcb1ad6075e"
+    },
+    {
+      "asset": "F2000_sp",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "F2000_sp",
+        "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh",
+        "body_holstered_254679ad4dcfefdd",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "F2000_sp",
+          "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh",
+          "jntWpnwpnJnt_16",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "ad03b2e0731a13fa8e534c4e153725ae26ece4da2fc8c6a8b3bd2a153b0dd068"
+    },
+    {
+      "asset": "F2000_sp_k",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "F2000_sp_k",
+        "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh",
+        "body_holstered_41c96b07f3799105",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "F2000_sp_k",
+          "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh",
+          "jntWpnwpnJnt_16",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "b19e13e573aa03364947f9aeec3e93cb3b11245e861444ddc88ad9df374beb43"
+    },
+    {
+      "asset": "G3",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/weapons43/Support.completion.generated.h"
+      ],
+      "body_cache_key": [
+        "G3",
+        "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Mesh",
+        "body_holstered_966ab2011c892db3",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "G3",
+          "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "b7aa11ee2eb5e724e0341c69fa56f03b29b13fb285f685bd73c2623ee65ce4ea"
+    },
+    {
+      "asset": "G3",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Assault",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/weapons43/Support.completion.generated.h"
+      ],
+      "body_cache_key": [
+        "G3",
+        "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Mesh",
+        "body_holstered_7c01d1414de0e8a2",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "G3",
+          "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "601589eb4962cefbe846de70b5c3953ee7fdc90fe074bdb09a1d560d5bcce2a9"
+    },
+    {
+      "asset": "G3",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Assault_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/weapons43/Support.completion.generated.h"
+      ],
+      "body_cache_key": [
+        "G3",
+        "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Mesh",
+        "body_holstered_180d85f3abdfd3b7",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "G3",
+          "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "0f877a90c0c29f401d158439169d22560b14e09fa8a9c8b6328f98c0faaaa6d5"
+    },
+    {
+      "asset": "G3",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Assault_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/weapons43/Support.completion.generated.h"
+      ],
+      "body_cache_key": [
+        "G3",
+        "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Mesh",
+        "body_holstered_0ee57ff631523b25",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "G3",
+          "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "c2f12a3adc8a85aaf43227d66005605725a4d5e307775e16c240ab276828f23f"
+    },
+    {
+      "asset": "G3",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/weapons43/Support.completion.generated.h"
+      ],
+      "body_cache_key": [
+        "G3",
+        "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Mesh",
+        "body_holstered_fe8d10d1264e358d",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "G3",
+          "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "6b6ba09b23cf7638e22a0acc56a0b84711c36c2d6fb25c33a5db902204b80374"
+    },
+    {
+      "asset": "G3",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/weapons43/Support.completion.generated.h"
+      ],
+      "body_cache_key": [
+        "G3",
+        "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Mesh",
+        "body_holstered_1f094cb071986cda",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "G3",
+          "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "49221f3eac829c6415388bef884bfafbac14184e226077c12aa649b3616c8752"
+    },
+    {
+      "asset": "M16",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M16",
+        "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Mesh",
+        "body_holstered_f2759a855bf7c97a",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "M16",
+          "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "b93862a037d39e780c06270c96781ce268242a552ef7822ce8fb4fade0a239aa"
+    },
+    {
+      "asset": "M16",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M16",
+        "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Mesh",
+        "body_holstered_d8857f7c50ac2396",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "M16",
+          "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "2e8dda8c8cd35f036aa6be07626c6b49f8ca08197b8b83e7c2fc74101bba9bae"
+    },
+    {
+      "asset": "M16",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M16",
+        "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Mesh",
+        "body_holstered_0b27390c2c7f66c6",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "M16",
+          "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "0c7a80d0e77111e967a4602c90268a6f4497d6e8c909d717a6ae9015ba66042c"
+    },
+    {
+      "asset": "M16k",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M16k",
+        "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Mesh",
+        "body_holstered_0f3d1fe536b23704",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "M16k",
+          "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "fbc5ba539e33042ae60cc355696c9bdbd95463262ba4452d6735735e1ea4ff04"
+    },
+    {
+      "asset": "M16k",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M16k",
+        "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Mesh",
+        "body_holstered_306e600ded5c9915",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "M16k",
+          "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "29f14860c6dbbcb33648c471636ad5bbc2fa65148593a4de5e2b2c89f16eda7c"
+    },
+    {
+      "asset": "M16k",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M16k",
+        "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Mesh",
+        "body_holstered_e86d46812d2520e8",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "M16k",
+          "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "e3f54f001b6fe3dcaa95d54326cfaad28ec3eee3852f22b938743e5ede187e33"
+    },
+    {
+      "asset": "M1911",
+      "configuration": "Objects/Weapons/Handheld/Beach/M1911A1/M1911A1",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M1911",
+        "Objects/Weapons/Handheld/Beach/M1911A1/US_M1911_Mesh",
+        "body_holstered_fd397ee9b7fd484f",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "M1911",
+          "Objects/Weapons/Handheld/Beach/M1911A1/US_M1911_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "0231e87f26192fc5c5fb1601f80cfaf061dd889364e771d1fda174bbca69231a",
+      "mechanism": "pistol_slide"
+    },
+    {
+      "asset": "M1A1 Thompson",
+      "configuration": "Objects/Weapons/Handheld/Beach/Thompson/Thompson",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/weapons43/Support.completion.generated.h"
+      ],
+      "body_cache_key": [
+        "M1A1 Thompson",
+        "Objects/Weapons/Handheld/Beach/Thompson/thompson_Mesh",
+        "body_holstered_a4fe2147f69e0abf",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "M1A1 Thompson",
+          "Objects/Weapons/Handheld/Beach/Thompson/thompson_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "ca6fee25bc88dc7380230a8dd68d1036367f03805d7489630f0ae9d899a10d2d"
+    },
+    {
+      "asset": "M1A1 Thompson",
+      "configuration": "Objects/Weapons/Handheld/Beach/Thompson/Thompson_Assault",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/weapons43/Support.completion.generated.h"
+      ],
+      "body_cache_key": [
+        "M1A1 Thompson",
+        "Objects/Weapons/Handheld/Beach/Thompson/thompson_Mesh",
+        "body_holstered_ec87df0edbe3da72",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "M1A1 Thompson",
+          "Objects/Weapons/Handheld/Beach/Thompson/thompson_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "f247d8b4281d2ff2ae1b56724770e86aeeb125cb4cd4a122fd288b2271ad4729"
+    },
+    {
+      "asset": "M416",
+      "configuration": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M416",
+        "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh",
+        "body_holstered_c20dade10fe1be11",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "M416",
+          "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "8688af8b5967450caba1cbeb81b76010be495832930e56ec45fb434fcce79004"
+    },
+    {
+      "asset": "M416",
+      "configuration": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M416",
+        "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh",
+        "body_holstered_8c293274c79272ad",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "M416",
+          "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "cc1c5c856074ce21891be1ac309e7edcd0524b2c25f071e5b184cf757bd5c873"
+    },
+    {
+      "asset": "M416",
+      "configuration": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M416",
+        "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh",
+        "body_holstered_bc2a0e84ad8a4f69",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "M416",
+          "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "a80c249e14204cecadea677bbda6477bd8edf1d35164670118fec6bfb293ab48"
+    },
+    {
+      "asset": "M9",
+      "configuration": "Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9Beretta",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M9",
+        "Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9Beretta_Mesh",
+        "body_holstered_fabb8800248bd041",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "M9",
+          "Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9Beretta_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "74ab9090f8d9930adba38dee8c126161e1a1c1f848835a957c85f1680e32cf81",
+      "mechanism": "pistol_slide"
+    },
+    {
+      "asset": "M9-3",
+      "configuration": "Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9-3",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "M9-3",
+        "Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9Beretta_Mesh",
+        "body_holstered_6147f5c01a4dfa05",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "M9-3",
+          "Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9Beretta_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "283502284c6ac295c1f501704de9cc3eb270523c375555b1e163703de1f7fa05",
+      "mechanism": "pistol_slide"
+    },
+    {
+      "asset": "MG36",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "MG36",
+        "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh",
+        "body_holstered_7d443f5b39c6289a",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "MG36",
+          "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "85abef35bcfc0e2ca79b6d86e575b8f1f07e62c2d62a8adfdcc0b1a2a1ed2d7f"
+    },
+    {
+      "asset": "MG36",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "MG36",
+        "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh",
+        "body_holstered_8fcee8942dcb8453",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "MG36",
+          "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "6baffc36ef78c9efc67d5e8e7fec8dee701412ad3a6f5be1559266d31bf747b7"
+    },
+    {
+      "asset": "MG36",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Scope",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "MG36",
+        "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh",
+        "body_holstered_ed9b9dc75b289d37",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "MG36",
+          "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "47ae587d36b53bc57e4e2476a869e3a3b457c2cfa1ed8889b494096a42c0ae7c"
+    },
+    {
+      "asset": "MP443",
+      "configuration": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "MP443",
+        "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Mesh",
+        "body_holstered_cf09a1debd8b3485",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "MP443",
+          "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "7d6882532e69a8056d64ceef58246dc8b82e699b3fce592a1fc640b0efadd02c",
+      "mechanism": "pistol_slide"
+    },
+    {
+      "asset": "MP443_sp",
+      "configuration": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "MP443_sp",
+        "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Mesh",
+        "body_holstered_2cd4097fb88a8a37",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "MP443_sp",
+          "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "56e7616fafda35a6178962a60f25b06a0feb8c470986f097ed98a8c740c31521",
+      "mechanism": "pistol_slide"
+    },
+    {
+      "asset": "Mk14EBR",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "Mk14EBR",
+        "objects/weapons/handheld/bu_rif_mk14ebr/bu_rif_mk14ebr_mesh",
+        "body_holstered_5f5abe8e84988e30",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "Mk14EBR",
+          "objects/weapons/handheld/bu_rif_mk14ebr/bu_rif_mk14ebr_mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "4b0b2dafa6fbf3083e587d662ca4bf17a1bcd062329a2359a99bdadc5e31ba90"
+    },
+    {
+      "asset": "Mk14EBR",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Assault",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "Mk14EBR",
+        "objects/weapons/handheld/bu_rif_mk14ebr/bu_rif_mk14ebr_mesh",
+        "body_holstered_2607ba840df925c3",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "Mk14EBR",
+          "objects/weapons/handheld/bu_rif_mk14ebr/bu_rif_mk14ebr_mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "abaab00354e5e5a71abc1f48084753f7cf8e5a8b647ac755ef847114c666aa70"
+    },
+    {
+      "asset": "Mk14EBR",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Assault_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "Mk14EBR",
+        "objects/weapons/handheld/bu_rif_mk14ebr/bu_rif_mk14ebr_mesh",
+        "body_holstered_8e24fbde14f3e93e",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "Mk14EBR",
+          "objects/weapons/handheld/bu_rif_mk14ebr/bu_rif_mk14ebr_mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "c2d55be780b5f40c0eb949eb3868bd510592f0f6d2bb6c44dec89f72f48dc8e0"
+    },
+    {
+      "asset": "Mk14EBR",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Assault_Scope",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "Mk14EBR",
+        "objects/weapons/handheld/bu_rif_mk14ebr/bu_rif_mk14ebr_mesh",
+        "body_holstered_2b1320e4cbbf254b",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "Mk14EBR",
+          "objects/weapons/handheld/bu_rif_mk14ebr/bu_rif_mk14ebr_mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "a42c98f328d04f09bde9a039817e8e6e4cf1a745082b7333f1dabc55a2bef44f"
+    },
+    {
+      "asset": "Mk14EBR",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "Mk14EBR",
+        "objects/weapons/handheld/bu_rif_mk14ebr/bu_rif_mk14ebr_mesh",
+        "body_holstered_3b6730cb54465139",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "Mk14EBR",
+          "objects/weapons/handheld/bu_rif_mk14ebr/bu_rif_mk14ebr_mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "47f21066787fcc0204767603fae582cfe0db0535e9ef758f45f9a4c461a47d2e"
+    },
+    {
+      "asset": "Mk14EBR",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Scope",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "Mk14EBR",
+        "objects/weapons/handheld/bu_rif_mk14ebr/bu_rif_mk14ebr_mesh",
+        "body_holstered_9f9bf3882e457fbf",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "Mk14EBR",
+          "objects/weapons/handheld/bu_rif_mk14ebr/bu_rif_mk14ebr_mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "8bef496699cdac82ba7ac178c0f8569910717ab174d470bceeffb97a302a42d6"
+    },
+    {
+      "asset": "Nambu100",
+      "configuration": "Objects/Weapons/Handheld/Beach/Nambu100/Nambu100",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/opening426/NambuSupport.generated.h"
+      ],
+      "body_cache_key": [
+        "Nambu100",
+        "Objects/Weapons/Handheld/Beach/Nambu100/Nambu100_Mesh",
+        "body_holstered_b39952d7067af68c",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "Nambu100",
+          "Objects/Weapons/Handheld/Beach/Nambu100/Nambu100_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "f8e376bab7552db69f27636c1d0747723993b04983defbb0fe68504c2a9ea86e"
+    },
+    {
+      "asset": "PP2000",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "PP2000",
+        "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000_Mesh",
+        "body_holstered_6055e31be396ca7e",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "PP2000",
+          "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "ff5f94c0b0eea22ceaf52b0cc345fedaedadd42320d2684bb277a065aa2f3b5c"
+    },
+    {
+      "asset": "PP2000",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "PP2000",
+        "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000_Mesh",
+        "body_holstered_78f0642a3baa36c2",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "PP2000",
+          "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "d5079eb1660c94dea2575176377d4e975fcb63f36ffbeb9da018dff1c4088ab4"
+    },
+    {
+      "asset": "PP2000",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "PP2000",
+        "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000_Mesh",
+        "body_holstered_b7c1972e5a6dbdb9",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "PP2000",
+          "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "2fc9fb22050152f65c4166c1d83887f3b8c5a8f056102002d4d7f02a2799c187"
+    },
+    {
+      "asset": "QBU88",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "QBU88",
+        "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Mesh",
+        "body_holstered_8a17f88644a8f843",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "QBU88",
+          "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "7330d4a8aae66b2ea7f1380b987c91733684e3626e411ef38f810b58e4ca9837"
+    },
+    {
+      "asset": "QBU88",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "QBU88",
+        "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Mesh",
+        "body_holstered_909dfa0cbaab4fce",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "QBU88",
+          "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "97a9495d8c4b30a832079c7034554c7785566727df12c701144da471b8213443"
+    },
+    {
+      "asset": "QBU88",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "QBU88",
+        "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Mesh",
+        "body_holstered_6429bebd6fa51a82",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "QBU88",
+          "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "a2f92318f61f04b296a4da805167831e5a0fb7e83d8fbd174bc0558a8cf8848d"
+    },
+    {
+      "asset": "QBU88_sp",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_QBY88/SP_sni_QBU88",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "QBU88_sp",
+        "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Mesh",
+        "body_holstered_ec4473166949ec5b",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "QBU88_sp",
+          "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "073317a8503829f7356792948e0a9c134bb9a6256b2cd2ede53b6bde8e009405"
+    },
+    {
+      "asset": "QBU88_sp_k",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_QBY88/SP_sni_QBU88_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "QBU88_sp_k",
+        "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Mesh",
+        "body_holstered_d6fc85473c93fbb2",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "QBU88_sp_k",
+          "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "d830e857e1ac4d0b679905168251ec11b374a0169e5dadb61e8d1c2b9d576049"
+    },
+    {
+      "asset": "S20K",
+      "configuration": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "S20K",
+        "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Mesh",
+        "body_holstered_ca20773346871c6e",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "S20K",
+          "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "25318061d1a81d6a60977295ac36c4feb39e7b11794def01bb0f67c1afd96833"
+    },
+    {
+      "asset": "S20K",
+      "configuration": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Assault",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "S20K",
+        "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Mesh",
+        "body_holstered_ea7ce4c604d3063f",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "S20K",
+          "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "90aa22b894b76a45451eb11db19473eda10d5a328259df54ff371577963f5020"
+    },
+    {
+      "asset": "S20K",
+      "configuration": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Assault_FRAG",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "S20K",
+        "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Mesh",
+        "body_holstered_ea7a4d26d04fe6cc",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "S20K",
+          "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "729c049fe11f91426631cd1f5db03aee9901ba775fcfa775894a91b4b48a4657"
+    },
+    {
+      "asset": "S20K",
+      "configuration": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Assault_Slug",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "S20K",
+        "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Mesh",
+        "body_holstered_c02d93d39bcb98c8",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "S20K",
+          "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "95258f0820e08d5b5bdc1502b264720837142eccd0e8de95a2b8ae52d0831b13"
+    },
+    {
+      "asset": "S20K",
+      "configuration": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_FRAG",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "S20K",
+        "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Mesh",
+        "body_holstered_a43d968f9d1fba09",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "S20K",
+          "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "b6c8f5faf4bba01249964266f8798a27afa5e90a47330f8f21d27b95816648cb"
+    },
+    {
+      "asset": "S20K",
+      "configuration": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Slug",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "S20K",
+        "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Mesh",
+        "body_holstered_81b6bf6d41dce851",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "S20K",
+          "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "d175b1d568a068e7d74179a292c3fa5eb4aa6b2920c4ae9d9332afd95792c462"
+    },
+    {
+      "asset": "SCAR",
+      "configuration": "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "SCAR",
+        "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh",
+        "body_holstered_207fcb6352a4aaf6",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "SCAR",
+          "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "ecf5082d9bc319b0d30fa2eff405fac24a203303697ba8be157277da2a93557b"
+    },
+    {
+      "asset": "SCAR",
+      "configuration": "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "SCAR",
+        "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh",
+        "body_holstered_b04a5720c098e620",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "SCAR",
+          "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "c29e5ba374d1d49e1a1c7f0f155e93227098df7177db0e5d15e8a8ec809cd45f"
+    },
+    {
+      "asset": "SCAR",
+      "configuration": "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "SCAR",
+        "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh",
+        "body_holstered_7f7f851b09dee6d6",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "SCAR",
+          "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "52210cafa8e01dd33101cc1a6ecb34feb46951ba1aa3f943c55afabc1bac6dd4"
+    },
+    {
+      "asset": "SCAR_sp",
+      "configuration": "Objects/Weapons/Handheld/UL_rif_FNSCARL/SP_rif_FNSCARL",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "SCAR_sp",
+        "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh",
+        "body_holstered_7e49edcc2bd6f727",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "SCAR_sp",
+          "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "44586c5c876da2a055403ba9768c9e244d95e8743d1d2d764dc4827b1c84ea26"
+    },
+    {
+      "asset": "SCAR_sp_s",
+      "configuration": "Objects/Weapons/Handheld/UL_rif_FNSCARL/SP_rif_FNSCARL_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "SCAR_sp_s",
+        "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh",
+        "body_holstered_c13e82368fd8da28",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "SCAR_sp_s",
+          "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "a1c7801792a50fc05a4ed1ecc39dde7489102abd02c97d31ecb790299498a112"
+    },
+    {
+      "asset": "SVU",
+      "configuration": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "SVU",
+        "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Mesh",
+        "body_holstered_bf584a8fbf8b0e44",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "SVU",
+          "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "41407ccd94298664772573486d6811b44e34339f0bd1b48409d97d6d8c497387"
+    },
+    {
+      "asset": "SVU",
+      "configuration": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "SVU",
+        "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Mesh",
+        "body_holstered_2d1a70840e63bda7",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "SVU",
+          "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "a5a9413e06e041929add5106a5d66a9636572c98a35414e9314cbb991adb751f"
+    },
+    {
+      "asset": "SVU",
+      "configuration": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "SVU",
+        "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Mesh",
+        "body_holstered_a99dab9836dd41bd",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "SVU",
+          "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "1801592a0ea23ad597467c0610eae691e851c3919542ebda068692cfd1e8aed7"
+    },
+    {
+      "asset": "UMP",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "UMP",
+        "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_Mesh",
+        "body_holstered_d72b777e1dccb25c",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "UMP",
+          "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "b77ef579ec1fc325489f002d373463feadb77092837063b9e8198d04a61ba701"
+    },
+    {
+      "asset": "UMP",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "UMP",
+        "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_Mesh",
+        "body_holstered_59b972ca218a87a7",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "UMP",
+          "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "023fc7bd29a9cc703db8640575272436efda1ac755fe7941aef3a3506fe82947"
+    },
+    {
+      "asset": "UMP",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "UMP",
+        "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_Mesh",
+        "body_holstered_b32954ea71bc3e05",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "UMP",
+          "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "730fb20de1c9838a93c3d83e3a3fd1f6b68b2413450e77694a45b87d7628558b"
+    },
+    {
+      "asset": "UMPk",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_UMP/UPG_smg_UMP",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "UMPk",
+        "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_Mesh",
+        "body_holstered_87e3626e89130604",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "UMPk",
+          "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "fa5c9fd307ce5d8795b5dda7aa4422787ba5b9d0fa45d0e348c3a550b9dd8702"
+    },
+    {
+      "asset": "UMPk",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_UMP/UPG_smg_UMP_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "UMPk",
+        "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_Mesh",
+        "body_holstered_3ea57c15d5b7eb1f",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "UMPk",
+          "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "ac1cefa1b50397ea2ea9896c8b5afbb8c3711361a9cfb872913fb6a26eebd282"
+    },
+    {
+      "asset": "UMPk",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_UMP/UPG_smg_UMP_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "UMPk",
+        "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_Mesh",
+        "body_holstered_1140f2249776ccb0",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "UMPk",
+          "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "4ded9184bb4190032eabf13a47e976b5a6e0470f831085e04cf12d9c1ef096ec"
+    },
+    {
+      "asset": "USAS12",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "USAS12",
+        "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Mesh",
+        "body_holstered_436d30081e86e2e5",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "USAS12",
+          "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "0a5dca4302ddaff7c191ada4cd9e36e34cabd1837e27c24ccf2ad83aea04fbb0"
+    },
+    {
+      "asset": "USAS12",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Assault",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "USAS12",
+        "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Mesh",
+        "body_holstered_2d92eccdcd10da0a",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "USAS12",
+          "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "1efed0234491ddd968fb997498b6fd35ba7d0063e07b524b7d9671eeb0629cee"
+    },
+    {
+      "asset": "USAS12",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Assault_FRAG",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "USAS12",
+        "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Mesh",
+        "body_holstered_a8edd7f926d2655b",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "USAS12",
+          "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "3543fe0dcf843e18b5d46d5bd387fe6484b5cd72f2a1db5733ca586c0ff453c4"
+    },
+    {
+      "asset": "USAS12",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Assault_Slug",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "USAS12",
+        "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Mesh",
+        "body_holstered_884ab7213db5c0c1",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "USAS12",
+          "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "5f9e5a294b102de847d7bb3498d401557cf759694c53c1b9f9f887a793ebed05"
+    },
+    {
+      "asset": "USAS12",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_FRAG",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "USAS12",
+        "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Mesh",
+        "body_holstered_4754380a3a09a5de",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "USAS12",
+          "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "34436123f9ff7733777f68d5f3d039fd729e164690e49d25cef126c276398fd7"
+    },
+    {
+      "asset": "USAS12",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Slug",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "USAS12",
+        "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Mesh",
+        "body_holstered_f9f67fa159b0bcb1",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "USAS12",
+          "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "33a1735ce02bf43062ab8a6eccad37ca53172dcf4178017c01e2546891aeb00b"
+    },
+    {
+      "asset": "USAS12_sp",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_USAS-12/SP_shg_USAS12",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "USAS12_sp",
+        "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Mesh",
+        "body_holstered_8433d0a5fae2d6c3",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "USAS12_sp",
+          "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "1fac41ba64e75f9b3911ecb2b8f5517c1a0af158803d175784ebbbf4e412ba8d"
+    },
+    {
+      "asset": "USAS12_sp_s",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_USAS-12/SP_shg_USAS12_Slug",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "USAS12_sp_s",
+        "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Mesh",
+        "body_holstered_856e4b4a2a020453",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "USAS12_sp_s",
+          "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Mesh",
+          "jntWpn_12",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "eca0a27354d62134550a57b4ecc1b01045a0b4f6f9589d5437b75e3a8c11265c"
+    },
+    {
+      "asset": "UZI",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "UZI",
+        "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Mesh",
+        "body_holstered_15857de17181760a",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "UZI",
+          "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "dee29216dc9dd813a144a895ed3719e1c38425404b488fba992c92ab159fd130"
+    },
+    {
+      "asset": "UZI",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "UZI",
+        "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Mesh",
+        "body_holstered_912185bbbcbf9fd5",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "UZI",
+          "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "5e300af5661e46507bedd19f969a5cb76852d117865b791c5bc780140aaf8ef2"
+    },
+    {
+      "asset": "UZI",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "UZI",
+        "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Mesh",
+        "body_holstered_8e7350b6a265590a",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "supply_keys": [
+        [
+          "UZI",
+          "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "d3a9f0384952fadff6a6c0a4f9472f182c74b90ecec52d537a99b6e1b0b811ad"
+    },
+    {
+      "asset": "VSS",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "VSS",
+        "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Mesh",
+        "body_holstered_b3a4de6e21c21838",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "VSS",
+          "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "371e3517978ae04494ed2a6d6ae7879029290cb0d6d823dd3b51b98d6f0ae802"
+    },
+    {
+      "asset": "VSS",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "VSS",
+        "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Mesh",
+        "body_holstered_0f29c97623dad4cf",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "VSS",
+          "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "2f1ec915688a94cb667bd3335f31c5b918b54cdd91ad789aec7d7f8441a2f2c7"
+    },
+    {
+      "asset": "VSS",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "VSS",
+        "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Mesh",
+        "body_holstered_b3de3779c08c4a00",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "VSS",
+          "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "74d08b21bdc532638aff362c268763ad029c9f83beacb55be3510973f3b2d0c3"
+    },
+    {
+      "asset": "XM8",
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "XM8",
+        "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh",
+        "body_holstered_b6d7952f3cb3b474",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "XM8",
+          "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "32c314bcfb7134aa0bf69b9005179cb0c03c17321b8ff53d40e893028a67ca68"
+    },
+    {
+      "asset": "XM8",
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "XM8",
+        "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh",
+        "body_holstered_1dc6d184bf7e0ab3",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "XM8",
+          "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "6234cb4c13fd2330bca3af90f74c53c7505fc3a57f1d15b725a90b3492799dbb"
+    },
+    {
+      "asset": "XM8",
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "XM8",
+        "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh",
+        "body_holstered_eaf24d128334d35f",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "XM8",
+          "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "f48c2b0ac3df90662aac251cfa6f7750150d962df3d7d85561d6ed2eabdce17c"
+    },
+    {
+      "asset": "XM8 LMG",
+      "configuration": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "XM8 LMG",
+        "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh",
+        "body_holstered_86c6d1fb6bdfde3f",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "XM8 LMG",
+          "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "fdcca0fca647ce63b6bb661096316cab6d766fee68752ed35c47eb1034733027"
+    },
+    {
+      "asset": "XM8 LMG",
+      "configuration": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "XM8 LMG",
+        "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh",
+        "body_holstered_13e33c6a40ba00ab",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "XM8 LMG",
+          "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "8c1551a381e71ba76f7452057cffc67cb2c30a2ef557fe0bc07f85d1a520ac0c"
+    },
+    {
+      "asset": "XM8 LMG",
+      "configuration": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "XM8 LMG",
+        "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh",
+        "body_holstered_f6bda92dc2426fba",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "XM8 LMG",
+          "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "026f65a2dcf494e3287c7f29fb0534be56d1d47cf005a6c67f23ca89558dc0b2"
+    },
+    {
+      "asset": "XM8C",
+      "configuration": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "XM8C",
+        "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh",
+        "body_holstered_f8bf8478b318e24e",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "XM8C",
+          "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "f640435825b7a21a41d7225b7b3f19da33976961be4ea98adf78c7c6f6bb5799"
+    },
+    {
+      "asset": "XM8C",
+      "configuration": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Kobra",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "XM8C",
+        "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh",
+        "body_holstered_420525bd2eae3278",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "XM8C",
+          "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "db07d3309660d45cdbddb1c6a0afd9c4c2b866493139e69b8162821a3b672f11"
+    },
+    {
+      "asset": "XM8C",
+      "configuration": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "XM8C",
+        "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh",
+        "body_holstered_c393cfe6d6c2811b",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "XM8C",
+          "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "37442b9fe39e5b5ffda67481e4cc535b2eda9d191a2f20b0d665257d03684c51"
+    },
+    {
+      "asset": "XM8_sp",
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "XM8_sp",
+        "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh",
+        "body_holstered_a357d577c016d6b3",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "XM8_sp",
+          "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "17d1a0cf49b2a6cdef6e2d243f0744e9c4b8f52c41a89db09847869da1a91bc3"
+    },
+    {
+      "asset": "XM8_sp_s",
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8_Scoped",
+      "family": "detachable_magazine",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "XM8_sp_s",
+        "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh",
+        "body_holstered_ff793ed0a1a2122e",
+        12101763329092097707
+      ],
+      "manual_reload": "bc2.automatic-magazine-zero-bolt.v1",
+      "supply_keys": [
+        [
+          "XM8_sp_s",
+          "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "2abaf5ac37bf77fcf467f39749fac8f55da88325f12dcc7f06dad3ec1d9d4278"
+    },
+    {
+      "asset": "MP412",
+      "configuration": "Objects/Weapons/Handheld/MEC_hg_MP412rex/MEC_hg_MP412rex",
+      "family": "revolver_cylinder",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "MP412",
+        "Objects/Weapons/Handheld/MEC_hg_MP412rex/MEC_hg_MP412rex_Mesh",
+        "body_holstered_215a7dbcad7b2035",
+        12101763329092097707
+      ],
+      "manual_reload": "Cylinder",
+      "mechanism": "MP412",
+      "supply_keys": [
+        [
+          "MP412",
+          "Objects/Weapons/Handheld/MEC_hg_MP412rex/MEC_hg_MP412rex_Mesh",
+          "jntWpn_13",
+          12101763329092097707
+        ],
+        [
+          "MP412",
+          "Objects/Weapons/Handheld/MEC_hg_MP412rex/MEC_hg_MP412rex_Mesh",
+          "jntWpnwpnJnt_14",
+          12101763329092097707
+        ]
+      ]
+    },
+    {
+      "asset": "870MCS",
+      "configuration": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Assault",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "870MCS",
+        "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_Remington870MCS_Mesh",
+        "body_holstered_077d9cf5aa3c3720",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "09d52d512966fcdaa820818338829fc848f3dbe704df926575a042cdabb22e3d",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "870MCS",
+          "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_Remington870MCS_Mesh",
+          "jntWpn_3",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "3c43f81ace7e92b10b9fc6b93d88441b4d7028b9a9f29262b8f83eb1e34cf557"
+    },
+    {
+      "asset": "870MCS",
+      "configuration": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Assault_Slug",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "870MCS",
+        "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_Remington870MCS_Mesh",
+        "body_holstered_077d9cf5aa3c3720",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "5aa9d1626fa4db2f04a0e5a548f451d80b0c023a4b5dfa0ff17cbdf476f10211",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "870MCS",
+          "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_Remington870MCS_Mesh",
+          "jntWpn_3",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "3c43f81ace7e92b10b9fc6b93d88441b4d7028b9a9f29262b8f83eb1e34cf557"
+    },
+    {
+      "asset": "870MCS",
+      "configuration": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Frag",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "870MCS",
+        "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_Remington870MCS_Mesh",
+        "body_holstered_077d9cf5aa3c3720",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "5983bf9c07a655042e38eec87890118af8f14ade4c6805fda82f0724b20b7c53",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "870MCS",
+          "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_Remington870MCS_Mesh",
+          "jntWpn_3",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "3c43f81ace7e92b10b9fc6b93d88441b4d7028b9a9f29262b8f83eb1e34cf557"
+    },
+    {
+      "asset": "870MCS",
+      "configuration": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Frag_Assault",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "870MCS",
+        "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_Remington870MCS_Mesh",
+        "body_holstered_077d9cf5aa3c3720",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "8201a311bc803393d77369e535fe07a9395d56baddd9c3d5246c588f80f6ea1d",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "870MCS",
+          "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_Remington870MCS_Mesh",
+          "jntWpn_3",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "3c43f81ace7e92b10b9fc6b93d88441b4d7028b9a9f29262b8f83eb1e34cf557"
+    },
+    {
+      "asset": "870MCS",
+      "configuration": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Slug",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "870MCS",
+        "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_Remington870MCS_Mesh",
+        "body_holstered_077d9cf5aa3c3720",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "5d0ba224eb0d3a247627f287fbbe4cff076728c8a2963d1e32d213103eda53f9",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "870MCS",
+          "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_Remington870MCS_Mesh",
+          "jntWpn_3",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "3c43f81ace7e92b10b9fc6b93d88441b4d7028b9a9f29262b8f83eb1e34cf557"
+    },
+    {
+      "asset": "870MCS",
+      "configuration": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_Remington870MCS",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "870MCS",
+        "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_Remington870MCS_Mesh",
+        "body_holstered_077d9cf5aa3c3720",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "8dc87be1abd7fede0d5b6abb6b580ce6c192401a0151fcbbcd145ab970e4b8e0",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "870MCS",
+          "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_Remington870MCS_Mesh",
+          "jntWpn_3",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "3c43f81ace7e92b10b9fc6b93d88441b4d7028b9a9f29262b8f83eb1e34cf557"
+    },
+    {
+      "asset": "NS2000",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "NS2000",
+        "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Mesh",
+        "body_holstered_a6f3a7cf19851fe0",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "bff921157d1c64bf4bfa46c79fffa326d66e0eb998a13ee628ca980d0583a34b",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "NS2000",
+          "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Mesh",
+          "jntWpn_13",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "d83fe376b6250000cd1ec37fe26ddac957f600bf0222216c9b3b08d0ba029e5a"
+    },
+    {
+      "asset": "NS2000",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Assault",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "NS2000",
+        "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Mesh",
+        "body_holstered_a6f3a7cf19851fe0",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "4f1b8154998fe38a546854e18f5a65f1cb9f4068bba930cf1a19492800cb2be3",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "NS2000",
+          "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Mesh",
+          "jntWpn_13",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "d83fe376b6250000cd1ec37fe26ddac957f600bf0222216c9b3b08d0ba029e5a"
+    },
+    {
+      "asset": "NS2000",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Assault_FRAG",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "NS2000",
+        "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Mesh",
+        "body_holstered_a6f3a7cf19851fe0",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "b4ff108ff25b9d73acf5475745849c1bf2adc6795af56bf54d2f2b53c2af0a8e",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "NS2000",
+          "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Mesh",
+          "jntWpn_13",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "d83fe376b6250000cd1ec37fe26ddac957f600bf0222216c9b3b08d0ba029e5a"
+    },
+    {
+      "asset": "NS2000",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Assault_Slug",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "NS2000",
+        "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Mesh",
+        "body_holstered_a6f3a7cf19851fe0",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "e55d1b6a027c6defb91bd5fc7b21dbce1378620ee0885c2f3e5095ae755dd620",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "NS2000",
+          "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Mesh",
+          "jntWpn_13",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "d83fe376b6250000cd1ec37fe26ddac957f600bf0222216c9b3b08d0ba029e5a"
+    },
+    {
+      "asset": "NS2000",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_FRAG",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "NS2000",
+        "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Mesh",
+        "body_holstered_a6f3a7cf19851fe0",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "820807588493ae0561cab22894a4bbb67bd07e0f57b1eaae0a68a0d5ebc2d593",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "NS2000",
+          "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Mesh",
+          "jntWpn_13",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "d83fe376b6250000cd1ec37fe26ddac957f600bf0222216c9b3b08d0ba029e5a"
+    },
+    {
+      "asset": "NS2000",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Slug",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "NS2000",
+        "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Mesh",
+        "body_holstered_a6f3a7cf19851fe0",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "918cebe9787081f5ecb91da64ecdd2a0a95209905e55616890f35e06b5352799",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "NS2000",
+          "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Mesh",
+          "jntWpn_13",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "d83fe376b6250000cd1ec37fe26ddac957f600bf0222216c9b3b08d0ba029e5a"
+    },
+    {
+      "asset": "SPAS12",
+      "configuration": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "SPAS12",
+        "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh",
+        "body_holstered_e5e6f43aa0d3fb99",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "73b6d5a13e4cecb6b3b00b6ccdc4d3cbd77834953057144c3d3cf8703235211f",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "SPAS12",
+          "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh",
+          "jntWpn_7",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "0709dae5fd3313262552e42c489a0e87e7bce46e55993f1929aebe52e7e2c592"
+    },
+    {
+      "asset": "SPAS12",
+      "configuration": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Assault",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "SPAS12",
+        "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh",
+        "body_holstered_e5e6f43aa0d3fb99",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "4705c92ddf24b585edc3a7e1652dcf65d17980a0f448770d63858059cc384d30",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "SPAS12",
+          "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh",
+          "jntWpn_7",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "0709dae5fd3313262552e42c489a0e87e7bce46e55993f1929aebe52e7e2c592"
+    },
+    {
+      "asset": "SPAS12",
+      "configuration": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Assault_FRAG",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "SPAS12",
+        "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh",
+        "body_holstered_e5e6f43aa0d3fb99",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "aa4ae297743dc3a430a932ae4d8cb23abb17ab18a02329e3aa8fd67a57845920",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "SPAS12",
+          "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh",
+          "jntWpn_7",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "0709dae5fd3313262552e42c489a0e87e7bce46e55993f1929aebe52e7e2c592"
+    },
+    {
+      "asset": "SPAS12",
+      "configuration": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Assault_Slug",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "SPAS12",
+        "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh",
+        "body_holstered_e5e6f43aa0d3fb99",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "dd65bb8b590bb2b47b6f6fc5fa93bec4c322bb15ebbfe360e271e573beeae4ca",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "SPAS12",
+          "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh",
+          "jntWpn_7",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "0709dae5fd3313262552e42c489a0e87e7bce46e55993f1929aebe52e7e2c592"
+    },
+    {
+      "asset": "SPAS12",
+      "configuration": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_FRAG",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "SPAS12",
+        "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh",
+        "body_holstered_e5e6f43aa0d3fb99",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "2c894fdb26677df5a59551eb6088a6a82115bfeaaed4b4af64b989bd1be79ddd",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "SPAS12",
+          "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh",
+          "jntWpn_7",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "0709dae5fd3313262552e42c489a0e87e7bce46e55993f1929aebe52e7e2c592"
+    },
+    {
+      "asset": "SPAS12",
+      "configuration": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Slug",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "SPAS12",
+        "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh",
+        "body_holstered_e5e6f43aa0d3fb99",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "f2546c2137bfaa08d55ac7d69e4a48f7696ee2ab0bb5e8d54c264cd766dbae46",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "SPAS12",
+          "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh",
+          "jntWpn_7",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "0709dae5fd3313262552e42c489a0e87e7bce46e55993f1929aebe52e7e2c592"
+    },
+    {
+      "asset": "SPAS12_sp",
+      "configuration": "Objects/Weapons/Handheld/UL_shg_SPAS12/SP_shg_SPAS12",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/checkpoint202/Bc2AuthoredSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "SPAS12_sp",
+        "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh",
+        "body_holstered_346dd1f762d5b2a8",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "07e9c9d9b5ab40516490dd99687452cb6574c3aa8027671455943451ef45a624",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "SPAS12_sp",
+          "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh",
+          "jntWpn_7",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "0709dae5fd3313262552e42c489a0e87e7bce46e55993f1929aebe52e7e2c592"
+    },
+    {
+      "asset": "SPAS12_sp_s",
+      "configuration": "Objects/Weapons/Handheld/UL_shg_SPAS12/SP_shg_SPAS12_Slug",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/support312/StaticSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "SPAS12_sp_s",
+        "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh",
+        "body_holstered_122876732c545a7a",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "35b58563baa5e5b7028fc5ebb4ea1c73273397f3f95f1ef8690225d45edf3bd6",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "SPAS12_sp_s",
+          "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh",
+          "jntWpn_7",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "0709dae5fd3313262552e42c489a0e87e7bce46e55993f1929aebe52e7e2c592"
+    },
+    {
+      "asset": "T194",
+      "configuration": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "T194",
+        "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Mesh",
+        "body_holstered_280338ee49ed9d86",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "675013dfc689f8dc8cf57f08f9cd5b80b55e3af61f7cfe25548eb9ecd4b554e2",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "T194",
+          "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "f016a386a12c8afecac8fbd420a2eb03f13ffbcbb858388c0f4cef309128e917"
+    },
+    {
+      "asset": "T194",
+      "configuration": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_FRAG",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "T194",
+        "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Mesh",
+        "body_holstered_280338ee49ed9d86",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "1072c799334176cce75eb567c48522db1e0f03ca94d07e5ca169db37f422885c",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "T194",
+          "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "f016a386a12c8afecac8fbd420a2eb03f13ffbcbb858388c0f4cef309128e917"
+    },
+    {
+      "asset": "T194",
+      "configuration": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Slug",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "T194",
+        "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Mesh",
+        "body_holstered_280338ee49ed9d86",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "ca1b616ce051bd5f80a535730aa60818feee0c512c0e3b717610275f69652df3",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "T194",
+          "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "f016a386a12c8afecac8fbd420a2eb03f13ffbcbb858388c0f4cef309128e917"
+    },
+    {
+      "asset": "T194_sp",
+      "configuration": "Objects/Weapons/Handheld/MEC_shg_TOZ194/SP_shg_TOZ194",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "T194_sp",
+        "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Mesh",
+        "body_holstered_8979b0e0258f63c6",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "e0e03ee624a29cd7afc5306e83cbddb99fe05358c78cded02aac070fbdb110e9",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "T194_sp",
+          "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "f016a386a12c8afecac8fbd420a2eb03f13ffbcbb858388c0f4cef309128e917"
+    },
+    {
+      "asset": "T194_sp_s",
+      "configuration": "Objects/Weapons/Handheld/MEC_shg_TOZ194/SP_shg_TOZ194_Slug",
+      "family": "tube_pump",
+      "metadata_complete": true,
+      "errors": [],
+      "two_hand": [
+        "profiles/bounded-support372/CandidateSupports.generated.h"
+      ],
+      "body_cache_key": [
+        "T194_sp_s",
+        "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Mesh",
+        "body_holstered_07b185ffdfe4daea",
+        12101763329092097707
+      ],
+      "cycle_descriptor": "65c907e1494efa27b37241270608384a6bb2d963bdffa9f0bbe37c4934f62dd4",
+      "manual_reload": "single_shell",
+      "mechanism": "pump",
+      "supply_keys": [
+        [
+          "T194_sp_s",
+          "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Mesh",
+          "jntWpn_6",
+          12101763329092097707
+        ]
+      ],
+      "geometry_digest": "f016a386a12c8afecac8fbd420a2eb03f13ffbcbb858388c0f4cef309128e917"
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "schema": "fvr.bc2.support43.authoring_manifest.v1",
+  "policy": {
+    "schema": "fvr.bc2.explicit_support_contact_policy",
+    "schema_version": 1,
+    "mode": "fixed_authored_handsikpose_initial",
+    "reference_time_seconds": 0.0,
+    "support_aim_mode": "two_point",
+    "source_curve_claim": "none",
+    "native_admission": false,
+    "rationale": "The mod deliberately fixes the support contact to LeftHand relative to jntWpn_1 at the start of each exact configuration's authored absolute HandsIkPose role. This defines a stable VR grab target; it does not assert that the source hand remains fixed through animation. Existing source-envelope failures are retained. No guessed coordinates, gun-hand override, ammunition capability, owner grant, or tolerance change."
+  },
+  "inputs": {
+    "an94": {
+      "path": "arsmg-paired-contact-batch-candidate/all/grip-bindings.json",
+      "sha256": "9c027340e204ec5b979fe3dc5be1e6501e2e4d2c3b545bcc228d299ed7d22903"
+    },
+    "type5": {
+      "path": "overnight426/smg/opening-level-reference-bindings.json",
+      "sha256": "5f08f905cf3547f3c4d763665702838fcb531467ca2a4564a6bef790090eb3c3"
+    },
+    "common_metadata": {
+      "path": "manual-reload-catalog-20261003-candidate/mp-common-all-metadata.json",
+      "sha256": "aa7a85e4c9cac427a095eaddcf191947f8495ffbe19677fd4fdd8e58d1dac48a"
+    },
+    "mesh_bindings": {
+      "path": "arsmg-paired-contact-batch-candidate/all/mesh-bindings.json",
+      "sha256": "200da8cd939684af08c8c1a9176e89405ab1c77c8c8ce471e2e9958b93f5acf4"
+    },
+    "hand_poses": {
+      "path": "authored-hand-pose-batch/result.json",
+      "sha256": "e458cc8a74580020b62dd91172f8cc5f43cdb5fbbaf3df2e3d3f12bed0749c1f"
+    }
+  }
+}

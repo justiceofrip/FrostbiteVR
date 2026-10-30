@@ -24,7 +24,7 @@ struct RigSnapshot {
     float skinConsistencyError=0;
     interaction::ArmJoints left{},right{};
     std::uint32_t weaponBone=0;
-    std::vector<std::uint32_t> nativeHiddenLeaves; // Verified collapsed native geometry, always copied unchanged.
+    std::vector<std::uint32_t> nativeHiddenLeaves; // Complete verified collapsed weapon subtrees, copied unchanged.
 };
 // Read-only BC2 first-person rig snapshot. Caller establishes local soldier
 // ownership and validates the native getter/pose producer before using this as

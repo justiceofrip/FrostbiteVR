@@ -31,6 +31,86 @@ int main(){
     std::strcpy(s.config.assetName.data(),"XM8_sp_s");s.config.baseCapacity=30;
     CHECK(bc2::VerifiedSelectedFireAction(s,owner,8,1000000000)==bc2::EntryAction::Fire);
  }
+ { // Expack's authored reload route differs from its working Fire8 plunger.
+    bc2::ReloadStateSnapshot s;s.owner={1,2,3,4,5,6,7};s.sequence=8;s.observedNs=1000000000;
+    s.inventory=9;s.config.weaponData=10;s.config.firingData=11;s.config.primaryFire=12;
+    s.config.fireInputAction=8;s.config.reloadInputAction=14;s.config.baseCapacity=1;s.config.numberOfMagazines=-1;
+    std::strcpy(s.config.assetName.data(),"Expack_US");
+    std::strcpy(s.config.assetPath.data(),"Objects/Weapons/Handheld/Beach/Expack/Expack");
+    const auto valid=s;const auto owner=s.owner;
+    CHECK(bc2::VerifiedSelectedReloadAction(s,owner,8,1000000000)==bc2::EntryAction::Zoom);
+    CHECK(bc2::VerifiedSelectedFireAction(s,owner,8,1000000000)==bc2::EntryAction::Fire);
+    CHECK(!bc2::VerifiedSelectedReloadAction(s,owner,9,1000000000));
+    CHECK(!bc2::VerifiedSelectedReloadAction(s,owner,8,999999999));
+    CHECK(!bc2::VerifiedSelectedReloadAction(s,owner,8,1100000001));
+    for(unsigned field=0;field<7;++field){auto changed=owner;
+        switch(field){case 0:++changed.player;break;case 1:++changed.soldier;break;case 2:++changed.weak;break;
+            case 3:++changed.weapon;break;case 4:++changed.actorGeneration;break;case 5:++changed.equipGeneration;break;default:++changed.space;}
+        CHECK(!bc2::VerifiedSelectedReloadAction(s,changed,8,1000000000));}
+    for(unsigned field=0;field<12;++field){s=valid;
+        switch(field){case 0:s.config.assetName[0]='X';break;case 1:s.config.assetPath[0]='X';break;
+            case 2:s.config.assetPath.fill('A');break;case 3:s.config.fireInputAction=37;break;
+            case 4:s.config.reloadInputAction=38;break;case 5:s.config.baseCapacity=30;break;
+            case 6:s.config.numberOfMagazines=4;break;case 7:s.config.weaponData=0;break;
+            case 8:s.config.firingData=0;break;case 9:s.config.primaryFire=0;break;
+            case 10:s.inventory=0;break;default:s.observedNs=0;}
+        CHECK(!bc2::VerifiedSelectedReloadAction(s,owner,8,1000000000));}
+    s=valid;s.config.reloadInputAction=29;std::strcpy(s.config.assetName.data(),"XM8_sp_s");
+    CHECK(bc2::VerifiedSelectedReloadAction(s,owner,8,1000000000)==bc2::EntryAction::Reload);
+ }
+ { // The route owns Zoom14/Reload29, preserves Fire8 and rolls back exactly.
+    std::array<std::byte,256> bytes{};
+    const auto get=[&](unsigned at){unsigned value=0;std::memcpy(&value,bytes.data()+at,4);return value;};
+    const auto put=[&](unsigned at,unsigned value){std::memcpy(bytes.data()+at,&value,4);};
+    put(0x98,(1u<<28)|(1u<<29));put(0x9c,0x80000000u);const auto before=bytes;
+    interaction::ActionOutput a;a.active=true;a.owner=2;a.held=interaction::Fire|interaction::Reload;
+    bc2::ApplySelectedReloadRoute(a,bc2::EntryAction::Zoom);
+    {bc2::InputOverride p;CHECK(p.Apply(bytes,a));
+     CHECK(get(40)==std::bit_cast<unsigned>(1.f));CHECK(get(0x98)==((1u<<28)|(1u<<14)));CHECK(get(0x9c)==0x80000000u);
+     CHECK(p.Restore());CHECK(bytes==before);}
+    {bc2::InputOverride p;CHECK(p.Apply(bytes,a));
+     put(0x98,1u<<28);CHECK(!p.Restore());CHECK(get(0x98)==((1u<<28)|(1u<<29)));}
+    bytes=before;a.held=interaction::Fire;
+    {bc2::InputOverride p;CHECK(p.Apply(bytes,a));
+     CHECK(get(0x98)==(1u<<28)&&get(40)==std::bit_cast<unsigned>(1.f));}
+    CHECK(bytes==before);a.held=interaction::Reload;
+    bc2::ApplySelectedReloadRoute(a,bc2::EntryAction::Reload);
+    {bc2::InputOverride p;CHECK(p.Apply(bytes,a));CHECK(get(0x98)==((1u<<28)|(1u<<29)));}
+    CHECK(bytes==before);
+    for(const auto route:{std::optional<bc2::EntryAction>{},std::optional{bc2::EntryAction::ThrowGrenade}}){
+     a.held=a.pressed=interaction::Reload;a.released=interaction::Fire;
+     bc2::ApplySelectedReloadRoute(a,route);CHECK(!a.held&&!a.pressed&&a.released==interaction::Fire);
+     bc2::InputOverride p;CHECK(p.Apply(bytes,a));CHECK(get(0x98)==(1u<<28)&&get(40)==0);}
+    CHECK(bytes==before);
+ }
+ { // Existing right secondary -> Reload -> Expack Zoom; no left-trigger ADS.
+    interaction::ControllerActions actions;interaction::InputOwner owner{123,1,true,true};
+    interaction::InputFrame f;f.generation=1;f.spaceGeneration=1;f.predictedNs=1000000000;f.focused=f.headValid=true;
+    for(auto& h:f.hands){h.gripTracked=h.aimTracked=true;h.active=interaction::Components;}
+    const auto step=[&](){++f.generation;f.predictedNs+=11000000;return actions.Update(f,owner,f.predictedNs);};
+    const auto dispatch=[&](const interaction::ActionOutput& a,bool reload,bool fire)->bool {
+        std::array<std::byte,256> cache{};bc2::InputOverride p;
+        auto mapped=a;bc2::ApplySelectedReloadRoute(mapped,bc2::EntryAction::Zoom);
+        const bool applied=p.Apply(cache,mapped);
+        if(applied!=a.active)return false;if(applied)p.Commit();
+        unsigned bits=0,trigger=0;std::memcpy(&bits,cache.data()+0x98,4);std::memcpy(&trigger,cache.data()+40,4);
+        return bits==(reload?(1u<<14):0u)&&trigger==std::bit_cast<unsigned>(fire?1.f:0.f);
+    };
+    for(unsigned n=0;n<3;++n)CHECK(dispatch(step(),false,false));
+    f.hands[0].trigger=1;CHECK(dispatch(step(),false,false));
+    f.hands[1].held=interaction::Secondary;auto a=step();CHECK(a.pressed==interaction::Reload&&dispatch(a,true,false));
+    a=actions.Update(f,owner,f.predictedNs);CHECK(!a.pressed&&dispatch(a,true,false));
+    f.hands[1].trigger=1;CHECK(dispatch(step(),true,true));
+    f.focused=false;CHECK(dispatch(step(),false,false));f.focused=true;
+    for(unsigned n=0;n<3;++n)CHECK(dispatch(step(),false,false));
+    f.hands[1].held=0;f.hands[1].trigger=0;CHECK(dispatch(step(),false,false));
+    f.hands[1].held=interaction::Secondary;CHECK(dispatch(step(),true,false));
+    ++owner.generation;CHECK(dispatch(step(),false,false));
+    for(unsigned n=0;n<2;++n)CHECK(dispatch(step(),false,false));
+    f.hands[1].held=0;CHECK(dispatch(step(),false,false));
+    f.hands[1].held=interaction::Secondary;CHECK(dispatch(step(),true,false));
+    a.held=a.pressed=0;CHECK(dispatch(a,false,false)); // A prior action gate cannot be bypassed.
+ }
  { // Selected melee owns its boolean only; no Fire8 or acquisition attack.
     std::array<std::byte,256> bytes{};
     const auto get=[&](unsigned at){unsigned value=0;std::memcpy(&value,bytes.data()+at,4);return value;};

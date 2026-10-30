@@ -1,0 +1,532 @@
+{
+  "schema": "chat16.pistol_native_authority.v1",
+  "evidence_level": "offline file-backed static native code plus read-only production source",
+  "executable_sha256": "3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258",
+  "preferred_base": "0x400000",
+  "helper_sha256": "41bdc19cb0f5a46cee648ce7a7980e04719b60ce683fa11448d591650a59a05c",
+  "inherited_preparation": {
+    "path": "handoff\\tasks\\CHAT16\\20261029-work12\\preparation02.json",
+    "sha256": "0ae8203ae1f190ebdc8b0d1bfc293cdd9f8a1e256e89da2f94e6da48ba78ae55",
+    "reflection_repeated": false
+  },
+  "scope": {
+    "maximum_new_complete_functions": 8,
+    "complete_functions_decoded": 8,
+    "new_code_bytes": 3485,
+    "reused_thunk_hash_only_bytes": 52,
+    "dispatch_table_bytes": 112,
+    "total_unique_bounded_bytes": 3649,
+    "maximum_bytes": 65536,
+    "broad_executable_sweep": false,
+    "adjacent_function_spill": false,
+    "first_new_unpinned_entry": "0x2cd5e0 was reached by exact ready-query E8 at0x2d6ec0; instruction-by-instruction CFG covered83 contiguous bytes and all returns; final helper freezes size/hash."
+  },
+  "units": [
+    {
+      "rva": "0x2e9000",
+      "size": 397,
+      "sha256": "0babdb25cdcc8f494a544d27cdf628c67f495215872b1ff5fa90f62fd5ca426e",
+      "fnv1a64": "0x4a6ecc3d95700d53",
+      "meaning": "Original Update, thiscall(context*, DWORD), ret8.",
+      "complete": true,
+      "decode": "reports\\coordinator-20261030-pistol-native20\\decode-002e9000.txt",
+      "normalized_decode_sha256": "a4063e7e4dc408f14c74f07a51791780e61038e01890a4fa133ab6f7582da5b0",
+      "on_disk_decode_sha256": "d8a38b7eeb869acfb97a97736883b37dcfdae1015e61bdcc7a7ab0abf7e08395"
+    },
+    {
+      "rva": "0x2e62d0",
+      "size": 1732,
+      "sha256": "122c98fefa4503c8c98688477f9cf5a1bfbbccb47e84ce6b303898c199ad908d",
+      "fnv1a64": "0x71118b4d657473d3",
+      "meaning": "State Step, reached by Update+0x163; sixteen fixed dispatch cases.",
+      "complete": true,
+      "decode": "reports\\coordinator-20261030-pistol-native20\\decode-002e62d0.txt",
+      "normalized_decode_sha256": "5d380b1589766c16a97e3ae68be5f52dfee2205a5622fc8f4264c470777e68b4",
+      "on_disk_decode_sha256": "cae8595178bc63781b03786ea60a162fb94cc809919244ded5df38be927cd85f"
+    },
+    {
+      "rva": "0x2e69e0",
+      "size": 772,
+      "sha256": "03169d95d2323a352f44f0f4868a848e0979fe420766573b629d3ae9b97664e3",
+      "fnv1a64": "0x7344b32b39a9bd85",
+      "meaning": "Timed Step, reached by Update+0x172.",
+      "complete": true,
+      "decode": "reports\\coordinator-20261030-pistol-native20\\decode-002e69e0.txt",
+      "normalized_decode_sha256": "99df7a92c3ed3013232db84eb7fadc9b8219674d7656eff595b45d4bc7c99f94",
+      "on_disk_decode_sha256": "e7eeeeb7dc91acb57a0361b18f9b62df662757e6b0b17a1104f2f54084be540b"
+    },
+    {
+      "rva": "0x2dd6a0",
+      "size": 163,
+      "sha256": "266c10e8f1165deb4be7a07757f6a5f3cf2186ae66bf05eb74177642faceded8",
+      "fnv1a64": "0x3cae7f07de53d0f7",
+      "meaning": "Transition Commit, reached by Update+0x151.",
+      "complete": true,
+      "decode": "reports\\coordinator-20261030-pistol-native20\\decode-002dd6a0.txt",
+      "normalized_decode_sha256": "2af20305d5f9cdd2dfe29a1ea5c1bbc1121210863ca088e9200b82fc23d1e898",
+      "on_disk_decode_sha256": "61a20b74058931c9849258aed62208dd6794fcc41f7c22729fb8a66a6e4d3752"
+    },
+    {
+      "rva": "0x2d6eb0",
+      "size": 42,
+      "sha256": "1196d210e20d01b7933ccee46918f3620923b47badafde0025f7b3358fe3b020",
+      "fnv1a64": "0x86f6fd3bcb5db20e",
+      "meaning": "Ready query, Step+0xaa/+0x1aa and Timed+0x163; KnifeNativeCode.h whole proof.",
+      "complete": true,
+      "decode": "reports\\coordinator-20261030-pistol-native20\\decode-002d6eb0.txt",
+      "normalized_decode_sha256": "1b8bf5e6e5bcaaee05232c4d5c91c63f8d718e4c11e98f80746e7947d0b485be",
+      "on_disk_decode_sha256": "db819442bfb39c08d2a173ce3840ebad095527840b2af080de22510df3ae6af2"
+    },
+    {
+      "rva": "0x2e1fa0",
+      "size": 168,
+      "sha256": "61afd1de72f817bed677f42f1d3e1bacc627f1202c4b45c60d7f55acec3b5645",
+      "fnv1a64": "0x5a79cdc6166428ff",
+      "meaning": "Fire entry, Step+0x1dd; Bc2SelectedKnifeCode.h whole proof.",
+      "complete": true,
+      "decode": "reports\\coordinator-20261030-pistol-native20\\decode-002e1fa0.txt",
+      "normalized_decode_sha256": "91015fdfb5d903d5502f34f3cec898ee41f2681e80e3f34301609f46d34300ef",
+      "on_disk_decode_sha256": "70c3448dd74d9fb862c2a1a90fb139b1e2b4ddd7dad032f28b9ebbab2c4c61d0"
+    },
+    {
+      "rva": "0x2d6d40",
+      "size": 128,
+      "sha256": "794e13398660f6a5eb3068dee73bbb38364edcca42776696bcae9f5c435f6c56",
+      "fnv1a64": "0x32cc32ebc7884376",
+      "meaning": "Abort helper, Update+0x88; DiscoverReloadHoldCode complete proof.",
+      "complete": true,
+      "decode": "reports\\coordinator-20261030-pistol-native20\\decode-002d6d40.txt",
+      "normalized_decode_sha256": "8d36834ffcb5de1a8fbc6b4dcb0a6cefd071dbdf229f8ef484369e015b372b1d",
+      "on_disk_decode_sha256": "8cb5cf61adbf847082b464917acca1f87df21fe49924d742e559a035300c158a"
+    },
+    {
+      "rva": "0x2cd5e0",
+      "size": 83,
+      "sha256": "06e7a9f87e61cb0c5bc201ded55b11ba1575830fb9972ccd10c3d06aab4a170a",
+      "fnv1a64": "0xd9d078fbe813d855",
+      "meaning": "Ready-query direct callee at0x2d6ec0; complete CFG first established in this job.",
+      "complete": true,
+      "decode": "reports\\coordinator-20261030-pistol-native20\\decode-002cd5e0.txt",
+      "normalized_decode_sha256": "90218ba6c9515fe8e9840a1476762dcf596dbe4f7eee60078a31eb4de18653ac",
+      "on_disk_decode_sha256": "b1ac45d47040ef0240962065e1269f094ee8c24eea87279d9b5f0a6b278a6840"
+    }
+  ],
+  "exact_instructions": [
+    {
+      "rva": "0x2e911b",
+      "size": 4,
+      "sha256": "2d612f16cb9579c8546e247cc47c50b1ef68d5f6169985eec15b112c1caaafa0",
+      "bytes": "f6472c01",
+      "meaning": "Original Update checks fire input bit0."
+    },
+    {
+      "rva": "0x2e9121",
+      "size": 7,
+      "sha256": "c7484604bf0187d5df8622496f4c86086cb942de58fc70ff53feaac65b6c17fd",
+      "bytes": "c686a400000000",
+      "meaning": "Fire input release clears firing+0xa4 latch."
+    },
+    {
+      "rva": "0x2e6364",
+      "size": 5,
+      "sha256": "5d5da5149e7ba8ddd9172ac650a56092d000a348198bb68095d364af4e78d87b",
+      "bytes": "e8470bffff",
+      "meaning": "Return state1 queries native ammunition availability."
+    },
+    {
+      "rva": "0x2e6377",
+      "size": 7,
+      "sha256": "94105daa57b964821ea6a81bf2acc8ba87dc56e48d0bfa1b012041f6f8c7f348",
+      "bytes": "80bd8800000000",
+      "meaning": "State1 tests FireLogic.WaitForTriggerRelease at FireLogic+0x88."
+    },
+    {
+      "rva": "0x2e63f4",
+      "size": 3,
+      "sha256": "6f38a2dfb3518186de216e3ff7089ab80ee08791a6eddaaf7adb02012b67b3d4",
+      "bytes": "897e44",
+      "meaning": "Release-wait completion selects state2, independent of ammo transfer."
+    },
+    {
+      "rva": "0x2e6402",
+      "size": 5,
+      "sha256": "5bebce207b3aefa0a5f0068c1fc3cf10ff258df3272624fe3887c9b1f57de7f3",
+      "bytes": "f30f114650",
+      "meaning": "Release-wait completion clears phase timer."
+    },
+    {
+      "rva": "0x2e6451",
+      "size": 4,
+      "sha256": "f36ace60742e218578b284ec1b662feb1dba8c665115e0229ba00851ec11e15d",
+      "bytes": "f6432c01",
+      "meaning": "State2 requires fire request."
+    },
+    {
+      "rva": "0x2e645b",
+      "size": 7,
+      "sha256": "587cceabab9a1ce04cd8e392b0eed2fec66dd70a6e54644beae270315d63c84d",
+      "bytes": "80be8a00000000",
+      "meaning": "State2 rejects nonzero raw firing inhibit byte+0x8a."
+    },
+    {
+      "rva": "0x2e647a",
+      "size": 5,
+      "sha256": "fbec434de5b54c60a36fe8452abd8a34b30b7cfbcc40aa3a83a8b192ba8c8588",
+      "bytes": "e8310affff",
+      "meaning": "State2 then queries native ammo availability."
+    },
+    {
+      "rva": "0x2d6ec9",
+      "size": 4,
+      "sha256": "f61e630a642e1b8730d6cc61dd165f94674f24d86c36ec2dce501cd23b1d9615",
+      "bytes": "837e7c00",
+      "meaning": "Availability query checks loaded>0, no chamber field."
+    },
+    {
+      "rva": "0x2e2022",
+      "size": 7,
+      "sha256": "be96dd757c958278f387a267a3ad523997b36037bcd5e20df6309629323c3a6d",
+      "bytes": "c7464405000000",
+      "meaning": "Entry selects state5 for type0; alternate type2/3 paths are9/13."
+    },
+    {
+      "rva": "0x2e65a5",
+      "size": 7,
+      "sha256": "41bfe4de480deb5fe7208ac434e97614869eb0584339ab0093655034427eaf57",
+      "bytes": "c7464406000000",
+      "meaning": "State5 selects shot state6."
+    },
+    {
+      "rva": "0x2e6625",
+      "size": 4,
+      "sha256": "03ab93d33c3c5bcb653a200ea8b03824e0d89189f1152e04ae714f9fcdb8e77d",
+      "bytes": "837d1801",
+      "meaning": "State6 selects bolt state7 only for FireLogicType1."
+    },
+    {
+      "rva": "0x2e682c",
+      "size": 5,
+      "sha256": "dfb98281537f08983335682cd3454e28f298eb8303f1812ddf02525bd9d330b7",
+      "bytes": "e80f07ffff",
+      "meaning": "Ordinary reload state12 calls the existing real native ammo transfer."
+    },
+    {
+      "rva": "0x2e685a",
+      "size": 4,
+      "sha256": "5ad247313cff46e35d08b7c0626341be4d88db0e65991e55dea554fa989dbf61",
+      "bytes": "837d1400",
+      "meaning": "Magazine type1 skips repeat-single-round branch and selects state1."
+    },
+    {
+      "rva": "0x2e67b0",
+      "size": 7,
+      "sha256": "8c583a2e5a096601f67e3cb4a7287403d1a4835569ec35f53a89a6731355bb95",
+      "bytes": "c7464401000000",
+      "meaning": "Common return selects state1; not a chamber write."
+    },
+    {
+      "rva": "0x2e6b28",
+      "size": 4,
+      "sha256": "f327b6c43089f039d9a1e86b7cebbdb45d55a1a9ca07325b9d766ef1a621831f",
+      "bytes": "837b1400",
+      "meaning": "Timed reload interruption-to-shot branch is gated to reloadType0, excluded for MP443 magazine1."
+    },
+    {
+      "rva": "0x2d6d4e",
+      "size": 4,
+      "sha256": "68508ee7f80ccbf08d9ee9f98f2cbd4ce8882361fbf22c31228a31fa7b9c841d",
+      "bytes": "83782c00",
+      "meaning": "Abort helper checks ReloadLogic raw value0 before cancelling reload states10..12."
+    },
+    {
+      "rva": "0x2d6d65",
+      "size": 7,
+      "sha256": "74de70e9185842a056a4c0ed68c342dd78560d9613d89921b3e50d90aa72c2a5",
+      "bytes": "c7414401000000",
+      "meaning": "Permitted abort selects state1 without ammo writes."
+    },
+    {
+      "rva": "0x2dd738",
+      "size": 3,
+      "sha256": "2cdb98b1b39dd5a5097b2560edf8288328efa6b442314b11fb3be7aef74f9714",
+      "bytes": "894640",
+      "meaning": "Commit saves former current into previous."
+    },
+    {
+      "rva": "0x2dd73b",
+      "size": 3,
+      "sha256": "d2dde68e1eb8f9e171ed30519cb52f5ca4da37f2f0025d1f7fe6ebdbea25c5c6",
+      "bytes": "894e3c",
+      "meaning": "Commit changes current to selected next state."
+    }
+  ],
+  "direct_calls": [
+    {
+      "rva": "0x2ec6ea",
+      "size": 5,
+      "sha256": "e3789c58758f193b834572194e0e0745b89a6202b7063fb1bf48ffdfcbcb2a68",
+      "target_rva": "0x2e9000",
+      "role": "Inherited exact thunk->Update edge; no thunk disassembly.",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x2e9151",
+      "size": 5,
+      "sha256": "5540e648fabf86a0ad9d48d717217b01cfc8bfc02fc0173c9e32bf93e8c785f2",
+      "target_rva": "0x2dd6a0",
+      "role": "Update->Commit",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x2e9163",
+      "size": 5,
+      "sha256": "42d0228ce8c598724fdc472daee5385756bcb57e961146ace4d9d3a8a76f0dcd",
+      "target_rva": "0x2e62d0",
+      "role": "Update->Step",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x2e9172",
+      "size": 5,
+      "sha256": "28c730f0b7e29aa47d3735c7388b4fb4b13754156081886a2fa4ccd749993d2a",
+      "target_rva": "0x2e69e0",
+      "role": "Update->Timed",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x2e9088",
+      "size": 5,
+      "sha256": "a041685b14df679f2997f8016f73cedac54f186d2ac9ad44222325815b60564c",
+      "target_rva": "0x2d6d40",
+      "role": "Update->Abort",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x2e6364",
+      "size": 5,
+      "sha256": "5d5da5149e7ba8ddd9172ac650a56092d000a348198bb68095d364af4e78d87b",
+      "target_rva": "0x2d6eb0",
+      "role": "State1->availability",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x2e647a",
+      "size": 5,
+      "sha256": "fbec434de5b54c60a36fe8452abd8a34b30b7cfbcc40aa3a83a8b192ba8c8588",
+      "target_rva": "0x2d6eb0",
+      "role": "State2->availability",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x2d6ec0",
+      "size": 5,
+      "sha256": "0d39625720450bf65ff99084d040ba1da005047e6461b880983c6efdb7926926",
+      "target_rva": "0x2cd5e0",
+      "role": "Availability->exception predicate",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x2e64ad",
+      "size": 5,
+      "sha256": "6c17855826c8212c26d0e5d6ec2b56ac96c9116d601665602392aef5fd7759f0",
+      "target_rva": "0x2e1fa0",
+      "role": "State2->firing entry",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x2e65cc",
+      "size": 5,
+      "sha256": "7e666863d32b2b8626b953d220970f7f5c0c54312b2aa606c29297d3c68542e6",
+      "target_rva": "0x2dd960",
+      "role": "State6->shot/listener helper, target intentionally not decoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x2e682c",
+      "size": 5,
+      "sha256": "dfb98281537f08983335682cd3454e28f298eb8303f1812ddf02525bd9d330b7",
+      "target_rva": "0x2d6f40",
+      "role": "State12->previously qualified ammunition transfer, not decoded",
+      "callee_decoded": false
+    }
+  ],
+  "dispatch_tables": [
+    {
+      "rva": "0x2e6994",
+      "size": 64,
+      "sha256": "8613a8fcec54c7dd9189e5177d5d5784a332201005d5614f3fa75c34767ff6f3",
+      "cases": {
+        "0": "0x2e630e",
+        "1": "0x2e6322",
+        "2": "0x2e640d",
+        "3": "0x2e698a",
+        "4": "0x2e698a",
+        "5": "0x2e658c",
+        "6": "0x2e65b5",
+        "7": "0x2e672d",
+        "8": "0x2e6785",
+        "9": "0x2e6654",
+        "10": "0x2e67bd",
+        "11": "0x2e67fa",
+        "12": "0x2e681e",
+        "13": "0x2e689b",
+        "14": "0x2e68d1",
+        "15": "0x2e68fa"
+      }
+    },
+    {
+      "rva": "0x2e6ce4",
+      "size": 48,
+      "sha256": "1bb6f7c2ae99bf7e7ecadbe11bae13c08f2d6f54b882ea55fa96fec3580ab8f0",
+      "cases": {
+        "2": "0x2e6a87",
+        "3": "0x2e6a97",
+        "4": "0x2e6abd",
+        "5": "0x2e6a8e",
+        "6": "0x2e6a8e",
+        "7": "0x2e6a8e",
+        "8": "0x2e6a8e",
+        "9": "0x2e6c45",
+        "10": "0x2e6ae0",
+        "11": "0x2e6ae0",
+        "12": "0x2e6ae0",
+        "13": "0x2e6c90"
+      }
+    }
+  ],
+  "sources": [
+    {
+      "path": "src/games/bc2/Bc2OriginalFiringObserver.h",
+      "sha256": "638d1b117b986d9d5bf9dc4dd5774e9573cfbd75afdee24d05b67275baa0af3a",
+      "read_ranges": "1-42"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadFlow.cpp",
+      "sha256": "b31ec5cb2d603f324cda5a88b84cb8f2d1a901242060396bcc46fd031515e0ba",
+      "read_ranges": "7-19,64-86,102-116"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadState.cpp",
+      "sha256": "1c1591858df9cc5cff66ec9d4028eb4a069cf9cc059b1627455cf0734fdb7547",
+      "read_ranges": "10-21,85-103"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadFlowRuntime.cpp",
+      "sha256": "801173661d7287c07c97b9643ff18afdb2d8d01c1b99149a5d68fe62ffbdb96a",
+      "read_ranges": "114-128,140-158,265,381-389,961-1000,1183-1260,1699-1745,1870-1920,2640-2662"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeCycleService.cpp",
+      "sha256": "5b3c2bdfe6ce3fc08a50d0cd957c88f3ed9e30a3537e0d04a797908ba847a70f",
+      "read_ranges": "177-180,590-619"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeCycleEvidence.cpp",
+      "sha256": "e5aab06149377cb258c9fa66eacf1f48e8a61ae3ebc160a6325a9c3a94064706",
+      "read_ranges": "55-65,152-176"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeCycleInputGuard.h",
+      "sha256": "d7e6338f76bae7b8e5bc76cd5e307c4cef053c66190a235413405395c00b4a67",
+      "read_ranges": "1-50"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeCycleUpdateRoute.h",
+      "sha256": "f616e5716f77013a85f5165218a3c3f3d2d71ead64060fec9e968b1a1feae0be",
+      "read_ranges": "1-42"
+    },
+    {
+      "path": "src/games/bc2/KnifeNativeCode.h",
+      "sha256": "4d739e3f59f7ad48bcb91b8a0f6c929f3ec145ee943fc6d559a9001b98230201",
+      "read_ranges": "8-13"
+    },
+    {
+      "path": "src/games/bc2/Bc2SelectedKnifeCode.h",
+      "sha256": "44035824e016a0f854027810ef145849d91cefe75a18c7e67fde2b075b58ec95",
+      "read_ranges": "9-21"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineNativeProfile.h",
+      "sha256": "f303830336a95fbef0e51851a6b13c98ae79efabefdf1e13f60dde0c5ba0e972",
+      "read_ranges": "25-34"
+    },
+    {
+      "path": "src/games/bc2/Bc2AmmoResourceEvidence.h",
+      "sha256": "aad69a382b8217b2a2c24b1eb969461216154429e72bad3bb4913cf0c1ab219e",
+      "read_ranges": "9-80"
+    },
+    {
+      "path": "src/games/bc2/Bc2AmmoResourceService.h",
+      "sha256": "ae7cb015df1dcfc889ab40cdd6f9df24c57094505ab266a15ac6f8dc919e9ad4",
+      "read_ranges": "64-87,266-281"
+    },
+    {
+      "path": "src/games/bc2/Bc2AmmoResourceBinding.h",
+      "sha256": "a8af6c4691296e4ab29b35fa637179301dd11e819a2a2946ea1754543ebe3188",
+      "read_ranges": "9-25"
+    },
+    {
+      "path": "include/fvr/interaction/AmmunitionLedger.h",
+      "sha256": "a8fa594c59a278b66ac669f075dd21c80e244b5f644ab1a77f7426b13498daa9",
+      "read_ranges": "10-62"
+    },
+    {
+      "path": "include/fvr/interaction/WeaponActionGate.h",
+      "sha256": "d193daf0e08c8a8ebc4e1fd832827e2ec70cfd8d9b27d3d75345c36cb479438e",
+      "read_ranges": "21-24,40-47,66-79"
+    }
+  ],
+  "findings": {
+    "availability": "RVA0x2d6eb0 returns primaryFire!=null AND (exceptionPredicate0x2cd5e0 OR loaded>0). It reads neither current/next/timer nor a chamber field. Predicate uses firing flagsA8, primaryFire+0x1e7 and effective-capacity==-1 conditions; the called numeric conversion is not decoded or newly named.",
+    "independent_phase": "State1 explicitly gates on release latches, selects next2 and zero timer. State2 separately requires Fire bit0, raw+0x8a==0 and availability before firing entry. Thus phase/input readiness is independent of loaded count; it is not an independent chamber occupancy model.",
+    "single_fire": "Type0 entry selects5, Step5 selects6; Step6 selects bolt7 only for type1. MP443 type0 bypasses7/8 and returns1 after its ordinary single shot. No physical slide completion is performed by that path.",
+    "stock_feed": "Magazine reload1: states10->11->12(native transfer)->1(release checks)->2. MP443 post-reload time0 does not create a separate chambering stage; WaitForTriggerRelease=true is read at FireLogic+0x88.",
+    "manual_feed": "TryAmmoResourceHands admits idle2/2/0, executes an exact native ammo operation on server, then receives three own original Updates. Manual feed can remain2->2, so stock12->1->2 must not be required or fabricated.",
+    "interruption": "Timed reload-to-shot transfer branch requires reloadType0 and is skipped for magazine1. Existing Abort helper can select1 and clear timers for permitted ReloadLogic0 without touching ammo; selection/tracking changes are not evidence that this helper ran or that slide debt completed.",
+    "modeled_chamber": "No separate native chamber is established in these eight functions. This is a bounded negative, not proof of global absence. A mod-owned after-feed slide policy is supported as an explicit firing veto composed with real native feed authority and later native phase readiness.",
+    "current_limit": "Existing strict chamber API and NativeAfterShot mode must remain intact; NativeAfterShot handles Pump/Bolt and intentionally adds no empty-feed action."
+  },
+  "supported_route": {
+    "sourcefix_supported": true,
+    "implemented": false,
+    "proposal": "See HANDOFF.txt: separate PistolAfterFeedPolicy and BC2 witness; retain mod-owned debt across interruptions, no native chamber claim.",
+    "transaction_keys": [
+      "AmmoResourceOutcome.request.intent.id",
+      "AmmunitionReceipt.command.context.resource(actor,actorGeneration,weapon,weaponGeneration)",
+      "command.context.equipGeneration/space",
+      "command.id/sourceSequence/operation",
+      "receipt.authorityInvocation/beganNs/completedNs",
+      "receipt.authorityVerified/copiesVerified",
+      "ReloadHoldIdentity.owner/firing[3]/serverPlayer/serverSoldier/serverItem"
+    ],
+    "available_update_keys": [
+      "AmmoResourceOwnUpdate.invocation/branch/firing/beforeOwner/afterOwner",
+      "beginNs/endNs/depth/finished/identityRetained/neutralContext/animationHold",
+      "current/next/timer"
+    ],
+    "publication_gap": "Completion internally retains invocations_[3]/seen_[3], but AmmunitionReceipt publishes only authorityInvocation/completedNs. A new immutable sidecar witness or later own-Update cohort is needed; do not invent three IDs from receipt.copiesVerified.",
+    "new_read_dependencies": [
+      "raw firing+0x8a inhibit and +0xa4/+0xa5 release latches within the already-read0xb0 object span",
+      "existing exact FireLogic0/reloadType1/config identity plus inherited WaitForTriggerRelease=true; preserve ordinary predicate/input checks",
+      "later fresh neutral original Updates from all3 nonaliasing copies, bound to the successful feed command and item lifetime"
+    ]
+  },
+  "unresolved_fact": "No actual-game evidence yet shows the proposed mod-owned slide debt/fire veto surviving tactical/empty feed and interruption on all three MP443 copies; native or physical-headset acceptance is not granted.",
+  "retained_failures": [
+    "Two initial one-instruction decoder assertions stopped at0x2cd5e1 because dumpbin emitted a trailing partial-decode byte as an instruction. Address-filter/parser corrected; no receipt/output was saved until the complete83-byte CFG verified.",
+    "First proof attempt stopped because Windows write_text saved CRLF while the decoder recorded normalized LF text hashes. Proof now verifies both normalized and actual on-disk hashes; retained decode files unchanged."
+  ],
+  "execution": {
+    "git": false,
+    "builds": false,
+    "tests": false,
+    "game": false,
+    "process_access": false,
+    "input": false,
+    "xr": false,
+    "installs": false,
+    "subagents": false,
+    "production_writes": false
+  },
+  "frozen": true
+}

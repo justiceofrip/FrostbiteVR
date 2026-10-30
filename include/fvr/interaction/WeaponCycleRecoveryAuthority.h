@@ -1,11 +1,22 @@
 #pragma once
 #include "fvr/interaction/HandInteraction.h"
+#include "fvr/interaction/AmmunitionLedger.h"
 namespace fvr::interaction {
+// An adapter constructs this only from the completed ledger command and three
+// independent own-Update witnesses. Counts alone never authorize retained debt.
+struct WeaponCycleAmmoRebaseProvenance {
+    HandInteractionOwner owner{};HandInteractionKey item{},mechanism{};
+    std::uint64_t cycle=0,shot=0,pause=0,previousGuardEpoch=0,guardEpoch=0,drainRevision=0;
+    AmmunitionReceipt receipt{};
+    std::array<std::uint64_t,3> ownUpdates{};
+    bool operator==(const WeaponCycleAmmoRebaseProvenance&)const=default;
+};
 struct WeaponCycleDebt {
     HandInteractionOwner owner{};
     HandInteractionKey item{},mechanism{};
     std::uint64_t cycle=0,shot=0,guardEpoch=0;
     int loaded=0,reserve=0,capacity=0;
+    std::optional<WeaponCycleAmmoRebaseProvenance> ammunitionRebase;
     bool operator==(const WeaponCycleDebt&)const=default;
 };
 // Three independently observed, input-guarded native Updates. These may still

@@ -4,6 +4,16 @@
 #include "fvr/interaction/AmmoSupply.h"
 
 namespace fvr::bc2 {
+// Generic physical rows still require a verified native lease; registry enrollment
+// alone never grants ammunition authority. Receipts retain the original row.
+std::optional<interaction::AmmoSupplySource> ShotgunAmmoSupplySource(
+    const Bc2ReloadInteractionSample&,const Bc2AmmoReserveLease&)noexcept;
+std::optional<interaction::AmmoSupplySource> ShotgunAmmoSupplySource(
+    const Bc2ReloadInteractionSample&,const ReloadRoundLease&)noexcept;
+std::optional<interaction::AmmoSupplyReceipt> ShotgunAmmoSupplyReceipt(
+    const ShotgunReloadEquipmentProfile*,const interaction::AmmoSupplyReservation&,const Bc2ReloadOwnerMap&,
+    const Bc2ReloadBridgeResult&,const Bc2ReloadAckEvidence&,const ReloadRoundLease&,
+    const Bc2AmmoReserveLease&,std::int64_t nowNs)noexcept;
 // Exact selected SPAS profile and fresh native reserve, independent of whether
 // native ReloadHold is active. No offsets/read calls or inventory synthesis.
 // Pool identity retains the exact native server item/equip generation, separate

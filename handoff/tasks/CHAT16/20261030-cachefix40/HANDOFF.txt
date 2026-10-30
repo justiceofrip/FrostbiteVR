@@ -1,0 +1,13 @@
+Done Y: corrected only the batch's full configured-body/visibility input join; root execution remains pending.
+Changed: handoff/tasks/CHAT16/20261030-magazinebatch39/prepare_batch.py normalizes each visibility spec's instance_guid to its validated exact binding representation before deriving visibility and body records.
+The script first requires case-insensitive GUID equality. Resource, content hashes, mesh references and full enrollment dictionary equality remain enforced; no shared tools or baseline catalog records changed.
+Cause: MP443_sp visibility used 58098858-821B-4406-A19C-AE62E5D38BDF while its preserved body used lowercase. No other authored_configuration field differed.
+Evidence: read-only projection of the saved visibility specs and exact catalog proves complete configuration equality for M9, M9-3, MP443 and preserved MP443_sp after the input correction. Newly composed bodies inherit the normalized spec.
+Script SHA256: 364840d139058f69bb9d4816609fe22d5076e27f4febce03611f159bc559954d
+Reuse: reports/coordinator-20261030-magazinebatch39/magazine-geometry.json contains those four passing profiles, SHA256 722ef943fe2f33e7ae9a963d7fdf1e5fa869d1b0b5736a3ad94b054ad95b096e.
+Root command, from G:/Unity/VRMMO/bc2vr-task-worktrees/campaign-coordinator-20261028-r1:
+py -3.12 -B handoff/tasks/CHAT16/20261030-magazinebatch39/prepare_batch.py --game "G:/New folder (2)/Battlefield Bad Company 2" --output reports/coordinator-20261030-cachefix40 --reuse-geometry reports/coordinator-20261030-magazinebatch39/magazine-geometry.json --reuse-geometry-sha256 722ef943fe2f33e7ae9a963d7fdf1e5fa869d1b0b5736a3ad94b054ad95b096e
+The command reuses all four profiles, preserves prior outputs, and retains the saved M1911 gap without retrying it; expect complete=false until that separate work is integrated.
+The old M1911 gap sampled slide jntWpn_3; the actual thin magazine jntWpn_12 was excluded by the 15mm heuristic. This is not evidence that M1911 lacks authored magazine contact.
+The separate authored-geometry owner must arrange an explicit retry of that obsolete gap after correcting candidate selection. No geometry/tool fix was duplicated here.
+No Git, test suite, build, installed extraction, game, XR, installation or archive survey ran. Source and handoff frozen after this change.

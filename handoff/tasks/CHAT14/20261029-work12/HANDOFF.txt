@@ -1,0 +1,28 @@
+CHAT14 work12: DONE for exact offline binding/preparation; native admission remains off.
+Assigned base: dfc0e507be635769dade167c1d642e3716443835; no Git command used.
+One configuration only: M60_sp, Objects/Weapons/Handheld/BU_lmg_M60/SP_lmg_M60.dbx.
+Existing support312 profile/instance/hash matches installed sp_common archive index.
+Root retained proof/preparation/observer files beside this handoff; original scratch kept.
+proof.json pins installed EXE 3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258.
+All six complete production ReloadState function fingerprints pass; seven value/enum metadata tables resolve uniquely.
+jobs.json retains exact DBX refs/GUIDs/hashes/offsets and selects only this configuration.
+Authored: fltAutomaticFire=2, rtMagazine=1; capacity100, magazines2; EiaFire/EiaReload.
+ReloadTime7.80000019, threshold0.699999988, delay/post/bolt times0; bolt hold flags false.
+5.46s is only an authored timing hint; modifiers/scheduling and native transfer still require observation.
+Exact 1P replacement tree -> M60 1P_Reload GUID is proved; scoped/MP alternatives excluded.
+Cataloged sp_lmg_m60 async archive supplies exact a6b0e5c6... reload clip:8.03333378s.
+Current decoder resolves72 tracks including21 weapon tracks,15 varying; no bone role was guessed.
+Cover/latch/container/feed/charge remain presentation-role candidates, not separate proved native commands.
+Authored ReadinessStates.Relaxed/Alert=true describes presentation selection, not fire readiness.
+Native semantics observed by contract: begin10/wait11/transfer12/return1/input2 and loaded/reserve changes.
+observe.py reuses verified client/server/metadata readers, whole-function live checks and exact mesh/config selectors.
+It retains three distinct firing copies, phase timers/capacity modifiers and conserved counter-change intervals.
+One20s/20ms session,1100record/8MiB bound; requires2s stable partial prestate and2s settled poststate.
+Root later runs Run-Observe.ps1 -ProcessId <PID> -Executable <BFBC2Game.exe> -OutputPath <fresh.json>.
+Wrapper calls worktree StorageBudget first; after ready output, root owns ONE ordinary reload input.
+No preparation shot/input/native call/write/hook/foreground action exists in the observer.
+External samples are not atomic or complete events; cover/feed/native-pose correlation and actual fire permission remain unproved.
+Input-processing return is a candidate only; no chamber, resource-instance or ManualReload Applied acknowledgement.
+Validation: exact offline DBX/clip/executable extraction passed;6new observer checks and Python/PowerShell syntax passed.
+No unchanged suites/build/game/XR/install/profile/shared-source changes. No reader correction needed.
+Retire this one-shot worker; root can execute the prepared read observer when PC access returns.

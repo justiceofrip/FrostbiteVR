@@ -1,0 +1,38 @@
+{
+  "schema": "fvr.bc2.mechanism_registry_annotations.v1",
+  "sources": {
+    "actions": {
+      "path": "bc2vr-recovery/action379-batched/actions.json",
+      "sha256": "c1e775329c56c32bec9ed49392d5b080f4b9f50bbd66c0df15945f98d9dbd7b8"
+    },
+    "pistol_bindings": {
+      "path": "bc2vr-recovery/pistol-sniper-shotgun-mechanisms-candidate/batch/reference-bindings.json",
+      "sha256": "367daddaf86244359245312db8028756b91bf763b34535aa1191253db3981559"
+    },
+    "m1911_bindings": {
+      "path": "bc2vr-recovery/mesh312-research/reference-bindings.json",
+      "sha256": "3813a763b4640355e699f280a8a8dd9fcc6710ca03f57f7df3afe60c867d1ae7"
+    },
+    "mp443_geometry": {
+      "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/handoff/tasks/CHAT16/20261030-implementation17/mp443-geometry.json",
+      "sha256": "09314649460c4b0d81bd0138a39d44f3680c0fed4e485b353ae66fe7c2b3638c"
+    },
+    "mp443_roles": {
+      "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/handoff/tasks/CHAT16/20261030-implementation17/mp443-role-review.json",
+      "sha256": "4fe6e8d67687a0336ccc708cfc2d6a7c56ad0389b0dd306a5d556bdb465f4529"
+    },
+    "root_visual": {
+      "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/handoff/tasks/CHAT16/20261030-batch37/root-visual-review.json",
+      "sha256": "9fa7166e01b2ff72b5f4824968aebfe1d1732bdcf5cb56b5ccef55569f3bf9c4"
+    },
+    "pistol_measured": {
+      "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/handoff/tasks/CHAT16/20261030-batch37/measured.json",
+      "sha256": "1d2b8f21fbf1e64c5bfc0cc7289f0970b9a11c758becfc00c1799f36ec87fa06"
+    },
+    "pistol_roles": {
+      "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/handoff/tasks/CHAT16/20261030-batch37/role-policy.json",
+      "sha256": "6284829079e6c8824f13eb49f9fa5bd6b465c601e0777f2a24e06b186ac12a71"
+    }
+  },
+  "profiles": []
+}

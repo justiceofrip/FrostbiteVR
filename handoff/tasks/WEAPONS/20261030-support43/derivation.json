@@ -1,0 +1,65 @@
+{
+  "schema": "fvr.bc2.support43.derivation.v1",
+  "authoring_policy_sha256": "4e8f62f6d9aa4603d54694a45240068623b70bf26d06aeffcbebb8ed9f00b19b",
+  "generator_sha256": "c78fadef531edd31d87954f439b667b02da002c0462a183e25538cce6baf8049",
+  "support_tool_sha256": "86360c11c74e9a1eb853f367e2f31d775760a40849794aa7ea22a17bfacc266b",
+  "rows": [
+    {
+      "asset": "AN94",
+      "mesh": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh",
+      "source_configurations": 3,
+      "source_status": "decoded_spline_candidate",
+      "translation_bound_m": 0.0460227382973555,
+      "rotation_bound_deg": 5.324107073383923,
+      "previous_bounded_gate_passes": false
+    },
+    {
+      "asset": "AN94_sp_k",
+      "mesh": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh",
+      "source_configurations": 1,
+      "source_status": "decoded_spline_candidate",
+      "translation_bound_m": 0.0460227382973555,
+      "rotation_bound_deg": 5.324107073383923,
+      "previous_bounded_gate_passes": false
+    },
+    {
+      "asset": "AN94_sp_s",
+      "mesh": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh",
+      "source_configurations": 1,
+      "source_status": "decoded_spline_candidate",
+      "translation_bound_m": 0.0460227382973555,
+      "rotation_bound_deg": 5.324107073383923,
+      "previous_bounded_gate_passes": false
+    },
+    {
+      "asset": "Garand",
+      "mesh": "Objects/Weapons/Handheld/Beach/Jap_Type5/Jap_Type5_Mesh",
+      "source_configurations": 1,
+      "source_status": "decoded_spline_candidate",
+      "translation_bound_m": 0.0036945699668886087,
+      "rotation_bound_deg": 0.8270476976919565,
+      "previous_bounded_gate_passes": false
+    },
+    {
+      "asset": "Garand",
+      "mesh": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Mesh",
+      "source_configurations": 2,
+      "source_status": "decoded_spline_candidate",
+      "translation_bound_m": 0.003946105962812197,
+      "rotation_bound_deg": 1.1015104855972997,
+      "previous_bounded_gate_passes": false
+    }
+  ],
+  "exact_source_archives": {
+    "Dist/win32/levels/mp_common/level-00.fbrb": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965",
+    "Dist/win32/async/weapon/m1garand-00.fbrb": "d0d031b25e2cc58e61c309d0ebb958394c175e4329c5468bd81a68f2325068d5",
+    "Dist/win32/async/weapon/ai_rif_an94abakan-00.fbrb": "a389e8f65dd0cc9a56e342f123a732d4b3544ba5849b16004c9699dcaa0a6515",
+    "Dist/win32/levels/sp_01/level-00.fbrb": "9693feb53337f1a83c49d725eab25d146e91469394c3b93e7bf62214ecc8a44f",
+    "Dist/win32/levels/sp_common/level-00.fbrb": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842",
+    "Dist/win32/async/weapon/type5-00.fbrb": "3e6520e476e604e4aef06c23ba2814ed9cd8639f007a98595aa605d8dc58d5cb"
+  },
+  "source_configurations": 8,
+  "unique_support_keys": 5,
+  "native_checked": false,
+  "headset_accepted": false
+}

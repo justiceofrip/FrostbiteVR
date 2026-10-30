@@ -1,0 +1,25 @@
+CHAT29 work12 scope probe: approved diagnostic wire implemented; six source files frozen.
+Files: Bc2SelectedMeshesObservation.{h,cpp}, Bc2Gameplay.{h,cpp}, NativeProbe.cpp,
+tests/Bc2SelectedMeshesObservationTests.cpp. SelectedMeshes1p reader/tests untouched.
+Read AGENTS, CURRENT, ARCHITECTURE and work12 HANDOFF; no native/session work.
+Existing finite PassEvidence branch opts in: !continuous, <=15000ms, controller
+and pose/Hands. Exact target: Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95.
+Hands-only and persistent/default branches perform zero added zoom native reads.
+Persistent+zoom is refused; diagnostic storage is allocated only on explicit opt-in.
+Existing Gather observation remains outside draw: cadence100ms, max200 attempts.
+Extra read requires a successful verified exact-path selected observation;
+shares original owner/sequence/200ms deadline and charges both reads' elapsed time.
+Complete configured selection is compared between reads; Clear/reinstall cancel
+late zoom completion. Original selected publication survives zoom-only rejection.
+Report mesh_zoom_1p contains statuses/read cost, max8 historical identity rows,
+complete owner/configuration/binding/lease, separate authored states/verified nulls.
+No zoom consumer API; ADS/active-state/magnified-scene/reticle/render authority false.
+Eight added observer groups (19 total): disabled/persistent refusal, exact path,
+states/nulls, failure, cancellation/reinstall, combined lease, cohort, cadence/budget.
+Self-review and scoped diff --check pass with existing CRLF accepted; tests NOT RUN.
+Root owns focused x86/x64 Observation/Carried tests and Gameplay/NativeProbe syntax.
+Static proof reused unchanged from HANDOFF: M95 config
+GUID7717ea86-49ed-4aa8-b401-7e62d8ade339 -> Scope_Mesh
+GUID362e1873-9ce0-11db-a0ec-c8be9f4fc557, Objects/Weapons/Handheld/Scope/Scope_Mesh.
+No speculative offsets/profile searches/builds/game/XR/input/install/shared-doc edits.
+Source/static evidence only; integration held; actual-game/headset acceptance pending.

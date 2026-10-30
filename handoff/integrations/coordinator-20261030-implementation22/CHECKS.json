@@ -1,0 +1,314 @@
+{
+  "base": "77b9926a2cede0a447a3f2f13169036673932307",
+  "source": [
+    {
+      "path": "CMakeLists.txt",
+      "sha256": "b56390660fb524161a80a1300592d6864b771389749229f55e3244bb06446cf5",
+      "bytes": 95813
+    },
+    {
+      "path": "handoff/integrations/coordinator-20261029-polish11/Run-IsolatedChecks.ps1",
+      "sha256": "66f6a900d1538babde648df89166ad1e0d00a65776254edcfb93b28ff25f972f",
+      "bytes": 9520
+    },
+    {
+      "path": "include/fvr/interaction/PhysicalPistolSlide.h",
+      "sha256": "84239b4eaf35a50c20f4072aeb33d8864407337e7cc4ee67e055e2660f58adcc",
+      "bytes": 19745
+    },
+    {
+      "path": "include/fvr/interaction/PistolAfterFeedPolicy.h",
+      "sha256": "dffc9497c81116c8312c45a568b7a0e332f977da121dc22492f4d95e3176626d",
+      "bytes": 27659
+    },
+    {
+      "path": "src/games/bc2/Bc2Gameplay.cpp",
+      "sha256": "61d3214d7ccd59b093fa3db3a95d2c002c09832d10a9dfcbfd7a5d76d554a420",
+      "bytes": 368915
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalFeed.cpp",
+      "sha256": "238a51e0a3b8da69c848a0458b3dfc6ef711849c3149d6ea87b52db8529cd62e",
+      "bytes": 37499
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalFeed.h",
+      "sha256": "d63f70abc7aee04ada0da721ca0b6c107b3c0964ffecd0cf9b382f20412b4d86",
+      "bytes": 5339
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalPistolSlide.cpp",
+      "sha256": "43979eb201671aac95713de94bee12ba0ede23b3729b98e19005d294e368af80",
+      "bytes": 19199
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalPistolSlide.h",
+      "sha256": "c65ea6221dfc2b099b6559144a835ce9b5e819750889ee0b616e80247d67c6b5",
+      "bytes": 3539
+    },
+    {
+      "path": "src/games/bc2/Bc2PistolAfterFeedEvidence.h",
+      "sha256": "e94b5babe7ffeb1cd929a3dd2f05b6503c149862905977e28e02e1e97c3cb0c3",
+      "bytes": 19852
+    },
+    {
+      "path": "src/games/bc2/Bc2PistolAfterFeedInput.h",
+      "sha256": "af408988b30661d905e014e6086c0a3107732c20ab1f44815812f3f57ccca531",
+      "bytes": 2679
+    },
+    {
+      "path": "src/games/bc2/Bc2PistolSlidePresentation.h",
+      "sha256": "312b852d06b6b180ad9e2cdf2f9382b2e075523bae281bc30934363d71a4d2cd",
+      "bytes": 17857
+    },
+    {
+      "path": "src/games/bc2/Bc2PistolSlideProfile.h",
+      "sha256": "e4f7602976745425fdc557e80a3b7e07ebd6aa1d7ace2a0d19fa849560aa77ad",
+      "bytes": 6745
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadFlowRuntime.cpp",
+      "sha256": "2978198007da576d03436ebabae66584fb12be44f20be139bcfcc896c3f193a5",
+      "bytes": 316420
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadFlowRuntime.h",
+      "sha256": "1d591e568769b9d45369a9ab77b08aa877e7c65fe606d6356f7fec31a70ab4ad",
+      "bytes": 25623
+    },
+    {
+      "path": "src/games/bc2/Bc2RigPublication.cpp",
+      "sha256": "e6b6dea6ea381e42d3acbe2f8f15073eb5881ca68e911baa3d44b80bf25ca45c",
+      "bytes": 221703
+    },
+    {
+      "path": "src/games/bc2/Bc2RigPublication.h",
+      "sha256": "9b70ca3632a633896e96e3084e231b20d9be4e0d9733bc1ea8f04b75aa6c8203",
+      "bytes": 11518
+    },
+    {
+      "path": "tests/Bc2PhysicalFeedTests.cpp",
+      "sha256": "39c19c9456d51c2fd8987960111285a52e4342593be5056196bac40a2bdde553",
+      "bytes": 27035
+    },
+    {
+      "path": "tests/Bc2PhysicalPistolSlideTests.cpp",
+      "sha256": "4a985f77e0ca80a023a94a2d3c1804eca9035bfde10f0a11a4856fbfb752feb3",
+      "bytes": 16114
+    },
+    {
+      "path": "tests/Bc2PistolAfterFeedEvidenceTests.cpp",
+      "sha256": "0eadae4da654c016837edce924685a4876829d5d6954e64e22eb067bb5f204ee",
+      "bytes": 14396
+    },
+    {
+      "path": "tests/Bc2PistolAfterFeedInputTests.cpp",
+      "sha256": "e0d52d42349bb66ebbba52f1193ae7bd337b9883b98d9bf065e0de1734e5b508",
+      "bytes": 3207
+    },
+    {
+      "path": "tests/Bc2PistolSlidePresentationTests.cpp",
+      "sha256": "fa715f28cd70862178c78ac39abdc33077f4470194c69e710fa8630a7e500757",
+      "bytes": 18571
+    },
+    {
+      "path": "tests/Bc2PistolSlideProfileTests.cpp",
+      "sha256": "52f58c914a27340d3042045e7f66b0c5ef58d25bc0e5c2fb28da77133b5f7a44",
+      "bytes": 5490
+    },
+    {
+      "path": "tests/PistolAfterFeedPolicyTests.cpp",
+      "sha256": "e3d73f479cacd042841715c1516e45d5cfed7c81727f638e9dcb20184751f9ce",
+      "bytes": 28053
+    }
+  ],
+  "checks": [
+    {
+      "suite": "PhysicalPistolSlide",
+      "architecture": "x86",
+      "result": "reports/coordinator-20261030-implementation22/physicalpistolslide-x86-check01/result.json",
+      "result_sha256": "e97c73b51fb75b2048c1fa3b5a123bdb3f20e7192f428dcfc9d52ed4f39e034a",
+      "command_sha256": "f8f126e9890a41c90be1d837666492b6bdee0a97ad0e1b7ae58f5043b6a17ae6"
+    },
+    {
+      "suite": "PhysicalPistolSlide",
+      "architecture": "x64",
+      "result": "reports/coordinator-20261030-implementation22/physicalpistolslide-x64-check01/result.json",
+      "result_sha256": "2cecce324a29870b2fc7e47be302b4d95947ac551edd4ba7c96094e59cc5701d",
+      "command_sha256": "5b69d49e5c8b1ddc4ba3f470e996146054fbc9d0f9daf4d73842a1674f21298d"
+    },
+    {
+      "suite": "PistolAfterFeedPolicy",
+      "architecture": "x86",
+      "result": "reports/coordinator-20261030-implementation22/pistolafterfeedpolicy-x86-check01/result.json",
+      "result_sha256": "76a911da8cd59c6c05e041c7ab3a91fce51715a850594467eae06928a220e414",
+      "command_sha256": "896752665db38fdb2a86d364bf123fe3b7fbcf3e1b0a1362e4bf5976c85b6b54"
+    },
+    {
+      "suite": "PistolAfterFeedPolicy",
+      "architecture": "x64",
+      "result": "reports/coordinator-20261030-implementation22/pistolafterfeedpolicy-x64-check01/result.json",
+      "result_sha256": "aebf32e12fffc78e2e7e8b6c5a4f08fe57e626bb2d529280e42f401bb720c767",
+      "command_sha256": "f9834249623d04cb015dd8c61911f2661a25cc048192a3c02a053833e2829d33"
+    },
+    {
+      "suite": "Bc2PistolSlideProfile",
+      "architecture": "x86",
+      "result": "reports/coordinator-20261030-implementation22/bc2pistolslideprofile-x86-check01/result.json",
+      "result_sha256": "e262c58c49d47408a57e6b263713e2b50bf9bf4244129f9cfd26b0493d942a4f",
+      "command_sha256": "a0795234c04984dfe03b28a362c4780f7e302603340e9abf56cfec6c6507f747",
+      "unaffected_reuse": [
+        {
+          "path": "src/games/bc2/Bc2PistolAfterFeedEvidence.h",
+          "reason": "Runner over-recorded unrelated evidence header. This suite does not include it; release identity change is exercised by owner03/evidence02."
+        }
+      ]
+    },
+    {
+      "suite": "Bc2PistolSlideProfile",
+      "architecture": "x64",
+      "result": "reports/coordinator-20261030-implementation22/bc2pistolslideprofile-x64-check01/result.json",
+      "result_sha256": "711a6aedf3d287cdff6e85ba0b1e932f7ed43b3a770a19c5b1a24b928cc64db2",
+      "command_sha256": "978ec8f212a621e5a5f93db48af3967280549dfd954c0182ee32ffca58a10ae6",
+      "unaffected_reuse": [
+        {
+          "path": "src/games/bc2/Bc2PistolAfterFeedEvidence.h",
+          "reason": "Runner over-recorded unrelated evidence header. This suite does not include it; release identity change is exercised by owner03/evidence02."
+        }
+      ]
+    },
+    {
+      "suite": "Bc2PistolSlidePresentation",
+      "architecture": "x86",
+      "result": "reports/coordinator-20261030-implementation22/bc2pistolslidepresentation-x86-check01/result.json",
+      "result_sha256": "931ab69819640d48bbd131613d33cac64a1b5b840540a80bdbca1e787b8f8c38",
+      "command_sha256": "4173b17e5cafe71c82db41b817b53a8897224e64aad233efe932bc5b5cf85bb1",
+      "unaffected_reuse": [
+        {
+          "path": "src/games/bc2/Bc2PistolAfterFeedEvidence.h",
+          "reason": "Runner over-recorded unrelated evidence header. This suite does not include it; release identity change is exercised by owner03/evidence02."
+        }
+      ]
+    },
+    {
+      "suite": "Bc2PistolSlidePresentation",
+      "architecture": "x64",
+      "result": "reports/coordinator-20261030-implementation22/bc2pistolslidepresentation-x64-check01/result.json",
+      "result_sha256": "c8a3ec4947dd9b76041df4af68e0f01a66d4f00247ef01ec678af201f035467f",
+      "command_sha256": "80728030add8d0cd2cdad80c38ef7e747bbd3f6831a5aa1ac7597371e273f93f",
+      "unaffected_reuse": [
+        {
+          "path": "src/games/bc2/Bc2PistolAfterFeedEvidence.h",
+          "reason": "Runner over-recorded unrelated evidence header. This suite does not include it; release identity change is exercised by owner03/evidence02."
+        }
+      ]
+    },
+    {
+      "suite": "Bc2PistolAfterFeedEvidence",
+      "architecture": "x86",
+      "result": "reports/coordinator-20261030-implementation22/bc2pistolafterfeedevidence-x86-check02/result.json",
+      "result_sha256": "acb5cdfd4773869b55b3adbb84a039f4b760078ab601208c99667986ac0360cb",
+      "command_sha256": "6754044db93a39e403de0dbf14df9a839228ed77f3639d5cbadd46b094612b32"
+    },
+    {
+      "suite": "Bc2PistolAfterFeedEvidence",
+      "architecture": "x64",
+      "result": "reports/coordinator-20261030-implementation22/bc2pistolafterfeedevidence-x64-check02/result.json",
+      "result_sha256": "7d010daeb0ce5ae48d0938be65e60e08dbefb70a5a50d0001cdbcd823c6e441f",
+      "command_sha256": "af3b27f3f34343641f43538789a7b2c5e4a4f0351f0da083a098a898917b65bd"
+    },
+    {
+      "suite": "Bc2PistolAfterFeedInput",
+      "architecture": "x86",
+      "result": "reports/coordinator-20261030-implementation22/bc2pistolafterfeedinput-x86-check01/result.json",
+      "result_sha256": "50156d45ba7c16774452dc6097401fe8be23b4ba2cfe76a77c88f953f854dd2f",
+      "command_sha256": "8b7a3c89adf1c621b45a10f781cc50d3e4f54a5d06b9fbcfb0defb0e58fd02c3",
+      "unaffected_reuse": [
+        {
+          "path": "src/games/bc2/Bc2PistolAfterFeedEvidence.h",
+          "reason": "Runner over-recorded unrelated evidence header. This suite does not include it; release identity change is exercised by owner03/evidence02."
+        }
+      ]
+    },
+    {
+      "suite": "Bc2PistolAfterFeedInput",
+      "architecture": "x64",
+      "result": "reports/coordinator-20261030-implementation22/bc2pistolafterfeedinput-x64-check01/result.json",
+      "result_sha256": "d43bee33d6e4c0f0493e81f8fd148a8cd600c0c0705dd76903f7ceb934ad852a",
+      "command_sha256": "222e5b8412cefd4d06d25cc40f2e5bd7da723ef27d9b3a57e20718a5fddbcb29",
+      "unaffected_reuse": [
+        {
+          "path": "src/games/bc2/Bc2PistolAfterFeedEvidence.h",
+          "reason": "Runner over-recorded unrelated evidence header. This suite does not include it; release identity change is exercised by owner03/evidence02."
+        }
+      ]
+    },
+    {
+      "suite": "Bc2PhysicalPistolSlide",
+      "architecture": "x86",
+      "result": "reports/coordinator-20261030-implementation22/bc2physicalpistolslide-x86-check03/result.json",
+      "result_sha256": "d7aeca3b86e64a77805ae95dcb571c48dd270982a8a67df7197db118413af5a5",
+      "command_sha256": "d38832a689b9e7e75a3cc4c29e4dcc66fb7b71706f9d234cdf37b20c7754ae26"
+    },
+    {
+      "suite": "Bc2PhysicalPistolSlide",
+      "architecture": "x64",
+      "result": "reports/coordinator-20261030-implementation22/bc2physicalpistolslide-x64-check03/result.json",
+      "result_sha256": "a3432730a3ea9fa2ee5af6cf71efc372d98ffd415c8ad572ef17fc08afac5463",
+      "command_sha256": "662d26b4b5439e5672d4beb97541c668e14797ef33fe52c68dfefd581e1431e8"
+    },
+    {
+      "suite": "Bc2PhysicalFeed",
+      "architecture": "x86",
+      "result": "reports/coordinator-20261030-implementation22/bc2physicalfeed-x86-check01/result.json",
+      "result_sha256": "369c6582ba2ae0c85fd37bf74edd973512077e0643baf9fbfedcb770e65bdf22",
+      "command_sha256": "975bdc5cb8b7a4f79d30fe478eb2dcaea9581dcd42e67388eaa7fd1d393d4b07"
+    },
+    {
+      "suite": "Bc2PhysicalFeed",
+      "architecture": "x64",
+      "result": "reports/coordinator-20261030-implementation22/bc2physicalfeed-x64-check01/result.json",
+      "result_sha256": "68caeb3c612e575e669d91d0e82cec832a0b26b7edf32faa30ab5c935bbae5e8",
+      "command_sha256": "875e61fd570780c202776a36cc3255f87250d2530886212183903b6141fd62db"
+    },
+    {
+      "suite": "GameplaySyntax",
+      "architecture": "x86",
+      "result": "reports/coordinator-20261030-implementation22/gameplaysyntax-x86-check01/result.json",
+      "result_sha256": "a8a06036317d3acb187c6e65e20e6541c1f2d5562d5a57a51624df39d63fc525",
+      "command_sha256": "9a45644ce8ed997dfe6f21a83303585e6dbae86341c3e0b8a89a924d737ff0ba"
+    },
+    {
+      "suite": "NativeSyntax",
+      "architecture": "x86",
+      "result": "reports/coordinator-20261030-implementation22/nativesyntax-x86-check01/result.json",
+      "result_sha256": "5bda4c2890109e3b5f152d4291be4be283096ad2278aecbef5801d60459339d0",
+      "command_sha256": "3c9986f6aaac7349ad2603b1a37dfd8b1b82a481c273a755c18b08464e356384"
+    },
+    {
+      "suite": "ReloadSyntax",
+      "architecture": "x86",
+      "result": "reports/coordinator-20261030-implementation22/reloadsyntax-x86-check03/result.json",
+      "result_sha256": "a25f1505497fb9f053188c86f95325edb944cc5cee4df52506d9761e18d3c8a6",
+      "command_sha256": "1925567a100428f1769b013931a318c18260e5665c42ca8f2bb83a567af0c351"
+    },
+    {
+      "suite": "RigSyntax",
+      "architecture": "x86",
+      "result": "reports/coordinator-20261030-implementation22/rigsyntax-x86-check01/result.json",
+      "result_sha256": "daabafe298fddf39775bea401ee160bc18dfe83aaf75ce7ac7c798cf13b9ee27",
+      "command_sha256": "b45c9aa6b8de5a97047a0c6703fda759d4553b8a21a2e8eb70b86b945cc9302a"
+    }
+  ],
+  "excluded": [
+    "bc2physicalpistolslide-x86-check01",
+    "bc2physicalpistolslide-x64-check01",
+    "bc2physicalpistolslide-x86-check02",
+    "bc2physicalpistolslide-x64-check02",
+    "reloadsyntax-x86-check02 (actual compiler x64)"
+  ],
+  "evidence_level": "deterministic and syntax only",
+  "full_normal_builds": false,
+  "installed": false,
+  "pushed": false
+}

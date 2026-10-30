@@ -1,0 +1,19 @@
+DoneY: source-only MP443 after-feed evidence, durable provisional veto, typed clearance and retirement backend.
+Base77b9926; native20 proof01 SHA7877e01f24a8e9d374f0109119bdd210083acecb7eeded1bf519eef4e9b67561 reused; no repeated native trace.
+Owned: Bc2ReloadFlowRuntime.h/.cpp; new Bc2PistolAfterFeedEvidence.h and Bc2PistolAfterFeedInput.h.
+Tests added: Bc2PistolAfterFeedEvidenceTests.cpp (7 groups), Bc2PistolAfterFeedInputTests.cpp (3 groups); not run here.
+Actual ordinary request route journals original admission snapshot/request/command before InvokeNative and arms stable-resource veto.
+Exact Completed outcomes retain distinct removal/return/refill lineage, original intent, full receipt and original ReloadHoldIdentity.
+Three later genuine own Updates must begin after feed.completedNs; IDs/owner/server/native bookends and effective-neutral input remain explicit.
+Readiness requires finite exact MP443 config,2/2/0 and verified +8a/+a4/+a5; it is phase/input readiness, never native chamber.
+ReadPistolAfterFeedEvent(cursor) exposes bounded128-event admission/terminal history; state retains current resource lineage independently.
+ReadPistolAfterFeedState(resource,now) exposes debt, historical feed and fresh issued readiness; reads never renew source clocks.
+ReleasePistolAfterFeedGate({clearance}) requires exact issued fresh witness; empty debt additionally requires typed same-feed physical stroke/release.
+Scope clears only proven context+2c Fire bit0, preserving non-fire bits/dt/+28; one original call and exact compare restoration remain.
+Ammo observers use separately proven effective neutrality; raw original context and scope receipt stay distinct in reports.
+Tracking/stow/equip/space expiry cannot discard debt; actual fresh stable binding rejoins current native identity without rewriting old feed identity.
+Existing explicit actor-drain route reclaims sidecar/atomic slots and publishes ReadPistolAfterFeedActorRetirement(cursor) with exact retired resources.
+Limit: missing/expired owner or stable-resource publication withholds input-write/readiness authority; no old identity/timestamp is fabricated.
+No Git/build/test/game/process/XR/input/install/subagents; root owns validation and physical-owner/Gameplay integration.
+No actual-game all-copy veto/interrupt acceptance or headset claim; input-copy early-return and stock Abort guard are not used for pistol.
+Source frozen for root validation; backend22 retired after final handoff.

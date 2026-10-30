@@ -1,0 +1,21 @@
+Shared feed transaction implementation, 2026-10-30
+Code: include/fvr/interaction/FeedReload.h
+Tests: tests/FeedReloadTests.cpp (22 deterministic synthetic cases)
+Immutable lifetime: exact owner, mechanism, profile revision and target supply.
+Physical receipt: monotonic id, coherent input/snapshot, completion time, full candidate.
+Request embeds exact receipt, unique lifetime/request IDs and verified binding key.
+Nine feed operations remain distinct; no magazine/breech/round mapping.
+Binding admission starts disabled and grants each feed operation separately.
+Dispatch is one-shot; pending is inspection/reconciliation only, never a retry.
+Applied acknowledgement echoes the whole request and cites authoritative evidence.
+Accepted effect persists while fresh matching post-state is still awaited.
+No next request until exact ack plus fresh reconciled operation postcondition.
+Fresh neutral is required initially, after each request, and after interruption.
+Tracking/stow/gaps stop new intent and preserve pending requests/accepted effects.
+Timeouts cannot prove rejection; confirmed no-effect expiry uses exact Rejected.
+Retire requires all pending evidence resolved plus a new reconciled old-owner snapshot.
+New owner/profile/binding lifetime requires a new object with a unique token.
+Completed means transaction final effect observed; it never grants fire readiness.
+No native binding, BC2 enabling, ammo arithmetic or stock timer completion added.
+Compilation/build execution delegated to root by explicit ownership instruction.
+Root integrates FeedInteraction receipts into this API and registers the test target.

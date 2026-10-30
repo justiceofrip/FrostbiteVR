@@ -1,0 +1,597 @@
+{
+  "schema": "chat27.cinematic_manager_static_code.v1",
+  "evidence_level": "offline file-backed code",
+  "executable_sha256": "3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258",
+  "preferred_base": "0x400000",
+  "script_sha256": "1a6506e11576f290e70f847a65f307cf1cebffab928360120d4fee5e587857fb",
+  "inherited": {
+    "path": "handoff\\tasks\\CHAT27\\20261030-update18\\proof01.json",
+    "sha256": "5b4a5c5c60e3577e6814c9d6a9cc373de3433de26d48f2540b4fde7ee0272f43",
+    "used": "First/last companion uses pass companion+0x80 to0x3b1800/0x3b6300 on receiver[0x188b10()+0x14]. Relative angular output remains companion+0x90..+0xc8."
+  },
+  "scope": {
+    "maximum_units": 8,
+    "new_function_units": 8,
+    "complete_function_units": 7,
+    "partial_function_units": 1,
+    "partial_unit": "0x39cb30..0x39cb71; caller entry unknown; only removal-drain loop and tail decoded",
+    "adjacent_units": 0,
+    "unique_decoded_code_bytes": 1647,
+    "sum_saved_decode_bytes": 1647,
+    "maximum_code_bytes": 65536,
+    "ceiling_met": true,
+    "stopped_at_unit_limit": true,
+    "range_strategy": "Incremental byte ranges stop at complete single instructions; sequential chunks stop at return/unconditional jump. Explicit branches authorize continuation. Exact E8 scan authorized one additional caller tail; no backward prologue guessing."
+  },
+  "units": [
+    {
+      "rva": "0x3b1800",
+      "size": 482,
+      "sha256": "f8572894fa495ef0afd9b4ec3c4c5d15b3656421b86cb2344dfcc4b3ae117d32",
+      "meaning": "Registration: append a 0x28-byte record and set interface membership byte.",
+      "complete": true
+    },
+    {
+      "rva": "0x3b6300",
+      "size": 158,
+      "sha256": "773e83cc2c72c7024107c2d85fac5a41771b97b9c84ccf817f648d7be307677c",
+      "meaning": "Clear interface membership, then immediate or deferred removal.",
+      "complete": true
+    },
+    {
+      "rva": "0x396d90",
+      "size": 115,
+      "sha256": "47aaf8dd10d1c1681ef2be33ded797dd9b66025202c52b215257a671d08844f9",
+      "meaning": "Comparison transform: use singleton+0xac or fallback singleton+0x60.",
+      "complete": true
+    },
+    {
+      "rva": "0x188b10",
+      "size": 13,
+      "sha256": "e62b15c4b8301786ab8affe9390f9834b21092920d8794cdba0ac25fa6771a21",
+      "meaning": "Return KERNEL32!TlsGetValue result using stored TLS index.",
+      "complete": true
+    },
+    {
+      "rva": "0x394280",
+      "size": 233,
+      "sha256": "c66f38191aff9ce80c4308b6dbd058329dc06aad3d1cce9b38bf227805f19a9e",
+      "meaning": "Find matching registration, release subhandles, virtual+4 callback, swap-remove record.",
+      "complete": true
+    },
+    {
+      "rva": "0x1315e0",
+      "size": 86,
+      "sha256": "8c5323587af20acd127815931fecb417b01f305b0bcb71380ac2ab2e943de27f",
+      "meaning": "Copy twelve padded matrix floats from receiver+0x10..+0x48 to output.",
+      "complete": true
+    },
+    {
+      "rva": "0x39cb30",
+      "size": 65,
+      "sha256": "4ed1acbac0931296e434f73624d265014f11d269c0a5b2f5869d142bcf3847f2",
+      "meaning": "Partial caller tail: drain deferred removals unless interface membership was restored.",
+      "complete": false
+    },
+    {
+      "rva": "0x3abc90",
+      "size": 495,
+      "sha256": "f0570a1c8aedb9046586de13fd4b5821545d48409b2ecd21c0ba578a4b1d2d0f",
+      "meaning": "Initialize the separate comparison-transform singleton; no selected-player join.",
+      "complete": true
+    }
+  ],
+  "instructions": [
+    {
+      "rva": "0x3b1810",
+      "size": 4,
+      "sha256": "baf69dacc532a48342611a07a5f651aca2aa7680f7bf13b0d3cef1a02faa5f3c",
+      "bytes": "807b0400",
+      "meaning": "Entry ignores interfaces whose membership byte+4 is already set."
+    },
+    {
+      "rva": "0x3b1829",
+      "size": 4,
+      "sha256": "bc2e99c868fb4241f9c3c53d00fce6177621cfaee1c2949486da54d91299344a",
+      "bytes": "895c2438",
+      "meaning": "Registration record begins with the incoming interface pointer."
+    },
+    {
+      "rva": "0x3b1844",
+      "size": 3,
+      "sha256": "02202d2bd08d6f4db3ea66b963a71eb024fc2caa4981d035fee587d51065df75",
+      "bytes": "8b501c",
+      "meaning": "Optional comparison path reads interface virtual slot+0x1c."
+    },
+    {
+      "rva": "0x3b188e",
+      "size": 3,
+      "sha256": "58f3539af42aa4b631ed62a8b19537266928370de9757283d34ed681b25d6bc6",
+      "bytes": "8b522c",
+      "meaning": "Optional comparison path reads interface virtual slot+0x2c."
+    },
+    {
+      "rva": "0x3b199d",
+      "size": 3,
+      "sha256": "15787865c306def5273eaae77864dc3093979674832f32d1dfdbd9f55498d690",
+      "bytes": "8d4f04",
+      "meaning": "Registration collection header is manager+4."
+    },
+    {
+      "rva": "0x3b19aa",
+      "size": 3,
+      "sha256": "e7a9e44b007fd70ed1b45a062461a8127a1502137841e509479c198dd8099bb4",
+      "bytes": "8d5728",
+      "meaning": "Record stride is0x28 bytes."
+    },
+    {
+      "rva": "0x3b19b2",
+      "size": 5,
+      "sha256": "ed40c66b18ae6f33ca449611f324da2718d5800c874fd174f5f8a7a5a4c14f00",
+      "bytes": "b90a000000",
+      "meaning": "Fast append copies ten dwords."
+    },
+    {
+      "rva": "0x3b19bd",
+      "size": 4,
+      "sha256": "1ae4d313cdd7c0cfdd2f667d9575071a58712f1a045c517671aa5203325dea4b",
+      "bytes": "c6430401",
+      "meaning": "Fast append sets interface membership byte+4."
+    },
+    {
+      "rva": "0x3b19d5",
+      "size": 4,
+      "sha256": "1ae4d313cdd7c0cfdd2f667d9575071a58712f1a045c517671aa5203325dea4b",
+      "bytes": "c6430401",
+      "meaning": "Growth append also sets interface membership byte+4."
+    },
+    {
+      "rva": "0x3b6315",
+      "size": 4,
+      "sha256": "6e27549c20419bcbbd24c8e2ac1f205371d64739662b20ee69c57c01cddd7445",
+      "bytes": "c6470400",
+      "meaning": "Removal clears interface membership byte+4 before taking either path."
+    },
+    {
+      "rva": "0x3b6319",
+      "size": 4,
+      "sha256": "1b0ff47a75c089faee326ee03300e9eea0ab0cdf45e1485d06c663f05e17371c",
+      "bytes": "807e5000",
+      "meaning": "Manager+0x50 selects immediate versus queued removal; exact field semantics unproved."
+    },
+    {
+      "rva": "0x3b6347",
+      "size": 3,
+      "sha256": "a47ef8a50cb37d6293d184d3e52207c619eaf9a99a01f367a5d9ded5c9d86222",
+      "bytes": "8d4e14",
+      "meaning": "Deferred removal collection header is manager+0x14."
+    },
+    {
+      "rva": "0x3b635c",
+      "size": 2,
+      "sha256": "1aace8871496ce645e91d6faf40093becd6152a5cf5cb7c1536edce2cb65a6d4",
+      "bytes": "8938",
+      "meaning": "Deferred removal retains the same interface pointer."
+    },
+    {
+      "rva": "0x3942b4",
+      "size": 2,
+      "sha256": "2f483875efeee19e1a2b859ee56468234b69415315856d5dfbc914bd7bed5445",
+      "bytes": "390f",
+      "meaning": "Immediate removal matches the first dword of each record against interface."
+    },
+    {
+      "rva": "0x3942d1",
+      "size": 3,
+      "sha256": "d539d1cec930823bf0dcbe0602c0ec6b677d59756621543f7413eb6e8d57ff90",
+      "bytes": "83c728",
+      "meaning": "Immediate removal scans in0x28-byte strides."
+    },
+    {
+      "rva": "0x394323",
+      "size": 3,
+      "sha256": "364358a845464b47e0942274b71fd6d951b142c92c651ef1ff85117a54dde6e5",
+      "bytes": "8b2c2f",
+      "meaning": "Matched record first dword supplies callback receiver."
+    },
+    {
+      "rva": "0x39432d",
+      "size": 3,
+      "sha256": "067d93ed1fe3f5434bb323607c973e8fb2a9ee0d9dc9f2990915a5f493f9ab6d",
+      "bytes": "8b4204",
+      "meaning": "Matched interface virtual+4 callback; target unresolved."
+    },
+    {
+      "rva": "0x39435b",
+      "size": 2,
+      "sha256": "cb8d5c44f9ef5bfeb98c24d466cd6e172cc06e530a120b977668d061087a808b",
+      "bytes": "f3a5",
+      "meaning": "Last record replaces removed record."
+    },
+    {
+      "rva": "0x39435d",
+      "size": 4,
+      "sha256": "fb58f7545b336ff8650575233da3656c7062da9a488d3ac4c995ec72a38d75ce",
+      "bytes": "834308d8",
+      "meaning": "Collection end moves back by0x28."
+    },
+    {
+      "rva": "0x39cb32",
+      "size": 4,
+      "sha256": "8696a41591258e94e4bbca8b5c40de32ed5159d5c6a5298089a850bec72406f7",
+      "bytes": "80780400",
+      "meaning": "Deferred drain skips removal when membership byte has become nonzero again."
+    },
+    {
+      "rva": "0x39cb39",
+      "size": 2,
+      "sha256": "516d98b8f7e112c7ab40cf0397e0c0231765f39a38298f43fccc3f60a7f096e1",
+      "bytes": "8bce",
+      "meaning": "Deferred drain passes the same manager receiver to immediate removal."
+    },
+    {
+      "rva": "0x39cb51",
+      "size": 3,
+      "sha256": "bb45e1c5d7058ce21178a514da2b21f76912a0e840f61cc6e471c79b8143b8b1",
+      "bytes": "895618",
+      "meaning": "Deferred drain resets end to begin."
+    },
+    {
+      "rva": "0x188b10",
+      "size": 5,
+      "sha256": "c40a2c7d5bff639c6c756fa2df40f7cb4368636085795fab33e71906714e2890",
+      "bytes": "a1a8715601",
+      "meaning": "TLS index is read from RVA0x11671a8."
+    },
+    {
+      "rva": "0x188b16",
+      "size": 6,
+      "sha256": "c2bd41a8118392b4416ed5920723cd28f8f574816fc06ddc92aedb28343a578d",
+      "bytes": "ff1554534001",
+      "meaning": "Imported call through IAT RVA0x1005354, verified KERNEL32!TlsGetValue."
+    },
+    {
+      "rva": "0x396d93",
+      "size": 6,
+      "sha256": "10392732f4c3d578d91e765f1063f2b4a4afb5cf3beba742d03a62cb068810ff",
+      "bytes": "8b8fac000000",
+      "meaning": "Separate comparison singleton+0xac supplies matrix-copy source."
+    },
+    {
+      "rva": "0x396de2",
+      "size": 3,
+      "sha256": "c1e122f5cdfd15c2643c66022a62c12ce3a28b90a5c03e2a7c532af5d6222840",
+      "bytes": "83c760",
+      "meaning": "Fallback transform begins at comparison singleton+0x60."
+    },
+    {
+      "rva": "0x1315e6",
+      "size": 3,
+      "sha256": "7c7e4eafe441828143ae8e399f63f6845301d7aa918da3e13d8104f305f75c16",
+      "bytes": "d94110",
+      "meaning": "Matrix copy starts reading receiver+0x10."
+    },
+    {
+      "rva": "0x13162a",
+      "size": 3,
+      "sha256": "7fefb6692afbd0d5f5b7e4d6b493c0e76ce8642223bdd06ba90cedbeef13dd4e",
+      "bytes": "d94148",
+      "meaning": "Matrix copy final source float is receiver+0x48."
+    },
+    {
+      "rva": "0x3abd0f",
+      "size": 6,
+      "sha256": "4999952c73fd1d602f3c69ca89b21e593c41f32886e5968a2bfc5a0b956d3591",
+      "bytes": "899eac000000",
+      "meaning": "Comparison singleton constructor initializes source+0xac to null."
+    }
+  ],
+  "direct_calls": [
+    {
+      "rva": "0x3b238f",
+      "size": 5,
+      "sha256": "3cea8104744325a0e3981ea4ae6652be7cebd8e0ec9b4043dc574601b6d97769",
+      "target_rva": "0x3b1800",
+      "role": "Inherited first-use manager registration edge.",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x3b6ba1",
+      "size": 5,
+      "sha256": "e3c33a4b0b35ac11ee6f5b759d62554df673610b5eba48a9290adfb9f2531636",
+      "target_rva": "0x3b6300",
+      "role": "Inherited last-use removal edge.",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x3b1868",
+      "size": 5,
+      "sha256": "20d3bffd14d850fe68d6091ac0c62504e30d4abb51a496bcd408253734be1f19",
+      "target_rva": "0x3abc90",
+      "role": "Lazy initialize separate comparison singleton.",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x3b1887",
+      "size": 5,
+      "sha256": "e076f81b391596edac3060fb2971ddad2d6b13a11b5a5b19a288a5aab87e727d",
+      "target_rva": "0x396d90",
+      "role": "Read separate comparison transform.",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x3b191a",
+      "size": 5,
+      "sha256": "a3896fa69bfc0a6448a5a99cd0436c1c65893c8f84297fb5bb8dd823316389ee",
+      "target_rva": "0x3abc90",
+      "role": "Second guarded comparison singleton initialization.",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x3b19d0",
+      "size": 5,
+      "sha256": "4f61555a823a4d56c197514e53298cbc51c2d700d6b8b9975fc010bfd98aa71c",
+      "target_rva": "0x3ad020",
+      "role": "Record storage growth helper, undecoded.",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x3b6391",
+      "size": 5,
+      "sha256": "c59642628059f4d9dd6d23c35af719a92c0e17b2e1a8c3abc34f998d47d15e76",
+      "target_rva": "0x394280",
+      "role": "Immediate removal branch.",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x396da3",
+      "size": 5,
+      "sha256": "48040f9e54374fd685177111d3c81a38ba0c2b7ec942b8b74e209ae8e3eeb6c5",
+      "target_rva": "0x1315e0",
+      "role": "Copy selected comparison object matrix, object identity unproved.",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x396de8",
+      "size": 5,
+      "sha256": "e952fa84f6b625fd683209bb9a464d0b6349471e4d539b1535940c47252d4d35",
+      "target_rva": "0x3810",
+      "role": "Fallback matrix-copy helper, undecoded.",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x396dfa",
+      "size": 5,
+      "sha256": "ca6d9d7cf378eb79e208e021dce263cb9b2053ed413b22cc78d33dce7ebb683d",
+      "target_rva": "0x3810",
+      "role": "Null-source fallback copy, undecoded.",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x3942e9",
+      "size": 5,
+      "sha256": "1ce9b6fe55758885ff012a9448e9d082f917108096eb2f6c4a2281a86406034b",
+      "target_rva": "0x188b10",
+      "role": "Get TLS context for subhandle release service.",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x39430c",
+      "size": 5,
+      "sha256": "7f37eec7583621d824ef0865e0667a81b96a7301050c516a3681888d77eb1da9",
+      "target_rva": "0xc38580",
+      "role": "Release record subhandle, undecoded.",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x39cb3b",
+      "size": 5,
+      "sha256": "b3ade4a0fe7ea366632ac62616e6cba5e1b1fb73b6cb3c7f20a7d63cedc22599",
+      "target_rva": "0x394280",
+      "role": "Additional direct caller discovered by exact E8 target scan; loop-back proves local instruction boundary.",
+      "callee_decoded": true
+    }
+  ],
+  "tls_import": {
+    "dll": "KERNEL32.dll",
+    "name": "TlsGetValue",
+    "iat": {
+      "rva": "0x1005354",
+      "size": 4,
+      "sha256": "337a867d4f5ba9e39ce759613ac1bc24b14be82e9a1c2537703620f60a0b9e9d"
+    },
+    "descriptor": {
+      "rva": "0x10e53b4",
+      "size": 20,
+      "sha256": "e4e6ea805b49d7d2c5fe8793812b23fa828c264b2b7ec70a0ebf863967070c80"
+    },
+    "lookup": {
+      "rva": "0x10e5960",
+      "size": 4,
+      "sha256": "337a867d4f5ba9e39ce759613ac1bc24b14be82e9a1c2537703620f60a0b9e9d"
+    }
+  },
+  "findings": {
+    "retention": "Yes.0x3b1800 retains incoming companion+0x80 in a0x28-byte manager+4 collection record. Interface+4 (companion+0x84) prevents duplicate registration and becomes1 after append.",
+    "comparison": "When a global gate and interface virtual+0x1c allow it, registration calls interface virtual+0x2c for a transform, compares its translation to a separate singleton transform from0x396d90, and derives an integer field in the record. Helper0x1315e0 only copies12 floats; singleton source+0xac ownership is not established. This is a comparison source, not proof the companion is selected.",
+    "removal": "0x3b6300 clears interface+4. If manager+0x50 is zero,0x394280 immediately locates the record, releases recorded subhandles, calls interface virtual+4, and swap-removes it. Otherwise it queues the interface in manager+0x14 with lock-shaped helper calls.",
+    "queued_drain": "Verified caller tail0x39cb30 checks each queued interface+4, removes only still-cleared entries through0x394280, then resets the queue end to begin. Full caller entry and scheduling owner remain unproved.",
+    "tls": "0x188b10 is KERNEL32!TlsGetValue(global TLS index RVA0x11671a8); manager is TLS-context+0x14, not established as local-player view manager.",
+    "lifetime": "Inherited first/last-use count boundaries control registration and clearing/queueing of removal. They establish interface registration lifetime, not actual selected cinematic lifetime.",
+    "selection": "No decoded chain connects retained interface output, inherited companion+0x90..+0xc8 angular matrix, or manager membership to the selected local-player view, active blend ownership, entry/exit view authority, or HUD suppression."
+  },
+  "source_implementation": {
+    "supported_correction": false,
+    "production_modified": false,
+    "reason": "No supported selected-view/HUD predicate or source correction follows from registration lifetime. Do not gate production policy on camera state4, companion+0x84/+0xfd/count+0xdc, or manager collection membership."
+  },
+  "next_unresolved_edge": {
+    "callsite_rva": "0x3b1898",
+    "dispatch": "[vtable(companion+0x80)+0x2c]",
+    "argument": "Output matrix storage passed on stack by registration path.",
+    "required": "Resolve the constructor-assigned table for companion+0x80 and its exact+0x2c target, then identify the manager collection update consumer and its actual selected local-player-view join.",
+    "related_callsite": "0x394332 invokes the same retained interface virtual+4 on removal; target remains unresolved.",
+    "limit": "Registration, transform comparison, and deferred cleanup remain insufficient to derive active-cinematic or HUD conditions."
+  },
+  "execution": {
+    "game": false,
+    "desktop_tests": false,
+    "builds": false,
+    "tests": false,
+    "process_access": false,
+    "input": false,
+    "xr": false,
+    "profiles": false,
+    "installs": false,
+    "packages": false,
+    "subagents": false,
+    "git": false
+  },
+  "verification": "File hash, inherited proof hash, complete bounded decode coverage, saved decode hashes, exact instruction bytes, direct-call destinations and TLS import identity checked. Decoder development failures were parser/truncation handling and did not introduce additional function units.",
+  "saved_decodes": [
+    {
+      "rva": "0x1315e0",
+      "size": 86,
+      "sha256": "8c5323587af20acd127815931fecb417b01f305b0bcb71380ac2ab2e943de27f",
+      "decode_sha256": "d1003c1aa571d7bea54d53afc041601b33b91404f3309a56ed33b64268117c2b",
+      "instruction_count": 31,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-manager\\decode-001315e0-56.txt"
+    },
+    {
+      "rva": "0x188b10",
+      "size": 13,
+      "sha256": "e62b15c4b8301786ab8affe9390f9834b21092920d8794cdba0ac25fa6771a21",
+      "decode_sha256": "e97d91cd833164e6cbd9f6109fa9e92a0532494d7c13fb694207f6a614771931",
+      "instruction_count": 4,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-manager\\decode-00188b10-d.txt"
+    },
+    {
+      "rva": "0x394280",
+      "size": 96,
+      "sha256": "6889a3769eed2fb8f3cf3dce578e15975c0cdc73e51cfc0a484593e621f63844",
+      "decode_sha256": "d5489a06adcf52ad4f3b96d905b6c87d1b3e83a60235e9a2d915718459f9c3de",
+      "instruction_count": 41,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-manager\\decode-00394280-60.txt"
+    },
+    {
+      "rva": "0x3942e0",
+      "size": 137,
+      "sha256": "fef2536459fe481f56f8a9b73de7f5216737794e6ecef43488e7b6b44a3d042f",
+      "decode_sha256": "bfd36bd914d3061b37692db8e531c090b73bef75d9bb1766dd0ecaef8a63b4c2",
+      "instruction_count": 50,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-manager\\decode-003942e0-89.txt"
+    },
+    {
+      "rva": "0x396d90",
+      "size": 98,
+      "sha256": "abb5917ec7d12e9a8e34f5f5d2c02adfeca99dec3af4f0344b12252a148e2bf3",
+      "decode_sha256": "6347ef6960e56e22c8cd906435ee0d4ca543039b5c79b03a65d6b55d657d9a5e",
+      "instruction_count": 36,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-manager\\decode-00396d90-62.txt"
+    },
+    {
+      "rva": "0x396df2",
+      "size": 17,
+      "sha256": "ac9845dd966cca5044457d41159a8e3a740e342375ba810710b7498ad34a8af8",
+      "decode_sha256": "49e8ff68c4865e8ac10a079d44ebac4b5d0c7c4863c1088a3fca3a7c709de0a2",
+      "instruction_count": 6,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-manager\\decode-00396df2-11.txt"
+    },
+    {
+      "rva": "0x39cb30",
+      "size": 9,
+      "sha256": "7b1e075e82f5309d3bf4a64d300afb99462379402ddf69ea0af53522fa2b5333",
+      "decode_sha256": "6091ceee05b8839c024b0e6fc2c02bfd8eaab0835fb972180f803c7f6d00b161",
+      "instruction_count": 4,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-manager\\decode-0039cb30-9.txt"
+    },
+    {
+      "rva": "0x39cb39",
+      "size": 2,
+      "sha256": "516d98b8f7e112c7ab40cf0397e0c0231765f39a38298f43fccc3f60a7f096e1",
+      "decode_sha256": "921aefcb395f6e07d3ebf9d8f824d15a7d22d422a3d73f666f0cf14d4bdc1f88",
+      "instruction_count": 1,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-manager\\decode-0039cb39-2.txt"
+    },
+    {
+      "rva": "0x39cb3b",
+      "size": 54,
+      "sha256": "abeeeec8286227e020099a863dc2f872d56eeb3c7da587c4b526419ece5be8c9",
+      "decode_sha256": "ca82529246dfdb2fee6edde1f12ee9866e1372b2801d925b5c41e80bdb92d002",
+      "instruction_count": 18,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-manager\\decode-0039cb3b-36.txt"
+    },
+    {
+      "rva": "0x3abc90",
+      "size": 440,
+      "sha256": "036c8946d5735ad282a063678811e8384d8125aa0fef5b2ed0b94cfd9797954f",
+      "decode_sha256": "ce5d55f6a701135efeb9b4b9cd76e09f6736d07c62383f743ec6eb56eda7ffb9",
+      "instruction_count": 82,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-manager\\decode-003abc90-1b8.txt"
+    },
+    {
+      "rva": "0x3abe48",
+      "size": 55,
+      "sha256": "48ca121fdb5f7b84ec589fe42369204f387c0a90241fa1713b68b2e7f6a3a539",
+      "decode_sha256": "6aa3fafc9bb59cef29edfcb8ae697e056428e5ba03cff8782d1ab43e52b3544a",
+      "instruction_count": 12,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-manager\\decode-003abe48-37.txt"
+    },
+    {
+      "rva": "0x3b1800",
+      "size": 77,
+      "sha256": "dc6dfc265530c56c47dcb5d1929289c2e3752900cfc730e00f1f526673489042",
+      "decode_sha256": "9a0af8d9bd8a372f98369312dc61e82b8bd18d6fb1e646f3a0fc034ade2c3076",
+      "instruction_count": 24,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-manager\\decode-003b1800-4d.txt"
+    },
+    {
+      "rva": "0x3b184d",
+      "size": 327,
+      "sha256": "3ab56c310d836b593e4a7ea078c1a755031649ba21828784df2684c2be680cb0",
+      "decode_sha256": "e2aced34b18eb2416f79a6feec64772d693ffc8100ab6e661a0c044c04500ca1",
+      "instruction_count": 80,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-manager\\decode-003b184d-147.txt"
+    },
+    {
+      "rva": "0x3b1994",
+      "size": 54,
+      "sha256": "7484d974ebcc444a8b9f9398a9ad34fbd99f63a7b16806d178f4b4b042a17424",
+      "decode_sha256": "b8f9bedd59565dcfaf559eb203c46947a313500135353e87e2ae28009f8d6fac",
+      "instruction_count": 20,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-manager\\decode-003b1994-36.txt"
+    },
+    {
+      "rva": "0x3b19ca",
+      "size": 24,
+      "sha256": "4b130d58e78376a62fa7edd6e8cb0a62447137ae68eaecc7ff2c86adb9a24d28",
+      "decode_sha256": "1dd8f5aa60818e1ecd836be3c8640b514ea275e365ad36c63ebc7b1664ef3d6e",
+      "instruction_count": 11,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-manager\\decode-003b19ca-18.txt"
+    },
+    {
+      "rva": "0x3b6300",
+      "size": 96,
+      "sha256": "987ebb45426d55b95cf3e4e98a69b7629e625ddbaf4e6b5bcfb7c55063742906",
+      "decode_sha256": "125a238504147ec3a74249376c268ff097d6a2d4f8fe0b460f9f7086c759e061",
+      "instruction_count": 31,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-manager\\decode-003b6300-60.txt"
+    },
+    {
+      "rva": "0x3b6360",
+      "size": 48,
+      "sha256": "086f06e9ea216c0bc3c28c39d1d993c435b9c595f876ff79a4bab706a6114554",
+      "decode_sha256": "28e9526465e65d4237099530ea8926a57e20a661400e8a5e3690bb3f9d2dc32a",
+      "instruction_count": 16,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-manager\\decode-003b6360-30.txt"
+    },
+    {
+      "rva": "0x3b6390",
+      "size": 14,
+      "sha256": "cc8c004bb080e7d09c00c6eaeb18127511d2268332fd1afebb96ab3cbcd93f62",
+      "decode_sha256": "24cf1e17f567542a40844c317253d3d42d6f2712cec9eea89a8927e4a33bd42e",
+      "instruction_count": 6,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-manager\\decode-003b6390-e.txt"
+    }
+  ]
+}

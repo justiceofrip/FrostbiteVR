@@ -1,0 +1,23 @@
+DoneY: exact callback investigation completed; cinematic facing/HUD correction still unsupported.
+Assigned worktree campaign-coordinator-20261028-r1, supplied HEAD6ac2281909436510172bbbf562cf46318dca98da; no Git queried.
+Exact EXE SHA2563911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258 verified.
+Files: cinematic_callback.py, proof01.json, this handoff; preserved scratch under implementation18/cinematic-callback.
+Proof SHA2560f8b8f1ee38729d7103ac63df99363daf505a05cbf6ab6b45b78271032b22227.
+Eight NEW function units, zero adjacent units,1517function bytes,1543unique code/padding bytes; stopped at8.
+Inherited owner+0xdc callback0x49dc10 forwards fourth argument to whole-camera callee0x4955a0.
+NEW:0x4955a0 handles two angular channels, not an admitted cinematic activation transition.
+It reads forwarded payload selectors4/5 through0x2128f0 and float[payload+0xa0] through0x212b80.
+Camera+0xe0/+0xe4 hold count/sum/mean channel state; both null returns without output.
+Angles camera+0xe8/+0xec use settings=[[camera+0xc]+0xe0], bounds+0x94/+0x90 and mode byte+0x98.
+Relative mode uses signed channel mean*bound; alternate mode accumulates payload scalar*pi and clamps.
+Imported _CIcos/_CIsin prove the first angle constructs a Y-axis rotation; second helper0x12ee00 remains undecoded.
+Final call0x495a0a ->0x38c640 copies12floats through [camera+0xd4] to+0x90..+0xc8.
+Singleton helper0x3af9e0 returns RVA0x1170d80;0x38d550 reads its selected scalar ratio.
+Its objects+0xac/+0xb0 are NOT joined to this camera; active-camera identities remain unproved.
+No local-player/current-view selection, entry/exit/skip, blend authority or HUD suppression evidence.
+Do not treat channel pointers, event receipt or camera existence as an active-cinematic predicate.
+NEXT exact edge:0x495d70, known caller0x49dba8, camera primary+0xb4 candidate and whole-camera receiver.
+Question: does that update consume the proved relative matrix and join the animated camera to a selected player view?
+No production changes, adapter enablement, signature installation or patch ownership requested.
+File-only verifier passed; no desktop/game/process/XR/input/build/test/profile/install/package/subagent work.
+Retired. Root owns any next bounded decoder and all source/runtime decisions.

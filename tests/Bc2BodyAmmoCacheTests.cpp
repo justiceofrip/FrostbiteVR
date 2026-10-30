@@ -25,7 +25,9 @@ int ExactOwnedGeometry(){Fixture f;auto bytes=f.Pack();const auto result=f.Parse
     const auto z=g.sections.front().mesh.vertices.front().z;CHECK(Near(z,-.03f));bytes.assign(bytes.size(),std::byte{});CHECK(g.sections.front().mesh.vertices.front().z==z);return 0;}
 int RejectMalformedBeforeAnyUpload(){Fixture f;const auto valid=f.Pack();
     for(std::size_t count=0;count<valid.size();++count){const auto result=f.Parse(std::span(valid).first(count));CHECK(!result.catalog&&result.status!=BodyAmmoCacheStatus::Loaded);}
-    auto bytes=valid;bytes[0]=std::byte{0};CHECK(f.Parse(bytes).status==BodyAmmoCacheStatus::Header);bytes=valid;bytes[8]=std::byte{65};CHECK(f.Parse(bytes).status==BodyAmmoCacheStatus::Count);
+    auto bytes=valid;bytes[0]=std::byte{0};CHECK(f.Parse(bytes).status==BodyAmmoCacheStatus::Header);bytes=valid;
+    for(unsigned n=0;n<4;++n)bytes[8+n]=std::byte(((MaxBodyPropAssets+1)>>(n*8))&255);
+    CHECK(f.Parse(bytes).status==BodyAmmoCacheStatus::Count);
     bytes=valid;bytes.push_back(std::byte{});CHECK(f.Parse(bytes).status==BodyAmmoCacheStatus::Trailing);
     bytes=valid;bytes[14]=std::byte{'X'};CHECK(f.Parse(bytes).status==BodyAmmoCacheStatus::Identity);
     bytes=valid;bytes[bytes.size()-15]=std::byte{1};CHECK(f.Parse(bytes).status==BodyAmmoCacheStatus::Geometry);return 0;}

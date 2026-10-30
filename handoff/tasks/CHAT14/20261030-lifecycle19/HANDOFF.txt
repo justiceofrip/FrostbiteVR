@@ -1,0 +1,20 @@
+Done Y: source-level M60 backend lifecycle closure; frozen for coordinator validation.
+Exclusive source edits: Bc2FeedEquipmentAdapter.h; Bc2ReloadFlowRuntime.h/.cpp; Bc2FeedEquipmentAdapterTests.cpp.
+Native views carry an opaque immutable issuedSource witness tied to the exact adapter instance and exact original view fields.
+Witness lifetime follows retained view/submission ownership, independent of the bounded 64-observation history; no unbounded registry or clock renewal.
+Only noEntryOnly retention may use an evicted witness. Actual new transfer admission still requires history membership and fresh exact live view/counts.
+Missing/forged/substituted witnesses and old adapter-instance proof reject; actor retirement removes the exact old enrollment.
+Delayed rejection still needs genuine later neutral unchanged own-server and both client Updates; no native Call/Transfer is admitted by retention.
+FeedEquipmentActorDrain and FeedEquipmentActorRetirement are typed feed evidence; ordinary AmmunitionCommand is never substituted.
+ReadFeedEquipmentActorRetirement(afterEvent) returns earliest retained event after cursor; FeedEquipmentActorRetirementValid checks the public proof.
+RetireAmmoForReplacementActor now independently finds feed-only retained native actors, including when ordinary resource service has no actor.
+Existing Active/requestEntryGate/callbackRevision/OwnerCopyGate/cleanupOwnerEpoch path verifies real fresh native actor replacement and drained callbacks.
+M60 replacement reserve observation reuses the existing six timing words plus original structural/count reads; ordinary config grants are unchanged.
+Only exact previous native actor plus actorGeneration loses pending/refused/enrollment/view slots; unrelated actors remain retained.
+Sixty-four exact command receipts survive retirement; sixty-four typed actor audit events retain identities, pending feed command, counts and ambiguity.
+Drained reports include feed_actor_retirements; retirement never fabricates Applied/Rejected ammunition success for an ambiguous old effect.
+The old actor's Armed callback handoff is reclaimed only under the same actual native invocation exclusion, after draining any available exact row.
+Twenty deterministic test definitions include 80-observation expired retry, source forgery/new issuer, exact drained replacement, unrelated debt and 24 feed-only respawns.
+Tests/builds were NOT EXECUTED by this worker. Coordinator owns x86/x64 checks and frontend claim release/Equipment slot retirement wiring.
+No Git, game/input/process-memory/XR/install, shared-document or subagent action. Source remains uninstalled/unpublished.
+Actual native actor-replacement/no-entry episodes and headset acceptance remain distinct, unverified production evidence.

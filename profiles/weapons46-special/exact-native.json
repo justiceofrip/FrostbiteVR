@@ -1,0 +1,590 @@
+{
+  "schema": "fvr.bc2.fixed_container_native_exact.v1",
+  "records": [
+    {
+      "native_name": "MP412",
+      "weapon_class": "wcSmg",
+      "resource": "Objects/Weapons/Handheld/MEC_hg_MP412rex/MEC_hg_MP412rex.dbx",
+      "resource_sha256": "6479ac2e4e3d68887ae0c202e3dee4d703a65fa5a83188e8f6d963660e854a2e",
+      "instance_guid": "811B1F2B-4413-41A1-B7F0-0AED8A1D527A",
+      "firing_resource": "Objects/Weapons/Handheld/MEC_hg_MP412rex/MEC_hg_MP412rex_Firing.dbx",
+      "firing_sha256": "9d58266d67146ff22cba9ef6324045172c58fa1d942efce16aad57c9b1b15c06",
+      "firing_guid": "5C2989F1-DFE4-4945-8834-4A9532FA6FF1",
+      "function_resource": "Objects/Weapons/Handheld/MEC_hg_MP412rex/MEC_hg_MP412rex_Firing.dbx",
+      "function_sha256": "9d58266d67146ff22cba9ef6324045172c58fa1d942efce16aad57c9b1b15c06",
+      "function_guid": "21E2DC7B-A46D-4B12-BD1D-F3181BF80EB7",
+      "fields": {
+        "FireLogic.ReloadLogic": {
+          "value": "rlWeaponSwitchCancelsUnfinishedReload",
+          "encoding": "string",
+          "offset": 7191
+        },
+        "FireLogic.ReloadType": {
+          "value": "rtMagazine",
+          "encoding": "string",
+          "offset": 7196
+        },
+        "FireLogic.ReloadTime": {
+          "value": 4.099999904632568,
+          "encoding": "float32",
+          "offset": 7113
+        },
+        "FireLogic.ReloadDelay": {
+          "value": 0.0,
+          "encoding": "float32",
+          "offset": 7103
+        },
+        "FireLogic.ReloadThreshold": {
+          "value": 0.8500000238418579,
+          "encoding": "float32",
+          "offset": 7133
+        },
+        "FireLogic.PostReloadSequenceTime": {
+          "value": 0.0,
+          "encoding": "float32",
+          "offset": 7123
+        },
+        "FireLogic.RateOfFire": {
+          "value": 200.0,
+          "encoding": "float32",
+          "offset": 7082
+        },
+        "FireLogic.FireLogicType": {
+          "value": "fltSingleFire",
+          "encoding": "string",
+          "offset": 7201
+        },
+        "FireLogic.FireInputAction": {
+          "value": "EiaFire",
+          "encoding": "string",
+          "offset": 7051
+        },
+        "FireLogic.ReloadInputAction": {
+          "value": "EiaReload",
+          "encoding": "string",
+          "offset": 7065
+        },
+        "FireLogic.BoltAction.BoltActionDelay": {
+          "value": 0.0,
+          "encoding": "float32",
+          "offset": 6916
+        },
+        "FireLogic.BoltAction.BoltActionTime": {
+          "value": 0.0,
+          "encoding": "float32",
+          "offset": 6926
+        },
+        "FireLogic.BoltAction.HoldBoltActionUntilFireRelease": {
+          "value": false,
+          "encoding": "bool",
+          "offset": 6936
+        },
+        "FireLogic.BoltAction.HoldBoltActionUntilZoomRelease": {
+          "value": false,
+          "encoding": "bool",
+          "offset": 6943
+        },
+        "Ammo.MagazineCapacity": {
+          "value": 6,
+          "encoding": "int32",
+          "offset": 7214
+        },
+        "Ammo.NumberOfMagazines": {
+          "value": 4,
+          "encoding": "int32",
+          "offset": 7225
+        },
+        "Ammo.AmmoPickupMinAmount": {
+          "value": 5,
+          "encoding": "int32",
+          "offset": 7247
+        },
+        "Ammo.AmmoPickupMaxAmount": {
+          "value": 10,
+          "encoding": "int32",
+          "offset": 7257
+        },
+        "Ammo.AutoReplenishMagazine": {
+          "value": false,
+          "encoding": "bool",
+          "offset": 7268
+        },
+        "Shot.NumberOfBulletsPerShell": {
+          "value": 1,
+          "encoding": "int32",
+          "offset": 6784
+        },
+        "Shot.NumberOfBulletsPerShot": {
+          "value": 1,
+          "encoding": "int32",
+          "offset": 6795
+        }
+      },
+      "weapon_states": [
+        {
+          "index": 0,
+          "mesh_asset_references": [
+            "objects/weapons/handheld/mec_hg_mp412rex/mec_hg_mp412rex_mesh/397bd7e7-52b2-11db-b6db-d77c9124e8ad"
+          ],
+          "animation_tree_references": {
+            "AnimTree1p": "objects/weapons/handheld/mec_hg_mp412rex/mec_hg_mp412rex_animtree1p/b0427fed-f073-4cb3-866d-e32fa2f13630",
+            "AnimTree3p": "objects/weapons/handheld/mec_hg_mp412rex/mec_hg_mp412rex_animtree3p/5a5c97dd-d122-4fcd-ab6f-a4030b2928a0"
+          },
+          "fields": {
+            "IsPumpAction": false,
+            "IsOneHanded": true,
+            "AnimatedFireType": "AnimatedFireSingle",
+            "AnimatedAimingType": "AnimatedAimingTwoHanded",
+            "SkipReloadAnimation": false
+          },
+          "missing": []
+        }
+      ],
+      "abort_reload_on_sprint": false,
+      "missing_fields": [],
+      "runtime_admitted": false,
+      "scope": "Exact authored data/reference chain, not a native object ABI or current live configuration",
+      "origin_archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+      "origin_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+    },
+    {
+      "native_name": "Garand",
+      "weapon_class": "wcAssault",
+      "resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Assault.dbx",
+      "resource_sha256": "a41b2e7bb7f7e8af83521a60106fa23fbec462dd740fbac2230898a1519cb83b",
+      "instance_guid": "4BC8D46C-CC7B-4993-8BBE-09E708BEF4FA",
+      "firing_resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Firing.dbx",
+      "firing_sha256": "131015bf44b1a8ad7a3eb42f21a6c74a1a49dc748d2bf993350d9e439ea79f16",
+      "firing_guid": "5932B06B-F9F3-43BF-8D65-391F4FB7625B",
+      "function_resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Firing.dbx",
+      "function_sha256": "131015bf44b1a8ad7a3eb42f21a6c74a1a49dc748d2bf993350d9e439ea79f16",
+      "function_guid": "26A5ED1B-5C3D-478B-8012-B5E67907C7C8",
+      "fields": {
+        "FireLogic.ReloadLogic": {
+          "value": "rlWeaponSwitchCancelsUnfinishedReload",
+          "encoding": "string",
+          "offset": 7558
+        },
+        "FireLogic.ReloadType": {
+          "value": "rtMagazine",
+          "encoding": "string",
+          "offset": 7563
+        },
+        "FireLogic.ReloadTime": {
+          "value": 4.099999904632568,
+          "encoding": "float32",
+          "offset": 7480
+        },
+        "FireLogic.ReloadDelay": {
+          "value": 0.0,
+          "encoding": "float32",
+          "offset": 7470
+        },
+        "FireLogic.ReloadThreshold": {
+          "value": 0.6499999761581421,
+          "encoding": "float32",
+          "offset": 7500
+        },
+        "FireLogic.PostReloadSequenceTime": {
+          "value": 0.0,
+          "encoding": "float32",
+          "offset": 7490
+        },
+        "FireLogic.RateOfFire": {
+          "value": 260.0,
+          "encoding": "float32",
+          "offset": 7449
+        },
+        "FireLogic.FireLogicType": {
+          "value": "fltSingleFire",
+          "encoding": "string",
+          "offset": 7568
+        },
+        "FireLogic.FireInputAction": {
+          "value": "EiaFire",
+          "encoding": "string",
+          "offset": 7418
+        },
+        "FireLogic.ReloadInputAction": {
+          "value": "EiaReload",
+          "encoding": "string",
+          "offset": 7432
+        },
+        "FireLogic.BoltAction.BoltActionDelay": {
+          "value": 0.0,
+          "encoding": "float32",
+          "offset": 7281
+        },
+        "FireLogic.BoltAction.BoltActionTime": {
+          "value": 0.5,
+          "encoding": "float32",
+          "offset": 7292
+        },
+        "FireLogic.BoltAction.HoldBoltActionUntilFireRelease": {
+          "value": false,
+          "encoding": "bool",
+          "offset": 7303
+        },
+        "FireLogic.BoltAction.HoldBoltActionUntilZoomRelease": {
+          "value": false,
+          "encoding": "bool",
+          "offset": 7310
+        },
+        "Ammo.MagazineCapacity": {
+          "value": 8,
+          "encoding": "int32",
+          "offset": 7580
+        },
+        "Ammo.NumberOfMagazines": {
+          "value": 6,
+          "encoding": "int32",
+          "offset": 7591
+        },
+        "Ammo.AmmoPickupMinAmount": {
+          "value": 8,
+          "encoding": "int32",
+          "offset": 7613
+        },
+        "Ammo.AmmoPickupMaxAmount": {
+          "value": 16,
+          "encoding": "int32",
+          "offset": 7623
+        },
+        "Ammo.AutoReplenishMagazine": {
+          "value": false,
+          "encoding": "bool",
+          "offset": 7633
+        },
+        "Shot.NumberOfBulletsPerShell": {
+          "value": 1,
+          "encoding": "int32",
+          "offset": 7147
+        },
+        "Shot.NumberOfBulletsPerShot": {
+          "value": 1,
+          "encoding": "int32",
+          "offset": 7158
+        }
+      },
+      "weapon_states": [
+        {
+          "index": 0,
+          "mesh_asset_references": [
+            "objects/weapons/handheld/beach/m1garand/m1garand_mesh/c8d9a8fc-1475-49f5-b84e-e969d2e3a076"
+          ],
+          "animation_tree_references": {
+            "AnimTree1p": "objects/weapons/handheld/beach/m1garand/m1garand_animtree1p/56252e78-0e23-4fe3-8838-cc22d5a86161",
+            "AnimTree3p": "objects/weapons/handheld/beach/m1garand/m1garand_animtree3p/bd67660b-495f-479b-a58c-d0ed2d79f55c"
+          },
+          "fields": {
+            "IsPumpAction": false,
+            "IsOneHanded": false,
+            "AnimatedFireType": "AnimatedFireSingle",
+            "AnimatedAimingType": "AnimatedAimingTwoHanded",
+            "SkipReloadAnimation": false
+          },
+          "missing": []
+        }
+      ],
+      "abort_reload_on_sprint": false,
+      "missing_fields": [],
+      "runtime_admitted": false,
+      "scope": "Exact authored data/reference chain, not a native object ABI or current live configuration",
+      "origin_archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+      "origin_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+    },
+    {
+      "native_name": "Garand",
+      "weapon_class": "wcAssault",
+      "resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand.dbx",
+      "resource_sha256": "db8d551f626a593e10848381c00983c7a4999e1096a91deb1ded60d49a8e101d",
+      "instance_guid": "D77B3602-E594-465D-87FA-8C193660522B",
+      "firing_resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Firing.dbx",
+      "firing_sha256": "131015bf44b1a8ad7a3eb42f21a6c74a1a49dc748d2bf993350d9e439ea79f16",
+      "firing_guid": "5932B06B-F9F3-43BF-8D65-391F4FB7625B",
+      "function_resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Firing.dbx",
+      "function_sha256": "131015bf44b1a8ad7a3eb42f21a6c74a1a49dc748d2bf993350d9e439ea79f16",
+      "function_guid": "26A5ED1B-5C3D-478B-8012-B5E67907C7C8",
+      "fields": {
+        "FireLogic.ReloadLogic": {
+          "value": "rlWeaponSwitchCancelsUnfinishedReload",
+          "encoding": "string",
+          "offset": 7558
+        },
+        "FireLogic.ReloadType": {
+          "value": "rtMagazine",
+          "encoding": "string",
+          "offset": 7563
+        },
+        "FireLogic.ReloadTime": {
+          "value": 4.099999904632568,
+          "encoding": "float32",
+          "offset": 7480
+        },
+        "FireLogic.ReloadDelay": {
+          "value": 0.0,
+          "encoding": "float32",
+          "offset": 7470
+        },
+        "FireLogic.ReloadThreshold": {
+          "value": 0.6499999761581421,
+          "encoding": "float32",
+          "offset": 7500
+        },
+        "FireLogic.PostReloadSequenceTime": {
+          "value": 0.0,
+          "encoding": "float32",
+          "offset": 7490
+        },
+        "FireLogic.RateOfFire": {
+          "value": 260.0,
+          "encoding": "float32",
+          "offset": 7449
+        },
+        "FireLogic.FireLogicType": {
+          "value": "fltSingleFire",
+          "encoding": "string",
+          "offset": 7568
+        },
+        "FireLogic.FireInputAction": {
+          "value": "EiaFire",
+          "encoding": "string",
+          "offset": 7418
+        },
+        "FireLogic.ReloadInputAction": {
+          "value": "EiaReload",
+          "encoding": "string",
+          "offset": 7432
+        },
+        "FireLogic.BoltAction.BoltActionDelay": {
+          "value": 0.0,
+          "encoding": "float32",
+          "offset": 7281
+        },
+        "FireLogic.BoltAction.BoltActionTime": {
+          "value": 0.5,
+          "encoding": "float32",
+          "offset": 7292
+        },
+        "FireLogic.BoltAction.HoldBoltActionUntilFireRelease": {
+          "value": false,
+          "encoding": "bool",
+          "offset": 7303
+        },
+        "FireLogic.BoltAction.HoldBoltActionUntilZoomRelease": {
+          "value": false,
+          "encoding": "bool",
+          "offset": 7310
+        },
+        "Ammo.MagazineCapacity": {
+          "value": 8,
+          "encoding": "int32",
+          "offset": 7580
+        },
+        "Ammo.NumberOfMagazines": {
+          "value": 6,
+          "encoding": "int32",
+          "offset": 7591
+        },
+        "Ammo.AmmoPickupMinAmount": {
+          "value": 8,
+          "encoding": "int32",
+          "offset": 7613
+        },
+        "Ammo.AmmoPickupMaxAmount": {
+          "value": 16,
+          "encoding": "int32",
+          "offset": 7623
+        },
+        "Ammo.AutoReplenishMagazine": {
+          "value": false,
+          "encoding": "bool",
+          "offset": 7633
+        },
+        "Shot.NumberOfBulletsPerShell": {
+          "value": 1,
+          "encoding": "int32",
+          "offset": 7147
+        },
+        "Shot.NumberOfBulletsPerShot": {
+          "value": 1,
+          "encoding": "int32",
+          "offset": 7158
+        }
+      },
+      "weapon_states": [
+        {
+          "index": 0,
+          "mesh_asset_references": [
+            "objects/weapons/handheld/beach/m1garand/m1garand_mesh/c8d9a8fc-1475-49f5-b84e-e969d2e3a076"
+          ],
+          "animation_tree_references": {
+            "AnimTree1p": "objects/weapons/handheld/beach/m1garand/m1garand_animtree1p/56252e78-0e23-4fe3-8838-cc22d5a86161",
+            "AnimTree3p": "objects/weapons/handheld/beach/m1garand/m1garand_animtree3p/bd67660b-495f-479b-a58c-d0ed2d79f55c"
+          },
+          "fields": {
+            "IsPumpAction": false,
+            "IsOneHanded": false,
+            "AnimatedFireType": "AnimatedFireSingle",
+            "AnimatedAimingType": "AnimatedAimingTwoHanded",
+            "SkipReloadAnimation": false
+          },
+          "missing": []
+        }
+      ],
+      "abort_reload_on_sprint": false,
+      "missing_fields": [],
+      "runtime_admitted": false,
+      "scope": "Exact authored data/reference chain, not a native object ABI or current live configuration",
+      "origin_archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+      "origin_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+    },
+    {
+      "native_name": "Garand",
+      "weapon_class": "wcAssault",
+      "resource": "Objects/Weapons/Handheld/Beach/Jap_Type5/Type5.dbx",
+      "resource_sha256": "e314479c35ea6819e5c662f35c4fca5af56cab3a1c1fe0a3b373efa05e153bd2",
+      "instance_guid": "E66520C7-7B62-4D35-9274-72A762F0C35D",
+      "firing_resource": "Objects/Weapons/Handheld/Beach/Jap_Type5/Type5_Firing.dbx",
+      "firing_sha256": "c867df93f07f0e2ff26d6dba3e0764912c202b800abaf452a757cf031fade5db",
+      "firing_guid": "4B688927-A212-4B2A-8D4A-CEFB55B12B48",
+      "function_resource": "Objects/Weapons/Handheld/Beach/Jap_Type5/Type5_Firing.dbx",
+      "function_sha256": "c867df93f07f0e2ff26d6dba3e0764912c202b800abaf452a757cf031fade5db",
+      "function_guid": "A937C536-C339-43F7-84B8-B78EC6F1A4FB",
+      "fields": {
+        "FireLogic.ReloadLogic": {
+          "value": "rlWeaponSwitchCancelsUnfinishedReload",
+          "encoding": "string",
+          "offset": 5016
+        },
+        "FireLogic.ReloadType": {
+          "value": "rtMagazine",
+          "encoding": "string",
+          "offset": 5021
+        },
+        "FireLogic.ReloadTime": {
+          "value": 4.099999904632568,
+          "encoding": "float32",
+          "offset": 4942
+        },
+        "FireLogic.ReloadDelay": {
+          "value": 0.0,
+          "encoding": "float32",
+          "offset": 4932
+        },
+        "FireLogic.ReloadThreshold": {
+          "value": 0.6499999761581421,
+          "encoding": "float32",
+          "offset": 4962
+        },
+        "FireLogic.PostReloadSequenceTime": {
+          "value": 0.0,
+          "encoding": "float32",
+          "offset": 4952
+        },
+        "FireLogic.RateOfFire": {
+          "value": 260.0,
+          "encoding": "float32",
+          "offset": 4912
+        },
+        "FireLogic.FireLogicType": {
+          "value": "fltSingleFire",
+          "encoding": "string",
+          "offset": 5026
+        },
+        "FireLogic.FireInputAction": {
+          "value": "EiaFire",
+          "encoding": "string",
+          "offset": 4886
+        },
+        "FireLogic.ReloadInputAction": {
+          "value": "EiaReload",
+          "encoding": "string",
+          "offset": 4897
+        },
+        "FireLogic.BoltAction.BoltActionDelay": {
+          "value": 0.0,
+          "encoding": "float32",
+          "offset": 4751
+        },
+        "FireLogic.BoltAction.BoltActionTime": {
+          "value": 0.5,
+          "encoding": "float32",
+          "offset": 4762
+        },
+        "FireLogic.BoltAction.HoldBoltActionUntilFireRelease": {
+          "value": false,
+          "encoding": "bool",
+          "offset": 4773
+        },
+        "FireLogic.BoltAction.HoldBoltActionUntilZoomRelease": {
+          "value": false,
+          "encoding": "bool",
+          "offset": 4779
+        },
+        "Ammo.MagazineCapacity": {
+          "value": 8,
+          "encoding": "int32",
+          "offset": 5037
+        },
+        "Ammo.NumberOfMagazines": {
+          "value": 9999,
+          "encoding": "int32",
+          "offset": 5048
+        },
+        "Ammo.AmmoPickupMinAmount": {
+          "value": 8,
+          "encoding": "int32",
+          "offset": 5069
+        },
+        "Ammo.AmmoPickupMaxAmount": {
+          "value": 8,
+          "encoding": "int32",
+          "offset": 5079
+        },
+        "Ammo.AutoReplenishMagazine": {
+          "value": false,
+          "encoding": "bool",
+          "offset": 5089
+        },
+        "Shot.NumberOfBulletsPerShell": {
+          "value": 1,
+          "encoding": "int32",
+          "offset": 4623
+        },
+        "Shot.NumberOfBulletsPerShot": {
+          "value": 1,
+          "encoding": "int32",
+          "offset": 4634
+        }
+      },
+      "weapon_states": [
+        {
+          "index": 0,
+          "mesh_asset_references": [
+            "objects/weapons/handheld/beach/jap_type5/jap_type5_mesh/eb95b279-a4f7-11dd-817c-9a13d9954241"
+          ],
+          "animation_tree_references": {
+            "AnimTree1p": "objects/weapons/handheld/beach/jap_type5/jap_type5_animtree1p/6027e24b-8bdc-4a4d-8e4f-e845b4c24103",
+            "AnimTree3p": "objects/weapons/handheld/beach/jap_type5/jap_type5_animtree3p/f685f795-2d76-4204-96fa-05defe659b6d"
+          },
+          "fields": {
+            "IsPumpAction": false,
+            "IsOneHanded": false,
+            "AnimatedFireType": "AnimatedFireSingle",
+            "AnimatedAimingType": "AnimatedAimingTwoHanded",
+            "SkipReloadAnimation": false
+          },
+          "missing": []
+        }
+      ],
+      "abort_reload_on_sprint": false,
+      "missing_fields": [],
+      "runtime_admitted": false,
+      "scope": "Exact authored data/reference chain, not a native object ABI or current live configuration",
+      "origin_archive": "Dist/win32/levels/sp_01/level-00.fbrb",
+      "origin_index_sha256": "9693feb53337f1a83c49d725eab25d146e91469394c3b93e7bf62214ecc8a44f"
+    }
+  ],
+  "native_runtime_checked": false
+}

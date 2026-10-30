@@ -1,0 +1,16 @@
+Done: current-input safety and historical raw-pose integration in PistolAfterFeedPolicy.
+Owned files: include/fvr/interaction/PistolAfterFeedPolicy.h; tests/PistolAfterFeedPolicyTests.cpp; this handoff.
+Motion requires currentSafety; only currentSafety updates/renews the GunHold root.
+AcquireFrom/RenewFrom consume exact original raw packet sequence and deadline.
+PistolAfterFeedHandObservation retains actual input, pre-update mechanism claim, lifecycle result and gun claim.
+Owner supplies immutable sourceObservation/currentObservation from actual Gameplay packets; no synthetic release.
+An exact Released event retains the last accepted mechanism lease while older raw geometry catches up.
+Historical post-release observations cannot acquire, renew, publish targets or resurrect mechanism custody.
+Completion requires the exact original raw release packet and fresh original claim/input/binding deadlines.
+Tracking/lifetime invalidation, expired lease, changed gun, stolen tool and missing/altered release proof fail closed.
+Native ammo equip and hand equip are separate domains; exact adapter binding joins them, item generation matches hand equip.
+Existing 17 groups preserved; 5 integrated groups added (22 total), including N then N-2 and consumed release.
+Strict PhysicalPistolSlide API/tests and HandInteraction are unchanged by this task.
+Typed feed/native clearance, immutable ammo outcomes and pending/debt/stow retention remain intact.
+No tests, builds, Git, game, processes, input, XR, installation, network or subagents run; root owns validation.
+No actual-game or headset acceptance claimed. Frozen; ownership returned to root.

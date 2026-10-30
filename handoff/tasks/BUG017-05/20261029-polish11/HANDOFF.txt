@@ -1,0 +1,35 @@
+BUG017-05 / polish11: source correction prepared; native/headset acceptance OPEN.
+Base: 7063c0003fa5e41027bf831e3bb9c70093962da8; no build/install/session/Git mutation.
+Files: Bc2Gameplay.cpp, Bc2InputBinding.cpp/.h, Bc2InputBindingTests.cpp.
+Gameplay preserves the preceding cutscene agent's view-evidence retention edits.
+ContextualTool source/tests were not changed; all source ownership released.
+Evidence: docs/archive/OPENING-WEAPONS-426.md:93 identifies Expack_US and both meshes.
+Authored data: G:/Unity/VRMMO/bc2vr-recovery/overnight426/smg/sp01-config.json:442-531.
+It identifies wcC4, exact Beach/Expack/Expack.dbx, fltDetonatedFiring,
+FireInputAction=EiaFire, ReloadInputAction=EiaZoom, capacity1, magazines-1.
+Expack DBX SHA256 ee13bac56819de89a1ead7c705b982796e9350d157b744d2fcf4a58a6b63da30.
+Firing DBX SHA256 b6623c9c0510f83676c1f5eff55aa5b469546a53a1d5dc1c466a7d887827f170.
+Session: G:/Unity/VRMMO/BC2VR-Launcher/data/runtime/sessions/20261029-174056-341-41f3c366.
+Bounded native-trace extraction: Expack_US pose episode6, equipment generation6,
+weapon106331424/data431015680/persistence134401792; actor1040182880/weak121195192.
+Actual GunHold: serial14365, claim18/item106331424/gen6, input12150;
+observed27209936380700 < deadline27210034323200. This prerequisite is demonstrated.
+Reload observer is enabled: 5352 Observed/1 ReadFailure/0 malformed-owner-config-state.
+No per-Expack selected firing snapshot was retained; aggregate counts cannot prove it.
+ReadReloadState admits reserve/count/capacity -1; Unknown ammo eligibility is not refusal.
+Existing Bc2ReloadStateTests.cpp:CapacityAndUnknowns covers -1 reserve/capacity reads.
+normal_contextual_tools=false; ContextualTool is the separate wcLaserDesignator path.
+Cause supported by source: generic right-secondary Reload writes native29;
+Expack authors that operation on Zoom14. Left trigger deliberately supplies pose only.
+Fix: live selected ReloadState owner/config/sequence/deadline + exact asset/path
+resolve Expack's route; current same-item GunHold and settled attack gates are required.
+Map the existing gated Reload request to AlternateFire, then existing InputOverride
+writes Zoom14. No writer ABI/new native offset/hook, raw-input injection, or ammo write.
+Fire8/plunger and ordinary weapon Reload29 remain unchanged; invalid route drops Reload.
+User control: right secondary/reload button (B on Touch/Index); right trigger still plunges.
+Regressions: metadata/owner/expiry denial, Reload29/Fire8 preservation, exact rollback,
+neutral rearm, repeated holds, left-trigger pose only, and denied/gated requests.
+Review: CRLF-aware git diff --check passed (existing source is stored CRLF).
+Required root checks: Bc2InputBinding + ControllerInput and relevant holster/reload gates;
+both normal architectures per repository rules. No tests/builds run by this source agent.
+Then verify native charge operation, plunger, Mission1 progression and headset control.

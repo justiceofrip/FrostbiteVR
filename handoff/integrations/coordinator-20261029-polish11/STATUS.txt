@@ -1,0 +1,29 @@
+BC2 VR polish11 jobs — staged only, integration awaits user
+Base:7063c0003fa5e41027bf831e3bb9c70093962da8; same coordinator branch/worktree.
+Fresh agents receive one job; final Done Y/N, then no further assignment.
+Y means the scoped source job passed required offline checks, not headset acceptance.
+
+BUG017-05 C4 route source job: Y — c4_polish11 retired; native progression untested.
+BUG017-06/07 focused performance evidence retention: Y — performance_polish11 retired.
+BUG017-02/03/04 late cutscene evidence retention: Y — cutscene_polish11 retired.
+Actual performance/fire/cutscene fixes: N; relevant event measurements still missing.
+BUG017-01 destruction fix: N; named damaged building/event/draw missing.
+Other queue cards remain at their recorded prerequisites; no duplicate investigations.
+
+All file ownership returned to root. Gameplay edits were serialized, not merged blindly.
+Root added bounded Expack request/route/snapshot-status counters for next-test diagnosis;
+these count requested routes, not successful native throws or spent charges.
+Evidence: handoff/tasks/BUG017-*/20261029-polish11; source checks below.
+HostFrameDiagnostics, TrackedBodyAnchor and Bc2InputBinding pass isolated x86/x64.
+Combined Gameplay passes normal-feature x86 syntax check, including final counters.
+Initial anchor runner used wrong dynamic CRT; preserved link failure, corrected /MT passes.
+Only relevant source was compiled; unchanged baseline libraries were reused read-only.
+Results: reports/coordinator-20261029-polish11/{host-checks-*,anchor-*,input-*,gameplay-*}.
+Full normal builds and actual-game/headset checks await authorized integration.
+No canonical source integration, shared build, game/profile or installation change.
+
+Next integration test controls: Expack right secondary/B requests charge; trigger plunges.
+Confirm a charge is thrown/placed, detonation works, and Mission1 can progress.
+Retain improved holstering; test another firearm's reload and ordinary trigger behavior.
+Collect named cutscene/destruction episodes and focused gameplay frame timings.
+No performance gain, camera repair, HUD repair or all-task completion is claimed.

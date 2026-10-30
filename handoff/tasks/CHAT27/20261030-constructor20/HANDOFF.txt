@@ -1,0 +1,12 @@
+DoneY: bounded offline constructor/update-owner job complete. SourcefixN: transform composition and selected-view authority remain unproved.
+Worktree campaign-coordinator-20261028-r1; supplied base828f554 (batch18); root owns Git/build/integration/install; no Git queried.
+EXE SHA2563911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258 verified file-only.
+Owned files: HANDOFF.txt, cinematic_constructor.py, proof01.json; scratch reports/coordinator-20261030-constructor20.
+Proof SHA25652bc97c398eb5823ad7b29d54c46187de842fb775067a8acb024753d32cdf852; exact bytes/hashes and complete coverage verified.
+Eight NEW complete units,1360decoded bytes, zero adjacent spill:0x3b63d0,0x38cce0,0x38d900,0x3b0010,0x3b23c0,0x3abfa0,0x3b0050,0x39cd30.
+Constructor0x3b63d0 separately initializes relative+90..c8, delegates base+10..48 initialization, creates0x42dd10([resource+58],0,0), and retains that child at companion+d0.
+Assigned companion+80 table102c974 slot+14 ->3b23c0 delegates to39cd30; call39cdf5 updates the exact constructor-owned child through41e610([companion+d0],incoming_scalar,computed_scalar).
+This closes child construction/update ownership only. No decoded update combines relative+90..c8 with base+10..48; no selected local-player view/HUD/entry/skip/exit/gameplay-return authority follows.
+Primary table candidate+38/+3c bodies only set/clear+fe and singleton state; table end is not independently admitted. Prior manager false gate remains negative and was not retraced.
+ONE next edge:0x39cdf5 ->0x41e610(receiver=[companion+d0]); determine its transform output/consumer, then actual selected local-player-view consumption. No production file proposal is supported.
+No production writes, Git, builds/tests, game/process access, input/XR, profiles, installs/packages or subagents. Frozen at eight units and retired.

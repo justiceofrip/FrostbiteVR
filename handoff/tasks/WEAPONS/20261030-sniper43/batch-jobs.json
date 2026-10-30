@@ -1,0 +1,963 @@
+{
+  "schema": "fvr.bc2.sniper43.manual_reload_batch.v1",
+  "summary": {
+    "catalog_origin_rows": 38,
+    "exact_configurations": 28,
+    "native_asset_names": 12,
+    "dispatch_groups": {
+      "singlefire_authored_bolt_fields": 3,
+      "bolt_action_magazine_with_persistent_debt": 17,
+      "automatic_zero_bolt": 3,
+      "singlefire_zero_bolt": 5
+    },
+    "exact_reference_bindings": 28,
+    "exact_mechanism_inputs": 28,
+    "exact_mesh_inputs": 28,
+    "strict_geometry_configs": 17,
+    "geometry_work_configs": 11,
+    "supported_candidate_dispatch_configs": 28,
+    "native_enabled_configs": 0,
+    "tests_run": false,
+    "builds_run": false,
+    "game_access": false
+  },
+  "runtime_enabled": false,
+  "jobs": [
+    {
+      "job_id": "sniper43-00",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU.dbx",
+        "sha256": "256f3e276b8dae06739453fd5fbbae0c820acb0629b02f01608aeb9f3bbe0cfc",
+        "guid": "763fffd8-481f-479f-8414-b2f0b62f2574"
+      },
+      "asset": "SVU",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/0"
+      },
+      "proposed_family": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "reuse_exact_strict_candidate_then_native_mesh_contact_join",
+        "native_three_copy_ammunition_resource_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "no_manual_bolt_or_chamber_grant_from_authored_fields",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-01",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98.dbx",
+        "sha256": "aaab64e3c8c783167e401e9c27a240135aa69bbc54a1cb40b1b2e1efb30d696e",
+        "guid": "33f9e790-e758-4468-b3db-00cd6c3b1a4d"
+      },
+      "asset": "SV98",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/1"
+      },
+      "proposed_family": "bc2.bolt-action-magazine-reload.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "reuse_exact_strict_candidate_then_native_mesh_contact_join",
+        "native_three_copy_ammunition_resource_join",
+        "typed_reload_pause_resume_and_ammo_receipt_rebase",
+        "exact_bolt_calibration_and_selected_native_cycle_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "retain_same_cycle_and_shot_through_every_ammo_transaction",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-02",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Kobra.dbx",
+        "sha256": "71a8887897a904ca0227bed174fd473002a72aad5f460b51b4c5155221fd3395",
+        "guid": "f19040c7-adc9-4bfc-8d3d-ef80961d6ea1"
+      },
+      "asset": "VSS",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/2"
+      },
+      "proposed_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "reuse_exact_strict_candidate_then_native_mesh_contact_join",
+        "native_three_copy_ammunition_resource_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "no_manual_bolt_or_chamber_grant_from_authored_fields",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-03",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/SP_sni_QBU88_Kobra.dbx",
+        "sha256": "0c294fd9bc16e0ec213d1608e40a52be4aeb06d59b20777b0e228870e2736e24",
+        "guid": "6d9bbdeb-c6c6-4d82-95d1-195e3e84719a"
+      },
+      "asset": "QBU88_sp_k",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/3"
+      },
+      "proposed_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "review_exact_authored_contact_frames_without_relaxing_stability",
+        "native_three_copy_ammunition_resource_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "no_manual_bolt_or_chamber_grant_from_authored_fields",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-04",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24.dbx",
+        "sha256": "84252e7fa90e376d2cfe3131a1e83423a00d9a1dda52d0974b5d4d8d3d8de82c",
+        "guid": "3632d971-d742-493d-8962-358ade024c39"
+      },
+      "asset": "M24",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/4"
+      },
+      "proposed_family": "bc2.bolt-action-magazine-reload.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "review_complete_paired_role_from_exact_rigid_parts",
+        "native_three_copy_ammunition_resource_join",
+        "typed_reload_pause_resume_and_ammo_receipt_rebase",
+        "exact_bolt_calibration_and_selected_native_cycle_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "retain_same_cycle_and_shot_through_every_ammo_transaction",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-05",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95_Scoped.dbx",
+        "sha256": "e395944e3978c6847bc5c66d033d265a7571477c5a588deba1aafde822e6c4b9",
+        "guid": "1378ecef-dc5f-4728-81e5-a5dd7e9b10da"
+      },
+      "asset": "M95_sp_s",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/5"
+      },
+      "proposed_family": "bc2.bolt-action-magazine-reload.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "reuse_exact_strict_candidate_then_native_mesh_contact_join",
+        "native_three_copy_ammunition_resource_join",
+        "typed_reload_pause_resume_and_ammo_receipt_rebase",
+        "exact_bolt_calibration_and_selected_native_cycle_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "retain_same_cycle_and_shot_through_every_ammo_transaction",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-06",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Kobra.dbx",
+        "sha256": "efd5ae5cf68228d5e7fd85cc33af281475b5af30ba557000bf83759fe49187f5",
+        "guid": "aaf5e0dd-a0ff-4d1b-8645-837c1d726a1e"
+      },
+      "asset": "QBU88",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/6"
+      },
+      "proposed_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "review_exact_authored_contact_frames_without_relaxing_stability",
+        "native_three_copy_ammunition_resource_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "no_manual_bolt_or_chamber_grant_from_authored_fields",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-07",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Scoped.dbx",
+        "sha256": "942be844e1a6392fb1a21eec3127be36b453357c53af1258b371cdc5615420b8",
+        "guid": "3f35373a-9cc7-44bc-94b6-23dcfb1af196"
+      },
+      "asset": "M24",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/7"
+      },
+      "proposed_family": "bc2.bolt-action-magazine-reload.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "review_complete_paired_role_from_exact_rigid_parts",
+        "native_three_copy_ammunition_resource_join",
+        "typed_reload_pause_resume_and_ammo_receipt_rebase",
+        "exact_bolt_calibration_and_selected_native_cycle_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "retain_same_cycle_and_shot_through_every_ammo_transaction",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-08",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88.dbx",
+        "sha256": "262bdb522e499fd12766e185940754e3c384fcecdcaff55b0ab953e4428ab600",
+        "guid": "8e18b38e-6734-494a-ba37-d4264b077d3f"
+      },
+      "asset": "QBU88",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/8"
+      },
+      "proposed_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "review_exact_authored_contact_frames_without_relaxing_stability",
+        "native_three_copy_ammunition_resource_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "no_manual_bolt_or_chamber_grant_from_authored_fields",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-09",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Scoped.dbx",
+        "sha256": "d2f60a131cac9415dc1df226cff07a2ccca4f7f454f7c8047ffb7d6691360a4d",
+        "guid": "f8a33345-a75a-48cd-94eb-f480242d12e8"
+      },
+      "asset": "VSS",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/9"
+      },
+      "proposed_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "reuse_exact_strict_candidate_then_native_mesh_contact_join",
+        "native_three_copy_ammunition_resource_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "no_manual_bolt_or_chamber_grant_from_authored_fields",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-10",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores.dbx",
+        "sha256": "d723d3c23a8582720108bbcdae94716bcf341229120dec9f72f72e2787d2194d",
+        "guid": "848238ec-10e5-4d40-80d2-96cb04da2a64"
+      },
+      "asset": "VSS",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/10"
+      },
+      "proposed_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "reuse_exact_strict_candidate_then_native_mesh_contact_join",
+        "native_three_copy_ammunition_resource_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "no_manual_bolt_or_chamber_grant_from_authored_fields",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-11",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95_Scoped.dbx",
+        "sha256": "ba7fae3e042aa8c991074b4477e7c986d97af6888b82a55d86863a8d494fed95",
+        "guid": "8fb1cb9c-b070-459b-9260-bf4b0f713af4"
+      },
+      "asset": "M95k",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/11"
+      },
+      "proposed_family": "bc2.bolt-action-magazine-reload.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "reuse_exact_strict_candidate_then_native_mesh_contact_join",
+        "native_three_copy_ammunition_resource_join",
+        "typed_reload_pause_resume_and_ammo_receipt_rebase",
+        "exact_bolt_calibration_and_selected_native_cycle_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "retain_same_cycle_and_shot_through_every_ammo_transaction",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-12",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Kobra.dbx",
+        "sha256": "e0e734e4aa30889c95baff9d75e4d808828c72fd1067ccfa238c5696504fa9e7",
+        "guid": "3261b232-3a20-4aee-bd73-090f92cb4cac"
+      },
+      "asset": "SV98",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/12"
+      },
+      "proposed_family": "bc2.bolt-action-magazine-reload.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "reuse_exact_strict_candidate_then_native_mesh_contact_join",
+        "native_three_copy_ammunition_resource_join",
+        "typed_reload_pause_resume_and_ammo_receipt_rebase",
+        "exact_bolt_calibration_and_selected_native_cycle_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "retain_same_cycle_and_shot_through_every_ammo_transaction",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-13",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL.dbx",
+        "sha256": "c10e29215b23d814f1c75dcc3782da6a96c78340ac6eef48a203cdc87d93cac7",
+        "guid": "7d1dfd60-085c-4e0a-9feb-80a40d11eb2e"
+      },
+      "asset": "GOL",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/13"
+      },
+      "proposed_family": "bc2.bolt-action-magazine-reload.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "derive_reviewed_reverse_authored_withdrawal_path",
+        "native_three_copy_ammunition_resource_join",
+        "typed_reload_pause_resume_and_ammo_receipt_rebase",
+        "exact_bolt_calibration_and_selected_native_cycle_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "retain_same_cycle_and_shot_through_every_ammo_transaction",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-14",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/SP_sni_QBU88.dbx",
+        "sha256": "adeb31f56ef751ae0b7c33fd86fd18e9a043ba8d49eb7dc3d3dd54019d0073a9",
+        "guid": "96fb1aae-975b-49df-80f6-6ecc8103ebf2"
+      },
+      "asset": "QBU88_sp",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/14"
+      },
+      "proposed_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "review_exact_authored_contact_frames_without_relaxing_stability",
+        "native_three_copy_ammunition_resource_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "no_manual_bolt_or_chamber_grant_from_authored_fields",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-15",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95.dbx",
+        "sha256": "992535507a1b074634772678f5cd6bc8a71a90a599ac5b469c71d1c7bfd560a3",
+        "guid": "cb2a15fe-8f0a-4772-9102-64548e0db3b6"
+      },
+      "asset": "M95",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/15"
+      },
+      "proposed_family": "bc2.bolt-action-magazine-reload.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "reuse_exact_strict_candidate_then_native_mesh_contact_join",
+        "native_three_copy_ammunition_resource_join",
+        "typed_reload_pause_resume_and_ammo_receipt_rebase",
+        "exact_bolt_calibration_and_selected_native_cycle_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "retain_same_cycle_and_shot_through_every_ammo_transaction",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-16",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Scoped.dbx",
+        "sha256": "bf7a9c6eca83f0f1c27d54d605ffbe785146f0fc68ac6d92522b168234a6cab8",
+        "guid": "74aad94b-a1a0-42b5-80d5-e1e321894a47"
+      },
+      "asset": "QBU88",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/16"
+      },
+      "proposed_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "review_exact_authored_contact_frames_without_relaxing_stability",
+        "native_three_copy_ammunition_resource_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "no_manual_bolt_or_chamber_grant_from_authored_fields",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-17",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Kobra.dbx",
+        "sha256": "64f76339e07c1013e790e10b73579d270390e76e96ab6041b2425f654a072b5e",
+        "guid": "f6fb90ec-a5fb-4129-a43b-72f8ea67d33d"
+      },
+      "asset": "SVU",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/17"
+      },
+      "proposed_family": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "reuse_exact_strict_candidate_then_native_mesh_contact_join",
+        "native_three_copy_ammunition_resource_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "no_manual_bolt_or_chamber_grant_from_authored_fields",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-18",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95_Kobra.dbx",
+        "sha256": "b977410ca5f1378221df8f4cf96c8a328a3392ecc55cd26411cfd4f6ca4a3af3",
+        "guid": "8cfa632a-bf58-48b7-bd8b-75760bfc7843"
+      },
+      "asset": "M95k",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/18"
+      },
+      "proposed_family": "bc2.bolt-action-magazine-reload.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "reuse_exact_strict_candidate_then_native_mesh_contact_join",
+        "native_three_copy_ammunition_resource_join",
+        "typed_reload_pause_resume_and_ammo_receipt_rebase",
+        "exact_bolt_calibration_and_selected_native_cycle_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "retain_same_cycle_and_shot_through_every_ammo_transaction",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-19",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Scoped.dbx",
+        "sha256": "34726cf9a312f3dc146686cfa1b7a3258bd8ab86c8bb1844d42742ff4306b25f",
+        "guid": "d18e3fa0-9072-4358-b41e-c4ef04dd56e9"
+      },
+      "asset": "SVU",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/19"
+      },
+      "proposed_family": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "reuse_exact_strict_candidate_then_native_mesh_contact_join",
+        "native_three_copy_ammunition_resource_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "no_manual_bolt_or_chamber_grant_from_authored_fields",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-20",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95.dbx",
+        "sha256": "b0d0fefba512071700dac709af898f4d0554b3dce272dffe6774bf845fe95bc8",
+        "guid": "bc0f37ac-a57f-4899-b393-3b669a18b3bd"
+      },
+      "asset": "M95k",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/20"
+      },
+      "proposed_family": "bc2.bolt-action-magazine-reload.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "reuse_exact_strict_candidate_then_native_mesh_contact_join",
+        "native_three_copy_ammunition_resource_join",
+        "typed_reload_pause_resume_and_ammo_receipt_rebase",
+        "exact_bolt_calibration_and_selected_native_cycle_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "retain_same_cycle_and_shot_through_every_ammo_transaction",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-21",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Scoped.dbx",
+        "sha256": "14366feb18371c96bded4aa417cf614b5e62e75634e6b6afabfb67132385974c",
+        "guid": "812f8f83-616d-48a2-a6c8-1d2b55fa5165"
+      },
+      "asset": "M95",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/21"
+      },
+      "proposed_family": "bc2.bolt-action-magazine-reload.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "reuse_exact_strict_candidate_then_native_mesh_contact_join",
+        "native_three_copy_ammunition_resource_join",
+        "typed_reload_pause_resume_and_ammo_receipt_rebase",
+        "exact_bolt_calibration_and_selected_native_cycle_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "retain_same_cycle_and_shot_through_every_ammo_transaction",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-22",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Scoped.dbx",
+        "sha256": "45f85b1f1c6a508bf88dee3de04b6d56c85a19f976d3fddb681f8ecaddf18b8f",
+        "guid": "67d1700a-ffec-4296-916f-4e7d8429eaa0"
+      },
+      "asset": "SV98",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/22"
+      },
+      "proposed_family": "bc2.bolt-action-magazine-reload.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "reuse_exact_strict_candidate_then_native_mesh_contact_join",
+        "native_three_copy_ammunition_resource_join",
+        "typed_reload_pause_resume_and_ammo_receipt_rebase",
+        "exact_bolt_calibration_and_selected_native_cycle_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "retain_same_cycle_and_shot_through_every_ammo_transaction",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-23",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Kobra.dbx",
+        "sha256": "12d56fe4e39fd8b9d3a6c42ebd18eab4bf8e4a4c5b5a2296b7dfbd73ec9cd6a8",
+        "guid": "de784d39-793f-49c9-b389-6f4b2358617e"
+      },
+      "asset": "M24",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/23"
+      },
+      "proposed_family": "bc2.bolt-action-magazine-reload.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "review_complete_paired_role_from_exact_rigid_parts",
+        "native_three_copy_ammunition_resource_join",
+        "typed_reload_pause_resume_and_ammo_receipt_rebase",
+        "exact_bolt_calibration_and_selected_native_cycle_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "retain_same_cycle_and_shot_through_every_ammo_transaction",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-24",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Kobra.dbx",
+        "sha256": "6b5bfe1065253189c3bc18a0f1b974927ca1d65a94218a8b76a0037639e898d3",
+        "guid": "dcd9e585-21bb-419a-aad4-0b80295f287f"
+      },
+      "asset": "M95",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/24"
+      },
+      "proposed_family": "bc2.bolt-action-magazine-reload.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "reuse_exact_strict_candidate_then_native_mesh_contact_join",
+        "native_three_copy_ammunition_resource_join",
+        "typed_reload_pause_resume_and_ammo_receipt_rebase",
+        "exact_bolt_calibration_and_selected_native_cycle_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "retain_same_cycle_and_shot_through_every_ammo_transaction",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-25",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Scoped.dbx",
+        "sha256": "b413a709fda2431c4e10085ca02db20344f2e21ab71ab77940b489807142e2c5",
+        "guid": "82f7222d-dc86-4d46-82f3-444b9f6d6c12"
+      },
+      "asset": "GOL",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/25"
+      },
+      "proposed_family": "bc2.bolt-action-magazine-reload.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "derive_reviewed_reverse_authored_withdrawal_path",
+        "native_three_copy_ammunition_resource_join",
+        "typed_reload_pause_resume_and_ammo_receipt_rebase",
+        "exact_bolt_calibration_and_selected_native_cycle_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "retain_same_cycle_and_shot_through_every_ammo_transaction",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-26",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95.dbx",
+        "sha256": "8f8494c4d007bb3955485d740372bd521ff6fb4fa437f1df81602c29023ec298",
+        "guid": "7717ea86-49ed-4aa8-b401-7e62d8ade339"
+      },
+      "asset": "M95_sp",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/26"
+      },
+      "proposed_family": "bc2.bolt-action-magazine-reload.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "reuse_exact_strict_candidate_then_native_mesh_contact_join",
+        "native_three_copy_ammunition_resource_join",
+        "typed_reload_pause_resume_and_ammo_receipt_rebase",
+        "exact_bolt_calibration_and_selected_native_cycle_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "retain_same_cycle_and_shot_through_every_ammo_transaction",
+      "ready_to_enable": false
+    },
+    {
+      "job_id": "sniper43-27",
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Kobra.dbx",
+        "sha256": "12c0e163971af2fac10e58e70ce5035dbeb9ff816ed5127296661035816a2e6e",
+        "guid": "0ca52687-d93d-4160-acf0-63bfed5fad88"
+      },
+      "asset": "GOL",
+      "inputs": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-sniper43\\geometry-inputs.json",
+        "pointer": "/configurations/27"
+      },
+      "proposed_family": "bc2.bolt-action-magazine-reload.v1",
+      "stages_before_tests": [
+        "exact_descriptor_extraction",
+        "independent_native_family_review",
+        "derive_reviewed_reverse_authored_withdrawal_path",
+        "native_three_copy_ammunition_resource_join",
+        "typed_reload_pause_resume_and_ammo_receipt_rebase",
+        "exact_bolt_calibration_and_selected_native_cycle_join",
+        "immutable_exact_key_digest_registry_enrollment"
+      ],
+      "manual_operations": [
+        "remove_original",
+        "return_original",
+        "discard_original",
+        "seat_replacement",
+        "partial_reload",
+        "empty_reload",
+        "retain_resource_on_tracking_or_equipment_interruption"
+      ],
+      "owed_bolt_policy": "retain_same_cycle_and_shot_through_every_ammo_transaction",
+      "ready_to_enable": false
+    }
+  ],
+  "minimum_ammo_conservation": {
+    "remove": "L/R -> 0/R; original carries exactly L",
+    "return": "0/R -> L/R; consume exact original once",
+    "refill": "0/R -> min(C,R)/(R-min(C,R)); original must be explicitly discarded",
+    "bolt": "no extra chamber round, no ammo change on stroke, same cycle/shot remain owed until exact completion"
+  }
+}

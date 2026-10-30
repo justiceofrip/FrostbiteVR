@@ -11,6 +11,7 @@ struct AmmunitionIntent {
     std::int64_t observedNs=0,deadlineNs=0;
     AmmunitionOperation operation{};
     std::optional<RemovedMagazineResource> original;
+    int rounds=1; // Bounded InsertRounds request; never inferred from final counts.
     bool operator==(const AmmunitionIntent&)const=default;
 };
 
@@ -57,7 +58,31 @@ public:
         lastIntent_=intent.id;
         auto* ledger=FindMutable(intent.context.resource);if(!ledger)return {};
         current.deadlineNs=std::min(current.deadlineNs,intent.deadlineNs);
-        return ledger->Queue(intent.operation,current,now,intent.original);
+        return ledger->Queue(intent.operation,current,now,intent.original,intent.rounds);
+    }
+    // Adapter borrows the selected stable ledger under its serialization gate.
+    // No copy or second ledger may be used for a physical fixed container.
+    template<class F> bool WithSelectedLedger(const AmmoResourceContext& context,F&& visit)noexcept {
+        if(!selected_||*selected_!=context)return false;
+        auto* ledger=FindMutable(context.resource);
+        return ledger&&visit(*ledger);
+    }
+    std::optional<AmmunitionCommand> AdoptPrepared(const AmmunitionIntent& intent,
+        const AmmunitionCommand& command,const AmmunitionSnapshot& current,std::int64_t now)noexcept {
+        if(!selected_||*selected_!=intent.context||current.context!=intent.context||
+           !intent.id||intent.id<=lastIntent_||intent.operation!=AmmunitionOperation::InsertRounds||
+           intent.original||intent.rounds<=0||intent.observedNs<=0||now<intent.observedNs||now>=intent.deadlineNs||
+           intent.deadlineNs-intent.observedNs>100000000)return {};
+        lastIntent_=intent.id;
+        auto* ledger=FindMutable(intent.context.resource);
+        if(!ledger||ledger->Phase()!=AmmunitionLedgerPhase::Queued||ledger->Pending()!=command||
+           command.context!=intent.context||command.operation!=intent.operation||command.original||
+           command.before!=current.counts||command.sourceSequence>current.sequence||
+           command.requestedNs<intent.observedNs||command.requestedNs>now||
+           command.admissionDeadlineNs>intent.deadlineNs||now>=command.admissionDeadlineNs||
+           command.after.loaded-command.before.loaded!=std::min({intent.rounds,command.before.capacity-command.before.loaded,
+               command.before.reserve}))return {};
+        return command;
     }
     std::optional<AmmunitionCommand> Dispatch(const AmmunitionCommand& command,
                                              const AmmunitionSnapshot& current,std::int64_t now)noexcept {

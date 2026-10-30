@@ -1,0 +1,30 @@
+Separate explicit mod-owned MP443 after-feed slide policy; no native chamber claim.
+Keep strict PhysicalPistolSlide native-chamber API and WeaponActionGate::NativeAfterShot unchanged.
+Add PistolAfterFeedPolicy core: exact stable resource, successful removal/feed lineage,
+mod-owned empty-feed debt, separate physical-stroke and native-ready receipts, explicit retirement.
+Tactical status comes from real pre-removal policy lineage and acknowledged shot/removal history.
+Both Return/Refill start at loaded0; feed.before.loaded cannot distinguish tactical/empty.
+Missing lineage blocks. Empty-mag return cannot clear debt; add no fictional chamber round.
+Retain debt/transactions on tracking, stow, selection changes. Never reverse completed native feed.
+Bind exact Completed AmmoResourceOutcome to request.intent.id and receipt.command.context.resource,
+context equipGeneration/space, command.id/sourceSequence/operation, authorityInvocation/beganNs/completedNs.
+Require authorityVerified/copiesVerified; RemoveMagazine/ReturnMagazine/RefillMagazine stay distinct.
+Bc2PistolAfterFeedEvidence joins exact ReloadHoldIdentity(owner,firing[3],serverPlayer/soldier/item)
+to later genuine AmmoResourceOwnUpdate rows: unique own invocation for each branch, exact owner,
+depth1, finished, identityRetained, neutral effective context, no animationHold, current2/next2/timer0.
+Each new witness row begins at or after feed receipt.completedNs; retain original command/invocation IDs.
+Existing AmmoResourceCompletion private invocations/seen arrays are not in AmmunitionReceipt.
+Publish an immutable sidecar or collect a later cohort; never invent IDs from copiesVerified.
+ReadReloadFlowBoundary already reads0xb0 bytes with bookends: expose +8a inhibit and+a4/+a5 latches
+only via the exact MP443 finite-ammo sidecar and equivalent verified server checks.
+Readiness means phase/input readiness only; stock availability/listeners/update still decide actual shot.
+Compose fire veto inside existing original Update route, preserving observers, one original call,
+dt, non-fire input and exact context restoration. Record effective neutral context for sidecar.
+OriginalFiringObserver::copyInput early return skips required ammo observation; do not use it.
+NativeCycleInputGuard context+28=1 may call stock Abort; do not reuse it wholesale.
+Only same-feed physical completion AND fresh own-update readiness may release policy debt.
+Reuse exact implementation17 MP443 slide geometry; grasp tolerances/travel are explicit mod policy.
+Native RVAs/ABI/complete byte/source pins: proof01.json; no new unverified offsets or operation IDs.
+Production seams: ReloadFlowRuntime AmmoResourceRow, TryAmmoResourceHands, service Observe/Outcome;
+Bc2AmmoResourceEvidence/Service, AmmunitionLedger, native boundary copy and normal input route.
+The evidence is static; normal builds and actual-game/headset behavior remain separate.

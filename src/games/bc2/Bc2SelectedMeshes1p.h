@@ -46,9 +46,8 @@ struct SelectedMeshesSnapshot {
     // Meshes1p array address, NEVER the mesh asset/skin instance/GPU resource.
     std::uint32_t soleConfiguredArray=0;
     NativeOperationBinding operationBinding{};
-    // Future exact reflected configuration-path reader must repeat this with
-    // the same owner/data/configured array. Existing readers leave it absent;
-    // mesh paths and a weapon label cannot manufacture this proof.
+    // Repeated with the same owner/data/configured array when nonnull. Mesh
+    // paths and a weapon label cannot manufacture a missing configuration path.
     std::array<char,512> configurationPath{};
     bool configurationPathVerified=false;
     std::uint32_t configurationPathPointer=0;
@@ -57,7 +56,7 @@ struct SelectedMeshesSnapshot {
 };
 enum class SelectedMeshesStatus:std::uint8_t {
     Observed,Disabled,InvalidArguments,BindingMismatch,ReadFailure,ReadBudget,
-    OwnerMismatch,MalformedMetadata,ArrayBounds,ChangedDuringRead
+    OwnerMismatch,MalformedMetadata,ArrayBounds,ChangedDuringRead,ConfigurationMismatch
 };
 struct SelectedMeshesResult {
     SelectedMeshesStatus status=SelectedMeshesStatus::Disabled;
@@ -72,6 +71,34 @@ struct SelectedMeshesResult {
 SelectedMeshesResult ReadSelectedMeshes1p(const ReloadStateMemory&,const SelectedMeshesBinding&,
     std::uint32_t imageBase,const ReloadStateOwner&,std::uint64_t sequence,
     std::int64_t observedNs,std::int64_t deadlineNs,bool enabled=false) noexcept;
+struct SelectedZoomMeshState {
+    std::uint32_t state=0,field=0;
+    // A zero address is a verified null MeshZoom1p, not a failed lookup.
+    SelectedMeshAsset mesh{};
+    bool operator==(const SelectedZoomMeshState&)const=default;
+};
+struct SelectedMeshZoomSnapshot {
+    // Same repeated owner, configuration path, authored states and original
+    // lease as the zoom read. Multiple states remain separate and unselected.
+    SelectedMeshesSnapshot selected{};
+    std::array<SelectedZoomMeshState,8> states{};
+    static constexpr bool activeStateVerified=false,adsAcknowledged=false,
+        magnifiedSceneVerified=false,reticleVerified=false,renderSuppressionAllowed=false;
+};
+struct SelectedMeshZoomResult {
+    SelectedMeshesStatus status=SelectedMeshesStatus::Disabled;
+    std::optional<SelectedMeshZoomSnapshot> snapshot;
+    std::uint32_t readCalls=0,readBytes=0;
+};
+// Independent, opt-in diagnostic; no lens-filter callback is needed. Requires
+// an exact full configuration path (for example the campaign SP_sni_M95 path),
+// verifies the file-backed MeshZoom1p descriptor and repeats its asset identity
+// inside the existing owner/configuration bookends. Authored data only: this
+// does not identify the active state, an ADS phase, a submitted draw or a target.
+// Keep outside draw hot paths and discard at selected.deadlineNs/owner change.
+SelectedMeshZoomResult ReadSelectedMeshZoom1p(const ReloadStateMemory&,const SelectedMeshesBinding&,
+    std::uint32_t imageBase,const ReloadStateOwner&,std::string_view exactConfigurationPath,
+    std::uint64_t sequence,std::int64_t observedNs,std::int64_t deadlineNs,bool enabled=false)noexcept;
 // Same reflected config reader for a genuinely carried, UNSELECTED slot.
 // selected.owner remains the actual selected native owner; it is never rewritten
 // to pretend the carried weapon is selected. These values grant no hide/shot proof.

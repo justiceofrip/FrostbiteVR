@@ -1,0 +1,17 @@
+Done Y: focused read-only review of batch18 feed backend and renderer integration.
+One actionable finding; production source unchanged. Frozen/retired after this handoff.
+
+[P1] Retained no-entry retry depends on evictable observation history.
+Location: src/games/bc2/Bc2FeedEquipmentAdapter.h:215-217.
+Runtime path: Bc2ReloadFlowRuntime.cpp:2773 can return RetentionBusy before acquiring the gate or retaining any command/source.
+Caller path: Bc2PhysicalFeed.cpp:230 retries that exact retained submission with noEntryOnly=true.
+Broken condition: 64 successful native view publications replace the original source before the retry can acquire the gate.
+SubmitResult then returns Invalid at the known-source check forever, even though no native transfer was admitted and later own-server/client callbacks prove unchanged counts.
+The frontend keeps pending/refused debt and the persistent fire gate; no rejected receipt can be produced to allow recovery.
+Narrow fix: retain a bounded issued-source/no-entry witness across RetentionBusy, independent of the rolling ReadAt history, and validate the retry against it.
+Keep exact command/resource provenance and later real unchanged callback reconciliation; never turn this retry into native transfer admission.
+Add a regression: RetentionBusy -> more than 64 coherent publications -> exact noEntryOnly retry -> three fresh unchanged callbacks -> one Rejected/noTransferEntry receipt.
+
+No actionable renderer finding in the bounded source/call-site review: canonical metres scale once, separate carry bases, exact current mechanism claim, private pre-feed fallback, and source-byte checks at both Pack callbacks are coherent.
+Excluded the root-owned moving physical-owner recovery issue and already-known feed-only actor retirement gap.
+No Git, builds/tests, game/process/XR/input/install, native success or headset acceptance claimed.

@@ -31,7 +31,14 @@ def catalog_resource_pins(rows, skeleton_archive, skeleton_resource, skeleton_sh
 
     add(skeleton_archive, skeleton_resource, skeleton_sha)
     for row in rows:
-        if row.get('rigid_assembly'):
+        if row.get('configured_aliases'):
+            from bc2_firearm_body_aliases import alias_resource_pins
+            for archive,resource,digest in alias_resource_pins(row):add(archive,resource,digest)
+        if row.get('mod_authored_magazine'):
+            for label in ('mesh', 'lod', 'skeleton', 'static', 'reload'):
+                ref = row['mod_policy_source'][label]
+                add(ref['archive'], ref['resource'], ref['sha256'])
+        elif row.get('rigid_assembly'):
             for label in ('mesh', 'lod', 'skeleton', 'static', 'reload'):
                 ref = row['assembly_source'][label]
                 add(ref['archive'], ref['resource'], ref['sha256'])
@@ -104,6 +111,16 @@ def content_profile(row):
         for label in ('mesh', 'lod', 'skeleton', 'static', 'reload'):
             if label in row['assembly_source']:
                 result['assembly_source'][label] = provenance(row['assembly_source'][label], ('archive_index_sha256',))
+    if 'mod_policy_source' in row:
+        result['mod_policy_source'] = dict(row['mod_policy_source'])
+        for label in ('mesh', 'lod', 'skeleton', 'static', 'reload'):
+            if label in row['mod_policy_source']:
+                result['mod_policy_source'][label] = provenance(row['mod_policy_source'][label], ('archive_index_sha256',))
+    if 'configured_aliases' in row:
+        result['configured_aliases']=[]
+        for alias in row['configured_aliases']:
+            if alias['profile'].get('configured_aliases'):raise ValueError('Nested configuration alias')
+            result['configured_aliases'].append({**alias,'profile':content_profile(alias['profile'])})
     return result
 
 

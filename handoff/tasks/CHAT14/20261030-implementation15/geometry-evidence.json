@@ -1,0 +1,2323 @@
+{
+  "schema": "fvr.bc2.exact_m60_geometry.v1",
+  "evidence_level": "offline_installed_asset_measurement",
+  "source_proof_sha256": "f703e5e4dc3f7d2cdefc6690c346b053732590a11f084a74a5b5e75054c57a7f",
+  "source_jobs_sha256": "b02c6569c60999e562e1e31b03a337a767f72c0a9114eb3e55bae24c44b1a180",
+  "selector": {
+    "asset_name": "M60_sp",
+    "asset_path": "Objects/Weapons/Handheld/BU_lmg_M60/SP_lmg_M60"
+  },
+  "binding_digest": "047e71e95acf4ef47b15c2f09e12a63abeb4395fcb375dcffca86cb6088080bf",
+  "archive_indices": {
+    "Dist/win32/levels/sp_common/level-00.fbrb": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842",
+    "Dist/win32/async/weapon/sp_lmg_m60-00.fbrb": "4260b95b2de5e90945e0554bac1e55a5066a121810845b2b40d108d4de4b8b89"
+  },
+  "resources": {
+    "Characters/Skeletons/ske01.res": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+    "Animations/Weapons/Handheld/BU_lmg_M60/1P/1P_Reload.res": "a6b0e5c68340c3ec2211e25a7f682bbce93befc1535e13fc31bd46bf727614f3",
+    "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Mesh_lod0_data.res": "bff83bba14b87b2833321648d5d3ef738496896e173b20a73bf638aecb4440d9",
+    "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Mesh.res": "76111c128ce0365d6df6263bfa87cf6329979283d62dc95c95806d5b8eec4446"
+  },
+  "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+  "inverse_bind_max_error": 7.35e-07,
+  "coordinate_convention": "canonical reflected-Z row-vector metres; weapon frame jntWpn_1",
+  "duration_s": 8.0333337784,
+  "sample_hz": 30,
+  "sample_count": 243,
+  "weapon_track_count": 21,
+  "weighted_parts": 14,
+  "native_admission": false,
+  "runtime_enabled": false,
+  "runtime_interpolation_verified": false,
+  "roles": {
+    "cover": "unsupported",
+    "latch": "unsupported",
+    "container": "unsupported",
+    "feed": "unsupported",
+    "charge": "unsupported"
+  },
+  "limits": [
+    "Numeric bone names do not name semantic mechanisms; materials name presentation surfaces only.",
+    "Clip t0 is a baseline, not native closed/attached/ready authority.",
+    "Hinge ranges and contact windows sample the offline decoder; slider extrema are analytic decoder extrema.",
+    "Contact uses knuckle centroid, AABB proximity and nearest mesh vertex; no controller grip or reach tolerance is authored.",
+    "No sampled animation timestamp is a native stage, command, acknowledgement or gameplay permission."
+  ],
+  "reader_hashes": {
+    "inspect_bc2_mesh_asset.py": "2fd90f39794dfc4698229b8fb68eff02c0b91de168bf4027a1bb42adee1163bf",
+    "bc2_weapon_animation_pipeline.py": "1e1be1d12389835bc089ead9c172a011797a3c8d5370957b0ade2876ff3cd55b",
+    "bc2_granny_resource.py": "b96444d4e8ba8f62b00604fc7e2e4fc8d7ba484d1320c18578817bb5f3f81dd3",
+    "bc2_granny_curves.py": "02c2d8f1b7537e23ab2b4b2ccf63b32d848848077525cf65255d976749f08e2c",
+    "bc2_mesh_geometry.py": "f2c5b09a658e62a9b525fa9475a2a82c9d5de3453eb31dbfb5c82fa0f36ba220",
+    "bc2_authored_magazine_geometry.py": "5e5d1a752c763d0edeb3c741852ec5481b45ecb3e5846405bd9fc3ea58af5ec3",
+    "bc2_authored_mechanism_geometry.py": "5dcc25473ba364d52eb5c44cd4e29a11b50890849a0b5ca81d61c07cc11b80ef",
+    "bc2_authored_linear_mechanism.py": "c82762805550a36628f7e3fd91699129eb63d95e142f1976c6579c07da890a0f"
+  },
+  "parts": [
+    {
+      "bone": "jntWpn_0",
+      "index": 7,
+      "parent": "Spine",
+      "mesh_weighted": false,
+      "semantic_role": null,
+      "motion": {
+        "kind": "general_rigid_motion",
+        "max_translation_m": 0.3432975339,
+        "max_rotation_rad": 1.2715741447,
+        "axis_in_baseline_part": null,
+        "peak_sample": 200,
+        "axis_line_residual_m": 0.0,
+        "baseline_parent_from_part": [
+          -0.1105596513,
+          0.8367337472,
+          0.5363331053,
+          0.0,
+          0.9892185596,
+          0.1447895371,
+          -0.0219688713,
+          0.0,
+          -0.0960375181,
+          0.5281217911,
+          -0.8437204329,
+          -0.0,
+          0.521738481,
+          -0.3449480709,
+          0.3415711398,
+          1.0
+        ],
+        "peak_parent_from_part": [
+          -0.7694369902,
+          -0.0721382224,
+          0.6346359547,
+          0.0,
+          0.2482573096,
+          0.8817019027,
+          0.4012107463,
+          0.0,
+          -0.5885023588,
+          0.4662594038,
+          -0.6605052173,
+          -0.0,
+          0.6508403534,
+          -0.5316460998,
+          0.1822556354,
+          1.0
+        ],
+        "baseline_is_native_closed": false,
+        "semantic_role": null
+      },
+      "peak_time_s": 6.6666666667,
+      "baseline_weapon_from_part": [
+        1.0,
+        -5.393e-06,
+        -5.393e-06,
+        0.0,
+        5.393e-06,
+        1.0,
+        -0.0,
+        0.0,
+        5.393e-06,
+        -0.0,
+        1.0,
+        -0.0,
+        -2.1297e-06,
+        0.0321606807,
+        -0.4332229793,
+        1.0
+      ]
+    },
+    {
+      "bone": "jntWpn_1",
+      "index": 10,
+      "parent": "jntWpn_0",
+      "mesh_weighted": true,
+      "semantic_role": null,
+      "motion": {
+        "kind": "static",
+        "max_translation_m": 0.0,
+        "max_rotation_rad": 0.0,
+        "axis_in_baseline_part": null,
+        "peak_sample": 0,
+        "axis_line_residual_m": 0.0,
+        "baseline_parent_from_part": [
+          1.0,
+          5.393e-06,
+          5.393e-06,
+          0.0,
+          -5.393e-06,
+          1.0,
+          -0.0,
+          0.0,
+          -5.393e-06,
+          -0.0,
+          1.0,
+          -0.0,
+          -3.32e-08,
+          -0.0321606807,
+          0.4332229793,
+          1.0
+        ],
+        "peak_parent_from_part": [
+          1.0,
+          5.393e-06,
+          5.393e-06,
+          0.0,
+          -5.393e-06,
+          1.0,
+          -0.0,
+          0.0,
+          -5.393e-06,
+          -0.0,
+          1.0,
+          -0.0,
+          -3.32e-08,
+          -0.0321606807,
+          0.4332229793,
+          1.0
+        ],
+        "baseline_is_native_closed": false,
+        "semantic_role": null
+      },
+      "peak_time_s": 0.0,
+      "baseline_weapon_from_part": [
+        1.0,
+        -0.0,
+        0.0,
+        0.0,
+        -0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        -0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "bounds_part_m": [
+        [
+          -0.0311889648,
+          -0.1056215763,
+          -1.0668337345
+        ],
+        [
+          0.0556640625,
+          0.0916440487,
+          0.0090329647
+        ]
+      ],
+      "extent_m": [
+        0.0868530273,
+        0.197265625,
+        1.0758666992
+      ],
+      "visible_triangles": 4782,
+      "depth_triangles": 4782,
+      "mixed_triangles": 0,
+      "materials": [
+        "Objects/Weapons/Handheld/BU_lmg_M60/Shaders/BU_lmg_M60_Mesh_BrushedMetal",
+        "Objects/Weapons/Handheld/BU_lmg_M60/Shaders/Plastic"
+      ]
+    },
+    {
+      "bone": "jntWpn_10",
+      "index": 35,
+      "parent": "jntWpn_1",
+      "mesh_weighted": false,
+      "semantic_role": null,
+      "motion": {
+        "kind": "general_rigid_motion",
+        "max_translation_m": 0.1178642531,
+        "max_rotation_rad": 1.588758438,
+        "axis_in_baseline_part": null,
+        "peak_sample": 31,
+        "axis_line_residual_m": 0.0,
+        "baseline_parent_from_part": [
+          1.0,
+          -5.397e-06,
+          1e-10,
+          0.0,
+          5.397e-06,
+          0.9999999991,
+          -4.31197e-05,
+          0.0,
+          1e-10,
+          4.31197e-05,
+          0.9999999991,
+          -0.0,
+          -4.65e-08,
+          0.0835033092,
+          -0.3364696503,
+          1.0
+        ],
+        "peak_parent_from_part": [
+          1.0,
+          -3.7817e-06,
+          3.8504e-06,
+          0.0,
+          3.7817e-06,
+          -0.0180042581,
+          -0.9998379102,
+          0.0,
+          3.8504e-06,
+          0.9998379102,
+          -0.0180042581,
+          -0.0,
+          -6.7e-08,
+          0.156064633,
+          -0.4293504149,
+          1.0
+        ],
+        "baseline_is_native_closed": false,
+        "semantic_role": null
+      },
+      "peak_time_s": 1.0333333333,
+      "baseline_weapon_from_part": [
+        1.0,
+        -5.397e-06,
+        1e-10,
+        0.0,
+        5.397e-06,
+        0.9999999991,
+        -4.31197e-05,
+        0.0,
+        1e-10,
+        4.31197e-05,
+        0.9999999991,
+        -0.0,
+        -4.65e-08,
+        0.0835033092,
+        -0.3364696503,
+        1.0
+      ]
+    },
+    {
+      "bone": "jntWpn_11",
+      "index": 36,
+      "parent": "jntWpn_1",
+      "mesh_weighted": true,
+      "semantic_role": null,
+      "motion": {
+        "kind": "static",
+        "max_translation_m": 0.0,
+        "max_rotation_rad": 2.11e-08,
+        "axis_in_baseline_part": null,
+        "peak_sample": 0,
+        "axis_line_residual_m": 0.0,
+        "baseline_parent_from_part": [
+          1.0,
+          5.393e-06,
+          5.3929e-06,
+          0.0,
+          -5.3929e-06,
+          1.0,
+          -5.393e-06,
+          0.0,
+          -5.393e-06,
+          5.3929e-06,
+          1.0,
+          -0.0,
+          0.0,
+          0.0,
+          -0.0,
+          1.0
+        ],
+        "peak_parent_from_part": [
+          1.0,
+          5.393e-06,
+          5.3929e-06,
+          0.0,
+          -5.3929e-06,
+          1.0,
+          -5.393e-06,
+          0.0,
+          -5.393e-06,
+          5.3929e-06,
+          1.0,
+          -0.0,
+          0.0,
+          0.0,
+          -0.0,
+          1.0
+        ],
+        "baseline_is_native_closed": false,
+        "semantic_role": null
+      },
+      "peak_time_s": 0.0,
+      "baseline_weapon_from_part": [
+        1.0,
+        5.393e-06,
+        5.3929e-06,
+        0.0,
+        -5.3929e-06,
+        1.0,
+        -5.393e-06,
+        0.0,
+        -5.393e-06,
+        5.3929e-06,
+        1.0,
+        -0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "bounds_part_m": [
+        [
+          -0.0161895752,
+          0.0496518612,
+          -0.9613649845
+        ],
+        [
+          0.0177459717,
+          0.1297299862,
+          -0.4298708439
+        ]
+      ],
+      "extent_m": [
+        0.0339355469,
+        0.080078125,
+        0.5314941406
+      ],
+      "visible_triangles": 686,
+      "depth_triangles": 686,
+      "mixed_triangles": 0,
+      "materials": [
+        "Objects/Weapons/Handheld/BU_lmg_M60/Shaders/BU_lmg_M60_Mesh_BrushedMetal"
+      ]
+    },
+    {
+      "bone": "jntWpn_12",
+      "index": 38,
+      "parent": "jntWpn_1",
+      "mesh_weighted": true,
+      "semantic_role": null,
+      "motion": {
+        "kind": "general_rigid_motion",
+        "max_translation_m": 0.7195820208,
+        "max_rotation_rad": 2.2482019846,
+        "axis_in_baseline_part": null,
+        "peak_sample": 70,
+        "axis_line_residual_m": 0.0,
+        "baseline_parent_from_part": [
+          0.9999999981,
+          4.31206e-05,
+          4.31188e-05,
+          0.0,
+          -4.31188e-05,
+          0.9999999981,
+          -4.31206e-05,
+          0.0,
+          -4.31206e-05,
+          4.31188e-05,
+          0.9999999981,
+          -0.0,
+          0.083738353,
+          0.0277554969,
+          -0.4063177281,
+          1.0
+        ],
+        "peak_parent_from_part": [
+          -0.4142800852,
+          0.8967742799,
+          -0.1554602906,
+          0.0,
+          -0.3954262239,
+          -0.3311888029,
+          -0.8567100316,
+          0.0,
+          -0.8197622292,
+          -0.2934448292,
+          0.4918129927,
+          -0.0,
+          0.6553224604,
+          -0.285303231,
+          -0.4230130123,
+          1.0
+        ],
+        "baseline_is_native_closed": false,
+        "semantic_role": null
+      },
+      "peak_time_s": 2.3333333333,
+      "baseline_weapon_from_part": [
+        0.9999999981,
+        4.31206e-05,
+        4.31188e-05,
+        0.0,
+        -4.31188e-05,
+        0.9999999981,
+        -4.31206e-05,
+        0.0,
+        -4.31206e-05,
+        4.31188e-05,
+        0.9999999981,
+        -0.0,
+        0.083738353,
+        0.0277554969,
+        -0.4063177281,
+        1.0
+      ],
+      "bounds_part_m": [
+        [
+          -0.0218963623,
+          -0.0050356388,
+          -2.384e-07
+        ],
+        [
+          0.005405426,
+          0.0154721737,
+          0.0675656796
+        ]
+      ],
+      "extent_m": [
+        0.0273017883,
+        0.0205078125,
+        0.067565918
+      ],
+      "visible_triangles": 280,
+      "depth_triangles": 280,
+      "mixed_triangles": 0,
+      "materials": [
+        "Objects/Weapons/Handheld/BU_lmg_M60/Shaders/Ammo"
+      ],
+      "stable_left_contact": null,
+      "closest_left_contact_sample": {
+        "time_s": 1.7,
+        "knuckle_bounds_distance_m": 0.0890875405,
+        "knuckle_centroid_part_m": [
+          0.0873482518,
+          -0.0390679765,
+          -0.0079854228
+        ],
+        "nearest_mesh_vertex_part_m": [
+          0.0025939941,
+          -0.0001528263,
+          0.0080564022
+        ],
+        "knuckle_to_mesh_vertex_m": 0.0946309318,
+        "part_from_wrist": [
+          -0.3966306646,
+          0.8488040678,
+          0.3495937219,
+          0.0,
+          0.4748486812,
+          0.5156286795,
+          -0.7131940794,
+          0.0,
+          -0.7856225849,
+          -0.1168705239,
+          -0.607567638,
+          0.0,
+          0.1364711613,
+          -0.0562269306,
+          0.0469412958,
+          1.0
+        ],
+        "sustained_grasp_verified": false
+      }
+    },
+    {
+      "bone": "jntWpn_13",
+      "index": 100,
+      "parent": "jntWpn_12",
+      "mesh_weighted": true,
+      "semantic_role": null,
+      "motion": {
+        "kind": "hinge_candidate",
+        "max_translation_m": 0.0,
+        "max_rotation_rad": 1.2516391685,
+        "axis_in_baseline_part": [
+          -3.5731e-06,
+          1.8199e-06,
+          -1.0
+        ],
+        "peak_sample": 81,
+        "axis_line_residual_m": 0.0,
+        "baseline_parent_from_part": [
+          0.9999999991,
+          4.31197e-05,
+          5.3928e-06,
+          0.0,
+          -4.31197e-05,
+          0.9999999991,
+          -5.3931e-06,
+          0.0,
+          -5.3931e-06,
+          5.3928e-06,
+          1.0,
+          -0.0,
+          -0.0251460969,
+          0.0179381948,
+          5e-09,
+          1.0
+        ],
+        "peak_parent_from_part": [
+          0.3138073357,
+          -0.9494866803,
+          7.5368e-06,
+          0.0,
+          0.9494866803,
+          0.3138073357,
+          -1.2132e-06,
+          0.0,
+          -1.2132e-06,
+          7.5368e-06,
+          1.0,
+          -0.0,
+          -0.0251460969,
+          0.0179381948,
+          5e-09,
+          1.0
+        ],
+        "baseline_is_native_closed": false,
+        "semantic_role": null
+      },
+      "peak_time_s": 2.7,
+      "baseline_weapon_from_part": [
+        0.9999999951,
+        8.62406e-05,
+        4.85097e-05,
+        0.0,
+        -8.62382e-05,
+        0.9999999951,
+        -4.85156e-05,
+        0.0,
+        -4.85139e-05,
+        4.85114e-05,
+        0.9999999976,
+        -0.0,
+        0.0585914826,
+        0.0456926073,
+        -0.4063195808,
+        1.0
+      ],
+      "bounds_part_m": [
+        [
+          -0.0060997009,
+          -0.0050356388,
+          -2.384e-07
+        ],
+        [
+          0.0053863525,
+          0.0096127987,
+          0.0675656796
+        ]
+      ],
+      "extent_m": [
+        0.0114860535,
+        0.0146484375,
+        0.067565918
+      ],
+      "visible_triangles": 160,
+      "depth_triangles": 160,
+      "mixed_triangles": 0,
+      "materials": [
+        "Objects/Weapons/Handheld/BU_lmg_M60/Shaders/Ammo"
+      ],
+      "stable_left_contact": null,
+      "closest_left_contact_sample": {
+        "time_s": 4.1333333333,
+        "knuckle_bounds_distance_m": 0.0894286593,
+        "knuckle_centroid_part_m": [
+          -0.0925034423,
+          0.0326752914,
+          0.0150826158
+        ],
+        "nearest_mesh_vertex_part_m": [
+          -0.0060997009,
+          0.0086362362,
+          0.0366818905
+        ],
+        "knuckle_to_mesh_vertex_m": 0.0922497229,
+        "part_from_wrist": [
+          0.189057966,
+          -0.2254147039,
+          0.9557433216,
+          0.0,
+          -0.9806918239,
+          0.0062219997,
+          0.1954605672,
+          0.0,
+          -0.0500063205,
+          -0.9742430385,
+          -0.2198860384,
+          0.0,
+          -0.0675935814,
+          0.104024664,
+          0.0114494057,
+          1.0
+        ],
+        "sustained_grasp_verified": false
+      }
+    },
+    {
+      "bone": "jntWpn_15",
+      "index": 116,
+      "parent": "jntWpnwpnJnt_14",
+      "mesh_weighted": true,
+      "semantic_role": null,
+      "motion": {
+        "kind": "hinge_candidate",
+        "max_translation_m": 0.0,
+        "max_rotation_rad": 1.7136885863,
+        "axis_in_baseline_part": [
+          -3.9284e-06,
+          1.4646e-06,
+          -1.0
+        ],
+        "peak_sample": 59,
+        "axis_line_residual_m": 0.0,
+        "baseline_parent_from_part": [
+          0.9999999991,
+          4.31197e-05,
+          5.3928e-06,
+          0.0,
+          -4.31197e-05,
+          0.9999999991,
+          -5.3931e-06,
+          0.0,
+          -5.3931e-06,
+          5.3928e-06,
+          1.0,
+          -0.0,
+          -0.0296859071,
+          0.0076751765,
+          1.88e-08,
+          1.0
+        ],
+        "peak_parent_from_part": [
+          -0.1423638083,
+          -0.9898143998,
+          7.6082e-06,
+          0.0,
+          0.9898143998,
+          -0.1423638083,
+          5.443e-07,
+          0.0,
+          5.443e-07,
+          7.6082e-06,
+          1.0,
+          -0.0,
+          -0.0296859071,
+          0.0076751765,
+          1.88e-08,
+          1.0
+        ],
+        "baseline_is_native_closed": false,
+        "semantic_role": null
+      },
+      "peak_time_s": 1.9666666667,
+      "baseline_weapon_from_part": [
+        0.9999999834,
+        0.0001724805,
+        5.9291e-05,
+        0.0,
+        -0.000172477,
+        0.9999999834,
+        -5.93061e-05,
+        0.0,
+        -5.93012e-05,
+        5.92959e-05,
+        0.9999999965,
+        -0.0,
+        0.0206640107,
+        0.0665491707,
+        -0.406322618,
+        1.0
+      ],
+      "bounds_part_m": [
+        [
+          -0.0220794678,
+          -0.0148012638,
+          -2.384e-07
+        ],
+        [
+          0.0053253174,
+          0.0057065487,
+          0.0675656796
+        ]
+      ],
+      "extent_m": [
+        0.0274047852,
+        0.0205078125,
+        0.067565918
+      ],
+      "visible_triangles": 320,
+      "depth_triangles": 320,
+      "mixed_triangles": 0,
+      "materials": [
+        "Objects/Weapons/Handheld/BU_lmg_M60/Shaders/Ammo"
+      ],
+      "stable_left_contact": null,
+      "closest_left_contact_sample": {
+        "time_s": 4.1,
+        "knuckle_bounds_distance_m": 0.0358883618,
+        "knuckle_centroid_part_m": [
+          -0.0513301539,
+          0.0265001023,
+          0.0084177372
+        ],
+        "nearest_mesh_vertex_part_m": [
+          -0.0150527954,
+          -0.0060122013,
+          0.0154416561
+        ],
+        "knuckle_to_mesh_vertex_m": 0.0492182086,
+        "part_from_wrist": [
+          0.1405791202,
+          -0.2294368912,
+          0.9631179699,
+          0.0,
+          -0.9881128353,
+          -0.0936402565,
+          0.1219201669,
+          0.0,
+          0.0622136297,
+          -0.9688086577,
+          -0.2398734019,
+          0.0,
+          -0.0333680301,
+          0.099995118,
+          0.0078894136,
+          1.0
+        ],
+        "sustained_grasp_verified": false
+      }
+    },
+    {
+      "bone": "jntWpn_17",
+      "index": 99,
+      "parent": "jntWpnwpnJnt_16",
+      "mesh_weighted": false,
+      "semantic_role": null,
+      "motion": {
+        "kind": "hinge_candidate",
+        "max_translation_m": 0.0,
+        "max_rotation_rad": 1.8603727789,
+        "axis_in_baseline_part": [
+          -4.0496e-06,
+          1.3434e-06,
+          -1.0
+        ],
+        "peak_sample": 122,
+        "axis_line_residual_m": 0.0,
+        "baseline_parent_from_part": [
+          0.9999999991,
+          4.31197e-05,
+          5.3928e-06,
+          0.0,
+          -4.31197e-05,
+          0.9999999991,
+          -5.3931e-06,
+          0.0,
+          -5.3931e-06,
+          5.3928e-06,
+          1.0,
+          -0.0,
+          0.0,
+          0.0,
+          -0.0,
+          1.0
+        ],
+        "peak_parent_from_part": [
+          -0.2855050126,
+          -0.9583772158,
+          7.5472e-06,
+          0.0,
+          0.9583772158,
+          -0.2855050126,
+          1.1003e-06,
+          0.0,
+          1.1003e-06,
+          7.5472e-06,
+          1.0,
+          -0.0,
+          0.0,
+          0.0,
+          -0.0,
+          1.0
+        ],
+        "baseline_is_native_closed": false,
+        "semantic_role": null
+      },
+      "peak_time_s": 4.0666666667,
+      "baseline_weapon_from_part": [
+        0.9999999951,
+        8.62406e-05,
+        4.85097e-05,
+        0.0,
+        -8.62382e-05,
+        0.9999999951,
+        -4.85156e-05,
+        0.0,
+        -4.85139e-05,
+        4.85114e-05,
+        0.9999999976,
+        -0.0,
+        -5.4836e-06,
+        -2.2304e-06,
+        -1.4966e-06,
+        1.0
+      ]
+    },
+    {
+      "bone": "jntWpn_18",
+      "index": 113,
+      "parent": "jntWpn_17",
+      "mesh_weighted": false,
+      "semantic_role": null,
+      "motion": {
+        "kind": "general_rigid_motion",
+        "max_translation_m": 0.0044271008,
+        "max_rotation_rad": 1.2795468313,
+        "axis_in_baseline_part": null,
+        "peak_sample": 126,
+        "axis_line_residual_m": 0.0,
+        "baseline_parent_from_part": [
+          0.9999999991,
+          4.31197e-05,
+          5.3928e-06,
+          0.0,
+          -4.31197e-05,
+          0.9999999991,
+          -5.3931e-06,
+          0.0,
+          -5.3931e-06,
+          5.3928e-06,
+          1.0,
+          -0.0,
+          1.08867e-05,
+          -6.2681e-06,
+          0.0,
+          1.0
+        ],
+        "peak_parent_from_part": [
+          0.287108019,
+          0.9578982125,
+          1.1066e-06,
+          0.0,
+          -0.9578982124,
+          0.287108019,
+          -7.5462e-06,
+          0.0,
+          -7.5462e-06,
+          1.1066e-06,
+          1.0,
+          -0.0,
+          -3.5734e-06,
+          3.2523e-06,
+          0.0,
+          1.0
+        ],
+        "baseline_is_native_closed": false,
+        "semantic_role": null
+      },
+      "peak_time_s": 4.2,
+      "baseline_weapon_from_part": [
+        0.9999999902,
+        0.0001293605,
+        5.39005e-05,
+        0.0,
+        -0.0001293576,
+        0.9999999902,
+        -5.39107e-05,
+        0.0,
+        -5.39075e-05,
+        5.39038e-05,
+        0.9999999971,
+        -0.0,
+        5.4036e-06,
+        -8.4976e-06,
+        -1.4958e-06,
+        1.0
+      ]
+    },
+    {
+      "bone": "jntWpn_19",
+      "index": 115,
+      "parent": "jntWpn_18",
+      "mesh_weighted": false,
+      "semantic_role": null,
+      "motion": {
+        "kind": "hinge_candidate",
+        "max_translation_m": 0.0,
+        "max_rotation_rad": 1.6240475211,
+        "axis_in_baseline_part": [
+          -3.8557e-06,
+          1.5374e-06,
+          -1.0
+        ],
+        "peak_sample": 92,
+        "axis_line_residual_m": 0.0,
+        "baseline_parent_from_part": [
+          0.9999999991,
+          4.31197e-05,
+          5.3928e-06,
+          0.0,
+          -4.31197e-05,
+          0.9999999991,
+          -5.3931e-06,
+          0.0,
+          -5.3931e-06,
+          5.3928e-06,
+          1.0,
+          -0.0,
+          0.0,
+          0.0,
+          -0.0,
+          1.0
+        ],
+        "peak_parent_from_part": [
+          -0.053182972,
+          -0.9985847843,
+          7.6241e-06,
+          0.0,
+          0.9985847843,
+          -0.053182972,
+          2.029e-07,
+          0.0,
+          2.029e-07,
+          7.6241e-06,
+          1.0,
+          -0.0,
+          0.0,
+          0.0,
+          -0.0,
+          1.0
+        ],
+        "baseline_is_native_closed": false,
+        "semantic_role": null
+      },
+      "peak_time_s": 3.0666666667,
+      "baseline_weapon_from_part": [
+        0.9999999834,
+        0.0001724805,
+        5.9291e-05,
+        0.0,
+        -0.000172477,
+        0.9999999834,
+        -5.93061e-05,
+        0.0,
+        -5.93012e-05,
+        5.92959e-05,
+        0.9999999965,
+        -0.0,
+        5.4036e-06,
+        -8.4976e-06,
+        -1.4958e-06,
+        1.0
+      ]
+    },
+    {
+      "bone": "jntWpn_2",
+      "index": 17,
+      "parent": "jntWpn_1",
+      "mesh_weighted": true,
+      "semantic_role": null,
+      "motion": {
+        "kind": "static",
+        "max_translation_m": 0.0,
+        "max_rotation_rad": 2.11e-08,
+        "axis_in_baseline_part": null,
+        "peak_sample": 0,
+        "axis_line_residual_m": 0.0,
+        "baseline_parent_from_part": [
+          1.0,
+          5.393e-06,
+          5.3929e-06,
+          0.0,
+          -5.3929e-06,
+          1.0,
+          -5.393e-06,
+          0.0,
+          -5.393e-06,
+          5.3929e-06,
+          1.0,
+          -0.0,
+          3.1e-08,
+          -0.0296383072,
+          -0.3613349795,
+          1.0
+        ],
+        "peak_parent_from_part": [
+          1.0,
+          5.393e-06,
+          5.3929e-06,
+          0.0,
+          -5.3929e-06,
+          1.0,
+          -5.393e-06,
+          0.0,
+          -5.393e-06,
+          5.3929e-06,
+          1.0,
+          -0.0,
+          3.1e-08,
+          -0.0296383072,
+          -0.3613349795,
+          1.0
+        ],
+        "baseline_is_native_closed": false,
+        "semantic_role": null
+      },
+      "peak_time_s": 0.0,
+      "baseline_weapon_from_part": [
+        1.0,
+        5.393e-06,
+        5.3929e-06,
+        0.0,
+        -5.3929e-06,
+        1.0,
+        -5.393e-06,
+        0.0,
+        -5.393e-06,
+        5.3929e-06,
+        1.0,
+        -0.0,
+        3.1e-08,
+        -0.0296383072,
+        -0.3613349795,
+        1.0
+      ],
+      "bounds_part_m": [
+        [
+          -0.0022220612,
+          -0.0157778263,
+          -0.0075685978
+        ],
+        [
+          0.003780365,
+          0.0154721737,
+          0.0139768124
+        ]
+      ],
+      "extent_m": [
+        0.0060024261,
+        0.03125,
+        0.0215454102
+      ],
+      "visible_triangles": 22,
+      "depth_triangles": 22,
+      "mixed_triangles": 0,
+      "materials": [
+        "Objects/Weapons/Handheld/BU_lmg_M60/Shaders/BU_lmg_M60_Mesh_BrushedMetal"
+      ]
+    },
+    {
+      "bone": "jntWpn_3",
+      "index": 30,
+      "parent": "jntWpn_1",
+      "mesh_weighted": true,
+      "semantic_role": null,
+      "motion": {
+        "kind": "static",
+        "max_translation_m": 0.0,
+        "max_rotation_rad": 2.11e-08,
+        "axis_in_baseline_part": null,
+        "peak_sample": 0,
+        "axis_line_residual_m": 0.0,
+        "baseline_parent_from_part": [
+          1.0,
+          5.393e-06,
+          5.3929e-06,
+          0.0,
+          -5.3929e-06,
+          1.0,
+          -5.393e-06,
+          0.0,
+          -5.393e-06,
+          5.3929e-06,
+          1.0,
+          -0.0,
+          3.1e-08,
+          0.0546113066,
+          -0.3155860007,
+          1.0
+        ],
+        "peak_parent_from_part": [
+          1.0,
+          5.393e-06,
+          5.3929e-06,
+          0.0,
+          -5.3929e-06,
+          1.0,
+          -5.393e-06,
+          0.0,
+          -5.393e-06,
+          5.3929e-06,
+          1.0,
+          -0.0,
+          3.1e-08,
+          0.0546113066,
+          -0.3155860007,
+          1.0
+        ],
+        "baseline_is_native_closed": false,
+        "semantic_role": null
+      },
+      "peak_time_s": 0.0,
+      "baseline_weapon_from_part": [
+        1.0,
+        5.393e-06,
+        5.3929e-06,
+        0.0,
+        -5.3929e-06,
+        1.0,
+        -5.393e-06,
+        0.0,
+        -5.393e-06,
+        5.3929e-06,
+        1.0,
+        -0.0,
+        3.1e-08,
+        0.0546113066,
+        -0.3155860007,
+        1.0
+      ],
+      "bounds_part_m": [
+        [
+          -0.0097808838,
+          -0.0226137638,
+          -0.1013948917
+        ],
+        [
+          0.0092163086,
+          0.0018002987,
+          0.0101926327
+        ]
+      ],
+      "extent_m": [
+        0.0189971924,
+        0.0244140625,
+        0.1115875244
+      ],
+      "visible_triangles": 87,
+      "depth_triangles": 87,
+      "mixed_triangles": 0,
+      "materials": [
+        "Objects/Weapons/Handheld/BU_lmg_M60/Shaders/BU_lmg_M60_Mesh_BrushedMetal"
+      ]
+    },
+    {
+      "bone": "jntWpn_4",
+      "index": 43,
+      "parent": "jntWpn_1",
+      "mesh_weighted": true,
+      "semantic_role": null,
+      "motion": {
+        "kind": "slider_candidate",
+        "max_translation_m": 0.2312568774,
+        "max_rotation_rad": 2.11e-08,
+        "axis_in_baseline_part": [
+          5.2075e-06,
+          -5.3802e-06,
+          1.0
+        ],
+        "peak_sample": 202,
+        "axis_line_residual_m": 0.0,
+        "baseline_parent_from_part": [
+          1.0,
+          5.393e-06,
+          5.3929e-06,
+          0.0,
+          -5.3929e-06,
+          1.0,
+          -5.393e-06,
+          0.0,
+          -5.393e-06,
+          5.3929e-06,
+          1.0,
+          -0.0,
+          -0.0517479445,
+          0.0121865959,
+          -0.4085690691,
+          1.0
+        ],
+        "peak_parent_from_part": [
+          1.0,
+          5.393e-06,
+          5.3929e-06,
+          0.0,
+          -5.3929e-06,
+          1.0,
+          -5.393e-06,
+          0.0,
+          -5.393e-06,
+          5.3929e-06,
+          1.0,
+          -0.0,
+          -0.0517479874,
+          0.0121865989,
+          -0.1773121918,
+          1.0
+        ],
+        "baseline_is_native_closed": false,
+        "semantic_role": null
+      },
+      "peak_time_s": 6.7333333333,
+      "baseline_weapon_from_part": [
+        1.0,
+        5.393e-06,
+        5.3929e-06,
+        0.0,
+        -5.3929e-06,
+        1.0,
+        -5.393e-06,
+        0.0,
+        -5.393e-06,
+        5.3929e-06,
+        1.0,
+        -0.0,
+        -0.0517479445,
+        0.0121865959,
+        -0.4085690691,
+        1.0
+      ],
+      "bounds_part_m": [
+        [
+          0.0062904358,
+          -0.0060122013,
+          -0.0048830509
+        ],
+        [
+          0.0490112305,
+          0.0047299862,
+          0.2515256405
+        ]
+      ],
+      "extent_m": [
+        0.0427207947,
+        0.0107421875,
+        0.2564086914
+      ],
+      "visible_triangles": 114,
+      "depth_triangles": 114,
+      "mixed_triangles": 0,
+      "materials": [
+        "Objects/Weapons/Handheld/BU_lmg_M60/Shaders/BU_lmg_M60_Mesh_BrushedMetal"
+      ],
+      "stable_left_contact": null,
+      "closest_left_contact_sample": {
+        "time_s": 6.5333333333,
+        "knuckle_bounds_distance_m": 0.0503562714,
+        "knuckle_centroid_part_m": [
+          -0.0287556024,
+          0.037097836,
+          -0.0210029633
+        ],
+        "nearest_mesh_vertex_part_m": [
+          0.0062904358,
+          0.0027768612,
+          -0.0026247501
+        ],
+        "knuckle_to_mesh_vertex_m": 0.0523823713,
+        "part_from_wrist": [
+          0.3944286075,
+          -0.6609553936,
+          0.6384074258,
+          0.0,
+          -0.9157915914,
+          -0.225394799,
+          0.3324499144,
+          0.0,
+          -0.0758408506,
+          -0.7157759092,
+          -0.6941995485,
+          0.0,
+          -0.0066900927,
+          0.1025511942,
+          0.0098743023,
+          1.0
+        ],
+        "sustained_grasp_verified": false
+      },
+      "rail": {
+        "baseline_origin_weapon_m": [
+          -0.0517479445,
+          0.0121865959,
+          -0.4085690691
+        ],
+        "axis_weapon": [
+          0,
+          0,
+          1
+        ],
+        "relative_to_clip_t0": true,
+        "decoded_extrema": {
+          "minimum_m": -0.0020137391,
+          "maximum_m": 0.2315819301,
+          "minimum_time_seconds": 6.5104431047,
+          "maximum_time_seconds": 6.730160063,
+          "method": "per_knot_polynomial_endpoints_and_stationary_points",
+          "includes_one_sided_knot_limits": true,
+          "runtime_interpolation_verified": false
+        },
+        "travel_m": 0.2335956691,
+        "transverse_control_hull_m": 4.45e-08,
+        "orientation_controls_identical": true
+      }
+    },
+    {
+      "bone": "jntWpn_5",
+      "index": 42,
+      "parent": "jntWpn_1",
+      "mesh_weighted": true,
+      "semantic_role": null,
+      "motion": {
+        "kind": "static",
+        "max_translation_m": 0.0,
+        "max_rotation_rad": 2.11e-08,
+        "axis_in_baseline_part": null,
+        "peak_sample": 0,
+        "axis_line_residual_m": 0.0,
+        "baseline_parent_from_part": [
+          1.0,
+          5.393e-06,
+          5.3929e-06,
+          0.0,
+          -5.3929e-06,
+          1.0,
+          -5.393e-06,
+          0.0,
+          -5.393e-06,
+          5.3929e-06,
+          1.0,
+          -0.0,
+          0.0011200362,
+          0.0709235147,
+          -0.4850040376,
+          1.0
+        ],
+        "peak_parent_from_part": [
+          1.0,
+          5.393e-06,
+          5.3929e-06,
+          0.0,
+          -5.3929e-06,
+          1.0,
+          -5.393e-06,
+          0.0,
+          -5.393e-06,
+          5.3929e-06,
+          1.0,
+          -0.0,
+          0.0011200362,
+          0.0709235147,
+          -0.4850040376,
+          1.0
+        ],
+        "baseline_is_native_closed": false,
+        "semantic_role": null
+      },
+      "peak_time_s": 0.0,
+      "baseline_weapon_from_part": [
+        1.0,
+        5.393e-06,
+        5.3929e-06,
+        0.0,
+        -5.3929e-06,
+        1.0,
+        -5.393e-06,
+        0.0,
+        -5.393e-06,
+        5.3929e-06,
+        1.0,
+        -0.0,
+        0.0011200362,
+        0.0709235147,
+        -0.4850040376,
+        1.0
+      ],
+      "bounds_part_m": [
+        [
+          -0.0497436523,
+          -0.0030825138,
+          -0.0746920109
+        ],
+        [
+          0.0029373169,
+          0.0428159237,
+          0.0299680233
+        ]
+      ],
+      "extent_m": [
+        0.0526809692,
+        0.0458984375,
+        0.1046600342
+      ],
+      "visible_triangles": 340,
+      "depth_triangles": 340,
+      "mixed_triangles": 0,
+      "materials": [
+        "Objects/Weapons/Handheld/BU_lmg_M60/Shaders/BU_lmg_M60_Mesh_BrushedMetal",
+        "Objects/Weapons/Handheld/BU_lmg_M60/Shaders/Plastic"
+      ]
+    },
+    {
+      "bone": "jntWpn_6",
+      "index": 41,
+      "parent": "jntWpn_1",
+      "mesh_weighted": true,
+      "semantic_role": null,
+      "motion": {
+        "kind": "general_rigid_motion",
+        "max_translation_m": 0.7677397006,
+        "max_rotation_rad": 2.2802475875,
+        "axis_in_baseline_part": null,
+        "peak_sample": 70,
+        "axis_line_residual_m": 0.0,
+        "baseline_parent_from_part": [
+          0.9999999981,
+          4.31206e-05,
+          4.31188e-05,
+          0.0,
+          -4.31188e-05,
+          0.9999999981,
+          -4.31206e-05,
+          0.0,
+          -4.31206e-05,
+          4.31188e-05,
+          0.9999999981,
+          -0.0,
+          0.1052855052,
+          -0.0216212654,
+          -0.3782466588,
+          1.0
+        ],
+        "peak_parent_from_part": [
+          -0.4292386542,
+          0.8833295942,
+          -0.1883693334,
+          0.0,
+          -0.3791626786,
+          -0.3655252575,
+          -0.8500746728,
+          0.0,
+          -0.8197498648,
+          -0.2934622875,
+          0.4918231846,
+          -0.0,
+          0.7869576301,
+          -0.3605540155,
+          -0.3653060237,
+          1.0
+        ],
+        "baseline_is_native_closed": false,
+        "semantic_role": null
+      },
+      "peak_time_s": 2.3333333333,
+      "baseline_weapon_from_part": [
+        0.9999999981,
+        4.31206e-05,
+        4.31188e-05,
+        0.0,
+        -4.31188e-05,
+        0.9999999981,
+        -4.31206e-05,
+        0.0,
+        -4.31206e-05,
+        4.31188e-05,
+        0.9999999981,
+        -0.0,
+        0.1052855052,
+        -0.0216212654,
+        -0.3782466588,
+        1.0
+      ],
+      "bounds_part_m": [
+        [
+          -0.0522766113,
+          -0.0587465763,
+          -0.0364382267
+        ],
+        [
+          0.0567016602,
+          0.0652768612,
+          0.0685422421
+        ]
+      ],
+      "extent_m": [
+        0.1089782715,
+        0.1240234375,
+        0.1049804688
+      ],
+      "visible_triangles": 373,
+      "depth_triangles": 373,
+      "mixed_triangles": 0,
+      "materials": [
+        "Objects/Weapons/Handheld/BU_lmg_M60/Shaders/BU_lmg_M60_Mesh_BrushedMetal",
+        "Objects/Weapons/Handheld/BU_lmg_M60/Shaders/Fabrics"
+      ],
+      "stable_left_contact": null,
+      "closest_left_contact_sample": {
+        "time_s": 2.1,
+        "knuckle_bounds_distance_m": 0.0,
+        "knuckle_centroid_part_m": [
+          0.055186508,
+          -0.033843059,
+          -0.032909597
+        ],
+        "nearest_mesh_vertex_part_m": [
+          0.0523376465,
+          -0.0274965763,
+          -0.0310671329
+        ],
+        "knuckle_to_mesh_vertex_m": 0.0071964247,
+        "part_from_wrist": [
+          -0.4599995503,
+          0.7878912136,
+          0.4094238015,
+          0.0,
+          0.2550996095,
+          0.5589347909,
+          -0.7889968877,
+          0.0,
+          -0.8504849222,
+          -0.2584943617,
+          -0.4581004934,
+          0.0,
+          0.1152145972,
+          -0.0412593621,
+          0.0125443501,
+          1.0
+        ],
+        "sustained_grasp_verified": false
+      }
+    },
+    {
+      "bone": "jntWpn_7",
+      "index": 40,
+      "parent": "jntWpn_1",
+      "mesh_weighted": true,
+      "semantic_role": null,
+      "motion": {
+        "kind": "static",
+        "max_translation_m": 0.0,
+        "max_rotation_rad": 7.63e-06,
+        "axis_in_baseline_part": null,
+        "peak_sample": 0,
+        "axis_line_residual_m": 0.0,
+        "baseline_parent_from_part": [
+          0.9033224139,
+          0.4289622553,
+          6.4476e-06,
+          0.0,
+          -0.4289622553,
+          0.9033224139,
+          4.0792e-06,
+          0.0,
+          -4.0744e-06,
+          -6.4506e-06,
+          1.0,
+          -0.0,
+          0.0271630511,
+          0.0146354707,
+          -0.9722089767,
+          1.0
+        ],
+        "peak_parent_from_part": [
+          0.9033224139,
+          0.4289622553,
+          6.4476e-06,
+          0.0,
+          -0.4289622553,
+          0.9033224139,
+          4.0792e-06,
+          0.0,
+          -4.0744e-06,
+          -6.4506e-06,
+          1.0,
+          -0.0,
+          0.0271630511,
+          0.0146354707,
+          -0.9722089767,
+          1.0
+        ],
+        "baseline_is_native_closed": false,
+        "semantic_role": null
+      },
+      "peak_time_s": 0.0,
+      "baseline_weapon_from_part": [
+        0.9033224139,
+        0.4289622553,
+        6.4476e-06,
+        0.0,
+        -0.4289622553,
+        0.9033224139,
+        4.0792e-06,
+        0.0,
+        -4.0744e-06,
+        -6.4506e-06,
+        1.0,
+        -0.0,
+        0.0271630511,
+        0.0146354707,
+        -0.9722089767,
+        1.0
+      ],
+      "bounds_part_m": [
+        [
+          -0.018951416,
+          -0.2232973576,
+          -0.025635004
+        ],
+        [
+          0.0129241943,
+          0.0115659237,
+          0.0343625546
+        ]
+      ],
+      "extent_m": [
+        0.0318756104,
+        0.2348632813,
+        0.0599975586
+      ],
+      "visible_triangles": 132,
+      "depth_triangles": 132,
+      "mixed_triangles": 0,
+      "materials": [
+        "Objects/Weapons/Handheld/BU_lmg_M60/Shaders/BU_lmg_M60_Mesh_BrushedMetal"
+      ]
+    },
+    {
+      "bone": "jntWpn_8",
+      "index": 33,
+      "parent": "jntWpn_1",
+      "mesh_weighted": true,
+      "semantic_role": null,
+      "motion": {
+        "kind": "static",
+        "max_translation_m": 0.0,
+        "max_rotation_rad": 7.63e-06,
+        "axis_in_baseline_part": null,
+        "peak_sample": 0,
+        "axis_line_residual_m": 0.0,
+        "baseline_parent_from_part": [
+          0.9052203297,
+          -0.4249425309,
+          6.4376e-06,
+          0.0,
+          0.4249425309,
+          0.9052203297,
+          -4.0896e-06,
+          0.0,
+          -4.0896e-06,
+          6.4376e-06,
+          1.0,
+          -0.0,
+          -0.0256052203,
+          0.0146354754,
+          -0.9722089767,
+          1.0
+        ],
+        "peak_parent_from_part": [
+          0.9052203297,
+          -0.4249425309,
+          6.4376e-06,
+          0.0,
+          0.4249425309,
+          0.9052203297,
+          -4.0896e-06,
+          0.0,
+          -4.0896e-06,
+          6.4376e-06,
+          1.0,
+          -0.0,
+          -0.0256052203,
+          0.0146354754,
+          -0.9722089767,
+          1.0
+        ],
+        "baseline_is_native_closed": false,
+        "semantic_role": null
+      },
+      "peak_time_s": 0.0,
+      "baseline_weapon_from_part": [
+        0.9052203297,
+        -0.4249425309,
+        6.4376e-06,
+        0.0,
+        0.4249425309,
+        0.9052203297,
+        -4.0896e-06,
+        0.0,
+        -4.0896e-06,
+        6.4376e-06,
+        1.0,
+        -0.0,
+        -0.0256052203,
+        0.0146354754,
+        -0.9722089767,
+        1.0
+      ],
+      "bounds_part_m": [
+        [
+          -0.0137863159,
+          -0.2232973576,
+          -0.0259401798
+        ],
+        [
+          0.0180206299,
+          0.0105893612,
+          0.0343625546
+        ]
+      ],
+      "extent_m": [
+        0.0318069458,
+        0.2338867187,
+        0.0603027344
+      ],
+      "visible_triangles": 134,
+      "depth_triangles": 134,
+      "mixed_triangles": 0,
+      "materials": [
+        "Objects/Weapons/Handheld/BU_lmg_M60/Shaders/BU_lmg_M60_Mesh_BrushedMetal"
+      ]
+    },
+    {
+      "bone": "jntWpn_9",
+      "index": 34,
+      "parent": "jntWpn_1",
+      "mesh_weighted": true,
+      "semantic_role": null,
+      "motion": {
+        "kind": "hinge_candidate",
+        "max_translation_m": 0.0,
+        "max_rotation_rad": 1.588758438,
+        "axis_in_baseline_part": [
+          -1.0,
+          1.5653e-06,
+          3.8276e-06
+        ],
+        "peak_sample": 31,
+        "axis_line_residual_m": 0.0,
+        "baseline_parent_from_part": [
+          1.0,
+          5.3931e-06,
+          5.3928e-06,
+          0.0,
+          -5.3928e-06,
+          0.9999999991,
+          -4.31197e-05,
+          0.0,
+          -5.3931e-06,
+          4.31197e-05,
+          0.9999999991,
+          -0.0,
+          2.63e-08,
+          0.0745346174,
+          -0.4183450341,
+          1.0
+        ],
+        "peak_parent_from_part": [
+          1.0,
+          7.6265e-06,
+          -6.87e-08,
+          0.0,
+          6.87e-08,
+          -0.0180042581,
+          -0.9998379102,
+          0.0,
+          -7.6265e-06,
+          0.9998379102,
+          -0.0180042581,
+          -0.0,
+          2.63e-08,
+          0.0745346174,
+          -0.4183450341,
+          1.0
+        ],
+        "baseline_is_native_closed": false,
+        "semantic_role": null
+      },
+      "peak_time_s": 1.0333333333,
+      "baseline_weapon_from_part": [
+        1.0,
+        5.3931e-06,
+        5.3928e-06,
+        0.0,
+        -5.3928e-06,
+        0.9999999991,
+        -4.31197e-05,
+        0.0,
+        -5.3931e-06,
+        4.31197e-05,
+        0.9999999991,
+        -0.0,
+        2.63e-08,
+        0.0745346174,
+        -0.4183450341,
+        1.0
+      ],
+      "bounds_part_m": [
+        [
+          -0.0234069824,
+          -0.0216372013,
+          -0.0057985783
+        ],
+        [
+          0.0499572754,
+          0.0135190487,
+          0.3301389217
+        ]
+      ],
+      "extent_m": [
+        0.0733642578,
+        0.03515625,
+        0.3359375
+      ],
+      "visible_triangles": 751,
+      "depth_triangles": 751,
+      "mixed_triangles": 0,
+      "materials": [
+        "Objects/Weapons/Handheld/BU_lmg_M60/Shaders/BU_lmg_M60_Mesh_BrushedMetal"
+      ],
+      "stable_left_contact": {
+        "begin_s": 0.7333333333,
+        "end_s": 0.9333333333,
+        "time_s": 0.8333333333,
+        "part_from_wrist": [
+          0.3143336263,
+          -0.5155984938,
+          0.7970900605,
+          0.0,
+          -0.3114162097,
+          0.7371808063,
+          0.5996535693,
+          0.0,
+          -0.8967799706,
+          -0.4367180464,
+          0.0711549874,
+          0.0,
+          0.0664640768,
+          0.0459096263,
+          0.1601348322,
+          1.0
+        ],
+        "max_relative_translation_m": 0.0006376537,
+        "max_relative_angle_rad": 0.0016118801,
+        "max_finger_angle_rad": 0.0001952684,
+        "knuckle_bounds_distance_m": 0.0128004491,
+        "qualifying_windows": 5,
+        "knuckle_centroid_part_m": [
+          0.000703,
+          0.0259076157,
+          0.191754995
+        ],
+        "nearest_mesh_vertex_part_m": [
+          0.0007791519,
+          0.0027768612,
+          0.190002203
+        ],
+        "knuckle_to_mesh_vertex_m": 0.0231971956
+      },
+      "closest_left_contact_sample": {
+        "time_s": 5.9333333333,
+        "knuckle_bounds_distance_m": 0.003717873,
+        "knuckle_centroid_part_m": [
+          -0.0072693159,
+          0.0172369217,
+          0.1901972225
+        ],
+        "nearest_mesh_vertex_part_m": [
+          -0.0117874146,
+          0.0018002987,
+          0.190002203
+        ],
+        "knuckle_to_mesh_vertex_m": 0.016085415,
+        "part_from_wrist": [
+          -0.0658897544,
+          0.9299601522,
+          0.36170797,
+          0.0,
+          -0.4985800024,
+          0.2833167737,
+          -0.8192371982,
+          0.0,
+          -0.8643358846,
+          -0.2343196983,
+          0.4449918623,
+          0.0,
+          0.0664889303,
+          0.0128266307,
+          0.1739274712,
+          1.0
+        ],
+        "sustained_grasp_verified": false
+      },
+      "hinge": {
+        "pivot_weapon_m": [
+          2.63e-08,
+          0.0745346174,
+          -0.4183450341
+        ],
+        "axis_weapon": [
+          -1,
+          0,
+          0
+        ],
+        "positive_open_sampled_rad": [
+          -0.0060629497,
+          1.5888015577
+        ],
+        "positive_open_control_hull_rad": [
+          -0.0061718852,
+          1.5893876575
+        ],
+        "position_controls_identical": true,
+        "max_off_axis_quaternion_component": 2.6965e-06,
+        "angular_samples": [
+          {
+            "time_s": 0.0,
+            "angle_rad": 4.31197e-05
+          },
+          {
+            "time_s": 0.5,
+            "angle_rad": -0.005054691
+          },
+          {
+            "time_s": 1.0,
+            "angle_rad": 1.5623351168
+          },
+          {
+            "time_s": 1.5,
+            "angle_rad": 1.570796182
+          },
+          {
+            "time_s": 2.0,
+            "angle_rad": 1.570796182
+          },
+          {
+            "time_s": 2.5,
+            "angle_rad": 1.570796182
+          },
+          {
+            "time_s": 3.0,
+            "angle_rad": 1.570796182
+          },
+          {
+            "time_s": 3.5,
+            "angle_rad": 1.570796182
+          },
+          {
+            "time_s": 4.0,
+            "angle_rad": 1.570796182
+          },
+          {
+            "time_s": 4.5,
+            "angle_rad": 1.570796182
+          },
+          {
+            "time_s": 5.0,
+            "angle_rad": 1.5707607641
+          },
+          {
+            "time_s": 5.5,
+            "angle_rad": -0.0005229289
+          },
+          {
+            "time_s": 6.0,
+            "angle_rad": -2.59348e-05
+          },
+          {
+            "time_s": 6.5,
+            "angle_rad": 4.31197e-05
+          },
+          {
+            "time_s": 7.0,
+            "angle_rad": 4.31197e-05
+          },
+          {
+            "time_s": 7.5,
+            "angle_rad": 4.31197e-05
+          },
+          {
+            "time_s": 8.0,
+            "angle_rad": 4.31197e-05
+          },
+          {
+            "time_s": 8.0333337784,
+            "angle_rad": 4.31197e-05
+          }
+        ]
+      }
+    },
+    {
+      "bone": "jntWpn_Flash",
+      "index": 37,
+      "parent": "jntWpn_1",
+      "mesh_weighted": false,
+      "semantic_role": null,
+      "motion": {
+        "kind": "static",
+        "max_translation_m": 0.0,
+        "max_rotation_rad": 2.11e-08,
+        "axis_in_baseline_part": null,
+        "peak_sample": 0,
+        "axis_line_residual_m": 0.0,
+        "baseline_parent_from_part": [
+          1.0,
+          5.393e-06,
+          5.3929e-06,
+          0.0,
+          -5.3929e-06,
+          1.0,
+          -5.393e-06,
+          0.0,
+          -5.393e-06,
+          5.3929e-06,
+          1.0,
+          -0.0,
+          0.0,
+          0.0,
+          -0.0,
+          1.0
+        ],
+        "peak_parent_from_part": [
+          1.0,
+          5.393e-06,
+          5.3929e-06,
+          0.0,
+          -5.3929e-06,
+          1.0,
+          -5.393e-06,
+          0.0,
+          -5.393e-06,
+          5.3929e-06,
+          1.0,
+          -0.0,
+          0.0,
+          0.0,
+          -0.0,
+          1.0
+        ],
+        "baseline_is_native_closed": false,
+        "semantic_role": null
+      },
+      "peak_time_s": 0.0,
+      "baseline_weapon_from_part": [
+        1.0,
+        5.393e-06,
+        5.3929e-06,
+        0.0,
+        -5.3929e-06,
+        1.0,
+        -5.393e-06,
+        0.0,
+        -5.393e-06,
+        5.3929e-06,
+        1.0,
+        -0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "bone": "jntWpnwpnJnt_14",
+      "index": 114,
+      "parent": "jntWpn_13",
+      "mesh_weighted": true,
+      "semantic_role": null,
+      "motion": {
+        "kind": "general_rigid_motion",
+        "max_translation_m": 0.0043311166,
+        "max_rotation_rad": 1.2061582815,
+        "axis_in_baseline_part": null,
+        "peak_sample": 122,
+        "axis_line_residual_m": 0.0,
+        "baseline_parent_from_part": [
+          0.9999999991,
+          4.31197e-05,
+          5.3928e-06,
+          0.0,
+          -4.31197e-05,
+          0.9999999991,
+          -5.3931e-06,
+          0.0,
+          -5.3931e-06,
+          5.3928e-06,
+          1.0,
+          -0.0,
+          -0.0082394352,
+          0.0131859378,
+          -2.6e-09,
+          1.0
+        ],
+        "peak_parent_from_part": [
+          0.356651445,
+          -0.9342375216,
+          7.504e-06,
+          0.0,
+          0.9342375216,
+          0.356651445,
+          -1.3836e-06,
+          0.0,
+          -1.3836e-06,
+          7.504e-06,
+          1.0,
+          -0.0,
+          -0.0082394352,
+          0.0131825993,
+          -2.7e-08,
+          1.0
+        ],
+        "baseline_is_native_closed": false,
+        "semantic_role": null
+      },
+      "peak_time_s": 4.0666666667,
+      "baseline_weapon_from_part": [
+        0.9999999902,
+        0.0001293605,
+        5.39005e-05,
+        0.0,
+        -0.0001293576,
+        0.9999999902,
+        -5.39107e-05,
+        0.0,
+        -5.39075e-05,
+        5.39038e-05,
+        0.9999999971,
+        -0.0,
+        0.0503509103,
+        0.0588778345,
+        -0.4063206229,
+        1.0
+      ],
+      "bounds_part_m": [
+        [
+          -0.0249328613,
+          -0.0050356388,
+          -2.384e-07
+        ],
+        [
+          0.0053977966,
+          0.0115659237,
+          0.0675656796
+        ]
+      ],
+      "extent_m": [
+        0.030330658,
+        0.0166015625,
+        0.067565918
+      ],
+      "visible_triangles": 320,
+      "depth_triangles": 320,
+      "mixed_triangles": 0,
+      "materials": [
+        "Objects/Weapons/Handheld/BU_lmg_M60/Shaders/Ammo"
+      ],
+      "stable_left_contact": null,
+      "closest_left_contact_sample": {
+        "time_s": 4.1333333333,
+        "knuckle_bounds_distance_m": 0.0594873318,
+        "knuckle_centroid_part_m": [
+          -0.0718822296,
+          0.0480967253,
+          0.0150832576
+        ],
+        "nearest_mesh_vertex_part_m": [
+          -0.0248565674,
+          0.0076596737,
+          0.0366818905
+        ],
+        "knuckle_to_mesh_vertex_m": 0.0656739598,
+        "part_from_wrist": [
+          0.0968785308,
+          -0.2778010037,
+          0.9557411536,
+          0.0,
+          -0.9148004637,
+          0.3534584222,
+          0.1954667628,
+          0.0,
+          -0.3921156231,
+          -0.8932489833,
+          -0.2198899544,
+          0.0,
+          -0.0232976329,
+          0.1059825803,
+          0.0114502007,
+          1.0
+        ],
+        "sustained_grasp_verified": false
+      }
+    },
+    {
+      "bone": "jntWpnwpnJnt_16",
+      "index": 39,
+      "parent": "jntWpn_1",
+      "mesh_weighted": false,
+      "semantic_role": null,
+      "motion": {
+        "kind": "general_rigid_motion",
+        "max_translation_m": 0.6628183454,
+        "max_rotation_rad": 2.2482019846,
+        "axis_in_baseline_part": null,
+        "peak_sample": 70,
+        "axis_line_residual_m": 0.0,
+        "baseline_parent_from_part": [
+          0.9999999981,
+          4.31206e-05,
+          4.31188e-05,
+          0.0,
+          -4.31188e-05,
+          0.9999999981,
+          -4.31206e-05,
+          0.0,
+          -4.31206e-05,
+          4.31188e-05,
+          0.9999999981,
+          -0.0,
+          -5.4836e-06,
+          -2.2304e-06,
+          -1.4966e-06,
+          1.0
+        ],
+        "peak_parent_from_part": [
+          -0.4142800852,
+          0.8967742799,
+          -0.1554602906,
+          0.0,
+          -0.3954262239,
+          -0.3311888029,
+          -0.8567100316,
+          0.0,
+          -0.8197622292,
+          -0.2934448292,
+          0.4918129927,
+          -0.0,
+          0.5717051016,
+          -0.312993147,
+          -0.0165414048,
+          1.0
+        ],
+        "baseline_is_native_closed": false,
+        "semantic_role": null
+      },
+      "peak_time_s": 2.3333333333,
+      "baseline_weapon_from_part": [
+        0.9999999981,
+        4.31206e-05,
+        4.31188e-05,
+        0.0,
+        -4.31188e-05,
+        0.9999999981,
+        -4.31206e-05,
+        0.0,
+        -4.31206e-05,
+        4.31188e-05,
+        0.9999999981,
+        -0.0,
+        -5.4836e-06,
+        -2.2304e-06,
+        -1.4966e-06,
+        1.0
+      ]
+    }
+  ]
+}

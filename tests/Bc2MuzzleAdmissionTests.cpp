@@ -1,12 +1,14 @@
 #include "Test.h"
 #include "Bc2MuzzleAdmission.h"
 #include "Bc2ProjectileLaunch.h"
+#include "Bc2ServerFireObservation.h"
 #include "fvr/engine/PeImage.h"
 #include "../profiles/opening426/NambuMuzzle.generated.h"
 #include "../profiles/opening426/NambuAuthoredGrip.generated.h"
 #include <cstring>
 #include <limits>
 #include <fstream>
+#include <sstream>
 using namespace fvr;using namespace fvr::bc2;
 namespace {
 math::Matrix4 At(float x=0,float y=0,float z=0){math::Matrix4 m{};for(unsigned n=0;n<4;++n)m.values[n][n]=1;m.values[3]={x,y,z,1};return m;}
@@ -152,6 +154,70 @@ int ActualLaunchStackAndObservationOrder(){
     CHECK(!VerifyProjectileLaunchCode(m.Reader(),0x400000,0x179dc1).verified);
     return 0;
 }
+ServerFireObservationSample FireObservation(std::uint64_t invocation,std::int64_t begin,std::string_view asset="late_m8_fixture"){
+    ServerFireObservationSample s;s.invocation=invocation;s.returnedOrdinal=invocation;s.beginQpc=begin;s.endQpc=begin+10;s.beginNs=begin;
+    s.key.player=1;s.key.soldier=2;s.key.weak=3;s.key.serverPlayer=4;s.key.serverSoldier=5;s.key.effects=6;s.key.configuration=7;
+    s.key.equipment.weapon=8;s.key.equipment.data=9;Text(s.key.equipment.asset,asset);
+    s.key.candidatePresent=true;s.key.candidateOwnerGeneration=10;s.key.space=11;s.candidateGeneration=invocation;
+    s.candidateDeadlineQpc=begin+100;s.helperCallbacks=1;s.controllerPresent=true;
+    s.controller.owner={2,10,12,11};s.controller.sequence=invocation;s.controller.observedNs=begin-1;
+    s.controller.deadlineNs=begin+100;s.controller.nowNs=begin-1;s.controller.focused=true;s.controller.tracked={true,true};return s;
+}
+int LateServerFireContextAndGaps(){
+    ServerFireObservation observation;
+    // Synthetic late weapon: the native detailed-prefix budget stays64. This
+    // observer receives only value copies, including after that budget fills.
+    for(unsigned n=1;n<=252;++n)observation.Observe(FireObservation(n,n*100,n<=8?"Garand_fixture":n<=64?"Nambu_fixture":"late_m8_fixture"));
+    CHECK(observation.Recorded()==252&&observation.Count()==3&&observation.EvictedReturns()==0);
+    const auto& late=observation.Cohorts()[2];CHECK(late.key.equipment.Asset()=="late_m8_fixture"&&late.returned==188&&late.helperCallbacks==188);
+    CHECK(late.firstValidBeginQpc==6500&&late.lastValidEndQpc==25210&&late.gaps==187);
+    auto pause=FireObservation(253,100000);pause.helperCallbacks=0;pause.controller.deadlineNs=99999;pause.controller.observedNs=90000;
+    pause.candidateDeadlineQpc=99999;observation.Observe(pause);
+    CHECK(late.returned==189&&late.withoutHelper==1&&late.expiredCandidate==1&&late.expiredController==1);
+    CHECK(late.latestGap.present&&late.latestGap.previous.invocation==252&&late.latestGap.current.invocation==253&&late.latestGap.qpc==74800);
+    CHECK(late.worstGap.qpc==74800&&observation.WorstGap().qpc==74800);
+    CHECK(late.latest.controller.observedNs==90000&&late.latest.controller.deadlineNs==99999&&late.latest.controller.sequence==253);
+    CHECK(std::string_view(late.latest.ControllerTime())=="expired");
+    std::ostringstream out;observation.Report(out);const auto json=out.str();
+    CHECK(json.find("\"asset\":\"late_m8_fixture\"")!=std::string::npos&&json.find("\"returned_invocations\":189")!=std::string::npos);
+    CHECK(json.find("\"controller_time_at_begin\":\"expired\"")!=std::string::npos&&json.find("\"begin_to_begin_qpc\":74800")!=std::string::npos);
+    return 0;
+}
+int ServerFireRetentionAndObservedIdentity(){
+    ServerFireObservation observation;auto initial=FireObservation(1,100);initial.endQpc=150;observation.Observe(initial);
+    for(unsigned n=2;n<=17;++n){auto sample=FireObservation(n,n*100);sample.key.equipment.persistence=n;observation.Observe(sample);}
+    CHECK(observation.Count()==16&&observation.Recorded()==17&&observation.EvictedReturns()==1);
+    CHECK(observation.WorstSpan()&&observation.WorstSpan()->invocation==1&&observation.WorstSpan()->Span()==50);
+    for(const auto& c:observation.Cohorts())CHECK(c.key.equipment.persistence!=0);
+    auto reused=FireObservation(18,1800);observation.Observe(reused);
+    CHECK(observation.EvictedReturns()==2);std::uint64_t retained=0;const ServerFireObservationCohort* reintroduced=nullptr;
+    for(const auto& c:observation.Cohorts()){retained+=c.returned;if(c.key.equipment.persistence==0)reintroduced=&c;}
+    CHECK(retained+observation.EvictedReturns()==observation.Recorded()&&reintroduced&&reintroduced->returned==1&&!reintroduced->latestGap.present);
+    ServerFireObservation split;split.Observe(initial);auto changed=initial;changed.invocation=2;changed.key.candidateOwnerGeneration++;split.Observe(changed);
+    changed=initial;changed.invocation=3;Text(changed.key.equipment.asset,"different_asset_same_addresses");split.Observe(changed);
+    changed=initial;changed.invocation=4;changed.key.candidatePresent=false;changed.key.candidateOwnerGeneration=0;changed.key.space=0;split.Observe(changed);
+    CHECK(split.Count()==4);return 0;
+}
+int ServerFireInvalidAndAbsentEvidence(){
+    ServerFireObservation observation;observation.Observe(FireObservation(1,100));
+    auto invalid=FireObservation(2,200);invalid.endQpc=199;invalid.helperCallbacks=0;invalid.controllerPresent=false;
+    observation.Observe(invalid);const auto& c=observation.Cohorts()[0];
+    CHECK(c.returned==2&&c.invalidTiming==1&&c.missingController==1&&c.withoutHelper==1&&c.unorderedOrInvalidPairs==1);
+    CHECK(c.firstValidBeginQpc==100&&c.lastValidEndQpc==110&&c.maximumSpanQpc==10);
+    CHECK(observation.LatestTimed()->invocation==1&&observation.WorstSpan()->invocation==1&&!c.latestGap.present);
+    CHECK(std::string_view(c.latest.ControllerTime())=="absent");
+    auto next=FireObservation(3,300);next.controller.deadlineNs=next.controller.observedNs;observation.Observe(next);
+    CHECK(c.invalidControllerTime==1&&c.unorderedOrInvalidPairs==2&&!c.latestGap.present&&c.lastValidEndQpc==310);
+    auto backwards=FireObservation(4,250);observation.Observe(backwards);
+    CHECK(c.unorderedOrInvalidPairs==3&&c.lastValidEndQpc==310&&observation.LatestTimed()->invocation==3);
+    auto unknown=FireObservation(5,0);unknown.endQpc=0;unknown.controllerPresent=false;unknown.key.candidatePresent=false;
+    unknown.key.candidateOwnerGeneration=0;unknown.key.space=0;observation.Observe(unknown);
+    CHECK(std::string_view(unknown.CandidateTime())=="absent"&&std::string_view(unknown.ControllerTime())=="absent");
+    CHECK(observation.LatestTimed()->invocation==3&&observation.WorstSpan()->invocation==1);
+    auto future=FireObservation(6,400);future.controller.observedNs=401;CHECK(std::string_view(future.ControllerTime())=="future");
+    std::ostringstream out;observation.Report(out);CHECK(out.str().find("\"observed_span_qpc\":null")!=std::string::npos);
+    return 0;
+}
 int InstalledLaunchCode(const char* path){
     std::ifstream file(path,std::ios::binary|std::ios::ate);CHECK(file);
     const auto length=file.tellg();CHECK(length>0&&length<256*1024*1024);
@@ -175,4 +241,4 @@ int InstalledLaunchCode(const char* path){
     return 0;
 }
 }
-int main(int argc,char** argv){CHECK(!ExactAuthoredEnrollment());CHECK(!IdentityGeometryAndNoNameFallback());CHECK(!ActualNativeReadPredicate());CHECK(!SameEventAndChangedConfiguration());CHECK(!ActualLaunchStackAndObservationOrder());if(argc==2)CHECK(!InstalledLaunchCode(argv[1]));return 0;}
+int main(int argc,char** argv){CHECK(!ExactAuthoredEnrollment());CHECK(!IdentityGeometryAndNoNameFallback());CHECK(!ActualNativeReadPredicate());CHECK(!SameEventAndChangedConfiguration());CHECK(!ActualLaunchStackAndObservationOrder());CHECK(!LateServerFireContextAndGaps());CHECK(!ServerFireRetentionAndObservedIdentity());CHECK(!ServerFireInvalidAndAbsentEvidence());if(argc==2)CHECK(!InstalledLaunchCode(argv[1]));return 0;}

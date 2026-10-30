@@ -1,0 +1,30 @@
+{
+  "schema": "fvr.bc2.family_enrollment.v1",
+  "additional_feed": 23,
+  "additional_slide": 4,
+  "total_feed": 24,
+  "total_slide": 5,
+  "magazine_batch": {
+    "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/reports/coordinator-20261030-family-enrollment41/batch-receipt.json",
+    "sha256": "4a871685a2fe48629e0259d574f677cf2d7f82c0ba8adcf81d161338d5ef8eae"
+  },
+  "cache": {
+    "preserved_rows": 49,
+    "appended_rows": 8,
+    "total_rows": 57,
+    "baseline_bytes": 16750541,
+    "baseline_sha256": "dade888c8bc205491a6e5a421055adf2085e1c864efede36b36f32415aa698d3",
+    "lossless_compacted_baseline_bytes": 11727597,
+    "added_record_bytes": 502030,
+    "candidate_bytes": 12229627,
+    "maximum_bytes": 16777216,
+    "maximum_rows": 64,
+    "indexed_hashes_and_all_metadata_preserved": true,
+    "remaining_bytes": 4547589,
+    "sha256": "b88c531d15ff2aa43d5fa3ea13984941b840932c47822d4d6b93f88460fa7d41"
+  },
+  "combined_normal_build": false,
+  "installed": false,
+  "actual_game_tested": false,
+  "headset_accepted": false
+}

@@ -1,0 +1,20 @@
+DoneY: exact MP443 geometry/mod interaction profile and pure presentation helpers prepared; source frozen.
+Base77b9926; worktree campaign-coordinator-20261028-r1. Only four new assigned source/test files edited.
+Files: src/games/bc2/Bc2PistolSlideProfile.h, src/games/bc2/Bc2PistolSlidePresentation.h.
+Tests: tests/Bc2PistolSlideProfileTests.cpp (4 groups), tests/Bc2PistolSlidePresentationTests.cpp (6 groups).
+Reused implementation17 GEOMETRY.txt, mp443-geometry.json, mp443-role-review.json and pinned linear helper identity.
+Exact MP443_sp configuration GUID/SHA/path/mesh plus fnv1a64:a7f219a1426216ab; no family/alias fallback.
+Static identity frame and signed [-.0019974632828737467,.07247133458104844]m rail retained; no native stops claimed.
+Authored 3.0s wrist/Ring3 geometry remains transient evidence, not a verified controller grasp.
+Mp443ModPolicy source0m/stroke65mm/front1mm/rear3mm/hysteresis0.75mm; complete envelope fits measured rail.
+Mod contact35mm/lateral25mm/rotation0.35rad/maxStep25mm/dwell30ms/maximum8s; no chamber/fire authority.
+Profile API: FindBc2Mp443SlideGeometry, BuildBc2Mp443ModSlideProfile, Bc2Mp443SlideLocalFrame.
+Source API: Bc2PistolSlideSourceFresh, Bc2PistolSlideRawWristInWeapon; immutable original raw-controller/wrist-offset/weapon metres.
+Render API: BindBc2PistolSlide, ComposeBc2PistolSlideWorldFrames, BuildBc2PistolSlideWrite (one BoneWrite).
+Original and current input/GunHold/Mechanism leases must match; new packets cannot renew original deadlines.
+Exact rig/topology requires direct leaf30 under root10; candidate write preserves every other native animated part.
+World translations convert once; target ignores prior palette overrides. Root retains selected-object/publication/restoration ownership.
+Tests prepared for exact selector, signed rail, policy, stale input/claim, bad rig/topology, nonrigid/scale, raw off-axis and leaf isolation.
+Checks NOT executed: tests, builds, Git, game, render/capture, archive survey, XR/input, installation. No native/headset acceptance.
+Root owns CMake registration, verification, integration and runtime admission. No other production files touched.
+Frozen and retired; ownership returned to root.

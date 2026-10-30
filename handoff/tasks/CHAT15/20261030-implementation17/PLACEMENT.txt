@@ -1,0 +1,23 @@
+CHAT15 implementation17: measured free placement/carry; offline source only.
+API: FeedMotionKind::FreePlacement; appended FeedMotionProfile::placement.
+FeedPlacementGeometry requires weaponFromSource, weaponFromDestination, sourceFromGrip.
+All three are explicit proper rigid row-vector canonical metre frames; zero defaults refuse.
+Only AttachContainer, DetachContainer, SeatFeed and WithdrawFeed accept this mode.
+Existing linear/hinge fields, typed receipts and behavior are retained.
+Source/destination alignment uses pathToleranceMeters and orientationToleranceRadians.
+Fresh neutral then source-contact grip acquires the exact current candidate/resource.
+Actual pickup hand offset is retained; carried target follows raw hand motion without snapping.
+Result.targetKind distinguishes None/Contact/Object; placement is Object, linear/hinge Contact.
+Placement target is the carried object pose; progress stays zero because no rail fraction exists.
+Free paths retain bounded hand/object steps, exact hand/tracking identity and gesture deadlines.
+Fresh held destination dwell must precede a separate fresh aligned release completion.
+Midair/premature release, destination departure, stale/duplicate input and tracking gaps cannot finish.
+Candidate, resource, role, geometry or binding changes cannot inherit the carried gesture.
+Receipt IDs remain monotonic across rearming/interruption; completion cites the current snapshot/input.
+14 added deterministic groups cover all four types, irregular carry, offsets, sockets and identity.
+25 existing groups retained; total39. Agent did not execute tests/builds; root owns validation.
+Geometry evidence: CHAT14 implementation15 GEOMETRY.txt and role-review.json only.
+That evidence identifies a free-moving pouch and articulated belt, not a measured M60 socket/grip.
+Tests use synthetic geometry only; no M60 dimensions, profile or native capability was supplied.
+No ammunition/state/native writes, game/process/XR/input/install/package/Git actions performed.
+Integration, push and install remain held. Root validation receipt supplies any later test result.

@@ -1,0 +1,66 @@
+{
+  "schema": "fvr.bc2.fixed_container_authoring_policy.v1",
+  "models": {
+    "MP412": {
+      "sample_path": "handoff/tasks/WEAPONS/20261030-special46/samples-MP412.json",
+      "sample_sha256": "6de883ecaa2b100a8fe6192dbbe3a22d4fcac40144bd6d6e5926732031a21884",
+      "kind": "Cylinder",
+      "capacity": 6,
+      "rounds_per_insertion": 6,
+      "supply_root": "jntWpn_13",
+      "supply_parts": [
+        "jntWpn_13",
+        "jntWpnwpnJnt_14"
+      ],
+      "insert_source_sample": 60,
+      "insert_destination_sample": 72,
+      "insert_grasp_sample": 63,
+      "source_hand": "LeftHand",
+      "closed_sample": 0,
+      "open_sample": 24,
+      "eject_peak_sample": 43,
+      "mechanical_grasp_sample": 21,
+      "coupled_opening_parts": [
+        "jntWpn_4",
+        "jntWpn_12",
+        "jntWpn_13"
+      ],
+      "mechanism_semantics": "jntWpn_4 is the break-open barrel hinge; cylinder jntWpn_12 is a separate sibling which also rotates independently in the authored clip. Explicit mod policy couples barrel, cylinder and retained live ammo to the barrel hinge. Open follows 42.4-degree plateau; EjectSpent follows additional 43.6-degree flick and return, reaching authored 86-degree maximum. Spent gesture never removes live rounds. jntWpn_13 ammunition and child jntWpnwpnJnt_14 metal loader form one six-round supply; fixed relative pose comes from frame63 of the actual carry/insertion segment."
+    },
+    "M1Garand": {
+      "sample_path": "handoff/tasks/WEAPONS/20261030-special46/samples-right-M1Garand.json",
+      "sample_sha256": "0719f20f3bab7ec749103932029b25a91e4ae1dfeb828b3501e87a367b59f8e8",
+      "kind": "EnBlocClip",
+      "capacity": 8,
+      "rounds_per_insertion": 8,
+      "supply_root": "jntWpn_12",
+      "supply_parts": [
+        "jntWpn_12",
+        "jntWpn_13"
+      ],
+      "insert_source_sample": 33,
+      "insert_destination_sample": 69,
+      "insert_grasp_sample": 36,
+      "source_hand": "RightHand",
+      "mechanism_semantics": "Own exact configured mesh and reload show metal en-bloc clip jntWpn_12 with ammunition child jntWpn_13; exact native config independently proves capacity8 and rtMagazine. Insertion uses frames33..69 outside malformed ejection frames22..25. The source right-hand grip at36 is explicitly mirrored in clip-local X and wrist-local X for left-hand VR use. Top-up retains current live rounds and performs one bounded native bulk transfer. No manual bolt or capacity+1."
+    },
+    "Type5": {
+      "sample_path": "handoff/tasks/WEAPONS/20261030-special46/samples-right-Type5.json",
+      "sample_sha256": "e4b5e0f5b996de985408b9728081ee5e7770f4a5d9d5b9d2d1c2a17432bbcb55",
+      "kind": "EnBlocClip",
+      "capacity": 8,
+      "rounds_per_insertion": 8,
+      "supply_root": "jntWpn_12",
+      "supply_parts": [
+        "jntWpn_12",
+        "jntWpn_13"
+      ],
+      "insert_source_sample": 33,
+      "insert_destination_sample": 69,
+      "insert_grasp_sample": 36,
+      "source_hand": "RightHand",
+      "mechanism_semantics": "Own exact configured mesh and reload show metal en-bloc clip jntWpn_12 with ammunition child jntWpn_13; exact native config independently proves capacity8 and rtMagazine. Insertion uses frames33..69 outside malformed ejection frames22..25. The source right-hand grip at36 is explicitly mirrored in clip-local X and wrist-local X for left-hand VR use. Top-up retains current live rounds and performs one bounded native bulk transfer. No manual bolt or capacity+1."
+    }
+  },
+  "common_policy": "Source frames and part bounds are measured from exact installed assets. Role selection, fixed grasp, analytical gesture, tolerances, coupled presentation, left-hand mirroring, top-up and spent-only semantics are explicit mod policy, never native calibration. Use one stable-weapon ledger. Input and owner checks remain enforced. Supply source may only rebase between grips. No game/headset qualification."
+}

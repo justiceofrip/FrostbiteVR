@@ -1,0 +1,19 @@
+Done Y: minimal explicit reviewed semantic magazine-role path prepared; no new mod hand-anchor fallback shipped.
+Root steering narrowed this task after exact feedbatch38 evidence showed its M1911 contact sampler selected the slide jntWpn_3, not magazine jntWpn_12.
+Preserve magazine-geometry02.json's 234-sample/221-window failed slide contact episode. It does not establish absence of magazine contact; one newly selected actual-magazine derivation is distinct work.
+Files: tools/bc2_reviewed_magazine_role.py, tools/test_bc2_reviewed_magazine_role.py, tools/bc2_authored_magazine_geometry.py and this handoff only. Earlier agent-owned placeholder module/test names removed by rename.
+API: derive(..., reviewed_roles=[review]); CLI --reviewed-magazine-roles review-list.json. Input is a list, independent of --reviewed-contacts; those review types cannot target the same exact configuration simultaneously.
+Reviewed assets must still be explicitly in paired_grasp_assets / --paired-reload-grasp. For M1911 also select rigid_assembly_assets / --rigid-assembly and sampled_path_assets / --sampled-magazine-path.
+Only the generic box-shape rejection is replaceable. All original parent/leaf-or-complete-assembly, rigid ownership, minimum triangle, static closed transform and substantial reload-motion checks remain mandatory. Ordinary candidates and rejected rows remain evidence.
+The selected root then runs the unchanged paired_reload_grasp and sampled-magazine path. No stable-authored/native/controller/headset qualification is inferred from the review. Native Reviewed(), scalar/three-own-update proof and runtime selection are untouched. C++ geometry contract needs no change.
+The default fitted-rail designer retains its independent 15mm width floor. Use the existing exact sampled path for this narrow thin-magazine route; this change does not widen that designer.
+Source review only: nine deterministic unittest cases written but NOT RUN per task restriction. No Git/build/game/XR/install/native execution or archive resurvey. Root must run tools/test_bc2_reviewed_magazine_role.py and applicable existing regressions.
+
+Exact M1911 facts already in feedbatch38 magazine-geometry02.json assembly_reports[asset=M1911]:
+  jntWpn_12 is direct child of jntWpn_1; extent metres [0.014135749544947012,0.12506794929504397,0.07080625742673875],240 rigid triangles, authored reload-control extent0.6543383777535038m.
+  The only rejection is outside explicit box-magazine shape candidate bounds (14.13575mm width vs default15mm).
+  Complete assembly digest6da74d035c3cff6a5def731eddc2d67ee45720fa014f75a344747e8d0a33c6de; descendants jntWpn_13 -> jntWpnwpnJnt_14 -> jntWpn_15 each have zero triangles and remain rigid members.
+  The sole ordinary candidate jntWpn_3 is the separately reviewed slide; its small detached witness must not be relabeled a magazine failure.
+
+Root visually reviewed the new exact magazine preview and accepted jntWpn_12 index38: cyan base below the grip when attached, full thin box magazine below the pistol in the removed pose. Source/renderer receipt: reports/coordinator-20261030-pipeline34/magazine-role-review/preview-receipt.json. No stable hand/native/controller claim follows.
+Review-input template: review-template.json (root fills merged-part/final digest; final passing role review is in pipeline34 reports).

@@ -1,0 +1,14 @@
+Done Y - source preparation only; frozen/retired after this handoff. Root owns validation and integration.
+Read AGENTS.md, docs/CURRENT.md, architecture contracts and registry35 handoff; no builds, tests, Git, game, XR, install or subagents.
+Owned only src/games/bc2/Bc2PhysicalPistolSlide.h/.cpp, tests/Bc2PhysicalPistolSlideTests.cpp and this handoff.
+Equipment retains a const Bc2PistolSlideRegistration reference resolved from event.profileKey before creating policy; unknown or changed keys cannot enroll/replace it.
+Event admission/command capacities and native resource/command/admission capacities must equal the retained row.configuration capacity.
+Native resource profileKey and each readiness branch profileKey must match the retained row; mismatches preserve the fire veto and mark the resource evidence gap.
+Equipment asset, selected configuration asset/path and geometry asset/path/mesh/fingerprint are independently checked; generic row-aware selected-mesh proof supplies current object/type/lease checks.
+Root confirmed full observed configuration/timing verification remains in native backend before key admission; no raw configuration field added to the owner sample.
+Motion profile, mechanism key, displacement offset and immutable presentation selection now derive from the retained row; presentation adds registrationKey.
+Existing raw-packet history, source clocks, real arbiter claims, native transaction history, migration, debt and actor-retirement paths remain intact.
+Report reads independent atomics only: asset_class means registered_slide/other/none; latest registration_key and last_selected_registration_key are reported without equipment traversal.
+Fixtures supply builtin profile keys and own-row keys plus complete selected mesh identities; four new groups bring owner tests to 15 groups.
+Added unknown/changed event keys, native/readiness key mismatch, native capacity mismatch, independent config/geometry refusal, immutable presentation key and diagnostic retention cases.
+No new real weapon enrollment, deterministic pass, actual-game result, native chamber state or headset acceptance is claimed; root must run owner regressions and normal build checks.

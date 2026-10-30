@@ -20,6 +20,8 @@
 #include "Bc2ReloadDeferredCompletion.h"
 #include "Bc2DiagnosticFireReserve.h"
 #include "Bc2M95StockShotConfig.h"
+#include "Bc2ManualPumpConfig.h"
+#include "Bc2FixedContainerNative.h"
 #include "Bc2OwnerPublication.h"
 #include "Bc2ReloadAbort.h"
 #include "Bc2MagazineEmptyControl.h"
@@ -54,6 +56,7 @@
 #include <bit>
 #include <cstring>
 #include <limits>
+#include <utility>
 namespace fvr::bc2 {
 namespace {
 template<class T>T Word(const std::byte* p,std::size_t at){T out{};std::memcpy(&out,p+at,sizeof(out));return out;}
@@ -95,6 +98,16 @@ bool OwnerValid(const ReloadStateOwner& o)noexcept{return o.player>=0x10000&&o.s
     o.weak>=0x10000&&o.weapon>=0x10000&&o.actorGeneration&&o.equipGeneration&&o.space;}
 bool SameIdentity(const ReloadFlowBoundary& a,const ReloadFlowBoundary& b)noexcept{
     return a.owner==b.owner&&a.firing==b.firing&&a.branch==b.branch&&a.wrapperOffset==b.wrapperOffset&&a.serverPlayer==b.serverPlayer&&a.serverSoldier==b.serverSoldier&&a.serverItem==b.serverItem;
+}
+void PistolBoundaryBits(ReloadFlowBoundary& out,const ReloadObservedConfig& config,const std::array<std::byte,0xb0>& raw)noexcept {
+    const auto* profile=FindBc2PistolSlideRegistration(config);if(!profile)return;
+    const auto capacity=profile->configuration.values.baseCapacity;
+    out.pistol={Word<std::uint8_t>(raw.data(),0x8a),Word<std::uint8_t>(raw.data(),0xa4),Word<std::uint8_t>(raw.data(),0xa5),true};
+    const auto capacityMultiplier=Word<float>(raw.data(),0x74),reserveMultiplier=Word<float>(raw.data(),0x78);
+    const auto capacityOverride=Word<int>(raw.data(),0x98);
+    out.pistolFiniteAmmo=!(out.flagsA8&(8|16))&&out.loaded>=0&&out.loaded<=capacity&&out.reserve>=0&&
+        NativeAmmoRefillFiniteReserve(config.numberOfMagazines,reserveMultiplier)&&
+        (capacityOverride==capacity||(capacityOverride==-1&&capacityMultiplier==1.f));
 }
 }
 bool ReloadReserveCopiesAgree(const ReloadHoldIdentity& identity,const std::array<ReloadFlowBoundary,3>& first,
@@ -155,6 +168,7 @@ std::optional<ReloadFlowBoundary> ReadReloadFlowBoundary(const ReloadStateMemory
     out.current=Word<unsigned>(raw.data(),0x3c);out.previous=Word<unsigned>(raw.data(),0x40);out.next=Word<unsigned>(raw.data(),0x44);
     out.timer=Word<float>(raw.data(),0x50);out.loaded=Word<std::int32_t>(raw.data(),0x7c);out.reserve=Word<std::int32_t>(raw.data(),0x80);
     out.flagsA8=Word<std::uint8_t>(raw.data(),0xa8);
+    PistolBoundaryBits(out,s.config,raw);
     if(out.current>15||out.previous>15||out.next>15||!std::isfinite(out.timer)||std::abs(out.timer)>1000000||
        out.loaded< -1||out.loaded>1000000||out.reserve< -1||out.reserve>1000000)return fail(ReloadFlowBoundaryFailure::StateRange);
     return out;
@@ -332,9 +346,40 @@ std::atomic<unsigned> ammoResourceRetained=0,ammoResourceDeferred=0;
 unsigned ammoResourceDrained=0;
 AmmoResourceBindingChannel ammoResourceBindings;
 unsigned ammoResourceRebinds=0;
+FeedEquipmentAdapter feedEquipment;
+std::optional<AmmoResourceHandoff> feedEquipmentHandoff{std::in_place};
 #ifdef FVR_BC2_AMMO_RESOURCE_HANDS
 AmmoResourceService ammoPlayerService;
 AmmoResourceChannel ammoPlayerChannel;
+PistolAfterFeedEvidence pistolAfterFeed;
+std::atomic<bool> pistolAfterFeedEnabled=false;
+// Admission publishes these native identities before dispatch. Slots are only
+// reclaimed with actor-drain evidence; equip/space changes never erase them.
+struct PistolVetoSlot {
+    std::atomic<std::uint64_t> actor=0,actorGeneration=0,weapon=0,weaponGeneration=0;
+    std::atomic<bool> blocked=false;
+};
+std::array<PistolVetoSlot,32> pistolVetoSlots;
+void PublishPistolVeto(const interaction::AmmoResourceIdentity& resource,bool blocked)noexcept {
+    for(auto& slot:pistolVetoSlots){
+        const auto weapon=slot.weapon.load(std::memory_order_acquire);
+        if(weapon&& (weapon!=resource.weapon||slot.actor.load()!=resource.actor||slot.actorGeneration.load()!=resource.actorGeneration||
+            slot.weaponGeneration.load()!=resource.weaponGeneration))continue;
+        if(!weapon){if(!blocked)return;slot.actor=resource.actor;slot.actorGeneration=resource.actorGeneration;
+            slot.weaponGeneration=resource.weaponGeneration;slot.weapon.store(resource.weapon,std::memory_order_release);}
+        slot.blocked.store(blocked,std::memory_order_release);return;
+    }
+}
+bool PistolVeto(const interaction::AmmoResourceIdentity& resource)noexcept {
+    for(const auto& slot:pistolVetoSlots)if(slot.blocked.load(std::memory_order_acquire)&&
+        slot.weapon.load(std::memory_order_acquire)==resource.weapon&&slot.actor.load()==resource.actor&&
+        slot.actorGeneration.load()==resource.actorGeneration&&slot.weaponGeneration.load()==resource.weaponGeneration)return true;
+    return false;
+}
+void RecordPistolOutcome()noexcept {
+    if(const auto& outcome=ammoPlayerService.Outcome();outcome&&pistolAfterFeed.Outcome(*outcome))
+        PublishPistolVeto(outcome->request.intent.context.resource,pistolAfterFeed.Blocks(outcome->request.intent.context.resource));
+}
 std::uint64_t ammoPlayerSequence=0;
 unsigned ammoPlayerCalls=0,ammoPlayerCompleted=0,ammoPlayerRejected=0;
 #endif
@@ -377,7 +422,27 @@ void CompleteAmmoResourceCall(const AmmoMoveProbeDecision& decision,const AmmoMo
 #endif
 AmmoResourceOwnUpdate AmmoResourceRow(const ReloadFlowRecord& record)noexcept {
     const auto& a=*record.exit.boundary;const auto& b=record.entry.boundary;
-    const auto context=record.entry.contextCopied?DecodeReloadUpdateContext(record.entry.copiedContext):std::nullopt;
+    std::array<std::byte,0x30> effective{};
+    const bool vetoed=record.exit.pistolInput.requested;
+    const bool effectiveKnown=vetoed&&record.entry.contextCopied&&record.exit.contextCopied&&
+        PistolAfterFeedEffectiveContext(record.entry.copiedContext,record.exit.copiedContext,record.exit.pistolInput,effective);
+    // Neutral means the actual input consumed by this original invocation.
+    // Raw entry/exit remain untouched in the record, with a separate exact
+    // scope receipt. A failed patch/restore grants no neutral input evidence.
+    const bool cycleGuarded=record.exit.cycleGuard.requested;
+    if(cycleGuarded&&record.exit.cycleGuard.Exact()&&record.entry.contextCopied){
+        effective=record.entry.copiedContext;
+        std::memcpy(effective.data()+0x28,record.exit.cycleGuard.effective.data(),8);
+    }
+    const bool fixedGuarded=record.exit.fixedInput.requested;
+    if(fixedGuarded&&record.exit.fixedInput.Exact()&&record.entry.contextCopied){
+        effective=record.entry.copiedContext;
+        std::memcpy(effective.data()+0x28,record.exit.fixedInput.effective.data(),8);
+    }
+    const auto context=fixedGuarded?(record.exit.fixedInput.Exact()?DecodeReloadUpdateContext(effective):std::nullopt):
+        cycleGuarded?(record.exit.cycleGuard.Exact()?DecodeReloadUpdateContext(effective):std::nullopt):
+        vetoed?(effectiveKnown?DecodeReloadUpdateContext(effective):std::nullopt):
+        record.entry.contextCopied?DecodeReloadUpdateContext(record.entry.copiedContext):std::nullopt;
     const bool neutral=context&&!context->inputFlags&&!context->fireRequested&&!context->orderRequested&&!context->reloadRequested;
     return {b.owner,a.owner,a.firing,a.serverPlayer,a.serverSoldier,a.serverItem,
         record.id,record.entry.nowNs,record.exit.nowNs,a.branch,record.entry.depth,
@@ -474,6 +539,12 @@ bool nativeCycleDispatcher=false;
 // Serializes routing publication/handoff only. No original callback holds it.
 std::atomic_flag nativeCycleRoutingGate=ATOMIC_FLAG_INIT;
 Bc2NativeCycleService nativeCycle;
+Bc2CycleReloadRouting nativeCycleReload;
+bool fixedContainerReloadEnabled=false; // Pre-Start, exact descriptor admission only.
+struct FixedContainerNativeGate {FixedContainerGate gate;ReloadHoldIdentity identity;ReloadObservedConfig config;bool fault=false;};
+std::array<std::optional<FixedContainerNativeGate>,64> fixedContainerGates{};
+std::atomic_flag fixedContainerGateLock=ATOMIC_FLAG_INIT;
+std::uint64_t fixedContainerLastLifetime=0;
 NativeCycleFailureJournal nativeCycleFirstFailure;
 NativeCycleContentionJournal nativeCycleFirstContention;
 NativeCycleContentionJournal nativeCycleFirstCriticalContention;
@@ -715,6 +786,26 @@ std::optional<Lease> Owner(unsigned firing,std::int64_t now)noexcept{
         if(std::find(identity.firing.begin(),identity.firing.end(),firing)!=identity.firing.end())cleanup=abortOwner;
     }},false);
     if(cleanup)return cleanup;
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+    // Retained mechanism debt still blocks native firing after tracking loss.
+    // Re-read the exact enrolled native owner; this supplies no hand authority
+    // and never renews the publication or controller packet that enrolled it.
+    if(!regular&&fixedContainerReloadEnabled){
+        std::optional<FixedContainerNativeGate> watch;
+        {Gate gate(fixedContainerGateLock);if(gate.held)for(const auto& slot:fixedContainerGates)
+            if(slot&&std::find(slot->identity.firing.begin(),slot->identity.firing.end(),firing)!=slot->identity.firing.end()){watch=slot;break;}}
+        if(watch&&serverBinding){
+            const auto revision=ownerRevision.load(std::memory_order_acquire),sequence=reserveSequence.Next();
+            const auto observed=Now();
+            const auto sample=ReadReloadState(memory,binding.state,base,watch->identity.owner,sequence,observed);
+            if(sample.snapshot&&sample.snapshot->config==watch->config&&ReadFixedContainerNativeConfig(memory,sample.snapshot->config)){
+                const auto server=ReadReloadServerState(memory,*serverBinding,binding.state,base,*sample.snapshot);
+                if(server){Lease retained{*sample.snapshot,observed+100000000,revision,server};
+                    if(RoundIdentity(retained)==watch->identity&&IsCurrent(retained,Now()))regular=retained;}
+            }
+        }
+    }
+#endif
     // Exact completion or a bounded already-held interruption watch supplies
     // native-only authority. Each native read keeps its own original freshness;
     // neither path renews an XR packet or grants physical hand custody.
@@ -769,7 +860,23 @@ std::optional<ReloadFlowBoundary> BoundaryFor(const Lease& lease,unsigned firing
         out.firing=firing;out.wrapperOffset=0x10;out.branch=2;out.soldierFlags=lease.snapshot.soldierFlags;
         out.serverPlayer=lease.server->links.player;out.serverSoldier=lease.server->links.soldier;out.serverItem=lease.server->links.item;
         out.current=read->currentState;out.previous=read->previousState;out.next=read->nextState;out.timer=read->phaseTimer;
-        out.loaded=read->loaded;out.reserve=read->reserve;out.flagsA8=read->flagsA8;return out;
+        out.loaded=read->loaded;out.reserve=read->reserve;out.flagsA8=read->flagsA8;
+        if(PistolAfterFeedConfigMatches(lease.snapshot.config)){
+            // Reuse the exact server owner validator around two complete raw
+            // reads. A sibling/client address cannot supply server evidence.
+            std::array<std::byte,0xb0> raw{},again{};const Reader r{memory};
+            const bool exact=ReadReloadServerOwner(memory,*serverBinding,binding.state,base,*lease.server,deadline,Now())&&
+                r.Read(firing,raw.data(),raw.size())&&
+                ReadReloadServerOwner(memory,*serverBinding,binding.state,base,*lease.server,deadline,Now())&&
+                r.Read(firing,again.data(),again.size())&&raw==again&&
+                Word<unsigned>(raw.data(),0)==base+binding.state.firingVtableRva&&
+                Word<unsigned>(raw.data(),8)==lease.snapshot.config.firingData&&Word<unsigned>(raw.data(),12)==lease.snapshot.config.ammoAddress&&
+                Word<unsigned>(raw.data(),0x3c)==out.current&&Word<unsigned>(raw.data(),0x40)==out.previous&&
+                Word<unsigned>(raw.data(),0x44)==out.next&&Word<float>(raw.data(),0x50)==out.timer&&
+                Word<int>(raw.data(),0x7c)==out.loaded&&Word<int>(raw.data(),0x80)==out.reserve&&Word<std::uint8_t>(raw.data(),0xa8)==out.flagsA8;
+            if(exact)PistolBoundaryBits(out,lease.snapshot.config,raw);
+        }
+        return out;
     }
     ReloadFlowBoundaryDiagnostic final;ReloadPhaseRetryAttempt retry;
     const auto read=ReadReloadPhaseCoherent([&](std::int64_t at,ReloadFlowBoundaryDiagnostic& d){
@@ -801,6 +908,8 @@ struct Observation {
     Frame frame{};std::optional<Lease> lease;unsigned context=0,snapshot=0;
     ReloadDeltaOverride hold{};bool holdRequested=false,finished=false;ReloadFlowEventInput entry{};RequestBoundaryEvidence evidence{};
     NativeCycleInputGuard cycleGuard{};std::uint64_t cycleGuardEpoch=0;unsigned cycleGuardSteps=0,cycleGuardRejected=0;
+    PistolAfterFeedInputReceipt pistolInput{};
+    FixedContainerInputGuard fixedInput{};
     Observation(ReloadFlowEvent kind,unsigned firing,unsigned caller,unsigned ctx,unsigned argument)noexcept{
         frame.previous=currentFrame;frame.firing=firing;frame.depth=frame.previous?frame.previous->depth+1:1;currentFrame=&frame;
         if(!enabled.load(std::memory_order_acquire))return;
@@ -863,6 +972,8 @@ struct Observation {
             if(snapshot){out.snapshotCopied=Context(snapshot,out.copiedSnapshot);if(!out.snapshotCopied)++contextMisses;}
             out.hold=hold;out.holdRequested=holdRequested;
             out.cycleGuard=cycleGuard;out.cycleGuardEpoch=cycleGuardEpoch;out.cycleGuardSteps=cycleGuardSteps;out.cycleGuardRejected=cycleGuardRejected;
+            out.pistolInput=pistolInput;
+            out.fixedInput=fixedInput;
             const auto independent=(requestMode||pumpDiagnostic)?frame.invocation.Finish(out):std::nullopt;
             if(frame.id){Gate gate(recordGate);if(!gate.held){++recordBusy;++recordEndBusy;
                     recordCompletions.Publish(frame.id,out);if(!requestMode&&!pumpDiagnostic)return {};}
@@ -923,6 +1034,75 @@ bool DeltaRestore(void* address,unsigned value,unsigned& previous)noexcept {
     __try {previous=unsigned(InterlockedExchange(static_cast<volatile LONG*>(address),LONG(value)));return true;}
     __except(EXCEPTION_EXECUTE_HANDLER){return false;}
 }
+bool NativeInputCompare(void*,unsigned,unsigned,unsigned,unsigned&)noexcept;
+void OriginalUpdateWithPistol(Observation& observation,void* self,void* context,unsigned extra){
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+    if(fixedContainerReloadEnabled&&observation.lease&&FixedContainerNativeConfig(observation.lease->snapshot.config)&&
+       observation.frame.depth==1&&observation.entry.contextCopied&&holdCodeVerified&&
+       observation.entry.caller==base+binding.code[1].rva+0x2f&&observation.entry.context==unsigned(context)&&
+       !(unsigned(context)&3)&&IsCurrent(*observation.lease,Now())&&ReadFixedContainerNativeConfig(memory,observation.lease->snapshot.config)){
+        ULONG_PTR low=0,high=0;GetCurrentThreadStackLimits(&low,&high);
+        if(unsigned(context)>=low&&std::uint64_t(unsigned(context))+0x30<=high){
+            bool blocked=true;const auto identity=RoundIdentity(*observation.lease);
+            {Gate gate(fixedContainerGateLock);if(gate.held)for(const auto& slot:fixedContainerGates)
+                if(slot&&slot->identity==identity&&slot->config==observation.lease->snapshot.config){blocked=slot->fault||slot->gate.blocksFire;break;}}
+            const std::array<unsigned,2> words{Word<unsigned>(observation.entry.copiedContext.data(),0x28),
+                Word<unsigned>(observation.entry.copiedContext.data(),0x2c)};
+            const NativeCycleInputAccess access{context,NativeInputCompare};
+            // Native exceptions still restore exactly the two original input
+            // words. Neither ammunition nor the persistent interlock is reset.
+            struct Call {void* self;void* context;unsigned extra;} call{self,context,extra};
+            RunFixedContainerInput(access,words,blocked,observation.entry.boundary.loaded==0,
+                [](void* value){const auto& c=*static_cast<Call*>(value);originalUpdate(c.self,c.context,c.extra);},&call,observation.fixedInput);
+            if(!observation.fixedInput.Exact()){
+                Gate gate(fixedContainerGateLock);if(gate.held)for(auto& slot:fixedContainerGates)
+                    if(slot&&slot->identity==identity)slot->fault=true;
+            }
+            return;
+        }
+    }
+#endif
+    bool requested=false;unsigned flags=0;
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+    if(pistolAfterFeedEnabled.load(std::memory_order_acquire)&&observation.lease&&observation.frame.depth==1&&observation.entry.contextCopied&&
+       PistolAfterFeedConfigMatches(observation.lease->snapshot.config)&&
+       observation.entry.boundary.pistolFiniteAmmo&&
+       observation.entry.caller==base+binding.code[1].rva+0x2f&&
+       observation.entry.context==unsigned(context)&&!(unsigned(context)&3)&&
+       IsCurrent(*observation.lease,Now())){
+        ULONG_PTR low=0,high=0;GetCurrentThreadStackLimits(&low,&high);
+        if(unsigned(context)>=low&&std::uint64_t(unsigned(context))+0x30<=high){
+            const auto binding=ammoResourceBindings.Read(observation.lease->snapshot.owner,Now());
+            if(binding)requested=PistolVeto(binding->context.resource);
+        }
+        flags=Word<unsigned>(observation.entry.copiedContext.data(),0x2c);
+    }
+#endif
+    struct Call {void* self;void* context;unsigned extra;} call{self,context,extra};
+    RunPistolAfterFeedInput({reinterpret_cast<void*>(unsigned(context)+0x2c),DeltaCompare},flags,requested,
+        [](void* value){const auto& c=*static_cast<Call*>(value);originalUpdate(c.self,c.context,c.extra);},&call,observation.pistolInput);
+}
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+std::optional<PistolAfterFeedOwnUpdate> PistolOwnRow(const ReloadFlowRecord& completed,const Lease& lease)noexcept {
+    if(!completed.exit.boundary||completed.entry.kind!=ReloadFlowEvent::Update||
+       !PistolAfterFeedConfigMatches(lease.snapshot.config))return {};
+    const auto resource=ammoResourceBindings.Read(lease.snapshot.owner,Now());if(!resource)return {};
+    std::array<std::byte,0x30> effective{};
+    const bool exact=completed.entry.contextCopied&&completed.exit.contextCopied&&
+        PistolAfterFeedEffectiveContext(completed.entry.copiedContext,completed.exit.copiedContext,completed.exit.pistolInput,effective);
+    const auto context=exact?DecodeReloadUpdateContext(effective):std::nullopt;
+    PistolAfterFeedOwnUpdate row;row.own=AmmoResourceRow(completed);row.identity=RoundIdentity(lease);row.context=resource->context;
+    row.profileKey=FindBc2PistolSlideRegistration(lease.snapshot.config)->key;
+    row.own.neutralContext=context&&!context->inputFlags&&!context->flags24Through28[4];
+    const auto& before=completed.entry.boundary;const auto& after=*completed.exit.boundary;
+    row.before=before.pistol;row.after=after.pistol;row.beforeFiring=before.firing;
+    row.beforeServerPlayer=before.serverPlayer;row.beforeServerSoldier=before.serverSoldier;row.beforeServerItem=before.serverItem;
+    row.nativeInvocation=completed.entry.nativeInvocation;row.nativeParent=completed.entry.nativeParent;row.nativeUpdate=completed.entry.nativeUpdate;
+    row.input=completed.exit.pistolInput;
+    row.effectiveContextVerified=exact&&context.has_value();row.finiteAmmoVerified=before.pistolFiniteAmmo&&after.pistolFiniteAmmo;
+    return row;
+}
+#endif
 std::optional<int> Capacity(unsigned firing,int authored)noexcept {
     float multiplier=0,again=0;int overrideValue=0,overrideAgain=0;
     if(!memory.read||!memory.read(memory.context,firing+0x74,&multiplier,4)||!memory.read(memory.context,firing+0x98,&overrideValue,4)||
@@ -934,7 +1114,7 @@ std::optional<int> Capacity(unsigned firing,int authored)noexcept {
 bool FamilyConfig(ReloadNativeFamily family,NativeMagazineProfileId id,const ReloadObservedConfig& c)noexcept {
     const auto* profile=ResolveMagazineNativeProfile(id);
     return family==ReloadNativeFamily::Xm8Magazine?(profile&&profile->Matches(c)):
-        family==ReloadNativeFamily::SpasTube&&IsDiagnosticSpasConfig(c);
+        family==ReloadNativeFamily::SpasTube&&ManualPumpConfig(c);
 }
 bool FamilyTiming(ReloadNativeFamily family,NativeMagazineProfileId id,const ReloadObservedConfig& c)noexcept {
     const auto* profile=ResolveMagazineNativeProfile(id);
@@ -944,11 +1124,15 @@ bool FamilyTiming(ReloadNativeFamily family,NativeMagazineProfileId id,const Rel
 bool RequestConfig(const ReloadObservedConfig& c)noexcept {
     return requestCycle.MatchesSelectedConfig(c);
 }
+bool FeedEquipmentReadConfig(const ReloadObservedConfig& config)noexcept {
+    const auto* profile=FindBc2FeedRegistration(config);
+    return profile&&ReadReloadDescriptorTiming(memory,config,profile->config);
+}
 bool RequestTiming(const ReloadObservedConfig& c)noexcept {
     return requestCycle.IsMagazine()?requestCycle.MagazineProfile().ReadTiming(memory,c):ReadReloadRoundTiming(memory,c);
 }
 bool PrepareHoldOnce(const Observation& observation,unsigned firing,unsigned caller,unsigned context,ReloadHoldInput& input,unsigned& deltaBits,
-    ReloadCohortRejection& rejected)noexcept {
+    ReloadCohortRejection& rejected,bool feedEquipmentRead=false,bool fixedContainerRead=false)noexcept {
     rejected={};const auto reject=[&](unsigned reason){rejected.stage=reason;++holdPrepareRejected[reason];return false;};
     if(!(requestMode?observation.frame.invocation.Record().id:observation.frame.id)||!observation.lease||observation.frame.depth!=1||!holdCodeVerified||
        caller!=base+binding.code[1].rva+0x2f||!context||(context&3))return reject(0);
@@ -956,7 +1140,9 @@ bool PrepareHoldOnce(const Observation& observation,unsigned firing,unsigned cal
     if(context<low||std::uint64_t(context)+0x30>high)return reject(1);
     const auto& lease=*observation.lease;
     if(!lease.server||!serverBinding||!IsCurrent(lease,Now())||
-       !(nativeBoltCandidate&&NativeCycleTarget(firing)?ReadM95StockShotConfig(memory,lease.snapshot.config):RequestConfig(lease.snapshot.config)))return reject(2);
+       !(fixedContainerRead?ReadFixedContainerNativeConfig(memory,lease.snapshot.config):
+         feedEquipmentRead?FeedEquipmentConfigMatches(lease.snapshot.config):
+         nativeBoltCandidate&&NativeCycleTarget(firing)?ReadManualBoltConfig(memory,lease.snapshot.config):RequestConfig(lease.snapshot.config)))return reject(2);
     input.identity.owner=lease.snapshot.owner;
     input.identity.firing={lease.snapshot.branches[0].address,lease.snapshot.branches[1].address,lease.server->links.firing};
     input.identity.serverPlayer=lease.server->links.player;input.identity.serverSoldier=lease.server->links.soldier;input.identity.serverItem=lease.server->links.item;
@@ -1080,8 +1266,96 @@ void TryAmmoMoveProbe(const Observation& observation,const ReloadHoldInput& inpu
     CompleteAmmoResourceCall(decision,receipt);
 }
 #endif
+// Feed requests share the proved native boundary, not magazine eligibility or
+// its resource ledger. All mod-owned cover/container state stays in the caller.
+void TryFeedEquipment(const Observation& observation,const ReloadHoldInput& in,void* self,void* context)noexcept {
+    if(!requestMode||!observation.lease||!in.verified||in.branch>=3||!FeedEquipmentConfigMatches(in.config))return;
+    Gate lock(ammoMoveProbeGate);if(!lock.held)return;
 #ifdef FVR_BC2_AMMO_RESOURCE_HANDS
-void TryAmmoResourceHands(const Observation& observation,const ReloadHoldInput& in,void* self,void* context)noexcept {
+    if(ammoPlayerService.Active())return;
+#endif
+    static ReloadHoldIdentity neutralOwner;static std::array<std::int64_t,3> neutral{};
+    const auto now=Now();const auto& c=in.context;
+    if(neutralOwner!=in.identity){neutralOwner=in.identity;neutral={};}
+    neutral[in.branch]=0; // A newer unsafe input invalidates this branch's old vote.
+    if(in.contextObservedNs<=0||now<in.contextObservedNs||now-in.contextObservedNs>=50000000||now>=in.leaseDeadlineNs||
+       !ValidManualReloadDelta(c.deltaSeconds)||c.reloadTimeMultiplier!=1||c.inputFlags||c.fireRequested||c.orderRequested||
+       c.reloadRequested||!c.flags24Through28[0]||c.flags24Through28[2]||c.flags24Through28[4])return;
+    neutral[in.branch]=in.contextObservedNs;if(in.branch!=2)return;
+    for(auto stamp:neutral)if(stamp<=0||now<stamp||now-stamp>=50000000)return;
+    const auto& server=in.branches[2];
+    for(unsigned n=0;n<3;++n){const auto& b=in.branches[n];
+        if(b.address!=in.identity.firing[n]||b.wrapperOffset!=(n==0?0x3cu:n==1?0x40u:0x10u)||
+           b.currentState!=2||b.nextState!=2||b.phaseTimer!=0||(b.flagsA8&(8|16))||
+           b.loaded!=server.loaded||b.reserve!=server.reserve||in.capacities[n]!=in.capacities[2])return;
+    }
+    const auto resource=ammoResourceBindings.Read(in.identity.owner,now);if(!resource)return;
+    const Reader reader{memory};
+    if(resource->data!=in.config.weaponData||!reader.Equals(std::uint64_t(in.identity.owner.weapon)+4,resource->data)||
+       !reader.Equals(std::uint64_t(resource->data)+0x64,resource->persistence))return;
+    // Recheck the relevant native scalar words without inheriting Reviewed()
+    // or a magazine cycle grant. The six complete code proofs belong to the
+    // already-installed reload observer; the actual refill trampoline is below.
+    if(!FeedEquipmentReadConfig(in.config))return;
+    FeedEquipmentNativeView view;
+    view.binding=*resource;view.identity=in.identity;view.config=in.config;
+    view.counts={server.loaded,server.reserve,in.capacities[2]};
+    // Completion of the actual coherent component reads, never publication
+    // or consumer time. A later inventory binding cannot be backdated.
+    view.observedNs=std::max({in.contextObservedNs,in.nowNs,resource->observedNs});
+    const auto* registration=FindBc2FeedRegistration(in.config);if(!registration)return;
+    view.deadlineNs=std::min({in.leaseDeadlineNs,resource->deadlineNs,
+        view.observedNs+std::min(registration->mechanism.maxAgeNs,100000000ll)});
+    if(!feedEquipment.Publish(view,now))return;
+    const auto adjacentView=feedEquipment.Read(in.identity.owner,Now());
+    if(!adjacentView||!feedEquipment.Pending()||feedEquipment.Invoked()||!feedEquipment.Current(*adjacentView,Now()))return;
+    const auto command=feedEquipment.Pending()->command;
+    const auto& b=command.before.counts;const auto& lease=*observation.lease;
+    const auto adjacent=BoundaryFor(lease,unsigned(self),Now());const auto capacity=Capacity(unsigned(self),in.config.baseCapacity);
+    MagazineAmmoMoveBytes before{},after{};std::array<std::byte,0x30> ctx{},ctxAfter{};
+    if(!capacity||*capacity!=b.capacity||in.identity!=RoundIdentity(lease)||in.identity.firing[2]!=unsigned(self)||
+       !adjacent||adjacent->branch!=2||adjacent->current!=2||adjacent->next!=2||adjacent->timer!=0||
+       adjacent->loaded!=b.loaded||adjacent->reserve!=b.reserve||!IsCurrent(lease,Now())||!RequestOwnerEvidence(lease,Now())||
+       !AmmoResourceBindingFresh(*resource,in.identity.owner,Now())||!Context(unsigned(self),before)||
+       Word<unsigned>(before.data(),0)!=base+binding.state.firingVtableRva||
+       Word<unsigned>(before.data(),4)!=base+binding.state.firingVtableRva-16||
+       Word<unsigned>(before.data(),8)!=in.config.firingData||Word<unsigned>(before.data(),12)!=in.config.ammoAddress||
+       Word<int>(before.data(),0x7c)!=b.loaded||Word<int>(before.data(),0x80)!=b.reserve||
+       !Context(unsigned(context),ctx)||ctx!=observation.entry.copiedContext)return;
+    const bool refillRequested=command.authority.effect==interaction::FeedAmmunitionEffect::RefillLoaded;
+    const auto refill=refillRequested?PlanNativeAmmoRefill(b.loaded,b.reserve,b.capacity,1):std::nullopt;
+    unsigned magazines=0;float multiplier=0;
+    const bool code=!refillRequested||(refill&&originalTransfer&&
+        reader.Equals(std::uint64_t(in.config.primaryFire)+0x20,1)&&
+        reader.Get(std::uint64_t(in.config.ammoAddress)+0x10,magazines)&&magazines==unsigned(in.config.numberOfMagazines)&&
+        reader.Get(std::uint64_t(unsigned(self))+0x78,multiplier)&&NativeAmmoRefillFiniteReserve(in.config.numberOfMagazines,multiplier)&&
+        Word<float>(before.data(),0x78)==multiplier&&
+        NativeAmmoRefillTrampolineVerified(memory,base,binding.state,unsigned(&Transfer),unsigned(originalTransfer)));
+    const auto invocation=observation.frame.invocation.Record().id;
+    if(!feedEquipmentHandoff->Arm(invocation))return;
+    // One final admission clock immediately owns call/no-entry. A failed
+    // preflight is not acknowledged until this actual server Update and both
+    // clients independently prove unchanged counts for the retained command.
+    const auto began=Now();
+    const bool applied=code&&feedEquipment.Current(*adjacentView,began)&&
+        FeedEquipmentSubmissionValid(*feedEquipment.Pending(),began);
+    const bool entered=applied&&refillRequested;
+    const bool returned=!entered||CallAmmoRefill(originalTransfer,self);
+    const bool contextExact=Context(unsigned(context),ctxAfter)&&ctxAfter==ctx;
+    const bool exact=returned&&Context(unsigned(self),after)&&contextExact&&
+        (entered?NativeAmmoRefillMatched(*refill,before,after):before==after);
+    (void)feedEquipment.Call({command,in.identity,invocation,began,Now(),applied,entered,exact,contextExact});
+}
+void ObserveFeedEquipment(const ReloadFlowRecord& completed)noexcept {
+    if(!completed.exit.boundary)return;
+    const auto row=AmmoResourceRow(completed);
+    const bool retained=feedEquipmentHandoff->Publish(row);
+    Gate lock(ammoMoveProbeGate);if(!lock.held)return;
+    if(const auto pending=feedEquipmentHandoff->Take())(void)feedEquipment.Observe(*pending,Now());
+    if(!retained)(void)feedEquipment.Observe(row,Now());
+}
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+void TryAmmoResourceHands(const Observation& observation,const ReloadHoldInput& in,void* self,void* context,bool pausedCycle=false)noexcept {
     if(!requestMode||!observation.lease||!in.verified||in.branch>=3||in.config.reloadType!=1)return;
     Gate lock(ammoMoveProbeGate);if(!lock.held)return;
     ammoPlayerService.Expire(Now());
@@ -1102,32 +1376,51 @@ void TryAmmoResourceHands(const Observation& observation,const ReloadHoldInput& 
     const auto resource=ammoResourceBindings.Read(in.identity.owner,now);if(!resource)return;
     Reader reader{memory};
     const auto profile=FindMagazineEquipment(in.config);
-    if(!profile||!profile->Ready()||!reader.Equals(std::uint64_t(in.identity.owner.weapon)+4,resource->data)||
+    const bool fixed=fixedContainerReloadEnabled&&ReadFixedContainerNativeConfig(memory,in.config);
+    const bool bolt=pausedCycle&&ReadManualBoltConfig(memory,in.config);
+    if((!fixed&&!bolt&&(!profile||!profile->Ready()))||!reader.Equals(std::uint64_t(in.identity.owner.weapon)+4,resource->data)||
        !reader.Equals(std::uint64_t(resource->data)+0x64,resource->persistence)||ammoPlayerSequence==UINT64_MAX)return;
-    bool idle=false;WithRequest([&]{const auto phase=requestCycle.Phase();
+    bool idle=false;std::uint64_t inputFloor=0;
+    if(pausedCycle)WithNativeCycle(NativeCycleAccess::Observation,[&]{
+        idle=bolt&&nativeCycle.ReloadPause()&&!nativeCycle.ReloadCommand()&&
+            nativeCycle.ReloadPermit({in.identity,in.config},Now()).has_value();
+        inputFloor=nativeCycle.LastControlInput().sequence;
+    });
+    else WithRequest([&]{const auto phase=requestCycle.Phase();
         idle=(phase==ReloadRequestCyclePhase::Idle||phase==ReloadRequestCyclePhase::Finished||phase==ReloadRequestCyclePhase::Cancelled)&&
-            requestCycle.MatchesSelectedConfig(in.config);
+            (fixed||requestCycle.MatchesSelectedConfig(in.config));
     },false);
     if(!idle)return;
-    const auto snapshot=AmmoResourceSample(in,*resource,++ammoPlayerSequence);
+    ammoPlayerSequence=std::max(ammoPlayerSequence+1,inputFloor);
+    const auto snapshot=AmmoResourceSample(in,*resource,ammoPlayerSequence);
     if(!ammoPlayerService.Select(*resource,in.identity,snapshot,now)){ammoPlayerChannel.Publish(ammoPlayerService.View(),ammoPlayerService.Outcome());return;}
     ammoPlayerChannel.Publish(ammoPlayerService.View(),ammoPlayerService.Outcome());
     if(ammoPlayerService.Active())return;
     const auto request=ammoPlayerChannel.Take();if(!request)return;
     const auto command=ammoPlayerService.Accept(*request,Now());
     if(!command){ammoPlayerChannel.Publish(ammoPlayerService.View(),ammoPlayerService.Outcome());return;}
-    const auto reject=[&]{++ammoPlayerRejected;ammoPlayerService.Cancel(Now());ammoPlayerChannel.Publish(ammoPlayerService.View(),ammoPlayerService.Outcome());};
+    const auto reject=[&]{++ammoPlayerRejected;ammoPlayerService.Cancel(Now());RecordPistolOutcome();ammoPlayerChannel.Publish(ammoPlayerService.View(),ammoPlayerService.Outcome());};
+    if(fixed?(command->operation!=interaction::AmmunitionOperation::InsertRounds||!request->preparedCommand):
+        command->operation==interaction::AmmunitionOperation::InsertRounds||request->preparedCommand){reject();return;}
+    if(fixed){
+        bool admitted=false;Gate gate(fixedContainerGateLock);
+        if(gate.held)for(const auto& slot:fixedContainerGates)if(slot&&slot->identity==in.identity&&
+            slot->config==in.config&&slot->gate.binding.context==resource->context&&slot->gate.blocksFire&&!slot->fault){admitted=true;break;}
+        if(!admitted){reject();return;}
+    }
     const auto& lease=*observation.lease;const auto& b=command->before;
     const auto move=command->mutationRequired&&(command->operation==interaction::AmmunitionOperation::RemoveMagazine||
         command->operation==interaction::AmmunitionOperation::ReturnMagazine)?
         PlanMagazineAmmoMove(command->operation==interaction::AmmunitionOperation::RemoveMagazine?MagazineAmmoMoveKind::Remove:MagazineAmmoMoveKind::Return,
             b.loaded,b.reserve,b.capacity,command->operation==interaction::AmmunitionOperation::RemoveMagazine?b.loaded:command->after.loaded):std::nullopt;
-    const auto refill=command->operation==interaction::AmmunitionOperation::RefillMagazine?PlanNativeAmmoRefill(b.loaded,b.reserve,b.capacity,1):std::nullopt;
+    const bool refillOperation=command->operation==interaction::AmmunitionOperation::RefillMagazine||
+        (fixed&&command->operation==interaction::AmmunitionOperation::InsertRounds);
+    const auto refill=refillOperation?PlanNativeAmmoRefill(b.loaded,b.reserve,b.capacity,1):std::nullopt;
     const auto code=ReadMagazineAmmoNativeBinding(memory,base,binding.state);
     const auto adjacent=BoundaryFor(lease,unsigned(self),Now());const auto capacity=Capacity(unsigned(self),in.config.baseCapacity);
     MagazineAmmoMoveBytes before{},after{};std::array<std::byte,0x30> ctx{},ctxAfter{};
     int reloadType=-1;unsigned magazineCount=0;float multiplier=0;
-    const bool refillCode=command->operation!=interaction::AmmunitionOperation::RefillMagazine||(refill&&originalTransfer&&
+    const bool refillCode=!refillOperation||(refill&&originalTransfer&&
         memory.read(memory.context,in.config.primaryFire+0x20,&reloadType,4)&&reloadType==1&&
         memory.read(memory.context,in.config.ammoAddress+0x10,&magazineCount,4)&&magazineCount==unsigned(in.config.numberOfMagazines)&&
         memory.read(memory.context,unsigned(self)+0x78,&multiplier,4)&&NativeAmmoRefillFiniteReserve(in.config.numberOfMagazines,multiplier)&&
@@ -1144,7 +1437,19 @@ void TryAmmoResourceHands(const Observation& observation,const ReloadHoldInput& 
        Word<int>(before.data(),0x7c)!=b.loaded||Word<int>(before.data(),0x80)!=b.reserve||
        !Context(unsigned(context),ctx)||ctx!=observation.entry.copiedContext){reject();return;}
     const auto invocation=observation.frame.invocation.Record().id;
-    if(!ammoPlayerService.InvokeNative(snapshot,[]()noexcept{return Now();},[&](std::int64_t began)noexcept {
+    if(pistolAfterFeedEnabled.load(std::memory_order_acquire)&&PistolAfterFeedConfigMatches(in.config)){
+        // Arm before the helper, including zero-round no-op removal. A native
+        // ambiguity retains this provisional veto until explicit reconciliation.
+        bool initialReady=command->before.loaded>0;
+        for(unsigned n=0;n<3;++n){const auto sidecar=BoundaryFor(lease,in.identity.firing[n],Now());
+            initialReady=initialReady&&sidecar&&PistolAfterFeedInitialPolicyReady(sidecar->pistol,sidecar->pistolFiniteAmmo,
+                sidecar->current,sidecar->next,sidecar->timer,sidecar->loaded,sidecar->reserve,command->before);
+        }
+        const auto* profile=FindBc2PistolSlideRegistration(in.config);
+        if(!profile||!pistolAfterFeed.Admit(*request,*command,in.identity,snapshot,initialReady,profile->key)){reject();return;}
+        PublishPistolVeto(command->context.resource,true);
+    }
+    const auto call=[&](std::int64_t began)noexcept {
         // Empty-mag removal/return is an owned no-op. Its exact original server
         // Update and both client Updates are still mandatory for completion.
         const bool returned=!command->mutationRequired||
@@ -1155,7 +1460,46 @@ void TryAmmoResourceHands(const Observation& observation,const ReloadHoldInput& 
             (!command->mutationRequired?before==after:refill?NativeAmmoRefillMatched(*refill,before,after):MagazineAmmoMoveMatched(*move,before,after));
         ++ammoPlayerCalls;
         return AmmoResourceNativeCall{in.identity,command->id,invocation,began,Now(),command->before,command->after,true,exact,contextExact};
-    })||!ammoResourceHandoff.Arm(invocation)){reject();return;}
+    };
+    bool called=false;
+    if(pausedCycle){
+        // This own server Update has not entered its original or reserved a
+        // recovery decision. Drain every predecessor before publishing the
+        // exact ledger command. No exclusion/policy gate spans a native call.
+        std::int64_t began=0;
+        {
+            ReloadInvocationExclusion entry(requestEntryGate,active,callbackRevision);
+            Gate route(nativeCycleRoutingGate);
+            if(entry.Quiet()&&route.held)WithNativeCycle(NativeCycleAccess::Control,[&]{
+                if(!entry.Quiet()||!IsCurrent(lease,Now()))return;
+                auto candidate=nativeCycle;auto journal=nativeCycleReload;
+                const NativeCycleRecoveryScope scope{in.identity,in.config};
+                began=Now();const auto permit=candidate.ReloadPermit(scope,began);
+                const interaction::WeaponCycleReloadDrain drain{callbackRevision.load(std::memory_order_acquire),began};
+                if(!permit||!candidate.BeginReloadCommand(scope,*permit,*command,drain,began)||
+                   !candidate.ReloadCommand()||!journal.Begin(scope,*candidate.ReloadCommand())||!entry.Quiet()||
+                   !ammoPlayerService.Dispatch(snapshot,began)){began=0;return;}
+                nativeCycle=std::move(candidate);nativeCycleReload=std::move(journal);
+            });
+        }
+        if(began)called=ammoPlayerService.Call(call(began));
+    }else called=ammoPlayerService.InvokeNative(snapshot,[]()noexcept{return Now();},call);
+    if(!called||!ammoResourceHandoff.Arm(invocation)){reject();return;}
+    RecordPistolOutcome();ammoPlayerChannel.Publish(ammoPlayerService.View(),ammoPlayerService.Outcome());
+}
+void ObserveCycleAmmoResource(const ReloadFlowRecord& completed)noexcept {
+    if(!completed.exit.boundary)return;
+    const auto row=AmmoResourceRow(completed);
+    ammoResourceHandoff.Publish(row); // The exact helper-owning Update survives contention.
+    Gate lock(ammoMoveProbeGate);if(!lock.held)return;
+    if(const auto pending=ammoResourceHandoff.Take())
+        if(ammoPlayerService.Observe(*pending,Now()))++ammoPlayerCompleted;
+    if(ammoPlayerService.Observe(row,Now()))++ammoPlayerCompleted;
+    if(const auto& outcome=ammoPlayerService.Outcome();outcome&&outcome->receipt&&
+       outcome->state==AmmoResourceRequestState::Completed)
+        WithNativeCycle(NativeCycleAccess::NativeFinish,[&]{
+            if(nativeCycleReload.Active())nativeCycleReload.Receipt(*outcome->receipt,ammoPlayerService.CompletionOwnUpdates());
+        },&completed);
     ammoPlayerChannel.Publish(ammoPlayerService.View(),ammoPlayerService.Outcome());
 }
 #endif
@@ -1605,13 +1949,16 @@ void __fastcall Update(void* self,void*,void* context,unsigned extra){
     selectedKnife::ObserveUpdate({firing,unsigned(context),caller,extra});
 #endif
     OriginalFiringScope independentObservation(independentFiringObserver,{firing,unsigned(context),caller,extra});
-    // Explicit independent tool input at this original boundary. The supplied
-    // context is a stack copy; native dt/argument and original context stay intact.
-    if(auto toolInput=independentObservation.InputCopy()){
-        alignas(16) auto nativeInput=*toolInput;originalUpdate(self,nativeInput.data(),extra);return;
-    }
     NativeCycleCallback cycleCallback(NativeCycleCallbackKind::Update,firing,unsigned(context));
     Observation observation(ReloadFlowEvent::Update,firing,caller,unsigned(context),extra);
+    // The exact pistol route composes inside the ordinary dispatcher so its
+    // ammo observers and original invocation remain intact. Other independent
+    // tools retain their existing caller-local input-copy route.
+    if(!observation.lease||!PistolAfterFeedConfigMatches(observation.lease->snapshot.config)){
+        if(auto toolInput=independentObservation.InputCopy()){
+            alignas(16) auto nativeInput=*toolInput;originalUpdate(self,nativeInput.data(),extra);return;
+        }
+    }
     const auto cycleInvocation=observation.frame.invocation.Record().id;cycleCallback.scope.BindInvocation(cycleInvocation);
     const bool cycleTarget=NativeCycleTarget(firing);
     bool target=RequestTarget(firing)||cycleTarget;
@@ -1623,7 +1970,31 @@ void __fastcall Update(void* self,void*,void* context,unsigned extra){
         target=IsCurrent(*observation.lease,Now())&&RequestOwnerEvidence(*observation.lease,Now());
 #endif
     if((!diagnosticHold&&!diagnosticRound&&!requestMode)||(requestMode&&(!activeScope.requestEntryAllowed||!target))){
-        if(cycleTarget)NativeCycleMissing(firing,cycleInvocation);originalUpdate(self,context,extra);return;}
+        if(cycleTarget)NativeCycleMissing(firing,cycleInvocation);OriginalUpdateWithPistol(observation,self,context,extra);return;}
+#ifdef FVR_BC2_NATIVE_AMMO_BACKEND
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+    if(requestMode&&fixedContainerReloadEnabled&&!cycleTarget&&observation.lease&&!observation.frame.cleanupOnly&&
+       FixedContainerNativeConfig(observation.lease->snapshot.config)){
+        ReloadHoldInput fixedInput;unsigned fixedDelta=0;ReloadCohortRejection rejected;
+        if(PrepareHoldOnce(observation,firing,caller,unsigned(context),fixedInput,fixedDelta,rejected,false,true))
+            TryAmmoResourceHands(observation,fixedInput,self,context);
+        OriginalUpdateWithPistol(observation,self,context,extra);
+        if(const auto completed=observation.Finish())ObserveCycleAmmoResource(*completed);
+        return;
+    }
+#endif
+    if(requestMode&&!cycleTarget&&observation.lease&&!observation.frame.cleanupOnly&&
+       FeedEquipmentConfigMatches(observation.lease->snapshot.config)){
+        ReloadHoldInput feedInput;unsigned feedDelta=0;ReloadCohortRejection rejected;
+        if(PrepareHoldOnce(observation,firing,caller,unsigned(context),feedInput,feedDelta,rejected,true))
+            TryFeedEquipment(observation,feedInput,self,context);
+        // Sibling route: no magazine request-cycle evaluation, stock animation
+        // hold or synthetic native update. Every original executes once.
+        OriginalUpdateWithPistol(observation,self,context,extra);
+        if(const auto completed=observation.Finish())ObserveFeedEquipment(*completed);
+        return;
+    }
+#endif
     const auto revision=callbackRevision.load(std::memory_order_acquire);
     const bool quietBefore=active.load(std::memory_order_acquire)==1;
     ReloadHoldInput input;unsigned deltaBits=0;bool ready=false;
@@ -1633,7 +2004,7 @@ void __fastcall Update(void* self,void*,void* context,unsigned extra){
     if(observation.lease&&observation.lease->cleanupEpoch){
         AbortRecord report;ReloadAbortDecision decision;
         if(ready)decision=TryAbort(observation,input,self,context,report);
-        originalUpdate(self,context,extra);
+        OriginalUpdateWithPistol(observation,self,context,extra);
         FinishAbort(decision,report,observation.Finish(),&*observation.lease);return;
     }
     if(cycleTarget){
@@ -1650,14 +2021,25 @@ void __fastcall Update(void* self,void*,void* context,unsigned extra){
             const bool source=observation.lease&&capacity&&cycleCallback.Isolated()&&holdCodeVerified&&
                 caller==base+binding.code[1].rva+0x2f&&unsigned(context)>=low&&std::uint64_t(unsigned(context))+0x30<=high&&
                 !(unsigned(context)&3)&&observation.entry.contextCopied&&IsCurrent(*observation.lease,Now())&&
-                (nativeBoltCandidate?ReadM95StockShotConfig(memory,observation.lease->snapshot.config):
-                    IsDiagnosticSpasConfig(observation.lease->snapshot.config));
+                (nativeBoltCandidate?ReadManualBoltConfig(memory,observation.lease->snapshot.config):
+                    ReadManualPumpConfig(memory,observation.lease->snapshot.config));
             if(source){recoveryScope=NativeCycleRecoveryScope{RoundIdentity(*observation.lease),observation.lease->snapshot.config};
                 recoveryCapacity=*capacity;recoveryDeadline=std::min(observation.lease->deadline,observation.entry.nowNs+100000000);}
         }
-        Bc2NativeCycleUpdateRoute route;
+        bool reloadPaused=false;
+        WithNativeCycle(NativeCycleAccess::Observation,[&]{reloadPaused=nativeCycle.ReloadPause().has_value();});
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+        if(ready&&reloadPaused)TryAmmoResourceHands(observation,input,self,context,true);
+#endif
+        Bc2NativeCycleUpdateRoute route;bool resourceRoute=false;
         WithNativeCycle(NativeCycleAccess::NativeUpdate,[&]{
             if(!cycleCallback.Isolated()){nativeCycle.Missing(firing,cycleInvocation);return;}
+            if(nativeCycleReload.Active()){
+                resourceRoute=route.recovering=true;
+                if(recoveryScope)route.recovery=nativeCycleReload.Evaluate(*recoveryScope,observation.entry,recoveryCapacity,recoveryDeadline);
+                if(!route.recovery)nativeCycle.Missing(firing,cycleInvocation);
+                return;
+            }
             route=EvaluateNativeCycleUpdateRoute(nativeCycle,{ready?&input:nullptr,
                 recoveryScope?&*recoveryScope:nullptr,&observation.entry,firing,cycleInvocation,recoveryCapacity,recoveryDeadline});
         },&observation.frame.invocation.Record());
@@ -1679,9 +2061,15 @@ void __fastcall Update(void* self,void*,void* context,unsigned extra){
             const auto completed=observation.Finish();
             WithNativeCycle(NativeCycleAccess::NativeFinish,[&]{
                 if(!completed||!cycleCallback.Isolated()){nativeCycle.Missing(firing,cycleInvocation);return;}
-                ++nativeCycleUpdates;nativeCycle.FinishRecovery(decision,*completed,observation.cycleGuard,
+                ++nativeCycleUpdates;
+                if(resourceRoute){if(!nativeCycleReload.Finish(decision,*completed))nativeCycle.Missing(firing,cycleInvocation);}
+                else nativeCycle.FinishRecovery(decision,*completed,observation.cycleGuard,
                     observation.cycleGuardSteps,observation.cycleGuardRejected);
-            },completed?&*completed:&observation.frame.invocation.Record());return;
+            },completed?&*completed:&observation.frame.invocation.Record());
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+            if(resourceRoute&&completed)ObserveCycleAmmoResource(*completed);
+#endif
+            return;
         }
         const auto& decision=route.normal;
         observation.holdRequested=decision.hold&&observation.lease&&IsCurrent(*observation.lease,Now())&&
@@ -1755,10 +2143,10 @@ void __fastcall Update(void* self,void*,void* context,unsigned extra){
         else if(holdProbe.Targets(firing))holdProbe.Abort(ReloadHoldReason::OwnerOrRead);
         observation.holdRequested=observation.holdRequested&&observation.lease&&IsCurrent(*observation.lease,Now())&&holdProbe.Allows(Now());
     }
-    struct Original {void* self;void* context;unsigned extra;} original{self,context,extra};
+    struct Original {void* self;void* context;unsigned extra;Observation* observation;} original{self,context,extra,&observation};
     const ReloadDeltaAccess access{reinterpret_cast<void*>(unsigned(context)+0x18),DeltaCompare,DeltaRestore};
     RunReloadDeltaOverride(access,deltaBits,observation.holdRequested,[](void* value){
-        const auto& c=*static_cast<Original*>(value);originalUpdate(c.self,c.context,c.extra);
+        const auto& c=*static_cast<Original*>(value);OriginalUpdateWithPistol(*c.observation,c.self,c.context,c.extra);
     },&original,observation.hold);
     if(observation.holdRequested){++holdOriginalCalls;
         if(!observation.hold.applied){++holdPatchFailures;holdProbe.Abort(ReloadHoldReason::PatchFailed);}
@@ -1799,6 +2187,8 @@ void __fastcall Update(void* self,void*,void* context,unsigned extra){
 #endif
 #ifdef FVR_BC2_AMMO_RESOURCE_HANDS
                 if(ammoPlayerService.Observe(row,Now()))++ammoPlayerCompleted;
+                RecordPistolOutcome();
+                if(const auto pistol=PistolOwnRow(*completed,*observation.lease))pistolAfterFeed.Observe(*pistol);
                 ammoPlayerChannel.Publish(ammoPlayerService.View(),ammoPlayerService.Outcome());
 #endif
             }
@@ -1864,7 +2254,8 @@ void __fastcall Commit(void* self,void*,void* context){
     if(observation.frame.cleanupOnly)return;
     if(requestMode){const auto completed=observation.Finish();
         if(NativeCycleTarget(unsigned(self)))WithNativeCycle(NativeCycleAccess::NativeCommit,[&]{
-            if(completed&&cycleCallback.Isolated()){++nativeCycleCommits;nativeCycle.Commit(*completed);}else nativeCycle.Missing(unsigned(self),cycleInvocation);
+            if(completed&&cycleCallback.Isolated()&&!nativeCycleReload.Active()){++nativeCycleCommits;nativeCycle.Commit(*completed);}
+            else nativeCycle.Missing(unsigned(self),cycleInvocation);
         },completed?&*completed:&observation.frame.invocation.Record());
         if(!completed)RequestMissing(unsigned(self),7,unsigned(ReloadFlowEvent::Commit),&observation.evidence);
     }
@@ -1903,9 +2294,14 @@ void __fastcall Restore(void* self,void*,void* snapshot){
     originalRestore(self,snapshot);
     if(observation.frame.cleanupOnly)return;
     if(NativeCycleTarget(unsigned(self))){const auto complete=observation.Finish();
-        WithNativeCycle(NativeCycleAccess::NativeRestore,[&]{if(complete&&cycleCallback.Isolated())nativeCycle.ObserveRestore(*complete);else nativeCycle.Missing(unsigned(self),cycleInvocation);},complete?&*complete:&observation.frame.invocation.Record());return;}
+        WithNativeCycle(NativeCycleAccess::NativeRestore,[&]{
+            if(complete&&cycleCallback.Isolated()){
+                if(nativeCycleReload.Active()){if(!nativeCycleReload.Restore(*complete))nativeCycle.Missing(unsigned(self),cycleInvocation);}
+                else nativeCycle.ObserveRestore(*complete);
+            }else nativeCycle.Missing(unsigned(self),cycleInvocation);
+        },complete?&*complete:&observation.frame.invocation.Record());return;}
     if(pumpDiagnostic){const auto complete=observation.Finish();
-        if(complete&&observation.lease&&IsDiagnosticSpasConfig(observation.lease->snapshot.config)){
+        if(complete&&observation.lease&&ManualPumpConfig(observation.lease->snapshot.config)){
             const auto identity=RoundIdentity(*observation.lease);const auto branch=complete->entry.boundary.branch;
             const auto proof=CycleRestore(*complete,identity,branch,{7,6,8,.1f,.5f});
             if(branch<2){Gate lock(pumpRestoreGate);if(lock.held){auto& prior=pumpRestores[branch];
@@ -1938,7 +2334,9 @@ void Boundary(std::ostream& out,const ReloadFlowBoundary& b){
        <<",\"server_player\":"<<b.serverPlayer<<",\"server_soldier\":"<<b.serverSoldier<<",\"server_item\":"<<b.serverItem
        <<",\"branch\":"<<unsigned(b.branch)<<",\"wrapper_offset\":"<<b.wrapperOffset<<",\"soldier_flags\":"<<unsigned(b.soldierFlags)
        <<",\"current\":"<<b.current<<",\"previous\":"<<b.previous<<",\"next\":"<<b.next<<",\"timer\":"<<b.timer
-       <<",\"loaded\":"<<b.loaded<<",\"reserve\":"<<b.reserve<<",\"flags_a8\":"<<unsigned(b.flagsA8)<<"}";
+       <<",\"loaded\":"<<b.loaded<<",\"reserve\":"<<b.reserve<<",\"flags_a8\":"<<unsigned(b.flagsA8)
+       <<",\"pistol_sidecar\":{\"verified\":"<<b.pistol.verified<<",\"finite_ammo\":"<<b.pistolFiniteAmmo
+       <<",\"inhibit_8a\":"<<unsigned(b.pistol.inhibit8a)<<",\"release_a4\":"<<unsigned(b.pistol.releaseA4)<<",\"release_a5\":"<<unsigned(b.pistol.releaseA5)<<"}}";
 }
 void Snapshot(std::ostream& out,const std::array<std::byte,0x40>& bytes,bool copied){
     if(!copied){out<<"null";return;}out<<"{\"bytes\":[";for(unsigned n=0;n<bytes.size();++n){if(n)out<<',';out<<std::to_integer<unsigned>(bytes[n]);}
@@ -2121,7 +2519,8 @@ std::optional<RequestProbeSnapshot> ReadRequestProbeSnapshot()noexcept {
     result.patchFailures=holdPatchFailures.load();result.restoreFailures=holdRestoreFailures.load();
     result.activeCallbacks=active.load()-1;result.revision=callbackRevision.load();return result;
 }
-static ReloadReserveObservation ReadReserveObservedFor(bool diagnostic,bool m95Only=false,std::uint64_t* proofRevision=nullptr)noexcept {
+static ReloadReserveObservation ReadReserveObservedFor(bool diagnostic,bool m95Only=false,std::uint64_t* proofRevision=nullptr,
+                                                     bool feedOnly=false)noexcept {
     ReserveReadEvidence readEvidence;readEvidence.observedNs=Now();
     const auto reject=[&](unsigned stage,bool deferred=false,bool cohort=false)noexcept->ReloadReserveObservation{
         const auto result=cohort?ReloadObservationResult::CohortGap:deferred?ReloadObservationResult::Deferred:ReloadObservationResult::Rejected;
@@ -2133,7 +2532,8 @@ static ReloadReserveObservation ReadReserveObservedFor(bool diagnostic,bool m95O
     std::optional<Lease> lease;
     {OwnerCopyGate lock;if(!lock.held)return reject(2,true);if(IsCurrent(published,Now())&&published.server)lease=published;}
     if(!lease)return reject(3);
-    const auto configAccepted=[&]()noexcept{return m95Only?ReadM95StockShotConfig(memory,lease->snapshot.config):diagnostic?DiagnosticFireReserveConfig(memory,lease->snapshot.config):RequestConfig(lease->snapshot.config);};
+    const auto configAccepted=[&]()noexcept{return feedOnly?FeedEquipmentReadConfig(lease->snapshot.config):
+        m95Only?ReadManualBoltConfig(memory,lease->snapshot.config):diagnostic?DiagnosticFireReserveConfig(memory,lease->snapshot.config):RequestConfig(lease->snapshot.config);};
     if(!configAccepted())return reject(4);
     const auto identity=RoundIdentity(*lease);
     readEvidence.owner={identity.owner.player,identity.owner.soldier,identity.owner.weak,identity.owner.weapon};
@@ -2238,7 +2638,7 @@ bool EnableM95EmptyRecording()noexcept {
 bool YieldNativeCycleRouting()noexcept {
     if(!nativePumpCandidate)return true;
     bool accepted=false;
-    WithNativeCycle(NativeCycleAccess::Selection,[&]{accepted=nativeCycle.YieldForReload();
+    WithNativeCycle(NativeCycleAccess::Selection,[&]{accepted=!nativeCycle.ReloadPause()&&!nativeCycleReload.Active()&&nativeCycle.YieldForReload();
         if(accepted)for(auto& target:nativeCycleTargets)target.store(0,std::memory_order_release);});
     return accepted;
 }
@@ -2636,6 +3036,84 @@ bool SubmitAmmoResourceRequest(const AmmoResourceRequest& request)noexcept {
     (void)request;return false;
 #endif
 }
+bool EnableFixedContainerReload()noexcept {
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+    if(!installed||started||enabled.load()||!requestMode||!holdCodeVerified)return false;
+    fixedContainerReloadEnabled=true;return true;
+#else
+    return false;
+#endif
+}
+bool PublishFixedContainerGate(const FixedContainerGate& publication)noexcept {
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+    const auto now=Now();const auto& binding=publication.binding;const auto& hand=publication.handOwner;
+    if(!fixedContainerReloadEnabled||!enabled.load(std::memory_order_acquire)||!publication.lifetime||!publication.revision||
+       !publication.inputSequence||publication.observedNs<=0||publication.observedNs>now||now>=publication.deadlineNs||
+       publication.deadlineNs-publication.observedNs>100000000||
+       !AmmoResourceBindingFresh(binding,binding.owner,now)||
+       hand.actor!=((std::uint64_t(binding.owner.weak)<<32)|binding.owner.soldier)||
+       hand.actorGeneration!=binding.owner.actorGeneration||hand.space!=binding.owner.space||!hand.equipGeneration||
+       (!publication.blocksFire&&!publication.closedVerified))return false;
+    std::optional<Lease> lease;
+    {OwnerCopyGate owner;if(!owner.held||!IsCurrent(published,now)||published.snapshot.owner!=binding.owner||!published.server)return false;lease=published;}
+    if(!ReadFixedContainerNativeConfig(memory,lease->snapshot.config)||!RequestOwnerEvidence(*lease,Now()))return false;
+    const auto current=ammoResourceBindings.Read(binding.owner,Now());
+    if(!current||current->context!=binding.context||current->inventory!=binding.inventory||current->switching!=binding.switching||
+       current->data!=binding.data||current->persistence!=binding.persistence)return false;
+    Gate resource(ammoMoveProbeGate);Gate gate(fixedContainerGateLock);
+    if(!resource.held||!gate.held)return false;
+    if(!publication.blocksFire){
+        const auto* ledger=ammoPlayerService.Inventory().Find(binding.context.resource);
+        const auto& view=ammoPlayerService.View();
+        if(ammoPlayerService.Active()||!ledger||ledger->Pending()||ledger->Phase()!=interaction::AmmunitionLedgerPhase::Ready||
+           ledger->Snapshot().context!=binding.context||!view||view->binding.context!=binding.context||!AmmoResourceViewFresh(*view,Now()))return false;
+    }
+    std::optional<FixedContainerNativeGate>* available=nullptr;
+    for(auto& slot:fixedContainerGates){
+        if(!slot){if(!available)available=&slot;continue;}
+        if(slot->gate.binding.context.resource!=binding.context.resource)continue;
+        if(publication.revision<=slot->gate.revision||publication.inputSequence<slot->gate.inputSequence||
+           publication.observedNs<slot->gate.observedNs||slot->fault)return false;
+        if(publication.lifetime!=slot->gate.lifetime&&(publication.lifetime<=fixedContainerLastLifetime||
+           slot->gate.blocksFire||!slot->gate.closedVerified))return false;
+        if(publication.lifetime!=slot->gate.lifetime)fixedContainerLastLifetime=publication.lifetime;
+        slot=FixedContainerNativeGate{publication,RoundIdentity(*lease),lease->snapshot.config};return true;
+    }
+    if(!available||publication.lifetime<=fixedContainerLastLifetime)return false;
+    *available=FixedContainerNativeGate{publication,RoundIdentity(*lease),lease->snapshot.config};
+    fixedContainerLastLifetime=publication.lifetime;return true;
+#else
+    (void)publication;return false;
+#endif
+}
+std::optional<FixedContainerGate> ReadFixedContainerGate(const interaction::AmmoResourceIdentity& resource)noexcept {
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+    Gate gate(fixedContainerGateLock);if(!gate.held)return {};
+    for(const auto& slot:fixedContainerGates)if(slot&&slot->gate.binding.context.resource==resource){
+        auto result=slot->gate;if(slot->fault){result.blocksFire=true;result.closedVerified=false;}return result;
+    }
+#else
+    (void)resource;
+#endif
+    return {};
+}
+bool WithAmmoResourceLedger(const AmmoResourceBinding& binding,const interaction::HandInteractionOwner& hand,
+    void* context,bool (*visit)(void*,interaction::AmmunitionLedger&)noexcept)noexcept {
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+    if(!fixedContainerReloadEnabled||!enabled.load(std::memory_order_acquire)||!visit||
+       hand.actor!=((std::uint64_t(binding.owner.weak)<<32)|binding.owner.soldier)||
+       hand.actorGeneration!=binding.owner.actorGeneration||hand.space!=binding.owner.space||!hand.equipGeneration)return false;
+    std::optional<Lease> lease;
+    {OwnerCopyGate owner;if(!owner.held||!IsCurrent(published,Now())||published.snapshot.owner!=binding.owner)return false;lease=published;}
+    if(!ReadFixedContainerNativeConfig(memory,lease->snapshot.config)||!RequestOwnerEvidence(*lease,Now()))return false;
+    Gate lock(ammoMoveProbeGate);if(!lock.held)return false;
+    return ammoPlayerService.WithSelectedLedger(binding,Now(),[&](interaction::AmmunitionLedger& ledger)noexcept{
+        return visit(context,ledger);
+    });
+#else
+    (void)binding;(void)hand;(void)context;(void)visit;return false;
+#endif
+}
 std::optional<AmmoResourceOutcome> ReadAmmoResourceOutcome(std::uint64_t request,const interaction::AmmoResourceContext& context)noexcept {
 #ifdef FVR_BC2_AMMO_RESOURCE_HANDS
     return ammoPlayerChannel.Outcome(request,context);
@@ -2643,40 +3121,182 @@ std::optional<AmmoResourceOutcome> ReadAmmoResourceOutcome(std::uint64_t request
     (void)request;(void)context;return {};
 #endif
 }
-bool RetireAmmoForReplacementActor(const ReloadStateOwner& owner)noexcept {
+bool EnablePistolAfterFeedPolicy()noexcept {
 #ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+    if(!installed||started||enabled.load()||!requestMode||!combinedFamilies||!holdCodeVerified||diagnosticHold||diagnosticRound)return false;
+    pistolAfterFeedEnabled.store(true,std::memory_order_release);return true;
+#else
+    return false;
+#endif
+}
+std::optional<PistolAfterFeedEvent> ReadPistolAfterFeedEvent(std::uint64_t afterEvent)noexcept {
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+    Gate gate(ammoMoveProbeGate);return gate.held?pistolAfterFeed.Event(afterEvent):std::nullopt;
+#else
+    (void)afterEvent;return {};
+#endif
+}
+std::optional<PistolAfterFeedResourceState> ReadPistolAfterFeedState(const interaction::AmmoResourceIdentity& resource,std::int64_t now)noexcept {
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+    if(now<=0||now>Now())return {};Gate gate(ammoMoveProbeGate);return gate.held?pistolAfterFeed.Read(resource,now):std::nullopt;
+#else
+    (void)resource;(void)now;return {};
+#endif
+}
+bool ReleasePistolAfterFeedGate(const PistolAfterFeedRelease& release)noexcept {
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+    if(!enabled.load(std::memory_order_acquire)||!requestMode)return false;
+    Gate gate(ammoMoveProbeGate);if(!gate.held||!pistolAfterFeed.Release(release,Now()))return false;
+    PublishPistolVeto(release.clearance.feed.receipt.command.context.resource,false);return true;
+#else
+    (void)release;return false;
+#endif
+}
+std::optional<PistolAfterFeedActorRetirement> ReadPistolAfterFeedActorRetirement(std::uint64_t afterEvent)noexcept {
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+    Gate gate(ammoMoveProbeGate);return gate.held?pistolAfterFeed.Retirement(afterEvent):std::nullopt;
+#else
+    (void)afterEvent;return {};
+#endif
+}
+std::optional<FeedEquipmentNativeView> ReadFeedEquipmentView(const ReloadStateOwner& owner,std::int64_t now)noexcept {
+    return ReadFeedEquipmentViewAt(owner,now,Now());
+}
+std::optional<FeedEquipmentNativeView> ReadFeedEquipmentViewAt(const ReloadStateOwner& owner,std::int64_t inputObservedNs,std::int64_t processingNow)noexcept {
+#ifdef FVR_BC2_NATIVE_AMMO_BACKEND
+    if(!enabled.load(std::memory_order_acquire)||!requestMode)return {};
+    Gate gate(ammoMoveProbeGate);if(!gate.held)return {};
+    const auto processing=Now();
+    if(processingNow<inputObservedNs||processing<processingNow)return {};
+    return feedEquipment.ReadAt(owner,inputObservedNs,processing);
+#else
+    (void)owner;(void)inputObservedNs;(void)processingNow;return {};
+#endif
+}
+bool SubmitFeedEquipmentCommand(const FeedEquipmentSubmission& request)noexcept {
+    return SubmitFeedEquipmentCommandResult(request)==FeedEquipmentSubmitResult::Submitted;
+}
+FeedEquipmentSubmitResult SubmitFeedEquipmentCommandResult(const FeedEquipmentSubmission& request,bool noEntryOnly)noexcept {
+#ifdef FVR_BC2_NATIVE_AMMO_BACKEND
+    if(!enabled.load(std::memory_order_acquire)||!requestMode)return FeedEquipmentSubmitResult::RetentionBusy;
+    Gate gate(ammoMoveProbeGate);return gate.held?feedEquipment.SubmitResult(request,Now(),noEntryOnly):FeedEquipmentSubmitResult::RetentionBusy;
+#else
+    (void)request;(void)noEntryOnly;return FeedEquipmentSubmitResult::Invalid;
+#endif
+}
+bool PublishFeedEquipmentGate(const FeedEquipmentGate& publication)noexcept {
+#ifdef FVR_BC2_NATIVE_AMMO_BACKEND
+    Gate gate(ammoMoveProbeGate);return gate.held&&feedEquipment.PublishGate(publication,Now());
+#else
+    (void)publication;return false;
+#endif
+}
+std::optional<FeedEquipmentGate> ReadFeedEquipmentGate(const interaction::AmmoResourceIdentity& resource)noexcept {
+#ifdef FVR_BC2_NATIVE_AMMO_BACKEND
+    Gate gate(ammoMoveProbeGate);return gate.held?feedEquipment.ReadGate(resource):std::nullopt;
+#else
+    (void)resource;return {};
+#endif
+}
+std::optional<interaction::FeedAmmunitionReceipt> ReadFeedEquipmentReceipt(std::uint64_t lifetime,std::uint64_t request)noexcept {
+#ifdef FVR_BC2_NATIVE_AMMO_BACKEND
+    // Historical exact receipts survive owner/input loss and Stop. Reading
+    // one supplies no fresh native view and can never renew its observation.
+    Gate gate(ammoMoveProbeGate);return gate.held?feedEquipment.Receipt(lifetime,request):std::nullopt;
+#else
+    (void)lifetime;(void)request;return {};
+#endif
+}
+std::optional<FeedEquipmentActorRetirement> ReadFeedEquipmentActorRetirement(std::uint64_t afterEvent)noexcept {
+#ifdef FVR_BC2_NATIVE_AMMO_BACKEND
+    Gate gate(ammoMoveProbeGate);return gate.held?feedEquipment.Retirement(afterEvent):std::nullopt;
+#else
+    (void)afterEvent;return {};
+#endif
+}
+bool RetireAmmoForReplacementActor(const ReloadStateOwner& owner)noexcept {
+#ifdef FVR_BC2_NATIVE_AMMO_BACKEND
     if(!requestMode||!enabled.load(std::memory_order_acquire))return false;
-    std::optional<ReloadHoldIdentity> previous;
-    {Gate gate(ammoMoveProbeGate);if(!gate.held)return false;previous=ammoPlayerService.ActorIdentity();}
-    if(!previous)return true;
+    std::optional<ReloadHoldIdentity> previous,feedPrevious,pistolPrevious;
+    {Gate gate(ammoMoveProbeGate);if(!gate.held)return false;
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+        previous=ammoPlayerService.ActorIdentity();
+        pistolPrevious=pistolAfterFeed.ActorForReplacement(owner);
+#endif
+        feedPrevious=feedEquipment.ActorIdentityForReplacement(owner);
+    }
     // Ordinary weapon/vehicle/recenter transitions must keep live actor debt.
-    if(previous->owner.soldier==owner.soldier&&previous->owner.weak==owner.weak)return true;
-    if(owner.actorGeneration<=previous->owner.actorGeneration)return false;
+    const bool ordinaryChanged=previous&&(previous->owner.soldier!=owner.soldier||previous->owner.weak!=owner.weak);
+    if(!ordinaryChanged&&!feedPrevious&&!pistolPrevious)return true;
     std::optional<Lease> lease;
     {OwnerCopyGate gate;if(gate.held&&IsCurrent(published,Now())&&published.server&&published.snapshot.owner==owner)lease=published;}
-    if(!lease||!DiagnosticFireReserveConfig(memory,lease->snapshot.config))return false;
+    if(!lease)return false;
+    const bool feedOnly=FeedEquipmentConfigMatches(lease->snapshot.config);
+    if(!(feedOnly?FeedEquipmentReadConfig(lease->snapshot.config):DiagnosticFireReserveConfig(memory,lease->snapshot.config)))return false;
     std::uint64_t proofRevision=0;
-    const auto evidence=ReadReserveObservedFor(true,false,&proofRevision);
+    const auto evidence=ReadReserveObservedFor(true,false,&proofRevision,feedOnly);
     if(!evidence.lease||!evidence.lease->verified||!evidence.lease->allThreeIdle||
         evidence.lease->identity!=RoundIdentity(*lease)||proofRevision>UINT64_MAX-2)return false;
     Active scope;ReloadInvocationExclusion entry(requestEntryGate,active,callbackRevision);
     if(!scope.requestEntryAllowed||!entry.Quiet()||
         !NativeCycleSelectionReadCurrent(proofRevision,callbackRevision.load(std::memory_order_acquire)))return false;
-    Gate resource(ammoMoveProbeGate);if(!resource.held||!entry.Quiet()||ammoPlayerService.ActorIdentity()!=previous)return false;
+    Gate resource(ammoMoveProbeGate);
+    if(!resource.held||!entry.Quiet()||feedEquipment.ActorIdentityForReplacement(owner)!=feedPrevious)return false;
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+    if(ammoPlayerService.ActorIdentity()!=previous)return false;
+    if(pistolAfterFeed.ActorForReplacement(owner)!=pistolPrevious)return false;
+#endif
     OwnerCopyGate ownerGate;
     if(!ownerGate.held||published.revision!=lease->revision||published.snapshot.owner!=owner||
         published.snapshot.config!=lease->snapshot.config||!IsCurrent(published,Now())||!entry.Quiet())return false;
     const auto epoch=cleanupOwnerEpoch.load(std::memory_order_acquire);const auto now=Now();
-    const AmmoResourceActorDrain drain{*previous,ammoPlayerService.Active(),callbackRevision.load(std::memory_order_acquire),
-        epoch,now,std::min(evidence.lease->deadlineNs,now+100000000),entry.Quiet()};
     if(!epoch||cleanupOwnerEpoch.load(std::memory_order_acquire)!=epoch||!entry.Quiet())return false;
-    const bool committed=ammoPlayerChannel.RetireQueuedForActor(*previous,[&](const auto& queued)noexcept{
-        return cleanupOwnerEpoch.load(std::memory_order_acquire)==epoch&&entry.Quiet()&&
-            ammoPlayerService.RetireForReplacementActor(*evidence.lease,now,drain,queued);
-    });
-    if(!committed)return false;
-    ammoPlayerChannel.Publish({},ammoPlayerService.Outcome());
-    return true;
+    bool committed=true;
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+    if(ordinaryChanged){
+        const AmmoResourceActorDrain drain{*previous,ammoPlayerService.Active(),callbackRevision.load(std::memory_order_acquire),
+            epoch,now,std::min(evidence.lease->deadlineNs,now+100000000),entry.Quiet()};
+        committed=ammoPlayerChannel.RetireQueuedForActor(*previous,[&](const auto& queued)noexcept{
+            return cleanupOwnerEpoch.load(std::memory_order_acquire)==epoch&&entry.Quiet()&&
+                ammoPlayerService.RetireForReplacementActor(*evidence.lease,now,drain,queued);
+        });
+        if(committed)ammoPlayerChannel.Publish({},ammoPlayerService.Outcome());
+    }
+    if(pistolPrevious){
+        const auto pistolNow=Now();
+        const AmmoResourceActorDrain drain{*pistolPrevious,{},callbackRevision.load(std::memory_order_acquire),
+            epoch,pistolNow,std::min(evidence.lease->deadlineNs,pistolNow+100000000),entry.Quiet()};
+        const bool retired=cleanupOwnerEpoch.load(std::memory_order_acquire)==epoch&&entry.Quiet()&&
+            pistolAfterFeed.Retire(*evidence.lease,drain,pistolNow);
+        if(retired)for(auto& slot:pistolVetoSlots)if(slot.actor.load()==pistolPrevious->owner.soldier&&
+            slot.actorGeneration.load()==pistolPrevious->owner.actorGeneration){slot.blocked.store(false,std::memory_order_release);slot.weapon.store(0,std::memory_order_release);}
+        committed=retired&&committed;
+    }
+#endif
+    // Feed and ordinary services may retain different previous actors. Neither
+    // service's transition may discard the other's pending native work.
+    if(feedPrevious){
+        const auto& pending=feedEquipment.Pending();
+        const bool ownsHandoff=pending&&pending->source.identity.owner.actorGeneration==feedPrevious->owner.actorGeneration&&
+            AmmoResourceSameNativeActor(pending->source.identity,*feedPrevious);
+        if(const auto completed=feedEquipmentHandoff->Take())(void)feedEquipment.Observe(*completed,Now());
+        const auto feedNow=Now();
+        const FeedEquipmentActorDrain drain{*feedPrevious,callbackRevision.load(std::memory_order_acquire),
+            epoch,feedNow,std::min(evidence.lease->deadlineNs,feedNow+100000000),entry.Quiet()};
+        const bool feedRetired=cleanupOwnerEpoch.load(std::memory_order_acquire)==epoch&&entry.Quiet()&&
+            feedEquipment.RetireForReplacementActor(*evidence.lease,feedNow,drain);
+        // Every old invocation is drained and newly entering callbacks are
+        // excluded from this route. Reclaim an Armed slot even when its old
+        // exit boundary was unavailable; retirement records the uncertainty.
+        if(feedRetired&&ownsHandoff)feedEquipmentHandoff.emplace();
+        committed=feedRetired&&committed;
+    }
+    if(committed&&previous){
+        Gate fixed(fixedContainerGateLock);if(!fixed.held)return false;
+        for(auto& slot:fixedContainerGates)if(slot&&slot->identity.owner.soldier==previous->owner.soldier&&
+            slot->identity.owner.actorGeneration<=previous->owner.actorGeneration)slot.reset();
+    }
+    return committed;
 #else
     (void)owner;return false;
 #endif
@@ -2755,7 +3375,7 @@ bool RetireNativeCycleForReplacementActor(const ReloadStateOwner& owner)noexcept
            published.snapshot.config!=lease->snapshot.config||!IsCurrent(published,Now())||
            !entry.Quiet()||nativeCycleCancelEpoch.load(std::memory_order_acquire)!=cancellation)return;
         for(auto& target:nativeCycleTargets)target.store(0,std::memory_order_release);
-        nativeCycle=candidate;retired=true;
+        nativeCycle=candidate;nativeCycleReload.Applied();retired=true;
     });
     return retired;
 #else
@@ -2769,7 +3389,8 @@ bool SelectNativeCycleMode(Bc2NativeCycleMode mode,const ReloadStateOwner& owner
     std::optional<Lease> lease;
     {OwnerCopyGate gate;if(gate.held&&IsCurrent(published,Now())&&published.server)lease=published;}
     if(!lease||lease->snapshot.owner!=owner||
-       !(mode==Bc2NativeCycleMode::M95?ReadM95StockShotConfig(memory,lease->snapshot.config):IsDiagnosticSpasConfig(lease->snapshot.config)))return false;
+       !(mode==Bc2NativeCycleMode::M95?ResolveBoltActionNativeProfile(lease->snapshot.config)!=nullptr:ManualPumpConfig(lease->snapshot.config))||
+       !ReadNativeCycleProfile(memory,lease->snapshot.config))return false;
     std::uint64_t proofRevision=0;
     const auto evidence=ReadReserveObservedFor(true,mode==Bc2NativeCycleMode::M95,&proofRevision);
     if(!evidence.lease||!evidence.lease->verified||!evidence.lease->allThreeIdle||
@@ -2784,15 +3405,18 @@ bool SelectNativeCycleMode(Bc2NativeCycleMode mode,const ReloadStateOwner& owner
     WithNativeCycle(NativeCycleAccess::Selection,[&]{
         if(!entry.Quiet())return;
         const auto cancellation=nativeCycleCancelEpoch.load(std::memory_order_acquire);
-        auto candidate=nativeCycle;
+        auto candidate=nativeCycle;bool replaced=false;
         const auto now=Now();
         const Bc2NativeCycleSelection selection{mode,*evidence.lease,lease->snapshot.config,now};
-        if(!candidate.Select(selection)){
+        const bool retainedReload=candidate.ReloadPause().has_value()||nativeCycleReload.Active();
+        if(retainedReload&&!NativeCycleClientActorReplaced(candidate.View(now).native.owner,owner))return;
+        if(retainedReload||!candidate.Select(selection)){
             const auto old=candidate.View(now);
             const Bc2NativeCycleActorDrain drain{old.native,old.cycle,old.shot,
                 callbackRevision.load(std::memory_order_acquire),now,
                 std::min(evidence.lease->deadlineNs,now+Bc2NativeCycleService::ContextFreshNs),entry.Quiet()};
             if(!candidate.SelectReplacementActor(selection,drain))return;
+            replaced=true;
         }
         OwnerCopyGate ownerGate;
         if(!ownerGate.held||published.revision!=lease->revision||published.snapshot.owner!=owner||
@@ -2801,7 +3425,8 @@ bool SelectNativeCycleMode(Bc2NativeCycleMode mode,const ReloadStateOwner& owner
         // The new service is unarmed until its exact fresh physical Control.
         // No prior firing target survives this drained mode publication.
         for(auto& target:nativeCycleTargets)target.store(0,std::memory_order_release);
-        nativeCycle=candidate;nativeBoltCandidate.store(mode==Bc2NativeCycleMode::M95,std::memory_order_release);
+        nativeCycle=candidate;if(replaced)nativeCycleReload.Applied();
+        nativeBoltCandidate.store(mode==Bc2NativeCycleMode::M95,std::memory_order_release);
         accepted=true;
     });
     return accepted;
@@ -2868,6 +3493,87 @@ bool EnableResourcePumpRecording()noexcept {
     return false;
 #endif
 }
+void TryRebaseNativeCycleReload(const Lease& lease)noexcept {
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+    bool pending=false;WithNativeCycle(NativeCycleAccess::Observation,[&]{pending=nativeCycleReload.Active();});
+    if(!pending)return;
+    Active activeScope;ReloadInvocationExclusion entry(requestEntryGate,active,callbackRevision);
+    if(!activeScope.requestEntryAllowed||!entry.Quiet())return;
+    Gate route(nativeCycleRoutingGate);Gate resourceGate(ammoMoveProbeGate);
+    if(!route.held||!resourceGate.held||!entry.Quiet())return;
+    const auto resource=ammoResourceBindings.Read(lease.snapshot.owner,Now());
+    if(!resource||!IsCurrent(lease,Now())||!RequestOwnerEvidence(lease,Now()))return;
+    WithNativeCycle(NativeCycleAccess::Control,[&]{
+        if(!entry.Quiet()||!nativeCycleReload.Active()||nativeCycle.ReloadCommand()!=nativeCycleReload.Command()||
+           nativeCycleReload.Scope()!=NativeCycleRecoveryScope{RoundIdentity(lease),lease.snapshot.config}||
+           resource->context!=nativeCycleReload.Command()->command.context||ammoPlayerService.Active())return;
+        const auto proof=nativeCycleReload.Rebase({callbackRevision.load(std::memory_order_acquire),Now()});
+        if(proof&&entry.Quiet()&&nativeCycle.ApplyReloadReceipt(nativeCycleReload.Scope(),*proof,Now()))nativeCycleReload.Applied();
+    });
+#else
+    (void)lease;
+#endif
+}
+template<class Operation>
+Bc2NativeCycleSubmitResult ChangeNativeCycleReload(const Bc2NativeCycleControl& source,Operation&& operation)noexcept {
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+    using Result=Bc2NativeCycleSubmitResult;
+    if(!nativePumpCandidate||!nativeBoltCandidate||!nativeCycleRecoveryEnabled||!enabled.load(std::memory_order_acquire))return Result::NotDispatched;
+    if(source.release||!interaction::weapon_cycle_detail::Window(source.input.observedNs,source.input.deadlineNs,Now()))return Result::NotDispatched;
+    std::optional<Lease> lease;
+    {OwnerCopyGate owner;if(!owner.held)return Result::Busy;
+        if(IsCurrent(published,Now())&&published.server&&published.snapshot.owner==source.nativeOwner)lease=published;}
+    if(!lease||!ReadManualBoltConfig(memory,lease->snapshot.config)||!RequestOwnerEvidence(*lease,Now()))return Result::NotDispatched;
+    const auto resource=ammoResourceBindings.Read(source.nativeOwner,Now());
+    Reader reader{memory};
+    if(!resource||!reader.Equals(std::uint64_t(source.nativeOwner.weapon)+4,resource->data)||
+       !reader.Equals(std::uint64_t(resource->data)+0x64,resource->persistence))return Result::NotDispatched;
+    Active activeScope;ReloadInvocationExclusion entry(requestEntryGate,active,callbackRevision);
+    if(!activeScope.requestEntryAllowed||!entry.Quiet())return Result::Busy;
+    Gate route(nativeCycleRoutingGate);Gate resourceGate(ammoMoveProbeGate);
+    if(!route.held||!resourceGate.held||!NativeCycleRequestRetired()||!entry.Quiet())return Result::Busy;
+    bool accepted=false,executed=false;
+    const bool held=WithNativeCycle(NativeCycleAccess::Control,[&]{
+        if(!entry.Quiet()||!IsCurrent(*lease,Now())||!AmmoResourceBindingFresh(*resource,source.nativeOwner,Now()))return;
+        auto candidate=nativeCycle;auto control=source;control.input.nowNs=Now();
+        if(!candidate.Control(control))return;
+        const NativeCycleRecoveryScope scope{RoundIdentity(*lease),lease->snapshot.config};
+        const interaction::WeaponCycleReloadDrain drain{callbackRevision.load(std::memory_order_acquire),Now()};
+        executed=true;
+        if(!operation(candidate,scope,*resource,drain,Now())||!entry.Quiet())return;
+        nativeCycle=std::move(candidate);accepted=true;
+        for(unsigned n=0;n<3;++n)nativeCycleTargets[n].store(scope.identity.firing[n],std::memory_order_release);
+    });
+    return accepted?Result::Accepted:!held?Result::Busy:executed?Result::Rejected:Result::NotDispatched;
+#else
+    (void)source;(void)operation;return Bc2NativeCycleSubmitResult::NotDispatched;
+#endif
+}
+Bc2NativeCycleSubmitResult PrepareNativeCycleReload(const Bc2NativeCycleControl& source,
+    const interaction::WeaponCycleReloadPause& pause)noexcept {
+    return ChangeNativeCycleReload(source,[&](Bc2NativeCycleService& candidate,const NativeCycleRecoveryScope& scope,
+        const AmmoResourceBinding& resource,const interaction::WeaponCycleReloadDrain& drain,std::int64_t now)noexcept {
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+        if(ammoPlayerService.Active()||nativeCycleReload.Active())return false;
+#endif
+        return candidate.PrepareReload(scope,pause,resource.context,drain,now);
+    });
+}
+Bc2NativeCycleSubmitResult ResumeNativeCycleReload(const Bc2NativeCycleControl& source,
+    const interaction::WeaponCycleIdleDebtLease& authority)noexcept {
+    return ChangeNativeCycleReload(source,[&](Bc2NativeCycleService& candidate,const NativeCycleRecoveryScope& scope,
+        const AmmoResourceBinding& resource,const interaction::WeaponCycleReloadDrain&,std::int64_t now)noexcept {
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+        const auto* ledger=ammoPlayerService.Inventory().Find(resource.context.resource);
+        if(ammoPlayerService.Active()||nativeCycleReload.Active()||!ledger||ledger->Pending()||ledger->WellEmpty()||
+           ledger->ResourceState()==interaction::MagazineResourceState::Held||
+           ledger->Phase()!=interaction::AmmunitionLedgerPhase::Ready||ledger->Snapshot().context!=resource.context||
+           ledger->Snapshot().counts!=interaction::AmmunitionCounts{candidate.ReloadDebt().loaded,candidate.ReloadDebt().reserve,
+               candidate.ReloadDebt().capacity})return false;
+#endif
+        return candidate.ResumeReload(scope,authority,now);
+    });
+}
 Bc2NativeCycleSubmitResult PublishNativeCycleControlResult(const Bc2NativeCycleControl& source)noexcept {
     if(!nativePumpCandidate||!enabled.load(std::memory_order_acquire))return Bc2NativeCycleSubmitResult::NotDispatched;
     const auto reject=[&](unsigned reason,const RequestBoundaryEvidence* evidence=nullptr,
@@ -2892,9 +3598,10 @@ Bc2NativeCycleSubmitResult PublishNativeCycleControlResult(const Bc2NativeCycleC
     // An old packet can straddle selection/recenter publication. Reject it,
     // but only ClearOwner(LifetimeEnded) carries native lifetime-end authority.
     if(lease->snapshot.owner!=source.nativeOwner){CancelNativeCycle();return reject(3);}
-    if(!(nativeBoltCandidate?ReadM95StockShotConfig(memory,lease->snapshot.config):IsDiagnosticSpasConfig(lease->snapshot.config))){CancelNativeCycle();return reject(4);}
+    if(!(nativeBoltCandidate?ReadManualBoltConfig(memory,lease->snapshot.config):ReadManualPumpConfig(memory,lease->snapshot.config))){CancelNativeCycle();return reject(4);}
     RequestBoundaryEvidence evidence;
     if(!RequestOwnerEvidence(*lease,Now(),&evidence)){CancelNativeCycle();return reject(5,&evidence);}
+    TryRebaseNativeCycleReload(*lease);
     const auto identity=RoundIdentity(*lease);
     Gate route(nativeCycleRoutingGate);if(!route.held)return Bc2NativeCycleSubmitResult::Busy;
     // Even a new owner must wait for the prior resource transaction's exact
@@ -3054,6 +3761,30 @@ void Report(std::ostream& out){
     out<<",\"shell_start_attempts\":[";
     constexpr const char* shellStartStages[]{"disabled","identity","preread","entry","routing","yield","lock","cohort","cycle","callback_arrival","monitor","accepted"};
     for(unsigned n=0;n<shellStartResults.size();++n){if(n)out<<',';out<<"{\"gate\":\""<<shellStartStages[n]<<"\",\"accepted\":"<<shellStartResults[n][0].load()<<",\"deferred\":"<<shellStartResults[n][1].load()<<",\"rejected\":"<<shellStartResults[n][2].load()<<'}';}out<<']';
+#ifdef FVR_BC2_NATIVE_AMMO_BACKEND
+    out<<",\"feed_actor_retirements\":[";
+    if(drained){
+        const auto identityJson=[&](const ReloadHoldIdentity& identity){const auto& o=identity.owner;
+            out<<"{\"player\":"<<o.player<<",\"soldier\":"<<o.soldier<<",\"weak\":"<<o.weak
+               <<",\"weapon\":"<<o.weapon<<",\"actor_generation\":"<<o.actorGeneration
+               <<",\"equip_generation\":"<<o.equipGeneration<<",\"space\":"<<o.space
+               <<",\"firing\":["<<identity.firing[0]<<','<<identity.firing[1]<<','<<identity.firing[2]
+               <<"],\"server_player\":"<<identity.serverPlayer<<",\"server_soldier\":"<<identity.serverSoldier
+               <<",\"server_item\":"<<identity.serverItem<<'}';};
+        std::uint64_t cursor=0;
+        while(const auto retirement=feedEquipment.Retirement(cursor)){const auto& r=*retirement;
+            if(cursor)out<<',';cursor=r.event;
+            out<<"{\"event\":"<<r.event<<",\"callback_revision\":"<<r.callbackRevision
+               <<",\"lifetime_end_epoch\":"<<r.lifetimeEndEpoch<<",\"observed_ns\":"<<r.observedNs
+               <<",\"retired_items\":"<<r.retiredItems<<",\"refused_commands\":"<<r.refusedCommands
+               <<",\"native_dispatched\":"<<r.nativeDispatched<<",\"ambiguous\":"<<r.ambiguous
+               <<",\"pending_lifetime\":"<<(r.pending?r.pending->request.lifetime:0)
+               <<",\"pending_request\":"<<(r.pending?r.pending->request.id:0)<<",\"previous\":";
+            identityJson(r.previous);out<<",\"replacement\":";identityJson(r.replacement);out<<'}';
+        }
+    }
+    out<<']';
+#endif
 #ifdef FVR_BC2_AMMO_RESOURCE_HANDS
     out<<",\"ammo_resource_hands\":{\"private_candidate\":true,\"ordinary_input_build\":";
 #ifdef FVR_BC2_RESOURCE_MAGAZINES
@@ -3538,7 +4269,16 @@ void Report(std::ostream& out){
            <<",\"applied\":"<<record.exit.cycleGuard.applied<<",\"restored\":"<<record.exit.cycleGuard.restored
            <<",\"unexpected_write\":"<<record.exit.cycleGuard.unexpectedWrite<<",\"original\":["<<record.exit.cycleGuard.original[0]<<','<<record.exit.cycleGuard.original[1]
            <<"],\"effective\":["<<record.exit.cycleGuard.effective[0]<<','<<record.exit.cycleGuard.effective[1]
-           <<"],\"before_restore\":["<<record.exit.cycleGuard.beforeRestore[0]<<','<<record.exit.cycleGuard.beforeRestore[1]<<"]}";out<<'}';
+           <<"],\"before_restore\":["<<record.exit.cycleGuard.beforeRestore[0]<<','<<record.exit.cycleGuard.beforeRestore[1]<<"]}"
+           <<",\"pistol_input\":{\"requested\":"<<record.exit.pistolInput.requested<<",\"applied\":"<<record.exit.pistolInput.applied
+           <<",\"restored\":"<<record.exit.pistolInput.restored<<",\"unexpected_write\":"<<record.exit.pistolInput.unexpectedWrite
+           <<",\"original\":"<<record.exit.pistolInput.original<<",\"effective\":"<<record.exit.pistolInput.effective
+           <<",\"before_restore\":"<<record.exit.pistolInput.beforeRestore<<"}"
+           <<",\"fixed_input\":{\"requested\":"<<record.exit.fixedInput.requested<<",\"applied\":"<<record.exit.fixedInput.applied
+           <<",\"restored\":"<<record.exit.fixedInput.restored<<",\"unexpected_write\":"<<record.exit.fixedInput.unexpectedWrite
+           <<",\"original\":["<<record.exit.fixedInput.original[0]<<','<<record.exit.fixedInput.original[1]
+           <<"],\"effective\":["<<record.exit.fixedInput.effective[0]<<','<<record.exit.fixedInput.effective[1]
+           <<"],\"before_restore\":["<<record.exit.fixedInput.beforeRestore[0]<<','<<record.exit.fixedInput.beforeRestore[1]<<"]}";out<<'}';
     }out<<"]}";
 }
 }
@@ -3555,6 +4295,8 @@ bool EnableNativePumpRecording(unsigned)noexcept{return false;}
 bool EnableResourcePumpRecording()noexcept{return false;}
 Bc2NativeCycleSubmitResult PublishNativeCycleControlResult(const Bc2NativeCycleControl&)noexcept{return Bc2NativeCycleSubmitResult::Rejected;}
 bool PublishNativeCycleControl(const Bc2NativeCycleControl&)noexcept{return false;}
+Bc2NativeCycleSubmitResult PrepareNativeCycleReload(const Bc2NativeCycleControl&,const interaction::WeaponCycleReloadPause&)noexcept{return Bc2NativeCycleSubmitResult::NotDispatched;}
+Bc2NativeCycleSubmitResult ResumeNativeCycleReload(const Bc2NativeCycleControl&,const interaction::WeaponCycleIdleDebtLease&)noexcept{return Bc2NativeCycleSubmitResult::NotDispatched;}
 std::optional<Bc2NativeCycleView> ReadNativeCycleView(std::int64_t)noexcept{return {};}
 bool AcknowledgeNativeCycleReady(const interaction::WeaponCycleReady&)noexcept{return false;}
 void CancelNativeCycle(bool)noexcept{}
@@ -3613,7 +4355,24 @@ bool ResourceHandsEnabled()noexcept{return false;}
 std::optional<AmmoResourceView> ReadAmmoResourceView(const ReloadStateOwner&,std::int64_t)noexcept{return {};}
 AmmoResourceRead ReadAmmoResourceObserved(const ReloadStateOwner&,std::int64_t)noexcept{return {AmmoResourceReadReason::Invalid,{}};}
 bool SubmitAmmoResourceRequest(const AmmoResourceRequest&)noexcept{return false;}
+bool EnableFixedContainerReload()noexcept{return false;}
+bool PublishFixedContainerGate(const FixedContainerGate&)noexcept{return false;}
+std::optional<FixedContainerGate> ReadFixedContainerGate(const interaction::AmmoResourceIdentity&)noexcept{return {};}
+bool WithAmmoResourceLedger(const AmmoResourceBinding&,const interaction::HandInteractionOwner&,void*,bool (*)(void*,interaction::AmmunitionLedger&)noexcept)noexcept{return false;}
 std::optional<AmmoResourceOutcome> ReadAmmoResourceOutcome(std::uint64_t,const interaction::AmmoResourceContext&)noexcept{return {};}
+bool EnablePistolAfterFeedPolicy()noexcept{return false;}
+std::optional<PistolAfterFeedEvent> ReadPistolAfterFeedEvent(std::uint64_t)noexcept{return {};}
+std::optional<PistolAfterFeedResourceState> ReadPistolAfterFeedState(const interaction::AmmoResourceIdentity&,std::int64_t)noexcept{return {};}
+bool ReleasePistolAfterFeedGate(const PistolAfterFeedRelease&)noexcept{return false;}
+std::optional<PistolAfterFeedActorRetirement> ReadPistolAfterFeedActorRetirement(std::uint64_t)noexcept{return {};}
+std::optional<FeedEquipmentNativeView> ReadFeedEquipmentView(const ReloadStateOwner&,std::int64_t)noexcept{return {};}
+std::optional<FeedEquipmentNativeView> ReadFeedEquipmentViewAt(const ReloadStateOwner&,std::int64_t,std::int64_t)noexcept{return {};}
+FeedEquipmentSubmitResult SubmitFeedEquipmentCommandResult(const FeedEquipmentSubmission&,bool)noexcept{return FeedEquipmentSubmitResult::Invalid;}
+bool SubmitFeedEquipmentCommand(const FeedEquipmentSubmission&)noexcept{return false;}
+std::optional<interaction::FeedAmmunitionReceipt> ReadFeedEquipmentReceipt(std::uint64_t,std::uint64_t)noexcept{return {};}
+bool PublishFeedEquipmentGate(const FeedEquipmentGate&)noexcept{return false;}
+std::optional<FeedEquipmentGate> ReadFeedEquipmentGate(const interaction::AmmoResourceIdentity&)noexcept{return {};}
+std::optional<FeedEquipmentActorRetirement> ReadFeedEquipmentActorRetirement(std::uint64_t)noexcept{return {};}
 void Report(std::ostream& out){out<<"{\"installed\":false,\"unsupported_architecture\":true,\"observation_only\":true}";}
 }
 #endif

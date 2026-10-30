@@ -1,0 +1,13 @@
+Done Y: reusable data preparation batch and exact review-input JSON; implementation only, root executes installed reads.
+Run: py -3.12 -B handoff/tasks/CHAT16/20261030-magazinebatch39/prepare_batch.py --game "G:/New folder (2)/Battlefield Bad Company 2" --output reports/coordinator-20261030-magazinebatch39
+Uses existing ArchivePool/readers pinned640MiB common allowance and256MiB selected cache; never changes global archive policy.
+Pins feedbatch38 exact inputs, batch02 geometry, pipeline34 exact native reviews/evidence, existing49-row catalog, inventory and saved native trace.
+Trace: pipeline-runtime-20261005/root-monitor/resource-inventory232-01/native-trace.json, SHA f0866319af60e015ced3bfed809f24be5c5b845b8df10542a433846c72f53dd3.
+Reuses M9/M9-3/SP geometry passes; preserves original M9/SP digests. MP443 rederives through an explicit same-content contact join with separate target identity/provenance.
+M1911 is retained once as unresolved; its unchanged failed contact extraction is not rerun. Exact four-configuration enrollment and six appended rows are expected if other gates pass.
+M1911:234 samples/221 windows;0 stable contacts. Four finger-only failures have at most0.000448592425m minimum detached motion; existing reviewed-frame API requires removed-item witness.
+No shared explicit landmark/mod-anchor mode exists in derive/export; review-input.json names that missing contract without inventing stable authored/native proof.
+Existing assembly/composite/catalog APIs preserve49 metadata rows, losslessly compact indexed baseline cache sections, and enforce64 rows/16MiB; receipt reports exact candidate bytes on overflow.
+Generated Registry.additions contains only newly supported assets; Geometry.additions excludes existing M9/SP. Merge those with opening426; Visibility.additions has only absent M9/M9-3/M1911 rows.
+Full visibility is exact5; enrollment/catalog subset follows usable geometry. Exit2 retains partial usable outputs and precise residuals; cache is written only within bounds.
+No Git/build/tests/game/XR/install/native executable analysis/subagents. Only owned folder changed; no proprietary assets exported by this preparation author. Retired.

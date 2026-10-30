@@ -1,0 +1,8 @@
+Continuation20: actual same-address pickup identity bug fixed.
+Unfinished M60 reload suppresses only its verified equipment/resource; original debt survives replacement.
+Owner11 groups pass both architectures; actual Gameplay x86 syntax passes.
+Initial regression used a released left hand for support acquisition; fixture corrected, failures preserved.
+Cinematic child update is queued matrix/state work; actual selected-view consumer still unknown.
+Pistol native trace supports explicit mod-owned after-feed policy; PLAN.txt is next implementation scope.
+All workers frozen/retired. Local source only; integration/push/install held,0.1.17 unchanged.
+No full normal build, native episode or headset acceptance claimed.

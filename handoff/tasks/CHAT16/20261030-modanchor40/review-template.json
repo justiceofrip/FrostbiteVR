@@ -1,0 +1,41 @@
+[
+  {
+    "schema": "fvr.bc2.reviewed-magazine-role.v1",
+    "native_asset_name": "M1911",
+    "weapon": {
+      "resource": "Objects/Weapons/Handheld/Beach/M1911A1/M1911A1.dbx",
+      "sha256": "7d94e90adc48c527abaec2a3d6f540b2f22417c4a42a5b0df0b3293e2f8e80c0",
+      "instance_guid": "e9e77835-ffe4-4f7b-8784-0970c71e051b",
+      "type": "GameSharedResources.SoldierWeaponData"
+    },
+    "configured_mesh_path": "Objects/Weapons/Handheld/Beach/M1911A1/US_M1911_Mesh",
+    "binding_digest": "ad1ad91bf3026e9d53dc11534e986c0b12ed2fb00dbd6089711fe529bd7b9e37",
+    "mesh_sha256": "54ef4ca71900885b3d96d5119aa46b3ae406dc044fdee2bcdbf4e5d82a55db02",
+    "lod_sha256": "71ba59511de64800d4e2bb1b9990d3ee0edc1afcfdfb4866f3b388e0d6dea4ba",
+    "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+    "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+    "static_clip_sha256": "3ae1703a5ba229b92e279cc91542edb97a65fccbbc316e9f0389c1272430c04b",
+    "clip_resource": "Animations/Weapons/Handheld/M1911A1/1P/1P_Reload.res",
+    "clip_sha256": "a002abb015f055379a9f05785162b9a9cbe6e07cc6bb6aeff5ff508b864072b0",
+    "magazine_bone": "jntWpn_12",
+    "part_digest": null,
+    "assembly_digest": "6da74d035c3cff6a5def731eddc2d67ee45720fa014f75a344747e8d0a33c6de",
+    "shape_envelope": {
+      "minimum_width_m": 0.013,
+      "maximum_width_m": 0.015,
+      "minimum_length_m": 0.12,
+      "maximum_length_m": 0.13
+    },
+    "semantic_role": "detachable_magazine",
+    "role_reviewed": true,
+    "reviewer": "root",
+    "review_basis": "Root visually inspected exact pinned jntWpn_12 index38: thin box magazine with base under grip when attached and full magazine below pistol in removed pose; complete rigid assembly includes three zero-triangle descendants.",
+    "visual_review_sha256": "481115922601db659f2ba8e263dc55aef860423d18cc8c17e8bf560826e5fbe2",
+    "stable_authored_contact_verified": false,
+    "native_role_verified": false,
+    "stable_controller_grasp_verified": false,
+    "runtime_admitted": false,
+    "headset_tested": false,
+    "review_digest": null
+  }
+]

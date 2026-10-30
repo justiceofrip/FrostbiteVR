@@ -25,11 +25,21 @@ inline std::optional<graphics::BodyPropInstance> BodyAmmoHostInstance(
             bound(m.reserve.observedNs,m.reserve.deadlineNs);bound(m.selected->observedNs,m.selected->deadlineNs);
             bound(m.family.observedNs,m.family.deadlineNs);
             if(m.family.carried)bound(m.family.carried->observedNs,m.family.carried->deadlineNs);
+        }else if(a.fixed){const auto& fixed=*a.fixed;
+            bound(fixed.binding.observedNs,fixed.binding.deadlineNs);bound(fixed.ammunition.observedNs,fixed.ammunition.deadlineNs);
         }else{const auto& shell=*a.shell;bound(shell.reserve.observedNs,shell.reserve.deadlineNs);bound(shell.meshes->observedNs,shell.meshes->deadlineNs);
             if(shell.heldCycle)bound(shell.heldCycle->observedNs,shell.heldCycle->deadlineNs);
         }
     }
     return graphics::BodyPropFresh(result,now)?std::optional{result}:std::nullopt;
+}
+inline std::vector<graphics::BodyPropInstance> BodyAmmoHostInstances(
+    const BodyAmmoRenderSource& before,const BodyAmmoRenderSource& current,std::int64_t now){
+    const auto a=ExpandBodyAmmoRenderSource(before),b=ExpandBodyAmmoRenderSource(current);
+    if(a.empty()||a.size()!=b.size())return {};
+    std::vector<graphics::BodyPropInstance> out;
+    for(unsigned n=0;n<a.size();++n){const auto instance=BodyAmmoHostInstance(a[n],b[n],now);if(!instance)return {};out.push_back(*instance);}
+    return out;
 }
 // Inverse of engine::NativeEye's handedness conversion. Native +0x220/+0x2e0
 // matrices are copied after that exact eye's Draw, never from a dirty prototype.

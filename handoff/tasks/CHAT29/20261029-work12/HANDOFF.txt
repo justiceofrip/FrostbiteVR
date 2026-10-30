@@ -1,0 +1,29 @@
+CHAT29 work12: independent read-only selected MeshZoom1p source candidate complete.
+Files: src/games/bc2/Bc2SelectedMeshes1p.{cpp,h}; tests/Bc2SelectedMeshes1pTests.cpp.
+ReadSelectedMeshZoom1p is opt-in and requires an exact full configuration path.
+It repeats selected owner/inventory/configuration, file-backed field descriptors,
+zoom pointer, native asset getter/type and copied path within the original lease.
+Null zoom is explicit; all authored states stay separate; active-state/ADS/draw/
+magnified-scene/reticle/render-authority flags remain false. Normal reads unchanged.
+Static executable inspected: G:\New folder (2)\Battlefield Bad Company 2\BFBC2Game.exe.
+SHA256 3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258.
+WeaponStateData descriptor VA0x1bfbed4: flags0x29,size0xc8,29fields at0x1c223f0.
+MeshZoom1p record VA0x1c22420: [0x145d204,0,0x1bf7514,0,0x94,0].
+Type0x1bf7514 is SkinnedMeshAsset,descriptor0x1bf73e0,flags0x35,size0x44;
+registration0x138b5f0 agrees. These are proof locations, not hardcoded runtime VAs.
+Exact target: Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95 (M95_sp).
+Installed Dist/win32/levels/sp_common/level-00.fbrb exact DBX read, one state:
+config GUID7717ea86-49ed-4aa8-b401-7e62d8ade339;
+DBX SHA256 8f8494c4d007bb3955485d740372bd521ff6fb4fa437f1df81602c29023ec298.
+MeshZoom1p -> Scope_Mesh GUID362e1873-9ce0-11db-a0ec-c8be9f4fc557;
+Render.SkinnedMeshAsset Name=Objects/Weapons/Handheld/Scope/Scope_Mesh;
+DBX SHA256 20ea86b2b0daef86c661d2aebb595f7c2ba9952ce117ea19329eb37c419aa501.
+Six added deterministic groups cover exact/null routes, metadata/asset rejection,
+coherency, ambiguity, binding/owner/lease; 17 groups total, NOT RUN by this agent.
+Self-review + git diff --check (existing CRLF accepted) pass; no builds/sessions.
+Root checks: selected-mesh, selected-configuration-path, carried-mesh suites;
+both normal architectures after user integration approval. No installation changed.
+Next authorized native capture: call new read with exact M95 path/full owner and
+original <=250ms lease outside draw path; retain result with hip/entry/settled/exit
+view/projection, three scope sections and separate HUD draws. No filter needed.
+Static/source evidence only: actual-game observation and headset acceptance pending.

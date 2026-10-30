@@ -1,0 +1,18 @@
+{
+  "schema": "fvr.storage-admission.v1",
+  "operation": "Session",
+  "checked_utc": "2026-10-30T13:10:04.1320054Z",
+  "output_path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-shotgun44",
+  "planned_bytes": 16777216,
+  "raw_capture_bytes": 0,
+  "max_raw_capture_bytes": 536870912,
+  "max_generated_bytes": 42949672960,
+  "min_free_bytes": 16106127360,
+  "generated": null,
+  "volumes": [
+    {
+      "root": "G:\\",
+      "free_bytes": 56507367424
+    }
+  ]
+}

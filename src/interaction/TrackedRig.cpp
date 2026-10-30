@@ -94,21 +94,6 @@ std::optional<TrackedRigPose> TrackedRig::Update(const TrackedRigOwner& owner,co
     if(authoredAttachment_&&!authoredWeaponInRight){weaponReady_=false;attachmentPending_=true;equipStarted_=attachmentStableSince_=input.predictedNs;}
     authoredAttachment_=bool(authoredWeaponInRight);
     if(authoredWeaponInRight){weaponAttachment_=*authoredWeaponInRight;weaponReady_=true;attachmentPending_=false;}
-    if(!authoredWeaponInRight&&input.hands[1].gripTracked&&(!weaponReady_||attachmentPending_)){
-        const auto current=Multiply(nativeWeapon,*inverseRight);
-        bool stable=weaponReady_;
-        for(unsigned r=0;r<4;++r)for(unsigned c=0;c<3;++c)
-            if(std::abs(current.values[r][c]-attachmentCandidate_.values[r][c])>(r==3?.003f*input.worldUnitsPerMeter:.01f))stable=false;
-        if(!stable){attachmentCandidate_=current;attachmentStableSince_=input.predictedNs;}
-        // Native equip identity changes before the new animation has settled.
-        // This authored relation must settle even without a measured aim profile.
-        // Aim-axis admission and grip acquisition are independent capabilities.
-        // Follow its authored hand attachment during that transition, then retain
-        // the stable relation through recoil. Reference recenter never relearns it.
-        weaponAttachment_=current;weaponReady_=true;
-        if(attachmentPending_&&input.predictedNs-equipStarted_>=600000000&&input.predictedNs-attachmentStableSince_>=150000000)attachmentPending_=false;
-    }
-    out.weaponAttachmentPending=attachmentPending_;out.weaponAttachmentAuthored=authoredAttachment_;
     for(unsigned n=0;n<2;++n){
         out.arms[n]={Transform(anchors[n].shoulder,anatomy,1),Transform(anchors[n].poleDirection,anatomy,0)};
         if(!input.hands[n].gripTracked)continue; // Never read an untracked pose.
@@ -133,6 +118,24 @@ std::optional<TrackedRigPose> TrackedRig::Update(const TrackedRigOwner& owner,co
     }
     if(!out.tracked[0]&&!out.tracked[1])return {};
     out.left=target[0];out.right=target[1];
+    // A tracked flag may still fail the head-relative wrist admission above.
+    // Only an admitted gun hand may acquire/settle a native attachment; an
+    // unavailable wrist leaves an already accepted attachment intact.
+    if(!authoredWeaponInRight&&out.tracked[1]&&(!weaponReady_||attachmentPending_)){
+        const auto current=Multiply(nativeWeapon,*inverseRight);
+        bool stable=weaponReady_;
+        for(unsigned r=0;r<4;++r)for(unsigned c=0;c<3;++c)
+            if(std::abs(current.values[r][c]-attachmentCandidate_.values[r][c])>(r==3?.003f*input.worldUnitsPerMeter:.01f))stable=false;
+        if(!stable){attachmentCandidate_=current;attachmentStableSince_=input.predictedNs;}
+        // Native equip identity changes before the new animation has settled.
+        // This authored relation must settle even without a measured aim profile.
+        // Aim-axis admission and grip acquisition are independent capabilities.
+        // Follow its authored hand attachment during that transition, then retain
+        // the stable relation through recoil. Reference recenter never relearns it.
+        weaponAttachment_=current;weaponReady_=true;
+        if(attachmentPending_&&input.predictedNs-equipStarted_>=600000000&&input.predictedNs-attachmentStableSince_>=150000000)attachmentPending_=false;
+    }
+    out.weaponAttachmentPending=attachmentPending_;out.weaponAttachmentAuthored=authoredAttachment_;
     // Lock the gun attachment to the tracked wrist through recoil/pump animation.
     // Native child animation is retained by the adapter subtree retarget.
     out.weapon=out.tracked[1]?Multiply(weaponAttachment_,out.right):nativeWeapon;

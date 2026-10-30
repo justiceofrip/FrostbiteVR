@@ -4,18 +4,22 @@
 #include "Bc2NativeCycleRecovery.h"
 #include "Bc2Rig.h"
 #include "fvr/interaction/BoltWeaponCustody.h"
+#include "fvr/interaction/AuthoredHandPose.h"
 #include <memory>
 #include <string>
 
 namespace fvr::bc2 {
-// Immutable selected-profile geometry. Authored measurements alone must leave
-// nativeJoined false; the adapter never derives admission from matching a name.
+// Immutable exact selected-profile geometry. Authored mod contacts remain
+// distinct from native-joined observations; both use independent native admission.
 struct Bc2BoltCalibration {
     std::string asset,mesh,partName;
     std::uint64_t rigFingerprint=0;
     interaction::WeaponCycleProfile profile{};
     math::Matrix4 wristFromPart{};
     bool nativeJoined=false;
+    bool authoredReviewed=false;
+    const interaction::AuthoredHandShape* handShape=nullptr;
+    std::string configurationPath;
 };
 bool BoltCalibrationValid(const Bc2BoltCalibration&)noexcept;
 struct Bc2BoltRawContact {
@@ -46,6 +50,10 @@ struct Bc2BoltTracking {
     float rawContactDistance=0;
     std::optional<interaction::WeaponCycleIdleDebtLease> recovery;
     std::optional<interaction::PhysicalWeaponCycleIdleDebtTarget> recoveryTarget;
+    // Retained open pose during magazine work; this grants no mechanism claim.
+    std::optional<math::Matrix4> reloadContact;
+    std::optional<interaction::WeaponCycleReloadPause> reloadPause;
+    std::optional<interaction::BoltReloadMechanicalPose> reloadMechanicalPose;
 };
 struct Bc2PhysicalBoltApi {
     void* context=nullptr;
@@ -55,6 +63,10 @@ struct Bc2PhysicalBoltApi {
     void (*cancel)(void*)noexcept=nullptr;
     Bc2PhysicalCycleRecoveryApi recovery{};
     Bc2NativeCycleSubmitResult (*controlResult)(void*,const Bc2NativeCycleControl&)noexcept=nullptr;
+    Bc2NativeCycleSubmitResult (*pauseReload)(void*,const Bc2NativeCycleControl&,
+        const interaction::WeaponCycleReloadPause&)noexcept=nullptr;
+    Bc2NativeCycleSubmitResult (*resumeReload)(void*,const Bc2NativeCycleControl&,
+        const interaction::WeaponCycleIdleDebtLease&)noexcept=nullptr;
 };
 struct Bc2PhysicalBoltSample {
     ReloadStateOwner nativeOwner{};
@@ -75,6 +87,7 @@ struct Bc2PhysicalBoltSample {
     // Passing a transfer grants no authority until the shared atomic arbiter
     // validates both old claims and both original destination evidence packets.
     std::optional<interaction::HandGunCustodyTransfer> custodyTransfer;
+    std::optional<interaction::BoltReloadCustodyIntent> reloadIntent;
     bool grip=false,cancel=false;
 };
 struct Bc2PhysicalBoltResult {
@@ -99,6 +112,8 @@ public:
     bool BlocksFire()const noexcept{return blocks_;}
     void Cancel(const interaction::HandInteractionSample&,interaction::HandInteraction&)noexcept;
 private:
+    template<class Lease> std::optional<Bc2PhysicalBoltResult> TickReload(const Bc2PhysicalBoltSample&,
+        interaction::BoltWeaponCustodyT<Lease>&,interaction::HandInteraction&)noexcept;
     Bc2PhysicalBoltResult TickRecovery(const Bc2PhysicalBoltSample&,const Bc2NativeCycleRecoveryView&,
         interaction::HandInteraction&,std::uint64_t& intent)noexcept;
     std::shared_ptr<const Bc2BoltCalibration> calibration_;
@@ -114,6 +129,6 @@ private:
     std::optional<interaction::WeaponCycleIdleDebtReady> recoveryAcknowledged_;
     bool recoverySettled_=false,recoveryPlacement_=false;
     ReloadStateOwner owner_{};
-    bool blocks_=false,settled_=false;
+    bool blocks_=false,settled_=false,reloadPrepared_=false;
 };
 }

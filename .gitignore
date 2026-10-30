@@ -6,6 +6,8 @@
 /tmp*/
 /tests/test-output/
 /private-inputs/
+# Intermediate fixed-container sampling stays local; reviewed geometry is in profiles/.
+/handoff/tasks/WEAPONS/20261030-special46/samples*.json
 /config/local.json
 **/__pycache__/
 *.pyc

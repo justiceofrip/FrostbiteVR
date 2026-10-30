@@ -49,6 +49,106 @@ def derive_bounded(bindings, assets, resources, *, translation_m, rotation_rad,
                    primary_hand_assets=primary_hand_assets,bounded_references=bounds)
 
 
+def derive_explicit_contact_policy(bindings, assets, resources, policy, *, enable_contact=False):
+    """Author a fixed mod contact from an explicitly pinned HandsIkPose origin.
+
+    This policy deliberately uses one authored reference, not the animated hand.
+    It does not certify that varying controls are static or within a tolerance.
+    The original static/bounded derivations remain independent and unchanged.
+    Callers must revalidate the source DBX closure and archive/content pins;
+    resources contains exact decoded (Clip, Skeleton) pairs, as for bounded data.
+    """
+    if not enable_contact:
+        raise ValueError('Explicit fixed contact policy requires contact enrollment')
+    if (bindings.get('schema') != 'fvr.bc2.authored_reload_reference_bindings' or
+            bindings.get('schema_version') != 1 or bindings.get('runtime_admission') is not False):
+        raise ValueError('Exact non-admitted authored reference binding required')
+    if (policy.get('schema') != 'fvr.bc2.explicit_support_contact_policy' or
+            policy.get('schema_version') != 1 or
+            policy.get('mode') != 'fixed_authored_handsikpose_initial' or
+            policy.get('reference_time_seconds') != 0.0 or
+            isinstance(policy.get('reference_time_seconds'), bool) or
+            policy.get('support_aim_mode') != 'two_point' or
+            policy.get('source_curve_claim') != 'none' or
+            policy.get('native_admission') is not False):
+        raise ValueError('Explicit fixed initial HandsIkPose contact policy required')
+    if checked_hash(policy.get('input_binding_document_digest')) != digest(bindings):
+        raise ValueError('Policy source binding document changed')
+    selected = [r for r in bindings['profiles'] if r['native_asset_name'] in assets]
+    expected = policy.get('source_binding_digests', [])
+    if (not assets or not selected or not isinstance(expected, list) or
+            len(set(expected)) != len(expected) or
+            sorted(expected) != sorted(r['binding_digest'] for r in selected) or
+            {r['native_asset_name'] for r in selected} != set(assets)):
+        raise ValueError('Explicit policy must pin every selected source configuration')
+    groups = {}
+    for row in selected:
+        if digest({k:v for k,v in row.items() if k != 'binding_digest'}) != row['binding_digest']:
+            raise ValueError('Authored reference digest changed')
+        if (row.get('runtime_accepted') is not False or row.get('active_native_mesh_binding') is not False or
+                row.get('state_count') != 1 or row.get('state_index') != 0):
+            raise ValueError('Fixed contact requires non-admitted sole-state authored configuration')
+        if row.get('weapon_class') not in ('wcAssault', 'wcSmg', 'wcLmg', 'wcSniper', 'wcShotgun'):
+            raise ValueError('Support contact enrollment requires an exact reviewed handheld firearm configuration')
+        path_key(row['configured_mesh_path'])
+        chain = row['animation_chain']
+        if path_key(chain['animation_resource']).rsplit('/', 1)[-1] != 'handsikpose.res':
+            raise ValueError('Fixed contact requires the exact authored HandsIkPose role')
+        if row.get('weapon_bone') != 'jntWpn_1':
+            raise ValueError('Fixed contact requires the exact weapon reference bone')
+        configuration = row.get('configuration_source', {
+            'archive': bindings.get('archive'), 'archive_index_sha256': bindings.get('archive_index_sha256')})
+        for source in (configuration, row['animation_source'], row['skeleton_source']):
+            path_key(source['archive']); checked_hash(source['archive_index_sha256'])
+        if (row['animation_source']['kind'] != 'GrannyAnimation' or
+                row['skeleton_source']['kind'] != 'GrannyModel'):
+            raise ValueError('Fixed contact source resource kind mismatch')
+        for receipt in (row['weapon'], chain['tree'], chain['animation_asset'], chain['skeleton_asset']):
+            path_key(receipt['resource']); checked_hash(receipt['sha256'])
+        if (row['weapon']['type'] != 'GameSharedResources.SoldierWeaponData' or
+                chain['animation_asset']['type'] != 'Animation.AnimationAsset'):
+            raise ValueError('Fixed contact requires exact weapon and absolute animation types')
+        key = (checked_hash(row['animation_sha256']), checked_hash(row['skeleton_sha256']))
+        if key not in resources:
+            raise ValueError('Exact decoded support resources absent')
+        clip, skeleton = resources[key]
+        if ((clip.sha256, skeleton.sha256) != key or skeleton.fingerprint != row['rig_fingerprint'] or
+                skeleton.metadata()['bones'] != row['rig_topology']):
+            raise ValueError('Decoded support resource identity mismatch')
+        evaluated = clip.evaluate(skeleton, 0.0, ['LeftHand'])
+        pose = matrix(evaluated['weapon_relative']['LeftHand'])
+        if (evaluated['bone_evaluation_status']['LeftHand'] != row['left_hand_status'] or
+                max(abs(x-y) for x,y in zip(pose, matrix(row['left_hand_in_weapon']))) > 1e-8):
+            raise ValueError('Fixed contact does not reproduce original authored reference')
+        envelope = relative_bounds(clip, skeleton, 'LeftHand')
+        key = (row['native_asset_name'], row['configured_mesh_path'], row['rig_fingerprint'])
+        groups.setdefault(key, []).append((row, pose, envelope, configuration))
+    result = []
+    for key, rows in sorted(groups.items()):
+        r, pose, envelope, configuration = rows[0]
+        signature = lambda item: (item[0]['animation_sha256'], item[0]['skeleton_sha256'],
+                                 item[0]['weapon_class'], item[1])
+        if any(signature(item) != signature(rows[0]) for item in rows[1:]):
+            raise ValueError('Conflicting exact support key')
+        out = {k:r[k] for k in ('native_asset_name', 'configured_mesh_path', 'rig_fingerprint',
+                                'animation_sha256', 'skeleton_sha256', 'weapon_class')}
+        out.update(left_hand_in_weapon=pose, left_hand_status='mod_authored_fixed_contact',
+                   source_left_hand_status=r['left_hand_status'], right_hand_retargeted=False,
+                   right_hand_status_not_admitted=r['right_hand_status'], native_admission=False,
+                   source_bindings=[item[0]['binding_digest'] for item in rows],
+                   source_weapons=[item[0]['weapon'] for item in rows], animation_chain=r['animation_chain'],
+                   configuration_sources=[item[3] for item in rows],
+                   animation_source=r['animation_source'], skeleton_source=r['skeleton_source'],
+                   source_reference_envelope=envelope, target_runtime_interpolation_verified=False,
+                   support_contact_reference=True, support_aim_mode='two_point',
+                   contact_policy=policy, contact_policy_digest=digest(policy))
+        out['binding_digest'] = digest(out)
+        result.append(out)
+    return dict(schema='fvr.bc2.authored_support_bindings', schema_version=1, profiles=result,
+                runtime_admission=False,
+                scope='Explicit mod-authored fixed initial HandsIkPose contact; source motion remains unqualified. No gun-hand, native interpolation, reload or firing admission.')
+
+
 def _derive(bindings, assets, *, enable_contact=False, primary_hand_assets=frozenset(), bounded_references=None):
     if bindings.get('schema') != 'fvr.bc2.authored_reload_reference_bindings' or bindings.get('runtime_admission') is not False:
         raise ValueError('Exact non-admitted authored reference binding required')

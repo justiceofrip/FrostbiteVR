@@ -1,0 +1,500 @@
+{
+  "schema": "chat16.pistol_readiness_preparation.v1",
+  "executable_sha256": "3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258",
+  "reader_sha256": {
+    "pistol_readiness_probe.py": "ef25be97da0af01993f9ee2e2e942577c8d475aa8e8ee71f629d2a374142c584",
+    "capture_reload_state.py": "94db343a4d568c5c6c784aa70b74a508ab936187f63eb95c778359a15294ca88",
+    "capture_reload_server.py": "9da3b354b76a43c11f6884ed03d560fdab73fa97bcf5af7351a02266d0cf587c",
+    "read_bc2.py": "aa03949aaa09f68534498cbc57f174f91f9843fd6a7ce1b3b86ca4127bffd45b",
+    "inspect_bc2_mesh_asset.py": "2fd90f39794dfc4698229b8fb68eff02c0b91de168bf4027a1bb42adee1163bf",
+    "bc2_weapon_config_pipeline.py": "09667ad3b7939429d7a4546718cc3079d4b8fa3df728c9f40c06f0e5969f60a6"
+  },
+  "descriptor_profile_sha256": "9377aa52312a6b4cec95237fb498d0e921691776c62d5fa96db12f00e08e0ece",
+  "authored_identity": {
+    "assetName": "MP443_sp",
+    "assetPath": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach",
+    "weapon": {
+      "resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx",
+      "sha256": "e16f5713854ca38ab58d61bd3c568e2f87533c0e82032d71d61f27449d5484cc",
+      "guid": "58098858-821b-4406-a19c-ae62e5d38bdf"
+    },
+    "firing": {
+      "resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Firing.dbx",
+      "sha256": "f710972b07146ff6ded2783fc2a2b6ee37fadb5a839c6cccee8a0e0deee18cbf",
+      "guid": "1b728e67-aa8b-48cc-89c1-c36e73ba2b6f"
+    },
+    "function": {
+      "resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Firing.dbx",
+      "sha256": "f710972b07146ff6ded2783fc2a2b6ee37fadb5a839c6cccee8a0e0deee18cbf",
+      "guid": "be85abfb-65c7-4097-9e23-0881ea334fbb"
+    }
+  },
+  "archive": "Dist\\win32\\levels\\sp_common\\level-00.fbrb",
+  "archive_index_sha256": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842",
+  "authored_fields": {
+    "FireLogic.ReloadLogic": {
+      "value": "rlWeaponSwitchCancelsUnfinishedReload",
+      "encoding": "string",
+      "offset": 7512
+    },
+    "FireLogic.ReloadType": {
+      "value": "rtMagazine",
+      "encoding": "string",
+      "offset": 7517
+    },
+    "FireLogic.ReloadTime": {
+      "value": 3.75,
+      "encoding": "float32",
+      "offset": 7436
+    },
+    "FireLogic.ReloadDelay": {
+      "value": 0.0,
+      "encoding": "float32",
+      "offset": 7426
+    },
+    "FireLogic.ReloadThreshold": {
+      "value": 0.5,
+      "encoding": "float32",
+      "offset": 7456
+    },
+    "FireLogic.PostReloadSequenceTime": {
+      "value": 0.0,
+      "encoding": "float32",
+      "offset": 7446
+    },
+    "FireLogic.RateOfFire": {
+      "value": 450.0,
+      "encoding": "float32",
+      "offset": 7405
+    },
+    "FireLogic.FireLogicType": {
+      "value": "fltSingleFire",
+      "encoding": "string",
+      "offset": 7522
+    },
+    "FireLogic.FireInputAction": {
+      "value": "EiaFire",
+      "encoding": "string",
+      "offset": 7374
+    },
+    "FireLogic.ReloadInputAction": {
+      "value": "EiaReload",
+      "encoding": "string",
+      "offset": 7388
+    },
+    "FireLogic.BoltAction.BoltActionDelay": {
+      "value": 0.0,
+      "encoding": "float32",
+      "offset": 7237
+    },
+    "FireLogic.BoltAction.BoltActionTime": {
+      "value": 0.0,
+      "encoding": "float32",
+      "offset": 7248
+    },
+    "FireLogic.BoltAction.HoldBoltActionUntilFireRelease": {
+      "value": false,
+      "encoding": "bool",
+      "offset": 7259
+    },
+    "FireLogic.BoltAction.HoldBoltActionUntilZoomRelease": {
+      "value": false,
+      "encoding": "bool",
+      "offset": 7266
+    },
+    "Ammo.MagazineCapacity": {
+      "value": 17,
+      "encoding": "int32",
+      "offset": 7534
+    },
+    "Ammo.NumberOfMagazines": {
+      "value": 3,
+      "encoding": "int32",
+      "offset": 7545
+    },
+    "Ammo.AmmoPickupMinAmount": {
+      "value": 5,
+      "encoding": "int32",
+      "offset": 7567
+    },
+    "Ammo.AmmoPickupMaxAmount": {
+      "value": 10,
+      "encoding": "int32",
+      "offset": 7577
+    },
+    "Ammo.AutoReplenishMagazine": {
+      "value": false,
+      "encoding": "bool",
+      "offset": 7587
+    },
+    "Shot.NumberOfBulletsPerShell": {
+      "value": 1,
+      "encoding": "int32",
+      "offset": 7104
+    },
+    "Shot.NumberOfBulletsPerShot": {
+      "value": 1,
+      "encoding": "int32",
+      "offset": 7115
+    }
+  },
+  "additional_fire_logic": {
+    "PreFireDelay": 0.0,
+    "ZoomBeforeFireDelay": 0.0,
+    "WaitForTriggerRelease": true,
+    "WaitForZoomRelease": false,
+    "HoldReloadUntilFireRelease": false,
+    "HoldReloadUntilZoomRelease": false
+  },
+  "weapon_states": [
+    {
+      "index": 0,
+      "mesh_asset_references": [
+        "objects/weapons/handheld/ru_hg_mp443grach/ru_hg_mp443grach_mesh/a2f5a385-64cf-11db-962b-86e865e73fbb"
+      ],
+      "animation_tree_references": {
+        "AnimTree1p": "objects/weapons/handheld/ru_hg_mp443grach/ru_hg_mp443grach_animtree1p/02bd776e-e07c-42bd-ba59-46e3ec4229fa",
+        "AnimTree3p": "objects/weapons/handheld/ru_hg_mp443grach/ru_hg_mp443grach_animtree3p/b482b1b5-0714-4a73-8610-93b8a02bdc87"
+      },
+      "fields": {
+        "IsPumpAction": false,
+        "IsOneHanded": true,
+        "AnimatedFireType": "AnimatedFireSingle",
+        "AnimatedAimingType": "AnimatedAimingTwoHanded",
+        "SkipReloadAnimation": false
+      },
+      "missing": []
+    }
+  ],
+  "authored_readiness_states": [
+    {
+      "index": 0,
+      "fields": {
+        "Relaxed": false,
+        "Alert": false
+      }
+    }
+  ],
+  "reflected_metadata": [
+    {
+      "name": "FireLogicData",
+      "metadata_rva": 25148036,
+      "metadata_sha256": "3a8f578733206b2785d721955d0789d0f95209a02f3c6c7a08d37b254485d55f",
+      "table_rva": 25302592,
+      "table_sha256": "b7a82384e4d6ca3c8cce64bf8f1efc28e90b4094bf8b1f37516c9a6b285d502c",
+      "size": 140,
+      "fields": [
+        {
+          "name": "HoldAndRelease",
+          "type_relative_offset": 36
+        },
+        {
+          "name": "BoltAction",
+          "type_relative_offset": 68
+        },
+        {
+          "name": "Recoil",
+          "type_relative_offset": 80
+        },
+        {
+          "name": "FireInputAction",
+          "type_relative_offset": 64
+        },
+        {
+          "name": "OrderInputAction",
+          "type_relative_offset": 116
+        },
+        {
+          "name": "ReloadInputAction",
+          "type_relative_offset": 128
+        },
+        {
+          "name": "TriggerPullWeight",
+          "type_relative_offset": 132
+        },
+        {
+          "name": "RateOfFire",
+          "type_relative_offset": 120
+        },
+        {
+          "name": "ClientFireRateMultiplier",
+          "type_relative_offset": 124
+        },
+        {
+          "name": "ReloadDelay",
+          "type_relative_offset": 8
+        },
+        {
+          "name": "ReloadTime",
+          "type_relative_offset": 12
+        },
+        {
+          "name": "PostReloadSequenceTime",
+          "type_relative_offset": 0
+        },
+        {
+          "name": "ReloadThreshold",
+          "type_relative_offset": 4
+        },
+        {
+          "name": "PreFireDelay",
+          "type_relative_offset": 16
+        },
+        {
+          "name": "ZoomBeforeFireDelay",
+          "type_relative_offset": 28
+        },
+        {
+          "name": "WaitForTriggerRelease",
+          "type_relative_offset": 136
+        },
+        {
+          "name": "WaitForZoomRelease",
+          "type_relative_offset": 137
+        },
+        {
+          "name": "HoldReloadUntilFireRelease",
+          "type_relative_offset": 138
+        },
+        {
+          "name": "HoldReloadUntilZoomRelease",
+          "type_relative_offset": 139
+        },
+        {
+          "name": "ReloadLogic",
+          "type_relative_offset": 32
+        },
+        {
+          "name": "ReloadType",
+          "type_relative_offset": 20
+        },
+        {
+          "name": "FireLogicType",
+          "type_relative_offset": 24
+        }
+      ]
+    },
+    {
+      "name": "AmmoConfigData",
+      "metadata_rva": 25147464,
+      "metadata_sha256": "87ed70626985e1c8e551537aa51b850e55e6c7dcf54fe92bb761e67c2612c93d",
+      "table_rva": 25295320,
+      "table_sha256": "3dcb1ab293e25f0d4d15176864010579ef0e5612f084cfc7d87376f72b7a69fd",
+      "size": 36,
+      "fields": [
+        {
+          "name": "MagazineCapacity",
+          "type_relative_offset": 20
+        },
+        {
+          "name": "NumberOfMagazines",
+          "type_relative_offset": 16
+        },
+        {
+          "name": "TraceFrequency",
+          "type_relative_offset": 24
+        },
+        {
+          "name": "AmmoPickupMinAmount",
+          "type_relative_offset": 28
+        },
+        {
+          "name": "AmmoPickupMaxAmount",
+          "type_relative_offset": 4
+        },
+        {
+          "name": "AutoReplenishMagazine",
+          "type_relative_offset": 32
+        },
+        {
+          "name": "AutoReplenishDelay",
+          "type_relative_offset": 0
+        },
+        {
+          "name": "AmmoBoxPickupRate",
+          "type_relative_offset": 12
+        },
+        {
+          "name": "AmmoBoxPickupAmount",
+          "type_relative_offset": 8
+        }
+      ]
+    },
+    {
+      "name": "BoltActionData",
+      "metadata_rva": 25147896,
+      "metadata_sha256": "41837d38e55282925f77004f9f9e6aca94eba682f28f20ace911fe3bfcc0027d",
+      "table_rva": 25297720,
+      "table_sha256": "075f1b7567bad9f1385ce831851c76ee74de5050a516684e723a64e82584449d",
+      "size": 12,
+      "fields": [
+        {
+          "name": "BoltActionDelay",
+          "type_relative_offset": 4
+        },
+        {
+          "name": "BoltActionTime",
+          "type_relative_offset": 0
+        },
+        {
+          "name": "HoldBoltActionUntilFireRelease",
+          "type_relative_offset": 9
+        },
+        {
+          "name": "HoldBoltActionUntilZoomRelease",
+          "type_relative_offset": 8
+        }
+      ]
+    },
+    {
+      "name": "WeaponStateData",
+      "metadata_rva": 25149140,
+      "metadata_sha256": "6b9123f7a8eb7739835211bb60a1fb31184a4771ecb3528ad3f2615e93b10565",
+      "table_rva": 25306096,
+      "table_sha256": "9e6ab677bb68e7974fce0b9f54841567241e32a891b4ecef45538df0aa8e6f79",
+      "size": 200,
+      "fields": [
+        {
+          "name": "BoneFakePhysics",
+          "type_relative_offset": 92
+        },
+        {
+          "name": "Meshes1p",
+          "type_relative_offset": 128
+        },
+        {
+          "name": "MeshZoom1p",
+          "type_relative_offset": 148
+        },
+        {
+          "name": "Meshes3p",
+          "type_relative_offset": 152
+        },
+        {
+          "name": "HiddenBones1p",
+          "type_relative_offset": 76
+        },
+        {
+          "name": "HiddenBones3p",
+          "type_relative_offset": 112
+        },
+        {
+          "name": "AnimTree1p",
+          "type_relative_offset": 184
+        },
+        {
+          "name": "AnimTree3p",
+          "type_relative_offset": 180
+        },
+        {
+          "name": "ZoomMeshTransitionFactor",
+          "type_relative_offset": 176
+        },
+        {
+          "name": "ZoomedScopeFilter",
+          "type_relative_offset": 172
+        },
+        {
+          "name": "NonZoomedScopeFilter",
+          "type_relative_offset": 188
+        },
+        {
+          "name": "KeepAimingTime",
+          "type_relative_offset": 12
+        },
+        {
+          "name": "AltDeployTime",
+          "type_relative_offset": 16
+        },
+        {
+          "name": "DeployTime",
+          "type_relative_offset": 8
+        },
+        {
+          "name": "UndeployTime",
+          "type_relative_offset": 0
+        },
+        {
+          "name": "AlwaysAimHead",
+          "type_relative_offset": 194
+        },
+        {
+          "name": "AnimatedFireType",
+          "type_relative_offset": 4
+        },
+        {
+          "name": "AnimatedAimingType",
+          "type_relative_offset": 20
+        },
+        {
+          "name": "IsOneHanded",
+          "type_relative_offset": 195
+        },
+        {
+          "name": "IsPumpAction",
+          "type_relative_offset": 192
+        },
+        {
+          "name": "PlayDeployAfterFire",
+          "type_relative_offset": 196
+        },
+        {
+          "name": "SkipDeployAnimation",
+          "type_relative_offset": 198
+        },
+        {
+          "name": "SkipReloadAnimation",
+          "type_relative_offset": 197
+        },
+        {
+          "name": "SkipFireAnimation",
+          "type_relative_offset": 193
+        },
+        {
+          "name": "HideProjectileAfterFireTime",
+          "type_relative_offset": 60
+        },
+        {
+          "name": "ProjectileBoneName",
+          "type_relative_offset": 64
+        },
+        {
+          "name": "Mesh3pTransforms",
+          "type_relative_offset": 44
+        },
+        {
+          "name": "CutsceneWeaponTransforms",
+          "type_relative_offset": 24
+        },
+        {
+          "name": "ReadinessStates",
+          "type_relative_offset": 40
+        }
+      ]
+    }
+  ],
+  "game_process_opened": false,
+  "chamber_knowledge": "Unknown",
+  "slide_ready_admitted": false,
+  "native_admission_changed": false,
+  "findings": [
+    "ReadinessStates is authored Relaxed/Alert metadata; it is not an observed chamber or slide state.",
+    "Zero bolt fields and 17 loaded capacity do not establish a separate chamber.",
+    "WaitForTriggerRelease is authored true; repeat-trigger behavior remains native, not a slide completion receipt.",
+    "The four inspected reflected structs expose no chamber/slide field; this is not proof that no such runtime state exists elsewhere.",
+    "WeaponActionGate already distinguishes occupied tactical feed from empty feed; Slide has no gesture mapping or BC2 chamber binding."
+  ],
+  "next_observation": {
+    "command": "py -3.12 -B pistol_readiness_probe.py observe --exe <exact BFBC2Game.exe> --pid <root-owned PID> --stage <stage> --output <new JSON>",
+    "stages": [
+      "tactical-before",
+      "tactical-after",
+      "empty-before",
+      "empty-after"
+    ],
+    "samples_maximum": 16,
+    "seconds_maximum": 3.75,
+    "purpose": "Compare existing two client and server firing observations around separately witnessed feed events.",
+    "limits": "Stage labels do not prove events; external reads are not atomic, firing/empty suppression/chamber/slide acceptance remains unqualified."
+  }
+}

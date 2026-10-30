@@ -1,0 +1,911 @@
+{
+  "schema": "fvr.bc2.magazines45.portable_source_enrollment.v1",
+  "installed_enrollment": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-magazines45-enrollment05\\receipt.json",
+    "sha256": "2bebcb7d963b59e8821a015a4670c1ff8bef4dca953a79dfbe339a6387dc502e"
+  },
+  "portable_replay_tool": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\tools\\bc2_authored_magazine_policy.py",
+    "sha256": "f46b814dd60a34f956f6cbab449af63adf747cb45e7f4829d2b18dc7a2cf3ca0"
+  },
+  "native_execution": false,
+  "headset_acceptance": false,
+  "rows": [
+    {
+      "key": "bc2:magazine-descriptor:54aea2c982ef3d9305f89d21cf188f4eb646ca844736a5e3e7f804b229385888",
+      "descriptor_digest": "065aaef2ff48f30b75c86bef524b74eedf721d26509f0a37ac4d6f264521ddcd",
+      "geometry_digest": "cc83f5144d5c201b210e7452c9940250cfab854f17e90af7c1f1746dd0a85157",
+      "native_family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+    },
+    {
+      "key": "bc2:magazine-descriptor:e0eb4b211e7e45faa687c0998e8c55d1dd849a75e8fbb01379afc8be01b56862",
+      "descriptor_digest": "a41b1cc9989872459ea546ce31399b814998c464de576107e1ed9d6617c50b7a",
+      "geometry_digest": "4df802369a482c552b87ed958e50e9e307579056f74cfc2b718c5206582911eb",
+      "native_family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+    },
+    {
+      "key": "bc2:magazine-descriptor:c607fff81b24f15b148070723fccedf2649d4fb685bbd1ddc815d2b825852203",
+      "descriptor_digest": "ba2ff561a9d4cc54833efe64d2cc24af9e102b63b6c9ac1a6a9ddb4981726929",
+      "geometry_digest": "832837fac9289b8a176eebf29136374d1e675a703d88d2f8cce120c1e02c96bb",
+      "native_family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+    },
+    {
+      "key": "bc2:magazine-descriptor:df92ffe911bb808043e97940248688ac618cd39cad1c6b27770853381c9831a3",
+      "descriptor_digest": "1dd674865210588fad3c65f9508204caf627012b6175c65de527f55083e47933",
+      "geometry_digest": "695508d78c619eef7138fad4c4f490c680ec70c441eef1987c4551d7b817a5ac",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:62f8c84e9ebce6830e22def87e0993c41af8f80c9eff50bd4db968586f2f5d68",
+      "descriptor_digest": "35cd8b0f85e5dff1d47722ba2802e67ec826e8c58688944e3115302383e2c46d",
+      "geometry_digest": "2b46bd8fc01e49ff80ab1336d234121bf66acff4d0477fc96cd9391dc854a811",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:00dd2c9e5d97a56a4866ed8969b6d76b8885aae79facaa02c15d0fdd08ea3ebe",
+      "descriptor_digest": "0c13f57d22f0856774d0dea7bb577581a799c9e619fbff9d84d9afa6996c70d4",
+      "geometry_digest": "0993e5b6ce0e00735539ef1448c42010847fd7953ffebe25245e8d01e02dcee5",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:f4e111ff381076ced20b749da2cfd26b442cd23bdfedf34577a4e9567904b37b",
+      "descriptor_digest": "98d56d8977fde3879a44dd04d3539acea33f23c738a667e38649179d4cff1fa1",
+      "geometry_digest": "f59b7ad5a4f46a500198b19e513d8fd51df9cd89264c301f264a7344d4c130f6",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:7fddce96ae850bb34700694a6ca212e9bd2b8eaf3164f68ea6532c7b90103bfe",
+      "descriptor_digest": "2c7db5ddffa18a2ba2774b537546f0eb34d033bb1121f03344a3cef312679286",
+      "geometry_digest": "e560197fd8b982c767593e94a7c80731978b3bf21c77017c3c1430559cc19187",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:9c0e1d6ef3b018b3449d16b5835731f0473e504a20d0c330c5db747d0ce94882",
+      "descriptor_digest": "3648e76e0438b903eb33253ada7e230aa39430bd72ef841bce5396052ff2ab08",
+      "geometry_digest": "da21d512223d42e479d7699ff33df6b6b571b2a678058d15232ba5871045a8bb",
+      "native_family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+    },
+    {
+      "key": "bc2:magazine-descriptor:137333396af845c526e0c4133d7b1ebef35b6e6b88afeee86dcf4eca2e23ca12",
+      "descriptor_digest": "766b119e69be4d1087da848c3f43205026a36ef325677c43fe16e125f6e14ace",
+      "geometry_digest": "0dadc8d2f3770c87d166f3e7ccbcea31acba53f31ec13d1447c5d2d74868207b",
+      "native_family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+    },
+    {
+      "key": "bc2:magazine-descriptor:d7526d6782bf33307bf98410184fe08f6480ceff5377df4047c7c917e60a21b9",
+      "descriptor_digest": "e7dc22e698882a00b7dff7b05a57a405d6d8f00d1ee188ef201b45901eb7db2e",
+      "geometry_digest": "69c441ba9d9848eae95f6005ec1f19ec05268bb8293e06a2420c6aa38d99909a",
+      "native_family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+    },
+    {
+      "key": "bc2:magazine-descriptor:193029c00fbe121e066512ba9f1b132fbe9c42666217cb6fbabccd7a483ae3c0",
+      "descriptor_digest": "067915fccd3d0d0eb5adebe90c27ec7f6ab1dca22befc9a9c489b1d8ecd41b9d",
+      "geometry_digest": "ed5b334f706863b82ae386e4605b340ab5f6e8ed12ae7c591461a2f1bfad7c62",
+      "native_family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+    },
+    {
+      "key": "bc2:magazine-descriptor:fb95624902ba5bab0cc29643cb0eecdf5cc22210e53c36ea80c1c03e4c1513a0",
+      "descriptor_digest": "fecbb42d6170cd4ed92f15b5df011cafde87e795f83c9cba3510fc50b2e4cb72",
+      "geometry_digest": "67c1c65edf8b522ed1a38098d995b7b427069e463018112872af1ebdc288bdbb",
+      "native_family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+    },
+    {
+      "key": "bc2:magazine-descriptor:1099ee5b921992241708f3f5956340a9d2d905daf76e9a04386b479d1dae8818",
+      "descriptor_digest": "48daa10c8fa4918e73acd985e65f4fb32e64345dd199116690cc12274b2ac5af",
+      "geometry_digest": "9f6d52c4d0a36e98ba2a40d322391cee514f5cee57ebbea0bf4e4a720cc5fb57",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:ffe465b3e39d55fe94d0eb5aa7f9d6c5265c0ce412130589a6632190ba8567b6",
+      "descriptor_digest": "7dd3539d563a2a5bc705d6d5d49a6e267b76f4c254f3d79743ca76259299a22a",
+      "geometry_digest": "ffebf9b3febb124c8a5f5a8f80f6072809715abe6b549461782ed11c59422f96",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:6877ac14cd00fadc4c2ebbd1b212a03ebd5a2d91de168016224e3cfe26da565d",
+      "descriptor_digest": "e9e3bca24aee3f3355341311050582dc86a8fdf872d3eb10cfb4fb20349012f7",
+      "geometry_digest": "0dfcfe72444c860c9da5ed72d5e4253565ae15cb5fe337d2df290840e8a12690",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:f1b468bfcba270dd085492a5093190267a2aec160df2ead87308947af5a760ef",
+      "descriptor_digest": "221c53ba5232e60374454d1db5e94a892713686015126f838f3a8c791cdea944",
+      "geometry_digest": "b926919b5275c5e81dc91be40b516575d0efb03dfd818f8d993b3e7fde337595",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:821e8a22afc26c4a6164fe5f6690eb089ef40e9cd811cdaa5360207bc7bac8eb",
+      "descriptor_digest": "4de4a3d32e4ce3a2489679f6cc614eb02984821fa0743af8a96e9172d9bcd369",
+      "geometry_digest": "6c4df67d997234fc4ccc2be433f6f4584a788d90db41a71bf7a255b3060cdb7c",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:1a9677a741508f9651487efe7eecd5f825ec4a67d2f1ca7e7649125c5e467ea5",
+      "descriptor_digest": "c6ea54dcdf0cb2d38fb42aec0e37ca617cbc84017e492dbf9f5ecbbbc23720d2",
+      "geometry_digest": "1f80cdf5529c43649ec8f8d251302d3ff16a9b95f36d9c715f2f39642b11bff9",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:61ed1947ca0bbf24439a2dcfcff5519f320d04b065ca5932088c9abb623349c1",
+      "descriptor_digest": "514eb693b159cdc39a1bb140e61ad2493e03bccce59c580a08bc1c552be2e95a",
+      "geometry_digest": "42538f95446b6cadfff8e8dad703f1bb60a9ee7da5e2f6423af8e321b9ecdd5e",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:c28491138d60417a2682b2b136e16eb15443dbb8492941dc9dd00f79cb81128b",
+      "descriptor_digest": "a735a2655948dea436bfe51cf0281c84a2ccd2891ce14333015b8818dfb1fd0a",
+      "geometry_digest": "2060da3f3729bdb51b8af5e33d7623123d39bdad8026f943e4c80f9ecf8680bb",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:9eb61decaaf8f1bafd230fe090ec624a0c4ba7d71298ae2e3d18b6845eec0774",
+      "descriptor_digest": "c5522196bc7ba1fdf909eb2455345207dbcc6938f953bd868a0eef140242ff35",
+      "geometry_digest": "d394dd34a343a4e7eaf1ac367da15e653d30f4298c4284b9fd9c605debfab7ce",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:dbd63631c3bbd5e3825c9fbef9d478b5b2f0f35cf2cce2b9978d95bd0533952b",
+      "descriptor_digest": "e1dab96ceeb8417717eb5547bb84c1f6fea1375bf8aaa5f86e787c8e770abead",
+      "geometry_digest": "5e67a14afa7e087c7e71a570f904277621b34848ed990beaeb3c531f034a0f05",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:5c55193f7c6059983df900538081454b7f1b28b7c95647f3a08f799f0728f0bb",
+      "descriptor_digest": "bd21cf9db55f9ed7f6e5c031d764c5a8dd643b94e4ecec20bb01c3bbd48a2a51",
+      "geometry_digest": "0a76fa67230b9b30c734e6c101520fb75af22a6c175928eeb9088fcb1ad6075e",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:b62512a8b03688d4d94af267154496ca57934e0d620e170c9cf2255bbd3dfc32",
+      "descriptor_digest": "a83a3c5288dee2d4f5c7d1ddc7033380f5e935cc15574d23f29e43a27a047a17",
+      "geometry_digest": "ad03b2e0731a13fa8e534c4e153725ae26ece4da2fc8c6a8b3bd2a153b0dd068",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:d75314cc75e395e6d0eafa3ea8fd67f254f751534848b21b29986d30b94939e7",
+      "descriptor_digest": "861f5754604d1e0ce99fbf8644a67f9b5c7c64f8501d2974799cf34f0848c8f5",
+      "geometry_digest": "b19e13e573aa03364947f9aeec3e93cb3b11245e861444ddc88ad9df374beb43",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:a7abb6254e1f53a5bc9f5ecae8481be94380dd72b6f05bb379bb5c5c83056133",
+      "descriptor_digest": "acf60ac2e3b6cb1ae436a96195e0fb4aef76888ba7d1d922300179409657d80d",
+      "geometry_digest": "b7aa11ee2eb5e724e0341c69fa56f03b29b13fb285f685bd73c2623ee65ce4ea",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:6019d3973c2ef13f248106f3863a1ad1d4a64ba7b89f6041ebe0ae5cd800ce74",
+      "descriptor_digest": "3bb227f006ddb8326624eb3efb93f58c5c760f9761034792f93b4db1e24e3c7f",
+      "geometry_digest": "601589eb4962cefbe846de70b5c3953ee7fdc90fe074bdb09a1d560d5bcce2a9",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:82fc18dabdc421e1b89e62c7394a6364723e5a2397f9fc3131f931041d218f38",
+      "descriptor_digest": "29ee6a4cdd1bc395cb82367e00cd1c4ff0368a92f03f6cca7898c3b4f7703f92",
+      "geometry_digest": "0f877a90c0c29f401d158439169d22560b14e09fa8a9c8b6328f98c0faaaa6d5",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:d2ee3e2255136b7eba413c440457b5be5da8dbbc8434fccd93593cc1ee476af9",
+      "descriptor_digest": "3428684ecfe0760031b57f7030a6a6088a3e763b6cbf5982f70173e90cb7676c",
+      "geometry_digest": "c2f12a3adc8a85aaf43227d66005605725a4d5e307775e16c240ab276828f23f",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:686ec6e168f3234c814b9fb3a48a372f8da821ac42eebd0de737888b1e1cfc75",
+      "descriptor_digest": "5601f63aee627def5be6918ad875c7f3b5707ab0274a1adbcd63e573c1b72ebb",
+      "geometry_digest": "6b6ba09b23cf7638e22a0acc56a0b84711c36c2d6fb25c33a5db902204b80374",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:caafb2a8249c50b118b4cc3244308afb99c696df61bf5668963eee6183b4326b",
+      "descriptor_digest": "ec5b65e992082fd7e3b8e3d3ee4679860df158812a933e3ec11013d6cb217779",
+      "geometry_digest": "49221f3eac829c6415388bef884bfafbac14184e226077c12aa649b3616c8752",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:5d03adf713d506ca6b5f871855d69bd3765b04257c14dcbf352147e261924e3b",
+      "descriptor_digest": "1a6a85fc965158ca25d30628441ce3b43e08335e26f9473190a533ee073104f9",
+      "geometry_digest": "fa3de72294a5298169c20296370b65ad7e22d579512cbafa47bc8f1f76d306d6",
+      "native_family": "bc2.bolt-action-magazine-reload.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:ff9317c5dfaf5869c3ed99563a1a64d5c3bcdb6aaee3b4308309399c2e46343e",
+      "descriptor_digest": "22b3e5a3dfdda753d6c6d547caada7704d286e0b906e9346a5037ac3890e9fe5",
+      "geometry_digest": "2b5d116e03a3390928efd94d99fae20af61ee599a3418be2f40fcbf07b94d2b6",
+      "native_family": "bc2.bolt-action-magazine-reload.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:d04de1419a64d72e192261b29f20f384188a69431eb6073febb17908b3d6a637",
+      "descriptor_digest": "50cecc5912ec1ddf4cf28e1b09be8c8e25685f6345109629b1fc789d3d3a3567",
+      "geometry_digest": "31f300ee9c2cb26d29dbbb18ab3ab25a77214f10be63cf874aa86b7dd602b4bf",
+      "native_family": "bc2.bolt-action-magazine-reload.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:9d997f5df5985bfb26a4219f09b93c220e875c5cd22659d07c4830b22b071a49",
+      "descriptor_digest": "47658581152515dfb9c01bae78f7382391df206262b40d2c1fee855224cd435f",
+      "geometry_digest": "b93862a037d39e780c06270c96781ce268242a552ef7822ce8fb4fade0a239aa",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:517ac4ed68c905e171599163d0c502698363f4b838a3de31f9b3ea63c2ab2dff",
+      "descriptor_digest": "e8d7685c7e694170cfcb33b13c392112d2a1ec7d369ff28fee2b5318ced2accf",
+      "geometry_digest": "2e8dda8c8cd35f036aa6be07626c6b49f8ca08197b8b83e7c2fc74101bba9bae",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:acd7d5fc6757741ecab81865e03711bbc4ae54ae1cad8a87b292989edea8c5d6",
+      "descriptor_digest": "d60756d3aad633e8602909e9cfbb306cae9e4f2d356a6129fba5114f119d6f09",
+      "geometry_digest": "0c7a80d0e77111e967a4602c90268a6f4497d6e8c909d717a6ae9015ba66042c",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:555d420b597c1c38f88c1ec54388b7b8e7bc0a9e51d9b185ee9915b9c3646724",
+      "descriptor_digest": "3653198f36490d216ceeb21885b260fb3a64e6db0b74b83a44b5502f2a60547c",
+      "geometry_digest": "fbc5ba539e33042ae60cc355696c9bdbd95463262ba4452d6735735e1ea4ff04",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:371ec684be3ddbc8425a79205d61be91657a896370e4a363bfc280be4bb96fc3",
+      "descriptor_digest": "6ae9fb963107911a72bf1d87d52c1cbfc7813a609fabc9c975865e6488adeb9a",
+      "geometry_digest": "29f14860c6dbbcb33648c471636ad5bbc2fa65148593a4de5e2b2c89f16eda7c",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:cd3e5189d7339655017c75ce9f051d082b0e45b51aef04e49580a3ca4e7ca422",
+      "descriptor_digest": "49dc59b99be72f20eaf418618a66ce263d900832f92e618c64258cd98da0b9e6",
+      "geometry_digest": "e3f54f001b6fe3dcaa95d54326cfaad28ec3eee3852f22b938743e5ede187e33",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:463b9ae5b99b03ae6ccf70a09a19ff158221f5e0814bc33b242004d11bdd092d",
+      "descriptor_digest": "ea5fade07d27daa7857d83e667169502b1028c404d1195c34066197dbe95383a",
+      "geometry_digest": "0231e87f26192fc5c5fb1601f80cfaf061dd889364e771d1fda174bbca69231a",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:ae252d073136692f790560e7d4403808fa35821233e692d3a7cbcb9db55850f1",
+      "descriptor_digest": "cec932f340b478987079843337cdf087616bae2f15287c5cf7a696173639bf54",
+      "geometry_digest": "ca6fee25bc88dc7380230a8dd68d1036367f03805d7489630f0ae9d899a10d2d",
+      "native_family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+    },
+    {
+      "key": "bc2:magazine-descriptor:e23e559810ac92ba9fbea095c4f39fe279f2ad3234d813dbd0b2e368c72a3329",
+      "descriptor_digest": "58996f6a50cdccc03c50090854f60d617927b1ccd0aa640369c9f546916b6ebd",
+      "geometry_digest": "f247d8b4281d2ff2ae1b56724770e86aeeb125cb4cd4a122fd288b2271ad4729",
+      "native_family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+    },
+    {
+      "key": "bc2:magazine-descriptor:259c5c2b7e53b42c311349557358351e1da7cf2675f7e0c0378044db956a55d8",
+      "descriptor_digest": "c98494e638829382f481cfc09344a0209836c9624784e063bbf923595f8d960d",
+      "geometry_digest": "6e477420b9b12d5629ce73ff11fa9e75c9d89fa4ac0127e69d444febb59f99d7",
+      "native_family": "bc2.bolt-action-magazine-reload.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:c962eb86f971bad5c255beff1bcc94213820c6bd949e5c9af72b559e2f17ed18",
+      "descriptor_digest": "4b6e995cf5587068bb4730f66655269aa52c66d280ac39cd565a27ccfadf7c2a",
+      "geometry_digest": "3af29bc7210da09ecf7e7e510875eb00bf3574cd077134364d72a26d33712245",
+      "native_family": "bc2.bolt-action-magazine-reload.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:33eb81fa3a6b0e81dbf6ff92d34e69f21d074aa88e37b74ed1d57c4ce57ec879",
+      "descriptor_digest": "ef0ccdfd529120beda44a721690000517f0de337a98dbc1f0f8e16b2d7257e88",
+      "geometry_digest": "ac80320b45fd06c1b7e8df8010c745704bf497d642b85c86bc2f2732d9e55639",
+      "native_family": "bc2.bolt-action-magazine-reload.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:34570b13cfb1c6fe0dc4f0db73a6604346ac190a95161f7156d8a4e07521f601",
+      "descriptor_digest": "8bb5e63dbaaebf9716d63d3125845a7858eb679bdede467dabb276acb88b3fda",
+      "geometry_digest": "8688af8b5967450caba1cbeb81b76010be495832930e56ec45fb434fcce79004",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:a4f45301ab39a17b5c246787eff61d1b26e2eff7ed57a4c934f6390caad3a1df",
+      "descriptor_digest": "e801a3c6d44d9fad7c70479121f8169f873365140dbe0009e7e4ef53b405e06d",
+      "geometry_digest": "cc1c5c856074ce21891be1ac309e7edcd0524b2c25f071e5b184cf757bd5c873",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:7cb01a7dbb019b587085e89663a7e303a0cebd4eaab01656a87765b9ce66265a",
+      "descriptor_digest": "e709f4794b278af91ffeaa6a65fc83c759dc8acb8d81ddf1ec0af97db274465b",
+      "geometry_digest": "a80c249e14204cecadea677bbda6477bd8edf1d35164670118fec6bfb293ab48",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:b5d5869089005d9252bd83368918d18444ae3e3ff8fa125513fba1d3b87684d5",
+      "descriptor_digest": "0f25ed29efad6553dd69370612a3c3d991c39b78f7d6c2112a7a6c644e09ffaf",
+      "geometry_digest": "74ab9090f8d9930adba38dee8c126161e1a1c1f848835a957c85f1680e32cf81",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:304a17ade6eb3c26fcd32b44430cb4e896bc77432d6229a5789b6d53db23f64f",
+      "descriptor_digest": "f595da54b7c72f1e6e405ce0bcedbfef2d6f5f9870ffb597ec4ab8c85a12347e",
+      "geometry_digest": "283502284c6ac295c1f501704de9cc3eb270523c375555b1e163703de1f7fa05",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:7d196898b6b8cd8f1e5774314c84c743518ed76fc4bb45526cab346ae1b004a6",
+      "descriptor_digest": "9fa12a3eb02cd394a4c5a931148532d390e3473e40ab0952521b7e479b18b08f",
+      "geometry_digest": "9e239280055daa5a7816e77dc2f77e214b89f89c45bfa95a2cfcb7845842b50e",
+      "native_family": "bc2.bolt-action-magazine-reload.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:cc628606789b8f2d73e796913c36c4dfdc89cd6f8e279414aa19729df39311e9",
+      "descriptor_digest": "fed73ae3024064ada4de4f325181e1d03326ec8e1eb1811ddad5bde0090c7999",
+      "geometry_digest": "c194ec433fd53a9de6910abf9ccc6dc9b90c1f1a051ee549839bdbdd252b65c1",
+      "native_family": "bc2.bolt-action-magazine-reload.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:a9127353cf9b7c7389e53ddbae6327bcdf107517c6f0a90e3f266fa0d22e47f8",
+      "descriptor_digest": "c2bc403c8dfd6b8aedd5fd84fe2c4d7f39772e34a74f507330940cfb43a152e0",
+      "geometry_digest": "96a262995d0d94287222562dba0dd5abbad439eceff31dc1603272f5ead1bdc4",
+      "native_family": "bc2.bolt-action-magazine-reload.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:e17eaa72190fcc4eb01e36801d41a6d771ac15c038708092165ed90c36adac33",
+      "descriptor_digest": "ba6256ff27a55659b51d7c7b64d208aa87040e930d0dfe566c7f02df32b69046",
+      "geometry_digest": "74c47c6acea59713d1133ab493701844eb5a1fffbeb02293d496e5b72555f4c3",
+      "native_family": "bc2.bolt-action-magazine-reload.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:2bd0524c9604bea44d5c1d45bec1ee876835a2afece03964de21bfe7eb6162e5",
+      "descriptor_digest": "5a2f025edf2a827282316f00b7274dfb202906ebb94502961e767b538f2dedcd",
+      "geometry_digest": "7cc70d91d87c0db680823ba8b749f244afe7821baefe35673b2a374b7352e60f",
+      "native_family": "bc2.bolt-action-magazine-reload.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:a3c42977e56f5a56f4031113a7f6edc9db9587c3c5ae572d84fea6d5c93a00ac",
+      "descriptor_digest": "d13ca4efa5ca91469b11684600a2df1eed08a25e8473de06bbee029918299ec6",
+      "geometry_digest": "9a6d8ed2db0e479498bae148c898070a2dbc8857e0c5dc470bd8b87b28610a92",
+      "native_family": "bc2.bolt-action-magazine-reload.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:834d88aeef8ffcec1480b7c64656ded44d321457a414e6d1902aeef1fad00276",
+      "descriptor_digest": "a85fe8094ad4141eca8ceeeee27aa4793101d60fb116d31a59631309846b7a12",
+      "geometry_digest": "62b6a020c0cb0f1feb61ab8d5828cc2ae0ecc9153454deb516774e93e9f7ac17",
+      "native_family": "bc2.bolt-action-magazine-reload.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:5134eb56c4274cc78b53f5b2fc10f3064d064800d51a5d014cff11ea21ed8afd",
+      "descriptor_digest": "60edac4f8c59b46f4f5e8e849046a4b3b7a6f0dac13df29798babe66e4d5daaf",
+      "geometry_digest": "83c3973aad51143c22aa5db42dcb89145cbc20ff38c53eb4bdb14a9f829785a8",
+      "native_family": "bc2.bolt-action-magazine-reload.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:c03287be1d2c19ecf5e56f62721282876919a4d87ef237d2cdf5bdc0acd0ffb3",
+      "descriptor_digest": "abac4ca3208fe701d7add2d9dc01d07c6489ae7476f24819cb2dfb612e0b40ec",
+      "geometry_digest": "85abef35bcfc0e2ca79b6d86e575b8f1f07e62c2d62a8adfdcc0b1a2a1ed2d7f",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:69eaf910273974736249debf309231a418eb5556bcc628cdac68d7f50253add3",
+      "descriptor_digest": "8fd9d1d1a7c105387dbbffb7288b87b002b304b0ecfacaf5740e552e4485db62",
+      "geometry_digest": "6baffc36ef78c9efc67d5e8e7fec8dee701412ad3a6f5be1559266d31bf747b7",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:f684d060c479c89c9d961fef083e541224e14c7a11371fdc2b41776fe73343ab",
+      "descriptor_digest": "c8d1702eddc33cc6cec78899c028b0900c38a97b97ffbe1b6bbf358b3de2a6da",
+      "geometry_digest": "47ae587d36b53bc57e4e2476a869e3a3b457c2cfa1ed8889b494096a42c0ae7c",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:2d6471a03056b3b2e4e13f2a59baf212565aefa56dccc33895ee43c076b5abb0",
+      "descriptor_digest": "2f97016d0246f46271f24ebed552289fd6e89162ef16d891488d64bb265cfa0c",
+      "geometry_digest": "7d6882532e69a8056d64ceef58246dc8b82e699b3fce592a1fc640b0efadd02c",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:52bfa481c525136589096989304d8b22ec43cc3d684f36b42a97846a54cb5e4a",
+      "descriptor_digest": "22e837a6b3b2f22c55587d7a31a1381556b5f253e11fb7b24d7e212077aada48",
+      "geometry_digest": "56e7616fafda35a6178962a60f25b06a0feb8c470986f097ed98a8c740c31521",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:545e31af17e617544d388a21fc5fe6218dcc788fa48e9f46ef77791fda0aa5b8",
+      "descriptor_digest": "07b1128eb9cbf41d6da440b942b2b7aab43999fb072ebd44c6af31ec1b817f33",
+      "geometry_digest": "4b0b2dafa6fbf3083e587d662ca4bf17a1bcd062329a2359a99bdadc5e31ba90",
+      "native_family": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:7aa7592b0312ca3195604e7797aa200fc22b64b2009be98a94a1ede39451711d",
+      "descriptor_digest": "ea0a73deabed320d308f821ec96cef662f8d957415b31ed7daac605564bea664",
+      "geometry_digest": "abaab00354e5e5a71abc1f48084753f7cf8e5a8b647ac755ef847114c666aa70",
+      "native_family": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:4a8f0b274238635d732abd2cc11fd663760d4ce612ced9272691fa84190fdc58",
+      "descriptor_digest": "fc5ef416f67ccb322b54d0296dd8cfb27d9ea15eaa8f7e5067f2575099917372",
+      "geometry_digest": "c2d55be780b5f40c0eb949eb3868bd510592f0f6d2bb6c44dec89f72f48dc8e0",
+      "native_family": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:3f8bc0cd10418e563b7c74ec9e5b7d88a6caa178bd6b9e8785c5fe9b7567ce25",
+      "descriptor_digest": "a6b49427207fff3a94e9a0792bd220954550295f02623f6f2b520ff38a5013ea",
+      "geometry_digest": "a42c98f328d04f09bde9a039817e8e6e4cf1a745082b7333f1dabc55a2bef44f",
+      "native_family": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:41f9670a90c1b089f3fe239e5d1bd9fda05eecd0b0019136d5f986f65dceeee3",
+      "descriptor_digest": "92d492943ef8cda632ae142973c09fcffb3307a1a7af2180f34ec1ec3d0be66a",
+      "geometry_digest": "47f21066787fcc0204767603fae582cfe0db0535e9ef758f45f9a4c461a47d2e",
+      "native_family": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:778d8e81e10cb929091000a375535d88c2e93fb66375e6476d5b6efcc1cf1d13",
+      "descriptor_digest": "44c1248607c8eba53303aa821271fa0e5fc099cab0b8fa7aa271178e907beb75",
+      "geometry_digest": "8bef496699cdac82ba7ac178c0f8569910717ab174d470bceeffb97a302a42d6",
+      "native_family": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:73f1d6c0d08fd05047cb12e939ba6ee52c396211b57c304ccc9b8062f409f4d8",
+      "descriptor_digest": "cc2291caf02e41d3a08d26c1a4142f43a21ab10773c989d6edd872ab56a0b3e6",
+      "geometry_digest": "f8e376bab7552db69f27636c1d0747723993b04983defbb0fe68504c2a9ea86e",
+      "native_family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+    },
+    {
+      "key": "bc2:magazine-descriptor:d5192f6f7e611fddcf8af969a5a4fb4d656788a6086f8f1d82c07939c809aa69",
+      "descriptor_digest": "f123651287aa4a8cb65e0a775a795bea04c5ce38e05b508be2b46e9e6d092ea2",
+      "geometry_digest": "ff5f94c0b0eea22ceaf52b0cc345fedaedadd42320d2684bb277a065aa2f3b5c",
+      "native_family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+    },
+    {
+      "key": "bc2:magazine-descriptor:6683eecdf056217377c7bdfc8b8248a9b953505d95a8d581a0bff048e5358755",
+      "descriptor_digest": "c6dac68e52b24a2ac8e4626c9fb571a12bce2fef41c4920ec7406951b879d46a",
+      "geometry_digest": "d5079eb1660c94dea2575176377d4e975fcb63f36ffbeb9da018dff1c4088ab4",
+      "native_family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+    },
+    {
+      "key": "bc2:magazine-descriptor:c350d350a994fe9fb6a7ee3fc46b70b419f37e1a809359b325bd9cfa326d1414",
+      "descriptor_digest": "9045d9e9a075ddc6bc512947aa9f7ab0e35dc6bfc0284a26816d91955a30705f",
+      "geometry_digest": "2fc9fb22050152f65c4166c1d83887f3b8c5a8f056102002d4d7f02a2799c187",
+      "native_family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+    },
+    {
+      "key": "bc2:magazine-descriptor:37a2fd9255b12bf5e47a226dd41ff1d52ec5df704075c3ceec70cd3426d5e975",
+      "descriptor_digest": "320052b7dae11af43d47487ba2314c3130468074c6d212ec8b0c65836a746bd5",
+      "geometry_digest": "7330d4a8aae66b2ea7f1380b987c91733684e3626e411ef38f810b58e4ca9837",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:323395ccfdcc4682df390ce420c13358df6d0a1dfa31c126566f31f4d066bb30",
+      "descriptor_digest": "0c156eb4c9b54bb2c904e79007cfe35bab94712b70492f88cd32e2d6b0ef1239",
+      "geometry_digest": "97a9495d8c4b30a832079c7034554c7785566727df12c701144da471b8213443",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:82679abf3c9a5f5679bd565b1c53d14199480ab35ad94aa0b71eddfbac797fd2",
+      "descriptor_digest": "ba2e9b015db68b3feb07745c3da0163b12b19c9a7e731b3e2dd5fc5a5c9eae94",
+      "geometry_digest": "a2f92318f61f04b296a4da805167831e5a0fb7e83d8fbd174bc0558a8cf8848d",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:675f72ae9b9bc4c2dbae796fd61cec112cf70ddae2717ba3784e3dd433eef270",
+      "descriptor_digest": "8684b4a28f81b2db750994b285cb63adb17f8be1ccfd33336df3e462cc061a43",
+      "geometry_digest": "073317a8503829f7356792948e0a9c134bb9a6256b2cd2ede53b6bde8e009405",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:14ca5aad5b706a1b9dc454c65f4934a55382e9232456226a15a6d96a58c572dc",
+      "descriptor_digest": "6a4351b8534c57268515783cb8b93a8b0deb1a527164d370ec1579435d807d97",
+      "geometry_digest": "d830e857e1ac4d0b679905168251ec11b374a0169e5dadb61e8d1c2b9d576049",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:532dcb822624624fe213eae324e06dfacfb4543a504e06ac1e2ad06425facf67",
+      "descriptor_digest": "16b713d46db6e950d1165e9c30713ab1b7689fec6f4fbee1b3bb5a308767ce14",
+      "geometry_digest": "25318061d1a81d6a60977295ac36c4feb39e7b11794def01bb0f67c1afd96833",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:151bc7f5db908e412bf589f90ad27e6d36a982a8f66c448463735e4663bfbac1",
+      "descriptor_digest": "5115f44235a3a88813a2a0a5f5a6d42afa76d28e4807bf2d877b9385acb02b10",
+      "geometry_digest": "90aa22b894b76a45451eb11db19473eda10d5a328259df54ff371577963f5020",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:f0ba77c5dac946388c9b5ee4fbe2a390e67ef76dc137e810e67ca024f68349e3",
+      "descriptor_digest": "8eeb03ccfdc0a41566957b382ef3c9d94917e1b90af9170375aad698c7053b81",
+      "geometry_digest": "729c049fe11f91426631cd1f5db03aee9901ba775fcfa775894a91b4b48a4657",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:5466a21edab829ec521ed15ff209d0cae1202e1c9720c981ec80504016da7813",
+      "descriptor_digest": "3be1da697ecf48453a86d75dbd8f1bf830ee2a8638cb6994ba0839969064965f",
+      "geometry_digest": "95258f0820e08d5b5bdc1502b264720837142eccd0e8de95a2b8ae52d0831b13",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:54b19bb731eaa114d765c82b4974c6e579d23760b17f470f95f4014bb8912959",
+      "descriptor_digest": "016b48cbbd7656cb43d720f4e934de9a2abb72ac34fab5a2fabee58819e91e59",
+      "geometry_digest": "b6c8f5faf4bba01249964266f8798a27afa5e90a47330f8f21d27b95816648cb",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:3dd7ed1f40eab21d2653a52e11f86a4ab1b7925c7c2d5a3678a5b1932add1ea8",
+      "descriptor_digest": "fb7c05e5c1290cce890aeb13e8b8c68d8f04cdf5d1c448eb85c811416a973826",
+      "geometry_digest": "d175b1d568a068e7d74179a292c3fa5eb4aa6b2920c4ae9d9332afd95792c462",
+      "native_family": "bc2.singlefire-magazine-zero-bolt.v1",
+      "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+    },
+    {
+      "key": "bc2:magazine-descriptor:98da580d445de61d73ac71da960a19f846bc4d9b0956ed99c0db3ddc412eb158",
+      "descriptor_digest": "3d137b1fbf5627fc990aff365d8af87074d270f12045c4c02fff4efb7d06e2bd",
+      "geometry_digest": "ecf5082d9bc319b0d30fa2eff405fac24a203303697ba8be157277da2a93557b",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:7e41a821f675656317c4fd3441a7449bd3c8256a7d63cfe9036b9474e748742e",
+      "descriptor_digest": "aee06acc2e5e7106b107d9f8105cddefbbfd54203cc0d1ffa565f70df105a6ec",
+      "geometry_digest": "c29e5ba374d1d49e1a1c7f0f155e93227098df7177db0e5d15e8a8ec809cd45f",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:bbdf00b7b5c94d833086717bb9346d028b3a05c185d7385c29789674d09b4dc2",
+      "descriptor_digest": "9ae27a565772942901686d9dcf8a5d7158e69512056e78b7b35906844aacafd8",
+      "geometry_digest": "52210cafa8e01dd33101cc1a6ecb34feb46951ba1aa3f943c55afabc1bac6dd4",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:b31aebfb1fa3bd62b92e52020688c97af446cc1e60aa41559ac9e3dc8e59f575",
+      "descriptor_digest": "c73120ea25cc6946e03ecaa270c96fe81fc89bf3878d9269a03f60131406c2f7",
+      "geometry_digest": "44586c5c876da2a055403ba9768c9e244d95e8743d1d2d764dc4827b1c84ea26",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:c3c22709659be930c6dc7a831b565ded925abe64ccb68b7f68f9ebc5ad5c567e",
+      "descriptor_digest": "924645a13919d598e325db8cac9cadff5e9996171cb87bf765d39de39e9a9fd0",
+      "geometry_digest": "a1c7801792a50fc05a4ed1ecc39dde7489102abd02c97d31ecb790299498a112",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:11860d9f0259e76ad07b316c34dec70a6dbd72fd731b581317c8473a48d30f85",
+      "descriptor_digest": "827c338d56fe15c8f17289885b60bfcbe68f73271b8f2b3007132cda1bae8722",
+      "geometry_digest": "e14fe1f6082d846f31c9d8bb7d642d2ee3401e355d52497c4646193b2937ff0b",
+      "native_family": "bc2.bolt-action-magazine-reload.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:58f0ad65f6576ba7f6666f1b5dbd06f7373304d9265e189d39c3f76513520307",
+      "descriptor_digest": "46ccf1ab87741d489b2f5c19ff7cea0762bfed50e7ae0ff138d534a60cceb121",
+      "geometry_digest": "930421e996f82378e6bd780e6464f712b42abec64264e1f03d656c611f530178",
+      "native_family": "bc2.bolt-action-magazine-reload.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:c3502874bea7c799efbd7d810661e5b25c5b0d1c6c6d0cf90e77cfb8bf307565",
+      "descriptor_digest": "65c2a2b1f7e12f666faac301f033ba09ff802d3256fb745e4780d1d82e0ad62b",
+      "geometry_digest": "60d2c46bc3bb395dd6dabec9e240c5082827c650affacc795388b4515f81bf98",
+      "native_family": "bc2.bolt-action-magazine-reload.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:04e2e2d372322fd7118521ffc0fc716005dbbb8f05669ceaafb78a28ef3f35c4",
+      "descriptor_digest": "93c7544bfb70aaa9803180020ac7aa8dd97b57c9971a4c8f4c154c9feb259494",
+      "geometry_digest": "41407ccd94298664772573486d6811b44e34339f0bd1b48409d97d6d8c497387",
+      "native_family": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:8313e354ee7e05964b8dbe326625db2340bde01970fe81cdd79ab94bd3f6624f",
+      "descriptor_digest": "1c04bd6d3cf54830aa980ff2f397b527b0a39626e82d8136be389c55e8e1b768",
+      "geometry_digest": "a5a9413e06e041929add5106a5d66a9636572c98a35414e9314cbb991adb751f",
+      "native_family": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:912363965c8217cac287a4cd9a8171cc1f6ef6e301d8d0952bf2f974bfbce1b3",
+      "descriptor_digest": "62b0462ffde2c45fffb5d5e766050726dcce782cc7dd83ba03e211279bc78ee6",
+      "geometry_digest": "1801592a0ea23ad597467c0610eae691e851c3919542ebda068692cfd1e8aed7",
+      "native_family": "bc2.singlefire-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+    },
+    {
+      "key": "bc2:magazine-descriptor:d8c12ee5fdb3d7010d506a6d35ccb7a4659b922df4b91086d53a3720c02574e7",
+      "descriptor_digest": "525af5240a80c30e8c8b289d8a894bec8978dfec009df47532a5a6e2f0fe5e39",
+      "geometry_digest": "b77ef579ec1fc325489f002d373463feadb77092837063b9e8198d04a61ba701",
+      "native_family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+    },
+    {
+      "key": "bc2:magazine-descriptor:a0cd7ccfe9530e190af53ca7a74bc47cf775e4ff3fe8797c9785075776c81553",
+      "descriptor_digest": "eb99584c5649b0745259fadf59de7562c0d58f75a87e9538f82691b779249b5b",
+      "geometry_digest": "023fc7bd29a9cc703db8640575272436efda1ac755fe7941aef3a3506fe82947",
+      "native_family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+    },
+    {
+      "key": "bc2:magazine-descriptor:d803188a5f4f780d2a338a532f61a49c1825af07d2ea85d592916b7008d314ed",
+      "descriptor_digest": "b85a35ea2fcfef19f8e546dcc2e22e55a806974d7521c40e6f60b07083a0161b",
+      "geometry_digest": "730fb20de1c9838a93c3d83e3a3fd1f6b68b2413450e77694a45b87d7628558b",
+      "native_family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+    },
+    {
+      "key": "bc2:magazine-descriptor:d3d4611105dd3a73998b6a3b1c9a07b81cbca4ee7a4c3388b1391038cce84eb1",
+      "descriptor_digest": "785d0e4357bc6d6b82f690f77dccad214219dad423f287a169f114306497b794",
+      "geometry_digest": "fa5c9fd307ce5d8795b5dda7aa4422787ba5b9d0fa45d0e348c3a550b9dd8702",
+      "native_family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+    },
+    {
+      "key": "bc2:magazine-descriptor:51433e30a3e6b097035ab4924f7c3a28d0361479b33be0e10e1614c133961297",
+      "descriptor_digest": "f80000605bde3ac4cfae20444a3f9ebef7a885d19780f6f19fc30c1fd84f9a00",
+      "geometry_digest": "ac1cefa1b50397ea2ea9896c8b5afbb8c3711361a9cfb872913fb6a26eebd282",
+      "native_family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+    },
+    {
+      "key": "bc2:magazine-descriptor:37d95e7c9c8d29f4ba3cfce885933531e185d1de7626e18f2c256b07488394ca",
+      "descriptor_digest": "213ba474253272a23ffef3a45601fd3de03c3052d464ca416462862cf87eccd7",
+      "geometry_digest": "4ded9184bb4190032eabf13a47e976b5a6e0470f831085e04cf12d9c1ef096ec",
+      "native_family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+    },
+    {
+      "key": "bc2:magazine-descriptor:a1b6899b5c924f7fa3535f73c11981dbaa045b6042774e8b12739da094603a95",
+      "descriptor_digest": "5ab04207c57bc62f5981bab7adde750ed59bb99ff8d63a24752992bdc468cdce",
+      "geometry_digest": "0a5dca4302ddaff7c191ada4cd9e36e34cabd1837e27c24ccf2ad83aea04fbb0",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:c3ab6f330c842ea16af3b5a4015571cde4381ae4b321078ff26f2a647d932bc5",
+      "descriptor_digest": "b04be6ebddc37e0a8efc269b6c5a17f5759ee027f955727990b567835702860b",
+      "geometry_digest": "1efed0234491ddd968fb997498b6fd35ba7d0063e07b524b7d9671eeb0629cee",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:12b76e77e43b05585b0ca6f08026907dd14bc97197cbf3b5b78f78c87678237c",
+      "descriptor_digest": "554393b345ef9ccd39e7ca28dbe9dc2e4013f15729941bea631883f73816987a",
+      "geometry_digest": "3543fe0dcf843e18b5d46d5bd387fe6484b5cd72f2a1db5733ca586c0ff453c4",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:eb0fceccd26374a67136958d96b498977123553d6b263b1b0ebc148918eb3d95",
+      "descriptor_digest": "4692f00c70273976a5ad4fe6357e00041c535951892f9396944caeab9c22866b",
+      "geometry_digest": "5f9e5a294b102de847d7bb3498d401557cf759694c53c1b9f9f887a793ebed05",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:8ca3da8433642bcf2b7ca657f390511c761b21ab9b3b0f7c5da10e6fb993f020",
+      "descriptor_digest": "b19a5db7b3a945384722842232431451edc1a37d3b72177785dbc4b0ab8c1be9",
+      "geometry_digest": "34436123f9ff7733777f68d5f3d039fd729e164690e49d25cef126c276398fd7",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:ec450e4890813d6ee9d3d5e7351fd7a9843e5bd67adbc47fd5561e4be0735012",
+      "descriptor_digest": "bb4bddcc7411bf6e9d5be8db689d747fdcb935c0756d2961cd82b08a30469445",
+      "geometry_digest": "33a1735ce02bf43062ab8a6eccad37ca53172dcf4178017c01e2546891aeb00b",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:4f97e7ec41ac74889c14dcd775d64a586b69ff7cdb3977e9cdc38a7500ede30c",
+      "descriptor_digest": "802da22d82a0ed998adcd4e31f8406615d9f3787246cc9227273a199892ce048",
+      "geometry_digest": "1fac41ba64e75f9b3911ecb2b8f5517c1a0af158803d175784ebbbf4e412ba8d",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:6df97060141bc51570d34af7a1de8835fc1f1b4585ff103186af72382a91237a",
+      "descriptor_digest": "8d0631732c1352c7cda26e16bcce05e4d5da516776db3ae13545a96485c7e01d",
+      "geometry_digest": "eca0a27354d62134550a57b4ecc1b01045a0b4f6f9589d5437b75e3a8c11265c",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:dc48ab96e370e3bd6b60d02fd97e6d3d2597f8290320692ffd9b7b7cf8e63565",
+      "descriptor_digest": "d98a7423295caf7e7b1a668b80ff8e9120e5a13f39b1058c5ed6e0ed365e6a84",
+      "geometry_digest": "dee29216dc9dd813a144a895ed3719e1c38425404b488fba992c92ab159fd130",
+      "native_family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+    },
+    {
+      "key": "bc2:magazine-descriptor:2f12ae7620d188380483d36e391c24f5d98899b9bfee0afcf69dab5f810f44ed",
+      "descriptor_digest": "21dfe24c26c4493677495f0af0246bd56805f9c529ef3469f9d99ff8d3c398de",
+      "geometry_digest": "5e300af5661e46507bedd19f969a5cb76852d117865b791c5bc780140aaf8ef2",
+      "native_family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+    },
+    {
+      "key": "bc2:magazine-descriptor:1e83842f6aa6f5f5f41423710b85c69ca25b2613bb1f0b208e7b6e09940f8670",
+      "descriptor_digest": "56c9205b9a508c0933fb509d6c715545052ed8ade11558b25d137fde14404283",
+      "geometry_digest": "d3a9f0384952fadff6a6c0a4f9472f182c74b90ecec52d537a99b6e1b0b811ad",
+      "native_family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f"
+    },
+    {
+      "key": "bc2:magazine-descriptor:4d31138736cae6e33c17a4777efdd9cc5bb77dc69f6ab62a65f354b8a193169d",
+      "descriptor_digest": "ffb4d28d1fccde456951adc75e9b19a66d9371a6ed1b00e5071b27512e395049",
+      "geometry_digest": "371e3517978ae04494ed2a6d6ae7879029290cb0d6d823dd3b51b98d6f0ae802",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:121a7426a50ef627a9f5fb69ea0efcf400f4085d7604b8b9045f75124f2068c0",
+      "descriptor_digest": "c83926c1ff2566fc21a8ef7ca8de861744751f66e08173faea050d9998517603",
+      "geometry_digest": "2f1ec915688a94cb667bd3335f31c5b918b54cdd91ad789aec7d7f8441a2f2c7",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:45f398e90f6d7fcc4a601b92328fdee4383d5337e341bad287a33ca7037a6c64",
+      "descriptor_digest": "ee4ae55665eff5ede7825215dfde7df137cfb477bce04b3e1e5b108f91865e7d",
+      "geometry_digest": "74d08b21bdc532638aff362c268763ad029c9f83beacb55be3510973f3b2d0c3",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:e274022c3fe42e2cac5bb7767f978f695ac5ce8b99e666c1c5bf89119c64572c",
+      "descriptor_digest": "b2456755518854bcbffb7f53dc43d19fee8423c98ab9b40c6b113f3317956a02",
+      "geometry_digest": "32c314bcfb7134aa0bf69b9005179cb0c03c17321b8ff53d40e893028a67ca68",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:bf703cc6c898cb9c9acadf69f7c91693973213997ed3e40941e34c182d61c1cb",
+      "descriptor_digest": "7fe4f80d5f880ab0f8abff61fc61b593d120106d8537c537f7bd6bb8a5e2b3d4",
+      "geometry_digest": "6234cb4c13fd2330bca3af90f74c53c7505fc3a57f1d15b725a90b3492799dbb",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:4f4cd5de7565ff110c07a825713010edd3291f421fb6afaa68c13d2da20c4012",
+      "descriptor_digest": "b6d8cc07abf4f50dceb5fdbfb354c4384c56057302343d6df2cdc4fb22d8d598",
+      "geometry_digest": "f48c2b0ac3df90662aac251cfa6f7750150d962df3d7d85561d6ed2eabdce17c",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:3c24d2117441df6d2392d17ef4239457e04defd13eaf277d5409cece3c9bf3aa",
+      "descriptor_digest": "62233fb7106ed7bf272e0f3b3a14d9c082497290a8b757d3216becca23779634",
+      "geometry_digest": "fdcca0fca647ce63b6bb661096316cab6d766fee68752ed35c47eb1034733027",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:63cff9a8d31c5d9fb6b8b88a1567c244eb70457fd41f44c18cae0d8ae474cabf",
+      "descriptor_digest": "9019ab03e6002f09b01e7f74abb43596997d0f87c6f75f79c7f4fd2453361168",
+      "geometry_digest": "8c1551a381e71ba76f7452057cffc67cb2c30a2ef557fe0bc07f85d1a520ac0c",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:568ad04d9a3d0a2f6ca6d72fdd2ebf64dc7271ba5c3e5457b85cc9d6b05ba912",
+      "descriptor_digest": "7e0f35786784c13cae277d30a139facb9ee4d998c2126756d755220caf4fffad",
+      "geometry_digest": "026f65a2dcf494e3287c7f29fb0534be56d1d47cf005a6c67f23ca89558dc0b2",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:f82cc516cde83c58df2ce57e6f7c84bbdbc8b643630b96c9a9ea8a14592bb324",
+      "descriptor_digest": "529f0b745a0b4ede187dbfdb021f554b1b1e660b800570bc8d8eacab9e72b3fa",
+      "geometry_digest": "f640435825b7a21a41d7225b7b3f19da33976961be4ea98adf78c7c6f6bb5799",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:de895a89d3dfd4d24e665efa52fbe7c3c840db75e7df0d5e1becd95886534659",
+      "descriptor_digest": "ef134a49b04b447e18d89c1fb8cd0676d7d40e219555004fd1046111e3337d16",
+      "geometry_digest": "db07d3309660d45cdbddb1c6a0afd9c4c2b866493139e69b8162821a3b672f11",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:13b8aa537cdea0a5730562015bdc9961ba66018aa17f3a0abae4ab4d1c6c45cd",
+      "descriptor_digest": "c31431276522dd4999abdcc4971d4949ebbd54591b7f9a4eb77cda89fc2640e6",
+      "geometry_digest": "37442b9fe39e5b5ffda67481e4cc535b2eda9d191a2f20b0d665257d03684c51",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:98ec12b73655a4883c20dbe4e9f73ec1b1eed3b61efa50bb9630cd9421cf88f0",
+      "descriptor_digest": "00c1e4398d18f3f29ac5af6e878fe16705ebd6e2e171c5cc902f8507f1366c95",
+      "geometry_digest": "17d1a0cf49b2a6cdef6e2d243f0744e9c4b8f52c41a89db09847869da1a91bc3",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    },
+    {
+      "key": "bc2:magazine-descriptor:95a6bb217edbfd7ba14c2db5e485d6cd56e6d6e6a3bbf5888d319b0be6c92438",
+      "descriptor_digest": "45b0c2a9583f50588da68415370e9f4967440761964a8cd56e7ee739146681aa",
+      "geometry_digest": "2abaf5ac37bf77fcf467f39749fac8f55da88325f12dcc7f06dad3ec1d9d4278",
+      "native_family": "bc2.automatic-magazine-zero-bolt.v1",
+      "instruction_proof_digest": null
+    }
+  ]
+}

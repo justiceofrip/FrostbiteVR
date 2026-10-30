@@ -1,0 +1,20 @@
+DoneY: shared explicit mod-owned pistol after-feed policy and 17 deterministic test groups written.
+Files: include/fvr/interaction/PistolAfterFeedPolicy.h; tests/PistolAfterFeedPolicyTests.cpp.
+PhysicalPistolSlide.h extracts shared raw geometry/stroke/dwell/release kernel; strict chamber API unchanged.
+Existing PhysicalPistolSlideTests.cpp remains unchanged (18 groups); root owns all validation.
+API: Bind(initial native-ready admission), ConfigureMotion(profile, mechanism key).
+BeginTransaction retains exact AmmunitionIntent/Command and pre-removal mod readiness.
+CompleteTransaction joins exact successful AmmunitionReceipt; no chamber inference or ammo mutation.
+Real pre-removal zero or existing debt owes slide; tactical positive removal retains policy readiness.
+Return/refill require exact successful removal lineage; empty return never clears debt or adds rounds.
+UpdateMotion uses explicit fresh adapter hand binding, raw poses, arbiter custody and real release.
+Hand actor/item keys are independent of stable ammunition resource identity/generation.
+ObserveReady needs same-feed receipt plus three unique fresh own-Update invocation/time witnesses.
+Clearance(now) carries exact feed/native witness and measured stroke, or retained tactical status.
+Neither empty-feed stroke nor native readiness alone releases debt; stale/replayed evidence refuses.
+Suspend preserves debt/pending/stroke; exact forward Migrate preserves original transaction contexts.
+Retire requires exact resource, ended actor lifetime and quiesced callbacks; never rolls back ammo.
+Source reviewed against native20 proof SHA7877e01f24a8e9d374f0109119bdd210083acecb7eeded1bf519eef4e9b67561.
+No Git/build/tests/game/process/XR/input/install/subagents performed; root owns checks and integration.
+Unresolved: actual-game all-three-copy firing veto and physical-headset behavior remain unqualified.
+Frozen and retired; exclusive file ownership returned to root, available for explicit findings.

@@ -1,4 +1,5 @@
 #include "Bc2ReloadRequestBridge.h"
+#include "Bc2ShotgunEquipment.h"
 namespace fvr::bc2
 {
 namespace
@@ -29,8 +30,7 @@ interaction::ManualReloadOwner NativeOwner(const Bc2ReloadOwnerMap &m)
 }
 bool Profile(const Bc2ReloadInteractionSample &s)
 {
-    return s.assetName == SpasReloadAsset && s.meshPath == SpasReloadMesh && s.rigFingerprint == SpasReloadRig &&
-           s.selectedMeshIdentityVerified;
+    return ShotgunInteractionMatches(s);
 }
 bool Claim(const interaction::HandClaim &c, const interaction::ReloadInsertionSample &s,
            interaction::InteractionHand hand, interaction::HandClaimKind kind, interaction::HandInteractionKey item)
@@ -121,7 +121,7 @@ Bc2ReloadBridgeResult Bc2ReloadRequestBridge::Begin(const Bc2ReloadInteractionSa
         return Snapshot(Bc2ReloadBridgeReason::NativeUnavailable);
     if (request.owner != PhysicalOwner(*map) || request.operation != ReloadOperation::InsertRound)
         return Snapshot(Bc2ReloadBridgeReason::InvalidRequest);
-    const auto profile = SpasReloadInsertionProfile();
+    const auto& profile = *KnownShotgunEquipment(sample.equipment)->shellInsertion;
     if (!reload_insertion_detail::Key(s.identity.item) || seat.operation != ReloadOperation::InsertRound ||
         seat.identity != s.identity || seat.inputSequence != s.sequence ||
         seat.profile != HandInteractionKey{profile.id, profile.revision} || s.geometrySequence != s.sequence)
@@ -132,7 +132,7 @@ Bc2ReloadBridgeResult Bc2ReloadRequestBridge::Begin(const Bc2ReloadInteractionSa
         s.itemClaim.token.id == s.weaponClaim.token.id ||
         (s.itemClaim.token.prerequisiteClaim && s.itemClaim.token.prerequisiteClaim != s.weaponClaim.token.id))
         return Snapshot(Bc2ReloadBridgeReason::InvalidClaim);
-    if (target.identity != seat.identity || target.shellClaim != seat.itemClaim ||
+    if (KnownShotgunEquipment(target.equipment)!=KnownShotgunEquipment(sample.equipment) || target.identity != seat.identity || target.shellClaim != seat.itemClaim ||
         target.weaponClaim != seat.weaponClaim || target.inputSequence != s.sequence ||
         target.nativeCycle != native.cycle || target.observedNs != s.observedNs ||
         !Fresh(target.observedNs, target.deadlineNs, s.nowNs, 100000000) ||
@@ -192,7 +192,7 @@ void Bc2ReloadRequestBridge::UpdatePresentation(const Bc2ReloadInteractionSample
         return;
     }
     const auto wrist = Multiply(sample.rawLeftWristWorldMeters, *InverseRigid(sample.weaponWorldMeters));
-    const auto profile = SpasReloadInsertionProfile();
+    const auto& profile = *KnownShotgunEquipment(sample.equipment)->shellInsertion;
     // Only fresh raw wrist/placed-weapon geometry can renew the fixed seated
     // landmark. Pulling away drops the guided pose, not the issued insertion.
     if (Distance(wrist, anchor_.weaponFromLeftWristMeters) > profile.releaseDistanceMeters ||
@@ -227,7 +227,7 @@ Bc2ReloadBridgeResult Bc2ReloadRequestBridge::ObservePendingInput(const Bc2Reloa
     if (s.identity.owner != owners_.physical || s.identity.weapon != owners_.weapon ||
         s.identity.trackingEpoch != trackingEpoch_)
         return Cancel(Bc2ReloadBridgeReason::OwnerChanged);
-    if (!Input(s) || !Profile(sample))
+    if (!Input(s) || !Profile(sample) || KnownShotgunEquipment(sample.equipment)!=KnownShotgunEquipment(anchor_.equipment))
         return Cancel(Bc2ReloadBridgeReason::TrackingLost);
     if (s.weaponClaim.token != gunClaim_ ||
         !Claim(s.weaponClaim, s, InteractionHand::Right, HandClaimKind::GunHold, owners_.weapon))
@@ -256,7 +256,7 @@ Bc2ReloadBridgeResult Bc2ReloadRequestBridge::Update(const Bc2ReloadInteractionS
     const auto map = BindBc2ReloadOwners(s.identity.owner, s.identity.weapon, native, s.nowNs);
     if (!map || *map != owners_ || s.identity.trackingEpoch != trackingEpoch_)
         return Cancel(Bc2ReloadBridgeReason::OwnerChanged);
-    if (!Input(s) || !Profile(sample))
+    if (!Input(s) || !Profile(sample) || KnownShotgunEquipment(sample.equipment)!=KnownShotgunEquipment(anchor_.equipment))
         return Cancel(Bc2ReloadBridgeReason::TrackingLost);
     if (!InteractionLease(sample, owners_, native))
         return Cancel(Bc2ReloadBridgeReason::NativeUnavailable);

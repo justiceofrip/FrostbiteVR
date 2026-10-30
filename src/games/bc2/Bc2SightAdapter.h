@@ -39,7 +39,16 @@ inline WeaponSightContact MeasureOpposedSightAdapterContact(const SightAdapterPr
  const auto& family=*p.family;
  if(!((s.assetName==family.primaryAsset&&configuration==family.primaryConfiguration)||
       (s.assetName==family.secondaryAsset&&configuration==family.secondaryConfiguration)))return {};
- return MeasureWeaponSightContact(s,*p.opposed);
+ const auto contact=MeasureWeaponSightContact(s,*p.opposed);
+ // Measurement alone cannot reserve the hand: both leaves and the captured
+ // wrist must support the same grasp that the held preview will consume.
+ // Keep the standalone reader's measurement-only contract unchanged.
+ if(!contact.valid||!contact.previewValid||
+    !interaction::sight_grasp_detail::Proper(contact.frontLocalMeters)||
+    !interaction::sight_grasp_detail::Proper(contact.rawHandLocalFrameMeters)||
+    !interaction::SightGraspBinding::Begin(contact.pivotMeters,contact.axis,contact.sightLocalMeters,
+        contact.handLocalFrameMeters,contact.graspPointMeters,contact.palmPointWristMeters,p.travelRadians))return {};
+ return contact;
 }
 inline const SightAdapterProfile* SightAdapterForFamily(const WeaponModeFamilyProfile* family)noexcept {
  if(!family)return nullptr;

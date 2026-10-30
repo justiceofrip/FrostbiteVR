@@ -1,0 +1,22 @@
+CHAT15 physical feed gesture implementation — 2026-10-30
+Files: include/fvr/interaction/FeedInteraction.h; tests/FeedInteractionTests.cpp.
+Portable FeedInteraction emits FeedPhysicalCompletion from FeedReload.h.
+Each operation requires its own explicitly measured linear/hinge profile.
+Default, unknown, mismatched, reflected, scaled and malformed geometry fails closed.
+Frames are proper rigid row-vector transforms in metres; hinge angles are radians.
+Exact owner/mechanism/profile/operation/resource/goal are retained through motion.
+Current immutable snapshot/input sequences and timestamps are revalidated each step.
+Fresh neutral and a later press at verified measured contact acquire a gesture.
+Threshold hysteresis and fresh endpoint dwell prevent jitter/replay completion.
+Measured return strokes require outbound dwell followed by return dwell.
+Gaps, tracking/hand/focus loss, cancellation and identity changes drop transient motion.
+Recovery requires fresh neutral; failure/duplicate packets cannot supply it.
+operationPermitted defaults false; caller suppresses pending/applied-wait gestures.
+Interrupt never modifies FeedReload or accepted requests; receipt IDs do not reset.
+Completion uses the CURRENT candidate snapshot, raw input sequence and timestamp.
+No observed feed state, ammunition, native authority or readiness is mutated.
+Twenty-five deterministic case groups authored, including all nine distinct operations.
+No test/build/game/XR/Git/process/input/profile/install commands run by this worker.
+Root owns registration, compilation, deterministic execution and both normal builds.
+No real weapon/M60 geometry, native capability, LMG acceptance or headset claim.
+Source review receipt: reports/coordinator-20261030-implementation15/gestures/source-review.txt.

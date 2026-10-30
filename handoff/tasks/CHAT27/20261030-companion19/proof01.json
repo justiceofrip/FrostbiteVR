@@ -1,0 +1,605 @@
+{
+  "schema": "chat27.cinematic_companion_static_code.v1",
+  "evidence_level": "offline file-backed code",
+  "executable_sha256": "3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258",
+  "preferred_base": "0x400000",
+  "script_sha256": "191a35c5ed03b1d413ca6f18d8c41a52ced693d41ce755a2b1a1f992672c51f4",
+  "imported_helper": {
+    "path": "handoff\\tasks\\CHAT27\\20261030-manager18\\cinematic_manager.py",
+    "sha256": "1a6506e11576f290e70f847a65f307cf1cebffab928360120d4fee5e587857fb"
+  },
+  "inherited": [
+    {
+      "path": "handoff\\tasks\\CHAT27\\20261030-manager18\\proof01.json",
+      "sha256": "4ff54dcefc7901926869f376322a023b438a8f1ab1f3477afdd421579936a432"
+    },
+    {
+      "path": "handoff\\tasks\\CHAT27\\20261030-work14\\proof01.json",
+      "sha256": "b5db47e429185f0a5ebe9d37986fe7ec4c4cb40de746bcd9f974f482147101d3"
+    },
+    {
+      "path": "handoff\\tasks\\CHAT27\\20261030-update18\\proof01.json",
+      "sha256": "5b4a5c5c60e3577e6814c9d6a9cc373de3433de26d48f2540b4fde7ee0272f43"
+    }
+  ],
+  "scope": {
+    "maximum_new_function_units": 8,
+    "new_function_units": 8,
+    "complete_new_function_units": 8,
+    "inherited_constructor_reused": 1,
+    "inherited_constructor_bytes": 280,
+    "new_unique_code_bytes": 1922,
+    "total_unique_decoded_code_bytes": 2202,
+    "maximum_code_bytes": 65536,
+    "adjacent_spill_units": 0,
+    "ceiling_met": true,
+    "new_question": "Constructor camera+0xd4 assignment and exact companion interface slots; old service/matrix helpers not redecoded.",
+    "decoding": "Incremental single-instruction dumpbin ranges; chunks stop at return or unconditional branch. Conditional destinations are continued inside the same unit. All final units covered exactly."
+  },
+  "units": [
+    {
+      "rva": "0x4b4340",
+      "size": 280,
+      "sha256": "f55f0a4383abf562545f840fd82a8274cf570552174416cf0699ba5bd1b80b60",
+      "new": false,
+      "complete": true,
+      "meaning": "Inherited camera constructor; new member+0xd4 assignment question only."
+    },
+    {
+      "rva": "0x211390",
+      "size": 103,
+      "sha256": "bbd37eb431225170c4d2cfd737ae40768dbe0e538de9521aac1add41b1e89f55",
+      "new": true,
+      "complete": true,
+      "meaning": "Direct constructor call at camera0x4b435e with receiver camera+0xd0."
+    },
+    {
+      "rva": "0x3b7d30",
+      "size": 240,
+      "sha256": "aa658941e1adc1a85a65954c92a9c57d1b11cb89b24d3bd99062b359126dbeb8",
+      "new": true,
+      "complete": true,
+      "meaning": "Factory called at0x2113b6; return stored at camera+0xd4."
+    },
+    {
+      "rva": "0x3b69f0",
+      "size": 163,
+      "sha256": "f3411f07c650eeed978cd791b7e32e1ea5f16708f07a318c0e91497642701e62",
+      "new": true,
+      "complete": true,
+      "meaning": "Factory last success branch0x3b7e15 constructs0x100-byte object."
+    },
+    {
+      "rva": "0x38c6c0",
+      "size": 86,
+      "sha256": "8511e320ac0ef12262ec4ebb8e5ca4e15b57a4ac858fe13a9a3a801dd183bc0b",
+      "new": true,
+      "complete": true,
+      "meaning": "Exact companion+0x80 assigned table0x102c974 slot+0x2c."
+    },
+    {
+      "rva": "0x38c780",
+      "size": 3,
+      "sha256": "01cb47d078b4841b8408ec4fe278efa83115c6f6e101972987507d2b2b57dcf0",
+      "new": true,
+      "complete": true,
+      "meaning": "Exact companion+0x80 assigned table0x102c974 slot+0x1c."
+    },
+    {
+      "rva": "0x3a6b20",
+      "size": 480,
+      "sha256": "03fe6c9c3d6310bcb44abee251bcf48a6e659378c3e031b5984f631135bbff34",
+      "new": true,
+      "complete": true,
+      "meaning": "Factory first success branch0x3b7d66 constructs0x1b0-byte object."
+    },
+    {
+      "rva": "0x3979b0",
+      "size": 237,
+      "sha256": "27db20de7f56fb34ed2e6eb2c54da68b6cdec6f5cd4aba34f073fb41671296b7",
+      "new": true,
+      "complete": true,
+      "meaning": "Factory second success branch0x3b7da8 constructs0xf0-byte object."
+    },
+    {
+      "rva": "0x3b7840",
+      "size": 610,
+      "sha256": "de5e4f5c90ef5065f082f885750899b0a1e1755c1b6131097cdd352acf9e3ef9",
+      "new": true,
+      "complete": true,
+      "meaning": "Factory third success branch0x3b7de1 constructs0x200-byte object."
+    }
+  ],
+  "exact_instructions": [
+    {
+      "rva": "0x4b4355",
+      "size": 6,
+      "sha256": "a570407fe1e38b0eb5db23825a1c75bebba993aa5ec1cc401bd14b78973ca7d5",
+      "bytes": "8d9ed0000000",
+      "meaning": "Inherited constructor receiver camera+0xd0."
+    },
+    {
+      "rva": "0x2113ad",
+      "size": 6,
+      "sha256": "4eedebb01a58d0b24af124f146e6ea4724732bac1412ebd1c6ada210717eaece",
+      "bytes": "8b80e0000000",
+      "meaning": "Resource passed to factory is [camera constructor second argument+0xe0]."
+    },
+    {
+      "rva": "0x2113bd",
+      "size": 3,
+      "sha256": "f49d9e55cb77604907965d963c4fd7b25f39e7ad6aee1b0542ba1da026799d21",
+      "bytes": "894604",
+      "meaning": "Factory return stored at member receiver+4, hence camera+0xd4."
+    },
+    {
+      "rva": "0x3b7df1",
+      "size": 5,
+      "sha256": "0945799c604efc9208dfd327cfaba30c2bbcb8b933b6d0c66211653da2563892",
+      "bytes": "68302dc001",
+      "meaning": "Final factory predicate receives storage VA0x1c02d30; runtime TypeInfo contents not present in file."
+    },
+    {
+      "rva": "0x3b7dff",
+      "size": 2,
+      "sha256": "841437fd6b8a9aea74f9ee2b7b903afa11b5702e99d301c7fa4bd2ba3665ed2e",
+      "bytes": "741b",
+      "meaning": "Failed final predicate returns null."
+    },
+    {
+      "rva": "0x3b7e01",
+      "size": 5,
+      "sha256": "f91430c6057e45b44e29de121f012cae91217284006137edf5bff10160d55675",
+      "bytes": "6800010000",
+      "meaning": "Final factory success requests0x100-byte allocation."
+    },
+    {
+      "rva": "0x3b6a0d",
+      "size": 6,
+      "sha256": "fd21267c45c1c252126d377396da7c75154d0ab3c40c71c81d6b2a69c6827be2",
+      "bytes": "c706a8c94201",
+      "meaning": "Constructor assigns primary table RVA0x102c9a8."
+    },
+    {
+      "rva": "0x3b6a13",
+      "size": 10,
+      "sha256": "45e27de21d15d06a482b5a91511f03d8f565df8da2901af120429b59f2e28b18",
+      "bytes": "c7868000000074c94201",
+      "meaning": "Constructor explicitly assigns companion+0x80 table RVA0x102c974."
+    },
+    {
+      "rva": "0x3b6a57",
+      "size": 6,
+      "sha256": "96da0e357df3b1394a04e022468d3aa79e3519cd8e37804b897f111fd880ced9",
+      "bytes": "8886fd000000",
+      "meaning": "Constructor initializes companion+0xfd, matching inherited lifecycle field shape."
+    },
+    {
+      "rva": "0x38c6c6",
+      "size": 3,
+      "sha256": "46fc5a096a432e719f9e32f8e05316061f7c0db44f8980fff579f4b51d694d5d",
+      "bytes": "d94190",
+      "meaning": "Getter source starts interface-0x70, hence companion+0x10."
+    },
+    {
+      "rva": "0x38c70a",
+      "size": 3,
+      "sha256": "b93e31eb759a46b8838fadf1a868724e5335909152d15af8834ac0cb2fcfe127",
+      "bytes": "d941c8",
+      "meaning": "Getter final source is interface-0x38, hence companion+0x48."
+    },
+    {
+      "rva": "0x38c780",
+      "size": 3,
+      "sha256": "01cb47d078b4841b8408ec4fe278efa83115c6f6e101972987507d2b2b57dcf0",
+      "bytes": "32c0c3",
+      "meaning": "Exact+0x1c method always returns AL=0."
+    },
+    {
+      "rva": "0x3b1844",
+      "size": 3,
+      "sha256": "02202d2bd08d6f4db3ea66b963a71eb024fc2caa4981d035fee587d51065df75",
+      "bytes": "8b501c",
+      "meaning": "Inherited manager loads interface+0x1c target."
+    },
+    {
+      "rva": "0x3b184b",
+      "size": 2,
+      "sha256": "cefb6ab22ceb39e9ba061187c8ea79abd8c6dd3fb3031ce67c7cb6be1fe8b2e0",
+      "bytes": "84c0",
+      "meaning": "Inherited manager tests AL returned by+0x1c."
+    },
+    {
+      "rva": "0x3b184d",
+      "size": 6,
+      "sha256": "0ac93f30b29c3f086b2fd9195aaf0344e2b51a639eced455ec95b831f1881960",
+      "bytes": "0f8441010000",
+      "meaning": "Zero AL bypasses the matrix comparison to0x3b1994."
+    },
+    {
+      "rva": "0x3b188e",
+      "size": 3,
+      "sha256": "58f3539af42aa4b631ed62a8b19537266928370de9757283d34ed681b25d6bc6",
+      "bytes": "8b522c",
+      "meaning": "Inherited manager loads interface+0x2c only after the gate."
+    },
+    {
+      "rva": "0x3b1898",
+      "size": 2,
+      "sha256": "3b13dd103c9872398081e5c055fec5a762b83f1db6da42d9fdc5432a69eff25d",
+      "bytes": "ffd2",
+      "meaning": "Inherited indirect matrix call bypassed for table0x102c974."
+    },
+    {
+      "rva": "0x3b189a",
+      "size": 7,
+      "sha256": "11524266c752bc1231ceb4c8a6439d7150c8cec6bbc0a07b9ad1d8a560b94dc9",
+      "bytes": "d9842490000000",
+      "meaning": "If another interface passes the gate, consumer reads output translation element+0x30."
+    },
+    {
+      "rva": "0x3a6b44",
+      "size": 6,
+      "sha256": "a8f0250ebe6783b50fd6a0ad170300433cdd9b622d40c1161bdefdec733fbfe5",
+      "bytes": "899e80000000",
+      "meaning": "First factory constructor explicitly zeroes object+0x80; it does not assign the lifecycle interface table."
+    },
+    {
+      "rva": "0x3979dc",
+      "size": 6,
+      "sha256": "7df54b5ccd596276cb80f2fa39b9d7f95ce421768efc3b0110682d04868a50ed",
+      "bytes": "898680000000",
+      "meaning": "Second factory constructor explicitly zeroes object+0x80; different layout."
+    },
+    {
+      "rva": "0x3b7868",
+      "size": 6,
+      "sha256": "a8f0250ebe6783b50fd6a0ad170300433cdd9b622d40c1161bdefdec733fbfe5",
+      "bytes": "899e80000000",
+      "meaning": "Third factory constructor explicitly zeroes object+0x80; later helper writes remain unexamined."
+    }
+  ],
+  "direct_calls": [
+    {
+      "rva": "0x4b435e",
+      "size": 5,
+      "sha256": "e8deb83e25eb04fe9dc778f686418077e3b33255412b7c4f76111722717911df",
+      "target_rva": "0x211390",
+      "role": "Camera member construction.",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x2113b6",
+      "size": 5,
+      "sha256": "9bc47c40b1d91885e0c8ba758b98277e6cdf34dcecd9112ab7f63a39d7cc8dc8",
+      "target_rva": "0x3b7d30",
+      "role": "Companion factory; returned pointer retained at camera+0xd4.",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x3b7d66",
+      "size": 5,
+      "sha256": "f539f27310eca95bec1cb0ee73de499eb06ad44e7c614fcff52de25b0e494a55",
+      "target_rva": "0x3a6b20",
+      "role": "First conditional factory constructor.",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x3b7da8",
+      "size": 5,
+      "sha256": "f1c2099ab52d200dd5376edaddf97020a8c8c5331bd3582e351c342e18173df7",
+      "target_rva": "0x3979b0",
+      "role": "Second conditional factory constructor.",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x3b7de1",
+      "size": 5,
+      "sha256": "958717086447c9b721c705698d71a6045e1133dda72ec14e4ecf15d2cedf6d75",
+      "target_rva": "0x3b7840",
+      "role": "Third conditional factory constructor.",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x3b7e15",
+      "size": 5,
+      "sha256": "d96e7e429d8b85fa16b2d075ed8bc72aa06d38f2ad37e6730211c7838e1f7692",
+      "target_rva": "0x3b69f0",
+      "role": "Fourth conditional factory constructor; explicit secondary table assignment.",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x3b69f9",
+      "size": 5,
+      "sha256": "40c65cd78cc5a3dcf0a761cc7b8b03da8811f7fa811e10417500ec2b1f0230c6",
+      "target_rva": "0x3b63d0",
+      "role": "Undecoded companion base constructor; next exact construction edge.",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x3b7a6a",
+      "size": 5,
+      "sha256": "eff4006baaec4335a5ffb45d4a9e62e475d8f74a9c65614dddb49cdcfec7b5f7",
+      "target_rva": "0x3b6e00",
+      "role": "Undecoded helper on third factory variant; no final+0x80 value asserted for that branch.",
+      "callee_decoded": false
+    }
+  ],
+  "exact_assigned_table_slots": [
+    {
+      "rva": "0x102c990",
+      "size": 4,
+      "sha256": "4974878ff3aa7b4249c80419c5465552eebacb9f28250fdcaf3836e35b5500dc",
+      "table_rva": "0x102c974",
+      "offset": "0x1c",
+      "target_rva": "0x38c780",
+      "decoded": true
+    },
+    {
+      "rva": "0x102c9a0",
+      "size": 4,
+      "sha256": "e2a5192ae3a7332dd46b0d8d54c873ff5c0839c964b399d2221d0d0ff183d6ad",
+      "table_rva": "0x102c974",
+      "offset": "0x2c",
+      "target_rva": "0x38c6c0",
+      "decoded": true
+    },
+    {
+      "rva": "0x102c978",
+      "size": 4,
+      "sha256": "6771d3629022da6005f3c6a26fd632e82491b880ff83fedbf024ed51a194c04b",
+      "table_rva": "0x102c974",
+      "offset": "0x4",
+      "target_rva": "0x211260",
+      "decoded": false
+    }
+  ],
+  "inspected_type_storage": {
+    "rva": "0x1802d30",
+    "size": 16,
+    "sha256": "374708fff7719dd5979ec875d56cd2286f6d3cf7ec317a3b25632aab28ec37bb",
+    "bytes": "00000000000000000000000000000000",
+    "limit": "Zero-filled on-disk storage gives no runtime resource name or selection authority."
+  },
+  "findings": {
+    "creation": "0x4b4340 calls0x211390(camera+0xd0,P). That helper calls0x3b7d30([P+0xe0],0,0) and stores its return at camera+0xd4.",
+    "factory": "Four predicate-selected allocation/constructor alternatives exist:0x1b0/0x3a6b20,0xf0/0x3979b0,0x200/0x3b7840,0x100/0x3b69f0; otherwise null. Exclusive runtime resource selection is not proved.",
+    "assigned_table": "The fourth constructed variant explicitly assigns primary0x102c9a8 and interface at+0x80 to0x102c974 after its base constructor. It initializes+fc/+fd/+fe consistent with inherited start/stop shape. This is a real constructor assignment, not a contiguous-pointer-table inference.",
+    "other_variants": "Other three constructors explicitly zero+0x80 and use different primary tables. Their called helpers were not chased, so no claim that they can never later write+0x80. Generic factory return alone is insufficient to admit the lifecycle interface.",
+    "exact_matrix": "Assigned table+0x2c resolves0x38c6c0. With ECX=companion+0x80, it copies12 floats from companion+0x10..+0x48 into padded matrix output+0..+0x38 and returns the output pointer. It does not read inherited relative angular storage+0x90..+0xc8.",
+    "exact_gate": "Assigned table+0x1c resolves0x38c780, which returns AL=0. At manager0x3b184d this unconditionally selects0x3b1994, bypassing indirect call0x3b1898 and its matrix comparison for this assigned table.",
+    "output_consumer": "The inherited optional path consumes returned translation+0x30/+0x34/+0x38 to compute distance against its comparison singleton. For this table that consumer is unreachable through registration. No selected-view output consumer follows from the edge.",
+    "removal": "Assigned table+4 resolves0x211260 for inherited removal edge0x394332; target intentionally undecoded at unit ceiling.",
+    "authority": "No admitted selected local-player/current-view chain, active blend ownership, HUD condition, entry/exit/skip lifetime, or runtime table state. No cinematic fix follows."
+  },
+  "source_implementation": {
+    "supported_correction": false,
+    "production_modified": false,
+    "reason": "The proposed manager transform edge is gated off for the explicitly constructed companion interface and cannot establish current cinematic/view authority."
+  },
+  "next_unresolved_edge": {
+    "kind": "missing output-consumer join",
+    "missing": "Find the companion update that combines relative angular matrix+0x90..+0xc8 with animated/base transform+0x10..+0x48, then its actual selected local-player-view consumer. The registration comparison edge is closed negative for assigned table0x102c974.",
+    "exact_new_construction_edge": {
+      "callsite_rva": "0x3b69f9",
+      "target_rva": "0x3b63d0",
+      "receiver": "companion",
+      "argument": "resource",
+      "required": "If continuing construction analysis, inspect only this called base constructor for an explicit update-owner relationship; constructor existence alone is not a selected-view join."
+    },
+    "exact_unread_removal_edge": {
+      "callsite_rva": "0x394332",
+      "target_rva": "0x211260",
+      "receiver": "companion+0x80",
+      "slot": "+4",
+      "limit": "Cleanup callback target resolved; no active-view authority implied."
+    }
+  },
+  "execution": {
+    "git": false,
+    "builds": false,
+    "tests": false,
+    "game": false,
+    "process_access": false,
+    "input": false,
+    "xr": false,
+    "profiles": false,
+    "installs": false,
+    "packages": false,
+    "subagents": false,
+    "production_writes": false
+  },
+  "verification": "Executable/inherited proof/helper hashes, exact new decode coverage, preserved decode hashes, instruction bytes, direct E8 destinations and constructor-owned slots verified file-only.",
+  "frozen": true,
+  "saved_decodes": [
+    {
+      "rva": "0x211390",
+      "size": 69,
+      "sha256": "ab104b488dca6403c343bbee50dfae289459764e4127ffe44ddd32b62f6523ca",
+      "unit": "0x211390",
+      "decode_sha256": "4a3bf7ad088172c3d9831bdad2d306159b3e6e5a00c675544ff53afcac9824dc",
+      "instruction_count": 20,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-companion\\decode-00211390-45.txt"
+    },
+    {
+      "rva": "0x2113d5",
+      "size": 34,
+      "sha256": "65f84e5caf01218e1a9a82dcbd62560d2f25cf61c0b0d39f1f95b4c61c38c15e",
+      "unit": "0x211390",
+      "decode_sha256": "1ce8a2a342dc0b2cf4c54c27447f3cb3293a3cdbf134887d10a69a209e83f2bc",
+      "instruction_count": 13,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-companion\\decode-002113d5-22.txt"
+    },
+    {
+      "rva": "0x38c6c0",
+      "size": 86,
+      "sha256": "8511e320ac0ef12262ec4ebb8e5ca4e15b57a4ac858fe13a9a3a801dd183bc0b",
+      "unit": "0x38c6c0",
+      "decode_sha256": "ab41a4c48a3d28095896656cbbf4a72e6b69cbf3fc4b2db55042093e5b3bb2e3",
+      "instruction_count": 31,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-companion\\decode-0038c6c0-56.txt"
+    },
+    {
+      "rva": "0x38c780",
+      "size": 3,
+      "sha256": "01cb47d078b4841b8408ec4fe278efa83115c6f6e101972987507d2b2b57dcf0",
+      "unit": "0x38c780",
+      "decode_sha256": "2f8c197267ab06956d980714dca789ae853212a146b92afbf98d60bbee14fb6a",
+      "instruction_count": 2,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-companion\\decode-0038c780-3.txt"
+    },
+    {
+      "rva": "0x3979b0",
+      "size": 237,
+      "sha256": "27db20de7f56fb34ed2e6eb2c54da68b6cdec6f5cd4aba34f073fb41671296b7",
+      "unit": "0x3979b0",
+      "decode_sha256": "d6c27c830c8105c65ccf71aebf9ed39aefe49ac191620adc2b9fb03a5d286d76",
+      "instruction_count": 53,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-companion\\decode-003979b0-ed.txt"
+    },
+    {
+      "rva": "0x3a6b20",
+      "size": 364,
+      "sha256": "bc6ca75a40fdf269d85d72e9118b638a23ba185fae88a4465ac1e489af9c2cce",
+      "unit": "0x3a6b20",
+      "decode_sha256": "a1b32f044ba54ae13ea26a994d21255c82d0b9d55c0cd98dace1eeb38525df59",
+      "instruction_count": 75,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-companion\\decode-003a6b20-16c.txt"
+    },
+    {
+      "rva": "0x3a6c8c",
+      "size": 97,
+      "sha256": "1ea3a997c0995f1de2328384d24c17c72be6199effcdae19f07c7568e5d1cacf",
+      "unit": "0x3a6b20",
+      "decode_sha256": "92c23d28be698bbd47501d9343aed12c658b0ec796775840683020330a11f530",
+      "instruction_count": 30,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-companion\\decode-003a6c8c-61.txt"
+    },
+    {
+      "rva": "0x3a6ced",
+      "size": 19,
+      "sha256": "e0e43facdaf69e50d21763406fa7747da0c96dc7908e1efbd61bd4be7c593f04",
+      "unit": "0x3a6b20",
+      "decode_sha256": "d7bba5943254a08ada9977d130751d049869bb5864cc391d27a5b9ec8dc76183",
+      "instruction_count": 9,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-companion\\decode-003a6ced-13.txt"
+    },
+    {
+      "rva": "0x3b69f0",
+      "size": 163,
+      "sha256": "f3411f07c650eeed978cd791b7e32e1ea5f16708f07a318c0e91497642701e62",
+      "unit": "0x3b69f0",
+      "decode_sha256": "d01766e15e4b6948e3a21ee23ab46720ba7d25d854caa52346ca55c9e7cb14a8",
+      "instruction_count": 36,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-companion\\decode-003b69f0-a3.txt"
+    },
+    {
+      "rva": "0x3b7840",
+      "size": 496,
+      "sha256": "27541de2f2db3d22b71d54619c7e56ec277613bb019ce81a07c43b02fcf4f0cf",
+      "unit": "0x3b7840",
+      "decode_sha256": "cb18187a43044706e973ad4299998736cb1dd0604ed192e619e586a8f43839d8",
+      "instruction_count": 84,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-companion\\decode-003b7840-1f0.txt"
+    },
+    {
+      "rva": "0x3b7a30",
+      "size": 48,
+      "sha256": "1f26c58d3d96b59d4bfa3a736aa077d9726e73af6ae53810589d8bdadb6e7040",
+      "unit": "0x3b7840",
+      "decode_sha256": "fed3b728e3be5cb71991ce88343a8a9c331f3e71d360fb95c8eb21c98025338b",
+      "instruction_count": 14,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-companion\\decode-003b7a30-30.txt"
+    },
+    {
+      "rva": "0x3b7a60",
+      "size": 49,
+      "sha256": "1b0399bfa1ab5e94be0465ca26d4dede110d9b4b15dd7130d741284a389cfbfb",
+      "unit": "0x3b7840",
+      "decode_sha256": "90b2bba3924b153971c500b3f4261d840d24c2c9c26fd7a7e34360f61c9b0c26",
+      "instruction_count": 18,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-companion\\decode-003b7a60-31.txt"
+    },
+    {
+      "rva": "0x3b7a91",
+      "size": 17,
+      "sha256": "b86732df49bb14b897933dc0a6bcb956c8b1f1795942ba5ee4e0815cf24c5f53",
+      "unit": "0x3b7840",
+      "decode_sha256": "f372f958f6e715bf68e5008e58a7465177eb38173627e67402db842d315f01c4",
+      "instruction_count": 8,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-companion\\decode-003b7a91-11.txt"
+    },
+    {
+      "rva": "0x3b7d30",
+      "size": 61,
+      "sha256": "8c9dd83a163e992107c12ba3ecf20ece83721753dd6d23bcf3b14af58aed53b6",
+      "unit": "0x3b7d30",
+      "decode_sha256": "b10f86e48d13ebb419c76be15801e52c7b1010308dca77a33cc11a43f137eb89",
+      "instruction_count": 21,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-companion\\decode-003b7d30-3d.txt"
+    },
+    {
+      "rva": "0x3b7d6d",
+      "size": 66,
+      "sha256": "ed330fcf0d90b04e6333aba0890f9bbefa9afe4f7dd4401e5140525d99d304ac",
+      "unit": "0x3b7d30",
+      "decode_sha256": "eb798d4d44cdac711b80d440c2b72d16c0b6ffd8b796727622d5c42e887c0743",
+      "instruction_count": 23,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-companion\\decode-003b7d6d-42.txt"
+    },
+    {
+      "rva": "0x3b7daf",
+      "size": 57,
+      "sha256": "5d795b11fbb9f3dc5a5331a228e993db0078bc221b28a6c74a53475d3eccc7d7",
+      "unit": "0x3b7d30",
+      "decode_sha256": "cd63a635666ecfb12ef7052da0ed7eef5cc511363678639859880330a1503a1d",
+      "instruction_count": 21,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-companion\\decode-003b7daf-39.txt"
+    },
+    {
+      "rva": "0x3b7de8",
+      "size": 52,
+      "sha256": "7072ed505fabb04ea15beec3a4e23903434ce5d633e2b475f9536c666f135daa",
+      "unit": "0x3b7d30",
+      "decode_sha256": "82e86c185b14fd1c65514167be437f42d35cd330d7409e3cb924bc75db633fad",
+      "instruction_count": 19,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-companion\\decode-003b7de8-34.txt"
+    },
+    {
+      "rva": "0x3b7e1c",
+      "size": 4,
+      "sha256": "ee0819e8ce47b5aa9bd7c4675a3d0fa205ff5f7508ffac58dd48dbaab1aa5da0",
+      "unit": "0x3b7d30",
+      "decode_sha256": "fbf4dd3f7256f9683f4d2a649c093982c178fb7f58f35319f53d24a6bd59c2be",
+      "instruction_count": 3,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-companion\\decode-003b7e1c-4.txt"
+    },
+    {
+      "rva": "0x4b4340",
+      "size": 191,
+      "sha256": "cfcdd8731f3c056bb224186638f3369fc6377a2467386acc319804881f4c5a18",
+      "unit": "0x4b4340",
+      "decode_sha256": "c4583d66427694bb9682558c310a21b845e69474750a948a0e02801f524c9889",
+      "instruction_count": 45,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-companion\\decode-004b4340-bf.txt"
+    },
+    {
+      "rva": "0x4b43ff",
+      "size": 72,
+      "sha256": "92838f3895c3fe3dd20e522f6b69d8a5b91110fb024b89dbe1192d3feb85ebdc",
+      "unit": "0x4b4340",
+      "decode_sha256": "0e24adc28f858aba36df72858725a2d8f146733b363640e20c09b50b1a7e5a98",
+      "instruction_count": 22,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-companion\\decode-004b43ff-48.txt"
+    },
+    {
+      "rva": "0x4b4447",
+      "size": 17,
+      "sha256": "53399d37cfcf48460a85e9a0157a429661dd166e2c038c0d36910231de841650",
+      "unit": "0x4b4340",
+      "decode_sha256": "f6beda5062227e7e3dcbfa0541e37341653110beca4c9485ddf8e2ccc74d57b0",
+      "instruction_count": 8,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-companion\\decode-004b4447-11.txt"
+    }
+  ]
+}

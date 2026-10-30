@@ -1,0 +1,397 @@
+{
+  "schema": "chat27.cinematic_child_static_code.v1",
+  "evidence_level": "offline file-backed code; no actual-game or headset check",
+  "executable_sha256": "3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258",
+  "preferred_base": "0x400000",
+  "script_sha256": "3cb7f3eb4e60c2a41923d2cdefa2fb0b1c93da9e319b73064d5ac82ac0f0f9b3",
+  "imported_helper": {
+    "path": "handoff\\tasks\\CHAT27\\20261030-manager18\\cinematic_manager.py",
+    "sha256": "1a6506e11576f290e70f847a65f307cf1cebffab928360120d4fee5e587857fb"
+  },
+  "inherited": {
+    "path": "handoff\\tasks\\CHAT27\\20261030-constructor20\\proof01.json",
+    "sha256": "52bc97c398eb5823ad7b29d54c46187de842fb775067a8acb024753d32cdf852",
+    "treatment": "Immutable predecessor. Its child ownership remains valid; this proof refines the previously incomplete argument list and scalar-accessor description."
+  },
+  "scope": {
+    "maximum_new_function_units": 8,
+    "new_function_units": 4,
+    "complete_new_function_units": 4,
+    "unique_decoded_code_bytes": 415,
+    "reused_code_bytes": 209,
+    "total_code_bytes": 624,
+    "maximum_code_bytes": 65536,
+    "adjacent_spill_units": 0,
+    "ceiling_met": true,
+    "stopped_at_unit_ceiling": false,
+    "stop_reason": "Exact branch produces a queue submission; neither transform composition nor its selected-view consumer is reached. Stop at this ownership boundary instead of spending remaining budget on unrelated child internals.",
+    "strategy": "Exact direct edges only; one-instruction dumpbin reads stop at returns/unconditional branches; explicit in-unit branch continuation completes coverage. No whole-image code or xref scan."
+  },
+  "units": [
+    {
+      "rva": "0x41e610",
+      "size": 80,
+      "sha256": "fd33f12c52ca30f560ba7d926ee57ae74c7f7e7479cbd8d7da8c5d1eeead00fa",
+      "complete": true,
+      "meaning": "Exact update edge at0x39cdf5 with constructor-owned child receiver."
+    },
+    {
+      "rva": "0x41e590",
+      "size": 119,
+      "sha256": "faa2361c3a090c7c0d8bed4a22e74daea43f34db0ed8ca175685d42e044cf91f",
+      "complete": true,
+      "meaning": "Direct call from child update at0x41e625; retains child receiver."
+    },
+    {
+      "rva": "0xb50630",
+      "size": 149,
+      "sha256": "5276f5096f96d1682b34985e21ecf846a23b6ece7e144f96edbb24ce11183a0f",
+      "complete": true,
+      "meaning": "Direct call from child update at0x41e657; append a matrix/state record to caller-supplied queue."
+    },
+    {
+      "rva": "0x2ca490",
+      "size": 67,
+      "sha256": "34cd088ae49a96f949c77d7eac22080880c9583a1a048c0c953cdf9933a97bf1",
+      "complete": true,
+      "meaning": "Exact scalar call at0x39cde0; no stack arguments, preserves five prepared child arguments."
+    }
+  ],
+  "exact_instructions": [
+    {
+      "rva": "0x2ca491",
+      "size": 4,
+      "sha256": "f4c96fceab300ffe2306d278131942cd08750eebfd8f6e67f13f1e0e242b1771",
+      "bytes": "80792800",
+      "meaning": "Scalar accessor chooses between object double+0x20 and unsigned dword ratio+0/+4 using flag+0x28."
+    },
+    {
+      "rva": "0x2ca4a7",
+      "size": 1,
+      "sha256": "ae3f4619b0413d70d3004b9131c3752153074e45725be13b9a148978895e359e",
+      "bytes": "c3",
+      "meaning": "First scalar-accessor return leaves the five caller-prepared stack words untouched."
+    },
+    {
+      "rva": "0x2ca4d2",
+      "size": 1,
+      "sha256": "ae3f4619b0413d70d3004b9131c3752153074e45725be13b9a148978895e359e",
+      "bytes": "c3",
+      "meaning": "Second scalar-accessor return also has no stack cleanup."
+    },
+    {
+      "rva": "0x39cdce",
+      "size": 1,
+      "sha256": "4ae81572f06e1b88fd5ced7a1a000945432e83e1551e6f721ee9c00b8cc33260",
+      "bytes": "51",
+      "meaning": "Inherited caller first prepares its second incoming argument B, later child seventh argument."
+    },
+    {
+      "rva": "0x39cdd2",
+      "size": 2,
+      "sha256": "91046df2aa008410555df240b14243aa348b37cd16582c9d8a80ca305afccab2",
+      "bytes": "6a00",
+      "meaning": "Inherited caller next prepares zero, later child sixth argument."
+    },
+    {
+      "rva": "0x39cdd4",
+      "size": 5,
+      "sha256": "8c9348395e6ed90999fc9e3c11cd77e7c57ae98f00786bfe0f512dd351704f26",
+      "bytes": "8d54241852",
+      "meaning": "Inherited caller prepares pointer to local matrix M, later child fifth argument."
+    },
+    {
+      "rva": "0x39cdd9",
+      "size": 2,
+      "sha256": "2f04a3aa051f1f60d695f6c44c0c3d383973dfd446ace8962664a76bb10e31a8",
+      "bytes": "5151",
+      "meaning": "Inherited caller prepares third incoming argument C, then a word overwritten with0.0f."
+    },
+    {
+      "rva": "0x39cddd",
+      "size": 3,
+      "sha256": "aa619cd12d735f14c2b5a03872a988f913b5f94589fbe889857e505dc6c8eb25",
+      "bytes": "d91c24",
+      "meaning": "Store0.0f in future child third argument; scalar accessor does not consume it."
+    },
+    {
+      "rva": "0x41e5bd",
+      "size": 7,
+      "sha256": "8dde0a7d16ed3f50938e38cc43c67679a618ba9022485ad5341f6ea43533ce09",
+      "bytes": "83be8400000000",
+      "meaning": "Indexed scalar writes execute only while child+0x84 is nonzero."
+    },
+    {
+      "rva": "0x41e5df",
+      "size": 5,
+      "sha256": "e397f64772f1672943a479cb81579a5b50d554dcca7a62f153a5f789dc0fe463",
+      "bytes": "f30f110481",
+      "meaning": "First incoming scalar is stored through array [[child+0x58]+0x10]+0x10, indexed by [child+0x64]+0x0c."
+    },
+    {
+      "rva": "0x41e5fd",
+      "size": 5,
+      "sha256": "10b601d7f87c493bc2eb22c0483fb2a3eaa73538d2516e92f7d3ae4014e7e669",
+      "bytes": "f30f110490",
+      "meaning": "Accessor scalar is stored through the same array, indexed by [child+0x60]+0x0c."
+    },
+    {
+      "rva": "0x41e649",
+      "size": 3,
+      "sha256": "e7a5ae23c2e5b0c1204c0b3d605c8dfb588ee77c31c83100504652e4cd499ac0",
+      "bytes": "8b4654",
+      "meaning": "The queued state pointer comes from child+0x54."
+    },
+    {
+      "rva": "0x41e64f",
+      "size": 4,
+      "sha256": "1cbadedef3279a21f24b9bc13d8a0eb1ffe86c46b84e856c2d2680d88b2ceaf9",
+      "bytes": "8b4c243c",
+      "meaning": "Submission receiver is child seventh argument, original companion-update second argument B."
+    },
+    {
+      "rva": "0x41e65d",
+      "size": 3,
+      "sha256": "b6fc3a9ea0896e5943662c03c0846f778e629404ddd60b3a1fd544e439b4c626",
+      "bytes": "c21c00",
+      "meaning": "Child update consumes seven stack arguments."
+    },
+    {
+      "rva": "0xb50636",
+      "size": 6,
+      "sha256": "631791943db1e6c34ca430f746fc5d7553de5434f70f3f5b3c9d567235f59815",
+      "bytes": "8b8120070000",
+      "meaning": "Read current submission count at receiver B+0x720."
+    },
+    {
+      "rva": "0xb50644",
+      "size": 5,
+      "sha256": "f28991510679b0a76fbc4fb7f4f6907cff9d68b95f172fefa3a2f6d08d47e4cf",
+      "bytes": "6bc0700301",
+      "meaning": "Compute record address R=[B]+old_count*0x70."
+    },
+    {
+      "rva": "0xb50649",
+      "size": 6,
+      "sha256": "3c9b9c3d0cd81e2fb39a0e4a6a393d77ec8d279abf3cabf94a6b1128dee499b7",
+      "bytes": "899120070000",
+      "meaning": "Advance submission count; no selected-view predicate is tested here."
+    },
+    {
+      "rva": "0xb50652",
+      "size": 3,
+      "sha256": "6e11034a074ab306522f956bf227190da0e27a2d15b2927e0c7806575358ea82",
+      "bytes": "894840",
+      "meaning": "Record+0x40 receives child+0x54 state pointer."
+    },
+    {
+      "rva": "0xb50667",
+      "size": 2,
+      "sha256": "7b49099e61f4143eef20a9da7c7e9473806157f4b5a9736e4176c87e9fe04ca9",
+      "bytes": "d918",
+      "meaning": "Start copying twelve padded matrix floats from M into R; no matrix multiplication occurs."
+    },
+    {
+      "rva": "0xb506c2",
+      "size": 3,
+      "sha256": "c696d63b977784c81e509a6cd6630b7a010afbc7b8fe6e5909e0ce417e18860f",
+      "bytes": "c22000",
+      "meaning": "Queue helper consumes eight stack arguments."
+    }
+  ],
+  "direct_calls": [
+    {
+      "rva": "0x39cde0",
+      "size": 5,
+      "sha256": "a200a843b3b3fdb8ff118d10f42c45cc91c79bfcd91a077212ddb729ef31c346",
+      "bytes": "e8abd6f2ff",
+      "target_rva": "0x2ca490",
+      "decoded": true,
+      "meaning": "Inherited scalar accessor call; ECX=[TLS+0x0c], zero stack arguments."
+    },
+    {
+      "rva": "0x39cdf5",
+      "size": 5,
+      "sha256": "a90a9f725a512be4ac96d1b9a1ca8f6d172426dabd220874156271acfdf2115c",
+      "bytes": "e816180800",
+      "target_rva": "0x41e610",
+      "decoded": true,
+      "meaning": "Inherited exact starting edge; ECX=child and seven arguments, with five retained across scalar accessor."
+    },
+    {
+      "rva": "0x41e625",
+      "size": 5,
+      "sha256": "b2a26746216e1a60744f65d17d066a5d6ecb8a41691ef9693b9bdb5e862533e7",
+      "bytes": "e866ffffff",
+      "target_rva": "0x41e590",
+      "decoded": true,
+      "meaning": "Pass the first two child arguments to indexed-state updater; ECX remains child."
+    },
+    {
+      "rva": "0x41e5aa",
+      "size": 5,
+      "sha256": "1b792bca36a8de2aa4d60e081effb17d8fc3af4cf8d5021bd00fdea9a691c0fd",
+      "bytes": "e8d119ffff",
+      "target_rva": "0x40ff80",
+      "decoded": false,
+      "meaning": "Drain pending eight-byte child+0x68..+0x6c entries using pointer and byte; target not decoded and its deeper effects are not claimed."
+    },
+    {
+      "rva": "0x41e657",
+      "size": 5,
+      "sha256": "66ad0a47e70f67d8ed59df63f046b49f4426360e456f2a4263a7d1391109f0f2",
+      "bytes": "e8d41f7300",
+      "target_rva": "0xb50630",
+      "decoded": true,
+      "meaning": "Append state/matrix record with ECX=B, the original companion-update second argument."
+    }
+  ],
+  "constants": [
+    {
+      "rva": "0x10d9420",
+      "size": 4,
+      "sha256": "c68830a25204a09f8e77aada6bc5807f607cccaaa0ebb2a7122d317584478a8b",
+      "bytes": "000080bf",
+      "float_value": -1.0,
+      "meaning": "Queued scalar is exactly-1.0f; its semantic role is not inferred."
+    },
+    {
+      "rva": "0x10d95f8",
+      "size": 4,
+      "sha256": "9d459b445179d46efc315fd7ef9a5c8185bd7f3e2860dc6d325ab1b85acf6a96",
+      "bytes": "0000804f",
+      "float_value": 4294967296.0,
+      "meaning": "Unsigned-conversion correction used by scalar ratio accessor."
+    }
+  ],
+  "abi": {
+    "original": "0x39cd30 receives (A, B, C); A is incoming scalar; types of B/C beyond this flow are not independently established.",
+    "local_matrix": "M is the existing stack identity matrix, optionally filled by resolved companion+0x88 owner virtual+0x44. It is distinct storage from companion relative+0x90..+0xc8 and base+0x10..+0x48.",
+    "scalar_accessor": "T=0x2ca490([TLS+0x0c]); zero stack arguments. If byte+0x28 is set, return double+0x20 rounded to float; otherwise return unsigned dword+0 divided by unsigned dword+4, rounded to float. No matrix or caller scalar is read.",
+    "child_call": {
+      "receiver": "[companion+0xd0]",
+      "arguments": [
+        "A",
+        "T",
+        "0.0f",
+        "C",
+        "M",
+        "0",
+        "B"
+      ],
+      "cleanup_bytes": 28
+    },
+    "queue_call": {
+      "receiver": "B",
+      "arguments": [
+        "[child+0x54]",
+        "0.0f",
+        "C (not read in this helper)",
+        "M",
+        "0",
+        "0",
+        "-1.0f",
+        "-1"
+      ],
+      "cleanup_bytes": 32
+    }
+  },
+  "findings": {
+    "child_state": "0x41e590 drains child pending entries via undecoded0x40ff80 and resets the end pointer. When child+0x84 is nonzero and descriptors exist, it stores A/T into the indexed float array reached through child+0x58 using child+0x64/+0x60 descriptors. Descriptor semantics are unproved.",
+    "submission": "0x41e610 then calls0xb50630 with ECX=B. That leaf helper increments B+0x720 and writes R=[B]+old_count*0x70. R+0x00,+04,+08,+10,+14,+18,+20,+24,+28,+30,+34,+38 copy M; R+0x40=[child+0x54], +0x44=0.0f, +0x48=-1.0f, +0x4d=0, +0x50=0, +0x54=-1. Remaining record fields are untouched by this helper.",
+    "ownership_limit": "This proves a constructor-owned child state update and matrix/state submission, not an evaluated transform output. No decoded new function composes companion relative+0x90..+0xc8 with base+0x10..+0x48. The queued record consumer and concrete B ownership are unknown; deeper effects of pending-entry helper0x40ff80 are unexamined.",
+    "acceptance_limit": "No selected local-player view, active camera, HUD, cutscene entry/skip/exit or gameplay-return authority is proved. No source fix or continuous head-rotation override is supported.",
+    "prior_negative": "Manager membership and its inherited false gate were not retraced or promoted into active-camera evidence."
+  },
+  "source_implementation": {
+    "supported_correction": false,
+    "production_modified": false,
+    "proposed_files": [],
+    "proposed_apis": [],
+    "reason": "No transform-composition/output-to-selected-view ownership join."
+  },
+  "next_unresolved_edge": {
+    "producer_callsite_rva": "0x41e657",
+    "producer_target_rva": "0xb50630",
+    "exact_record": "R=[B]+old_[B+0x720]*0x70, where B is original0x39cd30 second argument; record+0x40=[child+0x54] and its first twelve padded matrix floats copy M.",
+    "unresolved": "Consumer of this exact submitted record -> evaluated transform output -> selected local-player view. Consumer target is not identified; no new call target is invented.",
+    "required": "Identify an explicit consumer/owner before any further queue or child expansion; queue scheduling alone cannot establish camera ownership."
+  },
+  "execution": {
+    "git": false,
+    "builds": false,
+    "tests": false,
+    "game": false,
+    "game_process_access": false,
+    "input": false,
+    "xr": false,
+    "profiles": false,
+    "installs": false,
+    "packages": false,
+    "subagents": false,
+    "production_writes": false
+  },
+  "verification": "Executable, predecessor/helper, reused decode and new decode hashes; complete exact unit coverage; instruction bytes, E8 destinations, constants and ABI stack layout verified offline.",
+  "verification_attempts": "Initial proof generation refused a mistaken+1.0 constant expectation before writing output. Exact four-byte read000080bf established-1.0, the expectation was corrected, and final proof generation passed.",
+  "reused_decodes": [
+    {
+      "rva": "0x39cd30",
+      "size": 131,
+      "unit": "0x39cd30",
+      "sha256": "74430c3f82c27bda34c4dd0f2e755835ac03b2607c559583c45750eedfdf0517",
+      "decode_sha256": "dc1b86e06111fff3f15e4352cf40b323e9f2867ffe9095abc2e4ecf4c14e7731",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-0039cd30-83.txt"
+    },
+    {
+      "rva": "0x39cdb3",
+      "size": 78,
+      "unit": "0x39cd30",
+      "sha256": "2c5856b1f3cf3ab2fa3af7184d48ef0f63deae72246d80d3e947b932f487e716",
+      "decode_sha256": "795413e6ccb03c05bb4f536e531607a13ee988687d4365f054922a7022f2ceb8",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-0039cdb3-4e.txt"
+    }
+  ],
+  "saved_decodes": [
+    {
+      "rva": "0x2ca490",
+      "size": 24,
+      "unit": "0x2ca490",
+      "sha256": "477cb17a8f7e048c5a73a070d54e5d9f94b29bcd6d5f99db3d7ff9755b2db78f",
+      "decode_sha256": "1868670547c2f63292d294558e18cb22e4c5aaefbb1385d4043e2ea4cd6da143",
+      "path": "reports\\coordinator-20261030-cinematic-child21\\decode-002ca490-18.txt"
+    },
+    {
+      "rva": "0x2ca4a8",
+      "size": 43,
+      "unit": "0x2ca490",
+      "sha256": "7fd93750871e07f4e91d406e7373fa3120ea4d536ec318e5887b784389f8caca",
+      "decode_sha256": "9f55f137166049c502edf1e439edb271e291d8f7a1ed0974757260d52374cb48",
+      "path": "reports\\coordinator-20261030-cinematic-child21\\decode-002ca4a8-2b.txt"
+    },
+    {
+      "rva": "0x41e590",
+      "size": 119,
+      "unit": "0x41e590",
+      "sha256": "faa2361c3a090c7c0d8bed4a22e74daea43f34db0ed8ca175685d42e044cf91f",
+      "decode_sha256": "f029ead3fe39a4312c400eceb8bc426d78efef39da232a734de805d92c4c7b70",
+      "path": "reports\\coordinator-20261030-cinematic-child21\\decode-0041e590-77.txt"
+    },
+    {
+      "rva": "0x41e610",
+      "size": 80,
+      "unit": "0x41e610",
+      "sha256": "fd33f12c52ca30f560ba7d926ee57ae74c7f7e7479cbd8d7da8c5d1eeead00fa",
+      "decode_sha256": "620562c401180813e779c56cc0b040fd0666add3dec432642d6f609475b16cce",
+      "path": "reports\\coordinator-20261030-cinematic-child21\\decode-0041e610-50.txt"
+    },
+    {
+      "rva": "0xb50630",
+      "size": 149,
+      "unit": "0xb50630",
+      "sha256": "5276f5096f96d1682b34985e21ecf846a23b6ece7e144f96edbb24ce11183a0f",
+      "decode_sha256": "cb96186a948778851a0cb0d5ee8c1da1fa7672ddeaf07ff980b63cbcb8000eb1",
+      "path": "reports\\coordinator-20261030-cinematic-child21\\decode-00b50630-95.txt"
+    }
+  ],
+  "frozen": true
+}

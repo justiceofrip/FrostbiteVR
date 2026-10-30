@@ -1,0 +1,224 @@
+{
+  "schema": "fvr.bc2.pistol_feed_dependency_plan.v1",
+  "evidence_level": "cached_authored_json_and_source_read_only",
+  "native_admission": false,
+  "headset_acceptance": false,
+  "sources": {
+    "metadata": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+      "sha256": "aa7a85e4c9cac427a095eaddcf191947f8495ffbe19677fd4fdd8e58d1dac48a"
+    },
+    "pistol_bindings": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\pistol-sniper-shotgun-mechanisms-candidate\\batch\\reference-bindings.json",
+      "sha256": "367daddaf86244359245312db8028756b91bf763b34535aa1191253db3981559"
+    },
+    "pistol_meshes": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\pistol-sniper-shotgun-mechanisms-candidate\\batch\\mesh-bindings.json",
+      "sha256": "641173d9aeb52d1e436e42a831c02a9f5217fa53338e9c34f94bb987adefa848"
+    },
+    "m1911_bindings": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\mesh312-research\\reference-bindings.json",
+      "sha256": "3813a763b4640355e699f280a8a8dd9fcc6710ca03f57f7df3afe60c867d1ae7"
+    },
+    "m1911_meshes": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\mesh312-research\\mp-mesh-bindings.json",
+      "sha256": "fc1e43f8ba9146e47d3a262704b3d93a375fb44dd096108905efd27bf5d64c15"
+    },
+    "original_jobs": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\automatic-magazine-stock-bolt-20261003-candidate\\extended-descriptor-jobs.json",
+      "sha256": "ff4e5adab0bf3ed046f648bc96503254f7a3887dedfe21c742f846fcf13571c6"
+    },
+    "existing_geometry": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\profiles\\experimental-pistol-sampled242\\exact-geometry.json",
+      "sha256": "bf3d5339930a38f4125bf64497ed3df33e8c5183a4a2f40d0e7ba248d15a0ff6"
+    },
+    "existing_native_reviews": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\profiles\\resource-enrollment295-pistol\\exact-reviews.json",
+      "sha256": "258d186f317199621956881899a580f85e71a149fb0d87c3ca3701e08c983b20"
+    },
+    "singlefire_proof": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\profiles\\singlefire238\\static-proof.json",
+      "sha256": "513aaee389e14d98f59cab742b00508f6b2f03689af10a2518271a42bbcacbae"
+    }
+  },
+  "configurations": [
+    {
+      "asset": "M9",
+      "configuration_resource": "Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9Beretta.dbx",
+      "configuration_guid": "f4692ba9-a65b-420e-86e3-b34693fa384d",
+      "configuration_sha256": "5e671d40c30fa8d718c16e75fb22220e47e7b40325eba4be6a95cbfefcb29f91",
+      "fully_enrolled": false,
+      "native_registry": false,
+      "geometry_profile_index": 0,
+      "visibility_row_present": false,
+      "body_catalog_indices": [],
+      "binding_pointer": "/profiles/47",
+      "binding_source": "pistol_bindings",
+      "mesh_pointer": "/weapons/48",
+      "mesh_source": "pistol_meshes",
+      "missing": [
+        "exact_native_review_and_registry_row",
+        "detached_magazine_catalog_cache_record",
+        "exact_configured_body_catalog_cache_record",
+        "exact_visibility_descriptor"
+      ]
+    },
+    {
+      "asset": "M9-3",
+      "configuration_resource": "Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9-3.dbx",
+      "configuration_guid": "5bd5cc30-2813-44a3-bf08-6d23eaa66394",
+      "configuration_sha256": "8ba71d710a9822745622e66c77ae601367fb5230676ed8834611f0ebc74d9279",
+      "fully_enrolled": false,
+      "native_registry": false,
+      "geometry_profile_index": null,
+      "visibility_row_present": false,
+      "body_catalog_indices": [],
+      "binding_pointer": "/profiles/46",
+      "binding_source": "pistol_bindings",
+      "mesh_pointer": "/weapons/47",
+      "mesh_source": "pistol_meshes",
+      "missing": [
+        "exact_native_review_and_registry_row",
+        "detached_magazine_catalog_cache_record",
+        "exact_configured_body_catalog_cache_record",
+        "exact_magazine_geometry_profile",
+        "exact_visibility_descriptor"
+      ]
+    },
+    {
+      "asset": "M1911",
+      "configuration_resource": "Objects/Weapons/Handheld/Beach/M1911A1/M1911A1.dbx",
+      "configuration_guid": "e9e77835-ffe4-4f7b-8784-0970c71e051b",
+      "configuration_sha256": "7d94e90adc48c527abaec2a3d6f540b2f22417c4a42a5b0df0b3293e2f8e80c0",
+      "fully_enrolled": false,
+      "native_registry": false,
+      "geometry_profile_index": null,
+      "visibility_row_present": false,
+      "body_catalog_indices": [],
+      "binding_pointer": "/profiles/0",
+      "binding_source": "m1911_bindings",
+      "mesh_pointer": "/weapons/66",
+      "mesh_source": "m1911_meshes",
+      "missing": [
+        "exact_native_review_and_registry_row",
+        "detached_magazine_catalog_cache_record",
+        "exact_configured_body_catalog_cache_record",
+        "exact_magazine_geometry_profile",
+        "exact_visibility_descriptor"
+      ]
+    },
+    {
+      "asset": "MP443",
+      "configuration_resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach.dbx",
+      "configuration_guid": "a1617ba1-b5ef-4a8c-94d2-79cd1afd7b8a",
+      "configuration_sha256": "e2057d4456fc5619b556c5db67716d5fd2f0c91eb07e7a27276811e8e670f412",
+      "fully_enrolled": false,
+      "native_registry": false,
+      "geometry_profile_index": null,
+      "visibility_row_present": true,
+      "body_catalog_indices": [],
+      "binding_pointer": "/profiles/16",
+      "binding_source": "pistol_bindings",
+      "mesh_pointer": "/weapons/17",
+      "mesh_source": "pistol_meshes",
+      "missing": [
+        "exact_native_review_and_registry_row",
+        "detached_magazine_catalog_cache_record",
+        "exact_configured_body_catalog_cache_record",
+        "exact_magazine_geometry_profile"
+      ]
+    },
+    {
+      "asset": "MP443_sp",
+      "configuration_resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx",
+      "configuration_guid": "58098858-821b-4406-a19c-ae62e5d38bdf",
+      "configuration_sha256": "e16f5713854ca38ab58d61bd3c568e2f87533c0e82032d71d61f27449d5484cc",
+      "fully_enrolled": true,
+      "native_registry": true,
+      "geometry_profile_index": 1,
+      "visibility_row_present": true,
+      "body_catalog_indices": [
+        44,
+        45
+      ],
+      "binding_pointer": "/profiles/71",
+      "binding_source": "pistol_bindings",
+      "mesh_pointer": "/weapons/72",
+      "mesh_source": "pistol_meshes",
+      "missing": []
+    }
+  ],
+  "active_normal_caches": [
+    "G:\\Unity\\VRMMO\\FrostbiteVR\\build\\x86\\CMakeCache.txt",
+    "G:\\Unity\\VRMMO\\FrostbiteVR\\build\\x64\\CMakeCache.txt"
+  ],
+  "normal_headers": [
+    "profiles/opening426/CombinedRegistry.h",
+    "profiles/opening426/CombinedGeometry.h"
+  ],
+  "missing_code": "No mechanics/parser gap identified by this bounded dependency inspection; generated data and review records remain required.",
+  "cache": {
+    "existing_rows": 49,
+    "missing_rows": 8,
+    "prospective_rows": 57,
+    "max_rows": 64,
+    "max_bytes": 16777216,
+    "detached_key": [
+      "asset",
+      "mesh",
+      "part"
+    ],
+    "body_part_rule": "body_holstered_sha256(configuration_resource)[:16]",
+    "source": "config/body-ammo-assets.json"
+  },
+  "commands": [
+    {
+      "purpose": "Prepare exact5 cached input JSON; emits no native or new contact reviews",
+      "command": "py -3.12 -B handoff/tasks/CHAT16/20261030-feedbatch38/prepare_inputs.py --output reports/coordinator-20261030-feedbatch38",
+      "optional": "--jobs ROOT_CONSOLIDATED_JOBS"
+    },
+    {
+      "purpose": "Derive available complete assembly/contact/path candidates using existing shared generator; root executes named installed reads",
+      "command": "py -3.12 -B tools/bc2_authored_magazine_geometry.py --game \"G:/New folder (2)/Battlefield Bad Company 2\" --grip-bindings reports/coordinator-20261030-feedbatch38/reference-bindings.json --mesh-bindings reports/coordinator-20261030-feedbatch38/mesh-bindings.json --reviewed-contacts reports/coordinator-20261030-feedbatch38/existing-contact-reviews.json --asset M9 --paired-reload-grasp M9 --rigid-assembly M9 --sampled-magazine-path M9 --asset M9-3 --paired-reload-grasp M9-3 --rigid-assembly M9-3 --sampled-magazine-path M9-3 --asset M1911 --paired-reload-grasp M1911 --rigid-assembly M1911 --sampled-magazine-path M1911 --asset MP443 --paired-reload-grasp MP443 --rigid-assembly MP443 --sampled-magazine-path MP443 --asset MP443_sp --paired-reload-grasp MP443_sp --rigid-assembly MP443_sp --sampled-magazine-path MP443_sp --output reports/coordinator-20261030-feedbatch38/magazine-geometry.json",
+      "limits": "Existing SP contact review stays exact. MP443 needs independent exact semantic/contact review if ambiguous; M9-3/M1911 may still report geometry/contact gaps. No header or enrollment promised by this command."
+    },
+    {
+      "purpose": "Generate exact5 visibility report; saved matching rig trace is an explicit input, not synthesized",
+      "command": "py -3.12 -B tools/bc2_visibility_descriptors.py --game \"G:/New folder (2)/Battlefield Bad Company 2\" --configured-catalog reports/coordinator-20261030-feedbatch38/configured-catalog.json --installed-inventory \"G:/Unity/VRMMO/bc2vr-recovery/mesh312-research/inventory.json\" --trace ROOT_EXISTING_SAVED_NATIVE_RIG_TRACE --report reports/coordinator-20261030-feedbatch38/visibility.json --header reports/coordinator-20261030-feedbatch38/Visibility.generated.h",
+      "unresolved_input": "Exact saved trace path not supplied or surveyed; requires complete ske01 weapon_profile_samples. Reuse existing root evidence."
+    },
+    {
+      "purpose": "Export geometry header once every requested profile passes and exact role reviews exist",
+      "api": "bc2_authored_magazine_geometry.cpp_header(document, set(ASSETS)); reuse existing exact SP geometry if unchanged, retain its digest56e7616fafda35a6178962a60f25b06a0feb8c470986f097ed98a8c740c31521"
+    },
+    {
+      "purpose": "Prepare four new detached+whole-body rows with existing shared extraction APIs",
+      "api": [
+        "bc2_magazine_assembly_cache.derive_cache(mesh_raw,lod_data,Skeleton(skeleton),Clip(static),Clip(reload),exact_geometry_profile)",
+        "bc2_configured_body_assets.composite(game,pool,exact_visibility_spec,exact_reference_binding,exact_geometry_profile,skeleton,known,inverse)",
+        "bc2_configured_body_assets.compact_cache_sections(payload,rows)",
+        "bc2_body_ammo_assets.catalog_header(merged_rows)"
+      ],
+      "prerequisites": [
+        "Each detached row retains assembly_source={profile,mesh,lod,skeleton,static,reload} exact pins; never copy SP asset identity.",
+        "Each body row retains configuration_archive/configuration_archive_index_sha256, closed_archive/closed_archive_index_sha256 and exact DBX mesh references.",
+        "Preserve all49 existing catalog/cache records; append8 only after generic extraction succeeds. No standalone creation CLI exists for the new composite+assembly seed rows; use these existing library APIs in root preparation."
+      ]
+    },
+    {
+      "purpose": "Join exact native review, geometry, visibility and5-config subset body catalog",
+      "command": "py -3.12 -B tools/bc2_resource_enrollment.py --jobs reports/coordinator-20261030-feedbatch38/selected-jobs.json --reviews ROOT_REVIEWED_EXACT5_NATIVE_REVIEWS --geometry reports/coordinator-20261030-feedbatch38/magazine-geometry.json --visibility reports/coordinator-20261030-feedbatch38/visibility.json --catalog ROOT_EXACT5_BODY_AND_MAGAZINE_CATALOG --output reports/coordinator-20261030-feedbatch38/enrollment.json --header reports/coordinator-20261030-feedbatch38/PistolRegistry.generated.h",
+      "prerequisites": "Four missing exact native-key/digest review rows; do not duplicate existing SP row in combined registry. Native proof classification is data, not review."
+    },
+    {
+      "purpose": "Regenerate private staged cache after merged reviewed metadata catalog exists",
+      "command": "py -3.12 -B tools/bc2_body_ammo_assets.py --game \"G:/New folder (2)/Battlefield Bad Company 2\" --catalog ROOT_MERGED_REVIEWED_BODY_CATALOG --body-equipment --resource-content --output reports/coordinator-20261030-feedbatch38/body-ammo.fvrprop",
+      "limits": "Private G: staging only; do not install. Enforce unchanged16MiB cache bound."
+    }
+  ],
+  "scope_limits": [
+    "No build/test/game/XR/install/Git/native executable analysis ran.",
+    "No native reviews minted. No native per-config success inferred from generated data.",
+    "After-feed slide requires the existing native magazine completion owner/receipt; slide geometry alone supplies none."
+  ]
+}

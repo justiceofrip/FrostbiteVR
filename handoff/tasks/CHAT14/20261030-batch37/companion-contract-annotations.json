@@ -1,0 +1,393 @@
+{
+  "schema": "fvr.bc2.mechanism_registry_annotations.v1",
+  "sources": {
+    "actions": {
+      "path": "bc2vr-recovery/action379-batched/actions.json",
+      "sha256": "c1e775329c56c32bec9ed49392d5b080f4b9f50bbd66c0df15945f98d9dbd7b8"
+    },
+    "belt37": {
+      "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/handoff/tasks/CHAT14/20261030-batch37/roles-geometry-policy.json",
+      "sha256": "8d559fc53a33ee6bd15234530078da2c3f1ededa617001fdaa80cbc47fca746a"
+    }
+  },
+  "profiles": [
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:2e907a5781437c8d857df9c56b3c7cbb85fd31e40d7a00cea4e6853292d4553b",
+      "descriptor_digest": "0c3e487bc8a09eee0cb2e5c460b917481116af5ff41f0c40276167e7bf77755b",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/145/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/145/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/145/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/145/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/roles"
+      },
+      "geometry": {
+        "meshSha256": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/meshSha256"
+        },
+        "lodSha256": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/lodSha256"
+        },
+        "clipSha256": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/clipSha256"
+        },
+        "skeletonSha256": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/skeletonSha256"
+        },
+        "weaponFromHinge": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/weaponFromHinge"
+        },
+        "hingeFromOpeningContact": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/hingeFromOpeningContact"
+        },
+        "hingeFromClosingContact": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/hingeFromClosingContact"
+        },
+        "weaponFromCoverReference": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/weaponFromCoverReference"
+        },
+        "coverTravelRadians": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/coverTravelRadians"
+        },
+        "poses": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/poses"
+        },
+        "coverCompanions": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/cover_companion_candidates"
+        }
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/145"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/5"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.0092,
+        "orientationToleranceRadians": 0.189628,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.426663,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.032871,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.032871,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.032871,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    },
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:c1a74a0b4d07ae614a7c3a48455c0eb361714404263f88327da8ec710a2dd4d9",
+      "descriptor_digest": "8775a60a29e8bc0f073726be12c82a5e2fd772365843c44fce8ef3460c7657d3",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/157/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/157/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/157/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/157/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/roles"
+      },
+      "geometry": {
+        "meshSha256": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/meshSha256"
+        },
+        "lodSha256": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/lodSha256"
+        },
+        "clipSha256": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/clipSha256"
+        },
+        "skeletonSha256": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/skeletonSha256"
+        },
+        "weaponFromHinge": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/weaponFromHinge"
+        },
+        "hingeFromOpeningContact": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/hingeFromOpeningContact"
+        },
+        "hingeFromClosingContact": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/hingeFromClosingContact"
+        },
+        "weaponFromCoverReference": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/weaponFromCoverReference"
+        },
+        "coverTravelRadians": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/coverTravelRadians"
+        },
+        "poses": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/poses"
+        },
+        "coverCompanions": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/cover_companion_candidates"
+        }
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/157"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/10"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.0092,
+        "orientationToleranceRadians": 0.189628,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.426663,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.032871,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.032871,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.032871,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    },
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:7bb572fe1e1efe193567d5aae46d68fe9c7865cabe79c95897cc3ca228f1f4e2",
+      "descriptor_digest": "2695de08dbfb4877d1c0ed41d45cd71e8072a8c5b60f316fc7d20514357f24d5",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/163/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/163/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/163/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/163/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/roles"
+      },
+      "geometry": {
+        "meshSha256": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/meshSha256"
+        },
+        "lodSha256": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/lodSha256"
+        },
+        "clipSha256": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/clipSha256"
+        },
+        "skeletonSha256": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/skeletonSha256"
+        },
+        "weaponFromHinge": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/weaponFromHinge"
+        },
+        "hingeFromOpeningContact": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/hingeFromOpeningContact"
+        },
+        "hingeFromClosingContact": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/hingeFromClosingContact"
+        },
+        "weaponFromCoverReference": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/weaponFromCoverReference"
+        },
+        "coverTravelRadians": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/coverTravelRadians"
+        },
+        "poses": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/geometry/poses"
+        },
+        "coverCompanions": {
+          "source": "belt37",
+          "pointer": "/groups/d12de1d8f77364da5bb40efe421ca295e24c6dd37a1d9ed0dfd34af1d6af0936/cover_companion_candidates"
+        }
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/163"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/12"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.0092,
+        "orientationToleranceRadians": 0.189628,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.426663,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.032871,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.032871,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.032871,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    }
+  ]
+}

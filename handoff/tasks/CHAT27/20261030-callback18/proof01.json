@@ -1,0 +1,621 @@
+{
+  "schema": "chat27.cinematic_callback_static_code.v1",
+  "evidence_level": "offline file-backed code",
+  "executable_sha256": "3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258",
+  "preferred_base": "0x400000",
+  "script_sha256": "9aa5418f69c89388e48a14afa767c3a2a69f2d29a6ee7ed7db183867aff77802",
+  "inherited": {
+    "path": "handoff\\tasks\\CHAT27\\20261030-methods17\\proof01.json",
+    "sha256": "af327be2ac45a67eaa428b99a559c9f9c596caa79922f47ed889da624cc491b8",
+    "used": "Previously proved camera+0xdc interface callback0x49dc10 converts to whole camera and forwards fourth argument for event discriminators0x1f/0x2f."
+  },
+  "scope": {
+    "maximum_units": 8,
+    "new_function_units": 8,
+    "adjacent_units": 0,
+    "unique_decoded_code_and_padding_bytes": 1543,
+    "sum_requested_decode_bytes": 1556,
+    "function_bytes": 1517,
+    "maximum_code_bytes": 65536,
+    "ceiling_met": true,
+    "stopped_at_unit_limit": true,
+    "range_strategy": "Small instruction-boundary continuations; branches locate same-function blocks; stop at explicit returns and padding. Truncated final instruction fragments are retained and re-decoded from the same instruction start. No next-table-target end bounds."
+  },
+  "units": [
+    {
+      "rva": "0x4955a0",
+      "size": 1144,
+      "sha256": "dbc28073d22fef45c6c1a9b494bcf52c5eec0079ef1647c1ce033a708bb0640c",
+      "meaning": "Filtered camera callback callee; two angular channels and padded matrix update."
+    },
+    {
+      "rva": "0x38c640",
+      "size": 122,
+      "sha256": "534b972d69181b06db0a1fba115f50322c9561642fd292298f32a814a6c62bc3",
+      "meaning": "Copies twelve input floats into receiver+0x90..+0xc8, skipping padding lanes."
+    },
+    {
+      "rva": "0x2128f0",
+      "size": 126,
+      "sha256": "b2ba4bb7b6ee64fb1506f3baa0229ea11899c950a41f4869159a4d4ef1822929",
+      "meaning": "Numeric input selector; float array or packed-bit result. Input type is unproved."
+    },
+    {
+      "rva": "0x212b80",
+      "size": 7,
+      "sha256": "0be90990698b6afdd97412cf1700a54376b007a393fd3c17dbddbcda2f510baa",
+      "meaning": "Returns float at incoming payload+0xa0; field name unproved."
+    },
+    {
+      "rva": "0x3af9e0",
+      "size": 48,
+      "sha256": "385c6d05f39defdfb0ac64f5e6cb1a5bcde20cac45a4e0c7d1f72551eb894e4a",
+      "meaning": "Returns fixed singleton RVA0x1170d80 with guarded lazy initialization."
+    },
+    {
+      "rva": "0x38d550",
+      "size": 58,
+      "sha256": "91c3908515e1e674aa65cc5006cb7fbaa331e7c56e46a7feffac0c754b95669b",
+      "meaning": "Returns a selected scalar divided by receiver+0xcc; no object type admitted."
+    },
+    {
+      "rva": "0x8521b0",
+      "size": 6,
+      "sha256": "dcf1b123c2c512fb8cfc07fcf3d397d9dc39082d1a744ff73304595a56fc42ed",
+      "meaning": "Import thunk to MSVCR80.dll!_CIcos."
+    },
+    {
+      "rva": "0x8521b6",
+      "size": 6,
+      "sha256": "581f71cd66ec0676e81051e1477563144b40adce66e09307b7967e9d3f40136e",
+      "meaning": "Import thunk to MSVCR80.dll!_CIsin."
+    }
+  ],
+  "facts": {
+    "imports": [
+      {
+        "iat_rva": "0x1005528",
+        "dll": "MSVCR80.dll",
+        "name": "_CIcos",
+        "lookup_entry": {
+          "rva": "0x10e5b34",
+          "size": 4,
+          "sha256": "b893d6dd958279c1fe854d0aba012b5ffda53d4837ec828d077bca16552be548"
+        }
+      },
+      {
+        "iat_rva": "0x100552c",
+        "dll": "MSVCR80.dll",
+        "name": "_CIsin",
+        "lookup_entry": {
+          "rva": "0x10e5b38",
+          "size": 4,
+          "sha256": "ddc76edbbf1f438770c6802ab477183748fe5f7f41659d1c106c9743f77b546a"
+        }
+      }
+    ],
+    "constants": [
+      {
+        "rva": "0x10d94f0",
+        "size": 4,
+        "sha256": "e00e5eb9444182f352323374ef4e08ebcb784725fdd4fd612d7730540b3e0c8c",
+        "value": 1.0
+      },
+      {
+        "rva": "0x10d9420",
+        "size": 4,
+        "sha256": "c68830a25204a09f8e77aada6bc5807f607cccaaa0ebb2a7122d317584478a8b",
+        "value": -1.0
+      },
+      {
+        "rva": "0x10d9410",
+        "size": 4,
+        "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+        "value": 0.0
+      },
+      {
+        "rva": "0x1009d00",
+        "size": 4,
+        "sha256": "6d58692645c9d1cfaf13541cbd258f86193ef63c2f1d38f6bbca9617372d7bd6",
+        "value": -0.0
+      },
+      {
+        "rva": "0x10d9640",
+        "size": 8,
+        "sha256": "387688f9240b7a78393541098b24aefe3e8d688fe35170af9c8cabcdc44f4097",
+        "value": 3.1415927410125732
+      },
+      {
+        "rva": "0x100a0b0",
+        "size": 8,
+        "sha256": "fab4c4415b50601e97f6b89f2f92021b61bf2dd3bdb9d1f5ffb6e8de92046e01",
+        "value": 180.0
+      }
+    ]
+  },
+  "instructions": [
+    {
+      "rva": "0x4955b0",
+      "size": 6,
+      "sha256": "e1804634859e10c188c33e8f60e4cf7e4fb6f2025eb4ae467c787661c7df1663",
+      "bytes": "8b86e0000000",
+      "meaning": "Read camera+0xe0 channel pointer."
+    },
+    {
+      "rva": "0x4955bb",
+      "size": 6,
+      "sha256": "51d654e6dd8035679539a7fbf4d4a5e605a0947d1e2c9ff5f17830113890c23d",
+      "bytes": "3986e4000000",
+      "meaning": "If both channel pointers are zero, return without writing output."
+    },
+    {
+      "rva": "0x4955cc",
+      "size": 3,
+      "sha256": "c1bedf4c2f5ea8aefbb50d15b8baf1d2f90c3ea04aa630233486dc2fe00a863c",
+      "bytes": "8b4e0c",
+      "meaning": "Read camera+0x0c resource-shaped pointer; its type is not re-admitted here."
+    },
+    {
+      "rva": "0x4955cf",
+      "size": 6,
+      "sha256": "a9213e55af410fc7e50f13f78541d36529a0bcc2b9397dbd09806cdca172983f",
+      "bytes": "8bb9e0000000",
+      "meaning": "Channel settings pointer is [[camera+0x0c]+0xe0]."
+    },
+    {
+      "rva": "0x4955dd",
+      "size": 3,
+      "sha256": "350035d67bbad9ded6aeca4542efd660ac807e838bc409c091a6749844eb401b",
+      "bytes": "8b5d08",
+      "meaning": "EBX receives the forwarded fourth callback argument."
+    },
+    {
+      "rva": "0x49562e",
+      "size": 6,
+      "sha256": "63a62e67a2190a0e8f2ba78af519f7f4c18e73619b1aef0358b6538bd735f7e9",
+      "bytes": "d98794000000",
+      "meaning": "First angular bound reads settings+0x94."
+    },
+    {
+      "rva": "0x49564e",
+      "size": 2,
+      "sha256": "784bf273fe3b2dd4e1c2201308ea08cc8219d71aa98e5775e6dae770be9308a2",
+      "bytes": "6a04",
+      "meaning": "First numeric selector is4."
+    },
+    {
+      "rva": "0x4956b8",
+      "size": 7,
+      "sha256": "8a99d3c273848b90a7eeffdf36655fef854b21e90daef1694a3dedfa2acf2747",
+      "bytes": "80bf9800000000",
+      "meaning": "Settings+0x98 selects averaged-relative versus accumulated/clamped mode."
+    },
+    {
+      "rva": "0x49570d",
+      "size": 6,
+      "sha256": "985a6bd364938e4732491f506eb3a4d5616798fd3cf9f1b8bd769e182ad897dd",
+      "bytes": "d996e8000000",
+      "meaning": "First accumulated channel stores at camera+0xe8."
+    },
+    {
+      "rva": "0x49578d",
+      "size": 6,
+      "sha256": "3ed32dcbda9d3ca693a184edff06e5ae1a119c3f9fee22765023e3171f7eb25a",
+      "bytes": "d99ee8000000",
+      "meaning": "Final first angle stores at camera+0xe8."
+    },
+    {
+      "rva": "0x495874",
+      "size": 6,
+      "sha256": "1922d1f2c822a5806b20d0c4928cffe118c6ec73be6af863e1ce6a3dfda74bf2",
+      "bytes": "d98790000000",
+      "meaning": "Second angular bound reads settings+0x90."
+    },
+    {
+      "rva": "0x495894",
+      "size": 2,
+      "sha256": "af398567cec4766dbc12d87503d2dedd539952851eaee19b49df3bba88aff49e",
+      "bytes": "6a05",
+      "meaning": "Second numeric selector is5."
+    },
+    {
+      "rva": "0x4959ca",
+      "size": 6,
+      "sha256": "1cb50bbb70864910a293fe9fdf188f84c25fe5a2cf2a0a6eb755a9944bcfa480",
+      "bytes": "d99eec000000",
+      "meaning": "Final second angle stores at camera+0xec."
+    },
+    {
+      "rva": "0x4959ff",
+      "size": 6,
+      "sha256": "5f51121dcd10ad0f04fa35038b30bc038eac4f34b7318e5c8482a88eb7eb5cbd",
+      "bytes": "8b8ed4000000",
+      "meaning": "Final matrix recipient is [camera+0xd4]."
+    },
+    {
+      "rva": "0x495a05",
+      "size": 4,
+      "sha256": "725461a8fbed271c211091ae412d2e8d9ac25acc78c4933d29e3c870c38f636d",
+      "bytes": "8d542420",
+      "meaning": "Final matrix source is the local padded four-row array."
+    },
+    {
+      "rva": "0x38c64b",
+      "size": 6,
+      "sha256": "45fad2e9d883cb600bb004651ef665f0936d93037547ea5ad9ee5582623f9fae",
+      "bytes": "d99990000000",
+      "meaning": "Setter writes first float at recipient+0x90."
+    },
+    {
+      "rva": "0x38c6ae",
+      "size": 6,
+      "sha256": "820b85b0f40b1f2f392418ca4e55f2958058d8f7e7082047f9260a2689aa2819",
+      "bytes": "d999c8000000",
+      "meaning": "Setter writes twelfth float at recipient+0xc8."
+    },
+    {
+      "rva": "0x212921",
+      "size": 4,
+      "sha256": "e518948b09a7e94cde57ee35a0652ba7801914ab8693f0bee3d5ce16bb31db52",
+      "bytes": "d9449e08",
+      "meaning": "Selector array path returns float[payload+8+selector*4]."
+    },
+    {
+      "rva": "0x212b80",
+      "size": 6,
+      "sha256": "a8cee1d35358febb3274785f96b315ba145eef79fdcc0aac184b378925497288",
+      "bytes": "d981a0000000",
+      "meaning": "Second payload helper returns float[payload+0xa0]."
+    },
+    {
+      "rva": "0x3afa0a",
+      "size": 5,
+      "sha256": "7e040147ba625059350aca02142a6462ec72c821cd5bc9dc8462e6001f548f03",
+      "bytes": "b8800d5701",
+      "meaning": "Singleton helper returns preferred VA0x1570d80/RVA0x1170d80."
+    },
+    {
+      "rva": "0x38d551",
+      "size": 6,
+      "sha256": "028b62827457f84f164b9b43cd4953c63f05572fead4ff8e3ef5c1fc9cf228ae",
+      "bytes": "8b81ac000000",
+      "meaning": "Scalar helper reads first optional object at singleton+0xac."
+    },
+    {
+      "rva": "0x38d55b",
+      "size": 5,
+      "sha256": "da73b13859fac0380d97c99490e02378a3f3871613ab428de6317b117df127ba",
+      "bytes": "f30f104074",
+      "meaning": "Positive scalar candidate comes from that object+0x74."
+    },
+    {
+      "rva": "0x38d569",
+      "size": 6,
+      "sha256": "1b0c1b34a1e4c7ef223d5bcd451bd8637725291bab9a849eed4cc77369120020",
+      "bytes": "8b81b0000000",
+      "meaning": "Fallback object is singleton+0xb0."
+    },
+    {
+      "rva": "0x38d56f",
+      "size": 5,
+      "sha256": "005c21b9354785f53692bcb4b891d01ef971d343551ed7a00d6ad34a0e4d83c4",
+      "bytes": "f30f104030",
+      "meaning": "Fallback scalar comes from fallback object+0x30."
+    },
+    {
+      "rva": "0x38d57c",
+      "size": 6,
+      "sha256": "3e24ccb96bd28c39f2d6ea7bf75241ab3c0b632cbef82429dc16c3ddaa3e7c88",
+      "bytes": "d8b1cc000000",
+      "meaning": "Selected scalar is divided by singleton+0xcc."
+    }
+  ],
+  "direct_calls": [
+    {
+      "rva": "0x495638",
+      "size": 5,
+      "sha256": "5319779077669aaf25b831e10c45f36d342fc4d41dd818de6805060d64889a5e",
+      "target_rva": "0x3af9e0",
+      "role": "Singleton for first channel scalar",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x49563f",
+      "size": 5,
+      "sha256": "110bed900316e484b3852e8c2ecc19132c064af26f95148d19ae26e287b5a763",
+      "target_rva": "0x38d550",
+      "role": "First channel scalar ratio",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x495664",
+      "size": 5,
+      "sha256": "49af7df838bb370bf6369e7a74a0315041ab995c0c81fe4fa3942ccf4e00f46e",
+      "target_rva": "0x2128f0",
+      "role": "Forwarded payload with selector4",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x4956e4",
+      "size": 5,
+      "sha256": "ef02a3cdbffc3998a22a750c7bc45c3c962bcfdbfd7eda7471467f0413ec0810",
+      "target_rva": "0x212b80",
+      "role": "Forwarded payload scalar+0xa0",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x4957bc",
+      "size": 5,
+      "sha256": "4a1c71406da5d7ad7e77aab153c41c30964867003b9767127ebc59d9767ca44f",
+      "target_rva": "0x8521b0",
+      "role": "cos(first angle)",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x4957d1",
+      "size": 5,
+      "sha256": "6089345374a979455a331ce1f36bbf121b4ccd754c3b1e44b6e735337097f366",
+      "target_rva": "0x8521b6",
+      "role": "sin(first angle)",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x495858",
+      "size": 5,
+      "sha256": "c4a4ee85d2fcd1c0a8f1eb02e6f907b4cbe6d53025ada5ffa88feb202b60a96d",
+      "target_rva": "0x13db40",
+      "role": "First local matrix operation; callee not decoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x495862",
+      "size": 5,
+      "sha256": "7f61cd279f2fd6d1b12fcda3092f106f95486c9434305c0afc11595cb4bd1f4c",
+      "target_rva": "0x3810",
+      "role": "First local matrix copy operation; callee not decoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x49587e",
+      "size": 5,
+      "sha256": "7a7ca5c2e32741f289931ea11b72a16ce785a85df66cce0ee125ae70310a818f",
+      "target_rva": "0x3af9e0",
+      "role": "Singleton for second channel scalar",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x495885",
+      "size": 5,
+      "sha256": "7a22d7e4d8c0c8ed8cedbbe41878d429463094dd5addbf32d3a58762d98fa4cb",
+      "target_rva": "0x38d550",
+      "role": "Second channel scalar ratio",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x4958aa",
+      "size": 5,
+      "sha256": "3b212664a1b020fe2a877aba989ba6f00289613af66a33f1ad61e54ad0f08a6e",
+      "target_rva": "0x2128f0",
+      "role": "Forwarded payload with selector5",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x49591b",
+      "size": 5,
+      "sha256": "611b8eea27a572f6611a1dcb13e9075ebc6dfd2ee365021bc485f7a3b8c21528",
+      "target_rva": "0x212b80",
+      "role": "Forwarded payload scalar+0xa0",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x4959e9",
+      "size": 5,
+      "sha256": "80dc17b596db09ddb51a5df9cc462306498c3bd897f414e311d4bb755cd82340",
+      "target_rva": "0x12ee00",
+      "role": "Second local angular operation, selector0; callee not decoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x4959f0",
+      "size": 5,
+      "sha256": "c71074b5e4a590d7b01475ce36328a0c7c8b63880d04710c817383c7990e0663",
+      "target_rva": "0x13db40",
+      "role": "Second local matrix operation; callee not decoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x4959fa",
+      "size": 5,
+      "sha256": "29c5ad7e4812b2314f86b8ddb7fa6025407483e444e781489be3eb0484240fb1",
+      "target_rva": "0x3810",
+      "role": "Second local matrix copy operation; callee not decoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x495a0a",
+      "size": 5,
+      "sha256": "b062f4ddbb9977ed3a0b3c939db36e09e5d1a40e027df2421557325eef9fee93",
+      "target_rva": "0x38c640",
+      "role": "Write local matrix through camera+0xd4",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x212907",
+      "size": 5,
+      "sha256": "b04816c2d431daee83d86c8ba4bc11a1bc56599d922da0fcc15cbe7ddf5429bc",
+      "target_rva": "0x852790",
+      "role": "Numeric selector bit helper; callee not decoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x3af9f8",
+      "size": 5,
+      "sha256": "c83bcfb016bb1d15aaf89808e6b940f8680c70b0c2846e8a57ac8d419b1338dd",
+      "target_rva": "0x3abc90",
+      "role": "Singleton initializer; callee not decoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x3afa02",
+      "size": 5,
+      "sha256": "d8fa6f4d6b0ecf4190d0ca5689aaa52e5a305a9aa109181eb2bbf1dd8d9fb6f0",
+      "target_rva": "0x852315",
+      "role": "Singleton termination registration; semantic role unproved",
+      "callee_decoded": false
+    }
+  ],
+  "supported_chain": "Event-filtered exact camera -> forwarded payload selectors4/5 -> two angle accumulators camera+0xe8/+0xec -> local padded transform -> [camera+0xd4]+0x90..+0xc8. First channel explicitly constructs a Y-axis rotation using _CIcos/_CIsin.",
+  "channel_behavior": {
+    "gate": "Both camera+0xe0 and camera+0xe4 null => immediate return. Pointer presence is channel availability, not proved cinematic activity.",
+    "averaging": "Each present channel stores capacity/count/sum/mean at offsets0/4/8/0xc. At capacity, subtract prior mean and decrement count before incorporating new sample.",
+    "bounds": "settings=[[camera+0xc]+0xe0]; first bound=settings+0x94, second=settings+0x90; each multiplied by pi/180 and singleton scalar ratio.",
+    "relative": "When byte[settings+0x98]!=0: first angle=-mean4*bound94, second angle=mean5*bound90.",
+    "accumulated": "Otherwise first angle subtracts payload value4*payload scalar+0xa0*pi and second adds value5*same scalar*pi, each clamped to its signed bound.",
+    "remaining_names": "Input payload type, selector names, payload+0xa0 field name, settings type/field names and singleton object type remain unproved."
+  },
+  "singleton_relation": {
+    "rva": "0x1170d80",
+    "scalar": "If object=[singleton+0xac] exists and float[object+0x74]>0, use it; otherwise use float[[singleton+0xb0]+0x30]. Divide by float[singleton+0xcc].",
+    "limitation": "No equality/ownership join between either singleton member and camera or [camera+0xd4]. These fields must not be promoted to active-camera identity."
+  },
+  "source_implementation": {
+    "supported_correction": false,
+    "production_modified": false,
+    "reason": "This callback handles relative camera angular input. It neither proves the live selected cinematic camera nor supplies cinematic entry/exit/skip/HUD authority."
+  },
+  "next_unresolved_edge": {
+    "rva": "0x495d70",
+    "known_caller": "0x49dba8",
+    "inherited_relation": "Camera primary-table+0xb4 candidate invokes this with the whole camera and original first argument.",
+    "question": "Does the ordinary camera update consume [camera+0xd4]+0x90 and join its resulting base/animated transform to a selected local-player view?",
+    "separate_limit": "A matching transform consumer still needs the active-view/local-player lifetime and blend-authority join before runtime admission."
+  },
+  "execution": {
+    "game": false,
+    "desktop_tests": false,
+    "builds": false,
+    "tests": false,
+    "process_access": false,
+    "profiles": false,
+    "installs": false,
+    "packages": false,
+    "subagents": false,
+    "git": false
+  },
+  "tool_limits": "Initial python command hit the Windows Store alias without running the script; existing py -3 launcher then ran file-only inspection. No package installation. Two source-search wildcard path errors returned no affected-path results; subsequent rg used directory paths and glob flags.",
+  "verification": "Exact file hashes, preserved decode hashes, inherited proof hash, all eight function spans, selected instruction bytes, direct-call destinations, import entries and scalar constants checked without game execution.",
+  "saved_decodes": [
+    {
+      "rva": "0x2128f0",
+      "size": 32,
+      "sha256": "bb946d7550858c40835fb0032d3adcf13b2d51a424e7048a72052d3d6dcadb79",
+      "decode_sha256": "1e14319c141843f746bfdd24bc546cbd14a78b5959a40dc7fbe8a34265eb41f5",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-callback\\decode-002128f0-20.txt"
+    },
+    {
+      "rva": "0x212910",
+      "size": 96,
+      "sha256": "b904d54250a6e99583e11dad169e597a6113d29b77d0e554a2a74e278065ac1d",
+      "decode_sha256": "17830e283efea9dad793ce4209d395dabbf4f48a9309e6bf7e0a16c4876df981",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-callback\\decode-00212910-60.txt"
+    },
+    {
+      "rva": "0x212b80",
+      "size": 16,
+      "sha256": "c540bcc16ccacf386c1417f4a8fba5ed4a03a7588dddef66f2da1fe6b49646e5",
+      "decode_sha256": "6c8c3828fbe878e0a25061004e2b9a9347cbdd6c688c2375a1f62ea710b18cd0",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-callback\\decode-00212b80-10.txt"
+    },
+    {
+      "rva": "0x38c640",
+      "size": 32,
+      "sha256": "09af27c54579b9cacfcc0beb793b86f5609b750e0163181e0f67bef4885c7886",
+      "decode_sha256": "b5017e9e1b5efe32781cb2910c12bf594d21e5689fd061647b6f2725d5bd7b69",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-callback\\decode-0038c640-20.txt"
+    },
+    {
+      "rva": "0x38c65d",
+      "size": 83,
+      "sha256": "60784c00445840f5ae96a916c5e7e8bd151b972377145484bc35b00de9c72070",
+      "decode_sha256": "bb717d320899a2b6a2907da0a774c4a0084176a1daa21a589fe34f19b4f64696",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-callback\\decode-0038c65d-53.txt"
+    },
+    {
+      "rva": "0x38c6ae",
+      "size": 18,
+      "sha256": "c9be1a157f4d975fb78343a00377ea6d501cdf9543378a90258efb2c6553ae9b",
+      "decode_sha256": "afb210004251598cb8c3757544666040b6b0a710e072d721ecfd9cddb4987645",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-callback\\decode-0038c6ae-12.txt"
+    },
+    {
+      "rva": "0x38d550",
+      "size": 32,
+      "sha256": "67172d0771d4751e31f6ada0cfa58f2cde2f336e645df994d117a8107abb1314",
+      "decode_sha256": "117ecb5f1ff416dbf99ce325332ef072b726d5a65ceec7085e610f31e1d5911d",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-callback\\decode-0038d550-20.txt"
+    },
+    {
+      "rva": "0x38d56f",
+      "size": 17,
+      "sha256": "03acb935ca6c8466c0457aa3a96a7420423501101974b7104c12cbb4ca18ede3",
+      "decode_sha256": "df38d8b6b9424f14c3b010bc30ebf640f46bf5734b83abb08e7d55a9b331b627",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-callback\\decode-0038d56f-11.txt"
+    },
+    {
+      "rva": "0x38d57c",
+      "size": 20,
+      "sha256": "2c36f08541ba3eb0873d0ff9ac2c89f6823720cacd8ea6050a7bf5d647fb8ff9",
+      "decode_sha256": "ef95b0c03948ff7657c9d9a3dea92a6603fbf2ff8bf56a05e2627f6e51de6ec4",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-callback\\decode-0038d57c-14.txt"
+    },
+    {
+      "rva": "0x3af9e0",
+      "size": 16,
+      "sha256": "a2ea45bfb5ca3fb321804c8a76c39b3e08282d8d4233353404102a087aad8a9e",
+      "decode_sha256": "aeca1f9328c22d6ef48c8e2b6b3adfb245f20223b1b7ae57740aba0ffb84db44",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-callback\\decode-003af9e0-10.txt"
+    },
+    {
+      "rva": "0x3af9ed",
+      "size": 35,
+      "sha256": "1805f681bfef568d66b943970ab1d2ebdce6cb9d5672a74dd229e0d5a72f10b3",
+      "decode_sha256": "6e3fef5db8a647a8bb08c8b6bc875a4910963c19870e1289d43be4d8524e610a",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-callback\\decode-003af9ed-23.txt"
+    },
+    {
+      "rva": "0x4955a0",
+      "size": 64,
+      "sha256": "13953e988c01d04376c3cf6859535cccbb92bfe648dcafd5b24410958f4445ad",
+      "decode_sha256": "02cea503bd400d8b16a9e57461055b7d574480a830a6ef1a8c07518e8d89ad2d",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-callback\\decode-004955a0-40.txt"
+    },
+    {
+      "rva": "0x4955e0",
+      "size": 1072,
+      "sha256": "2038ee256a548e89db5cf96e1afc197c4e3ffdd3ce50b8a792fdbdb9bb9291b0",
+      "decode_sha256": "c65b45f84ad8452d089ee3c5bbe58540fa7c8c7305839156a7e1c1912123de3e",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-callback\\decode-004955e0-430.txt"
+    },
+    {
+      "rva": "0x495a10",
+      "size": 11,
+      "sha256": "7b50f0351b8f98398d1b077eae53937f85721c2cad778b3313ebbe57f8128997",
+      "decode_sha256": "323495f5fdbbfce4e9085d26ab95ddbc48e98aca296d855ebafb68d79a0e7d81",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-callback\\decode-00495a10-b.txt"
+    },
+    {
+      "rva": "0x8521b0",
+      "size": 6,
+      "sha256": "dcf1b123c2c512fb8cfc07fcf3d397d9dc39082d1a744ff73304595a56fc42ed",
+      "decode_sha256": "534a1854c3514b275a769f689a60f20992040a5609c8cdd7eb3250e9c0643f4f",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-callback\\decode-008521b0-6.txt"
+    },
+    {
+      "rva": "0x8521b6",
+      "size": 6,
+      "sha256": "581f71cd66ec0676e81051e1477563144b40adce66e09307b7967e9d3f40136e",
+      "decode_sha256": "012bd8b2a53a6e59716780e4a3f1f72cb1a62061d05390150efd13f03dd82e8f",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-callback\\decode-008521b6-6.txt"
+    }
+  ]
+}

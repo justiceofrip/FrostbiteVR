@@ -1,0 +1,4317 @@
+{
+  "schema": "fvr.bc2.firearm_completion_roster.v1",
+  "source_pins": {
+    "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json": "aa7a85e4c9cac427a095eaddcf191947f8495ffbe19677fd4fdd8e58d1dac48a",
+    "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json": "b7f8426148d3ba25a071f28f64450ae19130c523fb0cf561605be8c017259015",
+    "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\config\\body-ammo-assets.json": "261bd96dbdca3bd13566d73eede163aebe2f0e04d38a908330c018c16d0e98e6"
+  },
+  "scope": "All exact firearms in the existing MP/SP common catalogs, plus enrolled campaign-only firearm configurations.",
+  "exclusions": [
+    "Launchers, grenades and tools are tracked separately from this firearm roster.",
+    "CHAT01/03 recovery remains deferred; external CHAT25/26/32 ownership is unchanged."
+  ],
+  "summary": {
+    "configurations": 181,
+    "asset_names": 77,
+    "mechanisms": {
+      "belt_feed": 24,
+      "bolt_magazine": 17,
+      "clip_or_exact_configuration_review": 3,
+      "detachable_magazine": 111,
+      "revolver_cylinder": 1,
+      "tube_pump": 25
+    },
+    "source_complete": 181
+  },
+  "rows": [
+    {
+      "asset": "M249",
+      "configuration": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi",
+      "identity": [
+        "M249",
+        "87ce26be3af226195387d0da68df0aeb8046990fc31ff14ce65a250dd01138f3",
+        "46c1e3c8-85e3-47cf-8fd2-9d55acca92d3"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 171
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M249",
+      "configuration": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Kobra",
+      "identity": [
+        "M249",
+        "79bfb7ef3bdd501ce2012119db7d96d5829d0ce5f72bedaf7bd37635ea451422",
+        "8b208f35-565d-49f3-a884-9b00feacfc68"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 187
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M249",
+      "configuration": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Scoped",
+      "identity": [
+        "M249",
+        "214ae28886ea18869432d1dac175672bb0c803748b7660b5e4fcc8f7c338861e",
+        "7332b717-0dc5-425e-9894-2c8e730fa765"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 204
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M60",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60",
+      "identity": [
+        "M60",
+        "b403eed0838e83cb4b8aeb5f90732ecc993275ec1b9ca8d1c0ebdb416504d51b",
+        "4f0e5980-8009-442e-b3b2-3c60ba50caa7"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 42
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 21
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M60",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Kobra",
+      "identity": [
+        "M60",
+        "c103568d5cbbfba9ffd20969f02844a77d7d1aa6a886e3171f5459f872934fc4",
+        "01cf38e3-9bab-450b-85b0-d48053606638"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 63
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 34
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M60",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Scoped",
+      "identity": [
+        "M60",
+        "d677ece40b17d13c27d1a22aa193a79194e73e63c4eb75fe6df1dfc4e36add19",
+        "e5a30f30-a66d-45cc-90f1-7c06b3e9f7d6"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 213
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 107
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M60_sp",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_M60/SP_lmg_M60",
+      "identity": [
+        "M60_sp",
+        "3c7b9a1cdba0fe1f3109bfbeafe1d8081f7dabf6aa465c4b430f8b65833bfdea",
+        "bd561a9b-fd48-4254-b4c4-39653213981a"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 244
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 24
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M60_sp_s",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_M60/SP_lmg_M60_Scope",
+      "identity": [
+        "M60_sp_s",
+        "caa83622df20545e5e765c2a913da46ecbcbc7a669561740aefef1f6a26c3fa7",
+        "c113c0a1-ef2c-4883-9211-2bece0cab38a"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 255
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 51
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "MG3",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3",
+      "identity": [
+        "MG3",
+        "ec08bba67ae0ff8b9d327b61c2b066f91881d08b180ceb82e408f926b30a65f2",
+        "de63f2a2-a42d-4726-b87e-4dcfbc763203"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 111
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 60
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "MG3",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Kobra",
+      "identity": [
+        "MG3",
+        "b6eea2dda2aa7854e7256b0004b057de1f305ff0a8a1cec029fcb6be70c9b744",
+        "dd64cb3f-6c32-4549-aad7-27335214da5a"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 106
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 59
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "MG3",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Scoped",
+      "identity": [
+        "MG3",
+        "f24bdbc7dca79f8bbc4026eedf734a7c6b5b3a7e13feac54fe28bfa1b34eafca",
+        "456734db-b104-420e-a7ca-d65113c2f29a"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 4
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 1
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "MG3_sp",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_MG3/SP_lmg_MG3",
+      "identity": [
+        "MG3_sp",
+        "e79ec24fd52b5a2d7c336823e563100f10dc3194a15d6e428eb4819ec752fa15",
+        "8890cba2-69c7-4a13-bfd8-b08e6a0e1de3"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 237
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 4
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "MG3_sp_k",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_MG3/SP_lmg_MG3_Kobra",
+      "identity": [
+        "MG3_sp_k",
+        "02d9c0b961b297c9856198b530084a340e46af7d8dcda2a7cd68fbf27ef452cf",
+        "a40c3ac8-c1f2-47db-ac08-0bf52c2d0673"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 274
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 109
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "MG3k",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3",
+      "identity": [
+        "MG3k",
+        "4f09f04186645914906ed3a9b3ba113daebbd6d03bd9e5b8c5c04eac5c075ff6",
+        "b6515bb7-cc4d-44e2-8678-fb6b88f12691"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 198
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "MG3k",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3_Kobra",
+      "identity": [
+        "MG3k",
+        "ef2d20a93c8134b40eea55c04c68a6202308a0b0fb08aeaf047cf90c67c180e6",
+        "9d8cbec8-0903-42f0-9f91-3dcbafb5a437"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 2
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "MG3k",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3_Scoped",
+      "identity": [
+        "MG3k",
+        "78f8cb63038841fbf6074cffc1423048f22322e27ab579093b03c118f5d359e4",
+        "63c43439-b751-491c-83b4-cccc64419832"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 97
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "PKM",
+      "configuration": "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM",
+      "identity": [
+        "PKM",
+        "748809a7c23502232ed78def704291c0746804c7e4ffa09349d0d62c67fc5535",
+        "eccf2b1d-eb98-439d-b5eb-cd8ad428e001"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 173
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "PKM",
+      "configuration": "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Kobra",
+      "identity": [
+        "PKM",
+        "3a74555345e826bb42b54e9e9691c42537c602c3dfa8269e215934123ef3d39c",
+        "197aa580-9ec5-4255-b429-b6f010f31129"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 91
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "PKM",
+      "configuration": "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Scoped",
+      "identity": [
+        "PKM",
+        "acf04a74279816ca2c52d0022cda2956256cd2d2e887dcb3cb7ed038c5a4e0fb",
+        "21cc46a6-bdf9-46bd-8a2b-2e4d808af6f3"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 119
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "QJU88",
+      "configuration": "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88",
+      "identity": [
+        "QJU88",
+        "4a5ea65fa3e368c88fec78494ca57764c35a66e68d3beb73d536cecb26b92b80",
+        "0f342abf-80ad-4399-8604-bdbd6ae50399"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 115
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 64
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "QJU88",
+      "configuration": "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Kobra",
+      "identity": [
+        "QJU88",
+        "23ee1f34d87937f78f420c91e724bc7adba2f1788cbe515711a92251a956ba16",
+        "00734bf6-4a22-4254-80bd-2070a8f5bdbc"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 20
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 9
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "QJU88",
+      "configuration": "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Scoped",
+      "identity": [
+        "QJU88",
+        "802b49e4efc4361ce70a7a15198244f05cbf32f859b68cdfcf955a70f2189cbc",
+        "c1621063-3a19-4151-a452-21b347bc66e7"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 178
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 95
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "QJU88_sp",
+      "configuration": "Objects/Weapons/Handheld/MEC_lmg_QJY88/SP_lmg_QJY88",
+      "identity": [
+        "QJU88_sp",
+        "b0391715dd3b2b3e2dc78aa4cc1d82cbf712f732182e7de034c2a6e2fd1807cb",
+        "5f90d97a-feef-48e8-b1ec-de137cff2a6a"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 261
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 63
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "QJU88_sp_k",
+      "configuration": "Objects/Weapons/Handheld/MEC_lmg_QJY88/SP_lmg_QJY88_Kobra",
+      "identity": [
+        "QJU88_sp_k",
+        "4a7e87055920c76a7c142cce17c5f1e097ac0dc3743d6bc9faeeef8ebda74a9d",
+        "1975a8f8-24c0-41d5-8f6b-e022090408be"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "belt_feed",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 238
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 5
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "GOL",
+      "configuration": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL",
+      "identity": [
+        "GOL",
+        "c10e29215b23d814f1c75dcc3782da6a96c78340ac6eef48a203cdc87d93cac7",
+        "7d1dfd60-085c-4e0a-9feb-80a40d11eb2e"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "bolt_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 189
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "GOL",
+      "configuration": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Kobra",
+      "identity": [
+        "GOL",
+        "12c0e163971af2fac10e58e70ce5035dbeb9ff816ed5127296661035816a2e6e",
+        "0ca52687-d93d-4160-acf0-63bfed5fad88"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "bolt_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 26
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "GOL",
+      "configuration": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Scoped",
+      "identity": [
+        "GOL",
+        "b413a709fda2431c4e10085ca02db20344f2e21ab71ab77940b489807142e2c5",
+        "82f7222d-dc86-4d46-82f3-444b9f6d6c12"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "bolt_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 39
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M24",
+      "configuration": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24",
+      "identity": [
+        "M24",
+        "84252e7fa90e376d2cfe3131a1e83423a00d9a1dda52d0974b5d4d8d3d8de82c",
+        "3632d971-d742-493d-8962-358ade024c39"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "bolt_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 162
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M24",
+      "configuration": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Kobra",
+      "identity": [
+        "M24",
+        "12d56fe4e39fd8b9d3a6c42ebd18eab4bf8e4a4c5b5a2296b7dfbd73ec9cd6a8",
+        "de784d39-793f-49c9-b389-6f4b2358617e"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "bolt_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 212
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M24",
+      "configuration": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Scoped",
+      "identity": [
+        "M24",
+        "942be844e1a6392fb1a21eec3127be36b453357c53af1258b371cdc5615420b8",
+        "3f35373a-9cc7-44bc-94b6-23dcfb1af196"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "bolt_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 165
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M95",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95",
+      "identity": [
+        "M95",
+        "992535507a1b074634772678f5cd6bc8a71a90a599ac5b469c71d1c7bfd560a3",
+        "cb2a15fe-8f0a-4772-9102-64548e0db3b6"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "bolt_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 86
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 47
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M95",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Kobra",
+      "identity": [
+        "M95",
+        "6b5bfe1065253189c3bc18a0f1b974927ca1d65a94218a8b76a0037639e898d3",
+        "dcd9e585-21bb-419a-aad4-0b80295f287f"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "bolt_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 233
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 116
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M95",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Scoped",
+      "identity": [
+        "M95",
+        "14366feb18371c96bded4aa417cf614b5e62e75634e6b6afabfb67132385974c",
+        "812f8f83-616d-48a2-a6c8-1d2b55fa5165"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "bolt_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 114
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 62
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M95_sp",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95",
+      "identity": [
+        "M95_sp",
+        "8f8494c4d007bb3955485d740372bd521ff6fb4fa437f1df81602c29023ec298",
+        "7717ea86-49ed-4aa8-b401-7e62d8ade339"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "bolt_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 263
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 74
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M95_sp_s",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95_Scoped",
+      "identity": [
+        "M95_sp_s",
+        "e395944e3978c6847bc5c66d033d265a7571477c5a588deba1aafde822e6c4b9",
+        "1378ecef-dc5f-4728-81e5-a5dd7e9b10da"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "bolt_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 235
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 2
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M95k",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95",
+      "identity": [
+        "M95k",
+        "b0d0fefba512071700dac709af898f4d0554b3dce272dffe6774bf845fe95bc8",
+        "bc0f37ac-a57f-4899-b393-3b669a18b3bd"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "bolt_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 94
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M95k",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95_Kobra",
+      "identity": [
+        "M95k",
+        "b977410ca5f1378221df8f4cf96c8a328a3392ecc55cd26411cfd4f6ca4a3af3",
+        "8cfa632a-bf58-48b7-bd8b-75760bfc7843"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "bolt_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 70
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M95k",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95_Scoped",
+      "identity": [
+        "M95k",
+        "ba7fae3e042aa8c991074b4477e7c986d97af6888b82a55d86863a8d494fed95",
+        "8fb1cb9c-b070-459b-9260-bf4b0f713af4"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "bolt_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 169
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "SV98",
+      "configuration": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98",
+      "identity": [
+        "SV98",
+        "aaab64e3c8c783167e401e9c27a240135aa69bbc54a1cb40b1b2e1efb30d696e",
+        "33f9e790-e758-4468-b3db-00cd6c3b1a4d"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "bolt_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 214
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "SV98",
+      "configuration": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Kobra",
+      "identity": [
+        "SV98",
+        "e0e734e4aa30889c95baff9d75e4d808828c72fd1067ccfa238c5696504fa9e7",
+        "3261b232-3a20-4aee-bd73-090f92cb4cac"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "bolt_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 191
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "SV98",
+      "configuration": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Scoped",
+      "identity": [
+        "SV98",
+        "45f85b1f1c6a508bf88dee3de04b6d56c85a19f976d3fddb681f8ecaddf18b8f",
+        "67d1700a-ffec-4296-916f-4e7d8429eaa0"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "bolt_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 193
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "Garand",
+      "configuration": "Objects/Weapons/Handheld/Beach/Jap_Type5/Type5",
+      "identity": [
+        "Garand",
+        "e314479c35ea6819e5c662f35c4fca5af56cab3a1c1fe0a3b373efa05e153bd2",
+        "e66520c7-7b62-4d35-9274-72a762f0c35d"
+      ],
+      "weapon_class": "campaign_exact_configuration",
+      "mechanism": "clip_or_exact_configuration_review",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\config\\body-ammo-assets.json",
+          "configuration": "Objects/Weapons/Handheld/Beach/Jap_Type5/Type5"
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "Garand",
+      "configuration": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand",
+      "identity": [
+        "Garand",
+        "db8d551f626a593e10848381c00983c7a4999e1096a91deb1ded60d49a8e101d",
+        "d77b3602-e594-465d-87fa-8c193660522b"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "clip_or_exact_configuration_review",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 50
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "Garand",
+      "configuration": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Assault",
+      "identity": [
+        "Garand",
+        "a41b2e7bb7f7e8af83521a60106fa23fbec462dd740fbac2230898a1519cb83b",
+        "4bc8d46c-cc7b-4993-8bbe-09e708bef4fa"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "clip_or_exact_configuration_review",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 43
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "9A91",
+      "configuration": "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91",
+      "identity": [
+        "9A91",
+        "c99262453ee0b53736ef6e1fc281ef400af6c84a7ce8f9d456b6b33b27938e59",
+        "f5c47cc5-558a-426a-892d-d1ec35559925"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 194
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "9A91",
+      "configuration": "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Kobra",
+      "identity": [
+        "9A91",
+        "2ea98b1ffbdbc95ad9ebc5c2e1562cfc100193287ae337650ea6a57eb63db052",
+        "89141423-62bb-4cb0-af89-6b8485451993"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 6
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "9A91",
+      "configuration": "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Scoped",
+      "identity": [
+        "9A91",
+        "bcdc1aafdfe1ac52145fb17232f7ad4d62038d99a1ef8598e136dda7b8819b3e",
+        "a40f09a2-a3f5-4325-a795-853b3fde2fe3"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 174
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "AEK971",
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971",
+      "identity": [
+        "AEK971",
+        "a567e8328b92d6f8b3157bfc92e7f9042ede7994f68b789c7830396c9214f190",
+        "677a99bb-20d1-4360-bbfc-fd7e829ab658"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 44
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 22
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "AEK971",
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Kobra",
+      "identity": [
+        "AEK971",
+        "b03079e74c7d4a8b66af0b87a061476fdc23d291d60423825380a45983e49025",
+        "a0d06cd2-b42d-4d88-a8e4-056e98be85f4"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 132
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 70
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "AEK971",
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Scoped",
+      "identity": [
+        "AEK971",
+        "c8c65332f252325e8cd285d7f51b0293874bcf697b327dd31e0bc1b6600b2b85",
+        "c6f71482-8271-4705-a77a-b3ec10088bff"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 183
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 100
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "AEK971_sp",
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971",
+      "identity": [
+        "AEK971_sp",
+        "eef52077b1721323a66be8875c1bb4c7df1a2755b1264a36d9004534a91bfbc1",
+        "c0088cee-fb7f-4fc2-a69c-2c59372f4f81"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 243
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 17
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "AEK971_sp_k",
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971_Kobra",
+      "identity": [
+        "AEK971_sp_k",
+        "b5eaaf38ebf0221abbf4cac1dd92c2329a630d893e18048d9784e2bc3ce3f81f",
+        "9770f645-e63c-4a86-ad1a-7d9e99d1b689"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 257
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 53
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "AKS74u",
+      "configuration": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74U_Scoped",
+      "identity": [
+        "AKS74u",
+        "ac2ce55da2cee78916d637565eb5e846ee8f24d38e19fbf7fa5eaddcc56f0b8e",
+        "aa515565-1ac4-44da-a0de-21539dcf74eb"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 102
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 57
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "AKS74u",
+      "configuration": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u",
+      "identity": [
+        "AKS74u",
+        "8ff7c3d213c5b7c48c8f07e2dbd7d7437ba9aaf361d3463be80615c3c39ce3a0",
+        "e244d635-5210-493d-bfc5-42604266e8f4"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 90
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 50
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "AKS74u",
+      "configuration": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Kobra",
+      "identity": [
+        "AKS74u",
+        "2c4647689c92964ff709534f94727aa02328029bfaf9cd7c0ca05590c1863f8f",
+        "efbdb8f5-6f28-46c6-acab-dd107968445f"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 56
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 30
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "AKS74u_sp",
+      "configuration": "Objects/Weapons/Handheld/RU_rif_AKS74u/SP_rif_AKS74u",
+      "identity": [
+        "AKS74u_sp",
+        "880e3cc69f6d0fdd1a225eb978b41a8e7d71d20dbeef363bc003a37c4807f787",
+        "1c8d18af-47dc-46a7-8351-0a745559a0b7"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 262
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 68
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "AKS74u_sp_k",
+      "configuration": "Objects/Weapons/Handheld/RU_rif_AKS74u/SP_rif_AKS74u_Kobra",
+      "identity": [
+        "AKS74u_sp_k",
+        "63ddce7bab79e3e303ed871f5c28c263cfb81802b1463ba0815cb4d64ba2d145",
+        "15d61ac6-0cfa-4d1d-a917-bb4f186be223"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 250
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 39
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "AN94",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan",
+      "identity": [
+        "AN94",
+        "70c754da0b5a5127c9517c321c9fd16ce1f7e6b7a78aef5b898144ca20fb1761",
+        "2c564f24-5daf-4bbc-96f4-4a56d91a4f85"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 113
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 122
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "AN94",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Kobra",
+      "identity": [
+        "AN94",
+        "b03c15de6436481ee10013d164ec8afb35877cad095f51273145ae4e366815df",
+        "bc08efa5-a9ed-4ba5-a7a5-edf2be35eaf4"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 18
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 8
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "AN94",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Scoped",
+      "identity": [
+        "AN94",
+        "48949b0d8859231c6d1c5242878670a8496082648d9bbf16fa858d6705889f54",
+        "2fcfbd7c-e585-4f59-8747-f5d5beb1313a"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 227
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 114
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "AN94_sp_k",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rif_AN94_Kobra",
+      "identity": [
+        "AN94_sp_k",
+        "70c554deab1dc38a94cfb535a541b987785806c43362a19f5a695a0e1fa51611",
+        "0707e9e7-969e-4ec0-884c-b08bc3445433"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 272
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 99
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "AN94_sp_s",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rif_AN94_Scoped",
+      "identity": [
+        "AN94_sp_s",
+        "158fbe6ab51db5dd0c77612c372f909f7287854a18bf122e330f0b0afb63d1bc",
+        "26cdf39d-11f1-40d4-857c-75f6b044e9f6"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 271
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 96
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "AUG",
+      "configuration": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG",
+      "identity": [
+        "AUG",
+        "cff1cb85a2c8db4b3e6158457833986e73694d481364af06d7a83635fbe862e8",
+        "763a5b70-fc8f-400a-a202-a295377e19af"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 89
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "AUG",
+      "configuration": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Kobra",
+      "identity": [
+        "AUG",
+        "4814e32c2cf7731ae081e16750e7ab05d9f22387e54e2581e69c2368dae97243",
+        "a55e0bb3-5f66-49bd-bfed-d7fe4b8c9bc8"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 57
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "AUG",
+      "configuration": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Scoped",
+      "identity": [
+        "AUG",
+        "34476b9ea4a38f4ac00e595b760c2081f4a7e6cd28de849e72dc5bea5fd481b1",
+        "fe35353c-b5ae-4ce2-a241-f0a43d076eb4"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 107
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "F2000",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000",
+      "identity": [
+        "F2000",
+        "83f2f28450a0eda76aaaf211b0eae669a5d2182ec99d21b0e91fa518b295ba4a",
+        "4c059a65-d0db-49bb-9268-a328629c9c82"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 77
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 38
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "F2000",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Kobra",
+      "identity": [
+        "F2000",
+        "8e1fe66ef5cfaffc91fd3f677f9d568304eb102b2aa7dfda8a71c7fc0dac6467",
+        "3fba7025-fca4-405e-96b7-24a3d0381779"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 210
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 106
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "F2000",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Scoped",
+      "identity": [
+        "F2000",
+        "c56a994611fc8ede4bcaeb5e6714311e4c0f94bd2b20c274991dd7c2f1dd0d45",
+        "53ccfdfd-ea8b-4d0a-a420-339c4156d4e8"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 121
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 66
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "F2000_sp",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000",
+      "identity": [
+        "F2000_sp",
+        "62d1514ab5eb00161f763e67d73768d9ef8a2ee611027a2a41b6deacefa86925",
+        "46404a9e-9e38-43a7-831e-fb4b2f2692c6"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 247
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 28
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "F2000_sp_k",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000_Kobra",
+      "identity": [
+        "F2000_sp_k",
+        "1f9862c8e572be9106ff4376cc6c32d74b628e033e5e3a45f8d47a36320adf0a",
+        "4e1e987a-95c8-4acf-ab26-ed6337e3229a"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 251
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 42
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "G3",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3",
+      "identity": [
+        "G3",
+        "ed83d82965d34c95c43f1e60aec350219711a5784d623d6ccfb816432b7624bb",
+        "363b537f-734c-4af9-8e53-3c15564595e2"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 7
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "G3",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Assault",
+      "identity": [
+        "G3",
+        "dcaefd902cc37f1a49706ff3f9e13b39ad1a57e46e257b800318e66f4ba9bc0c",
+        "9997cbef-6c5a-4cb2-a2ec-f28b07ee08db"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 15
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "G3",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Assault_Kobra",
+      "identity": [
+        "G3",
+        "aeb5ff4e3b0ff63dca1f000af9b065b2f400473997d79afbd3e8a520b72109eb",
+        "10dcc986-0eb3-4176-a242-2d6558a5b187"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 197
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "G3",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Assault_Scoped",
+      "identity": [
+        "G3",
+        "5258aecd0beceec2afc69e63ceccd45325be52173ccbdfa499ac25a5c770340a",
+        "5f40b246-3ae8-42ff-b6e8-33ad09b70cd7"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 37
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "G3",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Kobra",
+      "identity": [
+        "G3",
+        "0b2ff642336693562b2156b80e899aabf0a14009f56b6b33322281bbc52650e0",
+        "ff2e0e14-e07a-46de-858c-5f1337b7b8cb"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 128
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "G3",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Scoped",
+      "identity": [
+        "G3",
+        "6cc5013a4b9988d358b1e5e6bb97057b41e0e16c61a2ccf24a31b17f1bdaf188",
+        "03c53a2d-428e-4666-a912-25d1e9264ff5"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 228
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M16",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2",
+      "identity": [
+        "M16",
+        "7020e5f31483583d06a39c836b3da872290944e28c0fd2a0a0d34dcd6948bf7c",
+        "0df850c9-8e97-426d-aafc-eb0b0477dfb5"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 108
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M16",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Kobra",
+      "identity": [
+        "M16",
+        "3d81027bfe3e0d4273772208ecc75ece2e60533b1f809ef32f5521ab9a6f1384",
+        "38ef1aa2-493e-47e9-b2e6-3a34bf09c454"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 156
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M16",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Scoped",
+      "identity": [
+        "M16",
+        "d6c6c0e879e16783508cbbaa8ea8b9f6795e5fd090758db18cc34f00a78aa8a5",
+        "42bfb0f7-6d52-43bc-a878-07542ce052a5"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 146
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M16k",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2",
+      "identity": [
+        "M16k",
+        "eb3c438965a1045b6db6f76c61bf54691b38232ad560b21c84f38efacaf89dc4",
+        "b75bbbdc-6d08-4119-80ac-ca4f6ef78f39"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 152
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M16k",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2_Kobra",
+      "identity": [
+        "M16k",
+        "e857ce0e773ace8104712b9b259291aa07b9cbcb02a609e46b276edc2a22e555",
+        "8fb0867e-fcd8-4121-bb00-ec9b7e6da878"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 8
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M16k",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2_Scoped",
+      "identity": [
+        "M16k",
+        "84e72eda5b33ea697993e52ea9f4a45d94507056d6a9a43cf30a047621bd126e",
+        "5859df39-18d6-41a8-84c1-3998932a30bc"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 124
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M1911",
+      "configuration": "Objects/Weapons/Handheld/Beach/M1911A1/M1911A1",
+      "identity": [
+        "M1911",
+        "7d94e90adc48c527abaec2a3d6f540b2f22417c4a42a5b0df0b3293e2f8e80c0",
+        "e9e77835-ffe4-4f7b-8784-0970c71e051b"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 66
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M1A1 Thompson",
+      "configuration": "Objects/Weapons/Handheld/Beach/Thompson/Thompson",
+      "identity": [
+        "M1A1 Thompson",
+        "1fddcb8da6dd1e3746c30293b5c901c94242d2c581c3c2255e8c9f44e7e98c1b",
+        "207cffd9-8285-4407-ab2a-4c3a650f1f99"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 84
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M1A1 Thompson",
+      "configuration": "Objects/Weapons/Handheld/Beach/Thompson/Thompson_Assault",
+      "identity": [
+        "M1A1 Thompson",
+        "b2207c1afcf2b976401228b2a564885f0b69ef981ed4ddbc358e378b04963ec1",
+        "980051ae-97e5-4bdf-a203-6eef9e16ab92"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 58
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M416",
+      "configuration": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416",
+      "identity": [
+        "M416",
+        "0bd854517cadef34c6eef85698736eca2c05c797fb5ed2f3dec35c2a2b61326a",
+        "ca69bfba-0f21-42e3-bbe9-fa2902600563"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 80
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M416",
+      "configuration": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Kobra",
+      "identity": [
+        "M416",
+        "6a7232f70141053111da71246e385861f1e5d0e50e02cfcd28fe2947d8d34ad5",
+        "c8e7f199-d0c4-44d7-a44b-ad221c23cb9c"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 125
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M416",
+      "configuration": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Scoped",
+      "identity": [
+        "M416",
+        "6a4dd608be0432b022795d44bfbd55c8939c5d0fd6d95c7b421a740ab192c247",
+        "796cab59-65bc-4d59-b868-983681809062"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 27
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M9",
+      "configuration": "Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9Beretta",
+      "identity": [
+        "M9",
+        "5e671d40c30fa8d718c16e75fb22220e47e7b40325eba4be6a95cbfefcb29f91",
+        "f4692ba9-a65b-420e-86e3-b34693fa384d"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 196
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "M9-3",
+      "configuration": "Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9-3",
+      "identity": [
+        "M9-3",
+        "8ba71d710a9822745622e66c77ae601367fb5230676ed8834611f0ebc74d9279",
+        "5bd5cc30-2813-44a3-bf08-6d23eaa66394"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 195
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "MG36",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36",
+      "identity": [
+        "MG36",
+        "7a564c7726be97924e36db02ec6a218f6b1500c057dffe004b3df549a60a15c1",
+        "b5101354-a431-45c0-b640-2f2339ac9e86"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 32
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "MG36",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Kobra",
+      "identity": [
+        "MG36",
+        "d0e44f08b2e86ab0e99a890f8a4d8af4adbb4c6ccbc0a2d98a8349f643b664fb",
+        "75e08cb5-f9fd-4d99-9adc-5c172db310fc"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 93
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "MG36",
+      "configuration": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Scope",
+      "identity": [
+        "MG36",
+        "6f2c2e40d3efc9a3f143ea2b89d9e08f0e617eaa9f831b51ea64bbd3367ff63d",
+        "d7c9100e-a312-4084-871e-2471b63da284"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 12
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "MP443",
+      "configuration": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach",
+      "identity": [
+        "MP443",
+        "e2057d4456fc5619b556c5db67716d5fd2f0c91eb07e7a27276811e8e670f412",
+        "a1617ba1-b5ef-4a8c-94d2-79cd1afd7b8a"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 72
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 36
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "MP443_sp",
+      "configuration": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach",
+      "identity": [
+        "MP443_sp",
+        "e16f5713854ca38ab58d61bd3c568e2f87533c0e82032d71d61f27449d5484cc",
+        "58098858-821b-4406-a19c-ae62e5d38bdf"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 275
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 110
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "Mk14EBR",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR",
+      "identity": [
+        "Mk14EBR",
+        "23c2e44285d2547f3a76142a510648220bd9601a35e3a2388d701daf92ada8e3",
+        "ea04234c-c5d1-4ab3-a630-e535a8903f28"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 99
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "Mk14EBR",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Assault",
+      "identity": [
+        "Mk14EBR",
+        "516e9cce36a5f0e314d5e8de6e8bcfb1c97e144e55dfe4688c96c7cefeac9840",
+        "1bc128db-2f92-489b-9c2d-f7a53fe04749"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 200
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "Mk14EBR",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Assault_Kobra",
+      "identity": [
+        "Mk14EBR",
+        "fb7de60c77fd023759f34d06ebd087b692b0b5ae940a6850826429c67db8edb9",
+        "eee4e0f1-ef17-4cf2-9356-289d85b4e742"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 104
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "Mk14EBR",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Assault_Scope",
+      "identity": [
+        "Mk14EBR",
+        "330a8756ee9a52dacc9c9eea5bd9e96b404722c3533110793a79cdd255f96fe7",
+        "3943d011-8f20-47c8-9fef-0380a9f3bc45"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 206
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "Mk14EBR",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Kobra",
+      "identity": [
+        "Mk14EBR",
+        "5e9bd63f2cf900e6a191aa767a7d940caabce6fcb6069af3c8fbb4af2bf634d1",
+        "f96b3f73-11d0-49d5-bb9d-2bc30a81ea1a"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 34
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "Mk14EBR",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Scope",
+      "identity": [
+        "Mk14EBR",
+        "dc0d31eedfd069197436e76a1d8c53432876eae51ef3bff0439a7c76a2233846",
+        "eabdcaf5-3e0b-4be4-ab4f-fb36dc9e3254"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 209
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "Nambu100",
+      "configuration": "Objects/Weapons/Handheld/Beach/Nambu100/Nambu100",
+      "identity": [
+        "Nambu100",
+        "24ca715ffcaf75cedc25712d8c43e80a5bc7a51b72eb750593d5cb7725cc0120",
+        "ac8010d7-94e2-4b04-ae1f-1e20af940c0f"
+      ],
+      "weapon_class": "campaign_exact_configuration",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\config\\body-ammo-assets.json",
+          "configuration": "Objects/Weapons/Handheld/Beach/Nambu100/Nambu100"
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "PP2000",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000",
+      "identity": [
+        "PP2000",
+        "25475fc23a93a4168db67673aef4c4c75a09a29b57fa95637b2c4456df2dbb9b",
+        "d0060d52-0de0-4a16-a774-22e78f8cafba"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 164
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "PP2000",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000_Kobra",
+      "identity": [
+        "PP2000",
+        "ecd5c77daf17908aaea2369b21a5be85a32cb6eab7f459c509581f5dfd08804b",
+        "a11f3500-f861-4750-ba0c-d6c79c18532c"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 120
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "PP2000",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000_Scoped",
+      "identity": [
+        "PP2000",
+        "42ba16bd39694e30f6181e0974a2f27fb2f63b94367a9d8db625e303b310a979",
+        "a9e617c8-f9f8-4844-91e4-16b258d12f42"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 33
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "QBU88",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88",
+      "identity": [
+        "QBU88",
+        "262bdb522e499fd12766e185940754e3c384fcecdcaff55b0ab953e4428ab600",
+        "8e18b38e-6734-494a-ba37-d4264b077d3f"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 40
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 19
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "QBU88",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Kobra",
+      "identity": [
+        "QBU88",
+        "efd5ae5cf68228d5e7fd85cc33af281475b5af30ba557000bf83759fe49187f5",
+        "aaf5e0dd-a0ff-4d1b-8645-837c1d726a1e"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 142
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 76
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "QBU88",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Scoped",
+      "identity": [
+        "QBU88",
+        "bf7a9c6eca83f0f1c27d54d605ffbe785146f0fc68ac6d92522b168234a6cab8",
+        "74aad94b-a1a0-42b5-80d5-e1e321894a47"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 208
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 105
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "QBU88_sp",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_QBY88/SP_sni_QBU88",
+      "identity": [
+        "QBU88_sp",
+        "adeb31f56ef751ae0b7c33fd86fd18e9a043ba8d49eb7dc3d3dd54019d0073a9",
+        "96fb1aae-975b-49df-80f6-6ecc8103ebf2"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 242
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 15
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "QBU88_sp_k",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_QBY88/SP_sni_QBU88_Kobra",
+      "identity": [
+        "QBU88_sp_k",
+        "0c294fd9bc16e0ec213d1608e40a52be4aeb06d59b20777b0e228870e2736e24",
+        "6d9bbdeb-c6c6-4d82-95d1-195e3e84719a"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 259
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 55
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "S20K",
+      "configuration": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12",
+      "identity": [
+        "S20K",
+        "f5191a7b1d3b363822a22069fc1a579ec258fa1dd079fe0e1191c62ea4dfe975",
+        "db8383ba-6059-4192-b0a4-bf2ecb36f3a2"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 10
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "S20K",
+      "configuration": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Assault",
+      "identity": [
+        "S20K",
+        "120d8793ba985e2012ab3a6a98ffc00cfc86a1efe75d071cda5824e573fe0aa8",
+        "e0bf1bc3-97a6-4480-bfb6-7aabc3b298d5"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 135
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "S20K",
+      "configuration": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Assault_FRAG",
+      "identity": [
+        "S20K",
+        "ddcbc54c5caa89654ac3709613b7011e4444952c187343a7384686e6396f4829",
+        "4b7a97a0-ad3b-4eb4-b761-88d72fe68654"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 5
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "S20K",
+      "configuration": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Assault_Slug",
+      "identity": [
+        "S20K",
+        "73b99cb95f1dec1c6725c946fa355f4ed6f4318ae97e8a1347a99036798bb25e",
+        "1bbc17e3-d8c2-4033-a348-d69910d0135e"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 69
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "S20K",
+      "configuration": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_FRAG",
+      "identity": [
+        "S20K",
+        "5eca8a51c6400190fa05991ad4a21e4e910a9e5223418b5229a654f598acc516",
+        "8770594f-da9a-494e-bdcb-1279b4964ed2"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 49
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "S20K",
+      "configuration": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Slug",
+      "identity": [
+        "S20K",
+        "139fadbefafb09b9d55957f5188b35e440c6e362bc39545bbe6d89197608414b",
+        "dbb3b8ba-a5c4-41b8-b877-ba832455ad3c"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 98
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "SCAR",
+      "configuration": "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL",
+      "identity": [
+        "SCAR",
+        "7d97233814a8c59c03c0d3c3917254695045b86589f5ee55b901f19e34f3ffcb",
+        "994266fa-8e2c-4d7c-b8f3-3a326c64b7c2"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 82
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 43
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "SCAR",
+      "configuration": "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Kobra",
+      "identity": [
+        "SCAR",
+        "7d216c57eea514fbeee6106e5dd5872803ea71823f9d265ac3d8b314ce8bdd3c",
+        "717ce619-e324-4967-bc70-11e36f5b7072"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 75
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 37
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "SCAR",
+      "configuration": "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Scoped",
+      "identity": [
+        "SCAR",
+        "3c2d7c8db4b89d6e0cf6d48c74a014fc9cd24c83b0eadb59602b419a7db5bfdd",
+        "ecbe8c76-05ac-4e38-bd33-37a4c094387b"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 215
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 108
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "SCAR_sp",
+      "configuration": "Objects/Weapons/Handheld/UL_rif_FNSCARL/SP_rif_FNSCARL",
+      "identity": [
+        "SCAR_sp",
+        "afef46404434e56a20dacd77bc81217bc6018da97b7009d27d87ca57b30e6d6f",
+        "fc1e53be-dbcc-487b-84e0-3ad6213fe7d1"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 273
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 102
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "SCAR_sp_s",
+      "configuration": "Objects/Weapons/Handheld/UL_rif_FNSCARL/SP_rif_FNSCARL_Scoped",
+      "identity": [
+        "SCAR_sp_s",
+        "afec48bfa7ce38765503f771f4fa4491c3f84c444943887b9c46e04323116ba5",
+        "bacef779-0c96-4795-8a59-20645a5ec396"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 258
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 54
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "SVU",
+      "configuration": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU",
+      "identity": [
+        "SVU",
+        "256f3e276b8dae06739453fd5fbbae0c820acb0629b02f01608aeb9f3bbe0cfc",
+        "763fffd8-481f-479f-8414-b2f0b62f2574"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 19
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "SVU",
+      "configuration": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Kobra",
+      "identity": [
+        "SVU",
+        "64f76339e07c1013e790e10b73579d270390e76e96ab6041b2425f654a072b5e",
+        "f6fb90ec-a5fb-4129-a43b-72f8ea67d33d"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 96
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "SVU",
+      "configuration": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Scoped",
+      "identity": [
+        "SVU",
+        "34726cf9a312f3dc146686cfa1b7a3258bd8ab86c8bb1844d42742ff4306b25f",
+        "d18e3fa0-9072-4358-b41e-c4ef04dd56e9"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 25
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "UMP",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP",
+      "identity": [
+        "UMP",
+        "7f47ec0c1a8e05085d9b582550a6aff9387ede7e9ee6dea7124646c8175b4bfd",
+        "8d9c738e-a09d-4ac4-9ed8-ca8360cf9d4e"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 188
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "UMP",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_Kobra",
+      "identity": [
+        "UMP",
+        "7f5f2505c9972c6d28f438693ab8a68f95a34634c105bc06d29a669651cdff38",
+        "64df6a5f-0c6c-45f5-8d25-0584a83d0226"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 226
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "UMP",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_Scoped",
+      "identity": [
+        "UMP",
+        "bc1e3314007540dd4ba304832fe2c5532bb36be23a0ec38c352630d5dd67cfae",
+        "746464ac-59c6-4a11-992f-200a14353436"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 148
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "UMPk",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_UMP/UPG_smg_UMP",
+      "identity": [
+        "UMPk",
+        "5b58620069e72c9f49117512f65f59607efc6da9d4910540e01bc05c9a1fda25",
+        "ce190d0e-dc45-488e-a4ce-3da348acf647"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 201
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "UMPk",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_UMP/UPG_smg_UMP_Kobra",
+      "identity": [
+        "UMPk",
+        "039ee1ee62cf94c05104b678c3958ef975f060b89e74f18be7eb36c9eec39641",
+        "c99d8729-2b90-4bba-b75e-1a69f61388cb"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 87
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "UMPk",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_UMP/UPG_smg_UMP_Scoped",
+      "identity": [
+        "UMPk",
+        "fadccfddecb127c52cae5d36e75f38578c7ffc87d1375f88740e777fe29bed87",
+        "ecc516b4-bffe-41ff-9620-57315b0efeb5"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 130
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "USAS12",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12",
+      "identity": [
+        "USAS12",
+        "1cdfbbf7748f99704503655a30dc0b2c6804892b612a41e8ff428a40dd6a64ee",
+        "89f16a61-39ca-4572-980c-0bc602a9b498"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 36
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 18
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "USAS12",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Assault",
+      "identity": [
+        "USAS12",
+        "d08173d4b684960f0508244018dd3c499196971321a01469de086f4753f8026a",
+        "0ed33dbf-5c18-4dc6-adfc-38d2864e5405"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 172
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "USAS12",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Assault_FRAG",
+      "identity": [
+        "USAS12",
+        "a7ef1ca22f890e14b05dd72a12979bff8f421f5ebbcc1f7ad7a835c506a4bb98",
+        "f41eaaa9-a29f-4c59-ba6e-d1763491d3df"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 167
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "USAS12",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Assault_Slug",
+      "identity": [
+        "USAS12",
+        "aec18843cbba6f0fbba03fe82a13dd974040b49e7d112c6cee91ae478de59418",
+        "c85c2005-302e-48e0-b7d6-42105037ebfb"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 232
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "USAS12",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_FRAG",
+      "identity": [
+        "USAS12",
+        "336a8989c46ee61b75c5b95aed09f47566da3ff65ce95c0e1c2e8c3a665322a9",
+        "c25f723c-0d6f-44b4-be51-59245538727e"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 205
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 104
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "USAS12",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Slug",
+      "identity": [
+        "USAS12",
+        "b87e1b6005cbca3da6c4781b44430234d7b01e4d89833fb481496929180cb968",
+        "fff06977-349e-47d7-8d79-55ca2b59ce2b"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 141
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 75
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "USAS12_sp",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_USAS-12/SP_shg_USAS12",
+      "identity": [
+        "USAS12_sp",
+        "6ba93fd079c7725723f5712d58a28b1d173da108350da5d0bd3c6a281e446a29",
+        "8daacbdd-6a60-4631-b0b6-d99655d7cf55"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 265
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 80
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "USAS12_sp_s",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_USAS-12/SP_shg_USAS12_Slug",
+      "identity": [
+        "USAS12_sp_s",
+        "7b347c663723d2090b07945677143ad80920513be4eb3da8cdb8bfc8d3b031f3",
+        "e7a66774-66c8-42fa-a2d0-1c6afdda5ccf"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 240
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 11
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "UZI",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI",
+      "identity": [
+        "UZI",
+        "4978ee888e33bb4086623535b93d63d9f2f4bda364e5dd9b351f7ff063a1349e",
+        "a0f66ce7-39bd-4495-85f4-5d880add6203"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 71
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 124
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "UZI",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Kobra",
+      "identity": [
+        "UZI",
+        "19f8eaa40bc0d57e8d86902256078291032c5a9548197faba0cab1b2ebac88c1",
+        "7500bc14-a764-4490-baee-85648f803b4e"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 222
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 126
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "UZI",
+      "configuration": "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Scoped",
+      "identity": [
+        "UZI",
+        "29040c14632aa20446a3ca95be940488b1ed9efdbf40a9df3d5b5e7a87d09bfe",
+        "c0853544-a9d4-44c8-ba74-7fec3a21e869"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 116
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 125
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "VSS",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores",
+      "identity": [
+        "VSS",
+        "d723d3c23a8582720108bbcdae94716bcf341229120dec9f72f72e2787d2194d",
+        "848238ec-10e5-4d40-80d2-96cb04da2a64"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 225
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "VSS",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Kobra",
+      "identity": [
+        "VSS",
+        "71a8887897a904ca0227bed174fd473002a72aad5f460b51b4c5155221fd3395",
+        "f19040c7-adc9-4bfc-8d3d-ef80961d6ea1"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 129
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "VSS",
+      "configuration": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Scoped",
+      "identity": [
+        "VSS",
+        "d2f60a131cac9415dc1df226cff07a2ccca4f7f454f7c8047ffb7d6691360a4d",
+        "f8a33345-a75a-48cd-94eb-f480242d12e8"
+      ],
+      "weapon_class": "wcSniper",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 11
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "XM8",
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8",
+      "identity": [
+        "XM8",
+        "97a21f7175e4671522b0f27d19f51e547b5b7cf3913028d48c973d7916a3730e",
+        "6649bc62-58ac-40c3-929c-ab451b1fba59"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 117
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 65
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "XM8",
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Kobra",
+      "identity": [
+        "XM8",
+        "c050f1f7670fe2458b0e2a917f08447a4245ab4e13ff6ae824ec6ef28b24e93e",
+        "db5c7b93-1cb3-4604-b2eb-2866bda58e46"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 59
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 32
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "XM8",
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Scoped",
+      "identity": [
+        "XM8",
+        "58f9a1d69fd33a6b901cacea3c29b2bf4f2658798258508c2f8bbd1137f1971b",
+        "99c1995b-ecd4-49ce-9ffa-0e1042e231f2"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 138
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 73
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "XM8 LMG",
+      "configuration": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg",
+      "identity": [
+        "XM8 LMG",
+        "515f82d772129e026d2c713ef33b0cc665f86f364ac4a754d52c7c465b7046ef",
+        "16ff338b-657b-4966-8a9e-bba5d3c40834"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 76
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "XM8 LMG",
+      "configuration": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Kobra",
+      "identity": [
+        "XM8 LMG",
+        "c49132975819d3fd9a6163f6466aa2f8bfa194f084e53bd14ef77185d1c36965",
+        "294f6305-dcdf-4be8-81cd-f5f62ed333c2"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 177
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "XM8 LMG",
+      "configuration": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Scoped",
+      "identity": [
+        "XM8 LMG",
+        "9a560d44b3f4d0ed000635bcd4eaa912960db12eb53ecc3bb1fd7bc8e1a00914",
+        "e5e3ba16-ae7a-4172-889f-3a6c0a397349"
+      ],
+      "weapon_class": "wcLmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 147
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "XM8C",
+      "configuration": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c",
+      "identity": [
+        "XM8C",
+        "21a6b56404b4ade896da5cd9b08a89db4db710c33ba0d99bff33f0acbcad4d9c",
+        "93e2a23e-b8d6-490b-8468-0b789da8e35c"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 62
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "XM8C",
+      "configuration": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Kobra",
+      "identity": [
+        "XM8C",
+        "b3a2b0b87554e994332c9e4d5819c6dd327afb26ab718a2b0161c5313464f6a6",
+        "461cfafc-f0df-4323-ac58-57fbcb733d6f"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 31
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "XM8C",
+      "configuration": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Scoped",
+      "identity": [
+        "XM8C",
+        "ae12d9803482f3846993ea46e0a4afc19495e4b76cd847ea78a45c616092d970",
+        "9f5ab2bd-cd9e-4830-927c-c91953f70092"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 21
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "XM8_sp",
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8",
+      "identity": [
+        "XM8_sp",
+        "f8a349fb548584eceb8b45899acdf580ba32a488646f7cb0e902228b61abd60d",
+        "dc440e16-a62e-4650-bf78-503b6ac7b499"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 266
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 82
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "XM8_sp_s",
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8_Scoped",
+      "identity": [
+        "XM8_sp_s",
+        "23a7261d6cbaffe7c642af167edfca1a8ac818ebef551538b01a5784ef8f472f",
+        "6a066a2d-ab87-4356-afa4-567741c395bf"
+      ],
+      "weapon_class": "wcAssault",
+      "mechanism": "detachable_magazine",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 246
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 27
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "MP412",
+      "configuration": "Objects/Weapons/Handheld/MEC_hg_MP412rex/MEC_hg_MP412rex",
+      "identity": [
+        "MP412",
+        "6479ac2e4e3d68887ae0c202e3dee4d703a65fa5a83188e8f6d963660e854a2e",
+        "811b1f2b-4413-41a1-b7f0-0aed8a1d527a"
+      ],
+      "weapon_class": "wcSmg",
+      "mechanism": "revolver_cylinder",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 92
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "870MCS",
+      "configuration": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Assault",
+      "identity": [
+        "870MCS",
+        "c53414fb9184ef6ba633d9b6f701345121102bc689e7727be75e5fb30a822319",
+        "79070ff4-8a66-47ca-b53f-49a8ee2a7b17"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 14
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "870MCS",
+      "configuration": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Assault_Slug",
+      "identity": [
+        "870MCS",
+        "c9d3fe797f72919b3b3f4eca87c3721b8708923813614312143c7a1593c6be52",
+        "1c67174a-686d-4be7-87c7-ce34db5beaa3"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 134
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "870MCS",
+      "configuration": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Frag",
+      "identity": [
+        "870MCS",
+        "61ec8e695b5a478eeeab775482d8bbda289644861952a3318d7aac8f37f7d9a5",
+        "beb9cf28-56b9-487a-baf2-a396c5bd6ab2"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 149
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "870MCS",
+      "configuration": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Frag_Assault",
+      "identity": [
+        "870MCS",
+        "3f6acf30377a14e0bca381bcdefc6831a273b465825f5b2cb9cd6e45043ac0ca",
+        "fc6342c8-7834-47cf-86f9-d2c79de732a6"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 140
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "870MCS",
+      "configuration": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Slug",
+      "identity": [
+        "870MCS",
+        "65122fbbe334e603a05faae1fcf324733751584928942450398793e6d2bd8b16",
+        "5b7eb1b8-df24-4369-a6cd-b3edad30f385"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 218
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "870MCS",
+      "configuration": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_Remington870MCS",
+      "identity": [
+        "870MCS",
+        "5b205a695ea01761b0c21727655967f554a5b0db0c826317e24efb7f4fde8925",
+        "fbcc489e-acc3-448f-998a-ddfb85582047"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 74
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "NS2000",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead",
+      "identity": [
+        "NS2000",
+        "4638204867c64ed0ed5179619c53677b75839223ed72f016067fe853f76ce15b",
+        "f9633dfa-3fa8-44ee-811c-0fa88a6771a5"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 61
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "NS2000",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Assault",
+      "identity": [
+        "NS2000",
+        "5c312c2830b93daced609debc1bb1b139d1d898f1435ee2c178b0c22563aa853",
+        "61f036c8-6593-4358-a83b-ee421d5d4129"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 88
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "NS2000",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Assault_FRAG",
+      "identity": [
+        "NS2000",
+        "dce0c07f5b24268b0fefc22d5a14d70eae13b8437324c499d44b036a7c9fd1c8",
+        "c3a330f8-9446-47c0-bb51-c7231b0bceee"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 139
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "NS2000",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Assault_Slug",
+      "identity": [
+        "NS2000",
+        "7b5f7bfb8f6af035019b244d9c51e6507ae334c2f5230e45229dbd29169cf90c",
+        "0a8ab56a-8527-4130-af03-3471643c0676"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 0
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "NS2000",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_FRAG",
+      "identity": [
+        "NS2000",
+        "c266a0ddfca04718d4ae949701844e756d9053c743d9f93d8f88e788aca82bce",
+        "9c30014c-cd01-49bb-85a6-fcc609ed7a93"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 181
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "NS2000",
+      "configuration": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Slug",
+      "identity": [
+        "NS2000",
+        "c8ed51bcf4349807da7c0f0ef5bbd6237cc6765fb76925aebda34e42e883f4cf",
+        "7d149c91-41dd-42d9-98bf-f591203eb1b8"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 151
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "SPAS12",
+      "configuration": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12",
+      "identity": [
+        "SPAS12",
+        "0061306f908e68bfc2ee6cec5bc1cc00507469713d2a7a2eea8394ddc5f87fb7",
+        "f236287b-f276-485a-a3e6-1c7d4530f407"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 168
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 92
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "SPAS12",
+      "configuration": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Assault",
+      "identity": [
+        "SPAS12",
+        "a4e3a566430ca38f9afad5939a4be2d07aa7db06a7d89afee06c45cb60da0cfa",
+        "b6875190-00bc-45d2-87da-663d798e4b6f"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 13
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "SPAS12",
+      "configuration": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Assault_FRAG",
+      "identity": [
+        "SPAS12",
+        "78faf84c33640d3e08135ff3150adc409c1175b9ba422258e1bfc6808405e6f9",
+        "275ef8e3-24e9-4bb3-b9b8-3402ad82eb40"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 216
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "SPAS12",
+      "configuration": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Assault_Slug",
+      "identity": [
+        "SPAS12",
+        "d187bcc483224b2651944dfa5682f0e41f6d3530f2bc05bd575a50dee0c959ae",
+        "75af4bef-8d9e-4dc9-ba62-2a73b2473bc0"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 163
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "SPAS12",
+      "configuration": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_FRAG",
+      "identity": [
+        "SPAS12",
+        "9582fdca2069d67b88372b0d375c259f5ffa29a87d143ee1f6ae3a82ec093a60",
+        "3cd79520-d9c4-4ec6-ba5f-370da9fcf789"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 153
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 83
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "SPAS12",
+      "configuration": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Slug",
+      "identity": [
+        "SPAS12",
+        "3dadfa119ecbe20609bd38190e00e9620b09c4ec76103d3caf892a2779b1b806",
+        "590cc282-3deb-44d9-aa6f-3a14c723d7b3"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 219
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 112
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "SPAS12_sp",
+      "configuration": "Objects/Weapons/Handheld/UL_shg_SPAS12/SP_shg_SPAS12",
+      "identity": [
+        "SPAS12_sp",
+        "800b46aead4e2704cb771176e5d7ae58f72838beb89fe4cb3f9d7192089f2113",
+        "cd43bc40-bbd7-4bab-b3d6-8ae934374944"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 260
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 58
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "SPAS12_sp_s",
+      "configuration": "Objects/Weapons/Handheld/UL_shg_SPAS12/SP_shg_SPAS12_Slug",
+      "identity": [
+        "SPAS12_sp_s",
+        "d63b873bc98ae672b9fd6176894329c691a7d3172585eb8090e7020a7c9739eb",
+        "c8312ba4-443e-40b1-b0ae-3ea3c71773c0"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 236
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 3
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "T194",
+      "configuration": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194",
+      "identity": [
+        "T194",
+        "6268186190de2603cbcf9c3b943e7b8230e4f5c22384a77b45c201053a1c16a2",
+        "ed6c98b7-205e-4488-857d-2408528ef2aa"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 254
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 49
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "T194",
+      "configuration": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_FRAG",
+      "identity": [
+        "T194",
+        "d089ce4a92cf6396ac2a5afbbb9e82e0d794aa812c95b796cd7f09b1fc2b6ba5",
+        "e3457eac-015f-4982-974b-92543a2bf010"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 248
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 29
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "T194",
+      "configuration": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Slug",
+      "identity": [
+        "T194",
+        "32cb52f0ac88e3e87b7b02e74938de8323679ef4da0a9fcb14c12a34567183fd",
+        "f00e6142-a931-4010-9136-e1fdf29b53c9"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 253
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 48
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "T194_sp",
+      "configuration": "Objects/Weapons/Handheld/MEC_shg_TOZ194/SP_shg_TOZ194",
+      "identity": [
+        "T194_sp",
+        "22f193d20ccc49b898ae09b92530de4db8e0f49f5a541e7971431e48186ca446",
+        "5cf68976-bf6c-4744-bda5-71a954679ff9"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 268
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 86
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    },
+    {
+      "asset": "T194_sp_s",
+      "configuration": "Objects/Weapons/Handheld/MEC_shg_TOZ194/SP_shg_TOZ194_Slug",
+      "identity": [
+        "T194_sp_s",
+        "0d23262d8a7450c67aa22a8bdf41bf97891945c34017bf364f2f0b7d794eadcf",
+        "361c0419-96a4-4e20-96ca-7b386c57eee6"
+      ],
+      "weapon_class": "wcShotgun",
+      "mechanism": "tube_pump",
+      "origins": [
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+          "index": 256
+        },
+        {
+          "source": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\sp-common-configurations.json",
+          "index": 52
+        }
+      ],
+      "two_hand": "source_complete_exact_selector",
+      "manual_reload": "source_complete_family_runtime_geometry",
+      "source_complete": true,
+      "installed": false,
+      "headset_accepted": false
+    }
+  ],
+  "completion_rule": "A row closes only after its exact two-hand selector, manual mechanism, native adapter, geometry and required render/cache dependencies are connected. Registry existence alone is insufficient.",
+  "completion": {
+    "evidence": "combined offline source checks; native/headset acceptance pending",
+    "receipt": "completion.json",
+    "integrated": false,
+    "installed": false
+  }
+}

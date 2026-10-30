@@ -1,0 +1,94 @@
+{
+  "level": "source structural audit only; no C++ build, deterministic execution, game or headset run",
+  "authored_equipment_rows": 25,
+  "unique_insertion_profiles": 25,
+  "native_candidates_unchanged": 24,
+  "consumer_spas_gate_audit": true,
+  "files": [
+    {
+      "path": "src/games/bc2/Bc2ShotgunEquipment.h",
+      "sha256": "2a6c18f00cbd5432853f50faa7066f83a292004a43d6ce79c785331a7039da91",
+      "balanced_delimiters": true
+    },
+    {
+      "path": "src/games/bc2/Bc2AmmoSupply.h",
+      "sha256": "a7b35f76b8c84d8cbe9d0cff41ecb530aa3f563dc8dd40187fe1ca93cf616b9b",
+      "balanced_delimiters": true
+    },
+    {
+      "path": "src/games/bc2/Bc2AmmoSupply.cpp",
+      "sha256": "79a24a098a5e17e3c8bc0772cb6167868cd4b969d2c84186dca6caa9d77ec611",
+      "balanced_delimiters": true
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadInteraction.h",
+      "sha256": "0d2d4f159d50bf9add9d8418a66ece4c579a07b916af170446da218bbc2df810",
+      "balanced_delimiters": true
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadInteraction.cpp",
+      "sha256": "2fa42c1673eb12c90a5f4c64ff2b8e22a719c5ee33c2c5be05bf078548fc4486",
+      "balanced_delimiters": true
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalReload.h",
+      "sha256": "d56ed90fc5fc87bcb188c09e77ecf7302f1c250ae27af581455bf446fa8e2bf6",
+      "balanced_delimiters": true
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalReload.cpp",
+      "sha256": "e033c290cc825189711b9b38352b0329e3583c5bef1edf0f4ae505d234f75a8a",
+      "balanced_delimiters": true
+    },
+    {
+      "path": "src/games/bc2/Bc2BeltAmmo.h",
+      "sha256": "c990e192ae551d19e7c9a8bd2a7f28791c7cdc3ffb2dcc3b4167b3195f4b074e",
+      "balanced_delimiters": true
+    },
+    {
+      "path": "src/games/bc2/Bc2BeltAmmo.cpp",
+      "sha256": "8e9b655aa61280273b9bca4e322bcca89f3ba4b4ad804bf92a3b03a569c2545f",
+      "balanced_delimiters": true
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyAmmo.h",
+      "sha256": "5a79f6e21ffbcc1e8f13e58342ce0c5216716c2dd3fb3cf83385e354e97cb0bc",
+      "balanced_delimiters": true
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyAmmoRenderer.cpp",
+      "sha256": "56c48a712691479fb9df989257f7a405d35b6d204c1579117b23e57066acf4cc",
+      "balanced_delimiters": true
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadPresentation.h",
+      "sha256": "f57b158dfba7222048ee9a63d445f00e7f26f4c62a58f17dd95f8f1073ad5703",
+      "balanced_delimiters": true
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadPresentation.cpp",
+      "sha256": "bc59ef39578e6a07c6dabe90ed632a6c7e27987547c3d57216ebc03adc3e1155",
+      "balanced_delimiters": true
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadPreview.h",
+      "sha256": "7d23281685bf49189335a31267a7ee487167f7e9c492601df922c2437ba0e139",
+      "balanced_delimiters": true
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadPreview.cpp",
+      "sha256": "6e7a4451976640a93c2389af7259f3dbbe95423101acb565a2a0a264934c8117",
+      "balanced_delimiters": true
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadRequestBridge.cpp",
+      "sha256": "3f495a8d231c61449a89f8b38de50643099599812eb777205f51e46cf50e907c",
+      "balanced_delimiters": true
+    },
+    {
+      "path": "tests/Bc2ShotgunEquipmentTests.cpp",
+      "sha256": "2ebd1e6f00c7628394adca82cf6e4a0df57c771ecacc957d61e9b49c28e81e7e",
+      "balanced_delimiters": true
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 #include "Bc2ReloadRequestCycle.h"
+#include "Bc2ManualPumpConfig.h"
 #include <limits>
 namespace fvr::bc2
 {
@@ -146,7 +147,7 @@ bool Bc2ReloadRequestCycle::Common(const ReloadHoldInput &in, bool timing, std::
         return false;
     if (!in.verified || in.branch >= 3 || in.identity != control_.identity ||
         !Fresh(in.nowNs, in.leaseDeadlineNs, now) || now - in.nowNs > ReloadHoldProbe::ContextFreshNs ||
-        !IsDiagnosticSpasConfig(in.config) ||
+        !ManualPumpConfig(in.config) ||
         (configured_ && in.config != config_))
     {
         Cancel(ReloadRequestCycleFailure::Owner);

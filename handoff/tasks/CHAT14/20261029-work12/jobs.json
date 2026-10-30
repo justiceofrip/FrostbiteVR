@@ -1,0 +1,164 @@
+{
+  "schema": "fvr.bc2.lmg_binding_jobs.v1",
+  "runtime_admission": "none",
+  "models": [
+    {
+      "label": "M60 campaign, exact unscoped configuration",
+      "mesh_resource": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Mesh.res",
+      "runtime_enabled": false,
+      "definitions": [
+        {
+          "native_name": "M60_sp",
+          "weapon_class": "wcLmg",
+          "resource": "Objects/Weapons/Handheld/BU_lmg_M60/SP_lmg_M60.dbx",
+          "resource_sha256": "3c7b9a1cdba0fe1f3109bfbeafe1d8081f7dabf6aa465c4b430f8b65833bfdea",
+          "instance_guid": "BD561A9B-FD48-4254-B4C4-39653213981A",
+          "firing_resource": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Firing.dbx",
+          "firing_sha256": "b28fee4d1224bb062cb5352b57916817ed38e47171b17c065c2798721153928b",
+          "firing_guid": "C3A3C9F7-AA9F-4A94-B9B9-05F5A04C4491",
+          "function_resource": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Firing.dbx",
+          "function_sha256": "b28fee4d1224bb062cb5352b57916817ed38e47171b17c065c2798721153928b",
+          "function_guid": "6030AF2D-B80D-49C6-A443-55DBAB23AF4B",
+          "fields": {
+            "FireLogic.ReloadLogic": {
+              "value": "rlWeaponSwitchCancelsUnfinishedReload",
+              "encoding": "string",
+              "offset": 7557
+            },
+            "FireLogic.ReloadType": {
+              "value": "rtMagazine",
+              "encoding": "string",
+              "offset": 7562
+            },
+            "FireLogic.ReloadTime": {
+              "value": 7.800000190734863,
+              "encoding": "float32",
+              "offset": 7480
+            },
+            "FireLogic.ReloadDelay": {
+              "value": 0.0,
+              "encoding": "float32",
+              "offset": 7470
+            },
+            "FireLogic.ReloadThreshold": {
+              "value": 0.699999988079071,
+              "encoding": "float32",
+              "offset": 7500
+            },
+            "FireLogic.PostReloadSequenceTime": {
+              "value": 0.0,
+              "encoding": "float32",
+              "offset": 7490
+            },
+            "FireLogic.RateOfFire": {
+              "value": 550.0,
+              "encoding": "float32",
+              "offset": 7449
+            },
+            "FireLogic.FireLogicType": {
+              "value": "fltAutomaticFire",
+              "encoding": "string",
+              "offset": 7567
+            },
+            "FireLogic.FireInputAction": {
+              "value": "EiaFire",
+              "encoding": "string",
+              "offset": 7418
+            },
+            "FireLogic.ReloadInputAction": {
+              "value": "EiaReload",
+              "encoding": "string",
+              "offset": 7432
+            },
+            "FireLogic.BoltAction.BoltActionDelay": {
+              "value": 0.0,
+              "encoding": "float32",
+              "offset": 7281
+            },
+            "FireLogic.BoltAction.BoltActionTime": {
+              "value": 0.0,
+              "encoding": "float32",
+              "offset": 7292
+            },
+            "FireLogic.BoltAction.HoldBoltActionUntilFireRelease": {
+              "value": false,
+              "encoding": "bool",
+              "offset": 7303
+            },
+            "FireLogic.BoltAction.HoldBoltActionUntilZoomRelease": {
+              "value": false,
+              "encoding": "bool",
+              "offset": 7310
+            },
+            "Ammo.MagazineCapacity": {
+              "value": 100,
+              "encoding": "int32",
+              "offset": 7579
+            },
+            "Ammo.NumberOfMagazines": {
+              "value": 2,
+              "encoding": "int32",
+              "offset": 7590
+            },
+            "Ammo.AmmoPickupMinAmount": {
+              "value": 45,
+              "encoding": "int32",
+              "offset": 7612
+            },
+            "Ammo.AmmoPickupMaxAmount": {
+              "value": 110,
+              "encoding": "int32",
+              "offset": 7622
+            },
+            "Ammo.AutoReplenishMagazine": {
+              "value": false,
+              "encoding": "bool",
+              "offset": 7632
+            },
+            "Shot.NumberOfBulletsPerShell": {
+              "value": 1,
+              "encoding": "int32",
+              "offset": 7148
+            },
+            "Shot.NumberOfBulletsPerShot": {
+              "value": 1,
+              "encoding": "int32",
+              "offset": 7159
+            }
+          },
+          "weapon_states": [
+            {
+              "index": 0,
+              "mesh_asset_references": [
+                "objects/weapons/handheld/bu_lmg_m60/bu_lmg_m60_mesh/03520058-46fd-11db-afd8-b659b2daab71"
+              ],
+              "animation_tree_references": {
+                "AnimTree1p": "objects/weapons/handheld/bu_lmg_m60/bu_lmg_m60_animtree1p/97e265af-42c1-4d3d-af20-4956ac9da26c",
+                "AnimTree3p": "objects/weapons/handheld/bu_lmg_m60/bu_lmg_m60_animtree3p/efcbd18d-f3bd-480d-9efa-009f0c802f07"
+              },
+              "fields": {
+                "IsPumpAction": false,
+                "IsOneHanded": false,
+                "AnimatedFireType": "AnimatedFireAutomatic",
+                "AnimatedAimingType": "AnimatedAimingTwoHanded",
+                "SkipReloadAnimation": false
+              },
+              "missing": []
+            }
+          ],
+          "abort_reload_on_sprint": false,
+          "missing_fields": [],
+          "runtime_admitted": false,
+          "scope": "Exact authored data/reference chain, not a native object ABI or current live configuration",
+          "selector": {
+            "asset_name": "M60_sp",
+            "asset_path": "Objects/Weapons/Handheld/BU_lmg_M60/SP_lmg_M60"
+          },
+          "runtime_enabled": false,
+          "source_archive": "Dist/win32/levels/sp_common/level-00.fbrb",
+          "source_index_sha256": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842"
+        }
+      ]
+    }
+  ]
+}

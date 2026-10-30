@@ -1,0 +1,68 @@
+{
+  "base": "e507fce3bed8fdc25e78f9005c90962571d847c6",
+  "source": [
+    {
+      "path": "handoff/integrations/coordinator-20261029-polish11/Run-IsolatedChecks.ps1",
+      "sha256": "a8ce1e757fa3ac2638cbf5af007e254b7ee0133714db19618b3b4bbbdf9b738c"
+    },
+    {
+      "path": "src/games/bc2/Bc2Gameplay.cpp",
+      "sha256": "2a154ebb4af451604395af6df4921915453a27f3f89b78ae391f897ff117dd18"
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalFeed.cpp",
+      "sha256": "7baaee54ad4a36b8d180bd95858b41122cdbc0f6ab1e3231115fdeb58ea295d7"
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalFeed.h",
+      "sha256": "734febd18e37a196a76d8da9510537c9d99d8c3fff6ab6b361986f9f6abce1d5"
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalPistolSlide.cpp",
+      "sha256": "bba84c370c411649e10c94de1d786610406d61ba0bf5819bf3a45c314361acec"
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalPistolSlide.h",
+      "sha256": "eb6e08265fb1f63ccaede9cfad39b3e01d79bfa6d87063a0b69e487bac24f0e1"
+    }
+  ],
+  "checks": [
+    {
+      "suite": "Bc2PhysicalFeed",
+      "architecture": "x64",
+      "result": "reports/coordinator-20261030-continuation26/bc2physicalfeed-x64-check01/result.json",
+      "result_sha256": "421c874a9997805d824f57fcd129d6ffdd10e246fd738907f11d54805e014c28",
+      "command_sha256": "64aacc4559db38337ec6bf2c68d3b66097030c066d5f71df1339a5a10356df23"
+    },
+    {
+      "suite": "Bc2PhysicalFeed",
+      "architecture": "x86",
+      "result": "reports/coordinator-20261030-continuation26/bc2physicalfeed-x86-check01/result.json",
+      "result_sha256": "17395fe9e720fec25efe8bd06ec7ee4ae49a945355340ed0a93ccd0260da6a5b",
+      "command_sha256": "57c95309aef37f6e1fde0947a25a47ef177f53c3e3b728c75604c5fc04e7ecf1"
+    },
+    {
+      "suite": "Bc2PhysicalPistolSlide",
+      "architecture": "x64",
+      "result": "reports/coordinator-20261030-continuation26/bc2physicalpistolslide-x64-check01/result.json",
+      "result_sha256": "a562ae74177eabe433c7bc0206aff6ddad59c15b80285f91422a6cd084237d57",
+      "command_sha256": "3f59118ae51dffb6be797cbb1d4992a09413e37a996b48caa42f5c2a24a302e0"
+    },
+    {
+      "suite": "Bc2PhysicalPistolSlide",
+      "architecture": "x86",
+      "result": "reports/coordinator-20261030-continuation26/bc2physicalpistolslide-x86-check01/result.json",
+      "result_sha256": "b36564569dc1de5e656585f956b105a4a147758c019b8e0db507d53152f81b43",
+      "command_sha256": "10b537d2b6f045c167e0f306dd9b59a75769a8a01e71b7f8c4768d065b4bcebf"
+    },
+    {
+      "suite": "GameplaySyntax",
+      "architecture": "x86",
+      "result": "reports/coordinator-20261030-continuation26/gameplaysyntax-x86-check01/result.json",
+      "result_sha256": "7fd6264d7f6e1b3f1f4d2811dcc2d910ec97cd127725968af7d225166303e7a0",
+      "command_sha256": "db18aa1366def33597b3460da9cd140cdbb8c5452b1b2030320c8704f26a0e80"
+    }
+  ],
+  "full_normal_builds": false,
+  "installed": false
+}

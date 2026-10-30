@@ -1,0 +1,800 @@
+{
+  "schema": "chat27.cinematic_update_static_code.v1",
+  "evidence_level": "offline file-backed code",
+  "executable_sha256": "3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258",
+  "preferred_base": "0x400000",
+  "script_sha256": "19a890389d8000c398afdc42171b2554be837879ebde27a7dbee6ec7a7360d0b",
+  "inherited": {
+    "path": "handoff\\tasks\\CHAT27\\20261030-callback18\\proof01.json",
+    "sha256": "0f8b8f1ee38729d7103ac63df99363daf505a05cbf6ab6b45b78271032b22227",
+    "used": "Camera+0xdc callback forwards to0x4955a0; angular output is stored through camera+0xd4 at+0x90..+0xc8; exact next update0x495d70 known caller0x49dba8."
+  },
+  "table_origin": "Root supplied prior methods17 primary table RVA0x1036550 and boundary0x1036650. Only new exact slots+0xe8/+0xec were read; constructor identity was reused rather than decoded.",
+  "scope": {
+    "maximum_units": 8,
+    "new_function_units": 8,
+    "complete_deliberate_units": 7,
+    "adjacent_partial_units": 1,
+    "adjacent_rva": "0xc02990",
+    "adjacent_bytes": 16,
+    "unique_decoded_code_and_padding_bytes": 1447,
+    "sum_requested_decode_bytes": 1478,
+    "complete_function_bytes": 1423,
+    "maximum_code_bytes": 65536,
+    "ceiling_met": true,
+    "stopped_at_unit_limit": true,
+    "range_strategy": "Initial64-byte exact root then instruction-boundary continuations and exact direct/virtual edges. One event-helper continuation crossed its return into16 adjacent bytes; counted as an eighth unit, retained and not followed."
+  },
+  "units": [
+    {
+      "rva": "0x495d70",
+      "size": 313,
+      "sha256": "e3378c8f4dbf5d89b45dee780f55403382a1f31210305263cbcf3f7a703cd660",
+      "meaning": "Whole-camera timed scalar and numeric state transition update.",
+      "complete": true
+    },
+    {
+      "rva": "0x227640",
+      "size": 354,
+      "sha256": "8163ef614502d0f1ebb239dd10d81e8db36ec3375f29e5b32056af278b0dcac1",
+      "meaning": "Writes receiver word+0x24 and updates four virtual-gated collections.",
+      "complete": true
+    },
+    {
+      "rva": "0xc02950",
+      "size": 64,
+      "sha256": "2be8a4a939f97a74a533d994af7419e713f2730cb6e9574b0a10b6272b0e9cc9",
+      "meaning": "Constructs event-shaped local payload and forwards through receiver+0x10.",
+      "complete": true
+    },
+    {
+      "rva": "0xc02990",
+      "size": 16,
+      "sha256": "3c336063626579000a9985885756ed4bf959cb15f0ee01a1a363ff196fc67fba",
+      "meaning": "Accidental adjacent prefix; incomplete and retired without following edges.",
+      "complete": false
+    },
+    {
+      "rva": "0x49dc40",
+      "size": 83,
+      "sha256": "b09b0864f9e523e672b60a592104346e9698044d428529b3a74b822342af0208",
+      "meaning": "Primary table+0xe8 candidate: starts companion and adds event1f callback on success.",
+      "complete": true
+    },
+    {
+      "rva": "0x486120",
+      "size": 53,
+      "sha256": "b52f137b3425a9db77aa4b21b88d0d761d5193e4fb15df36a5ddad4097a37ea4",
+      "meaning": "Primary table+0xec candidate: stops companion and removes event1f callback.",
+      "complete": true
+    },
+    {
+      "rva": "0x3b2240",
+      "size": 369,
+      "sha256": "261b418ec5fb619ec3e865a8b8a049a32ca2c6314cd012645c532cecf56a6536",
+      "meaning": "Companion start: resource checks, handles, flags, count and first-use manager registration.",
+      "complete": true
+    },
+    {
+      "rva": "0x3b6b00",
+      "size": 187,
+      "sha256": "e87f2867038b8d93a6469592727101d6441deb329a1c60cff45e7d93827fd393",
+      "meaning": "Companion stop: release handles, clear flag, last-use manager removal and count decrement.",
+      "complete": true
+    }
+  ],
+  "instructions": [
+    {
+      "rva": "0x495d77",
+      "size": 5,
+      "sha256": "c47fcaad1a8957f82432d3bc60451cc5b83392c7141ba78d7925fc9e1b065886",
+      "bytes": "f30f10464c",
+      "meaning": "Read timed scalar remainder camera+0x4c."
+    },
+    {
+      "rva": "0x495d8e",
+      "size": 6,
+      "sha256": "7891f6550cb7f0cd83d38335cfb007445375ee0bc2f3a6f0631b1905069775e7",
+      "bytes": "d8b0c4000000",
+      "meaning": "Normalize remainder by resource+0xc4."
+    },
+    {
+      "rva": "0x495db6",
+      "size": 3,
+      "sha256": "3786961a4b2641803dedd9149329b1ec5f65af9f7a44c8dc5086f0f397137254",
+      "bytes": "d95e50",
+      "meaning": "Store interpolated scalar at camera+0x50."
+    },
+    {
+      "rva": "0x495dbc",
+      "size": 2,
+      "sha256": "ee2343ed35c00734cd35d2c7b6913922f658f1e31ef85815a817295c0d70a943",
+      "bytes": "d821",
+      "meaning": "Subtract first float of incoming update argument from remainder."
+    },
+    {
+      "rva": "0x495ddc",
+      "size": 3,
+      "sha256": "536f0a527b016bef3264df865cca26512e95b49248ce37709305035509c41288",
+      "bytes": "8b4634",
+      "meaning": "Dispatch on numeric camera state+0x34."
+    },
+    {
+      "rva": "0x495df8",
+      "size": 6,
+      "sha256": "7f7a529c2406ed89a2fd4efadbe2a9fb9bf7df63cc885d682c7bd76de3e9826a",
+      "bytes": "8b82ec000000",
+      "meaning": "State5 invokes virtual slot+0xec."
+    },
+    {
+      "rva": "0x495e06",
+      "size": 5,
+      "sha256": "6d699ac896b3edb73903b956146ab7948b5fdea5ea5d68bb0fafebd7d079d6a2",
+      "bytes": "686edbc8d4",
+      "meaning": "State5 event-shaped payload discriminator0xd4c8db6e."
+    },
+    {
+      "rva": "0x495e27",
+      "size": 7,
+      "sha256": "e76ca80403d709ed06946fb02ec56e957051a7626cb38f44e69d90c54068bda0",
+      "bytes": "c7463400000000",
+      "meaning": "State5 completion sets numeric state0."
+    },
+    {
+      "rva": "0x495e33",
+      "size": 3,
+      "sha256": "bbdd48d69deb2951a4a6135ed4fcef3043c32451f4e4d76efdad444000adfabd",
+      "bytes": "8b4e3c",
+      "meaning": "State4 reads camera+0x3c and calls its first virtual slot."
+    },
+    {
+      "rva": "0x495e4a",
+      "size": 4,
+      "sha256": "d9301ebf8ccb992d9e89da0ea272e066ad757c3a0911706e8d45fc565be6ec92",
+      "bytes": "807e5400",
+      "meaning": "State4 transition additionally requires byte camera+0x54 nonzero."
+    },
+    {
+      "rva": "0x495e5c",
+      "size": 7,
+      "sha256": "28f6a124ba6ed644ff7e790a6a1e1e0a7c7a107389cfbaa0dcd7e56f95ecd515",
+      "bytes": "c7463405000000",
+      "meaning": "Eligible state4 advances to numeric state5."
+    },
+    {
+      "rva": "0x495e6a",
+      "size": 6,
+      "sha256": "96597dbb45096959f56831bf98ad57d18141a5440f1981b22ffcfdde53480d77",
+      "bytes": "8b82e8000000",
+      "meaning": "State2 invokes virtual slot+0xe8 and requires AL nonzero."
+    },
+    {
+      "rva": "0x495e82",
+      "size": 5,
+      "sha256": "2bf4590ed111c00d2703b328f333e7864a2d62b983d9909a467fe3ddf580a6fe",
+      "bytes": "68fd40fa32",
+      "meaning": "State2 success event-shaped discriminator0x32fa40fd."
+    },
+    {
+      "rva": "0x495e94",
+      "size": 4,
+      "sha256": "c841cca06b0757a5c195dd7fb8f3a9136543d892ed99d9a62e621fcbbcb07956",
+      "bytes": "c6465400",
+      "meaning": "State2 success clears camera+0x54."
+    },
+    {
+      "rva": "0x495e9d",
+      "size": 7,
+      "sha256": "157ad49a104680ac456aaca80896db06e29136c189ebe79f2ed35ab302e1b6ee",
+      "bytes": "c7463404000000",
+      "meaning": "State2 success sets numeric state4."
+    },
+    {
+      "rva": "0x227655",
+      "size": 4,
+      "sha256": "4734f7b14e638163fc43e2b033f7df5dbc5c25cfe85c68de4e98672533b35c5c",
+      "bytes": "66894624",
+      "meaning": "Direct transition helper writes word receiver+0x24."
+    },
+    {
+      "rva": "0xc0297a",
+      "size": 3,
+      "sha256": "a267b605cf6a3ea2260d45ce5fb25480e5e23e2c7d597c5032c34a2436899a51",
+      "bytes": "8b4910",
+      "meaning": "Payload dispatch receiver is camera+0x10."
+    },
+    {
+      "rva": "0x49dc46",
+      "size": 6,
+      "sha256": "5f51121dcd10ad0f04fa35038b30bc038eac4f34b7318e5c8482a88eb7eb5cbd",
+      "bytes": "8b8ed4000000",
+      "meaning": "Start method reads the same camera+0xd4 companion from inherited angular setter chain."
+    },
+    {
+      "rva": "0x49dc55",
+      "size": 6,
+      "sha256": "04715da0aa7a311627a0c73f7dc8ea30099dc4ce12582ccd41e4de4f062f428c",
+      "bytes": "8b81cc000000",
+      "meaning": "Start method passes resource+0xcc to undecoded0x495a20."
+    },
+    {
+      "rva": "0x49dc84",
+      "size": 6,
+      "sha256": "2b8e9538153ceb6c8294a3b11c0a4fae454d42fe261c7f22f9ee7354da5220f9",
+      "bytes": "81c6dc000000",
+      "meaning": "Successful start uses camera+0xdc callback interface."
+    },
+    {
+      "rva": "0x49dc8b",
+      "size": 2,
+      "sha256": "9ebc40312146a25852888261f8c7b30a5f4d68cb5bc976c262bfb07cc177f3a1",
+      "bytes": "6a1f",
+      "meaning": "Successful start passes event discriminator0x1f."
+    },
+    {
+      "rva": "0x486148",
+      "size": 6,
+      "sha256": "2b8e9538153ceb6c8294a3b11c0a4fae454d42fe261c7f22f9ee7354da5220f9",
+      "bytes": "81c6dc000000",
+      "meaning": "Stop uses identical camera+0xdc callback interface."
+    },
+    {
+      "rva": "0x48614f",
+      "size": 2,
+      "sha256": "9ebc40312146a25852888261f8c7b30a5f4d68cb5bc976c262bfb07cc177f3a1",
+      "bytes": "6a1f",
+      "meaning": "Stop passes identical event discriminator0x1f."
+    },
+    {
+      "rva": "0x3b2247",
+      "size": 6,
+      "sha256": "33b3380284a4979075f8c0c445c1e2cbd7481e3a70626a10fbf86763c32c1a93",
+      "bytes": "8b0d44c45401",
+      "meaning": "Companion start reads unknown global object pointer at RVA0x114c444."
+    },
+    {
+      "rva": "0x3b2250",
+      "size": 3,
+      "sha256": "46f6fa512b8e3637071c379f705f1ea2a1cc34298673e707071ac5f25afdb072",
+      "bytes": "8b7e70",
+      "meaning": "Start checks object reached via companion+0x70 then+0x60 then+0xc."
+    },
+    {
+      "rva": "0x3b228d",
+      "size": 6,
+      "sha256": "2977852985b163eeaed76e1801a24b0cb6cbce85f2f9616b956acf643f740c16",
+      "bytes": "8d8e88000000",
+      "meaning": "Start assigns a handle at companion+0x88 via undecoded helper."
+    },
+    {
+      "rva": "0x3b22ed",
+      "size": 6,
+      "sha256": "50dab5efe6cedc555ec1540dd6a550d872d77584fdad8d6c69e79f039af9362b",
+      "bytes": "8dbee8000000",
+      "meaning": "Start uses another handle at companion+0xe8."
+    },
+    {
+      "rva": "0x3b2354",
+      "size": 6,
+      "sha256": "a1bb15ba267e49ef1b2588d5e803597d60b2b82c7f7b9ce921cb5622c7c29aa6",
+      "bytes": "8986ec000000",
+      "meaning": "Optional lookup result goes to companion+0xec."
+    },
+    {
+      "rva": "0x3b2377",
+      "size": 7,
+      "sha256": "cfa25ab59f88401f111af662dbd2549daacff43528d9bba21c4a97a7d6b96618",
+      "bytes": "c686fd00000001",
+      "meaning": "Start sets companion+0xfd to1; this is not selected-view authority."
+    },
+    {
+      "rva": "0x3b2385",
+      "size": 6,
+      "sha256": "7484045d7317394f8f9328071c61926b64f3eb6210f1737c1a42ec3ed17153b6",
+      "bytes": "8d8e80000000",
+      "meaning": "First start forwards companion+0x80 to manager operation0x3b1800."
+    },
+    {
+      "rva": "0x3b2394",
+      "size": 7,
+      "sha256": "a1eeb811e30436f6df8763a0424d681e9e2d962c1e0938bfeeae29d8bdbc47a6",
+      "bytes": "8386dc00000001",
+      "meaning": "Start increments companion+0xdc count."
+    },
+    {
+      "rva": "0x3b6b26",
+      "size": 10,
+      "sha256": "a7ce1a065a4cca2745504b802ff9299a4c8ddbe16a121b043730fb88e86a978a",
+      "bytes": "c7868800000000000000",
+      "meaning": "Stop clears companion+0x88 after reference-release sequence."
+    },
+    {
+      "rva": "0x3b6b78",
+      "size": 10,
+      "sha256": "d9d7a2a70bd1a74b48f6675aa8bbe0970b5fad4c1766376d32d1c0919ba4c179",
+      "bytes": "c786e800000000000000",
+      "meaning": "Stop clears companion+0xe8 after reference-release sequence."
+    },
+    {
+      "rva": "0x3b6b89",
+      "size": 7,
+      "sha256": "3ced6fbd2c71eb992194a7facadaad8189654cee1a91c1ac8a979ee01ceb0514",
+      "bytes": "c686fd00000000",
+      "meaning": "Stop clears companion+0xfd."
+    },
+    {
+      "rva": "0x3b6b9a",
+      "size": 6,
+      "sha256": "9b2c77170995f32ca90d02df43e6433bc0e0c05235da4cc13141021280ca82f0",
+      "bytes": "8d9680000000",
+      "meaning": "Last counted stop forwards companion+0x80 to manager operation0x3b6300."
+    },
+    {
+      "rva": "0x3b6bb3",
+      "size": 6,
+      "sha256": "91f096ba9613d52f8b996e7722249cb691e003938f6130f6781c9f49f19898fb",
+      "bytes": "8986dc000000",
+      "meaning": "Positive companion+0xdc count is decremented."
+    }
+  ],
+  "direct_calls": [
+    {
+      "rva": "0x495e0d",
+      "size": 5,
+      "sha256": "a759071a8fe21b77fdef94ceee38070f8e12d6bf6834b3b35d7be19335a6d70b",
+      "target_rva": "0xc02950",
+      "role": "State5 payload dispatch",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x495e22",
+      "size": 5,
+      "sha256": "afdf57e1f15431e75ab0cd465091ff9c90a2a0d3c82376dd4f9db82a128e382e",
+      "target_rva": "0x227640",
+      "role": "State5 word-state transition with arguments0,1",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x495e89",
+      "size": 5,
+      "sha256": "e08d34eea8b1537b6b26e47b491b06898eb6235407b566a00d09dd881910061a",
+      "target_rva": "0xc02950",
+      "role": "State2 success payload dispatch",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x495e98",
+      "size": 5,
+      "sha256": "e06bcf507ec80d096999cdebe8af083cf7c3230b87c03a960efb48a1fabf1a2c",
+      "target_rva": "0x227640",
+      "role": "State2 success word-state transition with arguments1,1",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0xc02985",
+      "size": 5,
+      "sha256": "99874538b985479f14d8bb6cb8168b4b1bccb5dcf907cea3766228a2a3a2d939",
+      "target_rva": "0xc00e80",
+      "role": "Event-shaped payload downstream dispatch; undecoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x49dc4d",
+      "size": 5,
+      "sha256": "d3eccb6b9b768a2e1a888feda2a1173a24a98509ca032cc02db1863ac939fd7c",
+      "target_rva": "0x3a69f0",
+      "role": "Companion setter with camera+0x3c; undecoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x49dc5d",
+      "size": 5,
+      "sha256": "1469e00612a290bfe2794a160aef8d391588e1ff2b4e2e19b57226a94d690dde",
+      "target_rva": "0x495a20",
+      "role": "Resource+0xcc and whole-camera resolver; undecoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x49dc6c",
+      "size": 5,
+      "sha256": "84c4ce91da26b3ef498928dfced48c23c4e47cb06d865b3dcc7af95dce6af110",
+      "target_rva": "0x3b2240",
+      "role": "Companion start with resolver result",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x49dc77",
+      "size": 5,
+      "sha256": "8d699e35c5d92dd37998a050d8582ff25c8546b61b412cc6043401c4f7a0fec4",
+      "target_rva": "0x3ff060",
+      "role": "Global source for event service+0x18; undecoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x486129",
+      "size": 5,
+      "sha256": "94e0d47c99dd7280db02bb5d0a2487510e85ac7a1f1ca9998f9f1127e6152fbe",
+      "target_rva": "0x3b6b00",
+      "role": "Companion stop",
+      "callee_decoded": true
+    },
+    {
+      "rva": "0x486136",
+      "size": 5,
+      "sha256": "3e59cd22391f1b1f77ac7164711e84ebacf0be06dc0eda80602e81535b7f439b",
+      "target_rva": "0x3a69f0",
+      "role": "Companion setter with null; undecoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x48613b",
+      "size": 5,
+      "sha256": "a101aea31a6158f5249ced30660f53873e63a8505f95b87f52616365d8fa6ccc",
+      "target_rva": "0x3ff060",
+      "role": "Same event-service source; undecoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x3b2284",
+      "size": 5,
+      "sha256": "6fe01679e7097b227c86e23d320e675bc4970f211bc0ac0416067814ce66628c",
+      "target_rva": "0x228aa0",
+      "role": "Create/acquire handle from incoming resolver result; undecoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x3b2293",
+      "size": 5,
+      "sha256": "c34af51922f6d9eed7a461e83cb9055a6cf733a35d148165f0eef0542c5e5d67",
+      "target_rva": "0x191fc0",
+      "role": "Assign companion+0x88 handle; undecoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x3b22bf",
+      "size": 5,
+      "sha256": "6234019586854cb0a206f3d70bf7e1801f2b44adff77c2ed16e3dc9c34bd1ad1",
+      "target_rva": "0x417ea0",
+      "role": "Operation on companion+0xd0; undecoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x3b22f3",
+      "size": 5,
+      "sha256": "672a186f57cea2674b21ead2e2f2f2790fcb2d2327cffdcd974dc4102c8485d4",
+      "target_rva": "0x428d50",
+      "role": "Operation on companion+0xd0 with resource and output arguments; undecoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x3b22fb",
+      "size": 5,
+      "sha256": "45f14ec59114d6fcb37beb112254bba0e34465bdbb10d4adc66a0073c0247540",
+      "target_rva": "0x222190",
+      "role": "Assign companion+0xe8 handle; undecoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x3b234f",
+      "size": 5,
+      "sha256": "a3f669cb564422c84c4f0962970b690087e42c3dae8f9f798fa1e02b4e5d0083",
+      "target_rva": "0x21dcc0",
+      "role": "Optional named lookup using constantVA0x141c80c; undecoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x3b2380",
+      "size": 5,
+      "sha256": "af6eb2c669b2927d4da554789015fc9a613ebb8c975195799e21ba4197b48c42",
+      "target_rva": "0x188b10",
+      "role": "First-use global manager source; undecoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x3b238f",
+      "size": 5,
+      "sha256": "3cea8104744325a0e3981ea4ae6652be7cebd8e0ec9b4043dc574601b6d97769",
+      "target_rva": "0x3b1800",
+      "role": "First-use manager operation on companion+0x80; undecoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x3b6b50",
+      "size": 5,
+      "sha256": "9f0ec7912ef7f381206f407d69b02080dd42d7f283949ff730c7029c9b617211",
+      "target_rva": "0x41e660",
+      "role": "Stop operation on companion+0xd0 with resource and zero arguments; undecoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x3b6b92",
+      "size": 5,
+      "sha256": "51088e8537ef93e613a2cb39f931d21c65e21210016eccf8e054d35e8a77bd09",
+      "target_rva": "0x188b10",
+      "role": "Last-use global manager source; undecoded",
+      "callee_decoded": false
+    },
+    {
+      "rva": "0x3b6ba1",
+      "size": 5,
+      "sha256": "e3c33a4b0b35ac11ee6f5b759d62554df673610b5eba48a9290adfb9f2531636",
+      "target_rva": "0x3b6300",
+      "role": "Last-use manager operation on companion+0x80; undecoded",
+      "callee_decoded": false
+    }
+  ],
+  "virtual_slots": [
+    {
+      "rva": "0x1036638",
+      "size": 4,
+      "sha256": "4eeb18db7823983948af143793ae1f3c13347e0272eef9c998258e95b9b59644",
+      "table_rva": "0x1036550",
+      "slot": "0xe8",
+      "target_rva": "0x49dc40"
+    },
+    {
+      "rva": "0x103663c",
+      "size": 4,
+      "sha256": "2b578b6fd91db218ce614e68c19a3dfba5f7d965bf5d8792d1098e54aeef913b",
+      "table_rva": "0x1036550",
+      "slot": "0xec",
+      "target_rva": "0x486120"
+    }
+  ],
+  "update_behavior": {
+    "scalar": "If camera+0x4c>0, t=1-oldRemainder/resource+0xc4; camera+0x50=(1-t)*old50+t*camera48. Subtract float[updateArgument] from remainder; if nonpositive, set remainder0 and scalar50=scalar48. Field names and temporal unit remain unproved.",
+    "state2": "Call primary+0xe8; if AL nonzero and state is not already4, send discriminator0x32fa40fd, clear byte+0x54, call0x227640(1,1), set state4.",
+    "state4": "If object+0x3c exists, virtual0 returns ordered >=1, byte+0x54 is set, and possibly-mutated state is neither0 nor5, set state5.",
+    "state5": "Call primary+0xec, send discriminator0xd4c8db6e, then if possibly-mutated state!=0 call0x227640(0,1) and set state0.",
+    "other_states": "No state-path action; scalar step precedes every state.",
+    "limit": "The numeric values are not admitted as active-cinematic/selected-player-view enums."
+  },
+  "companion_lifecycle": {
+    "start": "0x49dc40 calls0x3a69f0(companion,camera3c), resolves resource+cc with0x495a20(resourcecc,camera), then0x3b2240(companion,result). On success it passes(camera+dc,0x1f) to [0x3ff060()+0x18] virtual+8 and returns1.",
+    "stop": "0x486120 calls0x3b6b00(companion),0x3a69f0(companion,null), then passes(camera+dc,0x1f) to the same event-service virtual+0x10.",
+    "event_pair": "Complementary slots+8/+0x10 support add/remove interpretation for inherited event callback, but service implementations and event names remain undecoded.",
+    "start_internals": "Unknown global object RVA0x114c444 virtual+0x18 looks up resource-shaped key companion70->60->0c, result virtual+0x14 must succeed. Handles+88/+e8 are assigned; flags+fc/+fd and counters+f0/+f4 initialized; count+dc increments. On first use,0x3b1800 receives companion+80 and receiver[0x188b10()+14].",
+    "stop_internals": "Reference-release sequences clear handles+88/+e8;0x41e660 receives resource companion70->60 through companion+d0. Flag+fd clears. If count+dc==1,0x3b6300 receives companion+80 and the same manager; positive count decrements.",
+    "transform": "None of these seven complete decoded functions reads companion+0x90..+0xc8, the inherited relative angular matrix. Any downstream transform consumption remains in undecoded callees or another update.",
+    "authority_limit": "Start/stop and subscription presence are proved for this companion; local-player identity, current view selection, blend ownership, skip and HUD authority remain unproved."
+  },
+  "source_implementation": {
+    "supported_correction": false,
+    "production_modified": false,
+    "reason": "Object lifecycle and numeric states do not establish selected cinematic view or HUD authority; no supported production policy or hook proposal."
+  },
+  "next_unresolved_edge": {
+    "rva": "0x3b1800",
+    "known_caller": "0x3b238f",
+    "relation": "Called on first companion start with receiver[0x188b10()+0x14] and argument companion+0x80; paired last-stop operation0x3b6300.",
+    "question": "Determine which update interface/collection receives companion+0x80 and whether its consumer joins the animated/relative transform to an actual selected local-player view.",
+    "limit": "Even scheduling membership is not selected-view authority; do not promote count+dc, flag+fd or camera state4 to an active-cinematic predicate."
+  },
+  "execution": {
+    "game": false,
+    "desktop_tests": false,
+    "builds": false,
+    "tests": false,
+    "process_access": false,
+    "input": false,
+    "xr": false,
+    "profiles": false,
+    "installs": false,
+    "packages": false,
+    "subagents": false,
+    "git": false
+  },
+  "verification": "Executable/inherited proof and preserved decode hashes, exact instruction bytes, direct-call targets, primary table slots and all complete function spans checked file-only.",
+  "saved_decodes": [
+    {
+      "rva": "0x227640",
+      "size": 32,
+      "sha256": "4b9b0130494c5ff5fa80b4e9e8e5e749ac92459d6ccee33b834665432830fe2a",
+      "decode_sha256": "a2324163fc21fefeccc3619a8cf2a0d9bd694811f21f206f42ea287f8f11d96c",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-00227640-20.txt"
+    },
+    {
+      "rva": "0x22765f",
+      "size": 325,
+      "sha256": "267560acf7b18022308aaa800b2f4eff8d0fbd1f3023e686950298d89446765c",
+      "decode_sha256": "823a20f24cc6ed56e170b1c24f39a9c70174588ad21d170235c4bbfddd9f40b9",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-0022765f-145.txt"
+    },
+    {
+      "rva": "0x3b2240",
+      "size": 16,
+      "sha256": "246e1ddaf6e240ddabb3cc0092a917f6dc508cb3e2a7a730f7c1dcdadea42227",
+      "decode_sha256": "e82a272761caa16cf5618748e86af0495e9083aa5e43b8dd64c93995ea59e70d",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-003b2240-10.txt"
+    },
+    {
+      "rva": "0x3b2250",
+      "size": 64,
+      "sha256": "236a12895188b5075d4b85cc82348b2bedfc2c57a6c10c0285220d4360a0d524",
+      "decode_sha256": "691ecd99128b9b8193a00ad32f7ce6a3e76c5c1c1658c42716cfe4b370480e6e",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-003b2250-40.txt"
+    },
+    {
+      "rva": "0x3b228d",
+      "size": 291,
+      "sha256": "9b4125f656e7aa59f9a3b1ceef8daf183f310b6558f805eb5a92bf25111a7391",
+      "decode_sha256": "f8e1370d74e8f0eb238955aeda5b7dd9c21f06acdca8233e61c998800da1b28c",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-003b228d-123.txt"
+    },
+    {
+      "rva": "0x3b23ae",
+      "size": 3,
+      "sha256": "e598d0c3ba86d917b177d7adde0556aa99bc355543c57aee0a3e50b684dd7e99",
+      "decode_sha256": "43b6c87a0f4d817fe141ea23c1c43e4a39295953b8468d66144b8aca8965a8c7",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-003b23ae-3.txt"
+    },
+    {
+      "rva": "0x3b6b00",
+      "size": 16,
+      "sha256": "86009d126f390e06fd75c644c69d4ab43e20a36199db7176fcb8cf9ce7fd8225",
+      "decode_sha256": "c702efa986d8b690144297ef87d79d385e5fbdbe7ff4ada2299198a6469653e3",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-003b6b00-10.txt"
+    },
+    {
+      "rva": "0x3b6b10",
+      "size": 35,
+      "sha256": "e7f5ecff3cc3dda360c58fd5502645f02032e05fc0293be8b511f299a3665c32",
+      "decode_sha256": "ea691621dd9cb9679e7b8cfcc00201ad3256464e1988a383b14c986679926663",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-003b6b10-23.txt"
+    },
+    {
+      "rva": "0x3b6b30",
+      "size": 48,
+      "sha256": "536577d915ee2cf59004767f445433bbed655af7a44fee061fd3ad5ad268f18e",
+      "decode_sha256": "2ef96d18c7a99b4d94645e04892b37d0e671400481941ac8b2bb7422ff73e4a9",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-003b6b30-30.txt"
+    },
+    {
+      "rva": "0x3b6b5f",
+      "size": 49,
+      "sha256": "99bb13065ed5f8346e2c970436d34ac34c7976c3190aaf156cffe37555f77990",
+      "decode_sha256": "380a9c421b9eb795a327f716dd88e24f282f2702aa9669eaa9d184cb217491bf",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-003b6b5f-31.txt"
+    },
+    {
+      "rva": "0x3b6b90",
+      "size": 16,
+      "sha256": "ce1ea10304dbe04ddf53b24f3f8e829f44f2870439b1982c9fbe8bf157edb0cb",
+      "decode_sha256": "3645a23fc379a5ea6b8930ec08dda476ea3b73fcfee382cda47ff1e940e2066c",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-003b6b90-10.txt"
+    },
+    {
+      "rva": "0x3b6ba0",
+      "size": 16,
+      "sha256": "27af0424233911fa001dd7241b2dd081ea7e4cb053ec54dcb05c8c6c83947bfc",
+      "decode_sha256": "a3a2af9269f83b92debb099249b9db87d8ca2ed7e1bf8c97f4b9773c467818c7",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-003b6ba0-10.txt"
+    },
+    {
+      "rva": "0x3b6bb0",
+      "size": 11,
+      "sha256": "4c6396859cdc9c84975c9fcd6f6b0498d0b8c7c4b1c5f913170bec7fcae2b844",
+      "decode_sha256": "ac58291a4e522cc7d769da5b8cc4d0832642c7c2a23203838d8f21ab40ea4c2f",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-003b6bb0-b.txt"
+    },
+    {
+      "rva": "0x486120",
+      "size": 16,
+      "sha256": "ef3ba6d8be0c017f538cc52dc5cf350dcf8dfa22c48ae2ff01cf2fa43915b615",
+      "decode_sha256": "94939dc222c70cb008950899c532e19523e83c747a4074525823123062701478",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-00486120-10.txt"
+    },
+    {
+      "rva": "0x48612e",
+      "size": 18,
+      "sha256": "13ae00d45af70b4bc0f6d0d06c42c751d4d431b9910a16ec68f097d3f7101783",
+      "decode_sha256": "16a36f32402875bfa58e0e2ab77dc835e6f48704068bdc2103482cda40145f7b",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-0048612e-12.txt"
+    },
+    {
+      "rva": "0x486140",
+      "size": 16,
+      "sha256": "b90aa925232118ae86a852521d813bfbbbaa6cbf1b5f7122ad2204ebafd8f8e7",
+      "decode_sha256": "1555e4bcceb4042d790e0ae9d576b81b947dc273474d2cfc3fe92e24aa620d69",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-00486140-10.txt"
+    },
+    {
+      "rva": "0x48614f",
+      "size": 9,
+      "sha256": "c817575c2da587678dce044efcddd156f7ed1b1d93c04c8ddc89ea7327823293",
+      "decode_sha256": "7f1b67dab35b6aa615c5acf73fd86747c51dadba82bf974d339b785b65a16922",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-0048614f-9.txt"
+    },
+    {
+      "rva": "0x495d70",
+      "size": 64,
+      "sha256": "18cab59a6e58b4420d1dfecd112b6e16325c5a0f6de260cab23947349f7928da",
+      "decode_sha256": "f370c1335e6f9fde02606bce58b800c8e90fd852a740c2516ae1420a34b1bbe9",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-00495d70-40.txt"
+    },
+    {
+      "rva": "0x495daf",
+      "size": 65,
+      "sha256": "64ceaafbadfdd36a18d31dae99dac6d5c2afed4515037b9477d1ee818300f2e4",
+      "decode_sha256": "72a7d3e343e231316c27fd9596e5b7395f0d9315754219a9d6c67492241ca19e",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-00495daf-41.txt"
+    },
+    {
+      "rva": "0x495df0",
+      "size": 152,
+      "sha256": "eec1e06b0463bc4b59379905102135a4b5210ea7e6704b6f08891fadd40a5dc9",
+      "decode_sha256": "8351726bb604998a0978b1b5e055c7d2b63f728299d775d94a6a63a825a72ba4",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-00495df0-98.txt"
+    },
+    {
+      "rva": "0x495e87",
+      "size": 37,
+      "sha256": "74b7e3cc971e242f4395aa48558ce8282951ae792d4b212036b3ee7a13efe3e9",
+      "decode_sha256": "85e7e0e803a41dcfa6bd5177b32a8c20f621cf9e0aa7aeef3c35e925cd7998ef",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-00495e87-25.txt"
+    },
+    {
+      "rva": "0x49dc40",
+      "size": 16,
+      "sha256": "c31272994832822054fc1f15bc6e108ee9936d5b2a5b10f804d507ce15b29a19",
+      "decode_sha256": "f3d1a61ba303be45daf69a4bcc9abf27b0339b0157e786deeca95fc8f3f82a36",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-0049dc40-10.txt"
+    },
+    {
+      "rva": "0x49dc4d",
+      "size": 19,
+      "sha256": "3d11ab311a663124efa8d619fcd3ea00f2732976fc7e56fb60155db0db760755",
+      "decode_sha256": "2201e85c58f8c48dc71c463e603f8dea63704779be1fb7162942d54a34886533",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-0049dc4d-13.txt"
+    },
+    {
+      "rva": "0x49dc5d",
+      "size": 19,
+      "sha256": "9616084d9c5961f38935a7999f032a75e419bd10ddc3da3db374258432b3d069",
+      "decode_sha256": "e9c32e7d4b16ab80aba82ffde404a830860588b91c4aac10b24fee8c12f0b12b",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-0049dc5d-13.txt"
+    },
+    {
+      "rva": "0x49dc6c",
+      "size": 20,
+      "sha256": "47ed0c2bd1764167e4c2e3da451059dcadcd8b94d9437b0d83cdfbfd89bbf2d5",
+      "decode_sha256": "285f36dfa68bc2907884d798a3b295885514f0847cd0196b86c3267cffbd3181",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-0049dc6c-14.txt"
+    },
+    {
+      "rva": "0x49dc7f",
+      "size": 17,
+      "sha256": "452c91ba3fea10a22222c9c1cec9e272c2b8eafbc819d6a40d89c750cd5ee1a4",
+      "decode_sha256": "7e830a21eb6f6f2d5a3fd1ea39988ad6bdd709ab3b10ad13ea851c1535e7c0f9",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-0049dc7f-11.txt"
+    },
+    {
+      "rva": "0x49dc8f",
+      "size": 4,
+      "sha256": "9a0d9a043cf55f73a7f66b5f322a2d60202cd12e422f7b820917112a526f1aa6",
+      "decode_sha256": "a03e90d380170b41acf6387e78e6a3b3400d3f5b267769cf904afec9e9258bb1",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-0049dc8f-4.txt"
+    },
+    {
+      "rva": "0xc02950",
+      "size": 32,
+      "sha256": "f4c4c9d8a8c9af5090ff57d7308769fba878facc3a9243ae339899a33a93d3d5",
+      "decode_sha256": "1a7b7684daca91dcb48fad659a95c34b97f39fafb7045d6c56b6d3b82d362a0b",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-00c02950-20.txt"
+    },
+    {
+      "rva": "0xc0296f",
+      "size": 17,
+      "sha256": "3cec677e4fa15931b0018750ea909aab8a781537dfae9429eb20e33872972559",
+      "decode_sha256": "4b772b00a701c3127913408a06f0621207670be4033e39d19206b9fb92241258",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-00c0296f-11.txt"
+    },
+    {
+      "rva": "0xc0297d",
+      "size": 35,
+      "sha256": "ccba7c3be62c05bd7a1c84552feca433fa9e0ecb2fe01c2321f45bdf4d8a8d42",
+      "decode_sha256": "93707858a101898e6686d5461b117716fea566a721cf58223a87465efd454fe2",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-00c0297d-23.txt"
+    }
+  ]
+}

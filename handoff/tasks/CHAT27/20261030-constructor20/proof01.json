@@ -1,0 +1,583 @@
+{
+  "schema": "chat27.cinematic_constructor_static_code.v1",
+  "evidence_level": "offline file-backed code",
+  "executable_sha256": "3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258",
+  "preferred_base": "0x400000",
+  "script_sha256": "260ec27513357015efd640762eec2d158ddf486f45eb7de53acc6d55bff8a52b",
+  "imported_helper": {
+    "path": "handoff\\tasks\\CHAT27\\20261030-manager18\\cinematic_manager.py",
+    "sha256": "1a6506e11576f290e70f847a65f307cf1cebffab928360120d4fee5e587857fb"
+  },
+  "inherited": [
+    {
+      "path": "handoff\\tasks\\CHAT27\\20261030-companion19\\proof01.json",
+      "sha256": "65363c36e5cae30e7b12ebe66567f0bed88a31ab7f446c059e5c0ebcada3f29f"
+    },
+    {
+      "path": "handoff\\tasks\\CHAT27\\20261030-manager18\\proof01.json",
+      "sha256": "4ff54dcefc7901926869f376322a023b438a8f1ab1f3477afdd421579936a432"
+    },
+    {
+      "path": "handoff\\tasks\\CHAT27\\20261030-update18\\proof01.json",
+      "sha256": "5b4a5c5c60e3577e6814c9d6a9cc373de3433de26d48f2540b4fde7ee0272f43"
+    }
+  ],
+  "scope": {
+    "maximum_new_function_units": 8,
+    "new_function_units": 8,
+    "complete_new_function_units": 8,
+    "unique_decoded_code_bytes": 1360,
+    "maximum_code_bytes": 65536,
+    "adjacent_spill_units": 0,
+    "ceiling_met": true,
+    "stopped_at_unit_ceiling": true,
+    "strategy": "Exact known construction edge, bounded constructor-owned table cells, then exact direct calls. Single-instruction dumpbin decoding stopped at returns or unconditional branches; in-unit destinations continued until all bytes were covered. No whole-image survey."
+  },
+  "units": [
+    {
+      "rva": "0x3b63d0",
+      "size": 306,
+      "sha256": "58fa707cd26f1f0f53b6b2414c7c2f5e8739baa152ef456bb90fcf2b62ad6851",
+      "bytes": "558bec83e4f083ec0856578b7d08578bf1e8fa68fdff0f57c0f30f100df0944d01c7868000000000c64101c6868400000000c70628c94201c78680000000f4c84201f30f118e90000000f30f118694000000f30f118698000000f30f1186a0000000f30f118ea4000000f30f1186a8000000f30f1186b0000000f30f1186b4000000f30f118eb8000000c7868800000000000000f30f1186c0000000f30f1186c4000000f30f1186c800000083c8ff68c00000008986d40000008986d8000000c786dc00000000000000e811a9c6ff83c40485c074118b4f586a006a00518bc8e85b780700eb0233c08d574c8986d00000008b0a3b4a0474106a00528bc8e8dda603008986d40000008b57403b57448d474074148b8ed00000006a0050e8bea603008986d80000005f8bc65e8be55dc20400",
+      "complete": true,
+      "meaning": "Exact unexamined base constructor called at0x3b69f9."
+    },
+    {
+      "rva": "0x38cce0",
+      "size": 174,
+      "sha256": "2df958458fe9abe6ec5cbf589af54d74166ab2087b4b3de3570612ef513b2de2",
+      "bytes": "558bec83e4f00f57c0f30f100df0944d0183ec0c568bf18b4d08c70618bd4201f30f114e10f30f114614f30f114618f30f114620f30f114e24f30f114628f30f114630f30f114634f30f114e38f30f100dc0bc4201f30f114640f30f114644f30f114648f30f114654f30f11465cf30f114e58b001884650f30f114664f30f11466c884660f30f114e68f30f114674f30f100520944d01894e70f30f1146788b018b10ffd28bc65e8be55dc20400",
+      "complete": true,
+      "meaning": "Nested constructor at0x3b63e1 initializes companion base transform."
+    },
+    {
+      "rva": "0x38d900",
+      "size": 8,
+      "sha256": "fb1a643c97884274c3157bdb824533c9ec654b9c7328338af59dc5a1699acf26",
+      "bytes": "c681fe00000001c3",
+      "complete": true,
+      "meaning": "Candidate primary table0x102c9a8+0x38 target; extent not inferred from adjacency."
+    },
+    {
+      "rva": "0x3b0010",
+      "size": 57,
+      "sha256": "dfff88fe4223a20b96740caa2809391711e65f6311bf0f2042a6c6abbb6df8bb",
+      "bytes": "b8010000008405800e5701c681fe00000000751d0905800e5701b9800d5701e85cbcffff68802a3801e8d7224a0083c404c605d40d570100c3",
+      "complete": true,
+      "meaning": "Candidate primary table0x102c9a8+0x3c target; extent not inferred from adjacency."
+    },
+    {
+      "rva": "0x3b23c0",
+      "size": 128,
+      "sha256": "dddd256dd517c134e7e94943dcfc598bdc80b112c2325c6a8cdf94de74fb17fb",
+      "bytes": "51568bf18b466885c07470833800746b8b4e6485c9743b8b018b10ffd2d95c24048b466885c074048b00eb0233c08b4e6c8b510c8b4010f30f104424040f2f05f0944d018b4810f30f1104917204c6467d00d944240c518d4e80d91c24e82edcffffd944240c8b5424148b4424105250518bced91c24e8f5a8feff5e59c20c00",
+      "complete": true,
+      "meaning": "Exact assigned secondary table0x102c974+0x14 target."
+    },
+    {
+      "rva": "0x3abfa0",
+      "size": 178,
+      "sha256": "8096312b6ae9c0c80b1d98e4adece4f3819ae7e1096a20f98d9e364c092eab8c",
+      "bytes": "83ec188b41f05356578b787868e900000068388d40016a006a00682c8d40016a0fe8ea4ec7ff8bf06a0e68d4c642018d5e0f5689742430895c2438ff151055400183c42483c70c5768a8c841018d4c24148d460e518d5424245289442420c60000e8baeecaff8b7c243883c40c5057e83ceecaff8b4c242c8b4424242bc883c40c83f9017e0d85c0740950e880f8c6ff83c4042bde83fb017e0d85f6740956e86cf8c6ff83c4048bc75f5e5b83c418c20400",
+      "complete": true,
+      "meaning": "Exact assigned secondary table0x102c974+0x08 target."
+    },
+    {
+      "rva": "0x3b0050",
+      "size": 300,
+      "sha256": "1bdcfcb9c0d8f9a0157f7637eb626a35e005666be52cf60a0703e9df703781dd",
+      "bytes": "83ec08568bf18b8ee400000085c974168b4670d940648b118b02d95c2404ffd0d84c2404eb0ad986f0000000d84424108d4c2410d99ef0000000518b4e70e8fd14c1008b4c24108b118b02ffd08b96f40000003bd00f83ca0000008b442410d986f0000000d95c24048d0c92c1e104034808d94144d95c2408d9442404d9442408dd05a0ba4101d8e9d95c2408d9442408d9cadbf2ddda726480befc00000000755b80befe00000000ddd9ddd8751680794800751083c2018996f40000005e83c408c20400d9414051d95c240cd944240cdc0d38964d01d95c240cd944240cd91c2451e8a8f8ffff8bc8e8e1d2fdffc686fc000000015e83c408c20400d9c9dff1ddd8722080befe000000007409e87df8ffffc64054008386f400000001c686fc000000005e83c408c20400",
+      "complete": true,
+      "meaning": "Direct update call0x3b241d with receiver companion and scalar first argument."
+    },
+    {
+      "rva": "0x39cd30",
+      "size": 209,
+      "sha256": "65940f806d760a29c2fe009f031fbc0192740803cb2fdabe2be025acc26204d5",
+      "bytes": "558bec83e4f083ec4c0f57c0f30f100df0944d01568bf18b460885c0f30f114c2410f30f11442414f30f11442418f30f11442420f30f114c2424f30f11442428f30f11442430f30f11442434f30f114c2438f30f11442440f30f11442444f30f11442448742b8b0085c0742583c0fc74208b460885c0740b8b0085c074058d48fceb0233c98b018b40448d54241052ffd0e84abddeffd9ee8b4d0c8b400c518b4d106a008d5424185251518bc8d91c24e8abd6f2ff8b4e5083ec08d95c2404d94508d91c24e8161808005e8be55dc20c00",
+      "complete": true,
+      "meaning": "Direct update call0x3b2436 retaining companion+0x80 interface receiver and all three incoming arguments."
+    }
+  ],
+  "exact_instructions": [
+    {
+      "rva": "0x3b6402",
+      "size": 6,
+      "sha256": "5da271315e5e1f4e7d7c4ef337969c45e035ff022c6e4a19611e8ca601bda9d0",
+      "bytes": "c70628c94201",
+      "meaning": "Base constructor temporarily assigns primary table0x102c928; derived constructor later replaces it."
+    },
+    {
+      "rva": "0x3b6408",
+      "size": 10,
+      "sha256": "528b3c84c11eb47ef0ec45f45a60d6b1f11e748093186fd63304dc2cbf96cd8c",
+      "bytes": "c78680000000f4c84201",
+      "meaning": "Base constructor temporarily assigns interface table0x102c8f4 at companion+0x80; derived constructor replaces it."
+    },
+    {
+      "rva": "0x3b6412",
+      "size": 8,
+      "sha256": "d4d35eb4d590fb3a06728d2313c845273b6622921475641b65f36b1df574c71b",
+      "bytes": "f30f118e90000000",
+      "meaning": "Relative matrix diagonal begins at companion+0x90; constant is1.0f."
+    },
+    {
+      "rva": "0x3b6474",
+      "size": 8,
+      "sha256": "fececb41c20214e061d0c4f8e2d8524dbd4cbbb4efe32c3c2e359734a642c4a7",
+      "bytes": "f30f1186c8000000",
+      "meaning": "Relative matrix last translation field+0xc8 initialized zero."
+    },
+    {
+      "rva": "0x3b647f",
+      "size": 5,
+      "sha256": "e9ba76c28cc20bf240493a6ba42f51509b90fa7aad77efee33eb4462b947b438",
+      "bytes": "68c0000000",
+      "meaning": "Allocate0xc0 bytes for the resource-backed child."
+    },
+    {
+      "rva": "0x3b64a6",
+      "size": 3,
+      "sha256": "95055df56d2f4a77a5f3e0bee6f4798891c6c13dde05e4b21226cf5670cea2a8",
+      "bytes": "8b4f58",
+      "meaning": "Child constructor first argument comes from resource+0x58."
+    },
+    {
+      "rva": "0x3b64a9",
+      "size": 5,
+      "sha256": "580fceb64ecbfdeb672e95f84f6a243844156350656b227c42535da3d8b64515",
+      "bytes": "6a006a0051",
+      "meaning": "Push child constructor arguments resource+0x58,0,0 in x86 right-to-left order."
+    },
+    {
+      "rva": "0x3b64bc",
+      "size": 6,
+      "sha256": "0eec5edbd87886ddc9e7ac4a0f1d41fc841f63a6357ff8c9a1cac4f67393f9e8",
+      "bytes": "8986d0000000",
+      "meaning": "Store constructed child or null at companion+0xd0."
+    },
+    {
+      "rva": "0x3b64d3",
+      "size": 6,
+      "sha256": "9432af493cda50ff6881cf8058964d88cfcb1ac7c7b66a2faf9070be8a478892",
+      "bytes": "8986d4000000",
+      "meaning": "Store first collection-registration return at companion+0xd4."
+    },
+    {
+      "rva": "0x3b64f2",
+      "size": 6,
+      "sha256": "eb3b8db9cceebcabfc0ff6ab4fbdf2d64c74eacdc470c529e7274faf0b1aec4d",
+      "bytes": "8986d8000000",
+      "meaning": "Store second collection-registration return at companion+0xd8."
+    },
+    {
+      "rva": "0x38cd00",
+      "size": 5,
+      "sha256": "c905b4736bc4996d662222ccdc5f06b98f423db2d2f5acb1fdd6b5f0c5fa1c04",
+      "bytes": "f30f114e10",
+      "meaning": "Base transform diagonal begins at companion+0x10; constant1.0f."
+    },
+    {
+      "rva": "0x38cd3f",
+      "size": 5,
+      "sha256": "3022692bfbc63e99c8a05dd2abc9779e6bef5a14a4ddbd3449dccf8d6863f958",
+      "bytes": "f30f114648",
+      "meaning": "Base transform final translation field+0x48 initialized zero."
+    },
+    {
+      "rva": "0x38cd77",
+      "size": 3,
+      "sha256": "6eba61f893755e52acd565b69d5a0dbd17a2bb1e5a7fbc07a01b2a2f161ba2ce",
+      "bytes": "894e70",
+      "meaning": "Retain resource pointer at companion+0x70 before calling resource virtual0."
+    },
+    {
+      "rva": "0x38d900",
+      "size": 8,
+      "sha256": "fb1a643c97884274c3157bdb824533c9ec654b9c7328338af59dc5a1699acf26",
+      "bytes": "c681fe00000001c3",
+      "meaning": "Primary candidate+0x38 sets companion flag+0xfe then returns."
+    },
+    {
+      "rva": "0x3b001b",
+      "size": 7,
+      "sha256": "0c5367e8707d86f964f7b35f889796c88f2c373162dbfdb87425ced4a7a1c77d",
+      "bytes": "c681fe00000000",
+      "meaning": "Primary candidate+0x3c clears companion flag+0xfe."
+    },
+    {
+      "rva": "0x3b23c4",
+      "size": 3,
+      "sha256": "0992d8925fd7c68fa9f6f2c3902094f3a528b3885697fa0187ea08af1de08ede",
+      "bytes": "8b4668",
+      "meaning": "Interface update first tests companion+0xe8 handle, then its pointee."
+    },
+    {
+      "rva": "0x3b2417",
+      "size": 3,
+      "sha256": "1a2309c9a64c1e05a8399caa9eab69eb47883d92f7986f239c8d624d2c73311b",
+      "bytes": "8d4e80",
+      "meaning": "Interface update converts receiver companion+0x80 to companion before event helper."
+    },
+    {
+      "rva": "0x3b2431",
+      "size": 2,
+      "sha256": "516d98b8f7e112c7ab40cf0397e0c0231765f39a38298f43fccc3f60a7f096e1",
+      "bytes": "8bce",
+      "meaning": "Interface update restores interface receiver for the delegated child update."
+    },
+    {
+      "rva": "0x39cd47",
+      "size": 3,
+      "sha256": "1781395ecac1f03760894fa4ba528b8de1bcff4981886ab8412aadd7c3a13a22",
+      "bytes": "8b4608",
+      "meaning": "Delegated update optionally resolves handle at companion+0x88."
+    },
+    {
+      "rva": "0x39cdb7",
+      "size": 3,
+      "sha256": "85e14f66c49483c87c26b9af261693fdbc34802462adc2f65a0bad95f2446265",
+      "bytes": "8b4044",
+      "meaning": "Resolved handle owner virtual+0x44 can fill the local base matrix."
+    },
+    {
+      "rva": "0x39cdcb",
+      "size": 3,
+      "sha256": "f2e07f3db41bc4321dc5d1841be910bd5196bedc06b54427bd1a9f034dc98b9f",
+      "bytes": "8b400c",
+      "meaning": "Scalar helper receiver is TLS-result+0x0c, distinct from manager membership TLS+0x14."
+    },
+    {
+      "rva": "0x39cde5",
+      "size": 3,
+      "sha256": "5ed051a062fd49f35a87a79eab49f93b0e61f9e837982b4b03874769b31ea38d",
+      "bytes": "8b4e50",
+      "meaning": "Delegated update reads interface+0x50, exactly companion+0xd0 child created by base constructor."
+    },
+    {
+      "rva": "0x39cdeb",
+      "size": 4,
+      "sha256": "10731d2b52a5f0fd82494353f6744a0ecaf68ab3c046dc40486f51f1859ab559",
+      "bytes": "d95c2404",
+      "meaning": "Second child update argument is scalar returned by0x2ca490."
+    },
+    {
+      "rva": "0x39cdef",
+      "size": 3,
+      "sha256": "9230e77c20651042d4a9774a38292181a417153865623e36201f334b77a20879",
+      "bytes": "d94508",
+      "meaning": "First child update argument is the original first scalar argument."
+    }
+  ],
+  "direct_calls": [
+    {
+      "rva": "0x3b69f9",
+      "size": 5,
+      "sha256": "40c65cd78cc5a3dcf0a761cc7b8b03da8811f7fa811e10417500ec2b1f0230c6",
+      "bytes": "e8d2f9ffff",
+      "target_rva": "0x3b63d0",
+      "decoded": true,
+      "meaning": "Inherited exact construction edge; no re-decode."
+    },
+    {
+      "rva": "0x3b63e1",
+      "size": 5,
+      "sha256": "ee36d000ef60ffdac6407cb1f4fbd2c0b604bef6556c24d258489624ea035316",
+      "bytes": "e8fa68fdff",
+      "target_rva": "0x38cce0",
+      "decoded": true,
+      "meaning": "Nested base transform/resource initialization."
+    },
+    {
+      "rva": "0x3b64b0",
+      "size": 5,
+      "sha256": "1ea58d44ee662e2a9ec6c1f11c334b7435a58258a7fc42f770424fc7da215ebe",
+      "bytes": "e85b780700",
+      "target_rva": "0x42dd10",
+      "decoded": false,
+      "meaning": "Create child from resource+0x58 and two zeros; body unexamined."
+    },
+    {
+      "rva": "0x3b64ce",
+      "size": 5,
+      "sha256": "1d85bad3400c8bd49fcde5309f4f3c31648b592fef86255e16483a5f2d13821c",
+      "bytes": "e8dda60300",
+      "target_rva": "0x3f0bb0",
+      "decoded": false,
+      "meaning": "Register resource+0x4c collection on constructed child; body unexamined."
+    },
+    {
+      "rva": "0x3b64ed",
+      "size": 5,
+      "sha256": "c8a2a2d849ae08da667529204b4470a8f540d5c37840255d0a74446f3a2169b5",
+      "bytes": "e8bea60300",
+      "target_rva": "0x3f0bb0",
+      "decoded": false,
+      "meaning": "Register resource+0x40 collection on constructed child; body unexamined."
+    },
+    {
+      "rva": "0x3b241d",
+      "size": 5,
+      "sha256": "64d9b93c7541ef920f57dfb309b2372611e117aacbc38516f3047a206281bdec",
+      "bytes": "e82edcffff",
+      "target_rva": "0x3b0050",
+      "decoded": true,
+      "meaning": "Timed event helper with receiver companion."
+    },
+    {
+      "rva": "0x3b2436",
+      "size": 5,
+      "sha256": "da417076ab309099513cc235caf0d6c111cdcaad2423294e67e5eac77236ed68",
+      "bytes": "e8f5a8feff",
+      "target_rva": "0x39cd30",
+      "decoded": true,
+      "meaning": "Delegate update with receiver companion+0x80 and three arguments."
+    },
+    {
+      "rva": "0x39cdc1",
+      "size": 5,
+      "sha256": "a877415c9f17b2b9a1b3e8e2b96db72c064887a92af0294049a416d7371b5635",
+      "bytes": "e84abddeff",
+      "target_rva": "0x188b10",
+      "decoded": false,
+      "meaning": "Inherited TLS helper; reused from manager18 without decoding."
+    },
+    {
+      "rva": "0x39cde0",
+      "size": 5,
+      "sha256": "a200a843b3b3fdb8ff118d10f42c45cc91c79bfcd91a077212ddb729ef31c346",
+      "bytes": "e8abd6f2ff",
+      "target_rva": "0x2ca490",
+      "decoded": false,
+      "meaning": "Compute scalar from optional local matrix and incoming arguments; body unexamined."
+    },
+    {
+      "rva": "0x39cdf5",
+      "size": 5,
+      "sha256": "a90a9f725a512be4ac96d1b9a1ca8f6d172426dabd220874156271acfdf2115c",
+      "bytes": "e816180800",
+      "target_rva": "0x41e610",
+      "decoded": false,
+      "meaning": "Update the constructor-owned companion+0xd0 child; next exact unexamined edge."
+    }
+  ],
+  "table_cells": [
+    {
+      "rva": "0x102c97c",
+      "size": 4,
+      "sha256": "b858e4533d56ba92732fc6109973a376030aeec64747c9ae679156652dfb04e2",
+      "bytes": "a0bf7a00",
+      "table_rva": "0x102c974",
+      "offset": "0x8",
+      "target_rva": "0x3abfa0",
+      "meaning": "Assigned companion+0x80 table; string-like output builder using resource+0x78, not a matrix update."
+    },
+    {
+      "rva": "0x102c988",
+      "size": 4,
+      "sha256": "85a3b3d4a8867fe4cbfa27d731b49228e502c42e301209280f859a9b3b61ab28",
+      "bytes": "c0237b00",
+      "table_rva": "0x102c974",
+      "offset": "0x14",
+      "target_rva": "0x3b23c0",
+      "meaning": "Assigned companion+0x80 table; update delegation and event handling."
+    },
+    {
+      "rva": "0x102c9e0",
+      "size": 4,
+      "sha256": "d5f2094cab49749e1e46973e98d3d7b996cf5a58a9e27647a3bd94c34f6ad713",
+      "bytes": "00d97800",
+      "table_rva": "0x102c9a8",
+      "offset": "0x38",
+      "target_rva": "0x38d900",
+      "meaning": "Candidate primary table cell; table end not independently admitted, body only proves flag write."
+    },
+    {
+      "rva": "0x102c9e4",
+      "size": 4,
+      "sha256": "8200ef7f876a1a5c813b3d188c82fe40f1f6e65787e70fcecfb45c9d1baa6e09",
+      "bytes": "10007b00",
+      "table_rva": "0x102c9a8",
+      "offset": "0x3c",
+      "target_rva": "0x3b0010",
+      "meaning": "Candidate primary table cell; table end not independently admitted, body only proves flag/singleton writes."
+    }
+  ],
+  "data_reads": [
+    {
+      "rva": "0x102c974",
+      "size": 52,
+      "sha256": "a142fd8d9e6ab6f1ebdfa7533058a653ff284f9f7768604767c529b975b65388",
+      "bytes": "a06a7b0060126100a0bf7a0070126100406a7a00c0237b00606a7a0080c77800a0126100b0126100c0126100c0c6780020c77800",
+      "meaning": "Exact assigned secondary table up to inherited next primary table address; no neighboring code survey."
+    },
+    {
+      "rva": "0x102c9a8",
+      "size": 64,
+      "sha256": "e56ec6b6e61051cd55d5ae48fcf1e7d61f871af7ff7703e25e033a1082b002f8",
+      "bytes": "e0777b0090cd7800b0ba6c00c0ba6c00d0ba6c00e0ba6c00f0ba6c0000bb6c00c0cd780010bb6c00e0697a00d0cd780040bb6c00b0cd780000d9780010007b00",
+      "meaning": "Bounded candidate primary table cells; no inferred end or selected-view semantics."
+    },
+    {
+      "rva": "0x10d94f0",
+      "size": 4,
+      "sha256": "e00e5eb9444182f352323374ef4e08ebcb784725fdd4fd612d7730540b3e0c8c",
+      "bytes": "0000803f",
+      "meaning": "Shared constructor matrix diagonal constant."
+    }
+  ],
+  "findings": {
+    "construction": "0x3b63d0 calls0x38cce0 to initialize base transform+0x10..+0x48 and retain resource at+0x70. It initializes relative matrix+0x90..+0xc8 independently to identity. No composition occurs in either constructor.",
+    "owned_child": "0x3b63d0 allocates0xc0 bytes, calls0x42dd10 with resource+0x58,0,0, stores returned child at companion+0xd0, and registers resource collections+0x4c/+0x40 to obtain handles+0xd4/+0xd8. Child constructor/registration bodies remain unexamined.",
+    "explicit_update_relationship": "Derived companion+0x80 table0x102c974 slot+0x14 points to0x3b23c0. With non-null companion+0xe8 and pointee it handles a scalar through companion+0xe4, calls0x3b0050(companion,first_scalar), and calls0x39cd30(companion+0x80,all_three_arguments).",
+    "timed_events": "0x3b0050 advances companion+0xf0, indexes0x50-byte resource records using+0xf4, and manages flags+0xfc/+0xfe and a separate singleton event. It does not read relative matrix or base transform storage.",
+    "child_tick": "0x39cd30 initializes a local identity matrix, optionally fills it via resolved companion+0x88 handle-owner virtual+0x44, computes a scalar via0x2ca490 on TLS+0x0c, then calls0x41e610 with ECX=companion+0xd0, first incoming scalar and computed scalar. This is an explicit constructor-to-update ownership join for the child.",
+    "limits": "No decoded update reads relative angular+0x90..+0xc8 or writes base transform+0x10..+0x48. Child tick effects and output consumers remain unknown. No selected local-player view, HUD state, active blend, entry/skip/exit or gameplay return authority is proved.",
+    "prior_negative": "The inherited manager table+0x1c false gate remains negative. Registration membership was not re-examined or promoted into current-view authority."
+  },
+  "source_implementation": {
+    "supported_correction": false,
+    "production_modified": false,
+    "reason": "Constructor-owned child update is now explicit, but transform composition and actual selected-view consumption are still absent."
+  },
+  "next_unresolved_edge": {
+    "callsite_rva": "0x39cdf5",
+    "target_rva": "0x41e610",
+    "receiver": "[companion+0xd0], the exact child returned from0x42dd10 at constructor0x3b64b0",
+    "arguments": [
+      "first scalar argument received by companion interface update",
+      "scalar returned by0x2ca490"
+    ],
+    "required": "Determine whether this child update produces an output explicitly consumed to combine companion relative+0x90..+0xc8 with base+0x10..+0x48; then establish actual selected local-player-view consumption. Existence, membership and update scheduling alone are insufficient."
+  },
+  "execution": {
+    "git": false,
+    "builds": false,
+    "tests": false,
+    "game": false,
+    "process_access": false,
+    "input": false,
+    "xr": false,
+    "profiles": false,
+    "installs": false,
+    "packages": false,
+    "subagents": false,
+    "production_writes": false
+  },
+  "verification": "Executable/inherited proof/helper hashes, exact full-unit bytes, preserved decode hashes, complete coverage, instruction pins, E8 destinations and table cells verified file-only.",
+  "saved_decodes": [
+    {
+      "rva": "0x38cce0",
+      "size": 174,
+      "unit": "0x38cce0",
+      "sha256": "2df958458fe9abe6ec5cbf589af54d74166ab2087b4b3de3570612ef513b2de2",
+      "decode_sha256": "a3e36bbaa1d24f59363c1f2a3cb23fbf408e9c80d483b342f6453e21811b15af",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-0038cce0-ae.txt"
+    },
+    {
+      "rva": "0x38d900",
+      "size": 8,
+      "unit": "0x38d900",
+      "sha256": "fb1a643c97884274c3157bdb824533c9ec654b9c7328338af59dc5a1699acf26",
+      "decode_sha256": "74613da3c7d854943caccadfc25b023ba3fb9850df91d56e9cd08b7c0b1bd615",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-0038d900-8.txt"
+    },
+    {
+      "rva": "0x39cd30",
+      "size": 131,
+      "unit": "0x39cd30",
+      "sha256": "74430c3f82c27bda34c4dd0f2e755835ac03b2607c559583c45750eedfdf0517",
+      "decode_sha256": "dc1b86e06111fff3f15e4352cf40b323e9f2867ffe9095abc2e4ecf4c14e7731",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-0039cd30-83.txt"
+    },
+    {
+      "rva": "0x39cdb3",
+      "size": 78,
+      "unit": "0x39cd30",
+      "sha256": "2c5856b1f3cf3ab2fa3af7184d48ef0f63deae72246d80d3e947b932f487e716",
+      "decode_sha256": "795413e6ccb03c05bb4f536e531607a13ee988687d4365f054922a7022f2ceb8",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-0039cdb3-4e.txt"
+    },
+    {
+      "rva": "0x3abfa0",
+      "size": 178,
+      "unit": "0x3abfa0",
+      "sha256": "8096312b6ae9c0c80b1d98e4adece4f3819ae7e1096a20f98d9e364c092eab8c",
+      "decode_sha256": "f26613763751e1ed7ecbd9cb8e0251ac052531bc1ab2471308714d6d747b19cc",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-003abfa0-b2.txt"
+    },
+    {
+      "rva": "0x3b0010",
+      "size": 57,
+      "unit": "0x3b0010",
+      "sha256": "dfff88fe4223a20b96740caa2809391711e65f6311bf0f2042a6c6abbb6df8bb",
+      "decode_sha256": "2b4deb42a18775755ea46341da344ef6c6dac25044583b63e14e18d348690786",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-003b0010-39.txt"
+    },
+    {
+      "rva": "0x3b0050",
+      "size": 38,
+      "unit": "0x3b0050",
+      "sha256": "092ce88a81468919b919fba6e94bfe628ad41f9535f55d0eb320d1fd812ed5ac",
+      "decode_sha256": "def58d3537951e96f914402bb3aa97b65fef980e16b351ee1dbac59b4413b515",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-003b0050-26.txt"
+    },
+    {
+      "rva": "0x3b0076",
+      "size": 159,
+      "unit": "0x3b0050",
+      "sha256": "235eefbfdfc2cc95c9b51e2bb5c86ac6aec2b6aebf2809bce18f9464fae6fbac",
+      "decode_sha256": "e52252059a04d6cd7679714153e59ca5b053883759f37835a70ba0aaf96e538c",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-003b0076-9f.txt"
+    },
+    {
+      "rva": "0x3b0115",
+      "size": 56,
+      "unit": "0x3b0050",
+      "sha256": "67aaf26b540bfbe69487ec352f461b4da72c11c9c624d8ed0c8d63861e993d11",
+      "decode_sha256": "67f89362e76038e2013378d054f48dd5c6e8666b221e98c4cd9a925f51b24dea",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-003b0115-38.txt"
+    },
+    {
+      "rva": "0x3b014d",
+      "size": 47,
+      "unit": "0x3b0050",
+      "sha256": "daf2b52c3e45ea9c56720c238739e4e2b42047b264a1e297b0113e7d3b4d70a1",
+      "decode_sha256": "1c89069914271ac94bacb993efe828ba586faeadad9f62160387aa15d1cd41a9",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-003b014d-2f.txt"
+    },
+    {
+      "rva": "0x3b23c0",
+      "size": 44,
+      "unit": "0x3b23c0",
+      "sha256": "28eed5f6f3181791e021e1a08fde81bb21c0947efce0f1c44133ce2a9294a2f2",
+      "decode_sha256": "77bfae2596255944fe64f83921180563316c7e4ccebbaae518d7ead54777b8ad",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-003b23c0-2c.txt"
+    },
+    {
+      "rva": "0x3b23ec",
+      "size": 84,
+      "unit": "0x3b23c0",
+      "sha256": "404d445f63a58011036e4a6dd50d09645364abc821d7a667bc8ce0f8e1891faf",
+      "decode_sha256": "52d75a8d5e8c6168e3aa90f766abb894ae8df98eab9f1d1ff9aed8df50b21671",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-003b23ec-54.txt"
+    },
+    {
+      "rva": "0x3b63d0",
+      "size": 231,
+      "unit": "0x3b63d0",
+      "sha256": "b791fd879e1b057442e9e916b779662dfdbe610dc091c9f1ef47e0daeca8dd0d",
+      "decode_sha256": "8c3ee51fdc054f4ea9ca28467461e716aa770d8eccc6af33dffc6d38573e6029",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-003b63d0-e7.txt"
+    },
+    {
+      "rva": "0x3b64b7",
+      "size": 75,
+      "unit": "0x3b63d0",
+      "sha256": "3380074e7564e051adae0a7397c326fe4601b42402520dacb87d7f938f30d13e",
+      "decode_sha256": "292b989fd7df5735916a7f9dc94d29964a54ce7028abb5537b01583d96f92e88",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-003b64b7-4b.txt"
+    }
+  ],
+  "frozen": true
+}

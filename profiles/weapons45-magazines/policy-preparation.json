@@ -1,0 +1,47 @@
+{
+  "schema": "fvr.bc2.magazines45.policy_preparation.v1",
+  "previous": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-magazines45-extraction01\\extraction-receipt.json",
+    "sha256": "f21f4953157ab1b73dcba67196e724288aff45ed842b451dbc3b3e31f5a29e69"
+  },
+  "reviews": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\profiles\\weapons45-magazines\\mod-authored-reviews.json",
+    "sha256": "f1cd7f79f1e4b3a74e5eb1b04696473be263ad63345057047f4ac79b5aa01a6c"
+  },
+  "packets": [
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-magazines45-policy02\\packet.json",
+      "sha256": "db4a812ffcf6ecef6896946b376434baf3fb41241a1fddd1dfe092af3c445521"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-magazines45-policy03\\packet.json",
+      "sha256": "0c4679dd4d70ee1e0e2d37a921c686f342eaf62298d8369c564fc9cce05ec3bf"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-magazines45-policy04\\packet.json",
+      "sha256": "cbfa809d29baab0d5b1191b0ebfd3c323d276ba0a7a749dcf6ed9754ca8405fa"
+    }
+  ],
+  "inventory": [
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-magazines45-policy03\\targeted-common-inventory.json",
+      "sha256": "1b8e3a5082bdb61a50ba0edbaebfc5c8839a9108cd18b15daf917b20d2b833ff"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-magazines45-policy04\\targeted-common-inventory.json",
+      "sha256": "1b8e3a5082bdb61a50ba0edbaebfc5c8839a9108cd18b15daf917b20d2b833ff"
+    }
+  ],
+  "summary": {
+    "configurations": 128,
+    "strict_geometry": 80,
+    "native_dispatch_supported": 128,
+    "preserved_registrations": 23,
+    "independent_content_groups": 28,
+    "missing_reload_actions": 12,
+    "mod_authored_geometry": 48,
+    "geometry_available": 128
+  },
+  "native_execution": false,
+  "headset_acceptance": false
+}

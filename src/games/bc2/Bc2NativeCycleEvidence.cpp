@@ -60,16 +60,24 @@ bool ValidateCycleUpdate(const ReloadFlowRecord& r,const ReloadHoldIdentity& ide
         r.entry.update==r.id&&r.entry.nativeUpdate==r.id&&Basic(r,identity,branch,true);
 }
 bool CycleConvergencePhase(unsigned current,unsigned next,float timer,bool m95,bool empty)noexcept {
-    if(!std::isfinite(timer)||timer<0)return false;
+    return CycleConvergencePhase(current,next,timer,{m95,empty,.5f,m95?2.3f:1.f});
+}
+bool CycleConvergencePhase(unsigned current,unsigned next,float timer,const NativeCycleConvergenceProfile& p)noexcept {
+    if(!std::isfinite(timer)||timer<0||!std::isfinite(p.boltDelay)||p.boltDelay<0||
+       !std::isfinite(p.boltTime)||p.boltTime<0)return false;
     if(current==2)return next==2&&timer==0;
     if(current==1)return (next==1||next==2)&&timer==0;
-    if(empty)return current==6&&next==1&&timer>0&&timer<=1;
+    if(p.empty)return current==6&&next==1&&timer>0&&timer<=1;
     if(current==6)return next==7&&timer>0&&timer<=1;
-    if(current==7)return (next==7||next==8)&&timer>=0&&timer<=.5f;
-    return current==8&&next==1&&timer>=0&&timer<=(m95?2.3f:1.f);
+    if(current==7)return (next==7||next==8)&&timer<=p.boltDelay;
+    return current==8&&next==1&&timer<=p.boltTime;
 }
 bool CycleGuardedUpdate(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity,unsigned branch,
     const NativeCycleInputGuard& guard,unsigned guardedSteps,unsigned rejectedSteps,bool m95,bool empty)noexcept {
+    return CycleGuardedUpdate(r,identity,branch,guard,guardedSteps,rejectedSteps,{m95,empty,.5f,m95?2.3f:1.f});
+}
+bool CycleGuardedUpdate(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity,unsigned branch,
+    const NativeCycleInputGuard& guard,unsigned guardedSteps,unsigned rejectedSteps,const NativeCycleConvergenceProfile& p)noexcept {
     if(!ValidateCycleUpdate(r,identity,branch)||!Unheld(r)||!guard.Exact()||rejectedSteps)return false;
     std::array<std::uint32_t,2> original{};std::memcpy(original.data(),r.entry.copiedContext.data()+0x28,8);
     if(guard.original!=original||guard.effective!=std::array<std::uint32_t,2>{(original[0]&~255u)|1u,0})return false;
@@ -77,13 +85,16 @@ bool CycleGuardedUpdate(const ReloadFlowRecord& r,const ReloadHoldIdentity& iden
     const auto& before=r.entry.boundary;const auto& after=*r.exit.boundary;
     return context&&!context->flags24Through28[2]&&
         (!(before.current==2&&before.next==2&&after.current==2&&after.next==2)||guardedSteps)&&
-        CycleConvergencePhase(before.current,before.next,before.timer,m95,empty)&&
-        CycleConvergencePhase(after.current,after.next,after.timer,m95,empty)&&
+        CycleConvergencePhase(before.current,before.next,before.timer,p)&&
+        CycleConvergencePhase(after.current,after.next,after.timer,p)&&
         before.loaded==after.loaded&&before.reserve==after.reserve&&
         (after.flagsA8==before.flagsA8||after.flagsA8==(before.flagsA8&~2u));
 }
 bool CycleGuardedCommit(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity,unsigned branch,std::uint64_t parent,bool m95,bool empty)noexcept {
-    (void)m95;const auto& e=r.entry;
+    return CycleGuardedCommit(r,identity,branch,parent,{m95,empty,.5f,m95?2.3f:1.f});
+}
+bool CycleGuardedCommit(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity,unsigned branch,std::uint64_t parent,const NativeCycleConvergenceProfile& p)noexcept {
+    const auto& e=r.entry;const bool empty=p.empty;
     if(!parent||r.id<=parent||e.kind!=ReloadFlowEvent::Commit||e.depth!=2||e.parent!=parent||e.nativeParent!=parent||
        e.update!=parent||e.nativeUpdate!=parent||!Basic(r,identity,branch,false)||!Unheld(r))return false;
     const auto c=DecodeReloadUpdateContext(e.copiedContext);const auto& a=e.boundary;const auto& z=*r.exit.boundary;
@@ -93,6 +104,9 @@ bool CycleGuardedCommit(const ReloadFlowRecord& r,const ReloadHoldIdentity& iden
         z.loaded==a.loaded&&z.reserve==a.reserve&&z.flagsA8==a.flagsA8;
 }
 bool CycleConvergenceRestore(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity,unsigned branch,bool m95,bool empty)noexcept {
+    return CycleConvergenceRestore(r,identity,branch,{m95,empty,.5f,m95?2.3f:1.f});
+}
+bool CycleConvergenceRestore(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity,unsigned branch,const NativeCycleConvergenceProfile& p)noexcept {
     const auto& a=r.entry;const auto& e=r.exit;
     if(!Identity(identity)||branch>=2||a.kind!=ReloadFlowEvent::Restore||!r.id||a.nativeInvocation!=r.id||
        a.depth!=1||a.parent||a.nativeParent||a.update||a.nativeUpdate||!r.finished||!r.identityRetained||
@@ -101,8 +115,8 @@ bool CycleConvergenceRestore(const ReloadFlowRecord& r,const ReloadHoldIdentity&
        a.boundary.snapshotSequence!=e.boundary->snapshotSequence||a.boundary.soldierFlags!=e.boundary->soldierFlags||
        !ReloadRestoreMatched(r))return false;
     const auto& b=a.boundary;const auto& v=*e.boundary;
-    return CycleConvergencePhase(b.current,b.next,b.timer,m95,empty)&&
-        CycleConvergencePhase(v.current,v.next,v.timer,m95,empty)&&
+    return CycleConvergencePhase(b.current,b.next,b.timer,p)&&
+        CycleConvergencePhase(v.current,v.next,v.timer,p)&&
         b.loaded==v.loaded&&b.reserve==v.reserve&&b.flagsA8==v.flagsA8;
 }
 bool CycleM95PreHoldRewind(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity,unsigned branch)noexcept {

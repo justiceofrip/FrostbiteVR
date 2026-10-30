@@ -1,0 +1,402 @@
+{
+  "schema": "fvr.bc2.firearm_source_completion.v1",
+  "source_complete": true,
+  "configurations": 181,
+  "asset_names": 77,
+  "evidence": "exact configuration joins, changed-component compilation, applicable production syntax and offline tests",
+  "checks": {
+    "x86": {
+      "BoltReloadDebt": {
+        "suite": "BoltReloadDebt",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons51-x86-06"
+      },
+      "Bc2NativeCycleReload": {
+        "suite": "Bc2NativeCycleReload",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons50-x86-05"
+      },
+      "FixedContainerReload": {
+        "suite": "FixedContainerReload",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons51-x86-06"
+      },
+      "Bc2FixedContainerResource": {
+        "suite": "Bc2FixedContainerResource",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons51-x86-06"
+      },
+      "Bc2CycleReloadRouting": {
+        "suite": "Bc2CycleReloadRouting",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons50-x86-05"
+      },
+      "Bc2PhysicalFixedContainer": {
+        "suite": "Bc2PhysicalFixedContainer",
+        "compiled": true,
+        "passed": true,
+        "report": "coordinator-20261030-weapons51-fixed08"
+      },
+      "FixedContainerContext": {
+        "suite": "FixedContainerContext",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons51-x86-06"
+      },
+      "Bc2BoltReloadRuntime": {
+        "suite": "Bc2BoltReloadRuntime",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons50-x86-05"
+      },
+      "Bc2ShotgunEquipment": {
+        "suite": "Bc2ShotgunEquipment",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons51-x86-06"
+      },
+      "Bc2BoltEquipment": {
+        "suite": "Bc2BoltEquipment",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons50-x86-05"
+      },
+      "Bc2Rig": {
+        "suite": "Bc2Rig",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons50-x86-05"
+      },
+      "Bc2PhysicalBolt": {
+        "suite": "Bc2PhysicalBolt",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons50-x86-05"
+      },
+      "Bc2PhysicalBoltRecovery": {
+        "suite": "Bc2PhysicalBoltRecovery",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons50-x86-05"
+      },
+      "Bc2BoltPlayerCustody": {
+        "suite": "Bc2BoltPlayerCustody",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons51-x86-06"
+      },
+      "Bc2PhysicalPump": {
+        "suite": "Bc2PhysicalPump",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons50-x86-05"
+      },
+      "Bc2PhysicalPumpRecovery": {
+        "suite": "Bc2PhysicalPumpRecovery",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons50-x86-05"
+      },
+      "Bc2NativeCycleService": {
+        "suite": "Bc2NativeCycleService",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons50-x86-05"
+      },
+      "Bc2NativeCycleEvidence": {
+        "suite": "Bc2NativeCycleEvidence",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons50-x86-05"
+      },
+      "Bc2NativeCycleRecoveryService": {
+        "suite": "Bc2NativeCycleRecoveryService",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons51-x86-06"
+      },
+      "AmmunitionLedger": {
+        "suite": "AmmunitionLedger",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons50-x86-05"
+      },
+      "AmmunitionInventory": {
+        "suite": "AmmunitionInventory",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons50-x86-05"
+      },
+      "Bc2AmmoResourceService": {
+        "suite": "Bc2AmmoResourceService",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons50-x86-05"
+      },
+      "Bc2AmmoResourceEvidence": {
+        "suite": "Bc2AmmoResourceEvidence",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons50-x86-05"
+      },
+      "Bc2ReloadInteraction": {
+        "suite": "Bc2ReloadInteraction",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons50-x86-05"
+      },
+      "Bc2ReloadPresentation": {
+        "suite": "Bc2ReloadPresentation",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons50-x86-05"
+      },
+      "Bc2ReloadPalette": {
+        "suite": "Bc2ReloadPalette",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons50-x86-05"
+      },
+      "Bc2BodyAmmo": {
+        "suite": "Bc2BodyAmmo",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons50-x86-05"
+      },
+      "Bc2BodyPropPair": {
+        "suite": "Bc2BodyPropPair",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons50-x86-05"
+      },
+      "FeedInteraction": {
+        "suite": "FeedInteraction",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons50-x86-05"
+      },
+      "Bc2BodyAmmoCache": {
+        "suite": "Bc2BodyAmmoCache",
+        "passed": true,
+        "compiled": true,
+        "report": "coordinator-20261030-weapons51-x86-06"
+      }
+    },
+    "x64": {
+      "BoltReloadDebt": {
+        "compiled": true,
+        "passed": true,
+        "suite": "BoltReloadDebt",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2NativeCycleReload": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2NativeCycleReload",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "FixedContainerReload": {
+        "compiled": true,
+        "passed": true,
+        "suite": "FixedContainerReload",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2FixedContainerResource": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2FixedContainerResource",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2CycleReloadRouting": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2CycleReloadRouting",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2PhysicalFixedContainer": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2PhysicalFixedContainer",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "FixedContainerContext": {
+        "compiled": true,
+        "passed": true,
+        "suite": "FixedContainerContext",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2BoltReloadRuntime": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2BoltReloadRuntime",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2ShotgunEquipment": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2ShotgunEquipment",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2BoltEquipment": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2BoltEquipment",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2Rig": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2Rig",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2PhysicalBolt": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2PhysicalBolt",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2PhysicalBoltRecovery": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2PhysicalBoltRecovery",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2BoltPlayerCustody": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2BoltPlayerCustody",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2PhysicalPump": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2PhysicalPump",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2PhysicalPumpRecovery": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2PhysicalPumpRecovery",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2NativeCycleService": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2NativeCycleService",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2NativeCycleEvidence": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2NativeCycleEvidence",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2NativeCycleRecoveryService": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2NativeCycleRecoveryService",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "AmmunitionLedger": {
+        "compiled": true,
+        "passed": true,
+        "suite": "AmmunitionLedger",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "AmmunitionInventory": {
+        "compiled": true,
+        "passed": true,
+        "suite": "AmmunitionInventory",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2AmmoResourceService": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2AmmoResourceService",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2AmmoResourceEvidence": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2AmmoResourceEvidence",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2ReloadInteraction": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2ReloadInteraction",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2ReloadPresentation": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2ReloadPresentation",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2ReloadPalette": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2ReloadPalette",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2BodyAmmo": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2BodyAmmo",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2BodyPropPair": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2BodyPropPair",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "FeedInteraction": {
+        "compiled": true,
+        "passed": true,
+        "suite": "FeedInteraction",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      },
+      "Bc2BodyAmmoCache": {
+        "compiled": true,
+        "passed": true,
+        "suite": "Bc2BodyAmmoCache",
+        "report": "coordinator-20261030-weapons51-x64-02"
+      }
+    }
+  },
+  "coverage": {
+    "path": "handoff\\tasks\\WEAPONS\\20261030-coverage50\\coverage.json",
+    "sha256": "b78baba25acfcb97a45cee915b421de467a6038d9260515d52198179192e50f0"
+  },
+  "production_syntax": {
+    "x86": "coordinator-20261030-weapons51-x86-06",
+    "x64": "coordinator-20261030-weapons51-x64-02",
+    "x64_excludes": "Gameplay/RigPublication/NativeProbe are x86-only build targets"
+  },
+  "cache": {
+    "path": "reports\\coordinator-20261030-cache48-enrollment01\\body-ammo.fvrprop",
+    "records": 252,
+    "bytes": 54281907,
+    "sha256": "d0135f2f44f31322ac5e3971b82b26d665c22c48d9b6a39a04dd489f95b396aa",
+    "verification": "actual CPU cache consumers passed on x86 and x64; incremental48 replay passed"
+  },
+  "python_checks": {
+    "report": "coordinator-20261030-assetchecks50",
+    "passed": 11,
+    "reused": "prior family authoring and cache completion passes remain applicable"
+  },
+  "enrollment": "profiles/weapons43/Enrollment.cmake",
+  "normal_dll_build": false,
+  "merged": false,
+  "pushed": false,
+  "installed": false,
+  "headset_accepted": false,
+  "installed_version": "0.1.17 unchanged",
+  "next": "Integrate the complete source batch and cache only when user requests integration; then use normal existing build trees."
+}

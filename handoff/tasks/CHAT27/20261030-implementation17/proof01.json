@@ -1,0 +1,255 @@
+{
+  "schema": "chat27.cinematic_service_static_code.v1",
+  "evidence_level": "offline file-backed code",
+  "executable_sha256": "3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258",
+  "preferred_base": "0x400000",
+  "prior_work14_proof_sha256": "b5db47e429185f0a5ebe9d37986fe7ec4c4cb40de746bcd9f974f482147101d3",
+  "reader_sha256": "94db343a4d568c5c6c784aa70b74a508ab936187f63eb95c778359a15294ca88",
+  "script_sha256": "5c1feacfe0d1ec4a1b05345b9e981f67714f165b5529ff8fcbe52f76697eb8c9",
+  "scope": {
+    "primary_helper": "0x826900",
+    "admitted_immediate_units": 3,
+    "additional_boundary_spill_units": 1,
+    "total_new_function_units_observed": 5,
+    "prior_eight_units_reexecuted": false,
+    "tables_walked": 0,
+    "note": "Initial 0x130-byte decode crossed the helper's return and exposed wrapper0x826990 and adjacent0x8269a0. Wrapper is an exact caller; adjacent function is counted as observed but is not admitted ownership evidence. Subsequent decode ranges end at the known function bounds."
+  },
+  "units": [
+    {
+      "rva": "0x826900",
+      "size": 139,
+      "sha256": "a0bda2bf365321dd0be41a389b7887a6250f93cb369b25e91f5e4ccdf8ba2f7e",
+      "reason": "Assigned exact helper called from work14 entity setup."
+    },
+    {
+      "rva": "0x826990",
+      "size": 13,
+      "sha256": "a967b756117f1343d1d0227b933e94c59ad7695c4ab05a37dba1f744bae2795e",
+      "reason": "Immediate exact caller at0x826995; no absolute or direct branch references to wrapper found."
+    },
+    {
+      "rva": "0x3ff720",
+      "size": 42,
+      "sha256": "4f55e54ff386a922ec86caebe606238b84f43b677c767f231d89efa07d4b3c06",
+      "reason": "Immediate exact caller sites0x3ff731/0x3ff743; same admitted context+0x40 receiver."
+    },
+    {
+      "rva": "0x823ed0",
+      "size": 263,
+      "sha256": "c2944dace5be23c6598e9d6948786899b1b4880ceacd0a16857f70d375d5e4ca",
+      "reason": "Only direct callee of primary helper, at0x826982; pointer-array insertion/growth."
+    },
+    {
+      "rva": "0x8269a0",
+      "size": 144,
+      "sha256": "56a7cde248ca65edfe167289e55345824e5dc4e87d9f6bc940a7c53ec55dab84",
+      "reason": "Initial boundary spill only. Not used to infer selection, lifetime, or owner type."
+    }
+  ],
+  "helper_references": {
+    "absolute": [],
+    "direct_branch_byte_candidates": [
+      {
+        "rva": "0x3df87e",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x3dfa38",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x3dfdb5",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x3e03d0",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x3ff731",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x3ff743",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x415d4f",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x41ac38",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x41be51",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4ab632",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4ab7c8",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4abfc5",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4ae718",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4aef89",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4af902",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4b002e",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4b062f",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4b07d9",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4b09ac",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4b2779",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4bc087",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4c3585",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4e9209",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4e9acc",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4e9f72",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4eaf86",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4eb62e",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4ec937",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4ecf0f",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4ed573",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4ed87d",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4f02b0",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4f2273",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4f8144",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x4fc4c2",
+        "opcode": "0xe8"
+      },
+      {
+        "rva": "0x826995",
+        "opcode": "0xe8"
+      }
+    ]
+  },
+  "wrapper_references": {
+    "absolute": [],
+    "direct_branch_byte_candidates": []
+  },
+  "caller_references": {
+    "absolute": [],
+    "direct_branch_byte_candidates": [
+      {
+        "rva": "0x15d23d",
+        "opcode": "0xe8"
+      }
+    ]
+  },
+  "reference_limits": "Only decoded call instructions are verified callers. Other byte candidates remain unwalked; absolute/direct scan absence does not exclude all indirect references.",
+  "static_edges": [
+    "Let S be receiver=[context+0x40] and P be work14's entity+0x98. Helper copies word[S+0x20] to word[P+0x0c], then increments the 16-bit service value.",
+    "For nonzero prior tail[S+8], helper writes [tail+8]=P and [P+4]=tail; otherwise [S+4]=P. It then sets [S+8]=P. On serial wrap to zero it walks [S+4] via node+8 and rewrites node+0x0c serials.",
+    "Helper writes word[P+0x0e]=([S+0x10]-[S+0x0c])/4. If end[S+0x10] is below capacity[S+0x14], it advances end by4 and writes P at the old end. Otherwise it calls0x823ed0 with receiver S+0x0c, insertion position=end, and address of the stack P argument.",
+    "Callee0x823ed0 inserts a4-byte value, optionally allocates/copies storage, then publishes begin/end/capacity. It does not resolve a player, view, camera, or selected owner.",
+    "Exact immediate caller0x3ff720 passes incoming this+0x4c to the same context+0x40 helper on its nonnull branch. This offset differs from work14's entity+0x98; no type for the incoming this is asserted.",
+    "Wrapper0x826990 forwards its first stack argument to0x826900 and returns popping8 bytes. It establishes no selection relationship."
+  ],
+  "safe_inference": "The helper establishes registration/list and pointer-array membership. Its serial and array-index writes are not evidence of a selected camera, semantic generation token, local-player ownership, or view authority.",
+  "source_implementation": {
+    "supported_correction": false,
+    "files_modified": [],
+    "runtime_admission_enabled": false,
+    "reason": "No admitted local-player/view -> selected cinematic owner edge. The shared registry cannot support an unconditional node-minus0x98 owner conversion; a second exact caller supplies this+0x4c."
+  },
+  "precise_missing_edge": "From the mixed-offset registry at [context+0x40]+0x0c, prove which node is a currently selected cinematic instance, its verified owner/subobject conversion, and the authoritative join to the admitted local player or active view/request. Neither registration membership nor 16-bit serial/index chooses that node.",
+  "proof_limits": "Static file evidence only. No full service type, deregistration/lifetime, synchronization, local-player scope, blend authority, current camera, or entry/exit/skip behavior is established. No runtime read chain/signature prepared.",
+  "saved_decodes": [
+    {
+      "path": "reports\\coordinator-20261030-implementation17\\cinematic\\decode-003ff720-2b.txt",
+      "size": 1063,
+      "sha256": "c19d61e54d6b42ed8eccaa2f55af71a21e1ccf6d7108260096f838692084e15c"
+    },
+    {
+      "path": "reports\\coordinator-20261030-implementation17\\cinematic\\decode-00823ed0-107.txt",
+      "size": 6027,
+      "sha256": "528fbbfb937afc4cd40394738a07d9d83cec66aaf563c337ff8d0229560fb897"
+    },
+    {
+      "path": "reports\\coordinator-20261030-implementation17\\cinematic\\decode-00826900-8b.txt",
+      "size": 3039,
+      "sha256": "9ed88853dc20571196a94b4a1fe3c47caa5fc463196e5ed21589772f8f18d95e"
+    }
+  ],
+  "failed_attempt_retained": "Initial decoder invocation omitted0x in /RANGE values and returned1147 before saving output; corrected invocation succeeded. No game execution occurred.",
+  "game_process_access": false,
+  "desktop_checks": false,
+  "builds": false,
+  "tests_executed": false,
+  "package_profile_install_changes": false,
+  "archive_survey": false,
+  "stop_reason": "Primary helper and three immediate related functions resolve to shared node registration/container insertion; one initial boundary spill is disclosed and counted. No source correction is provable within this cone. Stopped without spending the remaining function allowance."
+}

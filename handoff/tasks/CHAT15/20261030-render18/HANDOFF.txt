@@ -1,0 +1,23 @@
+Done Y: bounded source implementation connects physical M60 feed snapshots to the existing private rig palette.
+Files: Bc2RigPublication.h/.cpp, Bc2FeedPresentation.h, tests/Bc2FeedPresentationTests.cpp.
+Tracking.feed carries the exact immutable Gameplay snapshot; runtime owner wired sample.feed=feedResult.presentation.
+No renderer read of the independently latest global physical-feed publication.
+Admission joins native/controller owner, actual HandInteraction owner/equipment generation, weapon, supply/lifetime and original <=100ms raw-input lease.
+Current render input may be newer than the raw packet; neither packet nor selected-configuration lease is restamped.
+Binding requires exact M60 asset/configuration/mesh plus complete rig fingerprint, exact RigIdentity, names and topology.
+Pouch, cover and four chain bones produce separate subtree writes; unrelated animation and native hidden leaves are preserved.
+Measured cover-reference bone frame is transported through the hinge; hinge axes are not written directly to bone9.
+Attached parts use current placed weapon metres; carried pouch and chain use their separate retained world bases, then scale once.
+Mechanism wrist requires the actual left Mechanism claim, weapon item, exact lifetime contact, prerequisite, source sequence and original claim deadline.
+Current release or claim/operation change invalidates the posed hand; pose geometry alone never grants a claim.
+Feed hand claim suppresses conflicting support, sight, reload, magazine and active pump presentation; resting feed parts still render while idle.
+ControllerMapping remains derived from the existing pre-IK targets; posed feed wrist never feeds the recognizer.
+PublishedPose and Scope retain feed identity, selected snapshot and the exact pre-feed private fallback palette.
+Each native Pack rechecks current immutable input/claim, selected identities, live rig identity and original native source bytes.
+The scope reuses one prepared feed palette and never admits a newer feed into its second pack; invalidation selects the captured fallback.
+Existing current-source checks, getter-output commit and exact-write cleanup remain in place; no native palette writes/new hooks.
+Nine source test groups cover geometry, carry, articulation, rig rejection, raw lease/hand epochs, exact selector and actual-claim retention.
+Tests/builds were NOT executed; root owns x86/x64 affected suites and RigSyntax, followed by future normal integration builds.
+Static review found dependent Mechanism item mismatch; runtime owner fixed request to s.weapon (matching prerequisite GunHold), source verified.
+Remaining actual gap: successful native reload/palette pair and headset acceptance are unproved by these source changes.
+No Git, game/process/XR/input/install/package, shared status edits or subagents used. Owned files frozen for root review.

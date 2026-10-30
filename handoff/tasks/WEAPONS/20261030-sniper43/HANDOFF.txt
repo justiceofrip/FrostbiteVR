@@ -1,0 +1,10 @@
+Done Y for assigned batch/proof preparation; Done N for complete native firearm manual reload.
+Coverage: all28 cached sniper configs/12 names/38 origins;28 exact mesh+mechanism+reference joins.
+Four authorized source files add separate static bolt-action/inactive-SingleFire admissions and wcShotgun data extraction.
+Cached exact Step/Transfer disassembly supports20 newly classified rows; all28 descriptor rows now have supported candidate dispatch.
+descriptor-jobs.json + DisabledSniperRegistry.h:28 disabled rows, zero new runtime enablement or native authority.
+geometry-inputs.json + batch-jobs.json:17 strict-geometry configs,11 exact gap jobs; every variant retained.
+static-proof.json + receipt.json pin source/disassembly/output hashes; prepare_sniper_batch.py reproduces this data without game access.
+IMPLEMENTATION.txt + pause-rebase-interface.json define retained-debt hand/native integration, full-capacity receipt rebase and exact edit ownership.
+Remaining implementation: typed open-bolt reload pause/resume, generic exact bolt selector,11 geometry gaps and exact native/hand joins.
+No tests, builds, game, install, Git or recursive agents; no old missing-render check repeated.

@@ -1,0 +1,24 @@
+Implementation17: complete remaining source components offline; integration/install held.
+Base1909038; portable reload/session source7d408db; same coordinator worktree/branch.
+Latest user: full campaign task list, no more desktop-only PC tests; headset test later.
+Native16 closed normally with exact profile restoration; no useful M60 state obtained.
+
+Completed assignments; all ownership returned to root:
+feed_resources17 retired Done Y: ammunition ledger +15 cases, root x86/x64 pass.
+feed_placement17 retired Done Y: free placement + explicit target kind, root39 groups x86/x64 pass.
+Existing FeedReloadSession17 groups also pass both architectures against changed gestures.
+cinematic_service17 retired: bounded new helper proof; active-camera link still unproved.
+feed_equipment17 retired Done Y: combined consumer +14 cases, root x86/x64 check02 pass.
+pistol_slide17 retired Done Y: physical slide consumer +18 groups, root x86/x64 pass.
+pistol_geometry17 retired Done Y: exact MP443 slide/rail measured and root-rendered.
+cinematic_methods17 retired: exact owner+0xdc callback ->0x4955a0; active-view link still open.
+implementation17_review retired Done Y: no actionable source defects.
+Root: CMakeLists.txt, isolated runner, shared status, combined review, validation and Git.
+All writers stopped. No source overlap; no agent builds or game use.
+
+Concrete source gaps: feed reload had no retained ammunition ledger; pouch carry was
+incorrectly limited to linear/hinge motion. Implement distinct custody/conservation and
+measured free placement, then consume both together without inventing native authority.
+Cutscene investigation follows only exact unvisited service helper/caller edges from work14.
+All native transfer/stage mapping defaults unavailable until exact adapter evidence exists.
+Source completion, actual-game acceptance and user headset testing remain distinct.

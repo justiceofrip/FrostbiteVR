@@ -1,0 +1,29 @@
+CHAT24 work12 - replacement prop ownership audit
+Base: dfc0e507; sole coordinator worktree campaign-coordinator-20261028-r1.
+Result: no demonstrated production-reachable source-contract defect; no patch.
+Evidence level: bounded static source review only; no tests/builds/native session.
+User headset report says interactions improved; no new prop defect was reported.
+Scope: replacement-magazine release/regrip/holster producer-to-palette ownership.
+Contracts read: AGENTS.md, CURRENT.md, ARCHITECTURE.md required invariants.
+Producer: Bc2MagazineResourceReload.cpp:13-36 clears transient presentation on
+cancel/suspend; :169-186 preserves gap custody but emits no prop/resource view.
+Normal replacement release passes through AmmoSupply::Drop and WellEmpty state;
+submitted seats release only the exact reservation hand without undoing ammo.
+Consumer: Bc2MagazinePresentation.cpp:52-110 joins role, owner, claims, deadlines,
+carry basis and resource; :211-215 falls back when current publication differs.
+Native Pack rechecks current publication/source at Bc2RigPublication.cpp:499-531.
+Existing test sources: ReplacementCustodyAcrossPublicationGaps,
+ReplacementGapReleaseAndSafety, RenderAdmissionDoesNotRenewAmmunition,
+PaletteIsolationAndCurrentGuard; reviewed, not rerun or duplicated.
+Rejected candidate: DetachableMagazine.cpp:440-443 can reuse an old prop after
+synthetic same-owner GunHold replacement with no current geometry. No production
+route was established: Gameplay.cpp:994-1017 preserves continuous root custody;
+tracking/release boundaries cancel it; :2513-2515 blocks same-tick holster release
+through Bc2BodyHolster.cpp:263. Source write grant was revoked; no edits made.
+Missing native observation: one exact-owner replacement-magazine carry episode,
+left release then fresh pouch regrip, attempted shoulder stow while reload busy,
+then completed insert and ordinary stow/draw. Join both-eye prop visibility/pose
+to published role/item/hand and gun tokens, equipment generation, source deadlines
+and exact native ammo transfers. Check no old prop survives a changed owner/token.
+Retain any failed episode; static/unit evidence cannot establish headset behavior.
+All game/input/focus/XR/profile/install/integration actions remain held by root.

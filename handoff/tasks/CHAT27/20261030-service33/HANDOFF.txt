@@ -1,0 +1,12 @@
+DoneY: service branch closed; listener-record removal/invalidation bookkeeping established; SelectedCameraN; SourcefixN. Frozen/retired.
+Supplied HEAD d1e69f7b67ded2a558b5c27e0d5a30230cd40b74; no Git queried. Read-only EXE SHA256 3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258 verified.
+Proof proof01.json SHA256 6a13f5e6daf4bb93c18187018886d82e94dd4d9d824368ce85c9b36c144c34e4; file/hash/branch/call/table verifier passed without redecoding.
+Reused frozen context32 proof566a2562acc27a5dc0cd725ca496cb395c87abc77ae29a5712ac64b27f4ffea9 and entity31 proofb52ab309e1186ca788f572af8b6ddd078f5f838866d48701f12437b01c3c1648; exact saved bytes/artifacts verified, no inherited function redecoded.
+Three NEW complete functions only:26f70(291B),14800(189B),1f6b0(74B);198 instructions/554B; zero adjacent spill/partial functions. Sole inherited edge486232->26f70 remains conditional on the same constructed B/vtable.
+26f70 ECX=B,arg1=e=1f,arg2=L=O+dc,ret8. L.virtual+8 supplies AX for K=AX|((e&7fff)<<16); T=B+48+1c*e=B+3ac.14800 exactly matches (K low16,L,K bits16..30), ignoring bit31.
+Missing record or already-set bit31 at N+14 returns AL=0. Otherwise B+34!=0 sets N+14 bit31 and calls opaque25400(B+1c48,&local-key,N+10,slot with low byte0); AL=1.
+For B+34==0,1f6b0(T,out,N) directly decrements T+14 and calls opaque node/container helpers; AL=1. Physical unlink/free and deferred-list insertion internals remain unproved; generic helpers were not followed.
+This is removal/invalidation bookkeeping, with no decoded listener callback+4 delivery or selected-camera state operation.486210 ignores AL and sets byte[O+100]=1 after every normal return, including false.
+Missing selected-view evidence: concrete owner/instance/lifetime join to the active selected-view object, actual selection/pose authority, and downstream camera/render consumption. Park this branch; no further generic-service edge requested.
+No native scheduling/instance join, live identity, entry/skip/exit, gameplay-return, HUD, blend, camera correction or continuous-head-rotation claim. Opaque virtual+8/guard/container effects remain bounded unknowns; inherited failures retained; no new decode/proof failure.
+Only assigned HANDOFF.txt,cinematic_service.py,proof01.json and reports/coordinator-20261030-cinematic-service33 written; no production/Git/build/test/game/process/input/XR/install/subagents. Scope frozen at three functions.

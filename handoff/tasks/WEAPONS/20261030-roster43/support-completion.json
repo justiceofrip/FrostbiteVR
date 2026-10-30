@@ -1,0 +1,396 @@
+{
+  "schema": "fvr.bc2.authored_support_bindings",
+  "schema_version": 1,
+  "profiles": [
+    {
+      "native_asset_name": "G3",
+      "configured_mesh_path": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "715ce05b56d0bcf64636f900bc0f60ff6cea5c7c831aba05abbc51de3be96b85",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "weapon_class": "wcAssault",
+      "left_hand_in_weapon": [
+        0.17103127458594955,
+        0.70082922996692,
+        -0.6925219805446469,
+        0.0,
+        0.425407404897594,
+        -0.6865126297244886,
+        -0.5896854662335375,
+        0.0,
+        -0.8886938972288497,
+        -0.19374932168330772,
+        -0.4155530740777387,
+        -0.0,
+        0.03983107635280607,
+        0.005305284131391565,
+        -0.606087866966398,
+        1.0
+      ],
+      "left_hand_status": "mod_authored_fixed_contact",
+      "source_left_hand_status": "static_authored_pose",
+      "right_hand_retargeted": false,
+      "right_hand_status_not_admitted": "decoded_spline_candidate",
+      "native_admission": false,
+      "source_bindings": [
+        "21825e712cf3807cca7cc4c0cc061918d45c2b68bd5b3602a3f1801e82b39fa7",
+        "98836bf46f44e105980f2fed238c89953673c013203c21bc6b9f72747d917965",
+        "4015d4a2d347259ae4ca14b967481c735958ad1a7dd5bcf1f6ffd7a08a333bb8",
+        "2eaa8da9decf1a6a90763d541aaae8cf2909bd298d9796b0bb20a21b164d1baa",
+        "d653bf4a86da185b04ed0f2299cdc00770f45cfd0702fd53e3638c70c907fefd",
+        "281385ec8bf687c1e1856338b8c7d46b2c95eb9c7815ff9e04935ee1a1e6f068"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3.dbx",
+          "sha256": "ed83d82965d34c95c43f1e60aec350219711a5784d623d6ccfb816432b7624bb",
+          "instance_guid": "363b537f-734c-4af9-8e53-3c15564595e2",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Assault.dbx",
+          "sha256": "dcaefd902cc37f1a49706ff3f9e13b39ad1a57e46e257b800318e66f4ba9bc0c",
+          "instance_guid": "9997cbef-6c5a-4cb2-a2ec-f28b07ee08db",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Assault_Scoped.dbx",
+          "sha256": "5258aecd0beceec2afc69e63ceccd45325be52173ccbdfa499ac25a5c770340a",
+          "instance_guid": "5f40b246-3ae8-42ff-b6e8-33ad09b70cd7",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Kobra.dbx",
+          "sha256": "0b2ff642336693562b2156b80e899aabf0a14009f56b6b33322281bbc52650e0",
+          "instance_guid": "ff2e0e14-e07a-46de-858c-5f1337b7b8cb",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Assault_Kobra.dbx",
+          "sha256": "aeb5ff4e3b0ff63dca1f000af9b065b2f400473997d79afbd3e8a520b72109eb",
+          "instance_guid": "10dcc986-0eb3-4176-a242-2d6558a5b187",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Scoped.dbx",
+          "sha256": "6cc5013a4b9988d358b1e5e6bb97057b41e0e16c61a2ccf24a31b17f1bdaf188",
+          "instance_guid": "03c53a2d-428e-4666-a912-25d1e9264ff5",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_AnimTree1p.dbx",
+          "sha256": "0c99de212c19f6b236909007caca6e98a62f4d0f4f0669e31164900d3fcbf96b",
+          "instance_guid": "f1a6d6c2-a7e7-4b60-bd98-97b8ab379417",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/BU_rif_G3/1P/HandsIKPose.dbx",
+          "sha256": "da2c09daace416f2da25efa97938d24225fc1634c4b414338b886f87408a092c",
+          "instance_guid": "8dd21b55-8fb7-492f-adcc-ba44e2fbbae5",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/BU_rif_G3/1P/HandsIKPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "configuration_sources": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        },
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        },
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        },
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        },
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        },
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "animation_source": {
+        "selection": "unique_exact_resource_content_in_batch",
+        "archive": "Dist/win32/async/weapon/bu_rif_g3-00.fbrb",
+        "archive_index_sha256": "39fabc68febdc83fcd7637d9d2093335a8d18711569e1ddd42fa18c071cd724e",
+        "kind": "GrannyAnimation"
+      },
+      "skeleton_source": {
+        "selection": "exact_configuration_archive_resource",
+        "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+        "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965",
+        "kind": "GrannyModel"
+      },
+      "source_reference_envelope": {
+        "schema": "fvr.bc2.authored_relative_pose_bound",
+        "schema_version": 1,
+        "bone": "LeftHand",
+        "reference_bone": "jntWpn_1",
+        "common_ancestor": "Spine",
+        "unshared_bone_chain": [
+          "LeftHand",
+          "LeftForeArmRoll",
+          "LeftForeArm",
+          "LeftArmRoll",
+          "LeftArm",
+          "LeftShoulder",
+          "Spine4",
+          "Spine3",
+          "Spine2",
+          "Spine1"
+        ],
+        "unshared_reference_chain": [
+          "jntWpn_1",
+          "jntWpn_0"
+        ],
+        "reference_time_seconds": 0.0,
+        "reference_pose": [
+          0.17103127458594994,
+          0.7008292299669199,
+          -0.6925219805446462,
+          0.0,
+          0.4254074048975938,
+          -0.6865126297244881,
+          -0.5896854662335362,
+          0.0,
+          -0.8886938972288488,
+          -0.19374932168330783,
+          -0.4155530740777379,
+          -0.0,
+          0.03983107635280617,
+          0.005305284131391419,
+          -0.6060878669663974,
+          1.0
+        ],
+        "duration_seconds": 0.03333333507180214,
+        "translation_hull_bound_m": 0.0,
+        "rotation_hull_bound_rad": 0.0,
+        "translation_numerical_allowance_m": 2.1877261065395607e-08,
+        "rotation_numerical_allowance_rad": 1e-08,
+        "translation_bound_m": 2.1877261065395607e-08,
+        "rotation_bound_rad": 1e-08,
+        "unshared_controls_constant": true,
+        "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+        "target_runtime_interpolation_verified": false,
+        "runtime_admission": false
+      },
+      "target_runtime_interpolation_verified": false,
+      "support_contact_reference": true,
+      "support_aim_mode": "two_point",
+      "contact_policy": {
+        "schema": "fvr.bc2.explicit_support_contact_policy",
+        "schema_version": 1,
+        "mode": "fixed_authored_handsikpose_initial",
+        "reference_time_seconds": 0.0,
+        "support_aim_mode": "two_point",
+        "source_curve_claim": "none",
+        "native_admission": false,
+        "rationale": "The mod deliberately fixes the support contact to LeftHand relative to jntWpn_1 at the start of each exact configuration's authored absolute HandsIkPose role. This defines a stable VR grab target; it does not assert that the source hand remains fixed through animation. Existing source-envelope failures are retained. No guessed coordinates, gun-hand override, ammunition capability, owner grant, or tolerance change.",
+        "input_binding_document_digest": "b8fcf7a3e6ac70405f3c772485452c63068d6110473f77c2f27332707b4b5660",
+        "source_binding_digests": [
+          "21825e712cf3807cca7cc4c0cc061918d45c2b68bd5b3602a3f1801e82b39fa7",
+          "281385ec8bf687c1e1856338b8c7d46b2c95eb9c7815ff9e04935ee1a1e6f068",
+          "2e6738e43fd717dd29ccdff4156243889a4573008cc20132cdfcc1b7a2f5af07",
+          "2eaa8da9decf1a6a90763d541aaae8cf2909bd298d9796b0bb20a21b164d1baa",
+          "4015d4a2d347259ae4ca14b967481c735958ad1a7dd5bcf1f6ffd7a08a333bb8",
+          "5107ee04a996b4c4c9da5f549d56c4d7c659f0b2121070965bfb676a9b0e464a",
+          "98836bf46f44e105980f2fed238c89953673c013203c21bc6b9f72747d917965",
+          "d653bf4a86da185b04ed0f2299cdc00770f45cfd0702fd53e3638c70c907fefd"
+        ]
+      },
+      "contact_policy_digest": "02ceb664e076e16a0f40cb13ecdee6c45be375e452dc5673fa6363e8aa7df229",
+      "binding_digest": "7b7aacdd66b562a10aff49f3c893c79587ad6650a4b2bd008e45031ca1f45973"
+    },
+    {
+      "native_asset_name": "M1A1 Thompson",
+      "configured_mesh_path": "Objects/Weapons/Handheld/Beach/Thompson/thompson_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "f9fbcf318dda15bb101845efef8c09d4f2231a3ef4a908c0521c37d3ae33a76d",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "weapon_class": "wcSmg",
+      "left_hand_in_weapon": [
+        0.8150541796504055,
+        0.21388425793458415,
+        -0.5384609627839115,
+        0.0,
+        0.0620087960283182,
+        -0.9562309463860391,
+        -0.2859672820250242,
+        0.0,
+        -0.5760569359442895,
+        0.1996895124472829,
+        -0.7926427348869378,
+        -0.0,
+        0.018826708038857217,
+        0.06730075057419764,
+        -0.6740715230386963,
+        1.0
+      ],
+      "left_hand_status": "mod_authored_fixed_contact",
+      "source_left_hand_status": "decoded_spline_candidate",
+      "right_hand_retargeted": false,
+      "right_hand_status_not_admitted": "decoded_spline_candidate",
+      "native_admission": false,
+      "source_bindings": [
+        "5107ee04a996b4c4c9da5f549d56c4d7c659f0b2121070965bfb676a9b0e464a",
+        "2e6738e43fd717dd29ccdff4156243889a4573008cc20132cdfcc1b7a2f5af07"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/Beach/Thompson/Thompson_Assault.dbx",
+          "sha256": "b2207c1afcf2b976401228b2a564885f0b69ef981ed4ddbc358e378b04963ec1",
+          "instance_guid": "980051ae-97e5-4bdf-a203-6eef9e16ab92",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/Beach/Thompson/Thompson.dbx",
+          "sha256": "1fddcb8da6dd1e3746c30293b5c901c94242d2c581c3c2255e8c9f44e7e98c1b",
+          "instance_guid": "207cffd9-8285-4407-ab2a-4c3a650f1f99",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/Beach/Thompson/Thompson_AnimTree1p.dbx",
+          "sha256": "158143db4ca6c7d102d545e60904441fb8cd775d57ec99e5df53e097ea978765",
+          "instance_guid": "c1a5dac7-b78a-4490-b1c7-2333ddf0b7f5",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/Beach/Thompson/1p/HandsIkPose.dbx",
+          "sha256": "c8fcc831be85837fe75abde9a4306f3e317c96ffa4a4b8870100a0d0ba85ffb9",
+          "instance_guid": "f3d71428-5f56-4b78-aa98-308afa129ac1",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/Beach/Thompson/1p/HandsIkPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "configuration_sources": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        },
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "animation_source": {
+        "selection": "unique_exact_resource_content_in_batch",
+        "archive": "Dist/win32/async/weapon/ai_thompson-00.fbrb",
+        "archive_index_sha256": "85fb65e94738b1fbe7c4ac02b4899d32a4228cc54846091ff7a6567acff4fa79",
+        "kind": "GrannyAnimation"
+      },
+      "skeleton_source": {
+        "selection": "exact_configuration_archive_resource",
+        "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+        "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965",
+        "kind": "GrannyModel"
+      },
+      "source_reference_envelope": {
+        "schema": "fvr.bc2.authored_relative_pose_bound",
+        "schema_version": 1,
+        "bone": "LeftHand",
+        "reference_bone": "jntWpn_1",
+        "common_ancestor": "Spine",
+        "unshared_bone_chain": [
+          "LeftHand",
+          "LeftForeArmRoll",
+          "LeftForeArm",
+          "LeftArmRoll",
+          "LeftArm",
+          "LeftShoulder",
+          "Spine4",
+          "Spine3",
+          "Spine2",
+          "Spine1"
+        ],
+        "unshared_reference_chain": [
+          "jntWpn_1",
+          "jntWpn_0"
+        ],
+        "reference_time_seconds": 0.0,
+        "reference_pose": [
+          0.8150541796504045,
+          0.21388425793458427,
+          -0.5384609627839111,
+          0.0,
+          0.062008796028317825,
+          -0.9562309463860381,
+          -0.28596728202502364,
+          0.0,
+          -0.5760569359442891,
+          0.1996895124472833,
+          -0.7926427348869364,
+          -0.0,
+          0.018826708038857224,
+          0.06730075057419775,
+          -0.6740715230386953,
+          1.0
+        ],
+        "duration_seconds": 0.03333333507180214,
+        "translation_hull_bound_m": 5.24452060857017e-05,
+        "rotation_hull_bound_rad": 4.898913071535217e-05,
+        "translation_numerical_allowance_m": 2.3394004463423642e-08,
+        "rotation_numerical_allowance_rad": 1e-08,
+        "translation_bound_m": 5.246860009016513e-05,
+        "rotation_bound_rad": 4.8999130715352174e-05,
+        "unshared_controls_constant": false,
+        "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+        "target_runtime_interpolation_verified": false,
+        "runtime_admission": false
+      },
+      "target_runtime_interpolation_verified": false,
+      "support_contact_reference": true,
+      "support_aim_mode": "two_point",
+      "contact_policy": {
+        "schema": "fvr.bc2.explicit_support_contact_policy",
+        "schema_version": 1,
+        "mode": "fixed_authored_handsikpose_initial",
+        "reference_time_seconds": 0.0,
+        "support_aim_mode": "two_point",
+        "source_curve_claim": "none",
+        "native_admission": false,
+        "rationale": "The mod deliberately fixes the support contact to LeftHand relative to jntWpn_1 at the start of each exact configuration's authored absolute HandsIkPose role. This defines a stable VR grab target; it does not assert that the source hand remains fixed through animation. Existing source-envelope failures are retained. No guessed coordinates, gun-hand override, ammunition capability, owner grant, or tolerance change.",
+        "input_binding_document_digest": "b8fcf7a3e6ac70405f3c772485452c63068d6110473f77c2f27332707b4b5660",
+        "source_binding_digests": [
+          "21825e712cf3807cca7cc4c0cc061918d45c2b68bd5b3602a3f1801e82b39fa7",
+          "281385ec8bf687c1e1856338b8c7d46b2c95eb9c7815ff9e04935ee1a1e6f068",
+          "2e6738e43fd717dd29ccdff4156243889a4573008cc20132cdfcc1b7a2f5af07",
+          "2eaa8da9decf1a6a90763d541aaae8cf2909bd298d9796b0bb20a21b164d1baa",
+          "4015d4a2d347259ae4ca14b967481c735958ad1a7dd5bcf1f6ffd7a08a333bb8",
+          "5107ee04a996b4c4c9da5f549d56c4d7c659f0b2121070965bfb676a9b0e464a",
+          "98836bf46f44e105980f2fed238c89953673c013203c21bc6b9f72747d917965",
+          "d653bf4a86da185b04ed0f2299cdc00770f45cfd0702fd53e3638c70c907fefd"
+        ]
+      },
+      "contact_policy_digest": "02ceb664e076e16a0f40cb13ecdee6c45be375e452dc5673fa6363e8aa7df229",
+      "binding_digest": "96595a1f5b8e4bfe0b30508ca01ce44cc6216d5eb847c166ff21de31d2be9a9a"
+    }
+  ],
+  "runtime_admission": false,
+  "scope": "Explicit mod-authored fixed initial HandsIkPose contact; source motion remains unqualified. No gun-hand, native interpolation, reload or firing admission."
+}

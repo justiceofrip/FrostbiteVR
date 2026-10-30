@@ -1,0 +1,15 @@
+BUG017-06 work13 independent frozen-source review - 2026-10-30
+Done Y; actionable findings: none in the requested changes.
+Root-supplied baseline: 08300e6d53575b39598c67e602ac2e2d3bd2af63; no Git commands used.
+Reviewed Bc2ServerFireObservation.h; Bc2Gameplay.cpp 1178-1310 and 4200-4216; added Muzzle tests 157-219.
+Original forwarding remains once on each branch; normal return alone adds returned observation.
+Thread-local scope restoration preserves enclosing scopes and value copies outlive the callback scope.
+Helper counting precedes the existing detailed-prefix cap; new return observation adds no native reads.
+The new path uses one nonblocking try gate, fixed16-cohort storage and bounded value comparisons/copies.
+Failed/reversed span clocks are invalid; invalid samples do not replace valid extrema; unordered pairs are counted.
+Gap evidence retains both endpoints and explicitly disclaims cadence, trigger continuity and complete coverage.
+Controller source owner/sequence/times and focus/tracking/release are copied without restamping or trigger inference.
+Eviction/reentry and busy omissions are disclosed; final snapshot copy holds the gate only for bounded copying.
+Added tests cover late synthetic cohorts, eviction, identity separation, gaps, absent/invalid/expired evidence and output retention.
+Static review only; no builds/tests/game/XR/input/profile/install/process actions; root checks remain authoritative.
+No actual fire, cadence, shot/hit or headset acceptance claim. Source unchanged; reviewer retired.

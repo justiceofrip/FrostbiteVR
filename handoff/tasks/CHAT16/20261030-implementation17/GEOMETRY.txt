@@ -1,0 +1,21 @@
+DoneY: exact MP443_sp authored rail/rigid-part/contact measurement complete offline.
+Evidence: mp443-geometry.json; reproducible measure_mp443.py; landmark supplement mp443-role-review.json.
+Exact weapon GUID58098858-821b-4406-a19c-ae62e5d38bdf / DBX SHAe16f5713854ca38ab58d61bd3c568e2f87533c0e82032d71d61f27449d5484cc.
+Two pinned archives only: sp_common/level-00 + async/weapon/ai_hg_mp443grach-00; no archive resurvey.
+Decoded exactly1P_Reload + necessary static HandsIKPose comparison; shared ske01 fingerprint fnv1a64:a7f219a1426216ab.
+Config state0 -> exact mesh/tree; reload replacement index3 / result animation slot25; compare index9 / slot56.
+jntWpn_3 index30 is a direct leaf of weapon jntWpn_1, with720 visible +720 depth triangles.
+Every selected mesh vertex is rigid single-weight; no cross-part triangles;8 weighted parts total.
+Part bounds metres: min(-.0114429612,-.0373541117,-.0757018328), max(.0112026455,.0063638687,.1305128187).
+Static part orientation is identity; origin weapon metres(-.0000000248632,.0802396759391,-.0873531997204).
+Rail axis canonical weapon +Z; translation origin, no hinge pivot; all orientation controls identical.
+Analytic decoded displacement from static reference: min-.00199746328287m at2.92398832857s; max+.07247133458105m at3.09219025250s.
+Total decoded span .07446879786392m; lateral hull9.86156e-9m; bounded rotation9.36088e-6rad.
+Static reference is NOT the minimum endpoint: retain signed forward overshoot; no native stop inferred.
+Reload duration3.86666679382s;118 samples at30Hz; native interpolation/case selection unverified.
+No stable0.2s hand window. At3.0s Ring3 is1.88498mm from a slide vertex; authored contact is transient.
+Same-frame wrist and finger/nearest-vertex geometry are recorded; controller grip/reach tolerance is not authored.
+Root inspected admitted frame00/01: cyan jntWpn_3 is upper slide shell+sights; rearward motion exposes fixed barrel.
+mp443-role-review.json records reviewed presentation role and final measured profile inputs; root render3PNG totals95198B.
+No production edit; no agent render/capture, Git/build/test/game/process/XR/input/profile/install operation.
+Native chamber/slide lock/fire readiness remain Unknown; no runtime admission or physical/headset acceptance.

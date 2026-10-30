@@ -43,4 +43,43 @@ inline std::optional<interaction::HandGunCustodyTransfer> BuildBoltCustodyTransf
     }
     return t;
 }
+inline std::optional<interaction::HandGunCustodyTransfer> BuildBoltReloadCustodyTransfer(
+    const interaction::HandInteractionSample& current,interaction::HandInteractionKey item,
+    const Bc2BoltControllerContact& raw,const std::array<math::Matrix4,2>& originalGrips,
+    const interaction::HandInteraction& hands,interaction::BoltReloadCustodyIntent direction,std::uint64_t& intent)noexcept {
+    using namespace interaction;
+    if(direction==BoltReloadCustodyIntent::Pause){
+        auto transfer=BuildBoltCustodyTransfer(current,item,raw,originalGrips,hands,false,true,intent);
+        if(transfer)transfer->nextCompanion.reset(); // Left is free for the magazine.
+        return transfer;
+    }
+    if(direction==BoltReloadCustodyIntent::Resume)
+        return BuildBoltCustodyTransfer(current,item,raw,originalGrips,hands,true,false,intent,true);
+    return {};
+}
+// Current controller geometry under an already-proved immutable gun attachment.
+// This is separate from renderer evidence: no old contact packet is restamped.
+// The arbiter still requires the actual release edge and both unexpired tokens.
+inline std::optional<interaction::HandGunCustodyTransfer> BuildBoltMappedReloadResume(
+    const interaction::HandInteractionSample& current,interaction::HandInteractionKey item,
+    const interaction::HandClaimToken& root,const math::Matrix4& weapon,
+    const std::array<math::Matrix4,2>& wrists,const std::array<math::Matrix4,2>& originalGrips,
+    const interaction::HandInteraction& hands,std::uint64_t& intent)noexcept {
+    using namespace interaction;
+    const auto left=hands.Current(InteractionHand::Left),right=hands.Current(InteractionHand::Right);
+    if(!left||!right||right->token!=root||root.hand!=InteractionHand::Right||root.kind!=HandClaimKind::GunHold||
+       root.prerequisiteClaim||root.owner!=current.owner||root.item!=item||right->deadlineNs<=current.nowNs||
+       left->deadlineNs<=current.nowNs||left->token.kind!=HandClaimKind::WeaponSupport||
+       left->token.prerequisiteClaim!=root.id||left->token.owner!=current.owner||left->token.item!=item||
+       !current.released[1]||current.released[0]||!current.focused||!current.tracked[0]||!current.tracked[1]||
+       !weapon_cycle_detail::Window(current.observedNs,current.deadlineNs,current.nowNs)||intent==UINT64_MAX||
+       !feed_mechanism_detail::Pose(wrists[0])||!feed_mechanism_detail::Pose(originalGrips[0]))return {};
+    const auto inverse=InverseRigid(weapon);if(!inverse)return {};
+    const auto local=Multiply(wrists[0],*inverse);
+    if(!feed_mechanism_detail::Pose(local)||reload_insertion_detail::Distance(local,originalGrips[0])>.16f)return {};
+    HandGunCustodyTransfer transfer;transfer.gun=root;transfer.companion=left->token;transfer.releaseDepartingGun=true;
+    transfer.nextGun={{current.owner,InteractionHand::Left,HandClaimKind::GunHold,item,
+        {left->token.contact,current.sequence,current.deadlineNs,true},++intent,0},current};
+    return transfer;
+}
 }

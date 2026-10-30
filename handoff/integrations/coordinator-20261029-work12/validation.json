@@ -1,0 +1,152 @@
+{
+  "checks": [
+    {
+      "suite": "Carried",
+      "architecture": "x64",
+      "result": "reports/coordinator-20261029-work12/carried-x64-check01/result.json",
+      "passed": true
+    },
+    {
+      "suite": "Carried",
+      "architecture": "x86",
+      "result": "reports/coordinator-20261029-work12/carried-x86-check01/result.json",
+      "passed": true
+    },
+    {
+      "suite": "Configuration",
+      "architecture": "x64",
+      "result": "reports/coordinator-20261029-work12/configuration-x64-check01/result.json",
+      "passed": true
+    },
+    {
+      "suite": "Configuration",
+      "architecture": "x86",
+      "result": "reports/coordinator-20261029-work12/configuration-x86-check01/result.json",
+      "passed": true
+    },
+    {
+      "suite": "GameplaySyntax",
+      "architecture": "x86",
+      "result": "reports/coordinator-20261029-work12/gameplay-syntax01/result.json",
+      "passed": true
+    },
+    {
+      "suite": "Grip",
+      "architecture": "x64",
+      "result": "reports/coordinator-20261029-work12/grip-x64-after01/result.json",
+      "passed": true
+    },
+    {
+      "suite": "Grip",
+      "architecture": "x86",
+      "result": "reports/coordinator-20261029-work12/grip-x86-after01/result.json",
+      "passed": true
+    },
+    {
+      "suite": "NativeSyntax",
+      "architecture": "x86",
+      "result": "reports/coordinator-20261029-work12/native-syntax01/result.json",
+      "passed": true
+    },
+    {
+      "suite": "Observation",
+      "architecture": "x64",
+      "result": "reports/coordinator-20261029-work12/observation-x64-check01/result.json",
+      "passed": true
+    },
+    {
+      "suite": "Observation",
+      "architecture": "x86",
+      "result": "reports/coordinator-20261029-work12/observation-x86-check01/result.json",
+      "passed": true
+    },
+    {
+      "suite": "Scope",
+      "architecture": "x64",
+      "result": "reports/coordinator-20261029-work12/scope-x64-check01/result.json",
+      "passed": true
+    },
+    {
+      "suite": "Scope",
+      "architecture": "x86",
+      "result": "reports/coordinator-20261029-work12/scope-x86-check01/result.json",
+      "passed": true
+    },
+    {
+      "suite": "Sight",
+      "architecture": "x64",
+      "result": "reports/coordinator-20261029-work12/sight-x64-after01/result.json",
+      "passed": true
+    },
+    {
+      "suite": "Sight",
+      "architecture": "x86",
+      "result": "reports/coordinator-20261029-work12/sight-x86-after01/result.json",
+      "passed": true
+    }
+  ],
+  "integrated": false,
+  "native_checked": false,
+  "belt_checks": 6,
+  "unchanged_library_baseline": "7063c0003fa5e41027bf831e3bb9c70093962da8",
+  "run": "coordinator-20261029-work12",
+  "base": "dfc0e507be635769dade167c1d642e3716443835",
+  "headset_accepted": false,
+  "pistol_checks": 7,
+  "full_normal_build": false,
+  "sources": [
+    {
+      "path": "src/games/bc2/Bc2Gameplay.cpp",
+      "sha256": "dec8bc8d77f30fff6ddf67ba05a2a08b845973350c3907e803df4c6da0cb893c"
+    },
+    {
+      "path": "src/games/bc2/Bc2Gameplay.h",
+      "sha256": "2f071afea140ef935c804d7caed9096c284b36785534749417e7443fea90f9ed"
+    },
+    {
+      "path": "src/games/bc2/Bc2SelectedMeshes1p.cpp",
+      "sha256": "8104fe7c0a7da2cf11d4a89e633ea9c906f64f07b7e955c14dec1cf2d00ba86c"
+    },
+    {
+      "path": "src/games/bc2/Bc2SelectedMeshes1p.h",
+      "sha256": "8ccb43164d50da02ce41bbffffe7807baa9978261891099f764124a3fe6acccd"
+    },
+    {
+      "path": "src/games/bc2/Bc2SelectedMeshesObservation.cpp",
+      "sha256": "5a5a53f09bdadb506d6330733ff1ad36a2bad2d3a11f8e91c1f961805ad90819"
+    },
+    {
+      "path": "src/games/bc2/Bc2SelectedMeshesObservation.h",
+      "sha256": "8acd13f97e423b658779fbea3234979335da323ec8686e6623436613faf08195"
+    },
+    {
+      "path": "src/games/bc2/Bc2SightAdapter.h",
+      "sha256": "52a9ced4ad3a81e57d3072be62442787533f21b01bb4b6efc6ddc7c5bba6ab76"
+    },
+    {
+      "path": "src/games/bc2/NativeProbe.cpp",
+      "sha256": "cb51737b10a7b18cd2ebe52ba5e4bbf884fd252fde71471177d818df866ea04e"
+    },
+    {
+      "path": "src/interaction/TrackedRig.cpp",
+      "sha256": "493669e5709139fe8ee1c73ab01566c10272ca04d59f9b4275e67244b3528b6a"
+    },
+    {
+      "path": "tests/Bc2SelectedMeshes1pTests.cpp",
+      "sha256": "737195a1af27cd77f1dff204d6f007f6cd12449318854b78eedf9a003b329374"
+    },
+    {
+      "path": "tests/Bc2SelectedMeshesObservationTests.cpp",
+      "sha256": "33369db656d2972f539914bbb6b9ff1675fa3087123b70dcc37b40485a09b904"
+    },
+    {
+      "path": "tests/Bc2SightAdapterTests.cpp",
+      "sha256": "44b337b5ee5cdab6bdd93ef362c2d1668fd13316f42edcaa330958394b438f30"
+    },
+    {
+      "path": "tests/TrackedRigTests.cpp",
+      "sha256": "a20c910bf73470ed061b8ae48b8827af835622c3ebc83f20baeeb9e9324a1822"
+    }
+  ],
+  "installed": false
+}

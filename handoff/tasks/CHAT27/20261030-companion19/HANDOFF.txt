@@ -1,0 +1,20 @@
+DoneY: bounded companion-assignment/dispatch static job complete. SourcefixN: no selected-view/HUD authority proved.
+Worktree campaign-coordinator-20261028-r1; supplied base6ac2281909436510172bbbf562cf46318dca98da plus batch18; no Git queried.
+EXE SHA2563911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258 verified file-only.
+Artifacts: cinematic_companion.py, proof01.json, this handoff; scratch reports/coordinator-20261030-implementation18/cinematic-companion.
+Proof SHA25665363c36e5cae30e7b12ebe66567f0bed88a31ab7f446c059e5c0ebcada3f29f.
+Eight NEW complete function units,1922 bytes; inherited camera constructor280 bytes reused for the new assignment question; total2202, zero spill.
+New units:0x211390,0x3b7d30,0x3b69f0,0x38c6c0,0x38c780,0x3a6b20,0x3979b0,0x3b7840.
+Camera0x4b435e calls0x211390(camera+0xd0,P); helper stores0x3b7d30([P+0xe0],0,0) return at camera+0xd4.
+Factory has four predicate-selected constructors or null; live resource selection is not established by factory existence.
+Fourth branch0x3b7e15 calls0x3b69f0: explicit primary table0x102c9a8 and companion+0x80 table0x102c974; initializes+fc/+fd/+fe.
+Other constructors explicitly zero+0x80 and use different primary tables; their nested helper effects remain unexamined.
+Exact assigned table+0x2c ->0x38c6c0 copies12 padded floats from companion+0x10..+0x48 to output; not relative angular+0x90..+0xc8.
+Exact assigned table+0x1c ->0x38c780 returns AL=0; inherited branch0x3b184d skips to0x3b1994.
+Thus manager indirect edge0x3b1898 and its translation-distance comparison consumer are bypassed while this table owns the interface.
+This closes the proposed registration output join negatively; membership remains lifetime/scheduling evidence only.
+Exact assigned table+4 ->0x211260 resolves removal edge0x394332; target body undecoded at ceiling.
+Missing join: relative angular+0x90..+0xc8 -> animated/base transform+0x10..+0x48 update -> actual selected local-player view/HUD.
+Next exact NEW construction edge0x3b69f9 ->0x3b63d0(companion,resource); any follow-up must seek an explicit update-owner relationship.
+No source correction, production writes, Git, builds, tests, game/process access, input, XR, profiles, installs, packages or subagents.
+Executable/proof/helper/decode hashes, complete bounded coverage, exact bytes, calls and constructor-owned slots verified; frozen and retired.

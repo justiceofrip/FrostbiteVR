@@ -10,6 +10,8 @@ struct Bc2BoltPresentation {
     interaction::BoneWrite part{};
     math::Matrix4 mechanismWrist{};
 };
+std::optional<interaction::BoneWrite> BuildPausedBoltPart(const Bc2BoltTracking&,const RigSnapshot&,
+    const math::Matrix4& placedWeapon,float units,std::int64_t now)noexcept;
 // This proposes one independent leaf write; it never modifies the native rig.
 // Guided hand/finger targets remain separate from original gesture evidence.
 std::optional<Bc2BoltPresentation> BuildBoltPresentation(const Bc2BoltTracking&,const RigSnapshot&,
