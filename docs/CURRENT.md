@@ -5,10 +5,14 @@ Updated October 30, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
-Headset52 integrates the complete firearm batch: 77 names/181 configurations,
+Headset52 integrates firearm roster enrollment: 77 names/181 configurations,
 both normal builds pass331/331; private0.1.18 is installed and setup/assets pass.
 [Test candidate receipt](../handoff/integrations/coordinator-20261030-headset52/README.md).
-Source is pushed;0.1.17 rollback/settings are preserved and logging is automatic. User headset acceptance remains pending.
+Source is pushed;0.1.17 rollback/settings are preserved and logging is automatic.
+The user's0.1.18 test confirms multiweapon two-hand grips and reliable swaps, but
+reload/ammo, muzzle, empty-hand stow and underbarrel/sight failures remain open.
+[Feedback53](archive/2026-10-30-bc2vr-0.1.18-buglist.md) records shared runtime gaps;
+the weapons job is not complete. C4 was not tested; other earlier bugs remain open.
 
 Private0.1.17 includes the launcher retained-handle image fix;38 identity/43 portable
 checks pass. Its verified package reuses the staged cache, which now passes both

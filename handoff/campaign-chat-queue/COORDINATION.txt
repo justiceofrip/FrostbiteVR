@@ -11,7 +11,16 @@ Ownership: prior CHAT25/26 close.json confirms lease release, idle helpers and
 exact profile restoration. Coordinator acquired the lease before shared mutations.
 External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned.
 
-Headset52: user authorized the complete firearm batch for a private0.1.18 test.
+Feedback53: user tested0.1.18; multiple two-hand grips and weapon swaps work.
+Probable PKM/unknown pump shotgun lack ammo display/supply and reload initiation;
+AN94 reload fails (counter uncertain), AN94 underbarrel fails, XM8 sight will not flip.
+LMG firing is misaligned; empty-hand LMG stow is deferred at user's preference.
+Shared ammo/feed/visibility/muzzle and AN94 mode coverage gaps are confirmed in source;
+the exact AN94 reload and XM8 sight refusal remain unknown. C4 was not tested.
+Bug list: docs/archive/2026-10-30-bc2vr-0.1.18-buglist.md; session/native-report limits included.
+Docs/diagnosis only; installed0.1.18 unchanged. Close: reports/coordinator-20261030-feedback53/close.json.
+
+Headset52: user authorized the firearm source batch for a private0.1.18 test.
 Built source980808d; x86/x64 normal331/331 pass; six binary/PDB pairs verified.
 Source pushed/verified b441d57. Installed0.1.18 with local252-record cache verified;
 installed setup/assets pass,0.1.17 rollback and byte-identical settings preserved.
