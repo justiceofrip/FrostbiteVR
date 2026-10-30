@@ -64,6 +64,9 @@ struct FeedAmmunitionReceipt {
     // authoritative callback and all required native copies. A physical-only
     // step still needs observed unchanged counts; a function return is not it.
     bool authorityVerified=false,copiesVerified=false;
+    // Rejected proves a later coherent native observation with no transfer
+    // entry. Submission refusal or elapsed time alone cannot set this evidence.
+    bool noTransferEntry=false;
     bool operator==(const FeedAmmunitionReceipt&)const=default;
 };
 struct FeedAmmunitionState {
@@ -82,8 +85,8 @@ struct FeedAmmunitionState {
 class FeedAmmunition {
 public:
     FeedAmmunition(FeedMechanismProfile profile,FeedOwner owner,FeedKey mechanism,
-        FeedSupplyKey goal,std::uint64_t lifetime)noexcept:
-        profile_(profile),owner_(owner),mechanism_(mechanism),goal_(goal),lifetime_(lifetime){}
+        FeedSupplyKey goal,std::uint64_t lifetime,AmmoResourceIdentity resource={})noexcept:
+        profile_(profile),owner_(owner),mechanism_(mechanism),goal_(goal),lifetime_(lifetime),resource_(resource){}
     FeedAmmunition(const FeedAmmunition&)=delete;
     FeedAmmunition& operator=(const FeedAmmunition&)=delete;
     [[nodiscard]] bool Bind(const FeedAmmunitionSnapshot& snapshot,std::int64_t now)noexcept;
@@ -96,6 +99,10 @@ public:
     [[nodiscard]] bool Complete(const FeedAmmunitionReceipt& receipt,std::int64_t now)noexcept;
     void Suspend()noexcept {state_.suspended=true;}
     [[nodiscard]] bool Resume(const FeedAmmunitionSnapshot& snapshot,std::int64_t now)noexcept;
+    [[nodiscard]] bool CanMigrateContext(const FeedContextMigration&,const FeedAmmunitionSnapshot& before,
+        const FeedAmmunitionSnapshot& after,std::int64_t now)const noexcept;
+    [[nodiscard]] bool MigrateContext(const FeedContextMigration&,const FeedAmmunitionSnapshot& before,
+        const FeedAmmunitionSnapshot& after,std::int64_t now)noexcept;
     [[nodiscard]] bool Retire(const FeedAmmunitionSnapshot& snapshot,std::int64_t now)noexcept;
     [[nodiscard]] FeedAmmunitionState State()const noexcept {return state_;}
 private:
@@ -106,10 +113,11 @@ private:
     bool Unchanged(const FeedAmmunitionSnapshot& s)const noexcept;
     bool Plan(const FeedAmmunitionAuthority& a,const FeedAmmunitionSnapshot& s,FeedAmmunitionCommand& out)const noexcept;
     const FeedMechanismProfile profile_;
-    const FeedOwner owner_;
+    FeedOwner owner_;
     const FeedKey mechanism_;
     const FeedSupplyKey goal_;
     const std::uint64_t lifetime_;
+    const AmmoResourceIdentity resource_;
     FeedKey binding_{};
     FeedAmmunitionState state_{};
 };
@@ -229,7 +237,7 @@ inline bool FeedAmmunition::Complete(const FeedAmmunitionReceipt& r,std::int64_t
     const auto& command=*state_.pending;const auto& ack=r.acknowledgement;const auto& post=r.post;
     const bool applied=ack.status==FeedReloadAcknowledgement::Applied;
     const bool rejected=ack.status==FeedReloadAcknowledgement::Rejected;
-    if((!applied&&!rejected)||ack.request!=command.request||!r.authorityVerified||!r.copiesVerified||
+    if((!applied&&!rejected)||r.noTransferEntry!=rejected||ack.request!=command.request||!r.authorityVerified||!r.copiesVerified||
        !r.authorityInvocation||(state_.lastReceipt&&r.authorityInvocation<=state_.lastReceipt->authorityInvocation)||
        r.beganNs<command.request.requestedNs||r.completedNs<r.beganNs||
        now<r.completedNs||!Snapshot(post)||post.sequence<=command.before.sequence||
@@ -246,6 +254,28 @@ inline bool FeedAmmunition::Resume(const FeedAmmunitionSnapshot& s,std::int64_t 
     if(!state_.bound||state_.retired||state_.pending||!Fresh(s,now)||!Unchanged(s)||
        s.sequence<=state_.snapshot.sequence||s.observedNs<=state_.snapshot.observedNs)return false;
     state_.snapshot=s;state_.suspended=false;return true;
+}
+inline bool FeedAmmunition::CanMigrateContext(const FeedContextMigration& m,const FeedAmmunitionSnapshot& before,
+    const FeedAmmunitionSnapshot& after,std::int64_t now)const noexcept {
+    if(!state_.bound||!state_.suspended||state_.retired||state_.pending||state_.needsReconciliation||
+       !Snapshot(before)||now<before.observedNs||!Unchanged(before)||
+       !feed_mechanism_detail::Migration(m,resource_,owner_,after.owner,now,profile_.maxAgeNs))return false;
+    auto normalized=after;normalized.owner=owner_;
+    if(!Fresh(normalized,now)||normalized.mechanism!=before.mechanism||normalized.lifetime!=before.lifetime||
+       normalized.counts!=before.counts||normalized.loadedSupply!=before.loadedSupply)return false;
+    const auto joined=[](const FeedAmmunitionSnapshot& a,const AmmunitionSnapshot& n){
+        return a.sequence==n.sequence&&a.observedNs==n.observedNs&&a.deadlineNs==n.deadlineNs&&
+            a.counts.loaded==n.counts.loaded&&a.counts.reserve==n.counts.reserve&&a.counts.capacity==n.counts.capacity;
+    };
+    return joined(before,m.before)&&joined(after,m.after);
+}
+inline bool FeedAmmunition::MigrateContext(const FeedContextMigration& m,const FeedAmmunitionSnapshot& before,
+    const FeedAmmunitionSnapshot& after,std::int64_t now)noexcept {
+    if(!CanMigrateContext(m,before,after,now))return false;
+    owner_=after.owner;state_.snapshot=after;
+    // Retained resources keep their custody provenance. Historical commands,
+    // receipts, invocation/request IDs and round quantities are never rewritten.
+    return true;
 }
 inline bool FeedAmmunition::Retire(const FeedAmmunitionSnapshot& s,std::int64_t now)noexcept {
     Suspend();

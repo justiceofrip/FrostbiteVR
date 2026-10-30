@@ -56,6 +56,11 @@ struct Fixture {
         return q.candidate?q.candidate->operation:Op::CycleAction;}
     Matrix Pose(Op op,float progress)const {
         const auto& m=geometry.operations[static_cast<unsigned>(op)];auto local=m.motionFromContact;
+        if(m.kind==FeedMotionKind::FreePlacement){auto object=m.placement.weaponFromSource;
+            for(unsigned i=0;i<3;++i)object.values[3][i]+=
+                progress*(m.placement.weaponFromDestination.values[3][i]-object.values[3][i]);
+            return Product(m.placement.sourceFromGrip,object);
+        }
         if(m.kind==FeedMotionKind::Linear)local.values[3][0]+=progress*m.travel;
         else local=Product(local,Turn(progress*m.travel));
         return Product(local,m.weaponFromMotion);
@@ -70,7 +75,11 @@ struct Fixture {
     FeedReloadSessionResult Step(float progress=0,bool grip=true,std::int64_t advance=10){Prepare(progress,grip,advance);return Run();}
     bool Acquire(){return Step(0,false).reload.status==Status::Armed&&Step().interaction.status==Gesture::Acquired;}
     FeedReloadSessionResult Outbound(){for(float p:{.2f,.4f,.6f,.8f,.95f,.95f,.95f})Step(p);return result;}
-    FeedReloadSessionResult Finish(){auto r=Outbound();if(Next()==Op::CycleAction)
+    FeedReloadSessionResult Finish(){
+        if(geometry.operations[static_cast<unsigned>(Next())].kind==FeedMotionKind::FreePlacement){
+            for(float p:{.2f,.4f,.6f,.8f,1.f,1.f,1.f})Step(p);return Step(1,false);
+        }
+        auto r=Outbound();if(Next()==Op::CycleAction)
         for(float p:{.7f,.5f,.3f,.05f,.05f,.05f})r=Step(p);return r;}
     // Test adapter evidence, injected explicitly only after physical dispatch.
     // The session has no reference through which it could mutate native state.
@@ -302,6 +311,49 @@ int UnsupportedAndUnmeasuredStayDisabled(){
     Fixture invalid;invalid.lifetime=0;invalid.Start();
     CHECK(!invalid.Step(0,false).recognitionEnabled&&invalid.result.reload.status==Status::InvalidLifetime);return 0;
 }
+void Placement(Fixture& f,Op op){
+    auto& motion=f.geometry.operations[static_cast<unsigned>(op)];motion.kind=FeedMotionKind::FreePlacement;
+    motion.placement={Identity(),Identity(),Identity()};motion.placement.weaponFromDestination.values[3][0]=.1f;
+    f.x.snapshot.contacts[static_cast<unsigned>(feed_mechanism_detail::OperationPart(op))].weaponFromContact=Identity();
+}
+int SourceRebaseAfterAcknowledgementRetainsLifetimeAndRequiresNeutral(){
+    Fixture f(Op::DetachContainer);Placement(f,Op::DetachContainer);Placement(f,Op::AttachContainer);f.Start();
+    CHECK(f.Step(0,false).reload.status==Status::Armed);
+    auto candidate=*EvaluateFeedMechanism(f.profile,f.x.snapshot,f.goal,f.x.nowNs).candidate;
+    auto motion=f.geometry.operations[static_cast<unsigned>(candidate.operation)];
+    CHECK(!f.session->UpdateMotion(f.x.snapshot,candidate,motion,f.x.nowNs)); // Armed is not idle.
+    CHECK(f.Step().interaction.status==Gesture::Acquired);
+    candidate=*EvaluateFeedMechanism(f.profile,f.x.snapshot,f.goal,f.x.nowNs).candidate;
+    CHECK(!f.session->UpdateMotion(f.x.snapshot,candidate,motion,f.x.nowNs));
+    const auto sent=f.Finish();CHECK(sent.reload.dispatch);candidate=sent.reload.dispatch->completion.candidate;
+    CHECK(!f.session->UpdateMotion(f.x.snapshot,candidate,motion,f.x.nowNs));
+    CHECK(!f.Native(*sent.reload.dispatch).reload.pending);
+    auto& rebased=f.geometry.operations[static_cast<unsigned>(Op::AttachContainer)];
+    rebased.placement.weaponFromSource.values[3][1]=.003f;
+    f.x.snapshot.contacts[static_cast<unsigned>(FeedPart::Container)].weaponFromContact=rebased.placement.weaponFromSource;
+    f.Prepare();candidate=*EvaluateFeedMechanism(f.profile,f.x.snapshot,f.goal,f.x.nowNs).candidate;
+    const auto retained=f.session->State();
+    CHECK(f.session->UpdateMotion(f.x.snapshot,candidate,rebased,f.x.nowNs));
+    CHECK(f.session->State().acceptedOperations==retained.acceptedOperations&&f.session->State().lastApplied==retained.lastApplied);
+    CHECK(f.Run().interaction.status==Gesture::NeedNeutral); // Rebase did not consume this packet.
+    CHECK(f.Acquire()&&f.result.interaction.target&&Near(f.result.interaction.target->values[3][1],.003f));
+    const auto next=f.Finish();CHECK(next.reload.dispatch&&next.reload.dispatch->lifetime==500);
+    CHECK(next.reload.dispatch->id==sent.reload.dispatch->id+1&&
+        next.reload.dispatch->completion.id==sent.reload.dispatch->completion.id+1);return 0;
+}
+int SourceRebaseCannotChangeDestinationPolicyOrCurrentEvidence(){
+    for(unsigned kind=0;kind<8;++kind){Fixture f(Op::AttachContainer);Placement(f,Op::AttachContainer);f.Start();
+        f.Prepare(0,false);auto snapshot=f.x.snapshot;auto candidate=*EvaluateFeedMechanism(f.profile,snapshot,f.goal,f.x.nowNs).candidate;
+        auto motion=f.geometry.operations[static_cast<unsigned>(Op::AttachContainer)];auto now=f.x.nowNs;
+        switch(kind){case 0:motion.placement.weaponFromDestination.values[3][0]+=.001f;break;
+        case 1:motion.maxStepMeters+=.001f;break;case 2:motion.placement.sourceFromGrip.values[3][0]+=.001f;break;
+        case 3:++candidate.snapshotSequence;break;case 4:now+=101;break;
+        case 5:motion.placement.weaponFromSource={};break;case 6:++snapshot.owner.actorGeneration;break;
+        default:motion.placement.weaponFromSource.values[3][1]+=.02f;break;}
+        CHECK(!f.session->UpdateMotion(snapshot,candidate,motion,now));
+        CHECK(f.Acquire()&&f.Finish().reload.dispatch);
+    }return 0;
+}
 }
 int main(){
     static_assert(!std::is_copy_constructible_v<FeedReloadSession> && !std::is_move_constructible_v<FeedReloadSession>);
@@ -312,7 +364,9 @@ int main(){
        PostStateWithoutReceiptDoesNotReleasePending()||RejectedOperationNeedsNewPhysicalGesture()||
        StaleCompletionPacketCannotReappearAfterResolution()||InvalidCurrentEvidenceCannotFinishMotion()||
        NewOwnerCannotInheritPendingOrAcceptedWork()||RetirementCannotDiscardPendingTransaction()||
-       OptionalMechanismsAndAlreadyReadyDoNotInventNativeWork()||UnsupportedAndUnmeasuredStayDisabled())return 1;
-    std::puts("FeedReloadSessionTests: 17 deterministic measured-gesture/native-evidence composition cases passed (no native/headset claim)");
+       OptionalMechanismsAndAlreadyReadyDoNotInventNativeWork()||UnsupportedAndUnmeasuredStayDisabled()||
+       SourceRebaseAfterAcknowledgementRetainsLifetimeAndRequiresNeutral()||
+       SourceRebaseCannotChangeDestinationPolicyOrCurrentEvidence())return 1;
+    std::puts("FeedReloadSessionTests: 19 deterministic measured-gesture/native-evidence composition cases passed (no native/headset claim)");
     return 0;
 }

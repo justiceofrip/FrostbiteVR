@@ -1,0 +1,23 @@
+CHAT14/15 adapter18: DoneY for sibling BC2 feed backend source; full gameplay/actual-game acceptance remains separate.
+Scope: Bc2FeedEquipmentAdapter.h, Bc2FeedEquipmentAdapterTests.cpp, Bc2ReloadFlowRuntime.cpp/.h only plus this handoff.
+Evidence reused: work12 six complete ReloadState fingerprints/metadata; finite rtMagazine=1 Transfer arithmetic/trampoline; genuine AmmoResourceOwnUpdate rows.
+No new game/process/XR/input/profile/install/package/Git/build/test execution; root owns validation and integration.
+ReadFeedEquipmentView publishes independently admitted exact M60_sp config, inventory item lifetime, three firing identities and coherent idle counts.
+Admission checks exact path/values/pointer relationships, live timing words, neutral contexts, replica counts/capacities, own callback/stack and owner lease.
+No FindMagazineEquipment, magazine Ready, magazine command translation, stock cover fields or native charge readiness grants are used.
+SubmitFeedEquipmentCommand retains the complete FeedAmmunitionCommand and exact source NativeView plus current selected-rig/measured-motion/input proof.
+Proof requires rig fingerprint a7f219a1426216ab, valid operation geometry, matching profile/input, original deadlines and maxAge<=100ms.
+Only PhysicalOnly and atomic RefillLoaded are supported; refill allowed at explicit AttachContainer/SeatFeed/CloseCover boundaries.
+Partial refill preserves exact loadedSupply/container; goal must equal existing loadedSupply unless native loaded is zero with empty supply identity.
+Refill rechecks actual finite reserve modifier, capacity, Transfer hook/trampoline, whole firing bytes and unchanged input context; invokes original Transfer once.
+PhysicalOnly calls no transfer, but still needs actual unchanged server/client original Update observations.
+ReadFeedEquipmentReceipt joins exact full command, helper-owning server invocation, both client own Updates and observed post-counts.
+Counts/phase2 are not chamber/fire readiness; caller alone applies confirmed mod mechanism state and joins receipt sequence/time.
+Expiry never rolls back/retries; only real no-entry invocation plus three unchanged observations can produce Rejected.
+Failed postchecks/owner changes retain pending uncertainty. Submit false queues nothing and manufactures no receipt or acknowledgement.
+Backend lifetimes increase globally; request IDs increase within lifetime. Caller retains session/custody across stow/tracking loss.
+Production route: exact-M60 sibling in native Update; original Update once, independent feed completion handoff; existing magazine path unchanged.
+Public seam is implemented for x86 native backend; x64/unconfigured builds remain unavailable.
+Root physical caller/profile work supplies selected rig/contact proof, coupled same-pouch replenishment, retained session and hand/fire arbitration.
+Eight deterministic source tests cover exact partial-supply refill, physical-only, denied evidence/effects, own-server provenance, uncertainty, expiry and late receipts.
+Tests/builds not run by this worker; root must register/run the focused target and normal x86/x64 checks. No native/headset success is claimed.

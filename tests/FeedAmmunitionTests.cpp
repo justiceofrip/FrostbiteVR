@@ -49,7 +49,7 @@ struct Fixture {
         r.post.loadedSupply=applied?command.loadedSupplyAfter:command.before.loadedSupply;
         r.acknowledgement={command.request,applied?FeedReloadAcknowledgement::Applied:FeedReloadAcknowledgement::Rejected,
             r.post.sequence,r.post.observedNs};
-        r.authorityVerified=r.copiesVerified=true;return r;
+        r.authorityVerified=r.copiesVerified=true;r.noTransferEntry=!applied;return r;
     }
     bool Finish(const FeedAmmunitionCommand& command,bool applied=true){
         const auto receipt=Receipt(command,applied);const bool result=ledger->Complete(receipt,now);
@@ -206,6 +206,8 @@ int RejectedTransferRequiresUnchangedCountProof(){
     Fixture f;CHECK(f.Bind());const auto c=f.Send(Effect::ExtractLoaded,f.original,25);CHECK(c);
     auto receipt=f.Receipt(*c,false);auto wrong=receipt;wrong.post.counts.loaded=0;
     CHECK(!f.ledger->Complete(wrong,f.now));CHECK(f.ledger->State().pending==c);
+    wrong=receipt;wrong.noTransferEntry=false;
+    CHECK(!f.ledger->Complete(wrong,f.now)&&f.ledger->State().pending==c);
     CHECK(f.ledger->Complete(receipt,f.now));f.sample=receipt.post;
     CHECK(f.sample.counts.loaded==25&&f.Held(f.original)==-1&&f.Total()==105);
     CHECK(f.ledger->State().acceptedOperations==0);

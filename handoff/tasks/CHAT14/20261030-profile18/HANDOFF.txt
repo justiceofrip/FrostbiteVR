@@ -1,0 +1,24 @@
+Done Y: bounded exact M60 geometry/profile and articulated-presentation preparation; no runtime enablement.
+Source: src/games/bc2/Bc2FeedEquipmentProfile.h; focused cases: tests/Bc2FeedEquipmentProfileTests.cpp.
+Provenance: proof01.json pins the existing M60_sp selector/configuration, mesh/LOD/skeleton/reload hashes and source hashes.
+Only the four previously pinned resources were decoded; no metadata/archive resurvey or new compare clip.
+FindBc2M60FeedGeometry(asset, configurationPath, meshPath, rigFingerprint) requires the exact full selector.
+BuildBc2M60FeedMotion(geometry, operation, policy) supports OpenCover/CloseCover/DetachContainer/AttachContainer/SeatFeed.
+BuildBc2M60FeedInteractionProfile(geometry, id, revision, policy) populates only those measured operations.
+Bc2FeedInteractionPolicy has zero defaults; caller explicitly supplies tolerances, fractions, step/dwell/gap limits.
+Root-selected caller policy: same-container replenishment; open, coupled detach, reattach/refill, terminal seat, close.
+Detach pouch6 t1.8->t2.1; Attach starts at that same t2.1 pose and ends t3.6. Authored t3.0 approach remains separate evidence.
+Seat carries terminal15 from retained t3.6 pose to t4.5 resting pose, using measured terminal-local wrist reference at t3.933333.
+BuildBc2M60FeedMotionFromRetainedPose(..., retainedPose) rebases the next free-placement source to its actual prior accepted pose; freeze for the gesture.
+The recognizer preserves actual grip offset; none of the wrist frames asserts a native scripted grip constraint.
+Seven authored poses retain independent pouch6 and root12 plus parent-local13/14/15; terminal is not root12.
+ComposeBc2M60FeedPresentation(supply, pose) preserves exact resource/container keys and all four chain transforms.
+PlaceBc2M60FeedTerminal(supply, articulation, actualTerminal) solves ancestors backwards, retaining pouch independently.
+PlaceBc2M60FeedPouch(supply, articulation, actualPouch) carries pouch and separately composed chain using their current relative geometry.
+Caller owns persistent custody, explicit current articulation and interpolation. No single rigid belt, stage acknowledgement or native count inference.
+WithdrawFeed remains explicitly unmeasured for independent replacement; outward authored motion carries pouch and belt together.
+Latch contact and slider4 charge semantics remain unavailable; no Unknown-to-Absent, native cover boolean or chamber/fire readiness invented.
+File-only decoder passed; source literal block matches measurements; float32 orthogonality max error6.76e-8; parent composition residual<1e-10.
+Nine focused C++ cases authored, NOT executed; no build/Git/process/game/XR/input/render/capture/install/package/profile edits.
+Root must register/run the new suite and integrate the explicit replenishment planner/backend/owner separately.
+Reproduce measurement: py -3.12 -B handoff/tasks/CHAT14/20261030-profile18/measure_feed_profile.py

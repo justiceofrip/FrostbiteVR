@@ -17,6 +17,7 @@
 #include "Bc2ReloadRetirement.h"
 #include "Bc2AmmoResourceBinding.h"
 #include "Bc2AmmoResourceService.h"
+#include "Bc2FeedEquipmentAdapter.h"
 #include <atomic>
 #include <memory>
 #include <ostream>
@@ -339,6 +340,19 @@ std::optional<AmmoResourceView> ReadAmmoResourceView(const ReloadStateOwner&,std
 AmmoResourceRead ReadAmmoResourceObserved(const ReloadStateOwner&,std::int64_t now)noexcept;
 bool SubmitAmmoResourceRequest(const AmmoResourceRequest&)noexcept;
 std::optional<AmmoResourceOutcome> ReadAmmoResourceOutcome(std::uint64_t,const interaction::AmmoResourceContext&)noexcept;
+// Separate belt backend. A native view grants counts/identity only; callers
+// must supply the exact selected physical profile and original input evidence.
+// A false submit has not queued/called native work and supplies no fake receipt.
+std::optional<FeedEquipmentNativeView> ReadFeedEquipmentView(const ReloadStateOwner&,std::int64_t now)noexcept;
+std::optional<FeedEquipmentNativeView> ReadFeedEquipmentViewAt(const ReloadStateOwner&,std::int64_t inputObservedNs,std::int64_t processingNow)noexcept;
+FeedEquipmentSubmitResult SubmitFeedEquipmentCommandResult(const FeedEquipmentSubmission&,bool noEntryOnly=false)noexcept;
+bool SubmitFeedEquipmentCommand(const FeedEquipmentSubmission&)noexcept;
+std::optional<interaction::FeedAmmunitionReceipt> ReadFeedEquipmentReceipt(std::uint64_t lifetime,std::uint64_t request)noexcept;
+bool PublishFeedEquipmentGate(const FeedEquipmentGate&)noexcept;
+std::optional<FeedEquipmentGate> ReadFeedEquipmentGate(const interaction::AmmoResourceIdentity&)noexcept;
+// Earliest retained actor-retirement event after the supplied cursor. This is
+// lifetime evidence only; release old claims before reclaiming exact old slots.
+std::optional<FeedEquipmentActorRetirement> ReadFeedEquipmentActorRetirement(std::uint64_t afterEvent)noexcept;
 // One bounded recording session, at most20 seconds; no automatic reset/rearm.
 void Start()noexcept;
 // Disables only these hooks, drains for at most2s, retains trampolines/module.

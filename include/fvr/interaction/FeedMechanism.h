@@ -1,5 +1,6 @@
 #pragma once
 #include "fvr/math/StereoMath.h"
+#include "fvr/interaction/AmmunitionLedger.h"
 #include <array>
 #include <algorithm>
 #include <cmath>
@@ -15,6 +16,12 @@ struct FeedOwner {
     std::uint64_t actor=0,actorGeneration=0,weapon=0,equipGeneration=0,space=0;
     bool operator==(const FeedOwner&)const=default;
 };
+// Native old/new observations are separate evidence, never a rewritten receipt.
+// Before must join the retained historical observation without restamping;
+// after must be fresh. Migration requires a constructor-pinned stable resource.
+struct FeedContextMigration {
+    AmmunitionSnapshot before{},after{};
+};
 // The container and its ammunition are distinct identities, not two ammo grants.
 struct FeedSupplyKey {
     FeedKey resource{},container{};
@@ -27,6 +34,15 @@ enum class FeedContainerState:std::uint8_t {Unknown,Absent,Detached,Attached};
 enum class FeedSeatState:std::uint8_t {Unknown,Unseated,Seated};
 enum class FeedCycleState:std::uint8_t {Unknown,Absent,Required,Pending,NativeReady};
 enum class FeedSupplyState:std::uint8_t {Unknown,Usable,Depleted,Unavailable};
+enum class FeedRefillState:std::uint8_t {Unknown,NotRequired,Required,Applied};
+// Adapter-owned user-cycle intent and exact native refill evidence. Counts or
+// a pouch pose cannot establish Applied. requestId cites the RefillLoaded
+// AttachContainer request in this lifetime; Required has no request yet.
+struct FeedRefillObservation {
+    FeedRefillState state=FeedRefillState::Unknown;
+    std::uint64_t lifetime=0,requestId=0;
+    bool operator==(const FeedRefillObservation&)const=default;
+};
 enum class FeedPart:std::uint8_t {Cover,Latch,Container,Feed,Charge,Count};
 enum class FeedPhysicalOperation:std::uint8_t {
     None,ReleaseLatch,OpenCover,WithdrawFeed,DetachContainer,AttachContainer,
@@ -36,8 +52,8 @@ struct FeedContactBinding {
     std::uint32_t role=0;
     float radiusMeters=0,maxAngleRadians=0;
 };
-// This first family uses feed replacement followed by closure and optional
-// charging. Other orderings need another validated policy; no gun-name lookup.
+// Replacement remains the default. Replenishment and coupled pouch/feed
+// removal are explicit policy choices, never inferred from a gun name.
 struct FeedMechanismProfile {
     FeedFamily family=FeedFamily::Unknown;
     std::uint64_t id=0,revision=0;
@@ -46,6 +62,7 @@ struct FeedMechanismProfile {
     bool containerNeedsOpen=false,feedNeedsOpen=false,detachNeedsUnseated=false;
     std::int64_t maxAgeNs=0;
     std::array<FeedContactBinding,static_cast<unsigned>(FeedPart::Count)> contacts{};
+    bool sameContainerReplenishment=false,coupledContainerDetach=false;
 };
 struct FeedObservedContact {
     std::uint32_t role=0;
@@ -72,12 +89,15 @@ struct FeedMechanismSnapshot {
     FeedSupplyKey attached{},seated{};
     FeedSupplyObservation supply{};
     std::array<FeedObservedContact,static_cast<unsigned>(FeedPart::Count)> contacts{};
+    FeedRefillObservation refill{};
 };
 struct FeedPhysicalCandidate {
     FeedOwner owner{};FeedKey mechanism{};FeedSupplyKey supply{},goal{};
     std::uint64_t profileId=0,profileRevision=0,snapshotSequence=0;
     FeedPhysicalOperation operation=FeedPhysicalOperation::None;
     FeedPart part=FeedPart::Feed;std::uint32_t role=0;
+    FeedRefillObservation refill{};
+    bool coupledContainerDetach=false;
     bool operator==(const FeedPhysicalCandidate&)const=default;
 };
 enum class FeedMechanismStatus:std::uint8_t {
@@ -109,6 +129,25 @@ inline bool Key(FeedKey k)noexcept{return k.id&&k.generation;}
 inline bool Empty(FeedKey k)noexcept{return !k.id&&!k.generation;}
 inline bool Owner(const FeedOwner& o)noexcept {
     return o.actor&&o.actorGeneration&&o.weapon&&o.equipGeneration&&o.space;
+}
+inline bool Context(const FeedOwner& o,const AmmoResourceContext& c)noexcept {
+    return o.actor==c.resource.actor&&o.actorGeneration==c.resource.actorGeneration&&o.weapon==c.resource.weapon&&
+        o.equipGeneration==c.equipGeneration&&o.space==c.space;
+}
+inline bool Migration(const FeedContextMigration& m,const AmmoResourceIdentity& resource,
+    const FeedOwner& before,const FeedOwner& after,std::int64_t now,std::int64_t age)noexcept {
+    if(!resource.actor||!resource.actorGeneration||!resource.weapon||!resource.weaponGeneration||
+       !Owner(before)||!Owner(after)||before==after||m.before.context.resource!=resource||m.after.context.resource!=resource||
+       !Context(before,m.before.context)||!Context(after,m.after.context)||m.before.counts!=m.after.counts||
+       m.after.sequence<=m.before.sequence||m.after.observedNs<=m.before.observedNs)return false;
+    for(const auto* s:{&m.before,&m.after}){
+        const auto& c=s->counts;
+        if(!s->coherentIdleVerified||!s->sequence||s->observedNs<=0||now<s->observedNs||s->deadlineNs<=s->observedNs||
+           (s==&m.after&&now>=s->deadlineNs)||
+           s->deadlineNs-s->observedNs>age||c.capacity<=0||c.capacity>1000000||c.loaded<0||c.loaded>c.capacity||
+           c.reserve<0||c.reserve>1000000)return false;
+    }
+    return true;
 }
 inline bool Supply(FeedSupplyKey k,bool container)noexcept {
     return Key(k.resource)&&(container?Key(k.container):Empty(k.container));
@@ -151,7 +190,9 @@ inline FeedPart OperationPart(FeedPhysicalOperation op)noexcept {
     using namespace feed_mechanism_detail;
     if(p.family!=FeedFamily::Belt||!p.id||!p.revision||!p.ammunitionKind||p.maxAgeNs<=0||
        (p.latch&&!p.cover)||(p.containerNeedsOpen&&(!p.container||!p.cover))||
-       (p.feedNeedsOpen&&!p.cover)||(p.detachNeedsUnseated&&!p.container))return false;
+       (p.feedNeedsOpen&&!p.cover)||(p.detachNeedsUnseated&&!p.container)||
+       (p.sameContainerReplenishment&&!p.container)||
+       (p.coupledContainerDetach&&(!p.container||p.detachNeedsUnseated)))return false;
     for(unsigned n=0;n<p.contacts.size();++n){
         const auto& c=p.contacts[n];
         if(!Part(p,n)){if(c.role||c.radiusMeters!=0||c.maxAngleRadians!=0)return false;continue;}
@@ -187,6 +228,18 @@ inline FeedPart OperationPart(FeedPhysicalOperation op)noexcept {
        (s.feed==FeedSeatState::Seated?!Supply(s.seated,p.container):!Empty(s.seated))||
        (s.container==FeedContainerState::Attached&&s.feed==FeedSeatState::Seated&&s.attached!=s.seated))
         return fail(FeedMechanismStatus::InvalidSnapshot);
+    if(p.coupledContainerDetach&&s.container==FeedContainerState::Detached&&s.feed!=FeedSeatState::Unseated)
+        return fail(FeedMechanismStatus::InvalidSnapshot);
+    if(p.sameContainerReplenishment){
+        if(s.refill.state==FeedRefillState::Unknown)return fail(FeedMechanismStatus::UnknownState);
+        if((s.refill.state==FeedRefillState::NotRequired?(s.refill.lifetime||s.refill.requestId):
+            (!s.refill.lifetime||(s.refill.state==FeedRefillState::Required?s.refill.requestId!=0:
+             s.refill.state!=FeedRefillState::Applied||!s.refill.requestId)))||
+           (s.refill.state!=FeedRefillState::Required&&s.container!=FeedContainerState::Attached))
+            return fail(FeedMechanismStatus::InvalidSnapshot);
+        if((s.container==FeedContainerState::Attached&&s.attached!=desired)||
+           (s.feed==FeedSeatState::Seated&&s.seated!=desired))return fail(FeedMechanismStatus::WrongResource);
+    }
     if(!Supply(desired,p.container)||desired!=s.supply.key||s.supply.ammunitionKind!=p.ammunitionKind)
         return fail(FeedMechanismStatus::WrongResource);
     if(s.supply.state!=FeedSupplyState::Usable)return fail(FeedMechanismStatus::ResourceUnavailable);
@@ -196,7 +249,8 @@ inline FeedPart OperationPart(FeedPhysicalOperation op)noexcept {
     const auto candidate=[&](FeedPhysicalOperation op,FeedSupplyKey resource){
         const auto part=OperationPart(op);
         return FeedMechanismResult{FeedMechanismStatus::Candidate,FeedPhysicalCandidate{
-            s.owner,s.mechanism,resource,desired,p.id,p.revision,s.sequence,op,part,p.contacts[static_cast<unsigned>(part)].role}};
+            s.owner,s.mechanism,resource,desired,p.id,p.revision,s.sequence,op,part,p.contacts[static_cast<unsigned>(part)].role,
+            p.sameContainerReplenishment?s.refill:FeedRefillObservation{},p.coupledContainerDetach}};
     };
     const auto access=[&](FeedPhysicalOperation op,FeedSupplyKey resource,bool needsOpen){
         if(needsOpen&&s.cover==FeedCoverState::Closed){
@@ -205,8 +259,11 @@ inline FeedPart OperationPart(FeedPhysicalOperation op)noexcept {
         }
         return candidate(op,resource);
     };
-    const bool replacingContainer=p.container&&(s.container!=FeedContainerState::Attached||s.attached!=desired);
-    if(s.feed==FeedSeatState::Seated&&(s.seated!=desired||(replacingContainer&&s.container==FeedContainerState::Attached&&p.detachNeedsUnseated)))
+    const bool refillRequired=p.sameContainerReplenishment&&s.refill.state==FeedRefillState::Required;
+    const bool replacingContainer=p.container&&(refillRequired||s.container!=FeedContainerState::Attached||s.attached!=desired);
+    const bool coupledRemoval=p.coupledContainerDetach&&replacingContainer&&s.container==FeedContainerState::Attached;
+    if(s.feed==FeedSeatState::Seated&&!coupledRemoval&&
+       (s.seated!=desired||(replacingContainer&&s.container==FeedContainerState::Attached&&(p.detachNeedsUnseated||refillRequired))))
         return access(FeedPhysicalOperation::WithdrawFeed,s.seated,p.feedNeedsOpen);
     if(replacingContainer){
         if(s.container==FeedContainerState::Attached)return access(FeedPhysicalOperation::DetachContainer,s.attached,p.containerNeedsOpen);

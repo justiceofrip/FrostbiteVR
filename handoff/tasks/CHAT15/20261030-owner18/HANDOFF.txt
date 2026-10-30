@@ -1,0 +1,23 @@
+SourceDoneY — owner source frozen; validation/acceptance pending root checks.
+Owner: feed_runtime_owner18; coordinator worktree only; no Git/build/game/install actions.
+New API/source: src/games/bc2/Bc2PhysicalFeed.h and .cpp.
+Frozen presentation: ReadBc2PhysicalFeedPresentation(owner, nowNs), immutable copy.
+Carries exact native owner, rig, original input, physical weapon, supply, lifetime, revision.
+Separate pouch, four articulated belt frames, cover hinge frame/angle; no readiness grant.
+Gameplay installs normal session3 caller, exact config/mesh/rig/native/body/hand admission.
+ReadAt prior-callback history joins original grip/release and pre-IK geometry exactly.
+Existing normal knife/grenade/gadget/holster/support arbiters stay enabled.
+Global backend lifetimes increase; five per-cycle request ids; one persistent session.
+PhysicalOnly open/detach/seat/close; atomic same-supply RefillLoaded at attachment only.
+Prior receipts poll before tracking admission; original partial rounds remain native.
+Typed failed-submit retention retries only noEntryOnly; genuine Update rejection required.
+Persistent resource gate excludes stock Reload; earliest Gather suppression precedes XR earlyouts.
+Tests: tests/Bc2PhysicalFeedTests.cpp, nine deterministic owner/arbiter/callback cases.
+Includes full five stages, exact supply/counts, partial copies, tracking, rejection/recovery.
+No test execution by this owner; root owns build/runner integration and validation.
+ContextObservation migration retains the pinned resource across long stow/equip/space changes.
+Opaque movement-proof recovery handles partial hinge and completed rejected endpoint.
+Carried mask: pouch1, cover2(always attached), chain4/8/16/32; separate retained world bases.
+Snapshot paired into Tracking.feed; original wrist+current claim optional, no invented custody.
+Owner slots bounded8; no timeout eviction or arbitrary resource-generation replacement.
+Native/headset acceptance remains open; no desktop test was attempted.

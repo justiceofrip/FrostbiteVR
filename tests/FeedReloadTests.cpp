@@ -328,6 +328,51 @@ int InvalidLifetimeCannotStart(){
     CHECK(invalid.Update(f.x).status==Status::InvalidLifetime);
     f.p.family=FeedFamily::Magazine;f.Start();CHECK(f.Neutral().status==Status::InvalidLifetime);return 0;
 }
+void Replenishment(Fixture& f,bool detached=false){
+    f.p.sameContainerReplenishment=f.p.coupledContainerDetach=true;f.p.detachNeedsUnseated=false;
+    f.p.latch=f.p.charge=false;f.p.contacts[1]=f.p.contacts[4]={};
+    auto& s=f.x.snapshot;s.latch=FeedLatchState::Absent;s.cycle=FeedCycleState::Absent;
+    f.goal=f.old;s.supply.key=f.goal;s.refill={FeedRefillState::Required,500,0};
+    if(detached){s.cover=FeedCoverState::Open;s.container=FeedContainerState::Detached;s.attached={};
+        s.feed=FeedSeatState::Unseated;s.seated={};}
+    f.Start();
+}
+int RefillNeedsExactAttachEvidenceAndCannotBeSkipped(){
+    for(unsigned kind=0;kind<5;++kind){Fixture f;Replenishment(f,true);CHECK(f.Neutral().status==Status::Armed);
+        f.Intent();const auto sent=f.Update();CHECK(sent.dispatch&&sent.dispatch->completion.candidate.operation==Op::AttachContainer);
+        const auto request=*sent.dispatch;f.Tick();f.Effect(Op::AttachContainer);f.Ack(request);
+        auto& refill=f.x.snapshot.refill;
+        switch(kind){case 0:break; // Physical attachment only.
+        case 1:refill={FeedRefillState::Applied,500,request.id+1};break;
+        case 2:refill={FeedRefillState::Applied,501,request.id};break;
+        case 3:refill={FeedRefillState::Unknown,500,0};break;
+        default:refill={FeedRefillState::NotRequired,0,0};break;}
+        auto waiting=f.Update();CHECK(waiting.pending==request&&!waiting.completed&&!waiting.dispatch);
+        f.Tick();refill={FeedRefillState::Applied,500,request.id};auto done=f.Update();
+        CHECK(!done.pending&&!done.completed&&done.acceptedOperations==1);
+        CHECK(f.Neutral().candidate->operation==Op::SeatFeed);
+        f.Tick();refill={FeedRefillState::Required,500,0};CHECK(f.Update().status==Status::MechanismUnavailable);
+    }return 0;
+}
+int UnprovedRefillCannotStartOrMutateAnObservation(){
+    Fixture f;Replenishment(f);f.x.snapshot.refill={FeedRefillState::Applied,500,3};
+    const auto unproved=f.Neutral();CHECK(!unproved.completed&&!unproved.candidate&&!unproved.dispatch);
+    Fixture immutable;Replenishment(immutable);CHECK(immutable.Neutral().status==Status::Armed);
+    immutable.x.snapshot.refill.requestId=4;CHECK(immutable.Update().status==Status::SnapshotMismatch);
+    Fixture cancelled;Replenishment(cancelled);CHECK(cancelled.Neutral().status==Status::Armed);
+    cancelled.Tick();cancelled.x.snapshot.refill={FeedRefillState::NotRequired,0,0};
+    CHECK(cancelled.Update().status==Status::MechanismUnavailable&&!cancelled.reload->State().completed);return 0;
+}
+int CoupledDetachAcknowledgementRequiresBothEffects(){
+    Fixture f;Replenishment(f);f.x.snapshot.cover=FeedCoverState::Open;
+    CHECK(f.Neutral().status==Status::Armed);f.Intent();const auto sent=f.Update();CHECK(sent.dispatch);
+    const auto request=*sent.dispatch;CHECK(request.completion.candidate.operation==Op::DetachContainer);
+    f.Tick();f.Effect(Op::DetachContainer);f.Ack(request);
+    CHECK(!feed_reload_detail::EffectObserved(request,f.x.snapshot));CHECK(f.Update().pending==request);
+    f.Tick();f.x.snapshot.feed=FeedSeatState::Unseated;f.x.snapshot.seated={};
+    CHECK(feed_reload_detail::EffectObserved(request,f.x.snapshot));CHECK(!f.Update().pending);
+    CHECK(f.Neutral().candidate->operation==Op::AttachContainer);return 0;
+}
 }
 int main(){
     if(CompleteReplacement()||PartialAndEmptyProfiles()||OptionalPartsDoNotInventOperations()||ReceiptIsConsumedAcrossPackets()||
@@ -336,6 +381,8 @@ int main(){
        CiteLaterSnapshotAndRejectContradictoryAck()||TrackingAndStowRetainPendingAndApplied()||TrackingLossWithBadAckStillSuspends()||
        WrongOwnerDoesNotRetargetAcceptedEffect()||UnknownAndWrongResourceCannotDispatch()||PerOperationBindingIsIndependent()||
        SnapshotIdentityAndImmutability()||GapAndClockRollbackRequireNewIntent()||RejectionNeedsEvidenceAndFreshNeutral()||
-       CompletionNeedsExplicitFinalEvidence()||RetirementRequiresOldLifetimeReconciliation()||InvalidLifetimeCannotStart())return 1;
-    std::puts("FeedReloadTests: 22 deterministic synthetic coordinator cases passed (no native/headset claim)");return 0;
+       CompletionNeedsExplicitFinalEvidence()||RetirementRequiresOldLifetimeReconciliation()||InvalidLifetimeCannotStart()||
+       RefillNeedsExactAttachEvidenceAndCannotBeSkipped()||UnprovedRefillCannotStartOrMutateAnObservation()||
+       CoupledDetachAcknowledgementRequiresBothEffects())return 1;
+    std::puts("FeedReloadTests: 25 deterministic synthetic coordinator cases passed (no native/headset claim)");return 0;
 }

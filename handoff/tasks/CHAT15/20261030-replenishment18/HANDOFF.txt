@@ -1,0 +1,25 @@
+Task: replenishment18 portable same-container planning, source-only bounded job.
+Base requested: 6ac2281909436510172bbbf562cf46318dca98da (not git-checked by this agent).
+Changed: FeedMechanism.h, FeedReload.h, FeedInteraction.h, FeedEquipmentSession.h,
+FeedReloadSession.h and their five existing test files (root-granted addition).
+Profile adds sameContainerReplenishment=false, coupledContainerDetach=false.
+Snapshot adds refill: FeedRefillObservation {FeedRefillState state; lifetime; requestId}.
+States: Unknown, NotRequired, Required, Applied. Unknown fails closed.
+Required cites fresh user-cycle lifetime and zero requestId; goal stays same supply.
+Applied cites that lifetime and the exact RefillLoaded AttachContainer request id.
+NotRequired has zero tokens and never reopens an already-ready same supply.
+Coupled detach requires explicit profile policy and detached plus unseated poststate.
+Nine operations retained; coupled removal has no synthetic WithdrawFeed operation.
+Required plans open/detach/attach; accepted refill evidence permits seat/close.
+Reload retains verified refill progress, rejects stale/foreign/implicit skipped refill.
+Equipment enforces RefillLoaded on replenishment attach; other stages PhysicalOnly.
+Immutable snapshot/candidate/profile checks include new evidence and policy fields.
+Tests add five measured synthetic stages for 0/80,17/80,17/8 and conserve same supply/counts.
+Tests reject wrong/unknown refill proof, substituted acknowledgements, uncoupled effects,
+profile/evidence changes during gestures, and reset of already-verified refill progress.
+Default nine-step replacement tests remain; all native capabilities stay adapter-owned.
+UpdateMotion rebases only current free-placement source between gestures, preserving
+destination/grip/policy/counters/retained rounds; requires exact fresh unchanged evidence.
+Validation: checks unexecuted; root owns combined checks. No build/process/game/git action here.
+Evidence level: deterministic source regressions only; no native/headset acceptance.
+Source complete/frozen; near-destination interrupted placement and partial hinge recovery unavailable.

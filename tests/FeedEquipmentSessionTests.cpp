@@ -55,10 +55,15 @@ struct Fixture {
         x.interaction.contact.tracked=x.interaction.contact.handAvailable=true;
         Configure();Start();
     }
-    void Start(){equipment=std::make_unique<FeedEquipmentSession>(profile,geometry,x.snapshot.owner,x.snapshot.mechanism,goal,500);}
+    void Start(AmmoResourceIdentity resource={}){equipment=std::make_unique<FeedEquipmentSession>(profile,geometry,x.snapshot.owner,x.snapshot.mechanism,goal,500,resource);}
     Op Next()const {const auto q=EvaluateFeedMechanism(profile,x.snapshot,goal,x.nowNs);
         return q.candidate?q.candidate->operation:Op::CycleAction;}
     void Configure(){auto& a=x.authority;a.operation=Next();a.effect=Effect::PhysicalOnly;a.supply={};a.rounds=0;
+        if(profile.sameContainerReplenishment){
+            if(a.operation==Op::AttachContainer){a.effect=Effect::RefillLoaded;a.supply=goal;
+                a.rounds=std::min(x.ammunition.counts.capacity-x.ammunition.counts.loaded,x.ammunition.counts.reserve);}
+            return;
+        }
         switch(a.operation){
         case Op::WithdrawFeed:a.effect=Effect::ExtractLoaded;a.supply=original;a.rounds=x.ammunition.counts.loaded;break;
         case Op::DetachContainer:a.effect=Effect::ReturnSupply;a.supply=original;a.rounds=17;break;
@@ -98,7 +103,8 @@ struct Fixture {
         case Op::ReleaseLatch:s.latch=FeedLatchState::Released;break;
         case Op::OpenCover:s.cover=FeedCoverState::Open;break;
         case Op::WithdrawFeed:s.feed=FeedSeatState::Unseated;s.seated={};break;
-        case Op::DetachContainer:s.container=FeedContainerState::Detached;s.attached={};break;
+        case Op::DetachContainer:s.container=FeedContainerState::Detached;s.attached={};
+            if(profile.coupledContainerDetach){s.feed=FeedSeatState::Unseated;s.seated={};}break;
         case Op::AttachContainer:s.container=FeedContainerState::Attached;s.attached=goal;break;
         case Op::SeatFeed:s.feed=FeedSeatState::Seated;s.seated=goal;break;
         case Op::CloseCover:s.cover=FeedCoverState::Closed;break;
@@ -108,12 +114,15 @@ struct Fixture {
     }
     FeedAmmunitionReceipt Receipt(const FeedAmmunitionCommand& command,bool applied=true,bool mechanismEffect=true){
         if(applied&&mechanismEffect)Observe(command.request.completion.candidate.operation);
+        if(applied&&mechanismEffect&&profile.sameContainerReplenishment&&command.authority.effect==Effect::RefillLoaded)
+            x.snapshot.refill={FeedRefillState::Applied,command.request.lifetime,command.request.id};
         x.ammunition.counts=applied?command.after:command.before.counts;
         x.ammunition.loadedSupply=applied?command.loadedSupplyAfter:command.before.loadedSupply;
         Prepare(0,false);FeedAmmunitionReceipt r;r.command=command;r.post=x.ammunition;
         r.acknowledgement={command.request,applied?FeedReloadAcknowledgement::Applied:FeedReloadAcknowledgement::Rejected,
             r.post.sequence,r.post.observedNs};r.authorityInvocation=command.request.id;
-        r.beganNs=command.request.requestedNs;r.completedNs=x.nowNs;r.authorityVerified=r.copiesVerified=true;return r;
+        r.beganNs=command.request.requestedNs;r.completedNs=x.nowNs;r.authorityVerified=r.copiesVerified=true;
+        r.noTransferEntry=!applied;return r;
     }
     FeedEquipmentSessionResult Native(const FeedAmmunitionCommand& command,bool applied=true,bool mechanismEffect=true){
         x.receipt=Receipt(command,applied,mechanismEffect);const auto r=Run();x.receipt.reset();Configure();return r;
@@ -297,6 +306,188 @@ int WrongLifetimeCannotRebindOrReleaseRetainedEffects(){
     f.x.snapshot.owner=f.x.ammunition.owner=owner;CHECK(f.Native(*sent.dispatch).receiptAccepted&&f.Held(f.original)==17);
     return 0;
 }
+void Replenishment(Fixture& f,bool detached=false){
+    f.profile.sameContainerReplenishment=f.profile.coupledContainerDetach=true;f.profile.detachNeedsUnseated=false;
+    f.profile.latch=f.profile.charge=false;f.profile.contacts[1]=f.profile.contacts[4]={};
+    auto& s=f.x.snapshot;s.latch=FeedLatchState::Absent;s.cycle=FeedCycleState::Absent;
+    f.goal=f.original;s.supply.key=f.goal;s.refill={FeedRefillState::Required,500,0};
+    if(detached){s.cover=FeedCoverState::Open;s.container=FeedContainerState::Detached;s.attached={};
+        s.feed=FeedSeatState::Unseated;s.seated={};}
+    f.Configure();f.Start();
+}
+int FiveStageSameContainerRefillPreservesPartialAndEmptyCounts(){
+    for(unsigned kind=0;kind<3;++kind){const int loaded=kind==0?0:17,reserve=kind==2?8:80;
+        Fixture f(Op::ReleaseLatch,loaded,reserve);Replenishment(f);unsigned count=0;
+        const int transfer=std::min(50-loaded,reserve);
+        for(const auto op:{Op::OpenCover,Op::DetachContainer,Op::AttachContainer,Op::SeatFeed,Op::CloseCover}){
+            CHECK(f.Next()==op&&f.Acquire());const auto sent=f.Finish();CHECK(sent.dispatch);const auto command=*sent.dispatch;
+            CHECK(command.request.completion.candidate.goal==f.original&&command.before.loadedSupply==f.original);
+            CHECK(command.authority.effect==(op==Op::AttachContainer?Effect::RefillLoaded:Effect::PhysicalOnly));
+            CHECK(command.mutationRequired==(op==Op::AttachContainer));
+            if(op!=Op::AttachContainer)CHECK(command.before.counts==command.after&&command.loadedSupplyAfter==f.original);
+            if(op==Op::DetachContainer)CHECK(command.before.counts.loaded==loaded&&command.before.counts.reserve==reserve);
+            CHECK(f.equipment->State().ammunition.snapshot.counts==command.before.counts);
+            const auto applied=f.Native(command);++count;
+            CHECK(applied.receiptAccepted&&applied.acknowledgementDelivered&&!applied.session.reload.pending&&!applied.ammunition.pending);
+            CHECK(applied.ammunition.snapshot.loadedSupply==f.original&&f.Total()==loaded+reserve&&f.Held(f.original)==0);
+            CHECK(applied.session.reload.completed==(op==Op::CloseCover));
+            CHECK(applied.ammunition.acceptedOperations==count&&applied.session.reload.acceptedOperations==count);
+            if(op==Op::DetachContainer)CHECK(f.x.snapshot.feed==FeedSeatState::Unseated&&f.x.snapshot.refill.state==FeedRefillState::Required);
+            if(op==Op::AttachContainer)CHECK(f.Next()==Op::SeatFeed&&f.x.snapshot.refill.requestId==command.request.id);
+        }
+        CHECK(f.dispatches==5&&f.result.status==Status::Complete);
+        CHECK(f.result.ammunition.snapshot.counts.loaded==loaded+transfer&&f.result.ammunition.snapshot.counts.reserve==reserve-transfer);
+        CHECK(!f.Step(0,false).dispatch&&f.dispatches==5); // Completed cycle cannot replenish again.
+    }return 0;
+}
+int SameContainerRejectsExtractionReplacementAndPhysicalOnlyRefill(){
+    for(unsigned kind=0;kind<4;++kind){Fixture f;Replenishment(f,kind>=2);
+        if(kind==0){f.x.snapshot.cover=FeedCoverState::Open;f.Configure();f.x.authority.effect=Effect::ExtractLoaded;
+            f.x.authority.supply=f.original;f.x.authority.rounds=17;}
+        if(kind==1){f.x.ammunition.loadedSupply={{33,1},{44,1}};}
+        if(kind==2){f.x.authority.effect=Effect::PhysicalOnly;f.x.authority.supply={};f.x.authority.rounds=0;}
+        if(kind==3){f.x.authority.effect=Effect::AcquireReserve;}
+        const auto r=f.Step(0,false);CHECK(!r.dispatch&&!r.session.recognitionEnabled&&r.status==Status::PreflightRejected);
+        CHECK(r.ammunition.acceptedOperations==0&&r.session.reload.acceptedOperations==0);
+    }return 0;
+}
+int RefillReceiptAndExactProgressMustBothCorroborate(){
+    for(unsigned kind=0;kind<4;++kind){Fixture f;Replenishment(f,true);CHECK(f.Acquire());const auto sent=f.Finish();CHECK(sent.dispatch);
+        const auto command=*sent.dispatch;const auto receipt=f.Receipt(command);const auto valid=f.x.snapshot.refill;
+        if(kind==0){f.x.acknowledgement=receipt.acknowledgement; // Counts plus an ack never substitute the exact ledger receipt.
+            CHECK(!f.Run().acknowledgementDelivered&&f.result.ammunition.pending&&f.result.session.reload.pending);
+            f.x.acknowledgement.reset();}
+        if(kind==1)f.x.snapshot.refill={FeedRefillState::Required,500,0};
+        if(kind==2)++f.x.snapshot.refill.requestId;
+        if(kind==3)++f.x.snapshot.refill.lifetime;
+        f.x.receipt=receipt;const auto applied=f.Run();CHECK(applied.receiptAccepted);
+        CHECK(applied.ammunition.snapshot.counts==command.after&&applied.ammunition.snapshot.loadedSupply==f.original);
+        if(kind){CHECK(!applied.acknowledgementDelivered&&applied.session.reload.pending&&!applied.session.reload.completed);
+            f.x.receipt.reset();f.x.snapshot.refill=valid;f.Prepare(0,false);f.x.acknowledgement=f.FreshAck(command);
+            CHECK(f.Run().acknowledgementDelivered&&!f.result.session.reload.pending);
+        }else CHECK(applied.acknowledgementDelivered&&!applied.session.reload.pending);
+        CHECK(f.dispatches==1&&f.Held(f.original)==0&&f.Total()==97);
+    }return 0;
+}
+int SourceRebaseRequiresCurrentCountsAndPreservesRetainedRounds(){
+    Fixture f(Op::WithdrawFeed);CHECK(f.Acquire());const auto sent=f.Finish();CHECK(sent.dispatch);
+    CHECK(f.Native(*sent.dispatch).receiptAccepted&&f.Held(f.original)==17);
+    auto& motion=f.geometry.operations[static_cast<unsigned>(Op::DetachContainer)];
+    motion.placement.weaponFromSource.values[3][1]+=.002f;
+    f.x.snapshot.contacts[static_cast<unsigned>(FeedPart::Container)].weaponFromContact=
+        Product(motion.placement.sourceFromGrip,motion.placement.weaponFromSource);
+    f.Prepare();const auto candidate=*EvaluateFeedMechanism(f.profile,f.x.snapshot,f.goal,f.x.nowNs).candidate;
+    auto changed=f.x.ammunition;++changed.counts.reserve;
+    CHECK(!f.equipment->UpdateMotion(f.x.snapshot,changed,candidate,motion,f.x.nowNs));
+    const auto retained=f.equipment->State();
+    CHECK(f.equipment->UpdateMotion(f.x.snapshot,f.x.ammunition,candidate,motion,f.x.nowNs));
+    const auto rebased=f.equipment->State();
+    CHECK(rebased.ammunition.resources==retained.ammunition.resources&&rebased.ammunition.lastReceipt==retained.ammunition.lastReceipt);
+    CHECK(rebased.session.reload.lastApplied==retained.session.reload.lastApplied&&f.Held(f.original)==17&&f.Total()==97);
+    CHECK(f.Run().session.interaction.status==Gesture::NeedNeutral);CHECK(f.Acquire());
+    auto current=*EvaluateFeedMechanism(f.profile,f.x.snapshot,f.goal,f.x.nowNs).candidate;
+    CHECK(!f.equipment->UpdateMotion(f.x.snapshot,f.x.ammunition,current,motion,f.x.nowNs));
+    const auto next=f.Finish();CHECK(next.dispatch&&next.dispatch->request.id==sent.dispatch->request.id+1);
+    current=*EvaluateFeedMechanism(f.profile,f.x.snapshot,f.goal,f.x.nowNs).candidate;
+    CHECK(!f.equipment->UpdateMotion(f.x.snapshot,f.x.ammunition,current,motion,f.x.nowNs));
+    CHECK(f.Held(f.original)==17&&f.Total()==97);return 0;
+}
+AmmunitionSnapshot NativeContext(const FeedAmmunitionSnapshot& a,AmmoResourceIdentity resource){
+    AmmunitionSnapshot n;n.context={resource,a.owner.equipGeneration,a.owner.space};n.sequence=a.sequence;
+    n.observedNs=a.observedNs;n.deadlineNs=a.deadlineNs;n.counts={a.counts.loaded,a.counts.reserve,a.counts.capacity};
+    n.coherentIdleVerified=true;return n;
+}
+struct Migration {
+    FeedEquipmentContextObservation before{},after{};FeedContextMigration native{};std::int64_t now=0;
+    explicit Migration(Fixture& f){
+        before=*f.equipment->ContextObservation();after=before;now=before.snapshot.observedNs+1000;
+        ++after.snapshot.owner.equipGeneration;++after.snapshot.owner.space;++after.snapshot.sequence;++after.snapshot.inputSequence;
+        after.snapshot.observedNs=now;after.ammunition.owner=after.snapshot.owner;after.ammunition.sequence=after.snapshot.sequence;
+        after.ammunition.observedNs=now;after.ammunition.deadlineNs=now+100;
+        native.before=NativeContext(before.ammunition,{1,2,3,9});native.after=NativeContext(after.ammunition,{1,2,3,9});
+    }
+    bool Apply(Fixture& f){return f.equipment->MigrateContext(native,before.snapshot,before.ammunition,
+        after.snapshot,after.ammunition,now);}
+};
+int LongStowMigrationPreservesCustodyHistoryAndCounters(){
+    Fixture f(Op::WithdrawFeed);f.Start({1,2,3,9});CHECK(f.Acquire());const auto sent=f.Finish();CHECK(sent.dispatch);
+    CHECK(f.Native(*sent.dispatch).receiptAccepted&&f.Held(f.original)==17);
+    f.x.held=false;f.Step(0,false);CHECK(f.equipment->ContextObservation());const auto retained=f.equipment->State();
+    Migration migration(f);CHECK(migration.native.before.deadlineNs<migration.now);CHECK(migration.Apply(f));
+    const auto migrated=f.equipment->State();
+    CHECK(migrated.ammunition.suspended&&migrated.session.reload.suspended);
+    CHECK(migrated.ammunition.resources==retained.ammunition.resources&&migrated.ammunition.lastReceipt==retained.ammunition.lastReceipt);
+    CHECK(migrated.session.reload.lastApplied==retained.session.reload.lastApplied&&f.Total()==97&&f.Held(f.original)==17);
+    CHECK(migrated.ammunition.lastRequestId==sent.dispatch->request.id&&!migration.Apply(f));
+    f.x.snapshot=migration.after.snapshot;f.x.ammunition=migration.after.ammunition;f.x.nowNs=migration.now;
+    f.x.binding.owner=f.x.authority.owner=f.x.snapshot.owner;f.x.held=true;f.Configure();
+    CHECK(f.Step().session.interaction.status==Gesture::NeedNeutral&&!f.result.dispatch);
+    CHECK(f.Acquire());const auto retry=f.Finish();CHECK(retry.dispatch);
+    CHECK(retry.dispatch->request.id==sent.dispatch->request.id+1&&
+        retry.dispatch->request.completion.id==sent.dispatch->request.completion.id+1);
+    CHECK(retry.dispatch->before.owner==migration.after.snapshot.owner&&f.Held(f.original)==17);return 0;
+}
+int ContextMigrationRejectsSubstitutionStaleHistoryAndAmbiguity(){
+    for(unsigned kind=0;kind<12;++kind){Fixture f;f.Start(kind==11?AmmoResourceIdentity{}:AmmoResourceIdentity{1,2,3,9});
+        f.Step(0,false);f.x.held=false;f.Step(0,false);CHECK(f.equipment->ContextObservation());Migration m(f);
+        switch(kind){case 0:++m.native.after.context.resource.weaponGeneration;break;
+        case 1:++m.native.after.context.resource.actorGeneration;break;
+        case 2:++m.after.ammunition.counts.reserve;++m.native.after.counts.reserve;break;
+        case 3:++m.before.snapshot.observedNs;++m.before.ammunition.observedNs;++m.native.before.observedNs;break;
+        case 4:m.native.after.coherentIdleVerified=false;break;case 5:m.now+=101;break;
+        case 6:m.after.snapshot.owner=m.before.snapshot.owner;m.after.ammunition.owner=m.before.ammunition.owner;
+            m.native.after.context=m.native.before.context;break;
+        case 7:++m.after.snapshot.mechanism.generation;++m.after.ammunition.mechanism.generation;break;
+        case 8:++m.native.after.counts.loaded;break;case 9:m.after.snapshot.cover=FeedCoverState::Open;break;
+        case 10:++m.after.ammunition.lifetime;break;default:break;}
+        const auto retained=f.equipment->State();CHECK(!m.Apply(f));
+        CHECK(f.equipment->State().ammunition.snapshot==retained.ammunition.snapshot&&
+            f.equipment->State().session.reload.lastApplied==retained.session.reload.lastApplied);
+    }
+    Fixture pending;pending.Start({1,2,3,9});CHECK(pending.Acquire());CHECK(pending.Finish().dispatch);
+    pending.x.held=false;pending.Step(0,false);Migration unresolved(pending);CHECK(!unresolved.Apply(pending));
+    CHECK(pending.equipment->State().ammunition.pending&&pending.equipment->State().session.reload.pending);return 0;
+}
+int EndpointRecoveryJoinsCountsAndRejectedRequestUsesNewIds(){
+    Fixture f(Op::AttachContainer);CHECK(f.Acquire());const auto sent=f.Finish();CHECK(sent.dispatch);
+    const auto proof=f.equipment->RecoveryMotion();CHECK(proof);
+    f.Prepare(0,false);CHECK(!f.equipment->RecoverMotion(f.x.snapshot,f.x.ammunition,*proof,f.x.nowNs));
+    CHECK(f.Native(*sent.dispatch,false).receiptAccepted);CHECK(!f.equipment->State().session.reload.pending);
+    const auto held=proof->WeaponFromHeld();const auto& motion=proof->Motion();
+    f.x.snapshot.contacts[static_cast<unsigned>(FeedPart::Container)].weaponFromContact=Product(motion.placement.sourceFromGrip,held);
+    f.Prepare(0,false);auto wrong=f.x.ammunition;++wrong.counts.reserve;
+    CHECK(!f.equipment->RecoverMotion(f.x.snapshot,wrong,*proof,f.x.nowNs));
+    CHECK(f.equipment->RecoverMotion(f.x.snapshot,f.x.ammunition,*proof,f.x.nowNs));
+    CHECK(f.Carry(held,false).session.interaction.status==Gesture::Armed);
+    CHECK(f.Carry(held).session.interaction.status==Gesture::Acquired);
+    for(unsigned i=0;i<3;++i)CHECK(!f.Carry(held).dispatch);
+    const auto retry=f.Carry(held,false);CHECK(retry.dispatch&&retry.dispatch->request.id==sent.dispatch->request.id+1);
+    CHECK(retry.dispatch->request.completion.id==sent.dispatch->request.completion.id+1&&f.Total()==97);
+    CHECK(retry.dispatch->request.completion.candidate.supply==f.goal);return 0;
+}
+int PartialHingeRecoverySurvivesVerifiedContextMigration(){
+    Fixture f(Op::OpenCover);auto& motion=f.geometry.operations[static_cast<unsigned>(Op::OpenCover)];
+    motion.kind=FeedMotionKind::Hinge;motion.motionFromContact=Pose(.2f);motion.travel=1;motion.maxStepMeters=.06f;
+    f.x.snapshot.contacts[static_cast<unsigned>(FeedPart::Cover)].weaponFromContact=motion.motionFromContact;f.Start({1,2,3,9});
+    const auto step=[&](float progress,bool grip=true){f.Prepare(0,grip);
+        f.x.interaction.contact.weaponFromHandContact=Product(feed_interaction_detail::Along(motion.motionFromContact,
+            motion.kind,progress*motion.travel),motion.weaponFromMotion);return f.Run();};
+    CHECK(step(0,false).session.interaction.status==Gesture::Armed);CHECK(step(0).session.interaction.status==Gesture::Acquired);
+    step(.2f);step(.4f);const auto oldProof=f.equipment->RecoveryMotion();CHECK(oldProof);
+    f.x.snapshot.contacts[static_cast<unsigned>(FeedPart::Cover)].weaponFromContact=oldProof->WeaponFromHeld();
+    f.x.held=false;step(.4f);Migration migration(f);CHECK(migration.Apply(f));
+    const auto proof=f.equipment->RecoveryMotion();CHECK(proof&&proof->Candidate().owner==migration.after.snapshot.owner);
+    CHECK(proof->WeaponFromHeld().values==oldProof->WeaponFromHeld().values&&
+        feed_interaction_detail::Same(proof->Motion(),oldProof->Motion()));
+    f.x.snapshot=migration.after.snapshot;f.x.ammunition=migration.after.ammunition;f.x.nowNs=migration.now;
+    f.x.binding.owner=f.x.authority.owner=f.x.snapshot.owner;f.x.held=true;f.Prepare(0,false);
+    CHECK(!f.equipment->RecoverMotion(f.x.snapshot,f.x.ammunition,*oldProof,f.x.nowNs));
+    CHECK(f.equipment->RecoverMotion(f.x.snapshot,f.x.ammunition,*proof,f.x.nowNs));
+    CHECK(step(.4f,false).session.interaction.status==Gesture::Armed);
+    CHECK(step(.4f).session.interaction.status==Gesture::Acquired&&Near(static_cast<float>(f.result.session.interaction.progress),.4f));
+    for(float p:{.6f,.8f,.95f,.95f,.95f})CHECK(!step(p).dispatch);
+    CHECK(step(.95f,false).dispatch&&f.result.dispatch->request.id==1&&f.Total()==97);return 0;
+}
 }
 int main(){
     static_assert(!std::is_copy_constructible_v<FeedEquipmentSession>&&!std::is_move_constructible_v<FeedEquipmentSession>);
@@ -306,7 +497,12 @@ int main(){
        TrackingAndStowRetainHeldRoundsUntilExplicitReturn()||LatchedAcknowledgementCannotReconcileWithoutCurrentCountJoin()||
        RejectedReceiptRequiresAnotherGesture()||
        MalformedReceiptCannotAdvanceEitherComponent()||RetirementCannotAbandonPendingWorkOrCustody()||
-       RetirementRefusalNeverRetiresOnlyOneHalf()||WrongLifetimeCannotRebindOrReleaseRetainedEffects())return 1;
-    std::puts("FeedEquipmentSessionTests: 14 deterministic measured equipment/ammunition cases passed (no native/headset claim)");
+       RetirementRefusalNeverRetiresOnlyOneHalf()||WrongLifetimeCannotRebindOrReleaseRetainedEffects()||
+       FiveStageSameContainerRefillPreservesPartialAndEmptyCounts()||
+       SameContainerRejectsExtractionReplacementAndPhysicalOnlyRefill()||RefillReceiptAndExactProgressMustBothCorroborate()||
+       SourceRebaseRequiresCurrentCountsAndPreservesRetainedRounds()||LongStowMigrationPreservesCustodyHistoryAndCounters()||
+       ContextMigrationRejectsSubstitutionStaleHistoryAndAmbiguity()||EndpointRecoveryJoinsCountsAndRejectedRequestUsesNewIds()||
+       PartialHingeRecoverySurvivesVerifiedContextMigration())return 1;
+    std::puts("FeedEquipmentSessionTests: 22 deterministic measured equipment/ammunition cases passed (no native/headset claim)");
     return 0;
 }

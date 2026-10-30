@@ -80,19 +80,27 @@ inline bool SameSnapshot(const FeedMechanismSnapshot& a,const FeedMechanismSnaps
        a.sequence!=b.sequence||a.inputSequence!=b.inputSequence||a.observedNs!=b.observedNs||a.reconciled!=b.reconciled||
        a.cover!=b.cover||a.latch!=b.latch||a.container!=b.container||a.feed!=b.feed||a.cycle!=b.cycle||
        a.attached!=b.attached||a.seated!=b.seated||a.supply.key!=b.supply.key||
-       a.supply.ammunitionKind!=b.supply.ammunitionKind||a.supply.state!=b.supply.state)return false;
+       a.supply.ammunitionKind!=b.supply.ammunitionKind||a.supply.state!=b.supply.state||a.refill!=b.refill)return false;
     for(unsigned i=0;i<a.contacts.size();++i)
         if(a.contacts[i].role!=b.contacts[i].role||a.contacts[i].weaponFromContact.values!=b.contacts[i].weaponFromContact.values)return false;
     return true;
 }
 inline bool EffectObserved(const FeedReloadRequest& r,const FeedMechanismSnapshot& s)noexcept {
     const auto& c=r.completion.candidate;
+    if(c.refill.state!=FeedRefillState::Unknown){
+        if(c.operation==FeedPhysicalOperation::AttachContainer&&c.refill.state==FeedRefillState::Required){
+            if(c.refill.lifetime!=r.lifetime||s.refill.state!=FeedRefillState::Applied||
+               s.refill.lifetime!=r.lifetime||s.refill.requestId!=r.id)return false;
+        }else if(s.refill!=c.refill)return false;
+    }
     switch(c.operation){
     case FeedPhysicalOperation::ReleaseLatch:return s.latch==FeedLatchState::Released;
     case FeedPhysicalOperation::OpenCover:return s.cover==FeedCoverState::Open;
     case FeedPhysicalOperation::WithdrawFeed:return s.feed==FeedSeatState::Unseated&&feed_mechanism_detail::Empty(s.seated);
-    case FeedPhysicalOperation::DetachContainer:return s.container==FeedContainerState::Detached&&feed_mechanism_detail::Empty(s.attached);
-    case FeedPhysicalOperation::AttachContainer:return s.container==FeedContainerState::Attached&&s.attached==c.supply;
+    case FeedPhysicalOperation::DetachContainer:return s.container==FeedContainerState::Detached&&feed_mechanism_detail::Empty(s.attached)&&
+        (!c.coupledContainerDetach||(s.feed==FeedSeatState::Unseated&&feed_mechanism_detail::Empty(s.seated)));
+    case FeedPhysicalOperation::AttachContainer:return s.container==FeedContainerState::Attached&&s.attached==c.supply&&
+        (c.refill.state!=FeedRefillState::Required||(s.feed==FeedSeatState::Unseated&&feed_mechanism_detail::Empty(s.seated)));
     case FeedPhysicalOperation::SeatFeed:return s.feed==FeedSeatState::Seated&&s.seated==c.supply;
     case FeedPhysicalOperation::CloseCover:return s.cover==FeedCoverState::Closed;
     case FeedPhysicalOperation::EngageLatch:return s.latch==FeedLatchState::Engaged;
@@ -108,19 +116,29 @@ inline bool Authoritative(FeedMechanismStatus status,const FeedMechanismSnapshot
 }
 
 // Stateful portable coordinator, not a native binding. Profile and all identity
-// are immutable for this lifetime; the owner supplies a unique nonzero lifetime
+// except verified equip/space migration are immutable; the owner supplies a unique nonzero lifetime
 // token and keeps this object while requests/effects need reconciliation. No
 // copy, reset, timeout cancellation, ammo arithmetic or fire-ready output exists.
 // All nine FeedPhysicalOperation values retain their own request semantics.
 class FeedReload {
 public:
     FeedReload(FeedMechanismProfile profile,FeedOwner owner,FeedKey mechanism,
-        FeedSupplyKey goal,std::uint64_t lifetime)noexcept:
-        profile_(profile),owner_(owner),mechanism_(mechanism),goal_(goal),lifetime_(lifetime){}
+        FeedSupplyKey goal,std::uint64_t lifetime,AmmoResourceIdentity resource={})noexcept:
+        profile_(profile),owner_(owner),mechanism_(mechanism),goal_(goal),lifetime_(lifetime),resource_(resource){}
     FeedReload(const FeedReload&)=delete;
     FeedReload& operator=(const FeedReload&)=delete;
     [[nodiscard]] FeedReloadResult Update(const FeedReloadSample& sample)noexcept;
     [[nodiscard]] FeedReloadResult State()const noexcept;
+    [[nodiscard]] bool HasObservation(const FeedMechanismSnapshot& s)const noexcept {
+        return Identity(s)&&lastSnapshot_&&feed_reload_detail::SameSnapshot(s,*lastSnapshot_);
+    }
+    // Read-only admission for rebasing presentation between gestures. Does not
+    // consume an observation, rearm, or forget retained transaction evidence.
+    [[nodiscard]] bool CanRebaseMotion(const FeedMechanismSnapshot& snapshot,std::int64_t nowNs)const noexcept;
+    [[nodiscard]] bool CanMigrateContext(const FeedContextMigration&,const FeedMechanismSnapshot& before,
+        const FeedMechanismSnapshot& after,std::int64_t nowNs)const noexcept;
+    [[nodiscard]] bool MigrateContext(const FeedContextMigration&,const FeedMechanismSnapshot& before,
+        const FeedMechanismSnapshot& after,std::int64_t nowNs)noexcept;
     // Explicit end of this owner's lifetime. All requests must first receive
     // exact Applied/Rejected evidence and a post-operation snapshot. Then a NEW
     // reconciled old-owner snapshot permits retirement. Accepted effects remain
@@ -137,19 +155,22 @@ private:
     FeedKey mechanism_{},bindingKey_{};
     FeedSupplyKey goal_{};
     std::uint64_t lifetime_=0,nextRequest_=0,lastCompletion_=0,accepted_=0;
+    const AmmoResourceIdentity resource_{};
+    std::uint64_t refillRequest_=0;
     std::uint64_t lastInput_=0,resumeInput_=0,resumeSnapshot_=0;
     std::int64_t lastCallNs_=0,lastInputNs_=0;
     std::optional<FeedMechanismSnapshot> lastSnapshot_{};
     std::optional<FeedReloadRequest> pending_{},lastApplied_{};
     std::optional<FeedReloadAck> acknowledgement_{};
-    bool armed_=false,suspended_=true,completed_=false,retired_=false;
+    bool armed_=false,suspended_=true,completed_=false,retired_=false,refillRequired_=false;
 };
 inline bool FeedReload::Valid()const noexcept {
     return lifetime_&&ValidateFeedMechanismProfile(profile_)&&feed_mechanism_detail::Owner(owner_)&&
         feed_mechanism_detail::Key(mechanism_)&&feed_mechanism_detail::Supply(goal_,profile_.container);
 }
 inline bool FeedReload::Identity(const FeedMechanismSnapshot& s)const noexcept {
-    return s.owner==owner_&&s.mechanism==mechanism_&&s.profileId==profile_.id&&s.profileRevision==profile_.revision;
+    return s.owner==owner_&&s.mechanism==mechanism_&&s.profileId==profile_.id&&s.profileRevision==profile_.revision&&
+        (!profile_.sameContainerReplenishment||s.refill.state==FeedRefillState::NotRequired||s.refill.lifetime==lifetime_);
 }
 inline bool FeedReload::Binding(const FeedReloadBinding& b,FeedPhysicalOperation op)const noexcept {
     const auto n=static_cast<unsigned>(op);
@@ -177,6 +198,38 @@ inline FeedReloadResult FeedReload::State()const noexcept {
 }
 inline FeedReloadResult FeedReload::Result(FeedReloadStatus status,FeedMechanismStatus mechanism)const noexcept {
     auto r=State();r.status=status;r.mechanismStatus=mechanism;return r;
+}
+inline bool FeedReload::CanRebaseMotion(const FeedMechanismSnapshot& s,std::int64_t nowNs)const noexcept {
+    if(!Valid()||!Identity(s)||armed_||pending_||acknowledgement_||completed_||retired_||nowNs<lastCallNs_||
+       !feed_mechanism_detail::Fresh(s.observedNs,nowNs,profile_.maxAgeNs))return false;
+    if(lastSnapshot_&&(s.sequence<lastSnapshot_->sequence||s.inputSequence<lastInput_||s.observedNs<lastSnapshot_->observedNs||
+       (s.sequence==lastSnapshot_->sequence&&!feed_reload_detail::SameSnapshot(s,*lastSnapshot_))))return false;
+    if(profile_.sameContainerReplenishment&&
+       ((refillRequired_&&s.refill.state==FeedRefillState::NotRequired)||
+        (s.refill.state==FeedRefillState::Applied&&s.refill.requestId!=refillRequest_)||
+        (refillRequest_&&(s.refill.state!=FeedRefillState::Applied||s.refill.requestId!=refillRequest_))))return false;
+    return EvaluateFeedMechanism(profile_,s,goal_,nowNs).candidate.has_value();
+}
+inline bool FeedReload::CanMigrateContext(const FeedContextMigration& m,const FeedMechanismSnapshot& before,
+    const FeedMechanismSnapshot& after,std::int64_t now)const noexcept {
+    if(!Valid()||!Identity(before)||armed_||!suspended_||pending_||acknowledgement_||retired_||
+       !lastSnapshot_||now<lastCallNs_||!feed_mechanism_detail::Migration(m,resource_,owner_,after.owner,now,profile_.maxAgeNs)||
+       before.sequence!=m.before.sequence||before.observedNs!=m.before.observedNs||
+       after.sequence!=m.after.sequence||after.observedNs!=m.after.observedNs||
+       !HasObservation(before)||before.inputSequence<lastInput_||
+       after.inputSequence<before.inputSequence)return false;
+    auto normalized=after;normalized.owner=before.owner;normalized.sequence=before.sequence;
+    normalized.inputSequence=before.inputSequence;normalized.observedNs=before.observedNs;
+    if(!feed_reload_detail::SameSnapshot(before,normalized)||
+       !feed_reload_detail::Authoritative(EvaluateFeedMechanism(profile_,before,goal_,before.observedNs).status,before)||
+       !feed_reload_detail::Authoritative(EvaluateFeedMechanism(profile_,after,goal_,now).status,after))return false;
+    return true; // Exact retained history and unchanged physical state; no debt is reset.
+}
+inline bool FeedReload::MigrateContext(const FeedContextMigration& m,const FeedMechanismSnapshot& before,
+    const FeedMechanismSnapshot& after,std::int64_t now)noexcept {
+    if(!CanMigrateContext(m,before,after,now))return false;
+    owner_=after.owner;lastSnapshot_=after;lastInput_=after.inputSequence;lastInputNs_=lastCallNs_=now;
+    Suspend();return true; // Request/receipt watermarks and historical lastApplied stay exact.
 }
 inline FeedReloadResult FeedReload::Update(const FeedReloadSample& x)noexcept {
     using namespace feed_mechanism_detail;
@@ -225,6 +278,16 @@ inline FeedReloadResult FeedReload::Update(const FeedReloadSample& x)noexcept {
     if(!x.focused||!x.tracked||!x.held||inputGap)Suspend();
     const auto next=EvaluateFeedMechanism(profile_,s,goal_,x.nowNs);
     if(!Authoritative(next.status,s)){Suspend();return Result(FeedReloadStatus::MechanismUnavailable,next.status);}
+    if(profile_.sameContainerReplenishment){
+        if(s.refill.state==FeedRefillState::Required)refillRequired_=true;
+        const bool awaitingRefill=pending_&&pending_->completion.candidate.operation==FeedPhysicalOperation::AttachContainer&&
+            pending_->completion.candidate.refill.state==FeedRefillState::Required;
+        if((refillRequired_&&s.refill.state==FeedRefillState::NotRequired)||
+           (s.refill.state==FeedRefillState::Applied&&!awaitingRefill&&s.refill.requestId!=refillRequest_)||
+           (refillRequest_&&(s.refill.state!=FeedRefillState::Applied||s.refill.requestId!=refillRequest_))){
+            Suspend();return Result(FeedReloadStatus::MechanismUnavailable,FeedMechanismStatus::Unreconciled);
+        }
+    }
 
     if(pending_){
         armed_=false;
@@ -235,6 +298,8 @@ inline FeedReloadResult FeedReload::Update(const FeedReloadSample& x)noexcept {
            (a.status==FeedReloadAcknowledgement::Applied&&!EffectObserved(*pending_,s)))
             return Result(FeedReloadStatus::AwaitingSnapshot,next.status);
         const bool applied=a.status==FeedReloadAcknowledgement::Applied;
+        if(applied&&profile_.sameContainerReplenishment&&
+           pending_->completion.candidate.operation==FeedPhysicalOperation::AttachContainer)refillRequest_=pending_->id;
         pending_.reset();acknowledgement_.reset();
         // NoPhysicalStep alone never completes a transaction; this is the
         // fresh post-operation observation joined to its exact Applied receipt.

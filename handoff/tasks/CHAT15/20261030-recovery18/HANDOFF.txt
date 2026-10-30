@@ -1,0 +1,25 @@
+Task: recovery18 core integration, source-only; root owns validation execution.
+Changed six Feed headers; tests FeedInteraction, FeedEquipmentSession, FeedAmmunition.
+FeedEquipmentSession ctor accepts final optional AmmoResourceIdentity resource.
+Nonzero pinned stable actor/actorGeneration/weapon/weaponGeneration enables migration.
+RecoveryMotion() returns optional opaque FeedMotionRecovery minted by successful movement.
+Proof exposes Candidate(), Motion(), WeaponFromHeld(), Kind(), Lifetime(), WeaponWorld().
+RecoverMotion(snapshot,ammo,proof,now,optional FeedRecoveryFrame={}) retains full motion.
+Proof is scoped to issuing recognizer/lifetime/candidate/resource/profile and latest token.
+Original destination/policy and ordinary source separation/step bounds remain unchanged.
+Hinge recovery retains absolute original travel/return intent and actual held contact.
+All recovered completion requires fresh neutral/regrasp/held dwell/release, never old dwell.
+Terminal proof survives dispatch; pending work blocks recovery until exact resolution.
+Genuine Rejected retry at endpoint uses new completion/request IDs after fresh interaction.
+Optional interaction.weaponWorld records actual raw weapon frame in movement proof.
+FeedRecoveryFrame joins owner/mechanism/snapshot/input and actual raw observedNs.
+Free source projects retained held*oldWeaponWorld*inverse(currentWeaponWorld); hinge stays attached.
+ContextObservation() exposes exact internally retained joined snapshot/ammunition history.
+MigrateContext(migration,before,beforeAmmo,after,afterAmmo,now); migration holds native before/after.
+Historical before must match retained observation exactly; no restamp or old-age limit.
+After must freshly join unchanged counts, stable native identity, changed equip/space.
+Pending command/ack, ambiguous receipt, substituted generation/counts/history reject.
+Migration preserves pose proof/custody/goal/lifetime/IDs/exact historical receipts; requires neutral.
+FeedAmmunitionReceipt.noTransferEntry must be true for Rejected and false for Applied.
+Added partial hinge, near-endpoint, world projection, long-stow migration and retry cases.
+Source frozen pending root checks; no native/headset acceptance or checks executed by this agent.

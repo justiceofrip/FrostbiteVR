@@ -17,33 +17,54 @@ struct FeedReloadSessionResult {
 };
 
 // One physical recognizer and retained transaction coordinator per immutable
-// owner/mechanism/goal/lifetime. The adapter supplies measured profiles, current
+// stable resource/mechanism/goal/lifetime. Context changes require migration.
+// The adapter supplies measured profiles, current
 // raw contact, explicit operation capabilities and authoritative observations.
 // Only result.reload.dispatch is a native request, emitted once. Neither a
 // gesture receipt nor State().pending is permission to dispatch or to fire.
 class FeedReloadSession {
 public:
     FeedReloadSession(FeedMechanismProfile mechanismProfile,FeedInteractionProfile interactionProfile,
-        FeedOwner owner,FeedKey mechanism,FeedSupplyKey goal,std::uint64_t lifetime)noexcept:
+        FeedOwner owner,FeedKey mechanism,FeedSupplyKey goal,std::uint64_t lifetime,AmmoResourceIdentity resource={})noexcept:
         mechanismProfile_(mechanismProfile),interactionProfile_(interactionProfile),owner_(owner),
         mechanism_(mechanism),goal_(goal),lifetime_(lifetime),
-        reload_(mechanismProfile,owner,mechanism,goal,lifetime){}
+        interaction_(lifetime),reload_(mechanismProfile,owner,mechanism,goal,lifetime,resource){}
     FeedReloadSession(const FeedReloadSession&)=delete;
     FeedReloadSession& operator=(const FeedReloadSession&)=delete;
     [[nodiscard]] FeedReloadSessionResult Update(const FeedReloadSessionSample& sample)noexcept;
     [[nodiscard]] FeedReloadResult State()const noexcept {return reload_.State();}
+    [[nodiscard]] bool HasObservation(const FeedMechanismSnapshot& s)const noexcept{return reload_.HasObservation(s);}
+    // Rebase only the current free-placement source between gestures. The
+    // measured destination, grip, policy and all retained counters stay fixed.
+    [[nodiscard]] bool UpdateMotion(const FeedMechanismSnapshot& snapshot,const FeedPhysicalCandidate& candidate,
+        const FeedMotionProfile& motion,std::int64_t nowNs)noexcept;
+    [[nodiscard]] std::optional<FeedMotionRecovery> RecoveryMotion()const noexcept{return interaction_.RecoveryMotion();}
+    [[nodiscard]] bool RecoverMotion(const FeedMechanismSnapshot& snapshot,const FeedMotionRecovery& proof,std::int64_t nowNs,
+        const std::optional<FeedRecoveryFrame>& frame={})noexcept {
+        return !retirementRequested_&&!gestureBinding_&&proof.Lifetime()==lifetime_&&reload_.CanRebaseMotion(snapshot,nowNs)&&
+            interaction_.RecoverMotion(mechanismProfile_,interactionProfile_,snapshot,goal_,proof,nowNs,frame);
+    }
+    [[nodiscard]] bool CanMigrateContext(const FeedContextMigration& migration,const FeedMechanismSnapshot& before,
+        const FeedMechanismSnapshot& after,std::int64_t nowNs)const noexcept {
+        return !retirementRequested_&&!gestureBinding_&&reload_.CanMigrateContext(migration,before,after,nowNs);
+    }
+    [[nodiscard]] bool MigrateContext(const FeedContextMigration& migration,const FeedMechanismSnapshot& before,
+        const FeedMechanismSnapshot& after,std::int64_t nowNs)noexcept {
+        if(!CanMigrateContext(migration,before,after,nowNs)||!reload_.MigrateContext(migration,before,after,nowNs))return false;
+        interaction_.MigrateContext(owner_,after.owner);owner_=after.owner;return true;
+    }
     // Retirement cannot abandon native work. Reconcile the exact old request
     // and then supply a new old-owner snapshot, as required by FeedReload.
     [[nodiscard]] FeedReloadResult Retire(const FeedMechanismSnapshot& snapshot,std::int64_t nowNs)noexcept {
-        Interrupt();return reload_.Retire(snapshot,nowNs);
+        retirementRequested_=true;Interrupt();return reload_.Retire(snapshot,nowNs);
     }
 private:
     bool Binding(const FeedReloadBinding& binding,FeedPhysicalOperation operation)const noexcept;
     static bool SameBinding(const FeedReloadBinding& a,const FeedReloadBinding& b)noexcept;
     void Interrupt()noexcept {interaction_.Interrupt();gestureBinding_.reset();}
     const FeedMechanismProfile mechanismProfile_;
-    const FeedInteractionProfile interactionProfile_;
-    const FeedOwner owner_;
+    FeedInteractionProfile interactionProfile_;
+    FeedOwner owner_;
     const FeedKey mechanism_;
     const FeedSupplyKey goal_;
     const std::uint64_t lifetime_;
@@ -51,7 +72,27 @@ private:
     FeedReload reload_;
     std::optional<FeedReloadBinding> gestureBinding_{};
     FeedKey dispatchedBinding_{};
+    bool retirementRequested_=false;
 };
+inline bool FeedReloadSession::UpdateMotion(const FeedMechanismSnapshot& s,const FeedPhysicalCandidate& candidate,
+    const FeedMotionProfile& motion,std::int64_t nowNs)noexcept {
+    if(retirementRequested_||gestureBinding_||!reload_.CanRebaseMotion(s,nowNs))return false;
+    const auto current=EvaluateFeedMechanism(mechanismProfile_,s,goal_,nowNs);
+    const auto index=static_cast<unsigned>(candidate.operation);
+    if(!current.candidate||*current.candidate!=candidate||index>=interactionProfile_.operations.size()||
+       interactionProfile_.profileId!=mechanismProfile_.id||interactionProfile_.profileRevision!=mechanismProfile_.revision||
+       motion.operation!=candidate.operation||motion.kind!=FeedMotionKind::FreePlacement||
+       !feed_interaction_detail::Motion(motion))return false;
+    const auto& prior=interactionProfile_.operations[index];
+    if(prior.operation!=candidate.operation||prior.kind!=FeedMotionKind::FreePlacement||!feed_interaction_detail::Motion(prior))return false;
+    auto sourceOnly=prior;sourceOnly.placement.weaponFromSource=motion.placement.weaponFromSource;
+    if(!feed_interaction_detail::Same(sourceOnly,motion))return false;
+    const auto contact=feed_interaction_detail::Multiply(motion.placement.sourceFromGrip,motion.placement.weaponFromSource);
+    const auto& observed=s.contacts[static_cast<unsigned>(candidate.part)].weaponFromContact;
+    if(feed_interaction_detail::Distance(contact,observed)>motion.pathToleranceMeters||
+       feed_interaction_detail::Angle(contact,observed)>motion.orientationToleranceRadians)return false;
+    interactionProfile_.operations[index]=motion;Interrupt();return true;
+}
 inline bool FeedReloadSession::SameBinding(const FeedReloadBinding& a,const FeedReloadBinding& b)noexcept {
     return a.key==b.key&&a.owner==b.owner&&a.mechanism==b.mechanism&&a.profileId==b.profileId&&
         a.profileRevision==b.profileRevision&&a.verified==b.verified&&a.operations==b.operations;
@@ -111,7 +152,12 @@ inline FeedReloadSessionResult FeedReloadSession::Update(const FeedReloadSession
         default:break;
         }
     }
-    if(!keep)Interrupt();
+    if(!keep){
+        // A held packet while waiting for neutral cannot acquire, but it need
+        // not erase the explicitly admitted recovery origin before neutral.
+        if(out.recognitionEnabled&&out.interaction.status==FeedInteractionStatus::NeedNeutral)gestureBinding_.reset();
+        else Interrupt();
+    }
     return out;
 }
 }

@@ -1,3 +1,6 @@
+// Match the native consumer's include order: its matrix helper must not make
+// the feed recognizer's explicit matrix operations ambiguous.
+#include "fvr/interaction/TrackingMath.h"
 #include "fvr/interaction/FeedInteraction.h"
 #include "Test.h"
 #include <limits>
@@ -501,6 +504,86 @@ int PlacementOperationChangeCannotReuseDestinationDwell(){
     CHECK(f.At(f.Source()).status==Status::NeedNeutral);CHECK(f.Pickup());CHECK(f.Place().completion);
     CHECK(f.result.completion->candidate.operation==Op::SeatFeed);return 0;
 }
+int PartialHingeRecoveryRetainsTravelAndRequiresFreshRelease(){
+    Fixture f(Op::OpenCover);CHECK(f.Acquire()&&!f.controller.RecoveryMotion());
+    CHECK(f.Step(.2f).status==Status::Moving);const auto stale=*f.controller.RecoveryMotion();
+    CHECK(f.Step(.4f).status==Status::Moving);const auto proof=*f.controller.RecoveryMotion();
+    f.controller.Interrupt();f.s.contacts[f.Part()].weaponFromContact=proof.WeaponFromHeld();f.Prepare(.4f,false,1000);
+    CHECK(!f.controller.RecoverMotion(f.p,f.geometry,f.s,f.desired,stale,f.now));
+    CHECK(f.controller.RecoverMotion(f.p,f.geometry,f.s,f.desired,proof,f.now));
+    CHECK(!f.controller.RecoverMotion(f.p,f.geometry,f.s,f.desired,proof,f.now));
+    CHECK(f.Step(.4f).status==Status::NeedNeutral);
+    CHECK(f.Step(.4f,false).status==Status::Armed);CHECK(f.Step(.4f).status==Status::Acquired);
+    CHECK(Near(static_cast<float>(f.result.progress),.4f));
+    for(float p:{.6f,.8f,.95f,.95f,.95f})CHECK(!f.Step(p).completion);
+    CHECK(f.Step(.95f,false).completion&&f.result.completion->id==1);
+    CHECK(f.s.cover==FeedCoverState::Closed);return 0;
+}
+int EndpointPlacementRecoveryCannotReuseOldDwell(){
+    PlacementFixture f;CHECK(f.Pickup());CHECK(f.Dwell().status==Status::Endpoint);
+    auto proof=*f.controller.RecoveryMotion();f.controller.Interrupt();
+    f.s.contacts[f.Part()].weaponFromContact=f.Hand(proof.WeaponFromHeld());f.Prepare(0,false,1000);
+    auto shortSource=f.Motion();shortSource.placement.weaponFromSource=proof.WeaponFromHeld();
+    CHECK(!feed_interaction_detail::Motion(shortSource)); // Ordinary acquisition rules remain strict.
+    CHECK(f.controller.RecoverMotion(f.p,f.geometry,f.s,f.desired,proof,f.now));
+    CHECK(f.At(f.Destination(),false).status==Status::Armed);
+    CHECK(f.At(f.Destination()).status==Status::Acquired);
+    CHECK(f.At(f.Destination(),false).status==Status::Interrupted&&!f.result.completion);
+    proof=*f.controller.RecoveryMotion();f.Prepare(0,false);
+    CHECK(f.controller.RecoverMotion(f.p,f.geometry,f.s,f.desired,proof,f.now));
+    CHECK(f.At(f.Destination(),false).status==Status::Armed);
+    CHECK(f.At(f.Destination()).status==Status::Acquired);
+    for(unsigned i=0;i<3;++i)CHECK(!f.At(f.Destination()).completion);
+    CHECK(f.At(f.Destination(),false).completion&&f.result.completion->id==1);return 0;
+}
+int RecoveryProofCannotAuthorizeAnotherOwnerProfileOrRecognizer(){
+    for(unsigned kind=0;kind<7;++kind){Fixture f(Op::OpenCover);CHECK(f.Acquire());f.Step(.2f);
+        const auto proof=*f.controller.RecoveryMotion();f.controller.Interrupt();
+        f.s.contacts[f.Part()].weaponFromContact=proof.WeaponFromHeld();f.Prepare(.2f,false);
+        switch(kind){case 0:++f.s.owner.equipGeneration;break;case 1:++f.s.mechanism.generation;break;
+        case 2:f.Motion().travel+=.1f;break;case 3:f.Motion().maxStepMeters+=.001f;break;
+        case 4:f.s.contacts[f.Part()].weaponFromContact=Identity();break;
+        case 5:++f.s.supply.key.resource.generation;break;default:++f.p.revision;break;}
+        CHECK(!f.controller.RecoverMotion(f.p,f.geometry,f.s,f.desired,proof,f.now));
+        FeedInteraction another;CHECK(!another.RecoverMotion(f.p,f.geometry,f.s,f.desired,proof,f.now));
+    }return 0;
+}
+int WorldCarryRecoveryProjectsOnlyRetainedMovementFrame(){
+    PlacementFixture f;f.sample.weaponWorld=Identity();CHECK(f.Pickup());f.Approach();
+    const auto proof=*f.controller.RecoveryMotion();CHECK(proof.WeaponWorld());f.controller.Interrupt();
+    auto current=Turn(.25f);current.values[3][0]=.13f;
+    const auto held=Product(Product(proof.WeaponFromHeld(),*proof.WeaponWorld()),feed_interaction_detail::Inverse(current));
+    f.s.contacts[f.Part()].weaponFromContact=f.Hand(held);f.Prepare(0,false,1000);
+    FeedRecoveryFrame frame{f.s.owner,f.s.mechanism,f.s.sequence,f.s.inputSequence,f.s.observedNs,current};
+    CHECK(!f.controller.RecoverMotion(f.p,f.geometry,f.s,f.desired,proof,f.now));
+    auto wrong=frame;++wrong.inputSequence;
+    CHECK(!f.controller.RecoverMotion(f.p,f.geometry,f.s,f.desired,proof,f.now,wrong));
+    wrong=frame;wrong.observedNs=f.now+1;
+    CHECK(!f.controller.RecoverMotion(f.p,f.geometry,f.s,f.desired,proof,f.now,wrong));
+    wrong=frame;wrong.weaponWorld.values[0][0]=2;
+    CHECK(!f.controller.RecoverMotion(f.p,f.geometry,f.s,f.desired,proof,f.now,wrong));
+    CHECK(f.controller.RecoverMotion(f.p,f.geometry,f.s,f.desired,proof,f.now,frame));
+    f.sample.weaponWorld=current;CHECK(f.At(held,false).status==Status::Armed);
+    CHECK(f.At(held).status==Status::Acquired&&SamePose(*f.result.target,held));
+    CHECK(SamePose(Product(*f.result.target,current),Product(proof.WeaponFromHeld(),*proof.WeaponWorld())));
+    CHECK(feed_interaction_detail::Same(f.Motion(),proof.Motion())&&!f.result.completion);return 0;
+}
+int ReplenishmentPolicyAndEvidenceCannotChangeDuringGesture(){
+    for(unsigned kind=0;kind<4;++kind){Fixture f(Op::OpenCover);
+        f.p.sameContainerReplenishment=f.p.coupledContainerDetach=true;f.p.detachNeedsUnseated=false;
+        f.desired=f.old;f.s.supply.key=f.desired;f.s.refill={FeedRefillState::Required,500,0};
+        CHECK(f.Acquire());
+        switch(kind){case 0:f.p.sameContainerReplenishment=false;break;
+        case 1:f.p.coupledContainerDetach=false;break;
+        case 2:++f.s.refill.lifetime;break;
+        default:f.s.refill={FeedRefillState::Applied,500,3};break;}
+        CHECK(f.Step(.2f).status==Status::CandidateChanged&&!f.result.completion&&!f.result.target);
+    }
+    Fixture duplicate(Op::OpenCover);duplicate.p.sameContainerReplenishment=duplicate.p.coupledContainerDetach=true;
+    duplicate.p.detachNeedsUnseated=false;duplicate.desired=duplicate.old;duplicate.s.supply.key=duplicate.desired;
+    duplicate.s.refill={FeedRefillState::Required,500,0};CHECK(duplicate.Acquire());
+    ++duplicate.s.refill.lifetime;CHECK(duplicate.Run().status==Status::CandidateChanged);return 0;
+}
 }
 int main(){
     if(LinearReceiptAndNoStateMutation()||EveryOperationKeepsItsTypeAndResource()||RotatedTranslatedMetreFrame()||
@@ -518,6 +601,9 @@ int main(){
        PlacementLeavingDestinationRequiresANewHeldDwell()||PlacementLostTrackingAndInputGapsConsumeGrasp()||
        PlacementIdentityOrBindingChangeCannotFinishCarriedResource()||PlacementReceiptsNeverReplayOrReuseResourceIdentity()||
        PlacementMissingOrInvalidMeasuredGeometryFailsClosed()||PlacementTeleportAndRotationJumpRejected()||
-       PlacementDuplicateAndEqualTimeCannotEstablishDwell()||PlacementOperationChangeCannotReuseDestinationDwell())return 1;
-    std::puts("FeedInteraction: 39 deterministic cases passed (synthetic measured geometry; no native acceptance).");return 0;
+       PlacementDuplicateAndEqualTimeCannotEstablishDwell()||PlacementOperationChangeCannotReuseDestinationDwell()||
+       ReplenishmentPolicyAndEvidenceCannotChangeDuringGesture()||PartialHingeRecoveryRetainsTravelAndRequiresFreshRelease()||
+       EndpointPlacementRecoveryCannotReuseOldDwell()||RecoveryProofCannotAuthorizeAnotherOwnerProfileOrRecognizer()||
+       WorldCarryRecoveryProjectsOnlyRetainedMovementFrame())return 1;
+    std::puts("FeedInteraction: 44 deterministic cases passed (synthetic measured geometry; no native acceptance).");return 0;
 }

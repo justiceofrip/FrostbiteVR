@@ -1,0 +1,24 @@
+DoneY: bounded manager-edge static job complete. SourcefixN: selected cinematic/view/HUD authority remains unproved.
+Worktree campaign-coordinator-20261028-r1; supplied base6ac2281909436510172bbbf562cf46318dca98da plus batch18; no Git queried.
+Exact EXE SHA2563911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258 verified file-only.
+Files: cinematic_manager.py, proof01.json, this handoff; scratch reports/coordinator-20261030-implementation18/cinematic-manager.
+Proof SHA2564ff54dcefc7901926869f376322a023b438a8f1ab1f3477afdd421579936a432.
+Eight NEW function units: seven complete plus one deliberate caller-tail unit;1647 decoded bytes; zero adjacent units;64KB ceiling met.
+Complete units:0x3b1800,0x3b6300,0x396d90,0x188b10,0x394280,0x1315e0,0x3abc90. Partial caller0x39cb30..0x39cb71 has unknown entry.
+0x3b1800 retains companion+0x80 as first field of a0x28-byte manager+4 collection record.
+Interface+4, hence companion+0x84, is duplicate-registration membership and becomes1 after append.
+Optional interface virtual+0x1c/+0x2c path compares translation against a separate global singleton transform; no view selection follows.
+0x396d90 reads singleton+0xac through twelve-float copy0x1315e0 or falls back to singleton+0x60; source identity is unproved.
+0x3abc90 initializes that separate singleton, including null source+0xac; it provides no selected-player join.
+0x188b10 is KERNEL32!TlsGetValue using index RVA0x11671a8; manager is TLS-context+0x14.
+0x3b6300 clears companion+0x84, then immediately removes or queues the interface in manager+0x14 depending on manager+0x50.
+0x394280 matches record, releases subhandles, invokes interface virtual+4, copies last record over it, and subtracts0x28 from end.
+New caller tail0x39cb30 drains queued interfaces only while their membership remains cleared, then empties the pending list.
+Inherited first/last-use count controls registration lifetime; no active-view, blend-owner, skip or HUD lifetime is proved.
+NEXT exact indirect edge0x3b1898: receiver companion+0x80, slot+0x2c, stack output matrix; assigned interface table/target unresolved.
+Related removal edge0x394332 invokes the same interface virtual+4. Resolve table ownership before either target is admitted.
+Missing join: manager collection update consumer -> companion relative/animated output -> actual selected local-player view -> HUD condition.
+Do not promote camera state4, companion+84/+fd/count+dc, comparison matrix or manager membership into cinematic authority.
+No supported source correction; production unchanged. No game/process/input/XR/build/test/profile/install/package/subagent work.
+File hash, inherited proof, complete bounded spans, saved decodes, instruction/call pins and TLS import checked file-only.
+Frozen and retired at eight units; no further decoding or production writes authorized by this receipt.

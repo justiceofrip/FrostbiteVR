@@ -1,0 +1,366 @@
+{
+  "base": "6ac2281909436510172bbbf562cf46318dca98da",
+  "source": [
+    {
+      "path": "CMakeLists.txt",
+      "sha256": "f3949a557401163232cff0dbee6bd3674c47d065320d2a0a4dbe9d065e13ef3b",
+      "bytes": 95329
+    },
+    {
+      "path": "handoff/integrations/coordinator-20261029-polish11/Run-IsolatedChecks.ps1",
+      "sha256": "8a2ae4720e79eda1625bfa3a2c91e6eb21acff149d2784513ae0650140d20276",
+      "bytes": 7998
+    },
+    {
+      "path": "include/fvr/interaction/FeedAmmunition.h",
+      "sha256": "75e85b57ec9f03e8226de55377467912587171627e89a3aaf4a9d99aec1c1bcb",
+      "bytes": 17279
+    },
+    {
+      "path": "include/fvr/interaction/FeedEquipmentSession.h",
+      "sha256": "9fb521366ca996e7233cf53149039672df84a7621c206f06407c56bd4045c558",
+      "bytes": 17534
+    },
+    {
+      "path": "include/fvr/interaction/FeedInteraction.h",
+      "sha256": "b62aab3368785c15de33c42d0f18c33f98a9885632fed38abe4af9be966a5ba3",
+      "bytes": 32047
+    },
+    {
+      "path": "include/fvr/interaction/FeedMechanism.h",
+      "sha256": "8e458b2160f93ebdc81a39c17c07f0c2d5c72309e8f6b8a0282aae240275a864",
+      "bytes": 18813
+    },
+    {
+      "path": "include/fvr/interaction/FeedReload.h",
+      "sha256": "8f1af5d9e12cee34693a92a9f1eae5fdbb2ca2ecb0c31a07e175661a606a1bac",
+      "bytes": 22815
+    },
+    {
+      "path": "include/fvr/interaction/FeedReloadSession.h",
+      "sha256": "d52140aa47aa64bdf7c7199546ca3f977d84b798ff31d08cd24fa84521e7d965",
+      "bytes": 10501
+    },
+    {
+      "path": "src/games/bc2/Bc2FeedEquipmentAdapter.h",
+      "sha256": "311ec3d77889f9618b7ea7732148c9b1bf151e96b769327c4c89cf9827c7bde6",
+      "bytes": 29804
+    },
+    {
+      "path": "src/games/bc2/Bc2FeedEquipmentProfile.h",
+      "sha256": "a5a9d9d12d7cbb5203ae8b0ece5808924269a55ff30b9d04d7c43f1b69977748",
+      "bytes": 23949
+    },
+    {
+      "path": "src/games/bc2/Bc2FeedPresentation.h",
+      "sha256": "ab4b15d88f4e4316108c90ddea0315ef745cc024b9271352994f1cffa4d1becd",
+      "bytes": 12175
+    },
+    {
+      "path": "src/games/bc2/Bc2Gameplay.cpp",
+      "sha256": "7e6ad63b14fbea0260e01c9f770faff4ab932031cf74890f15ca117785cc1fa1",
+      "bytes": 363564
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalFeed.cpp",
+      "sha256": "a5587591866254ce92bfe98516ac6aeee159c3634de3516355ea84d7f87409c2",
+      "bytes": 36422
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalFeed.h",
+      "sha256": "0e37df8347bac99e03ce8749b60901e856c6cf797517fe0f61e6af333e579a1c",
+      "bytes": 4798
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadFlowRuntime.cpp",
+      "sha256": "801173661d7287c07c97b9643ff18afdb2d8d01c1b99149a5d68fe62ffbdb96a",
+      "bytes": 303251
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadFlowRuntime.h",
+      "sha256": "671f19dc01f8e97cf5f9b17e978d7cee14f5584416e1e579cab016cc06d0de3b",
+      "bytes": 24766
+    },
+    {
+      "path": "src/games/bc2/Bc2RigPublication.cpp",
+      "sha256": "398b7d92722eff13635c1e340914fd7b0095342ffd2ba2fda25df67924b8a4f9",
+      "bytes": 211355
+    },
+    {
+      "path": "src/games/bc2/Bc2RigPublication.h",
+      "sha256": "64519cc6be2f6f0dfc6a26a824e2bc163f8850613ab367890234ceede3de64f3",
+      "bytes": 11400
+    },
+    {
+      "path": "tests/Bc2FeedEquipmentAdapterTests.cpp",
+      "sha256": "a1b68be2946632f04406b8146d3520378573a0839fb643fe992bd3497d2f5398",
+      "bytes": 33281
+    },
+    {
+      "path": "tests/Bc2FeedEquipmentProfileTests.cpp",
+      "sha256": "64ab306ce8345b12d500b16835ce5f01f71d957586226b8ed331755158d11fc2",
+      "bytes": 16891
+    },
+    {
+      "path": "tests/Bc2FeedPresentationTests.cpp",
+      "sha256": "40c938fd72f9ace70fa2cf95930480b42ad84f002d8724f5c85432e676ef3f37",
+      "bytes": 12390
+    },
+    {
+      "path": "tests/Bc2PhysicalFeedTests.cpp",
+      "sha256": "a5b219adaa75f980a0c55a2e51c9a11b4442b6b97022db691f7b91ef7d00efec",
+      "bytes": 22657
+    },
+    {
+      "path": "tests/FeedAmmunitionTests.cpp",
+      "sha256": "9286433c1d3a2145a1cc4c5ce8cf8eab2a9ebb42441599348092486aad5a4df8",
+      "bytes": 18116
+    },
+    {
+      "path": "tests/FeedEquipmentSessionTests.cpp",
+      "sha256": "7fd7afbb7d540c52266d5d792a6034465498a811a3dcc949c0c7309bb4ac3d03",
+      "bytes": 41383
+    },
+    {
+      "path": "tests/FeedInteractionTests.cpp",
+      "sha256": "918112c470b99316a4a432898a610fba6ec6b77006a7bdb4a886083307703727",
+      "bytes": 43273
+    },
+    {
+      "path": "tests/FeedMechanismTests.cpp",
+      "sha256": "b0b2030c5b93696c666ee2150f9f1d37c65e1663cfdd4d476b75c1821f862046",
+      "bytes": 16785
+    },
+    {
+      "path": "tests/FeedReloadSessionTests.cpp",
+      "sha256": "21663c0245b8f2ac4ba2ef38c7bd470b8e6a61bd127d5801a0de06b8ba56ca05",
+      "bytes": 28257
+    },
+    {
+      "path": "tests/FeedReloadTests.cpp",
+      "sha256": "2e5430160cec0611d9f4f9622f6b7755d4cfbe08534c10f5243e9ee5186a82ac",
+      "bytes": 25839
+    }
+  ],
+  "checks": [
+    {
+      "suite": "FeedMechanism",
+      "architecture": "x86",
+      "passed": true,
+      "report": "reports\\coordinator-20261030-implementation18\\feedmechanism-x86-check01",
+      "command_sha256": "717381344f290ffceb10fcbb465be9abc6f3865eb9f25349a13ca644ad394ccd",
+      "result_sha256": "075e6a5815bf563ee0840afd303292f09fd726c1d95d6709a920113985e6e746",
+      "equivalent_text_only_changes": []
+    },
+    {
+      "suite": "FeedMechanism",
+      "architecture": "x64",
+      "passed": true,
+      "report": "reports\\coordinator-20261030-implementation18\\feedmechanism-x64-check01",
+      "command_sha256": "f479e903930f3388ced8303815729466364e9723443925235c80e78c0de4363e",
+      "result_sha256": "99c636d18b1d2fefc2547b4f114af0f228d48aa2d9a4cc9aed8e8a102300a257",
+      "equivalent_text_only_changes": []
+    },
+    {
+      "suite": "FeedReload",
+      "architecture": "x86",
+      "passed": true,
+      "report": "reports\\coordinator-20261030-implementation18\\feedreload-x86-check01",
+      "command_sha256": "e8282e6956dcb1f0104316b9b462388b3c5852560de7cb30d089b2137250b1e0",
+      "result_sha256": "c5c6e4f3536bbcedcacd7196777c72d0d57235681ae637cfc0d3c743eb864ff1",
+      "equivalent_text_only_changes": []
+    },
+    {
+      "suite": "FeedReload",
+      "architecture": "x64",
+      "passed": true,
+      "report": "reports\\coordinator-20261030-implementation18\\feedreload-x64-check01",
+      "command_sha256": "ce42b3056a55564382c6664789bafc6a14f46841881f7eebb63e075d4b9534b1",
+      "result_sha256": "cb326af8ddac9fe817425e287f6c913de295369ae956f0ddaaf0b3cb5bb1daa2",
+      "equivalent_text_only_changes": []
+    },
+    {
+      "suite": "FeedInteraction",
+      "architecture": "x86",
+      "passed": true,
+      "report": "reports\\coordinator-20261030-implementation18\\feedinteraction-x86-check02",
+      "command_sha256": "110883a23af814cb66bc2f444efeb956312d78093df1a33995d66489e5495228",
+      "result_sha256": "d0294a86c6d3aa0284c12b06f1dfcef61267a997ee790f24638cbc5060c89c7f",
+      "equivalent_text_only_changes": []
+    },
+    {
+      "suite": "FeedInteraction",
+      "architecture": "x64",
+      "passed": true,
+      "report": "reports\\coordinator-20261030-implementation18\\feedinteraction-x64-check02",
+      "command_sha256": "a0c565571b7f15e380db25ac0fa859a5e1fb3d0393ac2434cff8985f91ff2f57",
+      "result_sha256": "202138d6894f2a6278f979472757d8c6379a06df5fa564ee60cc5e0e9d5f7a31",
+      "equivalent_text_only_changes": []
+    },
+    {
+      "suite": "FeedReloadSession",
+      "architecture": "x86",
+      "passed": true,
+      "report": "reports\\coordinator-20261030-implementation18\\feedreloadsession-x86-check02",
+      "command_sha256": "280b646eefa88614f16b63fd836fa6e2efa4160c1ef803b1b60116cd30040cbc",
+      "result_sha256": "5d6f784fce0cd374bbd308720c71773da72330ade11d43d8c9dd944303378c3d",
+      "equivalent_text_only_changes": []
+    },
+    {
+      "suite": "FeedReloadSession",
+      "architecture": "x64",
+      "passed": true,
+      "report": "reports\\coordinator-20261030-implementation18\\feedreloadsession-x64-check02",
+      "command_sha256": "6922092927590ad979f98c64188b74d53480e992f26459ec09f373cd7ab4ef74",
+      "result_sha256": "5034abdb77874fd3280f0bb35e1d33182e62f155dc14afa9116e085138b26306",
+      "equivalent_text_only_changes": []
+    },
+    {
+      "suite": "FeedAmmunition",
+      "architecture": "x86",
+      "passed": true,
+      "report": "reports\\coordinator-20261030-implementation18\\feedammunition-x86-check01",
+      "command_sha256": "23654d5ba438911d5ce91844c4c98746f4b2352bdd3472d15cc9dc00f6686d03",
+      "result_sha256": "1ac60aafc7327b6bd76d71ab4a381bc7df3c139d2c3098655841cab23e34b7ea",
+      "equivalent_text_only_changes": []
+    },
+    {
+      "suite": "FeedAmmunition",
+      "architecture": "x64",
+      "passed": true,
+      "report": "reports\\coordinator-20261030-implementation18\\feedammunition-x64-check01",
+      "command_sha256": "ba5b4a3ae4725bf856aae93de277af63616a4be690a4dea22098fa16a24f0d92",
+      "result_sha256": "da7c3bcdb8ea4cc3af0b263bd44488df0a90804ed9edc4071ccaf5a7fb3d1b1c",
+      "equivalent_text_only_changes": []
+    },
+    {
+      "suite": "FeedEquipmentSession",
+      "architecture": "x86",
+      "passed": true,
+      "report": "reports\\coordinator-20261030-implementation18\\feedequipmentsession-x86-check02",
+      "command_sha256": "b842a311af5a216df71fba8cbeb99eeff4e1195772f50609883b172c691f382f",
+      "result_sha256": "77fc747f84fd4259e2710ede33cf17c79e140354766dd6099729ef0a66c066f8",
+      "equivalent_text_only_changes": []
+    },
+    {
+      "suite": "FeedEquipmentSession",
+      "architecture": "x64",
+      "passed": true,
+      "report": "reports\\coordinator-20261030-implementation18\\feedequipmentsession-x64-check02",
+      "command_sha256": "fe4fb78c756c8f9e32259e712a9bc1b536d031a08a4e5533e1391b2fe1ac5f1a",
+      "result_sha256": "0a30e1e46490592c83946ebcea9d007e27d120c287615b527aad6d398a36fe76",
+      "equivalent_text_only_changes": []
+    },
+    {
+      "suite": "Bc2FeedEquipmentAdapter",
+      "architecture": "x86",
+      "passed": true,
+      "report": "reports\\coordinator-20261030-implementation18\\bc2feedequipmentadapter-x86-check02",
+      "command_sha256": "5abd058c689cbe7fdf0acc0e002298c4fb8dc2e385a23ea5b7eb9f3063f51a89",
+      "result_sha256": "85d4acff635a3eb80ef801dd3d312260a84514b2e136414edf5fc37a8e2067f6",
+      "equivalent_text_only_changes": []
+    },
+    {
+      "suite": "Bc2FeedEquipmentAdapter",
+      "architecture": "x64",
+      "passed": true,
+      "report": "reports\\coordinator-20261030-implementation18\\bc2feedequipmentadapter-x64-check02",
+      "command_sha256": "9caf369f5376b15dbac4990198ff96970e9c15abaa39ec9681138f9d20a61b04",
+      "result_sha256": "894a9fbcd0d72547995d5b300794413d9c85caa7b87becb8cd4cb3fa0ffa1175",
+      "equivalent_text_only_changes": []
+    },
+    {
+      "suite": "Bc2FeedEquipmentProfile",
+      "architecture": "x86",
+      "passed": true,
+      "report": "reports\\coordinator-20261030-implementation18\\bc2feedequipmentprofile-x86-check03",
+      "command_sha256": "858e38ae4a7af22d7be57c55aff0b38b9b479af0410e9afd71299f7268d31b43",
+      "result_sha256": "cbb23a94faab7610800b6500e125a03e03d404dd35c6d4bcb1ee7b0596a51e60",
+      "equivalent_text_only_changes": []
+    },
+    {
+      "suite": "Bc2FeedEquipmentProfile",
+      "architecture": "x64",
+      "passed": true,
+      "report": "reports\\coordinator-20261030-implementation18\\bc2feedequipmentprofile-x64-check03",
+      "command_sha256": "0b8cf6c54f64e558158add2e422d963168b4bda84187ef519a4bc91736086651",
+      "result_sha256": "0fd9b8ddf1ce89409cfc62209657ad2a5c0a467f9ce30c43f5eb855d2754a53d",
+      "equivalent_text_only_changes": []
+    },
+    {
+      "suite": "Bc2PhysicalFeed",
+      "architecture": "x86",
+      "passed": true,
+      "report": "reports\\coordinator-20261030-implementation18\\bc2physicalfeed-x86-check07",
+      "command_sha256": "66acba388a6cae6b21ad51d2b29fdad762feabe42ccbc92e6eafa3c5c5ed1628",
+      "result_sha256": "44b52b74e07c36d7936e23e5e38e9e406cc0d532ed0f259bee7d45690a0f486e",
+      "equivalent_text_only_changes": []
+    },
+    {
+      "suite": "Bc2PhysicalFeed",
+      "architecture": "x64",
+      "passed": true,
+      "report": "reports\\coordinator-20261030-implementation18\\bc2physicalfeed-x64-check04",
+      "command_sha256": "f766cfcbcd8a7966da9ffb6f89870c656013ab7607a32a9a7c65418fb64e9f29",
+      "result_sha256": "77239434f597b9e50353a3159abba7050eefc6230e3ddfa7c700dfac5040869c",
+      "equivalent_text_only_changes": []
+    },
+    {
+      "suite": "Bc2FeedPresentation",
+      "architecture": "x86",
+      "passed": true,
+      "report": "reports\\coordinator-20261030-implementation18\\bc2feedpresentation-x86-check02",
+      "command_sha256": "5b167fd01fc5aaf61fbe15b3a2e9d6416e621d78415b501184cff94f78bef0fc",
+      "result_sha256": "5995d959113a245f20962ea62620d8df1e1ffb5f5a523dfe6ecded6a8eee68a2",
+      "equivalent_text_only_changes": []
+    },
+    {
+      "suite": "Bc2FeedPresentation",
+      "architecture": "x64",
+      "passed": true,
+      "report": "reports\\coordinator-20261030-implementation18\\bc2feedpresentation-x64-check02",
+      "command_sha256": "b2b517a0db64f7217e60057e79ce3410737141f2cd98d727ebaa9c9359dcc8fd",
+      "result_sha256": "419974655b2e22604835bfefb6f4237c64e632e79edd43b81d2a865dbf63070d",
+      "equivalent_text_only_changes": []
+    },
+    {
+      "suite": "ReloadSyntax",
+      "architecture": "x86",
+      "passed": true,
+      "report": "reports\\coordinator-20261030-implementation18\\reloadsyntax-x86-check03",
+      "command_sha256": "dca4b70084057150c6abbf53dd91ebb1c793afb21b53e224f2b4b48327fd542c",
+      "result_sha256": "2b412ebd887c086553fb1e1336304f5c43092d5303b85831170476298f412de7",
+      "equivalent_text_only_changes": []
+    },
+    {
+      "suite": "GameplaySyntax",
+      "architecture": "x86",
+      "passed": true,
+      "report": "reports\\coordinator-20261030-implementation18\\gameplaysyntax-x86-check02",
+      "command_sha256": "23e1702d7effa1cda0ea68ee61f237015600afcf015517473f9583deb46ce01b",
+      "result_sha256": "bd1d376c793dd81bde5cdd7aeac1b18d4218095821f99829c2bfff28b917afeb",
+      "equivalent_text_only_changes": []
+    },
+    {
+      "suite": "RigSyntax",
+      "architecture": "x86",
+      "passed": true,
+      "report": "reports\\coordinator-20261030-implementation18\\rigsyntax-x86-check02",
+      "command_sha256": "d89caab21b2e3123097401b03ede386945d7ee189774fb9d71eca48eed1bfee2",
+      "result_sha256": "8b65c74bc0dcf99d6a9246319dcd9b9e7e142530e4a9c6311acf516f466a0c99",
+      "equivalent_text_only_changes": [
+        {
+          "path": "src\\games\\bc2\\Bc2RigPublication.cpp",
+          "before_sha256": "07f405af59c8c2cf24bab254489b67bb34b53463e3f3c220d6419f734d805e40",
+          "after_sha256": "398b7d92722eff13635c1e340914fd7b0095342ffd2ba2fda25df67924b8a4f9",
+          "normalized_lf_sha256": "07f405af59c8c2cf24bab254489b67bb34b53463e3f3c220d6419f734d805e40",
+          "change": "Restored original CRLF; exact LF-normalized bytes unchanged."
+        }
+      ]
+    }
+  ],
+  "full_normal_build": false,
+  "native_game": false,
+  "headset": false,
+  "installed": false
+}

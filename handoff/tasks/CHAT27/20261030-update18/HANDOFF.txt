@@ -1,0 +1,23 @@
+DoneY: assigned bounded static update investigation complete. SourcefixN: active cinematic/view/HUD authority remains unproved.
+Assigned worktree campaign-coordinator-20261028-r1; supplied base6ac2281909436510172bbbf562cf46318dca98da; no Git queried.
+Exact EXE SHA2563911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258 verified file-only.
+Files: cinematic_update.py, proof01.json, this handoff; scratch reports/coordinator-20261030-implementation18/cinematic-update.
+Proof SHA2565b4a5c5c60e3577e6814c9d6a9cc373de3433de26d48f2540b4fde7ee0272f43.
+Eight NEW units: seven complete functions plus one accidental adjacent16-byte prefix0xc02990, counted and not followed.
+1447unique decoded code/padding bytes;1423complete-function bytes;1478requested bytes; stopped at8units.
+Exact0x495d70 is a timed scalar update(+4c/+48/+50) plus numeric state+34 transitions2->4->5->0.
+No selected-player view, relative matrix read, HUD suppression or admitted cinematic enum appears in this function.
+Root supplied primary table RVA0x1036550; exact new slots+e8=0x49dc40 and+ec=0x486120 verified below boundary0x1036650.
+State2 calls+e8; success sends discriminator0x32fa40fd, clears byte+54, calls0x227640(1,1), sets state4.
+State4 advances to5 only after camera+3c virtual0 result>=1 and byte+54, with mutation guards; field names unproved.
+State5 calls+ec, sends discriminator0xd4c8db6e, calls0x227640(0,1) if needed, then sets state0.
+0x227640 updates word+24 and virtual-gated collections;0xc02950 forwards event-shaped payload through camera+10.
+Start0x49dc40 uses camera+d4, camera+3c and resource+cc resolver0x495a20, then companion start0x3b2240.
+On success it passes(camera+dc,event1f) to event service virtual+8; stop0x486120 passes same pair to virtual+10.
+Companion start/stop0x3b2240/0x3b6b00 manage handles+88/+e8, flag+fd and count+dc, paired with manager first/last use.
+None of seven complete functions reads companion+90..+c8, the inherited relative angular matrix.
+Do not promote state4, companion flag+fd/count+dc, resource readiness or event subscription into active-cinematic authority.
+NEXT exact edge0x3b1800, caller0x3b238f: receives companion+80 and receiver[0x188b10()+14] on first start.
+Question: which update consumer receives that interface, and does it join animated/relative output to an actual selected local-player view?
+No source proposal supported; root owns any source patch. No game/process/input/XR/build/test/profile/install/package/subagent work.
+File-only hash/span/instruction/call/table verification passed. Frozen and retired at the eight-unit limit.
