@@ -71,6 +71,9 @@ function Save([string]$Name,$Value){
 }
 function RequireBool($Value,[string]$Name,[bool]$Expected){if(-not $Value.Contains($Name) -or $Value[$Name] -isnot [bool] -or $Value[$Name] -ne $Expected){throw "Required boolean differs: $Name"}}
 function RequireZero($Value,[string]$Name){if(-not $Value.Contains($Name) -or ($Value[$Name] -isnot [int] -and $Value[$Name] -isnot [long]) -or $Value[$Name] -ne 0){throw "Required zero differs: $Name"}}
+function RequireFlag($Value,[string]$Name,[bool]$Expected){
+ if(-not $Value.Contains($Name) -or ($Value[$Name] -isnot [bool] -and $Value[$Name] -isnot [int] -and $Value[$Name] -isnot [long]) -or [int]$Value[$Name] -ne [int]$Expected){throw "Required binary flag differs: $Name"}
+}
 function Lease {
  $value=ReadJson $leasePath 64KB
  if($value.owner_token -cne $leaseToken -or $value.run -cne 'coordinator-20261030-feedback56'){throw 'Root does not own the feedback56 integration lease'}
@@ -194,6 +197,14 @@ try {
  $gamePin=Pin $gameExe 128MB;if($gamePin.sha256 -cne $gameSha){throw 'Reviewed game image differs'};$pins.Add($gamePin)
  foreach($path in @($buildPath,$build.binaries.probe.path,$build.binaries.trace.path,$menuExe,$provenance.menu_source.path,$gameExe)){$locks.Add([IO.File]::Open($path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read))}
  Save 'artifact-binding.json' @{build=$buildPin;menu_provenance=$provenancePin;menu=$provenance.executable;source_commit=$ExpectedSourceCommit;source_sha256=$build.source_sha256;game=$gamePin;input_protocol=$build.input_protocol}
+ $cacheSource='G:\Unity\VRMMO\bc2vr-task-worktrees\campaign-coordinator-20261028-r1\reports\coordinator-20261030-wiring54\feed-cache01\body-ammo.fvrprop'
+ $cachePin=Pin $cacheSource 64MB
+ if($cachePin.sha256 -cne '7e3d16f5bcc0af74ff7ab3afe2740197b1b4b9ac18dc9f61416325861af8f49e'){throw 'Verified 264-part body cache differs'}
+ $cacheTarget=Join-Path $run 'body-ammo-assets.fvrprop'
+ [IO.File]::Copy($cacheSource,$cacheTarget,$false)
+ $stagedCache=Pin $cacheTarget 64MB
+ if($stagedCache.sha256 -cne $cachePin.sha256){throw 'Body cache staging differs'}
+ Save 'body-cache.json' @{source=$cachePin;staged=$stagedCache;parts=264;generated_again=$false}
  $stage='preserve-originals';ProfileIdle
  foreach($name in 'GameSettings.bin','GameSettings.ini','settings.ini'){$profiles+=Backup (Join-Path $profile $name) ('profile-before/'+$name)}
  foreach($relative in 'active.json','data/settings.json'){$launcherFiles+=Backup (Join-Path $launcher $relative) ('launcher-before/'+$relative)}
@@ -261,7 +272,7 @@ public static class Feedback56Process {
  WaitOwned $trace 50000;WaitOwned $menu 25000
  $stage='native-retirement';ProveRetirement
  $stage='menu-result';$menuResult=ReadJson (Join-Path $menuFolder 'result.json') 64KB
- RequireBool $menuResult 'front_end_observe' $true;RequireBool $menuResult 'click_close' $false;RequireBool $menuResult 'resume_existing' $false;RequireBool $menuResult 'headset_tested' $false
+ RequireFlag $menuResult 'front_end_observe' $true;RequireFlag $menuResult 'click_close' $false;RequireFlag $menuResult 'resume_existing' $false;RequireBool $menuResult 'headset_tested' $false
  if(Test-Path -LiteralPath (Join-Path $menuFolder 'menu.rgba')){
   $image=ReadJson (Join-Path $menuFolder 'image.json') 64KB
   if($image.width -lt 1 -or $image.width -gt 1920 -or $image.height -lt 1 -or $image.height -gt 1080){throw 'Menu image exceeded admitted dimensions'}

@@ -1,0 +1,13 @@
+Bursty automatic fire: unresolved; no firing-cadence fix is claimed.
+Actual0.1.19 session20261030-183739-725-5389f0d4 has no final native report.
+Joined requested/mapped/effective/native-cache/count telemetry is now in0.1.20.
+Repeated controller packets and persistent weapon bootstrap were already audited.
+New wait-boundary audit: normal TryBegin/PumpGraphics and IPC locks are nonblocking;
+producer GetData(DONOTFLUSH) and keyed acquisition return Busy instead of waiting.
+UpdateHook still calls updateOriginal once when capture admission is busy.
+The private Present Sleep(1) progress loop has a zero normal-build budget.
+This excludes an explicit normal ACK/GPU wait loop, not driver or engine stalls.
+Missing: actual held-trigger native shot/ammo and simulation/graphics timing join.
+Host reuse/source intervals alone do not establish firing cadence or headset FPS.
+One same-frame nonblocking host copy poll is included; benefit remains unmeasured.
+Fresh audit agent completed and retired; no speculative cadence modification.

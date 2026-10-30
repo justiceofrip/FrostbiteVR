@@ -1,0 +1,23 @@
+Private0.1.20 test candidate
+Check STATUS.txt/receipt.json for installation status; packaging alone is not installation.
+
+What changed since0.1.19:
+- LMG feed-mechanism contacts use the free hand's anatomical wrist coordinates.
+- Weapon visuals use reviewed authored axes for193 exact configurations/44 meshes,
+  alongside the existing measured muzzle origins. Native recoil/spread stay native.
+- Destruction projection correction now includes verified skin-decal and soot paths.
+- The normal host can poll a newly copied frame once before composing; no FPS gain claimed.
+- Reload failures retain their primary cancellation/contact reason. Fire telemetry joins
+  requested/mapped/effective input, native cache writes and stock count changes.
+
+Useful headset test:
+1. Hold XM8 automatic fire continuously; note whether it still feels bursty.
+2. Try AN94, a shotgun and an LMG reload; report the weapon and first action that fails.
+3. Check whether LMG shots follow the visible barrel, with and without the support hand.
+4. Revisit a destructible building; check whether its broken pieces/decals still render wrong.
+Underbarrels and C4 retain0.1.19's changes; this batch does not claim a newly verified fix.
+
+Logging remains automatic. Stop VR, then use Report feedback after the session.
+Empty-hand holstering stays deferred. Steam still needs the external executable,
+not another duplicate report. Full live manual reload support and firing smoothness
+are not established by the offline tests.
