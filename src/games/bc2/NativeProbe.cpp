@@ -1091,13 +1091,15 @@ void* __fastcall ProjectionContextHook(void* self,void*,const void* matrix){
         w.frame.store(stereoExperiment.frame,std::memory_order_release);
     }
     const auto callsite=reinterpret_cast<unsigned>(_ReturnAddress()),context=reinterpret_cast<unsigned>(self),address=U32(context+0x20);
-    const bool eligibleDerived=callsite==imageBase+projectionOverrides.meshCaller||callsite==imageBase+projectionOverrides.terrainCaller||callsite==imageBase+projectionOverrides.edgeCaller;
+    const bool surfaceDerived=projectionOverrides.skinDecalCaller&&projectionOverrides.sootCaller&&
+        (callsite==imageBase+projectionOverrides.skinDecalCaller||callsite==imageBase+projectionOverrides.sootCaller);
+    const bool eligibleDerived=surfaceDerived||callsite==imageBase+projectionOverrides.meshCaller||callsite==imageBase+projectionOverrides.terrainCaller||callsite==imageBase+projectionOverrides.edgeCaller;
     std::array<float,16> values{};if(!Read(address,values.data(),64)){
         if(eligibleDerived){derivedFrameFailed.store(true,std::memory_order_release);derivedFailures.fetch_add(1);}return result;}
     if(trackedCameraEvidence.frame.load(std::memory_order_acquire)==stereoExperiment.frame){
         const auto index=projectionCount.fetch_add(1);if(index<projectionEvidence.size()){
             auto& e=projectionEvidence[index];e.context=context;e.address=address;e.callsite=callsite;e.thread=GetCurrentThreadId();e.frame=stereoExperiment.frame;e.gather=gatheringEvidenceEye;e.values=values;}}
-    // Only the signature-verified mesh, terrain and edge depth-bias paths are eligible. Worker jobs
+    // Only signature-verified mesh, terrain, edge, skin-decal and soot depth-bias paths are eligible. Worker jobs
     // finish at the native gather/render barrier before Prepare/Draw scopes read.
     if(drawingNativeView||!eligibleDerived)return result;
     const auto fail=[](){derivedFrameFailed.store(true,std::memory_order_release);derivedFailures.fetch_add(1);};
@@ -3685,6 +3687,9 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             Require(MH_CreateHook(entry,ContextCameraHook,reinterpret_cast<void**>(&contextCameraOriginal))==MH_OK,"Create native camera context observer");hookEntries[7]=entry;
             const auto overrides=fvr::bc2::DiscoverProjectionOverrides(bytes,pe.image);
             Require(overrides&&same(overrides->setter,0x6d)&&same(overrides->meshCaller-0x25,41)&&same(overrides->terrainCaller-0x27,43)&&same(overrides->edgeCaller-0x21,33),"Projection override code/ABI mismatch");projectionOverrides=*overrides;
+            if(overrides->skinDecalCaller&&overrides->sootCaller){
+                Require(same(overrides->skinDecalCaller-0x1f,31)&&same(overrides->sootCaller-0x1f,31),"Surface projection override code/ABI mismatch");
+            }else projectionOverrides.skinDecalCaller=projectionOverrides.sootCaller=0;
             auto* projectionEntry=reinterpret_cast<void*>(imageBase+overrides->setter);
             Require(MH_CreateHook(projectionEntry,ProjectionContextHook,reinterpret_cast<void**>(&projectionContextOriginal))==MH_OK,"Create projection override observer");hookEntries[9]=projectionEntry;
         }

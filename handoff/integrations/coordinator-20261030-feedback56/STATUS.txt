@@ -15,6 +15,6 @@ Normal native syntax passed both architectures. Actual-GPU/emulated-runtime pres
 Host GPU test stack overflow reproduced twice; heap-owned fixture reports fix it in host-checks03.
 No game launch/install yet. One headset availability probe failed; reuse shared blocker, no retry per card.
 Headset-free native observation route found; bounded menu observation is next after combined validation.
-Destruction remains open: old uncorrected callers lack draw/ABI association; no guessed hook enrollment.
+Destruction: static ABI/consumer recovery supports two omitted skin-decal/soot paths; candidate adds exact signature-gated projection correction. DESTRUCTION.txt retains evidence and scene/headset limits.
 Evidence summary: reports/coordinator-20261030-feedback56/session-summary.json.
 Empty-hand stow remains deferred. Steam waits for executable; old reports remain sufficient.

@@ -273,7 +273,14 @@ std::optional<ProjectionOverrideCandidates> DiscoverProjectionOverrides(std::spa
     const auto linked=[&](unsigned call){const auto at=Offset(pe,call,5);return at&&b[*at]==std::byte{0xe8}&&std::int64_t(call)+5+std::int32_t(U32(b,*at+1))==*setter;};
     const auto at=Offset(pe,*setter,0x6d);const unsigned char tail[]={0x89,0x46,0x20,0x5e,0x8b,0xe5,0x5d,0xc2,4,0};
     if(!at||std::memcmp(b.data()+*at+0x63,tail,sizeof(tail))||!linked(*camera+0xa4)||!linked(*mesh+0x20)||!linked(*terrain+0x22)||!linked(*edge+0x1c))return {};
-    return ProjectionOverrideCandidates{*setter,*mesh+0x25,*terrain+0x27,*edge+0x21};
+    // SkinDecalsWin32 and the soot shaders copy a stack projection at ESP+0x300
+    // through the same thiscall setter. Keep these independently optional so
+    // absence or ambiguity cannot weaken the existing required callers.
+    const auto skinDecal=Find(b,pe,"F6 44 24 20 02 74 09 8D 4C 24 20 E8 ?? ?? ?? ?? 8D 84 24 00 03 00 00 50 8B CE E8 ?? ?? ?? ??");
+    const auto soot=Find(b,pe,"F6 44 24 20 02 74 09 8D 4C 24 20 E8 ?? ?? ?? ?? 8D 8C 24 00 03 00 00 51 8B CF E8 ?? ?? ?? ??");
+    return ProjectionOverrideCandidates{*setter,*mesh+0x25,*terrain+0x27,*edge+0x21,
+        skinDecal&&linked(*skinDecal+0x1a)?*skinDecal+0x1f:0,
+        soot&&linked(*soot+0x1a)?*soot+0x1f:0};
 }
 }
 

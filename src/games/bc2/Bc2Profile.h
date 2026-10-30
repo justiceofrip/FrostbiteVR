@@ -28,7 +28,12 @@ struct ViewInitializationCandidates {std::uint32_t rebuild=0,parentGetter=0,refr
 std::optional<ViewInitializationCandidates> DiscoverViewInitialization(std::span<const std::byte>,const engine::PeImage&);
 // Verified native context camera setter; observation does not grant write capability.
 std::optional<std::uint32_t> DiscoverContextCamera(std::span<const std::byte>,const engine::PeImage&);
-struct ProjectionOverrideCandidates {std::uint32_t setter=0,meshCaller=0,terrainCaller=0,edgeCaller=0;};
+struct ProjectionOverrideCandidates {
+    std::uint32_t setter=0,meshCaller=0,terrainCaller=0,edgeCaller=0;
+    // Optional return addresses; each remains zero unless its unique caller
+    // reaches the same verified setter. Discovery alone grants no write gate.
+    std::uint32_t skinDecalCaller=0,sootCaller=0;
+};
 std::optional<ProjectionOverrideCandidates> DiscoverProjectionOverrides(std::span<const std::byte>,const engine::PeImage&);
 struct CameraCacheCandidates {
     std::uint32_t getView=0,getProjection=0,getFrustum=0;

@@ -1,0 +1,16 @@
+Destruction candidate: skin-decal and soot projection contexts.
+Executable SHA256:3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258.
+Return RVAs8460E5/84DB3E copy ESP+300 projection through verified setter1C7F20.
+Setter copies64bytes into native arena and stores context+20; no stack pointer retained.
+Resources: Systems/MaterialMasking/SkinDecalsWin32; Shaders/SootPerVertex/SootPerPixel.
+Both reach queued consumer9C8400/merge98B99F shared with accepted mesh/edge paths.
+Old performance436/diagnostics-r50-edge-correction07-prep/run01 frame84136 has13
+uncorrected records per caller with right-eye XYW/native Z bias, interleaved21 corrected edges.
+Discovery requires unique executable signatures and the same verified setter target.
+Runtime admits the pair only together, with31 exact bytes compared for each caller.
+Existing finite/XYW matching, preserved native Z, frame/pointer/value admission,
+gather/render barrier and exact-write restoration remain unchanged.
+Signature mutations, duplicates, wrong target and section fixtures pass; installed
+executable parsing confirms both RVAs without loading or running the game.
+Evidence: worktree reports/coordinator-20261030-feedback56/projection-check01.
+No new scene/draw/VB/IB join; this is a supported correction candidate, not headset acceptance.

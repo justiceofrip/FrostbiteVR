@@ -116,6 +116,11 @@ std::vector<std::byte> ProjectionFixture(){auto b=Fixture();
     for(unsigned at:{0x8a4u,0xa20u,0xb22u,0xd1cu}){b[at]=std::byte{0xe8};Put32(b,at+1,0x900u-(at+5));}return b;
 }
 std::optional<bc2::ProjectionOverrideCandidates> Overrides(const std::vector<std::byte>& b){auto pe=engine::InspectPe(b);if(!pe.valid)return {};return bc2::DiscoverProjectionOverrides(b,pe.image);}
+std::vector<std::byte> DestructionProjectionFixture(){auto b=ProjectionFixture();
+    Pattern(b,0xf00,"F6 44 24 20 02 74 09 8D 4C 24 20 E8 00 00 00 00 8D 84 24 00 03 00 00 50 8B CE E8 00 00 00 00");
+    Pattern(b,0x1000,"F6 44 24 20 02 74 09 8D 4C 24 20 E8 00 00 00 00 8D 8C 24 00 03 00 00 51 8B CF E8 00 00 00 00");
+    for(unsigned at:{0xf1au,0x101au})Put32(b,at+1,0x900u-(at+5));return b;
+}
 int main(int argc,char** argv){
     CHECK(argc<=2);
     {auto b=ProjectionFixture();const auto p=Overrides(b);CHECK(p&&p->setter==0x1700&&p->meshCaller==0x1825&&p->terrainCaller==0x1927&&p->edgeCaller==0x1b21);
@@ -129,6 +134,28 @@ int main(int argc,char** argv){
     b=ProjectionFixture();Put32(b,0xd1d,0);CHECK(!Overrides(b));
     b=ProjectionFixture();b[0xd14]=std::byte{0x30};CHECK(!Overrides(b));
     b=ProjectionFixture();b[0xd1b]=std::byte{0xce};CHECK(!Overrides(b));}
+
+    {const auto prior=Overrides(ProjectionFixture());CHECK(prior&&prior->skinDecalCaller==0&&prior->sootCaller==0);
+    const auto p=Overrides(DestructionProjectionFixture());
+    CHECK(p&&p->setter==0x1700&&p->meshCaller==0x1825&&p->terrainCaller==0x1927&&p->edgeCaller==0x1b21);
+    CHECK(p->skinDecalCaller==0x1d1f&&p->sootCaller==0x1e1f);
+    for(unsigned anchor:{0xf00u,0x1000u}){
+        const auto rejected=[&](const std::vector<std::byte>& b){const auto q=Overrides(b);
+            return q&&q->setter==p->setter&&q->meshCaller==p->meshCaller&&q->terrainCaller==p->terrainCaller&&q->edgeCaller==p->edgeCaller
+                &&q->skinDecalCaller==(anchor==0xf00?0:p->skinDecalCaller)
+                &&q->sootCaller==(anchor==0x1000?0:p->sootCaller);};
+        // Every fixed opcode, stack offset, source register and argument setup
+        // byte is required; relative call operands are checked separately.
+        for(unsigned i=0;i<31;++i){if((i>=12&&i<16)||i>=27)continue;
+            auto b=DestructionProjectionFixture();b[anchor+i]^=std::byte{1};CHECK(rejected(b));}
+        auto b=DestructionProjectionFixture();Put32(b,anchor+0x1b,0x800u-(anchor+0x1f));CHECK(rejected(b)); // another executable target
+        b=DestructionProjectionFixture();std::copy_n(b.begin()+anchor,31,b.begin()+0xc00);
+        Put32(b,0xc1b,0x900u-0xc1f);CHECK(rejected(b)); // two valid callers are ambiguous
+        b=DestructionProjectionFixture();std::copy_n(b.begin()+anchor,31,b.begin()+0x1300);
+        std::fill_n(b.begin()+anchor,31,std::byte{});CHECK(rejected(b)); // non-executable bytes cannot enroll
+    }
+    auto b=DestructionProjectionFixture();b[0x96b]=std::byte{8};CHECK(!Overrides(b));
+    b=DestructionProjectionFixture();Put32(b,0xd1d,0);CHECK(!Overrides(b));}
 
     {auto b=Fixture();Pattern(b,0x800,"55 8B EC 83 E4 F0 83 EC 18 56 57 8B 7D 08 8A 47 08 8B F1 8B 4E 0C 81 4E 08 00 10 00 00 81 4E 08 00 08 00 00 80 46 07 02");
     Pattern(b,0x857,"89 46 24");Pattern(b,0x88c,"89 46 1C");Pattern(b,0x8c6,"5F 5E 8B E5 5D C2 08 00");
@@ -186,9 +213,10 @@ int main(int argc,char** argv){
         std::vector<std::byte> installed(static_cast<std::size_t>(size));input.seekg(0);
         CHECK(input.read(reinterpret_cast<char*>(installed.data()),static_cast<std::streamsize>(installed.size())));
         const auto verified=Caches(installed);CHECK(verified);
-        const auto projection=Overrides(installed);CHECK(projection);
+        const auto projection=Overrides(installed);CHECK(projection&&projection->skinDecalCaller&&projection->sootCaller);
         std::cout<<"Installed projection callers verified (no native execution): edge caller RVA="<<std::hex
-            <<projection->edgeCaller<<" setter RVA="<<projection->setter<<std::dec<<'\n';
+            <<projection->edgeCaller<<" skin decal caller RVA="<<projection->skinDecalCaller
+            <<" soot caller RVA="<<projection->sootCaller<<" setter RVA="<<projection->setter<<std::dec<<'\n';
         std::cout<<"Installed camera caches verified (no native execution): scale getter RVA="<<std::hex
             <<verified->getScale<<" squared getter RVA="<<verified->getScaleSquared
             <<" updater RVA="<<verified->updateScale<<std::dec<<'\n';
