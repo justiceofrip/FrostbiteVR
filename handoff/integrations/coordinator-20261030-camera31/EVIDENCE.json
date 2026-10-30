@@ -1,0 +1,39 @@
+{
+  "base": "6c42c3fd6d39715d47a07584061697b2be8a678e",
+  "proofs": [
+    {
+      "task": "owner27",
+      "proof": "handoff/tasks/CHAT27/20261030-owner27/proof01.json",
+      "sha256": "431f6a4cf5abbc28cae8029ad6bc3a506baeafeac55d46d00a22cd8e9f47b37c",
+      "script_sha256": "713e61d88f24c2fe606cb5af130181f87c889030bad57a8b9943278c3bff343e"
+    },
+    {
+      "task": "evaluate28",
+      "proof": "handoff/tasks/CHAT27/20261030-evaluate28/proof01.json",
+      "sha256": "fff1adb965c7d90422cc84bfd0bedf0c1667a0d8de2ae461a29e8cb006f8138e",
+      "script_sha256": "47c15243ca5df34aa71cb2a7b897bd4fc45a7d8d2e836c48f865cd03a725fd30"
+    },
+    {
+      "task": "transform29",
+      "proof": "handoff/tasks/CHAT27/20261030-transform29/proof01.json",
+      "sha256": "d647b5efc88343a496689c96a13247a9b2c6cb5f6da4406bee99f22e355396c2",
+      "script_sha256": "0bfff93d900fdd8e30b9958ff1f4be8a57b783c37c6e65879ce65c20930cd29b"
+    },
+    {
+      "task": "scheduler30",
+      "proof": "handoff/tasks/CHAT27/20261030-scheduler30/proof01.json",
+      "sha256": "75b8ad96767dc70e2da7705fb7e2749df65875f5922b9efe7000b4c912dfb397",
+      "script_sha256": "0c1460c0bc192e429d0f937342ab18862333f68144bd6f31b5777a7549fcc062"
+    },
+    {
+      "task": "entity31",
+      "proof": "handoff/tasks/CHAT27/20261030-entity31/proof01.json",
+      "sha256": "b52ab309e1186ca788f572af8b6ddd078f5f838866d48701f12437b01c3c1648",
+      "script_sha256": "c27ed332ec3a9fca19219bbc9f184ecfc08f6e8f1ac4915767ce4978107d63c2"
+    }
+  ],
+  "linked_files_verified": 67,
+  "evidence_level": "offline static code only",
+  "production_changes": false,
+  "game_or_headset_check": false
+}

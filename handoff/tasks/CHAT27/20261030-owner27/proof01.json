@@ -1,0 +1,863 @@
+{
+  "schema": "chat27.cinematic_original_queue_static.v1",
+  "evidence_level": "Offline file-backed static code; conditional object/call dataflow, no native execution or headset acceptance.",
+  "supplied_head": "6c42c3fd6d39715d47a07584061697b2be8a678e",
+  "git_queried": false,
+  "executable_sha256": "3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258",
+  "preferred_base": "0x400000",
+  "script_sha256": "713e61d88f24c2fe606cb5af130181f87c889030bad57a8b9943278c3bff343e",
+  "helper": {
+    "path": "handoff\\tasks\\CHAT27\\20261030-manager18\\cinematic_manager.py",
+    "sha256": "1a6506e11576f290e70f847a65f307cf1cebffab928360120d4fee5e587857fb"
+  },
+  "inherited": [
+    {
+      "path": "handoff\\tasks\\CHAT27\\20261030-queue25\\proof01.json",
+      "sha256": "09a31eea86970d877e406ae258273f1188910571f494e6539e8c6c701b2772ab"
+    },
+    {
+      "path": "handoff\\tasks\\CHAT27\\20261030-constructor20\\proof01.json",
+      "sha256": "52bc97c398eb5823ad7b29d54c46187de842fb775067a8acb024753d32cdf852"
+    },
+    {
+      "path": "handoff\\tasks\\CHAT27\\20261030-child21\\proof01.json",
+      "sha256": "c553d972c6fc54623be7e2222ec9426481d66f5e62b6116e1ff132a2cbd6d110"
+    },
+    {
+      "path": "handoff\\tasks\\CHAT27\\20261030-manager18\\proof01.json",
+      "sha256": "4ff54dcefc7901926869f376322a023b438a8f1ab1f3477afdd421579936a432"
+    },
+    {
+      "path": "handoff\\tasks\\CHAT27\\20261030-update18\\proof01.json",
+      "sha256": "5b4a5c5c60e3577e6814c9d6a9cc373de3433de26d48f2540b4fde7ee0272f43"
+    }
+  ],
+  "scope": {
+    "maximum_new_complete_functions": 8,
+    "new_complete_functions": 8,
+    "partial_functions": 0,
+    "new_unique_decoded_bytes": 2605,
+    "maximum_decoded_bytes": 65536,
+    "adjacent_spill_functions": 0,
+    "ceiling_met": true,
+    "reused_bytes": 2223
+  },
+  "units": [
+    {
+      "rva": "0x3b5a00",
+      "size": 2300,
+      "sha256": "89a41b8a4ab8c076ccd859c09b276b7e1d59936e819b163682f2c916f888ea2c",
+      "bytes": "558bec83e4f0b834170000e8e0c3490053568bf18b46043b4608578974240c0f84ce080000833df8d45601007405e80de2ffffc6465001c744242000000000908d4c24388bd18bc1894c2434895424288d9424e0040000894424248d8c24b80000008bc2894c242c8bca899424dc040000898424d00400008d8424cc0000008d9424e0080000898c24cc0400008bc8899424d40400008bd0898424c80000008d8424cc040000898424c00000008b44240c8b70043b7008c744241800000000898c24bc000000899424b80000000f84460100008b0e8b118b4210ffd08bf885ff0f84230100008b0e8b118b4424208b520c50ffd284c00f840d010000e8cf2e790084c0740b807e2500c6442413007405c6442413018b44240c80785800740de8bc2e790084c07404b301eb0232db8b0e8b118b4220ffd083c0ff83f804766584db7461807c241300897424140f84810000008b4c24188d1c0f83fb2077518b4424283b44242c73188bc883c00485c989442428741a8931895c2418e9890000008d54241452508d4c242ce801d1ffff895c2418eb748d44241450518d8c24d4040000eb60807c2413008974241474248b8c24d00400003b8c24d404000073d68bc183c10485c0898c24d0040000743a8930eb368b8c24bc0000003b8c24c000000073148bc183c10485c0898c24bc00000074168930eb128d54241452518d8c24c0000000e8a7d1ffff8b44240c83c6283b70080f85bafeffff8b4c240c807958000f845e040000e8b42d790084c00f84510400008b5424188b74240c8b0e52e88c6a7b008b4e5481c190ff0100e82ec227008b4e5468e0c8420181c194ff0100e85b9c2700e8a62eddff8b4c2424894424148b4424288bd02bd1c1fa02c7442418000000000f846b010000c744241c000000008b442418d945108b3c810fb657258b4c240c8b71548b0f8b010374241c528b501051d91c24ffd2508bcee8aed5ffff8d8e30070000e8b3c127008d9e3407000068d4c842018bcbe8e19b27006a008bcbe8589c27006a006860b778006a008bcbe8889b27008b4c24148b4508898e6c0700008d8e800a000089be6007000089b664070000898668070000e85ec127008d9e840a000068c4c842018bcbe88c9b27006a0068b0b778006a008bcbe83c9b27008b55088b450c8b4c241489beb00a00008b7c24188996b40a00008986b80a0000898ebc0a00008b5424282b54242483c701c1fa023bfa720433c0eb128b44240c8b48548b54241c8d840a00150000d94510508d9e800a0000538d863007000050568b74241c518b0ed91c24e8bc587b00837c24180076188b46548b4c241c8d9401b0fcffff6a01528bcbe83ddd27008b4424288b4c24248144241cd00d00008bd02bd1c1fa023bfa897c24180f829dfeffff8bb424bc0000008bd62b9424b8000000c1fa028d7aec8bdfc1fb1f23dfc1fa1f8bfaf7d783c31423df8bfa23fa83e7140bdfbf000000000f86a5000000897c24188b8424b80000008b0cb88b54240c8b4254894c241c8b4c24188db40100ba01008bcee822c027008d4e0468b4c84201e8559a27006a0068e03b7b006a008d4e04e8049a270085ff8b54241c8b45088b4d0c8956308b542414894634894e3889563c761c8b44240c8b48548b5424188d840ab0b601006a01508bcee85adc2700814424185003000083c7013bfb0f826effffff8b4424288b4c24248bb424bc0000008bd62b9424b8000000c1fa023bfa8b9424b8000000734890d9450c8b04ba83ec0cd95c2408d94508d95c2404d94510d91c2450e820dcffff8bb424cc0000008b9424c80000008bce2bca83c701c1f90283c4103bf972c18b4424288b4c24243bd68b74240c754a3bc80f84c30000008b56542bc1c1f80269c0d00d00006a018d841060f9ffff508d8a800a0000e8a6db27008b4c24282b4c24248b4654c1f90269c9d00d00006a018d9401b0fcffffeb753bc86a01745f8b56542bc1c1f80269c0d00d00008d841060f9ffff508d8a00ba0100e860db270069db500300008b46548d8c03b0b601006a01518d88800a0000e842db27008b5424282b5424248b4654c1fa0269d2d00d00006a018d8c02b0fcffff51eb118b465469db500300008d9403b0b60100528d8890ff0100e806db27008b46548b0d3c2d56010590ff010050e862df27008b4e5481c190ff010051e8732dd5ff8b565481c290ff010052e8842cd5ff8b4424302b44242c83c40833ffc1f802742b33dbd94510518b4e54d91c2403cbe85fa579008b4c24282b4c242483c701c1f90281c3d00d00003bf972d78b0ee8a01f7b00e9e50000008d9424301000008bc28d8c2430170000899424201000008b9424bc000000898c24181000008b8c24b800000033ff2bd1c1fa02898424141000008984241010000089bc24301700000f84810000008b34b9d945100fb656258b0e8b01528b501051d91c24ffd2508d8c241c100000e878d1ffffd945080fb656258b0e8b018b4014528d9424141000005251d91c24ffd00fb64625d9450c8b0e8b118b52185083ec08d95c2404d94508d91c24ffd28b8424bc0000008b8c24b80000002bc183c701c1f8023bf872868b84241010000085c074123b842420100000740950e84957c6ff83c4048d8c24000900008bd18bc1898c24f00800008d8c2400100000899424e40800008b9424d0040000898c24e80800008b8c24cc04000033ff2bd1c1fa02898424e008000089bc24001000000f84b10000008b34b9d945100fb656258b0e8b01528b501051d91c24ffd2508d8c24ec080000e891d0ffffd945080fb656258b0e8b018b4014528d9424e40800005251d91c24ffd0d945108d8c24e00800006a015151d91c24e8ee587b000fb64625d9450c8b0e8b118b521883c40c5083ec08d95c2404d94508d91c24ffd2d94510518d8c24e4080000d91c24e87aa379008b8424d00400008b8c24cc0400002bc183c701c1f8023bf80f8256ffffff8b8424e008000085c074123b8424f0080000740950e83256c6ff83c4048b8424b800000085c074123b8424c8000000740950e81556c6ff83c4048b8424cc04000085c074123b8424dc040000740950e8f855c6ff83c4048b44242485c0740f3b442434740950e8e155c6ff83c4048b44242083c00183f802894424200f825af7ffff8b4c240cc6415000e8fd67feff5f5e5b8be55dc20c00",
+      "complete": true,
+      "meaning": "Enclosing complete function for exact reset/consumer candidates3b61da and3b620d; virtual+14 dispatch forwards its queue."
+    },
+    {
+      "rva": "0x211270",
+      "size": 13,
+      "sha256": "c1be84170debde3b64f5cef564bfca9a5d6c23ebd6cbf54bdde4ba975845cbb5",
+      "bytes": "33c0837c2404010f94c0c20400",
+      "complete": true,
+      "meaning": "Assigned companion interface table+0x0c; accepts pass index1."
+    },
+    {
+      "rva": "0x2112a0",
+      "size": 4,
+      "sha256": "031a1d90a8a2c46993613c8b2828efd0c52f20f2852d5f2ff930bc6acc0090c8",
+      "bytes": "83c8ffc3",
+      "complete": true,
+      "meaning": "Assigned companion interface table+0x20; returns-1."
+    },
+    {
+      "rva": "0x3a6a40",
+      "size": 31,
+      "sha256": "8f9e318aead921e5865c2626549706473fea9d88644e98c4513d888336ad7eef",
+      "bytes": "8b416885c0740c8b0033c985c00f95c18bc1c333c033c985c00f95c18bc1c3",
+      "complete": true,
+      "meaning": "Assigned companion interface table+0x10; count1 iff companion+0xe8 handle and pointee exist."
+    },
+    {
+      "rva": "0x38b760",
+      "size": 75,
+      "sha256": "a9c0337c1d6719044b587bfb00590740d5681db318c7be5324ba28ba2ccbf8b7",
+      "bytes": "56e8aad3dfff8bf08b44241450e87ed3dfff6a01e867003600d94424188b4424108b080fb640258b118b521483c408508b4424105051d91c24ffd2e8b003360056e84ad3dfff83c4045ec3",
+      "complete": true,
+      "meaning": "Callback address explicitly installed at3b5cea; forwards retained registration interface and persistent B to virtual+14."
+    },
+    {
+      "rva": "0x3b3b30",
+      "size": 164,
+      "sha256": "6c6c20d7e0ba06416bc953dd18bf489b2bc4d222fdd83e27967731d0098cf852",
+      "bytes": "558bec83e4f081ec3c070000d9450c8d44242c8bc8568b75088bd089442420894c24148b0e8d8424300700008944241889542410c7842430070000000000008b118b42106a0051d91c24ffd0508d4c241ce8eaf6ffffd945108b0e8b118b52146a008d4424145051d91c24ffd28b0ed945148b018b50186a0083ec08d95c2404d94510d91c24ffd28b44241085c0740f3b442420740950e8e47cc6ff83c4045e8be55dc3",
+      "complete": true,
+      "meaning": "Exact call3b5f0b: alternative local queue without direct known consumer call."
+    },
+    {
+      "rva": "0xb489d0",
+      "size": 6,
+      "sha256": "47367aa1d8d455ac99884eb60ecfd9dbd967e669b5eff0c0188d8b044ef642c9",
+      "bytes": "a0d9498901c3",
+      "complete": true,
+      "meaning": "Exact call3b5afc: return global byte selecting registration record partition."
+    },
+    {
+      "rva": "0xb489e0",
+      "size": 12,
+      "sha256": "8efab7d563b4f6751fe77e385d7d833496c14899fcdacd62eb385ba0e6ee48bc",
+      "bytes": "33c03805d84989010f95c0c3",
+      "complete": true,
+      "meaning": "Exact call3b5c27: nonzero global byte gates persistent queue branch."
+    }
+  ],
+  "saved_decodes": [
+    {
+      "rva": "0x211270",
+      "size": 13,
+      "sha256": "c1be84170debde3b64f5cef564bfca9a5d6c23ebd6cbf54bdde4ba975845cbb5",
+      "unit": "0x211270",
+      "bytes": "33c0837c2404010f94c0c20400",
+      "decode_sha256": "82d2ffc8d55ebaf7f49c3b8462f6f0603c6230bc8db59b9a5939b708159aef1e",
+      "instruction_count": 4,
+      "path": "reports\\coordinator-20261030-cinematic-owner27\\decode-00211270-d.txt"
+    },
+    {
+      "rva": "0x2112a0",
+      "size": 4,
+      "sha256": "031a1d90a8a2c46993613c8b2828efd0c52f20f2852d5f2ff930bc6acc0090c8",
+      "unit": "0x2112a0",
+      "bytes": "83c8ffc3",
+      "decode_sha256": "98576d63de4500a65a93502819bdde5bc0d7fa2f6545e55421bec2536708a51e",
+      "instruction_count": 2,
+      "path": "reports\\coordinator-20261030-cinematic-owner27\\decode-002112a0-4.txt"
+    },
+    {
+      "rva": "0x38b760",
+      "size": 75,
+      "sha256": "a9c0337c1d6719044b587bfb00590740d5681db318c7be5324ba28ba2ccbf8b7",
+      "unit": "0x38b760",
+      "bytes": "56e8aad3dfff8bf08b44241450e87ed3dfff6a01e867003600d94424188b4424108b080fb640258b118b521483c408508b4424105051d91c24ffd2e8b003360056e84ad3dfff83c4045ec3",
+      "decode_sha256": "8cf33741283898f1748c8e84e3e0bf66833dbde0a5628ed45c275578eb395c9b",
+      "instruction_count": 27,
+      "path": "reports\\coordinator-20261030-cinematic-owner27\\decode-0038b760-4b.txt"
+    },
+    {
+      "rva": "0x3a6a40",
+      "size": 31,
+      "sha256": "8f9e318aead921e5865c2626549706473fea9d88644e98c4513d888336ad7eef",
+      "unit": "0x3a6a40",
+      "bytes": "8b416885c0740c8b0033c985c00f95c18bc1c333c033c985c00f95c18bc1c3",
+      "decode_sha256": "09901ac2935f650109acb57c5c5a12ef306d57a52e070e74c3467d6d643536ed",
+      "instruction_count": 15,
+      "path": "reports\\coordinator-20261030-cinematic-owner27\\decode-003a6a40-1f.txt"
+    },
+    {
+      "rva": "0x3b3b30",
+      "size": 164,
+      "sha256": "6c6c20d7e0ba06416bc953dd18bf489b2bc4d222fdd83e27967731d0098cf852",
+      "unit": "0x3b3b30",
+      "bytes": "558bec83e4f081ec3c070000d9450c8d44242c8bc8568b75088bd089442420894c24148b0e8d8424300700008944241889542410c7842430070000000000008b118b42106a0051d91c24ffd0508d4c241ce8eaf6ffffd945108b0e8b118b52146a008d4424145051d91c24ffd28b0ed945148b018b50186a0083ec08d95c2404d94510d91c24ffd28b44241085c0740f3b442420740950e8e47cc6ff83c4045e8be55dc3",
+      "decode_sha256": "3081b5d77f356ccf7c25334c7997a1d00ca108898b5cf76fe97fa9de7f2cbafe",
+      "instruction_count": 58,
+      "path": "reports\\coordinator-20261030-cinematic-owner27\\decode-003b3b30-a4.txt"
+    },
+    {
+      "rva": "0x3b5a00",
+      "size": 300,
+      "sha256": "e978a3daa88796d5abb631ee8423e0217b37b12b839d6ced05cbb784ced5728d",
+      "unit": "0x3b5a00",
+      "bytes": "558bec83e4f0b834170000e8e0c3490053568bf18b46043b4608578974240c0f84ce080000833df8d45601007405e80de2ffffc6465001c744242000000000908d4c24388bd18bc1894c2434895424288d9424e0040000894424248d8c24b80000008bc2894c242c8bca899424dc040000898424d00400008d8424cc0000008d9424e0080000898c24cc0400008bc8899424d40400008bd0898424c80000008d8424cc040000898424c00000008b44240c8b70043b7008c744241800000000898c24bc000000899424b80000000f84460100008b0e8b118b4210ffd08bf885ff0f84230100008b0e8b118b4424208b520c50ffd284c00f840d010000e8cf2e790084c0740b807e2500c6442413007405c6442413018b44240c80785800740de8bc2e790084c07404b301eb02",
+      "decode_sha256": "914263f54ee4822db685ddfa28fabca1d00c9d99e057311c67d199c663ea8e5f",
+      "instruction_count": 78,
+      "path": "reports\\coordinator-20261030-cinematic-owner27\\decode-003b5a00-12c.txt"
+    },
+    {
+      "rva": "0x3b5b2c",
+      "size": 2000,
+      "sha256": "ac1fa128f4331b537a87a9a530bf13091a577f5ebf358bfd449ca6faa94bd2d3",
+      "unit": "0x3b5a00",
+      "bytes": "32db8b0e8b118b4220ffd083c0ff83f804766584db7461807c241300897424140f84810000008b4c24188d1c0f83fb2077518b4424283b44242c73188bc883c00485c989442428741a8931895c2418e9890000008d54241452508d4c242ce801d1ffff895c2418eb748d44241450518d8c24d4040000eb60807c2413008974241474248b8c24d00400003b8c24d404000073d68bc183c10485c0898c24d0040000743a8930eb368b8c24bc0000003b8c24c000000073148bc183c10485c0898c24bc00000074168930eb128d54241452518d8c24c0000000e8a7d1ffff8b44240c83c6283b70080f85bafeffff8b4c240c807958000f845e040000e8b42d790084c00f84510400008b5424188b74240c8b0e52e88c6a7b008b4e5481c190ff0100e82ec227008b4e5468e0c8420181c194ff0100e85b9c2700e8a62eddff8b4c2424894424148b4424288bd02bd1c1fa02c7442418000000000f846b010000c744241c000000008b442418d945108b3c810fb657258b4c240c8b71548b0f8b010374241c528b501051d91c24ffd2508bcee8aed5ffff8d8e30070000e8b3c127008d9e3407000068d4c842018bcbe8e19b27006a008bcbe8589c27006a006860b778006a008bcbe8889b27008b4c24148b4508898e6c0700008d8e800a000089be6007000089b664070000898668070000e85ec127008d9e840a000068c4c842018bcbe88c9b27006a0068b0b778006a008bcbe83c9b27008b55088b450c8b4c241489beb00a00008b7c24188996b40a00008986b80a0000898ebc0a00008b5424282b54242483c701c1fa023bfa720433c0eb128b44240c8b48548b54241c8d840a00150000d94510508d9e800a0000538d863007000050568b74241c518b0ed91c24e8bc587b00837c24180076188b46548b4c241c8d9401b0fcffff6a01528bcbe83ddd27008b4424288b4c24248144241cd00d00008bd02bd1c1fa023bfa897c24180f829dfeffff8bb424bc0000008bd62b9424b8000000c1fa028d7aec8bdfc1fb1f23dfc1fa1f8bfaf7d783c31423df8bfa23fa83e7140bdfbf000000000f86a5000000897c24188b8424b80000008b0cb88b54240c8b4254894c241c8b4c24188db40100ba01008bcee822c027008d4e0468b4c84201e8559a27006a0068e03b7b006a008d4e04e8049a270085ff8b54241c8b45088b4d0c8956308b542414894634894e3889563c761c8b44240c8b48548b5424188d840ab0b601006a01508bcee85adc2700814424185003000083c7013bfb0f826effffff8b4424288b4c24248bb424bc0000008bd62b9424b8000000c1fa023bfa8b9424b8000000734890d9450c8b04ba83ec0cd95c2408d94508d95c2404d94510d91c2450e820dcffff8bb424cc0000008b9424c80000008bce2bca83c701c1f90283c4103bf972c18b4424288b4c24243bd68b74240c754a3bc80f84c30000008b56542bc1c1f80269c0d00d00006a018d841060f9ffff508d8a800a0000e8a6db27008b4c24282b4c24248b4654c1f90269c9d00d00006a018d9401b0fcffffeb753bc86a01745f8b56542bc1c1f80269c0d00d00008d841060f9ffff508d8a00ba0100e860db270069db500300008b46548d8c03b0b601006a01518d88800a0000e842db27008b5424282b5424248b4654c1fa0269d2d00d00006a018d8c02b0fcffff51eb118b465469db500300008d9403b0b60100528d8890ff0100e806db27008b46548b0d3c2d56010590ff010050e862df27008b4e5481c190ff010051e8732dd5ff8b565481c290ff010052e8842cd5ff8b4424302b44242c83c40833ffc1f802742b33dbd94510518b4e54d91c2403cbe85fa579008b4c24282b4c242483c701c1f90281c3d00d00003bf972d78b0ee8a01f7b00e9e50000008d9424301000008bc28d8c2430170000899424201000008b9424bc000000898c24181000008b8c24b800000033ff2bd1c1fa02898424141000008984241010000089bc24301700000f84810000008b34b9d945100fb656258b0e8b01528b501051d91c24ffd2508d8c241c100000e878d1ffffd945080fb656258b0e8b018b4014528d9424141000005251d91c24ffd00fb64625d9450c8b0e8b118b52185083ec08d95c2404d94508d91c24ffd28b8424bc0000008b8c24b80000002bc183c701c1f8023bf872868b84241010000085c074123b842420100000740950e84957c6ff83c4048d8c24000900008bd18bc1898c24f00800008d8c2400100000899424e40800008b9424d0040000898c24e80800008b8c24cc04000033ff2bd1c1fa02898424e008000089bc24001000000f84b10000008b34b9d945100fb656258b0e8b01528b501051d91c24ffd2508d8c24ec080000e891d0ffffd945080fb656258b0e8b018b4014528d9424e40800005251d91c24ffd0d945108d8c24e00800006a015151d91c24e8ee587b000fb64625d9450c8b0e8b118b521883c40c5083ec08d95c2404d94508d91c24ffd2d94510518d8c24e4080000d91c24e87aa379008b8424d00400008b8c24cc0400002bc183c701c1f8023bf80f8256ffffff8b8424e008000085c074123b8424f0080000740950e83256c6ff83c4048b8424b800000085c074123b8424c8000000740950e81556c6ff83c4048b8424cc04000085c074123b8424dc040000740950e8f855c6ff83c4048b44242485c0740f3b442434740950e8e155c6ff83c4048b44242083c00183f802894424200f825af7ffff8b4c240cc6415000e8fd67feff5f5e5b8be55dc20c00",
+      "decode_sha256": "1b37dc49a6e977f1e890de0a990ef98449d0a8c9455b8ff52464f99bbeb5b68d",
+      "instruction_count": 559,
+      "path": "reports\\coordinator-20261030-cinematic-owner27\\decode-003b5b2c-7d0.txt"
+    },
+    {
+      "rva": "0xb489d0",
+      "size": 6,
+      "sha256": "47367aa1d8d455ac99884eb60ecfd9dbd967e669b5eff0c0188d8b044ef642c9",
+      "unit": "0xb489d0",
+      "bytes": "a0d9498901c3",
+      "decode_sha256": "14160ae0c6d1c2f696e855edd8fdca2f06c108fceae7000bc0b0d9769ad2cbc4",
+      "instruction_count": 2,
+      "path": "reports\\coordinator-20261030-cinematic-owner27\\decode-00b489d0-6.txt"
+    },
+    {
+      "rva": "0xb489e0",
+      "size": 12,
+      "sha256": "8efab7d563b4f6751fe77e385d7d833496c14899fcdacd62eb385ba0e6ee48bc",
+      "unit": "0xb489e0",
+      "bytes": "33c03805d84989010f95c0c3",
+      "decode_sha256": "2216bdc79b15902e6b87593c04be2654c0d298a20f8eecab11f885af30a38661",
+      "instruction_count": 4,
+      "path": "reports\\coordinator-20261030-cinematic-owner27\\decode-00b489e0-c.txt"
+    }
+  ],
+  "reused_decodes": [
+    {
+      "rva": "0x3b3270",
+      "size": 130,
+      "sha256": "e0162554a5a6b011ece4708e3d8b004ec5019afc69884c1af8099b7927ccc297",
+      "unit": "0x3b3270",
+      "bytes": "8b4424045356578bf133db50899e20070000e829f4ffff8b4e042b0eb893244992f7e903d1c1fa068bcac1e91f33ff03ca7449f30f104424145533ed8d6424008b068a54241c03c588504cf30f11405889584089585c88584d8b4e042b0eb893244992f7e903d1c1fa068bc2c1e81f83c70103c283c5703bf872c55d5f5e5bc20c00",
+      "decode_sha256": "842cd77f1424047ea882c7d1fd8dc93ee4e93570de5756d76791866866e3d4e8",
+      "instruction_count": 50,
+      "path": "reports\\coordinator-20261030-cinematic-queue25\\decode-003b3270-82.txt"
+    },
+    {
+      "rva": "0xb505c0",
+      "size": 99,
+      "sha256": "0054cd3b9ce3b4afae3ed4a4c3cb4cca7577892345a081fe02863297a2aee63e",
+      "unit": "0xb505c0",
+      "bytes": "5356578bf98b378b4f042bceb893244992f7e903d1c1fa068bc2c1e81f33db03c2743a5533ed8b4c2e408b492c85c974078b118b4204ffd08b378b4f042bceb893244992f7e903d1c1fa068bcac1e91f83c30103ca83c5703bd972ca5d5f5e5bc20400",
+      "decode_sha256": "f34d4139aea639c04e6e582102f42f249b7a010d06d1f7fc1fa5fb234fa121dc",
+      "instruction_count": 44,
+      "path": "reports\\coordinator-20261030-cinematic-queue25\\decode-00b505c0-63.txt"
+    },
+    {
+      "rva": "0xb6bb00",
+      "size": 480,
+      "sha256": "9165e90c019faa9c04d2cde3f5a021825bd2f58b76c015f817f9e3617ac35426",
+      "unit": "0xb6bb00",
+      "bytes": "83ec1c538b5c24288b4b042b0bb893244992f7e903d1c1fa065533ed8bc25733ffc1e81f03c2897c2410896c2414896c2418896c2420c644242400896c240c0f848701000056896c24348d9b00000000817c2434000e00000f834001000068e0020000e848a4fcff6a148bd0e8afcefdff03d08bc283c40883e00f74052bd083c210556a1052e805514bff8bf883c40c3bfd8db7e002000074400f57c0892f896f04896f708d8fc000000089afa000000089afa4000000f30f1187a8000000f30f1187ac000000e84454feff89afd002000089afd40200008bef89b5d0020000c785d4020000140000008b3303742434558b46408b48382b483483c034c1f902898dd4020000d946440fb6564d8b4e40525683ec08d95c2404d9442444d91c24e89bfdffff807e4c007438807c24380074318b4e408d44241450e851ccffffd946488b4e548b565051518b4e40d91c24528d4424205081c5c00000005556e83dceffff57e887fb4aff8b4b042b0b8b7424148344243870b893244992f7e903d1c1fa068bcac1e91f83c60103ca83c40433ed3bf1897424100f82b2feffff396c24248b7c241474238b5c24183bfb8bf7740f8b1652e806d3acff83c6043bf375f18b44242450e835faacff5e3bfd740957e8dafb4aff83c4045f5d5b83c41cc3",
+      "decode_sha256": "c1402709014407ee8a5b3a92b7d0b85d01aa9ffc7d0aaac6573e9652db1ee0b2",
+      "instruction_count": 151,
+      "path": "reports\\coordinator-20261030-cinematic-queue25\\decode-00b6bb00-1e0.txt"
+    },
+    {
+      "rva": "0xb6c520",
+      "size": 54,
+      "sha256": "66e7cbcccb06ffc389f9f696f2cb94860c526b5b50a0c3a6b8d3f405197e302b",
+      "unit": "0xb6c520",
+      "bytes": "558bec83e4f081ec58030000803dd84989010056578bf9751d8b450cd945086a015051d91c24e8b5f5ffff83c40c5f5e8be55dc20800",
+      "decode_sha256": "1ebfd49a9099da9b0e2449e786c038dd680916a3c3a64e31bb7c901755699010",
+      "instruction_count": 22,
+      "path": "reports\\coordinator-20261030-cinematic-queue25\\decode-00b6c520-36.txt"
+    },
+    {
+      "rva": "0xb6c556",
+      "size": 121,
+      "sha256": "57071338f8934764fc74aa392dac55dccf8705e6a0ec36f6e72e0ae450348c26",
+      "unit": "0xb6c520",
+      "bytes": "6a008d4c2414e8df73acff6844ba4a018d4c2418e85133acffd945088b750c6a008d4c2414516a0056518bcfd91c24e8e6f0ffff8b0d3c2d56018d54241052e8e679acff8d44241050e8fcc759ff8d4c241451e812c759ffd9450883c4048bced91c24e80240feff8d4c2410e82974acff5f5e8be55dc20800",
+      "decode_sha256": "50f782617c42ae72d573edb36ad724a32ea3672d5bef860d684cac38315d0319",
+      "instruction_count": 39,
+      "path": "reports\\coordinator-20261030-cinematic-queue25\\decode-00b6c556-79.txt"
+    },
+    {
+      "rva": "0x39cd30",
+      "size": 131,
+      "unit": "0x39cd30",
+      "sha256": "74430c3f82c27bda34c4dd0f2e755835ac03b2607c559583c45750eedfdf0517",
+      "decode_sha256": "dc1b86e06111fff3f15e4352cf40b323e9f2867ffe9095abc2e4ecf4c14e7731",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-0039cd30-83.txt"
+    },
+    {
+      "rva": "0x39cdb3",
+      "size": 78,
+      "unit": "0x39cd30",
+      "sha256": "2c5856b1f3cf3ab2fa3af7184d48ef0f63deae72246d80d3e947b932f487e716",
+      "decode_sha256": "795413e6ccb03c05bb4f536e531607a13ee988687d4365f054922a7022f2ceb8",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-0039cdb3-4e.txt"
+    },
+    {
+      "rva": "0x3b23c0",
+      "size": 44,
+      "unit": "0x3b23c0",
+      "sha256": "28eed5f6f3181791e021e1a08fde81bb21c0947efce0f1c44133ce2a9294a2f2",
+      "decode_sha256": "77bfae2596255944fe64f83921180563316c7e4ccebbaae518d7ead54777b8ad",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-003b23c0-2c.txt"
+    },
+    {
+      "rva": "0x3b23ec",
+      "size": 84,
+      "unit": "0x3b23c0",
+      "sha256": "404d445f63a58011036e4a6dd50d09645364abc821d7a667bc8ce0f8e1891faf",
+      "decode_sha256": "52d75a8d5e8c6168e3aa90f766abb894ae8df98eab9f1d1ff9aed8df50b21671",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-003b23ec-54.txt"
+    },
+    {
+      "rva": "0x41e610",
+      "size": 80,
+      "unit": "0x41e610",
+      "sha256": "fd33f12c52ca30f560ba7d926ee57ae74c7f7e7479cbd8d7da8c5d1eeead00fa",
+      "decode_sha256": "620562c401180813e779c56cc0b040fd0666add3dec432642d6f609475b16cce",
+      "path": "reports\\coordinator-20261030-cinematic-child21\\decode-0041e610-50.txt"
+    },
+    {
+      "rva": "0xb50630",
+      "size": 149,
+      "unit": "0xb50630",
+      "sha256": "5276f5096f96d1682b34985e21ecf846a23b6ece7e144f96edbb24ce11183a0f",
+      "decode_sha256": "cb96186a948778851a0cb0d5ee8c1da1fa7672ddeaf07ff980b63cbcb8000eb1",
+      "path": "reports\\coordinator-20261030-cinematic-child21\\decode-00b50630-95.txt"
+    },
+    {
+      "rva": "0x3b1800",
+      "size": 77,
+      "sha256": "dc6dfc265530c56c47dcb5d1929289c2e3752900cfc730e00f1f526673489042",
+      "decode_sha256": "9a0af8d9bd8a372f98369312dc61e82b8bd18d6fb1e646f3a0fc034ade2c3076",
+      "instruction_count": 24,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-manager\\decode-003b1800-4d.txt"
+    },
+    {
+      "rva": "0x3b184d",
+      "size": 327,
+      "sha256": "3ab56c310d836b593e4a7ea078c1a755031649ba21828784df2684c2be680cb0",
+      "decode_sha256": "e2aced34b18eb2416f79a6feec64772d693ffc8100ab6e661a0c044c04500ca1",
+      "instruction_count": 80,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-manager\\decode-003b184d-147.txt"
+    },
+    {
+      "rva": "0x3b1994",
+      "size": 54,
+      "sha256": "7484d974ebcc444a8b9f9398a9ad34fbd99f63a7b16806d178f4b4b042a17424",
+      "decode_sha256": "b8f9bedd59565dcfaf559eb203c46947a313500135353e87e2ae28009f8d6fac",
+      "instruction_count": 20,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-manager\\decode-003b1994-36.txt"
+    },
+    {
+      "rva": "0x3b19ca",
+      "size": 24,
+      "sha256": "4b130d58e78376a62fa7edd6e8cb0a62447137ae68eaecc7ff2c86adb9a24d28",
+      "decode_sha256": "1dd8f5aa60818e1ecd836be3c8640b514ea275e365ad36c63ebc7b1664ef3d6e",
+      "instruction_count": 11,
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-manager\\decode-003b19ca-18.txt"
+    },
+    {
+      "rva": "0x3b228d",
+      "size": 291,
+      "sha256": "9b4125f656e7aa59f9a3b1ceef8daf183f310b6558f805eb5a92bf25111a7391",
+      "decode_sha256": "f8e1370d74e8f0eb238955aeda5b7dd9c21f06acdca8233e61c998800da1b28c",
+      "path": "reports\\coordinator-20261030-implementation18\\cinematic-update\\decode-003b228d-123.txt"
+    }
+  ],
+  "exact_instructions": [
+    {
+      "rva": "0x3b2385",
+      "size": 6,
+      "sha256": "7484045d7317394f8f9328071c61926b64f3eb6210f1737c1a42ec3ed17153b6",
+      "bytes": "8d8e80000000",
+      "meaning": "Inherited first-use registration passes the exact companion+0x80 interface."
+    },
+    {
+      "rva": "0x3b238c",
+      "size": 3,
+      "sha256": "8ad693355bb53293618281bc1b8a26be35a4c115aab008c68d24eb29c7969b8d",
+      "bytes": "8b4814",
+      "meaning": "Inherited registration receiver is [TLS-context+0x14]; this does not itself prove a selected-view owner."
+    },
+    {
+      "rva": "0x3b1829",
+      "size": 4,
+      "sha256": "bc2e99c868fb4241f9c3c53d00fce6177621cfaee1c2949486da54d91299344a",
+      "bytes": "895c2438",
+      "meaning": "Inherited registration stores the incoming interface as record first dword."
+    },
+    {
+      "rva": "0x3b199d",
+      "size": 3,
+      "sha256": "15787865c306def5273eaae77864dc3093979674832f32d1dfdbd9f55498d690",
+      "bytes": "8d4f04",
+      "meaning": "Inherited registration appends to receiver+4 collection."
+    },
+    {
+      "rva": "0x3b19aa",
+      "size": 3,
+      "sha256": "e7a9e44b007fd70ed1b45a062461a8127a1502137841e509479c198dd8099bb4",
+      "bytes": "8d5728",
+      "meaning": "Inherited registration record stride0x28."
+    },
+    {
+      "rva": "0x3b5ab1",
+      "size": 3,
+      "sha256": "597b99a1da006aa2099fd22976f734a08dab6bb0cafcfab0288b8ce028e61605",
+      "bytes": "8b7004",
+      "meaning": "New enclosing function reads its receiver M+4 record begin."
+    },
+    {
+      "rva": "0x3b5ad3",
+      "size": 9,
+      "sha256": "7ac2ac4640ab93c3e666662dfb96101eab3d85c28c245962adc5a07149697221",
+      "bytes": "8b0e8b118b4210ffd0",
+      "meaning": "Read interface from record first dword and call its assigned count slot+0x10."
+    },
+    {
+      "rva": "0x3b5aea",
+      "size": 10,
+      "sha256": "584acbada96218a4facd3f1ab98ebb4375b1ac4e488ce0d6c869f5f480ae5671",
+      "bytes": "8b4424208b520c50ffd2",
+      "meaning": "Gate each record using assigned slot+0x0c and pass index0 or1."
+    },
+    {
+      "rva": "0x3b5b05",
+      "size": 4,
+      "sha256": "e595293dc52a597f4d404e219199f30a9757c2bff017489328369b086deb5b9a",
+      "bytes": "807e2500",
+      "meaning": "Record+0x25 participates in branch partition; value is not a selected-view flag."
+    },
+    {
+      "rva": "0x3b5b2e",
+      "size": 9,
+      "sha256": "25a2d97d66dd79a23c1e7439eb649094dc9d168995c7808210365c79e976e9fd",
+      "bytes": "8b0e8b118b4220ffd0",
+      "meaning": "Assigned slot+0x20 supplies partition category."
+    },
+    {
+      "rva": "0x3b5bcf",
+      "size": 2,
+      "sha256": "bf6e9e48c1f603471e1b340109d29dd2e23da799965f3f956e4ff0c33e20d358",
+      "bytes": "8930",
+      "meaning": "Direct-consumer list fast append preserves the exact registration record pointer."
+    },
+    {
+      "rva": "0x3b5c0d",
+      "size": 3,
+      "sha256": "048aa2b7e026e4b3b3bc391a700adcafe2bbef63c324f67916cee05caf3a4b69",
+      "bytes": "83c628",
+      "meaning": "The new update function scans registration records in the inherited0x28-byte stride."
+    },
+    {
+      "rva": "0x3b616a",
+      "size": 7,
+      "sha256": "de6e64aa99da82ec85f9d1bb720f37e19fbd8b449480c999695ad8aa3cd43fe7",
+      "bytes": "8d8c2400090000",
+      "meaning": "With stable main-body ESP=P, local queue inline data starts at P+0x900."
+    },
+    {
+      "rva": "0x3b6175",
+      "size": 7,
+      "sha256": "62e2d7632dcb5a11bfb4a6f2a84e1aac92703c583fb733ba388b1d23e10b3aa3",
+      "bytes": "898c24f0080000",
+      "meaning": "Local B.inline=P+0x900 is stored at B+0x10."
+    },
+    {
+      "rva": "0x3b6183",
+      "size": 7,
+      "sha256": "26333609bdaa78c7d6863356736a1e107cc7fd5fba05e05abf35dc8231c63ab8",
+      "bytes": "899424e4080000",
+      "meaning": "Local B.end is P+0x900; B itself is P+0x8e0."
+    },
+    {
+      "rva": "0x3b6191",
+      "size": 7,
+      "sha256": "b932cea39ef919ce20e50c0347ee5656bce83bce7f1b69365f67dacb985ed079",
+      "bytes": "898c24e8080000",
+      "meaning": "Local B.capacity pointer starts at P+0x1000."
+    },
+    {
+      "rva": "0x3b61a6",
+      "size": 7,
+      "sha256": "d9a51d577f05647255a87e17a1533af72dd89979b3858790e91dc865416cb748",
+      "bytes": "898424e0080000",
+      "meaning": "Local B.begin is P+0x900."
+    },
+    {
+      "rva": "0x3b61ad",
+      "size": 7,
+      "sha256": "f791da5a65aed7fd59e6fb3ad0d8f23b8be04c69fed6ee77dd883c33e042a336",
+      "bytes": "89bc2400100000",
+      "meaning": "Initialize the same B+0x720 insertion count to zero."
+    },
+    {
+      "rva": "0x3b61ba",
+      "size": 3,
+      "sha256": "f672fc90a7d0e9835a289d31afcc074111b66e545ddd61bea46dade11eea3279",
+      "bytes": "8b34b9",
+      "meaning": "Load the retained registration record from the direct-consumer list."
+    },
+    {
+      "rva": "0x3b61d3",
+      "size": 7,
+      "sha256": "9cda5d8c29a13bc4da4f7d07f28bf7ac5e2d828d35d39bfbd34fcbef63b436a0",
+      "bytes": "8d8c24ec080000",
+      "meaning": "After three reset arguments, ECX=P+0x8e0 is exactly local B."
+    },
+    {
+      "rva": "0x3b61e6",
+      "size": 7,
+      "sha256": "08638c203111ecc3641a4f150cc7c68f3ad9dfe315864cafa8d8ffac98d16c2f",
+      "bytes": "8b0e8b018b4014",
+      "meaning": "Receiver is [record]; target is that exact interface assigned slot+0x14."
+    },
+    {
+      "rva": "0x3b61ed",
+      "size": 13,
+      "sha256": "70772bd398410f2071a062c5044297cc3d6432aeb61704906c034e70674e5031",
+      "bytes": "528d9424e40800005251d91c24",
+      "meaning": "Pass arguments(first scalar,B=P+0x8e0,record flag) to the interface update."
+    },
+    {
+      "rva": "0x3b61fa",
+      "size": 2,
+      "sha256": "491e503ba40e8d303d46b4b51b14826ae08e8c8c3ded6f1441ef1d5d53c42534",
+      "bytes": "ffd0",
+      "meaning": "Virtual update resolves to3b23c0 for the inherited companion table; all three arguments are then forwarded to39cd30."
+    },
+    {
+      "rva": "0x3b61ff",
+      "size": 14,
+      "sha256": "90b76d2a1195fc0caf6c7367be4f9ea368b992fe886157b8e2f3e6647e91d953",
+      "bytes": "8d8c24e00800006a015151d91c24",
+      "meaning": "Immediately pass the identical B=P+0x8e0 as second stack argument to b6bb00(T,B,1)."
+    },
+    {
+      "rva": "0x3b6236",
+      "size": 8,
+      "sha256": "dad0a7f46c90af58f27df5cc46c71a1d44a12f99011d9fdf8c0850de34d6ac16",
+      "bytes": "518d8c24e4080000",
+      "meaning": "Postprocessing receiver remains the same B after pushing one scalar argument."
+    },
+    {
+      "rva": "0x3b62d2",
+      "size": 10,
+      "sha256": "c7b379534a5d9d79d675401422cc48c9873ed15063845f003606e67bcc0d94ce",
+      "bytes": "8b44242083c00183f802",
+      "meaning": "Outer pass index is incremented and bounded to0,1; assigned companion gate accepts1."
+    },
+    {
+      "rva": "0x3b5ca5",
+      "size": 3,
+      "sha256": "71fe5b39132bde56cbe9251b7039b6d64ba58e0fcb836f72ff33d92ec6d44e58",
+      "bytes": "8b7154",
+      "meaning": "Persistent alternative queue base comes from [M+0x54]."
+    },
+    {
+      "rva": "0x3b5cac",
+      "size": 4,
+      "sha256": "33c542c7ce2fede891b3e32618bdfdb4186ab855ad681bc827737539cdcedbab",
+      "bytes": "0374241c",
+      "meaning": "Persistent queue B=[M+0x54]+current byte offset."
+    },
+    {
+      "rva": "0x3b5cea",
+      "size": 5,
+      "sha256": "49a3100971825e0d6b2d157cf7b12edd1392eba74c5d4082129247f4fcaf77b6",
+      "bytes": "6860b77800",
+      "meaning": "Exact producer callback address38b760 is installed into the persistent queue job."
+    },
+    {
+      "rva": "0x3b5d0b",
+      "size": 18,
+      "sha256": "796fa928e5b9006643167e4e02511c90954ea4f10382638e367559fef496f360",
+      "bytes": "89be6007000089b664070000898668070000",
+      "meaning": "Store retained record at B+0x760, same B at B+0x764, incoming scalar at B+0x768."
+    },
+    {
+      "rva": "0x3b5da4",
+      "size": 1,
+      "sha256": "de5a6f78116eca62d7fc5ce159d23ae6b889b365a1739ad2cf36f925a140d0cc",
+      "bytes": "56",
+      "meaning": "Forward this same persistent B as second stack argument to b6b670."
+    },
+    {
+      "rva": "0x3b5ddb",
+      "size": 8,
+      "sha256": "be331d4b53149e1c760ef4efb5014dd0fe4acf76e411b1575044852bc051d57e",
+      "bytes": "8144241cd00d0000",
+      "meaning": "Persistent queue slots advance by0xdd0 bytes."
+    },
+    {
+      "rva": "0x38b789",
+      "size": 3,
+      "sha256": "fc5fc8d9e1c355dec8bcf6bf4e1db2b6bed2156ac946b8e3f8111387d06fa40c",
+      "bytes": "8b5214",
+      "meaning": "Scheduled producer callback also invokes exact interface virtual+0x14."
+    },
+    {
+      "rva": "0x38b790",
+      "size": 11,
+      "sha256": "a2929a5093366effb99191b0a4d6f93746c9dea3d0660722be800756475904a4",
+      "bytes": "8b4424105051d91c24ffd2",
+      "meaning": "Callback forwards its second incoming argument B to interface update without altering it."
+    },
+    {
+      "rva": "0x3b6107",
+      "size": 7,
+      "sha256": "236f0dc9f5c389729c6e5acb66632e021c9c375dc149e04ce68334f662fba8d2",
+      "bytes": "8d942414100000",
+      "meaning": "Other in-function local queue is B0=P+0x1010 after the flag push; it has no direct b6bb00 call."
+    },
+    {
+      "rva": "0x3b3b92",
+      "size": 4,
+      "sha256": "1b6e7e0a9d61bb9b0277c34eb704a7b86cbf6564077472b66712f72c0654f05b",
+      "bytes": "8d442414",
+      "meaning": "Separate helper local queue is Q+0x10 after its flag push; no known queue consumer is called in that helper."
+    },
+    {
+      "rva": "0xb489d0",
+      "size": 6,
+      "sha256": "47367aa1d8d455ac99884eb60ecfd9dbd967e669b5eff0c0188d8b044ef642c9",
+      "bytes": "a0d9498901c3",
+      "meaning": "Partition test reads global byte RVA14949d9."
+    },
+    {
+      "rva": "0xb489e0",
+      "size": 12,
+      "sha256": "8efab7d563b4f6751fe77e385d7d833496c14899fcdacd62eb385ba0e6ee48bc",
+      "bytes": "33c03805d84989010f95c0c3",
+      "meaning": "Persistent branch uses nonzero global byte RVA14949d8, the same global inspected by inherited b6c520 wrapper."
+    }
+  ],
+  "table_cells": [
+    {
+      "rva": "0x102c980",
+      "size": 4,
+      "sha256": "ed7e74d87b6fc1a92ed14161da6e26a0cf699f0d2537a3c160622b9c1d394e5d",
+      "bytes": "70126100",
+      "meaning": "Accept pass1 only.",
+      "table_rva": "0x102c974",
+      "offset": "0xc",
+      "target_rva": "0x211270"
+    },
+    {
+      "rva": "0x102c984",
+      "size": 4,
+      "sha256": "51108d2b9d502ed01e423bcccabe9756a807cfe7a01006090855ecc4366c3498",
+      "bytes": "406a7a00",
+      "meaning": "Return1 iff interface+0x68 handle and pointee exist; equivalent to companion+0xe8.",
+      "table_rva": "0x102c974",
+      "offset": "0x10",
+      "target_rva": "0x3a6a40"
+    },
+    {
+      "rva": "0x102c988",
+      "size": 4,
+      "sha256": "85a3b3d4a8867fe4cbfa27d731b49228e502c42e301209280f859a9b3b61ab28",
+      "bytes": "c0237b00",
+      "meaning": "Inherited exact cinematic queue producer delegate.",
+      "table_rva": "0x102c974",
+      "offset": "0x14",
+      "target_rva": "0x3b23c0"
+    },
+    {
+      "rva": "0x102c994",
+      "size": 4,
+      "sha256": "ec02f17a482a9b73c67f65abee3066812b0048a4bbf699036a642566ba9e25dd",
+      "bytes": "a0126100",
+      "meaning": "Return-1; category is outside1..5.",
+      "table_rva": "0x102c974",
+      "offset": "0x20",
+      "target_rva": "0x2112a0"
+    }
+  ],
+  "direct_calls": [
+    {
+      "rva": "0x3b238f",
+      "size": 5,
+      "sha256": "3cea8104744325a0e3981ea4ae6652be7cebd8e0ec9b4043dc574601b6d97769",
+      "bytes": "e86cf4ffff",
+      "target_rva": "0x3b1800",
+      "meaning": "Inherited registration of exact companion interface into its TLS+14 manager."
+    },
+    {
+      "rva": "0x3b2436",
+      "size": 5,
+      "sha256": "da417076ab309099513cc235caf0d6c111cdcaad2423294e67e5eac77236ed68",
+      "bytes": "e8f5a8feff",
+      "target_rva": "0x39cd30",
+      "meaning": "Inherited cinematic delegate forwards the actual incoming B unchanged."
+    },
+    {
+      "rva": "0x39cdf5",
+      "size": 5,
+      "sha256": "a90a9f725a512be4ac96d1b9a1ca8f6d172426dabd220874156271acfdf2115c",
+      "bytes": "e816180800",
+      "target_rva": "0x41e610",
+      "meaning": "Inherited child update retains the B argument."
+    },
+    {
+      "rva": "0x41e657",
+      "size": 5,
+      "sha256": "66ad0a47e70f67d8ed59df63f046b49f4426360e456f2a4263a7d1391109f0f2",
+      "bytes": "e8d41f7300",
+      "target_rva": "0xb50630",
+      "meaning": "Inherited child appends into that B."
+    },
+    {
+      "rva": "0x3b5afc",
+      "size": 5,
+      "sha256": "cafb33f90f5a830b9c4b28572e062cf7f566278195ea2d536a37a5cab7da39a5",
+      "bytes": "e8cf2e7900",
+      "target_rva": "0xb489d0",
+      "meaning": "Partition byte reader."
+    },
+    {
+      "rva": "0x3b5c27",
+      "size": 5,
+      "sha256": "62617ea50952362daef7b91a22cd80e2958beab5b34dad9cdb0600be4d4ed4bc",
+      "bytes": "e8b42d7900",
+      "target_rva": "0xb489e0",
+      "meaning": "Persistent-queue branch global selector."
+    },
+    {
+      "rva": "0x3b61da",
+      "size": 5,
+      "sha256": "21102c6acd513774187f9217a8b104d2cc231c304cc67d1f0993d433980ad1ed",
+      "bytes": "e891d0ffff",
+      "target_rva": "0x3b3270",
+      "meaning": "Reset direct local B with count from companion slot+0x10, third incoming scalar and registration flag."
+    },
+    {
+      "rva": "0x3b620d",
+      "size": 5,
+      "sha256": "7e65b0319564b0d9545c16bd6c097955f7a93e40817ba9c3908eb78fa4396c4d",
+      "bytes": "e8ee587b00",
+      "target_rva": "0xb6bb00",
+      "meaning": "Consume the identical direct local B immediately after virtual+14 update."
+    },
+    {
+      "rva": "0x3b6241",
+      "size": 5,
+      "sha256": "61c13c2a3ca6786a8c45cbf3ebc25d3256f83edc76f78fa4ec3dcb99bcc6c0df",
+      "bytes": "e87aa37900",
+      "target_rva": "0xb505c0",
+      "meaning": "Postprocess identical direct local B after interface virtual+0x18."
+    },
+    {
+      "rva": "0x3b5cbd",
+      "size": 5,
+      "sha256": "f2a1c5e6ccaa23ba9a1ddcef02b35e36e1633acccfd83b405d75aeef12f4051e",
+      "bytes": "e8aed5ffff",
+      "target_rva": "0x3b3270",
+      "meaning": "Reset persistent alternative B."
+    },
+    {
+      "rva": "0x3b5daf",
+      "size": 5,
+      "sha256": "b403c4fef78d03a4bdb74f6fd656286c49079c556f8ba7c0361232e3721bf432",
+      "bytes": "e8bc587b00",
+      "target_rva": "0xb6b670",
+      "meaning": "Same persistent B goes to the alternate consumer also reached by b6c520; scheduler/body not decoded here."
+    },
+    {
+      "rva": "0x3b605c",
+      "size": 5,
+      "sha256": "30febb299bb1f9518251e40fdd2dec30d1b95d0141e93ae9cae89d3e4cf6e2dd",
+      "bytes": "e85fa57900",
+      "target_rva": "0xb505c0",
+      "meaning": "Postprocess persistent B after scheduling synchronization."
+    },
+    {
+      "rva": "0x3b5f0b",
+      "size": 5,
+      "sha256": "34d6ee40e2f6991909ef9c5f0af1b74c17aa48609fe0df4b653a8a35c9858fcf",
+      "bytes": "e820dcffff",
+      "target_rva": "0x3b3b30",
+      "meaning": "Explicit alternative helper owns its own queue; no direct known consumer call."
+    },
+    {
+      "rva": "0x3b60f3",
+      "size": 5,
+      "sha256": "680d4212f843081cb928c58ab99775da419a60be3d707df28064652aeb9d99ac",
+      "bytes": "e878d1ffff",
+      "target_rva": "0x3b3270",
+      "meaning": "Reset other local B0=P+0x1010."
+    },
+    {
+      "rva": "0x3b3b81",
+      "size": 5,
+      "sha256": "a920a38dd73ffe4ffa43382922784db3a662700c1ea74236f6627ff780f261db",
+      "bytes": "e8eaf6ffff",
+      "target_rva": "0x3b3270",
+      "meaning": "Reset helper-local B with flag0."
+    }
+  ],
+  "raw_candidate_searches": [
+    {
+      "path": "reports\\coordinator-20261030-cinematic-owner27\\raw-pointer-003b23c0.json",
+      "sha256": "42e45d21e57765c19c8549ae001431ad4ba833f0ccdf95a517d4a3b7dc3af811",
+      "target": "0x3b23c0",
+      "candidate_count": 1,
+      "treatment": "Only candidates enclosed in admitted complete functions support instruction/call claims."
+    },
+    {
+      "path": "reports\\coordinator-20261030-cinematic-owner27\\raw-pointer-00b6c520.json",
+      "sha256": "e8bb30d6639ea2876952d0640f53b4dd9aae621de82929515f4f19ae5fad4f4e",
+      "target": "0xb6c520",
+      "candidate_count": 0,
+      "treatment": "Only candidates enclosed in admitted complete functions support instruction/call claims."
+    },
+    {
+      "path": "reports\\coordinator-20261030-cinematic-owner27\\raw-rel32-0039cd30.json",
+      "sha256": "8454aa3bbb5c5fdaaed8d151f3e9ddd0b70bc8014e0352850329f9f96e53fe8a",
+      "target": "0x39cd30",
+      "candidate_count": 1,
+      "treatment": "Only candidates enclosed in admitted complete functions support instruction/call claims."
+    },
+    {
+      "path": "reports\\coordinator-20261030-cinematic-owner27\\raw-rel32-003b23c0.json",
+      "sha256": "fe8832ea5e9064448be8f30b55b671304d01c23cc83e628a8a70d9908684d5e4",
+      "target": "0x3b23c0",
+      "candidate_count": 0,
+      "treatment": "Only candidates enclosed in admitted complete functions support instruction/call claims."
+    },
+    {
+      "path": "reports\\coordinator-20261030-cinematic-owner27\\raw-rel32-003b5a00.json",
+      "sha256": "800565e842e3a125e30eed4839e04dde54469d6cbf54e6da7eef34e6b91f3e73",
+      "target": "0x3b5a00",
+      "candidate_count": 2,
+      "treatment": "Only candidates enclosed in admitted complete functions support instruction/call claims."
+    },
+    {
+      "path": "reports\\coordinator-20261030-cinematic-owner27\\raw-rel32-00b6b670.json",
+      "sha256": "ed2d8a132a17b68e28fe7ac199fafa28daa11e92de770997c0974ac107423153",
+      "target": "0xb6b670",
+      "candidate_count": 3,
+      "treatment": "Only candidates enclosed in admitted complete functions support instruction/call claims."
+    },
+    {
+      "path": "reports\\coordinator-20261030-cinematic-owner27\\raw-rel32-00b6bb00.json",
+      "sha256": "b553f3724c12f3b1c914f157169ea71e08822ef740c44b02f6b294f614713626",
+      "target": "0xb6bb00",
+      "candidate_count": 4,
+      "treatment": "Only candidates enclosed in admitted complete functions support instruction/call claims."
+    }
+  ],
+  "abi": {
+    "main": "3b5a00 is thiscall with three stack scalars A,D,T and ret0x0c. M denotes incoming ECX. P denotes stable main-body ESP after saving EBX,ESI,EDI. These are symbolic addresses, not runtime captures.",
+    "direct_queue": "B=P+0x8e0, inline=P+0x900, initial begin=end=inline, capacity=P+0x1000, insertion count[B+0x720]=0. Reset3b61da returns ret0x0c. Slot+0x14 call3b61fa gets (A,B,byte[R+0x25]); companion target3b23c0 returns ret0x0c and forwards B to39cd30. Call3b620d is b6bb00(T,B,1), with caller cleanup0x0c. Call3b6241 invokes b505c0(B,T).",
+    "persistent": "For the pooled branch, B=[M+0x54]+i*0xdd0. This B is reset, stored at B+0x764 beside record and scalar payload, passed to b6b670 as argument2 and later used as b505c0 receiver. Callback38b760 is cdecl(record,B,A,TLS) and forwards its own B to the interface. Job helper invocation ABI/order is not independently decoded.",
+    "alternatives": "Non-consuming paths pass B0=P+0x1010 at3b6113 or helper-local B=Q+0x10 at3b3b9b. Neither complete body invokes b6bb00/b6c520 for those queues; interface+0x18 effects remain unexamined."
+  },
+  "findings": {
+    "static_original_queue_join": true,
+    "exact_join": "Given a registration record R whose first dword is the inherited companion+0x80 interface,3b5a00 direct branch passes its own B through3b61fa -> table102c974+14 ->3b23c0 ->3b2436/39cd30 ->41e610/b50630, then passes that exact B at3b620d to inherited consumer b6bb00. This is a same-object path from the cinematic delegate to the known consumer, independent of separate caller424370.",
+    "dispatch_qualification": "Assigned companion table+0x0c accepts pass1, +0x10 returns1 iff handle/pointee at companion+0xe8 exist, and +0x20 returns-1.3b5a00 scans M+4..M+8 in0x28-byte records and preserves each record pointer in its partition lists. The loop and table methods therefore support the companion dispatch, subject to the recorded branch conditions.",
+    "direct_route_predicate": "Let F=byte14949d9, G=byte14949d8, q=byte[R+0x25], p=(byte[M+0x58]!=0 && G!=0). Eligible companion records have count1 on pass1. If (!F || q!=0) and either !p or the pooled cumulative count would exceed32, R enters the direct-consumer list and uses B=P+0x8e0. Other eligible records use the separately described pooled or non-consuming alternatives.",
+    "no_unique_runtime_owner": "No execution selects a concrete R, M, B or route. Multiple caller-owned queues can arrive at the exact inherited delegate. Do not label every incoming B as P+0x8e0 or as the separate424370 queue.",
+    "upstream_limit": "Inherited registration uses M=[TLS+0x14]. The new function proves same-record behavior for its own incoming M, but equivalence of a concrete scheduled3b5a00 receiver to that exact TLS manager instance is not established. Raw callers13edbc and435cc1 are preserved as unadmitted candidates only.",
+    "consumer_limit": "The direct route calls b6bb00 itself; it does not call b6c520. b6c520 remains only the previously proved wrapper. The b6b9c0 evaluator and downstream outputs are owned by a separate worker and were not decoded.",
+    "acceptance_limit": "No selected local-player view, matrix composition, HUD, cutscene entry/skip/exit, gameplay-return or continuous head-rotation authority. No production correction/API proposal."
+  },
+  "next_unresolved_edge": {
+    "candidate_rva": "0x435cc1",
+    "target_rva": "0x3b5a00",
+    "status": "Raw rel32 candidate only; enclosing caller not decoded in this job.",
+    "required": "Admit the complete enclosing caller and verify its receiver identity against the exact [TLS+0x14] manager that retained companion+0x80. This is the remaining concrete scheduling-instance join, before any live-selected-view claim."
+  },
+  "verification_attempts": "One initial slot+0x0c bound was12 bytes, one byte short of ret4. Complete-range parser rejected missing end/return before saving any decode. Corrected13-byte bound verified. No neighboring instruction was admitted. All8 complete-function coverage, inherited/new bytes, saved hashes, call targets and table cells pass final checks.",
+  "execution": {
+    "production_writes": false,
+    "git": false,
+    "builds": false,
+    "tests": false,
+    "game": false,
+    "process_access": false,
+    "input": false,
+    "xr": false,
+    "profiles": false,
+    "installs": false,
+    "packages": false,
+    "subagents": false
+  },
+  "frozen": true
+}

@@ -1,0 +1,577 @@
+{
+  "schema": "chat27.cinematic_transform_static_code.v1",
+  "evidence_level": "Offline file-backed static code. No deterministic execution test, actual-game check, or headset acceptance.",
+  "executable_sha256": "3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258",
+  "preferred_base": "0x400000",
+  "supplied_worktree_head": "6c42c3fd6d39715d47a07584061697b2be8a678e; supplied by parent, no Git queried",
+  "script_sha256": "0bfff93d900fdd8e30b9958ff1f4be8a57b783c37c6e65879ce65c20930cd29b",
+  "helper": {
+    "path": "handoff\\tasks\\CHAT27\\20261030-manager18\\cinematic_manager.py",
+    "sha256": "1a6506e11576f290e70f847a65f307cf1cebffab928360120d4fee5e587857fb"
+  },
+  "inherited": {
+    "path": "handoff\\tasks\\CHAT27\\20261030-evaluate28\\proof01.json",
+    "sha256": "fff1adb965c7d90422cc84bfd0bedf0c1667a0d8de2ae461a29e8cb006f8138e"
+  },
+  "inherited_entry_call": {
+    "rva": "0xb6ba71",
+    "size": 5,
+    "sha256": "eeca23a28d5ff081a1f5942db538d9ed86cad8135aa0a815f03357d2856f76ff",
+    "bytes": "e87a19ffff",
+    "assembly": "call        00F5D3F0",
+    "target_rva": "0xb5d3f0",
+    "new_target_decoded": false
+  },
+  "reused_decodes": [
+    {
+      "unit": "0xb6b9c0",
+      "reason": "Exact direct consumer from inherited call0xb6bc20.",
+      "complete_reachable_cfg": true,
+      "extent_end_rva": "0xb6baf5",
+      "listing_sha256": "6138b80ec1a011cb0c2b1aa4a9d6e7bb36af84e24e1c03a8984bb56a388aa995",
+      "listing_path": "reports\\coordinator-20261030-cinematic-evaluate28\\decode-00b6b9c0.txt",
+      "metadata_path": "reports\\coordinator-20261030-cinematic-evaluate28\\decode-00b6b9c0.json",
+      "metadata_sha256": "776ef5e37fdd52062c0b909e2b2fb6cc8fef4c1e9751f68c2fdca8c287f9f7ab",
+      "rva": "0xb6b9c0",
+      "size": 309,
+      "sha256": "676315b1d76ccfc3096027b9775704eaf3b1ed934d8b6af65c1f6ece0ab1be77"
+    },
+    {
+      "unit": "0xb628e0",
+      "reason": "Exact record/workspace call at0xb6ba6b.",
+      "complete_reachable_cfg": true,
+      "extent_end_rva": "0xb62b6b",
+      "listing_sha256": "26f574ce230693de9fec25a2eedd47cb8f243f5f46bb8633d3764a6e14979ea8",
+      "listing_path": "reports\\coordinator-20261030-cinematic-evaluate28\\decode-00b628e0.txt",
+      "metadata_path": "reports\\coordinator-20261030-cinematic-evaluate28\\decode-00b628e0.json",
+      "metadata_sha256": "9d82de418522b8bebc5f935d0e13ad1e2a49cc8c78718edd533d351e7cd2c78a",
+      "rva": "0xb628e0",
+      "size": 651,
+      "sha256": "4275fbb13c2bf74a4a76467849cec62dc960ef6061b374c75206d1cbc78923de"
+    },
+    {
+      "unit": "0xb6b050",
+      "reason": "Exact local-result collection call at0xb6ba81.",
+      "complete_reachable_cfg": true,
+      "extent_end_rva": "0xb6b1f4",
+      "listing_sha256": "f98aba9352cbd9d9ca0283f154289792d73d59e729c3b66e9bb0b1f80c5dca3d",
+      "listing_path": "reports\\coordinator-20261030-cinematic-evaluate28\\decode-00b6b050.txt",
+      "metadata_path": "reports\\coordinator-20261030-cinematic-evaluate28\\decode-00b6b050.json",
+      "metadata_sha256": "ed1c2662a4bdf625e526d41366489174efcd8389aec2cff567d7295a92e0a61c",
+      "rva": "0xb6b050",
+      "size": 420,
+      "sha256": "6bc1d61b754f4befc8df896fa652ae8d9c201a9711b357187ff433ee79f9787d"
+    },
+    {
+      "unit": "0xb6b520",
+      "reason": "Exact final local-result processing call at0xb6ba9d.",
+      "complete_reachable_cfg": true,
+      "extent_end_rva": "0xb6b5e7",
+      "listing_sha256": "cf786b23ea9c9df8acef6f7115ecf98384c94275e8e2ed4de4f39727fcb66605",
+      "listing_path": "reports\\coordinator-20261030-cinematic-evaluate28\\decode-00b6b520.txt",
+      "metadata_path": "reports\\coordinator-20261030-cinematic-evaluate28\\decode-00b6b520.json",
+      "metadata_sha256": "b533d019866fdfabe0f9ccb067b54c8b241d986125843df27c6293f8ff0ba78b",
+      "rva": "0xb6b520",
+      "size": 199,
+      "sha256": "23c409935ef0d98378e1276f325c64b79c335ec10ef63274040b18c6cdb8c32f"
+    }
+  ],
+  "scope": {
+    "new_complete_functions": 4,
+    "new_unique_decoded_bytes": 1326,
+    "partial_functions": 0,
+    "preferred_function_limit": 4,
+    "absolute_function_limit": 8,
+    "maximum_decoded_bytes": 65536,
+    "adjacent_spill_functions": 0,
+    "generic_scans": 0,
+    "reused_bytes": 1579,
+    "strategy": "Exact inherited b6ba71 target, its two direct calls, and exact b5d3bb transform-forwarding target. Single-instruction decode with reachable CFG closure; six skipped alignment bytes in b5d3f0 were not decoded."
+  },
+  "units": [
+    {
+      "unit": "0xb5d3f0",
+      "reason": "Exact inherited call b6ba71 with cdecl stack argument W.",
+      "complete_reachable_cfg": true,
+      "size": 226,
+      "extent_end_rva": "0xb5d4d8",
+      "listing_sha256": "6b760d5553bdf57cb2ac0b26de653487ed0e7f05ee0ca808c5304a57afb269c9",
+      "listing_path": "reports\\coordinator-20261030-cinematic-transform29\\decode-00b5d3f0.txt",
+      "metadata_path": "reports\\coordinator-20261030-cinematic-transform29\\decode-00b5d3f0.json",
+      "metadata_sha256": "1eb811d5a918811f0a1c33383102c29db75687f50fd001ce4925ca37d39613d7",
+      "byte_spans": [
+        {
+          "rva": "0xb5d3f0",
+          "size": 106,
+          "sha256": "b53e8d0ade41efbbc42a91e7df8c311f5158c9cf5ef8ae79c59a8859aa7de8ff",
+          "bytes": "81ec1001000055568bb4241c0100008b065733ff897c2414897c24188944240c897c24108b48148d54241c894c24188954241433c9397814761df30f100520944d018b442414f30f1104888b44240c83c1013b481472eb33ed39bed40200007651538d9ec0000000eb06"
+        },
+        {
+          "rva": "0xb5d460",
+          "size": 120,
+          "sha256": "bec7309a7a8073f9c37c2d96cf7fc75711fe7b35895c9989c1d5e7eef0897506",
+          "bytes": "8b96d00200008d4c24105103d7528d46105350e898feffff8b86b00000008b480483c41053e8d6bfffff83c50181c7b00b00003baed402000072c58b44241033ff5b33c93978145f5e5d76250f57c9908b542408f30f10048a0f2fc1720b8b4010f30f1104888b042483c1013b481472df81c410010000c3"
+        }
+      ]
+    },
+    {
+      "unit": "0xb5d310",
+      "reason": "Exact b5d473 call with (W+10,W+c0,U_i,K).",
+      "complete_reachable_cfg": true,
+      "size": 181,
+      "extent_end_rva": "0xb5d3c5",
+      "listing_sha256": "ea157e075ebe106497cb116135e5e1488040abd86ecb34d91bdb89b804c576a0",
+      "listing_path": "reports\\coordinator-20261030-cinematic-transform29\\decode-00b5d310.txt",
+      "metadata_path": "reports\\coordinator-20261030-cinematic-transform29\\decode-00b5d310.json",
+      "metadata_sha256": "f2cb49d1eb6651212a89f2ddba3d021c5ccb8d42a8d6d470339b509e44c5194c",
+      "byte_spans": [
+        {
+          "rva": "0xb5d310",
+          "size": 181,
+          "sha256": "a3db98c1461580d26d5253c633945b307b7c7cab93f2c2dcac64d3df7a273170",
+          "bytes": "83ec380f57c08b54244833c08944241c884424208844242189442424b8020000008944242c894424308b4424448b4808568b70108988900b00008950208d4820f30f11442404f30f11442408f30f1144240cf30f11442410c7442414feffffffc7442418fffffffff30f1144241cf30f1144242c8972048b542440898aa00000008b4c24448d704089b108020000d940188d742404568d7424185651528b90900b00008b02518b08d91c24e8c0cfffff5e83c438c3"
+        }
+      ]
+    },
+    {
+      "unit": "0xb59460",
+      "reason": "Exact b5d485 call with ECX=[[W+b0]+4], stack(W+c0).",
+      "complete_reachable_cfg": true,
+      "size": 682,
+      "extent_end_rva": "0xb5970a",
+      "listing_sha256": "d88c6a1ecdd7ef4f1f6ddcf4dde5b551662b29478c95eb3f1784d4e02a2c6d45",
+      "listing_path": "reports\\coordinator-20261030-cinematic-transform29\\decode-00b59460.txt",
+      "metadata_path": "reports\\coordinator-20261030-cinematic-transform29\\decode-00b59460.json",
+      "metadata_sha256": "4876ae04730128d8f2344de99d8889ffbdc123d72ccd99f052c348c93883695a",
+      "byte_spans": [
+        {
+          "rva": "0xb59460",
+          "size": 682,
+          "sha256": "e6aa51c670c933309b4238006aca8ee03288137f6add995cfac289b2f35d7452",
+          "bytes": "558bec83e4f081ec2402000053568b750833c0578bbe080200003987d0040000894c241c89842420020000894424180f8651010000bb100100008b043b8b4c241c50e87972ffffd9443b088bf08b46108b564c508b043b8d8f7005000051565283ec08d95c2404d9443b04d91c245650e8eb9fffffd9443b088b462483c420508b46408d4c2424518b0c3b8d5614525083ec08d95c2404d9443b04d91c245651e8bb9fffffd9443b088b4508d95c24348b562cd9443b048b4e44d95c2430d944243483c4206aff05f8010000508b4628528b143b505183ec08d95c2404d944242cd91c245652e835a0ffffd94424388b45088b4e308b564883c4246aff05fc010000508b4634508b043b515283ec08d95c2404d944242cd91c245650e8ff9fffffd94424388b45088b4e3c8b563883c4246aff0500020000508b4650518b0c3b525083ec08d95c2404d944242cd91c245651e8c99fffff8b44243c8b55088bba0802000083c00183c42483c3103b87d0040000894424180f82bdfeffff8b8424200200008bf28b8e0802000083b97007000020730583f8207207c681540b00000185c00f86f8000000d9e80f57c9d9eef30f1015f0944d018d4c24248bf80fb741086685c07c4d0fbfc08d04c0c1e0048d943008010000d902d941fcd8ebd809dee9d95c2418d9442418d9c9dbf1ddd976050f28c1eb06f30f10442418f30f1144241cd944241cdff276030f28c2f30f1102eb7dd941fcd8ead809d98608010000d8e1d95c2410d9442410d9cadbf2ddda76050f28c1eb06f30f10442410f30f11442414d9442414dff376030f28c2f30f118608010000d8ae98010000d95c2410d9442410d9c9dbf1ddd976050f28c1eb06f30f10442410f30f11442414d9442414dff276030f28c2f30f11869801000083c11083ef010f8521ffffffddd9ddd85f5e5b8be55dc20400"
+        }
+      ]
+    },
+    {
+      "unit": "0xb5a380",
+      "reason": "Exact b5d3bb call receiving W+10 and W+c0 plus child scalar and locals.",
+      "complete_reachable_cfg": true,
+      "size": 237,
+      "extent_end_rva": "0xb5a46d",
+      "listing_sha256": "5029e7131f8c3ec450deefc2c41baa623673e62191f9353d083ebe849d64598d",
+      "listing_path": "reports\\coordinator-20261030-cinematic-transform29\\decode-00b5a380.txt",
+      "metadata_path": "reports\\coordinator-20261030-cinematic-transform29\\decode-00b5a380.json",
+      "metadata_sha256": "84cb47a5eeda7901d9d412ea270471fa3a1aa593d4342253ec02bd55af86d9f6",
+      "byte_spans": [
+        {
+          "rva": "0xb5a380",
+          "size": 237,
+          "sha256": "6b9debfb39a1e8e0c4b4236073d8ad08588881a4b2a943071bfb4985425debcc",
+          "bytes": "53558b6c24108b85a0000000d9400c568bf157518d7e04d91c248bcfe8dfe8feffd9078b5614d84c24140fb742186685c0d95c2414f30f104c24147c3f8b8da00000008b098b79048b7f108b49080fbfc00fbe0407d904818d0c81d95c2418d9442414d9442418dff1ddd87608f30f10442418eb030f28c1f30f11010f2f0d00b54a018b5c241c763733ff397a0876308b5614d94424148b42048b14f8518b4cf804d91c248d04f8518b8b0802000052e82b68ffff8b461483c7013b780872d08b4e1480791a00741d8b442424d94424148b4c24208b168b520850515355518bced91c24ffd25f5e5d5bc21400"
+        }
+      ]
+    }
+  ],
+  "exact_instructions": [
+    {
+      "rva": "0xb5d3f8",
+      "size": 7,
+      "sha256": "0dc383c84104a9b50c4391c545259a01e52ea63ad29e27260325eeb32729b908",
+      "bytes": "8bb4241c010000",
+      "assembly": "mov         esi,dword ptr [esp+0000011Ch]",
+      "meaning": "ESI receives the sole cdecl argument W."
+    },
+    {
+      "rva": "0xb5d414",
+      "size": 3,
+      "sha256": "8ad693355bb53293618281bc1b8a26be35a4c115aab008c68d24eb29c7969b8d",
+      "bytes": "8b4814",
+      "assembly": "mov         ecx,dword ptr [eax+14h]",
+      "meaning": "H=[W]; the scalar accumulator count is unsigned [H+14]."
+    },
+    {
+      "rva": "0xb5d436",
+      "size": 5,
+      "sha256": "ab73f44428895e2d391ceeff008591c6210277e4a5a92aee1514bfde7a24e258",
+      "bytes": "f30f110488",
+      "assembly": "movss       dword ptr [eax+ecx*4],xmm0",
+      "meaning": "Initialize every accumulator float to -1 using the pinned constant."
+    },
+    {
+      "rva": "0xb5d449",
+      "size": 6,
+      "sha256": "8e525cbc37691954d7bf66e159c558a1f68eff4fb6148a686514755a466117e3",
+      "bytes": "39bed4020000",
+      "assembly": "cmp         dword ptr [esi+000002D4h],edi",
+      "meaning": "Unsigned [W+2d4] controls the per-child loop."
+    },
+    {
+      "rva": "0xb5d460",
+      "size": 6,
+      "sha256": "0eea0cd9adce0f54493436808f94dd891dc4f330e6f9419bbc7e501a30b9960a",
+      "bytes": "8b96d0020000",
+      "assembly": "mov         edx,dword ptr [esi+000002D0h]",
+      "meaning": "U_i=[W+2d0]+i*bb0."
+    },
+    {
+      "rva": "0xb5d46e",
+      "size": 3,
+      "sha256": "9c94450f116f82e19d63cf8bc8d495f1685afbf6f04e3a252ec22d82afc05537",
+      "bytes": "8d4610",
+      "assembly": "lea         eax,[esi+10h]",
+      "meaning": "Pass M=W+10 unchanged to the child helper."
+    },
+    {
+      "rva": "0xb5d47e",
+      "size": 3,
+      "sha256": "000969314c592b24c4dc2bd90f3a07f9962941a71894af7a0fca3580ed5f86df",
+      "bytes": "8b4804",
+      "assembly": "mov         ecx,dword ptr [eax+4]",
+      "meaning": "Post-evaluation receiver J=[[W+b0]+4]; b5d310 sets W+b0=U_i+20 before b5a380."
+    },
+    {
+      "rva": "0xb5d4b9",
+      "size": 3,
+      "sha256": "289bd4ce65d9ca0afd252c68a86f805922669ea8c69972873b82e62da4c88795",
+      "bytes": "0f2fc1",
+      "assembly": "comiss      xmm0,xmm1",
+      "meaning": "COMISS/JB skips negative or unordered (NaN) accumulator values."
+    },
+    {
+      "rva": "0xb5d4c1",
+      "size": 5,
+      "sha256": "ab73f44428895e2d391ceeff008591c6210277e4a5a92aee1514bfde7a24e258",
+      "bytes": "f30f110488",
+      "assembly": "movss       dword ptr [eax+ecx*4],xmm0",
+      "meaning": "Publish ordered values >=0 to [H+10]+j*4."
+    },
+    {
+      "rva": "0xb5d344",
+      "size": 6,
+      "sha256": "8ec7b3539621febdcd79502f5f1bc5eb673b66ec986149c74c78958ab1dd0f9c",
+      "bytes": "8988900b0000",
+      "assembly": "mov         dword ptr [eax+00000B90h],ecx",
+      "meaning": "U_i+b90 receives D_i=[U_i+8]."
+    },
+    {
+      "rva": "0xb5d34a",
+      "size": 3,
+      "sha256": "a4ef24357c582acd0d459becf21a2552b34163325c5953744e746d917bf142b5",
+      "bytes": "895020",
+      "assembly": "mov         dword ptr [eax+20h],edx",
+      "meaning": "U_i+20 receives the shared stack-local accumulator descriptor K."
+    },
+    {
+      "rva": "0xb5d384",
+      "size": 3,
+      "sha256": "0441741bcb049f3d550f100c7f2481140b5055088ad222b8dfd7afff829ac093",
+      "bytes": "897204",
+      "assembly": "mov         dword ptr [edx+4],esi",
+      "meaning": "K+4 receives [U_i+10]."
+    },
+    {
+      "rva": "0xb5d38b",
+      "size": 6,
+      "sha256": "26ce334ac1d93a046e02c8d1ae728ec64b6f3571a130f4ccee2bf48cc7d66ea3",
+      "bytes": "898aa0000000",
+      "assembly": "mov         dword ptr [edx+000000A0h],ecx",
+      "meaning": "M+a0=W+b0 receives U_i+20."
+    },
+    {
+      "rva": "0xb5d398",
+      "size": 6,
+      "sha256": "e3b51035cea7578bfc2e56db58998adb6cce7f06deeede550e1d27135cff2547",
+      "bytes": "89b108020000",
+      "assembly": "mov         dword ptr [ecx+00000208h],esi",
+      "meaning": "O+208=W+2c8 receives U_i+40."
+    },
+    {
+      "rva": "0xb5d3b6",
+      "size": 2,
+      "sha256": "7f9512bb270838a37ba1a6f3d2abbc601fcab1a1efd5eaee660c3baf995ed7c4",
+      "bytes": "8b08",
+      "assembly": "mov         ecx,dword ptr [eax]",
+      "meaning": "N_i=[[D_i]] becomes ECX for b5a380; D_i=[U_i+8]."
+    },
+    {
+      "rva": "0xb5a3a6",
+      "size": 4,
+      "sha256": "4a9a9ccf0fbb1ae00caf066dc0fa20f8573c58841e62dcb78593171ad822038d",
+      "bytes": "d84c2414",
+      "assembly": "fmul        dword ptr [esp+14h]",
+      "meaning": "Multiply caller scalar U_i+18 by float[N_i+4], after opaque b48c80(N_i+4,float[U_i+2c])."
+    },
+    {
+      "rva": "0xb5a3d1",
+      "size": 4,
+      "sha256": "38c731c0ee33d0118b6f1dcfc1e5b6e1a7beab6ee9841b2b2f6ef2d034e559a3",
+      "bytes": "0fbe0407",
+      "assembly": "movsx       eax,byte ptr [edi+eax]",
+      "meaning": "Use signed mapped byte indexed by the nonnegative signed16 [C_i+18], with C_i=[N_i+14]."
+    },
+    {
+      "rva": "0xb5a3f8",
+      "size": 4,
+      "sha256": "85c4b6bd026e40131a0a614e8766ce8c86483aca2da811ac8b07cd15b9a236cb",
+      "bytes": "f30f1101",
+      "assembly": "movss       dword ptr [ecx],xmm0",
+      "meaning": "Write existing accumulator if existing>scaled weight, otherwise scaled weight; unordered comparison selects scaled weight."
+    },
+    {
+      "rva": "0xb5a443",
+      "size": 4,
+      "sha256": "b8651eef5f797c97f0a455982614399019997b8dcafd103d8c3d385e25491fcf",
+      "bytes": "80791a00",
+      "assembly": "cmp         byte ptr [ecx+1Ah],0",
+      "meaning": "Nonzero byte[C_i+1a] admits virtual dispatch receiving M and O."
+    },
+    {
+      "rva": "0xb5a45d",
+      "size": 1,
+      "sha256": "a25513c7e0f6eaa80a3337ee18081b9e2ed09e00af8531c8f7bb2542764027e7",
+      "bytes": "55",
+      "assembly": "push        ebp",
+      "meaning": "Push the same M=W+10 for the virtual call."
+    },
+    {
+      "rva": "0xb5a464",
+      "size": 2,
+      "sha256": "3b13dd103c9872398081e5c055fec5a762b83f1db6da42d9fdc5432a69eff25d",
+      "bytes": "ffd2",
+      "assembly": "call        edx",
+      "meaning": "Unresolved virtual slot+8 call with ECX=N_i and stack(weight,M,O,descriptor,zero-vector)."
+    },
+    {
+      "rva": "0xb595fa",
+      "size": 7,
+      "sha256": "2eac232938d91708f7d69acde37ffffd5683aef908e322b3261e51c8b7bcbce8",
+      "bytes": "c681540b000001",
+      "assembly": "mov         byte ptr [ecx+00000B54h],1",
+      "meaning": "Write byte[V+b54]=1 when [V+770]>=32 or the helper-produced local count>=32; V=[O+208]."
+    },
+    {
+      "rva": "0xb5966e",
+      "size": 4,
+      "sha256": "4c9dd39fc4637b369ce24e9aa92071abcd9e2949e9f1dc3355685e06b4513914",
+      "bytes": "f30f1102",
+      "assembly": "movss       dword ptr [edx],xmm0",
+      "meaning": "For a nonnegative signed16 index, store a clamped scalar to O+108+index*90."
+    },
+    {
+      "rva": "0xb596af",
+      "size": 8,
+      "sha256": "dba1787c00812c337c134b8dd872e9e800fdfd2658d76c177b2c3eb35666f886",
+      "bytes": "f30f118608010000",
+      "assembly": "movss       dword ptr [esi+00000108h],xmm0",
+      "meaning": "For a negative signed16 index, store first clamped scalar to O+108."
+    },
+    {
+      "rva": "0xb596e9",
+      "size": 8,
+      "sha256": "6d5c7afa87f25e228a1664ee73d1667e78285ce083ac4a576894ba24a64a3299",
+      "bytes": "f30f118698010000",
+      "assembly": "movss       dword ptr [esi+00000198h],xmm0",
+      "meaning": "The negative-index branch also stores a clamped scalar to O+198."
+    }
+  ],
+  "direct_calls": [
+    {
+      "rva": "0xb594a2",
+      "size": 5,
+      "sha256": "c45a3b9e3cf86f64883cccc37142f7fd5491611821d71464f09fb34290bd024d",
+      "bytes": "e87972ffff",
+      "assembly": "call        00F50720",
+      "target_rva": "0xb50720",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb594d0",
+      "size": 5,
+      "sha256": "5a7c9eceb8612d772fad5cf2cc10534553cc2a5d0dc546811ad350b996f478ed",
+      "bytes": "e8eb9fffff",
+      "assembly": "call        00F534C0",
+      "target_rva": "0xb534c0",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb59500",
+      "size": 5,
+      "sha256": "a7eff4eae9954bf9277c48d1b1321c619328f1561bdc122bbbbea4de37af79d2",
+      "bytes": "e8bb9fffff",
+      "assembly": "call        00F534C0",
+      "target_rva": "0xb534c0",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb59546",
+      "size": 5,
+      "sha256": "77c266b62dde22fbed39d4cf90432b0452406303c561d4a3c1cba12bc3ab59d4",
+      "bytes": "e835a0ffff",
+      "assembly": "call        00F53580",
+      "target_rva": "0xb53580",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb5957c",
+      "size": 5,
+      "sha256": "4809fc539a25c3ecc6be1f2da4c6300d969e255704e8c7b5da404360ab1474b4",
+      "bytes": "e8ff9fffff",
+      "assembly": "call        00F53580",
+      "target_rva": "0xb53580",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb595b2",
+      "size": 5,
+      "sha256": "e9e6e76bc331fabc8c005ed4edc504663caf6258f15f239c271ef0c132507a52",
+      "bytes": "e8c99fffff",
+      "assembly": "call        00F53580",
+      "target_rva": "0xb53580",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb5a39c",
+      "size": 5,
+      "sha256": "2eb540232612c72fab5b1eacc78fcac90eb0eb670675e31266f700f05ddb9a6f",
+      "bytes": "e8dfe8feff",
+      "assembly": "call        00F48C80",
+      "target_rva": "0xb48c80",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb5a430",
+      "size": 5,
+      "sha256": "8d4edb02077753370f641b3aec5c2ea287285b7279cccddb77eef818e914bcf4",
+      "bytes": "e82b68ffff",
+      "assembly": "call        00F50C60",
+      "target_rva": "0xb50c60",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb5a464",
+      "size": 2,
+      "sha256": "3b13dd103c9872398081e5c055fec5a762b83f1db6da42d9fdc5432a69eff25d",
+      "bytes": "ffd2",
+      "assembly": "call        edx",
+      "target_status": "Virtual slot+8 of N_i, dynamic receiver/vtable identity not established."
+    },
+    {
+      "rva": "0xb5d3bb",
+      "size": 5,
+      "sha256": "224d04126cd73c3f7c258b287aa246baeed6c9177de3cd074ce2736f9fdbf874",
+      "bytes": "e8c0cfffff",
+      "assembly": "call        00F5A380",
+      "target_rva": "0xb5a380",
+      "new_target_decoded": true
+    },
+    {
+      "rva": "0xb5d473",
+      "size": 5,
+      "sha256": "15f94495b3d8127fc0d53699d2263680b149c7dfe3328c18a65e35a6b27da8ba",
+      "bytes": "e898feffff",
+      "assembly": "call        00F5D310",
+      "target_rva": "0xb5d310",
+      "new_target_decoded": true
+    },
+    {
+      "rva": "0xb5d485",
+      "size": 5,
+      "sha256": "36dcfcf4f99a6ca4a640dd57cfb1df5d30de9114f9c6cf1c95cf8be5b8a8607f",
+      "bytes": "e8d6bfffff",
+      "assembly": "call        00F59460",
+      "target_rva": "0xb59460",
+      "new_target_decoded": true
+    }
+  ],
+  "constants": [
+    {
+      "rva": "0x10d9420",
+      "size": 4,
+      "sha256": "c68830a25204a09f8e77aada6bc5807f607cccaaa0ebb2a7122d317584478a8b",
+      "bytes": "000080bf",
+      "value": -1.0,
+      "meaning": "Accumulator initialization -1."
+    },
+    {
+      "rva": "0x10ab500",
+      "size": 4,
+      "sha256": "46cecbeaa7de6866910a4856ef1f7378f9dd9dfa698578637ce4ecb33e7f7bac",
+      "bytes": "00000034",
+      "value": 1.1920928955078125e-07,
+      "meaning": "Threshold gating b5a380 child-record processing."
+    },
+    {
+      "rva": "0x10d94f0",
+      "size": 4,
+      "sha256": "e00e5eb9444182f352323374ef4e08ebcb784725fdd4fd612d7730540b3e0c8c",
+      "bytes": "0000803f",
+      "value": 1.0,
+      "meaning": "Scalar upper-clamp value 1."
+    }
+  ],
+  "notation": {
+    "W": "Original caller workspace.",
+    "M": "W+10: copied twelve-float payload starts here; padded slots are inherited unchanged.",
+    "O": "W+c0",
+    "H": "[W]",
+    "U_i": "[W+2d0]+i*bb0",
+    "K": "Stack descriptor in b5d3f0: K+0=H, K+4=per-child [U_i+10], K+8=address of stack scalar array, K+c=initial [H+14].",
+    "D_i": "[U_i+8]",
+    "N_i": "[[D_i]]",
+    "C_i": "[N_i+14]",
+    "V": "[O+208], set to U_i+40 before b5a380",
+    "J": "[[W+b0]+4], equal to [U_i+24] if nested evaluation preserves the pointers"
+  },
+  "abi": {
+    "driver": "b5d3f0(W), cdecl, plain ret. Caller b6ba76 reclaims 4 bytes.",
+    "prepare": "b5d310(M,O,U_i,K), cdecl, plain ret. Caller b5d481 reclaims 10h bytes.",
+    "evaluate": "b5a380: ECX=N_i, stack(float[U_i+18],M,O,stack descriptor,stack zero-vector), ret14.",
+    "postprocess": "b59460: ECX=J, stack(O), ret4.",
+    "virtual": "b5a464: ECX=N_i; target=[[N_i]+8]; stack(scaled weight,M,O,same descriptor,same zero-vector)."
+  },
+  "findings": {
+    "transform": "No decoded body directly multiplies or overwrites the twelve copied transform floats at M+{0,4,8,10,14,18,20,24,28,30,34,38}. M is forwarded to conditional unresolved virtual+8 at b5a464, and opaque callees/pointer aliases prevent a whole-call preservation or final-composition claim.",
+    "driver": "Allocate one local scalar array initialized to -1 for unsigned [H+14] elements. For each i<[W+2d4], call b5d310(M,O,U_i,K), then b59460([[W+b0]+4],O). After all children, publish only ordered scalar values >=0 into the float array [H+10]. No selected-view identity follows.",
+    "preparation": "Direct stores: U_i+b90=[U_i+8]; U_i+20=K; K+4=[U_i+10]; W+b0=U_i+20; W+2c8=U_i+40. K and the two descriptor/vector arguments are local stack objects; lifetime beyond the calls is not established.",
+    "scalar_accumulation": "b5a380 first calls opaque b48c80 with receiver N_i+4 and float[U_i+2c], then computes w=float[N_i+4]*float[U_i+18]. If signed16[C_i+18]>=0, use signed8[ [[K+4]+10] + index ] as accumulator index. Store old if ordered old>w, else w. Mapping range and object identity are not proved.",
+    "child_output": "If w is ordered greater than the pinned threshold, b5a380 forwards each 8-byte record in [C_i+4], count[C_i+8], plus w to b50c60 with ECX=[O+208]. If byte[C_i+1a]!=0, dispatch virtual+8 with M and O. These targets remain opaque.",
+    "postprocess": "b59460 iterates records at V+110 in strides10, count[V+4d0]. Opaque b50720/b534c0/b53580 receive child-derived inputs. Explicit output pointers include V+570 and O+1f8/+1fc/+200 (W+2b8/+2bc/+2c0), plus a stack list; callee effects are not inferred. Set byte[V+b54]=1 when [V+770]>=32 or local count>=32. For each local record, finite-value arithmetic uses delta=(1-a)*b: if signed16 index>=0, O+108+index*90=clamp(previous-delta,0,1); otherwise apply the same subtraction/clamp separately to O+108 and O+198. Exact NaN behavior follows the pinned branches, not generic clamp semantics.",
+    "direct_output": "At b5d4c1, K scalar[j] is copied to [H+10]+4*j only when COMISS against zero is ordered >=0; negative and NaN values are skipped. This is a directly reachable scalar-output route, not a proven selected camera transform.",
+    "conditional_zero_child_case": "If [W+2d4]==0, b5d3f0 invokes no child helpers, leaves the local array at -1, and publishes none of those scalars.",
+    "ownership_limit": "Parent reports original B route separately established through 3b5a00 conditional record virtual+14 ->3b23c0/39cd30, B=P+8e0, then b6bb00. That route is not re-decoded here; scheduler-instance equivalence and selected-view ownership remain unproved.",
+    "acceptance_limit": "No production fix, hook, API proposal, selected local-player view/camera, head-rotation authority, HUD, cutscene entry/skip/exit, gameplay return, actual game, or headset claim."
+  },
+  "next_unresolved_edge": {
+    "callsite_rva": "0xb5a464",
+    "target": "[[N_i]+8]",
+    "receiver": "N_i=[[D_i]], D_i=[U_i+8], U_i=[W+2d0]+i*bb0.",
+    "gate": "byte[[N_i+14]+1a]!=0",
+    "arguments": "(w,M=W+10,O=W+c0,stack descriptor,stack zero-vector)",
+    "required": "Establish this exact per-child receiver/vtable identity and slot+8 target, then decode its effects on the forwarded M/O. Do not choose an adjacent or guessed implementation."
+  },
+  "verification": {
+    "executable_hash": true,
+    "inherited_hash": true,
+    "reused_saved_decode_bytes_and_hashes": true,
+    "new_saved_decode_bytes_and_hashes": true,
+    "complete_reachable_cfg": true,
+    "no_overlap": true,
+    "exact_rel32_targets": true,
+    "attempts": "All four exact-target decodes succeeded; no rejected decode, adjacent spill, or generic scan."
+  },
+  "execution": {
+    "git": false,
+    "builds": false,
+    "tests": false,
+    "game": false,
+    "game_process_access": false,
+    "input": false,
+    "xr": false,
+    "profiles": false,
+    "installs": false,
+    "packages": false,
+    "subagents": false,
+    "production_writes": false
+  },
+  "frozen": true
+}

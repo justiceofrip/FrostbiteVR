@@ -1,0 +1,671 @@
+{
+  "schema": "chat27.cinematic_evaluate_static_code.v1",
+  "evidence_level": "Offline file-backed static code; no deterministic execution test, actual-game check, or headset acceptance.",
+  "executable_sha256": "3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258",
+  "preferred_base": "0x400000",
+  "supplied_worktree_head": "6c42c3fd6d39715d47a07584061697b2be8a678e; supplied by parent, no Git queried",
+  "script_sha256": "47c15243ca5df34aa71cb2a7b897bd4fc45a7d8d2e836c48f865cd03a725fd30",
+  "helper": {
+    "path": "handoff\\tasks\\CHAT27\\20261030-manager18\\cinematic_manager.py",
+    "sha256": "1a6506e11576f290e70f847a65f307cf1cebffab928360120d4fee5e587857fb"
+  },
+  "inherited": {
+    "path": "handoff\\tasks\\CHAT27\\20261030-queue25\\proof01.json",
+    "sha256": "09a31eea86970d877e406ae258273f1188910571f494e6539e8c6c701b2772ab"
+  },
+  "scope": {
+    "new_complete_functions": 4,
+    "new_unique_decoded_bytes": 1579,
+    "partial_functions": 0,
+    "preferred_function_limit": 4,
+    "absolute_function_limit": 8,
+    "maximum_decoded_bytes": 65536,
+    "adjacent_spill_functions": 0,
+    "generic_scans": 0,
+    "reused_bytes": 480,
+    "strategy": "Exact inherited call then three exact calls within that complete wrapper. Decode single instructions, follow reachable intrafunction branches, stop at returns; byte/hash and CFG closure verified."
+  },
+  "units": [
+    {
+      "unit": "0xb6b9c0",
+      "reason": "Exact direct consumer from inherited call0xb6bc20.",
+      "complete_reachable_cfg": true,
+      "extent_end_rva": "0xb6baf5",
+      "listing_sha256": "6138b80ec1a011cb0c2b1aa4a9d6e7bb36af84e24e1c03a8984bb56a388aa995",
+      "listing_path": "reports\\coordinator-20261030-cinematic-evaluate28\\decode-00b6b9c0.txt",
+      "metadata_path": "reports\\coordinator-20261030-cinematic-evaluate28\\decode-00b6b9c0.json",
+      "metadata_sha256": "776ef5e37fdd52062c0b909e2b2fb6cc8fef4c1e9751f68c2fdca8c287f9f7ab",
+      "rva": "0xb6b9c0",
+      "size": 309,
+      "sha256": "676315b1d76ccfc3096027b9775704eaf3b1ed934d8b6af65c1f6ece0ab1be77",
+      "bytes": "558bec83e4f081ecf80100008d44241c568bf18bc88bd0894c24108944241c8d4c24748954240c8bd18d442460894424148bc1894c2470895424648d9424fc0000008d8c24d4000000894c24688bca894424608bc2899424ec000000898c24dc0000008d9424fc010000578bce898424e4000000899424e8000000e810bbfeffd9450c83ec08d95c2404d94508d91c24e81b71ffff8b46343b46388b7d1874198b4d148b55105751528bcee8706effff57e87a19ffff83c404578d442414508bcee8caf5ffffd9450c8d4c24105183ec08d95c24048bced94508d91c24e87efaffff8b8424e000000085c074123b8424f0000000740950e8f4fd4aff83c4048b44246485c0740f3b442474740950e8ddfd4aff83c4048b44241085c0740f3b442420740950e8c6fd4aff83c4045f5e8be55dc21400"
+    },
+    {
+      "unit": "0xb628e0",
+      "reason": "Exact record/workspace call at0xb6ba6b.",
+      "complete_reachable_cfg": true,
+      "extent_end_rva": "0xb62b6b",
+      "listing_sha256": "26f574ce230693de9fec25a2eedd47cb8f243f5f46bb8633d3764a6e14979ea8",
+      "listing_path": "reports\\coordinator-20261030-cinematic-evaluate28\\decode-00b628e0.txt",
+      "metadata_path": "reports\\coordinator-20261030-cinematic-evaluate28\\decode-00b628e0.json",
+      "metadata_sha256": "9d82de418522b8bebc5f935d0e13ad1e2a49cc8c78718edd533d351e7cd2c78a",
+      "rva": "0xb628e0",
+      "size": 651,
+      "sha256": "4275fbb13c2bf74a4a76467849cec62dc960ef6061b374c75206d1cbc78923de",
+      "bytes": "558bec83e4f083ec44538b5d08568b7510578bf98b4f2c85c90f8488000000d9eef30f1005009d4001dd0588944d01f30f100d20944d01dcc96a02d9c98d8690000000508d9680000000d95c242052d94424248d44243cd954242c50d95c24388d542450d9433052d8442434f30f11442444f30f114c2448f30f1144244cd95c2454d84334d95c2458d94338d844243cd95c245ce85780fdff84c07548f30f100df0944d01eb08f30f100d9c5d4501d943300f57c0d99e80000000d94334d99e84000000d94338d99e88000000f30f118698000000f30f118e94000000f30f1186900000008b078986a00000008b4f04898ea40000008b57088996a80000008b470c8986ac000000d903d95e10d94304d95e14d94308d95e18d94310d95e20d94314d95e24d94318d95e28d94320d95e30d94324d95e34d94328d95e38d94330d95e40d94334d95e44d94338d95e488b47308b4810890e8b50148d86c00000008956048986d80200008b47288b08837954000f84970000008d5424108bc18b485452e8a91848008b4c24108b118b02ffd08b4c24108946708b118b02c744241800000000ffd085c07665c7442414000000008d5e588b4c24108b41088b4c24148d54241c5203c8e8441848008b108b42088b40048b4f185051e8a28cadffd940308b4c2410d95bf8d940348b118344241801d95bfcd94038834424146083c030d91b8b0283c310ffd03944241872a68b4f382b4f3433dbc1f9027466895c24188b96d00200008b4424188b4f348b0c9903c25089442418e87454ffff8b4f488b47443bc174178b57348b149a8d6424003910740783c0043bc175f53bc18b4c24140f95c00a450c81442418b00b00008841348b57382b573483c301c1fa023bda729e5f5e5b8be55dc20c00"
+    },
+    {
+      "unit": "0xb6b050",
+      "reason": "Exact local-result collection call at0xb6ba81.",
+      "complete_reachable_cfg": true,
+      "extent_end_rva": "0xb6b1f4",
+      "listing_sha256": "f98aba9352cbd9d9ca0283f154289792d73d59e729c3b66e9bb0b1f80c5dca3d",
+      "listing_path": "reports\\coordinator-20261030-cinematic-evaluate28\\decode-00b6b050.txt",
+      "metadata_path": "reports\\coordinator-20261030-cinematic-evaluate28\\decode-00b6b050.json",
+      "metadata_sha256": "ed1c2662a4bdf625e526d41366489174efcd8389aec2cff567d7295a92e0a61c",
+      "rva": "0xb6b050",
+      "size": 420,
+      "sha256": "6bc1d61b754f4befc8df896fa652ae8d9c201a9711b357187ff433ee79f9787d",
+      "bytes": "51538b5c241055568bf18b46382b46345733ffc1f802c644241300745033ed908b83d00200008b4e3403c58d0cb98b0983c04050e85753feff84c075188b56382b563483c701c1fa0281c5b00b00003bfa72cdeb186a00b9c04b8a01c644241701e89ade59ff6a01e8e3f7acff8b46382b463433ffc1f802744133ed8d6424008b8bd00200008b542418d94429308d0429525183c040d91c24508b46348b0cb8e8cbf2ffff8b4e382b4e3483c701c1f90281c5b00b00003bf972c5807c24130074116a00e887f7acffb9c04b8a01e85dde59fff30f1083c0020000f30f100df0944d010f2fc8f30f1144241c7648d944241cd9e8d9c0dee2d9c9d8aefc000000d95c241cd944241cd9eedff1ddd876050f57c0eb06f30f1044241cf30f1144241cd944241cdff1ddd876030f28c1f30f1186fc0000008b8ee000000085c9742180be0c0100000074188b442418d9460c8d93c0000000525051d91c24e80fb0fdffd983c40200008b860801000085c0d9e1d95c2418d9442418d99e000100007c158b8e84000000d983c40200008b0481d84010d958108b56445f8956485e5d5b59c20800"
+    },
+    {
+      "unit": "0xb6b520",
+      "reason": "Exact final local-result processing call at0xb6ba9d.",
+      "complete_reachable_cfg": true,
+      "extent_end_rva": "0xb6b5e7",
+      "listing_sha256": "cf786b23ea9c9df8acef6f7115ecf98384c94275e8e2ed4de4f39727fcb66605",
+      "listing_path": "reports\\coordinator-20261030-cinematic-evaluate28\\decode-00b6b520.txt",
+      "metadata_path": "reports\\coordinator-20261030-cinematic-evaluate28\\decode-00b6b520.json",
+      "metadata_sha256": "b533d019866fdfabe0f9ccb067b54c8b241d986125843df27c6293f8ff0ba78b",
+      "rva": "0xb6b520",
+      "size": 199,
+      "sha256": "23c409935ef0d98378e1276f325c64b79c335ec10ef63274040b18c6cdb8c32f",
+      "bytes": "568bf1e808c3ffff8b46288b0880797c00744c8b56682b56645733ffc1fa02743d8b4664d9460c8b04b88b50146a008d4860516830254f0151d91c2452e8cea5acff8b46648b04b8d9401c83c701d958188b4e682b4e64c1f9023bf972c35f8b86980000002b869400000033d2c1f802742f8b8e940000008b0c918b417485c07409d9415cd84010d958108b86980000002b869400000083c201c1f8023bd072d18bcee8b849feffd9442408518b4c2414d91c24518bcee87445feff8bcee81dfeffff5ec20c00"
+    }
+  ],
+  "reused_decodes": [
+    {
+      "rva": "0xb6bb00",
+      "size": 480,
+      "sha256": "9165e90c019faa9c04d2cde3f5a021825bd2f58b76c015f817f9e3617ac35426",
+      "unit": "0xb6bb00",
+      "bytes": "83ec1c538b5c24288b4b042b0bb893244992f7e903d1c1fa065533ed8bc25733ffc1e81f03c2897c2410896c2414896c2418896c2420c644242400896c240c0f848701000056896c24348d9b00000000817c2434000e00000f834001000068e0020000e848a4fcff6a148bd0e8afcefdff03d08bc283c40883e00f74052bd083c210556a1052e805514bff8bf883c40c3bfd8db7e002000074400f57c0892f896f04896f708d8fc000000089afa000000089afa4000000f30f1187a8000000f30f1187ac000000e84454feff89afd002000089afd40200008bef89b5d0020000c785d4020000140000008b3303742434558b46408b48382b483483c034c1f902898dd4020000d946440fb6564d8b4e40525683ec08d95c2404d9442444d91c24e89bfdffff807e4c007438807c24380074318b4e408d44241450e851ccffffd946488b4e548b565051518b4e40d91c24528d4424205081c5c00000005556e83dceffff57e887fb4aff8b4b042b0b8b7424148344243870b893244992f7e903d1c1fa068bcac1e91f83c60103ca83c40433ed3bf1897424100f82b2feffff396c24248b7c241474238b5c24183bfb8bf7740f8b1652e806d3acff83c6043bf375f18b44242450e835faacff5e3bfd740957e8dafb4aff83c4045f5d5b83c41cc3",
+      "decode_sha256": "c1402709014407ee8a5b3a92b7d0b85d01aa9ffc7d0aaac6573e9652db1ee0b2",
+      "instruction_count": 151,
+      "path": "reports\\coordinator-20261030-cinematic-queue25\\decode-00b6bb00-1e0.txt"
+    }
+  ],
+  "exact_instructions": [
+    {
+      "rva": "0xb6ba55",
+      "size": 6,
+      "sha256": "9dcd20a67d07f21d38c9d797d0e69ba859c96489591c5a52d5145b4e2e9beaf8",
+      "bytes": "8b46343b4638",
+      "meaning": "Only a nonempty S+34/S+38 pointer span admits record initialization and the following W-only call."
+    },
+    {
+      "rva": "0xb6ba60",
+      "size": 11,
+      "sha256": "9fbdb04d82fe7e2613462c4bbb163b85d72651af81908c1feaa3a632b4886642",
+      "bytes": "8b4d148b55105751528bce",
+      "meaning": "Forward unchanged F,R,W as arguments(R,F,W), with ECX=S."
+    },
+    {
+      "rva": "0xb6baf2",
+      "size": 3,
+      "sha256": "596494f50350462943d59d32bfc675a2c3e2e9a6aa0d0606422e3cbbffd86c6b",
+      "bytes": "c21400",
+      "meaning": "Wrapper consumes exactly five stack words(T,A,R,F,W)."
+    },
+    {
+      "rva": "0xb628ea",
+      "size": 3,
+      "sha256": "350035d67bbad9ded6aeca4542efd660ac807e838bc409c091a6749844eb401b",
+      "bytes": "8b5d08",
+      "meaning": "Record R is first argument in EBX."
+    },
+    {
+      "rva": "0xb628ee",
+      "size": 3,
+      "sha256": "d97e0e78eb460d97e7dfc62d4022ba021c01cb28faab461531a35fd995900dae",
+      "bytes": "8b7510",
+      "meaning": "Workspace W is third argument in ESI."
+    },
+    {
+      "rva": "0xb628f4",
+      "size": 5,
+      "sha256": "533ee4b4e4abb00a29e62d217286694326e00fb4fc10ad2ca375b46ca6ce3087",
+      "bytes": "8b4f2c85c9",
+      "meaning": "Optional helper receiver Q=[S+2c]."
+    },
+    {
+      "rva": "0xb62995",
+      "size": 6,
+      "sha256": "882e6f73188ab196aa24a870655b87b98951029d976f3bc7d680b32443ae8d32",
+      "bytes": "d99e80000000",
+      "meaning": "Fallback W+80 gets R+30; following instructions copy R+34/+38 to W+84/+88."
+    },
+    {
+      "rva": "0xb629ad",
+      "size": 24,
+      "sha256": "665e70acf77064319be27267bb059ef3bba6baf77c208b26197692db87ee0baa",
+      "bytes": "f30f118698000000f30f118e94000000f30f118690000000",
+      "meaning": "Fallback W+90/+98 become zero; W+94 uses a branch-specific constant."
+    },
+    {
+      "rva": "0xb629c5",
+      "size": 8,
+      "sha256": "a3b5b4fa04e5ad7c9773d879821401e710727dfd0cbec1884ba540a2022d0f4f",
+      "bytes": "8b078986a0000000",
+      "meaning": "State payload S+0..+c is copied as four dwords into W+a0..+ac."
+    },
+    {
+      "rva": "0xb629e8",
+      "size": 5,
+      "sha256": "cdcced7991b0fe8e8f925813c8a44989001749513624000ad766ff304e5a3334",
+      "bytes": "d903d95e10",
+      "meaning": "First of twelve scalar copies: R+0 -> W+10. Padding is not copied."
+    },
+    {
+      "rva": "0xb62a29",
+      "size": 6,
+      "sha256": "ad86201221dfaf8df9e413f4f5fd14df8c886a8acb916c017c09d5b1d3d334d1",
+      "bytes": "d94338d95e48",
+      "meaning": "Last of twelve scalar copies: R+38 -> W+48."
+    },
+    {
+      "rva": "0xb62a2f",
+      "size": 8,
+      "sha256": "5c2bced47ae0b0a5fa14b9bf3cdc38c1e0393a119b4b93ca8c5dba543783208a",
+      "bytes": "8b47308b4810890e",
+      "meaning": "W+0 gets [[S+30]+10]; W+4 gets [[S+30]+14]."
+    },
+    {
+      "rva": "0xb62a43",
+      "size": 6,
+      "sha256": "7067d211cb8b6a730427385525d07af650f09f415f76ca7f14630ac25d9c648c",
+      "bytes": "8986d8020000",
+      "meaning": "W+2d8 points to W+c0."
+    },
+    {
+      "rva": "0xb62b00",
+      "size": 6,
+      "sha256": "0eea0cd9adce0f54493436808f94dd891dc4f330e6f9419bbc7e501a30b9960a",
+      "bytes": "8b96d0020000",
+      "meaning": "Per-child workspace U_i starts at [W+2d0]+i*bb0."
+    },
+    {
+      "rva": "0xb62b41",
+      "size": 6,
+      "sha256": "0c1736f00f6a5b53ed403fd87a4d36f8629becb3ce3ecc446b2353dd2522b0af",
+      "bytes": "0f95c00a450c",
+      "meaning": "U_i+34 receives low-byte F OR membership in S+44/S+48 pointer span."
+    },
+    {
+      "rva": "0xb62b47",
+      "size": 11,
+      "sha256": "5004de525159921cea9885766ee37d06bb4e5a0c4b1389dc7fb7eb2067bed66e",
+      "bytes": "81442418b00b0000884134",
+      "meaning": "Advance U_i by bb0 and store its flag at+34."
+    },
+    {
+      "rva": "0xb6b080",
+      "size": 4,
+      "sha256": "b0535e9098efbe09edaf21155ae1d554e0406cf13ba49dcbe3fe1dd56112af35",
+      "bytes": "83c04050",
+      "meaning": "First collection pass forwards U_i+40 to b503e0 with child receiver."
+    },
+    {
+      "rva": "0xb6b0da",
+      "size": 16,
+      "sha256": "7d63d467976d794209262c083f1f910233801be4656c100f10c07036860db280",
+      "bytes": "d94429308d0429525183c040d91c2450",
+      "meaning": "Second collection pass forwards arguments(U_i+40,float[U_i+30],L)."
+    },
+    {
+      "rva": "0xb6b1c9",
+      "size": 6,
+      "sha256": "f0eeb21982ee8b798d059b7daa9e5e0ba77169ca9ab773cfee09a8ab31a4c400",
+      "bytes": "d99e00010000",
+      "meaning": "Direct state output S+100=abs(float[W+2c4])."
+    },
+    {
+      "rva": "0xb6b1e6",
+      "size": 7,
+      "sha256": "b1594e97071eac78dd136afb4a6dd1e6295785770657925997f7d7f835194c0b",
+      "bytes": "8b56445f895648",
+      "meaning": "Direct state output S+48=S+44."
+    },
+    {
+      "rva": "0xb6b5c8",
+      "size": 15,
+      "sha256": "c70ae316a36c4b3e7db5a5c2303a6c0cfc1e0a6691e3df7c697ba0095946e039",
+      "bytes": "d9442408518b4c2414d91c24518bce",
+      "meaning": "Final helper b4fb50 receives ECX=S and arguments(L,T)."
+    },
+    {
+      "rva": "0xb6b5e4",
+      "size": 3,
+      "sha256": "dbd1a662565b07272069f88faadf4327acaf51b7d14f236c84c0a9679d07cef3",
+      "bytes": "c20c00",
+      "meaning": "Final-stage wrapper consumes three arguments(T,A,L); A has no direct read in this body."
+    }
+  ],
+  "direct_calls": [
+    {
+      "rva": "0xb62974",
+      "size": 5,
+      "sha256": "066eb12d654fe0cbcf4f32762b0dfc628bc3f9a15c27c9b82d9ed3820c7b7ce8",
+      "bytes": "e85780fdff",
+      "assembly": "call        00F3A9D0",
+      "target_rva": "0xb3a9d0",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb62a62",
+      "size": 5,
+      "sha256": "668ef4e8d63d58d2b4a4919b0a07ee2931cf412ada55dd7e645c955f351b3593",
+      "bytes": "e8a9184800",
+      "assembly": "call        013E4310",
+      "target_rva": "0xfe4310",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb62a6f",
+      "size": 2,
+      "sha256": "491e503ba40e8d303d46b4b51b14826ae08e8c8c3ded6f1441ef1d5d53c42534",
+      "bytes": "ffd0",
+      "assembly": "call        eax",
+      "target_status": "Indirect target unresolved; no dynamic object identity inferred."
+    },
+    {
+      "rva": "0xb62a84",
+      "size": 2,
+      "sha256": "491e503ba40e8d303d46b4b51b14826ae08e8c8c3ded6f1441ef1d5d53c42534",
+      "bytes": "ffd0",
+      "assembly": "call        eax",
+      "target_status": "Indirect target unresolved; no dynamic object identity inferred."
+    },
+    {
+      "rva": "0xb62aa7",
+      "size": 5,
+      "sha256": "95caedf5d6d6a82ec33798cbe77d28c3691f271b0925077fd6a1ffa218708c85",
+      "bytes": "e844184800",
+      "assembly": "call        013E42F0",
+      "target_rva": "0xfe42f0",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb62ab9",
+      "size": 5,
+      "sha256": "659ddf38cf30f66a76186170a22f504ce6796946c1e26f089a85011c558c4b96",
+      "bytes": "e8a28cadff",
+      "assembly": "call        00A3B760",
+      "target_rva": "0x63b760",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb62ae7",
+      "size": 2,
+      "sha256": "491e503ba40e8d303d46b4b51b14826ae08e8c8c3ded6f1441ef1d5d53c42534",
+      "bytes": "ffd0",
+      "assembly": "call        eax",
+      "target_status": "Indirect target unresolved; no dynamic object identity inferred."
+    },
+    {
+      "rva": "0xb62b17",
+      "size": 5,
+      "sha256": "2480137ef2f13b908ece4cbf568ebfad2e221a4e84eab98ba57b621abc896831",
+      "bytes": "e87454ffff",
+      "assembly": "call        00F57F90",
+      "target_rva": "0xb57f90",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb6b084",
+      "size": 5,
+      "sha256": "c9bd521ac12c64931a98977040898d0d78b73b1ec270878889d283b90911786f",
+      "bytes": "e85753feff",
+      "assembly": "call        00F503E0",
+      "target_rva": "0xb503e0",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb6b0b1",
+      "size": 5,
+      "sha256": "4e4c00a6394263991e266e224f0343fd6b38d856fedd0a6d278576b16d5287fe",
+      "bytes": "e89ade59ff",
+      "assembly": "call        00508F50",
+      "target_rva": "0x108f50",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb6b0b8",
+      "size": 5,
+      "sha256": "f4f0b3bb9d11c92eaf8a0e151758106f01185bb704a003e465c1203d0872624e",
+      "bytes": "e8e3f7acff",
+      "assembly": "call        00A3A8A0",
+      "target_rva": "0x63a8a0",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb6b0f0",
+      "size": 5,
+      "sha256": "c9b9d158437ce652d13a7d62559e3fc14f9668ac8bda0a2ecf653fd5247dbcd6",
+      "bytes": "e8cbf2ffff",
+      "assembly": "call        00F6A3C0",
+      "target_rva": "0xb6a3c0",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb6b114",
+      "size": 5,
+      "sha256": "7e4ac7b2b27f768c62cd76d4d2dc14480c1bc05acb5332ccf6949db8aea80929",
+      "bytes": "e887f7acff",
+      "assembly": "call        00A3A8A0",
+      "target_rva": "0x63a8a0",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb6b11e",
+      "size": 5,
+      "sha256": "5d5e468766e7384640e47f50e7be5004c270d36d46e48f4116b273bd5f787c63",
+      "bytes": "e85dde59ff",
+      "assembly": "call        00508F80",
+      "target_rva": "0x108f80",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb6b1ac",
+      "size": 5,
+      "sha256": "404e678b17e26f4e4967824d8be34ba65730daf6f09e47812791c4c20dd3aa5b",
+      "bytes": "e80fb0fdff",
+      "assembly": "call        00F461C0",
+      "target_rva": "0xb461c0",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb6b523",
+      "size": 5,
+      "sha256": "7cc7d8f50cfd834999449969e64ee343de9bea96c78c5ac13f4e36d8e9826133",
+      "bytes": "e808c3ffff",
+      "assembly": "call        00F67830",
+      "target_rva": "0xb67830",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb6b55d",
+      "size": 5,
+      "sha256": "1781d1d33da5e306df37e262ba3d1a5c67850a95c71e5d77fbe1783cb1328f07",
+      "bytes": "e8cea5acff",
+      "assembly": "call        00A35B30",
+      "target_rva": "0x635b30",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb6b5c3",
+      "size": 5,
+      "sha256": "0d262c04cc22b6449c74c79872ad122611e35b9f2ca8349eae0daf2a45e6b70d",
+      "bytes": "e8b849feff",
+      "assembly": "call        00F4FF80",
+      "target_rva": "0xb4ff80",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb6b5d7",
+      "size": 5,
+      "sha256": "effc401e8432502ad81b3eae3b21987a0475bbbf1c6cd973f4910f49b2b2d5d9",
+      "bytes": "e87445feff",
+      "assembly": "call        00F4FB50",
+      "target_rva": "0xb4fb50",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb6b5de",
+      "size": 5,
+      "sha256": "78c32924ef8dfc5fb8b8657fefc4e59e471326567363e08f6dcee243efbda3ab",
+      "bytes": "e81dfeffff",
+      "assembly": "call        00F6B400",
+      "target_rva": "0xb6b400",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb6ba3b",
+      "size": 5,
+      "sha256": "2c002863b3ce400f44e21d6af4850a843b5effc6e6ab14cb45e42ff989b34764",
+      "bytes": "e810bbfeff",
+      "assembly": "call        00F57550",
+      "target_rva": "0xb57550",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb6ba50",
+      "size": 5,
+      "sha256": "45b3bfeccd4045528a38df73c8e2b4574ea4eefdd9d172355285c89e2fba968f",
+      "bytes": "e81b71ffff",
+      "assembly": "call        00F62B70",
+      "target_rva": "0xb62b70",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb6ba6b",
+      "size": 5,
+      "sha256": "93f84b129ede7b90eea3e45dfc789fc45684ff8f223710dec3dff455be6e782b",
+      "bytes": "e8706effff",
+      "assembly": "call        00F628E0",
+      "target_rva": "0xb628e0",
+      "new_target_decoded": true
+    },
+    {
+      "rva": "0xb6ba71",
+      "size": 5,
+      "sha256": "eeca23a28d5ff081a1f5942db538d9ed86cad8135aa0a815f03357d2856f76ff",
+      "bytes": "e87a19ffff",
+      "assembly": "call        00F5D3F0",
+      "target_rva": "0xb5d3f0",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb6ba81",
+      "size": 5,
+      "sha256": "5ca6b8264a5aea6c879b82e42d4df56ff8987d209cef937275adad45a8cd5398",
+      "bytes": "e8caf5ffff",
+      "assembly": "call        00F6B050",
+      "target_rva": "0xb6b050",
+      "new_target_decoded": true
+    },
+    {
+      "rva": "0xb6ba9d",
+      "size": 5,
+      "sha256": "d29098c372b0d316b0fc4faffda1ea918c40d31b9975feb56c70e9e49b1a506c",
+      "bytes": "e87efaffff",
+      "assembly": "call        00F6B520",
+      "target_rva": "0xb6b520",
+      "new_target_decoded": true
+    },
+    {
+      "rva": "0xb6bab7",
+      "size": 5,
+      "sha256": "de562f8319dfa255791d11eb8b5081847b3308617e2aa73def22fff321b78d61",
+      "bytes": "e8f4fd4aff",
+      "assembly": "call        0041B8B0",
+      "target_rva": "0x1b8b0",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb6bace",
+      "size": 5,
+      "sha256": "806385b6c8b4abc82fb1325c4c8bd626395bcde35dd60643854c3e92f0fb46cc",
+      "bytes": "e8ddfd4aff",
+      "assembly": "call        0041B8B0",
+      "target_rva": "0x1b8b0",
+      "new_target_decoded": false
+    },
+    {
+      "rva": "0xb6bae5",
+      "size": 5,
+      "sha256": "551befb4d1abc7a9fe375ea079315e11e349913f9213a04c500c08359da54bdf",
+      "bytes": "e8c6fd4aff",
+      "assembly": "call        0041B8B0",
+      "target_rva": "0x1b8b0",
+      "new_target_decoded": false
+    }
+  ],
+  "inherited_entry_call": {
+    "rva": "0xb6bc20",
+    "size": 5,
+    "sha256": "62f83827c1bdf6a4917ccd67a8958579aa64dff0779f5952575beba6e620840b",
+    "bytes": "e89bfdffff",
+    "target_rva": "0xb6b9c0",
+    "new_target_decoded": false,
+    "meaning": "Actual record processor: ECX=[R+0x40], arguments(T,[R+0x44],R,byte[R+0x4d],W); body not decoded."
+  },
+  "constants": [
+    {
+      "rva": "0x1009d00",
+      "size": 4,
+      "sha256": "6d58692645c9d1cfaf13541cbd258f86193ef63c2f1d38f6bbca9617372d7bd6",
+      "bytes": "00000080",
+      "value": -0.0,
+      "meaning": "Optional helper direction x/z."
+    },
+    {
+      "rva": "0x10d9420",
+      "size": 4,
+      "sha256": "c68830a25204a09f8e77aada6bc5807f607cccaaa0ebb2a7122d317584478a8b",
+      "bytes": "000080bf",
+      "value": -1.0,
+      "meaning": "Optional helper direction y."
+    },
+    {
+      "rva": "0x10d9488",
+      "size": 8,
+      "sha256": "4cfa5b42ca669328764e67cd9a34bb8f90b16ed7ca8d85e8443783d7ccce15ed",
+      "bytes": "000000000000e03f",
+      "value": 0.5,
+      "meaning": "Optional helper input y displacement; x/z displacement is zero times this finite constant."
+    },
+    {
+      "rva": "0x10d94f0",
+      "size": 4,
+      "sha256": "e00e5eb9444182f352323374ef4e08ebcb784725fdd4fd612d7730540b3e0c8c",
+      "bytes": "0000803f",
+      "value": 1.0,
+      "meaning": "Fallback W+94 when Q exists but helper returns AL=0; also state scalar clamp ceiling."
+    },
+    {
+      "rva": "0x1055d9c",
+      "size": 4,
+      "sha256": "e6c5a8cc0b688722786eec6ba31db6b61db30643a308ff421756437d1219a8e7",
+      "bytes": "000020c1",
+      "value": -10.0,
+      "meaning": "Fallback W+94 when Q is null."
+    }
+  ],
+  "notation": {
+    "S": "[R+40]",
+    "A": "float[R+44]",
+    "F": "zero-extended byte[R+4d]",
+    "W": "Caller-supplied workspace pointer, fifth argument of b6b9c0.",
+    "L": "Wrapper stack-local result container at stable post-prologue ESP+10.",
+    "C_i": "Pointer entry i in S+34/S+38 span.",
+    "U_i": "[W+2d0]+i*bb0"
+  },
+  "abi": {
+    "wrapper": "b6b9c0: ECX=S, stack(T,A,R,F,W), ret14. Calls b57550(S), b62b70(T,A) with ECX left by the previous call (not assumed), then conditionally b628e0(S,R,F,W) and cdecl b5d3f0(W), then b6b050(S,L,W), b6b520(S,T,A,L), and local-container cleanup calls.",
+    "initialize": "b628e0: ECX=S, stack(R,F,W), ret0c. Direct twelve-float copy and workspace setup, then child b57f90(C_i,U_i).",
+    "collect": "b6b050: ECX=S, stack(L,W), ret8. Calls b503e0(C_i,U_i+40), then b6a3c0(C_i,U_i+40,float[U_i+30],L); optional b461c0([S+e0],float[S+c],L,W+c0). Direct state side effects are listed separately.",
+    "finish": "b6b520: ECX=S, stack(T,A,L), ret0c. Direct second argument A is unused; forwards L,T to b4fb50 and subsequently calls b6b400(S)."
+  },
+  "findings": {
+    "exact_transform_copy": [
+      {
+        "source_offset": "0x0",
+        "destination_offset": "0x10"
+      },
+      {
+        "source_offset": "0x4",
+        "destination_offset": "0x14"
+      },
+      {
+        "source_offset": "0x8",
+        "destination_offset": "0x18"
+      },
+      {
+        "source_offset": "0x10",
+        "destination_offset": "0x20"
+      },
+      {
+        "source_offset": "0x14",
+        "destination_offset": "0x24"
+      },
+      {
+        "source_offset": "0x18",
+        "destination_offset": "0x28"
+      },
+      {
+        "source_offset": "0x20",
+        "destination_offset": "0x30"
+      },
+      {
+        "source_offset": "0x24",
+        "destination_offset": "0x34"
+      },
+      {
+        "source_offset": "0x28",
+        "destination_offset": "0x38"
+      },
+      {
+        "source_offset": "0x30",
+        "destination_offset": "0x40"
+      },
+      {
+        "source_offset": "0x34",
+        "destination_offset": "0x44"
+      },
+      {
+        "source_offset": "0x38",
+        "destination_offset": "0x48"
+      }
+    ],
+    "transform_copy_limit": "b628e0 copies R float payload to W+10..48 without matrix arithmetic. It skips padding. This establishes initialization only; following opaque b5d3f0 may change W before collection. No final composed transform is claimed.",
+    "fallback": "If Q=[S+2c] is null, or b3a9d0 returns AL=0, copy R+30/+34/+38 into W+80/+84/+88 and write W+90/+98=0. W+94 uses the exact branch constants above. A nonzero helper result skips these fallback stores; exact helper effects are unresolved.",
+    "state_payload": "Copy S+0,+4,+8,+c as dwords to W+a0,+a4,+a8,+ac; W+0/+4 get [[S+30]+10/+14], and W+2d8=W+c0.",
+    "child_records": "Each C_i is passed with U_i to b57f90; U_i+34 becomes low-byte F bitwise-OR 1 if C_i occurs in S+44/S+48, otherwise OR 0. Workspace record stride is bb0.",
+    "optional_points": "When [[S+28]]+54 is nonzero, wrapper/helper and virtual calls produce an unresolved collection. Its virtual slot0 return goes to W+70. Per-result position+30/+34/+38 is copied to W+50+10*j / W+54+10*j / W+58+10*j. No identity or coordinate-space claim.",
+    "direct_state_outputs": "b6b050 conditionally updates S+fc using W+2c0 with a clamp; writes S+100=abs(float[W+2c4]); if signed S+108 >= 0, adds W+2c4 to [ [S+84] + index*4 ] pointee+10; copies S+44 to S+48. b6b520 conditionally copies each S+64/S+68 child+1c to+18 and adds each S+94/S+98 child+5c to its nonnull child+74 pointee+10. Other callees can add effects.",
+    "composition_boundary": "At b6ba70, W is pushed immediately after b628e0 returns; b6ba71 calls b5d3f0 and b6ba76 reclaims four bytes. This is the next exact target receiving the initialized transform before collection.",
+    "ownership_limit": "Inherited 424370 proves this layout for a separate stack-local queue. No evidence here joins that queue to the original cinematic B or selected local-player view; the other agent owns original-B provenance.",
+    "acceptance_limit": "No selected camera, active pose authority, HUD, cutscene entry/skip/exit, gameplay return, continuous head rotation, production correction, or API proposal."
+  },
+  "next_unresolved_edge": {
+    "callsite_rva": "0xb6ba71",
+    "target_rva": "0xb5d3f0",
+    "arguments": "One cdecl stack argument W after b628e0 copied R into W+10..48; branch requires S+34 != S+38.",
+    "required": "Decode this exact target to establish what it does to W and whether/how it composes the copied transform before b6b050. Do not assume transform composition from its position in the call chain."
+  },
+  "verification": {
+    "executable_hash": true,
+    "inherited_hash": true,
+    "saved_decode_bytes_and_hashes": true,
+    "complete_reachable_cfg": true,
+    "no_overlap": true,
+    "exact_rel32_targets": true,
+    "attempts": "All four single-instruction decodes succeeded. First proof assembly rejected a duplicate size keyword before writing proof01.json; assembly was corrected and final validation succeeded. No rejected decode and no neighboring function decoded."
+  },
+  "execution": {
+    "git": false,
+    "builds": false,
+    "tests": false,
+    "game": false,
+    "game_process_access": false,
+    "input": false,
+    "xr": false,
+    "profiles": false,
+    "installs": false,
+    "packages": false,
+    "subagents": false,
+    "production_writes": false
+  },
+  "frozen": true
+}

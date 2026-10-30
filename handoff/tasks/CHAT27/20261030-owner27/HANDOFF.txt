@@ -1,0 +1,13 @@
+DoneY: bounded static continuation complete. OriginalBStaticPathY; SchedulerInstanceJoinN; SourcefixN; selected-view authority unproved.
+Supplied HEAD6c42c3fd6d39715d47a07584061697b2be8a678e; root owns Git/build/integration; no Git queried.
+EXE SHA2563911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258 verified file-only.
+Owned HANDOFF.txt, cinematic_owner.py, proof01.json; scratch reports/coordinator-20261030-cinematic-owner27; proof SHA256431f6a4cf5abbc28cae8029ad6bc3a506baeafeac55d46d00a22cd8e9f47b37c.
+Queue25 proof09a31eea86970d877e406ae258273f1188910571f494e6539e8c6c701b2772ab and inherited constructor/child/registration decodes reused with byte/hash verification.
+Eight NEW complete functions/2605 bytes:3b5a00,211270,2112a0,3a6a40,38b760,3b3b30,b489d0,b489e0;2223 reused bytes; zero adjacent spill.
+For retained record R naming companion+80,3b61fa invokes assigned table102c974+14 ->3b23c0 ->3b2436/39cd30 with B=P+8e0;3b620d immediately passes SAME B to b6bb00(T,B,1), then3b6241 postprocesses B. P is3b5a00 stable main-body ESP.
+Assigned companion slots+0c/+10/+20 admit pass1, count1 when handle+pointee exist, and category-1; exact record/list/argument dataflow is verified. Consumer path calls b6bb00 directly, not wrapper b6c520.
+Runtime route is conditional on globals14949d8/14949d9, M+58, R+25 and pooled count32. Other routes use persistent B=[M+54]+i*dd0 or separate non-consuming local queues; no unique runtime B is claimed.
+The separate424370 queue remains unrelated. No b6b9c0/downstream evaluator bodies were decoded; no selected local-player view, matrix composition, HUD, entry/skip/exit, gameplay-return or continuous head-rotation claim follows.
+LIMIT: original registration M=[TLS+14] is inherited; concrete scheduled3b5a00 receiver equality to that exact M is not established by the conditional same-record path.
+ONE next edge: admit complete enclosing caller for raw candidate435cc1 ->3b5a00 and verify its receiver against the exact TLS+14 manager retaining companion+80. Raw candidate alone is not an admitted instruction/owner proof.
+One initial12-byte leaf bound omitted the final return byte and was rejected before saving; corrected13-byte coverage, exact calls/table cells and saved hashes pass. No production writes, Git, builds/tests, process/game access, input/XR, install or subagents. Frozen and retired.

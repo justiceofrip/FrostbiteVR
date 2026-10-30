@@ -1,0 +1,15 @@
+DoneY: bounded record-consumer continuation complete; exact workspace copies established, transform composition unresolved. SourcefixN; no production camera claim.
+Worktree campaign-coordinator-20261028-r1; supplied HEAD6c42c3fd6d39715d47a07584061697b2be8a678e; no Git queried.
+EXE SHA2563911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258 verified file-only.
+Owned HANDOFF.txt, cinematic_evaluate.py, proof01.json; scratch reports/coordinator-20261030-cinematic-evaluate28; proof SHA256fff1adb965c7d90422cc84bfd0bedf0c1667a0d8de2ae461a29e8cb006f8138e.
+Inherited queue25 proof09a31eea86970d877e406ae258273f1188910571f494e6539e8c6c701b2772ab; four complete NEW functions/1579 bytes: b6b9c0,b628e0,b6b050,b6b520;480 reused bytes; no adjacent spill or generic scans.
+Let S=[R+40],A=float[R+44],F=byte[R+4d]. b6b9c0 consumes(T,A,R,F,W),ret14; nonempty S+34/S+38 gates b628e0(S,R,F,W) and the following b5d3f0(W); then b6b050(S,L,W),b6b520(S,T,A,L).
+b628e0 copies12 floats W[o+10]=R[o] for hex offsets o={0,4,8,10,14,18,20,24,28,30,34,38}; padding is untouched. This is initialization, not matrix multiplication or proof of final W values.
+If Q=[S+2c] is null or its b3a9d0 call returns AL=0, W+80/+84/+88 get R+30/+34/+38, W+90/+98=0, W+94=-10 for null Q or1 for helper failure. Nonzero helper-result effects remain opaque.
+Workspace state payload S+0..+c goes to W+a0..+ac; per-child U_i=[W+2d0]+i*bb0 receives b57f90(C_i,U_i), then U_i+34=F OR membership in S+44/S+48.
+b6b050 forwards(U_i+40,float[U_i+30],L) to b6a3c0 with receiver C_i; direct state stores include S+100=abs(W+2c4) and S+48=S+44. b6b520 eventually forwards(L,T) to b4fb50; other callees remain opaque.
+ONE next edge: b6ba71 -> b5d3f0, cdecl argument W immediately after the exact12-float copy and before collection. Decode its effects on W; composition is not assumed from its place in the chain.
+PROVENANCE LIMIT: inherited424370 is a separate caller with its own stack queue. This proof does not equate that B with original cinematic B; original-B ownership is assigned to the other agent and was not investigated here.
+No selected-player camera/view, HUD, cutscene entry/skip/exit, gameplay-return, continuous head-rotation authority, production correction or API proposal follows.
+All four decodes and final byte/hash/CFG/rel32 validation pass. Initial proof assembly rejected a duplicate size keyword before writing; corrected assembly passes. No decode failure or neighboring function.
+No production writes, Git, builds/tests, game/process access, input/XR, profiles, installs/packages or subagents. Frozen and retired.

@@ -1,4 +1,4 @@
-Continuation26 source ready; basee507fce. Existing coordinator lease retained.
+Continuation26 committed6c42c3f; basee507fce. Existing coordinator lease retained.
 Diagnostics26 DoneY/retired; queue25 DoneY/static evidence only/retired. Root owns all files.
 Added bounded on-demand M60/MP443 reports; current and retained supported-asset issue separated.
 No new per-frame output, allocation or scan. Gameplay Report wires both owners.
@@ -6,3 +6,6 @@ Owner suites x86/x64 and Gameplay x86 syntax passed; CHECKS.json pins five resul
 Queue25 verified separate stack queue and consumer, but not original cinematic B ownership.
 Next exact camera edge:3b2436->39cd30 second argument B; no generic camera resurvey.
 No canonical integration/push/install;0.1.17 unchanged. No game/PC tests.
+Camera workers27-31 DoneY/static evidence only, frozen/retired. Root owns all files.
+Their combined receipt is handoff/integrations/coordinator-20261030-camera31/EVIDENCE.json.
+Next: exact singleton reconciliation3ff110 and initialization188a50; no selected-view claim.

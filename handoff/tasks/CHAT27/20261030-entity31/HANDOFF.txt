@@ -1,0 +1,15 @@
+DoneY: bounded offline entity-callback ABI/filter/effect chain completed; no camera correction proved. Frozen/retired.
+Supplied HEAD6c42c3fd6d39715d47a07584061697b2be8a678e; no Git invoked. EXE SHA3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258 verified.
+Proof proof01.json SHA256 b52ab309e1186ca788f572af8b6ddd078f5f838866d48701f12437b01c3c1648; verifier passed without redecoding.
+Three NEW complete functions: RVA495a90(121B),3b8cc0(6B),486210(46B);60 instructions/173B; zero adjacent spill.
+Reused methods17 proof af327be2ac45a67eaa428b99a559c9f9c596caa79922f47ed889da624cc491b8; its ten-unit spill failure remains unchanged.
+Exact inherited setup4af877 assigns owner+dc ->table1036650; table+4 ->495a90. No primary-slot adjacency inference.
+Callback ECX=owner+dc, ret10h cleans four stack slots; only original slots1/2 read. Filter pairs1f/2f or12/1b.
+Both paths require byte[owner+100]==0 and byte[[owner+c]+cd]!=0; owner conversion at495afa subtracts dc before call486210.
+Pair1f/2f additionally uses getter3b8cc0(global RVA1170e90), virtual+38 result Q!=0, then Q.virtual+14(39h) requiring AL!=0.
+Effect486210 calls3ff060, takes B=[return+18], calls B.virtual+10(1fh,owner+dc), then stores byte[owner+100]=1 after normal return.
+Reused scheduler30 getter3ff060(121B), byte SHA89422b84c64640424675adfa046919caa1ee166f691478a4e5bb00ff27fc3e57; never redecoded here.
+Getter returns preferred VA15713d8(RVA11713d8), so B=[preferred VA15713f0]; concrete receiver/vtable/operation remains unproved.
+NEXT exact edge: inherited call3ff079 ->188a50, ECX=VA15713d8,arg1=1; establish singleton+18 ownership for virtual call486232. Not decoded here.
+Numeric discriminators/fields remain unnamed; no selected-view/HUD/camera, local-player identity, lifetime/blend, runtime or headset claim.
+Only assigned handoff/script/proof and scratch reports/coordinator-20261030-cinematic-entity31 written; no production/game/process/input/XR/Git/build/test/install/subagent work.
