@@ -1,7 +1,9 @@
 #pragma once
 #include "Bc2BeltAmmo.h"
+#include "Bc2ShotgunEquipment.h"
 #include "Bc2MagazinePresentation.h"
 #include "fvr/interaction/AmmoSupplyProp.h"
+#include "Bc2FixedContainerEquipment.h"
 
 namespace fvr::bc2 {
 // Render-only copy of the SAME source/contact used by the reload consumer.
@@ -10,11 +12,13 @@ struct BodyAmmoTracking {
     interaction::AmmoSupplyVisualSample visual{};
     std::optional<MagazineTracking> magazine;
     std::optional<BeltAmmoTracking> shell;
+    std::optional<FixedContainerBodyAmmo> fixed;
 };
 inline bool BodyAmmoFresh(const BodyAmmoTracking& t,std::int64_t now)noexcept {
     using namespace interaction;
-    if(bool(t.magazine)==bool(t.shell)||!AmmoSupplyVisualFresh(t.visual,now))return false;
-    if(t.shell)return SpasBeltAmmoFresh(*t.shell,now)&&
+    if(unsigned(bool(t.magazine))+unsigned(bool(t.shell))+unsigned(bool(t.fixed))!=1||!AmmoSupplyVisualFresh(t.visual,now))return false;
+    if(t.fixed){const auto source=FixedContainerBodySource(*t.fixed,t.visual.input,now);return source&&*source==t.visual.source;}
+    if(t.shell)return ShotgunBeltAmmoFresh(*t.shell,now)&&
         AmmoSupplyVisualRetained(t.shell->visual,t.visual,now)&&
         AmmoSupplyVisualRetained(t.visual,t.shell->visual,now);
     const auto& m=*t.magazine;const auto& in=t.visual.input;
@@ -27,9 +31,15 @@ inline bool BodyAmmoFresh(const BodyAmmoTracking& t,std::int64_t now)noexcept {
     return source&&*source==t.visual.source;
 }
 inline bool BodyAmmoRetained(const BodyAmmoTracking& old,const BodyAmmoTracking& current,std::int64_t now)noexcept {
-    if(!BodyAmmoFresh(old,now)||!BodyAmmoFresh(current,now)||bool(old.magazine)!=bool(current.magazine))return false;
+    if(!BodyAmmoFresh(old,now)||!BodyAmmoFresh(current,now)||bool(old.magazine)!=bool(current.magazine)||bool(old.fixed)!=bool(current.fixed))return false;
+    if(old.fixed){const auto& a=*old.fixed;const auto& b=*current.fixed;
+        return a.equipment==b.equipment&&a.binding.owner==b.binding.owner&&a.binding.context==b.binding.context&&
+            a.binding.inventory==b.binding.inventory&&a.binding.switching==b.binding.switching&&a.binding.data==b.binding.data&&
+            a.binding.persistence==b.binding.persistence&&a.ammunition.sequence<=b.ammunition.sequence&&
+            (a.ammunition.sequence!=b.ammunition.sequence||a.ammunition.counts==b.ammunition.counts)&&
+            AmmoSupplyVisualRetained(old.visual,current.visual,now);}
     if(old.shell)return interaction::AmmoSupplyVisualRetained(old.visual,current.visual,now)&&
-        SpasBeltAmmoRetained(*old.shell,*current.shell,now);
+        ShotgunBeltAmmoRetained(*old.shell,*current.shell,now);
     const auto& a=*old.magazine;const auto& b=*current.magazine;
     const auto& v=old.visual;const auto& w=current.visual;
     // Both exact typed publications were validated above. A newer loaded count
@@ -76,9 +86,15 @@ inline std::optional<BodyAmmoPose> BuildBodyAmmoPose(const BodyAmmoTracking& sou
         // geometry is extracted into the named magazine bone's local space.
         partFromContact=InverseRigid(g.interaction.insertion.itemFromHand);
         pose.asset=g.asset;pose.mesh=g.mesh;pose.part=g.bones.magazine;pose.rigFingerprint=g.rigFingerprint;
+    }else if(source.fixed){
+        const auto* e=KnownFixedContainerEquipment(source.fixed->equipment);if(!e)return {};
+        partFromContact=InverseRigid(e->interaction.geometry[2].motion.placement.sourceFromGrip);
+        pose.asset=e->asset;pose.mesh=e->mesh;pose.part=e->supplyRoot;pose.rigFingerprint=e->rigFingerprint;
     }else{
-        partFromContact=SpasShellBoneAtCenter(reload_insertion_detail::Identity(),1.f);
-        pose.asset=SpasReloadAsset;pose.mesh=SpasReloadMesh;pose.part="jntWpn_7";pose.rigFingerprint=SpasReloadRig;
+        const auto* equipment=KnownShotgunEquipment(source.shell->equipment);const auto geometry=ShotgunShellGeometry(equipment);
+        if(!equipment||!geometry)return {};
+        partFromContact=ShotgunShellBoneAtCenter(equipment,reload_insertion_detail::Identity(),1.f);
+        pose.asset=equipment->native->config->assetName;pose.mesh=equipment->meshPath;pose.part=geometry->bone;pose.rigFingerprint=equipment->rigFingerprint;
     }
     const auto placed=partFromContact?BuildAmmoSupplyPropPose(source.visual,input,eyeBase,*partFromContact,now):std::nullopt;
     if(!placed)return {};

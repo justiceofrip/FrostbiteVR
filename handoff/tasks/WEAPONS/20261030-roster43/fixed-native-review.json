@@ -1,0 +1,482 @@
+{
+  "schema": "fvr.bc2.fixed_container_native_review.v1",
+  "evidence_level": "static shared instruction/configuration review; no native or headset success",
+  "singlefire_instruction_proof": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee",
+  "inactive_bolt_instruction_proof": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+  "jobs": {
+    "schema": "fvr.bc2.magazine_descriptor_jobs",
+    "schema_version": 1,
+    "runtime_enabled": false,
+    "registry_change": false,
+    "descriptors": [
+      {
+        "key": "bc2:magazine-descriptor:8d044692f0fbe8c4b6fd91538e6a7cf0beca4d5550e03f966c66790f244a7eb4",
+        "identity": {
+          "assetName": "Garand",
+          "assetPath": "Objects/Weapons/Handheld/Beach/Jap_Type5/Type5",
+          "weapon": {
+            "resource": "Objects/Weapons/Handheld/Beach/Jap_Type5/Type5.dbx",
+            "sha256": "e314479c35ea6819e5c662f35c4fca5af56cab3a1c1fe0a3b373efa05e153bd2",
+            "guid": "e66520c7-7b62-4d35-9274-72a762f0c35d"
+          },
+          "firing": {
+            "resource": "Objects/Weapons/Handheld/Beach/Jap_Type5/Type5_Firing.dbx",
+            "sha256": "c867df93f07f0e2ff26d6dba3e0764912c202b800abaf452a757cf031fade5db",
+            "guid": "4b688927-a212-4b2a-8d4a-cefb55b12b48"
+          },
+          "function": {
+            "resource": "Objects/Weapons/Handheld/Beach/Jap_Type5/Type5_Firing.dbx",
+            "sha256": "c867df93f07f0e2ff26d6dba3e0764912c202b800abaf452a757cf031fade5db",
+            "guid": "a937c536-c339-43f7-84b8-b78ec6f1a4fb"
+          }
+        },
+        "configuration": {
+          "assetName": "Garand",
+          "assetPath": "Objects/Weapons/Handheld/Beach/Jap_Type5/Type5",
+          "values": {
+            "reloadType": 1,
+            "fireInputAction": 8,
+            "reloadInputAction": 29,
+            "baseCapacity": 8,
+            "numberOfMagazines": 9999,
+            "reloadDelay": 0.0,
+            "reloadTime": 4.099999904632568,
+            "reloadThreshold": 0.6499999761581421,
+            "postReloadTime": 0.0,
+            "boltDelay": 0.0,
+            "boltTime": 0.5,
+            "holdBoltUntilFireRelease": false,
+            "holdBoltUntilZoomRelease": false,
+            "fireLogicType": 0
+          },
+          "timing": [
+            {
+              "offset": 16,
+              "expected": 1059481190,
+              "expected_bits": "3f266666",
+              "comparison": "Bits"
+            },
+            {
+              "offset": 20,
+              "expected": 0,
+              "expected_bits": "00000000",
+              "comparison": "Bits"
+            },
+            {
+              "offset": 24,
+              "expected": 1082340147,
+              "expected_bits": "40833333",
+              "comparison": "Bits"
+            },
+            {
+              "offset": 32,
+              "expected": 1,
+              "expected_bits": "00000001",
+              "comparison": "Bits"
+            },
+            {
+              "offset": 36,
+              "expected": 0,
+              "expected_bits": "00000000",
+              "comparison": "Bits"
+            },
+            {
+              "offset": 44,
+              "expected": 0,
+              "expected_bits": "00000000",
+              "comparison": "Bits"
+            }
+          ],
+          "admission": "Candidate"
+        },
+        "authored_symbols": {
+          "FireLogic.FireLogicType": "fltSingleFire",
+          "FireLogic.ReloadType": "rtMagazine",
+          "FireLogic.FireInputAction": "EiaFire",
+          "FireLogic.ReloadInputAction": "EiaReload",
+          "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+        },
+        "source_class": "wcAssault",
+        "origins": [
+          {
+            "archive": "Dist/win32/levels/sp_01/level-00.fbrb",
+            "index_sha256": "9693feb53337f1a83c49d725eab25d146e91469394c3b93e7bf62214ecc8a44f"
+          }
+        ],
+        "same_reviewed_dispatch_shape": true,
+        "deferred_reasons": [],
+        "proposed_completion_deadline_ns": 4799999905,
+        "completion_margin_ns": 700000000,
+        "cycle_admission": "Candidate",
+        "runtime_enabled": false,
+        "registry_change": false,
+        "descriptor_digest": "678efdea6744c18bf9ee1b757b40600409c75e1ee838a9ec31f7204df9cbffc2",
+        "prior_descriptor_digest": "c8c4742b69b7fc80ad2061cf810245f08a33fa8533b58598f0e2231efd6a4db8",
+        "boltaction_magazine_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+        "chamber_knowledge": "Unknown",
+        "native_runtime_admission": false,
+        "owed_bolt_reload_handoff_admission": false,
+        "jobs": [
+          "independent_exact_magazine_native_family_review",
+          "exact_magazine_hand_contact"
+        ]
+      },
+      {
+        "key": "bc2:magazine-descriptor:c2cd76f9fd1d95b0c0c3e01ef20da54a47b95ecbd8dc388c9a5e1ec61bb61c3d",
+        "identity": {
+          "assetName": "Garand",
+          "assetPath": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand",
+          "weapon": {
+            "resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand.dbx",
+            "sha256": "db8d551f626a593e10848381c00983c7a4999e1096a91deb1ded60d49a8e101d",
+            "guid": "d77b3602-e594-465d-87fa-8c193660522b"
+          },
+          "firing": {
+            "resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Firing.dbx",
+            "sha256": "131015bf44b1a8ad7a3eb42f21a6c74a1a49dc748d2bf993350d9e439ea79f16",
+            "guid": "5932b06b-f9f3-43bf-8d65-391f4fb7625b"
+          },
+          "function": {
+            "resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Firing.dbx",
+            "sha256": "131015bf44b1a8ad7a3eb42f21a6c74a1a49dc748d2bf993350d9e439ea79f16",
+            "guid": "26a5ed1b-5c3d-478b-8012-b5e67907c7c8"
+          }
+        },
+        "configuration": {
+          "assetName": "Garand",
+          "assetPath": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand",
+          "values": {
+            "reloadType": 1,
+            "fireInputAction": 8,
+            "reloadInputAction": 29,
+            "baseCapacity": 8,
+            "numberOfMagazines": 6,
+            "reloadDelay": 0.0,
+            "reloadTime": 4.099999904632568,
+            "reloadThreshold": 0.6499999761581421,
+            "postReloadTime": 0.0,
+            "boltDelay": 0.0,
+            "boltTime": 0.5,
+            "holdBoltUntilFireRelease": false,
+            "holdBoltUntilZoomRelease": false,
+            "fireLogicType": 0
+          },
+          "timing": [
+            {
+              "offset": 16,
+              "expected": 1059481190,
+              "expected_bits": "3f266666",
+              "comparison": "Bits"
+            },
+            {
+              "offset": 20,
+              "expected": 0,
+              "expected_bits": "00000000",
+              "comparison": "Bits"
+            },
+            {
+              "offset": 24,
+              "expected": 1082340147,
+              "expected_bits": "40833333",
+              "comparison": "Bits"
+            },
+            {
+              "offset": 32,
+              "expected": 1,
+              "expected_bits": "00000001",
+              "comparison": "Bits"
+            },
+            {
+              "offset": 36,
+              "expected": 0,
+              "expected_bits": "00000000",
+              "comparison": "Bits"
+            },
+            {
+              "offset": 44,
+              "expected": 0,
+              "expected_bits": "00000000",
+              "comparison": "Bits"
+            }
+          ],
+          "admission": "Candidate"
+        },
+        "authored_symbols": {
+          "FireLogic.FireLogicType": "fltSingleFire",
+          "FireLogic.ReloadType": "rtMagazine",
+          "FireLogic.FireInputAction": "EiaFire",
+          "FireLogic.ReloadInputAction": "EiaReload",
+          "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+        },
+        "source_class": "wcAssault",
+        "origins": [
+          {
+            "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+            "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+          }
+        ],
+        "same_reviewed_dispatch_shape": true,
+        "deferred_reasons": [],
+        "proposed_completion_deadline_ns": 4799999905,
+        "completion_margin_ns": 700000000,
+        "cycle_admission": "Candidate",
+        "runtime_enabled": false,
+        "registry_change": false,
+        "descriptor_digest": "e85ef48683a4848fc058ad0a2d200dacc04536bed76c9f3666d581a94ea2a05f",
+        "prior_descriptor_digest": "7d81121646d6d00bc956fc4632e1851ffae48a842b26dfa9b90f1d9b9b9379df",
+        "boltaction_magazine_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+        "chamber_knowledge": "Unknown",
+        "native_runtime_admission": false,
+        "owed_bolt_reload_handoff_admission": false,
+        "jobs": [
+          "independent_exact_magazine_native_family_review",
+          "exact_magazine_hand_contact"
+        ]
+      },
+      {
+        "key": "bc2:magazine-descriptor:8878947ae5d05fcc4f3177d557e860934fab375091be2445ac1f1bfb1ea97d29",
+        "identity": {
+          "assetName": "Garand",
+          "assetPath": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Assault",
+          "weapon": {
+            "resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Assault.dbx",
+            "sha256": "a41b2e7bb7f7e8af83521a60106fa23fbec462dd740fbac2230898a1519cb83b",
+            "guid": "4bc8d46c-cc7b-4993-8bbe-09e708bef4fa"
+          },
+          "firing": {
+            "resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Firing.dbx",
+            "sha256": "131015bf44b1a8ad7a3eb42f21a6c74a1a49dc748d2bf993350d9e439ea79f16",
+            "guid": "5932b06b-f9f3-43bf-8d65-391f4fb7625b"
+          },
+          "function": {
+            "resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Firing.dbx",
+            "sha256": "131015bf44b1a8ad7a3eb42f21a6c74a1a49dc748d2bf993350d9e439ea79f16",
+            "guid": "26a5ed1b-5c3d-478b-8012-b5e67907c7c8"
+          }
+        },
+        "configuration": {
+          "assetName": "Garand",
+          "assetPath": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Assault",
+          "values": {
+            "reloadType": 1,
+            "fireInputAction": 8,
+            "reloadInputAction": 29,
+            "baseCapacity": 8,
+            "numberOfMagazines": 6,
+            "reloadDelay": 0.0,
+            "reloadTime": 4.099999904632568,
+            "reloadThreshold": 0.6499999761581421,
+            "postReloadTime": 0.0,
+            "boltDelay": 0.0,
+            "boltTime": 0.5,
+            "holdBoltUntilFireRelease": false,
+            "holdBoltUntilZoomRelease": false,
+            "fireLogicType": 0
+          },
+          "timing": [
+            {
+              "offset": 16,
+              "expected": 1059481190,
+              "expected_bits": "3f266666",
+              "comparison": "Bits"
+            },
+            {
+              "offset": 20,
+              "expected": 0,
+              "expected_bits": "00000000",
+              "comparison": "Bits"
+            },
+            {
+              "offset": 24,
+              "expected": 1082340147,
+              "expected_bits": "40833333",
+              "comparison": "Bits"
+            },
+            {
+              "offset": 32,
+              "expected": 1,
+              "expected_bits": "00000001",
+              "comparison": "Bits"
+            },
+            {
+              "offset": 36,
+              "expected": 0,
+              "expected_bits": "00000000",
+              "comparison": "Bits"
+            },
+            {
+              "offset": 44,
+              "expected": 0,
+              "expected_bits": "00000000",
+              "comparison": "Bits"
+            }
+          ],
+          "admission": "Candidate"
+        },
+        "authored_symbols": {
+          "FireLogic.FireLogicType": "fltSingleFire",
+          "FireLogic.ReloadType": "rtMagazine",
+          "FireLogic.FireInputAction": "EiaFire",
+          "FireLogic.ReloadInputAction": "EiaReload",
+          "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+        },
+        "source_class": "wcAssault",
+        "origins": [
+          {
+            "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+            "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+          }
+        ],
+        "same_reviewed_dispatch_shape": true,
+        "deferred_reasons": [],
+        "proposed_completion_deadline_ns": 4799999905,
+        "completion_margin_ns": 700000000,
+        "cycle_admission": "Candidate",
+        "runtime_enabled": false,
+        "registry_change": false,
+        "descriptor_digest": "fd7ff07e50ec918184f1e32f643739ba0b5c275805d3a69a55f6d1f55b3099c0",
+        "prior_descriptor_digest": "1e5a774911e8b51a017ecc6fffc99aea1c3f60358658fa841b07a8aa967ea958",
+        "boltaction_magazine_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+        "chamber_knowledge": "Unknown",
+        "native_runtime_admission": false,
+        "owed_bolt_reload_handoff_admission": false,
+        "jobs": [
+          "independent_exact_magazine_native_family_review",
+          "exact_magazine_hand_contact"
+        ]
+      },
+      {
+        "key": "bc2:magazine-descriptor:b023be93b5c35527c70749c9d0c5392f44518f76e1bb764a61e55c9f2b67b299",
+        "identity": {
+          "assetName": "MP412",
+          "assetPath": "Objects/Weapons/Handheld/MEC_hg_MP412rex/MEC_hg_MP412rex",
+          "weapon": {
+            "resource": "Objects/Weapons/Handheld/MEC_hg_MP412rex/MEC_hg_MP412rex.dbx",
+            "sha256": "6479ac2e4e3d68887ae0c202e3dee4d703a65fa5a83188e8f6d963660e854a2e",
+            "guid": "811b1f2b-4413-41a1-b7f0-0aed8a1d527a"
+          },
+          "firing": {
+            "resource": "Objects/Weapons/Handheld/MEC_hg_MP412rex/MEC_hg_MP412rex_Firing.dbx",
+            "sha256": "9d58266d67146ff22cba9ef6324045172c58fa1d942efce16aad57c9b1b15c06",
+            "guid": "5c2989f1-dfe4-4945-8834-4a9532fa6ff1"
+          },
+          "function": {
+            "resource": "Objects/Weapons/Handheld/MEC_hg_MP412rex/MEC_hg_MP412rex_Firing.dbx",
+            "sha256": "9d58266d67146ff22cba9ef6324045172c58fa1d942efce16aad57c9b1b15c06",
+            "guid": "21e2dc7b-a46d-4b12-bd1d-f3181bf80eb7"
+          }
+        },
+        "configuration": {
+          "assetName": "MP412",
+          "assetPath": "Objects/Weapons/Handheld/MEC_hg_MP412rex/MEC_hg_MP412rex",
+          "values": {
+            "reloadType": 1,
+            "fireInputAction": 8,
+            "reloadInputAction": 29,
+            "baseCapacity": 6,
+            "numberOfMagazines": 4,
+            "reloadDelay": 0.0,
+            "reloadTime": 4.099999904632568,
+            "reloadThreshold": 0.8500000238418579,
+            "postReloadTime": 0.0,
+            "boltDelay": 0.0,
+            "boltTime": 0.0,
+            "holdBoltUntilFireRelease": false,
+            "holdBoltUntilZoomRelease": false,
+            "fireLogicType": 0
+          },
+          "timing": [
+            {
+              "offset": 16,
+              "expected": 1062836634,
+              "expected_bits": "3f59999a",
+              "comparison": "Bits"
+            },
+            {
+              "offset": 20,
+              "expected": 0,
+              "expected_bits": "00000000",
+              "comparison": "Bits"
+            },
+            {
+              "offset": 24,
+              "expected": 1082340147,
+              "expected_bits": "40833333",
+              "comparison": "Bits"
+            },
+            {
+              "offset": 32,
+              "expected": 1,
+              "expected_bits": "00000001",
+              "comparison": "Bits"
+            },
+            {
+              "offset": 36,
+              "expected": 0,
+              "expected_bits": "00000000",
+              "comparison": "Bits"
+            },
+            {
+              "offset": 44,
+              "expected": 0,
+              "expected_bits": "00000000",
+              "comparison": "Bits"
+            }
+          ],
+          "admission": "Candidate"
+        },
+        "authored_symbols": {
+          "FireLogic.FireLogicType": "fltSingleFire",
+          "FireLogic.ReloadType": "rtMagazine",
+          "FireLogic.FireInputAction": "EiaFire",
+          "FireLogic.ReloadInputAction": "EiaReload",
+          "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+        },
+        "source_class": "wcSmg",
+        "origins": [
+          {
+            "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+            "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+          }
+        ],
+        "same_reviewed_dispatch_shape": true,
+        "deferred_reasons": [],
+        "proposed_completion_deadline_ns": 4799999905,
+        "completion_margin_ns": 700000000,
+        "cycle_admission": "Candidate",
+        "runtime_enabled": false,
+        "registry_change": false,
+        "descriptor_digest": "817c4527daa19d4e4f64f6ee5aee0b67b380dc046cba5413f9d6f6313ce797ff",
+        "prior_descriptor_digest": "b69e246dbf2abd3eb18111aa80e39dee0e5d8faa0f86ca394f0af89284734e29",
+        "singlefire_magazine_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee",
+        "chamber_knowledge": "Unknown",
+        "native_runtime_admission": false,
+        "jobs": [
+          "independent_singlefire_native_family_review",
+          "exact_magazine_hand_contact",
+          "slide_ready_and_chamber_boundary"
+        ]
+      }
+    ],
+    "singlefire_candidate_extension": {
+      "proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee",
+      "rows_reclassified": 1,
+      "runtime_enabled": false,
+      "chamber_knowledge": "Unknown",
+      "limits": [
+        "Isolated original instructions, synthetic objects and empty listeners only.",
+        "No native owners, three-copy convergence, shot, chamber or slide readiness receipt."
+      ]
+    },
+    "boltaction_magazine_candidate_extension": {
+      "proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+      "rows_reclassified": 3,
+      "runtime_enabled": false,
+      "limits": [
+        "Static ordinary reload dispatch only; no new original-instruction execution or actual-game result.",
+        "Owed bolt, original magazine ownership, native three-copy convergence and physical custody require their own receipts.",
+        "No firing/chamber grant and no direct native state, timer, ammo or animation writes."
+      ]
+    }
+  }
+}

@@ -67,6 +67,17 @@ bool BodyAmmoGeometryMatches(const BodyAmmoGeometry& g,const BodyAmmoRenderSourc
     return g.key==s.geometry&&g.asset==s.asset&&g.mesh==s.mesh&&g.part==s.part&&g.rigFingerprint==s.rigFingerprint&&
         s.geometry==MakeBodyAmmoGeometryKey(s.asset,s.mesh,s.part,s.rigFingerprint);
 }
+std::vector<BodyAmmoRenderSource> ExpandBodyAmmoRenderSource(const BodyAmmoRenderSource& s){
+    if(!s.authority||!s.authority->fixed||s.assemblyPart)return {s};
+    const auto* e=KnownFixedContainerEquipment(s.authority->fixed->equipment);
+    if(!e||s.asset!=e->asset||s.mesh!=e->mesh||s.part!=e->supplyRoot||s.rigFingerprint!=e->rigFingerprint)return {};
+    std::vector<BodyAmmoRenderSource> out;
+    for(const auto& p:e->parts)if(p.supplyPart){
+        auto part=s;part.part=p.bone;part.geometry=MakeBodyAmmoGeometryKey(s.asset,s.mesh,p.bone,s.rigFingerprint);
+        part.prop.partWorld=interaction::Multiply(p.supplyFromPart,s.prop.partWorld);part.assemblyPart=true;out.push_back(std::move(part));
+    }
+    return out;
+}
 bool BodyAmmoSourceRetained(const BodyAmmoRenderSource& a,const BodyAmmoRenderSource& b,std::int64_t now)noexcept {
     const auto authorityMatches=[&](const BodyAmmoRenderSource& s){
         if(!s.authority||!BodyAmmoFresh(*s.authority,now)||
@@ -74,14 +85,18 @@ bool BodyAmmoSourceRetained(const BodyAmmoRenderSource& a,const BodyAmmoRenderSo
             !interaction::AmmoSupplyVisualRetained(s.authority->visual,s.prop.source,now))return false;
         if(s.authority->magazine){const auto& g=*s.authority->magazine->family.binding.profile->geometry;
             return s.asset==g.asset&&s.mesh==g.mesh&&s.part==g.bones.magazine&&s.rigFingerprint==g.rigFingerprint;}
-        return s.asset==SpasReloadAsset&&s.mesh==SpasReloadMesh&&s.part=="jntWpn_7"&&s.rigFingerprint==SpasReloadRig;
+        if(s.authority->fixed){const auto* e=KnownFixedContainerEquipment(s.authority->fixed->equipment);
+            return e&&s.asset==e->asset&&s.mesh==e->mesh&&s.rigFingerprint==e->rigFingerprint&&
+                (s.assemblyPart?std::any_of(e->parts.begin(),e->parts.end(),[&](const auto& p){return p.supplyPart&&p.bone==s.part;}):s.part==e->supplyRoot);}
+        const auto* e=KnownShotgunEquipment(s.authority->shell->equipment);const auto g=ShotgunShellGeometry(e);
+        return e&&g&&s.asset==e->native->config->assetName&&s.mesh==e->meshPath&&s.part==g->bone&&s.rigFingerprint==e->rigFingerprint;
     };
     // Each prop must exactly match its own typed publication. Cross-publication
     // render continuity is then owned by BodyAmmoRetained, including a coherent
     // loaded/refill-cost change; do not reapply pickup's strict cost comparison.
     return authorityMatches(a)&&authorityMatches(b)&&BodyAmmoRetained(*a.authority,*b.authority,now)&&
         graphics::ValidRigidPropKey(a.geometry)&&a.geometry==b.geometry&&a.asset==b.asset&&a.mesh==b.mesh&&a.part==b.part&&
-        a.rigFingerprint&&a.rigFingerprint==b.rigFingerprint&&a.geometry==MakeBodyAmmoGeometryKey(a.asset,a.mesh,a.part,a.rigFingerprint)&&
+        a.assemblyPart==b.assemblyPart&&a.rigFingerprint&&a.rigFingerprint==b.rigFingerprint&&a.geometry==MakeBodyAmmoGeometryKey(a.asset,a.mesh,a.part,a.rigFingerprint)&&
         graphics::RigidPropWorldValid(a.prop.partWorld)&&graphics::RigidPropWorldValid(b.prop.partWorld);
 }
 unsigned BodyAmmoBoundaryMissing(const BodyAmmoBoundaryProof& p,BodyAmmoEyeKey key,const BodyAmmoTargetIdentity& t,std::uint64_t context,std::int64_t now)noexcept {
@@ -139,6 +154,19 @@ bool Bc2BodyAmmoRenderer::PumpStop()noexcept {
 }
 void Bc2BodyAmmoRenderer::EndEye(ID3D11DeviceContext* context,BodyAmmoEyeKey key,const BodyAmmoRenderSource* before,
     const BodyAmmoRenderSource* current,std::int64_t now,const BodyAmmoBoundaryProof& proof)noexcept {
+    if(before&&current&&before->authority&&before->authority->fixed&&!before->assemblyPart){
+        try{
+            const auto first=ExpandBodyAmmoRenderSource(*before),latest=ExpandBodyAmmoRenderSource(*current);
+            const auto catalog=impl_->catalog.load(std::memory_order_acquire);
+            // Require the complete assembly before drawing any of it. Missing
+            // metal/clip geometry must not silently become a rounds-only prop.
+            if(first.empty()||first.size()!=latest.size()||!catalog){++impl_->reasons[2];return;}
+            for(unsigned n=0;n<first.size();++n)if(!BodyAmmoSourceRetained(first[n],latest[n],now)||
+                std::none_of(catalog->begin(),catalog->end(),[&](const auto& p){return p&&BodyAmmoGeometryMatches(*p,first[n]);})){
+                ++impl_->reasons[2];return;}
+            for(unsigned n=0;n<first.size();++n)EndEye(context,key,&first[n],&latest[n],now,proof);
+        }catch(...){++impl_->reasons[12];}return;
+    }
     auto& p=*impl_;struct Callback {std::atomic<unsigned>& count;Callback(std::atomic<unsigned>& c):count(c){count.fetch_add(1,std::memory_order_acq_rel);}~Callback(){count.fetch_sub(1,std::memory_order_release);}} callback(p.inFlight);
     if(p.stopping.load(std::memory_order_acquire)){PumpStop();return;}if(!p.enabled.load(std::memory_order_acquire))return;
     const auto thread=GetCurrentThreadId();unsigned absent=0;p.ownerThread.compare_exchange_strong(absent,thread);

@@ -35,6 +35,42 @@ Bc2BoltRawContact BuildBoltRawContact(const Bc2BoltTracking& t,const RigSnapshot
     if(!feed_mechanism_detail::Pose(wrist))return {};
     return {t.nativeOwner,rig.identity,binding->fingerprint,t.input,wrist,true};
 }
+std::optional<BoneWrite> BuildPausedBoltPart(const Bc2BoltTracking& t,const RigSnapshot& rig,
+    const math::Matrix4& placed,float units,std::int64_t now)noexcept {
+    if(!Base(t,rig,now)||!Units(units)||!t.gun||!t.weapon||t.target||t.recoveryTarget||
+       bool(t.reloadPause)==bool(t.reloadMechanicalPose)||!feed_mechanism_detail::Pose(placed))return {};
+    const auto& p=t.calibration->profile;
+    const auto& pause=t.reloadPause?*t.reloadPause:t.reloadMechanicalPose->pause;
+    auto input=t.input;input.nowNs=now;
+    if(t.reloadPause){
+        if(!t.reloadContact||t.mechanismPhase!=WeaponCyclePhase::ReloadPaused||
+           (t.custody!=BoltCustodyPhase::ReloadPaused&&t.custody!=BoltCustodyPhase::Reloading&&
+            t.custody!=BoltCustodyPhase::ReloadResumePending)||now>=pause.pauseDeadlineNs)return {};
+    }else{
+        const auto& pose=*t.reloadMechanicalPose;const auto& a=pose.authority;
+        if(t.custody!=BoltCustodyPhase::Manipulating||t.mechanismPhase!=WeaponCyclePhase::AwaitingGrip||
+           t.mechanism||t.held||!t.recovery||pose.gun!=t.gun->token||pose.resumedNs<pause.pausedNs||
+           pose.resumedNs>=pause.pauseDeadlineNs||now<pose.resumedNs||now>=pose.cycleDeadlineNs||
+           pause.cycleDeadlineNs<pause.pausedNs||pose.resumedNs>INT64_MAX-(pause.cycleDeadlineNs-pause.pausedNs)||
+           pose.cycleDeadlineNs!=pose.resumedNs+(pause.cycleDeadlineNs-pause.pausedNs)||
+           !weapon_cycle_detail::Same(a,*t.recovery)||!weapon_cycle_detail::Lease(*t.recovery,now)||
+           !weapon_cycle_detail::AmmoRebase(a.grant.debt)||a.grant.debt.ammunitionRebase->pause!=pause.pause||
+           a.owner!=pause.owner||a.item!=pause.item||a.mechanism!=pause.mechanism||a.cycle!=pause.cycle||a.shot!=pause.shot)return {};
+    }
+    if(pause.owner!=input.owner||pause.item!=HandInteractionKey{t.nativeOwner.weapon,input.owner.equipGeneration}||
+       pause.mechanism!=HandInteractionKey{p.id,input.owner.equipGeneration}||pause.profile!=p.id||pause.revision!=p.revision||
+       !pause.pause||now<pause.pausedNs||!std::isfinite(pause.travel)||!std::isfinite(pause.rotation)||pause.travel<0||pause.travel>p.stroke||
+       pause.rotation<std::min(0.f,p.unlockRadians)||pause.rotation>std::max(0.f,p.unlockRadians)||
+       !CurrentBoltCustodyWeaponTarget(*t.weapon,input,*t.gun))return {};
+    const auto part=DeriveBoltPart(rig,t.calibration->partName);
+    if(!part||part->fingerprint!=t.calibration->rigFingerprint)return {};
+    auto local=weapon_cycle_detail::Target(p,pause.travel,pause.rotation);
+    for(unsigned row=0;row<4;++row)for(unsigned col=0;col<4;++col)
+        if((t.reloadContact&&std::abs(local.values[row][col]-t.reloadContact->values[row][col])>1e-5f)||
+           std::abs(placed.values[row][col]-t.weapon->weaponInWorld.values[row][col]*(row==3&&col<3?units:1.f))>1e-5f)return {};
+    for(unsigned n=0;n<3;++n)local.values[3][n]*=units;
+    return BoneWrite{part->part,Multiply(local,placed)};
+}
 std::optional<Bc2BoltPresentation> BuildBoltPresentation(const Bc2BoltTracking& t,const RigSnapshot& rig,
     const math::Matrix4& placed,float units,std::int64_t now)noexcept {
     if(!Base(t,rig,now)||!Units(units)||!t.mechanism||!t.gun||!t.weapon||

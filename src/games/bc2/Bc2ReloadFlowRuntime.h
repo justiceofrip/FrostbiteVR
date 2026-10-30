@@ -1,9 +1,9 @@
+#pragma once
 #include "Bc2ReloadObservation.h"
 #include "Bc2ReloadOwnerLoss.h"
 #include "Bc2PreholdEntryObservation.h"
 #include "Bc2ReloadKeepAlive.h"
 #include "Bc2ReloadStart.h"
-#pragma once
 #include "Bc2OwnerPublication.h"
 #include "Bc2NativeCycleInputGuard.h"
 #include "Bc2ReloadFlow.h"
@@ -78,6 +78,7 @@ struct ReloadFlowEventEnd {
     ReloadDeltaOverride hold{};bool holdRequested=false;
     NativeCycleInputGuard cycleGuard{};std::uint64_t cycleGuardEpoch=0;unsigned cycleGuardSteps=0,cycleGuardRejected=0;
     PistolAfterFeedInputReceipt pistolInput{};
+    FixedContainerInputGuard fixedInput{};
 };
 // True only for a fully captured owner-retained restore whose output matches
 // the captured source fields and whose source bytes did not change. No authority
@@ -342,6 +343,13 @@ bool ResourceHandsEnabled()noexcept;
 std::optional<AmmoResourceView> ReadAmmoResourceView(const ReloadStateOwner&,std::int64_t now)noexcept;
 AmmoResourceRead ReadAmmoResourceObserved(const ReloadStateOwner&,std::int64_t now)noexcept;
 bool SubmitAmmoResourceRequest(const AmmoResourceRequest&)noexcept;
+// Explicit fixed-container backend; exact descriptors and physical policy are
+// separate admissions. The callback is synchronous under the resource gate.
+bool EnableFixedContainerReload()noexcept;
+bool PublishFixedContainerGate(const FixedContainerGate&)noexcept;
+std::optional<FixedContainerGate> ReadFixedContainerGate(const interaction::AmmoResourceIdentity&)noexcept;
+bool WithAmmoResourceLedger(const AmmoResourceBinding&,const interaction::HandInteractionOwner&,
+    void*,bool (*)(void*,interaction::AmmunitionLedger&)noexcept)noexcept;
 std::optional<AmmoResourceOutcome> ReadAmmoResourceOutcome(std::uint64_t,const interaction::AmmoResourceContext&)noexcept;
 // Durable MP443 admission/terminal lineage and per-resource veto. Reading a
 // state never renews a receipt or supplies missing own-Update evidence.

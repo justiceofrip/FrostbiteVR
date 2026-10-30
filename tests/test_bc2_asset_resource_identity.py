@@ -26,8 +26,8 @@ class ResourceIdentityTests(unittest.TestCase):
 
     def test_complete_current_catalog_has_consistent_exact_resource_pins(self):
         pins = identity.catalog_resource_pins(self.rows, ammo.SKELETON_ARCHIVE, ammo.SKELETON_RESOURCE, ammo.SKELETON_SHA)
-        self.assertEqual(len(self.rows), 48)
-        self.assertEqual(len(pins), 94)
+        self.assertEqual(len(self.rows), 252)
+        self.assertEqual(len(pins), 409)
         self.assertEqual(pins[(ammo.SKELETON_ARCHIVE.casefold(), ammo.SKELETON_RESOURCE)], ammo.SKELETON_SHA)
         broken = copy.deepcopy(self.rows[0])
         broken['mesh_sha256'] = '0' * 64
@@ -54,16 +54,22 @@ class ResourceIdentityTests(unittest.TestCase):
                 new_pool(path).read_selected(['mesh.res'])
 
     def test_only_known_container_provenance_may_differ(self):
+        def change_indexes(row):
+            for key in ('archive_index_sha256', 'configuration_archive_index_sha256', 'closed_archive_index_sha256'):
+                if key in row:
+                    row[key] = 'f' * 64
+            for source in row.get('sources', []):
+                source['archive_index_sha256'] = 'f' * 64
+            for container in ('assembly_source', 'mod_policy_source'):
+                for label in ('mesh', 'lod', 'skeleton', 'static', 'reload'):
+                    if label in row.get(container, {}):
+                        row[container][label]['archive_index_sha256'] = 'f' * 64
+            for alias in row.get('configured_aliases', []):
+                change_indexes(alias['profile'])
+
         for original in self.rows:
             changed = copy.deepcopy(original)
-            for key in ('archive_index_sha256', 'configuration_archive_index_sha256', 'closed_archive_index_sha256'):
-                if key in changed:
-                    changed[key] = 'f' * 64
-            for source in changed.get('sources', []):
-                source['archive_index_sha256'] = 'f' * 64
-            for label in ('mesh', 'lod', 'skeleton', 'static', 'reload'):
-                if label in changed.get('assembly_source', {}):
-                    changed['assembly_source'][label]['archive_index_sha256'] = 'f' * 64
+            change_indexes(changed)
             self.assertFalse(identity.profiles_match([changed], [original]))
             self.assertTrue(identity.profiles_match([changed], [original], True))
             for field in ('asset', 'mesh', 'part', 'rig_fingerprint', 'inverse_bind', 'sections'):
@@ -77,6 +83,29 @@ class ResourceIdentityTests(unittest.TestCase):
         changed = copy.deepcopy(rigid)
         changed['assembly_source']['profile']['reload_clip']['archive_index_sha256'] = 'f' * 64
         self.assertFalse(identity.profiles_match([changed], [rigid], True))
+
+    def test_new_policy_and_alias_resource_hashes_remain_exact(self):
+        policy = next(r for r in self.rows if r.get('mod_authored_magazine'))
+        for label in ('mesh', 'lod', 'skeleton', 'static', 'reload'):
+            changed = copy.deepcopy(policy)
+            changed['mod_policy_source'][label]['sha256'] = '0' * 64
+            self.assertFalse(identity.profiles_match([changed], [policy], True), label)
+        original = next(r for r in self.rows if r.get('configured_aliases'))
+        for mutation in ('payload', 'configuration', 'clip', 'nested'):
+            changed = copy.deepcopy(original)
+            alias = changed['configured_aliases'][0]
+            if mutation == 'payload':
+                alias['geometry_payload_sha256'] = '0' * 64
+            elif mutation == 'configuration':
+                alias['profile']['authored_configuration']['sha256'] = '0' * 64
+            elif mutation == 'clip':
+                alias['profile']['closed_clip_sha256'] = '0' * 64
+            else:
+                alias['profile']['configured_aliases'] = [{'profile': {}}]
+                with self.assertRaisesRegex(ValueError, 'Nested configuration alias'):
+                    identity.profiles_match([changed], [original], True)
+                continue
+            self.assertFalse(identity.profiles_match([changed], [original], True), mutation)
 
     def test_actual_catalog_driver_rejects_skeleton_before_parsing_or_writing(self):
         with tempfile.TemporaryDirectory() as folder:

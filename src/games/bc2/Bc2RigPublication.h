@@ -5,6 +5,7 @@
 #endif
 #include "Bc2PhysicalPump.h"
 #include "Bc2BoltRuntimeGeometry.h"
+#include "Bc2FixedContainerPresentation.h"
 #include "Bc2EquipmentIdentity.h"
 #include "Bc2MuzzleAdmission.h"
 #include "Bc2ReloadProducerBinding.h"
@@ -70,6 +71,8 @@ struct Tracking {
     // the actual selected configuration, native equipment and measured rig.
     std::shared_ptr<const Bc2PhysicalFeedPresentation> feed;
     std::shared_ptr<const Bc2PhysicalPistolSlidePresentation> pistolSlide;
+    Bc2FixedContainerTracking fixedContainer{};
+    std::optional<BodyAmmoTracking> fixedBodyAmmo;
     interaction::InputFrame boltRawInput{}; // Before support-orientation guidance; same original generation.
     std::optional<interaction::AmmoSupplyVisualSample> bodyMagazine;
     ReloadTracking reload{}; // Explicit mode; defaults off, immutable preview.
@@ -117,6 +120,8 @@ struct ShotAimEvidence {
  std::uint64_t rigFingerprint=0;
  math::Vec3 modelForward{},modelUp{};
  bool authoredBinding=false,authoredAxes=false,preSupportInputAvailable=false;
+ // Exact configured mesh and rig identity, independent of primary-hand/aim authority.
+ bool selectedRigVerified=false;
 };
 // Current-input body base using the original bounded native eye/stance source.
 // Does not reuse or restamp the previous published tracked body frame.
@@ -131,6 +136,7 @@ struct WeaponShotFrame {
  MagazineRawContact magazine{};
  Bc2PumpRawContact pump{};
  Bc2BoltControllerContact bolt{};
+ Bc2FixedContainerRawContact fixedContainer{};
  ReloadRawContact reload{}; // Original pre-IK input generation/times and rig identity.
  // Returned only through the publication's original configured-mesh/input lease.
  // Experimental authored contact, never a native aim/muzzle/holster capability.
@@ -181,6 +187,7 @@ std::optional<math::Matrix4> ReadEyeBase(unsigned soldier,unsigned weak,std::uin
 void PublishTracking(const Tracking&)noexcept;
 // Original current input/native source only; never renews a visual lease.
 std::optional<BodyAmmoRenderSource> ReadBodyAmmoRenderSource(std::int64_t now)noexcept;
+std::optional<FixedContainerRenderSource> ReadFixedContainerRenderSource(std::int64_t now)noexcept;
 std::optional<BodyHolsteredRenderSource> ReadHolsteredBodyRenderSource(std::int64_t now)noexcept;
 std::optional<StowedAmmoRenderSource> ReadStowedAmmoRenderSource(std::int64_t now)noexcept;
 std::optional<BodyCarriedRenderBatch> ReadCarriedBodyRenderSource(std::int64_t now)noexcept;

@@ -2,6 +2,7 @@
 #include "Bc2M95StockShotDiagnostic.h"
 #include "Bc2ReloadState.h"
 #include "Bc2ReloadConfigDescriptor.h"
+#include "Bc2BoltActionNativeProfile.h"
 #include <bit>
 namespace fvr::bc2 {
 // Read-only original-shot experiment. This grants no manual cycle, reload,
@@ -9,12 +10,7 @@ namespace fvr::bc2 {
 inline bool M95StockShotConfig(const ReloadObservedConfig& c)noexcept {
  return ReloadDescriptorText(c.assetName,"M95_sp")&&
   ReloadDescriptorText(c.assetPath,"Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95")&&
-  c.weaponData>=0x10000&&c.firingData>=0x10000&&c.primaryFire>=0x10000&&
-  std::uint64_t(c.primaryFire)+0x170==c.ammoAddress&&
-  c.fireLogicType==1&&c.reloadType==1&&c.fireInputAction==8&&c.reloadInputAction==29&&
-  c.baseCapacity==5&&c.numberOfMagazines==5&&c.reloadDelay==0&&c.reloadTime==6.9f&&
-  c.reloadThreshold==.67f&&c.postReloadTime==0&&c.boltDelay==0&&c.boltTime==2.3f&&
-  c.holdBoltUntilFireRelease&&!c.holdBoltUntilZoomRelease;
+  ResolveBoltActionNativeProfile(c);
 }
 inline bool ReadM95StockShotConfig(const ReloadStateMemory& m,const ReloadObservedConfig& c)noexcept {
  if(!m.read||!M95StockShotConfig(c))return false;

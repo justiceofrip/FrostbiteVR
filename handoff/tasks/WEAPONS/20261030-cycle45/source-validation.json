@@ -1,0 +1,62 @@
+{
+  "evidence_level": "static source review and exact generator check",
+  "check": "py -3.12 -B tools/bc2_cycle_family_registry.py --check",
+  "check_exit": 0,
+  "profiles": {
+    "bolt": 17,
+    "pump": 25,
+    "excluded_non_bolt_snipers": 11
+  },
+  "cpp_compilation": "root-owned; not run by cycle45",
+  "game_or_headset_check": false,
+  "files": [
+    {
+      "path": "src/games/bc2/Bc2NativeCycleService.h",
+      "sha256": "04cb86defe96d2e31ece7dfbdfc1288e9066931c78201eb92506b996e8c91a76"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeCycleService.cpp",
+      "sha256": "d4fb5bb9ac8c64b0c8213904869ecfbb3c161b801e3a2fdb7755357c300ff5e8"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeCycleRecoveryState.h",
+      "sha256": "5197887ab838454fb394a9825e4aebd87efb3ac1efbc8bd3291a9f2c3802a2dd"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeCycleEvidence.h",
+      "sha256": "9d5f897202d6895ceaacbadc09e25c7ab72119747194f376621939b1bea58b6d"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeCycleEvidence.cpp",
+      "sha256": "f68948dbff2727dad03b3bfcf45d906104032336a6e13471e1cee8a2e63c42e5"
+    },
+    {
+      "path": "src/games/bc2/Bc2M95StockShotConfig.h",
+      "sha256": "195194b0e9b32c0cbe378ac761fd415ad199a27e30c130ba1f56dee2fd7ca10c"
+    },
+    {
+      "path": "src/games/bc2/Bc2BoltActionNativeProfile.h",
+      "sha256": "ab90d1c20e2a3d1b9107a0c48e0cf8530d462616d6f37d4a70f2c458b0a80e08"
+    },
+    {
+      "path": "include/fvr/interaction/WeaponCycle.h",
+      "sha256": "41e8b4f0d4e2e28f71166504974de4f0c0e2a56ff92fe96b4ff8747ad1add711"
+    },
+    {
+      "path": "include/fvr/interaction/WeaponCycleConvergence.h",
+      "sha256": "51571979822ec6b8a072c80a298981fe8ff102b9c6029a5d34eb07bfe72bcf32"
+    },
+    {
+      "path": "tests/Bc2NativeCycleReloadTests.cpp",
+      "sha256": "5083f17669a47d9cc56887783afc8370d32e798109e51865ffa7fc22e26fbae8"
+    },
+    {
+      "path": "tools/bc2_cycle_family_registry.py",
+      "sha256": "ca84c39c2965a7ab69b2ae5332138be41a6adc18ca261fc1babe42527cdbeb97"
+    },
+    {
+      "path": "profiles/weapons45-cycles/exact-cycle-reviews.json",
+      "sha256": "e456517059f6fe059813f873b74899947d2c1758154f41450cb46f24cb583ca4"
+    }
+  ]
+}

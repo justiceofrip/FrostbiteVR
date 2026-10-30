@@ -1,9 +1,13 @@
 # Current state — shared normal integration / public 0.1.15
 
-Updated October 29, 2026. This replaces old next-step instructions; prior evidence remains in
+Updated October 30, 2026. This replaces old next-step instructions; prior evidence remains in
 [history/](history/README.md) (search it by run number; never read a log whole).
 
 ## Active work
+
+Weapons51 stages complete firearm source coverage for77 names/181 configurations;
+30 focused suites pass per architecture and the252-record cache passes both CPU consumers.
+[Completion receipt](../handoff/tasks/WEAPONS/20261030-roster43/COMPLETE.md). Integration/install held by user; installed0.1.17 is unchanged.
 
 Private0.1.17 includes the launcher retained-handle image fix;38 identity/43 portable
 checks pass. Its verified package reuses the staged cache, which now passes both

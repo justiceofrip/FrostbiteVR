@@ -16,6 +16,7 @@ struct ReloadPreview {
     ReloadRoundLease native{};
     interaction::HandClaim shellClaim{},weaponClaim{};
     Bc2ReloadTargets targets{}; // Used only by Guided/Pending.
+    const ShotgunReloadEquipmentProfile* equipment=nullptr;
 };
 // Visibility authority for a genuinely started/kept manual native cycle.
 // Independent of shell claims and the allThreeHeld insertion gate: pending
@@ -25,6 +26,7 @@ struct ReloadShellControl {
     Bc2AmmoReserveLease reserve{};
     interaction::HandClaim weaponClaim{};
     std::shared_ptr<const SelectedMeshesSnapshot> selectedMeshes;
+    const ShotgunReloadEquipmentProfile* equipment=nullptr;
 };
 // Visual ownership outlives an individual native reload transaction. The stock
 // clip may keep its shell visible after the final round is acknowledged. This
@@ -33,6 +35,7 @@ struct ReloadShellControl {
 struct ReloadShellPresentation {
     interaction::HandClaim weaponClaim{};
     std::shared_ptr<const SelectedMeshesSnapshot> selectedMeshes;
+    const ShotgunReloadEquipmentProfile* equipment=nullptr;
 };
 struct ReloadTracking {
     bool enabled=false;
@@ -43,6 +46,7 @@ struct ReloadTracking {
     std::shared_ptr<const ReloadShellControl> shellControl;
     std::shared_ptr<const BeltAmmoTracking> belt; // Reserve visual; optional held-cycle evidence, no shell claim or ammo authority.
     std::shared_ptr<const ReloadShellPresentation> manualShell;
+    const ShotgunReloadEquipmentProfile* equipment=nullptr;
 };
 struct ReloadRawContact {
     bool valid=false,nativeShellVisible=false;
@@ -55,6 +59,7 @@ struct ReloadRawContact {
     math::Matrix4 rawLeftWristWorldMeters{},weaponWorldMeters{};
     // Same-publication reference body, diagnostic mapping evidence only.
     math::Matrix4 trackingBodyWorldMeters{};
+    const ShotgunReloadEquipmentProfile* equipment=nullptr;
 };
 bool ReloadTrackingFresh(const ReloadTracking&,std::int64_t nowNs)noexcept;
 bool ReloadPreviewFresh(const ReloadPreview&,const ReloadTracking&,std::int64_t nowNs)noexcept;
@@ -71,7 +76,7 @@ ReloadPackedPaletteChoice SelectReloadPackedPalette(const ReloadPreview&,const R
     std::int64_t nowNs,std::int64_t originalTargetDeadline,
     std::span<const std::array<std::byte,64>> posed,std::span<const std::array<std::byte,64>> base,
     bool coherentShotGuard)noexcept;
-// Private suppression of the exact SPAS shell leaf during an active manual
+// Private suppression of the exact equipment shell during an active manual
 // cycle WITHOUT a displayed physical item. Never changes animation or ammo.
 struct ReloadShellHidePlan {
     RigIdentity rig{};
@@ -95,7 +100,7 @@ ReloadRawContact BuildReloadRawContact(const ReloadTracking&,const RigSnapshot&,
     float unitsPerMetre,std::int64_t nowNs,const math::Matrix4* trackingBody=nullptr);
 std::optional<Bc2ReloadTargets> ResolveReloadPreviewTargets(const ReloadPreview&,
     const ReloadTracking&,const ReloadRawContact&,std::int64_t nowNs)noexcept;
-// Evidence-backed SPAS static skin binding, not a generic selected-mesh bool.
+// Exact equipment shell skin binding, not a generic selected-mesh bool.
 // Every call still checks the current exact asset, named rig and claims/native
 // lease. Only its exact owned shell may receive the visibility exception;
 // final Pack checks exact current native source bytes and current ownership.

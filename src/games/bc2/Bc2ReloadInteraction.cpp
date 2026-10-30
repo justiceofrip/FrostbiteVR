@@ -1,4 +1,5 @@
 #include "Bc2ReloadInteraction.h"
+#include "Bc2ShotgunEquipment.h"
 namespace fvr::bc2 {
 interaction::ReloadInsertionProfile SpasReloadInsertionProfile()noexcept {
     interaction::ReloadInsertionProfile p{};
@@ -41,9 +42,16 @@ Bc2ReloadInteractionResult Bc2ReloadInteraction::Reject(Bc2ReloadInteractionReas
 Bc2ReloadInteractionResult Bc2ReloadInteraction::Update(const Bc2ReloadInteractionSample& sample)noexcept {
     using namespace interaction;
     if(!enabled_)return Reject(Bc2ReloadInteractionReason::Disabled);
-    if(sample.assetName!=SpasReloadAsset||sample.meshPath!=SpasReloadMesh||sample.rigFingerprint!=SpasReloadRig)
+    if(!ShotgunEquipmentMatches(sample.equipment,sample.assetName,sample.meshPath,sample.rigFingerprint,sample.configurationPath))
         return Reject(Bc2ReloadInteractionReason::UnsupportedAsset);
     if(!sample.selectedMeshIdentityVerified)return Reject(Bc2ReloadInteractionReason::MeshUnverified);
+    const auto* equipment=KnownShotgunEquipment(sample.equipment);
+    if(equipment_!=equipment){
+        const bool changed=equipment_&&cycle_;insertion_.Reset();cycle_=0;
+        if(!insertion_.Reconfigure(*equipment->shellInsertion))return Reject(Bc2ReloadInteractionReason::UnsupportedAsset);
+        equipment_=equipment;
+        if(changed)return Reject(Bc2ReloadInteractionReason::NativeCycleChanged);
+    }
     const auto& s=sample.insertion;const auto& n=sample.native;
     if(!n.cycle||!n.allFiringCopiesHeld||n.owner!=s.identity.owner||n.weapon!=s.identity.weapon||
        n.observedNs<=0||n.observedNs>s.nowNs||n.deadlineNs<=s.nowNs||n.deadlineNs<n.observedNs||
@@ -56,7 +64,7 @@ Bc2ReloadInteractionResult Bc2ReloadInteraction::Update(const Bc2ReloadInteracti
     using namespace reload_insertion_detail;
     if(!Rigid(sample.rawLeftWristWorldMeters)||!Rigid(sample.weaponWorldMeters))
         return Reject(Bc2ReloadInteractionReason::InvalidWorldPose);
-    auto raw=s;const auto profile=SpasReloadInsertionProfile();raw.profile={profile.id,profile.revision};
+    auto raw=s;const auto& profile=*equipment->shellInsertion;raw.profile={profile.id,profile.revision};
     raw.weaponFromHand=Multiply(sample.rawLeftWristWorldMeters,*InverseRigid(sample.weaponWorldMeters));
     Bc2ReloadInteractionResult out;out.insertion=insertion_.Update(raw);
     const auto& r=out.insertion;
@@ -64,7 +72,7 @@ Bc2ReloadInteractionResult Bc2ReloadInteraction::Update(const Bc2ReloadInteracti
     const auto item=r.guidedItem.value_or(*r.rawItem);
     const auto hand=Multiply(profile.itemFromHand,item); // Duplicate packets retain the original coherent geometry.
     out.targets=Bc2ReloadTargets{s.identity,s.itemClaim.token,s.weaponClaim.token,s.sequence,n.cycle,s.observedNs,
-        std::min({s.deadlineNs,n.deadlineNs,s.itemClaim.deadlineNs,s.weaponClaim.deadlineNs}),item,hand};
+        std::min({s.deadlineNs,n.deadlineNs,s.itemClaim.deadlineNs,s.weaponClaim.deadlineNs}),item,hand,equipment};
     // A physical seat remains a candidate. Only native completion reconciles ammo.
     return out;
 }

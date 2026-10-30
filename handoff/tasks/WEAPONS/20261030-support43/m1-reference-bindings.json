@@ -1,0 +1,1432 @@
+{
+  "schema": "fvr.bc2.authored_reload_reference_bindings",
+  "schema_version": 1,
+  "profiles": [
+    {
+      "native_asset_name": "Garand",
+      "weapon_class": "wcAssault",
+      "authored_rifle_support": false,
+      "weapon": {
+        "resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Assault.dbx",
+        "sha256": "a41b2e7bb7f7e8af83521a60106fa23fbec462dd740fbac2230898a1519cb83b",
+        "instance_guid": "4bc8d46c-cc7b-4993-8bbe-09e708bef4fa",
+        "type": "GameSharedResources.SoldierWeaponData"
+      },
+      "state_index": 0,
+      "state_count": 1,
+      "meshes": [
+        {
+          "reference": "objects/weapons/handheld/beach/m1garand/m1garand_mesh/c8d9a8fc-1475-49f5-b84e-e969d2e3a076",
+          "mesh_document": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Mesh.dbx",
+          "mesh_document_sha256": "bc80fff0a09c462f9845cf37d7e6d30eb7fefbf41c88d3697e6334d428e69d66",
+          "mesh_instance_guid": "c8d9a8fc-1475-49f5-b84e-e969d2e3a076",
+          "mesh_resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Mesh.res",
+          "configured_mesh_path": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Mesh",
+          "geometry": {
+            "mesh_sha256": "b41fe39886444763ab02e562e2fe429d4289461871a0f1ab1c913d56322b190c",
+            "lods": [
+              {
+                "lod": 0,
+                "data_resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Mesh_lod0_data.res",
+                "data_sha256": "6cbb612e03b33c3e9ce9acd10ecce129be56bb17677936931c0a9a7431c53258"
+              }
+            ]
+          }
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_AnimTree1p.dbx",
+          "sha256": "d555a03a712adfe4ff4bd98b2e06ac9319c3055f6b8e9152f8573a58b6209b82",
+          "instance_guid": "56252e78-0e23-4fe3-8838-cc22d5a86161",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/M1garand/1P/HandsIkPose.dbx",
+          "sha256": "69f37aeeb655585e240fbd5a059b710846996ad937a5ab70ba4203b5d95b7cc2",
+          "instance_guid": "9bc449e6-37ef-4750-99c6-7b81b02bdc93",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/M1garand/1P/HandsIkPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "animation_sha256": "5af5de7e8fdd5f45080553d97805575d8227488ac865d43d751fc7c6ff282d85",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "animation_source": {
+        "archive": "Dist/win32/async/weapon/m1garand-00.fbrb",
+        "archive_index_sha256": "d0d031b25e2cc58e61c309d0ebb958394c175e4329c5468bd81a68f2325068d5",
+        "kind": "GrannyAnimation",
+        "selection": "exact_pinned_source_resource"
+      },
+      "skeleton_source": {
+        "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+        "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965",
+        "kind": "GrannyModel",
+        "selection": "exact_configuration_archive_resource"
+      },
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "rig_topology": [
+        {
+          "name": "grannyRootBone",
+          "parent_index": -1
+        },
+        {
+          "name": "Hips",
+          "parent_index": 0
+        },
+        {
+          "name": "Spine",
+          "parent_index": 1
+        },
+        {
+          "name": "Spine1",
+          "parent_index": 2
+        },
+        {
+          "name": "Spine2",
+          "parent_index": 3
+        },
+        {
+          "name": "LeftUpLeg",
+          "parent_index": 1
+        },
+        {
+          "name": "RightUpLeg",
+          "parent_index": 1
+        },
+        {
+          "name": "jntWpn_0",
+          "parent_index": 2
+        },
+        {
+          "name": "Spine3",
+          "parent_index": 4
+        },
+        {
+          "name": "Spine4",
+          "parent_index": 8
+        },
+        {
+          "name": "jntWpn_1",
+          "parent_index": 7
+        },
+        {
+          "name": "LeftLeg",
+          "parent_index": 5
+        },
+        {
+          "name": "RightLeg",
+          "parent_index": 6
+        },
+        {
+          "name": "Neck",
+          "parent_index": 9
+        },
+        {
+          "name": "Neck1",
+          "parent_index": 13
+        },
+        {
+          "name": "LeftShoulder",
+          "parent_index": 9
+        },
+        {
+          "name": "RightShoulder",
+          "parent_index": 9
+        },
+        {
+          "name": "jntWpn_2",
+          "parent_index": 10
+        },
+        {
+          "name": "Head",
+          "parent_index": 14
+        },
+        {
+          "name": "Eyes",
+          "parent_index": 18
+        },
+        {
+          "name": "LeftArm",
+          "parent_index": 15
+        },
+        {
+          "name": "RightArm",
+          "parent_index": 16
+        },
+        {
+          "name": "RightEye",
+          "parent_index": 19
+        },
+        {
+          "name": "LeftEye",
+          "parent_index": 19
+        },
+        {
+          "name": "RightFoot",
+          "parent_index": 12
+        },
+        {
+          "name": "LeftFoot",
+          "parent_index": 11
+        },
+        {
+          "name": "LeftArmRoll",
+          "parent_index": 20
+        },
+        {
+          "name": "RightArmRoll",
+          "parent_index": 21
+        },
+        {
+          "name": "LeftForeArm",
+          "parent_index": 26
+        },
+        {
+          "name": "RightForeArm",
+          "parent_index": 27
+        },
+        {
+          "name": "jntWpn_3",
+          "parent_index": 10
+        },
+        {
+          "name": "LeftForeArmRoll",
+          "parent_index": 28
+        },
+        {
+          "name": "RightForeArmRoll",
+          "parent_index": 29
+        },
+        {
+          "name": "jntWpn_8",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_9",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_10",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_11",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_Flash",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_12",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpnwpnJnt_16",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_7",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_6",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_5",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_4",
+          "parent_index": 10
+        },
+        {
+          "name": "LeftHand",
+          "parent_index": 31
+        },
+        {
+          "name": "RightHand",
+          "parent_index": 32
+        },
+        {
+          "name": "FJ_R_CheekUpper",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_Temple",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_Temple",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_NoseWing",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_NoseWing",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_BrowOuter",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_BrowInner",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_BrowOuter",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_BrowInner",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_LipRightCorner",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_LipLeftCorner",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_LipUpperRight",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_LipUpperLeft",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_LipUpperMiddle",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_CheekUpper",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_CheekLower",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_CheekLower",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_NoseSide",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_NoseSide",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_MouthUpper",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_MouthUpper",
+          "parent_index": 18
+        },
+        {
+          "name": "Jaw",
+          "parent_index": 18
+        },
+        {
+          "name": "RightToeBase",
+          "parent_index": 24
+        },
+        {
+          "name": "LeftToeBase",
+          "parent_index": 25
+        },
+        {
+          "name": "FJ_Chin",
+          "parent_index": 67
+        },
+        {
+          "name": "FJ_Tongue",
+          "parent_index": 67
+        },
+        {
+          "name": "FJ_LipLowerRight",
+          "parent_index": 67
+        },
+        {
+          "name": "FJ_LipLowerMiddle",
+          "parent_index": 67
+        },
+        {
+          "name": "FJ_LipLowerLeft",
+          "parent_index": 67
+        },
+        {
+          "name": "RightUpperLid",
+          "parent_index": 19
+        },
+        {
+          "name": "RightLowerLid",
+          "parent_index": 19
+        },
+        {
+          "name": "LeftUpperLid",
+          "parent_index": 19
+        },
+        {
+          "name": "LeftLowerLid",
+          "parent_index": 19
+        },
+        {
+          "name": "RightHandMiddle1",
+          "parent_index": 45
+        },
+        {
+          "name": "RightHandThumb1",
+          "parent_index": 45
+        },
+        {
+          "name": "RightHandIndex1",
+          "parent_index": 45
+        },
+        {
+          "name": "RightHandRing1",
+          "parent_index": 45
+        },
+        {
+          "name": "RightHandPinky1",
+          "parent_index": 45
+        },
+        {
+          "name": "LeftHandMiddle1",
+          "parent_index": 44
+        },
+        {
+          "name": "LeftHandThumb1",
+          "parent_index": 44
+        },
+        {
+          "name": "LeftHandIndex1",
+          "parent_index": 44
+        },
+        {
+          "name": "LeftHandRing1",
+          "parent_index": 44
+        },
+        {
+          "name": "LeftHandPinky1",
+          "parent_index": 44
+        },
+        {
+          "name": "LeftHandThumb2",
+          "parent_index": 85
+        },
+        {
+          "name": "RightHandThumb2",
+          "parent_index": 80
+        },
+        {
+          "name": "RightHandMiddle2",
+          "parent_index": 79
+        },
+        {
+          "name": "LeftHandMiddle2",
+          "parent_index": 84
+        },
+        {
+          "name": "RightHandIndex2",
+          "parent_index": 81
+        },
+        {
+          "name": "LeftHandIndex2",
+          "parent_index": 86
+        },
+        {
+          "name": "LeftHandRing2",
+          "parent_index": 87
+        },
+        {
+          "name": "RightHandRing2",
+          "parent_index": 82
+        },
+        {
+          "name": "LeftHandPinky2",
+          "parent_index": 88
+        },
+        {
+          "name": "RightHandPinky2",
+          "parent_index": 83
+        },
+        {
+          "name": "jntWpn_17",
+          "parent_index": 39
+        },
+        {
+          "name": "jntWpn_13",
+          "parent_index": 38
+        },
+        {
+          "name": "FJ_L_Ear",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_Ear",
+          "parent_index": 18
+        },
+        {
+          "name": "LeftHandThumb3",
+          "parent_index": 89
+        },
+        {
+          "name": "RightHandThumb3",
+          "parent_index": 90
+        },
+        {
+          "name": "LeftHandIndex3",
+          "parent_index": 94
+        },
+        {
+          "name": "RightHandIndex3",
+          "parent_index": 93
+        },
+        {
+          "name": "LeftHandMiddle3",
+          "parent_index": 92
+        },
+        {
+          "name": "RightHandMiddle3",
+          "parent_index": 91
+        },
+        {
+          "name": "LeftHandRing3",
+          "parent_index": 95
+        },
+        {
+          "name": "RightHandRing3",
+          "parent_index": 96
+        },
+        {
+          "name": "RightHandPinky3",
+          "parent_index": 98
+        },
+        {
+          "name": "LeftHandPinky3",
+          "parent_index": 97
+        },
+        {
+          "name": "jntWpn_18",
+          "parent_index": 99
+        },
+        {
+          "name": "jntWpnwpnJnt_14",
+          "parent_index": 100
+        },
+        {
+          "name": "jntWpn_19",
+          "parent_index": 113
+        },
+        {
+          "name": "jntWpn_15",
+          "parent_index": 114
+        },
+        {
+          "name": "cameraBase",
+          "parent_index": 0
+        },
+        {
+          "name": "PhysJnt_Hips",
+          "parent_index": 1
+        },
+        {
+          "name": "PhysJnt_LeftUpLeg",
+          "parent_index": 5
+        },
+        {
+          "name": "PhysJnt_RightUpLeg",
+          "parent_index": 6
+        },
+        {
+          "name": "PhysJnt_RightLeg",
+          "parent_index": 12
+        },
+        {
+          "name": "PhysJnt_LeftLeg",
+          "parent_index": 11
+        },
+        {
+          "name": "PhysJnt_Torso",
+          "parent_index": 9
+        },
+        {
+          "name": "PhysJnt_Head",
+          "parent_index": 18
+        },
+        {
+          "name": "PhysJnt_LeftArm",
+          "parent_index": 20
+        },
+        {
+          "name": "PhysJnt_RightArm",
+          "parent_index": 21
+        },
+        {
+          "name": "PhysJnt_LeftForeArm",
+          "parent_index": 28
+        },
+        {
+          "name": "PhysJnt_RightForeArm",
+          "parent_index": 29
+        },
+        {
+          "name": "cameraJoint",
+          "parent_index": 117
+        },
+        {
+          "name": "kitJoint2",
+          "parent_index": 6
+        },
+        {
+          "name": "kitJoint13",
+          "parent_index": 2
+        },
+        {
+          "name": "kitJoint7",
+          "parent_index": 2
+        },
+        {
+          "name": "kitJoint4",
+          "parent_index": 3
+        },
+        {
+          "name": "kitJoint8",
+          "parent_index": 3
+        },
+        {
+          "name": "kitJoint9",
+          "parent_index": 3
+        },
+        {
+          "name": "kitJoint5",
+          "parent_index": 3
+        },
+        {
+          "name": "kitJoint6",
+          "parent_index": 3
+        },
+        {
+          "name": "kitJoint12",
+          "parent_index": 3
+        },
+        {
+          "name": "kitJoint10",
+          "parent_index": 4
+        },
+        {
+          "name": "kitJoint11",
+          "parent_index": 4
+        },
+        {
+          "name": "kitJoint16",
+          "parent_index": 8
+        },
+        {
+          "name": "kitJoint15",
+          "parent_index": 8
+        },
+        {
+          "name": "kitJoint14",
+          "parent_index": 8
+        },
+        {
+          "name": "kitJoint17",
+          "parent_index": 8
+        },
+        {
+          "name": "kitJoint18",
+          "parent_index": 9
+        },
+        {
+          "name": "kitJoint19",
+          "parent_index": 9
+        }
+      ],
+      "weapon_bone": "jntWpn_1",
+      "coordinate_convention": "canonical reflected-Z row-vector metres; named bone relative to jntWpn_1",
+      "right_hand_in_weapon": [
+        0.3684613286380444,
+        0.9177952604205095,
+        -0.1479463052865328,
+        0.0,
+        -0.804436977187203,
+        0.2350066434905453,
+        -0.5455758675465996,
+        0.0,
+        -0.46595858081186114,
+        0.32003708763978717,
+        0.8248993050687102,
+        -0.0,
+        -0.058927766685460306,
+        0.016475656573231513,
+        -0.2358675459743505,
+        1.0
+      ],
+      "left_hand_in_weapon": [
+        0.5466820884996397,
+        0.7494192191371781,
+        -0.373509742980681,
+        0.0,
+        0.24628488424968073,
+        -0.5702464526089895,
+        -0.783685357191894,
+        0.0,
+        -0.8003014743856185,
+        0.33643694398012575,
+        -0.496314147311479,
+        -0.0,
+        0.028589902255079975,
+        0.0065620358167565816,
+        -0.6399961730315242,
+        1.0
+      ],
+      "right_hand_status": "decoded_spline_candidate",
+      "left_hand_status": "decoded_spline_candidate",
+      "all_required_controls_constant": false,
+      "evaluation_status": "decoded_spline_candidate",
+      "static_parts_and_fingers": {},
+      "status": "authored_reload_references_only",
+      "runtime_accepted": false,
+      "active_native_mesh_binding": false,
+      "configured_mesh_path": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Mesh",
+      "binding_digest": "0eee70c5f89aa8f07a9d33c2461d11844cd34545a7eade3328aa85aa994154da"
+    },
+    {
+      "native_asset_name": "Garand",
+      "weapon_class": "wcAssault",
+      "authored_rifle_support": false,
+      "weapon": {
+        "resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand.dbx",
+        "sha256": "db8d551f626a593e10848381c00983c7a4999e1096a91deb1ded60d49a8e101d",
+        "instance_guid": "d77b3602-e594-465d-87fa-8c193660522b",
+        "type": "GameSharedResources.SoldierWeaponData"
+      },
+      "state_index": 0,
+      "state_count": 1,
+      "meshes": [
+        {
+          "reference": "objects/weapons/handheld/beach/m1garand/m1garand_mesh/c8d9a8fc-1475-49f5-b84e-e969d2e3a076",
+          "mesh_document": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Mesh.dbx",
+          "mesh_document_sha256": "bc80fff0a09c462f9845cf37d7e6d30eb7fefbf41c88d3697e6334d428e69d66",
+          "mesh_instance_guid": "c8d9a8fc-1475-49f5-b84e-e969d2e3a076",
+          "mesh_resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Mesh.res",
+          "configured_mesh_path": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Mesh",
+          "geometry": {
+            "mesh_sha256": "b41fe39886444763ab02e562e2fe429d4289461871a0f1ab1c913d56322b190c",
+            "lods": [
+              {
+                "lod": 0,
+                "data_resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Mesh_lod0_data.res",
+                "data_sha256": "6cbb612e03b33c3e9ce9acd10ecce129be56bb17677936931c0a9a7431c53258"
+              }
+            ]
+          }
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_AnimTree1p.dbx",
+          "sha256": "d555a03a712adfe4ff4bd98b2e06ac9319c3055f6b8e9152f8573a58b6209b82",
+          "instance_guid": "56252e78-0e23-4fe3-8838-cc22d5a86161",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/M1garand/1P/HandsIkPose.dbx",
+          "sha256": "69f37aeeb655585e240fbd5a059b710846996ad937a5ab70ba4203b5d95b7cc2",
+          "instance_guid": "9bc449e6-37ef-4750-99c6-7b81b02bdc93",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/M1garand/1P/HandsIkPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "animation_sha256": "5af5de7e8fdd5f45080553d97805575d8227488ac865d43d751fc7c6ff282d85",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "animation_source": {
+        "archive": "Dist/win32/async/weapon/m1garand-00.fbrb",
+        "archive_index_sha256": "d0d031b25e2cc58e61c309d0ebb958394c175e4329c5468bd81a68f2325068d5",
+        "kind": "GrannyAnimation",
+        "selection": "exact_pinned_source_resource"
+      },
+      "skeleton_source": {
+        "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+        "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965",
+        "kind": "GrannyModel",
+        "selection": "exact_configuration_archive_resource"
+      },
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "rig_topology": [
+        {
+          "name": "grannyRootBone",
+          "parent_index": -1
+        },
+        {
+          "name": "Hips",
+          "parent_index": 0
+        },
+        {
+          "name": "Spine",
+          "parent_index": 1
+        },
+        {
+          "name": "Spine1",
+          "parent_index": 2
+        },
+        {
+          "name": "Spine2",
+          "parent_index": 3
+        },
+        {
+          "name": "LeftUpLeg",
+          "parent_index": 1
+        },
+        {
+          "name": "RightUpLeg",
+          "parent_index": 1
+        },
+        {
+          "name": "jntWpn_0",
+          "parent_index": 2
+        },
+        {
+          "name": "Spine3",
+          "parent_index": 4
+        },
+        {
+          "name": "Spine4",
+          "parent_index": 8
+        },
+        {
+          "name": "jntWpn_1",
+          "parent_index": 7
+        },
+        {
+          "name": "LeftLeg",
+          "parent_index": 5
+        },
+        {
+          "name": "RightLeg",
+          "parent_index": 6
+        },
+        {
+          "name": "Neck",
+          "parent_index": 9
+        },
+        {
+          "name": "Neck1",
+          "parent_index": 13
+        },
+        {
+          "name": "LeftShoulder",
+          "parent_index": 9
+        },
+        {
+          "name": "RightShoulder",
+          "parent_index": 9
+        },
+        {
+          "name": "jntWpn_2",
+          "parent_index": 10
+        },
+        {
+          "name": "Head",
+          "parent_index": 14
+        },
+        {
+          "name": "Eyes",
+          "parent_index": 18
+        },
+        {
+          "name": "LeftArm",
+          "parent_index": 15
+        },
+        {
+          "name": "RightArm",
+          "parent_index": 16
+        },
+        {
+          "name": "RightEye",
+          "parent_index": 19
+        },
+        {
+          "name": "LeftEye",
+          "parent_index": 19
+        },
+        {
+          "name": "RightFoot",
+          "parent_index": 12
+        },
+        {
+          "name": "LeftFoot",
+          "parent_index": 11
+        },
+        {
+          "name": "LeftArmRoll",
+          "parent_index": 20
+        },
+        {
+          "name": "RightArmRoll",
+          "parent_index": 21
+        },
+        {
+          "name": "LeftForeArm",
+          "parent_index": 26
+        },
+        {
+          "name": "RightForeArm",
+          "parent_index": 27
+        },
+        {
+          "name": "jntWpn_3",
+          "parent_index": 10
+        },
+        {
+          "name": "LeftForeArmRoll",
+          "parent_index": 28
+        },
+        {
+          "name": "RightForeArmRoll",
+          "parent_index": 29
+        },
+        {
+          "name": "jntWpn_8",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_9",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_10",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_11",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_Flash",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_12",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpnwpnJnt_16",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_7",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_6",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_5",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_4",
+          "parent_index": 10
+        },
+        {
+          "name": "LeftHand",
+          "parent_index": 31
+        },
+        {
+          "name": "RightHand",
+          "parent_index": 32
+        },
+        {
+          "name": "FJ_R_CheekUpper",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_Temple",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_Temple",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_NoseWing",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_NoseWing",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_BrowOuter",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_BrowInner",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_BrowOuter",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_BrowInner",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_LipRightCorner",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_LipLeftCorner",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_LipUpperRight",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_LipUpperLeft",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_LipUpperMiddle",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_CheekUpper",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_CheekLower",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_CheekLower",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_NoseSide",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_NoseSide",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_MouthUpper",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_MouthUpper",
+          "parent_index": 18
+        },
+        {
+          "name": "Jaw",
+          "parent_index": 18
+        },
+        {
+          "name": "RightToeBase",
+          "parent_index": 24
+        },
+        {
+          "name": "LeftToeBase",
+          "parent_index": 25
+        },
+        {
+          "name": "FJ_Chin",
+          "parent_index": 67
+        },
+        {
+          "name": "FJ_Tongue",
+          "parent_index": 67
+        },
+        {
+          "name": "FJ_LipLowerRight",
+          "parent_index": 67
+        },
+        {
+          "name": "FJ_LipLowerMiddle",
+          "parent_index": 67
+        },
+        {
+          "name": "FJ_LipLowerLeft",
+          "parent_index": 67
+        },
+        {
+          "name": "RightUpperLid",
+          "parent_index": 19
+        },
+        {
+          "name": "RightLowerLid",
+          "parent_index": 19
+        },
+        {
+          "name": "LeftUpperLid",
+          "parent_index": 19
+        },
+        {
+          "name": "LeftLowerLid",
+          "parent_index": 19
+        },
+        {
+          "name": "RightHandMiddle1",
+          "parent_index": 45
+        },
+        {
+          "name": "RightHandThumb1",
+          "parent_index": 45
+        },
+        {
+          "name": "RightHandIndex1",
+          "parent_index": 45
+        },
+        {
+          "name": "RightHandRing1",
+          "parent_index": 45
+        },
+        {
+          "name": "RightHandPinky1",
+          "parent_index": 45
+        },
+        {
+          "name": "LeftHandMiddle1",
+          "parent_index": 44
+        },
+        {
+          "name": "LeftHandThumb1",
+          "parent_index": 44
+        },
+        {
+          "name": "LeftHandIndex1",
+          "parent_index": 44
+        },
+        {
+          "name": "LeftHandRing1",
+          "parent_index": 44
+        },
+        {
+          "name": "LeftHandPinky1",
+          "parent_index": 44
+        },
+        {
+          "name": "LeftHandThumb2",
+          "parent_index": 85
+        },
+        {
+          "name": "RightHandThumb2",
+          "parent_index": 80
+        },
+        {
+          "name": "RightHandMiddle2",
+          "parent_index": 79
+        },
+        {
+          "name": "LeftHandMiddle2",
+          "parent_index": 84
+        },
+        {
+          "name": "RightHandIndex2",
+          "parent_index": 81
+        },
+        {
+          "name": "LeftHandIndex2",
+          "parent_index": 86
+        },
+        {
+          "name": "LeftHandRing2",
+          "parent_index": 87
+        },
+        {
+          "name": "RightHandRing2",
+          "parent_index": 82
+        },
+        {
+          "name": "LeftHandPinky2",
+          "parent_index": 88
+        },
+        {
+          "name": "RightHandPinky2",
+          "parent_index": 83
+        },
+        {
+          "name": "jntWpn_17",
+          "parent_index": 39
+        },
+        {
+          "name": "jntWpn_13",
+          "parent_index": 38
+        },
+        {
+          "name": "FJ_L_Ear",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_Ear",
+          "parent_index": 18
+        },
+        {
+          "name": "LeftHandThumb3",
+          "parent_index": 89
+        },
+        {
+          "name": "RightHandThumb3",
+          "parent_index": 90
+        },
+        {
+          "name": "LeftHandIndex3",
+          "parent_index": 94
+        },
+        {
+          "name": "RightHandIndex3",
+          "parent_index": 93
+        },
+        {
+          "name": "LeftHandMiddle3",
+          "parent_index": 92
+        },
+        {
+          "name": "RightHandMiddle3",
+          "parent_index": 91
+        },
+        {
+          "name": "LeftHandRing3",
+          "parent_index": 95
+        },
+        {
+          "name": "RightHandRing3",
+          "parent_index": 96
+        },
+        {
+          "name": "RightHandPinky3",
+          "parent_index": 98
+        },
+        {
+          "name": "LeftHandPinky3",
+          "parent_index": 97
+        },
+        {
+          "name": "jntWpn_18",
+          "parent_index": 99
+        },
+        {
+          "name": "jntWpnwpnJnt_14",
+          "parent_index": 100
+        },
+        {
+          "name": "jntWpn_19",
+          "parent_index": 113
+        },
+        {
+          "name": "jntWpn_15",
+          "parent_index": 114
+        },
+        {
+          "name": "cameraBase",
+          "parent_index": 0
+        },
+        {
+          "name": "PhysJnt_Hips",
+          "parent_index": 1
+        },
+        {
+          "name": "PhysJnt_LeftUpLeg",
+          "parent_index": 5
+        },
+        {
+          "name": "PhysJnt_RightUpLeg",
+          "parent_index": 6
+        },
+        {
+          "name": "PhysJnt_RightLeg",
+          "parent_index": 12
+        },
+        {
+          "name": "PhysJnt_LeftLeg",
+          "parent_index": 11
+        },
+        {
+          "name": "PhysJnt_Torso",
+          "parent_index": 9
+        },
+        {
+          "name": "PhysJnt_Head",
+          "parent_index": 18
+        },
+        {
+          "name": "PhysJnt_LeftArm",
+          "parent_index": 20
+        },
+        {
+          "name": "PhysJnt_RightArm",
+          "parent_index": 21
+        },
+        {
+          "name": "PhysJnt_LeftForeArm",
+          "parent_index": 28
+        },
+        {
+          "name": "PhysJnt_RightForeArm",
+          "parent_index": 29
+        },
+        {
+          "name": "cameraJoint",
+          "parent_index": 117
+        },
+        {
+          "name": "kitJoint2",
+          "parent_index": 6
+        },
+        {
+          "name": "kitJoint13",
+          "parent_index": 2
+        },
+        {
+          "name": "kitJoint7",
+          "parent_index": 2
+        },
+        {
+          "name": "kitJoint4",
+          "parent_index": 3
+        },
+        {
+          "name": "kitJoint8",
+          "parent_index": 3
+        },
+        {
+          "name": "kitJoint9",
+          "parent_index": 3
+        },
+        {
+          "name": "kitJoint5",
+          "parent_index": 3
+        },
+        {
+          "name": "kitJoint6",
+          "parent_index": 3
+        },
+        {
+          "name": "kitJoint12",
+          "parent_index": 3
+        },
+        {
+          "name": "kitJoint10",
+          "parent_index": 4
+        },
+        {
+          "name": "kitJoint11",
+          "parent_index": 4
+        },
+        {
+          "name": "kitJoint16",
+          "parent_index": 8
+        },
+        {
+          "name": "kitJoint15",
+          "parent_index": 8
+        },
+        {
+          "name": "kitJoint14",
+          "parent_index": 8
+        },
+        {
+          "name": "kitJoint17",
+          "parent_index": 8
+        },
+        {
+          "name": "kitJoint18",
+          "parent_index": 9
+        },
+        {
+          "name": "kitJoint19",
+          "parent_index": 9
+        }
+      ],
+      "weapon_bone": "jntWpn_1",
+      "coordinate_convention": "canonical reflected-Z row-vector metres; named bone relative to jntWpn_1",
+      "right_hand_in_weapon": [
+        0.3684613286380444,
+        0.9177952604205095,
+        -0.1479463052865328,
+        0.0,
+        -0.804436977187203,
+        0.2350066434905453,
+        -0.5455758675465996,
+        0.0,
+        -0.46595858081186114,
+        0.32003708763978717,
+        0.8248993050687102,
+        -0.0,
+        -0.058927766685460306,
+        0.016475656573231513,
+        -0.2358675459743505,
+        1.0
+      ],
+      "left_hand_in_weapon": [
+        0.5466820884996397,
+        0.7494192191371781,
+        -0.373509742980681,
+        0.0,
+        0.24628488424968073,
+        -0.5702464526089895,
+        -0.783685357191894,
+        0.0,
+        -0.8003014743856185,
+        0.33643694398012575,
+        -0.496314147311479,
+        -0.0,
+        0.028589902255079975,
+        0.0065620358167565816,
+        -0.6399961730315242,
+        1.0
+      ],
+      "right_hand_status": "decoded_spline_candidate",
+      "left_hand_status": "decoded_spline_candidate",
+      "all_required_controls_constant": false,
+      "evaluation_status": "decoded_spline_candidate",
+      "static_parts_and_fingers": {},
+      "status": "authored_reload_references_only",
+      "runtime_accepted": false,
+      "active_native_mesh_binding": false,
+      "configured_mesh_path": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Mesh",
+      "binding_digest": "d4b16c8f248edbcd5bf512291da794aed704330c9bbc254651a8d876ebe0d1c8"
+    }
+  ],
+  "gaps": [],
+  "runtime_admission": false,
+  "scope": "Exact authored reference and content binding; current native equipment/mesh/rig guards remain required",
+  "summary": {
+    "weapon_definitions": 2,
+    "bound_profiles": 2,
+    "gaps": 0
+  },
+  "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+  "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+}

@@ -3,10 +3,20 @@
 #include "fvr/interaction/TrackingMath.h"
 
 namespace fvr::interaction {
-enum class BoltCustodyPhase:unsigned {Idle,AwaitingCustody,Manipulating,Returned};
+enum class BoltCustodyPhase:unsigned {Idle,AwaitingCustody,Manipulating,Returned,ReloadPaused,Reloading,ReloadResumePending};
+enum class BoltReloadCustodyIntent:unsigned {Pause,Resume};
 // Current tracked mechanism wrist, under this coordinator's exact retained
 // root attachment. It is not a replacement timestamp for a rendered contact.
 struct BoltCustodyCurrentContact {HandClaimToken gun{};math::Matrix4 wristInWorld{};};
+// Mechanical presentation only while reacquiring the already-open bolt. This
+// binds the exact pause/rebase and retained root; it is never a hand target.
+struct BoltReloadMechanicalPose {
+    WeaponCycleReloadPause pause{};
+    WeaponCycleIdleDebtLease authority{};
+    HandClaimToken gun{};
+    std::int64_t resumedNs=0,cycleDeadlineNs=0;
+    bool operator==(const BoltReloadMechanicalPose&)const=default;
+};
 template<class Authority> struct BoltCustodySampleT {
     HandInteractionSample source{};
     Authority lease{};
@@ -65,6 +75,95 @@ public:
         phase_=BoltCustodyPhase::AwaitingCustody;gun_.reset();submitted_.reset();returnNeutral_=0;
         deadline_=now+profile.maximumCycleNs;return true;
     }
+    std::optional<WeaponCycleReloadPause> PauseForReload(const HandInteractionSample& source,HandInteraction& hands)noexcept {
+        if(phase_!=BoltCustodyPhase::Manipulating||submitted_||!gun_)return {};
+        const auto current=hands.Current(gun_->hand);
+        if(!current||current->token!=*gun_||current->deadlineNs<=source.nowNs)return {};
+        WeaponCycleInput input;input.source=source;
+        const auto pause=cycle_.PauseForReload(input,hands);if(!pause)return {};
+        phase_=BoltCustodyPhase::ReloadPaused;return pause;
+    }
+    // Separate from completed-stroke ReturnCustody: Left becomes FREE for the
+    // magazine, and the exact open gesture remains owed throughout this state.
+    HandGunCustodyResult PauseCustody(const HandInteractionSample& current,const HandGunCustodyTransfer& transfer,
+        const math::Matrix4& oldWrist,const math::Matrix4& nextWrist,HandInteraction& hands)noexcept {
+        HandGunCustodyResult out;out.transaction.reason=HandInteractionReason::InvalidRequest;
+        const auto& pause=cycle_.ReloadPause();
+        if(phase_!=BoltCustodyPhase::ReloadPaused||!pause||!gun_||submitted_||
+           current.owner!=identity_.owner||current.sequence<=pause->inputSequence||current.observedNs<=pause->observedNs||
+           current.nowNs>=pause->pauseDeadlineNs||current.released[weapon_cycle_detail::HandIndex(profile_.hands.mechanism)]||
+           transfer.gun!=*gun_||transfer.companion||transfer.nextCompanion||transfer.releaseDepartingGun||
+           transfer.nextGun.request.hand!=profile_.hands.mechanism||transfer.nextGun.request.contact.key!=originalGunContact_||
+           transfer.nextGun.evidence.sequence<=pause->inputSequence||
+           !feed_mechanism_detail::Pose(oldWrist)||!feed_mechanism_detail::Pose(nextWrist))return out;
+        const auto inverse=InverseRigid(nextWrist);if(!inverse)return out;
+        const auto attachment=Multiply(Multiply(attachment_,oldWrist),*inverse);
+        if(!feed_mechanism_detail::Pose(attachment))return out;
+        out=hands.TransferGunCustody(current,transfer);
+        if(out.transaction.accepted&&out.transaction.claim){gun_=out.transaction.claim->token;attachment_=attachment;
+            phase_=BoltCustodyPhase::Reloading;reloadReturned_=current.sequence;}
+        return out;
+    }
+    // A fresh ordinary support claim must exist after magazine custody ended.
+    // This transfer still grants no mechanism lease; native recovery must then
+    // observe right neutral and two independent all-three idle rounds.
+    HandGunCustodyResult ResumeCustody(const HandInteractionSample& current,const HandGunCustodyTransfer& transfer,
+        const math::Matrix4& oldWrist,const math::Matrix4& nextWrist,HandInteraction& hands)noexcept {
+        HandGunCustodyResult out;out.transaction.reason=HandInteractionReason::InvalidRequest;
+        const auto support=hands.Current(profile_.hands.gun);
+        if(phase_!=BoltCustodyPhase::Reloading||!cycle_.ReloadPause()||!gun_||!support||
+           current.owner!=identity_.owner||current.nowNs>=cycle_.ReloadPause()->pauseDeadlineNs||current.sequence<=reloadReturned_||
+           !current.released[weapon_cycle_detail::HandIndex(profile_.hands.mechanism)]||
+           transfer.gun!=*gun_||!transfer.companion||*transfer.companion!=support->token||
+           support->token.kind!=HandClaimKind::WeaponSupport||support->token.contact!=originalSupportContact_||
+           support->token.prerequisiteClaim!=gun_->id||support->token.id<=gun_->id||support->inputSequence<=reloadReturned_||
+           transfer.nextGun.request.hand!=profile_.hands.gun||transfer.nextGun.request.contact.key!=originalSupportContact_||
+           transfer.nextGun.evidence.sequence<=reloadReturned_||transfer.nextCompanion||!transfer.releaseDepartingGun||
+           !feed_mechanism_detail::Pose(oldWrist)||!feed_mechanism_detail::Pose(nextWrist))return out;
+        const auto inverse=InverseRigid(nextWrist);if(!inverse)return out;
+        const auto attachment=Multiply(Multiply(attachment_,oldWrist),*inverse);
+        if(!feed_mechanism_detail::Pose(attachment))return out;
+        out=hands.TransferGunCustody(current,transfer);
+        if(out.transaction.accepted&&out.transaction.claim){gun_=out.transaction.claim->token;attachment_=attachment;
+            phase_=BoltCustodyPhase::ReloadResumePending;}
+        return out;
+    }
+    template<class Previous> bool CanResumeAfterReload(const BoltWeaponCustodyT<Previous>& previous,const WeaponCycleLease& lease,
+        const HandInteractionSample& neutral,const math::Matrix4& wrist,const HandContactProof& contact,const HandInteraction& hands)const noexcept {
+        if((phase_!=BoltCustodyPhase::Idle&&phase_!=BoltCustodyPhase::AwaitingCustody)||
+           previous.phase_!=BoltCustodyPhase::ReloadResumePending||!previous.gun_||submitted_||previous.submitted_||
+           !feed_mechanism_detail::Pose(wrist)||!cycle_.CanResumeAfterReload(previous.cycle_,lease,neutral))return false;
+        const auto gun=hands.Current(previous.profile_.hands.gun);
+        if(!gun||gun->token!=*previous.gun_||hands.Current(previous.profile_.hands.mechanism)||
+           contact.key!=gun->token.contact||contact.inputSequence!=neutral.sequence||!contact.eligible||
+           contact.deadlineNs!=neutral.deadlineNs||gun->deadlineNs<=neutral.nowNs)return false;
+        return true;
+    }
+    template<class Previous> bool ResumeAfterReload(BoltWeaponCustodyT<Previous>& previous,const WeaponCycleLease& lease,
+        const HandInteractionSample& neutral,const math::Matrix4& wrist,const HandContactProof& contact,HandInteraction& hands)noexcept {
+        if(!CanResumeAfterReload(previous,lease,neutral,wrist,contact,hands)||
+           !hands.Renew(neutral,*previous.gun_,contact).accepted)return false;
+        const auto pause=*previous.cycle_.ReloadPause();
+        const auto elapsed=neutral.nowNs-pause.pausedNs;
+        if(!cycle_.ResumeAfterReload(previous.cycle_,lease,neutral))return false;
+        profile_=previous.profile_;identity_=lease;contactFromWrist_=previous.contactFromWrist_;attachment_=previous.attachment_;
+        originalGunContact_=previous.originalGunContact_;originalSupportContact_=previous.originalSupportContact_;
+        gun_=previous.gun_;deadline_=previous.deadline_+elapsed;returnNeutral_=0;reloadReturned_=previous.reloadReturned_;
+        if constexpr(std::is_same_v<Authority,WeaponCycleIdleDebtLease>)
+            reloadMechanicalPose_=BoltReloadMechanicalPose{pause,lease,*gun_,neutral.nowNs,pause.cycleDeadlineNs+elapsed};
+        phase_=BoltCustodyPhase::Manipulating;previous.gun_.reset();previous.phase_=BoltCustodyPhase::Idle;return true;
+    }
+    const auto& ReloadPause()const noexcept{return cycle_.ReloadPause();}
+    std::optional<math::Matrix4> PausedContact()const noexcept {
+        const auto& pause=cycle_.ReloadPause();
+        if(!pause||cycle_.Phase()!=WeaponCyclePhase::ReloadPaused)return {};
+        return weapon_cycle_detail::Target(profile_,pause->travel,pause->rotation);
+    }
+    std::optional<BoltReloadMechanicalPose> ReloadMechanicalPose()const noexcept {
+        if(phase_!=BoltCustodyPhase::Manipulating||cycle_.Phase()!=WeaponCyclePhase::AwaitingGrip||
+           !gun_||!reloadMechanicalPose_||reloadMechanicalPose_->gun!=*gun_)return {};
+        return reloadMechanicalPose_;
+    }
     // Transfer only still-live physical custody when a retained debt changes
     // its authority kind. This neither mints a hand claim nor accepts a native
     // completion. Expired/lost custody must return through ordinary gun/support
@@ -113,7 +212,8 @@ public:
     HandInteractionResult UpdateGunHold(const HandInteractionSample& source,
         const math::Matrix4& wrist,const HandContactProof& contact,HandInteraction& hands)noexcept {
         const auto current=gun_?hands.Current(gun_->hand):std::nullopt;
-        if((phase_!=BoltCustodyPhase::Manipulating&&phase_!=BoltCustodyPhase::Returned)||!gun_||
+        if((phase_!=BoltCustodyPhase::Manipulating&&phase_!=BoltCustodyPhase::Returned&&
+            phase_!=BoltCustodyPhase::ReloadPaused&&phase_!=BoltCustodyPhase::Reloading&&phase_!=BoltCustodyPhase::ReloadResumePending)||!gun_||
            source.owner!=identity_.owner||!current||current->token!=*gun_||
            gun_->kind!=HandClaimKind::GunHold||gun_->prerequisiteClaim||gun_->item!=identity_.item||
            !feed_mechanism_detail::Pose(wrist)||contact.key!=gun_->contact||!contact.eligible||
@@ -188,7 +288,8 @@ public:
         const math::Matrix4& wrist,const HandContactProof& contact,HandInteraction& hands)noexcept {
         BoltCustodyResult out;out.custody=phase_;out.blocksFire=true;
         const auto lifecycle=UpdateGunHold(source,wrist,contact,hands);
-        if(!lifecycle.inputValid||(phase_!=BoltCustodyPhase::Manipulating&&phase_!=BoltCustodyPhase::Returned)||!gun_||
+        if(!lifecycle.inputValid||(phase_!=BoltCustodyPhase::Manipulating&&phase_!=BoltCustodyPhase::Returned&&
+            phase_!=BoltCustodyPhase::ReloadPaused&&phase_!=BoltCustodyPhase::Reloading&&phase_!=BoltCustodyPhase::ReloadResumePending)||!gun_||
            source.owner!=identity_.owner||!feed_mechanism_detail::Pose(wrist)||contact.key!=gun_->contact||
            !contact.eligible||!hands.Renew(source,*gun_,contact).accepted)return out;
         const auto gun=hands.Current(gun_->hand);if(!gun||gun->token!=*gun_)return out;
@@ -234,7 +335,8 @@ private:
     HandInteractionKey originalGunContact_{},originalSupportContact_{};
     std::optional<HandClaimToken> gun_;
     std::optional<WeaponCycleRelease> submitted_;
-    std::uint64_t returnNeutral_=0;
+    std::optional<BoltReloadMechanicalPose> reloadMechanicalPose_;
+    std::uint64_t returnNeutral_=0,reloadReturned_=0;
     std::int64_t deadline_=0;
     BoltCustodyPhase phase_=BoltCustodyPhase::Idle;
 };

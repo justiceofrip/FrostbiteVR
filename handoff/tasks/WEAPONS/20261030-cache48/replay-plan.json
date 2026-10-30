@@ -1,0 +1,16 @@
+{
+  "schema": "fvr.bc2.firearm_cache_completion_replay.v1",
+  "catalog": {
+    "path": "profiles\\weapons48-cache\\additions-body-ammo-assets.json",
+    "sha256": "21aa746f6261f88e0aaf0920db803c75688d1470ac79086f8363daaeac72588f"
+  },
+  "cache_rows": 48,
+  "exact_aliases": 17,
+  "expected_bytes": 10217050,
+  "expected_sha256": "cce271606de4dac766fee0a86ec1adcdc2340ece50c930d3c8069a5706743cc2",
+  "requested_storage_bytes": 33554432,
+  "baseline204_replay": "Reuse prior PASS; no re-extraction",
+  "normal_command": "py -3.12 -B tools/bc2_body_ammo_assets.py --game \"G:/New folder (2)/Battlefield Bad Company 2\" --catalog profiles/weapons48-cache/additions-body-ammo-assets.json --body-equipment --resource-content --output reports/coordinator-20261030-cache48-replay01/body-ammo.fvrprop",
+  "native_execution": false,
+  "headset_acceptance": false
+}

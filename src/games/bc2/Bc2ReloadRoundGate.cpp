@@ -1,4 +1,5 @@
 #include "Bc2ReloadRoundGate.h"
+#include "Bc2ManualPumpConfig.h"
 #include "Bc2ReloadConfigDescriptor.h"
 #include <cstring>
 namespace fvr::bc2 {
@@ -10,13 +11,13 @@ bool SameHeld(const ReloadFiringObservation& a,const ReloadFiringObservation& b)
     a.currentState==b.currentState&&a.nextState==b.nextState&&a.phaseTimer==b.phaseTimer&&a.loaded==b.loaded&&a.reserve==b.reserve;}
 }
 bool ReadReloadRoundTiming(const ReloadStateMemory& m,const ReloadObservedConfig& c)noexcept {
-    return ReadReloadDescriptorTiming(m,c,SpasReloadDescriptor);
+    return ReadManualPumpReloadTiming(m,c);
 }
 bool ReloadRoundGate::Enable()noexcept {if(phase_!=ReloadRoundGatePhase::Disabled||!initial_.Enable())return false;phase_=ReloadRoundGatePhase::Waiting;return true;}
 void ReloadRoundGate::Cancel(ReloadRoundGateFailure why)noexcept {if(phase_==ReloadRoundGatePhase::Disabled||phase_==ReloadRoundGatePhase::Released||phase_==ReloadRoundGatePhase::Aborted)return;
     phase_=ReloadRoundGatePhase::Aborted;failure_=why;initial_.Stop();completion_.Cancel();}
 bool ReloadRoundGate::Common(const ReloadHoldInput& in,bool timing)noexcept {
-    if(!in.verified||in.branch>=3||in.nowNs<=0||in.leaseDeadlineNs<=in.nowNs||in.leaseDeadlineNs-in.nowNs>200000000||!IsDiagnosticSpasConfig(in.config)){
+    if(!in.verified||in.branch>=3||in.nowNs<=0||in.leaseDeadlineNs<=in.nowNs||in.leaseDeadlineNs-in.nowNs>200000000||!ManualPumpConfig(in.config)){
         Cancel(ReloadRoundGateFailure::OwnerOrRead);return false;}
     if(!Safe(in.context)){Cancel(ReloadRoundGateFailure::UnsafeInput);return false;}
     if(!timing){Cancel(ReloadRoundGateFailure::Timing);return false;}

@@ -14,7 +14,13 @@ bool ValidateArms(std::span<const std::int32_t> parents,ArmJoints left,ArmJoints
 std::optional<std::vector<BoneWrite>> RetargetRigSubtree(std::span<const std::int32_t> parents,
     std::span<const math::Matrix4> native,std::uint32_t root,const math::Matrix4& target,std::span<const std::uint32_t> preservedLeaves){
     if(parents.empty()||parents.size()>1024||parents.size()!=native.size()||root>=parents.size()||!InverseAnimatedTransform(target))return {};
-    for(const auto leaf:preservedLeaves)if(leaf>=parents.size()||leaf==root||std::find(parents.begin(),parents.end(),std::int32_t(leaf))!=parents.end())return {};
+    for(const auto leaf:preservedLeaves){
+        if(leaf>=parents.size()||leaf==root||std::count(preservedLeaves.begin(),preservedLeaves.end(),leaf)!=1)return {};
+        // A preserved compound part must include its complete descendant set.
+        // No visible child may be left following an untouched collapsed parent.
+        for(unsigned child=0;child<parents.size();++child)if(parents[child]==std::int32_t(leaf)&&
+            std::find(preservedLeaves.begin(),preservedLeaves.end(),child)==preservedLeaves.end())return {};
+    }
     const auto inverse=InverseAnimatedTransform(native[root]);if(!inverse)return {};
     const auto delta=Multiply(*inverse,target);std::vector<BoneWrite> result;
     for(unsigned n=0;n<parents.size();++n){

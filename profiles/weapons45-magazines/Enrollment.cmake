@@ -1,0 +1,2 @@
+set(BC2_REVIEWED_MAGAZINE_REGISTRY_HEADER "${CMAKE_CURRENT_LIST_DIR}/CombinedRegistry.h" CACHE FILEPATH "Exact firearm magazines" FORCE)
+set(BC2_EXPERIMENTAL_MAGAZINE_HEADER "${CMAKE_CURRENT_LIST_DIR}/CombinedGeometry.h" CACHE FILEPATH "Exact firearm magazine geometry" FORCE)

@@ -9,7 +9,8 @@ namespace fvr::bc2 {
 enum class NativeMagazineProfileId : std::uint64_t {ScopedXm8=0,AuthoredAek=1};
 enum class MagazineIdentityRoute : std::uint8_t { LinkedLauncherAlias, SelectedCarriedItem };
 enum class MagazineCycleAdmission : std::uint8_t {
- Candidate, ReviewedReload11Transfer12, ReviewedSingleFireReload11Transfer12
+ Candidate, ReviewedReload11Transfer12, ReviewedSingleFireReload11Transfer12,
+ ReviewedSingleFireStockBoltReload11Transfer12, ReviewedBoltActionReload11Transfer12
 };
 // Native reload policy data only. Geometry, hand contacts and render receipts
 // are independent capabilities. Authored timing does not prove this cycle.
@@ -22,6 +23,14 @@ struct MagazineNativeProfile {
   const auto& v=configuration.values;
   if(v.reloadType!=1||v.fireInputAction!=8||v.reloadInputAction!=29)return false;
   if(cycleAdmission==MagazineCycleAdmission::ReviewedReload11Transfer12)return v.fireLogicType==2;
+  // Separate exact instruction review admits only the ordinary magazine
+  // 11/12 path. It never pays a bolt debt or permits a custody/native handoff.
+  // In particular, SingleFire's authored bolt values cannot use zero-bolt review.
+  if(cycleAdmission==MagazineCycleAdmission::ReviewedSingleFireStockBoltReload11Transfer12||
+     cycleAdmission==MagazineCycleAdmission::ReviewedBoltActionReload11Transfer12)
+   return v.fireLogicType==(cycleAdmission==MagazineCycleAdmission::ReviewedBoltActionReload11Transfer12?1:0)&&
+    v.boltDelay>=0&&v.boltDelay<=10&&v.boltTime>=0&&v.boltTime<=10&&
+    (v.boltDelay!=0||v.boltTime!=0||v.holdBoltUntilFireRelease||v.holdBoltUntilZoomRelease);
   // The separately reviewed SingleFire instruction path covers magazine
   // reload/empty inhibition only. It grants no slide or chamber authority.
   return cycleAdmission==MagazineCycleAdmission::ReviewedSingleFireReload11Transfer12&&

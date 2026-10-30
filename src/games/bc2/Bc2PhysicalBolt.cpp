@@ -22,12 +22,17 @@ template<class Custody> Bc2PhysicalBoltResult RetainBoltCustody(const Bc2Physica
     const auto retained=custody->RetainCustody(s.input,s.wristWorld[hand],contact,hands);
     out.tracking.weapon=retained.weapon;out.tracking.custody=retained.custody;
     out.tracking.mechanismPhase=retained.physical.cycle.phase;
+    out.tracking.reloadContact=custody->PausedContact();
+    if(custody->CyclePhase()==WeaponCyclePhase::ReloadPaused)out.tracking.reloadPause=custody->ReloadPause();
+    out.tracking.reloadMechanicalPose=custody->ReloadMechanicalPose();
+    if(out.tracking.reloadMechanicalPose)out.tracking.recovery=out.tracking.reloadMechanicalPose->authority;
     out.tracking.gun=hands.Current(token->hand);out.tracking.mechanism=hands.Current(calibration->profile.hands.mechanism);
     out.ownsGunCustody=bool(retained.weapon);out.ownsMechanism=retained.physical.ownsMechanism;return out;
 }
 }
 bool BoltCalibrationValid(const Bc2BoltCalibration& c)noexcept {
-    return c.nativeJoined&&!c.asset.empty()&&!c.mesh.empty()&&!c.partName.empty()&&c.rigFingerprint&&
+    return (c.nativeJoined||(c.authoredReviewed&&!c.configurationPath.empty()&&c.handShape))&&
+        !c.asset.empty()&&!c.mesh.empty()&&!c.partName.empty()&&c.rigFingerprint&&
         weapon_cycle_detail::Profile(c.profile)&&c.profile.family==WeaponCycleFamily::Bolt&&
         feed_mechanism_detail::Pose(c.wristFromPart);
 }
@@ -57,6 +62,55 @@ void Bc2PhysicalBolt::Cancel(const HandInteractionSample& input,HandInteraction&
     if(recoveryCustody_&&recoveryCycle_){BoltCustodyIdleDebtSample loss;loss.source=input;loss.lease=*recoveryCycle_;recoveryCustody_->Update(loss,hands);}
     if(cycle_){BoltCustodySample loss;loss.source=input;loss.lease=*cycle_;custody_->Update(loss,hands);}
 }
+template<class Lease> std::optional<Bc2PhysicalBoltResult> Bc2PhysicalBolt::TickReload(
+    const Bc2PhysicalBoltSample& s,BoltWeaponCustodyT<Lease>& custody,HandInteraction& hands)noexcept {
+    if(!api_.pauseReload||!api_.resumeReload)return {};
+    const auto& p=calibration_->profile;
+    const bool current=!s.cancel&&s.asset==calibration_->asset&&s.mesh==calibration_->mesh&&
+        s.nativeOwner==owner_&&Mapped(s.nativeOwner,s.input,s.item)&&s.input.focused&&
+        s.input.tracked[0]&&s.input.tracked[1]&&weapon_cycle_detail::Window(s.input.observedNs,s.input.deadlineNs,s.input.nowNs);
+    if(current&&s.reloadIntent==BoltReloadCustodyIntent::Pause&&custody.CyclePhase()==WeaponCyclePhase::Forward)
+        custody.PauseForReload(s.input,hands);
+    // The policy retains pause provenance after resume. Only the paused phase
+    // belongs here; AwaitingGrip must return to the normal physical recognizer.
+    if(!custody.ReloadPause()||custody.CyclePhase()!=WeaponCyclePhase::ReloadPaused)return {};
+    blocks_=true;
+    if(!current)return RetainBoltCustody(s,calibration_,&custody,hands);
+    const Bc2NativeCycleControl control{s.nativeOwner,s.input,s.item,{p.id,s.item.generation},{},true};
+    if(!reloadPrepared_){
+        const auto accepted=api_.pauseReload(api_.context,control,*custody.ReloadPause());
+        if(accepted!=Bc2NativeCycleSubmitResult::Accepted)return RetainBoltCustody(s,calibration_,&custody,hands);
+        reloadPrepared_=true;
+    }
+    std::optional<HandGunCustodyResult> changed;
+    if(s.custodyTransfer&&s.reloadIntent){
+        const auto old=weapon_cycle_detail::HandIndex(p.hands.gun),next=weapon_cycle_detail::HandIndex(p.hands.mechanism);
+        if(*s.reloadIntent==BoltReloadCustodyIntent::Pause)
+            changed=custody.PauseCustody(s.input,*s.custodyTransfer,s.wristWorld[old],s.wristWorld[next],hands);
+        else changed=custody.ResumeCustody(s.input,*s.custodyTransfer,s.wristWorld[next],s.wristWorld[old],hands);
+    }
+    // Current input can arm a native idle-debt grant only after the actual
+    // magazine handoff has released the right hand. It never pays the stroke.
+    DispatchCycleControl(api_,control);
+    if(custody.Custody()==BoltCustodyPhase::ReloadResumePending&&api_.recovery.Complete()){
+        const auto view=api_.recovery.view(api_.context,s.input.nowNs);
+        if(view&&view->native.owner==s.nativeOwner&&view->authority){
+            const auto hand=weapon_cycle_detail::HandIndex(p.hands.gun);
+            const auto contact=s.gunContacts[hand].eligible?s.gunContacts[hand]:s.gunContact;
+            auto next=std::make_unique<BoltWeaponIdleDebtCustody>();
+            if(next->CanResumeAfterReload(custody,*view->authority,s.input,s.wristWorld[hand],contact,hands)&&
+               api_.resumeReload(api_.context,control,*view->authority)==Bc2NativeCycleSubmitResult::Accepted&&
+               next->ResumeAfterReload(custody,*view->authority,s.input,s.wristWorld[hand],contact,hands)){
+                // No hand consumer runs between preflight and commit above.
+                // The exact resumed open milestone becomes the sole owner.
+                recoveryCustody_=std::move(next);recoveryCycle_=view->authority;cycle_.reset();reloadPrepared_=false;
+                auto out=RetainBoltCustody(s,calibration_,recoveryCustody_.get(),hands);
+                out.tracking.recovery=view->authority;out.custodyChange=changed;return out;
+            }
+        }
+    }
+    auto out=RetainBoltCustody(s,calibration_,&custody,hands);out.custodyChange=changed;return out;
+}
 Bc2PhysicalBoltResult Bc2PhysicalBolt::Tick(const Bc2PhysicalBoltSample& s,HandInteraction& hands,std::uint64_t& intent)noexcept {
     Bc2PhysicalBoltResult out;
     if(!calibration_||!BoltCalibrationValid(*calibration_)||(!api_.control&&!api_.controlResult)||!api_.view||!api_.ack||!api_.cancel)return out;
@@ -75,6 +129,11 @@ Bc2PhysicalBoltResult Bc2PhysicalBolt::Tick(const Bc2PhysicalBoltSample& s,HandI
        s.input.focused&&s.input.tracked[0]&&s.input.tracked[1]&&
        weapon_cycle_detail::Window(s.input.observedNs,s.input.deadlineNs,s.input.nowNs))
         out.tracking={true,s.nativeOwner,s.input,calibration_};
+    if(recoveryCustody_&&recoveryCycle_){
+        if(auto reload=TickReload(s,*recoveryCustody_,hands))return *reload;
+    }else if(cycle_){
+        if(auto reload=TickReload(s,*custody_,hands))return *reload;
+    }
     auto view=api_.view(api_.context,s.input.nowNs);
     // A ready receipt settles only its exact previously submitted transaction.
     // It remains consumable after the physical owner or tracking has changed.
@@ -375,6 +434,7 @@ Bc2PhysicalBoltResult Bc2PhysicalBolt::TickRecovery(const Bc2PhysicalBoltSample&
     if(prior!=WeaponCyclePhase::Cancelled&&result.physical.cycle.phase==WeaponCyclePhase::Cancelled&&!recoveryPending_)
         api_.cancel(api_.context);
     out.tracking.recovery=sample.lease;out.tracking.recoveryTarget=result.physical.target;
+    out.tracking.reloadMechanicalPose=recoveryCustody_->ReloadMechanicalPose();
     out.tracking.weapon=result.weapon;out.tracking.custody=result.custody;out.tracking.mechanismPhase=result.physical.cycle.phase;
     out.tracking.mechanism=hands.Current(p.hands.mechanism);out.tracking.gun=currentGun?hands.Current(currentGun->hand):std::nullopt;
     out.ownsMechanism=result.physical.ownsMechanism;out.ownsGunCustody=bool(result.weapon);

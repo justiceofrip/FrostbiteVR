@@ -35,7 +35,9 @@ inline bool BoltTrackingFresh(const Bc2BoltTracking& t,std::int64_t now)noexcept
 }
 inline bool BoltCustodyFresh(const Bc2BoltTracking& t,std::int64_t now)noexcept {
     if(!BoltTrackingFresh(t,now)||!t.weapon||!t.gun||
-       (t.custody!=interaction::BoltCustodyPhase::Manipulating&&t.custody!=interaction::BoltCustodyPhase::Returned))return false;
+       (t.custody!=interaction::BoltCustodyPhase::Manipulating&&t.custody!=interaction::BoltCustodyPhase::Returned&&
+        t.custody!=interaction::BoltCustodyPhase::ReloadPaused&&t.custody!=interaction::BoltCustodyPhase::Reloading&&
+        t.custody!=interaction::BoltCustodyPhase::ReloadResumePending))return false;
     auto input=t.input;input.nowNs=now;return interaction::CurrentBoltCustodyWeaponTarget(*t.weapon,input,*t.gun);
 }
 inline bool BoltTargetFresh(const Bc2BoltTracking& t,std::int64_t now)noexcept {
@@ -50,6 +52,12 @@ inline bool BoltTargetFresh(const Bc2BoltTracking& t,std::int64_t now)noexcept {
 inline bool BoltCustodyRetained(const Bc2BoltTracking& old,const Bc2BoltTracking& current,std::int64_t now)noexcept {
     if(!BoltCustodyFresh(old,now)||!BoltCustodyFresh(current,now)||old.nativeOwner!=current.nativeOwner||
        old.calibration!=current.calibration||old.input.sequence>current.input.sequence||old.gun->token!=current.gun->token)return false;
+    if(old.reloadPause||current.reloadPause)return old.reloadPause==current.reloadPause&&old.reloadContact&&current.reloadContact&&
+        old.reloadContact->values==current.reloadContact->values;
+    if(old.reloadMechanicalPose||current.reloadMechanicalPose)
+        return old.reloadMechanicalPose==current.reloadMechanicalPose&&old.recovery&&current.recovery&&
+            interaction::weapon_cycle_detail::Same(*old.recovery,*current.recovery)&&
+            interaction::weapon_cycle_detail::Lease(*current.recovery,now);
     if(!old.target&&!old.recoveryTarget)return true;
     if(!BoltTargetFresh(old,now)||!BoltTargetFresh(current,now)||old.mechanism->token!=current.mechanism->token)return false;
     auto input=current.input;input.nowNs=now;

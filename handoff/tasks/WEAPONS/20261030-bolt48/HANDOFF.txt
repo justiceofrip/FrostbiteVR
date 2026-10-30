@@ -1,0 +1,33 @@
+Bolt48 source completion, 2026-10-30
+
+The player now retains the real ReloadPaused right press until an original
+renderer packet carrying that press arrives. Original input/contact deadlines,
+history, release barriers and atomic TransferGunCustody admission are unchanged.
+The intention expires at the original press deadline or a real release.
+
+Reloading release uses current mapped wrists under the exact retained gun
+attachment, including absent/expired render publication. It creates current
+support geometry, not a restamped render packet; expired old claims cannot move.
+
+Resume retains a typed open mechanical pose joined to the exact pause, native
+idle-debt grant, ammunition rebase and current root. BuildPausedBoltPart accepts
+this only during AwaitingGrip and before the resumed active deadline. It creates
+no hand/mechanism target or fire permission, and yields to a real mechanism grasp.
+TickReload now intercepts only ReloadPaused; retained provenance no longer traps
+resumed AwaitingGrip. A later Forward pause can reuse the same remaining budget.
+
+Root integration: RigPublication's BuildPausedBoltPart call must also run when
+input.bolt.reloadMechanicalPose is present. Root owns this shared call site.
+
+New focused executable: tests/Bc2BoltReloadRuntimeTests.cpp, link as existing
+Bc2PhysicalBoltTests with Bc2BoltPlayerCustody.cpp/Bc2BoltTrackedMapping.cpp if not
+already in BC2Camera. It includes three groups: bounded N-1 press/release intent;
+mock ledger/convergence reload receipts and pose retention through real regrip;
+and refusal to revive expired gun/support claims on release. It also checks
+foreign input, changed grant/pause/root, invalid deadline/phase and nonfinite pose.
+Suggested existing regression coverage: Bc2BoltPlayerCustody, Bc2PhysicalBolt,
+Bc2PhysicalBoltRecovery, BoltWeaponCustody, BoltReloadDebt, M95BoltCustody.
+
+Evidence: source review only by bolt48; no build, test execution, Git, native
+game, installation or headset action. Root performs combined builds/tests.
+Authored calibration review, hand-shape and configuration-path fields preserved.

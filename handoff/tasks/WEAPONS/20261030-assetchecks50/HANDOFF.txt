@@ -1,0 +1,10 @@
+DONE Y. Tests only; resource identity implementation unchanged.
+Updated obsolete catalog expectations: 252 records, 409 exact resource pins,
+69 supply records, 164 configured display records plus 17 proven aliases = 181 selectors.
+Preserved legacy geometry checks and recognized only the 15 explicitly authored sampled display poses.
+Extended provenance mutation checks to mod-policy sources and aliases; added negative checks
+for policy resource hashes, alias payload/configuration/clip hashes and forbidden nested aliases.
+Passed: identity 8/8; body assets 3/3. Original failures retained in weapons50-python.
+Logs: reports/coordinator-20261030-assetchecks50/{identity.log,body-assets-02.log}.
+Three original fixture errors were sandbox TEMP ACL failures; normal elevated fixture access passed.
+No extraction, game, Git, build or installation. Worker retired; root owns files again.

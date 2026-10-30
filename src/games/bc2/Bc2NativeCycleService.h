@@ -16,7 +16,7 @@ struct Bc2NativeCycleControl {
 };
 enum class Bc2NativeCyclePhase:unsigned {Watching,ShotObserved,Arming,Held,Releasing,Complete,Cancelled,Converging,Advancing};
 enum class Bc2NativeCycleFailure:unsigned {None,Control,Owner,Input,State,Shot,Hold,Restore,Expired,Completion};
-enum class Bc2NativeCycleMode:unsigned {Spas,M95};
+enum class Bc2NativeCycleMode:unsigned {Spas,M95,Pump=Spas,Bolt=M95};
 // First actual Held -> Cancelled(Input) rejection for this service lifetime.
 // Fixed-size captured values only: no IO, native reads or fresh authority.
 // Retained across actor retirement so a late failure survives a bounded trace.
@@ -169,6 +169,19 @@ public:
     // Called only at a drained runtime operation handoff. Pending outcomes and
     // unresolved manual debt cannot yield to shell/resource mutations.
     bool YieldForReload()noexcept;
+    // Typed magazine handoff: exact native scope and original physical debt
+    // survive every command. Caller excludes/drains callbacks at each drain.
+    bool PrepareReload(const NativeCycleRecoveryScope&,const interaction::WeaponCycleReloadPause&,
+        const interaction::AmmoResourceContext&,const interaction::WeaponCycleReloadDrain&,std::int64_t now)noexcept;
+    std::optional<interaction::WeaponCycleReloadPermit> ReloadPermit(const NativeCycleRecoveryScope&,std::int64_t now)noexcept;
+    bool BeginReloadCommand(const NativeCycleRecoveryScope&,const interaction::WeaponCycleReloadPermit&,
+        const interaction::AmmunitionCommand&,const interaction::WeaponCycleReloadDrain&,std::int64_t now)noexcept;
+    bool ApplyReloadReceipt(const NativeCycleRecoveryScope&,const interaction::WeaponCycleReloadAmmoRebase&,std::int64_t now)noexcept;
+    bool ResumeReload(const NativeCycleRecoveryScope&,const interaction::WeaponCycleIdleDebtLease&,std::int64_t now)noexcept;
+    const auto& ReloadPause()const noexcept{return recovery_.ReloadPause();}
+    const auto& ReloadCommand()const noexcept{return recovery_.ReloadCommand();}
+    const auto& LastReloadReceipt()const noexcept{return recovery_.LastReloadReceipt();}
+    const auto& ReloadDebt()const noexcept{return recovery_.Debt();}
     bool SuspendCompletion()noexcept;
     // Retain only established all-branch native holds for a fixed interruption
     // window. Revokes all physical-use leases; fresh neutral resumes them.
@@ -232,6 +245,7 @@ private:
     std::uint64_t cycle_=0,shot_=0,sequence_=0;
     std::uint64_t lastEvent_=0,failureInvocation_=0;
     std::int64_t began_=0,deadline_=0;
+    std::int64_t reloadPauseSpent_=0;
     std::int64_t suspendedAt_=0,suspendedUntil_=0;
     std::uint64_t heldSuspensions_=0,heldResumptions_=0;
     int loaded_=0,reserve_=0,capacity_=0;

@@ -1,5 +1,6 @@
 #include "Bc2ReloadHold.h"
 #include "Bc2ReloadConfigDescriptor.h"
+#include "Bc2ManualPumpConfig.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -65,7 +66,7 @@ bool ReloadHoldProbe::Evaluate(const ReloadHoldInput& in)noexcept {
     struct Unlock{std::atomic_flag& f;~Unlock(){f.clear(std::memory_order_release);}} unlock{gate_};
     phase=Phase();if(phase!=ReloadHoldPhase::Waiting&&phase!=ReloadHoldPhase::Holding)return false;
     if(!in.verified||in.branch>=3||in.nowNs<=0||in.leaseDeadlineNs<=in.nowNs||
-       in.leaseDeadlineNs-in.nowNs>200000000||!Owner(in.identity)||!IsDiagnosticSpasConfig(in.config)){
+       in.leaseDeadlineNs-in.nowNs>200000000||!Owner(in.identity)||!ManualPumpConfig(in.config)){
         if(in.branch<3)contexts_[in.branch]=0;Abort(ReloadHoldReason::OwnerOrRead);return false;
     }
     if(phase==ReloadHoldPhase::Holding&&(in.identity!=armedIdentity_||in.config!=armedConfig_)){

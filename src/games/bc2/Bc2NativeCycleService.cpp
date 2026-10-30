@@ -7,17 +7,13 @@
 namespace fvr::bc2 {
 using namespace interaction;
 namespace {
-constexpr NativeCycleHeldBoundary SpasBoundary{7,6,8,.1f,.5f};
-constexpr NativeCycleHeldBoundary SpasEmptyBoundary{6,5,1,.1f,1.f,true};
-constexpr NativeCycleHeldBoundary M95Boundary{8,7,1,.1f,2.3f};
-// The measured final-shot delay is only~117ms. The SPAS100ms arming floor
-// can already be missed while all three own-shot receipts arrive. Retain
-// positive headroom; original callback/context and write checks still apply.
-constexpr NativeCycleHeldBoundary M95EmptyBoundary{6,5,1,.01f,1.f,true};
-const NativeCycleHeldBoundary& Boundary(Bc2NativeCycleMode mode,bool empty)noexcept {
-    // Native281 observes the same6/5/1 last-shot boundary in M95. It
-    // bypasses the positive-loaded bolt/pump states for both selected classes.
-    return mode==Bc2NativeCycleMode::M95?(empty?M95EmptyBoundary:M95Boundary):empty?SpasEmptyBoundary:SpasBoundary;
+const Bc2CycleNativeProfile* Profile(Bc2NativeCycleMode mode,const ReloadObservedConfig& config)noexcept {
+    const auto* profile=ResolveNativeCycleProfile(config);
+    return profile&&((mode==Bc2NativeCycleMode::Bolt&&profile->family==Bc2NativeCycleFamily::Bolt)||
+        (mode==Bc2NativeCycleMode::Pump&&profile->family==Bc2NativeCycleFamily::Pump))?profile:nullptr;
+}
+NativeCycleHeldBoundary Boundary(Bc2NativeCycleMode mode,const ReloadObservedConfig& config,bool empty)noexcept {
+    const auto* profile=Profile(mode,config);return profile?profile->Held(empty):NativeCycleHeldBoundary{};
 }
 bool Safe(const ReloadUpdateContext& c)noexcept {
     return ValidManualReloadDelta(c.deltaSeconds)&&!c.inputFlags&&!c.fireRequested&&!c.orderRequested&&!c.reloadRequested&&
@@ -51,7 +47,7 @@ bool Bc2NativeCycleService::BeginRecovery(std::int64_t now)noexcept {
         held_.reset();return !recovery_.Uncertain();
     }
     if(!recoveryEnabled_||phase_!=Bc2NativeCyclePhase::Held||release_||ready_||firedMask_!=7||heldMask_!=7||
-       now<began_||guardEpoch_==UINT64_MAX)return false;
+       now<began_||guardEpoch_==UINT64_MAX||!Profile(mode_,config_))return false;
     // Conversion must occur while the native callbacks still prove established
     // holds. A long unobserved gap cannot acquire a continuous guard retroactively.
     for(unsigned b=0;b<3;++b){
@@ -60,7 +56,8 @@ bool Bc2NativeCycleService::BeginRecovery(std::int64_t now)noexcept {
     }
     Bc2NativeCycleRecoveryState candidate;
     if(!candidate.Begin({native_,config_},{control_.input.owner,control_.item,control_.mechanism,
-        cycle_,shot_,guardEpoch_+1,loaded_,reserve_,capacity_},began_,mode_==Bc2NativeCycleMode::M95,emptyCycle_))return false;
+        cycle_,shot_,guardEpoch_+1,loaded_,reserve_,capacity_},began_,
+        Profile(mode_,config_)->Convergence(emptyCycle_)))return false;
     for(unsigned b=0;b<3;++b)if(openUpdate_[b]&&!candidate.BeginHold(b,openUpdate_[b],before_[b].nowNs,openDeadline_[b]))return false;
     recovery_=std::move(candidate);++guardEpoch_;phase_=Bc2NativeCyclePhase::Converging;
     // Retain issued held-lease identity only to identify an overtaken release.
@@ -84,7 +81,7 @@ bool Bc2NativeCycleService::BeginInputRecovery(const ReloadHoldInput& in,std::ui
        (!c.inputFlags&&!c.flags24Through28[3]&&!c.flags24Through28[4]))return false;
     for(unsigned b=0;b<3;++b)
         if(!Held(in.branches[b],b<2&&restoredAt_[b]>=began_&&restoredAt_[b]<=in.nowNs,
-            b<2?restoredPrevious_[b]:0u,Boundary(mode_,emptyCycle_))||
+            b<2?restoredPrevious_[b]:0u,Boundary(mode_,config_,emptyCycle_))||
            in.branches[b].loaded!=loaded_||in.branches[b].reserve!=reserve_||in.capacities[b]!=capacity_)return false;
     return BeginRecovery(in.nowNs);
 }
@@ -106,7 +103,7 @@ NativeCycleRecoveryDecision Bc2NativeCycleService::EvaluateRecovery(const Native
     const ReloadFlowEventInput& entry,int capacity,std::int64_t deadline)noexcept {
     lastEvent_=entry.nativeInvocation;
     if(entry.boundary.branch<3)paidOrdinaryIdle_[entry.boundary.branch]={};
-    if(!Recovering())return {};
+    if(!Recovering()||recovery_.ReloadCommand())return {};
     if(entry.boundary.branch<3&&paidRecoveryDrain_[entry.boundary.branch]){Cancel(Bc2NativeCycleFailure::Owner);return {};}
     const auto result=recovery_.Evaluate(scope,entry,capacity,deadline);
     if(!result)Cancel(Bc2NativeCycleFailure::Owner);return result;
@@ -175,9 +172,9 @@ bool Bc2NativeCycleService::ReserveValid(const Bc2AmmoReserveLease& r,std::int64
     return true;
 }
 bool Bc2NativeCycleService::SelectionValid(const Bc2NativeCycleSelection& source)const noexcept {
-    return (source.mode==Bc2NativeCycleMode::Spas||source.mode==Bc2NativeCycleMode::M95)&&
-        (source.mode==Bc2NativeCycleMode::M95?M95StockShotConfig(source.config):IsDiagnosticSpasConfig(source.config))&&
-        (source.mode!=Bc2NativeCycleMode::M95||source.reserve.capacity==5)&&ReserveValid(source.reserve,source.nowNs);
+    const auto* profile=Profile(source.mode,source.config);
+    return profile&&(source.mode!=Bc2NativeCycleMode::Bolt||source.reserve.capacity==profile->config->values.baseCapacity)&&
+        ReserveValid(source.reserve,source.nowNs);
 }
 void Bc2NativeCycleService::ApplySelection(const Bc2NativeCycleSelection& source)noexcept {
     const auto& r=source.reserve;
@@ -229,7 +226,7 @@ std::optional<Bc2NativeCycleActorRetirement> Bc2NativeCycleService::RetireForRep
     openUpdate_={};contexts_={};heldAt_={};finishedAt_={};restoredAt_={};restoredPrevious_={};
     forwardReadyAt_={};preRestoredAt_={};preRewindAt_={};cycleState_={};tail_={};before_={};
     issued_={};issueAt_=0;firedMask_=heldMask_=readyMask_=0;failureInvocation_=0;
-    began_=deadline_=suspendedAt_=suspendedUntil_=0;emptyCycle_=false;
+    began_=deadline_=suspendedAt_=suspendedUntil_=reloadPauseSpent_=0;emptyCycle_=false;
     recovery_={};concurrentCycle_=false;lastRecoveryRelease_.reset();openHold_={};openDeadline_={};
     held_.reset();releaseSubmittedNs_=0;release_.reset();ready_.reset();ClearAcknowledgedReady();
     native_={};config_={};loaded_=reserve_=capacity_=0;
@@ -329,6 +326,50 @@ bool Bc2NativeCycleService::YieldForReload()noexcept {
     phase_=Bc2NativeCyclePhase::Watching;firedMask_=heldMask_=readyMask_=0;
     release_.reset();releaseSubmittedNs_=0;forwardReadyAt_={};selection_.reset();recovery_={};concurrentCycle_=false;return true;
 }
+bool Bc2NativeCycleService::PrepareReload(const NativeCycleRecoveryScope& scope,const WeaponCycleReloadPause& pause,
+    const AmmoResourceContext& resource,const WeaponCycleReloadDrain& drain,std::int64_t now)noexcept {
+    if(mode_!=Bc2NativeCycleMode::Bolt||scope!=NativeCycleRecoveryScope{native_,config_}||release_||ready_||
+       recovery_.ReloadPause()||pause.owner!=control_.input.owner||pause.item!=control_.item||pause.mechanism!=control_.mechanism||
+       pause.cycle!=cycle_||pause.shot!=shot_||pause.inputSequence>control_.input.sequence||
+       pause.observedNs>control_.input.observedNs||pause.deadlineNs>control_.input.deadlineNs||
+       now>=deadline_||reloadPauseSpent_>=WeaponCycle::MaximumReloadPauseNs||
+       pause.pauseDeadlineNs-pause.pausedNs>WeaponCycle::MaximumReloadPauseNs-reloadPauseSpent_||
+       std::any_of(openUpdate_.begin(),openUpdate_.end(),[](auto id){return id!=0;}))return false;
+    auto next=*this;
+    if(!next.Recovering()&&!next.BeginRecovery(now))return false;
+    if(!next.recovery_.PrepareReload(scope,pause,resource,drain,now))return false;
+    next.concurrentCycle_=false;next.phase_=Bc2NativeCyclePhase::Converging;
+    next.held_.reset();next.issued_={};next.suspendedAt_=next.suspendedUntil_=0;
+    *this=std::move(next);return true;
+}
+std::optional<WeaponCycleReloadPermit> Bc2NativeCycleService::ReloadPermit(const NativeCycleRecoveryScope& scope,std::int64_t now)noexcept {
+    return Recovering()?recovery_.ReloadPermit(scope,now):std::nullopt;
+}
+bool Bc2NativeCycleService::BeginReloadCommand(const NativeCycleRecoveryScope& scope,const WeaponCycleReloadPermit& permit,
+    const AmmunitionCommand& command,const WeaponCycleReloadDrain& drain,std::int64_t now)noexcept {
+    return Recovering()&&!concurrentCycle_&&
+        std::none_of(openUpdate_.begin(),openUpdate_.end(),[](auto id){return id!=0;})&&
+        recovery_.BeginReloadCommand(scope,permit,command,drain,now);
+}
+bool Bc2NativeCycleService::ApplyReloadReceipt(const NativeCycleRecoveryScope& scope,const WeaponCycleReloadAmmoRebase& rebase,std::int64_t now)noexcept {
+    if(!Recovering()||concurrentCycle_||rebase.guardEpoch<=guardEpoch_||
+       std::any_of(openUpdate_.begin(),openUpdate_.end(),[](auto id){return id!=0;}))return false;
+    for(unsigned b=0;b<3;++b)if(rebase.ownUpdates[b].invocation<=lastInvocation_[b])return false;
+    if(!recovery_.ApplyReloadReceipt(scope,rebase,now))return false;
+    const auto& debt=recovery_.Debt();loaded_=debt.loaded;reserve_=debt.reserve;capacity_=debt.capacity;guardEpoch_=debt.guardEpoch;
+    for(unsigned b=0;b<3;++b)lastInvocation_[b]=rebase.ownUpdates[b].invocation;
+    held_.reset();issued_={};return true;
+}
+bool Bc2NativeCycleService::ResumeReload(const NativeCycleRecoveryScope& scope,const WeaponCycleIdleDebtLease& authority,std::int64_t now)noexcept {
+    if(!Recovering()||concurrentCycle_||!recovery_.ReloadPause()||
+       std::any_of(openUpdate_.begin(),openUpdate_.end(),[](auto id){return id!=0;}))return false;
+    const auto& pause=*recovery_.ReloadPause();
+    if(now<pause.pausedNs||now>=pause.pauseDeadlineNs)return false;
+    const auto elapsed=now-pause.pausedNs;
+    if(elapsed>WeaponCycle::MaximumReloadPauseNs-reloadPauseSpent_||deadline_>INT64_MAX-elapsed||
+       !recovery_.ResumeReload(scope,authority,now))return false;
+    reloadPauseSpent_+=elapsed;deadline_+=elapsed;return true;
+}
 bool Bc2NativeCycleService::SuspendCompletion()noexcept {
     if((phase_!=Bc2NativeCyclePhase::Releasing&&phase_!=Bc2NativeCyclePhase::Advancing)||!release_)return false;
     return true;
@@ -388,7 +429,7 @@ bool Bc2NativeCycleService::SuspendExpiredController(const ReloadHoldInput& in)n
       if(firedMask_!=7||heldMask_!=7||!held_||!Safe(in.context))return false;
       for(unsigned b=0;b<3;++b)
         if(!Held(in.branches[b],b<2&&restoredAt_[b]>=began_&&restoredAt_[b]<=in.nowNs,
-            b<2?restoredPrevious_[b]:0u,Boundary(mode_,emptyCycle_))||
+            b<2?restoredPrevious_[b]:0u,Boundary(mode_,config_,emptyCycle_))||
            in.branches[b].loaded!=loaded_||in.branches[b].reserve!=reserve_||in.capacities[b]!=capacity_)return false;
     }
     suspendedAt_=in.nowNs;
@@ -398,17 +439,19 @@ bool Bc2NativeCycleService::SuspendExpiredController(const ReloadHoldInput& in)n
     held_.reset();issued_={};++heldSuspensions_;return true;
 }
 bool Bc2NativeCycleService::Current(const ReloadHoldInput& in,bool nativeOnly)const noexcept {
+    const auto* profile=Profile(mode_,in.config);
     if(selectionRequired_&&(!selection_||in.identity!=selection_->reserve.identity||in.config!=selection_->config))return false;
     const bool observing=ObservationWatch(in.nowNs).has_value();
     if(!in.verified||in.branch>=3||(!observing&&(!Mapping(control_)||
        (!nativeOnly&&!weapon_cycle_detail::Window(control_.input.observedNs,control_.input.deadlineNs,in.nowNs))))||
        in.identity.owner!=control_.nativeOwner||
-       in.leaseDeadlineNs<=in.nowNs||in.leaseDeadlineNs-in.nowNs>200000000||!(mode_==Bc2NativeCycleMode::M95?M95StockShotConfig(in.config):IsDiagnosticSpasConfig(in.config)))return false;
+       in.leaseDeadlineNs<=in.nowNs||in.leaseDeadlineNs-in.nowNs>200000000||!profile)return false;
     if(in.identity.serverPlayer<0x10000||in.identity.serverSoldier<0x10000||in.identity.serverItem<0x10000)return false;
     for(unsigned branch=0;branch<3;++branch){
         if(in.identity.firing[branch]<0x10000||in.branches[branch].address!=in.identity.firing[branch]||
            in.branches[branch].wrapperOffset!=(branch==0?0x3cu:branch==1?0x40u:0x10u)||
-           in.capacities[branch]<=0||in.capacities[branch]>1000000)return false;
+           in.capacities[branch]<=0||in.capacities[branch]>1000000||
+           (mode_==Bc2NativeCycleMode::Bolt&&in.capacities[branch]!=profile->config->values.baseCapacity))return false;
         for(unsigned other=0;other<branch;++other)if(in.identity.firing[other]==in.identity.firing[branch])return false;
     }
     return true;
@@ -450,7 +493,7 @@ Bc2NativeCycleDecision Bc2NativeCycleService::Evaluate(const ReloadHoldInput& in
         }
         return out;
     }
-    for(unsigned n=0;n<3;++n)if(!Held(in.branches[n],n<2&&restoredAt_[n]>=began_&&restoredAt_[n]<=in.nowNs,n<2?restoredPrevious_[n]:0u,Boundary(mode_,emptyCycle_))||in.branches[n].loaded!=loaded_||in.branches[n].reserve!=reserve_||
+    for(unsigned n=0;n<3;++n)if(!Held(in.branches[n],n<2&&restoredAt_[n]>=began_&&restoredAt_[n]<=in.nowNs,n<2?restoredPrevious_[n]:0u,Boundary(mode_,config_,emptyCycle_))||in.branches[n].loaded!=loaded_||in.branches[n].reserve!=reserve_||
         in.capacities[n]!=capacity_){
         if(phase_==Bc2NativeCyclePhase::Held)Cancel(Bc2NativeCycleFailure::State);
         return out;
@@ -462,7 +505,7 @@ Bc2NativeCycleDecision Bc2NativeCycleService::Evaluate(const ReloadHoldInput& in
     // Waiting for stale sibling contexts here lets the original timer advance
     // during a frame gap. Physical leases still require all fresh hold receipts.
     if(heldMask_!=7)for(auto observed:contexts_)if(observed<=0||observed>in.nowNs||in.nowNs-observed>ContextFreshNs)return out;
-    if(!heldMask_)for(const auto& branch:in.branches)if(branch.phaseTimer<Boundary(mode_,emptyCycle_).minArmTimer)return out;
+    if(!heldMask_)for(const auto& branch:in.branches)if(branch.phaseTimer<Boundary(mode_,config_,emptyCycle_).minArmTimer)return out;
     phase_=heldMask_==7?Bc2NativeCyclePhase::Held:Bc2NativeCyclePhase::Arming;
     out.hold=true;out.cycle=cycle_;
     out.deadlineNs=std::min({deadline_,in.leaseDeadlineNs,suspendedAt_?suspendedUntil_:control_.input.deadlineNs});
@@ -493,7 +536,7 @@ void Bc2NativeCycleService::Finish(const Bc2NativeCycleDecision& d,const ReloadF
             }
             finishedAt_[d.branch]=record.exit.nowNs;return;
         }
-        auto boundary=Boundary(mode_,emptyCycle_);
+        auto boundary=Boundary(mode_,config_,emptyCycle_);
         if(d.branch<2&&restoredAt_[d.branch]>=began_&&restoredAt_[d.branch]<=record.entry.nowNs&&
            record.entry.boundary.previous==restoredPrevious_[d.branch])boundary.previous=restoredPrevious_[d.branch];
         const bool exact=d.hold&&d.cycle==cycle_&&CycleHold(record,native_,d.branch,boundary,false)&&record.exit.nowNs<d.deadlineNs;
@@ -535,7 +578,7 @@ void Bc2NativeCycleService::Finish(const Bc2NativeCycleDecision& d,const ReloadF
         if(phase_!=Bc2NativeCyclePhase::ShotObserved){
             if(cycle_==UINT64_MAX||shot_==UINT64_MAX||record.exit.nowNs>INT64_MAX-MaximumCycleNs){Cancel(Bc2NativeCycleFailure::Shot);return;}
             recovery_={};concurrentCycle_=false;ClearAcknowledgedReady();++cycle_;++shot_;began_=record.exit.nowNs;deadline_=began_+MaximumCycleNs;
-            emptyCycle_=emptyShot;loaded_=after.loaded;reserve_=after.reserve;capacity_=in.capacities[d.branch];
+            emptyCycle_=emptyShot;reloadPauseSpent_=0;loaded_=after.loaded;reserve_=after.reserve;capacity_=in.capacities[d.branch];
             firedMask_=heldMask_=readyMask_=0;contexts_={};heldAt_={};finishedAt_={};restoredAt_={};restoredPrevious_={};preRestoredAt_={};preRewindAt_={};cycleState_={};tail_={};issued_={};held_.reset();ready_.reset();release_.reset();releaseSubmittedNs_=0;forwardReadyAt_={};
             phase_=Bc2NativeCyclePhase::ShotObserved;
         }
@@ -564,7 +607,7 @@ void Bc2NativeCycleService::Finish(const Bc2NativeCycleDecision& d,const ReloadF
             paidOrdinaryIdle_[d.branch]={d.invocation,cycle_,shot_,record.entry.nowNs,record.exit.nowNs};
     }
     if(d.hold){
-        auto boundary=Boundary(mode_,emptyCycle_);
+        auto boundary=Boundary(mode_,config_,emptyCycle_);
         if(d.branch<2&&restoredAt_[d.branch]>=began_&&restoredAt_[d.branch]<=record.entry.nowNs&&record.entry.boundary.previous==restoredPrevious_[d.branch])boundary.previous=restoredPrevious_[d.branch];
         if(d.cycle!=cycle_||!CycleHold(record,native_,d.branch,boundary,false)||record.exit.nowNs>=d.deadlineNs){
             Cancel(record.exit.hold.applied&&!record.exit.hold.restored?Bc2NativeCycleFailure::Restore:Bc2NativeCycleFailure::Hold);return;
@@ -598,7 +641,7 @@ void Bc2NativeCycleService::Finish(const Bc2NativeCycleDecision& d,const ReloadF
         }
         const bool forward=d.branch<2&&forwardReadyAt_[d.branch]&&
             record.entry.nowNs>=forwardReadyAt_[d.branch]&&
-            CycleForwardIdleUpdate(record,native_,d.branch,Boundary(mode_,emptyCycle_).current);
+            CycleForwardIdleUpdate(record,native_,d.branch,Boundary(mode_,config_,emptyCycle_).current);
         if((tail_[d.branch]==TailLength()||forward)&&after.current==2&&after.next==2){
             readyMask_|=1u<<d.branch;finishedAt_[d.branch]=record.exit.nowNs;
             if(readyMask_==7){
@@ -619,6 +662,7 @@ void Bc2NativeCycleService::Finish(const Bc2NativeCycleDecision& d,const ReloadF
     }
 }
 void Bc2NativeCycleService::Commit(const ReloadFlowRecord& record)noexcept {
+    if(recovery_.ReloadCommand())return; // Only the dispatched resource observer consumes these callbacks.
     if(Recovering()){lastEvent_=record.id;if(!recovery_.Commit(record))Cancel(Bc2NativeCycleFailure::Completion);return;}
     if(phase_!=Bc2NativeCyclePhase::Releasing||!release_||record.entry.boundary.branch>=3)return;
     lastEvent_=record.id;
@@ -647,6 +691,7 @@ bool Bc2NativeCycleService::PaidRecoveryRestoreOrdered(const ReloadFlowRecord& r
     return true;
 }
 void Bc2NativeCycleService::ObserveRestore(const ReloadFlowRecord& record)noexcept {
+    if(recovery_.ReloadCommand())return;
     if(record.entry.boundary.branch<3)paidOrdinaryIdle_[record.entry.boundary.branch]={};
     if(phase_==Bc2NativeCyclePhase::Watching||phase_==Bc2NativeCyclePhase::Cancelled||!native_.owner.player)return;
     if(mode_==Bc2NativeCycleMode::M95&&phase_==Bc2NativeCyclePhase::Complete&&!ready_&&
@@ -680,8 +725,8 @@ void Bc2NativeCycleService::ObserveRestore(const ReloadFlowRecord& record)noexce
     // never reaches this service; runtime filters it before taking the gate.
     if(branch>=2){ContradictoryRestore();return;}
     if(!(firedMask_&(1u<<branch)))return;
-    const auto& boundary=Boundary(mode_,emptyCycle_);
-    if(CycleConvergenceRestore(record,native_,branch,mode_==Bc2NativeCycleMode::M95,emptyCycle_)&&
+    const auto& boundary=Boundary(mode_,config_,emptyCycle_);
+    if(CycleConvergenceRestore(record,native_,branch,Profile(mode_,config_)->Convergence(emptyCycle_))&&
        record.entry.boundary.current==2&&record.entry.boundary.next==2&&record.entry.boundary.timer==0&&
        record.exit.boundary->current==boundary.current&&record.exit.boundary->previous==2&&
        record.exit.boundary->next==boundary.next&&record.exit.boundary->timer>0&&record.exit.boundary->timer<=boundary.maxTimer){
@@ -736,7 +781,7 @@ void Bc2NativeCycleService::ObserveRestore(const ReloadFlowRecord& record)noexce
         contexts_={};restoredAt_[branch]=preRestoredAt_[branch]=preRewindAt_[branch]=0;restoredPrevious_[branch]=0;
         return;
     }
-    if(!emptyCycle_&&CyclePreHoldSnapshotProgression(record,native_,branch,Boundary(mode_,false),.1f)){
+    if(!emptyCycle_&&CyclePreHoldSnapshotProgression(record,native_,branch,Boundary(mode_,config_,false),.1f)){
         // Native prediction can cross the post-shot wait/hold boundary in
         // either direction before interception has begun. Preserve the actual
         // Restore output's previous state; never invent an omitted Commit.
@@ -748,7 +793,7 @@ void Bc2NativeCycleService::ObserveRestore(const ReloadFlowRecord& record)noexce
            record.exit.boundary->loaded!=loaded_||record.exit.boundary->reserve!=reserve_){ContradictoryRestore();return;}
         const auto& after=*record.exit.boundary;
         lastInvocation_[branch]=record.id;cycleState_[branch]=after.current;contexts_={};
-        if(after.current==Boundary(mode_,false).current){restoredAt_[branch]=record.exit.nowNs;restoredPrevious_[branch]=after.previous;}
+        if(after.current==Boundary(mode_,config_,false).current){restoredAt_[branch]=record.exit.nowNs;restoredPrevious_[branch]=after.previous;}
         else {preRewindAt_[branch]=record.exit.nowNs;restoredAt_[branch]=preRestoredAt_[branch]=0;restoredPrevious_[branch]=0;}
         return;
     }

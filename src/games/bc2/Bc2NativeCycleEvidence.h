@@ -4,6 +4,17 @@
 
 namespace fvr::bc2 {
 struct ReloadFlowRecord;
+// Exact authored bounds for the shared type-1 dispatch. Legacy wrappers below
+// retain their original diagnostic envelopes; selected profiles supply these.
+struct NativeCycleConvergenceProfile {
+    bool bolt=false,empty=false;
+    float boltDelay=.5f,boltTime=1.f;
+};
+bool CycleConvergencePhase(unsigned current,unsigned next,float timer,const NativeCycleConvergenceProfile&)noexcept;
+bool CycleGuardedUpdate(const ReloadFlowRecord&,const ReloadHoldIdentity&,unsigned branch,
+    const NativeCycleInputGuard&,unsigned guardedSteps,unsigned rejectedSteps,const NativeCycleConvergenceProfile&)noexcept;
+bool CycleGuardedCommit(const ReloadFlowRecord&,const ReloadHoldIdentity&,unsigned branch,std::uint64_t parent,const NativeCycleConvergenceProfile&)noexcept;
+bool CycleConvergenceRestore(const ReloadFlowRecord&,const ReloadHoldIdentity&,unsigned branch,const NativeCycleConvergenceProfile&)noexcept;
 // Guarded convergence is a distinct path. Original context must be restored,
 // own Update/Step provenance exact, counts conserved. Busy never votes idle.
 bool CycleConvergencePhase(unsigned current,unsigned next,float timer,bool m95,bool empty)noexcept;

@@ -28,7 +28,9 @@ public:
     bool ReferencesReady()const noexcept{return references_.has_value();}
     bool BlocksFire()const noexcept{return debt_||retirementRequired_;}
     bool NeedsOwnerRetirement()const noexcept{return retirementRequired_;}
-    bool OwnsGunCustody()const noexcept{return custody_==interaction::BoltCustodyPhase::Manipulating;}
+    bool OwnsGunCustody()const noexcept{return custody_==interaction::BoltCustodyPhase::Manipulating||
+        custody_==interaction::BoltCustodyPhase::ReloadPaused||custody_==interaction::BoltCustodyPhase::Reloading||
+        custody_==interaction::BoltCustodyPhase::ReloadResumePending;}
     std::optional<std::array<math::Matrix4,2>> References()const noexcept{return references_;}
 private:
     void Invalidate()noexcept;
@@ -40,6 +42,12 @@ private:
     std::optional<Bc2BoltControllerContact> lastContact_;
     std::optional<Bc2BoltWristMapping> wristMapping_;
     std::optional<interaction::HandClaimToken> mappedCustody_;
+    std::optional<math::Matrix4> mappedAttachment_;
+    std::optional<std::array<math::Matrix4,2>> preparedWrists_;
+    interaction::HandInteractionSample preparedInput_{};
+    // The real press packet keeps its original lifetime while renderer N-1
+    // catches up. A release or phase change discards this intention.
+    std::optional<interaction::HandInteractionSample> reloadPress_;
     interaction::HandInteractionSample previous_{};
     // Retained original geometry/identity only. Restoring player coordination
     // still requires a new typed idle-debt grant and the SAME live left gun.
@@ -49,6 +57,7 @@ private:
     std::int64_t selectedAt_=0,stableAt_=0,lastNow_=0;
     std::uint64_t lastRaw_=0,submitted_=0,neutral_=0,returnPress_=0;
     interaction::BoltCustodyPhase custody_=interaction::BoltCustodyPhase::Idle;
+    interaction::WeaponCyclePhase mechanismPhase_=interaction::WeaponCyclePhase::Idle;
     bool debt_=false,ready_=false,retirementRequired_=false,rightArmed_=false,rightHeld_=false;
 };
 }

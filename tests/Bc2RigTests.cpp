@@ -503,9 +503,18 @@ int Run(){
  auto renamed=Fixture();Name(renamed,8,"jntWpn_31");Name(renamed,9,"jntWpn_27");renamed.data[0x299c]=std::byte{0};
  const auto ordinary=Read(renamed);CHECK(ordinary&&(ordinary->nativeHiddenLeaves==std::vector<std::uint32_t>{8,9}));
  auto unrelatedName=Fixture();Name(unrelatedName,9,"inactive_geometry");CHECK(!Read(unrelatedName));
- // Preserve strict topology: unrelated/arm leaves, a hidden ancestor, and a
- // nested weapon descendant do not acquire this exception.
- for(unsigned parent:{0u,3u,6u,8u}){auto bad=Fixture();bad.Put(0x17204+9*0x98,parent);CHECK(!Read(bad));}
+ // Unrelated and arm leaves remain rejected. A complete collapsed compound
+ // weapon subtree is preserved, including its child, without unhide authority.
+ for(unsigned parent:{0u,3u,6u}){auto bad=Fixture();bad.Put(0x17204+9*0x98,parent);CHECK(!Read(bad));}
+ auto compound=Fixture();compound.Put(0x17204+9*0x98,8);
+ const auto compoundRig=Read(compound);CHECK(compoundRig&&compoundRig->nativeHiddenLeaves.size()==2);
+ const auto compoundWrites=interaction::RetargetRigSubtree(compoundRig->parents,compoundRig->evaluatedWorld,7,target,compoundRig->nativeHiddenLeaves);
+ CHECK(compoundWrites&&compoundWrites->size()==1&&compoundWrites->front().index==7);
+ const std::array<std::uint32_t,1> incomplete{8};
+ CHECK(!interaction::RetargetRigSubtree(compoundRig->parents,compoundRig->evaluatedWorld,7,target,incomplete));
+ auto visibleChild=compound;const auto visiblePose=Identity();
+ for(unsigned base:{0x18000u,0x1a000u,0x1b000u})Matrix(visibleChild,base+9*64,visiblePose);
+ CHECK(!Read(visibleChild));
  auto underArm=Fixture();underArm.Put(0x17204+7*0x98,6);CHECK(!Read(underArm));
  // A role can be a direct weapon child in an otherwise valid ancestry graph.
  // The validated role/arm branch must still reject collapse, not become hidden.

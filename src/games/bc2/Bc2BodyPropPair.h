@@ -3,6 +3,7 @@
 #include "Bc2BodyCarriedPair.h"
 #include "Bc2StowedAmmo.h"
 #include "fvr/graphics/VehicleReticle.h"
+#include "Bc2FixedContainerPresentation.h"
 namespace fvr::bc2 {
 struct BodyPropSources {
     std::optional<BodyAmmoRenderSource> ammo;
@@ -10,6 +11,7 @@ struct BodyPropSources {
     std::optional<BodyCarriedRenderBatch> carried;
     std::optional<StowedAmmoRenderSource> stowedAmmo;
     std::optional<graphics::VehicleReticleSample> vehicleReticle;
+    std::optional<FixedContainerRenderSource> fixed;
 };
 struct BodyPropPairSource {BodyCarriedPairKey key{};BodyPropSources original;};
 
@@ -25,8 +27,19 @@ inline graphics::BodyPropEye BuildBodyPropPairEye(const BodyPropPairSource& pair
         a->observedNs=std::max(a->observedNs,b->observedNs);a->deadlineNs=std::min(a->deadlineNs,b->deadlineNs);
         if(graphics::BodyPropFresh(*a,now))eye.instances[eye.count++]=*a;
     };
-    if(original.ammo&&before.ammo&&after.ammo)
-        append(BodyAmmoHostInstance(*original.ammo,*before.ammo,now),BodyAmmoHostInstance(*original.ammo,*after.ammo,now));
+    const auto appendAssembly=[&](const auto& a,const auto& b){
+        if(a.empty()||a.size()!=b.size()||a.size()>graphics::MaxBodyProps-eye.count)return;
+        const auto first=eye.count;
+        for(unsigned n=0;n<a.size();++n){append(a[n],b[n]);if(eye.count!=first+n+1){
+            while(eye.count>first)eye.instances[--eye.count]={};return;}}
+    };
+    try{
+        if(original.ammo&&before.ammo&&after.ammo)
+            appendAssembly(BodyAmmoHostInstances(*original.ammo,*before.ammo,now),BodyAmmoHostInstances(*original.ammo,*after.ammo,now));
+        if(original.fixed&&before.fixed&&after.fixed)
+            appendAssembly(RetainFixedContainerHostInstances(*original.fixed,*before.fixed,now),
+                RetainFixedContainerHostInstances(*original.fixed,*after.fixed,now));
+    }catch(...){/* Missing complete assemblies grant no partial source. */}
     // The held and empty-hand paths cannot share a source within an eye pair.
     // A transition must start a new pair using its own fresh typed evidence.
     if(!original.ammo&&!before.ammo&&!after.ammo&&original.stowedAmmo&&before.stowedAmmo&&after.stowedAmmo)

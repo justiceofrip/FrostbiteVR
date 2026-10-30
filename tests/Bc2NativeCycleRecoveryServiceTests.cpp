@@ -140,7 +140,11 @@ struct RecoveryFixture:Fixture {
     }
     void Idle(unsigned branch,bool busy=false,unsigned rejected=0){
         clock+=1000000;const auto d0=Begin(branch);(void)d0; // Recovering normal Evaluate deliberately issues nothing.
-        auto& a=update.entry.boundary;a.current=busy?8:2;a.previous=busy?7:1;a.next=busy?1:2;a.timer=busy?.1f:0;
+        // SPAS waits in7 before its zero-duration state8; a positive state8
+        // timer belongs to the bolt family and is invalid for this pump Config.
+        const bool bolt=service.Mode()==Bc2NativeCycleMode::M95;
+        auto& a=update.entry.boundary;a.current=busy?(bolt?8:7):2;
+        a.previous=busy?(bolt?7:6):1;a.next=busy?(bolt?1:8):2;a.timer=busy?.1f:0;
         update.exit.boundary=a;update.exit.nowNs=++clock;
         const auto d=service.EvaluateRecovery({input.identity,input.config},update.entry,input.capacities[branch],clock+99000000);
         NativeCycleInputGuard g;g.requested=g.applied=g.restored=true;g.original={0,0};g.effective=g.beforeRestore={1,0};
@@ -254,7 +258,11 @@ int MissingGuardAndConservationNeverRecover(){for(unsigned mutation=0;mutation<4
     CHECK(f.service.View(f.clock).phase==Bc2NativeCyclePhase::Cancelled&&f.service.View(f.clock).blocksFire);
     CHECK(!f.service.RecoveryView(f.clock)->authority&&!f.service.RecoveryView(f.clock)->ready);
     CHECK(!f.service.BeginRecovery(f.clock));}return 0;}
-int NativeBusyRevokesGrantButNotSubmittedReceipt(){RecoveryFixture f;CHECK(f.Held());CHECK(f.service.BeginRecovery(f.clock));CHECK(f.Grant());
+int NativeBusyRevokesGrantButNotSubmittedReceipt(){for(bool m95:{false,true}){RecoveryFixture f(m95);
+    const NativeCycleConvergenceProfile exact{m95,false,f.input.config.boltDelay,f.input.config.boltTime};
+    CHECK(CycleConvergencePhase(m95?8:7,m95?1:8,.1f,exact));
+    if(!m95)CHECK(!CycleConvergencePhase(8,1,.1f,exact));
+    CHECK(f.Held());CHECK(f.service.BeginRecovery(f.clock));CHECK(f.Grant());
     const auto old=*f.service.RecoveryView(f.clock)->authority;f.Idle(0,true);CHECK(!f.service.RecoveryView(f.clock)->authority);
     f.Rounds();CHECK(!f.service.RecoveryView(f.clock)->authority);CHECK(f.Grant());
     const auto next=*f.service.RecoveryView(f.clock)->authority;CHECK(next.grant.nonce!=old.grant.nonce);
@@ -262,7 +270,7 @@ int NativeBusyRevokesGrantButNotSubmittedReceipt(){RecoveryFixture f;CHECK(f.Hel
         std::min(f.control.input.deadlineNs,next.deadlineNs)};CHECK(f.service.SubmitRecovery(release,f.control.input));f.Rounds();
     const auto ready=*f.service.RecoveryView(f.clock)->ready;f.service.BeginRecovery(f.clock);f.clock+=61000000000;
     CHECK(f.service.RecoveryView(f.clock)->ready->observedNs==ready.observedNs);CHECK(!f.service.AcknowledgeRecovery(ready,f.clock));
-    f.Rounds();CHECK(f.service.AcknowledgeRecovery(ready,f.clock));return 0;}
+    f.Rounds();CHECK(f.service.AcknowledgeRecovery(ready,f.clock));}return 0;}
 int ExistingHoldDrainsBeforeConvergence(){
     for(unsigned branch=0;branch<3;++branch){RecoveryFixture f;CHECK(f.Held());f.Begin(branch);CHECK(f.decision.hold);
         const auto issued=f.decision;const auto firing=f.input.identity.firing[branch];

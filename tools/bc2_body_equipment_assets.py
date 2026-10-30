@@ -114,6 +114,8 @@ def derive_equipment(game,specs=SPECS,strict_anchors=False):
     return rows,bytes(payload)
 
 def equipment_header(rows):
+    from bc2_firearm_body_aliases import expand_equipment_rows
+    rows=expand_equipment_rows(rows)
     # Exact complete configurations supersede legacy asset/base-mesh display
     # rows. Legacy cache records remain available for older compatible clients.
     exact={(r['asset'],r['mesh']) for r in rows if r.get('configuration_path')}

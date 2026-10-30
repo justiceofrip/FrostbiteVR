@@ -11,7 +11,10 @@ struct BeltAmmoTracking {
     Bc2AmmoReserveLease reserve{};
     std::shared_ptr<const SelectedMeshesSnapshot> meshes;
     std::optional<ReloadRoundLease> heldCycle; // Exact original lease; no insertion/ammo authority.
+    const ShotgunReloadEquipmentProfile* equipment=nullptr;
 };
+bool ShotgunBeltAmmoFresh(const BeltAmmoTracking&,std::int64_t now)noexcept;
+bool ShotgunBeltAmmoRetained(const BeltAmmoTracking&,const BeltAmmoTracking&,std::int64_t now)noexcept;
 bool SpasBeltAmmoFresh(const BeltAmmoTracking&,std::int64_t now)noexcept;
 bool SpasBeltAmmoRetained(const BeltAmmoTracking&,const BeltAmmoTracking&,std::int64_t now)noexcept;
 struct BeltAmmoPalette {
@@ -31,6 +34,9 @@ std::optional<std::vector<std::array<std::byte,64>>> PlaceIdleShell(const RigSna
 std::optional<BeltAmmoPalette> BuildSpasBeltAmmoPalette(const BeltAmmoTracking&,const RigSnapshot&,
     std::span<const std::array<std::byte,64>> ordinary,const interaction::InputFrame&,
     const math::Matrix4& eyeBase,std::string_view asset,std::int64_t now);
+std::optional<BeltAmmoPalette> BuildShotgunBeltAmmoPalette(const BeltAmmoTracking&,const RigSnapshot&,
+    std::span<const std::array<std::byte,64>> ordinary,const interaction::InputFrame&,
+    const math::Matrix4& eyeBase,std::string_view asset,std::int64_t now);
 struct BeltAmmoPaletteChoice {std::span<const std::array<std::byte,64>> bytes;bool fallback=true;};
 BeltAmmoPaletteChoice SelectSpasBeltAmmoPalette(const BeltAmmoPalette&,const BeltAmmoTracking* current,
     std::int64_t now,bool coherentNativeSource)noexcept;
@@ -39,4 +45,8 @@ BeltAmmoPaletteChoice SelectSpasBeltAmmoPalette(const BeltAmmoPalette&,const Bel
 BeltAmmoPaletteChoice SelectSpasBeltOverlay(const BeltAmmoPalette&,const BeltAmmoTracking* current,
     std::int64_t now,bool coherentNativeSource,std::span<const std::array<std::byte,64>> currentBase,
     bool currentCycleHidden)noexcept;
+BeltAmmoPaletteChoice SelectShotgunBeltAmmoPalette(const BeltAmmoPalette&,const BeltAmmoTracking*,std::int64_t,bool)noexcept;
+BeltAmmoPaletteChoice SelectShotgunBeltOverlay(const BeltAmmoPalette&,const BeltAmmoTracking*,std::int64_t,bool,
+    std::span<const std::array<std::byte,64>>,bool)noexcept;
+
 }

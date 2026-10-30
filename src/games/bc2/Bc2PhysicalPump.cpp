@@ -27,7 +27,7 @@ WeaponCycleProfile Profile(const Bc2PumpCalibration& c,math::Vec3 point)noexcept
 }
 }
 bool PumpCalibrationValid(const Bc2PumpCalibration& c)noexcept {
-    return c.measured&&c.revision&&c.rigFingerprint&&c.profileId&&!c.asset.empty()&&c.asset.size()<64&&PumpGeometryValid(c.geometry)&&(c.rearDirection==1||c.rearDirection==-1)&&
+    return (c.measured||c.authoredReviewed)&&c.revision&&c.rigFingerprint&&c.profileId&&!c.asset.empty()&&c.asset.size()<64&&PumpGeometryValid(c.geometry)&&(c.rearDirection==1||c.rearDirection==-1)&&
         weapon_cycle_detail::Profile(Profile(c,{}))&&PumpCompanionsValid(c.geometry,c.companions,c.fixedParts)&&reload_insertion_detail::Rigid(c.closedPart)&&reload_insertion_detail::Rigid(c.closedWrist);
 }
 bool PumpTrackingFresh(const Bc2PumpTracking& t,std::int64_t now)noexcept {

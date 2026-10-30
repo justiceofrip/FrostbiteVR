@@ -1,0 +1,247 @@
+{
+  "schema": "fvr.bc2.magazines45.explicit_mod_reviews.v1",
+  "reviews": [
+    {
+      "schema": "fvr.bc2.mod_authored_magazine_review.v1",
+      "content_group": "6bf2c4207cbdb45af8ec121bcbbe8bd1dd254ddf8a674251803c7c6e23f267bc",
+      "source_packet": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-magazines45-policy02\\6bf2c4207cbdb45a\\source.json",
+        "sha256": "3f65676b6ba87ce9201324627bcc3f25e24d87074fa0e39432c4f9b9290b7f79"
+      },
+      "preview_sha256": "dac546c22e4333c63ea4166c59f91d1cb31f1ca181b61d12387f9ef12fce6a78",
+      "magazine_bone": "jntWpn_12",
+      "pose_index": 0,
+      "frame_seconds": 1.2,
+      "pose_digest": "262f8926c8c41304e290cd7fc67345283c9f53232a15d3ac91331be98ce4a4a6",
+      "entry_axis": 1,
+      "inward_sign": 1,
+      "carry_policy": "measured_lower_third_design",
+      "reviewer": "magazines45 exact hierarchy/three-view source review",
+      "basis": "The measured curved box below the receiver is weapon child12; weighted child13 stays in the authored reference assembly. Use its own sampled fingers with lower-third carry; frame-zero attachment is explicitly mod-authored because reference controls vary.",
+      "native_verified": false,
+      "headset_tested": false,
+      "measured_stable_contact_claim": false,
+      "review_digest": "d5a39bac8c6298c1b54dc299269bfe8ae48187edc24d189df8310c9d66b3dafe"
+    },
+    {
+      "schema": "fvr.bc2.mod_authored_magazine_review.v1",
+      "content_group": "71617e3f2464010f040367c0de5d8306e700e962082ed19487e8841410a4905c",
+      "source_packet": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-magazines45-policy02\\71617e3f2464010f\\source.json",
+        "sha256": "015938b1845b82db92af89dbaaf87eaf893acb3596827ba2b44e4aa4332d6b79"
+      },
+      "preview_sha256": "0030c9a8d27e436128d107535b2a5982ae23c8e85c833f068e26ad62c0f5b4ac",
+      "magazine_bone": "jntWpn_6",
+      "pose_index": 0,
+      "frame_seconds": 0.8333333333333334,
+      "pose_digest": "b59dfdc0394063a274ff1207160fe1969ee938117dc138584f65a6858f5df3f7",
+      "entry_axis": 1,
+      "inward_sign": 1,
+      "carry_policy": "measured_lower_third_design",
+      "reviewer": "magazines45 exact hierarchy/three-view source review",
+      "basis": "The measured rear box below the bullpup receiver is the independent moving magazine. Its own complete finger shape supplies the fixed mod carry; the earlier temporal-contact failure remains.",
+      "native_verified": false,
+      "headset_tested": false,
+      "measured_stable_contact_claim": false,
+      "review_digest": "96408e179670e8c973a609153f1baae0a4d0fc8e6480d4e9322637766bbc7cd8"
+    },
+    {
+      "schema": "fvr.bc2.mod_authored_magazine_review.v1",
+      "content_group": "7f4f40965875d95fc24020578203996e7b8daea21762ef5e3709b58e0c272348",
+      "source_packet": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-magazines45-policy02\\7f4f40965875d95f\\source.json",
+        "sha256": "1359167d50f955bda43cd1d65ac682e1fb055126ed5984ce474a141b5efaadca"
+      },
+      "preview_sha256": "40294b0a9227211fb093cc63755c515ec2d30fe16c720f4d412872648e4aa906",
+      "magazine_bone": "jntWpn_6",
+      "pose_index": 0,
+      "frame_seconds": 2.3666666666666667,
+      "pose_digest": "fb8c5f73412de3869a7bcf4f7f22f61a4ca8469504cd13d7edcf2dfd426892cc",
+      "entry_axis": 1,
+      "inward_sign": 1,
+      "carry_policy": "exact_same_frame_short_box",
+      "reviewer": "magazines45 exact hierarchy/three-view source review",
+      "basis": "The measured shallow box under the receiver is 50.8mm tall. Author a +Y top-face feed rail; its longer Z dimension is the fore-aft footprint, not insertion height. Preserve the complete own-clip frame; do not claim a stable temporal grip or native rail.",
+      "native_verified": false,
+      "headset_tested": false,
+      "measured_stable_contact_claim": false,
+      "review_digest": "9873aa9986517e12c80272f8f2a9ee9e78c0c16cc51ad6c3dc4fbb0f96aa7947"
+    },
+    {
+      "schema": "fvr.bc2.mod_authored_magazine_review.v1",
+      "content_group": "5e619cbf0b33e7002863c4f34538bdc5706d2e30bdee3c83ea00306f2d2bd893",
+      "source_packet": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-magazines45-policy02\\5e619cbf0b33e700\\source.json",
+        "sha256": "ee5ee5d06049c80a8afd0a7e4e6efef68a46e28a59f68f7973d77fabb438fcec"
+      },
+      "preview_sha256": "a63253d62630f0a1ca15e4b519d166864cad45cf8a05fbd2056255acc722cf24",
+      "magazine_bone": "jntWpn_6",
+      "pose_index": 0,
+      "frame_seconds": 2.2666666666666666,
+      "pose_digest": "0dd8483ce24557e4fdc951add5b21c72858c09a908971b74f9dddde1e2e25610",
+      "entry_axis": 1,
+      "inward_sign": 1,
+      "carry_policy": "exact_same_frame_short_box",
+      "reviewer": "magazines45 exact hierarchy/three-view source review",
+      "basis": "The measured shallow receiver box is 53.7mm tall. Select its +Y receiver-facing top face and the complete own-clip contact frame; its longer Z footprint must not become the magazine feed direction.",
+      "native_verified": false,
+      "headset_tested": false,
+      "measured_stable_contact_claim": false,
+      "review_digest": "6e94e73215d1d87fe600f79224434e185ce769e8328a1acd7a5f93c5aa13db1e"
+    },
+    {
+      "schema": "fvr.bc2.mod_authored_magazine_review.v1",
+      "content_group": "5711fc71b7de56b69adfbcf460245e2a9f99332c9afaba7627c21a8fbcf34a1b",
+      "source_packet": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-magazines45-policy02\\5711fc71b7de56b6\\source.json",
+        "sha256": "96ceea405d2e2097ac8547130061e1dfab629a8eb455641e6a2acef76794e59c"
+      },
+      "preview_sha256": "353966d71bedaa98fecd486794804d9c343c6aef2146b9e3af2fb780fdf1f6b8",
+      "magazine_bone": "jntWpn_6",
+      "pose_index": 0,
+      "frame_seconds": 1.7,
+      "pose_digest": "75b9c7090f239567d322ccf1d8480c90b6b03e707d9abcc5de9724db0206530a",
+      "entry_axis": 1,
+      "inward_sign": 1,
+      "carry_policy": "measured_lower_third_design",
+      "reviewer": "magazines45 exact hierarchy/three-view source review",
+      "basis": "The measured box below the receiver is the only substantial detachable container; retain the exact own-clip finger shape as a mod carry policy and the +Y body-facing feed end.",
+      "native_verified": false,
+      "headset_tested": false,
+      "measured_stable_contact_claim": false,
+      "review_digest": "9724f29bde8c84d3b27fa65be46f3dcbd86a769646e1f0aa2963edf2bbdb1497"
+    },
+    {
+      "schema": "fvr.bc2.mod_authored_magazine_review.v1",
+      "content_group": "073f5ad57f4602260c6eb0c94c30721e2daa2689c2e3c45c813907322c9407cb",
+      "source_packet": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-magazines45-policy02\\073f5ad57f460226\\source.json",
+        "sha256": "bbadf676429b2c2932958ab2ea3390e8e4f6e06967b30a7506e1d018f2cdd9d6"
+      },
+      "preview_sha256": "364243c0c9f1496f167632e685cb56b3e2c8ba44412c1d73b5d53c599d098757",
+      "magazine_bone": "jntWpn_12",
+      "pose_index": 0,
+      "frame_seconds": 1.5,
+      "pose_digest": "656d30326f63753e3feeb48920e69f1cbf5faa3be53a7a30e0246d4ab50924af",
+      "entry_axis": 1,
+      "inward_sign": 1,
+      "carry_policy": "measured_lower_third_design",
+      "reviewer": "magazines45 exact hierarchy/three-view source review",
+      "basis": "The rear receiver box root12 plus weighted child13 is the magazine. Root4 is the separate long upper sliding control and is excluded. Use only measured magazine bounds and this asset own fingers.",
+      "native_verified": false,
+      "headset_tested": false,
+      "measured_stable_contact_claim": false,
+      "review_digest": "946f49e38b4d97568734c229348cd08b89ec5b45aaba8ed694ff1b073cfbda26"
+    },
+    {
+      "schema": "fvr.bc2.mod_authored_magazine_review.v1",
+      "content_group": "e9efd1972422f1870b578e9704e7f5cd2c3fccba18facf5c7b3a56a9759c4204",
+      "source_packet": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-magazines45-policy02\\e9efd1972422f187\\source.json",
+        "sha256": "5c1a807a21848958f7c1bc28f5ae9512a958fafc842b6d90a2fd588843803d85"
+      },
+      "preview_sha256": "a84f7f7473f9aa76a064c86d63d61dacf46fb4aae60bc44ee19ca290bbbcc2f6",
+      "magazine_bone": "jntWpn_6",
+      "pose_index": 0,
+      "frame_seconds": 1.1333333333333333,
+      "pose_digest": "204a74bce37e751ab451e28a61634dcc1d899867dddc83db168c10a0b216262a",
+      "entry_axis": 1,
+      "inward_sign": 1,
+      "carry_policy": "measured_lower_third_design",
+      "reviewer": "magazines45 exact hierarchy/three-view source review",
+      "basis": "The long curved box below the receiver is root6. Root3 is a separate thin upper action control and is excluded. The complete own-clip pose supplies finger shape; fixed carry and straight feed rail are mod policy.",
+      "native_verified": false,
+      "headset_tested": false,
+      "measured_stable_contact_claim": false,
+      "review_digest": "19bed6d1aba599c8b26ee118c707981ac915d4ee2e918c4c318801bf4e1781a3"
+    },
+    {
+      "schema": "fvr.bc2.mod_authored_magazine_review.v1",
+      "content_group": "dff2e3aa0cee1dfb9b1d25fcf25f3d368b8b7e5865e3ec8e7273d1286bc95e85",
+      "source_packet": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-magazines45-policy02\\dff2e3aa0cee1dfb\\source.json",
+        "sha256": "693b35479bb0dda8cfffbfce53e26eec0dc6fa70aeea0779436f12f926094ee6"
+      },
+      "preview_sha256": "210a8f9523241e6d6c15cd530ec1760b4dfba5d2c82b2f46babd97cfaff1e0ae",
+      "magazine_bone": "jntWpn_12",
+      "pose_index": 0,
+      "frame_seconds": 1.5666666666666667,
+      "pose_digest": "5126e0f91a18b652bf1370dd73c0a510b740477aeb6993ee475352c520b2e011",
+      "entry_axis": 1,
+      "inward_sign": 1,
+      "carry_policy": "measured_lower_third_design",
+      "reviewer": "magazines45 exact hierarchy/three-view source review",
+      "basis": "The long receiver magazine root12 and its weighted round child13 are distinct from the weapon body. Author a +Y linear feed rail and own-clip fixed hand shape; the missing native initial-withdrawal witness remains a recorded failure.",
+      "native_verified": false,
+      "headset_tested": false,
+      "measured_stable_contact_claim": false,
+      "review_digest": "66afbc444ecdaa02201f2c80526f845222f89270bb1252c06b38008b339d0fd5"
+    },
+    {
+      "schema": "fvr.bc2.mod_authored_magazine_review.v1",
+      "content_group": "44c52852dea022865b0a74fce62e8324c689329b67baf920685be90e8654b57e",
+      "source_packet": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-magazines45-policy03\\44c52852dea02286\\source.json",
+        "sha256": "b32ccc79817b650c3fb5b2002f184f687591aadb5a1e58d39e112daf629c4913"
+      },
+      "preview_sha256": "a0c4c809eb6ac51b70001877460bbc894264760f99206dd662c86f35e0bc7c90",
+      "magazine_bone": "jntWpn_12",
+      "pose_index": 0,
+      "frame_seconds": 1.1666666666666667,
+      "pose_digest": "6f3c95bf0dfed31a9de6f252286b9ce408800fcadfa26882d2bdd59c5cb34031",
+      "entry_axis": 1,
+      "inward_sign": 1,
+      "carry_policy": "measured_lower_third_design",
+      "reviewer": "magazines45 exact hierarchy/three-view source review",
+      "basis": "The narrow magazine below the grip is root12 with the measured weighted child13. Two non-unit authored frames are retained as invalid and unused. Select one complete valid own-clip finger frame and the measured +Y feed face; no interpolation or stable-contact claim.",
+      "native_verified": false,
+      "headset_tested": false,
+      "measured_stable_contact_claim": false,
+      "review_digest": "ec3340881d0d932a68eb30bf6b4b419b5dc81fafdd28284ec6dced1cdb1636b6"
+    },
+    {
+      "schema": "fvr.bc2.mod_authored_magazine_review.v1",
+      "content_group": "ccc088ce53d98699d0cc4daa18339ce428eb41d24180f39b0ac0288ec06ad546",
+      "source_packet": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-magazines45-policy04\\ccc088ce53d98699\\source.json",
+        "sha256": "7039909c6b526be10833f0df0408a2bbaa3dac5dab6377d0ab3512b271f358fb"
+      },
+      "preview_sha256": "1aa232e44b5a57825dbd87d5eba9b3ef647a00e4bfd71ba7cc83c1498f923e4d",
+      "magazine_bone": "jntWpn_6",
+      "pose_index": 0,
+      "frame_seconds": 0.6666666666666666,
+      "pose_digest": "b151e0d47deb7742e41e5fe57c25c9a3b1417a8b98bb72392a9af7c7b63b4fca",
+      "entry_axis": 1,
+      "inward_sign": 1,
+      "carry_policy": "measured_lower_third_design",
+      "reviewer": "magazines45 exact hierarchy/three-view source review",
+      "basis": "Measured receiver magazine root6 is the sole substantial moving box; own complete valid reload-frame fingers and +Y measured feed face define the mod carry/rail. The exact mesh is verified in MP common, independently of async inventory absence.",
+      "native_verified": false,
+      "headset_tested": false,
+      "measured_stable_contact_claim": false,
+      "review_digest": "1e93bb39de768502c4063d1320c99ca52e0bb5e6084cde7b07c6f4902c923552"
+    },
+    {
+      "schema": "fvr.bc2.mod_authored_magazine_review.v1",
+      "content_group": "77c108fdfdaac1ba1947df41b817272d0ccc00b07cca102f4962d5de98582148",
+      "source_packet": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-magazines45-policy04\\77c108fdfdaac1ba\\source.json",
+        "sha256": "af42c718ed96eb2e4d719627dc16dcaec1ce8578f3d13698ca53632fa49fd968"
+      },
+      "preview_sha256": "79d80d18176e84f5ed00b9efc394b024436076774b2a09a58c758e173dd553f7",
+      "magazine_bone": "jntWpn_12",
+      "pose_index": 0,
+      "frame_seconds": 1.8,
+      "pose_digest": "9505c6dde2233f37c63a105c2ab0f11c6ef4460030199060cef9c389b3a8ae67",
+      "entry_axis": 1,
+      "inward_sign": 1,
+      "carry_policy": "measured_lower_third_design",
+      "reviewer": "magazines45 exact hierarchy/three-view source review",
+      "basis": "Measured long box root12 lies below the receiver; its weighted child13 and descendant14 are retained in parent order at the exact reference pose. Small roots3/4 are separate action parts and excluded. Use own fingers and the measured +Y feed face.",
+      "native_verified": false,
+      "headset_tested": false,
+      "measured_stable_contact_claim": false,
+      "review_digest": "86a56d8075533e127a70196ad30b8a01c795c62bc7f55a95530f5fc35b520130"
+    }
+  ]
+}

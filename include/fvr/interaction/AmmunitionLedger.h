@@ -29,7 +29,7 @@ struct AmmunitionSnapshot {
     // must establish this; time, hand geometry and a render frame cannot.
     bool coherentIdleVerified=false;
 };
-enum class AmmunitionOperation:std::uint8_t {RemoveMagazine,ReturnMagazine,RefillMagazine,InsertRound};
+enum class AmmunitionOperation:std::uint8_t {RemoveMagazine,ReturnMagazine,RefillMagazine,InsertRound,InsertRounds};
 struct RemovedMagazineResource {
     AmmoResourceIdentity owner{};
     std::uint64_t id=0;
@@ -79,7 +79,7 @@ public:
         snapshot_=s;phase_=AmmunitionLedgerPhase::Ready;return true;
     }
     std::optional<AmmunitionCommand> Queue(AmmunitionOperation operation,const AmmunitionSnapshot& s,
-        std::int64_t now,std::optional<RemovedMagazineResource> original={})noexcept {
+        std::int64_t now,std::optional<RemovedMagazineResource> original={},int rounds=1)noexcept {
         if(phase_!=AmmunitionLedgerPhase::Ready||!Fresh(s,now)||s.context!=snapshot_.context||
            s.sequence<snapshot_.sequence||s.observedNs<snapshot_.observedNs||
            next_==std::numeric_limits<std::uint64_t>::max()||now>std::numeric_limits<std::int64_t>::max()-2000000000ll)return {};
@@ -99,6 +99,12 @@ public:
         case AmmunitionOperation::InsertRound:
             if(wellEmpty_||state_==MagazineResourceState::Held||original||s.counts.loaded>=s.counts.capacity||s.counts.reserve<=0)return {};
             ++after.loaded;--after.reserve;break;
+        case AmmunitionOperation::InsertRounds:{
+            if(wellEmpty_||state_==MagazineResourceState::Held||original||rounds<=0||
+               s.counts.loaded>=s.counts.capacity||s.counts.reserve<=0)return {};
+            const int transfer=std::min({rounds,s.counts.capacity-s.counts.loaded,s.counts.reserve});
+            after.loaded+=transfer;after.reserve-=transfer;break;
+        }
         default:return {};
         }
         // The current observation must still describe the expected resource
@@ -133,7 +139,7 @@ public:
             state_=MagazineResourceState::Held;wellEmpty_=true;break;
         case AmmunitionOperation::ReturnMagazine:state_=MagazineResourceState::Returned;wellEmpty_=false;break;
         case AmmunitionOperation::RefillMagazine:wellEmpty_=false;break;
-        case AmmunitionOperation::InsertRound:break;
+        case AmmunitionOperation::InsertRound:case AmmunitionOperation::InsertRounds:break;
         }
         snapshot_.counts=command_->after;snapshot_.observedNs=receipt.completedNs;
         lastReceipt_=receipt;command_.reset();phase_=AmmunitionLedgerPhase::Ready;return true;

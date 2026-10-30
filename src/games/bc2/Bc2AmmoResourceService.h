@@ -4,8 +4,56 @@
 #include "Bc2AmmoResourceEvidence.h"
 #include "Bc2AmmoResourceReadEvidence.h"
 #include "fvr/interaction/AmmunitionInventory.h"
+#include "fvr/interaction/HandInteraction.h"
+#include "Bc2NativeCycleInputGuard.h"
+#include <utility>
 
 namespace fvr::bc2 {
+// Physical mechanism debt has inventory lifetime. Only fresh exact physical
+// closure can release this interlock; missing controller packets never do.
+struct FixedContainerGate {
+    AmmoResourceBinding binding{};
+    interaction::HandInteractionOwner handOwner{};
+    std::uint64_t lifetime=0,revision=0,inputSequence=0;
+    std::int64_t observedNs=0,deadlineNs=0;
+    bool blocksFire=true,closedVerified=false;
+    bool operator==(const FixedContainerGate&)const=default;
+};
+struct FixedContainerInputGuard {
+    std::array<std::uint32_t,2> original{},effective{},beforeRestore{};
+    bool requested=false,applied=false,restored=false,unexpectedWrite=false;
+    bool operator==(const FixedContainerInputGuard&)const=default;
+    bool Apply(const NativeCycleInputAccess& access,const std::array<std::uint32_t,2>& source,bool blocksFire,bool empty)noexcept {
+        requested=true;
+        if(applied||!access.compareExchange||(source[0]&255u)>1||(source[1]&~7u))return false;
+        original=source;effective={blocksFire||empty?(source[0]&~255u)|1u:source[0],blocksFire?0u:source[1]&~4u};
+        std::uint32_t seen=0;
+        if(!access.compareExchange(access.context,1,original[1],effective[1],seen)||seen!=original[1])return false;
+        if(!access.compareExchange(access.context,0,original[0],effective[0],seen)||seen!=original[0]){
+            unexpectedWrite=!(access.compareExchange(access.context,1,effective[1],original[1],seen)&&seen==effective[1]);return false;
+        }
+        applied=true;return true;
+    }
+    bool Restore(const NativeCycleInputAccess& access)noexcept {
+        if(!applied||restored||!access.compareExchange)return false;
+        const bool flags=access.compareExchange(access.context,1,effective[1],original[1],beforeRestore[1])&&beforeRestore[1]==effective[1];
+        const bool inhibit=access.compareExchange(access.context,0,effective[0],original[0],beforeRestore[0])&&beforeRestore[0]==effective[0];
+        restored=flags&&inhibit;unexpectedWrite=!restored;return restored;
+    }
+    bool Exact()const noexcept{return requested&&applied&&restored&&!unexpectedWrite&&beforeRestore==effective;}
+};
+inline void RunFixedContainerInput(const NativeCycleInputAccess& access,const std::array<std::uint32_t,2>& words,
+    bool blocked,bool empty,void (*original)(void*),void* context,FixedContainerInputGuard& receipt){
+    receipt.Apply(access,words,blocked,empty);
+#if defined(_MSC_VER)
+    __try {original(context);}
+    __finally {if(receipt.applied)receipt.Restore(access);}
+#else
+    struct Restore {const NativeCycleInputAccess& access;FixedContainerInputGuard& receipt;
+        ~Restore(){if(receipt.applied)receipt.Restore(access);}} restore{access,receipt};
+    original(context);
+#endif
+}
 // Provenance for the consumed physical event. Its original input lifetime is
 // independent from the native observation that was valid at construction.
 // Admission still requires a fresh, exact current native view and own Update.
@@ -22,6 +70,9 @@ struct AmmoResourceRequest {
     interaction::AmmunitionIntent intent{};
     bool discard=false;
     std::optional<AmmoResourceSourceProof> sourceProof;
+    // Only an exact queued command in this service's selected ledger can be
+    // adopted. Physical recognition never marks it as natively dispatched.
+    std::optional<interaction::AmmunitionCommand> preparedCommand;
     bool operator==(const AmmoResourceRequest&)const=default;
 };
 inline bool AmmoResourceConstructionValid(const AmmoResourceRequest& r,std::int64_t now)noexcept {
@@ -199,7 +250,14 @@ public:
             if(active_->context!=snapshot.context||identity!=identity_){
                 Cancel(now);view_.reset();return false;
             }
-        }else if(!inventory_.Select(snapshot,now)){view_.reset();return false;}
+        }else {
+            const auto* prepared=inventory_.Find(snapshot.context.resource);
+            const bool queued=prepared&&prepared->Phase()==interaction::AmmunitionLedgerPhase::Queued&&
+                prepared->Pending()&&prepared->Pending()->operation==interaction::AmmunitionOperation::InsertRounds&&
+                prepared->Pending()->context==snapshot.context&&prepared->Pending()->before==snapshot.counts&&
+                inventory_.Selected()==snapshot.context;
+            if(!queued&&!inventory_.Select(snapshot,now)){view_.reset();return false;}
+        }
         actorIdentity_=identity;view_=next;
         if(awaitingPublication_&&receipt_&&receipt_->command.context!=snapshot.context)awaitingPublication_=false;
         Refresh();return true;
@@ -211,7 +269,11 @@ public:
         if(active_||awaitingPublication_){NoteRejection(AmmoResourceRejectionReason::Busy,r,now);return {};} // do not replace the pending publication receipt key
         request_=r.intent.id;submitted_=r;nativeDispatched_=false;state_=AmmoResourceRequestState::Rejected;receipt_.reset();
         using Reason=AmmoResourceRejectionReason;
-        const auto reject=[&](Reason reason)->std::optional<AmmunitionCommand>{NoteRejection(reason,r,now);Finish(now);Refresh();return {};};
+        const auto reject=[&](Reason reason)->std::optional<AmmunitionCommand>{
+            NoteRejection(reason,r,now);
+            if(r.preparedCommand)inventory_.Cancel(*r.preparedCommand);
+            Finish(now);Refresh();return {};
+        };
         if(!view_)return reject(Reason::NoView);
         if(!AmmoResourceViewFresh(*view_,now))return reject(
             now<view_->binding.observedNs||now>=view_->binding.deadlineNs||
@@ -235,9 +297,11 @@ public:
             if(r.intent.operation!=AmmunitionOperation::RemoveMagazine||!r.intent.original||!inventory_.Discard(*r.intent.original))return reject(Reason::Discard);
             state_=AmmoResourceRequestState::Completed;Finish(now);Refresh();return {};
         }
-        const auto command=inventory_.Submit(r.intent,view_->snapshot,now);
+        const auto command=r.preparedCommand?
+            inventory_.AdoptPrepared(r.intent,*r.preparedCommand,view_->snapshot,now):
+            inventory_.Submit(r.intent,view_->snapshot,now);
         if(!command)return reject(Reason::LedgerSubmit);
-        completion_=AmmoResourceCompletion{};
+        completion_=AmmoResourceCompletion{};ownUpdates_={};
         if(!completion_.Begin(*command,view_->identity)){inventory_.Cancel(*command);return reject(Reason::CompletionBegin);}
         identity_=view_->identity;active_=command;state_=AmmoResourceRequestState::Queued;Refresh();return command;
     }
@@ -268,7 +332,7 @@ public:
     }
     bool Observe(const AmmoResourceOwnUpdate& row,std::int64_t now)noexcept {
         if(!active_||state_==AmmoResourceRequestState::Queued)return false;
-        completion_.Observe(row);
+        if(completion_.Observe(row)&&row.branch<3)ownUpdates_[row.branch]=row;
         if(completion_.Failed()){Cancel(now);return false;}
         const auto receipt=completion_.Receipt(now);if(!receipt)return false;
         if(!inventory_.Complete(*receipt,now)){Cancel(now);return false;}
@@ -334,13 +398,23 @@ public:
             lastRequest_=std::max(lastRequest_,queued->intent.id);}
         actorRetirement_=retired;actorIdentity_=replacement.identity;
         active_.reset();submitted_.reset();receipt_.reset();view_.reset();
-        completion_={};identity_={};request_=0;state_=AmmoResourceRequestState::None;
+        completion_={};ownUpdates_={};identity_={};request_=0;state_=AmmoResourceRequestState::None;
         nativeDispatched_=awaitingPublication_=false;
         return true;
     }
     const auto& View()const noexcept{return view_;}
     const auto& Active()const noexcept{return active_;}
     const auto& Inventory()const noexcept{return inventory_;}
+    const auto& CompletionOwnUpdates()const noexcept{return ownUpdates_;}
+    // The callback must not escape this reference or reenter the service. The
+    // runtime holds its resource gate throughout construction/physical Update.
+    template<class F> bool WithSelectedLedger(const AmmoResourceBinding& binding,std::int64_t now,F&& visit)noexcept {
+        if(active_||awaitingPublication_||!view_||!AmmoResourceViewFresh(*view_,now)||
+           !AmmoResourceBindingFresh(binding,view_->identity.owner,now)||binding.context!=view_->binding.context||
+           binding.inventory!=view_->binding.inventory||binding.switching!=view_->binding.switching||
+           binding.data!=view_->binding.data||binding.persistence!=view_->binding.persistence)return false;
+        return inventory_.WithSelectedLedger(binding.context,std::forward<F>(visit));
+    }
     const auto& Outcome()const noexcept{return outcome_;}
     const auto& FirstRejection()const noexcept{return firstRejection_;}
 private:
@@ -385,6 +459,7 @@ private:
     std::optional<AmmoResourceRejection> firstRejection_;
     bool nativeDispatched_=false,awaitingPublication_=false;
     AmmoResourceCompletion completion_;
+    std::array<std::optional<AmmoResourceOwnUpdate>,3> ownUpdates_{};
     ReloadHoldIdentity identity_{};
     std::optional<ReloadHoldIdentity> actorIdentity_;
     std::optional<AmmoResourceActorRetirement> actorRetirement_;

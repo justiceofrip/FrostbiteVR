@@ -1,9 +1,9 @@
 """Compile immutable optional magazine rows from exact descriptor jobs.
 
-No row is enabled without a separate exact-key/digest review list. The only
-supported reviews are independent AutomaticFire and SingleFire magazine
-families. SingleFire and AutomaticFire with authored but inactive bolt fields
-additionally require their exact reflected instruction proofs. Unknown dispatch
+No row is enabled without a separate exact-key/digest review list. Supported
+reviews keep AutomaticFire, SingleFire and bolt-action magazine dispatch separate.
+Authored bolt fields additionally require their exact reflected instruction
+proofs. Magazine admission never grants owed-bolt custody/handoff. Unknown dispatch
 remains data, never guessed C++ enum values.
 This tool performs no process, game, geometry, ammo or native operations.
 """
@@ -12,6 +12,7 @@ import argparse
 import json
 from pathlib import Path
 import bc2_magazine_descriptor_manifest as descriptor
+import bc2_boltaction_magazine_proof as bolt_dispatch
 
 FAMILY = 'bc2.automatic-magazine-zero-bolt.v1'
 SINGLE_FIRE_FAMILY = 'bc2.singlefire-magazine-zero-bolt.v1'
@@ -32,12 +33,12 @@ def eligible(row):
     if any(type(v[k]) is not int for k in ORDER[:6]) or any(type(v[k]) is not bool for k in ORDER[-2:]):return False
     if [v[k] for k in ORDER[:4]]!=[2,1,8,29]:
         from bc2_singlefire_magazine_proof import candidate_dispatch
-        if not candidate_dispatch(row):return False
+        if not candidate_dispatch(row) and not bolt_dispatch.candidate_dispatch(row):return False
     if not 0<v['baseCapacity']<=1000000 or not 0<v['numberOfMagazines']<=1000000:return False
     if any(descriptor.f32(v[k])!=v[k] for k in ORDER[6:12]):return False
     if any(v[k]!=0 for k in ('boltDelay','boltTime','holdBoltUntilFireRelease','holdBoltUntilZoomRelease')):
         from bc2_automatic_stock_bolt_proof import candidate_dispatch
-        if not candidate_dispatch(row):return False
+        if not candidate_dispatch(row) and not bolt_dispatch.candidate_dispatch(row):return False
     if not 0<v['reloadTime']<=10 or not 0<v['reloadThreshold']<=1 or not 0<=v['reloadDelay']<=10 or not 0<=v['postReloadTime']<=10:return False
     expected=[(0x10,int(descriptor.bits(v['reloadThreshold']),16)),(0x14,int(descriptor.bits(v['reloadDelay']),16)),
               (0x18,int(descriptor.bits(v['reloadTime']),16)),(0x20,1),(0x24,v['fireLogicType']),(0x2c,0)]
@@ -52,7 +53,7 @@ def build(jobs,reviews=None):
     if not isinstance(rows,list) or len(rows)>256 or not isinstance(reviews,list) or len(reviews)>256:raise ValueError('Registry row bound')
     approved={}
     for review in reviews:
-        if not isinstance(review,dict) or review.get('family_proof') not in (FAMILY,SINGLE_FIRE_FAMILY,AUTOMATIC_STOCK_BOLT_FAMILY):raise ValueError('Unreviewed dispatch family')
+        if not isinstance(review,dict) or review.get('family_proof') not in (FAMILY,SINGLE_FIRE_FAMILY,AUTOMATIC_STOCK_BOLT_FAMILY,bolt_dispatch.BOLT_FAMILY,bolt_dispatch.SINGLE_STOCK_FAMILY):raise ValueError('Unreviewed dispatch family')
         family=review['family_proof']
         if family==SINGLE_FIRE_FAMILY:
             from bc2_singlefire_magazine_proof import PROOF_DIGEST
@@ -60,6 +61,8 @@ def build(jobs,reviews=None):
         if family==AUTOMATIC_STOCK_BOLT_FAMILY:
             from bc2_automatic_stock_bolt_proof import PROOF_DIGEST
             if review.get('instruction_proof_digest')!=PROOF_DIGEST:raise ValueError('AutomaticFire stock-bolt instruction proof differs')
+        if family in (bolt_dispatch.BOLT_FAMILY,bolt_dispatch.SINGLE_STOCK_FAMILY):
+            if review.get('instruction_proof_digest')!=bolt_dispatch.PROOF_DIGEST:raise ValueError('Bolt-action magazine instruction proof differs')
         key=descriptor.text(review.get('key'),256)
         if key in approved:raise ValueError('Duplicate review')
         approved[key]=(descriptor.sha(review.get('descriptor_digest')),descriptor.sha(review.get('evidence_sha256')),family)
@@ -78,6 +81,10 @@ def build(jobs,reviews=None):
         seen_id[id_]=digest
         requested=key in approved
         if requested:
+            bolt=bool(row.get('boltaction_magazine_proof_digest'))
+            if bolt or approved[key][2] in (bolt_dispatch.BOLT_FAMILY,bolt_dispatch.SINGLE_STOCK_FAMILY):
+                if not bolt or bolt_dispatch.family_for(row)!=approved[key][2]:
+                    raise ValueError('Bolt-action/inactive SingleFire candidates require their separate exact dispatch family review')
             single=bool(row.get('singlefire_magazine_proof_digest'))
             if single and approved[key][2]!=SINGLE_FIRE_FAMILY:
                 raise ValueError('SingleFire candidates cannot use an AutomaticFire family review')
@@ -110,6 +117,8 @@ def build(jobs,reviews=None):
         lines.append(f'inline constexpr std::array<ReloadTimingWord,6> RegistryTiming{index}{{{{{words}}}}};')
         admission='ReviewedNative' if enabled else 'Candidate'
         cycle=('ReviewedSingleFireReload11Transfer12' if row.get('singlefire_magazine_proof_digest') else 'ReviewedReload11Transfer12') if enabled else 'Candidate'
+        if enabled and row.get('boltaction_magazine_proof_digest'):
+            cycle='ReviewedBoltActionReload11Transfer12' if v['fireLogicType']==1 else 'ReviewedSingleFireStockBoltReload11Transfer12'
         values=','.join(literal(k) for k in ORDER)
         lines.append(f'inline constexpr MagazineNativeProfile RegistryProfile{index}{{{{{json.dumps(c["assetName"])},{json.dumps(c["assetPath"])},{{{values}}},RegistryTiming{index},ReloadDescriptorAdmission::{admission}}},MagazineIdentityRoute::SelectedCarriedItem,MagazineCycleAdmission::{cycle},{row["proposed_completion_deadline_ns"]}ll}};')
     lines.append(f'inline constexpr std::array<MagazineNativeRegistration,{len(emitted)}> MagazineNativeRegistrations{{{{')

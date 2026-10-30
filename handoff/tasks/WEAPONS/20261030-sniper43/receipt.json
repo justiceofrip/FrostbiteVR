@@ -1,0 +1,47 @@
+{
+  "schema": "fvr.bc2.sniper43.preparation_receipt.v1",
+  "summary": {
+    "catalog_origin_rows": 38,
+    "exact_configurations": 28,
+    "native_asset_names": 12,
+    "dispatch_groups": {
+      "singlefire_authored_bolt_fields": 3,
+      "bolt_action_magazine_with_persistent_debt": 17,
+      "automatic_zero_bolt": 3,
+      "singlefire_zero_bolt": 5
+    },
+    "exact_reference_bindings": 28,
+    "exact_mechanism_inputs": 28,
+    "exact_mesh_inputs": 28,
+    "strict_geometry_configs": 17,
+    "geometry_work_configs": 11,
+    "supported_candidate_dispatch_configs": 28,
+    "native_enabled_configs": 0,
+    "tests_run": false,
+    "builds_run": false,
+    "game_access": false
+  },
+  "outputs": {
+    "descriptor-jobs.json": "b8dd29acf8e9d0c28b18dc8c1e29b1bfa7b6c16e7c43b62e6b38115995e6f032",
+    "geometry-inputs.json": "af55a1c61ed4dfef2cbae2ef159baa93311ad67ffd3cacff3c3b8019f6df8411",
+    "batch-jobs.json": "4f692cf636a656512e3fa37021b8e67c428969c58b59610cd473c03d5a06b607",
+    "static-proof.json": "e2bd8d39a8f94dbf342885184c20249458bc14612d9506a4c2f46f7ee07faeca",
+    "DisabledSniperRegistry.h": "e64cb89db683846eb017e28f1a5e72d78b1e2ccca5127c16905ad6d2d9f66260",
+    "IMPLEMENTATION.txt": "99ea6d84dcfe1d92c482c06f0f06ea54f6c9b2f497c45375c2f4d4a2cda1e5f3",
+    "pause-rebase-interface.json": "0a588b98986bf52c8df1591ec7d0891d30c68917c6b713b9d8fcadadf3b0b425",
+    "HANDOFF.txt": "8d6612f0bb48ad7b68e6f2580425803e0ac4cde5b459494600f10f2eb20cd816",
+    "prepare_sniper_batch.py": "d1e5608f78efa0cc1cea5bc81f159213ea51ec5aea796420a7f928652087ea8d"
+  },
+  "registry_summary": {
+    "rows": 28,
+    "enabled": 0,
+    "omitted_unreviewed_or_builtin": 0
+  },
+  "source_files_modified": [
+    "tools/bc2_magazine_descriptor_manifest.py",
+    "tools/bc2_boltaction_magazine_proof.py",
+    "tools/bc2_magazine_registry_header.py",
+    "src/games/bc2/Bc2MagazineNativeProfile.h"
+  ],
+  "evidence_level": "offline exact cached metadata preparation and source/static-disassembly review only"
+}

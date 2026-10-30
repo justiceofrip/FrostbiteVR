@@ -1,0 +1,75 @@
+{
+  "schema": "fvr.bc2.boltaction_magazine_static.v1",
+  "executable_sha256": "3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258",
+  "enum": {
+    "enum": "FireLogicType",
+    "metadata_rva": 25147952,
+    "table_rva": 25298032,
+    "fields": [
+      {
+        "name": "fltSingleFire",
+        "value": 0
+      },
+      {
+        "name": "fltSingleFireWithBoltAction",
+        "value": 1
+      },
+      {
+        "name": "fltAutomaticFire",
+        "value": 2
+      },
+      {
+        "name": "fltHoldAndRelease",
+        "value": 3
+      },
+      {
+        "name": "fltDetonatedFiring",
+        "value": 4
+      }
+    ],
+    "metadata_sha256": "65e4574abc7d2f053377345798732758fa03e4f37f74b07bfe3033f2d9f4a8c2",
+    "table_sha256": "9e4b986196f18dc51dc02e17148a56e42e2590e9a9f973d53fd64104e1f470fa"
+  },
+  "functions": {
+    "Step": {
+      "va": 7234256,
+      "size": 1732,
+      "sha256": "122c98fefa4503c8c98688477f9cf5a1bfbbccb47e84ce6b303898c199ad908d"
+    },
+    "Transfer": {
+      "va": 7171904,
+      "size": 254,
+      "sha256": "1fa3fc0036f39fcdf7a6db01e916d079810fd3ae0b5ac79fdd054b8c84b3966a"
+    }
+  },
+  "cached_evidence_sha256": {
+    "decoded-branch-proof.json": "49b24ba7ce41bb5dbb3109bd38a39a2472f301ac84f254e77763e3ca93e9f67f",
+    "Step-disassembly.txt": "9e4206a9ce26138df14486979b0976376966914fc5c5f84be3c62a0a4f1375ea",
+    "Transfer-disassembly.txt": "93395daae78136ac4275527fa86ba5a2a545e6c74eb824a7c4c344cb803e0474",
+    "functions.json": "d3706cceb7c8ec47f7467e51de204ae5a95262d3a7ebf5279e9890b0d1f90321"
+  },
+  "dispatch": {
+    "type1_only_enters_bolt_hold_va": 7235109,
+    "state7_delay_and_release_flags_va": 7235373,
+    "state8_bolt_time_va": 7235497,
+    "reload_state10_va": 7235517,
+    "reload_state11_va": 7235578,
+    "reload_state12_transfer_va": 7235628,
+    "magazine_return1_va": 7235674,
+    "transfer_reload_type_va": 7172012,
+    "ordinary_reload_states": [
+      10,
+      11,
+      12,
+      1
+    ],
+    "reload_type": 1,
+    "input_fire": 8,
+    "input_reload": 29,
+    "reload11_12_do_not_read_bolt_fields": true,
+    "singlefire0_ordinary_shot_does_not_enter_bolt7_8": true
+  },
+  "native_runtime_admission": false,
+  "owed_bolt_reload_handoff_admission": false,
+  "chamber_knowledge": "Unknown"
+}

@@ -10,7 +10,7 @@ struct ArmJoints {std::uint32_t shoulder=0,elbow=0,wrist=0;};
 bool ValidateArms(std::span<const std::int32_t> parents,ArmJoints left,ArmJoints right) noexcept;
 struct BoneWrite {std::uint32_t index=0;math::Matrix4 transform{};};
 // Move a complete attachment chain while retaining each current animated local
-// relation (magazine, bolt, muzzle, etc.). Explicit preserved leaves are excluded
+// relation (magazine, bolt, muzzle, etc.). Explicit preserved subtrees are excluded
 // from generated writes; only an adapter can establish why they are inactive.
 // No native indices or memory writes.
 std::optional<std::vector<BoneWrite>> RetargetRigSubtree(std::span<const std::int32_t> parents,

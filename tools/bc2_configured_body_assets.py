@@ -87,7 +87,7 @@ def compact_cache_sections(payload,rows):
  return bytes(out)
 
 def derive_catalog(game, reviewed, resource_content=False):
-    if not reviewed or len(reviewed)>64:raise ValueError('Catalog profile bound')
+    if not reviewed or len(reviewed)>256:raise ValueError('Catalog profile bound')
     exact=[r for r in reviewed if r.get('configuration_path')]
     common=exact[0] if exact else None
     if common:
@@ -96,6 +96,22 @@ def derive_catalog(game, reviewed, resource_content=False):
         source=reviewed[0]['assembly_source']['skeleton'];common_path,common_index=source['archive'],source['archive_index_sha256']
     else:
         common_path,common_index=reviewed[0]['archive'],reviewed[0]['archive_index_sha256']
+    # A mixed campaign/MP catalog can start with sp_common. The already bounded
+    # MP reader still needs its exact named container and pin when a later row
+    # owns mesh bytes there; row order must not silently select a smaller reader.
+    common_refs=[]
+    for row in reviewed:
+        refs=[dict(archive=row.get('configuration_archive'),archive_index_sha256=row.get('configuration_archive_index_sha256')),
+              dict(archive=row.get('archive'),archive_index_sha256=row.get('archive_index_sha256'))]
+        refs+=row.get('sources',[])
+        for field in ('assembly_source','mod_policy_source'):
+            refs += [value for value in row.get(field,{}).values() if isinstance(value,dict)]
+        for ref in refs:
+            if str(ref.get('archive','')).replace('\\','/').lower()=='dist/win32/levels/mp_common/level-00.fbrb':
+                common_refs.append((ref['archive'],ref['archive_index_sha256']))
+    if common_refs:
+        if len({ref[1] for ref in common_refs})!=1:raise ValueError('Conflicting MP common catalog pins')
+        common_path,common_index=common_refs[0]
     pool=ArchivePool(game,common_path,common_index,verify_common_index=not resource_content)
     if resource_content:
         pool=VerifiedResources(game,pool,catalog_resource_pins(reviewed,ammo.SKELETON_ARCHIVE,ammo.SKELETON_RESOURCE,ammo.SKELETON_SHA))
@@ -111,7 +127,16 @@ def derive_catalog(game, reviewed, resource_content=False):
             key=(r['asset'],r['mesh'],r['part'],r['rig_fingerprint'])
             if key in keys:raise ValueError('Duplicate catalog key')
             keys.add(key)
-            if r.get('rigid_assembly'):
+            if r.get('mod_authored_magazine'):
+                from bc2_authored_magazine_policy import derive_reviewed_cache
+                row,record=derive_reviewed_cache(game,pool,r,resource_content=resource_content)
+            elif r.get('mod_authored_display'):
+                from bc2_authored_magazine_policy import derive_reviewed_display
+                row,record=derive_reviewed_display(game,pool,r,resource_content=resource_content)
+            elif r.get('mod_authored_firearm_display'):
+                from bc2_firearm_cache_completion import derive_reviewed_display
+                row,record=derive_reviewed_display(game,pool,r,resource_content=resource_content)
+            elif r.get('rigid_assembly'):
                 from bc2_magazine_assembly_cache import derive_reviewed_cache
                 row,record=derive_reviewed_cache(game,pool,r,resource_content=resource_content)
             elif r.get('configuration_path'):
@@ -138,12 +163,16 @@ def derive_catalog(game, reviewed, resource_content=False):
                 row=derived[0]
             else:
                 derived,packed=ammo.derive(game,[(r['asset'],r['archive'],r['mesh'],r['part'])]);row=derived[0]
-                # Old records retain their exact bytes. New batch parts compact
-                # only unused vertex-buffer ranges; all indexed hashes match.
-                if key not in {(s[0],s[2],s[3],r['rig_fingerprint']) for s in ammo.SPECS}:
-                    packed=compact_cache_sections(packed,derived)
                 record=packed[12:]
-            if not profiles_match([row],[r],resource_content):raise ValueError('Installed geometry differs from exact catalog: '+str(key))
+            expected={k:v for k,v in r.items() if k!='configured_aliases'}
+            if not profiles_match([row],[expected],resource_content):raise ValueError('Installed geometry differs from exact catalog: '+str(key))
+            # Every catalog entry uses the same lossless indexed-data contract.
+            # Retaining unused legacy ranges can overflow the cache before new
+            # family entries are appended, despite identical rendered geometry.
+            record=compact_cache_sections(ammo.MAGIC+struct.pack('<I',1)+record,[row])[12:]
+            if r.get('configured_aliases'):
+                from bc2_firearm_body_aliases import verify_aliases
+                row['configured_aliases']=verify_aliases(game,pool,r,record,resource_content)
             rows.append(row);records+=record
             if len(records)+12>ammo.MAX_CACHE:raise ValueError('Private cache size limit')
         return rows,ammo.MAGIC+struct.pack('<I',len(rows))+records

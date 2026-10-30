@@ -21,8 +21,12 @@ public:
     using Policy=interaction::WeaponCycleConvergence<NativeCycleRecoveryScope>;
     bool Begin(const NativeCycleRecoveryScope& scope,const interaction::WeaponCycleDebt& debt,
         std::int64_t began,bool m95,bool empty)noexcept {
+        return Begin(scope,debt,began,{m95,empty,.5f,m95?2.3f:1.f});
+    }
+    bool Begin(const NativeCycleRecoveryScope& scope,const interaction::WeaponCycleDebt& debt,
+        std::int64_t began,const NativeCycleConvergenceProfile& profile)noexcept {
         if(active_||!policy_.Begin(scope,debt,began))return false;
-        scope_=scope;debt_=debt;began_=began;m95_=m95;empty_=empty;active_=true;return true;
+        scope_=scope;debt_=debt;began_=began;profile_=profile;m95_=profile.bolt;empty_=profile.empty;active_=true;return true;
     }
     bool BeginHold(unsigned branch,std::uint64_t invocation,std::int64_t begin,std::int64_t deadline)noexcept {
         if(!active_||branch>=3||open_[branch]||!policy_.BeginHold(scope_,branch,invocation,begin,deadline))return false;
@@ -35,6 +39,9 @@ public:
     NativeCycleRecoveryDecision Evaluate(const NativeCycleRecoveryScope& scope,const ReloadFlowEventInput& entry,
         int capacity,std::int64_t deadline)noexcept {
         NativeCycleRecoveryDecision out;
+        // The dispatched ammunition observer owns these callbacks exclusively.
+        // Old counts are deliberately not compared during a partial transfer.
+        if(policy_.ReloadCommand())return out;
         const auto branch=entry.boundary.branch;const auto decoded=DecodeReloadUpdateContext(entry.copiedContext);
         if(!active_||Uncertain()||scope!=scope_||branch>=3||open_[branch]||!entry.nativeInvocation||
            entry.nativeInvocation<=last_[branch]||entry.kind!=ReloadFlowEvent::Update||entry.depth!=1||
@@ -44,7 +51,7 @@ public:
            decoded->reloadTimeMultiplier<=0||decoded->reloadTimeMultiplier>4||decoded->flags24Through28[2]||
            entry.boundary.firing!=scope_.identity.firing[branch]||entry.boundary.owner!=scope_.identity.owner||
            entry.boundary.loaded!=debt_.loaded||entry.boundary.reserve!=debt_.reserve||capacity!=debt_.capacity||
-           !CycleConvergencePhase(entry.boundary.current,entry.boundary.next,entry.boundary.timer,m95_,empty_)||
+           !CycleConvergencePhase(entry.boundary.current,entry.boundary.next,entry.boundary.timer,profile_)||
            deadline<=entry.nowNs||deadline-entry.nowNs>Policy::MaximumFreshNs){LoseGuard();return out;}
         open_[branch]=last_[branch]=entry.nativeInvocation;
         return {entry.nativeInvocation,debt_.guardEpoch,branch,capacity,deadline};
@@ -56,7 +63,7 @@ public:
         if(Uncertain()||record.id!=d.invocation||d.epoch!=debt_.guardEpoch||record.exit.nowNs>=d.deadlineNs||
            record.exit.cycleGuardEpoch!=d.epoch||record.exit.cycleGuard!=guard||
            record.exit.cycleGuardSteps!=steps||record.exit.cycleGuardRejected!=rejected||
-           !CycleGuardedUpdate(record,scope_.identity,d.branch,guard,steps,rejected,m95_,empty_)||
+           !CycleGuardedUpdate(record,scope_.identity,d.branch,guard,steps,rejected,profile_)||
            record.exit.boundary->loaded!=debt_.loaded||record.exit.boundary->reserve!=debt_.reserve){LoseGuard();return false;}
         ++guardedUpdates_;guardedSteps_+=steps;
         progress_[d.branch]={d.invocation,record.exit.nowNs,d.deadlineNs};
@@ -83,7 +90,7 @@ public:
     bool Commit(const ReloadFlowRecord& record)noexcept {
         const auto branch=record.entry.boundary.branch;
         if(!active_||Uncertain()||branch>=3||!open_[branch]||
-           !CycleGuardedCommit(record,scope_.identity,branch,open_[branch],m95_,empty_)||
+           !CycleGuardedCommit(record,scope_.identity,branch,open_[branch],profile_)||
            record.exit.boundary->loaded!=debt_.loaded||record.exit.boundary->reserve!=debt_.reserve){LoseGuard();return false;}
         return true;
     }
@@ -91,7 +98,7 @@ public:
         const auto b=record.entry.boundary.branch;
         if(!active_||Uncertain()||b>=2||open_[b]||record.id<=last_[b]||record.entry.nowNs<began_||
            (policy_.Acknowledged()&&record.entry.nowNs<std::max(acknowledgedAt_,paidNativeFloor_))||
-           !CycleConvergenceRestore(record,scope_.identity,b,m95_,empty_)||
+           !CycleConvergenceRestore(record,scope_.identity,b,profile_)||
            record.exit.boundary->loaded!=debt_.loaded||record.exit.boundary->reserve!=debt_.reserve){LoseGuard();return false;}
         const auto& before=record.entry.boundary;const auto& after=*record.exit.boundary;
         const auto idle=[](const ReloadFlowBoundary& v){return v.current==2&&v.next==2&&v.timer==0;};
@@ -101,7 +108,7 @@ public:
             // admission to paid reconciliation. Unseen shots, reload phases,
             // changed ammunition and arbitrary busy states are not payment.
             const unsigned tail=empty_?6u:m95_?8u:7u,next=empty_||m95_?1u:8u;
-            const float maximum=empty_?1.f:m95_?2.3f:.5f;
+            const float maximum=empty_?1.f:m95_?profile_.boltTime:profile_.boltDelay;
             if(!idle(before)||after.current!=tail||after.previous!=2||after.next!=next||
                after.timer<=0||after.timer>maximum){LoseGuard();return false;}
         }
@@ -130,6 +137,39 @@ public:
     void Interrupt(std::int64_t now)noexcept {
         if(!active_)return;policy_.Interrupt(scope_,now);grant_.reset();
     }
+    bool PrepareReload(const NativeCycleRecoveryScope& scope,const interaction::WeaponCycleReloadPause& pause,
+        const interaction::AmmoResourceContext& resource,const interaction::WeaponCycleReloadDrain& drain,std::int64_t now)noexcept {
+        const auto& n=scope_.identity.owner;const auto& r=resource.resource;
+        if(!active_||Uncertain()||!m95_||scope!=scope_||!Drained()||ready_||nativeReady_||
+           debt_.owner.actor!=((std::uint64_t(n.weak)<<32)|n.soldier)||
+           debt_.owner.actorGeneration!=n.actorGeneration||debt_.owner.space!=n.space||
+           debt_.item.id!=n.weapon||r.actor!=n.soldier||r.actorGeneration!=n.actorGeneration||
+           r.weapon!=n.weapon||!r.weaponGeneration||resource.equipGeneration!=n.equipGeneration||resource.space!=n.space||
+           !policy_.PrepareReload(scope,pause,resource,drain,now))return false;
+        currentIdle_={};progress_={};grant_.reset();return true;
+    }
+    std::optional<interaction::WeaponCycleReloadPermit> ReloadPermit(const NativeCycleRecoveryScope& scope,std::int64_t now)noexcept {
+        return active_&&!Uncertain()&&Drained()?policy_.ReloadPermit(scope,now):std::nullopt;
+    }
+    bool BeginReloadCommand(const NativeCycleRecoveryScope& scope,const interaction::WeaponCycleReloadPermit& permit,
+        const interaction::AmmunitionCommand& command,const interaction::WeaponCycleReloadDrain& drain,std::int64_t now)noexcept {
+        if(!active_||Uncertain()||!Drained()||!policy_.BeginReloadCommand(scope,permit,command,drain,now))return false;
+        currentIdle_={};progress_={};grant_.reset();return true;
+    }
+    bool ApplyReloadReceipt(const NativeCycleRecoveryScope& scope,const interaction::WeaponCycleReloadAmmoRebase& rebase,std::int64_t now)noexcept {
+        if(!active_||Uncertain()||!Drained()||scope!=scope_)return false;
+        for(unsigned b=0;b<3;++b)if(rebase.ownUpdates[b].invocation<=last_[b])return false;
+        if(!policy_.ApplyReloadReceipt(scope,rebase,now))return false;
+        debt_=policy_.Debt();for(unsigned b=0;b<3;++b)last_[b]=rebase.ownUpdates[b].invocation;
+        currentIdle_={};progress_={};grant_.reset();return true;
+    }
+    bool ResumeReload(const NativeCycleRecoveryScope& scope,const interaction::WeaponCycleIdleDebtLease& authority,std::int64_t now)noexcept {
+        return active_&&!Uncertain()&&Drained()&&policy_.ResumeReload(scope,authority,now);
+    }
+    const auto& ReloadPause()const noexcept{return policy_.ReloadPause();}
+    const auto& ReloadCommand()const noexcept{return policy_.ReloadCommand();}
+    const auto& LastReloadReceipt()const noexcept{return policy_.LastReloadReceipt();}
+    const auto& Debt()const noexcept{return policy_.Debt();}
     bool RebaseTracking(const ReloadStateOwner& native,const interaction::HandInteractionSample& input)noexcept {
         auto previous=native;previous.space=scope_.identity.owner.space;
         auto next=scope_;next.identity.owner=native;
@@ -216,6 +256,7 @@ public:
     std::uint64_t GuardedSteps()const noexcept{return guardedSteps_;}
 private:
     NativeCycleRecoveryScope scope_{};interaction::WeaponCycleDebt debt_{};Policy policy_{};
+    NativeCycleConvergenceProfile profile_{};
     bool active_=false,m95_=false,empty_=false;std::int64_t began_=0;
     std::int64_t acknowledgedAt_=0,paidNativeFloor_=0;
     std::array<std::uint64_t,3> open_{},last_{};

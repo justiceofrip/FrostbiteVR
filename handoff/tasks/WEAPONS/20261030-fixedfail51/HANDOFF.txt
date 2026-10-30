@@ -1,0 +1,8 @@
+DONE Y; worker retired; root owns files again.
+FixedContainerReload.h drops rejected gesture hand binding while retaining mechanical recovery.
+Bc2PhysicalFixedContainer.cpp supplies a container key only for clips; cylinders now bind correctly.
+Adapter releases revoked gesture claims without discarding retained parts/ammunition state.
+Tests retain MotionJump rejection and verify fresh reacquisition; physical gate failure has compact diagnostics.
+Changed tests: FixedContainerReloadTests.cpp, Bc2PhysicalFixedContainerTests.cpp.
+Root checks: weapons51-x86-06 fixed policy/resource/context PASS; weapons51-fixed08 physical PASS.
+No worker compilation, Git, game session or installation performed.

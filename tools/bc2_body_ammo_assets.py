@@ -12,7 +12,7 @@ from bc2_weapon_animation_pipeline import Skeleton,canonical
 from bc2_asset_resource_identity import profiles_match
 
 MAGIC=b'BC2PROP1'
-MAX_CACHE=16*1024*1024
+MAX_CACHE=64*1024*1024
 SKELETON_ARCHIVE='Dist/win32/levels/sp_common/level-00.fbrb'
 SKELETON_RESOURCE='Characters/Skeletons/ske01.res'
 SKELETON_SHA='d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09'

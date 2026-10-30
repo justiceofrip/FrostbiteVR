@@ -1,0 +1,6 @@
+DONE Y: corrected family-specific synthetic busy callbacks.
+Owned change: tests/Bc2NativeCycleRecoveryServiceTests.cpp only.
+SPAS has BoltActionTime=0; previous fixture supplied M95 state8 with timer0.1.
+Busy pump fixture now uses7->8, bolt uses8->1. Exact Config rejection remains strict.
+The revocation/regrant/submitted-receipt case now covers both pump and bolt families.
+No production files changed. Root must rerun the focused suite; no child build/game/Git run.

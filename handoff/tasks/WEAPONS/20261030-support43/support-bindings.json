@@ -1,0 +1,824 @@
+{
+  "schema": "fvr.bc2.authored_support_bindings",
+  "schema_version": 1,
+  "runtime_admission": false,
+  "profiles": [
+    {
+      "native_asset_name": "AN94",
+      "configured_mesh_path": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "1b7546f4c1008ebf447c67752b436bf45815f1764a6af7f9d4d5983f8256b260",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "weapon_class": "wcAssault",
+      "left_hand_in_weapon": [
+        0.09254919772964057,
+        0.8755104907174169,
+        -0.4742531250749424,
+        0.0,
+        0.19465343978738542,
+        -0.4830158801769492,
+        -0.853701175983627,
+        0.0,
+        -0.976496126146202,
+        -0.013305643187618408,
+        -0.21512386078914011,
+        -0.0,
+        0.045806907002268304,
+        -0.07859526039903449,
+        -0.662534685496009,
+        1.0
+      ],
+      "left_hand_status": "mod_authored_fixed_contact",
+      "source_left_hand_status": "decoded_spline_candidate",
+      "right_hand_retargeted": false,
+      "right_hand_status_not_admitted": "decoded_spline_candidate",
+      "native_admission": false,
+      "source_bindings": [
+        "791b0d27608e4cdf6040ce3e8d0b0b49270648f15ffd9d3bd008c7f30c6650d3",
+        "8aaf6512979fb83eb695628f1738f0dd06fc8b7e139f500e718e9e1b5e6a5089",
+        "4a6f8c2381d20aed1bef90d8815992d186356e0c13cf125ee40a7659513abbb7"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Kobra.dbx",
+          "sha256": "b03c15de6436481ee10013d164ec8afb35877cad095f51273145ae4e366815df",
+          "instance_guid": "bc08efa5-a9ed-4ba5-a7a5-edf2be35eaf4",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan.dbx",
+          "sha256": "70c754da0b5a5127c9517c321c9fd16ce1f7e6b7a78aef5b898144ca20fb1761",
+          "instance_guid": "2c564f24-5daf-4bbc-96f4-4a56d91a4f85",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Scoped.dbx",
+          "sha256": "48949b0d8859231c6d1c5242878670a8496082648d9bbf16fa858d6705889f54",
+          "instance_guid": "2fcfbd7c-e585-4f59-8747-f5d5beb1313a",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Scoped_AnimTree1p.dbx",
+          "sha256": "1a4552d7328a2e7db1d832d7d93f579a01bd82c58835a96c79ecd9d8c21c1ad2",
+          "instance_guid": "622502d7-2444-4689-9b44-e31db6c845e9",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/BU_rif_AN94Abakan/1P/HandsIkPose.dbx",
+          "sha256": "fe459a58a97efa7ab6000e224a24b9c1985a24aefca4becc6ceb310040decd83",
+          "instance_guid": "79fb8279-a7dc-4453-81a0-68aeaeae7d43",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/BU_rif_AN94Abakan/1P/HandsIkPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "configuration_sources": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        },
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        },
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "animation_source": {
+        "selection": "unique_exact_resource_content_in_batch",
+        "archive": "Dist/win32/async/weapon/ai_rif_an94abakan-00.fbrb",
+        "archive_index_sha256": "a389e8f65dd0cc9a56e342f123a732d4b3544ba5849b16004c9699dcaa0a6515",
+        "kind": "GrannyAnimation"
+      },
+      "skeleton_source": {
+        "selection": "exact_configuration_archive_resource",
+        "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+        "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965",
+        "kind": "GrannyModel"
+      },
+      "source_reference_envelope": {
+        "schema": "fvr.bc2.authored_relative_pose_bound",
+        "schema_version": 1,
+        "bone": "LeftHand",
+        "reference_bone": "jntWpn_1",
+        "common_ancestor": "Spine",
+        "unshared_bone_chain": [
+          "LeftHand",
+          "LeftForeArmRoll",
+          "LeftForeArm",
+          "LeftArmRoll",
+          "LeftArm",
+          "LeftShoulder",
+          "Spine4",
+          "Spine3",
+          "Spine2",
+          "Spine1"
+        ],
+        "unshared_reference_chain": [
+          "jntWpn_1",
+          "jntWpn_0"
+        ],
+        "reference_time_seconds": 0.0,
+        "reference_pose": [
+          0.0925491977296411,
+          0.8755104907174164,
+          -0.47425312507494227,
+          0.0,
+          0.19465343978738553,
+          -0.48301588017694874,
+          -0.8537011759836262,
+          0.0,
+          -0.9764961261462017,
+          -0.013305643187618808,
+          -0.21512386078914023,
+          -0.0,
+          0.04580690700226851,
+          -0.07859526039903465,
+          -0.6625346854960087,
+          1.0
+        ],
+        "duration_seconds": 1.633333444595337,
+        "translation_hull_bound_m": 0.046022715841191816,
+        "rotation_hull_bound_rad": 0.09292318815926881,
+        "translation_numerical_allowance_m": 2.2456163682731338e-08,
+        "rotation_numerical_allowance_rad": 1e-08,
+        "translation_bound_m": 0.0460227382973555,
+        "rotation_bound_rad": 0.0929231981592688,
+        "unshared_controls_constant": false,
+        "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+        "target_runtime_interpolation_verified": false,
+        "runtime_admission": false
+      },
+      "target_runtime_interpolation_verified": false,
+      "support_contact_reference": true,
+      "support_aim_mode": "two_point",
+      "contact_policy": {
+        "schema": "fvr.bc2.explicit_support_contact_policy",
+        "schema_version": 1,
+        "mode": "fixed_authored_handsikpose_initial",
+        "reference_time_seconds": 0.0,
+        "support_aim_mode": "two_point",
+        "source_curve_claim": "none",
+        "native_admission": false,
+        "rationale": "The mod deliberately fixes the support contact to LeftHand relative to jntWpn_1 at the start of each exact configuration's authored absolute HandsIkPose role. This defines a stable VR grab target; it does not assert that the source hand remains fixed through animation. Existing source-envelope failures are retained. No guessed coordinates, gun-hand override, ammunition capability, owner grant, or tolerance change.",
+        "input_binding_document_digest": "d8dbcb85859da5a4a739497d78415a26421168914dcde84575e98d329ff63a94",
+        "source_binding_digests": [
+          "3abd42c5201baf99d7fee7070d007df41f90725dc69a978f2d26683a87ca3d1a",
+          "3af9a31824d4d3b3b98e1d67e835554e27603426c1b6ac426d895670c9602d8a",
+          "4a6f8c2381d20aed1bef90d8815992d186356e0c13cf125ee40a7659513abbb7",
+          "791b0d27608e4cdf6040ce3e8d0b0b49270648f15ffd9d3bd008c7f30c6650d3",
+          "8aaf6512979fb83eb695628f1738f0dd06fc8b7e139f500e718e9e1b5e6a5089"
+        ]
+      },
+      "contact_policy_digest": "b27de9f358f943d41c521e43f547b526a45584739c24c0ad89e37cc56a1c6f47",
+      "binding_digest": "6b79c1df9d6307326562423a0d3378cd39be0cee494d6a2b0dc616d93aa1b7a1"
+    },
+    {
+      "native_asset_name": "AN94_sp_k",
+      "configured_mesh_path": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "1b7546f4c1008ebf447c67752b436bf45815f1764a6af7f9d4d5983f8256b260",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "weapon_class": "wcAssault",
+      "left_hand_in_weapon": [
+        0.09254919772964057,
+        0.8755104907174169,
+        -0.4742531250749424,
+        0.0,
+        0.19465343978738542,
+        -0.4830158801769492,
+        -0.853701175983627,
+        0.0,
+        -0.976496126146202,
+        -0.013305643187618408,
+        -0.21512386078914011,
+        -0.0,
+        0.045806907002268304,
+        -0.07859526039903449,
+        -0.662534685496009,
+        1.0
+      ],
+      "left_hand_status": "mod_authored_fixed_contact",
+      "source_left_hand_status": "decoded_spline_candidate",
+      "right_hand_retargeted": false,
+      "right_hand_status_not_admitted": "decoded_spline_candidate",
+      "native_admission": false,
+      "source_bindings": [
+        "3af9a31824d4d3b3b98e1d67e835554e27603426c1b6ac426d895670c9602d8a"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rif_AN94_Kobra.dbx",
+          "sha256": "70c554deab1dc38a94cfb535a541b987785806c43362a19f5a695a0e1fa51611",
+          "instance_guid": "0707e9e7-969e-4ec0-884c-b08bc3445433",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Scoped_AnimTree1p.dbx",
+          "sha256": "1a4552d7328a2e7db1d832d7d93f579a01bd82c58835a96c79ecd9d8c21c1ad2",
+          "instance_guid": "622502d7-2444-4689-9b44-e31db6c845e9",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/BU_rif_AN94Abakan/1P/HandsIkPose.dbx",
+          "sha256": "fe459a58a97efa7ab6000e224a24b9c1985a24aefca4becc6ceb310040decd83",
+          "instance_guid": "79fb8279-a7dc-4453-81a0-68aeaeae7d43",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/BU_rif_AN94Abakan/1P/HandsIkPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "configuration_sources": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "animation_source": {
+        "selection": "unique_exact_resource_content_in_batch",
+        "archive": "Dist/win32/async/weapon/ai_rif_an94abakan-00.fbrb",
+        "archive_index_sha256": "a389e8f65dd0cc9a56e342f123a732d4b3544ba5849b16004c9699dcaa0a6515",
+        "kind": "GrannyAnimation"
+      },
+      "skeleton_source": {
+        "selection": "exact_configuration_archive_resource",
+        "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+        "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965",
+        "kind": "GrannyModel"
+      },
+      "source_reference_envelope": {
+        "schema": "fvr.bc2.authored_relative_pose_bound",
+        "schema_version": 1,
+        "bone": "LeftHand",
+        "reference_bone": "jntWpn_1",
+        "common_ancestor": "Spine",
+        "unshared_bone_chain": [
+          "LeftHand",
+          "LeftForeArmRoll",
+          "LeftForeArm",
+          "LeftArmRoll",
+          "LeftArm",
+          "LeftShoulder",
+          "Spine4",
+          "Spine3",
+          "Spine2",
+          "Spine1"
+        ],
+        "unshared_reference_chain": [
+          "jntWpn_1",
+          "jntWpn_0"
+        ],
+        "reference_time_seconds": 0.0,
+        "reference_pose": [
+          0.0925491977296411,
+          0.8755104907174164,
+          -0.47425312507494227,
+          0.0,
+          0.19465343978738553,
+          -0.48301588017694874,
+          -0.8537011759836262,
+          0.0,
+          -0.9764961261462017,
+          -0.013305643187618808,
+          -0.21512386078914023,
+          -0.0,
+          0.04580690700226851,
+          -0.07859526039903465,
+          -0.6625346854960087,
+          1.0
+        ],
+        "duration_seconds": 1.633333444595337,
+        "translation_hull_bound_m": 0.046022715841191816,
+        "rotation_hull_bound_rad": 0.09292318815926881,
+        "translation_numerical_allowance_m": 2.2456163682731338e-08,
+        "rotation_numerical_allowance_rad": 1e-08,
+        "translation_bound_m": 0.0460227382973555,
+        "rotation_bound_rad": 0.0929231981592688,
+        "unshared_controls_constant": false,
+        "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+        "target_runtime_interpolation_verified": false,
+        "runtime_admission": false
+      },
+      "target_runtime_interpolation_verified": false,
+      "support_contact_reference": true,
+      "support_aim_mode": "two_point",
+      "contact_policy": {
+        "schema": "fvr.bc2.explicit_support_contact_policy",
+        "schema_version": 1,
+        "mode": "fixed_authored_handsikpose_initial",
+        "reference_time_seconds": 0.0,
+        "support_aim_mode": "two_point",
+        "source_curve_claim": "none",
+        "native_admission": false,
+        "rationale": "The mod deliberately fixes the support contact to LeftHand relative to jntWpn_1 at the start of each exact configuration's authored absolute HandsIkPose role. This defines a stable VR grab target; it does not assert that the source hand remains fixed through animation. Existing source-envelope failures are retained. No guessed coordinates, gun-hand override, ammunition capability, owner grant, or tolerance change.",
+        "input_binding_document_digest": "d8dbcb85859da5a4a739497d78415a26421168914dcde84575e98d329ff63a94",
+        "source_binding_digests": [
+          "3abd42c5201baf99d7fee7070d007df41f90725dc69a978f2d26683a87ca3d1a",
+          "3af9a31824d4d3b3b98e1d67e835554e27603426c1b6ac426d895670c9602d8a",
+          "4a6f8c2381d20aed1bef90d8815992d186356e0c13cf125ee40a7659513abbb7",
+          "791b0d27608e4cdf6040ce3e8d0b0b49270648f15ffd9d3bd008c7f30c6650d3",
+          "8aaf6512979fb83eb695628f1738f0dd06fc8b7e139f500e718e9e1b5e6a5089"
+        ]
+      },
+      "contact_policy_digest": "b27de9f358f943d41c521e43f547b526a45584739c24c0ad89e37cc56a1c6f47",
+      "binding_digest": "c357f68dfdd89884ac5f23064afc7f0d8cf8e13ef1b4b1e2f0da6e46b7f8af0f"
+    },
+    {
+      "native_asset_name": "AN94_sp_s",
+      "configured_mesh_path": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "1b7546f4c1008ebf447c67752b436bf45815f1764a6af7f9d4d5983f8256b260",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "weapon_class": "wcAssault",
+      "left_hand_in_weapon": [
+        0.09254919772964057,
+        0.8755104907174169,
+        -0.4742531250749424,
+        0.0,
+        0.19465343978738542,
+        -0.4830158801769492,
+        -0.853701175983627,
+        0.0,
+        -0.976496126146202,
+        -0.013305643187618408,
+        -0.21512386078914011,
+        -0.0,
+        0.045806907002268304,
+        -0.07859526039903449,
+        -0.662534685496009,
+        1.0
+      ],
+      "left_hand_status": "mod_authored_fixed_contact",
+      "source_left_hand_status": "decoded_spline_candidate",
+      "right_hand_retargeted": false,
+      "right_hand_status_not_admitted": "decoded_spline_candidate",
+      "native_admission": false,
+      "source_bindings": [
+        "3abd42c5201baf99d7fee7070d007df41f90725dc69a978f2d26683a87ca3d1a"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rif_AN94_Scoped.dbx",
+          "sha256": "158fbe6ab51db5dd0c77612c372f909f7287854a18bf122e330f0b0afb63d1bc",
+          "instance_guid": "26cdf39d-11f1-40d4-857c-75f6b044e9f6",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Scoped_AnimTree1p.dbx",
+          "sha256": "1a4552d7328a2e7db1d832d7d93f579a01bd82c58835a96c79ecd9d8c21c1ad2",
+          "instance_guid": "622502d7-2444-4689-9b44-e31db6c845e9",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/BU_rif_AN94Abakan/1P/HandsIkPose.dbx",
+          "sha256": "fe459a58a97efa7ab6000e224a24b9c1985a24aefca4becc6ceb310040decd83",
+          "instance_guid": "79fb8279-a7dc-4453-81a0-68aeaeae7d43",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/BU_rif_AN94Abakan/1P/HandsIkPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "configuration_sources": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "animation_source": {
+        "selection": "unique_exact_resource_content_in_batch",
+        "archive": "Dist/win32/async/weapon/ai_rif_an94abakan-00.fbrb",
+        "archive_index_sha256": "a389e8f65dd0cc9a56e342f123a732d4b3544ba5849b16004c9699dcaa0a6515",
+        "kind": "GrannyAnimation"
+      },
+      "skeleton_source": {
+        "selection": "exact_configuration_archive_resource",
+        "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+        "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965",
+        "kind": "GrannyModel"
+      },
+      "source_reference_envelope": {
+        "schema": "fvr.bc2.authored_relative_pose_bound",
+        "schema_version": 1,
+        "bone": "LeftHand",
+        "reference_bone": "jntWpn_1",
+        "common_ancestor": "Spine",
+        "unshared_bone_chain": [
+          "LeftHand",
+          "LeftForeArmRoll",
+          "LeftForeArm",
+          "LeftArmRoll",
+          "LeftArm",
+          "LeftShoulder",
+          "Spine4",
+          "Spine3",
+          "Spine2",
+          "Spine1"
+        ],
+        "unshared_reference_chain": [
+          "jntWpn_1",
+          "jntWpn_0"
+        ],
+        "reference_time_seconds": 0.0,
+        "reference_pose": [
+          0.0925491977296411,
+          0.8755104907174164,
+          -0.47425312507494227,
+          0.0,
+          0.19465343978738553,
+          -0.48301588017694874,
+          -0.8537011759836262,
+          0.0,
+          -0.9764961261462017,
+          -0.013305643187618808,
+          -0.21512386078914023,
+          -0.0,
+          0.04580690700226851,
+          -0.07859526039903465,
+          -0.6625346854960087,
+          1.0
+        ],
+        "duration_seconds": 1.633333444595337,
+        "translation_hull_bound_m": 0.046022715841191816,
+        "rotation_hull_bound_rad": 0.09292318815926881,
+        "translation_numerical_allowance_m": 2.2456163682731338e-08,
+        "rotation_numerical_allowance_rad": 1e-08,
+        "translation_bound_m": 0.0460227382973555,
+        "rotation_bound_rad": 0.0929231981592688,
+        "unshared_controls_constant": false,
+        "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+        "target_runtime_interpolation_verified": false,
+        "runtime_admission": false
+      },
+      "target_runtime_interpolation_verified": false,
+      "support_contact_reference": true,
+      "support_aim_mode": "two_point",
+      "contact_policy": {
+        "schema": "fvr.bc2.explicit_support_contact_policy",
+        "schema_version": 1,
+        "mode": "fixed_authored_handsikpose_initial",
+        "reference_time_seconds": 0.0,
+        "support_aim_mode": "two_point",
+        "source_curve_claim": "none",
+        "native_admission": false,
+        "rationale": "The mod deliberately fixes the support contact to LeftHand relative to jntWpn_1 at the start of each exact configuration's authored absolute HandsIkPose role. This defines a stable VR grab target; it does not assert that the source hand remains fixed through animation. Existing source-envelope failures are retained. No guessed coordinates, gun-hand override, ammunition capability, owner grant, or tolerance change.",
+        "input_binding_document_digest": "d8dbcb85859da5a4a739497d78415a26421168914dcde84575e98d329ff63a94",
+        "source_binding_digests": [
+          "3abd42c5201baf99d7fee7070d007df41f90725dc69a978f2d26683a87ca3d1a",
+          "3af9a31824d4d3b3b98e1d67e835554e27603426c1b6ac426d895670c9602d8a",
+          "4a6f8c2381d20aed1bef90d8815992d186356e0c13cf125ee40a7659513abbb7",
+          "791b0d27608e4cdf6040ce3e8d0b0b49270648f15ffd9d3bd008c7f30c6650d3",
+          "8aaf6512979fb83eb695628f1738f0dd06fc8b7e139f500e718e9e1b5e6a5089"
+        ]
+      },
+      "contact_policy_digest": "b27de9f358f943d41c521e43f547b526a45584739c24c0ad89e37cc56a1c6f47",
+      "binding_digest": "3ad76d51a18370bcdcfda3a502508f11cd32d0f988a36f677223b4ebcefca808"
+    },
+    {
+      "native_asset_name": "Garand",
+      "configured_mesh_path": "Objects/Weapons/Handheld/Beach/Jap_Type5/Jap_Type5_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "7e994888f010a2e729cfc5fc3153e954cac0aab51289963a841b4445d3312cc7",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "weapon_class": "wcAssault",
+      "left_hand_in_weapon": [
+        0.5470207018369178,
+        0.7483133104767723,
+        -0.3752273192681202,
+        0.0,
+        0.24515383368688276,
+        -0.571787286876188,
+        -0.7829169153846364,
+        0.0,
+        -0.800417359625884,
+        0.3362833447110668,
+        -0.49623135983074257,
+        -0.0,
+        0.028453617254915926,
+        0.0065615548027223095,
+        -0.640349735305164,
+        1.0
+      ],
+      "left_hand_status": "mod_authored_fixed_contact",
+      "source_left_hand_status": "decoded_spline_candidate",
+      "right_hand_retargeted": false,
+      "right_hand_status_not_admitted": "decoded_spline_candidate",
+      "native_admission": false,
+      "source_bindings": [
+        "80f80917217519ccf30f8d1deaad800f822d601ffbb57f565d86f615bf95f9f3"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/Beach/Jap_Type5/Type5.dbx",
+          "sha256": "e314479c35ea6819e5c662f35c4fca5af56cab3a1c1fe0a3b373efa05e153bd2",
+          "instance_guid": "e66520c7-7b62-4d35-9274-72a762f0c35d",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/Beach/Jap_Type5/Jap_Type5_AnimTree1p.dbx",
+          "sha256": "d4e1d8324fd28f5582d83d64957362511cd90c7e88eda7226091f035b5b0800a",
+          "instance_guid": "6027e24b-8bdc-4a4d-8e4f-e845b4c24103",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/Beach/Jap_Type5/1p/HandsIkPose.dbx",
+          "sha256": "0d64c1674b8fd4e1c0c4947b63394bad0fceee24450596c242184f9dcd90b49d",
+          "instance_guid": "1622cc08-0d63-439c-bba2-8179b46af0ea",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/Beach/Jap_Type5/1p/HandsIkPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "configuration_sources": [
+        {
+          "archive": "Dist/win32/levels/sp_01/level-00.fbrb",
+          "archive_index_sha256": "9693feb53337f1a83c49d725eab25d146e91469394c3b93e7bf62214ecc8a44f"
+        }
+      ],
+      "animation_source": {
+        "selection": "unique_exact_resource_content_in_batch",
+        "archive": "Dist/win32/async/weapon/type5-00.fbrb",
+        "archive_index_sha256": "3e6520e476e604e4aef06c23ba2814ed9cd8639f007a98595aa605d8dc58d5cb",
+        "kind": "GrannyAnimation"
+      },
+      "skeleton_source": {
+        "selection": "exact_configuration_archive_resource",
+        "archive": "Dist/win32/levels/sp_common/level-00.fbrb",
+        "archive_index_sha256": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842",
+        "kind": "GrannyModel"
+      },
+      "source_reference_envelope": {
+        "schema": "fvr.bc2.authored_relative_pose_bound",
+        "schema_version": 1,
+        "bone": "LeftHand",
+        "reference_bone": "jntWpn_1",
+        "common_ancestor": "Spine",
+        "unshared_bone_chain": [
+          "LeftHand",
+          "LeftForeArmRoll",
+          "LeftForeArm",
+          "LeftArmRoll",
+          "LeftArm",
+          "LeftShoulder",
+          "Spine4",
+          "Spine3",
+          "Spine2",
+          "Spine1"
+        ],
+        "unshared_reference_chain": [
+          "jntWpn_1",
+          "jntWpn_0"
+        ],
+        "reference_time_seconds": 0.0,
+        "reference_pose": [
+          0.5470207018369172,
+          0.7483133104767722,
+          -0.37522731926811975,
+          0.0,
+          0.24515383368688168,
+          -0.571787286876187,
+          -0.7829169153846346,
+          0.0,
+          -0.8004173596258826,
+          0.33628334471106647,
+          -0.49623135983074146,
+          -0.0,
+          0.028453617254915922,
+          0.006561554802722559,
+          -0.6403497353051625,
+          1.0
+        ],
+        "duration_seconds": 0.03333333507180214,
+        "translation_hull_bound_m": 0.0036945467502760834,
+        "rotation_hull_bound_rad": 0.014434695395763348,
+        "translation_numerical_allowance_m": 2.321661252540848e-08,
+        "rotation_numerical_allowance_rad": 1e-08,
+        "translation_bound_m": 0.0036945699668886087,
+        "rotation_bound_rad": 0.014434705395763348,
+        "unshared_controls_constant": false,
+        "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+        "target_runtime_interpolation_verified": false,
+        "runtime_admission": false
+      },
+      "target_runtime_interpolation_verified": false,
+      "support_contact_reference": true,
+      "support_aim_mode": "two_point",
+      "contact_policy": {
+        "schema": "fvr.bc2.explicit_support_contact_policy",
+        "schema_version": 1,
+        "mode": "fixed_authored_handsikpose_initial",
+        "reference_time_seconds": 0.0,
+        "support_aim_mode": "two_point",
+        "source_curve_claim": "none",
+        "native_admission": false,
+        "rationale": "The mod deliberately fixes the support contact to LeftHand relative to jntWpn_1 at the start of each exact configuration's authored absolute HandsIkPose role. This defines a stable VR grab target; it does not assert that the source hand remains fixed through animation. Existing source-envelope failures are retained. No guessed coordinates, gun-hand override, ammunition capability, owner grant, or tolerance change.",
+        "input_binding_document_digest": "8ec12a5b21bd1377b82e1ef2b0fad42689702198dbede03ed600752f66c6193b",
+        "source_binding_digests": [
+          "80f80917217519ccf30f8d1deaad800f822d601ffbb57f565d86f615bf95f9f3"
+        ]
+      },
+      "contact_policy_digest": "530006f296bb951e1c44c900f158fea182766c02e1f7908281b4b1a0e6d1e8c6",
+      "binding_digest": "31091e61cf882522887bb5347b4101ade7ea4c3831dce2eadc2c20ab95d99450"
+    },
+    {
+      "native_asset_name": "Garand",
+      "configured_mesh_path": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "5af5de7e8fdd5f45080553d97805575d8227488ac865d43d751fc7c6ff282d85",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "weapon_class": "wcAssault",
+      "left_hand_in_weapon": [
+        0.5466820884996397,
+        0.7494192191371781,
+        -0.373509742980681,
+        0.0,
+        0.24628488424968073,
+        -0.5702464526089895,
+        -0.783685357191894,
+        0.0,
+        -0.8003014743856185,
+        0.33643694398012575,
+        -0.496314147311479,
+        -0.0,
+        0.028589902255079975,
+        0.0065620358167565816,
+        -0.6399961730315242,
+        1.0
+      ],
+      "left_hand_status": "mod_authored_fixed_contact",
+      "source_left_hand_status": "decoded_spline_candidate",
+      "right_hand_retargeted": false,
+      "right_hand_status_not_admitted": "decoded_spline_candidate",
+      "native_admission": false,
+      "source_bindings": [
+        "0eee70c5f89aa8f07a9d33c2461d11844cd34545a7eade3328aa85aa994154da",
+        "d4b16c8f248edbcd5bf512291da794aed704330c9bbc254651a8d876ebe0d1c8"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Assault.dbx",
+          "sha256": "a41b2e7bb7f7e8af83521a60106fa23fbec462dd740fbac2230898a1519cb83b",
+          "instance_guid": "4bc8d46c-cc7b-4993-8bbe-09e708bef4fa",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand.dbx",
+          "sha256": "db8d551f626a593e10848381c00983c7a4999e1096a91deb1ded60d49a8e101d",
+          "instance_guid": "d77b3602-e594-465d-87fa-8c193660522b",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_AnimTree1p.dbx",
+          "sha256": "d555a03a712adfe4ff4bd98b2e06ac9319c3055f6b8e9152f8573a58b6209b82",
+          "instance_guid": "56252e78-0e23-4fe3-8838-cc22d5a86161",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/M1garand/1P/HandsIkPose.dbx",
+          "sha256": "69f37aeeb655585e240fbd5a059b710846996ad937a5ab70ba4203b5d95b7cc2",
+          "instance_guid": "9bc449e6-37ef-4750-99c6-7b81b02bdc93",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/M1garand/1P/HandsIkPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "configuration_sources": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        },
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "animation_source": {
+        "archive": "Dist/win32/async/weapon/m1garand-00.fbrb",
+        "archive_index_sha256": "d0d031b25e2cc58e61c309d0ebb958394c175e4329c5468bd81a68f2325068d5",
+        "kind": "GrannyAnimation",
+        "selection": "exact_pinned_source_resource"
+      },
+      "skeleton_source": {
+        "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+        "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965",
+        "kind": "GrannyModel",
+        "selection": "exact_configuration_archive_resource"
+      },
+      "source_reference_envelope": {
+        "schema": "fvr.bc2.authored_relative_pose_bound",
+        "schema_version": 1,
+        "bone": "LeftHand",
+        "reference_bone": "jntWpn_1",
+        "common_ancestor": "Spine",
+        "unshared_bone_chain": [
+          "LeftHand",
+          "LeftForeArmRoll",
+          "LeftForeArm",
+          "LeftArmRoll",
+          "LeftArm",
+          "LeftShoulder",
+          "Spine4",
+          "Spine3",
+          "Spine2",
+          "Spine1"
+        ],
+        "unshared_reference_chain": [
+          "jntWpn_1",
+          "jntWpn_0"
+        ],
+        "reference_time_seconds": 0.0,
+        "reference_pose": [
+          0.5466820884996392,
+          0.7494192191371781,
+          -0.37350974298068074,
+          0.0,
+          0.24628488424967981,
+          -0.5702464526089885,
+          -0.783685357191892,
+          0.0,
+          -0.8003014743856169,
+          0.33643694398012514,
+          -0.4963141473114779,
+          -0.0,
+          0.02858990225507985,
+          0.0065620358167570655,
+          -0.6399961730315227,
+          1.0
+        ],
+        "duration_seconds": 0.03333333507180214,
+        "translation_hull_bound_m": 0.003946082749285976,
+        "rotation_hull_bound_rad": 0.019224974718914455,
+        "translation_numerical_allowance_m": 2.3213526221403526e-08,
+        "rotation_numerical_allowance_rad": 1e-08,
+        "translation_bound_m": 0.003946105962812197,
+        "rotation_bound_rad": 0.019224984718914456,
+        "unshared_controls_constant": false,
+        "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+        "target_runtime_interpolation_verified": false,
+        "runtime_admission": false
+      },
+      "target_runtime_interpolation_verified": false,
+      "support_contact_reference": true,
+      "support_aim_mode": "two_point",
+      "contact_policy": {
+        "schema": "fvr.bc2.explicit_support_contact_policy",
+        "schema_version": 1,
+        "mode": "fixed_authored_handsikpose_initial",
+        "reference_time_seconds": 0.0,
+        "support_aim_mode": "two_point",
+        "source_curve_claim": "none",
+        "native_admission": false,
+        "rationale": "The mod deliberately fixes the support contact to LeftHand relative to jntWpn_1 at the start of each exact configuration's authored absolute HandsIkPose role. This defines a stable VR grab target; it does not assert that the source hand remains fixed through animation. Existing source-envelope failures are retained. No guessed coordinates, gun-hand override, ammunition capability, owner grant, or tolerance change.",
+        "input_binding_document_digest": "08e5b71e102805617acca5747a56fa9a7222537f8f5dbe216e51a062888901e5",
+        "source_binding_digests": [
+          "0eee70c5f89aa8f07a9d33c2461d11844cd34545a7eade3328aa85aa994154da",
+          "d4b16c8f248edbcd5bf512291da794aed704330c9bbc254651a8d876ebe0d1c8"
+        ]
+      },
+      "contact_policy_digest": "12b3ca7b93d963e517c1a4d1eddb60bc67c9b5a12b8b57b87c3edae7ca083d67",
+      "binding_digest": "4ecbb7d35bf4f4e116f3d9f65fdd2c931d9849ec83d5a9e342753c1c5a9d4239"
+    }
+  ],
+  "scope": "Five explicit fixed mod contact selectors; source animation classifications and all runtime ownership checks unchanged."
+}

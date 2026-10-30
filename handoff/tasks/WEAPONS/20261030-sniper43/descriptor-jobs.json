@@ -1,0 +1,3334 @@
+{
+  "schema": "fvr.bc2.magazine_descriptor_jobs",
+  "schema_version": 1,
+  "runtime_enabled": false,
+  "registry_change": false,
+  "existing_baselines": [],
+  "descriptors": [
+    {
+      "key": "bc2:magazine-descriptor:04e2e2d372322fd7118521ffc0fc716005dbbb8f05669ceaafb78a28ef3f35c4",
+      "identity": {
+        "assetName": "SVU",
+        "assetPath": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU.dbx",
+          "sha256": "256f3e276b8dae06739453fd5fbbae0c820acb0629b02f01608aeb9f3bbe0cfc",
+          "guid": "763fffd8-481f-479f-8414-b2f0b62f2574"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Firing.dbx",
+          "sha256": "b7792006424a71ed5b45015a2412c8952df72318a9270e1f6b973570151d4fc2",
+          "guid": "58bfc585-406d-4e94-b811-c9f0caa43f4f"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Firing.dbx",
+          "sha256": "b7792006424a71ed5b45015a2412c8952df72318a9270e1f6b973570151d4fc2",
+          "guid": "cd78df16-e4e3-49e8-8069-420b775d1775"
+        }
+      },
+      "configuration": {
+        "assetName": "SVU",
+        "assetPath": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 10,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 3.700000047683716,
+          "reloadThreshold": 0.550000011920929,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.5,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1057803469,
+            "expected_bits": "3f0ccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1080872141,
+            "expected_bits": "406ccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4400000048,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "93c7544bfb70aaa9803180020ac7aa8dd97b57c9971a4c8f4c154c9feb259494",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_exact_magazine_native_family_review",
+        "exact_magazine_hand_contact"
+      ],
+      "prior_descriptor_digest": "388637885413d54a2833fe487ce49f929ebef672eb0526a4884ded6c47e821a6",
+      "boltaction_magazine_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "owed_bolt_reload_handoff_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:11860d9f0259e76ad07b316c34dec70a6dbd72fd731b581317c8473a48d30f85",
+      "identity": {
+        "assetName": "SV98",
+        "assetPath": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98.dbx",
+          "sha256": "aaab64e3c8c783167e401e9c27a240135aa69bbc54a1cb40b1b2e1efb30d696e",
+          "guid": "33f9e790-e758-4468-b3db-00cd6c3b1a4d"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Firing.dbx",
+          "sha256": "08042a1e9b72eec73f50a1d3bd2fdcddfdae46529db46b5089e686cae6618423",
+          "guid": "397ac28b-b817-4310-9068-20f1f8f070bd"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Firing.dbx",
+          "sha256": "08042a1e9b72eec73f50a1d3bd2fdcddfdae46529db46b5089e686cae6618423",
+          "guid": "d75d1484-38f6-4283-a5f5-6a37ed19c96e"
+        }
+      },
+      "configuration": {
+        "assetName": "SV98",
+        "assetPath": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 10,
+          "numberOfMagazines": 3,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.800000190734863,
+          "reloadThreshold": 0.5299999713897705,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 1.600000023841858,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1057467924,
+            "expected_bits": "3f07ae14",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1083808154,
+            "expected_bits": "4099999a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 5500000191,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "827c338d56fe15c8f17289885b60bfcbe68f73271b8f2b3007132cda1bae8722",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_exact_magazine_native_family_review",
+        "exact_magazine_hand_contact",
+        "typed_owed_bolt_reload_pause_and_ammo_receipt_rebase"
+      ],
+      "prior_descriptor_digest": "e99b5a288f9ca72b1194c8035dd79411f830726c1aef1c52eb90b8905f4374e9",
+      "boltaction_magazine_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "owed_bolt_reload_handoff_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:121a7426a50ef627a9f5fb69ea0efcf400f4085d7604b8b9045f75124f2068c0",
+      "identity": {
+        "assetName": "VSS",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Kobra",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Kobra.dbx",
+          "sha256": "71a8887897a904ca0227bed174fd473002a72aad5f460b51b4c5155221fd3395",
+          "guid": "f19040c7-adc9-4bfc-8d3d-ef80961d6ea1"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_FiringAuto_Scoped.dbx",
+          "sha256": "dcb8ed7d91665e77ee04c565c47183b24b870781566c3c1965218b0aed08f4f1",
+          "guid": "e262f072-d1e6-43b1-8575-99c42587b149"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_FiringAuto_Scoped.dbx",
+          "sha256": "dcb8ed7d91665e77ee04c565c47183b24b870781566c3c1965218b0aed08f4f1",
+          "guid": "afaa1ecc-3bd8-432b-9d6f-4df250cb9b91"
+        }
+      },
+      "configuration": {
+        "assetName": "VSS",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Kobra",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 20,
+          "numberOfMagazines": 3,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.199999809265137,
+          "reloadThreshold": 0.44999998807907104,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1055286886,
+            "expected_bits": "3ee66666",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1082549862,
+            "expected_bits": "40866666",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltAutomaticFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4899999810,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "c83926c1ff2566fc21a8ef7ca8de861744751f66e08173faea050d9998517603",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:14ca5aad5b706a1b9dc454c65f4934a55382e9232456226a15a6d96a58c572dc",
+      "identity": {
+        "assetName": "QBU88_sp_k",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_QBY88/SP_sni_QBU88_Kobra",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/SP_sni_QBU88_Kobra.dbx",
+          "sha256": "0c294fd9bc16e0ec213d1608e40a52be4aeb06d59b20777b0e228870e2736e24",
+          "guid": "6d9bbdeb-c6c6-4d82-95d1-195e3e84719a"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/SP_sni_QBY88_Firing_Scoped.dbx",
+          "sha256": "03213ca60f824189e7bedb74795c456bf3c37d6836ca31cd4cd10f5e823db702",
+          "guid": "e68fb9b3-979b-4822-96e2-ef4080e4d554"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/SP_sni_QBY88_Firing_Scoped.dbx",
+          "sha256": "03213ca60f824189e7bedb74795c456bf3c37d6836ca31cd4cd10f5e823db702",
+          "guid": "9a2fc5a8-e0f5-432d-bd6b-18a59ab38a9c"
+        }
+      },
+      "configuration": {
+        "assetName": "QBU88_sp_k",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_QBY88/SP_sni_QBU88_Kobra",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 10,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.099999904632568,
+          "reloadThreshold": 0.4399999976158142,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1054951342,
+            "expected_bits": "3ee147ae",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1082340147,
+            "expected_bits": "40833333",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        },
+        {
+          "archive": "Dist/win32/levels/sp_common/level-00.fbrb",
+          "index_sha256": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4799999905,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "6a4351b8534c57268515783cb8b93a8b0deb1a527164d370ec1579435d807d97",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_singlefire_native_family_review",
+        "exact_magazine_hand_contact",
+        "slide_ready_and_chamber_boundary"
+      ],
+      "prior_descriptor_digest": "28f462fd50cbef2564022d2c48a510fe8b6260fea75d17c172ed633e6e48df2e",
+      "singlefire_magazine_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:259c5c2b7e53b42c311349557358351e1da7cf2675f7e0c0378044db956a55d8",
+      "identity": {
+        "assetName": "M24",
+        "assetPath": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24.dbx",
+          "sha256": "84252e7fa90e376d2cfe3131a1e83423a00d9a1dda52d0974b5d4d8d3d8de82c",
+          "guid": "3632d971-d742-493d-8962-358ade024c39"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Firing.dbx",
+          "sha256": "ea30a393d55f51ba3fe669b96b200ac8a6bbcce8dfd7862760f1551122eaa753",
+          "guid": "1a067483-9412-4f7b-802e-1639f0147613"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Firing.dbx",
+          "sha256": "ea30a393d55f51ba3fe669b96b200ac8a6bbcce8dfd7862760f1551122eaa753",
+          "guid": "fa209e0a-0e88-422c-9335-ae03fffd727d"
+        }
+      },
+      "configuration": {
+        "assetName": "M24",
+        "assetPath": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 5.0,
+          "reloadThreshold": 0.5600000023841858,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 1.649999976158142,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1057971241,
+            "expected_bits": "3f0f5c29",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1084227584,
+            "expected_bits": "40a00000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 5700000000,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "c98494e638829382f481cfc09344a0209836c9624784e063bbf923595f8d960d",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_exact_magazine_native_family_review",
+        "exact_magazine_hand_contact",
+        "typed_owed_bolt_reload_pause_and_ammo_receipt_rebase"
+      ],
+      "prior_descriptor_digest": "7c6cda0fbdb036719bd9a84cd3b6bc5b922ed3afa81101a9f9016cf50358a338",
+      "boltaction_magazine_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "owed_bolt_reload_handoff_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:2bd0524c9604bea44d5c1d45bec1ee876835a2afece03964de21bfe7eb6162e5",
+      "identity": {
+        "assetName": "M95_sp_s",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95_Scoped",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95_Scoped.dbx",
+          "sha256": "e395944e3978c6847bc5c66d033d265a7571477c5a588deba1aafde822e6c4b9",
+          "guid": "1378ecef-dc5f-4728-81e5-a5dd7e9b10da"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_ScopeFiring.dbx",
+          "sha256": "d0d7c904eee1adc4e63f464b388ed5cd3a4d1201972400e3f1c37dde334256c6",
+          "guid": "e5a899a7-cb35-4926-a8f5-39d69e485528"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_ScopeFiring.dbx",
+          "sha256": "d0d7c904eee1adc4e63f464b388ed5cd3a4d1201972400e3f1c37dde334256c6",
+          "guid": "2d52ac1d-a729-4eaa-9fc2-ab089e561912"
+        }
+      },
+      "configuration": {
+        "assetName": "M95_sp_s",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95_Scoped",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 6.900000095367432,
+          "reloadThreshold": 0.6700000166893005,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 2.299999952316284,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059816735,
+            "expected_bits": "3f2b851f",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1088212173,
+            "expected_bits": "40dccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        },
+        {
+          "archive": "Dist/win32/levels/sp_common/level-00.fbrb",
+          "index_sha256": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 7600000096,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "5a2f025edf2a827282316f00b7274dfb202906ebb94502961e767b538f2dedcd",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_exact_magazine_native_family_review",
+        "exact_magazine_hand_contact",
+        "typed_owed_bolt_reload_pause_and_ammo_receipt_rebase"
+      ],
+      "prior_descriptor_digest": "f5db3da46779fda7719d32b237ebc1ae3547930f5db9cbb11b2e9c091d303055",
+      "boltaction_magazine_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "owed_bolt_reload_handoff_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:323395ccfdcc4682df390ce420c13358df6d0a1dfa31c126566f31f4d066bb30",
+      "identity": {
+        "assetName": "QBU88",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Kobra",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Kobra.dbx",
+          "sha256": "efd5ae5cf68228d5e7fd85cc33af281475b5af30ba557000bf83759fe49187f5",
+          "guid": "aaf5e0dd-a0ff-4d1b-8645-837c1d726a1e"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Firing_Scoped.dbx",
+          "sha256": "f132d6168f9b86bf4064c6a5cba0a3584f8551f6cdb6d84685265359067c42aa",
+          "guid": "d5525fe2-e05a-4230-b4b6-2a147dc834ca"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Firing_Scoped.dbx",
+          "sha256": "f132d6168f9b86bf4064c6a5cba0a3584f8551f6cdb6d84685265359067c42aa",
+          "guid": "ce1b24c1-999f-407f-94ad-757abc633427"
+        }
+      },
+      "configuration": {
+        "assetName": "QBU88",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Kobra",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 10,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.099999904632568,
+          "reloadThreshold": 0.4399999976158142,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1054951342,
+            "expected_bits": "3ee147ae",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1082340147,
+            "expected_bits": "40833333",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        },
+        {
+          "archive": "Dist/win32/levels/sp_common/level-00.fbrb",
+          "index_sha256": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4799999905,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "0c156eb4c9b54bb2c904e79007cfe35bab94712b70492f88cd32e2d6b0ef1239",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_singlefire_native_family_review",
+        "exact_magazine_hand_contact",
+        "slide_ready_and_chamber_boundary"
+      ],
+      "prior_descriptor_digest": "f70b406ae0c42cbe8082430cdced9165312571ee8312214a8af6982e5db59cfc",
+      "singlefire_magazine_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:33eb81fa3a6b0e81dbf6ff92d34e69f21d074aa88e37b74ed1d57c4ce57ec879",
+      "identity": {
+        "assetName": "M24",
+        "assetPath": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Scoped",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Scoped.dbx",
+          "sha256": "942be844e1a6392fb1a21eec3127be36b453357c53af1258b371cdc5615420b8",
+          "guid": "3f35373a-9cc7-44bc-94b6-23dcfb1af196"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_ScopeFiring.dbx",
+          "sha256": "476cffb4e9d0b62bae3d31d2dc7a35414603499227d962c618da835c9a3f5370",
+          "guid": "628355ba-9d95-483b-8464-14f98997d8ca"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_ScopeFiring.dbx",
+          "sha256": "476cffb4e9d0b62bae3d31d2dc7a35414603499227d962c618da835c9a3f5370",
+          "guid": "8dd6df2e-fd69-4a52-82f8-473385af3efe"
+        }
+      },
+      "configuration": {
+        "assetName": "M24",
+        "assetPath": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Scoped",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 5.0,
+          "reloadThreshold": 0.5600000023841858,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 1.649999976158142,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1057971241,
+            "expected_bits": "3f0f5c29",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1084227584,
+            "expected_bits": "40a00000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 5700000000,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "ef0ccdfd529120beda44a721690000517f0de337a98dbc1f0f8e16b2d7257e88",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_exact_magazine_native_family_review",
+        "exact_magazine_hand_contact",
+        "typed_owed_bolt_reload_pause_and_ammo_receipt_rebase"
+      ],
+      "prior_descriptor_digest": "7146ed820bdfb9dafca1029614d827e899d516037dcadec4bbad820381956cc4",
+      "boltaction_magazine_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "owed_bolt_reload_handoff_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:37a2fd9255b12bf5e47a226dd41ff1d52ec5df704075c3ceec70cd3426d5e975",
+      "identity": {
+        "assetName": "QBU88",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88.dbx",
+          "sha256": "262bdb522e499fd12766e185940754e3c384fcecdcaff55b0ab953e4428ab600",
+          "guid": "8e18b38e-6734-494a-ba37-d4264b077d3f"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Firing.dbx",
+          "sha256": "76e8f3c444fa8013eb8e2ad28640c5482256fee029607283a2370348cc072f9d",
+          "guid": "f270a566-2c41-4cae-b445-8aebf59311c6"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Firing.dbx",
+          "sha256": "76e8f3c444fa8013eb8e2ad28640c5482256fee029607283a2370348cc072f9d",
+          "guid": "8c97a835-37b8-4f0c-b399-2cd42d3dcfe6"
+        }
+      },
+      "configuration": {
+        "assetName": "QBU88",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 10,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.099999904632568,
+          "reloadThreshold": 0.4399999976158142,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1054951342,
+            "expected_bits": "3ee147ae",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1082340147,
+            "expected_bits": "40833333",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        },
+        {
+          "archive": "Dist/win32/levels/sp_common/level-00.fbrb",
+          "index_sha256": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4799999905,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "320052b7dae11af43d47487ba2314c3130468074c6d212ec8b0c65836a746bd5",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_singlefire_native_family_review",
+        "exact_magazine_hand_contact",
+        "slide_ready_and_chamber_boundary"
+      ],
+      "prior_descriptor_digest": "804e777d1b5bc5f6270b23e3e38dfe2679f1eb0c886f96b03ee68c623bdfda62",
+      "singlefire_magazine_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:45f398e90f6d7fcc4a601b92328fdee4383d5337e341bad287a33ca7037a6c64",
+      "identity": {
+        "assetName": "VSS",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Scoped",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Scoped.dbx",
+          "sha256": "d2f60a131cac9415dc1df226cff07a2ccca4f7f454f7c8047ffb7d6691360a4d",
+          "guid": "f8a33345-a75a-48cd-94eb-f480242d12e8"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_FiringAuto_Scoped.dbx",
+          "sha256": "dcb8ed7d91665e77ee04c565c47183b24b870781566c3c1965218b0aed08f4f1",
+          "guid": "e262f072-d1e6-43b1-8575-99c42587b149"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_FiringAuto_Scoped.dbx",
+          "sha256": "dcb8ed7d91665e77ee04c565c47183b24b870781566c3c1965218b0aed08f4f1",
+          "guid": "afaa1ecc-3bd8-432b-9d6f-4df250cb9b91"
+        }
+      },
+      "configuration": {
+        "assetName": "VSS",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Scoped",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 20,
+          "numberOfMagazines": 3,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.199999809265137,
+          "reloadThreshold": 0.44999998807907104,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1055286886,
+            "expected_bits": "3ee66666",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1082549862,
+            "expected_bits": "40866666",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltAutomaticFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4899999810,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "ee4ae55665eff5ede7825215dfde7df137cfb477bce04b3e1e5b108f91865e7d",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:4d31138736cae6e33c17a4777efdd9cc5bb77dc69f6ab62a65f354b8a193169d",
+      "identity": {
+        "assetName": "VSS",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores.dbx",
+          "sha256": "d723d3c23a8582720108bbcdae94716bcf341229120dec9f72f72e2787d2194d",
+          "guid": "848238ec-10e5-4d40-80d2-96cb04da2a64"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_FiringAuto.dbx",
+          "sha256": "7627720689a3fff58ef04cff3887f6b63027e957924329de593b815b6e11cdc2",
+          "guid": "4a264942-e887-448e-9c5e-4d516a07e44d"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_FiringAuto.dbx",
+          "sha256": "7627720689a3fff58ef04cff3887f6b63027e957924329de593b815b6e11cdc2",
+          "guid": "bff55e48-f1e9-4e71-beff-77860c175012"
+        }
+      },
+      "configuration": {
+        "assetName": "VSS",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 20,
+          "numberOfMagazines": 3,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.199999809265137,
+          "reloadThreshold": 0.44999998807907104,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1055286886,
+            "expected_bits": "3ee66666",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1082549862,
+            "expected_bits": "40866666",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltAutomaticFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4899999810,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "ffb4d28d1fccde456951adc75e9b19a66d9371a6ed1b00e5071b27512e395049",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:5134eb56c4274cc78b53f5b2fc10f3064d064800d51a5d014cff11ea21ed8afd",
+      "identity": {
+        "assetName": "M95k",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95_Scoped",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95_Scoped.dbx",
+          "sha256": "ba7fae3e042aa8c991074b4477e7c986d97af6888b82a55d86863a8d494fed95",
+          "guid": "8fb1cb9c-b070-459b-9260-bf4b0f713af4"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_ScopeFiring.dbx",
+          "sha256": "d0d7c904eee1adc4e63f464b388ed5cd3a4d1201972400e3f1c37dde334256c6",
+          "guid": "e5a899a7-cb35-4926-a8f5-39d69e485528"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_ScopeFiring.dbx",
+          "sha256": "d0d7c904eee1adc4e63f464b388ed5cd3a4d1201972400e3f1c37dde334256c6",
+          "guid": "2d52ac1d-a729-4eaa-9fc2-ab089e561912"
+        }
+      },
+      "configuration": {
+        "assetName": "M95k",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95_Scoped",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 6.900000095367432,
+          "reloadThreshold": 0.6700000166893005,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 2.299999952316284,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059816735,
+            "expected_bits": "3f2b851f",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1088212173,
+            "expected_bits": "40dccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 7600000096,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "60edac4f8c59b46f4f5e8e849046a4b3b7a6f0dac13df29798babe66e4d5daaf",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_exact_magazine_native_family_review",
+        "exact_magazine_hand_contact",
+        "typed_owed_bolt_reload_pause_and_ammo_receipt_rebase"
+      ],
+      "prior_descriptor_digest": "5658c7e011c506bce60b1cf2e6afaeb4c059858f6553a32c7693c6535095c810",
+      "boltaction_magazine_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "owed_bolt_reload_handoff_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:58f0ad65f6576ba7f6666f1b5dbd06f7373304d9265e189d39c3f76513520307",
+      "identity": {
+        "assetName": "SV98",
+        "assetPath": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Kobra",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Kobra.dbx",
+          "sha256": "e0e734e4aa30889c95baff9d75e4d808828c72fd1067ccfa238c5696504fa9e7",
+          "guid": "3261b232-3a20-4aee-bd73-090f92cb4cac"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_ScopeFiring.dbx",
+          "sha256": "3d5122abe442313b0e81b329539334cbc835cee9d9f8f39f38f82056c65654d7",
+          "guid": "4592ba14-4a56-4250-80de-4ba306c87139"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_ScopeFiring.dbx",
+          "sha256": "3d5122abe442313b0e81b329539334cbc835cee9d9f8f39f38f82056c65654d7",
+          "guid": "3aca3254-5a16-4dbc-a195-7544b8a875e4"
+        }
+      },
+      "configuration": {
+        "assetName": "SV98",
+        "assetPath": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Kobra",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 10,
+          "numberOfMagazines": 3,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.800000190734863,
+          "reloadThreshold": 0.5299999713897705,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 1.600000023841858,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1057467924,
+            "expected_bits": "3f07ae14",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1083808154,
+            "expected_bits": "4099999a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 5500000191,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "46ccf1ab87741d489b2f5c19ff7cea0762bfed50e7ae0ff138d534a60cceb121",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_exact_magazine_native_family_review",
+        "exact_magazine_hand_contact",
+        "typed_owed_bolt_reload_pause_and_ammo_receipt_rebase"
+      ],
+      "prior_descriptor_digest": "3df5a5fb628d96b1801e1d9c9d4ca1078b99ef00d83feee8b8f8cbd0f6ef7fdb",
+      "boltaction_magazine_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "owed_bolt_reload_handoff_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:5d03adf713d506ca6b5f871855d69bd3765b04257c14dcbf352147e261924e3b",
+      "identity": {
+        "assetName": "GOL",
+        "assetPath": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL.dbx",
+          "sha256": "c10e29215b23d814f1c75dcc3782da6a96c78340ac6eef48a203cdc87d93cac7",
+          "guid": "7d1dfd60-085c-4e0a-9feb-80a40d11eb2e"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/Mec_sni_GOL_Firing.dbx",
+          "sha256": "3563596034d9aec9f5409d460cf1082d8943fc87837b4f0b437fd86517b2e5f1",
+          "guid": "34f10ef9-1da4-4147-991c-0612f36bf5e6"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/Mec_sni_GOL_Firing.dbx",
+          "sha256": "3563596034d9aec9f5409d460cf1082d8943fc87837b4f0b437fd86517b2e5f1",
+          "guid": "9123c429-2528-455b-8c43-c17e0f6ec77c"
+        }
+      },
+      "configuration": {
+        "assetName": "GOL",
+        "assetPath": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.800000190734863,
+          "reloadThreshold": 0.6700000166893005,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 1.7999999523162842,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059816735,
+            "expected_bits": "3f2b851f",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1083808154,
+            "expected_bits": "4099999a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 5500000191,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "1a6a85fc965158ca25d30628441ce3b43e08335e26f9473190a533ee073104f9",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_exact_magazine_native_family_review",
+        "exact_magazine_hand_contact",
+        "typed_owed_bolt_reload_pause_and_ammo_receipt_rebase"
+      ],
+      "prior_descriptor_digest": "08c2579babc78ad05d3e449511d8334980417ff2607be5b478c5d2648eb901fe",
+      "boltaction_magazine_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "owed_bolt_reload_handoff_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:675f72ae9b9bc4c2dbae796fd61cec112cf70ddae2717ba3784e3dd433eef270",
+      "identity": {
+        "assetName": "QBU88_sp",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_QBY88/SP_sni_QBU88",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/SP_sni_QBU88.dbx",
+          "sha256": "adeb31f56ef751ae0b7c33fd86fd18e9a043ba8d49eb7dc3d3dd54019d0073a9",
+          "guid": "96fb1aae-975b-49df-80f6-6ecc8103ebf2"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/SP_sni_QBY88_Firing.dbx",
+          "sha256": "4e5c4b979db70f3bfcb5b2e4e7335fe98295a3e23e22b829bc6a62f84a944fcf",
+          "guid": "70b4779d-f43b-43d9-a91a-11cd05516f3b"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/SP_sni_QBY88_Firing.dbx",
+          "sha256": "4e5c4b979db70f3bfcb5b2e4e7335fe98295a3e23e22b829bc6a62f84a944fcf",
+          "guid": "0dc7211e-3f6f-4bb3-8a3b-48c951481d42"
+        }
+      },
+      "configuration": {
+        "assetName": "QBU88_sp",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_QBY88/SP_sni_QBU88",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 10,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.099999904632568,
+          "reloadThreshold": 0.4399999976158142,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1054951342,
+            "expected_bits": "3ee147ae",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1082340147,
+            "expected_bits": "40833333",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        },
+        {
+          "archive": "Dist/win32/levels/sp_common/level-00.fbrb",
+          "index_sha256": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4799999905,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "8684b4a28f81b2db750994b285cb63adb17f8be1ccfd33336df3e462cc061a43",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_singlefire_native_family_review",
+        "exact_magazine_hand_contact",
+        "slide_ready_and_chamber_boundary"
+      ],
+      "prior_descriptor_digest": "af98e66b3f333358005b765fd71fdf513b6ac2ba3ac7f54571a2df6df64bd9ce",
+      "singlefire_magazine_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:7d196898b6b8cd8f1e5774314c84c743518ed76fc4bb45526cab346ae1b004a6",
+      "identity": {
+        "assetName": "M95",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95.dbx",
+          "sha256": "992535507a1b074634772678f5cd6bc8a71a90a599ac5b469c71d1c7bfd560a3",
+          "guid": "cb2a15fe-8f0a-4772-9102-64548e0db3b6"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Firing.dbx",
+          "sha256": "4154044cea216e2803840dcf8ff5d2eb1343448d14e63a9b142e55f7858fa66d",
+          "guid": "a65b2cbb-05f1-488b-8dd1-9895f2b60ac5"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Firing.dbx",
+          "sha256": "4154044cea216e2803840dcf8ff5d2eb1343448d14e63a9b142e55f7858fa66d",
+          "guid": "aca0193a-bc85-4a6e-9809-a2e9fdd57b10"
+        }
+      },
+      "configuration": {
+        "assetName": "M95",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 6.900000095367432,
+          "reloadThreshold": 0.6700000166893005,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 2.299999952316284,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059816735,
+            "expected_bits": "3f2b851f",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1088212173,
+            "expected_bits": "40dccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        },
+        {
+          "archive": "Dist/win32/levels/sp_common/level-00.fbrb",
+          "index_sha256": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 7600000096,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "9fa12a3eb02cd394a4c5a931148532d390e3473e40ab0952521b7e479b18b08f",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_exact_magazine_native_family_review",
+        "exact_magazine_hand_contact",
+        "typed_owed_bolt_reload_pause_and_ammo_receipt_rebase"
+      ],
+      "prior_descriptor_digest": "13dc08e028b795c7bd09a97a7a70b386423ed2997d00537e5c62df934d8c5d4a",
+      "boltaction_magazine_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "owed_bolt_reload_handoff_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:82679abf3c9a5f5679bd565b1c53d14199480ab35ad94aa0b71eddfbac797fd2",
+      "identity": {
+        "assetName": "QBU88",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Scoped",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Scoped.dbx",
+          "sha256": "bf7a9c6eca83f0f1c27d54d605ffbe785146f0fc68ac6d92522b168234a6cab8",
+          "guid": "74aad94b-a1a0-42b5-80d5-e1e321894a47"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Firing_Scoped.dbx",
+          "sha256": "f132d6168f9b86bf4064c6a5cba0a3584f8551f6cdb6d84685265359067c42aa",
+          "guid": "d5525fe2-e05a-4230-b4b6-2a147dc834ca"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Firing_Scoped.dbx",
+          "sha256": "f132d6168f9b86bf4064c6a5cba0a3584f8551f6cdb6d84685265359067c42aa",
+          "guid": "ce1b24c1-999f-407f-94ad-757abc633427"
+        }
+      },
+      "configuration": {
+        "assetName": "QBU88",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Scoped",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 10,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.099999904632568,
+          "reloadThreshold": 0.4399999976158142,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1054951342,
+            "expected_bits": "3ee147ae",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1082340147,
+            "expected_bits": "40833333",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        },
+        {
+          "archive": "Dist/win32/levels/sp_common/level-00.fbrb",
+          "index_sha256": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4799999905,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "ba2e9b015db68b3feb07745c3da0163b12b19c9a7e731b3e2dd5fc5a5c9eae94",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_singlefire_native_family_review",
+        "exact_magazine_hand_contact",
+        "slide_ready_and_chamber_boundary"
+      ],
+      "prior_descriptor_digest": "8fa78ff22875595b27046d1887417dc135d1832c2a4ce07e343e5122bb5934d8",
+      "singlefire_magazine_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:8313e354ee7e05964b8dbe326625db2340bde01970fe81cdd79ab94bd3f6624f",
+      "identity": {
+        "assetName": "SVU",
+        "assetPath": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Kobra",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Kobra.dbx",
+          "sha256": "64f76339e07c1013e790e10b73579d270390e76e96ab6041b2425f654a072b5e",
+          "guid": "f6fb90ec-a5fb-4129-a43b-72f8ea67d33d"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Scope_Firing.dbx",
+          "sha256": "907df217dbdd511401efa5ebba54166642b4e53c5fe3716dbddbd0639b5c8cfa",
+          "guid": "2e194b03-1f5a-4681-9a53-f0ebed6f5eef"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Scope_Firing.dbx",
+          "sha256": "907df217dbdd511401efa5ebba54166642b4e53c5fe3716dbddbd0639b5c8cfa",
+          "guid": "fdfcbd6c-8b17-418e-b070-0a4b2ebe00c4"
+        }
+      },
+      "configuration": {
+        "assetName": "SVU",
+        "assetPath": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Kobra",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 10,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 3.700000047683716,
+          "reloadThreshold": 0.550000011920929,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.5,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1057803469,
+            "expected_bits": "3f0ccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1080872141,
+            "expected_bits": "406ccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4400000048,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "1c04bd6d3cf54830aa980ff2f397b527b0a39626e82d8136be389c55e8e1b768",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_exact_magazine_native_family_review",
+        "exact_magazine_hand_contact"
+      ],
+      "prior_descriptor_digest": "7d88b32407aa84f525f165558c371ab410c92f933a1b7655bcd9626504aef18b",
+      "boltaction_magazine_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "owed_bolt_reload_handoff_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:834d88aeef8ffcec1480b7c64656ded44d321457a414e6d1902aeef1fad00276",
+      "identity": {
+        "assetName": "M95k",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95_Kobra",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95_Kobra.dbx",
+          "sha256": "b977410ca5f1378221df8f4cf96c8a328a3392ecc55cd26411cfd4f6ca4a3af3",
+          "guid": "8cfa632a-bf58-48b7-bd8b-75760bfc7843"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_ScopeFiring.dbx",
+          "sha256": "d0d7c904eee1adc4e63f464b388ed5cd3a4d1201972400e3f1c37dde334256c6",
+          "guid": "e5a899a7-cb35-4926-a8f5-39d69e485528"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_ScopeFiring.dbx",
+          "sha256": "d0d7c904eee1adc4e63f464b388ed5cd3a4d1201972400e3f1c37dde334256c6",
+          "guid": "2d52ac1d-a729-4eaa-9fc2-ab089e561912"
+        }
+      },
+      "configuration": {
+        "assetName": "M95k",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95_Kobra",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 6.900000095367432,
+          "reloadThreshold": 0.6700000166893005,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 2.299999952316284,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059816735,
+            "expected_bits": "3f2b851f",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1088212173,
+            "expected_bits": "40dccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 7600000096,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "a85fe8094ad4141eca8ceeeee27aa4793101d60fb116d31a59631309846b7a12",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_exact_magazine_native_family_review",
+        "exact_magazine_hand_contact",
+        "typed_owed_bolt_reload_pause_and_ammo_receipt_rebase"
+      ],
+      "prior_descriptor_digest": "3b92f944c43f427e46631000596ba59be5c1fd76390efdf35558025eac4f737f",
+      "boltaction_magazine_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "owed_bolt_reload_handoff_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:912363965c8217cac287a4cd9a8171cc1f6ef6e301d8d0952bf2f974bfbce1b3",
+      "identity": {
+        "assetName": "SVU",
+        "assetPath": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Scoped",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Scoped.dbx",
+          "sha256": "34726cf9a312f3dc146686cfa1b7a3258bd8ab86c8bb1844d42742ff4306b25f",
+          "guid": "d18e3fa0-9072-4358-b41e-c4ef04dd56e9"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Scope_Firing.dbx",
+          "sha256": "907df217dbdd511401efa5ebba54166642b4e53c5fe3716dbddbd0639b5c8cfa",
+          "guid": "2e194b03-1f5a-4681-9a53-f0ebed6f5eef"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Scope_Firing.dbx",
+          "sha256": "907df217dbdd511401efa5ebba54166642b4e53c5fe3716dbddbd0639b5c8cfa",
+          "guid": "fdfcbd6c-8b17-418e-b070-0a4b2ebe00c4"
+        }
+      },
+      "configuration": {
+        "assetName": "SVU",
+        "assetPath": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Scoped",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 10,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 3.700000047683716,
+          "reloadThreshold": 0.550000011920929,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.5,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 0
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1057803469,
+            "expected_bits": "3f0ccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1080872141,
+            "expected_bits": "406ccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 4400000048,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "62b0462ffde2c45fffb5d5e766050726dcce782cc7dd83ba03e211279bc78ee6",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_exact_magazine_native_family_review",
+        "exact_magazine_hand_contact"
+      ],
+      "prior_descriptor_digest": "fe6e9143b41043155b1befdd4b227159ced76a687dac2740a62d66b935f95c56",
+      "boltaction_magazine_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "owed_bolt_reload_handoff_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:a3c42977e56f5a56f4031113a7f6edc9db9587c3c5ae572d84fea6d5c93a00ac",
+      "identity": {
+        "assetName": "M95k",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95.dbx",
+          "sha256": "b0d0fefba512071700dac709af898f4d0554b3dce272dffe6774bf845fe95bc8",
+          "guid": "bc0f37ac-a57f-4899-b393-3b669a18b3bd"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Firing.dbx",
+          "sha256": "4154044cea216e2803840dcf8ff5d2eb1343448d14e63a9b142e55f7858fa66d",
+          "guid": "a65b2cbb-05f1-488b-8dd1-9895f2b60ac5"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Firing.dbx",
+          "sha256": "4154044cea216e2803840dcf8ff5d2eb1343448d14e63a9b142e55f7858fa66d",
+          "guid": "aca0193a-bc85-4a6e-9809-a2e9fdd57b10"
+        }
+      },
+      "configuration": {
+        "assetName": "M95k",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 6.900000095367432,
+          "reloadThreshold": 0.6700000166893005,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 2.299999952316284,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059816735,
+            "expected_bits": "3f2b851f",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1088212173,
+            "expected_bits": "40dccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 7600000096,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "d13ca4efa5ca91469b11684600a2df1eed08a25e8473de06bbee029918299ec6",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_exact_magazine_native_family_review",
+        "exact_magazine_hand_contact",
+        "typed_owed_bolt_reload_pause_and_ammo_receipt_rebase"
+      ],
+      "prior_descriptor_digest": "fa1bd54812ce6c943e0d6e49802b7aff42fc5f2e69610540fd52818795c0d6c7",
+      "boltaction_magazine_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "owed_bolt_reload_handoff_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:a9127353cf9b7c7389e53ddbae6327bcdf107517c6f0a90e3f266fa0d22e47f8",
+      "identity": {
+        "assetName": "M95",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Scoped",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Scoped.dbx",
+          "sha256": "14366feb18371c96bded4aa417cf614b5e62e75634e6b6afabfb67132385974c",
+          "guid": "812f8f83-616d-48a2-a6c8-1d2b55fa5165"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_ScopeFiring.dbx",
+          "sha256": "d0d7c904eee1adc4e63f464b388ed5cd3a4d1201972400e3f1c37dde334256c6",
+          "guid": "e5a899a7-cb35-4926-a8f5-39d69e485528"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_ScopeFiring.dbx",
+          "sha256": "d0d7c904eee1adc4e63f464b388ed5cd3a4d1201972400e3f1c37dde334256c6",
+          "guid": "2d52ac1d-a729-4eaa-9fc2-ab089e561912"
+        }
+      },
+      "configuration": {
+        "assetName": "M95",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Scoped",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 6.900000095367432,
+          "reloadThreshold": 0.6700000166893005,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 2.299999952316284,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059816735,
+            "expected_bits": "3f2b851f",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1088212173,
+            "expected_bits": "40dccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        },
+        {
+          "archive": "Dist/win32/levels/sp_common/level-00.fbrb",
+          "index_sha256": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 7600000096,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "c2bc403c8dfd6b8aedd5fd84fe2c4d7f39772e34a74f507330940cfb43a152e0",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_exact_magazine_native_family_review",
+        "exact_magazine_hand_contact",
+        "typed_owed_bolt_reload_pause_and_ammo_receipt_rebase"
+      ],
+      "prior_descriptor_digest": "f2170f142b0863ce4bce35d644a180838d325bcb0355f815a2e9cb470f197f26",
+      "boltaction_magazine_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "owed_bolt_reload_handoff_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:c3502874bea7c799efbd7d810661e5b25c5b0d1c6c6d0cf90e77cfb8bf307565",
+      "identity": {
+        "assetName": "SV98",
+        "assetPath": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Scoped",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Scoped.dbx",
+          "sha256": "45f85b1f1c6a508bf88dee3de04b6d56c85a19f976d3fddb681f8ecaddf18b8f",
+          "guid": "67d1700a-ffec-4296-916f-4e7d8429eaa0"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_ScopeFiring.dbx",
+          "sha256": "3d5122abe442313b0e81b329539334cbc835cee9d9f8f39f38f82056c65654d7",
+          "guid": "4592ba14-4a56-4250-80de-4ba306c87139"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_ScopeFiring.dbx",
+          "sha256": "3d5122abe442313b0e81b329539334cbc835cee9d9f8f39f38f82056c65654d7",
+          "guid": "3aca3254-5a16-4dbc-a195-7544b8a875e4"
+        }
+      },
+      "configuration": {
+        "assetName": "SV98",
+        "assetPath": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Scoped",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 10,
+          "numberOfMagazines": 3,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.800000190734863,
+          "reloadThreshold": 0.5299999713897705,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 1.600000023841858,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1057467924,
+            "expected_bits": "3f07ae14",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1083808154,
+            "expected_bits": "4099999a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 5500000191,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "65c2a2b1f7e12f666faac301f033ba09ff802d3256fb745e4780d1d82e0ad62b",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_exact_magazine_native_family_review",
+        "exact_magazine_hand_contact",
+        "typed_owed_bolt_reload_pause_and_ammo_receipt_rebase"
+      ],
+      "prior_descriptor_digest": "316723491fbfa56806388e4a3d70a4412528a900cbae8a7e3248dc0a3b5d5a35",
+      "boltaction_magazine_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "owed_bolt_reload_handoff_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:c962eb86f971bad5c255beff1bcc94213820c6bd949e5c9af72b559e2f17ed18",
+      "identity": {
+        "assetName": "M24",
+        "assetPath": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Kobra",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Kobra.dbx",
+          "sha256": "12d56fe4e39fd8b9d3a6c42ebd18eab4bf8e4a4c5b5a2296b7dfbd73ec9cd6a8",
+          "guid": "de784d39-793f-49c9-b389-6f4b2358617e"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_ScopeFiring.dbx",
+          "sha256": "476cffb4e9d0b62bae3d31d2dc7a35414603499227d962c618da835c9a3f5370",
+          "guid": "628355ba-9d95-483b-8464-14f98997d8ca"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_ScopeFiring.dbx",
+          "sha256": "476cffb4e9d0b62bae3d31d2dc7a35414603499227d962c618da835c9a3f5370",
+          "guid": "8dd6df2e-fd69-4a52-82f8-473385af3efe"
+        }
+      },
+      "configuration": {
+        "assetName": "M24",
+        "assetPath": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Kobra",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 5.0,
+          "reloadThreshold": 0.5600000023841858,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 1.649999976158142,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1057971241,
+            "expected_bits": "3f0f5c29",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1084227584,
+            "expected_bits": "40a00000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 5700000000,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "4b6e995cf5587068bb4730f66655269aa52c66d280ac39cd565a27ccfadf7c2a",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_exact_magazine_native_family_review",
+        "exact_magazine_hand_contact",
+        "typed_owed_bolt_reload_pause_and_ammo_receipt_rebase"
+      ],
+      "prior_descriptor_digest": "67d901177308210e87fa418d55b97af8a24d22184dec62523e0d25e5d9d3c2ee",
+      "boltaction_magazine_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "owed_bolt_reload_handoff_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:cc628606789b8f2d73e796913c36c4dfdc89cd6f8e279414aa19729df39311e9",
+      "identity": {
+        "assetName": "M95",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Kobra",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Kobra.dbx",
+          "sha256": "6b5bfe1065253189c3bc18a0f1b974927ca1d65a94218a8b76a0037639e898d3",
+          "guid": "dcd9e585-21bb-419a-aad4-0b80295f287f"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_ScopeFiring.dbx",
+          "sha256": "d0d7c904eee1adc4e63f464b388ed5cd3a4d1201972400e3f1c37dde334256c6",
+          "guid": "e5a899a7-cb35-4926-a8f5-39d69e485528"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_ScopeFiring.dbx",
+          "sha256": "d0d7c904eee1adc4e63f464b388ed5cd3a4d1201972400e3f1c37dde334256c6",
+          "guid": "2d52ac1d-a729-4eaa-9fc2-ab089e561912"
+        }
+      },
+      "configuration": {
+        "assetName": "M95",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Kobra",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 6.900000095367432,
+          "reloadThreshold": 0.6700000166893005,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 2.299999952316284,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059816735,
+            "expected_bits": "3f2b851f",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1088212173,
+            "expected_bits": "40dccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        },
+        {
+          "archive": "Dist/win32/levels/sp_common/level-00.fbrb",
+          "index_sha256": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 7600000096,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "fed73ae3024064ada4de4f325181e1d03326ec8e1eb1811ddad5bde0090c7999",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_exact_magazine_native_family_review",
+        "exact_magazine_hand_contact",
+        "typed_owed_bolt_reload_pause_and_ammo_receipt_rebase"
+      ],
+      "prior_descriptor_digest": "7555ecefb4ab20b1bd46f04c3e7422db37cea86b81ec9e47a14d39664a135e3f",
+      "boltaction_magazine_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "owed_bolt_reload_handoff_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:d04de1419a64d72e192261b29f20f384188a69431eb6073febb17908b3d6a637",
+      "identity": {
+        "assetName": "GOL",
+        "assetPath": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Scoped",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Scoped.dbx",
+          "sha256": "b413a709fda2431c4e10085ca02db20344f2e21ab71ab77940b489807142e2c5",
+          "guid": "82f7222d-dc86-4d46-82f3-444b9f6d6c12"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_ScopeFiring.dbx",
+          "sha256": "951235c5d75d05462c7aca061dd224d7fd77e205ac61733896db49d65c3bc0e5",
+          "guid": "bab5b639-db08-49a2-b049-891d202b3dcb"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_ScopeFiring.dbx",
+          "sha256": "951235c5d75d05462c7aca061dd224d7fd77e205ac61733896db49d65c3bc0e5",
+          "guid": "8aba0d99-96fe-4d31-b39a-422e2cc74c87"
+        }
+      },
+      "configuration": {
+        "assetName": "GOL",
+        "assetPath": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Scoped",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.800000190734863,
+          "reloadThreshold": 0.6700000166893005,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 1.7999999523162842,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059816735,
+            "expected_bits": "3f2b851f",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1083808154,
+            "expected_bits": "4099999a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 5500000191,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "50cecc5912ec1ddf4cf28e1b09be8c8e25685f6345109629b1fc789d3d3a3567",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_exact_magazine_native_family_review",
+        "exact_magazine_hand_contact",
+        "typed_owed_bolt_reload_pause_and_ammo_receipt_rebase"
+      ],
+      "prior_descriptor_digest": "ebdcb4638a1d859bc3019c8fa6eff8833427006a1aaadd33fcccb306c6d036a3",
+      "boltaction_magazine_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "owed_bolt_reload_handoff_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:e17eaa72190fcc4eb01e36801d41a6d771ac15c038708092165ed90c36adac33",
+      "identity": {
+        "assetName": "M95_sp",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95.dbx",
+          "sha256": "8f8494c4d007bb3955485d740372bd521ff6fb4fa437f1df81602c29023ec298",
+          "guid": "7717ea86-49ed-4aa8-b401-7e62d8ade339"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Firing.dbx",
+          "sha256": "4154044cea216e2803840dcf8ff5d2eb1343448d14e63a9b142e55f7858fa66d",
+          "guid": "a65b2cbb-05f1-488b-8dd1-9895f2b60ac5"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Firing.dbx",
+          "sha256": "4154044cea216e2803840dcf8ff5d2eb1343448d14e63a9b142e55f7858fa66d",
+          "guid": "aca0193a-bc85-4a6e-9809-a2e9fdd57b10"
+        }
+      },
+      "configuration": {
+        "assetName": "M95_sp",
+        "assetPath": "Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 6.900000095367432,
+          "reloadThreshold": 0.6700000166893005,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 2.299999952316284,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059816735,
+            "expected_bits": "3f2b851f",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1088212173,
+            "expected_bits": "40dccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        },
+        {
+          "archive": "Dist/win32/levels/sp_common/level-00.fbrb",
+          "index_sha256": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 7600000096,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "ba6256ff27a55659b51d7c7b64d208aa87040e930d0dfe566c7f02df32b69046",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_exact_magazine_native_family_review",
+        "exact_magazine_hand_contact",
+        "typed_owed_bolt_reload_pause_and_ammo_receipt_rebase"
+      ],
+      "prior_descriptor_digest": "23b0ad850a90bf59dbdc6b9f0c22f500a8ee76f8ad6a7cb3033807c76b34466e",
+      "boltaction_magazine_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "owed_bolt_reload_handoff_admission": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:ff9317c5dfaf5869c3ed99563a1a64d5c3bcdb6aaee3b4308309399c2e46343e",
+      "identity": {
+        "assetName": "GOL",
+        "assetPath": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Kobra",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Kobra.dbx",
+          "sha256": "12c0e163971af2fac10e58e70ce5035dbeb9ff816ed5127296661035816a2e6e",
+          "guid": "0ca52687-d93d-4160-acf0-63bfed5fad88"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_ScopeFiring.dbx",
+          "sha256": "951235c5d75d05462c7aca061dd224d7fd77e205ac61733896db49d65c3bc0e5",
+          "guid": "bab5b639-db08-49a2-b049-891d202b3dcb"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_ScopeFiring.dbx",
+          "sha256": "951235c5d75d05462c7aca061dd224d7fd77e205ac61733896db49d65c3bc0e5",
+          "guid": "8aba0d99-96fe-4d31-b39a-422e2cc74c87"
+        }
+      },
+      "configuration": {
+        "assetName": "GOL",
+        "assetPath": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Kobra",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 5,
+          "numberOfMagazines": 5,
+          "reloadDelay": 0.0,
+          "reloadTime": 4.800000190734863,
+          "reloadThreshold": 0.6700000166893005,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 1.7999999523162842,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false,
+          "fireLogicType": 1
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059816735,
+            "expected_bits": "3f2b851f",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1083808154,
+            "expected_bits": "4099999a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSniper",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 5500000191,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "22b3e5a3dfdda753d6c6d547caada7704d286e0b906e9346a5037ac3890e9fe5",
+      "existing_baseline_reference": false,
+      "jobs": [
+        "exact_configuration_registry_join",
+        "independent_grip_and_magazine_geometry",
+        "current_native_config_and_cycle_fixture",
+        "independent_exact_magazine_native_family_review",
+        "exact_magazine_hand_contact",
+        "typed_owed_bolt_reload_pause_and_ammo_receipt_rebase"
+      ],
+      "prior_descriptor_digest": "20a7ea6ed314335720c5d2d37d4e92a853b19859d333f44de14ffb2822a8ff15",
+      "boltaction_magazine_proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+      "chamber_knowledge": "Unknown",
+      "native_runtime_admission": false,
+      "owed_bolt_reload_handoff_admission": false
+    }
+  ],
+  "rejected": [],
+  "summary": {
+    "descriptors": 28,
+    "existing_baselines": 0,
+    "disabled_candidates": 28,
+    "deferred": 0,
+    "rejected": 0
+  },
+  "limits": [
+    "Candidates are never native admission. Exact-name/path ambiguity is a blocking job.",
+    "Class/rtMagazine do not prove physical detachable-magazine or belt semantics.",
+    "Authored capacity is not current native capacity; no ammo ledger is emitted.",
+    "Completion margin is proposed shared policy data, not a native clock change.",
+    "New empty control requires separate actual native acceptance."
+  ],
+  "singlefire_candidate_extension": {
+    "proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee",
+    "rows_reclassified": 5,
+    "runtime_enabled": false,
+    "chamber_knowledge": "Unknown",
+    "limits": [
+      "Isolated original instructions, synthetic objects and empty listeners only.",
+      "No native owners, three-copy convergence, shot, chamber or slide readiness receipt."
+    ]
+  },
+  "boltaction_magazine_candidate_extension": {
+    "proof_digest": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc",
+    "rows_reclassified": 20,
+    "runtime_enabled": false,
+    "limits": [
+      "Static ordinary reload dispatch only; no new original-instruction execution or actual-game result.",
+      "Owed bolt, original magazine ownership, native three-copy convergence and physical custody require their own receipts.",
+      "No firing/chamber grant and no direct native state, timer, ammo or animation writes."
+    ]
+  },
+  "input_sha256": {
+    "catalog": "09b72862fbdcfea903d92657675264e94b28238690c5f8b9bbbbe6e6a110cd6e",
+    "singlefire_magazine_proof": "513aaee389e14d98f59cab742b00508f6b2f03689af10a2518271a42bbcacbae",
+    "boltaction_magazine_proof": "57de19d34179875c0cab56ea5527ccccd894ef259367258b552f8b8ca0bea3fc"
+  },
+  "scope": "All exact cached wcSniper configurations; no name-based admission or omitted variants"
+}

@@ -1,0 +1,17 @@
+Weapons51: firearm SOURCE COMPLETE; no merge/push/install/game authorized now.
+Coordinator worktree campaign-coordinator-20261028-r1; batch base857ac5f; candidate2b5a68c parked.
+Root owns Git, shared files, compile/tests and final completion receipt.
+Source workers43-49 retired; coverage50/assetchecks50/runtime-review50/recovery51 retired.
+Fixed51 Done Y and retired after policy/resource/context/physical checks passed.
+No agent writers. Root owns all files. External25/26/32 untouched;01/03 deferred.
+Exact metadata joins PASS181/181 configurations,77 names (coverage50/coverage.json).
+Reload families:128 magazine,25 shell/pump,24 belt-feed,4 clip/cylinder.
+Support/body selectors181; bolt mechanisms17; pistol slides5; final cache252 records.
+Full cache: reports/coordinator-20261030-cache48-enrollment01/body-ammo.fvrprop.
+Incremental48 normal regeneration PASS; baseline204 preserved; no repeated extraction.
+Runtime Gameplay/RigPublication/NativeProbe connected; applicable syntax checks passed.
+Focused checks30/30 x86 +30/30 x64 PASS, preserving/reusing unchanged earlier passes.
+Actual252-record CPU cache consumers PASS both architectures;11 asset integrity tests PASS.
+Completion receipt: completion.json; exact roster181/181 source_complete=true.
+Normal DLL build/integration/install remain held for user's integration request.
+Do not equate metadata coverage with working in-headset acceptance.

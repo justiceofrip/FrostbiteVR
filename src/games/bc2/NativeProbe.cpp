@@ -1242,7 +1242,8 @@ fvr::bc2::BodyPropSources ReadBodySources()noexcept {
         ReadBodySource(fvr::bc2::rigPublication::ReadHolsteredBodyRenderSource,1),
         ReadBodySource(fvr::bc2::rigPublication::ReadCarriedBodyRenderSource,2),
         ReadBodySource(fvr::bc2::rigPublication::ReadStowedAmmoRenderSource,3),
-        fvr::bc2::gameplay::ReadVehicleReticle(ReloadDrawNowNs())};
+        fvr::bc2::gameplay::ReadVehicleReticle(ReloadDrawNowNs()),
+        fvr::bc2::rigPublication::ReadFixedContainerRenderSource(ReloadDrawNowNs())};
 }
 struct BufferEvidence {ComPtr<ID3D11Buffer> staging;std::vector<unsigned char> bytes;unsigned source=0;bool done=false;};
 struct EyeBufferEvidence {bool queued=false;std::atomic<bool> complete=false;std::array<BufferEvidence,14> buffers;ComPtr<ID3D11DeviceContext> context;unsigned indices=0;};

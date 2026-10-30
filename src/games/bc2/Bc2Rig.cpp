@@ -107,24 +107,32 @@ std::optional<RigSnapshot> ReadFirstPersonRig(const RigMemory& memory,std::uint3
         for(unsigned i=0;i<4;++i){m.values[2][i]=-m.values[2][i];m.values[i][2]=-m.values[i][2];}return m;
     };
     std::vector<std::array<std::byte,64>> baseSkin(id.count);if(!read.Read(id.skinMatrices,baseSkin.data(),id.count*64))return {};
+    const auto collapsed=[](const math::Matrix4& m){
+        for(const auto& row:m.values)for(float x:row)if(!std::isfinite(x))return false;
+        for(unsigned r=0;r<3;++r)for(unsigned c=0;c<3;++c)
+            if(std::abs(m.values[r][c]-(r==c?.0001f:0.f))>1e-7f)return false;
+        return true;
+    };
+    std::vector<bool> hidden(id.count,false);
+    for(unsigned n=0;n<id.count;++n){
+        bool weaponMember=false;
+        for(auto at=result.parents[n];at!=-1;at=result.parents[at])weaponMember|=at==std::int32_t(result.weaponBone);
+        hidden[n]=weaponMember&&n!=result.weaponBone&&!armBranch(n)&&result.names[n].rfind("jntWpn",0)==0&&
+            collapsed(canonical(result.nativeWorld[n]))&&collapsed(canonical(baseSkin[n]))&&collapsed(canonical(result.nativeEvaluated[n]));
+    }
+    for(unsigned n=0;n<id.count;++n)if(hidden[n]){
+        for(unsigned child=0;child<id.count;++child)if(result.parents[child]==std::int32_t(n)&&!hidden[child])return {};
+    }
     for(unsigned n=0;n<id.count;++n){
         const auto world=canonical(result.nativeWorld[n]);result.world.push_back(world);
         std::array<std::byte,64> bytes{};std::memcpy(bytes.data(),records[n].data()+0x4c,64);
         const auto inverseBind=canonical(bytes);const auto bind=interaction::InverseAnimatedTransform(inverseBind);if(!bind)return {};result.inverseBind.push_back(inverseBind);
         const auto skin=canonical(baseSkin[n]),expected=interaction::Multiply(inverseBind,world);
-        // Native weapon animation hides direct leaves with a 1e-4 diagonal in
+        // Native weapon animation hides weapon geometry with a 1e-4 diagonal in
         // all three palettes (observed on SPAS jntWpn_7 and Garand jntWpn_6).
         // Their translations no longer obey bind*world. This is structural
         // preservation, not an attachment binding or permission to unhide them.
-        const auto collapsed=[](const math::Matrix4& m){
-            for(const auto& row:m.values)for(float x:row)if(!std::isfinite(x))return false;
-            for(unsigned r=0;r<3;++r)for(unsigned c=0;c<3;++c)
-                if(std::abs(m.values[r][c]-(r==c?.0001f:0.f))>1e-7f)return false;
-            return true;
-        };
-        if(result.names[n].rfind("jntWpn_",0)==0&&n!=result.weaponBone&&result.parents[n]==std::int32_t(result.weaponBone)&&!armBranch(n)&&
-           std::find(result.parents.begin(),result.parents.end(),std::int32_t(n))==result.parents.end()&&
-           collapsed(world)&&collapsed(skin)&&collapsed(canonical(result.nativeEvaluated[n]))){
+        if(hidden[n]){
             result.nativeHiddenLeaves.push_back(n);
             result.evaluatedWorld.push_back(interaction::Multiply(*bind,canonical(result.nativeEvaluated[n])));
             continue;

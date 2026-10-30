@@ -31,7 +31,7 @@ ENUM_FIELDS = {
     'fireInputAction': ('FireLogic.FireInputAction', 'EiaFire', 8),
     'reloadInputAction': ('FireLogic.ReloadInputAction', 'EiaReload', 29),
 }
-CLASSES = frozenset(('wcAssault', 'wcSmg', 'wcLmg', 'wcPistol', 'wcSniper'))
+CLASSES = frozenset(('wcAssault', 'wcSmg', 'wcLmg', 'wcPistol', 'wcSniper', 'wcShotgun'))
 
 def digest(value):
     return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest()
@@ -184,6 +184,7 @@ def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--catalog',type=Path,required=True)
     p.add_argument('--reviewed-baselines',type=Path);p.add_argument('--automatic-stock-bolt-proof',type=Path)
     p.add_argument('--singlefire-magazine-proof',type=Path)
+    p.add_argument('--boltaction-magazine-proof',type=Path)
     p.add_argument('--output',type=Path,required=True);a=p.parse_args()
     catalog,catalog_hash=load(a.catalog);baselines=None;baseline_hash=None
     if a.reviewed_baselines:baselines,baseline_hash=load(a.reviewed_baselines)
@@ -196,8 +197,13 @@ def main():
     if a.singlefire_magazine_proof:
         from bc2_singlefire_magazine_proof import apply
         proof,singlefire_hash=load(a.singlefire_magazine_proof);result=apply(result,proof)
+    boltaction_hash=None
+    if a.boltaction_magazine_proof:
+        from bc2_boltaction_magazine_proof import apply
+        proof,boltaction_hash=load(a.boltaction_magazine_proof);result=apply(result,proof)
     result['input_sha256']={'catalog':catalog_hash}
     if singlefire_hash:result['input_sha256']['singlefire_magazine_proof']=singlefire_hash
+    if boltaction_hash:result['input_sha256']['boltaction_magazine_proof']=boltaction_hash
     if proof_hash:result['input_sha256']['automatic_stock_bolt_proof']=proof_hash
     if baseline_hash:result['input_sha256']['reviewed_baselines']=baseline_hash
     a.output.parent.mkdir(parents=True,exist_ok=True);a.output.write_text(json.dumps(result,indent=2,allow_nan=False)+'\n',encoding='utf-8')

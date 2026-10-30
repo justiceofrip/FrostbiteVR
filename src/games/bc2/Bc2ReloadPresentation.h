@@ -4,15 +4,18 @@
 namespace fvr::bc2 {
 // Shared captured shell origin; the belt and held preview use the same prop center.
 std::optional<math::Matrix4> SpasShellBoneAtCenter(const math::Matrix4& centerWorld,float units)noexcept;
+std::optional<math::Matrix4> ShotgunShellBoneAtCenter(const ShotgunReloadEquipmentProfile*,const math::Matrix4& centerWorld,float units)noexcept;
 struct Bc2ReloadPresentationBinding {
     std::uint64_t fingerprint=0;
     std::uint32_t weapon=0,shell=0,wrist=0;
     std::array<std::uint32_t,15> fingers{};
+    const ShotgunReloadEquipmentProfile* equipment=nullptr;
+    std::vector<std::uint32_t> hiddenDescendants;
 };
 namespace bc2_reload_detail {
 // Structural derivation is separately testable with synthetic rigs. Production
 // must enter through BindBc2ReloadPresentation's exact captured-rig gate.
-std::optional<Bc2ReloadPresentationBinding> DerivePresentationBinding(const RigSnapshot&);
+std::optional<Bc2ReloadPresentationBinding> DerivePresentationBinding(const RigSnapshot&,const ShotgunReloadEquipmentProfile* equipment=nullptr);
 bool KnownHiddenShell(const RigSnapshot&,const Bc2ReloadPresentationBinding&)noexcept;
 // A private-copy exception for exactly the bound shell. Never changes native
 // bytes or the generic planner; every other hidden leaf remains excluded.
@@ -21,7 +24,8 @@ std::optional<RigPosePlan> BuildShellVisibilityPalette(const RigSnapshot&,
     std::optional<std::uint32_t> ownedShell);
 }
 std::optional<Bc2ReloadPresentationBinding> BindBc2ReloadPresentation(
-    const RigSnapshot&,std::string_view asset,std::string_view selectedMesh);
+    const RigSnapshot&,std::string_view asset,std::string_view selectedMesh,
+    const ShotgunReloadEquipmentProfile* equipment=nullptr);
 struct Bc2ReloadPresentationObservation {
     bool enabled=false,selectedMeshIdentityVerified=false,sectionOwnershipVerified=false,shellSectionVisible=false;
     std::string_view assetName,meshPath;
@@ -36,6 +40,8 @@ struct Bc2ReloadPresentationObservation {
     // Set only by the exact-owner AmmoObject preview adapter after its real
     // mesh/rig/claim/native-lease checks. Default callers retain hidden rejection.
     bool allowOwnedShellVisibility=false;
+    const ShotgunReloadEquipmentProfile* equipment=nullptr;
+    std::string_view configurationPath;
 };
 enum class Bc2ReloadPresentationReason : std::uint8_t {
     None,Disabled,UnsupportedAsset,StaleOwnership,InvalidBinding,VisibilityUnverified,
@@ -48,7 +54,7 @@ struct Bc2ReloadPresentationPlan {
     std::optional<RigPosePlan> palette;
     std::optional<std::uint32_t> ownedShellVisibility;
 };
-// Places the actual jntWpn_7 shell plus captured row58 hand shape independently
+// Places the exact equipment shell and its authored hand shape independently
 // of the weapon root. Root must solve the left arm to the SAME wrist target and
 // compose these writes once into its private immutable palette. Only a verified
 // owned ammo preview may replace the bound shell's native collapsed pose in that

@@ -2,6 +2,7 @@
 #include "Bc2MagazineNativeProfile.h"
 #include "Bc2ReloadFamily.h"
 #include "Bc2ReloadRoundGate.h"
+#include "Bc2ManualPumpConfig.h"
 namespace fvr::bc2 {
 // Typed selection of already reviewed manual native reload families. This is
 // configuration/timing evidence only: owner, invocation, phase, context and
@@ -9,7 +10,7 @@ namespace fvr::bc2 {
 // Unknown guns and underbarrel attachments retain ordinary native reloads.
 inline bool ManualEmptyFamilyConfig(ReloadNativeFamily family,NativeMagazineProfileId id,
     const ReloadObservedConfig& config)noexcept {
-    if(family==ReloadNativeFamily::SpasTube)return MatchesReloadDescriptor(config,SpasReloadDescriptor);
+    if(family==ReloadNativeFamily::SpasTube)return ManualPumpConfig(config);
     if(family!=ReloadNativeFamily::Xm8Magazine)return false;
     const auto* profile=ResolveMagazineNativeProfile(id);
     return profile&&profile->Matches(config)&&profile->ReviewedDispatch();

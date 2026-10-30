@@ -1,0 +1,50 @@
+{
+  "schema": "fvr.bc2.fixed_container_geometry_validation.v1",
+  "deterministic_test_command": "py -3 -B -m unittest discover -s tests -p test_bc2_fixed_container_geometry.py -v",
+  "tests_passed": 12,
+  "tests_failed": 0,
+  "generated_reproduction": "exact byte comparison passed",
+  "models": 3,
+  "configuration_selectors": 4,
+  "supply_cache_parts": 6,
+  "native_checked": false,
+  "headset_accepted": false,
+  "root_build_required": true,
+  "artifacts": [
+    {
+      "path": "tools/bc2_fixed_container_geometry.py",
+      "sha256": "231af90976e542c03d227e91a60b7e53fc0ed2dca293b5c823c347f456bcc637",
+      "bytes": 36807
+    },
+    {
+      "path": "tests/test_bc2_fixed_container_geometry.py",
+      "sha256": "bfea1035994f80e6cca2fdb5bcd67fe686f0b4aff7eeae5fe0e4f07b1f495dc7",
+      "bytes": 9088
+    },
+    {
+      "path": "handoff/tasks/WEAPONS/20261030-special46/authoring-policy.json",
+      "sha256": "a8171a4ed76589fbbfc09e9aaf4bc0088077a91ba13c985e46520c7c20158c7f",
+      "bytes": 3979
+    },
+    {
+      "path": "profiles/weapons46-special/body-ammo-assets.json",
+      "sha256": "9460f64fba5ace41787ff0a83e28fc146a4db4b7d70faf26123a5f339fa30498",
+      "bytes": 8468
+    },
+    {
+      "path": "profiles/weapons46-special/exact-native.json",
+      "sha256": "01b2e318833484cbb9053d67f5dba9a2f463c8519cf3fcccbb9e449007e6009d",
+      "bytes": 20398
+    },
+    {
+      "path": "profiles/weapons46-special/FixedContainer.generated.h",
+      "sha256": "e357360ae72bf8b3da6a8b782cde01e6eca28a8609688831128a73e409f6f69a",
+      "bytes": 98413
+    },
+    {
+      "path": "profiles/weapons46-special/geometry.json",
+      "sha256": "68284149401013b4aa8d40b55604fdce5d7ae0b020467af24a71faf8d0d2b939",
+      "bytes": 298792
+    }
+  ]
+}

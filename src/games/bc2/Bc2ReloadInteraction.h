@@ -2,6 +2,7 @@
 #include "fvr/interaction/ReloadInsertion.h"
 #include <string_view>
 namespace fvr::bc2 {
+struct ShotgunReloadEquipmentProfile;
 inline constexpr std::string_view SpasReloadAsset="SPAS12_sp";
 inline constexpr std::string_view SpasReloadMesh="Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh";
 inline constexpr std::uint64_t SpasReloadRig=0xa7f219a1426216abull;
@@ -23,6 +24,8 @@ struct Bc2ReloadInteractionSample {
     bool selectedMeshIdentityVerified=false;
     // Coherent RAW pre-IK wrist and placed weapon worlds, canonical metres.
     math::Matrix4 rawLeftWristWorldMeters{},weaponWorldMeters{};
+    const ShotgunReloadEquipmentProfile* equipment=nullptr;
+    std::string_view configurationPath;
 };
 struct Bc2ReloadTargets {
     interaction::ReloadInsertionIdentity identity{};
@@ -30,6 +33,7 @@ struct Bc2ReloadTargets {
     std::uint64_t inputSequence=0,nativeCycle=0;
     std::int64_t observedNs=0,deadlineNs=0;
     math::Matrix4 weaponFromShellCenterMeters{},weaponFromLeftWristMeters{};
+    const ShotgunReloadEquipmentProfile* equipment=nullptr;
 };
 enum class Bc2ReloadInteractionReason : std::uint8_t {
     None,Disabled,UnsupportedAsset,MeshUnverified,NativeGateUnavailable,NativeCycleChanged,
@@ -46,11 +50,12 @@ class Bc2ReloadInteraction {
 public:
     explicit Bc2ReloadInteraction(bool enabled=false)noexcept:enabled_(enabled),insertion_(SpasReloadInsertionProfile()){}
     Bc2ReloadInteractionResult Update(const Bc2ReloadInteractionSample&)noexcept;
-    void Reset()noexcept {insertion_.Reset();cycle_=0;}
+    void Reset()noexcept {insertion_.Reset();cycle_=0;equipment_=nullptr;}
 private:
     Bc2ReloadInteractionResult Reject(Bc2ReloadInteractionReason)noexcept;
     bool enabled_=false;
     std::uint64_t cycle_=0;
+    const ShotgunReloadEquipmentProfile* equipment_=nullptr;
     interaction::ReloadInsertion insertion_;
 };
 }

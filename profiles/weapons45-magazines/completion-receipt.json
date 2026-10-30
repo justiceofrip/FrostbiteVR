@@ -1,0 +1,71 @@
+{
+  "schema": "fvr.bc2.magazines45.complete_portable_enrollment.v1",
+  "complete": true,
+  "configurations": 128,
+  "strict_geometry": 80,
+  "explicit_mod_authored_geometry": 48,
+  "preserved_native_registrations": 23,
+  "new_exact_native_registrations": 105,
+  "catalog_rows": 204,
+  "cache_bytes": 44064869,
+  "cache_pin": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-magazines45-enrollment05\\body-ammo.fvrprop",
+    "sha256": "2e420c02ea639cd2b1087e762dca25fc16ae62db6f6cea7e1154e97cf3faf749"
+  },
+  "cache_bytes_unchanged": true,
+  "numerical_geometry_unchanged": true,
+  "source_complete": true,
+  "portable_replay_uses_private_paths": false,
+  "compiled": false,
+  "installed": false,
+  "native_execution": false,
+  "headset_acceptance": false,
+  "inputs": {
+    "installed_enrollment": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-magazines45-enrollment05\\receipt.json",
+      "sha256": "2bebcb7d963b59e8821a015a4670c1ff8bef4dca953a79dfbe339a6387dc502e"
+    }
+  },
+  "outputs": {
+    "batch.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\profiles\\weapons45-magazines\\batch.json",
+      "sha256": "5b2478c9111798b328b3585f738d1ef634249185bb8c3222384f55240e4d6ad5"
+    },
+    "geometry.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\profiles\\weapons45-magazines\\geometry.json",
+      "sha256": "da8726c3d3aea6be16f38b6ce963ce225b9b362fb47b40e11ea07890aaa52fe9"
+    },
+    "body-ammo-assets.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\profiles\\weapons45-magazines\\body-ammo-assets.json",
+      "sha256": "1eec9247845f8be88e9ade33d346f0f5250ab68ec85e52b8452d083cc0d23448"
+    },
+    "enrollment.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\profiles\\weapons45-magazines\\enrollment.json",
+      "sha256": "e38a76a229f65da62ddeb7d80530b415d7a5adefe07ce78d7fd921a3cdb1817c"
+    },
+    "CombinedRegistry.h": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\profiles\\weapons45-magazines\\CombinedRegistry.h",
+      "sha256": "8319980c7b742897014de1f5432825f4d271ac5c21b64131fa9aa33149dd5348"
+    },
+    "CombinedGeometry.h": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\profiles\\weapons45-magazines\\CombinedGeometry.h",
+      "sha256": "49cccfe1632d840dac63db809a765db1d2e6890b28ac7088cdf3bed306bd430e"
+    },
+    "Registry.additions.generated.h": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\profiles\\weapons45-magazines\\Registry.additions.generated.h",
+      "sha256": "84f419daed8f0f2214c672a9109334c70f4fe72c7fec1cb60d9f86e601343bf7"
+    },
+    "Geometry.additions.generated.h": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\profiles\\weapons45-magazines\\Geometry.additions.generated.h",
+      "sha256": "66dfd02c5d66b71d3dac7312777aad866c3e1b7bf8a41c1df916eeda283d476b"
+    },
+    "Visibility.generated.h": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\profiles\\weapons45-magazines\\Visibility.generated.h",
+      "sha256": "da8f575ab6f5bc8bcb6d139e994229c769647ac50715b5b0af1897a838a0a8bf"
+    },
+    "BodyAmmoAssetData.generated.h": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\profiles\\weapons45-magazines\\BodyAmmoAssetData.generated.h",
+      "sha256": "3b7e827f50e8857b831e123e14612a922a9bed671ce0cd889253d8bc7ce6ab32"
+    }
+  }
+}

@@ -402,6 +402,7 @@ public:
     }
 private:
     friend class FeedReloadSession;
+    friend class FixedContainerReload;
     void MigrateContext(const FeedOwner& before,const FeedOwner& after)noexcept {
         Drop();
         if(recovery_&&recovery_->candidate_.owner==before&&proofId_!=std::numeric_limits<std::uint64_t>::max()){

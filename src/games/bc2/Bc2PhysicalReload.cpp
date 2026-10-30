@@ -1,4 +1,5 @@
 #include "Bc2PhysicalReload.h"
+#include "Bc2ShotgunEquipment.h"
 #include <cstring>
 #include <limits>
 namespace fvr::bc2 {
@@ -16,7 +17,8 @@ bool Fresh(std::int64_t observed,std::int64_t deadline,std::int64_t now,std::int
 }
 bool Outside(const ReloadRawContact& raw)noexcept {
     if(!raw.valid||!Rigid(raw.rawLeftWristWorldMeters)||!Rigid(raw.weaponWorldMeters))return false;
-    const auto p=SpasReloadInsertionProfile();
+    const auto* equipment=KnownShotgunEquipment(raw.equipment);if(!equipment)return false;
+    const auto& p=*equipment->shellInsertion;
     const auto wrist=Multiply(raw.rawLeftWristWorldMeters,*InverseRigid(raw.weaponWorldMeters));
     const auto item=Multiply(*InverseRigid(p.itemFromHand),wrist);
     const auto rail=Multiply(Multiply(p.itemFromInsertion,item),*InverseRigid(p.weaponFromEntry));
@@ -85,25 +87,28 @@ void Bc2PhysicalReload::Feedback(PhysicalReloadResult& out,interaction::Feedback
     if(feedbackEventCount_<feedbackEvents_.size())feedbackEvents_[feedbackEventCount_++]=event;else ++feedbackEventDropped_;
 }
 const Bc2PhysicalReload::Evidence* Bc2PhysicalReload::Original(const PhysicalReloadSample& s)const noexcept {
-    if(!s.raw.valid||s.raw.owner!=s.nativeOwner||s.raw.rigFingerprint!=SpasReloadRig||!s.originalHandEvidence||
+    if(!s.raw.valid||s.raw.owner!=s.nativeOwner||s.raw.rigFingerprint!=equipment_->rigFingerprint||KnownShotgunEquipment(s.raw.equipment)!=equipment_||KnownShotgunEquipment(s.equipment)!=equipment_||!s.originalHandEvidence||
         !SameInput(s.raw.inputEvidence,*s.originalHandEvidence)||s.raw.inputEvidence.deadlineNs<=s.input.nowNs)return nullptr;
     for(const auto& e:history_)if(e&&SameInput(e->supply.input,s.raw.inputEvidence)&&
         e->supply.source.identity.owner==s.input.owner&&e->supply.source.identity.weapon==s.weapon&&
-        e->supply.trackingEpoch==s.trackingEpoch)return &*e;
+        e->supply.trackingEpoch==s.trackingEpoch&&
+        e->supply.source.identity.profile==HandInteractionKey{equipment_->shellInsertion->id,equipment_->shellInsertion->revision})return &*e;
     return nullptr;
 }
 Bc2ReloadInteractionSample Bc2PhysicalReload::Interaction(const PhysicalReloadSample& s,const Evidence* original,
     const ReloadRoundLease& lease,std::int64_t now)const noexcept {
     Bc2ReloadInteractionSample out;auto& i=out.insertion;
+    const auto* equipment=KnownShotgunEquipment(s.equipment);if(!equipment)return out;
+    out.equipment=equipment;out.configurationPath=equipment->native->config->assetPath;
     const auto& in=original?original->supply.input:s.input;
     i.identity={s.input.owner,s.weapon,original?original->item.token.item:HandInteractionKey{},s.trackingEpoch};
-    const auto p=SpasReloadInsertionProfile();i.profile={p.id,p.revision};
+    const auto& p=*equipment->shellInsertion;i.profile={p.id,p.revision};
     if(original){i.itemClaim=original->item;i.weaponClaim=original->gun;}
     i.sequence=in.sequence;i.geometrySequence=original?in.sequence:0;i.observedNs=in.observedNs;i.deadlineNs=in.deadlineNs;i.nowNs=now;
     i.focused=s.input.focused;i.itemTracked=s.input.tracked[0];i.weaponTracked=s.input.tracked[1];
     i.held=original&&supply_.Held()&&supply_.Held()->claim.token==original->item.token;
-    i.eligible=i.held&&bool(s.meshes)&&bool(FindSelectedMesh(*s.meshes,s.nativeOwner,SelectedMeshKind::Spas12,now));
-    out.assetName=s.asset;out.meshPath=SpasReloadMesh;out.rigFingerprint=s.raw.rigFingerprint;out.selectedMeshIdentityVerified=i.eligible;
+    i.eligible=i.held&&bool(s.meshes)&&bool(ShotgunEquipmentSelected(*s.meshes,s.nativeOwner,equipment,now));
+    out.assetName=s.asset;out.meshPath=equipment->meshPath;out.rigFingerprint=s.raw.rigFingerprint;out.selectedMeshIdentityVerified=i.eligible;
     out.rawLeftWristWorldMeters=s.raw.rawLeftWristWorldMeters;out.weaponWorldMeters=s.raw.weaponWorldMeters;
     if(const auto owners=BindBc2ReloadOwners(s.input.owner,s.weapon,lease,now))out.native=*ToBc2ReloadInteractionLease(*owners,lease,now);
     return out;
@@ -160,20 +165,29 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
     const auto cancel=[&](PhysicalReloadCancelReason reason){diagnosticCancel=reason;Cancel(s.input,hands,reason,s.cancelFlags);};
     using CancelReason=PhysicalReloadCancelReason;
     if(!Api()||s.input.nowNs<lastNow_){cancel(CancelReason::ApiOrClock);return out;}lastNow_=s.input.nowNs;
-    out.tracking={true,s.nativeOwner,s.input,{}};
+    const auto* requestedEquipment=KnownShotgunEquipment(s.equipment);
+    if(requestedEquipment!=equipment_){
+        cancel(CancelReason::OwnerChanged);
+        if(requestedEquipment&&!active_&&!retiring_&&!supply_.Held()&&!supply_.Pending()){
+            equipment_=requestedEquipment;insertion_.Reset();history_={};historyNext_=0;
+        }
+    }
+    const auto* equipment=requestedEquipment?requestedEquipment:equipment_;
+    const bool currentEquipment=requestedEquipment&&requestedEquipment==equipment_;
+    out.tracking={true,s.nativeOwner,s.input,{}};out.tracking.equipment=s.equipment;
     const auto gun=hands.Current(InteractionHand::Right);
     const bool gunSafe=ReloadTrackingFresh(out.tracking,s.input.nowNs)&&gun&&gun->token.kind==HandClaimKind::GunHold&&
         gun->token.owner==s.input.owner&&gun->token.item==s.weapon&&gun->inputSequence==s.input.sequence&&gun->deadlineNs>s.input.nowNs&&
         s.weapon.generation==s.input.owner.equipGeneration&&s.trackingEpoch==s.nativeOwner.space;
-    // SPAS acquisition/hold retains its exact direct native item requirement.
+    // Shell acquisition/hold retains its exact direct native item requirement.
     const bool safe=gunSafe&&s.weapon.id==s.nativeOwner.weapon;
     diagnosticSafe=safe;
-    const bool cancelInput=!safe||s.cancel||s.asset!=SpasReloadAsset;
+    const bool cancelInput=!safe||s.cancel||!currentEquipment||s.asset!=equipment->native->config->assetName;
     // A stock reload prop can remain visible after the native transfer retires,
     // including at full capacity or zero reserve. Its visual lifetime follows
     // this exact current manual gun and mesh, never ammunition availability.
     if(!cancelInput&&s.meshes){
-        try{out.tracking.manualShell=std::make_shared<const ReloadShellPresentation>(ReloadShellPresentation{*gun,s.meshes});}catch(...){}
+        try{out.tracking.manualShell=std::make_shared<const ReloadShellPresentation>(ReloadShellPresentation{*gun,s.meshes,equipment});}catch(...){}
         if(!ReloadShellPresentationFresh(out.tracking,s.input.nowNs))out.tracking.manualShell.reset();
     }
     supportReturn_.Observe(s.input,gun,cancelInput,hands.Current(InteractionHand::Left).has_value(),s.cancelFlags);
@@ -191,7 +205,7 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
         // A typed coherent owner/config proof may overlap a callback before
         // the first genuine hold. Keep only the exact already-owned shell.
         if(active_&&!retiring_&&!lease_&&supply_.Held()&&!supply_.Pending()&&
-           !deferredSeat_&&!completion_&&safe&&!s.cancel&&s.asset==SpasReloadAsset&&
+           !deferredSeat_&&!completion_&&safe&&!s.cancel&&currentEquipment&&s.asset==equipment->native->config->assetName&&
            native_.owner==s.nativeOwner&&physical_==s.input.owner){
             if(!holdEstablished_&&s.input.nowNs-started_>3000000000ll){cancel(CancelReason::HoldNotEstablished);return out;}
             if(!startupGapDeadline_&&acceptedControlDeadline_>s.input.nowNs)
@@ -199,12 +213,12 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
                     holdEstablished_?50000000ll:3000000000ll-(s.input.nowNs-started_)});
             if(!startupGapDeadline_||s.input.nowNs>=startupGapDeadline_){++startupGapExpired_;cancel(CancelReason::MissingSource);return out;}
             Bc2ReloadInteractionSample profile;profile.insertion.identity={s.input.owner,s.weapon,{},s.trackingEpoch};
-            profile.insertion.nowNs=s.input.nowNs;profile.assetName=s.asset;profile.meshPath=SpasReloadMesh;
+            profile.insertion.nowNs=s.input.nowNs;profile.assetName=s.asset;profile.meshPath=equipment->meshPath;profile.equipment=equipment;profile.configurationPath=equipment->native->config->assetPath;
             profile.rigFingerprint=s.raw.rigFingerprint;
-            profile.selectedMeshIdentityVerified=s.meshes&&FindSelectedMesh(*s.meshes,s.nativeOwner,SelectedMeshKind::Spas12,s.input.nowNs)&&
+            profile.selectedMeshIdentityVerified=currentEquipment&&KnownShotgunEquipment(s.raw.equipment)==equipment&&s.meshes&&ShotgunEquipmentSelected(*s.meshes,s.nativeOwner,equipment,s.input.nowNs)&&
                 s.raw.valid&&s.raw.owner==s.nativeOwner&&s.raw.inputEvidence.owner==s.input.owner&&
                 s.raw.inputEvidence.deadlineNs>s.input.nowNs;
-            const auto source=reserve_&&reserve_->identity==native_?SpasAmmoSupplySource(profile,*reserve_):std::nullopt;
+            const auto source=reserve_&&reserve_->identity==native_?ShotgunAmmoSupplySource(profile,*reserve_):std::nullopt;
             if(!source||!s.gripPressed||s.input.released[0]){cancel(CancelReason::MissingSource);return out;}
             const auto keep=Keep({native_,cycle_,s.input.sequence,s.input.observedNs,s.input.deadlineNs,true},s.input.nowNs);
             if(keep==ReloadKeepAliveResult::Rejected){cancel(CancelReason::KeepAliveRejected);return out;}
@@ -220,10 +234,10 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
         }
 
         const bool pending=bridge_.Phase()==Bc2ReloadBridgePhase::Pending&&supply_.Pending().has_value();
-        if(pending&&active_&&!retiring_&&safe&&!s.cancel&&s.asset==SpasReloadAsset&&
+        if(pending&&active_&&!retiring_&&safe&&!s.cancel&&currentEquipment&&s.asset==equipment->native->config->assetName&&
            native_.owner==s.nativeOwner&&physical_==s.input.owner&&bridge_.Owners().native==native_&&
            bridge_.Owners().cycle==cycle_&&s.meshes&&
-           FindSelectedMesh(*s.meshes,s.nativeOwner,SelectedMeshKind::Spas12,s.input.nowNs)){
+           ShotgunEquipmentSelected(*s.meshes,s.nativeOwner,equipment,s.input.nowNs)){
             // One original firing copy may transfer before its peers. The
             // submitted transaction outlives old observation leases, but cannot
             // spend credit or renew presentation until a coherent result returns.
@@ -250,9 +264,9 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
         const bool heldObservation=lease_&&lease_->observedNs>0&&lease_->observedNs<=s.input.nowNs&&
             lease_->deadlineNs>lease_->observedNs&&lease_->deadlineNs-lease_->observedNs<=200000000&&
             (lease_->deadlineNs>s.input.nowNs||holdEstablished_);
-        const bool original=active_&&!retiring_&&safe&&!s.cancel&&s.asset==SpasReloadAsset&&
+        const bool original=active_&&!retiring_&&safe&&!s.cancel&&currentEquipment&&s.asset==equipment->native->config->assetName&&
             native_.owner==s.nativeOwner&&physical_==s.input.owner&&s.meshes&&
-            FindSelectedMesh(*s.meshes,s.nativeOwner,SelectedMeshKind::Spas12,s.input.nowNs)&&
+            ShotgunEquipmentSelected(*s.meshes,s.nativeOwner,equipment,s.input.nowNs)&&
             reserve_&&reserve_->verified&&reserve_->identity==native_&&
             Fresh(reserve_->observedNs,reserve_->deadlineNs,s.input.nowNs)&&
             heldObservation&&lease_->identity==native_&&lease_->cycle==cycle_&&
@@ -281,20 +295,20 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
     if(observedReserve&&reserveObservation.result==ReloadObservationResult::Available){reserve_=observedReserve;startupGapDeadline_=0;}
     s.input.nowNs=Now(s.input.nowNs);
     if(!reserve_||reserve_->identity.owner!=s.nativeOwner||!Fresh(reserve_->observedNs,reserve_->deadlineNs,s.input.nowNs))reserve_.reset();
-    const auto selected=s.meshes?FindSelectedMesh(*s.meshes,s.nativeOwner,SelectedMeshKind::Spas12,s.input.nowNs):nullptr;
+    const auto selected=s.meshes?ShotgunEquipmentSelected(*s.meshes,s.nativeOwner,equipment,s.input.nowNs):nullptr;
     diagnosticSelected=selected!=nullptr;
     Bc2ReloadInteractionSample profile;profile.insertion.identity={s.input.owner,s.weapon,{},s.trackingEpoch};profile.insertion.nowNs=s.input.nowNs;
-    profile.assetName=s.asset;profile.meshPath=SpasReloadMesh;profile.rigFingerprint=s.raw.rigFingerprint;
-    profile.selectedMeshIdentityVerified=selected&&s.raw.valid&&s.raw.owner==s.nativeOwner&&
+    profile.assetName=s.asset;profile.meshPath=equipment->meshPath;profile.equipment=equipment;profile.configurationPath=equipment->native->config->assetPath;profile.rigFingerprint=s.raw.rigFingerprint;
+    profile.selectedMeshIdentityVerified=currentEquipment&&KnownShotgunEquipment(s.raw.equipment)==equipment&&selected&&s.raw.valid&&s.raw.owner==s.nativeOwner&&
         s.raw.inputEvidence.deadlineNs>s.input.nowNs&&s.raw.inputEvidence.owner==s.input.owner;
-    const auto source=reserve_?SpasAmmoSupplySource(profile,*reserve_):std::nullopt;
+    const auto source=reserve_?ShotgunAmmoSupplySource(profile,*reserve_):std::nullopt;
     diagnosticSource=source.has_value();
     Retire(s,hands,source);s.input.nowNs=Now(s.input.nowNs);
     RefreshRetirementBlock(s,gunSafe&&gun&&gun->deadlineNs>s.input.nowNs&&ReloadTrackingFresh(out.tracking,s.input.nowNs));
     if(cancelInput)return out; // Drain/reconciliation may progress, but never acquisition or submission.
     const auto publishBelt=[&]{
         if(!beltEnabled_||retiring_||supply_.Held()||supply_.Pending()||deferredSeat_||completion_||out.tracking.preview||!source||!reserve_||!gun)return;
-        BeltAmmoTracking t;t.owner=s.nativeOwner;t.reserve=*reserve_;t.meshes=s.meshes;
+        BeltAmmoTracking t;t.owner=s.nativeOwner;t.reserve=*reserve_;t.meshes=s.meshes;t.equipment=equipment;
         if(active_){
             if(!lease_||lease_->identity!=native_||lease_->cycle!=cycle_||!lease_->allThreeHeld||
                !ReloadShellControlFresh(out.tracking,s.input.nowNs))return;
@@ -303,7 +317,7 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
         auto& v=t.visual;v.enabled=true;v.source=*source;v.input=s.input;v.gun=*gun;
         v.contact=BodyAmmoContact();
         v.frame=beltFrame_;
-        if(SpasBeltAmmoFresh(t,Now(s.input.nowNs)))try{out.tracking.belt=std::make_shared<const BeltAmmoTracking>(std::move(t));}catch(...){}
+        if(ShotgunBeltAmmoFresh(t,Now(s.input.nowNs)))try{out.tracking.belt=std::make_shared<const BeltAmmoTracking>(std::move(t));}catch(...){}
     };
     if(!source||((reserve_->loaded>=reserve_->capacity||reserve_->reserve<=0)&&!supply_.Pending())||retiring_){
         cancel(!source?CancelReason::MissingSource:retiring_?CancelReason::Retiring:reserve_->loaded>=reserve_->capacity?CancelReason::FullMagazine:CancelReason::EmptyReserve);publishBelt();return out;
@@ -342,7 +356,7 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
     }
     ManualReloadAck physicalAck{};
     if(completion_&&acknowledgement_&&lease_&&reserve_&&supply_.Pending()){
-        if(const auto receipt=SpasAmmoSupplyReceipt(*supply_.Pending(),bridge_.Owners(),*completion_,*acknowledgement_,*lease_,*reserve_,s.input.nowNs)){
+        if(const auto receipt=ShotgunAmmoSupplyReceipt(equipment_,*supply_.Pending(),bridge_.Owners(),*completion_,*acknowledgement_,*lease_,*reserve_,s.input.nowNs)){
             if(supply_.Resolve(s.input,hands,*receipt).accepted){physicalAck=*completion_->acknowledged;++completed_;Journal(4,s.input.nowNs);
                 supportReturn_.Observe(s.input,gun,cancelInput,hands.Current(InteractionHand::Left).has_value(),s.cancelFlags);
                 supportReturn_.Complete(receipt->reservation.request,receipt->observedNs);
@@ -444,7 +458,8 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
     if(geometric.insertion.seat&&geometric.targets&&paired&&original&&!deferredSeat_){
         deferredSeat_=DeferredSeat{*paired,*geometric.insertion.seat,*geometric.targets,*original};
         // The checked profile is immutable; do not retain a caller-owned view.
-        deferredSeat_->contact.assetName=SpasReloadAsset;deferredSeat_->contact.meshPath=SpasReloadMesh;
+        deferredSeat_->contact.assetName=equipment_->native->config->assetName;deferredSeat_->contact.meshPath=equipment_->meshPath;
+        deferredSeat_->contact.equipment=equipment_;deferredSeat_->contact.configurationPath=equipment_->native->config->assetPath;
     }
     if(deferredSeat_){const auto& d=*deferredSeat_;const auto& old=d.contact.insertion;
         if(!active_||!s.gripPressed||!supply_.Held()||supply_.Held()->claim.token!=d.seat.itemClaim||gun->token!=d.seat.weaponClaim||
@@ -457,7 +472,7 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
     ManualReloadSample manual;manual.owner={owner.actor,owner.actorGeneration,s.weapon.id,owner.equipGeneration,owner.space};
     manual.sequence=s.input.sequence;manual.nowNs=s.input.nowNs;manual.focused=s.input.focused;manual.tracked=s.input.tracked[0]&&s.input.tracked[1];
     manual.bindingsVerified=source.has_value()&&reserve_->verified&&selected&&profile.selectedMeshIdentityVerified&&
-        profile.rigFingerprint==SpasReloadRig&&s.asset==SpasReloadAsset;
+        profile.rigFingerprint==equipment->rigFingerprint&&currentEquipment&&s.asset==equipment->native->config->assetName;
     manual.neutral=!s.gripPressed||(original&&Outside(s.raw));manual.acknowledgement=physicalAck;
     if(deferredSeat_){manual.neutral=false;
         if(lease_&&lease_->allThreeHeld)manual.gesture={deferredSeat_->seat.id,ReloadOperation::InsertRound};}
@@ -504,7 +519,7 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
         if(old.owner!=currentMeshes.owner||old.sequence>currentMeshes.sequence||old.weaponData!=currentMeshes.weaponData||
            old.soleConfiguredArray!=currentMeshes.soleConfiguredArray||old.states!=currentMeshes.states)guidedPreview_.reset();}
     if(supply_.Held()&&selected){
-        ReloadPreview preview;preview.selectedMeshes=s.meshes;preview.reserve=*reserve_;
+        ReloadPreview preview;preview.equipment=equipment;preview.selectedMeshes=s.meshes;preview.reserve=*reserve_;
         preview.shellClaim=supply_.Held()->claim;preview.weaponClaim=*gun;
         if(bridge_.Phase()==Bc2ReloadBridgePhase::Pending){
             // Original seated geometry may survive only its original deadline;
@@ -529,7 +544,7 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
     // control survives pending native advance and a spent item, but never
     // cancellation/retirement, stale reserve, owner loss or a missing mesh.
     if(active_&&!retiring_&&selected&&reserve_&&reserve_->identity==native_){
-        ReloadShellControl control{cycle_,*reserve_,*gun,s.meshes};
+        ReloadShellControl control{cycle_,*reserve_,*gun,s.meshes,equipment};
         try{out.tracking.shellControl=std::make_shared<const ReloadShellControl>(control);}catch(...){}
         if(!ReloadShellControlFresh(out.tracking,s.input.nowNs))out.tracking.shellControl.reset();
     }
@@ -576,7 +591,7 @@ void Bc2PhysicalReload::ObserveAvailability(const PhysicalReloadSample& s,const 
     flag(0,in.focused);flag(1,in.tracked[0]);flag(2,in.tracked[1]);flag(3,s.gripPressed);flag(4,in.released[0]);flag(5,s.cancel);
     flag(6,safe);flag(7,reserve);flag(8,selected);flag(9,s.raw.valid);flag(10,s.raw.owner==s.nativeOwner);
     flag(11,s.raw.inputEvidence.owner==in.owner&&s.raw.inputEvidence.deadlineNs>in.nowNs);
-    flag(12,s.raw.rigFingerprint==SpasReloadRig);flag(13,body);
+    flag(12,s.raw.rigFingerprint==equipment_->rigFingerprint&&KnownShotgunEquipment(s.raw.equipment)==equipment_);flag(13,body);
     flag(14,body&&row.primaryDistance<=pouch_.pouchRadiusMeters);
     flag(15,body&&pouch_.alternateContact&&row.alternateDistance<=pouch_.alternateContact->radiusMeters);
     flag(16,bool(gun));flag(17,gun&&gun->token.kind==interaction::HandClaimKind::GunHold&&gun->token.owner==in.owner&&gun->token.item==s.weapon&&gun->inputSequence==in.sequence&&gun->deadlineNs>in.nowNs);
@@ -595,7 +610,7 @@ void Bc2PhysicalReload::ObserveAvailability(const PhysicalReloadSample& s,const 
 }
 void Bc2PhysicalReload::ReportAvailability(std::ostream& out)const {
     static constexpr const char* names[]={"focused","left_tracked","right_tracked","grip_pressed","left_released","requested_cancel",
-        "safe_current_gun","reserve_current","selected_spas_mesh","raw_valid","raw_native_owner","raw_physical_lease","spas_rig","body_pose_valid",
+        "safe_current_gun","reserve_current","selected_shotgun_mesh","raw_valid","raw_native_owner","raw_physical_lease","shotgun_rig","body_pose_valid",
         "inside_primary","inside_alternate","gun_claim_present","gun_claim_current","input_fresh","all_three_held","retiring","native_drained",
         "shell_held","shell_pending","blocks_current","all_three_idle","reload_input_ready","supply_source","belt_enabled","alternate_contact","unattributed_cancel"};
     out<<"{\"schema\":1,\"capacity\":"<<availability_.size()<<",\"samples\":"<<availabilitySamples_<<",\"transitions\":"<<availabilityTransitions_
@@ -652,7 +667,7 @@ void Bc2PhysicalReload::ObserveGeometry(const Bc2ReloadInteractionSample& s,cons
     const auto& i=s.insertion;const auto item=i.identity.item.generation;
     if(!i.sequence||(i.sequence==geometrySource_&&s.native.cycle==geometryCycle_&&item==geometryItem_))return;
     if(!Rigid(s.rawLeftWristWorldMeters)||!Rigid(s.weaponWorldMeters))return;
-    const auto p=SpasReloadInsertionProfile();
+    const auto& p=*equipment_->shellInsertion;
     const auto hand=Multiply(s.rawLeftWristWorldMeters,*InverseRigid(s.weaponWorldMeters));
     const auto raw=Multiply(Multiply(p.itemFromInsertion,Multiply(*InverseRigid(p.itemFromHand),hand)),*InverseRigid(p.weaponFromEntry));
     if(!Rigid(raw))return;
@@ -684,7 +699,7 @@ void Bc2PhysicalReload::ObserveGeometry(const Bc2ReloadInteractionSample& s,cons
     geometryCount_=std::min(geometryCount_+1,unsigned(geometryRows_.size()));
 }
 void Bc2PhysicalReload::ReportGeometry(std::ostream& out)const {
-    const auto p=SpasReloadInsertionProfile();
+    const auto& p=*equipment_->shellInsertion;
     out<<"{\"source\":\"original_raw_contact\",\"phase_is_actual_insertion\":true,\"authoritative\":false,\"profile_revision\":"<<p.revision
        <<",\"travel_direction_in_entry\":["<<p.travelDirection[0]<<','<<p.travelDirection[1]<<','<<p.travelDirection[2]<<"],\"total\":"<<geometryTotal_
        <<",\"free\":"<<geometryFree_<<",\"guided\":"<<geometryGuided_<<",\"captures\":"<<geometryCaptured_<<",\"seats\":"<<geometrySeated_
