@@ -16,8 +16,18 @@ void Configure(Fixture& f,const BodyEquipmentProfile& p){
  f.s.selected=s;
 }
 void ExactCycle(Fixture& f,const BodyEquipmentProfile& p){auto request=f.out.visibility;f.Advance();Configure(f,p);f.Render(request);f.Suppress();f.Tick();}
+bool OpeningResourceConfiguration(const BodyEquipmentProfile& p){
+ // This target deliberately links the opening426 registry. Later render-only
+ // body enrollment does not enroll another native magazine consumer.
+ for(const auto& row:RegisteredMagazineNativeProfiles()){
+  if(row.id==NativeMagazineProfileId::ScopedXm8||row.id==NativeMagazineProfileId::AuthoredAek)continue;
+  if(row.profile&&row.profile->configuration.assetPath==p.configurationPath)return true;
+ }return false;
+}
 int ExactBodyAndVisibility(){unsigned count=0,nambu=0,type5=0,resourceProfiles=0;
- for(const auto& p:BodyEquipmentProfiles){if(!p.configurationPath)continue;++count;
+ for(const auto& p:BodyEquipmentProfiles){if(!p.configurationPath)continue;
+  const bool isType5=std::string_view(p.configurationPath)=="Objects/Weapons/Handheld/Beach/Jap_Type5/Type5";
+  if(!isType5&&!OpeningResourceConfiguration(p))continue;++count;
   Fixture f;f.adapter=Bc2BodyHolster{BodyInventoryHolsterAcceptance};Configure(f,p);f.Tick();
   CHECK(f.adapter.AcceptsProfile(f.s.nativeOwner,f.s.selected,f.s.hand.nowNs));
   const auto& snapshot=*f.s.selected;const auto* descriptor=ResolveVisibilityDescriptor(snapshot,f.s.nativeOwner,VisibilityDescriptors,f.s.hand.nowNs);
@@ -28,10 +38,10 @@ int ExactBodyAndVisibility(){unsigned count=0,nambu=0,type5=0,resourceProfiles=0
    const auto* equipment=FindMagazineEquipment(row.id);if(!equipment||equipment->native->configuration.assetPath!=p.configurationPath)continue;
    ++resources;CHECK(row.enabled&&equipment->Ready()&&equipment->geometry->asset==p.asset&&equipment->geometry->mesh==p.mesh);
    CHECK(equipment->geometry->rigFingerprint==p.rig);}
-  if(std::string_view(p.asset)=="Garand"){
+  if(isType5){
    // This exact campaign Type5 is enrolled for body/visibility only. Its row
    // must not silently grant a manual magazine consumer or native reload path.
-   ++type5;CHECK(std::string_view(p.configurationPath)=="Objects/Weapons/Handheld/Beach/Jap_Type5/Type5");
+   ++type5;CHECK(std::string_view(p.asset)=="Garand");
    CHECK(std::string_view(p.mesh)=="Objects/Weapons/Handheld/Beach/Jap_Type5/Jap_Type5_Mesh"&&
     std::string_view(p.part)=="body_holstered_42f20447f5130950"&&p.rig==0xa7f219a1426216abull);
    CHECK(p.configuredMeshes.size()==1&&p.configuredMeshes[0]==p.mesh);
@@ -77,10 +87,17 @@ int ExactBodyAndVisibility(){unsigned count=0,nambu=0,type5=0,resourceProfiles=0
   CHECK(!Source(f));ExactCycle(f,p);ExactCycle(f,p);
   CHECK(f.out.phase==BodyHolsterPhase::Held&&f.hands.Current(InteractionHand::Right)&&!f.out.blockWeaponActions);
  }
- CHECK(count==18&&resourceProfiles==17&&nambu==1&&type5==1);return 0;
+ CHECK(count==18&&resourceProfiles==17&&nambu==1&&type5==1);
+ unsigned registered=0;for(const auto& row:RegisteredMagazineNativeProfiles()){
+  if(row.id==NativeMagazineProfileId::ScopedXm8||row.id==NativeMagazineProfileId::AuthoredAek)continue;
+  CHECK(row.profile);unsigned matches=0;
+  for(const auto& p:BodyEquipmentProfiles)if(p.configurationPath&&row.profile->configuration.assetPath==p.configurationPath)++matches;
+  CHECK(matches==1);++registered;
+ }
+ CHECK(registered==17&&registered==resourceProfiles);return 0;
 }
 int InstalledCatalog(const char* path){auto result=LoadBodyAmmoGeometryCache(path);
- CHECK(result.status==BodyAmmoCacheStatus::Loaded&&result.catalog&&result.catalog->size()==49);
+ CHECK(result.status==BodyAmmoCacheStatus::Loaded&&result.catalog&&result.catalog->size()==BodyAmmoAssetProfiles.size());
  // Check every compiled cache identity, including the detached Nambu magazine.
  for(const auto& p:BodyAmmoAssetProfiles){unsigned matches=0;
   for(const auto& g:*result.catalog)if(g->asset==p.asset&&g->mesh==p.mesh&&g->part==p.part&&g->rigFingerprint==p.rig)++matches;
@@ -88,11 +105,11 @@ int InstalledCatalog(const char* path){auto result=LoadBodyAmmoGeometryCache(pat
  for(const auto& p:BodyEquipmentProfiles){if(!p.configurationPath)continue;unsigned matches=0;
   for(const auto& g:*result.catalog)if(g->asset==p.asset&&g->mesh==p.mesh&&g->part==p.part&&g->rigFingerprint==p.rig)++matches;
   CHECK(matches==1);}
- CHECK(BodyAmmoAssetProfiles.size()==49);return 0;
+ CHECK(BodyAmmoAssetProfiles.size()==252);return 0;
 }
 }
 int main(int argc,char** argv){CHECK(argc<=2&&NativeOperationCapabilities.size()==1);
  if(ExactBodyAndVisibility()||ActualHiddenSelectedProfiles()||SourceIdentityAndReceiptFailures()||OriginalDeadlinesAndDrawCancellation()||
     PoseUsesBodyShoulderAndScale()||RecenterRequiresNewTypedSource()||(argc==2&&InstalledCatalog(argv[1])))return 1;
  std::cout<<"17 exact resource/visibility/body joins plus display-only Type5 with no manual-magazine admission; 306 malformed bindings; actual hide/draw consumers passed. Native/GPU receipts are CPU fixtures.\n";
- if(argc==2)std::cout<<"All 49 installed cache profiles matched their exact compiled identities.\n";}
+ if(argc==2)std::cout<<"All "<<BodyAmmoAssetProfiles.size()<<" installed cache profiles matched their exact compiled identities.\n";}

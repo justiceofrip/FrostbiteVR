@@ -27,13 +27,17 @@ struct Fixture {
         Tick();Advance();Tick();}
     void Metadata(){auto m=std::make_shared<SelectedMeshesSnapshot>();m->owner=s.nativeOwner;m->sequence=s.hand.sequence;
         m->observedNs=s.hand.observedNs;m->deadlineNs=s.hand.deadlineNs;m->stateCount=1;m->soleConfiguredArray=0x70000;m->weaponData=0x80000;
+        // Body display rows bind the exact configured asset and mesh types.
+        m->configurationPathVerified=true;m->configurationPathPointer=0xc1000;m->stateTypeInfo=0xa2000;m->meshTypeInfo=0xa0000;
+        strcpy_s(m->configurationPath.data(),m->configurationPath.size(),xm8?
+            "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8_Scoped":"Objects/Weapons/Handheld/UL_shg_SPAS12/SP_shg_SPAS12");
         std::memcpy(m->weaponName.data(),"SPAS12_sp",sizeof("SPAS12_sp"));m->states[0].array=0x70000;m->states[0].count=1;
         auto& mesh=m->states[0].meshes[0];mesh.kind=SelectedMeshKind::Spas12;mesh.address=0x90000;mesh.typeInfo=0xa0000;mesh.namePointer=0xb0000;
         constexpr char path[]="Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh";std::memcpy(mesh.assetPath.data(),path,sizeof(path));
         if(xm8){std::memcpy(m->weaponName.data(),"XM8_sp_s",sizeof("XM8_sp_s"));m->states[0].count=2;
             mesh.kind=SelectedMeshKind::Xm8;constexpr char xm8Path[]="Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh";
             std::memcpy(mesh.assetPath.data(),xm8Path,sizeof(xm8Path));auto& optic=m->states[0].meshes[1];
-            optic.kind=SelectedMeshKind::Acog4x;optic.address=0x91000;optic.typeInfo=0xa1000;optic.namePointer=0xb1000;
+            optic.kind=SelectedMeshKind::Acog4x;optic.address=0x91000;optic.typeInfo=m->meshTypeInfo;optic.namePointer=0xb1000;
             constexpr char opticPath[]="Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh";std::memcpy(optic.assetPath.data(),opticPath,sizeof(opticPath));}
         s.selected=m;
         s.ordinary=BodyVisibleRig{s.nativeOwner,s.hand.sequence,s.hand.observedNs,s.hand.deadlineNs};}

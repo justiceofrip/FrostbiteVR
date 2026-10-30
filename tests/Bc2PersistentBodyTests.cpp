@@ -13,6 +13,9 @@ std::shared_ptr<const CarriedMeshesSnapshot> Mesh(const BodyInventoryDisplay& d,
     s.weaponData=slot.native.data;s.inventory=d.carried.inventory;s.selectedSlot=0;
     std::memcpy(s.weaponName.data(),"SPAS12_sp",sizeof("SPAS12_sp"));s.stateCount=1;s.soleConfiguredArray=0x40000;
     s.states[0].array=s.soleConfiguredArray;s.states[0].count=1;
+    s.configurationPathVerified=true;s.configurationPathPointer=0x41000;s.stateTypeInfo=0x42000;s.meshTypeInfo=0x43000;
+    strcpy_s(s.configurationPath.data(),s.configurationPath.size(),"Objects/Weapons/Handheld/UL_shg_SPAS12/SP_shg_SPAS12");
+    s.states[0].meshes[0].address=0x44000;s.states[0].meshes[0].namePointer=0x45000;s.states[0].meshes[0].typeInfo=s.meshTypeInfo;
     strcpy_s(s.states[0].meshes[0].assetPath.data(),512,"Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh");return c;
 }
 int PistolHipToHost(){Run r;r.f.Word(Fixture::bd+0x84,2);r.f.Text(0x2b100,"MP443_sp");r.Tick();

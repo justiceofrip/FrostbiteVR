@@ -75,10 +75,12 @@ int FleetCatalogKeepsEveryAsset(){Source s;auto catalog=std::make_shared<BodyAmm
     for(unsigned n=0;n<MaxBodyPropAssets;++n){auto g=std::make_shared<BodyAmmoGeometry>(*s.Geometry());
         g->asset="Asset_"+std::to_string(n);g->key=MakeBodyAmmoGeometryKey(g->asset,g->mesh,g->part,g->rigFingerprint);catalog->push_back(g);}
     Bc2BodyAmmoRenderer renderer;CHECK(renderer.QueueGeometryCatalog(catalog));
-    auto invalid=std::make_shared<BodyAmmoGeometryCatalog>(*catalog);invalid->push_back(catalog->front());CHECK(!renderer.QueueGeometryCatalog(invalid));
+    auto overflow=std::make_shared<BodyAmmoGeometry>(*catalog->back());overflow->asset="Asset_"+std::to_string(MaxBodyPropAssets);
+    overflow->key=MakeBodyAmmoGeometryKey(overflow->asset,overflow->mesh,overflow->part,overflow->rigFingerprint);
+    auto invalid=std::make_shared<BodyAmmoGeometryCatalog>(*catalog);invalid->push_back(overflow);CHECK(!renderer.QueueGeometryCatalog(invalid));
     invalid->pop_back();(*invalid)[MaxBodyPropAssets-1]=invalid->front();CHECK(!renderer.QueueGeometryCatalog(invalid));
     auto bad=std::make_shared<BodyAmmoGeometry>(*catalog->back());bad->sections.clear();invalid->back()=bad;CHECK(!renderer.QueueGeometryCatalog(invalid));
-    std::ostringstream report;renderer.Report(report);CHECK(report.str().find("\"catalog_parts\":64")!=std::string::npos);
+    std::ostringstream report;renderer.Report(report);CHECK(report.str().find("\"catalog_parts\":"+std::to_string(MaxBodyPropAssets)+"}")!=std::string::npos);
     renderer.RequestStop();CHECK(renderer.PumpStop());return 0;}
 }
 int main(){if(GeometryIsOwnedAndExact()||ExactSourceBeforeAnyUpload()||SourceClaimLeaseAndReplacement()||PreDrawSelectedLeaseCannotRenew()||ProofCannotBeInferredFromTargetShape()||DisabledAndUnprovenNeverTouchGpu()||CatalogAndLateBothEyeEvidence()||FleetCatalogKeepsEveryAsset())return 1;

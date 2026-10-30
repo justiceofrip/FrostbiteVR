@@ -18,9 +18,26 @@ MagazineGeometryProfile Second(){auto p=Xm8MagazineGeometry();p.asset="synthetic
  auto& c=p.interaction;auto& q=c.insertion;q.id=0x53594e5448ull;q.itemFromHand=q.itemFromInsertion=q.weaponFromEntry=Identity();
  q.weaponFromEntry.values[0]={0,0,-1,0};q.weaponFromEntry.values[2]={1,0,0,0};q.weaponFromEntry.values[3]={.2f,-.1f,.3f,1};
  q.travelMeters=.14f;c.pullMeters=.12f;c.maxPullStepMeters=.05f;return p;}
-int ExactRegistryDoesNotAdmitOtherWeapons(){CHECK(FindMagazineGeometry(Xm8MagazineAsset)==&Xm8MagazineGeometry());
- for(const auto asset:{"","XM8","XM8_sp","XM8_sp_s_extra","xm8_sp_s","40mmgl","AK74","UMP45","synthetic_smg_unregistered"})CHECK(!FindMagazineGeometry(asset));
+int ExactRegistryRequiresRegisteredConfiguration(){CHECK(FindMagazineGeometry(Xm8MagazineAsset)==&Xm8MagazineGeometry());
+ for(const auto asset:{"","XM8","XM8_sp_s_extra","xm8_sp_s","40mmgl","AK74","UMP45","synthetic_smg_unregistered"})CHECK(!FindMagazineGeometry(asset));
  const std::string embedded("XM8_sp_s\0suffix",15);CHECK(!FindMagazineGeometry(embedded));
+ // Optional registries can enroll formerly absent assets such as XM8_sp. Each
+ // available geometry must retain exact configuration identity; names shared
+ // by multiple native configurations still cannot select a geometry alone.
+ unsigned available=0;const auto registered=RegisteredMagazineNativeProfiles();
+ for(const auto& row:registered){const auto native=ResolveMagazineNativeProfile(row.id);if(!native)continue;
+  const auto geometry=FindMagazineGeometry(*native);if(!geometry)continue;
+  CHECK(geometry->asset==native->configuration.assetName&&MagazineGeometryMatchesConfiguration(*geometry,*native));
+  unsigned sameName=0;for(const auto& other:registered){const auto candidate=ResolveMagazineNativeProfile(other.id);
+   if(candidate&&candidate->configuration.assetName==geometry->asset)++sameName;}
+  CHECK(sameName>0);
+  if(sameName==1)CHECK(FindMagazineGeometry(geometry->asset)==geometry);
+  else CHECK(!FindMagazineGeometry(geometry->asset));
+  const auto suffixed=std::string(geometry->asset)+"_unregistered_suffix";CHECK(!FindMagazineGeometry(suffixed));
+  auto wrong=*native;wrong.configuration.assetPath="synthetic/unregistered/configuration";
+  CHECK(!FindMagazineGeometry(wrong));++available;
+ }
+ CHECK(available>0);
  const auto second=Second();CHECK(!BindMagazinePresentation(Rig(second),second.asset));return 0;}
 int CapturedXm8CalibrationIsUnchanged(){const auto& p=Xm8MagazineGeometry();const auto c=Xm8MagazineConfig();
  CHECK(p.rigFingerprint==Xm8MagazineRig&&p.mesh==Xm8MagazineMesh&&p.meshKind==SelectedMeshKind::Xm8);
@@ -68,5 +85,5 @@ int SharedRemovalCoordinatorConsumesDifferentGeometry(){
  }
  return 0;}
 }
-int main(){if(ExactRegistryDoesNotAdmitOtherWeapons()||CapturedXm8CalibrationIsUnchanged()||BoneRolesAreDataNotXm8Indices()||SharedRemovalCoordinatorConsumesDifferentGeometry())return 1;
+int main(){if(ExactRegistryRequiresRegisteredConfiguration()||CapturedXm8CalibrationIsUnchanged()||BoneRolesAreDataNotXm8Indices()||SharedRemovalCoordinatorConsumesDifferentGeometry())return 1;
  std::puts("4 magazine geometry profile groups passed; synthetic second profile is not registered or native-admitted");}
