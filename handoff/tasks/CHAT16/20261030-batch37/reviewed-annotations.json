@@ -1,0 +1,329 @@
+{
+  "schema": "fvr.bc2.mechanism_registry_annotations.v1",
+  "sources": {
+    "actions": {
+      "path": "bc2vr-recovery/action379-batched/actions.json",
+      "sha256": "c1e775329c56c32bec9ed49392d5b080f4b9f50bbd66c0df15945f98d9dbd7b8"
+    },
+    "pistol_bindings": {
+      "path": "bc2vr-recovery/pistol-sniper-shotgun-mechanisms-candidate/batch/reference-bindings.json",
+      "sha256": "367daddaf86244359245312db8028756b91bf763b34535aa1191253db3981559"
+    },
+    "m1911_bindings": {
+      "path": "bc2vr-recovery/mesh312-research/reference-bindings.json",
+      "sha256": "3813a763b4640355e699f280a8a8dd9fcc6710ca03f57f7df3afe60c867d1ae7"
+    },
+    "mp443_geometry": {
+      "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/handoff/tasks/CHAT16/20261030-implementation17/mp443-geometry.json",
+      "sha256": "09314649460c4b0d81bd0138a39d44f3680c0fed4e485b353ae66fe7c2b3638c"
+    },
+    "mp443_roles": {
+      "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/handoff/tasks/CHAT16/20261030-implementation17/mp443-role-review.json",
+      "sha256": "4fe6e8d67687a0336ccc708cfc2d6a7c56ad0389b0dd306a5d556bdb465f4529"
+    },
+    "root_visual": {
+      "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/handoff/tasks/CHAT16/20261030-batch37/root-visual-review.json",
+      "sha256": "9fa7166e01b2ff72b5f4824968aebfe1d1732bdcf5cb56b5ccef55569f3bf9c4"
+    },
+    "pistol_measured": {
+      "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/handoff/tasks/CHAT16/20261030-batch37/measured.json",
+      "sha256": "1d2b8f21fbf1e64c5bfc0cc7289f0970b9a11c758becfc00c1799f36ec87fa06"
+    },
+    "pistol_roles": {
+      "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/handoff/tasks/CHAT16/20261030-batch37/role-policy.json",
+      "sha256": "6284829079e6c8824f13eb49f9fa5bd6b465c601e0777f2a24e06b186ac12a71"
+    }
+  },
+  "profiles": [
+    {
+      "kind": "pistol_slide",
+      "descriptor_key": "bc2:magazine-descriptor:b5d5869089005d9252bd83368918d18444ae3e3ff8fa125513fba1d3b87684d5",
+      "descriptor_digest": "956dfe180a6fb2828596436d342e41b94b6f405d0ba480f7c5f399a723dca55c",
+      "native_class": "SingleFireMagazineZeroBolt",
+      "configuration": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/0/weapon_configuration"
+      },
+      "asset": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/0/asset"
+      },
+      "meshPath": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/0/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/0/rig_fingerprint"
+      },
+      "roles": {
+        "source": "pistol_measured",
+        "pointer": "/geometry_groups/d461449968993c0aa44b01d4e9070ce82713a72b35e6ca28060ff3a5af69c00c/roles"
+      },
+      "geometry": {
+        "source": "pistol_measured",
+        "pointer": "/geometry_groups/d461449968993c0aa44b01d4e9070ce82713a72b35e6ca28060ff3a5af69c00c/geometry"
+      },
+      "geometry_evidence": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/0"
+      },
+      "role_review": {
+        "source": "pistol_roles",
+        "pointer": "/configurations/0"
+      },
+      "reviewer": "CHAT16 batch37 offline authored-data review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "name": "M9 authored-rail candidate policy",
+        "sourceReference": "CHAT16/20261030-batch37/role-policy.json: middle 80 percent of exact signed rail",
+        "revision": 1,
+        "sourceDisplacementMeters": 0.006121851993763833,
+        "strokeMeters": 0.058878308304378346,
+        "frontToleranceMeters": 0.0029439154152189175,
+        "rearToleranceMeters": 0.0029439154152189175,
+        "hysteresisMeters": 0.0014719577076094587,
+        "contactRadiusMeters": 0.035,
+        "lateralToleranceMeters": 0.025,
+        "rotationToleranceRadians": 0.2,
+        "maxStepMeters": 0.014719577076094587,
+        "endpointDwellNs": 25000000,
+        "maximumStrokeNs": 3000000000
+      },
+      "enabled": false
+    },
+    {
+      "kind": "pistol_slide",
+      "descriptor_key": "bc2:magazine-descriptor:304a17ade6eb3c26fcd32b44430cb4e896bc77432d6229a5789b6d53db23f64f",
+      "descriptor_digest": "6d77694f7e806201a3aeb9dd5eb6cfdbb214c51aac579044ed3705999ff11bd7",
+      "native_class": "SingleFireMagazineZeroBolt",
+      "configuration": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/1/weapon_configuration"
+      },
+      "asset": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/1/asset"
+      },
+      "meshPath": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/1/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/1/rig_fingerprint"
+      },
+      "roles": {
+        "source": "pistol_measured",
+        "pointer": "/geometry_groups/d461449968993c0aa44b01d4e9070ce82713a72b35e6ca28060ff3a5af69c00c/roles"
+      },
+      "geometry": {
+        "source": "pistol_measured",
+        "pointer": "/geometry_groups/d461449968993c0aa44b01d4e9070ce82713a72b35e6ca28060ff3a5af69c00c/geometry"
+      },
+      "geometry_evidence": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/1"
+      },
+      "role_review": {
+        "source": "pistol_roles",
+        "pointer": "/configurations/1"
+      },
+      "reviewer": "CHAT16 batch37 offline authored-data review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "name": "M9-3 authored-rail candidate policy",
+        "sourceReference": "CHAT16/20261030-batch37/role-policy.json: middle 80 percent of exact signed rail",
+        "revision": 1,
+        "sourceDisplacementMeters": 0.006121851993763833,
+        "strokeMeters": 0.058878308304378346,
+        "frontToleranceMeters": 0.0029439154152189175,
+        "rearToleranceMeters": 0.0029439154152189175,
+        "hysteresisMeters": 0.0014719577076094587,
+        "contactRadiusMeters": 0.035,
+        "lateralToleranceMeters": 0.025,
+        "rotationToleranceRadians": 0.2,
+        "maxStepMeters": 0.014719577076094587,
+        "endpointDwellNs": 25000000,
+        "maximumStrokeNs": 3000000000
+      },
+      "enabled": false
+    },
+    {
+      "kind": "pistol_slide",
+      "descriptor_key": "bc2:magazine-descriptor:463b9ae5b99b03ae6ccf70a09a19ff158221f5e0814bc33b242004d11bdd092d",
+      "descriptor_digest": "b177fe6472b484d94bffef46b35a05259f70fe4c21be1843e746bed2dc578d06",
+      "native_class": "SingleFireMagazineZeroBolt",
+      "configuration": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/2/weapon_configuration"
+      },
+      "asset": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/2/asset"
+      },
+      "meshPath": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/2/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/2/rig_fingerprint"
+      },
+      "roles": {
+        "source": "pistol_measured",
+        "pointer": "/geometry_groups/f4e071a36ae6e0e7a1b9e2b145f8742e58e735eb7ac66603ab4cadd2745500fc/roles"
+      },
+      "geometry": {
+        "source": "pistol_measured",
+        "pointer": "/geometry_groups/f4e071a36ae6e0e7a1b9e2b145f8742e58e735eb7ac66603ab4cadd2745500fc/geometry"
+      },
+      "geometry_evidence": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/2"
+      },
+      "role_review": {
+        "source": "pistol_roles",
+        "pointer": "/configurations/2"
+      },
+      "reviewer": "CHAT16 batch37 offline authored-data review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "name": "M1911 authored-rail candidate policy",
+        "sourceReference": "CHAT16/20261030-batch37/role-policy.json: middle 80 percent of exact signed rail",
+        "revision": 1,
+        "sourceDisplacementMeters": 0.0036738736357050557,
+        "strokeMeters": 0.03471778711614955,
+        "frontToleranceMeters": 0.0017358893558074772,
+        "rearToleranceMeters": 0.0017358893558074772,
+        "hysteresisMeters": 0.0008679446779037386,
+        "contactRadiusMeters": 0.035,
+        "lateralToleranceMeters": 0.025,
+        "rotationToleranceRadians": 0.2,
+        "maxStepMeters": 0.008679446779037387,
+        "endpointDwellNs": 25000000,
+        "maximumStrokeNs": 3000000000
+      },
+      "enabled": false
+    },
+    {
+      "kind": "pistol_slide",
+      "descriptor_key": "bc2:magazine-descriptor:2d6471a03056b3b2e4e13f2a59baf212565aefa56dccc33895ee43c076b5abb0",
+      "descriptor_digest": "2f97016d0246f46271f24ebed552289fd6e89162ef16d891488d64bb265cfa0c",
+      "native_class": "SingleFireMagazineZeroBolt",
+      "configuration": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/3/weapon_configuration"
+      },
+      "asset": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/3/asset"
+      },
+      "meshPath": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/3/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/3/rig_fingerprint"
+      },
+      "roles": {
+        "source": "pistol_measured",
+        "pointer": "/geometry_groups/06fbc5f628f11ba767447d714e9d256c9ab3b0172ec30a5195b76843a0ae655b/roles"
+      },
+      "geometry": {
+        "source": "pistol_measured",
+        "pointer": "/geometry_groups/06fbc5f628f11ba767447d714e9d256c9ab3b0172ec30a5195b76843a0ae655b/geometry"
+      },
+      "geometry_evidence": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/3"
+      },
+      "role_review": {
+        "source": "pistol_roles",
+        "pointer": "/configurations/3"
+      },
+      "reviewer": "CHAT16 batch37 offline authored-data review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "name": "MP443 authored-rail candidate policy",
+        "sourceReference": "CHAT16/20261030-batch37/role-policy.json: middle 80 percent of exact signed rail",
+        "revision": 1,
+        "sourceDisplacementMeters": 0.005449416503518472,
+        "strokeMeters": 0.05957503829113775,
+        "frontToleranceMeters": 0.0029787519145568877,
+        "rearToleranceMeters": 0.0029787519145568877,
+        "hysteresisMeters": 0.0014893759572784438,
+        "contactRadiusMeters": 0.035,
+        "lateralToleranceMeters": 0.025,
+        "rotationToleranceRadians": 0.2,
+        "maxStepMeters": 0.014893759572784437,
+        "endpointDwellNs": 25000000,
+        "maximumStrokeNs": 3000000000
+      },
+      "enabled": false
+    },
+    {
+      "kind": "pistol_slide",
+      "descriptor_key": "bc2:magazine-descriptor:52bfa481c525136589096989304d8b22ec43cc3d684f36b42a97846a54cb5e4a",
+      "descriptor_digest": "22e837a6b3b2f22c55587d7a31a1381556b5f253e11fb7b24d7e212077aada48",
+      "native_class": "SingleFireMagazineZeroBolt",
+      "configuration": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/4/weapon_configuration"
+      },
+      "asset": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/4/asset"
+      },
+      "meshPath": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/4/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/4/rig_fingerprint"
+      },
+      "roles": {
+        "source": "pistol_measured",
+        "pointer": "/geometry_groups/06fbc5f628f11ba767447d714e9d256c9ab3b0172ec30a5195b76843a0ae655b/roles"
+      },
+      "geometry": {
+        "source": "pistol_measured",
+        "pointer": "/geometry_groups/06fbc5f628f11ba767447d714e9d256c9ab3b0172ec30a5195b76843a0ae655b/geometry"
+      },
+      "geometry_evidence": {
+        "source": "pistol_measured",
+        "pointer": "/configurations/4"
+      },
+      "role_review": {
+        "source": "pistol_roles",
+        "pointer": "/configurations/4"
+      },
+      "reviewer": "CHAT16 batch37 offline authored-data review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "name": "MP443_sp authored-rail candidate policy",
+        "sourceReference": "CHAT16/20261030-batch37/role-policy.json: middle 80 percent of exact signed rail",
+        "revision": 1,
+        "sourceDisplacementMeters": 0.005449416503518472,
+        "strokeMeters": 0.05957503829113775,
+        "frontToleranceMeters": 0.0029787519145568877,
+        "rearToleranceMeters": 0.0029787519145568877,
+        "hysteresisMeters": 0.0014893759572784438,
+        "contactRadiusMeters": 0.035,
+        "lateralToleranceMeters": 0.025,
+        "rotationToleranceRadians": 0.2,
+        "maxStepMeters": 0.014893759572784437,
+        "endpointDwellNs": 25000000,
+        "maximumStrokeNs": 3000000000
+      },
+      "enabled": false
+    }
+  ]
+}

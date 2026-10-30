@@ -1,0 +1,1779 @@
+{
+  "schema": "fvr.bc2.mechanism_registry_annotations.v1",
+  "sources": {
+    "actions": {
+      "path": "bc2vr-recovery/action379-batched/actions.json",
+      "sha256": "c1e775329c56c32bec9ed49392d5b080f4b9f50bbd66c0df15945f98d9dbd7b8"
+    },
+    "belt37": {
+      "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/handoff/tasks/CHAT14/20261030-batch37/roles-geometry-policy.json",
+      "sha256": "8d559fc53a33ee6bd15234530078da2c3f1ededa617001fdaa80cbc47fca746a"
+    }
+  },
+  "profiles": [
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:9541e55a524bc896fb311579681393e3e8399913e23eaa12f49304c1b77a08bd",
+      "descriptor_digest": "0a90b171035b96e43948d7f6107dbcbbb7ddb1e8ecd54649eb6665f75485966a",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/129/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/129/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/129/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/129/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/47152b74d272332a70914c5abce2d0e876009279f3ab2703ad27e9b5c2cadf9a/roles"
+      },
+      "geometry": {
+        "source": "belt37",
+        "pointer": "/groups/47152b74d272332a70914c5abce2d0e876009279f3ab2703ad27e9b5c2cadf9a/geometry"
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/129"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/0"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.007525,
+        "orientationToleranceRadians": 0.204383,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.45,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    },
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:9d2a5b73b2d86db27ba73aecc04884756c7c41f7866312d06c6542b4985c7d78",
+      "descriptor_digest": "6a46b57c25cafc76184a2cfdd21812db8d33e75fabe9b5b3ea10239d33a238b9",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/131/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/131/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/131/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/131/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/47152b74d272332a70914c5abce2d0e876009279f3ab2703ad27e9b5c2cadf9a/roles"
+      },
+      "geometry": {
+        "source": "belt37",
+        "pointer": "/groups/47152b74d272332a70914c5abce2d0e876009279f3ab2703ad27e9b5c2cadf9a/geometry"
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/131"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/1"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.007525,
+        "orientationToleranceRadians": 0.204383,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.45,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    },
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:ed61f93b9649b451711a26dd989887a838f50836a2f127e3c3e8323dfced5e88",
+      "descriptor_digest": "e5a3a71e3374a00a5853fe6cb5b30eefe7a48fd00ebec259145e815b1c67f2b9",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/135/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/135/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/135/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/135/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/99c74ae99c305c9cc3d344226e4518996e66c9bee24fb1c6a506992e778966a0/roles"
+      },
+      "geometry": {
+        "source": "belt37",
+        "pointer": "/groups/99c74ae99c305c9cc3d344226e4518996e66c9bee24fb1c6a506992e778966a0/geometry"
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/135"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/2"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.013623,
+        "orientationToleranceRadians": 0.204383,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.45,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.055351,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.055351,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.055351,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    },
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:3327ed5d49d19216e64395bda737a124b272fd5c53cb6eb3a4945637e8f22f4e",
+      "descriptor_digest": "0dcf6f4f9e883f143656074626bc91c60016e076e3e1621d7ac975980f333490",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/139/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/139/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/139/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/139/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/afcb3f3486c6d926743bbce6892474a6fb9789e41805bbeb8a2238f23a1fbe2f/roles"
+      },
+      "geometry": {
+        "source": "belt37",
+        "pointer": "/groups/afcb3f3486c6d926743bbce6892474a6fb9789e41805bbeb8a2238f23a1fbe2f/geometry"
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/139"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/3"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.007452,
+        "orientationToleranceRadians": 0.12566,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.282736,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.041583,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.041583,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.041583,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    },
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:3d34e98de9c99fe9098603548856b48f15a5028b02d075ff6dfe160b1b0ef995",
+      "descriptor_digest": "a1ee9fe13d10447292d2193c2a0c1ff2e93fd8d7ec100ac350126e9451de48bb",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/141/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/141/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/141/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/141/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/afcb3f3486c6d926743bbce6892474a6fb9789e41805bbeb8a2238f23a1fbe2f/roles"
+      },
+      "geometry": {
+        "source": "belt37",
+        "pointer": "/groups/afcb3f3486c6d926743bbce6892474a6fb9789e41805bbeb8a2238f23a1fbe2f/geometry"
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/141"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/4"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.007452,
+        "orientationToleranceRadians": 0.12566,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.282736,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.041583,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.041583,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.041583,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    },
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:7ad9e8aedea68626ea7742c7ec69bf034976bd5a465cf3244568862589473b68",
+      "descriptor_digest": "701dd5db3efa12a0ae9be5c56db9cbf6f2f18c7e376ad88eb37aeea2c239fb8c",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/149/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/149/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/149/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/149/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/47152b74d272332a70914c5abce2d0e876009279f3ab2703ad27e9b5c2cadf9a/roles"
+      },
+      "geometry": {
+        "source": "belt37",
+        "pointer": "/groups/47152b74d272332a70914c5abce2d0e876009279f3ab2703ad27e9b5c2cadf9a/geometry"
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/149"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/6"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.007525,
+        "orientationToleranceRadians": 0.204383,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.45,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    },
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:280d9ee64ec00ebeccaa3726f9bd400f4ee2bf737eeb2fd3bb457b5a07035bac",
+      "descriptor_digest": "a93caacb638d0d695ae815c8fc629c96ed80217e5fae651606dddef3a24d69b4",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/151/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/151/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/151/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/151/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/47152b74d272332a70914c5abce2d0e876009279f3ab2703ad27e9b5c2cadf9a/roles"
+      },
+      "geometry": {
+        "source": "belt37",
+        "pointer": "/groups/47152b74d272332a70914c5abce2d0e876009279f3ab2703ad27e9b5c2cadf9a/geometry"
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/151"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/7"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.007525,
+        "orientationToleranceRadians": 0.204383,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.45,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    },
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:8bdb6ad412066df74e28ef0076eb2046388e51bd5494399f2efe08e84e811d91",
+      "descriptor_digest": "95b738d323bb2cc51db27be52a19c6c7c9b36df471c0b90a30c4e60f0f172efb",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/153/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/153/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/153/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/153/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/47152b74d272332a70914c5abce2d0e876009279f3ab2703ad27e9b5c2cadf9a/roles"
+      },
+      "geometry": {
+        "source": "belt37",
+        "pointer": "/groups/47152b74d272332a70914c5abce2d0e876009279f3ab2703ad27e9b5c2cadf9a/geometry"
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/153"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/8"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.007525,
+        "orientationToleranceRadians": 0.204383,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.45,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    },
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:0180359a55abe60c12075d4d7129c36432401d6d59fdac75051d2aa1624d6d46",
+      "descriptor_digest": "474d69a0d84d01ab93c808d49ddb58a25f10d1d24c9d070531eeeeff7fbe42ca",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/155/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/155/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/155/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/155/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/99c74ae99c305c9cc3d344226e4518996e66c9bee24fb1c6a506992e778966a0/roles"
+      },
+      "geometry": {
+        "source": "belt37",
+        "pointer": "/groups/99c74ae99c305c9cc3d344226e4518996e66c9bee24fb1c6a506992e778966a0/geometry"
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/155"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/9"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.013623,
+        "orientationToleranceRadians": 0.204383,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.45,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.055351,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.055351,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.055351,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    },
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:2b72eea82134305423456788ce5ca3b3a9879432ee9ac0ea2b8e00c873a25156",
+      "descriptor_digest": "b41c31716f6607aec4894f223392a050c62e3c2e584ee26365aa4695aaf4a139",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/161/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/161/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/161/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/161/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/9f06820a6f5858c76d6ea2de9acd35995945668ba60a8e9e425c0611fba006bb/roles"
+      },
+      "geometry": {
+        "source": "belt37",
+        "pointer": "/groups/9f06820a6f5858c76d6ea2de9acd35995945668ba60a8e9e425c0611fba006bb/geometry"
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/161"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/11"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.010857,
+        "orientationToleranceRadians": 0.204383,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.45,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.043552,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.043552,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.043552,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    },
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:9904586f0ef31a801eb21d2c7e837cdb53182fc785e1c7d7b46c22fcde8013c9",
+      "descriptor_digest": "1bcc29e7659fe74b8cc7ec6263b234aafb534ee0ad7122e4c3de20c5a69bca64",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/167/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/167/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/167/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/167/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/99c74ae99c305c9cc3d344226e4518996e66c9bee24fb1c6a506992e778966a0/roles"
+      },
+      "geometry": {
+        "source": "belt37",
+        "pointer": "/groups/99c74ae99c305c9cc3d344226e4518996e66c9bee24fb1c6a506992e778966a0/geometry"
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/167"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/13"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.013623,
+        "orientationToleranceRadians": 0.204383,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.45,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.055351,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.055351,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.055351,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    },
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:21d7db31a43c1c93e00100c9f76f817155805ca65bf800410d484623d1d7f49a",
+      "descriptor_digest": "99f50a82adf6b0d9fe2ebec86edd5efc7d5482081b36bb29d9e64d1fb3ba4728",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/169/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/169/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/169/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/169/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/9f06820a6f5858c76d6ea2de9acd35995945668ba60a8e9e425c0611fba006bb/roles"
+      },
+      "geometry": {
+        "source": "belt37",
+        "pointer": "/groups/9f06820a6f5858c76d6ea2de9acd35995945668ba60a8e9e425c0611fba006bb/geometry"
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/169"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/14"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.010857,
+        "orientationToleranceRadians": 0.204383,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.45,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.043552,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.043552,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.043552,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    },
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:5fec50eaad08f83a41e34573b8ec4341fbbb85c0d933b3d2097916f19d92e08f",
+      "descriptor_digest": "09bcca7ed34506a7e70c4a8e7c58b791f55de17a001552d882ab917c5c0c49b3",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/171/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/171/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/171/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/171/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/47152b74d272332a70914c5abce2d0e876009279f3ab2703ad27e9b5c2cadf9a/roles"
+      },
+      "geometry": {
+        "source": "belt37",
+        "pointer": "/groups/47152b74d272332a70914c5abce2d0e876009279f3ab2703ad27e9b5c2cadf9a/geometry"
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/171"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/15"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.007525,
+        "orientationToleranceRadians": 0.204383,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.45,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    },
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:f65dbc64c1432ca431614a1f9793cb1d1a1811db628f0c5cb3f0a6db3be967dd",
+      "descriptor_digest": "3b03962cbe75cc23107fc803fe63266e2a964a0dc07f42a358ffd70950112a29",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/173/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/173/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/173/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/173/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/9f06820a6f5858c76d6ea2de9acd35995945668ba60a8e9e425c0611fba006bb/roles"
+      },
+      "geometry": {
+        "source": "belt37",
+        "pointer": "/groups/9f06820a6f5858c76d6ea2de9acd35995945668ba60a8e9e425c0611fba006bb/geometry"
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/173"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/16"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.010857,
+        "orientationToleranceRadians": 0.204383,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.45,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.043552,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.043552,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.043552,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    },
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:d80febf74cb2b158690b9e89c0ac3670fbb41deb3c973534e9dcb9bac87f92a0",
+      "descriptor_digest": "d4563139fddcef4fcaf8dc3d0b955a44c23b5e188bad8a5b8dcc31320f9c5c08",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/175/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/175/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/175/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/175/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/afcb3f3486c6d926743bbce6892474a6fb9789e41805bbeb8a2238f23a1fbe2f/roles"
+      },
+      "geometry": {
+        "source": "belt37",
+        "pointer": "/groups/afcb3f3486c6d926743bbce6892474a6fb9789e41805bbeb8a2238f23a1fbe2f/geometry"
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/175"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/17"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.007452,
+        "orientationToleranceRadians": 0.12566,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.282736,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.041583,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.041583,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.041583,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    },
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:b07b718776133f97bff4adc7e67750282a271d9b8dc102870b641f160dbe61d7",
+      "descriptor_digest": "c98a9bbca22295f6a256a73106ea0e3654d392d8d8e42e7dc96c192d5df874c8",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/177/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/177/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/177/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/177/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/47152b74d272332a70914c5abce2d0e876009279f3ab2703ad27e9b5c2cadf9a/roles"
+      },
+      "geometry": {
+        "source": "belt37",
+        "pointer": "/groups/47152b74d272332a70914c5abce2d0e876009279f3ab2703ad27e9b5c2cadf9a/geometry"
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/177"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/18"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.007525,
+        "orientationToleranceRadians": 0.204383,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.45,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    },
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:61dcf19b4aa4479fb2400fae748ff794e5c96543aef1bbaa15c7f0fd43f8212a",
+      "descriptor_digest": "f6f1e0f2649a6920c9d5e50710ed1d2d3dd350a4160efeff9e4e19ee323a8568",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/179/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/179/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/179/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/179/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/99c74ae99c305c9cc3d344226e4518996e66c9bee24fb1c6a506992e778966a0/roles"
+      },
+      "geometry": {
+        "source": "belt37",
+        "pointer": "/groups/99c74ae99c305c9cc3d344226e4518996e66c9bee24fb1c6a506992e778966a0/geometry"
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/179"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/19"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.013623,
+        "orientationToleranceRadians": 0.204383,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.45,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.055351,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.055351,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.055351,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    },
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:1113d42a78aa4618bd110c7f7ead1844124ede58986074d44a9acb9787faa58a",
+      "descriptor_digest": "d939fa731908d9ff8bf14befbf3d9ab50cb29e6a2a7466057cf0a3ca12a263e9",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/181/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/181/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/181/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/181/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/afcb3f3486c6d926743bbce6892474a6fb9789e41805bbeb8a2238f23a1fbe2f/roles"
+      },
+      "geometry": {
+        "source": "belt37",
+        "pointer": "/groups/afcb3f3486c6d926743bbce6892474a6fb9789e41805bbeb8a2238f23a1fbe2f/geometry"
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/181"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/20"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.007452,
+        "orientationToleranceRadians": 0.12566,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.282736,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.041583,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.041583,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.041583,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    },
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:b91bfb494c8eb5341c48ed73ecc9be8057fb576fb1247ddd900c18b846c339da",
+      "descriptor_digest": "a0265dbb8c84d6f331d02f82f8740f6a3e812636984953f18319d8ab039cef08",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/183/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/183/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/183/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/183/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/afcb3f3486c6d926743bbce6892474a6fb9789e41805bbeb8a2238f23a1fbe2f/roles"
+      },
+      "geometry": {
+        "source": "belt37",
+        "pointer": "/groups/afcb3f3486c6d926743bbce6892474a6fb9789e41805bbeb8a2238f23a1fbe2f/geometry"
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/183"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/21"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.007452,
+        "orientationToleranceRadians": 0.12566,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.282736,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.041583,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.041583,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.041583,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    },
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:1643591677dee7102b7a9553f6a75ad4e8a8290d26f79f40c92aeffec2dfd7e3",
+      "descriptor_digest": "1caa7c417da8553f4edde00b0384cc3f871ebb813200a31beb963d4cdd69e1c1",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/185/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/185/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/185/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/185/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/99c74ae99c305c9cc3d344226e4518996e66c9bee24fb1c6a506992e778966a0/roles"
+      },
+      "geometry": {
+        "source": "belt37",
+        "pointer": "/groups/99c74ae99c305c9cc3d344226e4518996e66c9bee24fb1c6a506992e778966a0/geometry"
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/185"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/22"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.013623,
+        "orientationToleranceRadians": 0.204383,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.45,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.055351,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.055351,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.055351,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    },
+    {
+      "kind": "feed",
+      "descriptor_key": "bc2:magazine-descriptor:8c4fb1fb10d63744bf8d1cd8537ee557d4151722f7befe180b50006964c7e4cd",
+      "descriptor_digest": "7b793719af41ef0ef2447cb324f319e2d2a91ae77ddcc5dcaa7f2fbeea9ee0c7",
+      "native_class": "AutomaticMagazineZeroBoltTransfer",
+      "configuration": {
+        "source": "actions",
+        "pointer": "/records/187/weapon_configuration"
+      },
+      "asset": {
+        "source": "actions",
+        "pointer": "/records/187/asset"
+      },
+      "meshPath": {
+        "source": "actions",
+        "pointer": "/records/187/configured_mesh"
+      },
+      "rigFingerprint": {
+        "source": "actions",
+        "pointer": "/records/187/rig_fingerprint"
+      },
+      "roles": {
+        "source": "belt37",
+        "pointer": "/groups/47152b74d272332a70914c5abce2d0e876009279f3ab2703ad27e9b5c2cadf9a/roles"
+      },
+      "geometry": {
+        "source": "belt37",
+        "pointer": "/groups/47152b74d272332a70914c5abce2d0e876009279f3ab2703ad27e9b5c2cadf9a/geometry"
+      },
+      "geometry_evidence": {
+        "source": "actions",
+        "pointer": "/records/187"
+      },
+      "role_review": {
+        "source": "belt37",
+        "pointer": "/configurations/23"
+      },
+      "reviewer": "Codex CHAT14 offline geometry and mod-policy review",
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "interaction_policy": {
+        "completeFraction": 0.96,
+        "releaseFraction": 0.12,
+        "pathToleranceMeters": 0.007525,
+        "orientationToleranceRadians": 0.204383,
+        "maxStepMeters": 0.07,
+        "maxStepRadians": 0.45,
+        "endpointDwellNs": 80000000,
+        "maximumGestureNs": 10000000000,
+        "maxInputGapNs": 80000000
+      },
+      "mechanism": {
+        "revision": 1,
+        "maxAgeNs": 80000000,
+        "ammunitionKind": 1,
+        "cover": true,
+        "latch": false,
+        "container": true,
+        "charge": false,
+        "containerNeedsOpen": true,
+        "feedNeedsOpen": true,
+        "detachNeedsUnseated": false,
+        "sameContainerReplenishment": true,
+        "coupledContainerDetach": true,
+        "contacts": {
+          "Cover": {
+            "role": 1,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          },
+          "Container": {
+            "role": 2,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          },
+          "Feed": {
+            "role": 3,
+            "radiusMeters": 0.049773,
+            "maxAngleRadians": 0.55
+          }
+        }
+      },
+      "enabled": false
+    }
+  ]
+}

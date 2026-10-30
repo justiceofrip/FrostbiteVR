@@ -1,0 +1,30 @@
+Done Y: registry35 source preparation; frozen after handoff. No builds/tests/Git/game/XR/install/subagents ran.
+Read AGENTS.md, CURRENT.md, ARCHITECTURE contracts, and CHAT14-16/20261030-{pipeline34,runtime34}/HANDOFF.txt.
+Owned Bc2FeedEquipmentProfile.h, Bc2FeedPresentation.h, Bc2FeedRegistry.cpp (root added ownership), their two tests, and this handoff only.
+Bc2FeedRegistration: key, profileDigest, geometry, interactionPolicy, mechanism, config, nativeClass, enabled, reviewed.
+profileDigest identifies the complete mechanism payload, distinct from any native magazine registry descriptor; key is its first16 lowercase SHA256 hex digits, nonzero.
+Builtin M60 key 0x35cbdca6154b3c90; digest 35cbdca6154b3c903553c2343ff1132c2c6ab3ce3726265a7f2c7d76e3c545c5; mechanism id 0x4d363046454544/revision1 unchanged.
+Builtin digest recipe: UTF8 LF "BC2FeedBuiltinSourceV1\n" + source from BEGIN MEASURED FRAMES comment through just before No category comment + source from M60ReloadTiming declaration through just before SameSelector declaration; remove lines assigning out.key/out.profileDigest.
+The M60 measured matrices, topology, existing mechanism policy, interaction tolerances and exact100/2/7.8/.7 native configuration remain unchanged.
+Generic Bc2FeedPoseId/Pose/ChainBone/Geometry/Presentation replace fixed names; old M60 aliases and restricted wrappers remain for compatibility.
+MaxBc2FeedChainBones=8; MaxBc2FeedParts=10. Pose has parentFromChainChild[7] and chainCount; presentation has weaponFromChain[8] and chainCount.
+Geometry: asset/configurationPath/meshPath/rigFingerprint; meshSha256/lodSha256/skeletonSha256/clipSha256; poses[7]; chain[8]; weaponFromHinge/hingeFromOpeningContact/hingeFromClosingContact; coverTravelRadians; chainCount; rootBone/pouchBone/coverBone; weaponFromCoverReference.
+Bone: bone,parent,index,parentIndex. Active chain1..8 must form adjacent parent links from the declared root; pose counts must match. Inactive array capacity is not consumed.
+Pose slots: Resting,PouchDetachSource,PouchWithdrawn,PouchAttachSource,PouchAttachedFeedUnseated,FeedSeatSource,FeedSeated.
+Pose fields: authoredSeconds,weaponFromPouch,weaponFromFeedRoot,parentFromChainChild,sourceFromWrist,chainCount; all active transforms are rigid canonical row-vector metres.
+Policy fields: completeFraction,releaseFraction,pathToleranceMeters,orientationToleranceRadians,maxStepMeters,maxStepRadians,endpointDwellNs,maximumGestureNs,maxInputGapNs.
+Native class is explicit Bc2FeedNativeClass::AutomaticMagazineZeroBoltTransfer; enabled/reviewed and ReviewedNative config required. Latch/charge/separate withdrawal remain unsupported.
+Exact descriptor timing offsets:0x10 threshold,0x14 zero,0x18 reloadTime,0x20 reloadType1,0x24 fireLogicType2,0x2c zero; no native timing/owner/firing authority is inferred from geometry.
+Bc2FeedRegistry.cpp alone includes FVR_BC2_FEED_REGISTRY_HEADER, expecting fvr::bc2::generated::GeneratedFeedProfiles std::array; max128 generated rows plus builtin.
+RegisteredBc2FeedProfiles() exposes immutable rows. FindBc2FeedRegistration overloads resolve key, observed config, exact asset/path/mesh/rig, or key+config+all selectors.
+SelectBc2FeedRegistration(span,...) provides pure key/config/all-selector overloads for offline fixtures. Duplicate keys/digests/native-config identity/geometry-config identity fail closed, including invalid competing rows.
+Combined production validation is cached once in static storage; array overflow returns an empty registry. Generated includes cannot vary inline definitions across native/renderer translation units.
+Generic BuildBc2FeedMotion/FromRetainedPose/InteractionProfile and ComposeBc2FeedPresentation/PlaceBc2FeedTerminal/PlaceBc2FeedPouch consume measured geometry and active chain count.
+Presentation owner needs registrationKey,chainCount,weaponFromChain[8],uint16_t carriedPartsMask. Pouch bit0,cover bit1(always attached),chain bits2..9.
+Bc2FeedPartFrames is array<Matrix4,10>; Bc2FeedPartWorldFrames takes geometry first, then parts/hinge/bases/units. Only chainCount+2 entries are active.
+Bc2FeedPartBinding holds parts[10],partCount,registrationKey,fingerprint,geometry pointer. Production BindBc2FeedParts(row,rig) requires the actual immutable registered row and exact rig fingerprint.
+Structural feed_presentation_detail::Derive(rig,geometry) is for deterministic fixtures; it grants no production binding. Palette writes sort actual ancestry so each distinct owned child retains its target.
+The original raw-input/hand-owner/selection-lease/claim checks remain; retained presentation additionally pins registrationKey,chainCount and registered rig fingerprint.
+Tests authored: profile suite now12 groups; presentation suite11 groups. Existing M60 geometry/lease/carry cases remain; independent synthetic capacities/transforms/contact roles/topology cover chains1,2,6,8 and mismatched/invalid/ambiguous rows.
+Synthetic rows stay local to test spans; no real configuration is added. Root owns CMake/runtime/native integration and test/build execution.
+Evidence level: source preparation/static review only. No deterministic pass, actual-game behavior, broader weapon enrollment, or headset acceptance is claimed.

@@ -1,0 +1,13 @@
+Done Y - bounded renderer source preparation; frozen and retired after this handoff.
+Owned and changed only src/games/bc2/Bc2RigPublication.h/.cpp and this handoff.
+Read AGENTS.md, CURRENT.md, architecture contracts and both CHAT14/CHAT16 registry35 handoffs.
+Feed binds the immutable row resolved by presentation.registrationKey after current input, native equipment, exact selected configuration/mesh and measured rig admission.
+Feed composition uses Bc2FeedPresentation with explicit chainCount and resolved geometry; no M60 singleton or fixed four-chain assumption remains in publication.
+Feed world bases retain original carried-part bases; active count, bounded arrays and ancestry-ordered part writes remain in the generic presentation helpers.
+Pistol freshness resolves registrationKey and independently resolves the exact selection to the same immutable row; retained palettes require unchanged key.
+Pistol TargetFresh, Selected/SelectedRetained, Bind, Compose and BuildWrite use that resolved row; current measured rig fingerprint is explicitly matched.
+Original-byte checks, native equipment identity rereads, selected leases, source raw history, deadlines, write ordering and exact restore/fallback paths remain intact.
+Feed retention additionally confirms the shot guard did not change during its final identity read, matching the pistol guard pattern.
+No renderer native timing/class authority was added; native descriptor admission stays with Gameplay/backend/runtime owners.
+Static targeted review only: no publication M60/Mp443/MP443 references remain. No Git, build, test, game, XR, install or subagent action ran.
+Root owns combined integration, deterministic checks and both architectures. No actual-game or headset qualification is claimed.

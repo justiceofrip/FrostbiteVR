@@ -209,12 +209,27 @@ inline constexpr std::array<VisibilityDescriptor,1> Type5VisibilityDescriptors{{
 }
 
 namespace fvr::bc2 {
+inline constexpr std::array<std::string_view,1> Pistol41VisibilityMeshes0{"Objects/Weapons/Handheld/Beach/M1911A1/US_M1911_Mesh"};
+inline constexpr std::array<std::string_view,8> Pistol41VisibilityBones0{"jntWpn_12","jntWpn_3","jntWpn_2","jntWpn_1","jntWpn_7","jntWpn_6","jntWpn_5","jntWpn_4"};
+inline constexpr std::array<std::string_view,1> Pistol41VisibilityMeshes1{"Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9Beretta_Mesh"};
+inline constexpr std::array<std::string_view,6> Pistol41VisibilityBones1{"jntWpn_12","jntWpn_3","jntWpn_2","jntWpn_1","jntWpn_6","jntWpn_4"};
+inline constexpr std::array<std::string_view,1> Pistol41VisibilityMeshes2{"Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9Beretta_Mesh"};
+inline constexpr std::array<std::string_view,6> Pistol41VisibilityBones2{"jntWpn_12","jntWpn_3","jntWpn_2","jntWpn_1","jntWpn_6","jntWpn_4"};
+inline constexpr std::array<VisibilityDescriptor,3> Pistol41VisibilityDescriptors{{
+{"M1911",Pistol41VisibilityMeshes0,Pistol41VisibilityBones0,0xa7f219a1426216abull,false,"Objects/Weapons/Handheld/Beach/M1911A1/M1911A1",false,false,true},
+{"M9-3",Pistol41VisibilityMeshes1,Pistol41VisibilityBones1,0xa7f219a1426216abull,false,"Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9-3",false,false,true},
+{"M9",Pistol41VisibilityMeshes2,Pistol41VisibilityBones2,0xa7f219a1426216abull,false,"Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9Beretta",false,false,true},
+}};
+}
+
+namespace fvr::bc2 {
 inline constexpr auto VisibilityDescriptors=[] {
- std::array<VisibilityDescriptor,BaselineVisibilityDescriptors.size()+ResourceVisibilityDescriptors.size()+Opening426VisibilityDescriptors.size()+Type5VisibilityDescriptors.size()> out{};
+ std::array<VisibilityDescriptor,BaselineVisibilityDescriptors.size()+ResourceVisibilityDescriptors.size()+Opening426VisibilityDescriptors.size()+Type5VisibilityDescriptors.size()+Pistol41VisibilityDescriptors.size()> out{};
  std::size_t n=0;for(const auto& p:BaselineVisibilityDescriptors)out[n++]=p;
  for(const auto& p:ResourceVisibilityDescriptors)out[n++]=p;
  for(const auto& p:Opening426VisibilityDescriptors)out[n++]=p;
  for(const auto& p:Type5VisibilityDescriptors)out[n++]=p;
+ for(const auto& p:Pistol41VisibilityDescriptors)out[n++]=p;
  return out;
 }();
 }

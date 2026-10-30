@@ -1,0 +1,3 @@
+# Local derived samples and visual evidence; reproducible with prepare_belt_batch.py.
+/synchronized-samples.json
+/role-points-*.png

@@ -1,0 +1,282 @@
+{
+  "schema": "fvr.bc2.family_batch_input_plan.v1",
+  "status": "reviewable_cached_authored_input_plan_not_exporter_annotations",
+  "evidence_level": "read_only_existing_authored_json",
+  "cwd": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1",
+  "evidence_root": "G:\\Unity\\VRMMO",
+  "native_admission": false,
+  "headset_acceptance": false,
+  "synthetic_rows": 0,
+  "summary": {
+    "exact_configurations": 29,
+    "belt_configurations": 24,
+    "pistol_configurations": 5,
+    "reviewed_exact_role_seeds": 2,
+    "ready_registry_annotations": 0
+  },
+  "assets": [
+    "M1911",
+    "M249",
+    "M60",
+    "M60_sp",
+    "M60_sp_s",
+    "M9",
+    "M9-3",
+    "MG3",
+    "MG3_sp",
+    "MG3_sp_k",
+    "MG3k",
+    "MP443",
+    "MP443_sp",
+    "PKM",
+    "QJU88",
+    "QJU88_sp",
+    "QJU88_sp_k"
+  ],
+  "sources": {
+    "metadata": {
+      "path": "bc2vr-recovery/manual-reload-catalog-20261003-candidate/mp-common-all-metadata.json",
+      "sha256": "aa7a85e4c9cac427a095eaddcf191947f8495ffbe19677fd4fdd8e58d1dac48a"
+    },
+    "inventory": {
+      "path": "bc2vr-recovery/arsmg-pipeline-20261003-candidate/installed-weapon-inventory.json",
+      "sha256": "f0f3425a13ac0a2df5d49bd724a7fbfd90ed0a72930583e8a3f6d7ba44a99f0b"
+    },
+    "hand_poses": {
+      "path": "bc2vr-recovery/authored-hand-pose-batch/result.json",
+      "sha256": "e458cc8a74580020b62dd91172f8cc5f43cdb5fbbaf3df2e3d3f12bed0749c1f"
+    },
+    "actions": {
+      "path": "bc2vr-recovery/action379-batched/actions.json",
+      "sha256": "c1e775329c56c32bec9ed49392d5b080f4b9f50bbd66c0df15945f98d9dbd7b8"
+    },
+    "belt_mechanisms": {
+      "path": "bc2vr-recovery/lmg-authored-mechanisms-candidate/all/mechanisms.json",
+      "sha256": "47460776b1d3e2c931692d47a08c5717d2173924665b8271a1d71b687caec256"
+    },
+    "belt_bindings": {
+      "path": "bc2vr-recovery/lmg-authored-mechanisms-candidate/all/reference-bindings.json",
+      "sha256": "0cbe8ed392eb9cda5feb6f3676bc3881ee4c6638ff287ad85e099fd40c12584e"
+    },
+    "belt_meshes": {
+      "path": "bc2vr-recovery/lmg-authored-mechanisms-candidate/all/mesh-bindings.json",
+      "sha256": "6146f057ea4a7ef5086be5b640d717ac091ec21427d0aaf64f7defce877f9bf8"
+    },
+    "pistol_mechanisms": {
+      "path": "bc2vr-recovery/pistol-sniper-shotgun-mechanisms-candidate/batch/mechanisms.json",
+      "sha256": "38c357bfe15c1e6ed292a2f4e93e401884522285dbae5124d5eaf63e346561be"
+    },
+    "pistol_bindings": {
+      "path": "bc2vr-recovery/pistol-sniper-shotgun-mechanisms-candidate/batch/reference-bindings.json",
+      "sha256": "367daddaf86244359245312db8028756b91bf763b34535aa1191253db3981559"
+    },
+    "pistol_meshes": {
+      "path": "bc2vr-recovery/pistol-sniper-shotgun-mechanisms-candidate/batch/mesh-bindings.json",
+      "sha256": "641173d9aeb52d1e436e42a831c02a9f5217fa53338e9c34f94bb987adefa848"
+    },
+    "m1911_bindings": {
+      "path": "bc2vr-recovery/mesh312-research/reference-bindings.json",
+      "sha256": "3813a763b4640355e699f280a8a8dd9fcc6710ca03f57f7df3afe60c867d1ae7"
+    },
+    "m1911_meshes": {
+      "path": "bc2vr-recovery/mesh312-research/mp-mesh-bindings.json",
+      "sha256": "fc1e43f8ba9146e47d3a262704b3d93a375fb44dd096108905efd27bf5d64c15"
+    },
+    "original_jobs": {
+      "path": "bc2vr-recovery/automatic-magazine-stock-bolt-20261003-candidate/extended-descriptor-jobs.json",
+      "sha256": "ff4e5adab0bf3ed046f648bc96503254f7a3887dedfe21c742f846fcf13571c6"
+    },
+    "mp443_jobs": {
+      "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/profiles/singlefire238/descriptor-jobs.json",
+      "sha256": "325905bff074c09dc74d901b0ff07004aa165f5eea444ab5335f81200ab2c403"
+    },
+    "mp443_selected_jobs": {
+      "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/profiles/resource-enrollment295-pistol/selected-jobs.json",
+      "sha256": "9377aa52312a6b4cec95237fb498d0e921691776c62d5fa96db12f00e08e0ece"
+    },
+    "mp443_native_reviews": {
+      "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/profiles/resource-enrollment295-pistol/exact-reviews.json",
+      "sha256": "258d186f317199621956881899a580f85e71a149fb0d87c3ca3701e08c983b20"
+    },
+    "mp443_native_review_evidence": {
+      "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/profiles/resource-enrollment295-pistol/review-evidence.json",
+      "sha256": "50d149c5c147061a39e04d0eec07efeefd2e0267956fbd3b258ec58dc0ed6a4e"
+    },
+    "m60_frames": {
+      "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/handoff/tasks/CHAT14/20261030-profile18/proof01.json",
+      "sha256": "cefbd019be7f6b9b44e41fe32eca7f5179059a6ab22c40289238346c532c82b8"
+    },
+    "m60_geometry": {
+      "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/handoff/tasks/CHAT14/20261030-implementation15/geometry-evidence.json",
+      "sha256": "6ecb026b1278c4e71fefc7da08a68c9dba97f66d64f4fd9d78d472ed8e889876"
+    },
+    "m60_roles": {
+      "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/handoff/tasks/CHAT14/20261030-implementation15/role-review.json",
+      "sha256": "4d18706ec91ac91702a966ce6440c6e2e22080ca7b384866a17cb6c772961631"
+    },
+    "mp443_geometry": {
+      "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/handoff/tasks/CHAT16/20261030-implementation17/mp443-geometry.json",
+      "sha256": "09314649460c4b0d81bd0138a39d44f3680c0fed4e485b353ae66fe7c2b3638c"
+    },
+    "mp443_roles": {
+      "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/handoff/tasks/CHAT16/20261030-implementation17/mp443-role-review.json",
+      "sha256": "4fe6e8d67687a0336ccc708cfc2d6a7c56ad0389b0dd306a5d556bdb465f4529"
+    },
+    "family_plan": {
+      "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/profiles/weapon-family-work-plan.json",
+      "sha256": "705470343f5212b2e3f7572d592d0628c672f508a3b2a151a4956ec712ce18cc"
+    }
+  },
+  "commands": {
+    "cached_registry_batch": [
+      "py",
+      "-3.12",
+      "-B",
+      "tools/bc2_mechanism_registry_header.py",
+      "--jobs",
+      "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-familybatch36\\descriptor-jobs.json",
+      "--reviewed",
+      "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\profiles\\resource-enrollment295-pistol\\exact-reviews.json",
+      "--annotations",
+      "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-familybatch36\\reviewed-annotations.json",
+      "--evidence-root",
+      "G:\\Unity\\VRMMO",
+      "--feed-header",
+      "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-familybatch36\\FeedProfiles.h",
+      "--pistol-header",
+      "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-familybatch36\\PistolSlideProfiles.h",
+      "--receipt",
+      "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-familybatch36\\registry-receipt.json"
+    ],
+    "optional_fresh_geometry_batch": [
+      "py",
+      "-3.12",
+      "-B",
+      "tools/bc2_authored_mechanism_geometry.py",
+      "--game",
+      "G:/New folder (2)/Battlefield Bad Company 2",
+      "--metadata",
+      "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\mp-common-all-metadata.json",
+      "--inventory",
+      "G:\\Unity\\VRMMO\\bc2vr-recovery\\arsmg-pipeline-20261003-candidate\\installed-weapon-inventory.json",
+      "--hand-poses",
+      "G:\\Unity\\VRMMO\\bc2vr-recovery\\authored-hand-pose-batch\\result.json",
+      "--output",
+      "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-familybatch36\\authored",
+      "--asset",
+      "M1911",
+      "--asset",
+      "M249",
+      "--asset",
+      "M60",
+      "--asset",
+      "M60_sp",
+      "--asset",
+      "M60_sp_s",
+      "--asset",
+      "M9",
+      "--asset",
+      "M9-3",
+      "--asset",
+      "MG3",
+      "--asset",
+      "MG3_sp",
+      "--asset",
+      "MG3_sp_k",
+      "--asset",
+      "MG3k",
+      "--asset",
+      "MP443",
+      "--asset",
+      "MP443_sp",
+      "--asset",
+      "PKM",
+      "--asset",
+      "QJU88",
+      "--asset",
+      "QJU88_sp",
+      "--asset",
+      "QJU88_sp_k"
+    ]
+  },
+  "command_status": {
+    "cached_registry_batch": "Do not invoke until descriptor-jobs.json and reviewed-annotations.json below are assembled and validated; these proposed files do not exist as part of this task. No admissions argument means emitted candidates remain disabled.",
+    "optional_fresh_geometry_batch": "Not required: action379 cache already has all29 reload rows. Supplied only as exact reusable family CLI; this task did not run it."
+  },
+  "required_preparation": [
+    "Root has corrected exporter pistol source_class to evidenced wcSmg. Preserve this exact source class and reviewed SingleFireMagazineZeroBolt dispatch checks; do not relabel real jobs.",
+    "Assemble descriptor-jobs.json by selecting the 24 belt rows from original_jobs and the two unchanged MP443 rows from mp443_jobs; M9/M9-3/M1911 need their own reviewed singlefire extension before they are valid exporter inputs. Do not relabel source_class or invent fireLogicType.",
+    "Create reviewed-annotations.json using pinned JSON pointers, exact per-config anchors and explicit semantic/policy reviews. Two exact seeds are available below; other configurations lack reviewed role/operation/landmark annotations even though raw authored motion exists.",
+    "Keep MP443_sp exact native review list separate from mechanism admission. No new mechanism-admission review exists here. Never substitute test fixtures or native magazine reviews for physical/native mechanism grants.",
+    "Full29-row export is not currently ready; preflight missing rows before exporter because any rejected annotation aborts both output headers. Emit only reviewed disabled candidates, while reporting unresolved configs separately."
+  ],
+  "cache_findings": [
+    "action379 reload records have no reported part gaps for all29 selected exact configs; old belt mechanisms cache has absent jntWpn_4 on M60/QJU88/MG3 and absent jntWpn_5 on M249. Prefer newer pinned actions records, not an archive resurvey.",
+    "M1911 older pistol mechanisms batch has No exact mesh geometry binding. Newer action379 /records/425 is a real authored M1911 reload from mesh312 inputs, with eight parts and measured signed rail.",
+    "All pistol slide candidates have zero qualifying sustained contact windows. M9/M9-3/M1911 magazine jntWpn_12 contacts are not slide-contact evidence.",
+    "M1911 signed rail span is about43.4mm; the MP44365mm policy cannot be copied. Retain signed minima and analytic extrema through per-config source pointers.",
+    "Type88 LMG native asset spellings are QJU88/QJU88_sp/QJU88_sp_k and mesh path MEC_lmg_QJY88. Do not substitute sniper QBU88 or family label Type88 as asset selector.",
+    "M9-3 is retained as a distinct configuration despite equal mesh/rail contents. MG36 and MP412 are excluded from this belt/reciprocating-slide batch."
+  ],
+  "missing_by_group": {
+    "feed_without_exact_role_seed": [
+      "semantic role/topology review",
+      "seven selected pose/contact/hinge references",
+      "reviewed interaction policy",
+      "exact mechanism admission for enablement"
+    ],
+    "pistol_without_exact_role_seed": [
+      "semantic slide/root topology review",
+      "signed rail and same-frame wrist/finger landmark references",
+      "reviewed interaction policy within each measured range",
+      "exact mechanism admission for enablement"
+    ],
+    "M9_M9_3_M1911": [
+      "reviewed singlefire descriptor extension; existing jobs remain deferred"
+    ],
+    "seed_annotations": [
+      "assemble exact per-config reference annotations from the named existing sources",
+      "explicit policy review",
+      "exact mechanism admission for enablement"
+    ]
+  },
+  "anchor_fields": [
+    "weapon_configuration",
+    "configured_mesh",
+    "rig_fingerprint",
+    "parts",
+    "linear_candidates"
+  ],
+  "source_size_note": "actions.json is25826840 bytes, within existing descriptor.load128MiB input bound. Hash pins cover original complete file; reference pointers select exact rows.",
+  "configurations": [
+    {"asset":"MG3k","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3_Kobra.dbx","configuration_guid":"9d8cbec8-0903-42f0-9f91-3dcbafb5a437","configuration_sha256":"ef2d20a93c8134b40eea55c04c68a6202308a0b0fb08aeaf047cf90c67c180e6","authored_anchor":{"source":"actions","pointer":"/records/129"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/58"},"descriptor_key":"bc2:magazine-descriptor:9541e55a524bc896fb311579681393e3e8399913e23eaa12f49304c1b77a08bd","descriptor_digest":"0a90b171035b96e43948d7f6107dbcbbb7ddb1e8ecd54649eb6665f75485966a","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":12,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"MG3","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Scoped.dbx","configuration_guid":"456734db-b104-420e-a7ca-d65113c2f29a","configuration_sha256":"f24bdbc7dca79f8bbc4026eedf734a7c6b5b3a7e13feac54fe28bfa1b34eafca","authored_anchor":{"source":"actions","pointer":"/records/131"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/64"},"descriptor_key":"bc2:magazine-descriptor:9d2a5b73b2d86db27ba73aecc04884756c7c41f7866312d06c6542b4985c7d78","descriptor_digest":"6a46b57c25cafc76184a2cfdd21812db8d33e75fabe9b5b3ea10239d33a238b9","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":12,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"QJU88","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Kobra.dbx","configuration_guid":"00734bf6-4a22-4254-80bd-2070a8f5bdbc","configuration_sha256":"23ee1f34d87937f78f420c91e724bc7adba2f1788cbe515711a92251a956ba16","authored_anchor":{"source":"actions","pointer":"/records/135"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/104"},"descriptor_key":"bc2:magazine-descriptor:ed61f93b9649b451711a26dd989887a838f50836a2f127e3c3e8323dfced5e88","descriptor_digest":"e5a3a71e3374a00a5853fe6cb5b30eefe7a48fd00ebec259145e815b1c67f2b9","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":14,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"M60","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60.dbx","configuration_guid":"4f0e5980-8009-442e-b3b2-3c60ba50caa7","configuration_sha256":"b403eed0838e83cb4b8aeb5f90732ecc993275ec1b9ca8d1c0ebdb416504d51b","authored_anchor":{"source":"actions","pointer":"/records/139"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/17"},"descriptor_key":"bc2:magazine-descriptor:3327ed5d49d19216e64395bda737a124b272fd5c53cb6eb3a4945637e8f22f4e","descriptor_digest":"0dcf6f4f9e883f143656074626bc91c60016e076e3e1621d7ac975980f333490","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":14,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"M60","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Kobra.dbx","configuration_guid":"01cf38e3-9bab-450b-85b0-d48053606638","configuration_sha256":"c103568d5cbbfba9ffd20969f02844a77d7d1aa6a886e3171f5459f872934fc4","authored_anchor":{"source":"actions","pointer":"/records/141"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/22"},"descriptor_key":"bc2:magazine-descriptor:3d34e98de9c99fe9098603548856b48f15a5028b02d075ff6dfe160b1b0ef995","descriptor_digest":"a1ee9fe13d10447292d2193c2a0c1ff2e93fd8d7ec100ac350126e9451de48bb","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":14,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"PKM","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Kobra.dbx","configuration_guid":"197aa580-9ec5-4255-b429-b6f010f31129","configuration_sha256":"3a74555345e826bb42b54e9e9691c42537c602c3dfa8269e215934123ef3d39c","authored_anchor":{"source":"actions","pointer":"/records/145"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/14"},"descriptor_key":"bc2:magazine-descriptor:2e907a5781437c8d857df9c56b3c7cbb85fd31e40d7a00cea4e6853292d4553b","descriptor_digest":"0c3e487bc8a09eee0cb2e5c460b917481116af5ff41f0c40276167e7bf77755b","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":16,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"MG3k","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3_Scoped.dbx","configuration_guid":"63c43439-b751-491c-83b4-cccc64419832","configuration_sha256":"78f8cb63038841fbf6074cffc1423048f22322e27ab579093b03c118f5d359e4","authored_anchor":{"source":"actions","pointer":"/records/149"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/48"},"descriptor_key":"bc2:magazine-descriptor:7ad9e8aedea68626ea7742c7ec69bf034976bd5a465cf3244568862589473b68","descriptor_digest":"701dd5db3efa12a0ae9be5c56db9cbf6f2f18c7e376ad88eb37aeea2c239fb8c","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":12,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"MG3","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Kobra.dbx","configuration_guid":"dd64cb3f-6c32-4549-aad7-27335214da5a","configuration_sha256":"b6eea2dda2aa7854e7256b0004b057de1f305ff0a8a1cec029fcb6be70c9b744","authored_anchor":{"source":"actions","pointer":"/records/151"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/11"},"descriptor_key":"bc2:magazine-descriptor:280d9ee64ec00ebeccaa3726f9bd400f4ee2bf737eeb2fd3bb457b5a07035bac","descriptor_digest":"a93caacb638d0d695ae815c8fc629c96ed80217e5fae651606dddef3a24d69b4","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":12,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"MG3","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3.dbx","configuration_guid":"de63f2a2-a42d-4726-b87e-4dcfbc763203","configuration_sha256":"ec08bba67ae0ff8b9d327b61c2b066f91881d08b180ceb82e408f926b30a65f2","authored_anchor":{"source":"actions","pointer":"/records/153"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/56"},"descriptor_key":"bc2:magazine-descriptor:8bdb6ad412066df74e28ef0076eb2046388e51bd5494399f2efe08e84e811d91","descriptor_digest":"95b738d323bb2cc51db27be52a19c6c7c9b36df471c0b90a30c4e60f0f172efb","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":12,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"QJU88","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88.dbx","configuration_guid":"0f342abf-80ad-4399-8604-bdbd6ae50399","configuration_sha256":"4a5ea65fa3e368c88fec78494ca57764c35a66e68d3beb73d536cecb26b92b80","authored_anchor":{"source":"actions","pointer":"/records/155"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/1"},"descriptor_key":"bc2:magazine-descriptor:0180359a55abe60c12075d4d7129c36432401d6d59fdac75051d2aa1624d6d46","descriptor_digest":"474d69a0d84d01ab93c808d49ddb58a25f10d1d24c9d070531eeeeff7fbe42ca","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":14,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"PKM","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Scoped.dbx","configuration_guid":"21cc46a6-bdf9-46bd-8a2b-2e4d808af6f3","configuration_sha256":"acf04a74279816ca2c52d0022cda2956256cd2d2e887dcb3cb7ed038c5a4e0fb","authored_anchor":{"source":"actions","pointer":"/records/157"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/81"},"descriptor_key":"bc2:magazine-descriptor:c1a74a0b4d07ae614a7c3a48455c0eb361714404263f88327da8ec710a2dd4d9","descriptor_digest":"8775a60a29e8bc0f073726be12c82a5e2fd772365843c44fce8ef3460c7657d3","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":16,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"M249","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi.dbx","configuration_guid":"46c1e3c8-85e3-47cf-8fd2-9d55acca92d3","configuration_sha256":"87ce26be3af226195387d0da68df0aeb8046990fc31ff14ce65a250dd01138f3","authored_anchor":{"source":"actions","pointer":"/records/161"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/12"},"descriptor_key":"bc2:magazine-descriptor:2b72eea82134305423456788ce5ca3b3a9879432ee9ac0ea2b8e00c873a25156","descriptor_digest":"b41c31716f6607aec4894f223392a050c62e3c2e584ee26365aa4695aaf4a139","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":12,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"PKM","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM.dbx","configuration_guid":"eccf2b1d-eb98-439d-b5eb-cd8ad428e001","configuration_sha256":"748809a7c23502232ed78def704291c0746804c7e4ffa09349d0d62c67fc5535","authored_anchor":{"source":"actions","pointer":"/records/163"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/49"},"descriptor_key":"bc2:magazine-descriptor:7bb572fe1e1efe193567d5aae46d68fe9c7865cabe79c95897cc3ca228f1f4e2","descriptor_digest":"2695de08dbfb4877d1c0ed41d45cd71e8072a8c5b60f316fc7d20514357f24d5","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":16,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"QJU88","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Scoped.dbx","configuration_guid":"c1621063-3a19-4151-a452-21b347bc66e7","configuration_sha256":"802b49e4efc4361ce70a7a15198244f05cbf32f859b68cdfcf955a70f2189cbc","authored_anchor":{"source":"actions","pointer":"/records/167"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/62"},"descriptor_key":"bc2:magazine-descriptor:9904586f0ef31a801eb21d2c7e837cdb53182fc785e1c7d7b46c22fcde8013c9","descriptor_digest":"1bcc29e7659fe74b8cc7ec6263b234aafb534ee0ad7122e4c3de20c5a69bca64","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":14,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"M249","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Kobra.dbx","configuration_guid":"8b208f35-565d-49f3-a884-9b00feacfc68","configuration_sha256":"79bfb7ef3bdd501ce2012119db7d96d5829d0ce5f72bedaf7bd37635ea451422","authored_anchor":{"source":"actions","pointer":"/records/169"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/10"},"descriptor_key":"bc2:magazine-descriptor:21d7db31a43c1c93e00100c9f76f817155805ca65bf800410d484623d1d7f49a","descriptor_digest":"99f50a82adf6b0d9fe2ebec86edd5efc7d5482081b36bb29d9e64d1fb3ba4728","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":12,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"MG3k","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3.dbx","configuration_guid":"b6515bb7-cc4d-44e2-8678-fb6b88f12691","configuration_sha256":"4f09f04186645914906ed3a9b3ba113daebbd6d03bd9e5b8c5c04eac5c075ff6","authored_anchor":{"source":"actions","pointer":"/records/171"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/36"},"descriptor_key":"bc2:magazine-descriptor:5fec50eaad08f83a41e34573b8ec4341fbbb85c0d933b3d2097916f19d92e08f","descriptor_digest":"09bcca7ed34506a7e70c4a8e7c58b791f55de17a001552d882ab917c5c0c49b3","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":12,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"M249","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Scoped.dbx","configuration_guid":"7332b717-0dc5-425e-9894-2c8e730fa765","configuration_sha256":"214ae28886ea18869432d1dac175672bb0c803748b7660b5e4fcc8f7c338861e","authored_anchor":{"source":"actions","pointer":"/records/173"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/107"},"descriptor_key":"bc2:magazine-descriptor:f65dbc64c1432ca431614a1f9793cb1d1a1811db628f0c5cb3f0a6db3be967dd","descriptor_digest":"3b03962cbe75cc23107fc803fe63266e2a964a0dc07f42a358ffd70950112a29","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":12,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"M60","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Scoped.dbx","configuration_guid":"e5a30f30-a66d-45cc-90f1-7c06b3e9f7d6","configuration_sha256":"d677ece40b17d13c27d1a22aa193a79194e73e63c4eb75fe6df1dfc4e36add19","authored_anchor":{"source":"actions","pointer":"/records/175"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/95"},"descriptor_key":"bc2:magazine-descriptor:d80febf74cb2b158690b9e89c0ac3670fbb41deb3c973534e9dcb9bac87f92a0","descriptor_digest":"d4563139fddcef4fcaf8dc3d0b955a44c23b5e188bad8a5b8dcc31320f9c5c08","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":14,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"MG3_sp","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/BU_lmg_MG3/SP_lmg_MG3.dbx","configuration_guid":"8890cba2-69c7-4a13-bfd8-b08e6a0e1de3","configuration_sha256":"e79ec24fd52b5a2d7c336823e563100f10dc3194a15d6e428eb4819ec752fa15","authored_anchor":{"source":"actions","pointer":"/records/177"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/73"},"descriptor_key":"bc2:magazine-descriptor:b07b718776133f97bff4adc7e67750282a271d9b8dc102870b641f160dbe61d7","descriptor_digest":"c98a9bbca22295f6a256a73106ea0e3654d392d8d8e42e7dc96c192d5df874c8","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":12,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"QJU88_sp_k","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/MEC_lmg_QJY88/SP_lmg_QJY88_Kobra.dbx","configuration_guid":"1975a8f8-24c0-41d5-8f6b-e022090408be","configuration_sha256":"4a7e87055920c76a7c142cce17c5f1e097ac0dc3743d6bc9faeeef8ebda74a9d","authored_anchor":{"source":"actions","pointer":"/records/179"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/38"},"descriptor_key":"bc2:magazine-descriptor:61dcf19b4aa4479fb2400fae748ff794e5c96543aef1bbaa15c7f0fd43f8212a","descriptor_digest":"f6f1e0f2649a6920c9d5e50710ed1d2d3dd350a4160efeff9e4e19ee323a8568","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":14,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"M60_sp","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/BU_lmg_M60/SP_lmg_M60.dbx","configuration_guid":"bd561a9b-fd48-4254-b4c4-39653213981a","configuration_sha256":"3c7b9a1cdba0fe1f3109bfbeafe1d8081f7dabf6aa465c4b430f8b65833bfdea","authored_anchor":{"source":"actions","pointer":"/records/181"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/3"},"descriptor_key":"bc2:magazine-descriptor:1113d42a78aa4618bd110c7f7ead1844124ede58986074d44a9acb9787faa58a","descriptor_digest":"d939fa731908d9ff8bf14befbf3d9ab50cb29e6a2a7466057cf0a3ca12a263e9","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":14,"authored_gaps":[],"role_review":{"source":"m60_roles","pointer":""},"ready_registry_annotation":false,"mechanism_admission":null,"measured_profile":{"source":"m60_frames","pointer":""},"profile_measurement_reader":"handoff/tasks/CHAT14/20261030-profile18/measure_feed_profile.py","unsupported_operations":["separate WithdrawFeed","independent ReleaseLatch/EngageLatch","CycleAction charge/chamber semantics"]},
+    {"asset":"M60_sp_s","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/BU_lmg_M60/SP_lmg_M60_Scope.dbx","configuration_guid":"c113c0a1-ef2c-4883-9211-2bece0cab38a","configuration_sha256":"caa83622df20545e5e765c2a913da46ecbcbc7a669561740aefef1f6a26c3fa7","authored_anchor":{"source":"actions","pointer":"/records/183"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/77"},"descriptor_key":"bc2:magazine-descriptor:b91bfb494c8eb5341c48ed73ecc9be8057fb576fb1247ddd900c18b846c339da","descriptor_digest":"a0265dbb8c84d6f331d02f82f8740f6a3e812636984953f18319d8ab039cef08","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":14,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"QJU88_sp","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/MEC_lmg_QJY88/SP_lmg_QJY88.dbx","configuration_guid":"5f90d97a-feef-48e8-b1ec-de137cff2a6a","configuration_sha256":"b0391715dd3b2b3e2dc78aa4cc1d82cbf712f732182e7de034c2a6e2fd1807cb","authored_anchor":{"source":"actions","pointer":"/records/185"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/6"},"descriptor_key":"bc2:magazine-descriptor:1643591677dee7102b7a9553f6a75ad4e8a8290d26f79f40c92aeffec2dfd7e3","descriptor_digest":"1caa7c417da8553f4edde00b0384cc3f871ebb813200a31beb963d4cdd69e1c1","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":14,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"MG3_sp_k","kind":"feed","configuration_resource":"Objects/Weapons/Handheld/BU_lmg_MG3/SP_lmg_MG3_Kobra.dbx","configuration_guid":"a40c3ac8-c1f2-47db-ac08-0bf52c2d0673","configuration_sha256":"02d9c0b961b297c9856198b530084a340e46af7d8dcda2a7cd68fbf27ef452cf","authored_anchor":{"source":"actions","pointer":"/records/187"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/57"},"descriptor_key":"bc2:magazine-descriptor:8c4fb1fb10d63744bf8d1cd8537ee557d4151722f7befe180b50006964c7e4cd","descriptor_digest":"7b793719af41ef0ef2447cb324f319e2d2a91ae77ddcc5dcaa7f2fbeea9ee0c7","source_class":"wcLmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":12,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"MP443","kind":"pistol_slide","configuration_resource":"Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach.dbx","configuration_guid":"a1617ba1-b5ef-4a8c-94d2-79cd1afd7b8a","configuration_sha256":"e2057d4456fc5619b556c5db67716d5fd2f0c91eb07e7a27276811e8e670f412","authored_anchor":{"source":"actions","pointer":"/records/236"},"descriptor_job":{"source":"mp443_jobs","pointer":"/descriptors/0"},"descriptor_key":"bc2:magazine-descriptor:2d6471a03056b3b2e4e13f2a59baf212565aefa56dccc33895ee43c076b5abb0","descriptor_digest":"2f97016d0246f46271f24ebed552289fd6e89162ef16d891488d64bb265cfa0c","source_class":"wcSmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":8,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"M9-3","kind":"pistol_slide","configuration_resource":"Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9-3.dbx","configuration_guid":"5bd5cc30-2813-44a3-bf08-6d23eaa66394","configuration_sha256":"8ba71d710a9822745622e66c77ae601367fb5230676ed8834611f0ebc74d9279","authored_anchor":{"source":"actions","pointer":"/records/338"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/16"},"descriptor_key":"bc2:magazine-descriptor:304a17ade6eb3c26fcd32b44430cb4e896bc77432d6229a5789b6d53db23f64f","descriptor_digest":"6d77694f7e806201a3aeb9dd5eb6cfdbb214c51aac579044ed3705999ff11bd7","source_class":"wcSmg","same_reviewed_dispatch_shape":false,"deferred_reasons":["unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"],"measured_part_count":6,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"M9","kind":"pistol_slide","configuration_resource":"Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9Beretta.dbx","configuration_guid":"f4692ba9-a65b-420e-86e3-b34693fa384d","configuration_sha256":"5e671d40c30fa8d718c16e75fb22220e47e7b40325eba4be6a95cbfefcb29f91","authored_anchor":{"source":"actions","pointer":"/records/340"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/75"},"descriptor_key":"bc2:magazine-descriptor:b5d5869089005d9252bd83368918d18444ae3e3ff8fa125513fba1d3b87684d5","descriptor_digest":"956dfe180a6fb2828596436d342e41b94b6f405d0ba480f7c5f399a723dca55c","source_class":"wcSmg","same_reviewed_dispatch_shape":false,"deferred_reasons":["unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"],"measured_part_count":6,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null},
+    {"asset":"MP443_sp","kind":"pistol_slide","configuration_resource":"Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx","configuration_guid":"58098858-821b-4406-a19c-ae62e5d38bdf","configuration_sha256":"e16f5713854ca38ab58d61bd3c568e2f87533c0e82032d71d61f27449d5484cc","authored_anchor":{"source":"actions","pointer":"/records/423"},"descriptor_job":{"source":"mp443_jobs","pointer":"/descriptors/1"},"descriptor_key":"bc2:magazine-descriptor:52bfa481c525136589096989304d8b22ec43cc3d684f36b42a97846a54cb5e4a","descriptor_digest":"22e837a6b3b2f22c55587d7a31a1381556b5f253e11fb7b24d7e212077aada48","source_class":"wcSmg","same_reviewed_dispatch_shape":true,"deferred_reasons":[],"measured_part_count":8,"authored_gaps":[],"role_review":{"source":"mp443_roles","pointer":""},"ready_registry_annotation":false,"mechanism_admission":null,"measured_profile":{"source":"mp443_geometry","pointer":""},"measured_profile_inputs":{"source":"mp443_roles","pointer":"/measured_profile_inputs"}},
+    {"asset":"M1911","kind":"pistol_slide","configuration_resource":"Objects/Weapons/Handheld/Beach/M1911A1/M1911A1.dbx","configuration_guid":"e9e77835-ffe4-4f7b-8784-0970c71e051b","configuration_sha256":"7d94e90adc48c527abaec2a3d6f540b2f22417c4a42a5b0df0b3293e2f8e80c0","authored_anchor":{"source":"actions","pointer":"/records/425"},"descriptor_job":{"source":"original_jobs","pointer":"/descriptors/25"},"descriptor_key":"bc2:magazine-descriptor:463b9ae5b99b03ae6ccf70a09a19ff158221f5e0814bc33b242004d11bdd092d","descriptor_digest":"b177fe6472b484d94bffef46b35a05259f70fe4c21be1843e746bed2dc578d06","source_class":"wcSmg","same_reviewed_dispatch_shape":false,"deferred_reasons":["unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"],"measured_part_count":8,"authored_gaps":[],"ready_registry_annotation":false,"mechanism_admission":null}
+  ]
+}

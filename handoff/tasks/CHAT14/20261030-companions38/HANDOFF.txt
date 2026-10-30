@@ -1,0 +1,15 @@
+API: MaxBc2FeedCoverCompanions=4; MaxBc2FeedParts=14; Bc2FeedPartCount(geometry).
+API: Bc2FeedCoverCompanion { Bc2FeedChainBone bone; Matrix4 weaponFromReference; }.
+API: Bc2FeedGeometry appends coverCompanions[4] and coverCompanionCount=0.
+Done Y: source prepared; five owned files only; frozen for root verification.
+Part order remains pouch, primary cover, active chain, then active companions.
+Companion target = reference * inverse(primary reference) * current primary target.
+Companions require unique named/indexed roles, rigid reference, and direct weapon-root parent.
+Binding verifies actual names, parent links, visibility and bounded ancestry to the weapon root.
+Companions use placed weapon bases; unchanged uint16 carry mask excludes every companion.
+Subtree writes preserve descendant native articulation and unrelated branches; existing ancestor ordering remains.
+M60 defaults to zero companions; one cover contact/state machine remains unchanged.
+Added synthetic cases: four siblings, maximum14 parts, numerical pivot/rotation, carried bases, native drift, descendants, nested owned roots, malformed/duplicate/disconnected/cyclic roles.
+No Git, build, tests, game, XR, installation or subprocess agents run. Root runs affected validation.
+Evidence scope: implementation and unexecuted deterministic regressions; no new actual-game/headset claim.
+Measured enrollment/exporter and physical-owner/Rig consumers remain root-owned.

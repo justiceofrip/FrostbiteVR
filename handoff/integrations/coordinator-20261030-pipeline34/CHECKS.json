@@ -1,0 +1,186 @@
+{
+  "source_base": "73511aa3651cf327e659df157dd6da79ea06d90c",
+  "checks": [
+    {
+      "suite": "MechanismFamilyData",
+      "architecture": "x86",
+      "receipt": "reports/coordinator-20261030-pipeline34/MechanismFamilyData-x86-05/result.json"
+    },
+    {
+      "suite": "Bc2FeedEquipmentProfile",
+      "architecture": "x86",
+      "receipt": "reports/coordinator-20261030-pipeline34/Bc2FeedEquipmentProfile-x86-05/result.json"
+    },
+    {
+      "suite": "Bc2FeedEquipmentAdapter",
+      "architecture": "x86",
+      "receipt": "reports/coordinator-20261030-pipeline34/Bc2FeedEquipmentAdapter-x86-05/result.json"
+    },
+    {
+      "suite": "Bc2FeedPresentation",
+      "architecture": "x86",
+      "receipt": "reports/coordinator-20261030-pipeline34/Bc2FeedPresentation-x86-07/result.json"
+    },
+    {
+      "suite": "Bc2PhysicalFeed",
+      "architecture": "x86",
+      "receipt": "reports/coordinator-20261030-pipeline34/Bc2PhysicalFeed-x86-07/result.json"
+    },
+    {
+      "suite": "MechanismRegistryGenerated",
+      "architecture": "x86",
+      "receipt": "reports/coordinator-20261030-pipeline34/MechanismRegistryGenerated-x86-07/result.json"
+    },
+    {
+      "suite": "Bc2PistolSlideProfile",
+      "architecture": "x86",
+      "receipt": "reports/coordinator-20261030-pipeline34/Bc2PistolSlideProfile-x86-03/result.json"
+    },
+    {
+      "suite": "Bc2PistolSlidePresentation",
+      "architecture": "x86",
+      "receipt": "reports/coordinator-20261030-pipeline34/Bc2PistolSlidePresentation-x86-03/result.json"
+    },
+    {
+      "suite": "Bc2PistolAfterFeedEvidence",
+      "architecture": "x86",
+      "receipt": "reports/coordinator-20261030-pipeline34/Bc2PistolAfterFeedEvidence-x86-03/result.json"
+    },
+    {
+      "suite": "Bc2PhysicalPistolSlide",
+      "architecture": "x86",
+      "receipt": "reports/coordinator-20261030-pipeline34/Bc2PhysicalPistolSlide-x86-04/result.json"
+    },
+    {
+      "suite": "MechanismFamilyData",
+      "architecture": "x64",
+      "receipt": "reports/coordinator-20261030-pipeline34/MechanismFamilyData-x64-05/result.json"
+    },
+    {
+      "suite": "Bc2FeedEquipmentProfile",
+      "architecture": "x64",
+      "receipt": "reports/coordinator-20261030-pipeline34/Bc2FeedEquipmentProfile-x64-05/result.json"
+    },
+    {
+      "suite": "Bc2FeedEquipmentAdapter",
+      "architecture": "x64",
+      "receipt": "reports/coordinator-20261030-pipeline34/Bc2FeedEquipmentAdapter-x64-05/result.json"
+    },
+    {
+      "suite": "Bc2FeedPresentation",
+      "architecture": "x64",
+      "receipt": "reports/coordinator-20261030-pipeline34/Bc2FeedPresentation-x64-07/result.json"
+    },
+    {
+      "suite": "Bc2PhysicalFeed",
+      "architecture": "x64",
+      "receipt": "reports/coordinator-20261030-pipeline34/Bc2PhysicalFeed-x64-07/result.json"
+    },
+    {
+      "suite": "MechanismRegistryGenerated",
+      "architecture": "x64",
+      "receipt": "reports/coordinator-20261030-pipeline34/MechanismRegistryGenerated-x64-07/result.json"
+    },
+    {
+      "suite": "Bc2PistolSlideProfile",
+      "architecture": "x64",
+      "receipt": "reports/coordinator-20261030-pipeline34/Bc2PistolSlideProfile-x64-03/result.json"
+    },
+    {
+      "suite": "Bc2PistolSlidePresentation",
+      "architecture": "x64",
+      "receipt": "reports/coordinator-20261030-pipeline34/Bc2PistolSlidePresentation-x64-03/result.json"
+    },
+    {
+      "suite": "Bc2PistolAfterFeedEvidence",
+      "architecture": "x64",
+      "receipt": "reports/coordinator-20261030-pipeline34/Bc2PistolAfterFeedEvidence-x64-03/result.json"
+    },
+    {
+      "suite": "Bc2PhysicalPistolSlide",
+      "architecture": "x64",
+      "receipt": "reports/coordinator-20261030-pipeline34/Bc2PhysicalPistolSlide-x64-04/result.json"
+    },
+    {
+      "suite": "GameplaySyntax",
+      "architecture": "x86",
+      "receipt": "reports/coordinator-20261030-pipeline34/GameplaySyntax-x86-02/result.json"
+    },
+    {
+      "suite": "ReloadSyntax",
+      "architecture": "x86",
+      "receipt": "reports/coordinator-20261030-pipeline34/ReloadSyntax-x86-02/result.json"
+    },
+    {
+      "suite": "RigSyntax",
+      "architecture": "x86",
+      "receipt": "reports/coordinator-20261030-pipeline34/RigSyntax-x86-02/result.json"
+    },
+    {
+      "suite": "NativeSyntax",
+      "architecture": "x86",
+      "receipt": "reports/coordinator-20261030-pipeline34/NativeSyntax-x86-02/result.json"
+    },
+    {
+      "suite": "FamilyEnrollment",
+      "architecture": "x86",
+      "receipt": "reports/coordinator-20261030-pipeline34/family-enrollment-x86-02/FamilyEnrollment-result.json"
+    },
+    {
+      "suite": "BodyAmmoCache",
+      "architecture": "x86",
+      "receipt": "reports/coordinator-20261030-pipeline34/family-enrollment-x86-02/BodyAmmoCache-result.json"
+    },
+    {
+      "suite": "FamilyEnrollment",
+      "architecture": "x64",
+      "receipt": "reports/coordinator-20261030-pipeline34/family-enrollment-x64-01/FamilyEnrollment-result.json"
+    },
+    {
+      "suite": "BodyAmmoCache",
+      "architecture": "x64",
+      "receipt": "reports/coordinator-20261030-pipeline34/family-enrollment-x64-01/BodyAmmoCache-result.json"
+    }
+  ],
+  "focused_passes": 28,
+  "python_exporter_tests": 22,
+  "schema": "JSON parsed and local references resolved; jsonschema unavailable",
+  "full_normal_build": false,
+  "integrated": false,
+  "pushed": false,
+  "installed": false,
+  "failures_preserved": [
+    "generated-x86-01",
+    "MechanismRegistryGenerated-x86-02",
+    "MechanismRegistryGenerated-x64-02",
+    "Bc2PhysicalPistolSlide-x86-03",
+    "Bc2PhysicalPistolSlide-x64-03",
+    "Bc2FeedPresentation-x86-05",
+    "Bc2FeedPresentation-x64-05",
+    "Bc2FeedPresentation-x86-06",
+    "family-enrollment-x86-01"
+  ],
+  "resolved_failures": [
+    "Synthetic feed had coincident placement/hinge contacts; slide contact distance contradicted its points. Fixtures corrected; exporter now rejects these before emission.",
+    "Large multi-fixture journals exhausted test stack; moved fixture journals to heap, matching persistent production lifetime.",
+    "Descendant float world/inverse roundtrip measured1.10269e-5 native units; regression tolerance2e-5 (<1 micrometre), source transform unchanged.",
+    "PowerShell output-name concatenation swallowed /link; parenthesized the scalar argument. Failed compile/link receipt retained."
+  ],
+  "review_fix": "Pistol native veto clearance now requires retained profile id/revision and exact mechanism contact key/generation.",
+  "python_tests": {
+    "mechanism_exporter": 22,
+    "reviewed_magazine_role": 9,
+    "authored_magazine_geometry": 31,
+    "reviewed_magazine_contact": 7,
+    "total": 69
+  },
+  "family_enrollment": {
+    "feed_configurations": 24,
+    "pistol_configurations": 5,
+    "cache_records": 57,
+    "preserved_records": 49,
+    "cache_bytes": 12229627,
+    "native_game_claim": false,
+    "headset_claim": false
+  }
+}

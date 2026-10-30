@@ -498,7 +498,7 @@ def mesh_weapon_matches(weapon,profile):
     return (weapon['native_name']==profile['native_asset_name'] and guid(weapon['instance_guid'])==guid(profile['weapon']['instance_guid']) and
             path_key(weapon['resource'])==path_key(profile['weapon']['resource']) and weapon['resource_sha256']==profile['weapon']['sha256'])
 
-def derive(game,bindings,mesh_bindings,assets,evidence_sink=None,paired_grasp_assets=(),mechanism_sink=None,rigid_assembly_assets=(),reviewed_contacts=(),sampled_path_assets=()):
+def derive(game,bindings,mesh_bindings,assets,evidence_sink=None,paired_grasp_assets=(),mechanism_sink=None,rigid_assembly_assets=(),reviewed_contacts=(),sampled_path_assets=(),reviewed_roles=()):
     if bindings.get('schema') not in ('fvr.bc2.authored_grip_bindings','fvr.bc2.authored_reload_reference_bindings') or bindings.get('schema_version')!=1:raise ValueError('Grip binding schema')
     if bindings['schema']=='fvr.bc2.authored_reload_reference_bindings' and set(paired_grasp_assets)!=set(assets):raise ValueError('Reload-only references require complete paired grasp extraction')
     if mesh_bindings.get('schema')!='fvr.bc2.authored_weapon_mesh_bindings':raise ValueError('Mesh binding schema')
@@ -508,7 +508,10 @@ def derive(game,bindings,mesh_bindings,assets,evidence_sink=None,paired_grasp_as
     if not set(sampled_path_assets)<=set(paired_grasp_assets):raise ValueError('Sampled path requires explicit paired contact assets')
     from bc2_reviewed_magazine_contact import index_reviews,verify_context,select_reviewed_pair
     reviews=index_reviews(reviewed_contacts,set(paired_grasp_assets))
-    if not set(reviews)<={p['weapon']['resource'] for p in bindings['profiles'] if p['native_asset_name'] in assets}:
+    import bc2_reviewed_magazine_role as role_review
+    role_reviews=role_review.index_reviews(reviewed_roles,set(paired_grasp_assets))
+    if set(reviews)&set(role_reviews):raise ValueError('Contact-frame and semantic-role reviews must not compete for one configuration')
+    if not (set(reviews)|set(role_reviews))<={p['weapon']['resource'] for p in bindings['profiles'] if p['native_asset_name'] in assets}:
         raise ValueError('Reviewed contact exact configuration absent from selected bindings')
     output=[];gaps=[];assembly_reports=[];reviewed_candidates=[]
     for profile in bindings['profiles']:
@@ -579,7 +582,14 @@ def derive(game,bindings,mesh_bindings,assets,evidence_sink=None,paired_grasp_as
             if evidence_sink is not None:evidence_sink(profile,parts,closed,candidates)
             paired=None
             review=reviews.get(profile['weapon']['resource'])
-            if review is not None:
+            semantic_review=role_reviews.get(profile['weapon']['resource'])
+            if semantic_review is not None:
+                role_review.verify_context(semantic_review,profile,reload_clip,skeleton,reload_name,variant['mesh_sha256'],lods[0]['data_sha256'],static.sha256)
+                role=role_review.select_role(semantic_review,candidates,rejected,parts,assemblies)
+                # Keep the original shape rejection and all other candidates as
+                # evidence. The chosen root still uses the unchanged sampler.
+                rejected.extend(dict(c,reasons=['exact reviewed semantic role selects another measured part']) for c in candidates if c['bone']!=role['bone'])
+            elif review is not None:
                 verify_context(review,profile,reload_clip,skeleton,reload_name,variant['mesh_sha256'],lods[0]['data_sha256'])
                 role,paired,contact_rejections=select_reviewed_pair(review,candidates,parts,closed,reload_clip,skeleton)
                 rejected.extend(contact_rejections)
@@ -682,6 +692,9 @@ def cpp_header(result,assets):
         if p['geometry']['design']['ux_defaults']!=UX:raise ValueError('Generated interaction defaults differ from documented design')
         for key in ('mesh_sha256','lod_sha256','skeleton_sha256','static_clip_sha256','profile_digest'):checked_hash(p[key])
         if p['bones']['fingers']!=FINGERS:raise ValueError('Exact authored finger topology required')
+        if 'semantic_role_review' in p['role_evidence']:
+            from bc2_reviewed_magazine_role import validate_export as validate_role_export
+            validate_role_export(p)
         if p['geometry']['design'].get('authored_reload_grasp'):
             paired=p['geometry']['design'].get('paired_reload_grasp',{})
             if paired.get('selection_mode') not in (None,'stable_relative_co_motion','reviewed_authored_frame'):raise ValueError('Unknown paired contact selection')
@@ -771,11 +784,14 @@ def main(argv=None):
     p.add_argument('--paired-reload-grasp',action='append',default=[],help='Explicit experimental same-frame authored carry pose asset; default keeps geometric estimate')
     p.add_argument('--rigid-assembly',action='append',default=[],help='Explicit complete rigid child-subtree extraction; paired contact remains mandatory')
     p.add_argument('--reviewed-contacts',type=Path,help='Explicit exact semantic root and complete authored frame annotations; never native admission')
+    p.add_argument('--reviewed-magazine-roles',type=Path,help='Explicit exact semantic root/shape review; original authored contact checks still mandatory')
     p.add_argument('--sampled-magazine-path',action='append',default=[],help='Explicit reverse authored initial withdrawal path asset')
     args=p.parse_args(argv);bindings,bh=read_json(args.grip_bindings);meshes,mh=read_json(args.mesh_bindings)
     reviews,rh=read_json(args.reviewed_contacts) if args.reviewed_contacts else ([],None)
-    result=derive(args.game,bindings,meshes,set(args.asset),paired_grasp_assets=set(args.paired_reload_grasp),rigid_assembly_assets=set(args.rigid_assembly),reviewed_contacts=reviews,sampled_path_assets=set(args.sampled_magazine_path));result['input_sha256']={'grip_bindings':bh,'mesh_bindings':mh}
+    roles,roles_hash=read_json(args.reviewed_magazine_roles) if args.reviewed_magazine_roles else ([],None)
+    result=derive(args.game,bindings,meshes,set(args.asset),paired_grasp_assets=set(args.paired_reload_grasp),rigid_assembly_assets=set(args.rigid_assembly),reviewed_contacts=reviews,sampled_path_assets=set(args.sampled_magazine_path),reviewed_roles=roles);result['input_sha256']={'grip_bindings':bh,'mesh_bindings':mh}
     if rh is not None:result['input_sha256']['reviewed_contacts']=rh
+    if roles_hash is not None:result['input_sha256']['reviewed_magazine_roles']=roles_hash
     args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_text(json.dumps(result,indent=2,allow_nan=False)+'\n',encoding='utf-8')
     if args.header:
         data=cpp_header(result,set(args.header_asset));args.header.parent.mkdir(parents=True,exist_ok=True);args.header.write_text(data,encoding='utf-8')

@@ -1,0 +1,300 @@
+{
+  "schema": "fvr.bc2.pistol_batch37_role_policy_reviews.v1",
+  "configurations": [
+    {
+      "asset": "M9",
+      "weapon_configuration": {
+        "resource": "Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9Beretta.dbx",
+        "sha256": "5e671d40c30fa8d718c16e75fb22220e47e7b40325eba4be6a95cbfefcb29f91",
+        "instance_guid": "f4692ba9-a65b-420e-86e3-b34693fa384d",
+        "type": "GameSharedResources.SoldierWeaponData"
+      },
+      "configured_mesh": "Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9Beretta_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "roles": {
+        "root": {
+          "bone": "jntWpn_1",
+          "index": 10
+        },
+        "slide": {
+          "bone": "jntWpn_3",
+          "index": 30,
+          "parent": "jntWpn_1",
+          "parentIndex": 10
+        }
+      },
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "reviewer": "CHAT16 batch37 offline authored-data review",
+      "semantic_role": "pistol_slide",
+      "review_basis": "Root visually inspected this exact PNG: highlighted jntWpn_3 is the upper slide shell/sights, with rearward travel exposing the barrel. M9-3 review applies only by exact mesh/LOD/skeleton/rig/reload/reference content equality.",
+      "source_role_review": {
+        "source": "root_visual",
+        "pointer": "/geometry_groups/0"
+      },
+      "interaction_policy": {
+        "name": "M9 authored-rail candidate policy",
+        "sourceReference": "CHAT16/20261030-batch37/role-policy.json: middle 80 percent of exact signed rail",
+        "revision": 1,
+        "sourceDisplacementMeters": 0.006121851993763833,
+        "strokeMeters": 0.058878308304378346,
+        "frontToleranceMeters": 0.0029439154152189175,
+        "rearToleranceMeters": 0.0029439154152189175,
+        "hysteresisMeters": 0.0014719577076094587,
+        "contactRadiusMeters": 0.035,
+        "lateralToleranceMeters": 0.025,
+        "rotationToleranceRadians": 0.2,
+        "maxStepMeters": 0.014719577076094587,
+        "endpointDwellNs": 25000000,
+        "maximumStrokeNs": 3000000000
+      },
+      "policy_basis": "Explicit experimental VR policy, not authored/native tolerances: central 80% of signed analytic span; 4% endpoint + 2% hysteresis each end; 4% rail reserve.",
+      "nativeClosedVerified": false,
+      "nativeRetractedVerified": false,
+      "stableControllerGraspVerified": false,
+      "native_admission": false,
+      "headset_acceptance": false,
+      "blockers": [],
+      "visual_reviewer": "root",
+      "preview": {
+        "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/reports/coordinator-20261030-pipeline34/pistol-role-review/m9.png",
+        "sha256": "39b15ad90958e1d88dc6fa6b4862766a5115c4804e883e96662d386460bece01"
+      }
+    },
+    {
+      "asset": "M9-3",
+      "weapon_configuration": {
+        "resource": "Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9-3.dbx",
+        "sha256": "8ba71d710a9822745622e66c77ae601367fb5230676ed8834611f0ebc74d9279",
+        "instance_guid": "5bd5cc30-2813-44a3-bf08-6d23eaa66394",
+        "type": "GameSharedResources.SoldierWeaponData"
+      },
+      "configured_mesh": "Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9Beretta_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "roles": {
+        "root": {
+          "bone": "jntWpn_1",
+          "index": 10
+        },
+        "slide": {
+          "bone": "jntWpn_3",
+          "index": 30,
+          "parent": "jntWpn_1",
+          "parentIndex": 10
+        }
+      },
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "reviewer": "CHAT16 batch37 offline authored-data review",
+      "semantic_role": "pistol_slide",
+      "review_basis": "Root visually inspected this exact PNG: highlighted jntWpn_3 is the upper slide shell/sights, with rearward travel exposing the barrel. M9-3 review applies only by exact mesh/LOD/skeleton/rig/reload/reference content equality.",
+      "source_role_review": {
+        "source": "root_visual",
+        "pointer": "/geometry_groups/0"
+      },
+      "interaction_policy": {
+        "name": "M9-3 authored-rail candidate policy",
+        "sourceReference": "CHAT16/20261030-batch37/role-policy.json: middle 80 percent of exact signed rail",
+        "revision": 1,
+        "sourceDisplacementMeters": 0.006121851993763833,
+        "strokeMeters": 0.058878308304378346,
+        "frontToleranceMeters": 0.0029439154152189175,
+        "rearToleranceMeters": 0.0029439154152189175,
+        "hysteresisMeters": 0.0014719577076094587,
+        "contactRadiusMeters": 0.035,
+        "lateralToleranceMeters": 0.025,
+        "rotationToleranceRadians": 0.2,
+        "maxStepMeters": 0.014719577076094587,
+        "endpointDwellNs": 25000000,
+        "maximumStrokeNs": 3000000000
+      },
+      "policy_basis": "Explicit experimental VR policy, not authored/native tolerances: central 80% of signed analytic span; 4% endpoint + 2% hysteresis each end; 4% rail reserve.",
+      "nativeClosedVerified": false,
+      "nativeRetractedVerified": false,
+      "stableControllerGraspVerified": false,
+      "native_admission": false,
+      "headset_acceptance": false,
+      "blockers": [],
+      "visual_reviewer": "root",
+      "preview": {
+        "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/reports/coordinator-20261030-pipeline34/pistol-role-review/m9.png",
+        "sha256": "39b15ad90958e1d88dc6fa6b4862766a5115c4804e883e96662d386460bece01"
+      }
+    },
+    {
+      "asset": "M1911",
+      "weapon_configuration": {
+        "resource": "Objects/Weapons/Handheld/Beach/M1911A1/M1911A1.dbx",
+        "sha256": "7d94e90adc48c527abaec2a3d6f540b2f22417c4a42a5b0df0b3293e2f8e80c0",
+        "instance_guid": "e9e77835-ffe4-4f7b-8784-0970c71e051b",
+        "type": "GameSharedResources.SoldierWeaponData"
+      },
+      "configured_mesh": "Objects/Weapons/Handheld/Beach/M1911A1/US_M1911_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "roles": {
+        "root": {
+          "bone": "jntWpn_1",
+          "index": 10
+        },
+        "slide": {
+          "bone": "jntWpn_3",
+          "index": 30,
+          "parent": "jntWpn_1",
+          "parentIndex": 10
+        }
+      },
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "reviewer": "CHAT16 batch37 offline authored-data review",
+      "semantic_role": "pistol_slide",
+      "review_basis": "Root visually inspected this exact PNG: highlighted jntWpn_3 is the upper slide shell/sights, with rearward travel exposing the barrel. M9-3 review applies only by exact mesh/LOD/skeleton/rig/reload/reference content equality.",
+      "source_role_review": {
+        "source": "root_visual",
+        "pointer": "/geometry_groups/1"
+      },
+      "interaction_policy": {
+        "name": "M1911 authored-rail candidate policy",
+        "sourceReference": "CHAT16/20261030-batch37/role-policy.json: middle 80 percent of exact signed rail",
+        "revision": 1,
+        "sourceDisplacementMeters": 0.0036738736357050557,
+        "strokeMeters": 0.03471778711614955,
+        "frontToleranceMeters": 0.0017358893558074772,
+        "rearToleranceMeters": 0.0017358893558074772,
+        "hysteresisMeters": 0.0008679446779037386,
+        "contactRadiusMeters": 0.035,
+        "lateralToleranceMeters": 0.025,
+        "rotationToleranceRadians": 0.2,
+        "maxStepMeters": 0.008679446779037387,
+        "endpointDwellNs": 25000000,
+        "maximumStrokeNs": 3000000000
+      },
+      "policy_basis": "Explicit experimental VR policy, not authored/native tolerances: central 80% of signed analytic span; 4% endpoint + 2% hysteresis each end; 4% rail reserve.",
+      "nativeClosedVerified": false,
+      "nativeRetractedVerified": false,
+      "stableControllerGraspVerified": false,
+      "native_admission": false,
+      "headset_acceptance": false,
+      "blockers": [],
+      "visual_reviewer": "root",
+      "preview": {
+        "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/reports/coordinator-20261030-pipeline34/pistol-role-review/m1911.png",
+        "sha256": "5c61b58fe23edf84a3e723e1c8b333af81c04103b832adf3d650c1c17946a6a8"
+      },
+      "calibration_limitations": [
+        "Ring3 is 32.25 mm from slide at its nearest sampled retracted pose; nearest other finger is Thumb2 at 11.22 mm. This is a mod-policy calibration limitation for later user testing; authored slide grasp is not verified."
+      ]
+    },
+    {
+      "asset": "MP443",
+      "weapon_configuration": {
+        "resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach.dbx",
+        "sha256": "e2057d4456fc5619b556c5db67716d5fd2f0c91eb07e7a27276811e8e670f412",
+        "instance_guid": "a1617ba1-b5ef-4a8c-94d2-79cd1afd7b8a",
+        "type": "GameSharedResources.SoldierWeaponData"
+      },
+      "configured_mesh": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "roles": {
+        "root": {
+          "bone": "jntWpn_1",
+          "index": 10
+        },
+        "slide": {
+          "bone": "jntWpn_3",
+          "index": 30,
+          "parent": "jntWpn_1",
+          "parentIndex": 10
+        }
+      },
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "reviewer": "CHAT16 batch37 offline authored-data review",
+      "semantic_role": "pistol_slide",
+      "review_basis": "Exact mesh/LOD/skeleton/rig/reload/reference hash equality with root-reviewed SP slide shell.",
+      "source_role_review": {
+        "source": "mp443_roles",
+        "pointer": ""
+      },
+      "interaction_policy": {
+        "name": "MP443 authored-rail candidate policy",
+        "sourceReference": "CHAT16/20261030-batch37/role-policy.json: middle 80 percent of exact signed rail",
+        "revision": 1,
+        "sourceDisplacementMeters": 0.005449416503518472,
+        "strokeMeters": 0.05957503829113775,
+        "frontToleranceMeters": 0.0029787519145568877,
+        "rearToleranceMeters": 0.0029787519145568877,
+        "hysteresisMeters": 0.0014893759572784438,
+        "contactRadiusMeters": 0.035,
+        "lateralToleranceMeters": 0.025,
+        "rotationToleranceRadians": 0.2,
+        "maxStepMeters": 0.014893759572784437,
+        "endpointDwellNs": 25000000,
+        "maximumStrokeNs": 3000000000
+      },
+      "policy_basis": "Explicit experimental VR policy, not authored/native tolerances: central 80% of signed analytic span; 4% endpoint + 2% hysteresis each end; 4% rail reserve.",
+      "nativeClosedVerified": false,
+      "nativeRetractedVerified": false,
+      "stableControllerGraspVerified": false,
+      "native_admission": false,
+      "headset_acceptance": false,
+      "blockers": []
+    },
+    {
+      "asset": "MP443_sp",
+      "weapon_configuration": {
+        "resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx",
+        "sha256": "e16f5713854ca38ab58d61bd3c568e2f87533c0e82032d71d61f27449d5484cc",
+        "instance_guid": "58098858-821b-4406-a19c-ae62e5d38bdf",
+        "type": "GameSharedResources.SoldierWeaponData"
+      },
+      "configured_mesh": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "roles": {
+        "root": {
+          "bone": "jntWpn_1",
+          "index": 10
+        },
+        "slide": {
+          "bone": "jntWpn_3",
+          "index": 30,
+          "parent": "jntWpn_1",
+          "parentIndex": 10
+        }
+      },
+      "roles_reviewed": true,
+      "policy_reviewed": true,
+      "reviewer": "CHAT16 batch37 offline authored-data review",
+      "semantic_role": "pistol_slide",
+      "review_basis": "Exact mesh/LOD/skeleton/rig/reload/reference hash equality with root-reviewed SP slide shell.",
+      "source_role_review": {
+        "source": "mp443_roles",
+        "pointer": ""
+      },
+      "interaction_policy": {
+        "name": "MP443_sp authored-rail candidate policy",
+        "sourceReference": "CHAT16/20261030-batch37/role-policy.json: middle 80 percent of exact signed rail",
+        "revision": 1,
+        "sourceDisplacementMeters": 0.005449416503518472,
+        "strokeMeters": 0.05957503829113775,
+        "frontToleranceMeters": 0.0029787519145568877,
+        "rearToleranceMeters": 0.0029787519145568877,
+        "hysteresisMeters": 0.0014893759572784438,
+        "contactRadiusMeters": 0.035,
+        "lateralToleranceMeters": 0.025,
+        "rotationToleranceRadians": 0.2,
+        "maxStepMeters": 0.014893759572784437,
+        "endpointDwellNs": 25000000,
+        "maximumStrokeNs": 3000000000
+      },
+      "policy_basis": "Explicit experimental VR policy, not authored/native tolerances: central 80% of signed analytic span; 4% endpoint + 2% hysteresis each end; 4% rail reserve.",
+      "nativeClosedVerified": false,
+      "nativeRetractedVerified": false,
+      "stableControllerGraspVerified": false,
+      "native_admission": false,
+      "headset_acceptance": false,
+      "blockers": []
+    }
+  ],
+  "runtime_admission": false,
+  "physical_reviewed": false
+}

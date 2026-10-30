@@ -1,0 +1,69 @@
+{
+  "schema": "fvr.bc2.pistol_batch37_root_visual_review.v1",
+  "reviewer": "root",
+  "evidence_level": "offline_authored_mesh_visual_inspection",
+  "roles_reviewed": true,
+  "geometry_groups": [
+    {
+      "content_hashes": {
+        "mesh_sha256": "6394f767c0e788f979c5940d1bbc02ef79b79ffff3e7a0825628f4064bf2d276",
+        "lod_sha256": "b901fbc5ded9490e20f1664783ac9d12c8a1dd0cebd0099f1ace4d9074eaa199",
+        "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+        "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+        "clip_sha256": "ae711bea5956669636137c96ef164b980e6bb60e7515146b166c2159587148cf",
+        "reference_clip_sha256": "58f30c12d8bad21682f7b44ddc575cf2b19d62f2dc99f2c6fd0099e66303e25a"
+      },
+      "preview": {
+        "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/reports/coordinator-20261030-pipeline34/pistol-role-review/m9.png",
+        "sha256": "39b15ad90958e1d88dc6fa6b4862766a5115c4804e883e96662d386460bece01"
+      },
+      "roles": {
+        "root": {
+          "bone": "jntWpn_1",
+          "index": 10
+        },
+        "slide": {
+          "bone": "jntWpn_3",
+          "index": 30,
+          "parent": "jntWpn_1",
+          "parentIndex": 10
+        }
+      },
+      "finding": "Root visually inspected this exact PNG: highlighted jntWpn_3 is the upper slide shell/sights, with rearward travel exposing the barrel. M9-3 review applies only by exact mesh/LOD/skeleton/rig/reload/reference content equality.",
+      "native_slide_role_verified": false,
+      "stable_controller_grasp_verified": false
+    },
+    {
+      "content_hashes": {
+        "mesh_sha256": "54ef4ca71900885b3d96d5119aa46b3ae406dc044fdee2bcdbf4e5d82a55db02",
+        "lod_sha256": "71ba59511de64800d4e2bb1b9990d3ee0edc1afcfdfb4866f3b388e0d6dea4ba",
+        "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+        "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+        "clip_sha256": "a002abb015f055379a9f05785162b9a9cbe6e07cc6bb6aeff5ff508b864072b0",
+        "reference_clip_sha256": "3ae1703a5ba229b92e279cc91542edb97a65fccbbc316e9f0389c1272430c04b"
+      },
+      "preview": {
+        "path": "bc2vr-task-worktrees/campaign-coordinator-20261028-r1/reports/coordinator-20261030-pipeline34/pistol-role-review/m1911.png",
+        "sha256": "5c61b58fe23edf84a3e723e1c8b333af81c04103b832adf3d650c1c17946a6a8"
+      },
+      "roles": {
+        "root": {
+          "bone": "jntWpn_1",
+          "index": 10
+        },
+        "slide": {
+          "bone": "jntWpn_3",
+          "index": 30,
+          "parent": "jntWpn_1",
+          "parentIndex": 10
+        }
+      },
+      "finding": "Root visually inspected this exact PNG: highlighted jntWpn_3 is the upper slide shell/sights, with rearward travel exposing the barrel. M9-3 review applies only by exact mesh/LOD/skeleton/rig/reload/reference content equality.",
+      "native_slide_role_verified": false,
+      "stable_controller_grasp_verified": false
+    }
+  ],
+  "root_decision": "Complete all five disabled annotations. M1911 weaker contact is an explicit mod-policy calibration limitation for later user testing; no verified grasp, native endpoint or chamber claim.",
+  "native_admission": false,
+  "headset_acceptance": false
+}

@@ -1,0 +1,18 @@
+#pragma once
+#include "Bc2MagazineNativeProfile.h"
+namespace fvr::bc2::generated {
+inline constexpr std::array<ReloadTimingWord,6> RegistryTiming0{{{0x10,0x3f000000u},{0x14,0x00000000u},{0x18,0x40700000u},{0x20,0x00000001u},{0x24,0x00000000u},{0x2c,0x00000000u}}};
+inline constexpr MagazineNativeProfile RegistryProfile0{{"MP443","Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach",{0,1,8,29,17,3,std::bit_cast<float>(0x00000000u),std::bit_cast<float>(0x40700000u),std::bit_cast<float>(0x3f000000u),std::bit_cast<float>(0x00000000u),std::bit_cast<float>(0x00000000u),std::bit_cast<float>(0x00000000u),false,false},RegistryTiming0,ReloadDescriptorAdmission::ReviewedNative},MagazineIdentityRoute::SelectedCarriedItem,MagazineCycleAdmission::ReviewedSingleFireReload11Transfer12,4450000000ll};
+inline constexpr std::array<ReloadTimingWord,6> RegistryTiming1{{{0x10,0x3f000000u},{0x14,0x00000000u},{0x18,0x40700000u},{0x20,0x00000001u},{0x24,0x00000000u},{0x2c,0x00000000u}}};
+inline constexpr MagazineNativeProfile RegistryProfile1{{"M9-3","Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9-3",{0,1,8,29,20,3,std::bit_cast<float>(0x00000000u),std::bit_cast<float>(0x40700000u),std::bit_cast<float>(0x3f000000u),std::bit_cast<float>(0x00000000u),std::bit_cast<float>(0x00000000u),std::bit_cast<float>(0x00000000u),false,false},RegistryTiming1,ReloadDescriptorAdmission::ReviewedNative},MagazineIdentityRoute::SelectedCarriedItem,MagazineCycleAdmission::ReviewedSingleFireReload11Transfer12,4450000000ll};
+inline constexpr std::array<ReloadTimingWord,6> RegistryTiming2{{{0x10,0x3f000000u},{0x14,0x00000000u},{0x18,0x40700000u},{0x20,0x00000001u},{0x24,0x00000000u},{0x2c,0x00000000u}}};
+inline constexpr MagazineNativeProfile RegistryProfile2{{"M9","Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9Beretta",{0,1,8,29,12,4,std::bit_cast<float>(0x00000000u),std::bit_cast<float>(0x40700000u),std::bit_cast<float>(0x3f000000u),std::bit_cast<float>(0x00000000u),std::bit_cast<float>(0x00000000u),std::bit_cast<float>(0x00000000u),false,false},RegistryTiming2,ReloadDescriptorAdmission::ReviewedNative},MagazineIdentityRoute::SelectedCarriedItem,MagazineCycleAdmission::ReviewedSingleFireReload11Transfer12,4450000000ll};
+inline constexpr std::array<ReloadTimingWord,6> RegistryTiming3{{{0x10,0x3f000000u},{0x14,0x00000000u},{0x18,0x40700000u},{0x20,0x00000001u},{0x24,0x00000000u},{0x2c,0x00000000u}}};
+inline constexpr MagazineNativeProfile RegistryProfile3{{"M1911","Objects/Weapons/Handheld/Beach/M1911A1/M1911A1",{0,1,8,29,7,4,std::bit_cast<float>(0x00000000u),std::bit_cast<float>(0x40700000u),std::bit_cast<float>(0x3f000000u),std::bit_cast<float>(0x00000000u),std::bit_cast<float>(0x00000000u),std::bit_cast<float>(0x00000000u),false,false},RegistryTiming3,ReloadDescriptorAdmission::ReviewedNative},MagazineIdentityRoute::SelectedCarriedItem,MagazineCycleAdmission::ReviewedSingleFireReload11Transfer12,4450000000ll};
+inline constexpr std::array<MagazineNativeRegistration,4> MagazineNativeRegistrations{{
+ {static_cast<NativeMagazineProfileId>(0x2f97016d0246f462ull),&RegistryProfile0,"2f97016d0246f46271f24ebed552289fd6e89162ef16d891488d64bb265cfa0c",true},
+ {static_cast<NativeMagazineProfileId>(0xf595da54b7c72f1eull),&RegistryProfile1,"f595da54b7c72f1e6e405ce0bcedbfef2d6f5f9870ffb597ec4ab8c85a12347e",true},
+ {static_cast<NativeMagazineProfileId>(0x0f25ed29efad6553ull),&RegistryProfile2,"0f25ed29efad6553dd69370612a3c3d991c39b78f7d6c2112a7a6c644e09ffaf",true},
+ {static_cast<NativeMagazineProfileId>(0xea5fade07d27daa7ull),&RegistryProfile3,"ea5fade07d27daa7857d83e667169502b1028c404d1195c34066197dbe95383a",true},
+}};
+} // namespace fvr::bc2::generated

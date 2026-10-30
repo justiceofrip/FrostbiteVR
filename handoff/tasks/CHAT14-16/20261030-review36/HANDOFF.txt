@@ -1,0 +1,14 @@
+DoneY: focused read-only family registry integration review; one blocking finding.
+Base supplied by coordinator: 73511aa; reviewed current worktree source without Git.
+P2: Join physical clearance to the retained pistol registration before releasing native fire veto.
+src/games/bc2/Bc2PistolAfterFeedEvidence.h:215-226 validates only nonzero stroke.profile/revision and hand ownership.
+It never compares stroke.profile/revision or mechanism.contact to the registration selected by slot.state.profileKey.
+Therefore an otherwise valid clearance with the correct feed/native witness but another interaction profile clears emptyDebt and blocksFire at line229.
+Concrete source witness: tests/Bc2PistolAfterFeedEvidenceTests.cpp:127 sets profile=12/revision=13, and line149 expects successful MP443 release.
+MP443 interaction identity is 0x4d50343433534c31/revision1 (src/games/bc2/Bc2PistolSlideProfile.h:91).
+ReleasePistolAfterFeedGate forwards this boundary result directly to PublishPistolVeto(false) (src/games/bc2/Bc2ReloadFlowRuntime.cpp:2909-2910).
+Resolve the retained registration during release and require its interaction ID/revision and expected mechanism contact identity; retain debt on mismatch.
+The normal physical producer pins its row; the missing join is at the independent native release boundary.
+No additional blocking findings in requested selectors, immutable registry storage, native-class checks, or reviewed profile propagation.
+Evidence level: source review only; no tests/builds/Git/game/native inspection; no all-family acceptance claim.
+No source edits. Feed owner's incomplete implementation files excluded. Frozen/retired.
