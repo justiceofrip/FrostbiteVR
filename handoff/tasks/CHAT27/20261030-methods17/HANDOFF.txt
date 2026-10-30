@@ -1,0 +1,25 @@
+DoneY: static method follow-up finished; actual cinematic camera correction remains unproved.
+Assigned worktree campaign-coordinator-20261028-r1; supplied HEAD1909038; no Git queried.
+Exact EXE SHA2563911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258 verified.
+Production readonly; no desktop/game/process/XR/input/build/test/profile/install/package/subagent work.
+Files: cinematic_methods.py, proof01.json(16367bytes), this handoff; four preserved scratch decodes.
+Proof SHA256af327be2ac45a67eaa428b99a559c9f9c596caa79922f47ed889da624cc491b8.
+NEW exact camera interface: inherited cleanup0x4a32eb forms EDI=whole owner+0xdc;
+0x4a331f assigns table RVA0x10364d4; table+4 points to decoded callback0x49dc10.
+Callback requires original stack arguments1/2 equal0x1f/0x2f; meanings are unproved.
+At0x49dc23 it subtracts0xdc from incoming ECX; at0x49dc29 it calls0x4955a0
+with whole camera receiver and original fourth stack argument. No camera/view semantics inferred.
+NEXT exact edge: decode0x4955a0 from this verified event-filtered owner conversion.
+Entity setup0x4af877 separately assigns owner+0xdc ->table0x1036650; slot+4=0x495a90, unexamined.
+Primary-table+0xb4 candidates: camera0x49dba0 checks state+0x34 and receiver[this+0xd4];
+entity0x4b9490 forwards float[*argument] to0x4b4460 and optional[this+0xe4] to0x433d80.
+Those callees are unexamined; frame-time/update semantics are hypotheses, not admitted field names.
+No decoded external virtual caller or admitted local-player/active-view selection join was found.
+Table correction: camera+0x100 is the separately assigned entity secondary table0x1036650.
+Entity-table-adjacent+0xdc target0x4a4060 is an unowned this-=0xd4 thunk, not an admitted primary slot.
+Scope failure: four ranges exposed ten units (four selected, six adjacent spills), exceeding max8.
+Cause: next table target was mistaken for next function boundary. All outputs retained; decode stopped.
+Root authorized only final ownership checks inside inherited hash-pinned setup/cleanup bytes.
+File verifier passed; initial0x4a3405 transcription assertion failure corrected to0x4a3404 and disclosed.
+No source adapter/signature/read chain prepared; metadata, active selection, lifetime/blend remain separate.
+No production ownership requested. Root owns exact next-callee follow-up. Retired.

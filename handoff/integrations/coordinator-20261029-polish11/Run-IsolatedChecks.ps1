@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param([ValidateSet('x86','x64')][string]$Architecture,
-      [ValidateSet('Anchor','Input','GameplaySyntax','NativeSyntax','Sight','Scope','Grip','Configuration','Carried','Observation','Muzzle','FeedReload','FeedInteraction','FeedReloadSession')][string]$Suite,
-      [ValidateSet('coordinator-20261029-polish11','coordinator-20261029-work12','coordinator-20261029-work13','coordinator-20261030-implementation15')][string]$ReportRun='coordinator-20261029-polish11',
+      [ValidateSet('Anchor','Input','GameplaySyntax','NativeSyntax','Sight','Scope','Grip','Configuration','Carried','Observation','Muzzle','FeedReload','FeedInteraction','FeedReloadSession','FeedAmmunition','FeedEquipmentSession','PhysicalPistolSlide')][string]$Suite,
+      [ValidateSet('coordinator-20261029-polish11','coordinator-20261029-work12','coordinator-20261029-work13','coordinator-20261030-implementation15','coordinator-20261030-implementation17')][string]$ReportRun='coordinator-20261029-polish11',
       [Parameter(Mandatory)][string]$OutputPath)
 $ErrorActionPreference='Stop'
 $PSNativeCommandUseErrorActionPreference=$false
@@ -34,7 +34,7 @@ if($Suite -in @('GameplaySyntax','NativeSyntax')) {
     $inputs.Add((Join-Path $work ('src/games/bc2/'+$source)))
     $arguments+=@('/Zs','/DWIN32','/D_WINDOWS','/DWIN32_LEAN_AND_MEAN',('/I'+(Join-Path $canonical 'build/x86/generated/bc2-operation')),('/I'+(Join-Path $work 'third_party/minhook-1.3.4/include'))) + $defines + $inputs.ToArray()
 } else {
-    $test=switch($Suite){'Anchor'{'TrackedBodyAnchorTests'}'Input'{'Bc2InputBindingTests'}'Sight'{'Bc2SightAdapterTests'}'Scope'{'Bc2SelectedMeshes1pTests'}'Grip'{'TrackedRigTests'}'Configuration'{'Bc2SelectedConfigurationPathTests'}'Carried'{'Bc2CarriedMeshesTests'}'Observation'{'Bc2SelectedMeshesObservationTests'}'Muzzle'{'Bc2MuzzleAdmissionTests'}'FeedReload'{'FeedReloadTests'}'FeedInteraction'{'FeedInteractionTests'}'FeedReloadSession'{'FeedReloadSessionTests'}}
+    $test=switch($Suite){'Anchor'{'TrackedBodyAnchorTests'}'Input'{'Bc2InputBindingTests'}'Sight'{'Bc2SightAdapterTests'}'Scope'{'Bc2SelectedMeshes1pTests'}'Grip'{'TrackedRigTests'}'Configuration'{'Bc2SelectedConfigurationPathTests'}'Carried'{'Bc2CarriedMeshesTests'}'Observation'{'Bc2SelectedMeshesObservationTests'}'Muzzle'{'Bc2MuzzleAdmissionTests'}'FeedReload'{'FeedReloadTests'}'FeedInteraction'{'FeedInteractionTests'}'FeedReloadSession'{'FeedReloadSessionTests'}'FeedAmmunition'{'FeedAmmunitionTests'}'FeedEquipmentSession'{'FeedEquipmentSessionTests'}'PhysicalPistolSlide'{'PhysicalPistolSlideTests'}}
     $inputs.Add((Join-Path $work ('tests/'+$test+'.cpp')))
     if($Suite -eq 'Input'){$inputs.Add((Join-Path $work 'src/games/bc2/Bc2InputBinding.cpp'))}
     if($Suite -in @('Scope','Configuration','Carried','Observation')){$inputs.Add((Join-Path $work 'src/games/bc2/Bc2SelectedMeshes1p.cpp'))}
@@ -47,12 +47,17 @@ if($Suite -in @('GameplaySyntax','NativeSyntax')) {
 }
 $identities=@($inputs|ForEach-Object {@{path=$_;sha256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant()}})
 $dependencyNames=@()
-if($Suite -in @('FeedReload','FeedInteraction','FeedReloadSession')) {
+if($Suite -in @('FeedReload','FeedInteraction','FeedReloadSession','FeedAmmunition','FeedEquipmentSession')) {
     $dependencyNames=@('include/fvr/interaction/FeedMechanism.h','include/fvr/interaction/FeedReload.h','include/fvr/math/StereoMath.h','tests/Test.h')
-    if($Suite -ne 'FeedReload'){$dependencyNames+='include/fvr/interaction/FeedInteraction.h'}
-    if($Suite -eq 'FeedReloadSession'){$dependencyNames+='include/fvr/interaction/FeedReloadSession.h'}
+    if($Suite -in @('FeedInteraction','FeedReloadSession','FeedEquipmentSession')){$dependencyNames+='include/fvr/interaction/FeedInteraction.h'}
+    if($Suite -in @('FeedReloadSession','FeedEquipmentSession')){$dependencyNames+='include/fvr/interaction/FeedReloadSession.h'}
+    if($Suite -in @('FeedAmmunition','FeedEquipmentSession')){$dependencyNames+='include/fvr/interaction/FeedAmmunition.h'}
+    if($Suite -eq 'FeedEquipmentSession'){$dependencyNames+='include/fvr/interaction/FeedEquipmentSession.h'}
 }
 $dependencies=@($dependencyNames|ForEach-Object {$path=Join-Path $work $_;@{path=$path;sha256=(Get-FileHash -LiteralPath $path).Hash.ToLowerInvariant()}})
+if($Suite -eq 'PhysicalPistolSlide') {
+    $dependencies=@('include/fvr/interaction/PhysicalPistolSlide.h','include/fvr/interaction/WeaponMechanism.h','include/fvr/interaction/HandInteraction.h','tests/Test.h'|ForEach-Object {$path=Join-Path $work $_;@{path=$path;sha256=(Get-FileHash -LiteralPath $path).Hash.ToLowerInvariant()}})
+}
 SaveJson 'command.json' @{compiler=(Get-Command cl.exe).Source;arguments=$arguments;inputs=$identities;dependencies=$dependencies;unchanged_baseline='7063c0003fa5e41027bf831e3bb9c70093962da8'}
 Push-Location $output
 try {

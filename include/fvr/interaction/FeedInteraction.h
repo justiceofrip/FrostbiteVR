@@ -3,7 +3,13 @@
 #include <limits>
 
 namespace fvr::interaction {
-enum class FeedMotionKind:std::uint8_t {Unknown,Linear,Hinge};
+enum class FeedMotionKind:std::uint8_t {Unknown,Linear,Hinge,FreePlacement};
+struct FeedPlacementGeometry {
+    // Explicit measured object poses and grip frame, proper rigid row-vector
+    // canonical METRES. No default source, destination, or grip is usable.
+    // sourceFromGrip * weaponFromSource is the source anatomical contact.
+    math::Matrix4 weaponFromSource{},weaponFromDestination{},sourceFromGrip{};
+};
 // An adapter must explicitly supply measured geometry for each operation. No
 // weapon name, default rail, or default hinge establishes physical eligibility.
 struct FeedMotionProfile {
@@ -18,6 +24,10 @@ struct FeedMotionProfile {
     float pathToleranceMeters=0,orientationToleranceRadians=0;
     float maxStepMeters=0,maxStepRadians=0;
     std::int64_t endpointDwellNs=0,maximumGestureNs=0,maxInputGapNs=0;
+    // FreePlacement uses these frames instead of rail/hinge geometry, travel,
+    // fractions or returnToStart. Path/orientation tolerances bound source
+    // contact agreement and destination alignment, never the free carry path.
+    FeedPlacementGeometry placement{};
 };
 struct FeedInteractionProfile {
     std::uint64_t profileId=0,profileRevision=0;
@@ -38,12 +48,16 @@ enum class FeedInteractionStatus:std::uint8_t {
     InvalidProfile,InvalidInput,CandidateChanged,ContactMiss,Interrupted,
     Expired,OffPath,MotionJump,CounterExhausted
 };
+enum class FeedInteractionTargetKind:std::uint8_t {None,Contact,Object};
 struct FeedInteractionResult {
     FeedInteractionStatus status=FeedInteractionStatus::NeedNeutral;
     FeedMechanismStatus evidence=FeedMechanismStatus::InvalidSnapshot;
     double progress=0;
     std::optional<math::Matrix4> target{}; // Presentation only, never native state.
     std::optional<FeedPhysicalCompletion> completion{};
+    // Linear/hinge target is an anatomical contact; free placement target is
+    // the carried object. Adapters must not apply an object pose to the hand.
+    FeedInteractionTargetKind targetKind=FeedInteractionTargetKind::None;
 };
 namespace feed_interaction_detail {
 inline math::Matrix4 Multiply(const math::Matrix4& a,const math::Matrix4& b)noexcept {
@@ -83,7 +97,10 @@ inline bool Same(const FeedMotionProfile& a,const FeedMotionProfile& b)noexcept 
         a.travel==b.travel&&a.completeFraction==b.completeFraction&&a.releaseFraction==b.releaseFraction&&
         a.pathToleranceMeters==b.pathToleranceMeters&&a.orientationToleranceRadians==b.orientationToleranceRadians&&
         a.maxStepMeters==b.maxStepMeters&&a.maxStepRadians==b.maxStepRadians&&a.endpointDwellNs==b.endpointDwellNs&&
-        a.maximumGestureNs==b.maximumGestureNs&&a.maxInputGapNs==b.maxInputGapNs;
+        a.maximumGestureNs==b.maximumGestureNs&&a.maxInputGapNs==b.maxInputGapNs&&
+        a.placement.weaponFromSource.values==b.placement.weaponFromSource.values&&
+        a.placement.weaponFromDestination.values==b.placement.weaponFromDestination.values&&
+        a.placement.sourceFromGrip.values==b.placement.sourceFromGrip.values;
 }
 inline bool Same(const FeedMechanismProfile& a,const FeedMechanismProfile& b)noexcept {
     if(a.family!=b.family||a.id!=b.id||a.revision!=b.revision||a.ammunitionKind!=b.ammunitionKind||
@@ -96,6 +113,26 @@ inline bool Same(const FeedMechanismProfile& a,const FeedMechanismProfile& b)noe
 }
 inline bool Motion(const FeedMotionProfile& m)noexcept {
     const auto op=static_cast<unsigned>(m.operation);
+    if(m.kind==FeedMotionKind::FreePlacement){
+        if(!m.measured||m.returnToStart||
+           (m.operation!=FeedPhysicalOperation::AttachContainer&&m.operation!=FeedPhysicalOperation::DetachContainer&&
+            m.operation!=FeedPhysicalOperation::SeatFeed&&m.operation!=FeedPhysicalOperation::WithdrawFeed)||
+           !feed_mechanism_detail::Pose(m.placement.weaponFromSource)||
+           !feed_mechanism_detail::Pose(m.placement.weaponFromDestination)||
+           !feed_mechanism_detail::Pose(m.placement.sourceFromGrip))return false;
+        for(float v:{m.pathToleranceMeters,m.orientationToleranceRadians,m.maxStepMeters,m.maxStepRadians})
+            if(!std::isfinite(v))return false;
+        if(m.pathToleranceMeters<=0||m.orientationToleranceRadians<0||m.orientationToleranceRadians>=1.570796327f||
+           m.maxStepMeters<=0||m.maxStepRadians<=0||m.maxStepRadians>=3.141592654f||m.endpointDwellNs<=0||
+           m.maximumGestureNs<=m.endpointDwellNs||m.maxInputGapNs<=0||m.maxInputGapNs>m.maximumGestureNs)return false;
+        // Source and destination acceptance regions must be distinct, and a
+        // single source-to-destination teleport must exceed a step bound.
+        const auto distance=Distance(m.placement.weaponFromSource,m.placement.weaponFromDestination);
+        const auto angle=Angle(m.placement.weaponFromSource,m.placement.weaponFromDestination);
+        return (distance>2*m.pathToleranceMeters||angle>2*m.orientationToleranceRadians)&&
+            (distance>m.maxStepMeters||angle>m.maxStepRadians)&&
+            feed_mechanism_detail::Pose(Multiply(m.placement.sourceFromGrip,m.placement.weaponFromSource));
+    }
     if(op==0||op>9||!m.measured||(m.kind!=FeedMotionKind::Linear&&m.kind!=FeedMotionKind::Hinge)||
        !feed_mechanism_detail::Pose(m.weaponFromMotion)||!feed_mechanism_detail::Pose(m.motionFromContact))return false;
     for(float v:{m.travel,m.completeFraction,m.releaseFraction,m.pathToleranceMeters,m.orientationToleranceRadians,
@@ -128,7 +165,7 @@ public:
         using namespace feed_interaction_detail;
         FeedInteractionResult out;
         const auto fail=[&](FeedInteractionStatus why){
-            Drop();out.status=why;out.target.reset();out.completion.reset();
+            Drop();out.status=why;out.target.reset();out.completion.reset();out.targetKind=FeedInteractionTargetKind::None;
             const bool sameRejected=hasRejected_&&sample.contact.owner==rejected_.contact.owner&&
                 sample.contact.mechanism==rejected_.contact.mechanism&&sample.hand==rejected_.hand&&
                 sample.trackingGeneration==rejected_.trackingGeneration;
@@ -173,6 +210,8 @@ public:
         if(bound_&&(!sameStream||!Same(candidate_,candidate)||!Same(motion_,motion)||!Same(mechanism_,mechanismProfile)))
             return fail(FeedInteractionStatus::CandidateChanged);
         if(bound_&&contact.observedNs-previousObserved>motion.maxInputGapNs)return fail(FeedInteractionStatus::Interrupted);
+        if(motion.kind==FeedMotionKind::FreePlacement&&sameStream&&contact.observedNs<=previousObserved)
+            return fail(FeedInteractionStatus::InvalidInput);
         if(!moving_){
             if(!sample.grip){
                 bound_=true;candidate_=candidate;motion_=motion;mechanism_=mechanismProfile;
@@ -182,23 +221,56 @@ public:
             // A missed press consumes neutral; sliding into contact while held
             // cannot become an acquisition edge.
             if(checked.status!=FeedMechanismStatus::ContactMatch)return fail(FeedInteractionStatus::ContactMiss);
-            const auto start=Multiply(motion.motionFromContact,motion.weaponFromMotion);
+            const bool placement=motion.kind==FeedMotionKind::FreePlacement;
+            const auto start=placement?Multiply(motion.placement.sourceFromGrip,motion.placement.weaponFromSource):
+                Multiply(motion.motionFromContact,motion.weaponFromMotion);
             const auto& observed=snapshot.contacts[static_cast<unsigned>(candidate.part)].weaponFromContact;
             const auto& binding=mechanismProfile.contacts[static_cast<unsigned>(candidate.part)];
             if(Distance(start,observed)>motion.pathToleranceMeters||Angle(start,observed)>motion.orientationToleranceRadians||
                Distance(start,contact.weaponFromHandContact)>binding.radiusMeters||Angle(start,contact.weaponFromHandContact)>binding.maxAngleRadians)
                 return fail(FeedInteractionStatus::OffPath);
-            grabbed_=Multiply(contact.weaponFromHandContact,Inverse(motion.weaponFromMotion));
+            // Preserve the actual pickup offset: neither hand nor carried
+            // object jumps to the measured grip or destination socket.
+            grabbed_=placement?Multiply(motion.placement.weaponFromSource,Inverse(contact.weaponFromHandContact)):
+                Multiply(contact.weaponFromHandContact,Inverse(motion.weaponFromMotion));
             if(!feed_mechanism_detail::Pose(grabbed_)||(motion.kind==FeedMotionKind::Hinge&&
                std::hypot(double(grabbed_.values[3][0]),double(grabbed_.values[3][1]))<=motion.pathToleranceMeters*2))
                 return fail(FeedInteractionStatus::OffPath);
             previous_=contact.weaponFromHandContact;moving_=true;started_=contact.observedNs;
-            out.status=FeedInteractionStatus::Acquired;out.target=start;return out;
+            out.status=FeedInteractionStatus::Acquired;
+            out.target=placement?motion.placement.weaponFromSource:start;
+            out.targetKind=placement?FeedInteractionTargetKind::Object:FeedInteractionTargetKind::Contact;
+            if(placement)carried_=*out.target;
+            return out;
         }
-        if(!sample.grip)return fail(FeedInteractionStatus::Interrupted);
+        const bool placement=motion.kind==FeedMotionKind::FreePlacement;
+        if(!sample.grip&&!placement)return fail(FeedInteractionStatus::Interrupted);
         if(contact.observedNs<=previousObserved)return fail(FeedInteractionStatus::InvalidInput);
         if(Distance(previous_,contact.weaponFromHandContact)>motion.maxStepMeters||
            Angle(previous_,contact.weaponFromHandContact)>motion.maxStepRadians)return fail(FeedInteractionStatus::MotionJump);
+        if(placement){
+            out.target=Multiply(grabbed_,contact.weaponFromHandContact);
+            out.targetKind=FeedInteractionTargetKind::Object;
+            if(!feed_mechanism_detail::Pose(*out.target))return fail(FeedInteractionStatus::OffPath);
+            if(Distance(carried_,*out.target)>motion.maxStepMeters||Angle(carried_,*out.target)>motion.maxStepRadians)
+                return fail(FeedInteractionStatus::MotionJump);
+            previous_=contact.weaponFromHandContact;carried_=*out.target;
+            const bool aligned=Distance(carried_,motion.placement.weaponFromDestination)<=motion.pathToleranceMeters&&
+                Angle(carried_,motion.placement.weaponFromDestination)<=motion.orientationToleranceRadians;
+            // No hysteresis outside the measured destination. A fresh held
+            // observation must establish dwell before a fresh release edge.
+            if(!aligned){endpoint_=0;placementDwelled_=false;}
+            if(sample.grip){
+                if(aligned&&!endpoint_)endpoint_=contact.observedNs;
+                if(endpoint_&&contact.observedNs-endpoint_>=motion.endpointDwellNs)placementDwelled_=true;
+                out.status=aligned?FeedInteractionStatus::Endpoint:FeedInteractionStatus::Moving;
+                return out;
+            }
+            if(!aligned||!placementDwelled_)return fail(FeedInteractionStatus::Interrupted);
+            if(receiptId_==std::numeric_limits<std::uint64_t>::max())return fail(FeedInteractionStatus::CounterExhausted);
+            out.completion=FeedPhysicalCompletion{++receiptId_,contact.inputSequence,contact.observedNs,candidate};
+            out.status=FeedInteractionStatus::Completed;Drop();return out;
+        }
         const auto local=Multiply(contact.weaponFromHandContact,Inverse(motion.weaponFromMotion));
         if(!feed_mechanism_detail::Pose(local))return fail(FeedInteractionStatus::OffPath);
         double travel=double(local.values[3][0])-grabbed_.values[3][0];
@@ -213,6 +285,7 @@ public:
            Angle(local,expected)>motion.orientationToleranceRadians)return fail(FeedInteractionStatus::OffPath);
         previous_=contact.weaponFromHandContact;
         out.target=Multiply(Along(motion.motionFromContact,motion.kind,std::clamp(out.progress,0.,1.)*motion.travel),motion.weaponFromMotion);
+        out.targetKind=FeedInteractionTargetKind::Contact;
         if(!feed_mechanism_detail::Pose(*out.target))return fail(FeedInteractionStatus::OffPath);
         const bool enter=returning_?out.progress<=1-motion.completeFraction:out.progress>=motion.completeFraction;
         const bool leave=returning_?out.progress>1-motion.releaseFraction:out.progress<motion.releaseFraction;
@@ -226,13 +299,14 @@ public:
         out.status=FeedInteractionStatus::Completed;Drop();return out;
     }
 private:
-    void Drop()noexcept {bound_=moving_=returning_=false;endpoint_=started_=0;}
+    void Drop()noexcept {bound_=moving_=returning_=placementDwelled_=false;endpoint_=started_=0;}
     bool stream_=false,bound_=false,moving_=false,returning_=false,lastGrip_=false;
+    bool placementDwelled_=false;
     bool hasRejected_=false;FeedInteractionSample rejected_{};
     FeedOwner lastOwner_{};FeedKey lastMechanism_{},lastHand_{};
     std::uint64_t lastTracking_=0,lastInput_=0,lastSnapshot_=0,receiptId_=0;
     std::int64_t lastNow_=0,lastObserved_=0,started_=0,endpoint_=0;
     FeedPhysicalCandidate candidate_{};FeedMotionProfile motion_{};FeedMechanismProfile mechanism_{};
-    math::Matrix4 grabbed_{},previous_{},lastRaw_{};
+    math::Matrix4 grabbed_{},previous_{},lastRaw_{},carried_{};
 };
 }

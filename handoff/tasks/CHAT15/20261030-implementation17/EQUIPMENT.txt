@@ -1,0 +1,19 @@
+Done: Y (source frozen; root check02 passes all 14 cases on x86/x64).
+Source: include/fvr/interaction/FeedEquipmentSession.h
+Tests: tests/FeedEquipmentSessionTests.cpp (14 deterministic scenario groups).
+One immutable lifetime retains the physical session and ammunition ledger.
+Only result.dispatch is an adapter command; nested reload dispatch is cleared.
+Fresh same-observation mechanism/count evidence and explicit authority gate intent.
+Receipt validation remains active through tracking loss/stow/old-owner suspension.
+Historical receipts remain immutable and retain accepted effects/custody.
+Fresh explicit matching acknowledgement resolves historical/missing-poststate waits.
+Updated counts or standalone acknowledgements cannot substitute for a ledger receipt.
+Retirement preflights exact ledger conditions, then asks the reload coordinator.
+Reload refusal leaves both retained; successful retirement retains resource records.
+Tests exercise nine measured stages, irregular free placement, direct partial/empty
+refill, held extraction/return, duplicate dispatch suppression, forged acknowledgements,
+malformed receipts, delayed evidence, suspension and retirement refusal/recovery.
+Latched acknowledgements also require a current matching count join to reconcile.
+No build/test, Git, game/process/XR/input/profile/install/package action by this agent.
+No native adapter is enabled; no M60/native/headset acceptance is claimed.
+Integration remains held; root retains check01 and final check02 evidence separately.

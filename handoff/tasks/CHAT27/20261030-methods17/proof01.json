@@ -1,0 +1,408 @@
+{
+  "schema": "chat27.cinematic_methods_static_code.v1",
+  "evidence_level": "offline file-backed code",
+  "executable_sha256": "3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258",
+  "preferred_base": "0x400000",
+  "script_sha256": "221f09636216fd02b82d1452d7edcae336abca3227172bfe3458a54f33b8dd1d",
+  "inherited": {
+    "work14": {
+      "path": "handoff/tasks/CHAT27/20261030-work14/proof01.json",
+      "sha256": "b5db47e429185f0a5ebe9d37986fe7ec4c4cb40de746bcd9f974f482147101d3"
+    },
+    "implementation17": {
+      "path": "handoff/tasks/CHAT27/20261030-implementation17/proof01.json",
+      "sha256": "54fe3d0b5c1eb60d0134be8b5a2e04f0f78e6b9ea56ca2d3ad9cfed60994904e"
+    }
+  },
+  "scope": {
+    "selected_decode_starts": 4,
+    "unintended_adjacent_function_units": 6,
+    "total_new_function_units_observed": 10,
+    "requested_maximum": 8,
+    "ceiling_met": false,
+    "explanation": "Ranges ended at next known table target, which was not the next function boundary. This unintentionally exposed six adjacent units. All retained; no further decoding after overrun recognized. Root authorized only exact table-assignment checks inside inherited hash-pinned functions."
+  },
+  "units": [
+    {
+      "rva": "0x49dba0",
+      "size": 61,
+      "sha256": "9f085e588195175ec578cbaa33ee01d44dd692334e7eb04b33a4af305a333319",
+      "classification": "selected",
+      "meaning": "camera table+0xb4 candidate: state transition and owned receiver check"
+    },
+    {
+      "rva": "0x4b9490",
+      "size": 45,
+      "sha256": "6b26cd71d26a63ef50fb40b617a97355b220df034e7fb5e81b9a40b13d4835a9",
+      "classification": "selected",
+      "meaning": "entity table+0xb4 candidate: float argument forwarding"
+    },
+    {
+      "rva": "0x4b94c0",
+      "size": 80,
+      "sha256": "cd6e4ee2b59829807c5c35d558db77bff66d1f65d9e9e871bb320fa90f62b9c8",
+      "classification": "adjacent spill partial",
+      "meaning": "Unrelated adjacent method; ownership unproved and incomplete ending retained."
+    },
+    {
+      "rva": "0x49dbe0",
+      "size": 37,
+      "sha256": "b2fac22b1495dfe956992e485a8b5c9b618ebdae61b940379a52ae1e95d33371",
+      "classification": "selected",
+      "meaning": "camera table+0xdc candidate: pointer predicate; no view join"
+    },
+    {
+      "rva": "0x49dc10",
+      "size": 33,
+      "sha256": "dc009af62ea4c05a6b30b6e7757e90ff90603198976289ea7ac760fc9595592a",
+      "classification": "adjacent spill later ownership-proved",
+      "meaning": "Exact secondary camera table0x10364d4+4, incoming owner+0xdc."
+    },
+    {
+      "rva": "0x4a4060",
+      "size": 11,
+      "sha256": "617daef5cd1ce16adee24452320110e18e53afcc725cb36f74d17014335b59f2",
+      "classification": "selected later rejected ownership",
+      "meaning": "Adjacent entity-table word+0xdc points to adjustment thunk; no primary ownership proof."
+    },
+    {
+      "rva": "0x4a4070",
+      "size": 8,
+      "sha256": "68c1e972ebcbc7cafe114fa4c9cfa4e16c502550689a4e23798570c8242d2adc",
+      "classification": "adjacent spill",
+      "meaning": "Unowned adjustment thunk; no semantic promotion."
+    },
+    {
+      "rva": "0x4a4080",
+      "size": 11,
+      "sha256": "998c3d70f96620c4b5ca2c8a17d91568036e66c3203c2256907ae0f62046f97b",
+      "classification": "adjacent spill",
+      "meaning": "Unowned adjustment thunk; no semantic promotion."
+    },
+    {
+      "rva": "0x4a4090",
+      "size": 11,
+      "sha256": "90f2df939597067a3a7b64d6fb952e7f28f181896a6eb215a92a0ce422bbfd21",
+      "classification": "adjacent spill",
+      "meaning": "Unowned adjustment thunk; no semantic promotion."
+    },
+    {
+      "rva": "0x4a40a0",
+      "size": 138,
+      "sha256": "436717f31644d4547375b3a7c7f32dc30779e748255ed66c2bce09271f87749c",
+      "classification": "adjacent spill",
+      "meaning": "Unowned adjacent method; no semantic promotion."
+    }
+  ],
+  "tables": [
+    {
+      "rva": "0x1036550",
+      "size": 244,
+      "sha256": "8fb87fb97786221b4904fc18c23a0888db804459c6c123b483358dc5f713f6e6",
+      "interpretation": "camera primary continuous function-pointer candidate span, before [active] string"
+    },
+    {
+      "rva": "0x10366c8",
+      "size": 220,
+      "sha256": "f98ab66134cf66d6821c650de503ee64eae7845f166a7a8a3541d0c5685b9545",
+      "interpretation": "entity primary candidate prefix; later contiguous words not admitted"
+    },
+    {
+      "rva": "0x10364d4",
+      "size": 12,
+      "sha256": "ac5390712d68daed889e2d907a88db32d1e9334ee140b72ee25577324fa1fcef",
+      "interpretation": "exact camera secondary interface at owner+0xdc"
+    },
+    {
+      "rva": "0x1036650",
+      "size": 12,
+      "sha256": "373a305ac192204dbbaa9ad6227f0f0e24e6f4341c2913d94c2ed48347f0f168",
+      "interpretation": "exact entity secondary interface at owner+0xdc"
+    }
+  ],
+  "instructions": [
+    {
+      "rva": "0x49dba6",
+      "bytes": "8bf1",
+      "sha256": "f7f55aeb563f96b4cba54af81ceeed57ee70e798f4823259a7b30067b3ce82e0",
+      "meaning": "Camera candidate preserves incoming whole-object ECX in ESI."
+    },
+    {
+      "rva": "0x49dbad",
+      "bytes": "837e3404",
+      "sha256": "7ff49f342b5663d8ff3450d8d4ecd30608bfe394fce772842ea1fcc2f1437f1b",
+      "meaning": "Checks this+0x34 against4."
+    },
+    {
+      "rva": "0x49dbb3",
+      "bytes": "8b8ed4000000",
+      "sha256": "5f51121dcd10ad0f04fa35038b30bc038eac4f34b7318e5c8482a88eb7eb5cbd",
+      "meaning": "Receiver=[this+0xd4]."
+    },
+    {
+      "rva": "0x49dbd2",
+      "bytes": "c7463405000000",
+      "sha256": "28f6a124ba6ed644ff7e790a6a1e1e0a7c7a107389cfbaa0dcd7e56f95ecd515",
+      "meaning": "Stores state5 on the decoded conditional path."
+    },
+    {
+      "rva": "0x4b9492",
+      "bytes": "8b7c240c",
+      "sha256": "93de2e94cf83ab0f45172c5f494618b4deeac70de382dc12b83c2f67804b271d",
+      "meaning": "Loads original first stack argument after two register saves."
+    },
+    {
+      "rva": "0x4b9496",
+      "bytes": "d907",
+      "sha256": "2c65234a9d2d6bc1c5c453c2b54d0cc48767246d15f302b08380006c062071a3",
+      "meaning": "Loads float at first argument."
+    },
+    {
+      "rva": "0x4b9499",
+      "bytes": "d91c24",
+      "sha256": "aa619cd12d735f14c2b5a03872a988f913b5f94589fbe889857e505dc6c8eb25",
+      "meaning": "Copies float to outgoing stack argument."
+    },
+    {
+      "rva": "0x4b949c",
+      "bytes": "8bf1",
+      "sha256": "f7f55aeb563f96b4cba54af81ceeed57ee70e798f4823259a7b30067b3ce82e0",
+      "meaning": "Preserves incoming ECX as this in ESI."
+    },
+    {
+      "rva": "0x4b94a3",
+      "bytes": "8b8ee4000000",
+      "sha256": "537276b28f47002c25763c60578cfcda624e6c9271de20553bf6a3a266828c4d",
+      "meaning": "Loads optional receiver=[this+0xe4]."
+    },
+    {
+      "rva": "0x4b94ad",
+      "bytes": "d907",
+      "sha256": "2c65234a9d2d6bc1c5c453c2b54d0cc48767246d15f302b08380006c062071a3",
+      "meaning": "Loads same first-argument float before optional second call."
+    },
+    {
+      "rva": "0x49dbe0",
+      "bytes": "8b410c",
+      "sha256": "20303652b024e91ea1659934623368e09b640377ab9245dd3251c1536643d6a9",
+      "meaning": "Loads authored-resource-shaped pointer [this+0xc]; semantic type not proved."
+    },
+    {
+      "rva": "0x49dbe3",
+      "bytes": "8b80cc000000",
+      "sha256": "ab1307b3a1e94f3f46ae5e59dee09867acce21e9e5388b7191000ef1e9d76539",
+      "meaning": "Reads resource-shaped pointer+0xcc; no admitted metadata-field match."
+    },
+    {
+      "rva": "0x4a32eb",
+      "bytes": "8dbedc000000",
+      "sha256": "b5c18ca6a3bbc3ea5fd5c495fc83f1e3d586a33e22caf89b1228e845fff2bf98",
+      "meaning": "Inherited camera cleanup: EDI=this+0xdc."
+    },
+    {
+      "rva": "0x4a331f",
+      "bytes": "c707d4644301",
+      "sha256": "1ef899ac2817bda8ece07b352494cd3534b8c806a36ec96f6682dbcda578e595",
+      "meaning": "Inherited camera cleanup: assigns secondary table0x10364d4 at this+0xdc."
+    },
+    {
+      "rva": "0x4af877",
+      "bytes": "c786dc00000050664301",
+      "sha256": "8c6a1b8010e590792bdb406cbc1cb6538e6316532da9c3d11abd69aa45da73df",
+      "meaning": "Inherited entity setup: assigns secondary table0x1036650 at this+0xdc."
+    },
+    {
+      "rva": "0x4a3404",
+      "bytes": "8bf1",
+      "sha256": "f7f55aeb563f96b4cba54af81ceeed57ee70e798f4823259a7b30067b3ce82e0",
+      "meaning": "Inherited entity cleanup: ESI=whole this."
+    },
+    {
+      "rva": "0x4a3410",
+      "bytes": "8dbedc000000",
+      "sha256": "b5c18ca6a3bbc3ea5fd5c495fc83f1e3d586a33e22caf89b1228e845fff2bf98",
+      "meaning": "Inherited entity cleanup: EDI=this+0xdc."
+    },
+    {
+      "rva": "0x4a343a",
+      "bytes": "c70750664301",
+      "sha256": "20513a66a01002412e36cd587745befd9c3ac8b1855b991aebcdaec218657703",
+      "meaning": "Inherited entity cleanup repeats table0x1036650 assignment at this+0xdc."
+    },
+    {
+      "rva": "0x49dc10",
+      "bytes": "837c24041f",
+      "sha256": "b3b467061fbab70c19f3f8c6516ed0b3054904405a4de3d1fd69d7f765784ac4",
+      "meaning": "Camera callback accepts first stack discriminator0x1f."
+    },
+    {
+      "rva": "0x49dc17",
+      "bytes": "837c24082f",
+      "sha256": "dc24009ec6d0d15b6d77aae077a39bfa6067704120e53481934d9d0620410ebb",
+      "meaning": "Camera callback accepts second stack discriminator0x2f."
+    },
+    {
+      "rva": "0x49dc1e",
+      "bytes": "8b442410",
+      "sha256": "a364c0a3b03fe7e1896a7a346390c9908819669b07b52568bfc6a70bb5a38562",
+      "meaning": "Loads original fourth stack argument."
+    },
+    {
+      "rva": "0x49dc22",
+      "bytes": "50",
+      "sha256": "5c62e091b8c0565f1bafad0dad5934276143ae2ccef7a5381e8ada5b1a8d26d2",
+      "meaning": "Forwards fourth stack argument."
+    },
+    {
+      "rva": "0x49dc23",
+      "bytes": "81c124ffffff",
+      "sha256": "db31b39e2e070e9added8990397ab9f7a58eb09305ed470686f1c60d4aaa19f7",
+      "meaning": "Converts incoming this+0xdc interface back to whole camera by subtracting0xdc."
+    },
+    {
+      "rva": "0x4a4060",
+      "bytes": "81e9d4000000",
+      "sha256": "3048e4f538b58dc2db3ce7997c41fa5e7321b7f5b027579a1e1dc7280ba289cc",
+      "meaning": "Unowned table-adjacent thunk subtracts0xd4; not primary entity slot evidence."
+    }
+  ],
+  "direct_calls": [
+    {
+      "instruction": {
+        "rva": "0x49dba8",
+        "size": 5,
+        "sha256": "a21b6a1a098558160d1ba6288f7a5adc1d7d481ffff595b877adc6bc493bcc88"
+      },
+      "bytes": "e8c381ffff",
+      "target_rva": "0x495d70",
+      "relationship": "camera candidate forwards its original stack argument, whole-object receiver",
+      "callee_decoded": false
+    },
+    {
+      "instruction": {
+        "rva": "0x49dbbd",
+        "size": 5,
+        "sha256": "35466524f57ea65109b3c40ff48fa5d59e2a562d8fa51e9c79817ddcaa402a35"
+      },
+      "bytes": "e82efdeeff",
+      "target_rva": "0x38d8f0",
+      "relationship": "camera candidate calls [this+0xd4] receiver",
+      "callee_decoded": false
+    },
+    {
+      "instruction": {
+        "rva": "0x4b949e",
+        "size": 5,
+        "sha256": "a4d7ebc0bcee3900ca2703899bf3a9fd168347cf79175e166577a79e688a15a2"
+      },
+      "bytes": "e8bdafffff",
+      "target_rva": "0x4b4460",
+      "relationship": "entity candidate forwards first-argument float with whole-object receiver",
+      "callee_decoded": false
+    },
+    {
+      "instruction": {
+        "rva": "0x4b94b3",
+        "size": 5,
+        "sha256": "60e815c2eaa4dfcf135393db6514b914f08c8f72ca86f9a0f1c2e2805e551170"
+      },
+      "bytes": "e8c8a8f7ff",
+      "target_rva": "0x433d80",
+      "relationship": "entity candidate forwards same float with optional [this+0xe4] receiver",
+      "callee_decoded": false
+    },
+    {
+      "instruction": {
+        "rva": "0x49dbef",
+        "size": 5,
+        "sha256": "c03993463dd34f6ca40cc36f491f56bb99cabc092db0cf511f017d3c40abb169"
+      },
+      "bytes": "e82c7effff",
+      "target_rva": "0x495a20",
+      "relationship": "camera candidate passes resource-shaped member+0xcc and whole-object pointer",
+      "callee_decoded": false
+    },
+    {
+      "instruction": {
+        "rva": "0x49dc29",
+        "size": 5,
+        "sha256": "4a035e1799eec91f30bf0587b00ed5f3afdead981872436303452085df71caba"
+      },
+      "bytes": "e87279ffff",
+      "target_rva": "0x4955a0",
+      "relationship": "verified camera secondary callback converts this+0xdc to whole object and forwards fourth argument",
+      "callee_decoded": false
+    }
+  ],
+  "new_chain": "Exact camera owner+0xdc -> table0x10364d4 -> slot+4 callback0x49dc10; callback filters stack discriminators0x1f/0x2f, converts interface to whole owner by subtracting0xdc, then calls0x4955a0 with original fourth argument. No event name or active-view semantics assigned.",
+  "primary_table_limits": "Known setup assignments prove primary table origins; selected +0xb4 entries sit in their continuous pointer prefixes. No external decoded virtual dispatch was found in this scope. Do not treat every later executable word as a primary slot: entity+0xdc thunk0x4a4060 is unowned here. Camera+0x100 starts the independently assigned entity secondary table0x1036650, not a camera primary method.",
+  "metadata_field_match": {
+    "matched": false,
+    "reason": "Current reads at object+0x34/+0xd4/+0xe4 and resource-shaped+0xcc have no established authored-field name in inherited evidence. Numeric values0x1f/0x2f are dispatch discriminators only. No repeated type inventory."
+  },
+  "next_unresolved_edges": [
+    {
+      "priority": 1,
+      "rva": "0x4955a0",
+      "known_caller": "0x49dc29",
+      "input": "whole ClientCutsceneCameraEntity receiver; original camera-callback fourth argument",
+      "question": "Does the event-filtered target select/copy camera transform or join admitted active view/local player?"
+    },
+    {
+      "priority": 2,
+      "rva": "0x4b4460",
+      "known_caller": "0x4b949e",
+      "input": "whole ClientCutsceneEntity receiver; float from original first argument",
+      "question": "Does the frame-like update perform current sequence/camera selection?"
+    },
+    {
+      "priority": 3,
+      "rva": "0x495a90",
+      "known_reference": "0x1036654",
+      "input": "ClientCutsceneEntity secondary interface at owner+0xdc; body unexamined",
+      "question": "What event handling and owner conversion occur?"
+    }
+  ],
+  "source_implementation": {
+    "supported_correction": false,
+    "production_modified": false,
+    "runtime_admission_enabled": false,
+    "reason": "No admitted local-player/active-view -> currently selected cinematic camera chain. Verified callback conversion improves a specific edge but does not discover the live selected instance."
+  },
+  "limitations": "Static function roles beyond argument/state operations remain hypotheses; timing, generation, synchronization, blend authority, entry/exit/skip and headset outcome unproved.",
+  "saved_decodes": [
+    {
+      "path": "reports\\coordinator-20261030-implementation17\\cinematic-methods\\decode-0049dba0-40.txt",
+      "size": 1413,
+      "sha256": "0ff69cc92c0d7847e65a2339f68d5c8aff1dbdb18574f9f740a8fd77360c1508"
+    },
+    {
+      "path": "reports\\coordinator-20261030-implementation17\\cinematic-methods\\decode-004b9490-80.txt",
+      "size": 2863,
+      "sha256": "5b54fa2a0ad1d19e2f6b9f897745ae79b647f31260ac962409d8f024aa195c6c"
+    },
+    {
+      "path": "reports\\coordinator-20261030-implementation17\\cinematic-methods\\decode-0049dbe0-60.txt",
+      "size": 2594,
+      "sha256": "c8b0c7409686b1f7d798692fb7e802379f56587704fe4e7b584616c1f79db60d"
+    },
+    {
+      "path": "reports\\coordinator-20261030-implementation17\\cinematic-methods\\decode-004a4060-d0.txt",
+      "size": 4546,
+      "sha256": "2383efb4fe91dbe367d15b10a68aad53a0cce16c29a6f4f80c4635440f7e77a9"
+    }
+  ],
+  "execution": {
+    "game": false,
+    "desktop_tests": false,
+    "builds": false,
+    "tests": false,
+    "process_access": false,
+    "profiles": false,
+    "installs": false,
+    "packages": false,
+    "subagents": false
+  },
+  "verifier_failure_retained": "First proof-generation attempt rejected a transcription error: ESI=ECX instruction was entered as0x4a3405 instead of0x4a3404. Corrected using inherited exact cleanup prefix; no proof file was emitted by the failed attempt.",
+  "verification": "Exact executable/prior/function/instruction/table hashes and direct-call destinations checked by file-only verifier; no additional decoding during proof generation."
+}
