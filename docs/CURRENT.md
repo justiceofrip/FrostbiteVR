@@ -5,6 +5,11 @@ Updated October 30, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
+Integration55 combines the weapon/ammo/underbarrel batch with depth-target reuse.
+Both normal builds and335 checks per architecture pass; private0.1.19 package/cache
+are verified. [Integration receipt](../handoff/integrations/coordinator-20261030-integration55/receipt.json).
+Local installation is pending; no new game or headset acceptance.
+
 Headset52 integrates firearm roster enrollment: 77 names/181 configurations,
 both normal builds pass331/331; private0.1.18 is installed and setup/assets pass.
 [Test candidate receipt](../handoff/integrations/coordinator-20261030-headset52/README.md).

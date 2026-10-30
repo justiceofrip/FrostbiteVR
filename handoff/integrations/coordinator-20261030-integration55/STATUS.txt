@@ -1,12 +1,12 @@
-Integration55: user authorized wiring54 integration and local test installation.
-Candidate84d6952; intended private0.1.19. Normal builds and installation pending.
-Root owns Git, build trees, packaging/install and both leases; all agents retired.
-Steam request is in STEAM-REQUEST.txt; actual executable remains unavailable.
-Reuse wiring54 focused passes and264-record cache; do not repeat asset extraction.
-No game launch or headset acceptance requested/performed during installation.
-Normal x86-02 built;334/335 passed, magazine test hit telemetry-table stack overflow.
-Fix allocates bounded counter storage once at construction; no per-Tick allocation or gameplay-policy change.
-Original failure/source provenance retained; rerun normal builds against the correction.
-x64 normal build completed;333/335 passed, two fixtures corrected (stack history storage, explicit receiver release).
-Only the two corrected tests are rebuilt/rerun on both architectures;333 unchanged passes per architecture are reused with binary hashes.
-Native binary/symbol hashes and source closure must remain identical to built7131871; Fixture-Validation.py verifies this before freeze.
+Integration55 — source and private0.1.19 package validated; installation pending
+User authorized integration of wiring54 plus local installation.
+Built source7131871; validated d2acbb1 (test-only corrections after native build).
+Both normal architectures compile.335/335 tests accepted each:333 unchanged passes +2 corrected fixtures, with hash verification.
+Six native binary/symbol pairs match; source closure and264-part cache pinned in receipt.json.
+Prior failures retained; bounded diagnostic storage moved off stack, fixtures made independent of stack/timing.
+Native artifacts were not rebuilt for test-only corrections. No game launch or headset acceptance.
+Package/settings/cache checks passed; installation and setup/assets validation are the next step.
+All agents retired. Root owns both leases, Git and deployment until close.
+Steam: actual unmodified executable remains missing; forward STEAM-REQUEST.txt. Report3 excluded.
+Empty-hand holstering deferred. AN94 live refusal, barrel aim, sight behavior and performance still need headset confirmation.
+Local evidence: reports/coordinator-20261030-integration55; original wiring54 evidence remains applicable where unchanged.

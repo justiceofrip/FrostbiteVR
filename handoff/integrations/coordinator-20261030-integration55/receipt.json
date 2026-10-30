@@ -1,0 +1,40 @@
+{
+  "schema": "fvr.coordinator-integration.v1",
+  "version": "0.1.19",
+  "task_commit": "84d695244638878590b51377e253660d1c6005c8",
+  "built_source_commit": "7131871e37837ad67ffdd83fe2d6da04363c22ed",
+  "validated_source_commit": "d2acbb1c1069f51a4dc9a59d911150748fc32115",
+  "source_sha256": "d6ebf298a32037edd7eef5ab28a57a0ea6fa83cb1c2da087be527703aaf42695",
+  "normal_build_receipt": {
+    "path": "reports/coordinator-20261030-integration55/normal-runtime/build-receipt.json",
+    "sha256": "085e860a2f32cc556732a00dfadc0991b300bfd749897654828ebd649ed2794b"
+  },
+  "normal_checks": {
+    "x86": 335,
+    "x64": 335
+  },
+  "validation_method": "Full normal builds;333 unchanged passing tests per architecture reused with hashes;2 corrected fixtures rebuilt/passed per architecture. Native artifacts and symbols unchanged.",
+  "fixture_validation": "reports/coordinator-20261030-integration55/fixture-validation.json",
+  "matching_binary_symbol_pairs": 6,
+  "local_cache_parts": 264,
+  "local_cache_sha256": "7e3d16f5bcc0af74ff7ab3afe2740197b1b4b9ac18dc9f61416325861af8f49e",
+  "package_verified": true,
+  "package_sha256": "3da21eda394ff4385b57ededb544fa7dbebcd1ee466802ae67f38ba35afaccb0",
+  "package_files": 101,
+  "runtime_files": 93,
+  "asset_recipe_sha256": "eab12dbc842c5dbef02f9dcc6090d351139bd04b528ef3d071c0503903ea3078",
+  "source_pushed": false,
+  "installed": false,
+  "previous_version": "0.1.18",
+  "game_started": false,
+  "headset_accepted": false,
+  "publicly_released": false,
+  "automatic_logging": true,
+  "retained_failures": [
+    "x86-01 storage refusal",
+    "x86-02 magazine telemetry stack overflow",
+    "x64-01 feed fixture stack/receiver timing failures"
+  ],
+  "steam": "Unmodified Steam BFBC2Game.exe still required; existingReport4 andlauncher-last7 sufficient; request inSTEAM-REQUEST.txt.",
+  "deferred": "Empty-hand holstering; reported scene/cinematic bugs remain open."
+}
