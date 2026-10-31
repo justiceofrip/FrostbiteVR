@@ -3,7 +3,8 @@
 param([Parameter(Mandatory)][string]$InstallRoot,
       [ValidateSet('Launch','Validate','Stop','Check','Update','Rollback','Feedback')][string]$Action,
       [switch]$Fresh, [switch]$UseLocal, [switch]$Prerelease, [switch]$ActivateGameWindow,
-      [ValidateSet('MainMenu','Campaign')][string]$StartAt='MainMenu')
+      [ValidateSet('MainMenu','Campaign')][string]$StartAt='MainMenu',
+      [guid]$CommandId=[guid]::NewGuid())
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Launcher.Core.ps1')
 . (Join-Path $PSScriptRoot 'Launcher.Settings.ps1')
@@ -12,9 +13,10 @@ $null = Set-FvrLauncherStorage $InstallRoot
 $data = Join-Path $InstallRoot 'data'
 $null = New-Item -ItemType Directory -Path $data -Force
 $lock = $null
+$stopResult=$null
 $operationStarted=[DateTime]::UtcNow.ToString('o')
 function Status([string]$Message, [string]$State='working') {
-    Write-FvrJson (Join-Path $data 'operation.json') @{action=$Action;state=$State;message=$Message;utc=[DateTime]::UtcNow.ToString('o');started_utc=$operationStarted}
+    Write-FvrJson (Join-Path $data 'operation.json') @{action=$Action;state=$State;message=$Message;utc=[DateTime]::UtcNow.ToString('o');started_utc=$operationStarted;command_id=$CommandId.ToString();worker_pid=$PID;stop_outcome=$(if($stopResult){$stopResult.outcome}else{$null})}
 }
 function Read-LocalSession($Settings) {
     $record = $Settings.local_backend.session_record
@@ -97,10 +99,11 @@ try {
         }
     }
     if ($package.runtime_entry -and -not $UseLocal) {
-        Status $(if($Action -eq 'Launch'){'Opening BC2 in VR…'}else{'Checking the installed runtime…'})
+        Status $(if($Action -eq 'Launch'){'Opening BC2 in VR…'}elseif($Action -eq 'Stop'){'Requesting VR shutdown…'}else{'Checking the installed runtime…'})
         $entry = Get-FvrChild $versionFolder $package.runtime_entry
         & $entry -Action $Action -SettingsPath (Join-Path $data 'settings.json') -StateRoot (Join-Path $data 'runtime') -Fresh:$Fresh -StartAt $StartAt -ActivateGameWindow:($Action -eq 'Launch' -and $ActivateGameWindow) 6>&1 | ForEach-Object {
-            if($_ -is [Management.Automation.InformationRecord] -and $_.MessageData.ToString().StartsWith('BC2VR: ')){Status $_.MessageData.ToString().Substring(7)}else{Write-Output $_}
+            if($Action -eq 'Stop' -and $_ -is [pscustomobject] -and $_.PSObject.Properties['schema'] -and $_.schema -eq 'bc2vr.stop-result.v1' -and $_.outcome -in @('requested','no_owned_session')){$stopResult=$_;Write-Output $_.message}
+            elseif($_ -is [Management.Automation.InformationRecord] -and $_.MessageData.ToString().StartsWith('BC2VR: ')){Status $_.MessageData.ToString().Substring(7)}else{Write-Output $_}
         }
     } else {
         if (-not $settings.local_backend) { throw 'This is the launcher only. Install a release containing the VR runtime before playing.' }
@@ -109,7 +112,7 @@ try {
         }
         if ($Action -eq 'Stop') {
             $session = Read-LocalSession $settings
-            if (-not $session) { Status 'No launcher-owned VR session is running.' 'done'; exit 0 }
+            if (-not $session) { $stopResult=@{outcome='no_owned_session'};Status 'No launcher-owned VR session is running.' 'done'; exit 0 }
             Status 'Ending VR and saving its logs. BC2 and SteamVR will stay open…'
             & $settings.local_backend.stop -ReportFolder $session.run
         } elseif ($Action -eq 'Validate') {
@@ -129,7 +132,10 @@ try {
         }
     }
     if ($Action -eq 'Launch') { Status 'VR startup completed. Check your headset. Closing this launcher leaves the game and VR running.' 'started' }
-    elseif ($Action -eq 'Stop') { Status 'VR stop requested and headset host closed. BC2 and SteamVR remain open; cleanup may take a few seconds.' 'done' }
+    elseif ($Action -eq 'Stop') {
+        if($stopResult){Status $stopResult.message 'done'}
+        else{$stopResult=@{outcome='unconfirmed'};Status 'VR stop command finished. Headset shutdown is not confirmed; check your headset and logs.' 'done'}
+    }
     else {
         Assert-FvrFreeSpace $InstallRoot 640MB
         Assert-FvrFreeSpace ([IO.Path]::GetTempPath()) 640MB

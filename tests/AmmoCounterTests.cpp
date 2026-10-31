@@ -143,7 +143,8 @@ int RejectedCountsCannotRenewOwnership(){
             if(fault==1||fault==2)++left.sequence;if(fault==3)--left.sequence;
             auto right=left;
             if(fault==1)--right.loaded; // Conflicting counts within a sequence.
-            if(fault==2){++right.sequence;--right.observedNs;} // Sequence/time inversion.
+            if(fault==2){++right.sequence;--right.observedNs;--right.deadlineNs;} // Sequence/time inversion, with individually valid leases.
+            CHECK(AmmoCounterFresh(left,now)&&AmmoCounterFresh(right,now));
             CHECK(!hud.Receive(left,right,30,now));
             CHECK(hud.Select(30,admitted.deadlineNs-1));
             CHECK(!hud.Select(30,admitted.deadlineNs)); // Even repeated fresh-looking replays cannot extend the lease.

@@ -193,7 +193,7 @@ int main() {
     episode.interactions.sight.evaluated=false;episode.interactions.sight.reset=false;
     CHECK(interactions.Observe(episode)&&interactions.TryDrain(batch));
     std::ostringstream unevaluated;WriteFireRouteTelemetry(unevaluated,batch);
-    CHECK(unevaluated.str().find("\"policy_phase\":null,\"reason\":null,\"packet_observed\":true,\"packet_reason\":1")!=std::string::npos);
+    CHECK(unevaluated.str().find("\"policy_phase\":null,\"reason\":null,\"packet_observed\":1,\"packet_reason\":1")!=std::string::npos);
 
     // An interaction-only overflow retains the newest transitions and reports
     // every overwritten event even though native Fire never changed.

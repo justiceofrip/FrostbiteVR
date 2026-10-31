@@ -16,8 +16,8 @@ $active=Get-Bc2Session $StateRoot
 if($Action -eq 'Stop'){
     if($active -and (Find-Bc2OwnedProcess $active.supervisor)){
         [IO.File]::WriteAllText((Join-Path $active.folder 'stop.request'),'Requested by launcher')
-        Write-Output 'VR stop requested. BC2 and SteamVR remain open.'
-    }else{Write-Output 'No owned BC2 VR session is running.'}
+        [pscustomobject]@{schema='bc2vr.stop-result.v1';outcome='requested';message='VR stop requested. BC2 and SteamVR remain open; headset shutdown is not yet confirmed.'}
+    }else{[pscustomobject]@{schema='bc2vr.stop-result.v1';outcome='no_owned_session';message='No owned BC2 VR session is running.'}}
     return
 }
 $config=Get-Bc2RuntimeConfig

@@ -1,0 +1,14 @@
+Feedback59 headset check (after receipt confirms private0.1.23 installation)
+Use the normal launcher. Existing settings and logging are preserved.
+
+In one normal play session, use whichever supported guns you encounter:
+- Keep the second hand gripping while moving/aiming; check for the half-second release.
+- Confirm AN94 manual reload and smooth held automatic fire remain working.
+- Try T194 shell insertion/pump and QJU88 belt reload; note the exact failed step if any.
+- Try XM8/AN94 sight movement and underbarrel mode; completion is not yet accepted.
+- Watch whether the ammo label remains visible through firing and reload transitions.
+
+The LMG failure is not specifically fixed or accepted by this batch. The new
+continuous interaction records will identify rejection even if final reporting fails.
+No need for a desktop/menu check. Empty-hand holstering remains deferred.
+Use Stop VR; if it does not respond, closing BC2 is acceptable. Save that session.

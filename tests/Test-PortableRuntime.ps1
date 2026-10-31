@@ -40,6 +40,39 @@ try {
     Check ($null -eq (Find-Bc2OwnedProcess $wrong)) 'reused PID with different creation time rejected'
     $wrong=$identity.Clone();$wrong.path=Join-Path $root 'different.exe'
     Check ($null -eq (Find-Bc2OwnedProcess $wrong)) 'same PID with different executable rejected'
+    # Exercise the real packaged Worker -> Entry Stop path. This test process is
+    # the harmless supervisor identity; Stop may only create its fixture request.
+    $stopInstall=Join-Path $root 'stop-install';$stopVersion=Join-Path $stopInstall 'versions/0.0.1'
+    $stopRuntime=Join-Path $stopInstall 'data/runtime';$stopSession=Join-Path $stopRuntime 'sessions/fixture'
+    foreach($folder in @('app','runtime')){$null=[IO.Directory]::CreateDirectory((Join-Path $stopVersion $folder))}
+    $null=[IO.Directory]::CreateDirectory($stopSession)
+    foreach($name in @('Launcher.ps1','Worker.ps1','Launcher.Core.ps1','Launcher.Feedback.ps1','Launcher.Storage.ps1','Launcher.Settings.ps1')){
+        Copy-Item -LiteralPath (Join-Path $repo ('launcher/'+$name)) -Destination (Join-Path $stopVersion ('app/'+$name))
+    }
+    foreach($name in @('Entry.ps1','Runtime.Core.ps1','Dependencies.ps1','Startup.ps1','Resolution.ps1')){
+        Copy-Item -LiteralPath (Join-Path $repo ('launcher/runtime/'+$name)) -Destination (Join-Path $stopVersion ('runtime/'+$name))
+    }
+    $stopFiles=@(foreach($file in Get-ChildItem -LiteralPath $stopVersion -File -Recurse){@{path=[IO.Path]::GetRelativePath($stopVersion,$file.FullName).Replace('\','/');sha256=(Get-FileHash -LiteralPath $file.FullName).Hash.ToLowerInvariant()}})
+    Write-FvrJson (Join-Path $stopVersion 'package.json') @{schema='fvr.desktop.package.v1';version='0.0.1';runtime_entry='runtime/Entry.ps1';files=$stopFiles}
+    Write-FvrJson (Join-Path $stopInstall 'active.json') @{current='0.0.1'}
+    foreach($stopCase in @('missing','stale','owned')){
+        if($stopCase -ne 'missing'){
+            $supervisor=$identity.Clone()
+            if($stopCase -eq 'stale'){$supervisor.start_utc=[DateTime]::UtcNow.AddDays(-1).ToString('o')}
+            Write-FvrJson (Join-Path $stopRuntime 'active-session.json') @{relative_folder='sessions/fixture';supervisor=$supervisor}
+        }
+        $commandId=[guid]::NewGuid().ToString()
+        $stopWorker=Start-Bc2Child (Join-Path $PSHOME 'pwsh.exe') @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',(Join-Path $stopVersion 'app/Worker.ps1'),'-InstallRoot',$stopInstall,'-Action','Stop','-CommandId',$commandId) $root ('stop-'+$stopCase)
+        try{Check ($stopWorker.WaitForExit(15000) -and $stopWorker.ExitCode -eq 0) ('real Stop worker exits: '+$stopCase)}finally{$stopWorker.Dispose()}
+        $operation=Read-FvrJson (Join-Path $stopInstall 'data/operation.json')
+        $requested=$stopCase -eq 'owned'
+        $expectedOutcome=if($requested){'requested'}else{'no_owned_session'}
+        $expectedMessage=if($requested){'VR stop requested. BC2 and SteamVR remain open; headset shutdown is not yet confirmed.'}else{'No owned BC2 VR session is running.'}
+        Check ($operation.state -eq 'done' -and $operation.stop_outcome -eq $expectedOutcome -and $operation.message -ceq $expectedMessage) ('Stop preserves actual result without claiming host exit: '+$stopCase)
+        Check ($operation.command_id -eq $commandId -and $operation.worker_pid -gt 0 -and [bool]$operation.started_utc) ('Stop operation carries command identity and start: '+$stopCase)
+        Check ((Test-Path -LiteralPath (Join-Path $stopSession 'stop.request')) -eq $requested) ('Stop requests only the live owned supervisor: '+$stopCase)
+    }
+    Check ((Find-Bc2OwnedProcess $identity).Id -eq $PID) 'Stop leaves the owned supervisor alive for cooperative cleanup'
     $cache=Join-Path $root 'cache';$null=New-Item -ItemType Directory -Path $cache
     $files=@(1..6|ForEach-Object{$name="file$_.txt";$path=Join-Path $cache $name;[IO.File]::WriteAllText($path,"asset$_");@{path=$name;sha256=(Get-FileHash -LiteralPath $path).Hash.ToLowerInvariant()}})
     $manifest=@{schema='bc2vr.local-assets.v1';recipe_sha256='a'*64;game_sha256='b'*64;files=$files}

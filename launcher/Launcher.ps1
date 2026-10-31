@@ -73,7 +73,19 @@ $window=[Windows.Markup.XamlReader]::Load([Xml.XmlNodeReader]::new($markup))
 $controls=@{}
 foreach($name in @('BuildLabel','GameFolder','ChooseGame','SettingsNotice','Launch','Fresh','Local','SteamCompatibility','Stop','Validate','Logs','Feedback','Status','Progress','Check','Update','Rollback','Prerelease')){$controls[$name]=$window.FindName($name)}
 $script:job=$null;$script:reopenRequired=$false;$script:jobStarted=$null
+$script:command=$null;$script:commandHistory=@()
+$commandPath=Join-Path $data 'launcher-commands.json'
+try{
+    if((Test-Path -LiteralPath $commandPath) -and (Get-Item -LiteralPath $commandPath).Length -le 65536){
+        $previous=Read-FvrJson $commandPath
+        if($previous.schema -eq 'fvr.launcher.commands.v1'){$script:commandHistory=@($previous.commands | Select-Object -Last 7)}
+    }
+}catch{} # Diagnostics must not prevent starting the launcher.
 $actions=@('Launch','Stop','Validate','Check','Update','Rollback','Feedback')
+function Save-CommandLifecycle {
+    # Only transitions write this bounded history; never record settings or arguments.
+    try{Write-FvrJson $commandPath @{schema='fvr.launcher.commands.v1';commands=@($script:commandHistory)}}catch{}
+}
 function Show-Settings {
     $script:settings=$script:settingsState.settings
     $backend=$settings.local_backend
@@ -103,13 +115,19 @@ function Set-Busy([bool]$Busy){
     $controls.Progress.IsIndeterminate=$Busy
 }
 function Begin-Action([string]$Action){
+    $request=@{command_id=[guid]::NewGuid().ToString();action=$Action;requested_utc=[DateTime]::UtcNow.ToString('o');launcher_pid=$PID;busy=[bool]$script:job;active_command_id=$(if($script:job){$script:command.command_id}else{$null})}
+    $script:commandHistory=@($script:commandHistory | Select-Object -Last 7)+@($request)
+    Save-CommandLifecycle
+    # Keep ownership of the existing worker, including its pending output tasks.
+    if($script:job){return}
+    $script:command=$request
     try{
         if($Action -in @('Launch','Validate') -and -not $script:gameFolderReady){throw 'Choose your game folder before continuing.'}
         # ProcessStartInfo.ArgumentList handles spaces and quotes without a shell.
         $start=[Diagnostics.ProcessStartInfo]::new((Join-Path $PSHOME 'pwsh.exe'))
         $start.UseShellExecute=$false;$start.CreateNoWindow=$true
         $start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true
-        foreach($arg in @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot 'Worker.ps1'),'-InstallRoot',$InstallRoot,'-Action',$Action)){$start.ArgumentList.Add($arg)}
+        foreach($arg in @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot 'Worker.ps1'),'-InstallRoot',$InstallRoot,'-Action',$Action,'-CommandId',$request.command_id)){$start.ArgumentList.Add($arg)}
         # Only the player's Launch click requests one initial game activation.
         # Validate, update, stop and automatic recovery never request focus.
         if($Action -eq 'Launch'){$start.ArgumentList.Add('-ActivateGameWindow')}
@@ -118,10 +136,13 @@ function Begin-Action([string]$Action){
         if($controls.Prerelease.IsChecked){$start.ArgumentList.Add('-Prerelease')}
         $script:jobStarted=[DateTime]::UtcNow
         $script:jobAction=$Action
+        $request.dispatch_utc=$script:jobStarted.ToString('o');Save-CommandLifecycle
         $script:job=[Diagnostics.Process]::Start($start)
+        $request.worker_pid=$script:job.Id;$request.worker_created_utc=[DateTime]::UtcNow.ToString('o');Save-CommandLifecycle
         $script:stdout=$script:job.StandardOutput.ReadToEndAsync();$script:stderr=$script:job.StandardError.ReadToEndAsync()
+        $request.output_tasks_created_utc=[DateTime]::UtcNow.ToString('o');Save-CommandLifecycle
         $controls.Status.Text='Starting…';Set-Busy $true
-    }catch{$controls.Status.Text=$_.Exception.Message;Set-Busy $false}
+    }catch{$request.start_failed_utc=[DateTime]::UtcNow.ToString('o');Save-CommandLifecycle;$controls.Status.Text=$_.Exception.Message;Set-Busy ([bool]$script:job)}
 }
 Show-Settings;Set-Busy $false
 $controls.SteamCompatibility.Add_Click({
@@ -190,6 +211,9 @@ $timer.Add_Tick({
         if(Test-Path -LiteralPath $statusPath){
             try{
                 $state=Read-FvrJson $statusPath
+                if($script:job -and $state['command_id'] -eq $script:command.command_id -and -not $script:command['worker_started_utc']){
+                    $script:command.worker_started_utc=$state.started_utc;Save-CommandLifecycle
+                }
                 if(-not $script:jobStarted -or [DateTimeOffset]::Parse($state.utc).UtcDateTime -ge $script:jobStarted){
                     $controls.Status.Text=$state.message
                     if(-not $script:job -and $package.runtime_entry){
@@ -200,7 +224,23 @@ $timer.Add_Tick({
                 }
             }catch{} # Atomic rename may briefly contend with antivirus/readers.
         }
-        if($script:job -and $script:job.HasExited){
+        if($script:job){
+            $changed=$false
+            if($script:job.HasExited -and -not $script:command['worker_exit_observed_utc']){
+                $script:command.worker_exit_observed_utc=[DateTime]::UtcNow.ToString('o');$script:command.exit_code=$script:job.ExitCode
+                $script:command.stdout_ready_at_exit=$script:stdout.IsCompleted;$script:command.stderr_ready_at_exit=$script:stderr.IsCompleted;$changed=$true
+            }
+            foreach($stream in @('stdout','stderr')){
+                $task=Get-Variable -Name $stream -Scope Script -ValueOnly
+                if($task.IsCompleted -and -not $script:command[($stream+'_completed_utc')]){
+                    $script:command[($stream+'_completed_utc')]=[DateTime]::UtcNow.ToString('o');$script:command[($stream+'_status')]=$task.Status.ToString();$changed=$true
+                }
+            }
+            if($changed){Save-CommandLifecycle}
+        }
+        # An exited worker can leave inherited pipes open. Preserve its ownership
+        # and busy state, but never wait for those pipes on the UI thread.
+        if($script:job -and $script:job.HasExited -and $script:stdout.IsCompleted -and $script:stderr.IsCompleted){
             $out=$script:stdout.GetAwaiter().GetResult();$err=$script:stderr.GetAwaiter().GetResult()
             # Overwrite two compact operation logs, never accumulate recordings.
             [IO.File]::WriteAllText((Join-Path $data 'launcher-last.log'),$out.Substring([Math]::Max(0,$out.Length-262144))+[Environment]::NewLine+$err.Substring([Math]::Max(0,$err.Length-65536)))
@@ -208,6 +248,7 @@ $timer.Add_Tick({
             if($script:job.ExitCode -eq 0 -and $script:jobAction -eq 'Feedback') {
                 Start-Process explorer.exe -ArgumentList ('"'+(Get-FvrChild $data 'feedback')+'"')
             }
+            $script:command.completed_utc=[DateTime]::UtcNow.ToString('o');Save-CommandLifecycle
             $script:job.Dispose();$script:job=$null;Set-Busy $false
         }
     }catch{$controls.Status.Text=$_.Exception.Message}

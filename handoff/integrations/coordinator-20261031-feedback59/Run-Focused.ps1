@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$Attempt='01')
+param([string]$Attempt='01',[string[]]$Suites=@('Bc2Rig','Bc2PhysicalReload','Bc2PhysicalFeed','Bc2PhysicalPump','Bc2PhysicalPumpRecovery','AmmoCounter','Bc2FireRouteTelemetry','Bc2SightAdapter','Bc2HeldFireCadence'))
 $ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$false
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 $run=Join-Path $repo 'reports/coordinator-20261031-feedback59'
@@ -23,17 +23,13 @@ $vs='C:/Program Files/Microsoft Visual Studio/18/Community'
 $build=Join-Path $repo 'build/x86'
 & cmake -S $repo -B $build -C (Join-Path $repo 'profiles/weapons43/Enrollment.cmake') "-DBC2_NATIVE_OPERATION_CAPABILITIES_HEADER:FILEPATH=$($state.reviewed_header.Replace('\','/'))" "-DBC2_NATIVE_OPERATION_SOURCE_RECEIPT:FILEPATH=$($state.source_receipt.Replace('\','/'))" "-DBC2_NATIVE_OPERATION_SOURCE_SHA256:STRING=$($state.source_sha256)" *> (Join-Path $out 'configure.log')
 if($LASTEXITCODE){Get-Content (Join-Path $out 'configure.log') -Tail 20;throw 'Focused configure failed'}
-$suites=@('Bc2Rig','Bc2PhysicalReload','Bc2PhysicalFeed','Bc2PhysicalPump','Bc2PhysicalPumpRecovery','AmmoCounter','Bc2FireRouteTelemetry','Bc2SightAdapter','Bc2HeldFireCadence')
-$targets=@($suites|ForEach-Object {$_+'Tests'})+@('AmmoCounterHudWarpTests')
+$targets=@($suites|ForEach-Object {$_+'Tests'})
 & cmake --build $build --parallel 4 --target @targets *> (Join-Path $out 'build.log')
 if($LASTEXITCODE){Get-Content (Join-Path $out 'build.log') -Tail 35;throw 'Focused build failed'}
 $pattern='^('+($suites -join '|')+')$'
 & ctest --test-dir $build --output-on-failure --parallel 4 -R $pattern *> (Join-Path $out 'tests.log')
 $cpu=$LASTEXITCODE
-# Software D3D WARP + mocked XR functions; no headset, SteamVR or game launch.
-& (Join-Path $build 'AmmoCounterHudWarpTests.exe') *> (Join-Path $out 'hud-warp.log')
-$hud=$LASTEXITCODE
-Save 'result.json' @{passed=($cpu -eq 0 -and $hud -eq 0);cpu_exit=$cpu;hud_warp_exit=$hud;suites=$suites;source_commit=$state.source_commit;source_sha256=$state.source_sha256;architecture='x86';game_started=$false;headset_accepted=$false}
+# HUD WARP belongs to the x64 host and is invoked after its normal build.
+Save 'result.json' @{passed=($cpu -eq 0);cpu_exit=$cpu;suites=$suites;source_commit=$state.source_commit;source_sha256=$state.source_sha256;architecture='x86';game_started=$false;headset_accepted=$false}
 Get-Content (Join-Path $out 'tests.log') -Tail 7
-Get-Content (Join-Path $out 'hud-warp.log') -Tail 5
-if($cpu -or $hud){throw 'Focused check failed'}
+if($cpu){throw 'Focused check failed'}

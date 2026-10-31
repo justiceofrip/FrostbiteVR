@@ -103,6 +103,7 @@ function New-FvrFeedbackBundle([string]$InstallRoot, $Package, $Settings) {
     $parts.Add('Review this text before attaching its ZIP. Redaction is best effort. No upload was performed.')
     $sources=[Collections.Generic.List[object]]::new()
     $sources.Add(@{name='launcher-last.log';path=(Get-FvrChild $data 'launcher-last.log')})
+    $sources.Add(@{name='launcher-commands.json';path=(Get-FvrChild $data 'launcher-commands.json')})
     $sources.Add(@{name='package-check.json';path=(Get-FvrChild $data 'package-check.json')})
     # Public runtime reports must remain below this installation's state root.
     # Never enumerate a user's disk, developer captures, assets or memory dumps.
