@@ -97,6 +97,19 @@ struct Tracking {
 #endif
 
 };
+// The native publisher supplies its QPC deadline converted to nanoseconds.
+// This predicate is shared with offline rig/contact integration; it never
+// manufactures tracking readiness or extends native/input/presentation leases.
+inline bool MagazineTrackingAdmitted(const Tracking& next,std::int64_t inputDeadlineNs,std::int64_t now)noexcept {
+ const auto& owner=next.magazine.owner;
+ return interaction::ValidInput(next.input)&&next.input.focused&&next.input.headValid&&
+  next.input.hands[0].gripTracked&&next.input.hands[1].gripTracked&&next.input.hands[1].aimTracked&&
+  owner.soldier==next.soldier&&owner.weak==next.weak&&owner.weapon==next.weapon&&
+  owner.actorGeneration==next.ownerGeneration&&owner.space==next.input.spaceGeneration&&
+  next.magazine.inputEvidence.sequence==next.input.generation&&
+  next.magazine.inputEvidence.deadlineNs<=inputDeadlineNs&&
+  (next.magazine.target?MagazinePaletteTargetFresh(next.magazine,now):MagazineTrackingFresh(next.magazine,now));
+}
 // Read-only shot candidate from the same immutable pose as the rendered gun.
 // flashBone is name/topology validated, but firing semantics still need native
 // acceptance before a consumer can use this to modify a projectile.

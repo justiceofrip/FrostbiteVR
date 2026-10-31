@@ -7,6 +7,7 @@
 #include "Bc2BoltEquipment.h"
 #include "Bc2PhysicalFixedContainer.h"
 #include "Bc2NativeInputEpochs.h"
+#include "Bc2HeldFireCadence.h"
 #include "Bc2SceneMilestones.h"
 #include "Bc2ViewBasisEvidence.h"
 #include <Windows.h>
@@ -575,7 +576,8 @@ std::optional<CampaignVehicleSnapshot> cachedCampaignVehicle;
 ULONGLONG campaignVehicleRetryAt=0;
 VehicleSeatIdentity cachedVehicleIdentity{};std::uint64_t cachedVehicleFingerprint=0;
 unsigned cachedVehicleData=0,cachedEntryData=0;
-interaction::InputFrame cachedInput{};std::int64_t inputDeadline=0;
+GameplayInputLease gameplayInputLease;
+auto& cachedInput=gameplayInputLease.input;auto& inputDeadline=gameplayInputLease.deadlineQpc;
 bool Read(std::uintptr_t at,void* out,std::size_t n)noexcept {SIZE_T actual=0;return at>=0x10000&&at<=UINT32_MAX-n&&ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<void*>(at),out,n,&actual)&&actual==n;}
 unsigned U32(std::uintptr_t at)noexcept {unsigned out=0;Read(at,&out,4);return out;}
 bool InImage(unsigned at,unsigned n)noexcept{return at>=image&&std::uint64_t(at)+n<=image+imageSize;}
@@ -1536,10 +1538,9 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     bool detachedUsed=false;std::optional<Bc2AmmoReserveLease> detachedReserve;
     interaction::InputFrame input{};
     std::int64_t deadline=0;const auto result=readInput?readInput(input,deadline):ipc::ChannelResult::Closed;
-    if(result==ipc::ChannelResult::Ok){cachedInput=input;inputDeadline=deadline;}
-    else if(result!=ipc::ChannelResult::Busy){cachedInput={};inputDeadline=0;}
+    gameplayInputLease.Observe(result,input,deadline);
     LARGE_INTEGER clock{};QueryPerformanceCounter(&clock);
-    const bool fresh=clock.QuadPart>0&&clock.QuadPart<inputDeadline;
+    const bool fresh=gameplayInputLease.Fresh(clock.QuadPart);
     input=fresh?cachedInput:interaction::InputFrame{};if(!fresh)++stale;
     // Retire old observation labels even when journal publication is busy.
     if(!fresh||!input.focused||vehicleShotSpace!=input.spaceGeneration){vehicleShotObserver.Invalidate();boatReticle.Invalidate();}
@@ -2961,6 +2962,23 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         // Default before Apply also records its explicit refusal branch below.
         r.write=FireRouteWrite::Refused;
     }
+    // Native reads and interaction processing above can outlast the packet.
+    // Recheck the original lease and exact owner for ordinary firearms too;
+    // Use/selected-knife checks alone leave the common held-Fire path exposed.
+    LARGE_INTEGER dispatchClock{};Owner dispatchOwner{};
+    const bool dispatchOwnerCurrent=Resolve(dispatchOwner)&&dispatchOwner==owner;
+    const bool dispatchCacheWritable=dispatchOwnerCurrent&&Writable(owner.cache,InputBytes);
+    const bool dispatchClockOkay=QueryPerformanceCounter(&dispatchClock)!=FALSE;
+    if(!GameplayInputDispatchCurrent(gameplayInputLease,dispatchClockOkay?dispatchClock.QuadPart:0,
+        dispatchOwnerCurrent,dispatchCacheWritable)){
+        fireTrace.record.reasons|=(!dispatchClockOkay||!gameplayInputLease.Fresh(dispatchClock.QuadPart))?
+            FireRouteStaleInput:FireRouteOwnerUnavailable;
+        // Match a stale reception's semantic invalidation. A processing stall
+        // must not leave a held trigger armed after its command was refused.
+        (void)actions.Update({}, {owner.soldier,inputEpoch,false,true,rigEpoch},0,
+            dispatchClockOkay?HandNanos(dispatchClock.QuadPart):0);
+        return;
+    }
     if(scope->patch.Apply({reinterpret_cast<std::byte*>(owner.cache),InputBytes},out,grenade,cycle,weaponMode,contextUseVehicleAlias,verifiedFireAction)){++applied;if(out.pressed&interaction::NextWeapon)++nextWeaponCommands;if(out.pressed&interaction::PreviousWeapon)++previousWeaponCommands;if(out.forward||out.strafe)++moving;if(out.held)++buttons;
         // Do not restore at the end of player update: BC2 also consumes this
         // buffer afterward. The next original gather replaces every action.
@@ -3877,6 +3895,7 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
             api.clock=[](void*)noexcept{LARGE_INTEGER now{};QueryPerformanceCounter(&now);return HandNanos(now.QuadPart);};
             physicalReloadApi=api;physicalReload.emplace(true,api);if(!enablePhysicalReloadProbe)physicalReload->EnableBeltAmmo();
             if(!enablePhysicalReloadProbe&&magazineReloadSession==3){
+                if(!reloadFlowRuntime::EnableFeedEquipmentReload())return false;
                 Bc2PhysicalFeedApi feed;
                 feed.read=[](void*,const ReloadStateOwner& owner,std::int64_t now)noexcept{return reloadFlowRuntime::ReadFeedEquipmentView(owner,now);};
                 feed.submit=[](void*,const FeedEquipmentSubmission& command)noexcept{return reloadFlowRuntime::SubmitFeedEquipmentCommand(command);};

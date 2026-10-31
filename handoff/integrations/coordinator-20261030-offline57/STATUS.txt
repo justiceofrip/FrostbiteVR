@@ -1,0 +1,17 @@
+Offline57: shared manual reload connections; no desktop/game sessions.
+Magazine skeleton closure fixes21configurations, including AN94;128ready configurations
+pass production palette/publication/contact/physical-removal tests on x86/x64.
+Feed/fixed native control now suppresses stock reload at the actual Step boundary,
+retains physical debt across publication loss and requires explicit feed activation.
+The production command/own-Update completion test covers24normal feed rows.
+Actual executable emulation checks70reload configurations and the last-round leak;
+configuration, allocator and round-consuming listener substitutes are explicit.
+Held-fire dispatch rechecks original input lifetime at the final write.
+Native timer emulation demonstrates shot grouping after hitches, not user-cause proof.
+Rig read batching saves10 native calls per snapshot with scalar fallback and both
+ownership bookends. Focused equivalence/ownership checks pass both architectures.
+Bursty feel, LMG aim, destruction and full in-headset reload completion remain unaccepted.
+Prior destruction/visual-axis/underbarrel fixes are retained; no redundant re-enrollment.
+Independent reload review: no actionable findings. Completed agents retired.
+Root owns combined builds, source push, private packaging and installation status.
+PIPELINE.txt identifies actual source stages and what their checks establish.

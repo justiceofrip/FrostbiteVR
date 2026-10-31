@@ -75,10 +75,19 @@ std::optional<MagazineCarryFrame> MagazineRemovalFrame(const MagazineTracking&,c
 MagazineRawContact BuildMagazineRawContact(const MagazineTracking&,const RigSnapshot&,std::string_view asset,
  const math::Matrix4& rawLeftWrist,const math::Matrix4& placedWeapon,float unitsPerMetre,std::int64_t now,
  const math::Matrix4* trackingBody=nullptr);
+// Contact admission after the immutable rig frame has passed its native owner,
+// equipment and selected-mesh checks. The frame and raw input keep their own
+// original deadlines; a newer tracking guard cannot renew either one.
+MagazineRawContact AdmitMagazineRawContact(const MagazineTracking* guard,const ReloadStateOwner&,
+ const MagazineRawContact* frame,std::uint64_t frameInput,std::int64_t frameDeadlineNs,std::int64_t now)noexcept;
 struct MagazinePresentationBinding {
  std::uint64_t fingerprint=0;std::uint32_t weapon=0,magazine=0,wrist=0;
  std::array<std::uint32_t,15> fingers{};
  std::array<std::uint32_t,MagazineAssemblyLimit> assembly{};unsigned assemblyCount=0;
+ // An exact-bind co-located descendant inherits an explicitly authored
+ // member's transform. It still receives the full current-frame rigidity and
+ // visibility checks, and participates in every pose/hide write.
+ std::array<unsigned,MagazineAssemblyLimit> assemblyProfileMember{};
  const MagazineGeometryProfile* geometry=nullptr; // Immutable profile used to derive these exact roles.
  bool operator==(const MagazinePresentationBinding&)const=default;
 };
@@ -86,7 +95,7 @@ namespace magazine_presentation_detail {
  // Structural fixture helper; production additionally requires captured hash.
  std::optional<MagazinePresentationBinding> Derive(const RigSnapshot&);
  // Explicit geometry variant for structural/offline calibration. It grants no native authority.
- std::optional<MagazinePresentationBinding> Derive(const RigSnapshot&,const MagazineGeometryProfile&);
+ std::optional<MagazinePresentationBinding> Derive(const RigSnapshot&,const MagazineGeometryProfile&,bool completeCoincidentDescendants=false);
 }
 std::optional<MagazinePresentationBinding> BindMagazinePresentation(const RigSnapshot&,std::string_view asset);
 std::optional<MagazinePresentationBinding> BindMagazinePresentation(const RigSnapshot&,const MagazineEquipmentProfile&);

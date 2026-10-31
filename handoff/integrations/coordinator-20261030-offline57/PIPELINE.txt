@@ -1,0 +1,76 @@
+BC2 weapon pipeline: what exists and what it proves
+Updated October 31, 2026. Root coordinates this run; agents own disjoint runtime files.
+
+There is working batch asset/profile tooling. There is NOT yet an established
+all-weapons working reload implementation. Prior enrollment counts overstated
+practical completion when described as finished weapons.
+
+1. Identify exact weapon configurations and their source assets
+   tools/bc2_firearm_magazine_batch.py
+   tools/bc2_weapon_animation_pipeline.py
+   handoff/tasks/WEAPONS/20261030-roster43/roster.json
+   These read source identities, skeletons, clips, geometry and equipment families.
+   Existing roster:77 names/181 configurations. Do not repeat enrollment.
+
+2. Generate tables and connect them to the normal build
+   profiles/weapons43/Enrollment.cmake
+   profiles/weapons45-magazines/Enrollment.cmake
+   profiles/mechanism-family41/Enrollment.cmake
+   These select generated support, magazine, shotgun, bolt, feed, slide and muzzle
+   definitions. Source routes:128 magazine,25 shell/pump,24 feed,4 clip/cylinder.
+   Table inclusion proves configuration coverage, not successful live interaction.
+
+3. Produce real hand/weapon contact from the running game
+   src/games/bc2/Bc2RigPublication.cpp
+   src/games/bc2/Bc2MagazinePresentation.cpp
+   src/games/bc2/Bc2Gameplay.cpp
+   Native owner, selected weapon, palette, hand pose and original input lifetime
+   must agree. A table entry cannot make missing/rejected live contact valid.
+
+4. Run the physical reload and keep its ammunition/mechanical state
+   src/games/bc2/Bc2MagazinePhysicalReload.cpp
+   src/games/bc2/Bc2PhysicalFeed.cpp
+   src/games/bc2/Bc2ReloadFlowRuntime.cpp
+   This is the runtime connection being repaired. It must start from actual
+   contact, suppress conflicting stock actions, dispatch the native operation
+   once, and accept the matching result without losing rounds or owed cycles.
+
+5. Check the connection, build, install and test in headset
+   tests/Bc2MagazineRawContactPipelineTests.cpp
+   tests/Bc2ReloadFamilyDispatchTests.cpp
+   tests/Bc2HeldFireCadenceTests.cpp
+   handoff/integrations/coordinator-20261030-offline57/Run-Focused.ps1
+   Build.ps1 (required normal x86/x64 builds)
+   Old component tests supplied valid raw input directly. The new magazine check
+   goes through the production palette reader, publication admission, contact
+   builder and physical consumer instead. It samples178 selected asset bindings;
+   that count differs from the reload-family roster and is not a success count.
+
+Current source changes
+- Magazine: complete verified co-located skeleton descendants for21configs,
+  including AN94 variants. Moving/hidden parts retain their rejection checks.
+- Native reload: feed/fixed stock-reload suppression and retained mechanism gates;
+  explicit physical-feed activation and tested native command/completion route.
+- Fire: reject a command whose original input expired during processing.
+- Rig reads: group adjacent used fields, saving10 native calls per snapshot.
+- Agents completed their scoped jobs and retired; root validates/integrates.
+
+Evidence limits
+Magazine, rig and held-fire focused checks pass both architectures. The raw-contact
+check accepts all128ready magazine configurations, including21completed subtrees.
+Feed dispatch passes24rows on x86/x64 using normal AttachContainer/CloseCover
+routing. Normal combined builds are pending at this source checkpoint.
+Initial fixture failures and the test-launch manifest issue remain recorded in
+reports/coordinator-20261030-offline57; they are not counted as product defects.
+Native-code emulation confirms the same-Update last-round stock-reload leak and
+scoped Step fix. It uses explicit allocator/listener substitutes, not a live game.
+Native timer emulation groups2/3shots after160/240ms hitches even with held Fire.
+That is a mechanism, not the established user-session cause; bursty feel is open.
+Private0.1.20 remains installed at this source checkpoint; installation is separate.
+User-confirmed progress: multiweapon two-hand grips, reliable swaps, LMG counter.
+No weapon is counted as working merely because its profile or unit check exists.
+
+Paths above are relative to this coordinator worktree:
+G:\Unity\VRMMO\bc2vr-task-worktrees\campaign-coordinator-20261028-r1
+Current scheduling state:
+G:\Unity\VRMMO\FrostbiteVR\handoff\campaign-chat-queue\COORDINATOR-STATE.txt

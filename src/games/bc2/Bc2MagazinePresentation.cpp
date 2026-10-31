@@ -11,22 +11,23 @@ math::Matrix4 Units(math::Matrix4 m,float units)noexcept{for(unsigned n=0;n<3;++
 // Reject that packet instead of making a rigid assembly erase native motion.
 bool AssemblyVisibleRigid(const RigSnapshot& rig,const MagazinePresentationBinding& b,float units,
  MagazineRawContactEvidence* evidence=nullptr)noexcept{
- if(!b.assemblyCount)return true;
  const auto reject=[&](MagazineRawContactReason reason){if(evidence)evidence->reason=reason;return false;};
  if(evidence)evidence->magazineBone=b.magazine;
  const auto hidden=[&](unsigned n){return std::find(rig.nativeHiddenLeaves.begin(),rig.nativeHiddenLeaves.end(),n)!=rig.nativeHiddenLeaves.end();};
  if(hidden(b.magazine))return reject(MagazineRawContactReason::MagazineHidden);
  if(!Rigid(rig.evaluatedWorld[b.magazine]))return reject(MagazineRawContactReason::MagazineNotRigid);
+ if(!b.assemblyCount)return true;
  const auto inverse=InverseRigid(rig.evaluatedWorld[b.magazine]);if(!inverse)return reject(MagazineRawContactReason::MagazineInverseUnavailable);
  for(unsigned n=0;n<b.assemblyCount;++n){const auto bone=b.assembly[n];
   if(evidence){evidence->childBone=bone;evidence->relativeDistanceMeters.reset();evidence->relativeAngleRadians.reset();}
   if(hidden(bone))return reject(MagazineRawContactReason::ChildHidden);
   if(!Rigid(rig.evaluatedWorld[bone]))return reject(MagazineRawContactReason::ChildNotRigid);
   const auto relative=Units(Multiply(rig.evaluatedWorld[bone],*inverse),1/units);
-  const auto distance=Distance(relative,b.geometry->assembly[n].itemFromBone);
+  const auto& expected=b.geometry->assembly[b.assemblyProfileMember[n]].itemFromBone;
+  const auto distance=Distance(relative,expected);
   if(evidence)evidence->relativeDistanceMeters=distance;
   if(distance>.001f)return reject(MagazineRawContactReason::ChildPositionMismatch);
-  const auto angle=Angle(relative,b.geometry->assembly[n].itemFromBone);
+  const auto angle=Angle(relative,expected);
   if(evidence)evidence->relativeAngleRadians=angle;
   if(angle>.01f)return reject(MagazineRawContactReason::ChildAngleMismatch);
  }
@@ -131,7 +132,7 @@ std::optional<MagazineCarryFrame> MagazineRemovalFrame(const MagazineTracking& t
 }
 namespace magazine_presentation_detail {
 std::optional<MagazinePresentationBinding> Derive(const RigSnapshot& rig) {return Derive(rig,Xm8MagazineGeometry());}
-std::optional<MagazinePresentationBinding> Derive(const RigSnapshot& rig,const MagazineGeometryProfile& profile) {
+std::optional<MagazinePresentationBinding> Derive(const RigSnapshot& rig,const MagazineGeometryProfile& profile,bool completeCoincidentDescendants) {
  const auto count=rig.names.size();if(!count||count>1024||rig.parents.size()!=count||rig.inverseBind.size()!=count||rig.evaluatedWorld.size()!=count)return {};
  const auto named=[&](std::string_view name)->std::optional<std::uint32_t>{const auto i=std::find(rig.names.begin(),rig.names.end(),name);
  if(i==rig.names.end()||std::find(i+1,rig.names.end(),name)!=rig.names.end())return {};return unsigned(i-rig.names.begin());};
@@ -145,18 +146,43 @@ std::optional<MagazinePresentationBinding> Derive(const RigSnapshot& rig,const M
  out.assemblyCount=profile.assemblyCount;
  for(unsigned n=0;n<out.assemblyCount;++n){
   const auto bone=named(profile.assembly[n].bone),parent=named(profile.assembly[n].parent);
-  if(!bone||!parent||rig.parents[*bone]!=int(*parent))return {};out.assembly[n]=*bone;
+  if(!bone||!parent||rig.parents[*bone]!=int(*parent))return {};out.assembly[n]=*bone;out.assemblyProfileMember[n]=n;
  }
- // Every descendant, including unweighted intermediary bones, must be declared.
+ out.fingerprint=SightRigFingerprint(rig.names,rig.parents,rig.inverseBind);
+ // Authored visible-member lists can end before the shared skeleton's dormant
+ // co-located controls. Close ONLY those descendants from the exact captured
+ // inverse bind, never from a learned animated pose or a bone-name convention.
+ // Unreviewed branches directly under the magazine remain unsupported.
+ std::vector<std::uint32_t> missing;
  for(std::size_t n=0;n<count;++n){auto at=rig.parents[n];while(at!=-1&&at!=int(*mag))at=rig.parents[at];
-  if(at==int(*mag)&&std::find(out.assembly.begin(),out.assembly.begin()+out.assemblyCount,n)==out.assembly.begin()+out.assemblyCount)return {};
+  if(at==int(*mag)&&std::find(out.assembly.begin(),out.assembly.begin()+out.assemblyCount,n)==out.assembly.begin()+out.assemblyCount)
+   missing.push_back(std::uint32_t(n));
+ }
+ if(!missing.empty()){
+  if(!completeCoincidentDescendants||!out.fingerprint||out.fingerprint!=profile.rigFingerprint||
+     missing.size()+out.assemblyCount>out.assembly.size())return {};
+  while(!missing.empty()){
+   bool added=false;
+   for(auto i=missing.begin();i!=missing.end();){const auto bone=*i;const auto parent=rig.parents[bone];
+    const auto ancestor=std::find(out.assembly.begin(),out.assembly.begin()+out.assemblyCount,unsigned(parent));
+    if(ancestor==out.assembly.begin()+out.assemblyCount){++i;continue;}
+    const auto bind=InverseRigid(rig.inverseBind[bone]);if(!bind||!Rigid(rig.inverseBind[parent]))return {};
+    const auto local=Multiply(*bind,rig.inverseBind[parent]);
+    for(unsigned r=0;r<4;++r)for(unsigned c=0;c<4;++c)
+     if(std::abs(local.values[r][c]-float(r==c))>(r==3?.000001f:.00001f))return {};
+    const auto slot=out.assemblyCount++;out.assembly[slot]=bone;
+    out.assemblyProfileMember[slot]=out.assemblyProfileMember[std::size_t(ancestor-out.assembly.begin())];
+    i=missing.erase(i);added=true;
+   }
+   if(!added)return {};
+  }
  }
  for(unsigned digit=0;digit<5;++digit){auto parent=*wrist;for(unsigned j=0;j<3;++j){
  const auto bone=named(profile.bones.fingers[digit*3+j]);if(!bone||rig.parents[*bone]!=int(parent))return {};
  out.fingers[slot++]=*bone;parent=*bone;}}
  for(std::size_t n=0;n<count;++n){if(n==*wrist)continue;auto at=rig.parents[n];while(at!=-1&&at!=int(*wrist))at=rig.parents[at];
  if(at==int(*wrist)&&std::find(out.fingers.begin(),out.fingers.end(),n)==out.fingers.end())return {};}
- out.fingerprint=SightRigFingerprint(rig.names,rig.parents,rig.inverseBind);return out.fingerprint?std::optional{out}:std::nullopt;
+ return out.fingerprint?std::optional{out}:std::nullopt;
 }
 }
 std::optional<MagazinePresentationBinding> BindMagazinePresentation(const RigSnapshot& rig,std::string_view asset){
@@ -166,7 +192,7 @@ std::optional<MagazinePresentationBinding> BindMagazinePresentation(const RigSna
 std::optional<MagazinePresentationBinding> BindMagazinePresentation(const RigSnapshot& rig,const MagazineEquipmentProfile& equipment){
  if(!equipment.Ready())return {};
  const auto profile=equipment.geometry;
- const auto binding=magazine_presentation_detail::Derive(rig,*profile);
+ const auto binding=magazine_presentation_detail::Derive(rig,*profile,true);
  return binding&&binding->fingerprint==profile->rigFingerprint?binding:std::nullopt;
 }
 MagazineRawContact BuildMagazineRawContact(const MagazineTracking& t,const RigSnapshot& rig,std::string_view asset,
@@ -176,7 +202,7 @@ MagazineRawContact BuildMagazineRawContact(const MagazineTracking& t,const RigSn
  if(t.retainedVisualSuppression)return reject(MagazineRawContactReason::RetainedVisualSuppression);
  if(!MagazineTrackingFresh(t,now))return reject(MagazineRawContactReason::TrackingNotFresh);
  const auto& geometry=*t.family.binding.profile->geometry;
- const auto binding=magazine_presentation_detail::Derive(rig,geometry);
+ const auto binding=magazine_presentation_detail::Derive(rig,geometry,true);
  if(asset!=geometry.asset)return reject(MagazineRawContactReason::AssetMismatch);
  if(!binding)return reject(MagazineRawContactReason::RigBindingUnavailable);
  out.evidence.magazineBone=binding->magazine;
@@ -196,11 +222,29 @@ MagazineRawContact BuildMagazineRawContact(const MagazineTracking& t,const RigSn
  Angle(relative,geometry.attachedItem)<.1f;}
  return out;
 }
+MagazineRawContact AdmitMagazineRawContact(const MagazineTracking* guard,const ReloadStateOwner& owner,
+ const MagazineRawContact* frame,std::uint64_t frameInput,std::int64_t frameDeadlineNs,std::int64_t now)noexcept {
+ const auto reject=[](MagazineRawContactReason reason){return RejectedMagazineRawContact(reason);};
+ if(!guard)return reject(MagazineRawContactReason::GuardMissing);
+ if(guard->owner!=owner)return reject(MagazineRawContactReason::GuardOwnerMismatch);
+ if(!MagazineTrackingFresh(*guard,now))return reject(MagazineRawContactReason::GuardNotFresh);
+ if(!frame||frameDeadlineNs<=now)return reject(MagazineRawContactReason::FrameUnavailable);
+ // Rejected builder packets are diagnostics only. Their empty authority fields
+ // are expected, and must not conceal the actual rejection with an owner error.
+ if(!frame->valid)return *frame;
+ if(frame->owner!=owner)return reject(MagazineRawContactReason::ContactOwnerMismatch);
+ const auto& input=frame->inputEvidence;
+ if(input.sequence!=frameInput)return reject(MagazineRawContactReason::FrameInputMismatch);
+ if(input.sequence>guard->inputEvidence.sequence)return reject(MagazineRawContactReason::InputNewerThanGuard);
+ if(input.observedNs>now)return reject(MagazineRawContactReason::InputInFuture);
+ if(input.deadlineNs<=now)return reject(MagazineRawContactReason::InputExpired);
+ return *frame;
+}
 MagazinePresentationPlan BuildMagazinePresentation(const RigSnapshot& rig,const MagazinePresentationBinding& binding,
  const MagazineTracking& t,const math::Matrix4& weapon,float units,std::int64_t now){
  MagazinePresentationPlan out;if(!MagazinePaletteTargetFresh(t,now))return out;
  const auto& geometry=*t.family.binding.profile->geometry;
- const auto actual=magazine_presentation_detail::Derive(rig,geometry);
+ const auto actual=magazine_presentation_detail::Derive(rig,geometry,true);
  if(!actual||*actual!=binding||!MagazinePaletteTargetFresh(t,now)||rig.identity.soldier!=t.owner.soldier||rig.identity.weak!=t.owner.weak||
  !std::isfinite(units)||units<=0||!Rigid(weapon)||!AssemblyVisibleRigid(rig,binding,units)||
  std::find(rig.nativeHiddenLeaves.begin(),rig.nativeHiddenLeaves.end(),binding.magazine)!=rig.nativeHiddenLeaves.end())return out;
@@ -211,7 +255,7 @@ MagazinePresentationPlan BuildMagazinePresentation(const RigSnapshot& rig,const 
  const auto itemWorld=Multiply(Units(v.weaponFromItemMeters,units),frame);
  out.writes.push_back({binding.magazine,itemWorld});
  for(unsigned n=0;n<binding.assemblyCount;++n)out.writes.push_back({binding.assembly[n],
-  Multiply(Units(geometry.assembly[n].itemFromBone,units),itemWorld)});
+  Multiply(Units(geometry.assembly[binding.assemblyProfileMember[n]].itemFromBone,units),itemWorld)});
  if(v.handTarget){
  // Removal motion/contact keeps its independently sampled raw wrist. The
  // displayed hand must use the SAME authored magazine grasp as these fingers,
@@ -226,7 +270,7 @@ MagazinePresentationPlan BuildMagazinePresentation(const RigSnapshot& rig,const 
 std::optional<std::vector<std::array<std::byte,64>>> HideMagazinePackedPalette(const RigSnapshot& rig,
  const MagazinePresentationBinding& binding,std::span<const std::array<std::byte,64>> ordinary){
  if(!binding.geometry)return {};
- const auto actual=magazine_presentation_detail::Derive(rig,*binding.geometry);if(!actual||*actual!=binding||ordinary.size()!=rig.names.size())return {};
+ const auto actual=magazine_presentation_detail::Derive(rig,*binding.geometry,true);if(!actual||*actual!=binding||ordinary.size()!=rig.names.size())return {};
  std::array<std::uint32_t,1+MagazineAssemblyLimit> indices{binding.magazine};
  std::copy_n(binding.assembly.begin(),binding.assemblyCount,indices.begin()+1);
  return weapon_visibility_detail::CollapseWeightedPalette(ordinary,std::span(indices).first(1+binding.assemblyCount));

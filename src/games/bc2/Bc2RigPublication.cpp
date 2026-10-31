@@ -1161,15 +1161,7 @@ void PublishTracking(const Tracking& source)noexcept {
        pumpOwner.actorGeneration!=next.ownerGeneration||pumpOwner.space!=next.input.spaceGeneration||
        next.pump.input.deadlineNs>ReloadNanos(next.deadline)||!PumpTrackingFresh(next.pump,ReloadNanos()))next.pump={};
     pumpGuard.store(next.pump.enabled?std::make_shared<const Bc2PumpTracking>(next.pump):std::shared_ptr<const Bc2PumpTracking>{},std::memory_order_release);
-    const auto& magazineOwner=next.magazine.owner;
-    if(!interaction::ValidInput(next.input)||!next.input.focused||!next.input.headValid||
-       !next.input.hands[0].gripTracked||!next.input.hands[1].gripTracked||!next.input.hands[1].aimTracked||
-       magazineOwner.soldier!=next.soldier||magazineOwner.weak!=next.weak||magazineOwner.weapon!=next.weapon||
-       magazineOwner.actorGeneration!=next.ownerGeneration||magazineOwner.space!=next.input.spaceGeneration||
-       next.magazine.inputEvidence.sequence!=next.input.generation||
-       next.magazine.inputEvidence.deadlineNs>ReloadNanos(next.deadline)||
-       !(next.magazine.target?MagazinePaletteTargetFresh(next.magazine,ReloadNanos()):
-         MagazineTrackingFresh(next.magazine,ReloadNanos())))next.magazine={};
+    if(!MagazineTrackingAdmitted(next,ReloadNanos(next.deadline),ReloadNanos()))next.magazine={};
     magazineGuard.store(next.magazine.enabled?std::make_shared<const MagazineTracking>(next.magazine):
         std::shared_ptr<const MagazineTracking>{},std::memory_order_release);
     if(next.fixedContainer.enabled){
@@ -1283,18 +1275,10 @@ MagazineRawContact ReadMagazineContact(const ReloadStateOwner& owner)noexcept {
         // private to magazine interaction and never grants a firing pose.
         const auto shot=ReadWeaponFrame(owner.soldier,owner.weak,owner.weapon,WeaponFrameUse::BodyObservation);
         if(!shot)return RejectedMagazineRawContact(MagazineRawContactReason::FrameUnavailable);
-        // Failed builder packets carry diagnostics only; their authority fields
-        // deliberately remain empty. The admitted body frame and stable guard
-        // identify this observation without turning it into usable contact.
-        if(shot->magazine.valid){
-            if(shot->magazine.owner!=owner)return RejectedMagazineRawContact(MagazineRawContactReason::ContactOwnerMismatch);
-            if(shot->magazine.inputEvidence.sequence!=shot->generation)return RejectedMagazineRawContact(MagazineRawContactReason::FrameInputMismatch);
-            if(shot->magazine.inputEvidence.sequence>guard->inputEvidence.sequence)return RejectedMagazineRawContact(MagazineRawContactReason::InputNewerThanGuard);
-            if(shot->magazine.inputEvidence.observedNs>now)return RejectedMagazineRawContact(MagazineRawContactReason::InputInFuture);
-            if(shot->magazine.inputEvidence.deadlineNs<=now)return RejectedMagazineRawContact(MagazineRawContactReason::InputExpired);
-        }
+        const auto contact=AdmitMagazineRawContact(guard.get(),owner,&shot->magazine,
+            shot->generation,ReloadNanos(shot->deadline),now);
         if(magazineGuard.load(std::memory_order_acquire)!=guard)continue;
-        return shot->magazine;
+        return contact;
     }return RejectedMagazineRawContact(MagazineRawContactReason::GuardChanged);
 }
 Bc2PumpPackCounters ReadPumpPackCounters()noexcept {

@@ -19,16 +19,26 @@ public:
         }return true;
     }
     std::uint32_t U32(std::uint32_t at)const {std::uint32_t value=0;Read(at,&value,4);return value;}
+    template<std::size_t N> bool Words(std::uint32_t at,std::array<std::uint32_t,N>& values)const {
+        // Only adjacent used fields are grouped. Readers that expose individual
+        // fields still work, and a partial failed read contributes no bytes.
+        if(Read(at,values.data(),N*sizeof(std::uint32_t)))return true;
+        for(std::size_t n=0;n<N;++n)if(!Read(at+std::uint32_t(n*4),&values[n],4))return false;
+        return true;
+    }
     bool Identity(std::uint32_t soldier,std::uint32_t weak,RigIdentity& i)const {
         if(soldier<0x10000||soldier>UINT32_MAX-0x500||U32(weak)!=soldier+4)return false;
         unsigned char flags=0;if(!Read(soldier+0x475,&flags,1)||!(flags&1))return false;
-        i.soldier=soldier;i.weak=weak;i.animation=U32(soldier+0x3b4);
-        const auto root=U32(soldier+0x3b8);if(!root||U32(root+4)!=soldier||i.animation<0x10000||i.animation>UINT32_MAX-0xa00)return false;
-        i.skeleton=U32(i.animation+0x50);i.pose=U32(i.animation+0x54);
+        std::array<std::uint32_t,2> owner{},rig{},pose{};std::array<std::uint32_t,3> header{};
+        if(!Words(soldier+0x3b4,owner))return false;
+        i.soldier=soldier;i.weak=weak;i.animation=owner[0];
+        const auto root=owner[1];if(!root||U32(root+4)!=soldier||i.animation<0x10000||i.animation>UINT32_MAX-0xa00)return false;
+        if(!Words(i.animation+0x50,rig))return false;i.skeleton=rig[0];i.pose=rig[1];
         if(i.skeleton<0x10000||i.skeleton>UINT32_MAX-0x40||i.pose<0x10000||i.pose>UINT32_MAX-0x30)return false;
-        i.count=U32(i.skeleton+0x10);if(i.count<6||i.count>1024||U32(i.pose+0x28)!=i.skeleton||U32(i.pose+0x1c)!=i.count)return false;
-        i.worldHeader=U32(i.pose+0x18);if(i.worldHeader<0x10000||i.worldHeader>UINT32_MAX-12||U32(i.worldHeader)!=i.count)return false;
-        i.worldMatrices=U32(i.worldHeader+4);i.skinMatrices=U32(i.worldHeader+8);
+        i.count=U32(i.skeleton+0x10);if(i.count<6||i.count>1024||U32(i.pose+0x28)!=i.skeleton)return false;
+        if(!Words(i.pose+0x18,pose)||pose[1]!=i.count)return false;
+        i.worldHeader=pose[0];if(i.worldHeader<0x10000||i.worldHeader>UINT32_MAX-12||!Words(i.worldHeader,header)||header[0]!=i.count)return false;
+        i.worldMatrices=header[1];i.skinMatrices=header[2];
         unsigned char custom=0;if(!Read(i.animation+0x99c,&custom,1)||custom>1)return false;i.nativeIk=custom!=0;
         i.evaluatedMatrices=i.nativeIk?U32(i.animation+0x31c):i.skinMatrices;
         for(auto at:{i.worldMatrices,i.skinMatrices,i.evaluatedMatrices})if(at<0x10000||std::uint64_t(at)+i.count*64ull>UINT32_MAX)return false;return true;

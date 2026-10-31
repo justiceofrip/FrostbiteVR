@@ -79,6 +79,7 @@ struct ReloadFlowEventEnd {
     NativeCycleInputGuard cycleGuard{};std::uint64_t cycleGuardEpoch=0;unsigned cycleGuardSteps=0,cycleGuardRejected=0;
     PistolAfterFeedInputReceipt pistolInput{};
     FixedContainerInputGuard fixedInput{};
+    FixedContainerInputGuard feedInput{};
 };
 // True only for a fully captured owner-retained restore whose output matches
 // the captured source fields and whose source bytes did not change. No authority
@@ -86,6 +87,50 @@ struct ReloadFlowEventEnd {
 struct ReloadFlowRecord {
     std::uint64_t id=0;ReloadFlowEventInput entry{};ReloadFlowEventEnd exit{};
     bool finished=false,identityRetained=false;
+};
+// These functions are also used by the installed Update route. The caller
+// still proves the native invocation, stack context and exact current owner;
+// this boundary checks the admitted family/configuration and restores only
+// its two input words. It neither advances simulation nor changes ammunition.
+bool RunReloadFamilyInput(const ReloadStateMemory&,const ReloadObservedConfig&,
+    const NativeCycleInputAccess&,const std::array<std::uint32_t,2>&,bool blocksFire,int loaded,
+    void (*original)(void*),void* context,FixedContainerInputGuard&);
+struct MagazineEmptyStep;
+bool ReloadDirectFamilyEmptyStepEligible(const ReloadStateMemory&,const ReloadObservedConfig&,
+    const MagazineEmptyStep&,const ReloadUpdateContext&,std::int64_t now)noexcept;
+AmmoResourceOwnUpdate ReloadFamilyOwnUpdate(const ReloadFlowRecord&)noexcept;
+struct ReloadFeedCommandAccess {
+    ReloadStateMemory memory{};
+    std::uint32_t nativeContext=0;
+    void* user=nullptr;
+    bool (*refill)(void*)noexcept=nullptr;
+    std::int64_t (*now)(void*)noexcept=nullptr;
+};
+// Actual server-helper dispatch and exact postcheck, shared with the installed
+// route. codeVerified is the adjacent installed-trampoline proof; it cannot be
+// supplied by a configuration/profile alone. The adapter retains call/no-entry
+// once, then requires the real server and both prediction Update records.
+bool DispatchReloadFeedCommand(FeedEquipmentAdapter&,const FeedEquipmentNativeView&,
+    std::uint64_t invocation,bool codeVerified,const ReloadFeedCommandAccess&,
+    const std::array<std::byte,0xb0>& before,const std::array<std::byte,0x30>& input)noexcept;
+// Native-only protection survives presentation/selection publication loss.
+// A retained scope must be re-read through the normal client/server readers;
+// it is not fresh hand authority and has no ammunition completion semantics.
+class ReloadFeedInputScopes {
+public:
+    struct Scope {
+        interaction::AmmoResourceIdentity resource{};
+        ReloadHoldIdentity identity{};
+        ReloadObservedConfig config{};
+        bool fault=false;
+    };
+    bool Retain(const FeedEquipmentNativeView&,std::int64_t now)noexcept;
+    std::optional<Scope> Find(std::uint32_t firing)const noexcept;
+    bool Faulted(const interaction::AmmoResourceIdentity&)const noexcept;
+    void Fault(const ReloadHoldIdentity&)noexcept;
+    void Retire(const ReloadHoldIdentity&)noexcept;
+private:
+    std::array<std::optional<Scope>,64> slots_{};
 };
 // Pure captured-data comparison: consumers need no executable-hook runtime.
 inline bool ReloadRestoreMatched(const ReloadFlowRecord& record)noexcept{
@@ -364,6 +409,8 @@ std::optional<PistolAfterFeedActorRetirement> ReadPistolAfterFeedActorRetirement
 // Separate belt backend. A native view grants counts/identity only; callers
 // must supply the exact selected physical profile and original input evidence.
 // A false submit has not queued/called native work and supplies no fake receipt.
+// Enable only when the physical feed consumer is installed, before Start.
+bool EnableFeedEquipmentReload()noexcept;
 std::optional<FeedEquipmentNativeView> ReadFeedEquipmentView(const ReloadStateOwner&,std::int64_t now)noexcept;
 std::optional<FeedEquipmentNativeView> ReadFeedEquipmentViewAt(const ReloadStateOwner&,std::int64_t inputObservedNs,std::int64_t processingNow)noexcept;
 FeedEquipmentSubmitResult SubmitFeedEquipmentCommandResult(const FeedEquipmentSubmission&,bool noEntryOnly=false)noexcept;
