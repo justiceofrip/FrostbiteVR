@@ -22,5 +22,10 @@ producer ordering, and partial-pump recovery on repeated controller packets.
 Production generated header equality is checked from pinned original inputs.
 Review/test failures remain in the run folder; they are not headset acceptance.
 
-Root owns integration, builds and installation. `receipt.json` will record
-actual outcomes. No new game/headset session is requested for this batch.
+Root owns integration, builds and installation. `receipt.json` records
+completed validation and installation. No new game/headset session is requested for this batch.
+
+Private 0.1.25 is installed; source pushed, settings/logging preserved, 0.1.24 rollback.
+Normal builds pass 341/341 each; focused 13/13, generator 22/22 and production
+header equality pass. Fixture/import failures are preserved in focused01/02.
+All agents retired. No new game/headset session ran.

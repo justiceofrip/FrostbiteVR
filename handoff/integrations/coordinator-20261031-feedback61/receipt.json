@@ -1,0 +1,64 @@
+{
+  "schema": "fvr.feedback61.integration.v1",
+  "built_source_commit": "434d6128fbe8a4a0f246d5b2f4ea4bca0f354b8a",
+  "native_source_sha256": "418c10aa026456d70b237072ac2a03aa4d6a7f5bfb88e14b5570b71ae5a3f3f5",
+  "build_receipt": "reports/coordinator-20261031-feedback61/normal-runtime/build-receipt.json",
+  "build_receipt_sha256": "39318aed87e2cd350d9bdaee72c92f5ccee2830f39af0841a5144ed68e3c33a4",
+  "included_commits": [
+    "96df1a5480cadbd61d041e27e1ec87bea05729ba",
+    "434d6128fbe8a4a0f246d5b2f4ea4bca0f354b8a"
+  ],
+  "normal_checks": {
+    "x86": "341/341",
+    "x64": "341/341"
+  },
+  "focused_checks": "13/13: twelve unchanged focused-01 passes plus corrected feed focused-03",
+  "generator_checks": "22/22",
+  "generated_production_feed_header_matches": true,
+  "prior_focused_failures_retained": true,
+  "review_resolution": "reports/coordinator-20261031-feedback61/review-resolution.txt",
+  "source_changes": [
+    "explicit acquired-grasp orientation for all BC2 feed contacts; authored position and subsequent relative motion remain constrained",
+    "allow current same-configuration confirmation ahead of lagging published input guard while preserving original aim/support authority",
+    "retain existing exact recovery-pump grasp across missing renderer contact without movement or completion",
+    "bounded native-view and recovery-gate diagnostics for first unexplained held-lease transition"
+  ],
+  "recorded_failure": {
+    "session": "20261031-123121-711-83a672cf",
+    "version": "0.1.24",
+    "native_report_complete": true,
+    "interaction_events": 4980,
+    "event_drops": 0,
+    "feed_idle_angle_rejections": 1807,
+    "feed_event1640_other_acquisition_gates_passed": true
+  },
+  "prior_user_headset_confirmed": [
+    "AN94 manual magazine reload",
+    "smooth firing",
+    "T194 shell insertion and magnetic rail improvement"
+  ],
+  "private_candidate": "0.1.25",
+  "installed": true,
+  "installed_version": "0.1.25",
+  "rollback_version": "0.1.24",
+  "package_files": 101,
+  "runtime_files": 93,
+  "package_sha256": "85ab4017f1c43ba7467f89caebf115b1d2432f1d3428635bcf9137b570606cba",
+  "settings_preserved": true,
+  "installed_validation_passed": true,
+  "installation_evidence": "reports/coordinator-20261031-feedback61/installation.json",
+  "installed_validation_evidence": "reports/coordinator-20261031-feedback61/installed-validation.log",
+  "source_pushed": "434d6128fbe8a4a0f246d5b2f4ea4bca0f354b8a",
+  "source_push_evidence": "reports/coordinator-20261031-feedback61/source-push.json",
+  "game_started": false,
+  "headset_accepted": false,
+  "agents_retired": true,
+  "remaining": [
+    "new runtime behavior needs headset confirmation",
+    "exact first pump native-held disappearance remains unattributed",
+    "per-event configuration/guard ordering was not recorded; source-backed defect and caller order are verified",
+    "underbarrel, aim, destruction and performance acceptance remain open"
+  ],
+  "public_release": false,
+  "final_status_push_and_lease_close": "reports/coordinator-20261031-feedback61/close.json"
+}

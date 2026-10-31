@@ -5,11 +5,11 @@ Updated October 31, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
-Feedback60 is pushed and private 0.1.24 is installed: shared grip lifetime, held-shell retention, feed-cover startup and shotgun audio routing corrections are combined. Normal x86/x64 pass 341/341 each; focused 9/9 and generator 12/12 pass. Setup/assets validation passes; settings/logging are preserved and 0.1.23 is rollback. [Receipt](../handoff/integrations/coordinator-20261031-feedback60/receipt.json). No new game/headset test; all-weapon completion remains unaccepted.
+Feedback61 is pushed and private 0.1.25 is installed: acquired-grasp feed pickup, current aim-confirmation ordering and pump recovery custody are corrected. Both normal builds pass 341/341, focused 13/13 and generator 22/22 pass; generated production header matches pinned inputs. Setup/assets validation passes; settings/logging preserved, 0.1.24 rollback. [Receipt](../handoff/integrations/coordinator-20261031-feedback61/receipt.json). New headset behavior remains unaccepted.
 
-The user's 0.1.23 session confirms T194 shell insertion and rail improvement, but support still detaches and QJU88 reload fails; [feedback](archive/2026-10-31-bc2vr-0.1.23-buglist.md). Feedback60 fixes shared consumers across the existing profiles; the exact failing feed idle predicate was not logged.
+The user's 0.1.24 session still failed T194 partial-pump and QJU88 grip/reload; [feedback](archive/2026-10-31-bc2vr-0.1.24-buglist.md). Its complete native report identifies feed orientation refusal. The initial native held-lease loss remains unattributed; aim ordering is source-supported. Earlier T194 shell/rail progress remains, without a new acceptance claim.
 
-The user's 0.1.22 headset session confirms AN94 manual magazine reload and smooth firing. It reports support-grip drops, T194 shell insertion/QJU88 reload failures, underbarrel failure and HUD flicker; [feedback](archive/2026-10-31-bc2vr-0.1.22-buglist.md). Cadence58's Fire-continuity correction is retained; no firing policy changed in feedback59/60. [Test card](../handoff/integrations/coordinator-20261031-feedback59/TEST.txt).
+The user's 0.1.22 headset session confirms AN94 manual magazine reload and smooth firing. It reports support-grip drops, T194 shell insertion/QJU88 reload failures, underbarrel failure and HUD flicker; [feedback](archive/2026-10-31-bc2vr-0.1.22-buglist.md). Cadence58's Fire-continuity correction remains included. [Test card](../handoff/integrations/coordinator-20261031-feedback59/TEST.txt).
 
 Offline57's shared magazine/feed reload connections, bounded hitch protection, fewer rig reads and deferred frame-feedback service are retained. [Prior receipt](../handoff/integrations/coordinator-20261030-offline57/receipt.json) and [actual pipeline](../handoff/integrations/coordinator-20261030-offline57/PIPELINE.txt). All-weapon reload completion, measured FPS, aim and destruction acceptance remain open.
 
