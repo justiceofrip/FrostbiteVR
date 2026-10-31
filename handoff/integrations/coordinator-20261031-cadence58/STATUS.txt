@@ -1,0 +1,37 @@
+Cadence58: preserve held Fire across idle ammunition-publication gaps
+
+Supported defect
+An exact same-owner, attached, idle magazine could temporarily lack a readable
+ammo publication (Busy, NoView, Revision, Future or Expired). The resource adapter
+correctly kept reload/equipment admission blocked, but its shared action mask
+also cleared Fire. A later readable update restored ordinary Fire, creating a
+possible notch in an otherwise continuously held automatic trigger.
+Future is reachable when native publication advances after hand sampling.
+
+Correction
+Separate idleFireContinuity from idleAwaitingResource. Preserve only Fire bits
+already admitted by the ordinary input path for the exact current idle owner,
+profile and GunHold. No synthetic Fire/edge, input renewal or fire-rate change.
+Keep busy/reload/Use/equipment blocking. Pending, uncertain and retired publication
+states remain in the blocked wait; do not cancel into an unblocked state.
+Active removal, custody, insertion and native completion retain their Fire gates.
+
+Validation
+Focused resource, physical-magazine, contextual interaction and held-fire suites
+exercise publication deferrals, repeated packets, native input-cache levels,
+neutral preservation, 21 lifetime/input failures and pending/retired blocking.
+Independent review found the cancellation bypass in the initial patch; root
+corrected it and added effective-action assertions. Earlier check is retained.
+Root runs final x86/x64 normal builds; final result/install identity in receipt.json.
+
+Saved-session limits
+The user's0.1.19 log has no Fire-route, shot or ammo timestamps. Fully tracked XM8
+windows contain81-92 native input samples but22-30 published pairs per second;
+this rules out whole-second input outages, not subsecond filtering or stalls.
+The retained host timeline does not overlap XM8. No consumer-dependent producer
+wait defect was found. Reuse these results; do not repeat the desktop attempts.
+Installed0.1.21 already enables/persists Fire-route observations automatically.
+This fixes a demonstrated Fire interruption mechanism; user symptom attribution
+and measured headset improvement remain open. No new game session ran.
+Detailed evidence: worktree reports/coordinator-20261031-cadence58.
+All implementation/review agents completed and retired; root owns integration.

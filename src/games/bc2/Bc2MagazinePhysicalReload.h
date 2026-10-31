@@ -58,9 +58,12 @@ struct MagazinePhysicalResult {
  bool ordinaryReloadAllowed=false;
  unsigned acquired=0,submitted=0,completed=0;
  std::optional<interaction::AmmoSupplyVisualSample> bodyAmmo;
- // Identity-only idle wait. Independently verified support may remain held;
- // no magazine target, ammunition observation or native action is granted.
+ // Identity-only idle wait. Independently verified support may continue;
+ // no magazine target, ammunition observation or reload admission is granted.
  bool idleAwaitingResource=false;
+ // A separate debt-free idle classification permits existing Fire to survive
+ // this filter only; native input and owner authority remain independent.
+ bool idleFireContinuity=false;
 };
 struct MagazineResourceProbeState {
  MagazinePhysicalResult result{};
@@ -85,7 +88,15 @@ inline void ApplyMagazinePhysicalActions(interaction::ActionOutput& out,const Ma
  if(profile&&profile->Ready()&&!ordinary){out.held&=~interaction::Reload;out.pressed&=~interaction::Reload;}
  if(magazine.reloadHeld)out.held|=interaction::Reload;
  if(magazine.blocksWeaponActions){
-  constexpr auto blocked=interaction::Fire|interaction::AlternateFire|interaction::Use|interaction::NextWeapon|interaction::PreviousWeapon;
+  // Fire already passed current input/owner and earlier mechanism gates. An
+  // idle ammo-publication gap cannot revoke that independent native route;
+  // never restore a Fire level removed by another gate or synthesize an edge.
+  const bool idleFire=profile&&profile->Ready()&&magazine.tracking.family.binding.profile==profile&&
+   magazine.idleAwaitingResource&&magazine.idleFireContinuity&&
+   magazine.interaction.phase==interaction::DetachableMagazinePhase::Attached&&
+   !magazine.ownsLeftHand&&!magazine.reloadHeld;
+  const auto blocked=interaction::AlternateFire|interaction::Use|interaction::NextWeapon|interaction::PreviousWeapon|
+   (idleFire?0u:interaction::Fire);
   out.held&=~blocked;out.pressed&=~blocked;
  }
 }

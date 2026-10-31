@@ -147,10 +147,20 @@ MagazinePhysicalResult Bc2MagazineResourceReload::TickImpl(const MagazinePhysica
             boundGun_&&gun&&gun->token==*boundGun_&&gun->inputSequence==s.input.sequence&&gun->deadlineNs>now&&
             boundEpoch_==s.trackingEpoch;
         diagnosticSameOwner_=sameOwner;
+        // Busy/NoView/Revision/Future/Expired withhold ammunition authority;
+        // they do not observe native owner loss. Only the exact current input,
+        // family and GunHold above may retain ordinary Fire in this debt-free
+        // attached state. Reload/equipment admission still waits for a view.
         const bool idle=sameOwner&&read.Deferred()&&last_.phase==DetachableMagazinePhase::Attached&&!cycle_&&!pending_&&
             !physical_&&!reservation_&&!supply_.Held()&&!supply_.Pending()&&!carry_&&!submittedSeat_&&
             !last_.removalClaim&&latestView_->phase==AmmunitionLedgerPhase::Ready&&
             !latestView_->wellEmpty&&latestView_->originalState!=MagazineResourceState::Held;
+        // Keep uncertain/retired publication states in the existing blocked
+        // idle wait. Cancelling a wait could clear busy_ and admit equipment.
+        const bool idleFire=idle&&
+            (latestView_->requestState==AmmoResourceRequestState::None||latestView_->requestState==AmmoResourceRequestState::Completed||
+             latestView_->requestState==AmmoResourceRequestState::Rejected)&&
+            (!latestView_->terminal||latestView_->terminal->state!=AmmoResourceRequestState::ActorRetired);
         const auto phase=last_.phase;
         // Typed publication gaps preserve existing custody, not ammunition
         // authority. No new object, seat or native request can start here.
@@ -181,6 +191,7 @@ MagazinePhysicalResult Bc2MagazineResourceReload::TickImpl(const MagazinePhysica
         if(last_.phase!=phase&&!(replacement&&last_.phase==DetachableMagazinePhase::WellEmpty))return cancel(CancelCause::Interaction);
         busy_=true;auto& waits=idle?idleViewWaits_:activeViewWaits_;if(waits!=UINT64_MAX)++waits;
         out.interaction=last_;out.interaction.prop.reset();out.blocksWeaponActions=true;out.idleAwaitingResource=idle;
+        out.idleFireContinuity=idleFire;
         out.ownsLeftHand=bool(last_.removalClaim)||bool(supply_.Held());
         out.acquired=acquired_;out.submitted=submitted_;out.completed=completed_;
         out.tracking.family=s.family;out.tracking.owner=s.nativeOwner;

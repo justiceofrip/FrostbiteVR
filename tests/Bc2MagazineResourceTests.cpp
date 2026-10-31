@@ -1,5 +1,6 @@
 #include "Test.h"
 #include "Bc2MagazineResourceReload.h"
+#include "Bc2InputBinding.h"
 #include <cstring>
 #include <cstdio>
 #include <sstream>
@@ -123,14 +124,14 @@ int IdleResourceGapBlocksAdmission(){
             std::optional<HandClaim> support;
             for(unsigned n=0;n<20;++n){
                 f.Send(true,true);CHECK(f.result.interaction.phase==DetachableMagazinePhase::Attached);
-                CHECK(f.result.idleAwaitingResource&&f.result.blocksWeaponActions&&f.adapter->BlocksEquipment());
+                CHECK(f.result.idleAwaitingResource&&f.result.idleFireContinuity&&f.result.blocksWeaponActions&&f.adapter->BlocksEquipment());
                 CHECK(!f.result.ownsLeftHand&&!MagazineBlocksSupport(f.result,f.now));
                 CHECK(!f.result.tracking.enabled&&!f.result.tracking.target&&!f.result.tracking.resource&&!f.result.bodyAmmo);
                 CHECK(!f.result.interaction.prop&&!f.result.interaction.transaction.request&&!MagazineTrackingFresh(f.result.tracking,f.now));
                 CHECK(f.result.tracking.family.binding.profile==profile&&f.gun->token==gun);
                 CHECK(!f.adapter->ResourceProbeState(f.now).resource&&f.calls==0&&f.counts==counts);
                 ActionOutput out;out.held=out.pressed=Fire|AlternateFire|Use|NextWeapon|PreviousWeapon|Reload;
-                ApplyMagazinePhysicalActions(out,profile,f.result);CHECK(out.held==0&&out.pressed==0);
+                ApplyMagazinePhysicalActions(out,profile,f.result);CHECK(out.held==Fire&&out.pressed==Fire);
                 HandContactProof contact{{1003,1},f.sequence,f.s.input.deadlineNs,true};
                 if(support)support=f.hands.Renew(f.s.input,support->token,contact).claim;
                 else support=f.hands.Acquire(f.s.input,{f.s.input.owner,InteractionHand::Left,HandClaimKind::WeaponSupport,f.s.weapon,contact,++f.intent,gun.id}).claim;
@@ -147,10 +148,80 @@ int IdleResourceGapBlocksAdmission(){
             CHECK(f.Eject());CHECK(f.calls==1&&f.counts.loaded==0&&f.counts.reserve==counts.reserve);
         }
     }
-    CHECK(profiles>0);std::printf("Idle native gaps: %u profiles; no view and expired view, preserved support, no fabricated authority, normal resume.\n",profiles);return 0;
+    CHECK(profiles>0);std::printf("Idle native gaps: %u profiles; no view and expired view, preserved support/Fire, blocked reload/equipment, normal resume.\n",profiles);return 0;
+}
+int IdleResourceGapKeepsFireLevel(){
+    unsigned schedules=0;
+    for(const auto* profile:{&Xm8MagazineEquipment(),FindMagazineEquipment("AEK971_sp"),FindMagazineEquipment("F2000_sp")}){
+        if(!profile||!profile->Ready())continue;
+        for(auto reason:{AmmoResourceReadReason::Busy,AmmoResourceReadReason::NoView,AmmoResourceReadReason::Revision,
+                         AmmoResourceReadReason::Future,AmmoResourceReadReason::Expired}){
+            Fixture f(*profile,true);f.Send();const auto counts=f.counts;const auto gun=f.gun->token;
+            f.forceReadReason=reason;
+            std::optional<HandClaim> support;
+            for(unsigned n=0;n<8;++n){
+                if(n%2)f.Repeat();else f.Send(true);
+                CHECK(f.result.idleAwaitingResource&&f.result.blocksWeaponActions&&f.adapter->BlocksEquipment());
+                CHECK(!f.adapter->ResourceProbeState(f.now).resource);
+                HandContactProof contact{{1003,1},f.sequence,f.s.input.deadlineNs,true};
+                if(support)support=f.hands.Renew(f.s.input,support->token,contact).claim;
+                else support=f.hands.Acquire(f.s.input,{f.s.input.owner,InteractionHand::Left,HandClaimKind::WeaponSupport,
+                    f.s.weapon,contact,++f.intent,gun.id}).claim;
+                CHECK(support&&support->token.prerequisiteClaim==gun.id&&!MagazineBlocksSupport(f.result,f.now));
+                ActionOutput out;out.active=true;out.owner=f.native.owner.soldier;
+                out.held=Fire|AlternateFire|Reload|Use|NextWeapon|PreviousWeapon;
+                ApplyMagazinePhysicalActions(out,profile,f.result);
+                CHECK(out.held==Fire&&out.pressed==0);
+                std::array<std::byte,InputBytes> cache{};InputOverride patch;
+                CHECK(patch.Apply(cache,out));patch.Commit();float fire=0;
+                std::memcpy(&fire,cache.data()+8+4*unsigned(EntryAction::Fire),sizeof fire);CHECK(fire==1.f);
+                // Earlier semantic/mechanism suppression and trigger release
+                // stay neutral: this filter cannot reassert Fire or an edge.
+                out.held=out.pressed=0;ApplyMagazinePhysicalActions(out,profile,f.result);
+                CHECK(patch.Apply(cache,out));patch.Commit();
+                std::memcpy(&fire,cache.data()+8+4*unsigned(EntryAction::Fire),sizeof fire);
+                CHECK(fire==0.f&&out.pressed==0&&f.calls==0&&f.counts==counts);
+            }
+            f.forceReadReason.reset();f.Send();
+            CHECK(!f.result.idleAwaitingResource&&!f.result.blocksWeaponActions&&f.calls==0);++schedules;
+        }
+    }
+    // Actual channel timing: a native publication can advance between hand
+    // sampling and resource reading while the original controller lease lives.
+    Fixture future(Xm8MagazineEquipment(),true);future.Send();
+    future.beforeTick=[](Fixture& f){f.now+=Ms;f.Select();};future.Send();
+    CHECK(future.channel.ReadObserved(future.native.owner,future.s.input.nowNs,future.now).reason==AmmoResourceReadReason::Future);
+    CHECK(future.channel.Read(future.native.owner,future.now)&&future.result.idleAwaitingResource&&future.result.idleFireContinuity);
+    ActionOutput held;held.held=Fire;ApplyMagazinePhysicalActions(held,future.profile,future.result);
+    CHECK(held.held==Fire&&held.pressed==0&&future.calls==0);
+    CHECK(schedules>0);std::printf("Idle held Fire: %u fresh/duplicate publication-gap schedules, native cache continuity and real Future ordering.\n",schedules);
+    return 0;
+}
+int IdleFireCannotUseRetiredOrPendingResource(){
+    for(auto state:{AmmoResourceRequestState::Queued,AmmoResourceRequestState::Dispatched,
+                    AmmoResourceRequestState::Uncertain,AmmoResourceRequestState::ActorRetired}){
+        Fixture f(Xm8MagazineEquipment(),true);
+        f.beforeTick=[state](Fixture& x){auto v=*x.service.View();v.requestState=state;x.channel.Publish(v);};
+        f.Send();f.beforeTick={};f.forceReadReason=AmmoResourceReadReason::Busy;f.Send();
+        CHECK(f.result.idleAwaitingResource&&!f.result.idleFireContinuity&&f.result.blocksWeaponActions&&f.adapter->BlocksEquipment()&&f.calls==0);
+        ActionOutput out;out.held=out.pressed=Fire|AlternateFire|Reload|Use|NextWeapon|PreviousWeapon;
+        ApplyMagazinePhysicalActions(out,f.profile,f.result);CHECK(out.held==0&&out.pressed==0);
+    }
+    for(auto reason:{AmmoResourceReadReason::Owner,AmmoResourceReadReason::Invalid}){
+        Fixture f(Xm8MagazineEquipment(),true);f.Send();f.forceReadReason=reason;f.Send();
+        CHECK(!f.result.idleAwaitingResource&&!f.result.idleFireContinuity&&f.calls==0);
+    }
+    Fixture retired(Xm8MagazineEquipment(),true);
+    retired.beforeTick=[](Fixture& f){auto v=*f.service.View();v.terminal.emplace();
+        v.terminal->state=AmmoResourceRequestState::ActorRetired;f.channel.Publish(v);};
+    retired.Send();retired.beforeTick={};retired.forceReadReason=AmmoResourceReadReason::Busy;retired.Send();
+    CHECK(retired.result.idleAwaitingResource&&!retired.result.idleFireContinuity&&retired.result.blocksWeaponActions&&retired.adapter->BlocksEquipment()&&retired.calls==0);
+    ActionOutput out;out.held=out.pressed=Fire|AlternateFire|Reload|Use|NextWeapon|PreviousWeapon;
+    ApplyMagazinePhysicalActions(out,retired.profile,retired.result);CHECK(out.held==0&&out.pressed==0);
+    return 0;
 }
 int IdleResourceGapRejectsLifetimeLoss(){
-    for(unsigned fault=0;fault<19;++fault){Fixture f;f.Send();f.hideRead=true;
+    for(unsigned fault=0;fault<21;++fault){Fixture f;f.Send();f.hideRead=true;
         f.beforeTick=[fault](Fixture& x){switch(fault){
             case 0:++x.s.nativeOwner.equipGeneration;break;
             case 1:++x.s.input.owner.equipGeneration;break;
@@ -172,6 +243,8 @@ int IdleResourceGapRejectsLifetimeLoss(){
             case 16:x.s.input.focused=false;break;
             case 17:x.s.input.tracked[0]=false;break;
             case 18:x.s.family.binding.equipment.data++;break;
+            case 19:++x.s.nativeOwner.actorGeneration;break;
+            case 20:++x.s.input.owner.actorGeneration;break;
         }};
         f.Send();CHECK(f.result.interaction.phase==DetachableMagazinePhase::Cancelled);
         CHECK(!f.result.idleAwaitingResource&&!f.result.tracking.target&&f.calls==0);
@@ -186,7 +259,7 @@ int IdleResourceGapRejectsLifetimeLoss(){
         f.hideRead=true;f.Send();CHECK(f.result.interaction.phase==DetachableMagazinePhase::Cancelled);
         CHECK(!f.result.idleAwaitingResource&&!f.result.tracking.resource);
     }
-    std::puts("Idle wait rejects 19 lifetime/input/config/claim mutations, cancellation resurrection and non-idle states.");return 0;
+    std::puts("Idle wait rejects 21 lifetime/input/config/claim mutations, cancellation resurrection and non-idle states.");return 0;
 }
 int CompletionBetweenInputPackets(){
     unsigned profiles=0;
@@ -475,6 +548,9 @@ int OriginalCustodySurvivesTypedPublicationGap(){
             for(unsigned n=0;n<20;++n){f.Send(true,false,-.05f);
                 CHECK(f.result.interaction.phase==DetachableMagazinePhase::RemovedHeld&&f.result.ownsLeftHand);
                 CHECK(f.result.blocksWeaponActions&&MagazineBlocksSupport(f.result,f.now));
+                CHECK(!f.result.idleAwaitingResource);
+                ActionOutput fire;fire.held=fire.pressed=Fire;ApplyMagazinePhysicalActions(fire,profile,f.result);
+                CHECK(fire.held==0&&fire.pressed==0);
                 CHECK(f.hands.Current(InteractionHand::Left)->token==hand&&f.calls==1);
                 CHECK(!f.result.tracking.enabled&&!f.result.tracking.target&&!f.result.tracking.resource&&!f.result.bodyAmmo);
                 CHECK(!f.adapter->ResourceProbeState(f.now).resource&&f.service.View()->original==original);
@@ -501,7 +577,9 @@ int PendingOriginalAndReleasedMagazineGaps(){
         for(unsigned n=0;n<15;++n){f.Send(mode==0,false,heldTravel);
             CHECK(f.result.interaction.phase!=DetachableMagazinePhase::Cancelled&&f.calls==1);
             CHECK(!f.result.interaction.transaction.acknowledged&&!f.result.interaction.transaction.completed);
-            CHECK(!f.result.tracking.target&&!f.result.tracking.resource&&f.result.blocksWeaponActions);}
+            CHECK(!f.result.tracking.target&&!f.result.tracking.resource&&f.result.blocksWeaponActions&&!f.result.idleAwaitingResource);
+            ActionOutput fire;fire.held=fire.pressed=Fire;ApplyMagazinePhysicalActions(fire,f.profile,f.result);
+            CHECK(fire.held==0&&fire.pressed==0);}
         f.completeNative=true;f.forceReadReason.reset();f.Send(mode==0,false,heldTravel);f.Send(mode==0,false,heldTravel);
         CHECK(f.result.interaction.phase!=DetachableMagazinePhase::Cancelled&&f.calls==1);
         if(mode){CHECK(!f.hands.Current(InteractionHand::Left));
@@ -848,5 +926,5 @@ int HeldRemovalSurvivesRejectedExpiredAdmission(){
   }
  }CHECK(profiles>0);std::printf("Expired removal admission: held grab recovery and seven cancellation cases across %u enrolled profiles.\n",profiles);return 0;
 }
-int main(){if(OriginalMagazineTrackingInterruption()||OriginalSuspensionRequiresFreshCustodyAndExactResource()||SuspendedPendingUnseatNeedsExactCompletionAndFreshPull()||OriginalMagazineMissingInputInterval()||SuspendedOriginalStillHonorsRealRelease())return 1;if(RetiredNativeActorReleasesOnlyOldPhysicalCustody())return 1;if(HeldRemovalSurvivesRejectedExpiredAdmission()||SupportContactDoesNotUnseatMagazine())return 1;if(IdleViewFailureSurvivesStartupCancellation()||LivePhysicalIntentOutlivesItsConstructionPublication()||ReplacementAndSeatActualPublicationExpiry()||ReplacementCustodyAcrossPublicationGaps()||ReplacementGapReleaseAndSafety()||RenderAdmissionDoesNotRenewAmmunition()||OriginalCustodySurvivesTypedPublicationGap()||PendingOriginalAndReleasedMagazineGaps()||ReturnOriginalAfterActualExpiry()||PendingDiscardAcrossExpiredPublication()||ActiveGapStillRejectsLifetimeAndTimeout()||IdleResourceGapBlocksAdmission()||IdleResourceGapRejectsLifetimeLoss()||CompletionBetweenInputPackets()||DeferredCompletionCannotRenewOrChangeOwner()||NamespaceProof()||SharedHandAdapter()||ReturnOriginal()||RestoreEmptyAfterSwitch()||SeatPublicationBoundary()||CancelledSeatSurvivesContextChanges()||TerminalDoesNotRequireNewMagazineSelection())return 1;
+int main(){if(IdleResourceGapKeepsFireLevel()||IdleFireCannotUseRetiredOrPendingResource())return 1;if(OriginalMagazineTrackingInterruption()||OriginalSuspensionRequiresFreshCustodyAndExactResource()||SuspendedPendingUnseatNeedsExactCompletionAndFreshPull()||OriginalMagazineMissingInputInterval()||SuspendedOriginalStillHonorsRealRelease())return 1;if(RetiredNativeActorReleasesOnlyOldPhysicalCustody())return 1;if(HeldRemovalSurvivesRejectedExpiredAdmission()||SupportContactDoesNotUnseatMagazine())return 1;if(IdleViewFailureSurvivesStartupCancellation()||LivePhysicalIntentOutlivesItsConstructionPublication()||ReplacementAndSeatActualPublicationExpiry()||ReplacementCustodyAcrossPublicationGaps()||ReplacementGapReleaseAndSafety()||RenderAdmissionDoesNotRenewAmmunition()||OriginalCustodySurvivesTypedPublicationGap()||PendingOriginalAndReleasedMagazineGaps()||ReturnOriginalAfterActualExpiry()||PendingDiscardAcrossExpiredPublication()||ActiveGapStillRejectsLifetimeAndTimeout()||IdleResourceGapBlocksAdmission()||IdleResourceGapRejectsLifetimeLoss()||CompletionBetweenInputPackets()||DeferredCompletionCannotRenewOrChangeOwner()||NamespaceProof()||SharedHandAdapter()||ReturnOriginal()||RestoreEmptyAfterSwitch()||SeatPublicationBoundary()||CancelledSeatSurvivesContextChanges()||TerminalDoesNotRequireNewMagazineSelection())return 1;
     std::puts("BC2 resource hand adapter: measured XM8 rail, unequal native/physical identities, chest display, original return, refill and equip restoration passed (mock native Updates).");return 0;}
