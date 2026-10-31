@@ -418,6 +418,9 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     State::Packet* source=nullptr;
     for(auto& p:state.packets)if(p.owner==s.owner&&p.weapon==s.weapon&&SamePacket(p.input,s.raw.inputEvidence)&&
         (!p.contact||p.contact->rig==s.raw.rig)){source=&p;break;}
+    if(source&&source->native){out.diagnostic.sourceNativeSequence=source->native->sequence;
+        out.diagnostic.sourceNativeObservedNs=source->native->observedNs;
+        out.diagnostic.sourceNativeDeadlineNs=source->native->deadlineNs;}
     const auto rawCheck=[&](unsigned bit,bool passed){out.diagnostic.rawChecked|=1u<<bit;
         if(passed)out.diagnostic.rawPassed|=1u<<bit;return passed;};
     (void)rawCheck(0,gun);

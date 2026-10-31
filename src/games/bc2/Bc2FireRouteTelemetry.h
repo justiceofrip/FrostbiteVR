@@ -97,6 +97,9 @@ struct FireRouteRecord {
     std::optional<float> feedCoverDistance,feedCoverAngle;
     std::int64_t feedNeutralAgeNs=-1;
     std::uint64_t supportSource=0,sightSource=0,shellSource=0,feedSource=0;
+    // Provenance only: do not turn native publication cadence into outcome changes.
+    std::uint64_t feedNativeSource=0;
+    std::int64_t feedNativeObservedNs=0,feedNativeDeadlineNs=0;
     std::int64_t supportSourceDeadlineNs=0,sightSourceDeadlineNs=0,shellSourceDeadlineNs=0,feedSourceDeadlineNs=0;
     std::uint64_t serial=0,input=0,inputEpoch=0,ammoSequence=0;
     std::int64_t gatherNs=0,sampledNs=0,inputObservedNs=0,inputDeadlineNs=0,inputAgeNs=-1;
@@ -242,7 +245,9 @@ inline void WriteFireRouteTelemetry(std::ostream& o,const FireRouteTelemetryBatc
                 o<<",\"idle_checked\":"<<f.idleChecked<<",\"idle_passed\":"<<f.idlePassed;
                 o<<",\"cover_distance_m\":";measure(r.feedCoverDistance);o<<",\"cover_angle_radians\":";measure(r.feedCoverAngle);
                 o<<",\"neutral_age_ns\":";if(r.feedNeutralAgeNs<0)o<<"null";else o<<r.feedNeutralAgeNs;}
-            o<<",\"source_sequence\":"<<r.feedSource<<",\"source_deadline_ns\":"<<r.feedSourceDeadlineNs<<'}';}
+            o<<",\"source_sequence\":"<<r.feedSource<<",\"source_deadline_ns\":"<<r.feedSourceDeadlineNs
+             <<",\"source_native_sequence\":"<<r.feedNativeSource<<",\"source_native_observed_ns\":"<<r.feedNativeObservedNs
+             <<",\"source_native_deadline_ns\":"<<r.feedNativeDeadlineNs<<'}';}
         o<<'}';
     };
     const auto record=[&](const FireRouteRecord& r){

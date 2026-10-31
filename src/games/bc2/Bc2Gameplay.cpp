@@ -2125,6 +2125,8 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             r.idleChecked=d.idleChecked;r.idlePassed=d.idlePassed;
             fireTrace.record.feedCoverDistance=d.coverDistanceMeters;fireTrace.record.feedCoverAngle=d.coverAngleRadians;
             fireTrace.record.feedNeutralAgeNs=d.neutralAgeNs;
+            fireTrace.record.feedNativeSource=d.sourceNativeSequence;fireTrace.record.feedNativeObservedNs=d.sourceNativeObservedNs;
+            fireTrace.record.feedNativeDeadlineNs=d.sourceNativeDeadlineNs;
             fireTrace.record.feedSource=sample.raw.inputEvidence.sequence;fireTrace.record.feedSourceDeadlineNs=sample.raw.inputEvidence.deadlineNs;}
         if(feedResult.blocksFire){constexpr auto mask=interaction::Fire|interaction::AlternateFire|interaction::Reload;
             out.held&=~mask;out.pressed&=~mask;}

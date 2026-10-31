@@ -7,6 +7,7 @@
 #include <cstring>
 #include <memory>
 #include <sstream>
+#include <vector>
 using namespace fvr::bc2;
 using namespace fvr::interaction;
 namespace {
@@ -17,6 +18,7 @@ template<std::size_t N>void Text(std::array<char,N>& out,std::string_view text){
 fvr::math::Matrix4 Identity(){fvr::math::Matrix4 m{};for(unsigned i=0;i<4;++i)m.values[i][i]=1;return m;}
 fvr::math::Matrix4 Turn(float angle){auto m=Identity();const auto c=std::cos(angle),s=std::sin(angle);
     m.values[0][0]=m.values[1][1]=c;m.values[0][1]=s;m.values[1][0]=-s;return m;}
+ReloadRawContact RepublishFeedContact(const ReloadRawContact&,const fvr::math::Matrix4&,std::int64_t);
 struct Fixture {
     const Bc2FeedRegistration* registration=FindBc2FeedRegistration(bc2_feed_profile_detail::M60Registration.key);
     // Production keeps these native histories in static storage. Keep each
@@ -34,14 +36,32 @@ struct Fixture {
     Bc2PhysicalFeedResult result{};
     std::optional<FeedEquipmentSubmission> submitted;
     bool refuse=false,occupyLeft=false;unsigned submits=0;
+    // Native simulation, controller input and render publication have separate
+    // clocks. Defaults preserve the original one-publication-per-input fixture.
+    std::vector<unsigned> nativeCadence{1};
+    std::size_t nativeTick=0;
+    unsigned nativePublications=0,delayedRenders=0,repeatedRenders=0;
+    std::uint64_t firstRepeatedSource=0;
+    bool delayedRender=false,repeatRender=false,mutateNativeObserved=false;
+    std::optional<ReloadRawContact> awaitingRender,lastRendered;
+    std::optional<FeedEquipmentNativeView> lastAcceptedNative;
+    std::uint64_t lastAcceptedInput=0;
+    std::array<unsigned,10> reusedNativeByOperation{};
+    bool reusedNativeUnchanged=true;
     Bc2PhysicalFeed physical;
+    std::optional<FeedEquipmentNativeView> NativeRead(std::optional<FeedEquipmentNativeView> view)const {
+        // Fault injection only: the real backend never issues mutated copies
+        // of one native sequence. Exercise refusal at the physical/core join.
+        if(view&&mutateNativeObserved)++view->observedNs;
+        return view;
+    }
     Bc2PhysicalFeedApi Api(){return {this,
-        [](void* p,const ReloadStateOwner& o,std::int64_t now)noexcept{return static_cast<Fixture*>(p)->backend.Read(o,now);},
+        [](void* p,const ReloadStateOwner& o,std::int64_t now)noexcept{auto& f=*static_cast<Fixture*>(p);return f.NativeRead(f.backend.Read(o,now));},
         [](void* p,const FeedEquipmentSubmission& s)noexcept{auto& f=*static_cast<Fixture*>(p);++f.submits;f.submitted=s;
             return !f.refuse&&f.backend.Submit(s,f.now+1);},
         [](void* p,std::uint64_t life,std::uint64_t id)noexcept{return static_cast<Fixture*>(p)->backend.Receipt(life,id);},
         [](void* p,const ReloadStateOwner& o,std::int64_t observed,std::int64_t now)noexcept{
-            return static_cast<Fixture*>(p)->backend.ReadAt(o,observed,now);},
+            auto& f=*static_cast<Fixture*>(p);return f.NativeRead(f.backend.ReadAt(o,observed,now));},
         [](void* p,const FeedEquipmentSubmission& s,bool noEntryOnly)noexcept{auto& f=*static_cast<Fixture*>(p);
             if(!noEntryOnly){++f.submits;f.submitted=s;}
             return f.backend.SubmitResult(s,f.now+1,noEntryOnly||f.refuse);},
@@ -78,8 +98,16 @@ struct Fixture {
     void PrepareTick(const fvr::math::Matrix4& wrist,bool grip,bool cancel=false){
         lastWrist=wrist;
         const auto age=(std::min)(100*Ms,registration->mechanism.maxAgeNs);
-        now+=10*Ms;++sequence;native.observedNs=now-1;native.deadlineNs=native.observedNs+age;
-        native.binding.observedNs=native.observedNs;native.binding.deadlineNs=native.deadlineNs;(void)backend.Publish(native,now);
+        now+=10*Ms;++sequence;
+        const auto publications=nativeCadence[nativeTick++%nativeCadence.size()];
+        for(unsigned n=0;n<publications;++n){
+            // Observations occur at actual fixture clock instants before this
+            // input. An idle native clock changes neither sequence nor lease.
+            native.observedNs=now-1-(publications-1-n)*(10*Ms/publications);
+            native.deadlineNs=native.observedNs+age;
+            native.binding.observedNs=native.observedNs;native.binding.deadlineNs=native.deadlineNs;
+            (void)backend.Publish(native,native.observedNs+1);++nativePublications;
+        }
         sample.binding=native.binding;
         selected->sequence=sequence;selected->observedNs=native.observedNs;selected->deadlineNs=native.deadlineNs;
         sample.input.sequence=sequence;sample.input.observedNs=now;sample.input.deadlineNs=now+age;sample.input.nowNs=now+1;
@@ -103,13 +131,38 @@ struct Fixture {
     Bc2PhysicalFeedResult Consume(const ReloadRawContact* rendered=nullptr){
         if(rendered){sample.raw=*rendered;sample.frameSequence=rendered->inputEvidence.sequence;}
         result=physical.Tick(sample,hands,intent);
+        if(result.diagnostic.policyEvaluated&&result.presentation&&result.ownsHand&&!result.pending&&
+           (result.interactionStatus==FeedInteractionStatus::Acquired||result.interactionStatus==FeedInteractionStatus::Moving||
+            result.interactionStatus==FeedInteractionStatus::Endpoint)){
+            const auto source=backend.ReadAt(sample.owner,sample.raw.inputEvidence.observedNs,sample.input.nowNs);
+            if(source){
+                if(lastAcceptedNative&&source->sequence==lastAcceptedNative->sequence&&
+                   sample.raw.inputEvidence.sequence>lastAcceptedInput){
+                    ++reusedNativeByOperation[unsigned(result.presentation->operation)];
+                    reusedNativeUnchanged=reusedNativeUnchanged&&*source==*lastAcceptedNative;
+                }
+                lastAcceptedNative=source;lastAcceptedInput=sample.raw.inputEvidence.sequence;
+            }
+        }
         if(std::getenv("FVR_FEED_TEST_TRACE"))std::fprintf(stderr,"profile=%llu tick=%llu grip=%d selected=%d blocked=%d owns=%d pending=%d status=%u interaction=%u reload=%u hand=%u angle=%.4f submits=%u\n",
             static_cast<unsigned long long>(registration->key),static_cast<unsigned long long>(sequence),sample.grip,result.selected,result.blocksFire,result.ownsHand,result.pending,
             unsigned(result.status),unsigned(result.interactionStatus),unsigned(result.reloadStatus),unsigned(result.handReason),result.presentation?result.presentation->coverRadians:-99.f,submits);
         return result;
     }
     Bc2PhysicalFeedResult Tick(const fvr::math::Matrix4& wrist,bool grip,bool cancel=false){
-        PrepareTick(wrist,grip,cancel);return Consume();
+        PrepareTick(wrist,grip,cancel);
+        if(!delayedRender)return Consume();
+        const auto next=sample.raw;
+        if(repeatRender&&lastRendered&&grip&&result.ownsHand&&!result.pending&&!lastRendered->inputEvidence.released[0]){
+            // A render pass can map the previous source again while current
+            // controller evidence has advanced. It cannot contribute motion.
+            const auto repeated=RepublishFeedContact(*lastRendered,lastRendered->weaponWorldMeters,sample.input.nowNs);
+            if(!firstRepeatedSource)firstRepeatedSource=repeated.inputEvidence.sequence;
+            Consume(&repeated);++repeatedRenders;
+        }
+        if(awaitingRender){Consume(&*awaitingRender);++delayedRenders;lastRendered=awaitingRender;}
+        else {Consume(&next);lastRendered=next;}
+        awaitingRender=next;return result;
     }
     FeedMotionProfile Open()const {return *BuildBc2FeedMotion(registration->geometry,
         FeedPhysicalOperation::OpenCover,registration->interactionPolicy);}
@@ -161,7 +214,13 @@ struct Fixture {
     bool PickSupply(){
         auto chest=Identity();const auto config=Bc2FeedSupplyConfig();
         for(unsigned n=0;n<3;++n)chest.values[3][n]=config.pouchCenterMeters[n];
-        sample.bodyFromHand=chest;Tick(chest,false);Tick(chest,false);Tick(chest,true);
+        sample.bodyFromHand=chest;
+        // Chest rebasing follows a suspension and intentionally still needs
+        // a newer native observation. Hold the physical neutral through one
+        // scheduled native cycle and its render lag before the pickup edge.
+        const auto neutralPackets=(std::max)(std::size_t{2},nativeCadence.size()+(delayedRender?1u:0u));
+        for(std::size_t packet=0;packet<neutralPackets;++packet)Tick(chest,false);
+        Tick(chest,true);
         const auto hand=hands.Current(InteractionHand::Left);
         return hand&&hand->token.kind==HandClaimKind::AmmoObject&&result.ownsHand;
     }
@@ -432,6 +491,104 @@ ReloadRawContact RepublishFeedContact(const ReloadRawContact& source,const fvr::
     return BuildSupportControllerMapping(source.owner,source.inputEvidence,input,source.rig,source.rigFingerprint,
         feed_interaction_detail::Multiply(local,world),world,world,1,now);
 }
+int EveryEnrolledFeedCompletesWithIndependentPublicationClocks(){
+    // Counts are native publications per 10 ms controller packet. Include
+    // controller:native 2:1, 3:1, irregular, and native:controller 2:1.
+    const std::array<std::vector<unsigned>,4> cadences{{{1,0},{1,0,0},{1,0,1,0,0,0,1,0,0},{2}}};
+    constexpr std::array operations{FeedPhysicalOperation::OpenCover,FeedPhysicalOperation::DetachContainer,
+        FeedPhysicalOperation::AttachContainer,FeedPhysicalOperation::SeatFeed,FeedPhysicalOperation::CloseCover};
+    unsigned configurations=0,cycles=0,receipts=0;
+    for(const auto& registration:RegisteredBc2FeedProfiles()){
+        ++configurations;
+        for(unsigned cadence=0;cadence<cadences.size();++cadence)for(bool delayed:{false,true}){
+            Fixture f(&registration);f.nativeCadence=cadences[cadence];f.sequence=9004;
+            f.wristCalibration=Turn(2.29598f);f.delayedRender=f.repeatRender=delayed;
+            const auto before=f.native.counts;
+            const auto units=(std::min)(before.capacity-before.loaded,before.reserve);
+            std::uint64_t lifetime=0;
+            const auto reconcile=[&](unsigned stage)->int{
+                CHECK(f.submitted&&f.submits==stage+1&&f.backend.Pending());
+                const auto command=f.submitted->command;
+                CHECK(command.authority.operation==operations[stage]&&command.request.id==stage+1);
+                CHECK(f.submitted->geometry.registrationKey==registration.key&&!f.result.submitRefused);
+                if(!lifetime)lifetime=command.request.lifetime;
+                CHECK(command.request.lifetime==lifetime);
+                CHECK(command.before.sequence==f.submitted->source.sequence);
+                CHECK(command.before.observedNs==f.submitted->source.observedNs);
+                CHECK(command.before.deadlineNs==f.submitted->source.deadlineNs);
+                CHECK(command.mutationRequired==(stage==2));
+                CHECK(command.authority.rounds==(stage==2?units:0));
+                // Offline callback rows exercise the real adapter's three
+                // firing-copy reconciliation. They are not game receipts.
+                CHECK(f.Callback());
+                const auto receipt=f.backend.Receipt(lifetime,command.request.id);CHECK(receipt);
+                CHECK(receipt->command==command&&receipt->acknowledgement.status==FeedReloadAcknowledgement::Applied);
+                CHECK(receipt->post.sequence>command.before.sequence&&receipt->post.observedNs>command.request.requestedNs);
+                CHECK(receipt->post.counts==command.after);
+                ++receipts;
+                // Let scheduled native publications corroborate the receipt;
+                // never publish an extra observation to force reconciliation.
+                for(std::size_t packet=0;packet<f.nativeCadence.size()+3;++packet)f.Tick(f.lastWrist,false);
+                CHECK(!f.backend.Pending()&&!f.result.pending&&f.submits==stage+1);
+                CHECK(f.native.counts==command.after);
+                CHECK(f.BlocksFire()==(stage!=4));
+                return 0;
+            };
+            CHECK(f.OpenCover());CHECK(reconcile(0)==0);CHECK(f.native.counts==before);
+            CHECK(f.Place(FeedPhysicalOperation::DetachContainer));CHECK(reconcile(1)==0);CHECK(f.native.counts==before);
+            CHECK(f.Place(FeedPhysicalOperation::AttachContainer));CHECK(reconcile(2)==0);
+            CHECK((f.native.counts==FeedAmmunitionCounts{before.loaded+units,before.reserve-units,before.capacity}));
+            CHECK(f.Place(FeedPhysicalOperation::SeatFeed));CHECK(reconcile(3)==0);
+            CHECK(f.Close());CHECK(reconcile(4)==0);
+            CHECK(f.submits==5&&!f.BlocksFire()&&f.reusedNativeUnchanged);
+            std::ostringstream report;f.physical.Report(report);
+            CHECK(report.str().find("\"receipts_accepted\":5")!=std::string::npos);
+            if(cadence<3){
+                CHECK(f.nativePublications<f.nativeTick);
+                for(auto operation:operations)CHECK(f.reusedNativeByOperation[unsigned(operation)]>0);
+            }else CHECK(f.nativePublications==2*f.nativeTick);
+            if(delayed)CHECK(f.delayedRenders>0&&f.repeatedRenders>0&&f.firstRepeatedSource==9006);
+            else CHECK(f.delayedRenders==0&&f.repeatedRenders==0);
+            ++cycles;
+        }
+    }
+    CHECK(configurations==24&&cycles==192&&receipts==960);
+    std::printf("Independent feed clocks: %u profiles, %u full cycles, %u offline mocked adapter receipts\n",configurations,cycles,receipts);
+    return 0;
+}
+int IndependentNativeClockExpiryAndMutationAreRejected(){
+    using namespace feed_interaction_detail;
+    for(bool mutate:{false,true}){
+        Fixture f;f.nativeCadence={1,0,0};f.wristCalibration=Identity();
+        const auto motion=f.Open();const auto start=feed_interaction_detail::Multiply(motion.motionFromContact,motion.weaponFromMotion);
+        f.Tick(start,false);const auto native=f.backend.Read(f.sample.owner,f.sample.input.nowNs);CHECK(native);
+        f.Tick(start,true);CHECK(f.result.interactionStatus==FeedInteractionStatus::Acquired&&f.result.ownsHand);
+        const auto acquired=f.backend.Read(f.sample.owner,f.sample.input.nowNs);CHECK(acquired&&*acquired==*native);
+        const auto cover=f.result.presentation->coverRadians;
+        if(mutate)f.mutateNativeObserved=true;
+        else {f.nativeCadence={0};f.now=native->deadlineNs-10*Ms;}
+        f.Tick(feed_interaction_detail::Multiply(Along(motion.motionFromContact,motion.kind,motion.travel/12),motion.weaponFromMotion),true);
+        CHECK(f.native.observedNs==native->observedNs&&f.native.deadlineNs==native->deadlineNs&&f.nativePublications==1);
+        CHECK(f.submits==0&&!f.backend.Pending()&&!f.result.pending&&f.BlocksFire());
+        if(mutate){
+            // All adapter admission and raw joins pass. Only immutable native
+            // observation identity changed under the reused sequence.
+            CHECK(f.result.diagnostic.admissionPassed==63&&f.result.diagnostic.rawPassed==511);
+            // The ammunition ledger detects this same-sequence mutation
+            // before granting recognizer authority; reload retains its own
+            // exact snapshot-mismatch rejection as well.
+            CHECK(f.result.interactionStatus==FeedInteractionStatus::Interrupted);
+            CHECK(f.result.reloadStatus==FeedReloadStatus::SnapshotMismatch);
+            CHECK(f.result.presentation&&f.result.presentation->coverRadians==cover);
+        }else {
+            CHECK(f.sample.input.observedNs==native->deadlineNs&&f.sample.input.deadlineNs>f.sample.input.nowNs);
+            CHECK(!f.backend.Read(f.sample.owner,f.sample.input.nowNs));
+            CHECK(f.result.diagnostic.exit==Bc2PhysicalFeedExit::ViewUnavailable&&!f.result.diagnostic.policyEvaluated);
+            CHECK(!f.result.ownsHand&&!f.result.presentation&&!f.hands.Current(InteractionHand::Left));
+        }
+    }
+    return 0;
+}
 int EveryEnrolledFeedRetainsRepeatedPacketThroughOpenCover(){
     using namespace feed_interaction_detail;unsigned configurations=0;
     for(const auto& registration:RegisteredBc2FeedProfiles()){
@@ -640,6 +797,7 @@ int StartupRejectionBarrierStaysWithinItsInputLifetime(){
     return 0;
 }
 int PartialCoverRequiresFreshRegraspAndPreservesProgress(){
+    {
     Fixture f;using namespace feed_interaction_detail;const auto m=f.Open();
     const auto pose=[&](double t){return feed_interaction_detail::Multiply(Along(m.motionFromContact,m.kind,m.travel*t),m.weaponFromMotion);};
     f.Tick(pose(0),false);f.Tick(pose(0),true);
@@ -651,7 +809,76 @@ int PartialCoverRequiresFreshRegraspAndPreservesProgress(){
     for(unsigned step=0;step<8;++step)f.Tick(pose(1),true);
     CHECK(!f.submitted);f.Tick(pose(1),false);
     CHECK(f.submitted&&f.submitted->command.request.id==1);CHECK(f.submitted->command.authority.operation==FeedPhysicalOperation::OpenCover);
-    CHECK(f.Reconcile());CHECK(f.result.presentation->coverRadians>1.4f);return 0;
+    CHECK(f.Reconcile());CHECK(f.result.presentation->coverRadians>1.4f);
+    }
+    for(bool delayed:{false,true})for(unsigned fault=0;fault<3;++fault){
+        Fixture f;using namespace feed_interaction_detail;const auto m=f.Open();
+        f.nativeCadence={1,0,0};f.delayedRender=f.repeatRender=delayed;
+        const auto pose=[&](double t){return feed_interaction_detail::Multiply(Along(m.motionFromContact,m.kind,m.travel*t),m.weaponFromMotion);};
+        f.Tick(pose(0),false);f.Tick(pose(0),true);
+        for(unsigned step=1;step<=6;++step)f.Tick(pose(double(step)/12),true);
+        f.Tick(pose(.5),true); // Deliver the final partial-motion source under render lag.
+        CHECK(!f.submitted&&f.result.presentation&&f.result.presentation->coverRadians>.7f);
+        const auto partial=f.result.presentation->coverRadians;
+        const auto lifetime=f.result.presentation->lifetime;
+        // Publish at suspension, then leave two controller packets on that
+        // exact native observation so recovery must wait before rearming.
+        f.nativeTick=0;f.Tick(pose(.5),false,true);CHECK(f.BlocksFire());
+        bool waited=false,armed=false;
+        std::optional<FeedEquipmentNativeView> previousNative;
+        for(unsigned packet=0;packet<8;++packet){
+            f.Tick(pose(.5),false);
+            CHECK(!f.submitted&&!f.result.pending&&f.BlocksFire());
+            CHECK(f.result.presentation&&Near(f.result.presentation->coverRadians,partial));
+            CHECK(f.result.presentation->lifetime==lifetime);
+            const auto source=f.backend.ReadAt(f.sample.owner,f.sample.raw.inputEvidence.observedNs,f.sample.input.nowNs);
+            CHECK(source);
+            if(f.result.diagnostic.policyEvaluated&&f.result.interactionStatus==FeedInteractionStatus::NeedNeutral){
+                CHECK(previousNative&&*source==*previousNative);
+                CHECK(!f.result.ownsHand);waited=true;
+                if(fault){
+                    f.nativeCadence={0};
+                    if(fault==1)f.now=source->deadlineNs-10*Ms;
+                    else f.mutateNativeObserved=true;
+                    f.Tick(pose(.5),false);
+                    CHECK(f.submits==0&&!f.backend.Pending()&&!f.result.pending&&f.BlocksFire());
+                    if(fault==1){
+                        CHECK(!f.backend.Read(f.sample.owner,f.sample.input.nowNs));
+                        CHECK(f.result.diagnostic.exit==Bc2PhysicalFeedExit::ViewUnavailable);
+                        CHECK(!f.result.ownsHand&&!f.result.presentation);
+                    }else {
+                        CHECK(f.result.interactionStatus==FeedInteractionStatus::Interrupted);
+                        CHECK(f.result.reloadStatus==FeedReloadStatus::SnapshotMismatch);
+                        CHECK(f.result.presentation&&Near(f.result.presentation->coverRadians,partial));
+                    }
+                    break;
+                }
+            }
+            if(f.result.diagnostic.policyEvaluated&&f.result.interactionStatus==FeedInteractionStatus::Armed){armed=true;break;}
+            previousNative=source;
+        }
+        CHECK(waited);
+        if(fault)continue;
+        CHECK(armed);
+        f.Tick(pose(.5),true);if(delayed)f.Tick(pose(.5),true);
+        CHECK(f.result.ownsHand&&f.result.interactionStatus==FeedInteractionStatus::Acquired);
+        CHECK(f.result.presentation&&Near(f.result.presentation->coverRadians,partial));
+        for(unsigned step=7;step<=12;++step)f.Tick(pose(double(step)/12),true);
+        for(unsigned packet=0;packet<f.DwellPackets()+3;++packet)f.Tick(pose(1),true);
+        CHECK(!f.submitted&&f.result.presentation&&f.result.presentation->coverRadians>1.4f);
+        f.Tick(pose(1),false);if(delayed)f.Tick(pose(1),false);
+        CHECK(f.submitted&&f.submits==1&&f.submitted->command.request.id==1);
+        CHECK(f.submitted->command.request.lifetime==lifetime);
+        CHECK(f.submitted->command.authority.operation==FeedPhysicalOperation::OpenCover);
+        CHECK(f.submitted->command.before.observedNs==f.submitted->source.observedNs);
+        CHECK(f.submitted->command.before.deadlineNs==f.submitted->source.deadlineNs);
+        CHECK(f.Callback());
+        for(unsigned packet=0;packet<6;++packet)f.Tick(pose(1),false);
+        CHECK(!f.result.pending&&f.result.presentation&&f.result.presentation->coverRadians>1.4f);
+        CHECK(f.native.counts.loaded==20&&f.native.counts.reserve==130);
+        if(delayed)CHECK(f.delayedRenders>0&&f.repeatedRenders>0);
+    }
+    return 0;
 }
 int LongStowMigratesOnlySamePinnedResource(){
     Fixture f;CHECK(f.OpenCover());const auto lifetime=f.submitted->command.request.lifetime;
@@ -779,6 +1006,8 @@ int main(){
     CHECK(EveryEnrolledFeedUsesAnatomicalControllerMapping()==0);
     CHECK(EveryEnrolledFeedAcceptsObservedGraspWithDelayedPublication()==0);
     CHECK(EveryEnrolledFeedStartsFromReleasedApproach()==0);
+    CHECK(EveryEnrolledFeedCompletesWithIndependentPublicationClocks()==0);
+    CHECK(IndependentNativeClockExpiryAndMutationAreRejected()==0);
     CHECK(EveryEnrolledFeedRetainsRepeatedPacketThroughOpenCover()==0);
     CHECK(RepeatedFeedPacketRejectsChangedSourceAndExpiredAuthority()==0);
     CHECK(EveryEnrolledFeedConsumesMissedStartupEdge()==0);
@@ -790,5 +1019,5 @@ int main(){
     CHECK(SameAddressReplacementDoesNotInheritFeedDebt()==0);
     CHECK(RealNoEntryReceiptRecoversCompletedEndpointWithNewId()==0);
     CHECK(DrainedActorReplacementReclaimsSlotsWithoutInventingAmmunitionSuccess()==0);
-    std::puts("Bc2PhysicalFeedTests: 25 deterministic owner/arbiter/callback compositions; no game or headset acceptance");
+    std::puts("Bc2PhysicalFeedTests: 27 deterministic owner/arbiter/callback compositions; no game or headset acceptance");
 }

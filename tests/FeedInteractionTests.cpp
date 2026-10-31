@@ -72,6 +72,10 @@ struct Fixture {
         now+=advance;++s.sequence;++s.inputSequence;s.observedNs=now;
         sample.contact={s.owner,s.mechanism,s.sequence,s.inputSequence,now,true,true,Product(graspOrientation,Pose(progress))};sample.grip=grip;
     }
+    void PrepareInput(float progress,bool grip=true,std::int64_t advance=10){
+        now+=advance;++s.inputSequence;
+        sample.contact={s.owner,s.mechanism,s.sequence,s.inputSequence,now,true,true,Product(graspOrientation,Pose(progress))};sample.grip=grip;
+    }
     FeedInteractionResult Run(){result=controller.Update(p,geometry,s,desired,sample,now);return result;}
     FeedInteractionResult Step(float progress,bool grip=true,std::int64_t advance=10){Prepare(progress,grip,advance);return Run();}
     bool Acquire(){return Step(0,false).status==Status::Armed&&Step(0).status==Status::Acquired;}
@@ -286,6 +290,83 @@ int ImmutableInputAndSnapshotSequences(){
         CHECK(f.Run().status==Status::InvalidInput&&!f.result.completion);
     }return 0;
 }
+int NewControllerPacketsUseUnchangedNativeSnapshot(){
+    for(const auto op:{Op::ReleaseLatch,Op::OpenCover,Op::CloseCover,Op::SeatFeed}){
+        Fixture f(op);const auto native=f.s;CHECK(f.Run().status==Status::Armed);
+        CHECK(f.Run().status==Status::Duplicate&&!f.result.completion&&!f.result.target);
+        f.PrepareInput(0);CHECK(f.Run().status==Status::Acquired);
+        CHECK(f.Run().status==Status::Duplicate&&!f.result.completion&&!f.result.target);
+        f.PrepareInput(.2f);CHECK(f.Run().status==Status::Moving&&f.result.target);
+        CHECK(f.Run().status==Status::Duplicate&&!f.result.completion&&!f.result.target);
+        for(float progress:{.4f,.6f,.8f,.95f,.95f,.95f}){f.PrepareInput(progress);f.Run();}
+        CHECK(f.result.status==Status::Completed&&f.result.completion);
+        CHECK(f.result.completion->candidate.snapshotSequence==native.sequence);
+        CHECK(f.result.completion->inputSequence==f.s.inputSequence&&f.result.completion->completedNs==f.now);
+        CHECK(f.s.sequence==native.sequence&&f.s.observedNs==native.observedNs);
+        CHECK(feed_reload_detail::SameNativeSnapshot(f.s,native)&&!feed_reload_detail::SameSnapshot(f.s,native));
+    }return 0;
+}
+int ReusedNativeSequenceRejectsMutationWithNewOrRepeatedInput(){
+    for(const bool newInput:{false,true})for(unsigned mutation=0;mutation<10;++mutation){
+        Fixture f;CHECK(f.Acquire());const auto native=f.s;
+        if(newInput)f.PrepareInput(.2f);
+        switch(mutation){
+        case 0:f.s.contacts[f.Part()].weaponFromContact.values[3][0]+=.001f;break;
+        case 1:f.s.contacts[static_cast<unsigned>(FeedPart::Cover)].weaponFromContact.values[3][1]+=.001f;break;
+        case 2:++f.s.contacts[static_cast<unsigned>(FeedPart::Cover)].role;break;
+        case 3:++f.s.observedNs;break;
+        case 4:f.s.supply.state=FeedSupplyState::Unavailable;break;
+        case 5:++f.s.attached.resource.generation;break;
+        case 6:f.s.cycle=FeedCycleState::NativeReady;break;
+        case 7:f.s.refill={FeedRefillState::Required,500,0};break;
+        case 8:f.s.reconciled=false;break;
+        default:f.s.feed=FeedSeatState::Unseated;f.s.seated={};break;
+        }
+        CHECK(f.Run().status==Status::InvalidInput&&!f.result.completion&&!f.result.target);
+        const auto input=f.s.inputSequence;f.s=native;f.s.inputSequence=input;
+        CHECK(f.Run().status==Status::InvalidInput); // Repair cannot replay the rejected controller packet.
+    }
+    for(const bool changedHand:{false,true}){
+        Fixture f;CHECK(f.Acquire());f.controller.Interrupt();f.PrepareInput(0,false);
+        if(changedHand)++f.sample.hand.generation;else ++f.sample.trackingGeneration;
+        f.s.contacts[static_cast<unsigned>(FeedPart::Cover)].weaponFromContact.values[3][1]+=.001f;
+        CHECK(f.Run().status==Status::InvalidInput&&!f.result.completion&&!f.result.target);
+    }
+    return 0;
+}
+int SameNativeInputKeepsExpiryOwnerAndRollbackGates(){
+    for(unsigned invalid=0;invalid<5;++invalid){
+        Fixture f;CHECK(f.Acquire());f.PrepareInput(.2f,true,invalid==0?101:10);
+        switch(invalid){
+        case 0:break;
+        case 1:++f.s.owner.actorGeneration;f.sample.contact.owner=f.s.owner;break;
+        case 2:f.s.inputSequence-=2;f.sample.contact.inputSequence=f.s.inputSequence;break;
+        case 3:--f.s.sequence;f.sample.contact.snapshotSequence=f.s.sequence;break;
+        default:--f.s.observedNs;break;
+        }
+        const auto r=f.Run();CHECK(!r.completion&&!r.target);
+        CHECK(r.status==(invalid==1?Status::CandidateChanged:Status::InvalidInput));
+        if(invalid==0)CHECK(r.evidence==FeedMechanismStatus::Stale);
+    }return 0;
+}
+int RepeatedControllerGeometryAndFlagsRemainImmutable(){
+    for(unsigned mutation=0;mutation<8;++mutation){
+        Fixture f;CHECK(f.Acquire());const auto packet=f.sample;
+        switch(mutation){
+        case 0:f.sample.contact.weaponFromHandContact.values[3][0]+=.001f;break;
+        case 1:f.sample.grip=false;break;
+        case 2:f.sample.focused=false;break;
+        case 3:f.sample.cancel=true;break;
+        case 4:f.sample.operationPermitted=false;break;
+        case 5:f.sample.contact.tracked=false;break;
+        case 6:f.sample.contact.handAvailable=false;break;
+        default:f.sample.weaponWorld=Identity();break;
+        }
+        const auto r=f.Run();CHECK(!r.completion&&!r.target);
+        CHECK(r.status==Status::InvalidInput||r.status==Status::Interrupted);
+        f.sample=packet;CHECK(f.Run().status==Status::InvalidInput);
+    }return 0;
+}
 // Entirely synthetic metre geometry. These frames are not M60 measurements,
 // sockets, grip evidence, or native/resource authority.
 Matrix Placed(float x,float y,float z,float angle){auto m=Turn(angle);m.values[3]={x,y,z,1};return m;}
@@ -326,6 +407,25 @@ struct PlacementFixture:Fixture {
     FeedInteractionResult Dwell(){Approach();At(Destination());return At(Destination());}
     FeedInteractionResult Place(){Dwell();return At(Destination(),false);}
 };
+int FreePlacementMovesAndReleasesAgainstOneNativeObservation(){
+    PlacementFixture f;CHECK(f.At(f.Source(),false).status==Status::Armed);const auto native=f.s;
+    const auto input=[&](const Matrix& object,bool grip=true){
+        f.now+=10;++f.s.inputSequence;
+        f.sample.contact={f.s.owner,f.s.mechanism,f.s.sequence,f.s.inputSequence,f.now,true,true,f.Hand(object)};
+        f.sample.grip=grip;return f.Run();
+    };
+    CHECK(input(f.Source()).status==Status::Acquired);
+    for(const auto& object:{Placed(.28f,-.17f,.43f,.5f),Placed(.31f,-.13f,.46f,.7f),
+        Placed(.36f,-.1f,.43f,.9f),Placed(.40f,-.12f,.40f,1.1f)})
+        CHECK(input(object).status==Status::Moving&&!f.result.completion);
+    for(unsigned dwell=0;dwell<3;++dwell)CHECK(input(f.Destination()).status==Status::Endpoint&&!f.result.completion);
+    CHECK(f.Run().status==Status::Duplicate&&!f.result.completion&&!f.result.target);
+    CHECK(input(f.Destination(),false).status==Status::Completed&&f.result.completion);
+    CHECK(f.result.completion->candidate.snapshotSequence==native.sequence);
+    CHECK(f.result.completion->inputSequence==f.s.inputSequence&&f.result.completion->completedNs==f.now);
+    CHECK(f.s.sequence==native.sequence&&f.s.observedNs==native.observedNs&&feed_reload_detail::SameNativeSnapshot(f.s,native));
+    return 0;
+}
 int PlacementIrregularCarryHasActualPresentationAndNoStateWrites(){
     PlacementFixture f;CHECK(f.Pickup());CHECK(SamePose(*f.result.target,f.Source()));
     CHECK(f.result.targetKind==FeedInteractionTargetKind::Object);
@@ -539,6 +639,62 @@ int PartialHingeRecoveryRetainsTravelAndRequiresFreshRelease(){
     CHECK(f.Step(.95f,false).completion&&f.result.completion->id==1);
     CHECK(f.s.cover==FeedCoverState::Closed);return 0;
 }
+int RecoveryWaitRetainsPartialTravelUntilNewNativeObservation(){
+    for(bool held:{false,true}){
+        Fixture f(Op::OpenCover);CHECK(f.Acquire());f.Step(.2f);f.Step(.4f);
+        const auto proof=*f.controller.RecoveryMotion();f.controller.Interrupt();
+        f.s.contacts[f.Part()].weaponFromContact=proof.WeaponFromHeld();f.Prepare(.4f,false,1000);
+        CHECK(f.controller.RecoverMotion(f.p,f.geometry,f.s,f.desired,proof,f.now));
+        const auto admitted=f.s;
+        for(unsigned wait=0;wait<2;++wait){
+            f.PrepareInput(.4f,held);CHECK(f.Run().status==Status::NeedNeutral);
+            CHECK(!f.result.target&&!f.result.completion&&f.result.targetKind==FeedInteractionTargetKind::None);
+            CHECK(feed_reload_detail::SameNativeSnapshot(f.s,admitted));
+            CHECK(f.controller.RecoveryMotion()->WeaponFromHeld().values==proof.WeaponFromHeld().values);
+            CHECK(f.Run().status==Status::NeedNeutral&&!f.result.target&&!f.result.completion);
+        }
+        // Waiting release packets did not arm; even a newer native observation
+        // still needs a fresh release before the retained hinge can be grasped.
+        CHECK(f.Step(.4f).status==Status::NeedNeutral);
+        CHECK(f.Step(.4f,false).status==Status::Armed);
+        f.PrepareInput(.4f);CHECK(f.Run().status==Status::Acquired);
+        CHECK(Near(static_cast<float>(f.result.progress),.4f));
+        for(float point:{.6f,.8f,.95f,.95f,.95f})CHECK(!f.Step(point).completion);
+        CHECK(f.Step(.95f,false).completion&&f.result.completion->id==1);
+        CHECK(f.s.cover==FeedCoverState::Closed);
+    }
+    return 0;
+}
+int RecoveryWaitKeepsExpiryMutationAndInputSafety(){
+    for(unsigned defect=0;defect<10;++defect){
+        Fixture f(Op::OpenCover);CHECK(f.Acquire());f.Step(.2f);f.Step(.4f);
+        const auto proof=*f.controller.RecoveryMotion();f.controller.Interrupt();
+        f.s.contacts[f.Part()].weaponFromContact=proof.WeaponFromHeld();f.Prepare(.4f,false,1000);
+        CHECK(f.controller.RecoverMotion(f.p,f.geometry,f.s,f.desired,proof,f.now));
+        // Mutations on the very first waiting packet must be checked against
+        // the exact recovered observation, not only the older movement frame.
+        f.PrepareInput(.4f,false,defect==0?f.p.maxAgeNs+1:10);
+        switch(defect){
+        case 0:break; // Current controller input cannot renew expired native evidence.
+        case 1:++f.s.observedNs;break;
+        case 2:f.s.contacts[f.Part()].weaponFromContact.values[3][0]+=.001f;break;
+        case 3:++f.s.owner.equipGeneration;f.sample.contact.owner=f.s.owner;break;
+        case 4:f.sample.contact.tracked=false;break;
+        case 5:f.sample.contact.handAvailable=false;break;
+        case 6:f.sample.focused=false;break;
+        case 7:f.sample.cancel=true;break;
+        case 8:--f.s.sequence;f.sample.contact.snapshotSequence=f.s.sequence;break;
+        default:
+            CHECK(f.Run().status==Status::NeedNeutral);
+            f.sample.grip=true; // Rewriting a waiting packet cannot create a press.
+            break;
+        }
+        const auto status=f.Run().status;
+        CHECK(status==Status::InvalidInput||status==Status::CandidateChanged||status==Status::Interrupted);
+        CHECK(!f.result.target&&!f.result.completion&&f.result.targetKind==FeedInteractionTargetKind::None);
+    }
+    return 0;
+}
 int EndpointPlacementRecoveryCannotReuseOldDwell(){
     PlacementFixture f;CHECK(f.Pickup());CHECK(f.Dwell().status==Status::Endpoint);
     auto proof=*f.controller.RecoveryMotion();f.controller.Interrupt();
@@ -615,6 +771,9 @@ int main(){
        MeasuredStartMustMatchObservedContact()||StaleIncoherentAndUnavailableEvidence()||ReversedSequenceAndTimeCannotComplete()||
        GestureDeadlineAlsoRejectsDuplicate()||SnapshotCannotMutateStableProfileDuringMotion()||
        PendingExternalWorkSuppressesGestureUntilFreshNeutral()||ImmutableInputAndSnapshotSequences()||
+       NewControllerPacketsUseUnchangedNativeSnapshot()||ReusedNativeSequenceRejectsMutationWithNewOrRepeatedInput()||
+       SameNativeInputKeepsExpiryOwnerAndRollbackGates()||RepeatedControllerGeometryAndFlagsRemainImmutable()||
+       FreePlacementMovesAndReleasesAgainstOneNativeObservation()||
        PlacementIrregularCarryHasActualPresentationAndNoStateWrites()||PlacementAllFourOperationsRetainCurrentTypeAndResource()||
        PlacementNeedsFreshNeutralAndMeasuredSourceGrip()||PlacementPreservesActualPickupOffset()||
        PlacementWrongSocketOrOrientationCannotComplete()||PlacementMidairAndPrematureReleaseCannotComplete()||
@@ -623,7 +782,8 @@ int main(){
        PlacementMissingOrInvalidMeasuredGeometryFailsClosed()||PlacementTeleportAndRotationJumpRejected()||
        PlacementDuplicateAndEqualTimeCannotEstablishDwell()||PlacementOperationChangeCannotReuseDestinationDwell()||
        ReplenishmentPolicyAndEvidenceCannotChangeDuringGesture()||PartialHingeRecoveryRetainsTravelAndRequiresFreshRelease()||
+       RecoveryWaitRetainsPartialTravelUntilNewNativeObservation()||RecoveryWaitKeepsExpiryMutationAndInputSafety()||
        EndpointPlacementRecoveryCannotReuseOldDwell()||RecoveryProofCannotAuthorizeAnotherOwnerProfileOrRecognizer()||
        WorldCarryRecoveryProjectsOnlyRetainedMovementFrame())return 1;
-    std::puts("FeedInteraction: 45 deterministic cases passed (synthetic measured geometry; no native acceptance).");return 0;
+    std::puts("FeedInteraction: 52 deterministic cases passed (synthetic measured geometry; no native acceptance).");return 0;
 }

@@ -230,7 +230,7 @@ public:
         recoveryStart_=proof;recoveryStart_->held_=held;
         if(frame&&proof.Kind()==FeedMotionKind::FreePlacement)recoveryStart_->weaponWorld_=frame->weaponWorld;
         recoveryStart_->id_=++proofId_;recovery_=recoveryStart_;
-        recoveryInput_=snapshot.inputSequence;recoverySnapshot_=snapshot.sequence;
+        recoveryInput_=snapshot.inputSequence;recoverySnapshot_=snapshot;
         recoveryObserved_=frame&&proof.Kind()==FeedMotionKind::FreePlacement?frame->observedNs:snapshot.observedNs;
         return true;
     }
@@ -272,9 +272,19 @@ public:
         if(nowNs<lastNow_)return fail(FeedInteractionStatus::InvalidInput);
         lastNow_=nowNs;
         if(moving_&&nowNs-started_>motion.maximumGestureNs)return fail(FeedInteractionStatus::Expired);
+        const bool waitingRecovery=recoveryStart_&&!moving_&&snapshot.sequence==recoverySnapshot_.sequence;
+        if(recoveryStart_&&!moving_&&(contact.inputSequence<=recoveryInput_||contact.observedNs<=recoveryObserved_||
+           snapshot.sequence<recoverySnapshot_.sequence||
+           (waitingRecovery&&!feed_reload_detail::SameNativeSnapshot(snapshot,recoverySnapshot_))))
+            return fail(FeedInteractionStatus::InvalidInput);
         const bool sameStream=stream_&&contact.owner==lastOwner_&&contact.mechanism==lastMechanism_&&
             sample.hand==lastHand_&&sample.trackingGeneration==lastTracking_;
         if(sameStream&&(contact.inputSequence<lastInput_||contact.observedNs<lastObserved_||snapshot.sequence<lastSnapshot_))
+            return fail(FeedInteractionStatus::InvalidInput);
+        const bool sameNativeStream=stream_&&snapshot.owner==lastNativeSnapshot_.owner&&snapshot.mechanism==lastNativeSnapshot_.mechanism;
+        const bool changedNative=sameNativeStream&&snapshot.sequence==lastNativeSnapshot_.sequence&&
+            !feed_reload_detail::SameNativeSnapshot(snapshot,lastNativeSnapshot_);
+        if(sameNativeStream&&(snapshot.sequence<lastNativeSnapshot_.sequence||snapshot.observedNs<lastNativeSnapshot_.observedNs))
             return fail(FeedInteractionStatus::InvalidInput);
         if(sameStream&&contact.inputSequence==lastInput_){
             if(snapshot.sequence!=lastSnapshot_||contact.observedNs!=lastObserved_||
@@ -282,21 +292,26 @@ public:
                 return fail(FeedInteractionStatus::InvalidInput);
             if(bound_&&(!Same(candidate_,candidate)||!Same(motion_,motion)||!Same(mechanism_,mechanismProfile)))
                 return fail(FeedInteractionStatus::CandidateChanged);
-            out.status=FeedInteractionStatus::Duplicate;return out;
+            if(changedNative)return fail(FeedInteractionStatus::InvalidInput);
+            out.status=waitingRecovery?FeedInteractionStatus::NeedNeutral:FeedInteractionStatus::Duplicate;return out;
         }
-        if(sameStream&&snapshot.sequence==lastSnapshot_)return fail(FeedInteractionStatus::InvalidInput);
+        if(changedNative)return fail(FeedInteractionStatus::InvalidInput);
         const auto previousObserved=lastObserved_;
         stream_=true;lastOwner_=contact.owner;lastMechanism_=contact.mechanism;lastHand_=sample.hand;
         lastTracking_=sample.trackingGeneration;lastInput_=contact.inputSequence;lastObserved_=contact.observedNs;
         lastSnapshot_=snapshot.sequence;lastRaw_=contact.weaponFromHandContact;lastGrip_=sample.grip;lastWeaponWorld_=sample.weaponWorld;
+        lastNativeSnapshot_=snapshot;
         if(bound_&&(!sameStream||!Same(candidate_,candidate)||!Same(motion_,motion)||!Same(mechanism_,mechanismProfile)))
             return fail(FeedInteractionStatus::CandidateChanged);
         if(bound_&&contact.observedNs-previousObserved>motion.maxInputGapNs)return fail(FeedInteractionStatus::Interrupted);
         if(motion.kind==FeedMotionKind::FreePlacement&&sameStream&&contact.observedNs<=previousObserved)
             return fail(FeedInteractionStatus::InvalidInput);
         if(!moving_){
-            if(recoveryStart_&&(contact.inputSequence<=recoveryInput_||snapshot.sequence<=recoverySnapshot_||
-               contact.observedNs<=recoveryObserved_))return fail(FeedInteractionStatus::InvalidInput);
+            // Fresh controller packets may precede the next native observation.
+            // Keep the admitted origin, but require new native evidence and a
+            // fresh neutral before regrasp. NeedNeutral also preserves it in
+            // FeedReloadSession without arming, moving or issuing a receipt.
+            if(waitingRecovery){out.status=FeedInteractionStatus::NeedNeutral;return out;}
             if(!sample.grip){
                 bound_=true;candidate_=candidate;motion_=motion;mechanism_=mechanismProfile;
                 out.status=FeedInteractionStatus::Armed;return out;
@@ -428,9 +443,10 @@ private:
     std::uint64_t lastTracking_=0,lastInput_=0,lastSnapshot_=0,receiptId_=0;
     std::int64_t lastNow_=0,lastObserved_=0,started_=0,endpoint_=0;
     FeedPhysicalCandidate candidate_{};FeedMotionProfile motion_{};FeedMechanismProfile mechanism_{};
+    FeedMechanismSnapshot lastNativeSnapshot_{},recoverySnapshot_{};
     math::Matrix4 grabbed_{},previous_{},lastRaw_{},carried_{};
     const std::uint64_t lifetime_=0;
-    std::uint64_t proofId_=0,recoveryInput_=0,recoverySnapshot_=0;
+    std::uint64_t proofId_=0,recoveryInput_=0;
     std::int64_t recoveryObserved_=0;
     double travel_=0;
     bool moved_=false,recoveringActive_=false,recoveryDwelled_=false,movingWorld_=false;

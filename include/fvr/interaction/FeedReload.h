@@ -75,15 +75,20 @@ struct FeedReloadResult {
 };
 
 namespace feed_reload_detail {
-inline bool SameSnapshot(const FeedMechanismSnapshot& a,const FeedMechanismSnapshot& b)noexcept {
+// Controller input advances independently of the immutable native observation.
+// Excluding its sequence does not renew native time or change any native field.
+inline bool SameNativeSnapshot(const FeedMechanismSnapshot& a,const FeedMechanismSnapshot& b)noexcept {
     if(a.owner!=b.owner||a.mechanism!=b.mechanism||a.profileId!=b.profileId||a.profileRevision!=b.profileRevision||
-       a.sequence!=b.sequence||a.inputSequence!=b.inputSequence||a.observedNs!=b.observedNs||a.reconciled!=b.reconciled||
+       a.sequence!=b.sequence||a.observedNs!=b.observedNs||a.reconciled!=b.reconciled||
        a.cover!=b.cover||a.latch!=b.latch||a.container!=b.container||a.feed!=b.feed||a.cycle!=b.cycle||
        a.attached!=b.attached||a.seated!=b.seated||a.supply.key!=b.supply.key||
        a.supply.ammunitionKind!=b.supply.ammunitionKind||a.supply.state!=b.supply.state||a.refill!=b.refill)return false;
     for(unsigned i=0;i<a.contacts.size();++i)
         if(a.contacts[i].role!=b.contacts[i].role||a.contacts[i].weaponFromContact.values!=b.contacts[i].weaponFromContact.values)return false;
     return true;
+}
+inline bool SameSnapshot(const FeedMechanismSnapshot& a,const FeedMechanismSnapshot& b)noexcept {
+    return a.inputSequence==b.inputSequence&&SameNativeSnapshot(a,b);
 }
 inline bool EffectObserved(const FeedReloadRequest& r,const FeedMechanismSnapshot& s)noexcept {
     const auto& c=r.completion.candidate;
@@ -203,7 +208,7 @@ inline bool FeedReload::CanRebaseMotion(const FeedMechanismSnapshot& s,std::int6
     if(!Valid()||!Identity(s)||armed_||pending_||acknowledgement_||completed_||retired_||nowNs<lastCallNs_||
        !feed_mechanism_detail::Fresh(s.observedNs,nowNs,profile_.maxAgeNs))return false;
     if(lastSnapshot_&&(s.sequence<lastSnapshot_->sequence||s.inputSequence<lastInput_||s.observedNs<lastSnapshot_->observedNs||
-       (s.sequence==lastSnapshot_->sequence&&!feed_reload_detail::SameSnapshot(s,*lastSnapshot_))))return false;
+       (s.sequence==lastSnapshot_->sequence&&!feed_reload_detail::SameNativeSnapshot(s,*lastSnapshot_))))return false;
     if(profile_.sameContainerReplenishment&&
        ((refillRequired_&&s.refill.state==FeedRefillState::NotRequired)||
         (s.refill.state==FeedRefillState::Applied&&s.refill.requestId!=refillRequest_)||
@@ -267,13 +272,13 @@ inline FeedReloadResult FeedReload::Update(const FeedReloadSample& x)noexcept {
     if(lastSnapshot_&&(s.sequence<lastSnapshot_->sequence||s.inputSequence<lastInput_||s.observedNs<lastSnapshot_->observedNs)){
         Suspend();return Result(FeedReloadStatus::SequenceRollback);
     }
-    if(lastSnapshot_&&s.sequence==lastSnapshot_->sequence&&!SameSnapshot(s,*lastSnapshot_)){
+    if(lastSnapshot_&&s.sequence==lastSnapshot_->sequence&&!SameNativeSnapshot(s,*lastSnapshot_)){
         Suspend();return Result(FeedReloadStatus::SnapshotMismatch);
     }
     const bool freshInput=s.inputSequence>lastInput_;
     const bool freshSnapshot=!lastSnapshot_||s.sequence>lastSnapshot_->sequence;
     const bool inputGap=lastInputNs_&&x.nowNs-lastInputNs_>profile_.maxAgeNs;
-    if(freshSnapshot)lastSnapshot_=s;
+    if(freshSnapshot||freshInput)lastSnapshot_=s;
     if(freshInput){lastInput_=s.inputSequence;lastInputNs_=x.nowNs;}
     if(!x.focused||!x.tracked||!x.held||inputGap)Suspend();
     const auto next=EvaluateFeedMechanism(profile_,s,goal_,x.nowNs);
@@ -308,7 +313,7 @@ inline FeedReloadResult FeedReload::Update(const FeedReloadSample& x)noexcept {
     }
     if(completed_)return Result(FeedReloadStatus::Complete,next.status);
     if(!x.focused||!x.tracked||!x.held)return Result(FeedReloadStatus::Suspended,next.status);
-    if(!freshInput||!freshSnapshot)return Result(FeedReloadStatus::DuplicatePacket,next.status);
+    if(!freshInput)return Result(FeedReloadStatus::DuplicatePacket,next.status);
     if(suspended_){
         if(!x.neutral||x.completion||s.inputSequence<=resumeInput_||s.sequence<=resumeSnapshot_)
             return Result(FeedReloadStatus::NeutralRequired,next.status);

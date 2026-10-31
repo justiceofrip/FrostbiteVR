@@ -35,6 +35,10 @@ struct Fixture {
         ++x.snapshot.sequence;++x.snapshot.inputSequence;x.snapshot.observedNs=++x.nowNs;
         x.neutral=false;x.completion.reset();x.acknowledgement.reset();
     }
+    void InputTick(){
+        ++x.snapshot.inputSequence;++x.nowNs;
+        x.neutral=false;x.completion.reset();x.acknowledgement.reset();
+    }
     FeedReloadResult Update(){return reload->Update(x);}
     FeedReloadResult Neutral(){Tick();x.neutral=true;return Update();}
     void Intent(){
@@ -142,6 +146,91 @@ int SamePacketCannotDispatchOrRearm(){
     CHECK(!f.Apply(*r.dispatch).pending);
     f.x.acknowledgement.reset();f.x.neutral=true;
     CHECK(f.Update().status==Status::DuplicatePacket);return 0;
+}
+int ControllerCadencePreservesExactObservationAndNativeReceiptJoins(){
+    Fixture f;f.Start();CHECK(f.Neutral().status==Status::Armed);const auto native=f.x.snapshot;
+    f.InputTick();CHECK(!f.reload->HasObservation(f.x.snapshot));
+    CHECK(f.Update().status==Status::AwaitingPhysicalCompletion);
+    CHECK(f.reload->HasObservation(f.x.snapshot)&&!f.reload->HasObservation(native));
+    CHECK(feed_reload_detail::SameNativeSnapshot(f.x.snapshot,native));
+    CHECK(!feed_reload_detail::SameSnapshot(f.x.snapshot,native));
+    f.InputTick();const auto candidate=*EvaluateFeedMechanism(f.p,f.x.snapshot,f.goal,f.x.nowNs).candidate;
+    f.x.completion=FeedPhysicalCompletion{++f.intent,f.x.snapshot.inputSequence,f.x.nowNs,candidate};
+    const auto sent=f.Update();CHECK(sent.status==Status::Dispatched&&sent.dispatch);
+    const auto request=*sent.dispatch;
+    CHECK(request.completion.candidate.snapshotSequence==native.sequence);
+    CHECK(request.completion.inputSequence==f.x.snapshot.inputSequence&&request.requestedNs>native.observedNs);
+    CHECK(f.x.snapshot.sequence==native.sequence&&f.x.snapshot.observedNs==native.observedNs);
+    for(unsigned repeat=0;repeat<3;++repeat){
+        CHECK(!f.Update().dispatch);f.InputTick();const auto waiting=f.Update();
+        CHECK(waiting.status==Status::AwaitingAcknowledgement&&waiting.pending==request&&waiting.acceptedOperations==0&&!waiting.dispatch);
+    }
+    f.Ack(request);CHECK(f.Update().status==Status::InvalidAcknowledgement);
+    CHECK(f.reload->State().pending==request&&f.reload->State().acceptedOperations==0);
+    f.InputTick();f.Ack(request);++f.x.acknowledgement->snapshotSequence;
+    const auto acknowledged=f.Update();
+    CHECK(acknowledged.status==Status::AwaitingSnapshot&&acknowledged.pending==request&&acknowledged.acceptedOperations==1);
+    f.InputTick();CHECK(f.Update().status==Status::AwaitingSnapshot);
+    CHECK(f.reload->State().pending==request&&f.reload->State().acceptedOperations==1);
+    f.Tick();f.Effect(Op::ReleaseLatch);const auto reconciled=f.Update();
+    CHECK(reconciled.status==Status::Reconciled&&!reconciled.pending&&!reconciled.dispatch&&reconciled.acceptedOperations==1);
+    CHECK(reconciled.lastApplied==request);
+    return 0;
+}
+int NewInputCannotMutateReusedNativeObservation(){
+    for(unsigned mutation=0;mutation<10;++mutation){
+        Fixture f;f.Start();CHECK(f.Neutral().status==Status::Armed);f.InputTick();
+        switch(mutation){
+        case 0:++f.x.snapshot.observedNs;break;
+        case 1:f.x.snapshot.contacts[0].weaponFromContact.values[3][0]+=.001f;break;
+        case 2:++f.x.snapshot.contacts[0].role;break;
+        case 3:f.x.snapshot.cycle=FeedCycleState::NativeReady;break;
+        case 4:f.x.snapshot.latch=FeedLatchState::Released;break;
+        case 5:++f.x.snapshot.attached.resource.generation;break;
+        case 6:++f.x.snapshot.supply.key.resource.generation;break;
+        case 7:f.x.snapshot.supply.state=FeedSupplyState::Depleted;break;
+        case 8:f.x.snapshot.reconciled=false;break;
+        default:f.x.snapshot.refill={FeedRefillState::Required,500,0};break;
+        }
+        const auto r=f.Update();CHECK(r.status==Status::SnapshotMismatch&&r.suspended&&!r.dispatch&&!r.pending);
+    }return 0;
+}
+int NewInputCannotRefreshNativeExpiryOrBypassRollback(){
+    Fixture stale;stale.Start();CHECK(stale.Neutral().status==Status::Armed);const auto native=stale.x.snapshot;
+    for(unsigned input=0;input<10;++input){
+        stale.InputTick();stale.x.nowNs+=9;CHECK(stale.Update().status==Status::AwaitingPhysicalCompletion);
+        CHECK(stale.x.snapshot.sequence==native.sequence&&stale.x.snapshot.observedNs==native.observedNs);
+    }
+    stale.InputTick();const auto expired=stale.Update();
+    CHECK(expired.status==Status::MechanismUnavailable&&expired.mechanismStatus==FeedMechanismStatus::Stale&&expired.suspended);
+    CHECK(!expired.dispatch&&!expired.pending&&expired.acceptedOperations==0);
+    CHECK(stale.Neutral().status==Status::Armed); // Recovery still needs a new native observation.
+    for(unsigned invalid=0;invalid<4;++invalid){
+        Fixture f;f.Start();CHECK(f.Neutral().status==Status::Armed);f.InputTick();
+        CHECK(f.Update().status==Status::AwaitingPhysicalCompletion);f.InputTick();
+        switch(invalid){
+        case 0:++f.x.snapshot.owner.actorGeneration;break;
+        case 1:f.x.snapshot.inputSequence-=2;break;
+        case 2:--f.x.snapshot.sequence;break;
+        default:--f.x.snapshot.observedNs;break;
+        }
+        const auto rejected=f.Update();
+        CHECK(rejected.status==(invalid==0?Status::LifetimeMismatch:Status::SequenceRollback));
+        CHECK(rejected.suspended&&!rejected.dispatch&&!rejected.pending);
+    }return 0;
+}
+int MotionRebaseSeparatesNewInputFromExactObservation(){
+    Fixture f;f.Start();f.InputTick();CHECK(f.Update().status==Status::NeutralRequired);
+    const auto before=f.x.snapshot;f.InputTick();
+    CHECK(f.reload->CanRebaseMotion(f.x.snapshot,f.x.nowNs));
+    CHECK(!f.reload->HasObservation(f.x.snapshot)&&f.reload->HasObservation(before));
+    CHECK(f.Update().status==Status::NeutralRequired&&f.reload->HasObservation(f.x.snapshot));
+    CHECK(!f.reload->HasObservation(before));
+    f.x.snapshot.contacts[0].weaponFromContact.values[3][0]+=.001f;
+    CHECK(!f.reload->CanRebaseMotion(f.x.snapshot,f.x.nowNs));
+    f.x.snapshot.contacts[0]=before.contacts[0];
+    CHECK(!f.reload->CanRebaseMotion(f.x.snapshot,before.observedNs+f.p.maxAgeNs+1));
+    return 0;
 }
 int CompletionMustMatchExactCandidate(){
     for(unsigned mismatch=0;mismatch<16;++mismatch){
@@ -377,6 +466,8 @@ int CoupledDetachAcknowledgementRequiresBothEffects(){
 int main(){
     if(CompleteReplacement()||PartialAndEmptyProfiles()||OptionalPartsDoNotInventOperations()||ReceiptIsConsumedAcrossPackets()||
        SamePacketCannotDispatchOrRearm()||CompletionMustMatchExactCandidate()||AckMustEchoExactRequest()||
+       ControllerCadencePreservesExactObservationAndNativeReceiptJoins()||NewInputCannotMutateReusedNativeObservation()||
+       NewInputCannotRefreshNativeExpiryOrBypassRollback()||MotionRebaseSeparatesNewInputFromExactObservation()||
        AppliedNeedsFreshObservedEffect()||SnapshotWithoutAckDoesNotAdvance()||AckEvidenceCannotBeOldFutureOrImplicit()||
        CiteLaterSnapshotAndRejectContradictoryAck()||TrackingAndStowRetainPendingAndApplied()||TrackingLossWithBadAckStillSuspends()||
        WrongOwnerDoesNotRetargetAcceptedEffect()||UnknownAndWrongResourceCannotDispatch()||PerOperationBindingIsIndependent()||
@@ -384,5 +475,5 @@ int main(){
        CompletionNeedsExplicitFinalEvidence()||RetirementRequiresOldLifetimeReconciliation()||InvalidLifetimeCannotStart()||
        RefillNeedsExactAttachEvidenceAndCannotBeSkipped()||UnprovedRefillCannotStartOrMutateAnObservation()||
        CoupledDetachAcknowledgementRequiresBothEffects())return 1;
-    std::puts("FeedReloadTests: 25 deterministic synthetic coordinator cases passed (no native/headset claim)");return 0;
+    std::puts("FeedReloadTests: 29 deterministic synthetic coordinator cases passed (no native/headset claim)");return 0;
 }
