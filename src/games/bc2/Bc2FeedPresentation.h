@@ -103,6 +103,7 @@ inline bool Bc2FeedSourceFresh(const Bc2PhysicalFeedPresentation& p,const Reload
 inline std::optional<math::Matrix4> Bc2FeedMechanismWristWorld(const Bc2PhysicalFeedPresentation& p,
     const math::Matrix4& placedWeaponWorldMeters)noexcept {
     using namespace interaction::feed_interaction_detail;
+    using interaction::feed_mechanism_detail::Pose;
     if(!p.mechanismWristWorldMeters||!Pose(*p.mechanismWristWorldMeters))return {};
     if(p.targetKind==interaction::FeedInteractionTargetKind::Object)return p.mechanismWristWorldMeters;
     if(p.targetKind!=interaction::FeedInteractionTargetKind::Contact||

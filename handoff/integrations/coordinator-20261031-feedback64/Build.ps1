@@ -28,7 +28,7 @@ if($Mode -eq 'Prepare'){
  [IO.File]::WriteAllText($header,$text.Replace($old.source_sha256,$closure.source_sha256),[Text.UTF8Encoding]::new($false))
  $receipt=Join-Path $proof 'source-with-header.json'
  & $python -B $helper source --root $repo --reviewed-header $header --output $receipt;if($LASTEXITCODE){throw 'Bound closure failed'}
- Save 'source-state.json' @{source_commit=((& git rev-parse HEAD)-join '');task_commit=((& git rev-parse HEAD)-join '');source_sha256=$closure.source_sha256;reviewed_header=$header;source_receipt=$receipt;operation_records_changed=$false;headset_accepted=$false;enrollment='profiles/weapons43/Enrollment.cmake'}
+ Save 'source-state.json' @{source_commit=((& git -C $repo rev-parse HEAD)-join '');task_commit=((& git -C $repo rev-parse HEAD)-join '');source_sha256=$closure.source_sha256;reviewed_header=$header;source_receipt=$receipt;operation_records_changed=$false;headset_accepted=$false;enrollment='profiles/weapons43/Enrollment.cmake'}
  return
 }
 $state=Get-Content -LiteralPath $statePath -Raw|ConvertFrom-Json
