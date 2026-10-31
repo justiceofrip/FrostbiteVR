@@ -11,6 +11,12 @@ int main(){
     CHECK(ShellReloadSoundFor("SPAS12_sp",pump)==ShellReloadSound::Unrelated);
     CHECK(ShellReloadSoundFor("TOZ194",reload)==ShellReloadSound::Unrelated);
     CHECK(ShellReloadSoundFor("SPAS12_sp",{})==ShellReloadSound::Unrelated);
+    CHECK(ShellReloadSoundFor(static_cast<const ShotgunAudioProfile*>(nullptr),reload)==ShellReloadSound::Unrelated);
+    auto missingFinish=LegacySpasAudio;missingFinish.finish={};
+    CHECK(ShellReloadSoundFor(&missingFinish,LegacySpasAudio.finish)==ShellReloadSound::Unrelated);
+    CHECK(ShellReloadSoundFor(&missingFinish,reload)==ShellReloadSound::InsertLoop);
+    auto unproven=LegacySpasAudio;unproven.provenance={};
+    CHECK(ShellReloadSoundFor(&unproven,reload)==ShellReloadSound::Unrelated);
     CHECK(ShellReloadLocalStart(true,ShellReloadSound::InsertLoop,true,1,1,true));
     CHECK(ShellReloadLocalStart(true,ShellReloadSound::Finish,true,1,1,true));
     CHECK(!ShellReloadLocalStart(false,ShellReloadSound::InsertLoop,true,1,1,true));

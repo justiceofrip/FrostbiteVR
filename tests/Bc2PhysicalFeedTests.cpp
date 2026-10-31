@@ -30,7 +30,7 @@ struct Fixture {
     std::optional<fvr::math::Matrix4> wristCalibration;
     Bc2PhysicalFeedResult result{};
     std::optional<FeedEquipmentSubmission> submitted;
-    bool refuse=false;unsigned submits=0;
+    bool refuse=false,occupyLeft=false;unsigned submits=0;
     Bc2PhysicalFeed physical;
     Bc2PhysicalFeedApi Api(){return {this,
         [](void* p,const ReloadStateOwner& o,std::int64_t now)noexcept{return static_cast<Fixture*>(p)->backend.Read(o,now);},
@@ -72,7 +72,7 @@ struct Fixture {
         sample.raw.rig.weak=sample.owner.weak;sample.raw.rig.count=170;sample.raw.rigFingerprint=g.rigFingerprint;
         sample.raw.weaponWorldMeters=Identity();
     }
-    Bc2PhysicalFeedResult Tick(const fvr::math::Matrix4& wrist,bool grip,bool cancel=false){
+    void PrepareTick(const fvr::math::Matrix4& wrist,bool grip,bool cancel=false){
         const auto age=(std::min)(100*Ms,registration->mechanism.maxAgeNs);
         now+=10*Ms;++sequence;native.observedNs=now-1;native.deadlineNs=native.observedNs+age;
         native.binding.observedNs=native.observedNs;native.binding.deadlineNs=native.deadlineNs;(void)backend.Publish(native,now);
@@ -93,11 +93,19 @@ struct Fixture {
         if(gun)(void)hands.UpdateAndRenewGunHold(sample.input,gun->token,gunProof);
         else {(void)hands.Update(sample.input);(void)hands.Acquire(sample.input,{sample.input.owner,InteractionHand::Right,
             HandClaimKind::GunHold,sample.weapon,gunProof,++intent,0});}
+        if(occupyLeft)(void)hands.Acquire(sample.input,{sample.input.owner,InteractionHand::Left,
+            HandClaimKind::BodyInventory,{999,1},{{998,1},sequence,sample.input.deadlineNs,true},++intent,0});
+    }
+    Bc2PhysicalFeedResult Consume(const ReloadRawContact* rendered=nullptr){
+        if(rendered){sample.raw=*rendered;sample.frameSequence=rendered->inputEvidence.sequence;}
         result=physical.Tick(sample,hands,intent);
         if(std::getenv("FVR_FEED_TEST_TRACE"))std::fprintf(stderr,"profile=%llu tick=%llu grip=%d selected=%d blocked=%d owns=%d pending=%d status=%u interaction=%u reload=%u hand=%u angle=%.4f submits=%u\n",
-            static_cast<unsigned long long>(registration->key),static_cast<unsigned long long>(sequence),grip,result.selected,result.blocksFire,result.ownsHand,result.pending,
+            static_cast<unsigned long long>(registration->key),static_cast<unsigned long long>(sequence),sample.grip,result.selected,result.blocksFire,result.ownsHand,result.pending,
             unsigned(result.status),unsigned(result.interactionStatus),unsigned(result.reloadStatus),unsigned(result.handReason),result.presentation?result.presentation->coverRadians:-99.f,submits);
         return result;
+    }
+    Bc2PhysicalFeedResult Tick(const fvr::math::Matrix4& wrist,bool grip,bool cancel=false){
+        PrepareTick(wrist,grip,cancel);return Consume();
     }
     FeedMotionProfile Open()const {return *BuildBc2FeedMotion(registration->geometry,
         FeedPhysicalOperation::OpenCover,registration->interactionPolicy);}
@@ -344,6 +352,135 @@ int EveryEnrolledFeedUsesAnatomicalControllerMapping(){
     }
     return 0;
 }
+int EveryEnrolledFeedStartsFromReleasedApproach(){
+    using namespace feed_interaction_detail;
+    for(const auto& registration:RegisteredBc2FeedProfiles()){
+        Fixture f(&registration);const auto m=f.Open();
+        const auto start=feed_interaction_detail::Multiply(m.motionFromContact,m.weaponFromMotion);
+        auto away=start;away.values[3][0]+=.3f;
+        f.Tick(away,false);
+        CHECK(f.result.diagnostic.idleChecked==2047&&!(f.result.diagnostic.idlePassed&(1u<<4)));
+        CHECK(f.result.diagnostic.idlePassed&(1u<<6));
+        CHECK(f.result.diagnostic.coverDistanceMeters&&*f.result.diagnostic.coverDistanceMeters>.29f);
+        CHECK(f.result.diagnostic.coverAngleRadians&&*f.result.diagnostic.coverAngleRadians<.001f);
+        f.Tick(start,true);
+        CHECK(f.result.ownsHand&&f.result.blocksFire&&f.result.diagnostic.policyEvaluated);
+        CHECK(f.result.interactionStatus==FeedInteractionStatus::Acquired);
+        for(unsigned step=1;step<=12;++step)f.Tick(feed_interaction_detail::Multiply(Along(m.motionFromContact,m.kind,m.travel*step/12),m.weaponFromMotion),true);
+        for(unsigned step=0;step<f.DwellPackets()&&!f.submitted;++step)
+            f.Tick(feed_interaction_detail::Multiply(Along(m.motionFromContact,m.kind,m.travel),m.weaponFromMotion),true);
+        CHECK(f.submitted&&f.submits==1&&f.submitted->command.authority.operation==FeedPhysicalOperation::OpenCover);
+        CHECK(f.Reconcile());
+    }
+    return 0;
+}
+int EveryEnrolledFeedConsumesMissedStartupEdge(){
+    using namespace feed_interaction_detail;
+    for(const auto& registration:RegisteredBc2FeedProfiles()){
+        Fixture f(&registration);const auto m=f.Open();const auto start=feed_interaction_detail::Multiply(m.motionFromContact,m.weaponFromMotion);
+        auto away=start;away.values[3][0]+=.3f;
+        f.Tick(start,true);CHECK(!f.result.ownsHand&&!f.result.blocksFire&&!f.result.diagnostic.policyEvaluated);
+        f.Tick(start,false);f.Tick(away,true);
+        CHECK(!f.result.ownsHand&&!f.result.blocksFire&&!f.result.diagnostic.policyEvaluated);
+        CHECK((f.result.diagnostic.idlePassed&(1u<<7))&&!(f.result.diagnostic.idlePassed&(1u<<4)));
+        f.result=f.physical.Tick(f.sample,f.hands,f.intent); // Repeat the missed press.
+        CHECK(!(f.result.diagnostic.idlePassed&(1u<<6))&&!f.result.diagnostic.policyEvaluated);
+        f.Tick(start,true); // Entering contact while held cannot reuse neutral.
+        CHECK(!f.result.ownsHand&&!f.result.blocksFire&&!f.result.pending&&f.submits==0);
+        CHECK(!(f.result.diagnostic.idlePassed&(1u<<6)));
+        f.Tick(away,false);f.Tick(start,true);
+        CHECK(f.result.ownsHand&&f.result.interactionStatus==FeedInteractionStatus::Acquired);
+    }
+    return 0;
+}
+int EveryEnrolledFeedStartupPreservesAdmissionGates(){
+    using namespace feed_interaction_detail;
+    for(const auto& registration:RegisteredBc2FeedProfiles()){
+        for(unsigned defect=0;defect<6;++defect){
+            Fixture f(&registration);const auto m=f.Open();const auto start=feed_interaction_detail::Multiply(m.motionFromContact,m.weaponFromMotion);
+            auto away=start;away.values[3][0]+=.3f;f.Tick(away,false);
+            switch(defect){
+            case 0:f.now+=registration.mechanism.maxAgeNs;break;
+            case 1:f.sample.selectedRigVerified=false;break;
+            case 2:f.sample.raw.valid=false;break;
+            case 3:f.native.counts.reserve=0;break;
+            case 4:f.native.counts.loaded=f.native.counts.capacity;break;
+            case 5:f.occupyLeft=true;break;
+            }
+            f.Tick(start,true);
+            CHECK(!f.result.ownsHand&&!f.result.blocksFire&&!f.result.pending&&!f.result.diagnostic.policyEvaluated&&f.submits==0);
+            if(defect==0)CHECK(f.result.diagnostic.neutralAgeNs>=registration.mechanism.maxAgeNs&&!(f.result.diagnostic.idlePassed&(1u<<8)));
+            if(defect==1||defect==2)CHECK(f.result.diagnostic.idleChecked==0);
+            if(defect==3)CHECK(!(f.result.diagnostic.idlePassed&(1u<<10)));
+            if(defect==4)CHECK(!(f.result.diagnostic.idlePassed&(1u<<9)));
+            if(defect==5){CHECK(!(f.result.diagnostic.idlePassed&1u));
+                const auto occupied=f.hands.Current(InteractionHand::Left);CHECK(occupied);
+                CHECK(f.hands.Release(f.sample.input,occupied->token).accepted);f.occupyLeft=false;}
+            f.sample.selectedRigVerified=f.sample.raw.valid=true;
+            f.native.counts.reserve=130;f.native.counts.loaded=20;
+            f.Tick(start,true);CHECK(!f.result.ownsHand&&!f.result.blocksFire&&!f.result.pending);
+            f.Tick(away,false);f.Tick(start,true);
+            CHECK(f.result.ownsHand&&f.result.interactionStatus==FeedInteractionStatus::Acquired);
+        }
+    }
+    return 0;
+}
+int EveryEnrolledFeedRejectsDelayedNeutralAfterRejectedPress(){
+    using namespace feed_interaction_detail;
+    for(const auto& registration:RegisteredBc2FeedProfiles()){
+        for(unsigned defect=0;defect<3;++defect){
+            Fixture f(&registration);const auto m=f.Open();const auto start=feed_interaction_detail::Multiply(m.motionFromContact,m.weaponFromMotion);
+            auto away=start;away.values[3][0]+=.3f;
+            f.sequence=9;f.Tick(away,false);const auto consumed=f.sample.raw;
+            CHECK(f.sample.input.sequence==10&&(f.result.diagnostic.idlePassed&(1u<<6)));
+            // Current release 11 is recorded, but the renderer still supplies
+            // packet 10. Keep the exact unconsumed release for later delivery.
+            f.PrepareTick(away,false);const auto delayedNeutral=f.sample.raw;f.Consume(&consumed);
+            CHECK(f.sample.input.sequence==11&&f.sample.raw.inputEvidence.sequence==10);
+            f.PrepareTick(away,true);
+            if(defect==0)f.sample.selectedRigVerified=false;
+            if(defect==1)f.sample.raw.valid=false;
+            if(defect==2)f.sample.raw.inputEvidence.released[0]=true;
+            f.Consume();
+            CHECK(f.sample.input.sequence==12&&!f.result.ownsHand&&!f.result.blocksFire&&!f.result.pending);
+            CHECK(!f.result.diagnostic.policyEvaluated);
+            CHECK(f.result.diagnostic.exit==(defect==2?Bc2PhysicalFeedExit::GunOrRawUnverified:Bc2PhysicalFeedExit::SelectionOrInput));
+            f.sample.selectedRigVerified=f.sample.raw.valid=true;
+            // At current held packet 13, release 11 still has valid original
+            // and current native leases, matching counts, and arbiter evidence.
+            f.PrepareTick(away,true);f.Consume(&delayedNeutral);
+            CHECK(f.sample.input.sequence==13&&f.sample.raw.inputEvidence.sequence==11);
+            CHECK(!f.sample.input.released[0]&&f.sample.raw.inputEvidence.released[0]);
+            CHECK(f.result.selected&&f.result.diagnostic.rawChecked==511&&f.result.diagnostic.rawPassed==511);
+            CHECK((f.result.diagnostic.idlePassed&(1u<<1))&&!(f.result.diagnostic.idlePassed&(1u<<2)));
+            CHECK(!(f.result.diagnostic.idlePassed&(1u<<6))&&!f.result.diagnostic.policyEvaluated);
+            f.Tick(start,true); // Held packet 14 cannot acquire from release 11.
+            CHECK(!f.result.ownsHand&&!f.result.blocksFire&&!f.result.pending&&!f.result.diagnostic.policyEvaluated&&f.submits==0);
+            f.Tick(away,false);f.Tick(start,true);
+            CHECK(f.result.ownsHand&&f.result.interactionStatus==FeedInteractionStatus::Acquired);
+        }
+    }
+    return 0;
+}
+int StartupRejectionBarrierStaysWithinItsInputLifetime(){
+    Fixture f;const auto m=f.Open();const auto start=feed_interaction_detail::Multiply(m.motionFromContact,m.weaponFromMotion);
+    auto away=start;away.values[3][0]+=.3f;f.Tick(away,false);
+    auto unrelated=f.sample.input;++unrelated.owner.actorGeneration;unrelated.sequence=1000;
+    f.physical.Suspend(unrelated,f.hands);
+    f.Tick(away,false);CHECK(f.result.diagnostic.idlePassed&(1u<<6));
+    f.sample.selectedRigVerified=false;f.Tick(start,true);f.sample.selectedRigVerified=true;
+    CHECK(!f.result.ownsHand&&!f.result.blocksFire);
+    // A verified new equip/space lifetime may restart its packet sequence.
+    ++f.native.identity.owner.equipGeneration;++f.native.identity.owner.space;
+    f.native.binding.owner=f.native.identity.owner;f.native.binding.context.equipGeneration=f.native.identity.owner.equipGeneration;
+    f.native.binding.context.space=f.native.identity.owner.space;
+    f.sample.owner=f.native.identity.owner;f.selected->owner=f.sample.owner;f.sample.raw.owner=f.sample.owner;
+    ++f.sample.weapon.generation;++f.sample.input.owner.equipGeneration;++f.sample.input.owner.space;
+    (void)f.hands.Reset();f.sequence=0;
+    f.Tick(away,false);CHECK(f.result.diagnostic.idlePassed&(1u<<6));
+    f.Tick(start,true);CHECK(f.result.ownsHand&&f.result.interactionStatus==FeedInteractionStatus::Acquired);
+    return 0;
+}
 int PartialCoverRequiresFreshRegraspAndPreservesProgress(){
     Fixture f;using namespace feed_interaction_detail;const auto m=f.Open();
     const auto pose=[&](double t){return feed_interaction_detail::Multiply(Along(m.motionFromContact,m.kind,m.travel*t),m.weaponFromMotion);};
@@ -482,10 +619,15 @@ int main(){
     CHECK(ReattachingWithoutChestSupplyCannotRefill()==0);
     CHECK(EveryEnrolledFeedUsesTheSharedChestRefillPath()==0);
     CHECK(EveryEnrolledFeedUsesAnatomicalControllerMapping()==0);
+    CHECK(EveryEnrolledFeedStartsFromReleasedApproach()==0);
+    CHECK(EveryEnrolledFeedConsumesMissedStartupEdge()==0);
+    CHECK(EveryEnrolledFeedStartupPreservesAdmissionGates()==0);
+    CHECK(EveryEnrolledFeedRejectsDelayedNeutralAfterRejectedPress()==0);
+    CHECK(StartupRejectionBarrierStaysWithinItsInputLifetime()==0);
     CHECK(PartialCoverRequiresFreshRegraspAndPreservesProgress()==0);
     CHECK(LongStowMigratesOnlySamePinnedResource()==0);
     CHECK(SameAddressReplacementDoesNotInheritFeedDebt()==0);
     CHECK(RealNoEntryReceiptRecoversCompletedEndpointWithNewId()==0);
     CHECK(DrainedActorReplacementReclaimsSlotsWithoutInventingAmmunitionSuccess()==0);
-    std::puts("Bc2PhysicalFeedTests: 17 deterministic owner/arbiter/callback compositions; no game or headset acceptance");
+    std::puts("Bc2PhysicalFeedTests: 22 deterministic owner/arbiter/callback compositions; no game or headset acceptance");
 }

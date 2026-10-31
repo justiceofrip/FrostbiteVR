@@ -9,6 +9,7 @@ import hashlib
 import json
 import math
 import struct
+import uuid
 from pathlib import Path
 from bc2_authored_grip_bindings import digest
 from bc2_weapon_animation_pipeline import identity, inverse_rigid, multiply
@@ -152,7 +153,52 @@ def pump_geometry(record,role,shell):
                             native_boundary_verified=False,negative_overshoot_m=rail['decoded_travel']['minimum_m'],
                             source_rail=rail,phase_source_times={leg:[s['time']for s in phase[leg]]for leg in ('rear','forward')}))
 
-def build(batch,samples):
+def load_actions(path):
+    if sha(path)!=ACTION_HASH:raise ValueError('Pinned action379 identities required')
+    return json.loads(Path(path).read_text())
+
+def audio_profile(row,sampled,actions,mesh):
+    result=dict(provenance=ACTION_HASH,cue_policy='generic_physical_cues_from_owner_spas_cache',roles={})
+    for role,key in (('1p_boltaction','pump'),('1p_reload','insertion'),('1p_reload_out','finish')):
+        matches=[p for p in row['mechanical_inputs']if p['role']==role]
+        result['roles'][key]=dict(status='unsupported_missing_exact_authored_binding',guid=None)
+        if len(matches)!=1:continue
+        binding=matches[0]
+        if binding['source']['sha256']!=ACTION_HASH:raise ValueError('Audio action source differs')
+        index=int(binding['source']['pointer'].removeprefix('/records/'))
+        record=sampled.get(index)
+        if record:
+            source=record['source'];record_digest=record['record_digest'];binding_digest=record['binding_digest']
+        elif actions is not None:
+            record=actions['records'][index];source=record['source'];record_digest=record['digest'];binding_digest=record['binding_digest']
+        else:continue
+        if source['role']!=role or record_digest!=binding['mechanism_digest'] or binding_digest!=binding['binding_digest']:
+            raise ValueError('Exact audio role identity differs')
+        if key=='finish':
+            # A valid action/binding pair can still belong to another weapon.
+            # Join the unsampled finish to this configuration and reviewed mesh.
+            reference=sampled[ROLES[mesh]['pump']]
+            tree=source.get('animation_tree',{});configuration=record.get('weapon_configuration',{})
+            if (not all(tree.get(k)for k in ('resource','sha256','instance_guid')) or
+                not configuration.get('resource') or not record.get('configured_mesh')):continue
+            states=[s for s in row.get('authored_states',[])if s['index']==record.get('state_index')]
+            if len(states)!=1 or not states[0].get('animation_tree_references',{}).get('AnimTree1p'):continue
+            tree_reference=(tree['resource'].removesuffix('.dbx')+'/'+tree['instance_guid']).casefold()
+            selected_bindings=[p['binding_digest']for p in row['mechanical_inputs']
+                               if p['role']in ('1p_boltaction','1p_reload')]
+            if (record.get('asset')!=row['asset'] or configuration['resource']!=row['resource'] or
+                record['configured_mesh']!=mesh or record.get('rig_fingerprint')!=reference['rig_fingerprint'] or
+                any(binding_digest!=value for value in selected_bindings) or
+                tree!=reference['source'].get('animation_tree') or
+                tree_reference!=states[0]['animation_tree_references']['AnimTree1p'].casefold() or
+                any(source.get(k)!=reference['source'][k]for k in ('mesh_sha256','lod_sha256','reference_clip_sha256'))):
+                raise ValueError('Exact finish audio equipment identity differs')
+        guid=str(uuid.UUID(source['asset_guid']))
+        result['roles'][key]=dict(status='exact_authored_animation',guid=guid,record=index,
+            asset_document=source['asset_document'],asset_document_sha256=source['asset_document_sha256'])
+    return result
+
+def build(batch,samples,actions=None):
     if batch.get('schema')!='fvr.bc2.shotgun_reload_batch.v1' or batch['inputs']['actions']['sha256']!=ACTION_HASH:
         raise ValueError('Pinned shotgun43 batch required')
     sampled=checked_samples(samples);groups={};content_groups={}
@@ -187,6 +233,8 @@ def build(batch,samples):
                    rig_fingerprint=geometry['rig_fingerprint'],physicalReviewed=True,
                    native_admission_changed=False,bindings={r:binding[r][0]for r in binding})
         value['profile_id']=int(digest(value)[:16],16);rows.append(value)
+        # Audio is a presentation join, never part of physical/native identity.
+        value['audio']=audio_profile(row,sampled,actions,mesh)
     for source in sampled.values():
         bindings=[p for r in inventory for p in r['mechanical_inputs']
                   if p['source']['pointer']=='/records/'+str(source['record_index'])]
@@ -204,6 +252,8 @@ def number(v):
 def matrix(m):
     return 'math::Matrix4{{{'+','.join('{'+','.join(number(v)for v in m[i:i+4])+'}'for i in range(0,16,4))+'}}}'
 def string(v):return json.dumps(v)
+def audio_guid(value):
+    return '{'+','.join(f'0x{x:02x}'for x in uuid.UUID(value).bytes_le)+'}' if value else '{}'
 def hand(name,shape):
     lines=[f'inline const interaction::AuthoredHandShape {name}= []{{interaction::AuthoredHandShape out{{}};out.counts={{3,3,3,3,3}};']
     for i,n in enumerate(FINGERS):lines.append(f'out.wristFromJoint[{i//3}][{i%3}]={matrix(shape[n])};')
@@ -211,7 +261,7 @@ def hand(name,shape):
 
 def header(result):
     lines=['#pragma once','// Generated source geometry + explicit VR policy. No native qualification.',
-           '#include "Bc2ShotgunReloadRegistry.h"','#include "Bc2PhysicalPump.h"','#include <bit>',
+           '#include "Bc2ShotgunReloadRegistry.h"','#include "Bc2PhysicalPump.h"','#include "Bc2ShotgunAudioProfile.h"','#include <bit>',
            'namespace fvr::bc2::generated {',
            'struct ShotgunShellGeometry {',
            ' const ShotgunReloadEquipmentProfile* equipment=nullptr;',
@@ -260,14 +310,26 @@ def header(result):
     lines.extend(['}};',
         'inline const ShotgunShellGeometry* FindShotgunShellGeometry(const ShotgunReloadEquipmentProfile* equipment)noexcept {',
         ' for(const auto& shell:ShotgunShellGeometries)if(shell.equipment==equipment)return &shell;return nullptr;',
+        '}'])
+    lines.append('inline constexpr std::array<ShotgunAudioProfile,25> ShotgunAudioProfiles{{')
+    for row in result['profiles']:
+        audio=row['audio'];roles=audio['roles']
+        lines.append('{'+','.join(audio_guid(roles[role]['guid'])for role in ('pump','insertion','finish'))+','+string(audio['provenance'])+'},')
+    lines.extend(['}};',
+        'inline const ShotgunAudioProfile* FindShotgunAudioProfile(const ShotgunReloadEquipmentProfile* equipment)noexcept {',
+        ' for(std::size_t i=0;i<ShotgunEquipmentProfiles.size();++i)if(equipment==&ShotgunEquipmentProfiles[i])return &ShotgunAudioProfiles[i];return nullptr;',
         '}', '} // namespace fvr::bc2::generated',''])
     return '\n'.join(lines)
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     for name in ('batch','samples','output','header'):parser.add_argument('--'+name,type=Path,required=True)
-    args=parser.parse_args(argv);result=build(json.loads(args.batch.read_text()),json.loads(args.samples.read_text()))
+    parser.add_argument('--actions',type=Path)
+    args=parser.parse_args(argv);batch=json.loads(args.batch.read_text())
+    actions_path=args.actions or Path(batch['inputs']['actions']['path'])
+    result=build(batch,json.loads(args.samples.read_text()),load_actions(actions_path))
     result['inputs']={k:dict(path=str(v),sha256=sha(v)) for k,v in (('batch',args.batch),('samples',args.samples))}
+    result['inputs']['actions']=dict(path=str(actions_path),sha256=ACTION_HASH)
     data=header(result);result['header_sha256']=hashlib.sha256(data.encode()).hexdigest()
     for path,text in ((args.output,json.dumps(result,indent=2,allow_nan=False)+'\n'),(args.header,data)):
         path.parent.mkdir(parents=True,exist_ok=True);path.write_text(text,encoding='utf-8')

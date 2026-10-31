@@ -1,10 +1,13 @@
 #pragma once
 #include "fvr/interaction/MechanismAudio.h"
+#include "Bc2ShotgunAudioProfile.h"
 #include <cstdint>
 #include <filesystem>
 #include <iosfwd>
 
 namespace fvr::bc2::mechanismAudio {
+// Spas names the existing extracted generic shotgun cue bank; the selected
+// profile independently supplies exact authored animation identities.
 enum class Cue : unsigned { None, Spas, M95 };
 struct Source {
     unsigned soldier=0,weak=0,weapon=0;
@@ -12,6 +15,7 @@ struct Source {
     Cue cue=Cue::None;
     std::int64_t observedNs=0,deadlineNs=0;
     bool manual=false,focused=false,tracked=false;
+    const ShotgunAudioProfile* profile=nullptr;
 };
 struct Config {
     // Observe first. Enabling replacement requires the recorded local-owner,

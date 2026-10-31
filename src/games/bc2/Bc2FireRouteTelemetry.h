@@ -58,6 +58,7 @@ struct FeedRouteObservation {
     unsigned exit=0,flags=0,status=0,rawChecked=0,rawPassed=0,admissionChecked=0,admissionPassed=0;
     unsigned reloadPhase=~0u,operation=~0u;
     unsigned selectionFailure=~0u;
+    unsigned idleChecked=0,idlePassed=0;
     bool observed=false,cancel=false,suspended=false,policyEvaluated=false;
     bool operator==(const FeedRouteObservation&)const=default;
 };
@@ -73,6 +74,9 @@ inline bool SameInteractionOutcome(InteractionRouteObservation a,InteractionRout
     a.sight.advanced=b.sight.advanced=false;
     if(a.sight.packetReason==1)a.sight.packetReason=0;
     if(b.sight.packetReason==1)b.sight.packetReason=0;
+    // Source advancement is provenance; repeated neutral packets are not new
+    // startup outcomes. The actual bit remains available in records/latest.
+    a.feed.idlePassed&=~(1u<<2);b.feed.idlePassed&=~(1u<<2);
     return a==b;
 }
 struct FireRouteConfiguration {
@@ -90,6 +94,8 @@ struct FireRouteRecord {
     // Measurements/provenance update latest but do not create a transition on
     // every pose/controller packet. Optional measurements stay null if absent.
     std::optional<float> supportDistance,leftSqueeze,sightDistance,sightAngle;
+    std::optional<float> feedCoverDistance,feedCoverAngle;
+    std::int64_t feedNeutralAgeNs=-1;
     std::uint64_t supportSource=0,sightSource=0,shellSource=0,feedSource=0;
     std::int64_t supportSourceDeadlineNs=0,sightSourceDeadlineNs=0,shellSourceDeadlineNs=0,feedSourceDeadlineNs=0;
     std::uint64_t serial=0,input=0,inputEpoch=0,ammoSequence=0;
@@ -232,7 +238,10 @@ inline void WriteFireRouteTelemetry(std::ostream& o,const FireRouteTelemetryBatc
                 o<<",\"hand_reason\":";number(f.policyEvaluated?f.status>>24:~0u);o<<",\"selection_failure\":";number(f.selectionFailure);
                 o<<",\"admission_checked\":"<<f.admissionChecked<<",\"admission_passed\":"<<f.admissionPassed
              <<",\"raw_checked\":"<<f.rawChecked<<",\"raw_passed\":"<<f.rawPassed<<",\"reload_phase\":";number(f.reloadPhase);
-                o<<",\"operation\":";number(f.operation);}
+                o<<",\"operation\":";number(f.operation);
+                o<<",\"idle_checked\":"<<f.idleChecked<<",\"idle_passed\":"<<f.idlePassed;
+                o<<",\"cover_distance_m\":";measure(r.feedCoverDistance);o<<",\"cover_angle_radians\":";measure(r.feedCoverAngle);
+                o<<",\"neutral_age_ns\":";if(r.feedNeutralAgeNs<0)o<<"null";else o<<r.feedNeutralAgeNs;}
             o<<",\"source_sequence\":"<<r.feedSource<<",\"source_deadline_ns\":"<<r.feedSourceDeadlineNs<<'}';}
         o<<'}';
     };
@@ -283,6 +292,7 @@ inline void WriteFireRouteTelemetry(std::ostream& o,const FireRouteTelemetryBatc
        "\"feed_admission_bits\":[\"view\",\"registration\",\"same_registration\",\"selected_proof\",\"not_cancelled\",\"input_window\"],"
        "\"feed_selection_failure\":[\"none\",\"registration_identity\",\"equipment_missing\",\"current_equipment\",\"binding_stale\",\"rig_unverified\",\"meshes_missing\",\"native_hand\",\"raw_invalid\",\"raw_owner\",\"raw_rig_soldier\",\"raw_rig_weak\",\"raw_rig_fingerprint\",\"raw_sequence\",\"raw_left_pose\",\"raw_weapon_pose\",\"native_view_stale\",\"native_owner\",\"mesh_owner\",\"mesh_sequence\",\"mesh_configuration_unverified\",\"mesh_configuration_pointer\",\"mesh_configuration_name\",\"mesh_weapon_name\",\"mesh_weapon_data\",\"mesh_inventory\",\"mesh_time_invalid\",\"mesh_time_future\",\"mesh_time_expired\",\"mesh_state_count\",\"mesh_configured_array_missing\",\"mesh_array_mismatch\",\"mesh_count_zero\",\"mesh_count_overflow\",\"mesh_match_count\"],"
        "\"feed_raw_bits\":[\"gun_claim\",\"source_packet\",\"source_native\",\"source_window\",\"source_after_native\",\"native_fresh\",\"same_item\",\"same_counts\",\"recorded_left_evidence\"],"
+       "\"feed_idle_bits\":[\"hand_available\",\"released_neutral\",\"new_source_packet\",\"source_grip\",\"cover_distance\",\"cover_angle\",\"neutral_present\",\"source_after_neutral\",\"neutral_fresh\",\"loaded_below_capacity\",\"reserve_available\"],"
        "\"feed_equipment_status\":[\"unbound\",\"ready\",\"suspended\",\"preflight_rejected\",\"dispatched\",\"awaiting_receipt\",\"awaiting_corroboration\",\"receipt_rejected\",\"acknowledgement_rejected\",\"reconciled\",\"complete\",\"retire_needs_reconciliation\",\"retired\",\"invariant_mismatch\"],"
        "\"feed_interaction_status\":[\"need_neutral\",\"armed\",\"acquired\",\"moving\",\"endpoint\",\"returning\",\"completed\",\"duplicate\",\"invalid_profile\",\"invalid_input\",\"candidate_changed\",\"contact_miss\",\"interrupted\",\"expired\",\"off_path\",\"motion_jump\",\"counter_exhausted\"],"
        "\"feed_reload_status\":[\"armed\",\"awaiting_physical_completion\",\"dispatched\",\"awaiting_acknowledgement\",\"awaiting_snapshot\",\"reconciled\",\"complete\",\"no_physical_step\",\"suspended\",\"neutral_required\",\"invalid_lifetime\",\"invalid_sample\",\"lifetime_mismatch\",\"unverified_binding\",\"duplicate_packet\",\"duplicate_completion\",\"invalid_completion\",\"acknowledgement_mismatch\",\"invalid_acknowledgement\",\"snapshot_mismatch\",\"sequence_rollback\",\"clock_discontinuity\",\"mechanism_unavailable\",\"retire_needs_reconciliation\",\"retired\",\"token_exhausted\"],"

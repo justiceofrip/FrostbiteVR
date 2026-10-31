@@ -1,5 +1,6 @@
 #pragma once
 #include "fvr/interaction/ShellReloadAudio.h"
+#include "Bc2ShotgunAudioProfile.h"
 #include <array>
 #include <filesystem>
 #include <iosfwd>
@@ -10,6 +11,7 @@ struct Source {
     interaction::ShellReloadAudioIdentity identity{};
     std::int64_t observedNs=0,deadlineNs=0;
     bool manual=false,focused=false,tracked=false,spas=false;
+    const ShotgunAudioProfile* profile=nullptr;
 };
 struct Config {bool replace=false;std::filesystem::path insertionWave;};
 bool Install(const Config& config={});

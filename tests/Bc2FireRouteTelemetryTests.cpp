@@ -163,6 +163,30 @@ int main() {
     feed.status=7u<<8;CHECK(interactions.Observe(episode));
     CHECK(interactions.TryDrain(batch)&&batch.count==0&&batch.latest.interactions.feed.status==(7u<<8));
 
+    // Idle feed gates are transitions, while contact measurements, neutral age
+    // and duplicate/new-source provenance cannot fill the bounded event ring.
+    FireRouteTelemetry startup;auto idle=Sample();auto& idleFeed=idle.interactions.feed;
+    idleFeed.observed=true;idleFeed.exit=1;idleFeed.idleChecked=idleFeed.idlePassed=2047;
+    idle.feedCoverDistance=.03f;idle.feedCoverAngle=.1f;idle.feedNeutralAgeNs=100;
+    CHECK(startup.Observe(idle));
+    for(unsigned i=0;i<1000;++i){
+        idleFeed.idlePassed=(2047u&~(1u<<2))|((i%2)<<2);
+        idle.feedCoverDistance=.03f+float(i)*.00001f;idle.feedCoverAngle=.1f+float(i)*.00001f;
+        ++idle.feedNeutralAgeNs;++idle.feedSource;CHECK(startup.Observe(idle));
+    }
+    CHECK(startup.TryDrain(batch)&&batch.count==1&&batch.overwritten==0);
+    CHECK(batch.latest.feedCoverDistance==idle.feedCoverDistance&&batch.latest.feedNeutralAgeNs==1100);
+    idleFeed.idlePassed&=~(1u<<4);CHECK(startup.Observe(idle));
+    CHECK(startup.TryDrain(batch)&&batch.count==1&&batch.records[0].changes==FireRouteInteractionChanged);
+    std::ostringstream startupJson;WriteFireRouteTelemetry(startupJson,batch);
+    CHECK(startupJson.str().find("\"idle_checked\":2047,\"idle_passed\":2031")!=std::string::npos);
+    CHECK(startupJson.str().find("\"neutral_age_ns\":1100")!=std::string::npos);
+    CHECK(startupJson.str().find("\"feed_idle_bits\":[\"hand_available\",\"released_neutral\",\"new_source_packet\"")!=std::string::npos);
+    idleFeed.idleChecked=idleFeed.idlePassed=0;idle.feedCoverDistance.reset();idle.feedCoverAngle.reset();idle.feedNeutralAgeNs=-1;
+    CHECK(startup.Observe(idle)&&startup.TryDrain(batch)&&batch.count==1);
+    std::ostringstream idleUnknown;WriteFireRouteTelemetry(idleUnknown,batch);
+    CHECK(idleUnknown.str().find("\"idle_checked\":0,\"idle_passed\":0,\"cover_distance_m\":null,\"cover_angle_radians\":null,\"neutral_age_ns\":null")!=std::string::npos);
+
     // The caller's routing/input tuple is untouched by observer bookkeeping;
     // unavailable evaluations are not carried over to a new owner/gather.
     const auto observed=episode;CHECK(interactions.Observe(episode));

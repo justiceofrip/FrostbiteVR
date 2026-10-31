@@ -61,12 +61,14 @@ unsigned U32(std::uintptr_t at) noexcept {unsigned out=0;Read(at,&out,4);return 
 bool Fresh(const Source& s,std::int64_t now) noexcept {
     return s.soldier>=0x10000&&s.weak>=0x10000&&s.weapon>=0x10000&&s.identity.actor&&s.identity.actorGeneration&&
         s.identity.item&&s.identity.itemGeneration&&s.manual&&s.focused&&s.tracked&&s.observedNs>0&&
+        (s.cue!=Cue::Spas||(s.profile&&ShotgunAudioRoleSupported(s.profile->pump)))&&
         s.observedNs<=now&&now<s.deadlineNs&&s.deadlineNs-s.observedNs<=200000000&&
         U32(s.weak)==s.soldier+4;
 }
-constexpr std::array<unsigned char,16> spasGuid{0x1b,0xf4,0x9c,0x2d,0xba,0x3a,0x22,0x4a,0x82,0xa8,0x64,0x05,0x1c,0x18,0x04,0x32};
 constexpr std::array<unsigned char,16> m95Guid{0x5e,0xf2,0x55,0x5f,0xb4,0xd4,0x20,0x4a,0x9f,0x14,0xca,0x15,0x2a,0x96,0x10,0xfa};
-Cue Match(const std::array<unsigned char,16>& guid) noexcept {return guid==spasGuid?Cue::Spas:guid==m95Guid?Cue::M95:Cue::None;}
+Cue Match(const ShotgunAudioProfile* profile,const std::array<unsigned char,16>& guid) noexcept {
+    return ShotgunAudioRoleFor(profile,guid)==ShotgunAudioRole::Pump?Cue::Spas:guid==m95Guid?Cue::M95:Cue::None;
+}
 struct Row {std::int64_t ns=0;unsigned thread=0,self=0,owner=0,guidAddress=0,unused=0;std::array<unsigned char,16> guid{};
     unsigned sourceSoldier=0,sourceWeapon=0,cue=0;std::uint64_t cycle=0,shot=0;unsigned char ownerFlags=0,callbackFirstPerson=0;
     bool start=false,readable=false,local=false,fresh=false,suppressed=false;};
@@ -95,13 +97,13 @@ void Dispatch(bool start,void* self,const void* guid,unsigned unused) noexcept {
     if(selectedKnife::SoundObservationEnabled())selectedKnife::ObserveSound(start,row.self,row.guid,unused);
 #endif
     if(shellReloadAudio::Dispatch(start,row.self,row.guid))return;
-    const auto cue=Match(row.guid);row.cue=unsigned(cue);
-    // All unrelated animation sounds pass through without owner/source reads.
+    const auto source=current.load(std::memory_order_acquire);
+    const auto cue=Match(source?source->profile:nullptr,row.guid);row.cue=unsigned(cue);
+    // Unrelated animation sounds pass through without native owner reads.
     if(cue==Cue::None){original(self,guid,unused);return;}
     row.owner=U32(row.self+4);
     row.readable=Read(row.self+0x50,&row.callbackFirstPerson,1)&&
         Read(row.owner+0x475,&row.ownerFlags,1);
-    const auto source=current.load(std::memory_order_acquire);
     if(source){row.sourceSoldier=source->soldier;row.sourceWeapon=source->weapon;row.cycle=source->identity.cycle;row.shot=source->identity.shot;
         row.local=row.readable&&row.owner==source->soldier;row.fresh=Fresh(*source,row.ns);}
     // Never suppress NPC audio, third-person callbacks, fire/reload sounds,

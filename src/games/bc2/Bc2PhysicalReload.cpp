@@ -319,6 +319,18 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
         v.frame=beltFrame_;
         if(ShotgunBeltAmmoFresh(t,Now(s.input.nowNs)))try{out.tracking.belt=std::make_shared<const BeltAmmoTracking>(std::move(t));}catch(...){}
     };
+    if(!source&&!s.raw.valid&&active_&&!retiring_&&supply_.Held()&&!supply_.Pending()&&
+       !deferredSeat_&&!completion_&&selected&&reserve_&&reserve_->verified&&reserve_->identity==native_&&
+       native_.owner==s.nativeOwner&&physical_==s.input.owner&&currentEquipment&&
+       reserve_->loaded<reserve_->capacity&&reserve_->reserve>0&&acceptedControlDeadline_>s.input.nowNs){
+        // A missing renderer publication is not a shell release. Current gun,
+        // native reserve and original accepted control still belong to this
+        // exact cycle. Retain only the existing hand claim; no native keep,
+        // insertion geometry, new pulse or ammunition request runs here.
+        const auto retained=supply_.RetainHeld(s.input,supply_.Held()->identity,s.gripPressed,hands);
+        diagnosticSupply=retained.reason;
+        if(retained.held){out.ammoOwnsHand=true;out.reloadHeld=s.input.nowNs<pulseUntil_;return out;}
+    }
     if(!source||((reserve_->loaded>=reserve_->capacity||reserve_->reserve<=0)&&!supply_.Pending())||retiring_){
         cancel(!source?CancelReason::MissingSource:retiring_?CancelReason::Retiring:reserve_->loaded>=reserve_->capacity?CancelReason::FullMagazine:CancelReason::EmptyReserve);publishBelt();return out;
     }

@@ -23,11 +23,14 @@ inline const AuthoredSupportProfile* BindAuthoredSupport(std::span<const Authore
  if(!equipment.weapon||!equipment.data||!owner.soldier||!owner.weak||
     !owner.actorGeneration||!owner.equipmentGeneration||!owner.space||!owner.inputSequence||
     !snapshot.owner.player||!snapshot.owner.equipGeneration||
-    !authored_grip_detail::Fresh(snapshot,now)||owner.inputDeadlineNs<=now||snapshot.deadlineNs<owner.inputDeadlineNs||snapshot.sequence>owner.inputSequence||
+    !authored_grip_detail::Fresh(snapshot,now)||owner.inputDeadlineNs<=now||snapshot.sequence>owner.inputSequence||
     snapshot.owner.weapon!=equipment.weapon||snapshot.weaponData!=equipment.data||snapshot.owner.soldier!=owner.soldier||
     snapshot.owner.weak!=owner.weak||snapshot.owner.actorGeneration!=owner.actorGeneration||
     snapshot.owner.space!=owner.space||
     equipment.Asset().empty()||authored_grip_detail::Text(snapshot.weaponName)!=equipment.Asset())return nullptr;
+ // Configuration and controller input have independent original deadlines.
+ // Both must be live now; a fresh configuration need not cover the input's
+ // entire future lease. AuthoredSupportCurrent rechecks BOTH at every output.
  const AuthoredSupportProfile* selected=nullptr;
  for(const auto& p:profiles){
   if(p.assetName!=equipment.Asset())continue;

@@ -2,6 +2,9 @@
 #include "Bc2AmmoSupply.h"
 #include "Bc2ReloadPresentation.h"
 #include "Bc2BeltAmmo.h"
+#include "Bc2PhysicalPump.h"
+#include "Bc2ShellReloadAudioProfile.h"
+#include "fvr/interaction/MechanismAudio.h"
 #include "Test.h"
 #include <cstring>
 #include <set>
@@ -129,6 +132,63 @@ int OwnCentersHandsAndDeclaredDescendants(){
     }
     CHECK(shellBones.size()==4);return 0;
 }
+int PumpConsumerAndAudioUseTheSelectedEquipment(){
+    for(const auto& equipment:EnrolledShotgunEquipment()){
+        const auto* audio=ShotgunEquipmentAudio(&equipment);CHECK(audio);
+        auto foreign=equipment;CHECK(!ShotgunEquipmentAudio(&foreign));
+        CHECK(ShotgunAudioRoleFor(audio,audio->pump)==ShotgunAudioRole::Pump);
+        CHECK(ShellReloadSoundFor(audio,audio->insertion)==ShellReloadSound::InsertLoop);
+        CHECK(ShellReloadSoundFor(audio,audio->finish)==ShellReloadSound::Finish);
+        CHECK(ShellReloadSoundFor(audio,audio->pump)==ShellReloadSound::Unrelated);
+        if(audio->pump!=LegacySpasAudio.pump)CHECK(ShotgunAudioRoleFor(audio,LegacySpasAudio.pump)==ShotgunAudioRole::Unrelated);
+        struct Native {Bc2NativeCycleView view{};unsigned releases=0,cancels=0;} native;
+        Bc2PhysicalPumpApi api{&native,
+            [](void* p,const Bc2NativeCycleControl& control)noexcept{auto& n=*static_cast<Native*>(p);if(control.release)++n.releases;return true;},
+            [](void* p,std::int64_t)noexcept->std::optional<Bc2NativeCycleView>{return static_cast<Native*>(p)->view;},
+            [](void*,const WeaponCycleReady&)noexcept{return true;},
+            [](void* p)noexcept{++static_cast<Native*>(p)->cancels;}};
+        auto calibration=std::make_shared<const Bc2PumpCalibration>(*equipment.pump);Bc2PhysicalPump pump{calibration,api};
+        Bc2PhysicalPumpSample sample;sample.nativeOwner={0x10000,0x20000,0x30000,0x40000,5,3,7};sample.item={0x40000,17};
+        sample.asset=equipment.native->config->assetName;
+        sample.input.owner={(std::uint64_t(0x30000)<<32)|0x20000,5,17,7};sample.input.focused=true;sample.input.tracked={true,true};
+        sample.input.nowNs=1000000000;HandInteraction hands;std::uint64_t intent=0;
+        native.view.native.owner=sample.nativeOwner;native.view.phase=Bc2NativeCyclePhase::Held;
+        native.view.cycle=native.view.shot=1;native.view.blocksFire=true;
+        const MechanismAudioIdentity identity{sample.input.owner.actor,5,sample.item.id,17,1,1};
+        MechanismAudioSuppressionLedger<> suppression;MechanismAudioLedger<> ledger;std::vector<MechanismAudioEvent> cues;
+        // The exact selected native callback establishes ownership before a
+        // real physical consumer can emit rear/closure cues for the same debt.
+        CHECK(ShotgunAudioRoleFor(audio,audio->pump)==ShotgunAudioRole::Pump&&suppression.Record(identity));
+        const auto tick=[&](float travel,bool grip){
+            auto& input=sample.input;++input.sequence;input.nowNs+=10000000;input.observedNs=input.nowNs;input.deadlineNs=input.nowNs+100000000;
+            input.released[0]=!grip;sample.grip=grip;hands.Update(input);
+            const HandContactProof proof{{1,17},input.sequence,input.deadlineNs,true};const auto gun=hands.Current(InteractionHand::Right);
+            if(gun)hands.Renew(input,gun->token,proof);
+            else hands.Acquire(input,{input.owner,InteractionHand::Right,HandClaimKind::GunHold,sample.item,proof,++intent,0});
+            native.view.held=WeaponCycleLease{input.owner,sample.item,{calibration->profileId,17},1,1,input.sequence,input.observedNs,input.deadlineNs,true};
+            auto contact=calibration->closedWrist;
+            for(unsigned n=0;n<3;++n)contact.values[3][n]+=calibration->geometry.axis[n]*calibration->rearDirection*travel;
+            sample.raw={sample.nativeOwner,{},calibration->rigFingerprint,input,contact,{},true};
+            const auto result=pump.Tick(sample,hands,intent);
+            if(result.audio&&suppression.Contains(result.audio->identity)&&ledger.Accept(*result.audio,input.nowNs)==MechanismAudioAdmission::Accepted)cues.push_back(*result.audio);
+            return result;
+        };
+        tick(0,false);tick(0,false);tick(0,true);CHECK(tick(0,true).ownsHand);
+        for(unsigned n=1;n<=10;++n)tick(calibration->geometry.stroke*n/10.f,true);
+        for(unsigned n=0;n<5;++n)tick(calibration->geometry.stroke,true);
+        for(int n=9;n>=0;--n)tick(calibration->geometry.stroke*n/10.f,true);
+        for(unsigned n=0;n<5&&!native.releases;++n)tick(0,true);
+        CHECK(native.releases==1&&native.cancels==0&&cues.size()==2);
+        CHECK(cues[0].stage==MechanismAudioStage::RearTravel&&cues[1].stage==MechanismAudioStage::Closure);
+        CHECK(cues[0].identity==identity&&cues[1].identity==identity);
+        ShellReloadAudioSuppression<> shells;const ShellReloadAudioIdentity shell{identity.actor,5,identity.item,17,2};
+        CHECK(!ShellReloadSuppressStart(shells,ShellReloadSoundFor(audio,audio->finish),shell,true));
+        CHECK(ShellReloadSuppressStart(shells,ShellReloadSoundFor(audio,audio->insertion),shell,true));
+        CHECK(ShellReloadSuppressStart(shells,ShellReloadSoundFor(audio,audio->finish),shell,true));
+        CHECK(!ShellReloadSuppressStart(shells,ShellReloadSoundFor(audio,audio->pump),shell,true));
+    }
+    return 0;
 }
-int main(){if(ExactRowsAndNativeSeparation()||SupplyAndInteractionUseExactProfile()||SupplyVisualRetainsEquipment()||OwnCentersHandsAndDeclaredDescendants())return 1;
+}
+int main(){if(ExactRowsAndNativeSeparation()||SupplyAndInteractionUseExactProfile()||SupplyVisualRetainsEquipment()||OwnCentersHandsAndDeclaredDescendants()||PumpConsumerAndAudioUseTheSelectedEquipment())return 1;
     std::puts("Shotgun equipment:25 exact rows, candidate separation, supply/bridge identity and own shell presentation passed.");return 0;}

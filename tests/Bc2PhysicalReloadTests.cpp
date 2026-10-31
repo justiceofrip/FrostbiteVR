@@ -86,7 +86,7 @@ struct Fixture {
             if(f.retirementVariant==6)receipt.event=0;return receipt;};
         policy.emplace(enabled,api,AmmoSupplyConfig{InteractionHand::Left,1000,{1001,1},{0,0,0},.15f,200000000});
     }
-    void Geometry(float z){const auto p=SpasReloadInsertionProfile();
+    void Geometry(float z){const auto p=s.equipment?*s.equipment->shellInsertion:SpasReloadInsertionProfile();
         s.raw.rawLeftWristWorldMeters=Multiply(p.itemFromHand,Multiply(*InverseRigid(p.itemFromInsertion),Multiply(reload_insertion_detail::TravelPose(p,z),Multiply(p.weaponFromEntry,s.raw.weaponWorldMeters))));}
     void SendRail(float x,float y,float z){
         const auto old=s.input;now+=20000000;++s.input.sequence;s.input.observedNs=s.input.nowNs=now;s.input.deadlineNs=now+100000000;
@@ -1179,8 +1179,37 @@ int ExpiredHoldGapRequiresCurrentCustodyAndOwner(){
  return 0;
 }
 
+int MissingRendererContactRetainsExactShellAcrossEquipmentProfiles(){
+ for(const auto& equipment:EnrolledShotgunEquipment()){
+  auto fp=std::make_unique<Fixture>();auto& f=*fp;
+  f.s.equipment=f.s.raw.equipment=&equipment;f.s.asset=equipment.native->config->assetName;
+  f.s.raw.rigFingerprint=equipment.rigFingerprint;
+  const auto text=[](auto& target,std::string_view value){target={};std::memcpy(target.data(),value.data(),value.size());};
+  text(f.mesh->states[0].meshes[0].assetPath,equipment.meshPath);
+  text(f.mesh->weaponName,equipment.native->config->assetName);
+  text(f.mesh->configurationPath,equipment.native->config->assetPath);f.mesh->configurationPathVerified=true;
+  CHECK(f.Begin());const auto shell=f.hands.Current(InteractionHand::Left)->token;
+  const auto cycle=f.policy->ProbeState(f.now).cycle;const auto keeps=f.keeps;
+  // Session input15449: current native/gun/selection, missing render packet.
+  f.s.raw={};f.Send(true);f.Send(true);
+  CHECK(f.result.ammoOwnsHand&&f.hands.Current(InteractionHand::Left)->token==shell);
+  CHECK(f.policy->ProbeState(f.now).cycle==cycle&&f.cancels==0&&f.starts==1&&f.keeps==keeps);
+  CHECK(f.submits==0&&!f.result.audio&&!f.result.tracking.preview);
+  f.s.raw.valid=true;f.s.raw.equipment=&equipment;f.s.raw.owner=f.s.nativeOwner;
+  f.s.raw.rigFingerprint=equipment.rigFingerprint;f.s.raw.weaponWorldMeters=Pose();f.held=true;f.Send(true);
+  CHECK(f.result.ammoOwnsHand&&f.hands.Current(InteractionHand::Left)->token==shell&&f.starts==1&&f.keeps>keeps);
+  f.s.raw={};f.Send(false);CHECK(!f.result.ammoOwnsHand&&f.cancels==1&&f.submits==0);
+ }
+ for(unsigned fault=0;fault<4;++fault){auto fp=std::make_unique<Fixture>();auto& f=*fp;CHECK(f.Begin());f.s.raw={};
+  if(fault==0)f.s.meshes.reset();if(fault==1)++f.reserve.identity.firing[0];
+  if(fault==2)f.s.cancel=true;if(fault==3)f.now+=100000000;
+  f.Send(true);CHECK(!f.result.ammoOwnsHand&&f.cancels==1&&f.submits==0);
+ }
+ return 0;
+}
 #include "Bc2ShellStartDeferralChecks.inc"
 int main(int argc,char** argv){
+ CHECK(MissingRendererContactRetainsExactShellAcrossEquipmentProfiles()==0);
  CHECK(MissingPumpObservationPreservesShellWithoutGrantingNativeAuthority()==0);
  CHECK(StockShellHideFollowsManualGunNotTheNativeTransaction()==0);
  if(argc==2&&std::strcmp(argv[1],"--expired-held-cohort")==0){

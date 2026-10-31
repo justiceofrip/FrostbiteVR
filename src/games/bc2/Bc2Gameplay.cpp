@@ -192,7 +192,7 @@ std::uint64_t mechanismAudioActor=0,mechanismAudioGeneration=0;
 std::uint64_t shellAudioActor=0,shellAudioGeneration=0;
 void PublishShellReloadAudio(const ReloadStateOwner& native,const interaction::HandInteractionSample& input,
     interaction::HandInteractionKey item,const PhysicalReloadProbeState& state,
-    const std::optional<interaction::ShellReloadAudioEvent>& event,bool manual) {
+    const std::optional<interaction::ShellReloadAudioEvent>& event,bool manual,const ShotgunAudioProfile* profile) {
     if(shellAudioActor&&(shellAudioActor!=input.owner.actor||shellAudioGeneration!=input.owner.actorGeneration))
         shellReloadAudio::RetireActor(shellAudioActor,shellAudioGeneration);
     shellAudioActor=input.owner.actor;shellAudioGeneration=input.owner.actorGeneration;
@@ -202,13 +202,13 @@ void PublishShellReloadAudio(const ReloadStateOwner& native,const interaction::H
         state.identity.owner==native?state.cycle:0};
     if(event)source.identity=event->identity;
     source.observedNs=input.observedNs;source.deadlineNs=input.deadlineNs;
-    source.manual=manual;source.spas=manual;source.focused=input.focused;source.tracked=input.tracked[0]&&input.tracked[1];
+    source.manual=manual;source.spas=manual;source.profile=profile;source.focused=input.focused;source.tracked=input.tracked[0]&&input.tracked[1];
     shellReloadAudio::Publish(source);
     if(event)shellReloadAudio::Emit(*event);
 }
 void PublishMechanismAudio(const ReloadStateOwner& native,const interaction::HandInteractionSample& input,
     interaction::HandInteractionKey item,mechanismAudio::Cue cue,
-    const std::optional<interaction::MechanismAudioEvent>& event,bool manual) {
+    const std::optional<interaction::MechanismAudioEvent>& event,bool manual,const ShotgunAudioProfile* profile) {
     if(mechanismAudioActor&&(mechanismAudioActor!=input.owner.actor||mechanismAudioGeneration!=input.owner.actorGeneration))
         mechanismAudio::RetireActor(mechanismAudioActor,mechanismAudioGeneration);
     mechanismAudioActor=input.owner.actor;mechanismAudioGeneration=input.owner.actorGeneration;
@@ -219,7 +219,7 @@ void PublishMechanismAudio(const ReloadStateOwner& native,const interaction::Han
         source.identity.cycle=view->cycle;source.identity.shot=view->shot;
     }
     if(event)source.identity=event->identity;
-    source.cue=cue;source.observedNs=input.observedNs;source.deadlineNs=input.deadlineNs;
+    source.cue=cue;source.profile=profile;source.observedNs=input.observedNs;source.deadlineNs=input.deadlineNs;
     source.manual=manual;source.focused=input.focused;source.tracked=input.tracked[0]&&input.tracked[1];
     mechanismAudio::Publish(source);
     if(event)mechanismAudio::Emit(*event);
@@ -2122,6 +2122,9 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             r.observed=true;r.exit=unsigned(d.exit);r.flags=d.flags;r.status=d.status;r.rawChecked=d.rawChecked;r.rawPassed=d.rawPassed;
             r.admissionChecked=d.admissionChecked;r.admissionPassed=d.admissionPassed;r.reloadPhase=d.reloadPhase;r.operation=d.operation;r.cancel=sample.cancel;
             r.selectionFailure=d.selectionFailure;r.policyEvaluated=d.policyEvaluated;
+            r.idleChecked=d.idleChecked;r.idlePassed=d.idlePassed;
+            fireTrace.record.feedCoverDistance=d.coverDistanceMeters;fireTrace.record.feedCoverAngle=d.coverAngleRadians;
+            fireTrace.record.feedNeutralAgeNs=d.neutralAgeNs;
             fireTrace.record.feedSource=sample.raw.inputEvidence.sequence;fireTrace.record.feedSourceDeadlineNs=sample.raw.inputEvidence.deadlineNs;}
         if(feedResult.blocksFire){constexpr auto mask=interaction::Fire|interaction::AlternateFire|interaction::Reload;
             out.held&=~mask;out.pressed&=~mask;}
@@ -2268,7 +2271,8 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             audioGun->token.owner==sample.input.owner&&audioGun->token.item==sample.weapon&&
             audioGun->inputSequence==sample.input.sequence&&audioGun->deadlineNs>sample.input.nowNs;
         PublishShellReloadAudio(sample.nativeOwner,sample.input,sample.weapon,physicalReload->ProbeState(sample.input.nowNs),
-            physicalResult.audio,(ordinaryShotgunEquipment||(!ordinaryManualCycles&&asset==SpasReloadAsset))&&audioOwnsGun&&aimValid&&out.active);
+            physicalResult.audio,(ordinaryShotgunEquipment||(!ordinaryManualCycles&&asset==SpasReloadAsset))&&audioOwnsGun&&aimValid&&out.active,
+            ShotgunEquipmentAudio(sample.equipment));
 #ifdef FVR_BC2_ARMING_EMPTY_PROBE
         if(armingEmptyFixture){const auto policy=reloadFlowRuntime::ReadRequestProbeSnapshot();LARGE_INTEGER stamp{};QueryPerformanceCounter(&stamp);
             const auto now=HandNanos(stamp.QuadPart);physicalResult.reloadHeld=armingEmptyFixture->After(physicalReload->ProbeState(now),
@@ -2307,7 +2311,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             ((out.pressed|out.held)&(interaction::Use|interaction::NextWeapon|interaction::PreviousWeapon));
         pumpResult=physicalPump->Tick(sample,handOwnership,handIntent);
         PublishMechanismAudio(sample.nativeOwner,sample.input,sample.item,mechanismAudio::Cue::Spas,
-            pumpResult.audio,!sample.cancel&&ordinarySelectionReady);
+            pumpResult.audio,!sample.cancel&&ordinarySelectionReady,ShotgunEquipmentAudio(ordinaryShotgunEquipment));
         if(physicalPumpFixture){LARGE_INTEGER processed{};QueryPerformanceCounter(&processed);const auto now=HandNanos(processed.QuadPart);
             physicalPumpFixture->Observe(pumpResult,reloadFlowRuntime::ReadNativeCycleView(now),rigPublication::ReadPumpPackCounters(),now);}
         if(resourcePumpCombination&&resourceInventoryFixture){LARGE_INTEGER processed{};QueryPerformanceCounter(&processed);const auto now=HandNanos(processed.QuadPart);
@@ -2334,7 +2338,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             if(boltResult.custodyChange&&boltResult.custodyChange->transaction.accepted)HandChanged("bolt_player_return");
         }
         if(ordinaryBoltSample)PublishMechanismAudio(ordinaryBoltSample->nativeOwner,ordinaryBoltSample->input,
-            ordinaryBoltSample->item,mechanismAudio::Cue::M95,boltResult.audio,!ordinaryBoltSample->cancel&&ordinarySelectionReady);
+            ordinaryBoltSample->item,mechanismAudio::Cue::M95,boltResult.audio,!ordinaryBoltSample->cancel&&ordinarySelectionReady,nullptr);
         if(ordinaryBoltInputFixture){LARGE_INTEGER processed{};QueryPerformanceCounter(&processed);const auto now=HandNanos(processed.QuadPart);
             ordinaryBoltInputFixture->Observe(boltResult,reloadFlowRuntime::ReadNativeCycleView(now),rigPublication::ReadBoltPackCounters(),now);}
         ApplyPumpActionGate(out,ordinaryBoltPlayer->BlocksFire());

@@ -16,7 +16,68 @@ class ShotgunEquipmentTests(unittest.TestCase):
     def setUpClass(cls):
         cls.batch=json.loads((ROOT/'handoff/tasks/WEAPONS/20261030-shotgun43/batch.json').read_text())
         cls.samples=json.loads((ROOT/'handoff/tasks/WEAPONS/20261030-shotgun44/samples.json').read_text())
-        cls.result=equipment.build(cls.batch,cls.samples)
+        cls.actions=equipment.load_actions(cls.batch['inputs']['actions']['path'])
+        cls.result=equipment.build(cls.batch,cls.samples,cls.actions)
+
+    def test_audio_roles_follow_the_existing_exact_action_join(self):
+        for row in self.result['profiles']:
+            audio=row['audio'];self.assertEqual(equipment.ACTION_HASH,audio['provenance'])
+            self.assertEqual('generic_physical_cues_from_owner_spas_cache',audio['cue_policy'])
+            for role in audio['roles'].values():
+                source=self.actions['records'][role['record']]['source']
+                self.assertEqual('exact_authored_animation',role['status'])
+                self.assertEqual(source['asset_guid'],role['guid'])
+                self.assertEqual(source['asset_document_sha256'],role['asset_document_sha256'])
+        partial=equipment.build(self.batch,self.samples)
+        for row in partial['profiles']:
+            self.assertEqual('unsupported_missing_exact_authored_binding',row['audio']['roles']['finish']['status'])
+            self.assertIsNone(row['audio']['roles']['finish']['guid'])
+
+    def test_rejects_foreign_finish_binding_with_consistent_digests(self):
+        for donor_asset in ('SPAS12','NS2000'):
+            with self.subTest(donor_asset=donor_asset):
+                b=copy.deepcopy(self.batch)
+                selected=next(r for r in b['inventory']if r['asset']=='NS2000')
+                donor=next(r for r in b['inventory']if r['asset']==donor_asset and r['resource']!=selected['resource'])
+                foreign=copy.deepcopy(next(p for p in donor['mechanical_inputs']if p['role']=='1p_reload_out'))
+                record=self.actions['records'][int(foreign['source']['pointer'].removeprefix('/records/'))]
+                # The complete foreign binding is internally valid; only its
+                # relationship to the selected equipment is wrong.
+                self.assertEqual(record['digest'],foreign['mechanism_digest'])
+                self.assertEqual(record['binding_digest'],foreign['binding_digest'])
+                self.assertEqual('1p_reload_out',record['source']['role'])
+                selected['mechanical_inputs']=[foreign if p['role']=='1p_reload_out' else p
+                                               for p in selected['mechanical_inputs']]
+                with self.assertRaisesRegex(ValueError,'Exact finish audio equipment identity differs'):
+                    equipment.build(b,self.samples,self.actions)
+
+    def test_rejects_finish_identity_changes_even_with_recomputed_digest(self):
+        for field in ('configured_mesh','animation_tree','binding_digest','weapon_configuration'):
+            with self.subTest(field=field):
+                b=copy.deepcopy(self.batch)
+                selected=next(r for r in b['inventory']if r['asset']=='NS2000')
+                binding=next(p for p in selected['mechanical_inputs']if p['role']=='1p_reload_out')
+                index=int(binding['source']['pointer'].removeprefix('/records/'))
+                actions=dict(self.actions,records=self.actions['records'].copy())
+                record=copy.deepcopy(actions['records'][index]);actions['records'][index]=record
+                if field=='animation_tree':record['source'][field]['instance_guid']='00000000-0000-0000-0000-000000000000'
+                elif field=='weapon_configuration':record[field]['resource']='ForeignWeapon.dbx'
+                elif field=='binding_digest':record[field]='0'*64
+                else:record[field]='ForeignMesh'
+                record['digest']=equipment.digest({k:v for k,v in record.items()if k!='digest'})
+                binding.update(mechanism_digest=record['digest'],binding_digest=record['binding_digest'])
+                with self.assertRaisesRegex(ValueError,'Exact finish audio equipment identity differs'):
+                    equipment.build(b,self.samples,actions)
+
+    def test_finish_without_selected_state_proof_stays_unsupported(self):
+        b=copy.deepcopy(self.batch)
+        selected=next(r for r in b['inventory']if r['asset']=='NS2000')
+        selected['authored_states']=[]
+        result=equipment.build(b,self.samples,self.actions)
+        row=next(r for r in result['profiles']if r['key']==selected['key'])
+        finish=row['audio']['roles']['finish']
+        self.assertEqual('unsupported_missing_exact_authored_binding',finish['status'])
+        self.assertIsNone(finish['guid'])
 
     def test_all_exact_tube_variants_have_independent_native_joins(self):
         rows=self.result['profiles']

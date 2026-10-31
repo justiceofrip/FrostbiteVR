@@ -2,7 +2,7 @@
 #include "Bc2AuthoredSupport.h"
 #include "fvr/interaction/SupportGrip.h"
 #include "fvr/interaction/GripAttachment.h"
-#include "../profiles/opening426/CombinedSupport.h"
+#include "../profiles/weapons43/CombinedSupport.h"
 #include <cstring>
 #include <iostream>
 using namespace fvr;using namespace fvr::bc2;
@@ -51,7 +51,7 @@ int EnrolledSupportComposesExistingGrip(){
   CHECK(!AuthoredSupportCurrent(*bound,&refreshed,f.equipment,f.owner,f.now+100000000));
   ++input.generation;input.predictedNs+=10000000;CHECK(policy.Update(owner,input,{}).released);
  }
- CHECK(scar&&pistol&&nambu&&enrolled==70&&primary==6);
+ CHECK(scar&&pistol&&nambu&&enrolled==77&&primary==6);
  CHECK(generated::AuthoredSupports[0].assetName=="SPAS12_sp");
  CHECK(generated::AuthoredSupports[0].leftInWeapon.values==generated::PreservedSupport202[0].leftInWeapon.values);
  return 0;
@@ -89,8 +89,74 @@ int NullPersistenceDoesNotHideEquipmentReplacement(){
  f.equipment.data=0;CHECK(!BindAuthoredSupportReference(generated::AuthoredSupports,f.snapshot,f.equipment,f.owner,p.rigFingerprint,f.now));
  return 0;
 }
+int ConfigurationCadenceDoesNotReleaseHeldSupport(){
+ using namespace interaction;
+ constexpr std::int64_t ms=1000000;
+ bool an94=false,t194=false,qju88=false,spas=false;unsigned checked=0;
+ for(const auto& p:generated::AuthoredSupports){
+  ++checked;an94|=p.assetName=="AN94_sp_k";t194|=p.assetName=="T194_sp";
+  qju88|=p.assetName=="QJU88_sp";spas|=p.assetName=="SPAS12_sp";
+  SupportFixture f(p);f.snapshot->observedNs=f.now;f.snapshot->deadlineNs=f.now+200*ms;
+  // The real producer observes configuration every 100ms with a 200ms lease.
+  // An immutable render input may still carry that source after 100ms while
+  // its own 100ms controller deadline has moved beyond the config deadline.
+  auto refreshed=*f.snapshot;++refreshed.sequence;refreshed.observedNs=f.now+100*ms;
+  refreshed.deadlineNs=f.now+300*ms;
+  InputFrame input{};input.spaceGeneration=f.owner.space;input.focused=input.headValid=true;
+  for(auto& hand:input.hands){hand.gripTracked=hand.aimTracked=true;hand.active=Components;}
+  input.hands[0].grip.position.z=p.aimMode==SupportAimMode::PrimaryHand?-.02f:-.4f;
+  SupportGrip policy;const SupportGripOwner owner{1,2,3};std::uint64_t token=0;
+  std::optional<AuthoredSupportBinding> beforeCutoff,afterCutoff;
+  for(const auto offset:{89,99,101,111}){
+   const auto now=f.now+offset*ms;++f.owner.inputSequence;f.owner.inputDeadlineNs=now+100*ms;
+   input.generation=f.owner.inputSequence;input.predictedNs=now;input.hands[0].squeeze=offset==89?0.f:1.f;
+   const auto bound=BindAuthoredSupportReference(generated::AuthoredSupports,f.snapshot,f.equipment,f.owner,p.rigFingerprint,now);
+   CHECK(bound&&AuthoredSupportContact(bound)==p.contactReference);
+   const auto current=offset<100?f.snapshot.get():&refreshed;
+   CHECK(AuthoredSupportCurrent(*bound,current,f.equipment,f.owner,now));
+   CHECK(bound->selected==f.snapshot&&bound->selected->deadlineNs==f.now+200*ms);
+   CHECK(bound->owner.inputDeadlineNs==now+100*ms);
+   const auto held=policy.Update(owner,input,{true,.05f,{},p.aimMode});
+   if(offset==89)CHECK(!held.holding);
+   else{
+    CHECK(held.holding&&!held.released&&held.engaged==(offset==99));
+    if(offset==99){token=held.token;beforeCutoff=bound;}
+    CHECK(held.token==token);
+   }
+   if(offset==101){
+    // This is the former failure: both sources remain live, but their
+    // future deadlines are differently ordered. No lifetime is extended.
+    CHECK(bound->selected->deadlineNs<bound->owner.inputDeadlineNs);afterCutoff=bound;
+   }
+  }
+  CHECK(beforeCutoff&&afterCutoff);
+  ++f.owner.inputSequence;f.owner.inputDeadlineNs=f.now+350*ms;
+  CHECK(AuthoredSupportCurrent(*afterCutoff,&refreshed,f.equipment,f.owner,f.now+199*ms));
+  CHECK(!AuthoredSupportCurrent(*beforeCutoff,&refreshed,f.equipment,f.owner,f.now+199*ms)); // original input expires
+  CHECK(!AuthoredSupportCurrent(*afterCutoff,&refreshed,f.equipment,f.owner,f.now+200*ms)); // original config expires
+  CHECK(!BindAuthoredSupportReference(generated::AuthoredSupports,f.snapshot,f.equipment,f.owner,p.rigFingerprint,f.now+200*ms));
+  CHECK(!AuthoredSupportCurrent(*afterCutoff,nullptr,f.equipment,f.owner,f.now+112*ms));
+  auto changed=refreshed;++changed.owner.equipGeneration;
+  CHECK(!AuthoredSupportCurrent(*afterCutoff,&changed,f.equipment,f.owner,f.now+112*ms));
+  changed=refreshed;Text(changed.states[0].meshes[0].assetPath,"Objects/Weapons/Replacement");
+  CHECK(!AuthoredSupportCurrent(*afterCutoff,&changed,f.equipment,f.owner,f.now+112*ms));
+  // Correct binding continuity never changes actual pull-away or squeeze release.
+  ++input.generation;input.predictedNs+=ms;
+  const auto away=policy.Update(owner,input,{true,SupportGripRetentionRadiusMeters+.01f,{},p.aimMode});
+  CHECK(away.released&&!away.holding&&away.reason==SupportRelease::Distance);
+  ++input.generation;input.predictedNs+=ms;CHECK(!policy.Update(owner,input,{true,.05f,{},p.aimMode}).holding);
+  ++input.generation;input.predictedNs+=ms;input.hands[0].squeeze=0;policy.Update(owner,input,{true,.05f,{},p.aimMode});
+  ++input.generation;input.predictedNs+=ms;input.hands[0].squeeze=1;CHECK(policy.Update(owner,input,{true,.05f,{},p.aimMode}).engaged);
+  ++input.generation;input.predictedNs+=ms;input.hands[0].squeeze=0;
+  const auto released=policy.Update(owner,input,{true,.05f,{},p.aimMode});
+  CHECK(released.released&&!released.holding&&released.reason==SupportRelease::Button);
+ }
+ CHECK(checked==generated::AuthoredSupports.size()&&checked==78&&an94&&t194&&qju88&&spas);
+ return 0;
+}
 int main(){
- if(EnrolledSupportComposesExistingGrip()||OriginalSupportConfigurationAndInputLifetime()||NullPersistenceDoesNotHideEquipmentReplacement())return 1;
+ if(EnrolledSupportComposesExistingGrip()||OriginalSupportConfigurationAndInputLifetime()||NullPersistenceDoesNotHideEquipmentReplacement()||
+    ConfigurationCadenceDoesNotReleaseHeldSupport())return 1;
  math::Matrix4 left{};for(unsigned n=0;n<4;++n)left.values[n][n]=1;left.values[3]={0,-.1f,-.6f,1};
  constexpr std::string_view digest="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
  const std::array<AuthoredSupportProfile,1> profiles{{{"SyntheticSupport","Objects/Weapons/SyntheticMesh",digest,digest,digest,91,left}}};
@@ -117,7 +183,7 @@ int main(){
  CHECK(BindAuthoredSupport(variants,s,equipment,owner,p.rigFingerprint,now)==&variants[1]);
  std::swap(variants[0],variants[1]);CHECK(BindAuthoredSupport(variants,s,equipment,owner,p.rigFingerprint,now)==&variants[0]);
  changed=s;changed.deadlineNs=owner.inputDeadlineNs-1;
- CHECK(!BindAuthoredSupport(profiles,changed,equipment,owner,p.rigFingerprint,now));
+ CHECK(BindAuthoredSupport(profiles,changed,equipment,owner,p.rigFingerprint,now)==&p);
  CHECK(!BindAuthoredSupport(profiles,s,equipment,owner,p.rigFingerprint+1,now));
  owner.space++;CHECK(!bind());owner.space--;owner.inputDeadlineNs=now;CHECK(!bind());
  std::cout<<"Measured support-only binding ownership, ambiguity and expiry passed\n";

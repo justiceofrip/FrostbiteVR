@@ -54,7 +54,7 @@ bool Read(std::uintptr_t at,void* out,std::size_t size)noexcept {
 }
 unsigned U32(std::uintptr_t at)noexcept {unsigned value=0;Read(at,&value,4);return value;}
 bool Fresh(const Source& s,std::int64_t now)noexcept {
-    return s.spas&&s.manual&&s.focused&&s.tracked&&ShellReloadAudioIdentityValid(s.identity)&&
+    return s.profile&&ShotgunAudioRoleSupported(s.profile->insertion)&&s.spas&&s.manual&&s.focused&&s.tracked&&ShellReloadAudioIdentityValid(s.identity)&&
         s.soldier>=0x10000&&s.weapon>=0x10000&&s.weak>=0x10000&&U32(s.weak)==s.soldier+4&&
         s.observedNs>0&&s.observedNs<=now&&s.deadlineNs>now&&s.deadlineNs-s.observedNs<=200000000;
 }
@@ -210,12 +210,12 @@ bool Install(const Config& config){
 }
 bool Dispatch(bool start,std::uintptr_t receiver,const std::array<unsigned char,16>& guid)noexcept {
     if(!enabled.load())return false;++inFlight;struct Exit{~Exit(){--inFlight;}} exit;
-    const auto kind=ShellReloadSoundFor("SPAS12_sp",guid);if(kind==ShellReloadSound::Unrelated)return false;
+    const auto s=current.load();
+    const auto kind=ShellReloadSoundFor(s?s->profile:nullptr,guid);if(kind==ShellReloadSound::Unrelated)return false;
     if(start)++starts;else ++stops;
     NativeRow row;row.now=Now();row.receiver=unsigned(receiver);row.owner=U32(receiver+4);row.kind=unsigned(kind);row.start=start;
     unsigned char first=0,flags=0;const bool read=Read(receiver+0x50,&first,1)&&Read(row.owner+0x475,&flags,1);
     row.firstPerson=first;row.ownerFlags=flags;
-    const auto s=current.load();
     if(s){row.source=s->soldier;row.cycle=s->identity.cycle;row.local=read&&row.owner==s->soldier;row.fresh=Fresh(*s,row.now);}
     const bool intended=s&&s->spas&&ShellReloadLocalStart(start,kind,row.local,first,flags,s->manual)&&replacing.load();
     if(intended){

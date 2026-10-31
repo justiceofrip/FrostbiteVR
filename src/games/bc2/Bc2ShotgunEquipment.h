@@ -2,6 +2,7 @@
 #include "Bc2ReloadInteraction.h"
 #include "Bc2ShotgunReloadRegistry.h"
 #include "Bc2SelectedMeshes1p.h"
+#include "Bc2ShotgunAudioProfile.h"
 #include "fvr/interaction/AuthoredHandPose.h"
 #include <algorithm>
 #ifdef BC2_SHOTGUN_EQUIPMENT_HEADER
@@ -53,6 +54,15 @@ inline const ShotgunReloadEquipmentProfile* KnownShotgunEquipment(const ShotgunR
     if(!p||p==DefaultSpasShotgunEquipment())return DefaultSpasShotgunEquipment();
     for(const auto& row:EnrolledShotgunEquipment())if(p==&row)return p;
     return nullptr;
+}
+inline const ShotgunAudioProfile* ShotgunEquipmentAudio(const ShotgunReloadEquipmentProfile* requested)noexcept {
+    const auto* equipment=KnownShotgunEquipment(requested);if(!equipment)return nullptr;
+    if(equipment==DefaultSpasShotgunEquipment())return &LegacySpasAudio;
+#ifdef BC2_SHOTGUN_EQUIPMENT_HEADER
+    return generated::FindShotgunAudioProfile(equipment);
+#else
+    return nullptr;
+#endif
 }
 struct Bc2ShotgunShellGeometry {
     const ShotgunReloadEquipmentProfile* equipment=nullptr;

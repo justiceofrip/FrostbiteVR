@@ -76,6 +76,9 @@ struct Bc2PhysicalFeedDiagnostic {
     unsigned flags=0,status=0,rawChecked=0,rawPassed=0,admissionChecked=0,admissionPassed=0;
     unsigned reloadPhase=~0u,operation=~0u;
     unsigned selectionFailure=~0u;
+    unsigned idleChecked=0,idlePassed=0;
+    std::optional<float> coverDistanceMeters,coverAngleRadians;
+    std::int64_t neutralAgeNs=-1;
     bool policyEvaluated=false;
 };
 struct Bc2PhysicalFeedResult {

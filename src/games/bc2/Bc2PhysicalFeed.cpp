@@ -118,7 +118,7 @@ struct Bc2PhysicalFeed::State {
         Bc2FeedPose pose{},gestureStart{};
         FeedCoverState cover=FeedCoverState::Closed;FeedContainerState container=FeedContainerState::Attached;
         FeedSeatState seat=FeedSeatState::Seated;FeedRefillObservation refill{FeedRefillState::NotRequired,0,0};
-        float coverRadians=0,gestureCoverRadians=0;std::uint64_t lifetime=0,revision=0,lastInput=0;
+        float coverRadians=0,gestureCoverRadians=0;std::uint64_t lifetime=0,revision=0,lastInput=0,rejectedInput=0;
         std::unique_ptr<FeedEquipmentSession> session;
         Bc2FeedAmmoSupply ammunitionSupply;
         bool supplyNeutral=false;
@@ -281,6 +281,12 @@ void Bc2PhysicalFeed::Suspend(const HandInteractionSample& input,HandInteraction
     for(auto& e:state_->equipment)if(e){if(e->claim){(void)hands.Release(input,*e->claim);e->claim.reset();}
         e->ammunitionSupply.Suspend(input,hands);e->supplyNeutral=false;
         if(e->session)e->motionDirty=true;
+        // A rejected current packet may be newer than the last renderer
+        // source. Its delayed release cannot re-arm this equipment lifetime.
+        const auto& owner=e->original.identity.owner;
+        if(input.owner==HandInteractionOwner{(std::uint64_t(owner.weak)<<32)|owner.soldier,
+            owner.actorGeneration,e->weapon.generation,owner.space})
+            e->rejectedInput=(std::max)(e->rejectedInput,input.sequence);
         e->neutral.reset();if(e->session){FeedEquipmentSessionSample sample;sample.nowNs=input.nowNs;(void)e->session->Update(sample);}}
 }
 Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandInteraction& hands,std::uint64_t& intent)noexcept {
@@ -402,7 +408,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             }
             if(!migrated){out.blocksFire=true;return finish(FeedExit::MigrationUnverified);}
         }else e->session.reset();
-        e->original=*view;e->weapon=s.weapon;e->neutral.reset();e->lastInput=0;e->motionDirty=true;
+        e->original=*view;e->weapon=s.weapon;e->neutral.reset();e->lastInput=e->rejectedInput=0;e->motionDirty=true;
     }
     const auto right=hands.Current(InteractionHand::Right);
     const bool gun=right&&right->token.owner==s.input.owner&&right->token.item==s.weapon&&
@@ -439,35 +445,52 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     const bool supplyHand=supplyHeld&&left&&left->token==supplyHeld->claim.token;
     bool available=!left||(e->claim&&left->token==*e->claim)||supplyHand;
     if(e->claim&&(!left||left->token!=*e->claim))e->claim.reset();
-    // A physical cycle starts only on a new raw grip after a real neutral
-    // cover contact. The saved neutral contains its own geometry/count packet.
+    // Neutral arms the input edge, not contact. Like FeedInteraction, accept a
+    // released hand away from the cover, then consume that neutral on the next
+    // grip packet. Only that edge may acquire the exact cover contact.
     const bool idle=!e->session||e->session->State().status==FeedEquipmentStatus::Complete;
     if(idle){
         const auto& m=e->motions.operations[unsigned(FeedPhysicalOperation::OpenCover)];
         const auto contact=feed_interaction_detail::Multiply(m.motionFromContact,m.weaponFromMotion);
         const auto& policy=profile.contacts[unsigned(FeedPart::Cover)];
-        const bool touch=Distance(local,contact)<=policy.radiusMeters&&Angle(local,contact)<=policy.maxAngleRadians;
-        if(!source->grip&&sourceInput.released[0]&&available&&touch&&sourceInput.sequence>e->lastInput){
+        const auto distance=Distance(local,contact),angle=Angle(local,contact);
+        const bool touch=distance<=policy.radiusMeters&&angle<=policy.maxAngleRadians;
+        const bool freshSequence=sourceInput.sequence>e->lastInput&&sourceInput.sequence>e->rejectedInput;
+        if(!source->grip&&sourceInput.released[0]&&available&&freshSequence){
             FeedEquipmentSessionSample neutral;neutral.interaction.contact.weaponFromHandContact=local;
             neutral.interaction.contact.observedNs=sourceInput.observedNs;neutral.interaction.contact.inputSequence=sourceInput.sequence;
             neutral.nowNs=now;neutral.ammunition=state.Ammo(*e,*source->native);neutral.interaction.focused=true;neutral.interaction.contact.tracked=true;
             e->neutral=neutral;
         }
-        if(source->grip&&touch&&available&&e->neutral&&sourceInput.sequence>e->neutral->interaction.contact.inputSequence&&
-           view->counts.loaded<view->counts.capacity&&view->counts.reserve>0&&
-           now-e->neutral->interaction.contact.observedNs<profile.maxAgeNs){
+        const auto neutral=e->neutral;
+        auto& diagnostic=out.diagnostic;diagnostic.coverDistanceMeters=float(distance);diagnostic.coverAngleRadians=float(angle);
+        if(neutral)diagnostic.neutralAgeNs=now-neutral->interaction.contact.observedNs;
+        const auto idleCheck=[&](unsigned bit,bool passed){diagnostic.idleChecked|=1u<<bit;
+            if(passed)diagnostic.idlePassed|=1u<<bit;return passed;};
+        (void)idleCheck(0,available);(void)idleCheck(1,!source->grip&&sourceInput.released[0]);
+        (void)idleCheck(2,freshSequence);(void)idleCheck(3,source->grip);
+        (void)idleCheck(4,distance<=policy.radiusMeters);(void)idleCheck(5,angle<=policy.maxAngleRadians);
+        (void)idleCheck(6,bool(neutral));
+        const bool afterNeutral=idleCheck(7,neutral&&sourceInput.sequence>neutral->interaction.contact.inputSequence);
+        const bool freshNeutral=idleCheck(8,neutral&&diagnostic.neutralAgeNs>=0&&diagnostic.neutralAgeNs<profile.maxAgeNs);
+        (void)idleCheck(9,view->counts.loaded<view->counts.capacity);(void)idleCheck(10,view->counts.reserve>0);
+        // A missed, expired or unavailable press cannot turn into acquisition
+        // by entering contact while still held, including on repeated packets.
+        if(source->grip&&afterNeutral)e->neutral.reset();
+        if(source->grip&&afterNeutral&&freshNeutral&&touch&&available&&
+           view->counts.loaded<view->counts.capacity&&view->counts.reserve>0){
             const auto lifetime=Lifetime();if(!lifetime){out.blocksFire=true;return finish(FeedExit::LifetimeExhausted);}
             e->lifetime=lifetime;e->refill={FeedRefillState::Required,lifetime,0};e->refused=false;
             try{e->session=std::make_unique<FeedEquipmentSession>(profile,e->motions,FeedEquipmentOwner(s.owner),e->mechanism,e->supply,lifetime,
                 e->original.binding.context.resource);}catch(...){out.blocksFire=true;return finish(FeedExit::SessionUnavailable);}
             state.PublishGate(*e);
-            auto neutral=*e->neutral;neutral.ammunition.lifetime=lifetime;neutral.snapshot=state.Snapshot(*e,neutral.ammunition,sourceInput);
-            neutral.snapshot.inputSequence=neutral.interaction.contact.inputSequence;
-            neutral.binding=state.Binding(*e);neutral.authority=state.Authority(*e,neutral.ammunition,FeedPhysicalOperation::OpenCover);
-            neutral.interaction.contact.owner=neutral.snapshot.owner;neutral.interaction.contact.mechanism=e->mechanism;
-            neutral.interaction.contact.snapshotSequence=neutral.snapshot.sequence;neutral.interaction.contact.handAvailable=true;
-            neutral.interaction.hand={1,sourceInput.owner.equipGeneration};neutral.interaction.trackingGeneration=sourceInput.owner.space;neutral.held=true;
-            (void)e->session->Update(neutral);e->neutral.reset();
+            auto armed=*neutral;armed.ammunition.lifetime=lifetime;armed.snapshot=state.Snapshot(*e,armed.ammunition,sourceInput);
+            armed.snapshot.inputSequence=armed.interaction.contact.inputSequence;
+            armed.binding=state.Binding(*e);armed.authority=state.Authority(*e,armed.ammunition,FeedPhysicalOperation::OpenCover);
+            armed.interaction.contact.owner=armed.snapshot.owner;armed.interaction.contact.mechanism=e->mechanism;
+            armed.interaction.contact.snapshotSequence=armed.snapshot.sequence;armed.interaction.contact.handAvailable=true;
+            armed.interaction.hand={1,sourceInput.owner.equipGeneration};armed.interaction.trackingGeneration=sourceInput.owner.space;armed.held=true;
+            (void)e->session->Update(armed);
         }
     }
     e->lastInput=(std::max)(e->lastInput,sourceInput.sequence);
