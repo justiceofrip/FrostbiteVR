@@ -1,0 +1,48 @@
+{
+  "schema": "fvr.cadence58.integration.v1",
+  "built_source_commit": "03eebdb34f8cf1299c67b17788cd21da26b811d2",
+  "native_source_sha256": "3f83d5041df2411bb54f51db7e1a055daa8663638eee84526465fd09e21e0729",
+  "build_receipt": "reports/coordinator-20261031-cadence58/normal-runtime/build-receipt.json",
+  "build_receipt_sha256": "725307d3c37e1ca832d57723cea9a705c4c9a5a21c448c37b4872fb3d425b94a",
+  "normal_checks": {
+    "x64": "341/341",
+    "x86": "341/341"
+  },
+  "focused_checks": {
+    "x86": "checks-x86-02",
+    "x64": "checks-x64-01",
+    "suites": 4
+  },
+  "source_changes": [
+    "preserve existing Fire through exact same-owner idle ammunition-publication deferral",
+    "retain reload/equipment blocking and explicit pending/uncertain/retired Fire denial"
+  ],
+  "demonstrated_fire_interruption_corrected": true,
+  "native_fire_rate_changed": false,
+  "user_session_attribution_proven": false,
+  "bursty_fire_fully_resolved": false,
+  "performance_gain_measured": false,
+  "independent_review_finding_resolved": true,
+  "review_resolution": "reports/coordinator-20261031-cadence58/review-resolution.txt",
+  "focused_and_session_evidence": "G:/Unity/VRMMO/bc2vr-task-worktrees/campaign-coordinator-20261028-r1/reports/coordinator-20261031-cadence58",
+  "native_probe_changed_from_0_1_21": true,
+  "private_candidate": "0.1.22",
+  "package_verified": true,
+  "package_files": 101,
+  "runtime_files": 93,
+  "installed": true,
+  "installed_version": "0.1.22",
+  "rollback_version": "0.1.21",
+  "settings_preserved": true,
+  "installed_validation_passed": true,
+  "source_pushed": "03eebdb34f8cf1299c67b17788cd21da26b811d2",
+  "source_push_evidence": "reports/coordinator-20261031-cadence58/source-push.json",
+  "installation_evidence": "reports/coordinator-20261031-cadence58/installation.json",
+  "installed_validation_evidence": "reports/coordinator-20261031-cadence58/installed-validation.log",
+  "game_started": false,
+  "headset_accepted": false,
+  "agents_retired": true,
+  "remaining": "Headset confirmation of automatic-fire feel; frame-pacing contribution not ruled out",
+  "public_release": false,
+  "final_status_push_and_lease_close": "reports/coordinator-20261031-cadence58/close.json"
+}

@@ -1,0 +1,11 @@
+Private0.1.22: automatic-fire continuity candidate
+Check receipt.json for actual installation status and exact build identity.
+
+Hold the XM8 trigger continuously for a few seconds while stationary, then while
+aiming with both hands. Repeat after a manual magazine reload. Another automatic
+magazine-fed gun exercises the same corrected action filter.
+Notice whether shots/audio/recoil pause together, or only the image looks choppy.
+Logging is automatic; stop VR normally when finished. Fire-route observations
+are retained in data/runtime/sessions/<session>/session-telemetry.jsonl.
+The change removes an idle ammo-data trigger cut; native fire rates are unchanged.
+Frame-pacing issues and actual headset improvement remain separate observations.

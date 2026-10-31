@@ -22,7 +22,8 @@ exercise publication deferrals, repeated packets, native input-cache levels,
 neutral preservation, 21 lifetime/input failures and pending/retired blocking.
 Independent review found the cancellation bypass in the initial patch; root
 corrected it and added effective-action assertions. Earlier check is retained.
-Root runs final x86/x64 normal builds; final result/install identity in receipt.json.
+Final x86/x64 normal builds pass341/341 each. Source03eebdb is pushed; private0.1.22
+installed/setup-assets validated, settings preserved,0.1.21 rollback. See receipt.json.
 
 Saved-session limits
 The user's0.1.19 log has no Fire-route, shot or ammo timestamps. Fully tracked XM8

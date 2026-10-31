@@ -1,9 +1,9 @@
 BC2 weapon pipeline: what exists and what it proves
 Updated October 31, 2026. Root coordinates this run; agents own disjoint runtime files.
 
-There is working batch asset/profile tooling. There is NOT yet an established
-all-weapons working reload implementation. Prior enrollment counts overstated
-practical completion when described as finished weapons.
+The targeted firearm roster has reload implementation paths for each family.
+Successful in-game completion across that roster is not yet established.
+Prior enrollment counts overstated practical completion when called finished weapons.
 The workflow uses separate scripts and runtime adapters, coordinated manually.
 It does not automatically establish that every enrolled weapon works in VR.
 
@@ -64,6 +64,8 @@ Current source changes
   Empty-Step suppression now covers bounded 250 ms simulation hitches while the
   original authority remains valid; controller input is never renewed by a hitch.
 - Fire: reject a command whose original input expired during processing.
+- Cadence58: preserve valid held Fire during exact idle ammo-publication gaps;
+  keep active reload, pending/retired state and equipment actions blocked.
 - Rig reads: group adjacent used fields, saving 10 native calls per snapshot.
 - Host: retry deferred completed-frame feedback once before EndFrame; forced
   contention, cancellation and exact acknowledgement pass offline GPU checks.
@@ -83,8 +85,9 @@ Native-code emulation confirms the same-Update last-round stock-reload leak and
 scoped Step fix. It uses explicit allocator/listener substitutes, not a live game.
 Native timer emulation groups 2/3 shots after 160/240 ms hitches even with held Fire.
 That is a mechanism, not the established user-session cause; bursty feel is open.
-Private 0.1.21 is installed; setup/assets validation passed, with 0.1.20 as rollback.
-Source is pushed. receipt.json records the exact runtime and installation evidence.
+Private 0.1.22 is installed; setup/assets validation passed, with 0.1.21 as rollback.
+Source is pushed. ../coordinator-20261031-cadence58/receipt.json records current identity;
+this folder's receipt.json retains the preceding 0.1.21 installation evidence.
 User-confirmed progress: multiweapon two-hand grips, reliable swaps, LMG counter.
 No weapon is counted as working merely because its profile or unit check exists.
 

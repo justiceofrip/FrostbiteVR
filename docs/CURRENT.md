@@ -5,20 +5,17 @@ Updated October 31, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
-Offline57 is pushed and private 0.1.21 is installed: shared magazine activation and feed reload control, bounded hitch protection, fewer rig reads and deferred frame-feedback service. Both normal builds pass 341/341; installed setup/assets validation passes, settings/logging are preserved and 0.1.20 is rollback. [Receipt](../handoff/integrations/coordinator-20261030-offline57/receipt.json) and [actual pipeline](../handoff/integrations/coordinator-20261030-offline57/PIPELINE.txt). No game session ran; all-weapon reload completion, bursty fire, measured FPS, aim and destruction acceptance remain open.
+Cadence58 is pushed and private 0.1.22 is installed: idle ammo-publication gaps preserve valid held Fire while reload/equipment and pending-state gates remain blocked. Both normal builds pass 341/341; installed setup/assets validation passes, settings/logging are preserved and 0.1.21 is rollback. [Receipt](../handoff/integrations/coordinator-20261031-cadence58/receipt.json). This corrects a demonstrated trigger-interruption mechanism; the user's session attribution, headset improvement and frame-pacing contribution remain unconfirmed. No game session ran.
+
+Offline57's shared magazine/feed reload connections, bounded hitch protection, fewer rig reads and deferred frame-feedback service are retained. [Prior receipt](../handoff/integrations/coordinator-20261030-offline57/receipt.json) and [actual pipeline](../handoff/integrations/coordinator-20261030-offline57/PIPELINE.txt). All-weapon reload completion, measured FPS, aim and destruction acceptance remain open.
 
 Feedback56's anatomical feed contacts, reviewed visual axes, skin-decal/soot correction and host copy poll are retained. [Prior receipt](../handoff/integrations/coordinator-20261030-feedback56/receipt.json). Its native menu observation did not establish campaign reload or headset acceptance.
 
 Integration55 supplied0.1.19's weapon/ammo/underbarrel wiring and depth-target reuse, retained in the current candidate. [Integration receipt](../handoff/integrations/coordinator-20261030-integration55/receipt.json). No headset acceptance or measured performance gain is inferred from setup validation.
 
-Headset52 integrates firearm roster enrollment: 77 names/181 configurations,
-both normal builds pass331/331; private0.1.18 was installed and setup/assets passed.
-[Test candidate receipt](../handoff/integrations/coordinator-20261030-headset52/README.md).
-Source was pushed; settings were preserved and logging is automatic.
-The user's0.1.18 test confirms multiweapon two-hand grips and reliable swaps, but
-reload/ammo, muzzle, empty-hand stow and underbarrel/sight failures remain open.
-[Feedback53](archive/2026-10-30-bc2vr-0.1.18-buglist.md) records shared runtime gaps;
-the weapons job is not complete. C4 was not tested; other earlier bugs remain open.
+Headset52 enrolled 77 names/181 configurations in private0.1.18; [receipt](../handoff/integrations/coordinator-20261030-headset52/README.md).
+The user confirmed multiweapon two-hand grips and reliable swaps. [Feedback53](archive/2026-10-30-bc2vr-0.1.18-buglist.md)
+records reload/ammo, muzzle, stow and underbarrel/sight failures; C4 was not tested. The weapons job remains unaccepted.
 Wiring54's shared ammo/feed, measured muzzle/underbarrel connections and depth-target reuse
 first shipped in 0.1.19 and remain included. [Original source evidence](../handoff/integrations/coordinator-20261030-wiring54/STATUS.txt).
 
@@ -31,14 +28,10 @@ its [handoff](../handoff/integrations/coordinator-20261028-runtime02/README.md).
 BC2 is visible with the headset connected. The desktop failure does not establish
 VR failure or require repair before a headset check; do not repeat unchanged desktop tests.
 
-CHAT07/CHAT23 source is combined with finished CHAT25/26: coherent loaded-count
-changes retain the same chest reserve prop across both eyes; grenade/reload
-regressions protect hand claims and fresh-neutral rearming. Both normal builds
-passed305/305 and four focused suites each. The [batch receipt](../handoff/integrations/coordinator-20261028-batch01/README.md)
-pins the runtime and evidence limits. Install09 deploys this runtime in0.1.17;
-the user's new headset report supplies failures and improved interaction feel;
-earlier stock black output limited visually guided native recipes. Other cards are parked
-with bounded native/asset/headset prerequisites in the coordinator state.
+CHAT07/CHAT23 source is combined with finished CHAT25/26: chest reserve continuity
+and grenade/reload hand-claim/rearming regressions are retained. The [batch receipt](../handoff/integrations/coordinator-20261028-batch01/README.md)
+records the original305/305 builds and evidence limits. Headset failures remain open;
+other cards' exact prerequisites are recorded once in the coordinator state.
 
 CHAT25/CHAT26 knife regressions and optional original-call sound context are
 integrated; gameplay recognition, damage and sound forwarding are unchanged.
