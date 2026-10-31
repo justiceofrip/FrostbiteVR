@@ -407,9 +407,24 @@ int EveryEnrolledFeedStartupPreservesAdmissionGates(){
             case 4:f.native.counts.loaded=f.native.counts.capacity;break;
             case 5:f.occupyLeft=true;break;
             }
-            f.Tick(start,true);
+            f.PrepareTick(start,true);
+            if(defect==0){
+                // The time jump also expires the right-hand lease. Acquire a
+                // fresh current gun hold so this case reaches neutral expiry,
+                // without renewing or replacing the stored left-hand neutral.
+                CHECK(!f.hands.Current(InteractionHand::Right));
+                const HandContactProof gunProof{{1,7},f.sample.input.sequence,f.sample.input.deadlineNs,true};
+                CHECK(f.hands.Acquire(f.sample.input,{f.sample.input.owner,InteractionHand::Right,
+                    HandClaimKind::GunHold,f.sample.weapon,gunProof,++f.intent,0}).accepted);
+            }
+            f.Consume();
             CHECK(!f.result.ownsHand&&!f.result.blocksFire&&!f.result.pending&&!f.result.diagnostic.policyEvaluated&&f.submits==0);
-            if(defect==0)CHECK(f.result.diagnostic.neutralAgeNs>=registration.mechanism.maxAgeNs&&!(f.result.diagnostic.idlePassed&(1u<<8)));
+            if(defect==0){
+                CHECK(f.result.diagnostic.rawChecked==511&&f.result.diagnostic.rawPassed==511);
+                CHECK(f.result.diagnostic.idleChecked==2047&&(f.result.diagnostic.idlePassed&(1u<<6))&&
+                    (f.result.diagnostic.idlePassed&(1u<<7)));
+                CHECK(f.result.diagnostic.neutralAgeNs>=registration.mechanism.maxAgeNs&&!(f.result.diagnostic.idlePassed&(1u<<8)));
+            }
             if(defect==1||defect==2)CHECK(f.result.diagnostic.idleChecked==0);
             if(defect==3)CHECK(!(f.result.diagnostic.idlePassed&(1u<<10)));
             if(defect==4)CHECK(!(f.result.diagnostic.idlePassed&(1u<<9)));
