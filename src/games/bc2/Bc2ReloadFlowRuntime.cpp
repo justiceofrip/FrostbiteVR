@@ -996,13 +996,14 @@ bool RequestOwnerEvidence(const Lease& lease,std::int64_t now,RequestBoundaryEvi
     return IsCurrent(lease,Now());
 }
 struct Observation {
-    Frame frame{};std::optional<Lease> lease;unsigned context=0,snapshot=0;
+    Frame frame{};std::optional<Lease> lease;unsigned context=0,snapshot=0,callbackCaller=0;
     ReloadDeltaOverride hold{};bool holdRequested=false,finished=false;ReloadFlowEventInput entry{};RequestBoundaryEvidence evidence{};
     NativeCycleInputGuard cycleGuard{};std::uint64_t cycleGuardEpoch=0;unsigned cycleGuardSteps=0,cycleGuardRejected=0;
     PistolAfterFeedInputReceipt pistolInput{};
     FixedContainerInputGuard fixedInput{};
     FixedContainerInputGuard feedInput{};
     Observation(ReloadFlowEvent kind,unsigned firing,unsigned caller,unsigned ctx,unsigned argument)noexcept{
+        callbackCaller=caller;
         frame.previous=currentFrame;frame.firing=firing;frame.depth=frame.previous?frame.previous->depth+1:1;currentFrame=&frame;
         if(!enabled.load(std::memory_order_acquire))return;
         ++calls[unsigned(kind)];const auto now=Now();
@@ -1128,7 +1129,195 @@ bool DeltaRestore(void* address,unsigned value,unsigned& previous)noexcept {
     __except(EXCEPTION_EXECUTE_HANDLER){return false;}
 }
 bool NativeInputCompare(void*,unsigned,unsigned,unsigned,unsigned&)noexcept;
+// This journal is deliberately independent of the first-20s full recorder.
+// It observes an existing feed scope even when live Update admission refuses;
+// retained identity and raw reads never grant owner, input or native authority.
+struct FeedGuardSample {
+    std::array<unsigned,3> identity{},state{};
+    unsigned timerBits=0,flags=0;int loaded=0,reserve=0;
+    bool read=false,identityMatches=false;
+};
+struct FeedGuardRow {
+    std::uint64_t serial=0,invocation=0,leaseRevision=0,leaseSequence=0;
+    std::int64_t began=0,ended=0,leaseObserved=0,leaseDeadline=0,previousEnd=0;
+    unsigned thread=0,firing=0,caller=0,context=0,depth=0,branch=3;
+    unsigned evaluated=0,passed=0,observationStage=0,clientFailure=0,serverFailure=0;
+    unsigned lookup=0,retainedLookup=0,inputKnown=0; // lookup: lock/scope/match/gate/fault/block/closed
+    bool lease=false,scope=false,runCalled=false,runAdmitted=false,nativeEntered=false,nativeReturned=false;
+    bool leaseCurrentBefore=false,leaseCurrentAfter=false;int guardLoaded=0;
+    bool countChanged=false,gapComparable=false,gapCountChanged=false,refillCandidate=false;
+    ReloadHoldIdentity identity{};ReloadObservedConfig config{};
+    std::uint64_t gateLifetime=0,gateRevision=0;
+    std::array<std::array<unsigned,2>,4> input{}; // original/effective/before restore/restored
+    FeedGuardSample before{},after{},previous{};
+    FixedContainerInputGuard receipt{};
+};
+template<unsigned N>struct FeedGuardRing {
+    std::array<FeedGuardRow,N> rows{};std::uint64_t total=0;
+    void Add(const FeedGuardRow& row)noexcept{rows[std::size_t(total++%N)]=row;}
+};
+struct FeedGuardJournal {
+    std::atomic_flag gate=ATOMIC_FLAG_INIT;
+    std::atomic<std::uint64_t> candidates=0,expired=0,scopeBusy=0,unidentified=0,recordBusy=0;
+    std::uint64_t committed=0,unchanged=0;
+    FeedGuardRing<128> changes;FeedGuardRing<256> counts;FeedGuardRing<16> refills;
+    std::array<FeedGuardRow,3> last{};
+};
+std::unique_ptr<FeedGuardJournal> feedGuardJournal;
+unsigned feedGuardTraceEnableStatus=0; // 0:not requested,1:unavailable,2:allocation failed,3:enabled
+class FeedGuardTrace {
+    Observation& observation_;FeedGuardRow row_{};bool active_=false;
+    FeedGuardSample Sample()const noexcept {
+        FeedGuardSample sample;std::array<std::byte,0xb0> raw{};
+        sample.read=Reader{memory}.Read(row_.firing,raw.data(),raw.size());if(!sample.read)return sample;
+        sample.identity={Word<unsigned>(raw.data(),0),Word<unsigned>(raw.data(),8),Word<unsigned>(raw.data(),12)};
+        sample.identityMatches=sample.identity==std::array<unsigned,3>{base+binding.state.firingVtableRva,row_.config.firingData,row_.config.ammoAddress};
+        sample.state={Word<unsigned>(raw.data(),0x3c),Word<unsigned>(raw.data(),0x40),Word<unsigned>(raw.data(),0x44)};
+        sample.timerBits=Word<unsigned>(raw.data(),0x50);sample.flags=Word<std::uint8_t>(raw.data(),0xa8);
+        sample.loaded=Word<int>(raw.data(),0x7c);sample.reserve=Word<int>(raw.data(),0x80);return sample;
+    }
+    void Input(unsigned phase)noexcept {
+        if(Reader{memory}.Read(std::uint64_t(row_.context)+0x28,row_.input[phase].data(),8))row_.inputKnown|=1u<<phase;
+    }
+    static bool CountsDiffer(const FeedGuardSample& a,const FeedGuardSample& b)noexcept {
+        return a.read&&b.read&&a.identityMatches&&b.identityMatches&&(a.loaded!=b.loaded||a.reserve!=b.reserve);
+    }
+    static bool Refill(const FeedGuardSample& a,const FeedGuardSample& b)noexcept {
+        return CountsDiffer(a,b)&&b.loaded>a.loaded&&b.reserve<a.reserve;
+    }
+public:
+    FeedGuardTrace(Observation& observation,unsigned context)noexcept:observation_(observation){
+#ifdef FVR_BC2_NATIVE_AMMO_BACKEND
+        if(!feedGuardJournal||!enabled.load(std::memory_order_acquire))return;
+        const auto now=Now();if(now<startNs||now-startNs>=300000000000ll){++feedGuardJournal->expired;return;}
+        ++feedGuardJournal->candidates;
+        if(observation.lease&&FeedEquipmentConfigMatches(observation.lease->snapshot.config)){
+            const auto& lease=*observation.lease;row_.identity=RoundIdentity(lease);row_.config=lease.snapshot.config;
+            row_.lease=true;row_.leaseObserved=lease.snapshot.observedNs;row_.leaseDeadline=lease.deadline;
+            row_.leaseRevision=lease.revision;row_.leaseSequence=lease.snapshot.sequence;
+            row_.leaseCurrentBefore=IsCurrent(lease,now);
+        }else {
+            Gate gate(ammoMoveProbeGate);if(!gate.held){++feedGuardJournal->scopeBusy;return;}
+            const auto scope=feedInputScopes.Find(observation.frame.firing);
+            if(!scope){++feedGuardJournal->unidentified;return;}
+            row_.scope=true;row_.identity=scope->identity;row_.config=scope->config;
+            row_.retainedLookup=1|2|(scope->fault?16u:0u);
+            if(const auto retained=feedEquipment.ReadGate(scope->resource)){
+                row_.retainedLookup|=8|(retained->blocksFire?32u:0u)|(retained->closedVerified?64u:0u);
+                row_.gateLifetime=retained->lifetime;row_.gateRevision=retained->revision;
+            }
+        }
+        row_.began=now;row_.thread=GetCurrentThreadId();row_.firing=observation.frame.firing;
+        row_.caller=observation.callbackCaller;row_.context=context;row_.depth=observation.frame.depth;
+        for(unsigned n=0;n<3;++n)if(row_.identity.firing[n]==row_.firing)row_.branch=n;
+        row_.invocation=observation.frame.invocation.Record().id;
+        row_.guardLoaded=observation.entry.boundary.loaded;
+        row_.observationStage=observation.evidence.stage;row_.clientFailure=unsigned(observation.evidence.client.failure);
+        row_.serverFailure=unsigned(observation.evidence.server.failure);
+        active_=true;row_.before=Sample();Input(0);
+#endif
+    }
+    bool Admit(unsigned bit,bool value)noexcept {
+        if(active_){row_.evaluated|=1u<<bit;if(value)row_.passed|=1u<<bit;}return value;
+    }
+    void Lookup(unsigned bits,const FeedEquipmentGate* gate=nullptr)noexcept {
+        if(!active_)return;row_.lookup|=bits;
+        if(gate){row_.gateLifetime=gate->lifetime;row_.gateRevision=gate->revision;}
+    }
+    void Run()noexcept{if(active_)row_.runCalled=true;}
+    void Admitted(bool admitted)noexcept{if(active_)row_.runAdmitted=admitted;}
+    void NativeEnter()noexcept{if(active_){row_.nativeEntered=true;Input(1);}}
+    void NativeReturn()noexcept{if(active_){row_.nativeReturned=true;Input(2);}}
+    ~FeedGuardTrace(){
+        if(!active_)return;
+        row_.after=Sample();Input(3);row_.ended=Now();row_.receipt=observation_.feedInput;
+        row_.leaseCurrentAfter=observation_.lease&&IsCurrent(*observation_.lease,row_.ended);
+        auto& journal=*feedGuardJournal;Gate gate(journal.gate);if(!gate.held){++journal.recordBusy;return;}
+        row_.serial=++journal.committed;
+        const auto index=std::min(row_.branch,2u);const auto& previous=journal.last[index];
+        const bool same=previous.serial&&previous.identity==row_.identity&&previous.config==row_.config&&previous.firing==row_.firing;
+        if(same){row_.previous=previous.after;row_.previousEnd=previous.ended;row_.gapComparable=previous.ended<=row_.began;
+            row_.gapCountChanged=row_.gapComparable&&CountsDiffer(previous.after,row_.before);}
+        row_.countChanged=CountsDiffer(row_.before,row_.after);
+        row_.refillCandidate=Refill(row_.before,row_.after)||(row_.gapComparable&&Refill(previous.after,row_.before));
+        // Ignore clocks, sequence/revision churn and timer countdowns. Preserve
+        // guard/refusal, input, state and count changes throughout the session.
+        const bool changed=!same||row_.evaluated!=previous.evaluated||row_.passed!=previous.passed||row_.lookup!=previous.lookup||
+            row_.retainedLookup!=previous.retainedLookup||row_.leaseCurrentBefore!=previous.leaseCurrentBefore||row_.leaseCurrentAfter!=previous.leaseCurrentAfter||
+            row_.lease!=previous.lease||row_.scope!=previous.scope||row_.observationStage!=previous.observationStage||
+            row_.clientFailure!=previous.clientFailure||row_.serverFailure!=previous.serverFailure||
+            row_.runCalled!=previous.runCalled||row_.runAdmitted!=previous.runAdmitted||row_.nativeReturned!=previous.nativeReturned||
+            row_.inputKnown!=previous.inputKnown||row_.input!=previous.input||row_.receipt!=previous.receipt||
+            row_.before.read!=previous.before.read||row_.after.read!=previous.after.read||
+            row_.before.identity!=previous.before.identity||row_.after.identity!=previous.after.identity||
+            row_.before.flags!=previous.before.flags||row_.after.flags!=previous.after.flags||
+            row_.before.state!=previous.before.state||row_.after.state!=previous.after.state||row_.countChanged||row_.gapCountChanged;
+        if(changed)journal.changes.Add(row_);else ++journal.unchanged;
+        if(row_.countChanged||row_.gapCountChanged)journal.counts.Add(row_);
+        if(row_.refillCandidate)journal.refills.Add(row_);
+        journal.last[index]=row_;
+    }
+};
+void ReportFeedGuardTrace(std::ostream& out){
+    out<<"{\"schema\":\"bc2.feed-guard-trace.v1\",\"enabled\":"<<bool(feedGuardJournal)
+       <<",\"enable_status\":"<<feedGuardTraceEnableStatus
+       <<",\"duration_ns\":300000000000,\"start_ns\":"<<startNs
+       <<",\"diagnostic_only\":true,\"raw_samples_atomic\":false,\"rows_available\":"<<drained
+       <<",\"admission_bits\":[\"request_mode\",\"feed_enabled\",\"lease\",\"feed_config\",\"depth_one\",\"context_copied\",\"code_verified\",\"caller\",\"context_identity\",\"alignment\",\"lease_current\",\"stack\"]"
+       <<",\"lookup_bits\":[\"lock\",\"scope\",\"identity_config_match\",\"retained_gate\",\"scope_fault\",\"blocks_fire\",\"closed_verified\",\"effective_blocked\"]"
+       <<",\"input_phases\":[\"before_guard\",\"native_entry\",\"native_return_before_restore\",\"after_restore\"]"
+       <<",\"limits\":\"Raw firing and input reads are sequential and diagnostic only. Retained scope identity is historical, not live owner proof. Missing or overwritten rows and untraced dispatcher paths preclude exhaustive attribution; count increases do not prove an uncommanded refill.\"";
+    if(!feedGuardJournal){out<<'}';return;}
+    const auto& j=*feedGuardJournal;
+    out<<",\"storage_bytes\":"<<sizeof(FeedGuardJournal)<<",\"candidates\":"<<j.candidates.load()
+       <<",\"expired\":"<<j.expired.load()<<",\"scope_lock_busy\":"<<j.scopeBusy.load()
+       <<",\"unidentified\":"<<j.unidentified.load()<<",\"record_lock_busy\":"<<j.recordBusy.load();
+    if(!drained){out<<'}';return;}
+    out<<",\"committed\":"<<j.committed<<",\"unchanged_omitted\":"<<j.unchanged;
+    const auto sample=[&](const FeedGuardSample& s){
+        out<<"{\"read\":"<<s.read<<",\"identity_matches\":"<<s.identityMatches
+           <<",\"identity\":["<<s.identity[0]<<','<<s.identity[1]<<','<<s.identity[2]
+           <<"],\"state\":["<<s.state[0]<<','<<s.state[1]<<','<<s.state[2]<<"],\"timer_bits\":"<<s.timerBits
+           <<",\"loaded\":"<<s.loaded<<",\"reserve\":"<<s.reserve<<",\"flags_a8\":"<<s.flags<<'}';};
+    const auto row=[&](const FeedGuardRow& r){const auto& o=r.identity.owner;const auto& c=r.config;
+        out<<"{\"serial\":"<<r.serial<<",\"invocation\":"<<r.invocation<<",\"begin_ns\":"<<r.began<<",\"end_ns\":"<<r.ended
+           <<",\"thread\":"<<r.thread<<",\"firing\":"<<r.firing<<",\"branch\":"<<r.branch<<",\"depth\":"<<r.depth
+           <<",\"caller\":"<<r.caller<<",\"context\":"<<r.context<<",\"evaluated\":"<<r.evaluated<<",\"passed\":"<<r.passed
+           <<",\"observation_stage\":"<<r.observationStage<<",\"client_failure\":"<<r.clientFailure<<",\"server_failure\":"<<r.serverFailure
+           <<",\"lease\":"<<r.lease<<",\"retained_scope_fallback\":"<<r.scope<<",\"lease_revision\":"<<r.leaseRevision
+           <<",\"lease_sequence\":"<<r.leaseSequence<<",\"lease_observed_ns\":"<<r.leaseObserved<<",\"lease_deadline_ns\":"<<r.leaseDeadline
+           <<",\"lease_current_before\":"<<r.leaseCurrentBefore<<",\"lease_current_after\":"<<r.leaseCurrentAfter
+           <<",\"owner\":{\"player\":"<<o.player<<",\"soldier\":"<<o.soldier<<",\"weak\":"<<o.weak<<",\"weapon\":"<<o.weapon
+           <<",\"actor_generation\":"<<o.actorGeneration<<",\"equip_generation\":"<<o.equipGeneration<<",\"space\":"<<o.space
+           <<",\"firing\":["<<r.identity.firing[0]<<','<<r.identity.firing[1]<<','<<r.identity.firing[2]
+           <<"],\"server_player\":"<<r.identity.serverPlayer<<",\"server_soldier\":"<<r.identity.serverSoldier<<",\"server_item\":"<<r.identity.serverItem<<'}'
+           <<",\"config\":{\"weapon_data\":"<<c.weaponData<<",\"firing_data\":"<<c.firingData<<",\"primary_fire\":"<<c.primaryFire
+           <<",\"ammo_address\":"<<c.ammoAddress<<",\"fire_logic\":"<<c.fireLogicType<<",\"reload_type\":"<<c.reloadType
+           <<",\"fire_input\":"<<c.fireInputAction<<",\"reload_input\":"<<c.reloadInputAction<<",\"capacity\":"<<c.baseCapacity
+           <<",\"number_of_magazines\":"<<c.numberOfMagazines<<",\"reload_time_bits\":"<<std::bit_cast<unsigned>(c.reloadTime)
+           <<",\"reload_delay_bits\":"<<std::bit_cast<unsigned>(c.reloadDelay)<<",\"reload_threshold_bits\":"<<std::bit_cast<unsigned>(c.reloadThreshold)<<'}'
+           <<",\"lookup\":"<<r.lookup<<",\"retained_lookup\":"<<r.retainedLookup<<",\"gate_lifetime\":"<<r.gateLifetime<<",\"gate_revision\":"<<r.gateRevision
+           <<",\"run_called\":"<<r.runCalled<<",\"run_admitted\":"<<r.runAdmitted<<",\"guard_loaded\":"<<r.guardLoaded
+           <<",\"native_entered\":"<<r.nativeEntered<<",\"native_returned\":"<<r.nativeReturned
+           <<",\"input_known\":"<<r.inputKnown<<",\"input\":[";
+        for(unsigned n=0;n<4;++n){if(n)out<<',';out<<'['<<r.input[n][0]<<','<<r.input[n][1]<<']';}
+        const auto& g=r.receipt;
+        out<<"],\"guard\":{\"requested\":"<<g.requested<<",\"applied\":"<<g.applied<<",\"restored\":"<<g.restored
+           <<",\"unexpected_write\":"<<g.unexpectedWrite<<",\"original\":["<<g.original[0]<<','<<g.original[1]
+           <<"],\"effective\":["<<g.effective[0]<<','<<g.effective[1]<<"],\"before_restore\":["<<g.beforeRestore[0]<<','<<g.beforeRestore[1]<<"]}"
+           <<",\"count_changed\":"<<r.countChanged<<",\"gap_comparable\":"<<r.gapComparable<<",\"gap_count_changed\":"<<r.gapCountChanged<<",\"refill_candidate\":"<<r.refillCandidate
+           <<",\"previous_end_ns\":"<<r.previousEnd<<",\"previous_after\":";sample(r.previous);
+        out<<",\"before\":";sample(r.before);out<<",\"after\":";sample(r.after);out<<'}';};
+    const auto ring=[&](const char* name,const auto& ring){
+        const auto capacity=ring.rows.size();const auto count=std::min<std::uint64_t>(ring.total,capacity);
+        out<<",\""<<name<<"\":{\"capacity\":"<<capacity<<",\"total\":"<<ring.total<<",\"overwritten\":"<<ring.total-count<<",\"rows\":[";
+        for(std::uint64_t n=ring.total-count;n<ring.total;++n){if(n!=ring.total-count)out<<',';row(ring.rows[std::size_t(n%capacity)]);}out<<"]}";};
+    ring("changes",j.changes);ring("counts",j.counts);ring("refills",j.refills);
+    out<<",\"last\":[";bool first=true;for(const auto& last:j.last)if(last.serial){if(!first)out<<',';first=false;row(last);}out<<"]}";
+}
 void OriginalUpdateWithPistol(Observation& observation,void* self,void* context,unsigned extra){
+    std::optional<FeedGuardTrace> trace;if(feedGuardJournal)trace.emplace(observation,unsigned(context));
+    const auto admission=[&](unsigned bit,bool value)noexcept{return trace?trace->Admit(bit,value):value;};
 #ifdef FVR_BC2_AMMO_RESOURCE_HANDS
     if(fixedContainerReloadEnabled&&observation.lease&&FixedContainerNativeConfig(observation.lease->snapshot.config)&&
        observation.frame.depth==1&&observation.entry.contextCopied&&holdCodeVerified&&
@@ -1156,22 +1345,32 @@ void OriginalUpdateWithPistol(Observation& observation,void* self,void* context,
     }
 #endif
 #ifdef FVR_BC2_NATIVE_AMMO_BACKEND
-    if(requestMode&&feedEquipmentReloadEnabled&&observation.lease&&FeedEquipmentConfigMatches(observation.lease->snapshot.config)&&
-       observation.frame.depth==1&&observation.entry.contextCopied&&holdCodeVerified&&
-       observation.entry.caller==base+binding.code[1].rva+0x2f&&observation.entry.context==unsigned(context)&&
-       !(unsigned(context)&3)&&IsCurrent(*observation.lease,Now())){
+    if(admission(0,requestMode)&&admission(1,feedEquipmentReloadEnabled)&&admission(2,observation.lease.has_value())&&
+       admission(3,FeedEquipmentConfigMatches(observation.lease->snapshot.config))&&admission(4,observation.frame.depth==1)&&
+       admission(5,observation.entry.contextCopied)&&admission(6,holdCodeVerified)&&
+       admission(7,observation.entry.caller==base+binding.code[1].rva+0x2f)&&admission(8,observation.entry.context==unsigned(context))&&
+       admission(9,!(unsigned(context)&3))&&admission(10,IsCurrent(*observation.lease,Now()))){
         ULONG_PTR low=0,high=0;GetCurrentThreadStackLimits(&low,&high);
-        if(unsigned(context)>=low&&std::uint64_t(unsigned(context))+0x30<=high){
+        if(admission(11,unsigned(context)>=low&&std::uint64_t(unsigned(context))+0x30<=high)){
             bool blocked=true;const auto identity=RoundIdentity(*observation.lease);
-            {Gate gate(ammoMoveProbeGate);if(gate.held){const auto scope=feedInputScopes.Find(unsigned(self));
-                if(scope&&scope->identity==identity&&scope->config==observation.lease->snapshot.config)
-                    if(const auto retained=feedEquipment.ReadGate(scope->resource))blocked=scope->fault||retained->blocksFire;}}
+            {Gate gate(ammoMoveProbeGate);if(gate.held){if(trace)trace->Lookup(1);const auto scope=feedInputScopes.Find(unsigned(self));
+                if(scope&&trace)trace->Lookup(2);
+                if(scope&&scope->identity==identity&&scope->config==observation.lease->snapshot.config){
+                    if(trace)trace->Lookup(4);
+                    if(const auto retained=feedEquipment.ReadGate(scope->resource)){
+                        blocked=scope->fault||retained->blocksFire;
+                        if(trace)trace->Lookup(8|(scope->fault?16u:0u)|(retained->blocksFire?32u:0u)|(retained->closedVerified?64u:0u),&*retained);
+                    }}}}
+            if(trace)trace->Lookup(blocked?128u:0u);
             const std::array<unsigned,2> words{Word<unsigned>(observation.entry.copiedContext.data(),0x28),
                 Word<unsigned>(observation.entry.copiedContext.data(),0x2c)};
-            struct Call {void* self;void* context;unsigned extra;} call{self,context,extra};
-            RunReloadFamilyInput(memory,observation.lease->snapshot.config,{context,NativeInputCompare},words,
+            struct Call {void* self;void* context;unsigned extra;FeedGuardTrace* trace;} call{self,context,extra,trace?&*trace:nullptr};
+            if(trace)trace->Run();
+            const bool admitted=RunReloadFamilyInput(memory,observation.lease->snapshot.config,{context,NativeInputCompare},words,
                 blocked,observation.entry.boundary.loaded,
-                [](void* value){const auto& c=*static_cast<Call*>(value);originalUpdate(c.self,c.context,c.extra);},&call,observation.feedInput);
+                [](void* value){const auto& c=*static_cast<Call*>(value);if(c.trace)c.trace->NativeEnter();
+                    originalUpdate(c.self,c.context,c.extra);if(c.trace)c.trace->NativeReturn();},&call,observation.feedInput);
+            if(trace)trace->Admitted(admitted);
             if(!observation.feedInput.Exact()){Gate gate(ammoMoveProbeGate);if(gate.held)feedInputScopes.Fault(identity);}
             return;
         }
@@ -1193,9 +1392,10 @@ void OriginalUpdateWithPistol(Observation& observation,void* self,void* context,
         flags=Word<unsigned>(observation.entry.copiedContext.data(),0x2c);
     }
 #endif
-    struct Call {void* self;void* context;unsigned extra;} call{self,context,extra};
+    struct Call {void* self;void* context;unsigned extra;FeedGuardTrace* trace;} call{self,context,extra,trace?&*trace:nullptr};
     RunPistolAfterFeedInput({reinterpret_cast<void*>(unsigned(context)+0x2c),DeltaCompare},flags,requested,
-        [](void* value){const auto& c=*static_cast<Call*>(value);originalUpdate(c.self,c.context,c.extra);},&call,observation.pistolInput);
+        [](void* value){const auto& c=*static_cast<Call*>(value);if(c.trace)c.trace->NativeEnter();
+            originalUpdate(c.self,c.context,c.extra);if(c.trace)c.trace->NativeReturn();},&call,observation.pistolInput);
 }
 #ifdef FVR_BC2_AMMO_RESOURCE_HANDS
 std::optional<PistolAfterFeedOwnUpdate> PistolOwnRow(const ReloadFlowRecord& completed,const Lease& lease)noexcept {
@@ -3892,6 +4092,17 @@ bool EnablePumpHoldDiagnostic()noexcept {
 bool DeferInventoryReloadRecords(bool recovery)noexcept{return installed&&!started&&!enabled.load()&&requestMode&&combinedFamilies&&
  recordWindowClock.Defer(recovery)&&(!recovery||records.EnableRecoveryCapacity());}
 bool BeginInventoryReloadRecords()noexcept{return enabled.load(std::memory_order_acquire)&&requestMode&&combinedFamilies&&recordWindowClock.OpenDeferred(Now());}
+bool EnableFeedGuardTrace()noexcept {
+    if(feedGuardJournal)return false;
+    feedGuardTraceEnableStatus=1;
+#ifdef FVR_BC2_NATIVE_AMMO_BACKEND
+    if(!installed||started||enabled.load())return false;
+    feedGuardJournal.reset(new(std::nothrow) FeedGuardJournal);
+    feedGuardTraceEnableStatus=feedGuardJournal?3u:2u;return bool(feedGuardJournal);
+#else
+    return false;
+#endif
+}
 void Start()noexcept{if(!installed||started)return;startNs=Now();if(startNs<=0)return;started=true;recordWindowClock.Start(startNs);if(diagnosticHold)holdProbe.Enable(pumpDiagnostic?ReloadHoldTarget::SpasPump:ReloadHoldTarget::Reload);if(diagnosticRound)roundGate.Enable();enabled.store(true,std::memory_order_release);}
 bool Stop()noexcept{
     enabled.store(false,std::memory_order_release);holdProbe.Stop();ClearOwner();bool okay=true;
@@ -3908,6 +4119,7 @@ void Report(std::ostream& out){
         recordCompletions.Drain(records);
     }
     out<<"{\"knife_export_observation_hook\":"<<knifeExportObservationInstalled<<",\"reserve_read_evidence\":";reserveReadEvidence.Report(out,drained);
+    out<<",\"feed_guard_trace\":";ReportFeedGuardTrace(out);
     out<<",\"magazine_start_attempts\":";magazineStartJournal.Report(out,drained);
     out<<",\"shell_start_attempts\":[";
     constexpr const char* shellStartStages[]{"disabled","identity","preread","entry","routing","yield","lock","cohort","cycle","callback_arrival","monitor","accepted"};
@@ -4471,6 +4683,7 @@ void PublishMagazineInteractionDiagnostic(const MagazineInteractionDiagnostic&)n
 bool EnableMagazineRequestCycles()noexcept{return false;}
 bool DeferInventoryReloadRecords(bool)noexcept{return false;}
 bool BeginInventoryReloadRecords()noexcept{return false;}
+bool EnableFeedGuardTrace()noexcept{return false;}
 bool SelectRequestFamily(ReloadNativeFamily,const ReloadStateOwner&)noexcept{return false;}
 bool SelectMagazineRequestProfile(NativeMagazineProfileId,const ReloadStateOwner&)noexcept{return false;}
 std::optional<NativeMagazineProfileId> ReadMagazineRequestProfile(const ReloadStateOwner&)noexcept{return {};}

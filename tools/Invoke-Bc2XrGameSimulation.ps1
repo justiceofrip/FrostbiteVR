@@ -14,7 +14,8 @@ param(
     [ValidateRange(1,12)][int]$CaptureCount=4,
     [ValidateRange(64,1024)][int]$CaptureWidth=1024,
     [ValidateRange(64,768)][int]$CaptureHeight=768,
-    [switch]$MechanismSnapshots
+    [switch]$MechanismSnapshots,
+    [switch]$PrivateGpuOrderedPresent
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
@@ -28,6 +29,7 @@ $stopReason=$null;$stopWritten=$false;$nativeRetired=$false;$gameClosed=$false;$
 $clock=[Diagnostics.Stopwatch]::new();$hostStartedAt=$null;$launchUtc=$null
 $startup=$null
 $mechanismMarker=@{requested=[bool]$MechanismSnapshots;status=$(if($MechanismSnapshots){'awaiting_session'}else{'not_requested'});native_enabled_claimed=$false}
+$privatePresentation=@{requested=[bool]$PrivateGpuOrderedPresent;environment_variable='FVR_PRIVATE_GPU_ORDERED_PRESENT';environment_value=$(if($PrivateGpuOrderedPresent){'1'}else{'0'});child_environment_verified=$false;other_fvr_bc2_environment_absent=$false;actual_host_enablement_claimed=$false}
 # Two eyes, with the mandatory SBS duplicate as a second image stream. Layers stay off.
 $simRawBytes=[long]$CaptureCount*$CaptureWidth*$CaptureHeight*4*2*2+$CaptureCount*64KB
 $rawBytes=512MB+$simRawBytes;$plannedBytes=$rawBytes+128MB;$rawLimitBytes=660MB
@@ -35,7 +37,7 @@ $capturePlan=@{maximum_compositions=$CaptureCount;width=$CaptureWidth;height=$Ca
 $receipt=[ordered]@{schema='fvr.xr-game-simulation.v1';status='failed';evidence_level='actual_game_simulated_runtime';
     actual_game_started=$false;native_running_observed=$false;reload_success_claimed=$false;headset_accepted=$false;
     limits=@{host_seconds=$Seconds;outer_seconds=$TimeoutSeconds;planned_bytes=$plannedBytes;raw_budget_bytes=$rawBytes;raw_budget_limit_bytes=$rawLimitBytes;raw_budget_reason='Readable menu/mechanism captures: native eight bounded images plus at most twelve 1024x768 stereo/SBS compositions.';native_maximum_raw_images=8;sim_compositions=$CaptureCount;sim_capture_width=$CaptureWidth;sim_capture_height=$CaptureHeight;render_width=1024;render_height=768;tape_max_frames=30000};
-    capture_plan=$capturePlan;mechanism_snapshots=$mechanismMarker;
+    capture_plan=$capturePlan;mechanism_snapshots=$mechanismMarker;private_gpu_ordered_present=$privatePresentation;
     failures=$failures;forced_termination_by_wrapper=$false}
 function Require([bool]$Condition,[string]$Message){if(-not $Condition){throw $Message}}
 function Full([string]$Path){
@@ -68,6 +70,7 @@ function Bind([string]$Name,$Identity,[string]$ExpectedPath,[int]$ParentId){
 function NoOtherProcesses([switch]$BeforeLaunch){
     foreach($process in @(Get-Process BFBC2Game,BC2XrHost,BC2NativeTrace,BC2NativeIpcProbe,BC2NativeResolution -ErrorAction SilentlyContinue)){
         try{
+            if($process.HasExited){continue}
             $identity=Get-Bc2ProcessIdentity $process -RequireLive $true
             $known=@($owned.Values|Where-Object {$_.identity.pid -eq $identity.pid -and $_.identity.start_utc -ceq $identity.start_utc -and $_.identity.path -ieq $identity.path}).Count -eq 1
             # Session publishes each identity just after Start-Process. Parentage permits that small window.
@@ -79,6 +82,11 @@ function NoOtherProcesses([switch]$BeforeLaunch){
                 $known=($fromSupervisor -or $preflight) -and $identity.path -iin $expected -and [DateTimeOffset]::Parse($identity.start_utc).UtcDateTime -ge $launchUtc
             }
             Require $known "Unowned BC2 process detected: $($identity.pid) $($identity.path)."
+        }catch{
+            # Discovery can overlap the normal supervisor's process exit. A
+            # process proven exited cannot be an unowned live participant;
+            # failures for a still-live process remain fatal.
+            if(-not $process.HasExited){throw}
         }finally{$process.Dispose()}
     }
 }
@@ -328,13 +336,18 @@ try{
     $psi.UseShellExecute=$false;$psi.CreateNoWindow=$true;$psi.WindowStyle=[Diagnostics.ProcessWindowStyle]::Hidden
     # No caller/global XR mutation: launcher descendants inherit this isolated map.
     foreach($key in @($psi.Environment.Keys)){if($key -match '^(XR_|XRSIM_|XRTAPE_|BVR_XRSIM_|FVR_|BC2_)'){$null=$psi.Environment.Remove($key)}}
+    # The only private comparison control is inserted after scrubbing inherited flags.
+    $environment[$privatePresentation.environment_variable]=$privatePresentation.environment_value
     foreach($key in $environment.Keys){$psi.Environment[$key]=[string]$environment[$key]}
+    $privateEnvironmentKeys=@($psi.Environment.Keys|Where-Object {$_ -match '^(FVR_|BC2_)'})
+    Require ($privateEnvironmentKeys.Count -eq 1 -and $privateEnvironmentKeys[0] -ceq $privatePresentation.environment_variable -and $psi.Environment[$privatePresentation.environment_variable] -ceq $privatePresentation.environment_value) 'Private comparison environment is not isolated.'
+    $privatePresentation.child_environment_verified=$true;$privatePresentation.other_fvr_bc2_environment_absent=$true
     foreach($key in 'TEMP','TMP','TMPDIR'){$psi.Environment[$key]=$scratch};$psi.Environment['PYTHONDONTWRITEBYTECODE']='1'
     $launchScript=Join-Path $OutputDir 'launch.ps1'
     # Literal paths are passed as arguments, never interpolated into shell code.
     [IO.File]::WriteAllText($launchScript,"param(`$EntryPath,`$SettingsPath,`$StateRoot,`$Log)`n`$ErrorActionPreference='Stop'`ntry { & `$EntryPath -Action Launch -SettingsPath `$SettingsPath -StateRoot `$StateRoot -StartAt MainMenu *>> `$Log } catch { [IO.File]::AppendAllText(`$Log,(`$_ | Out-String),[Text.UTF8Encoding]::new(`$false)); exit 1 }`n",$utf8)
     foreach($arg in @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$launchScript,(Join-Path $runtimeRoot 'Entry.ps1'),$settingsPath,$stateRoot,(Join-Path $OutputDir 'entry.log'))){$psi.ArgumentList.Add($arg)}
-    Save 'launch.json' @{executable=$pwsh;entry=(Join-Path $runtimeRoot 'Entry.ps1');action='Launch';start_at='MainMenu';activate_window=$false;environment=$environment;state_root=$stateRoot;capture_plan=$capturePlan;mechanism_snapshots_requested=[bool]$MechanismSnapshots}
+    Save 'launch.json' @{executable=$pwsh;entry=(Join-Path $runtimeRoot 'Entry.ps1');action='Launch';start_at='MainMenu';activate_window=$false;environment=$environment;state_root=$stateRoot;capture_plan=$capturePlan;mechanism_snapshots_requested=[bool]$MechanismSnapshots;private_gpu_ordered_present=$privatePresentation}
     NoOtherProcesses -BeforeLaunch
     foreach($row in $profiles+$launcherFiles){Require ((Pin $row.original.path).sha256 -ceq $row.original.sha256) 'Original changed before launch.'}
     $launchUtc=[DateTime]::UtcNow;$clock.Start();$entry=[Diagnostics.Process]::new();$entry.StartInfo=$psi
@@ -352,7 +365,10 @@ try{
         if($entry.HasExited -and -not $folder){throw 'Launcher exited without a new owned session.'}
         Start-Sleep -Milliseconds 100
     }
-}catch{$failures.Add($_.Exception.Message)}
+}catch{
+    $failures.Add($_.Exception.Message)
+    $receipt.failure_context=@{message=$_.Exception.Message;stack=$_.ScriptStackTrace;position=$_.InvocationInfo.PositionMessage}
+}
 finally{
     if($entry){
         try{

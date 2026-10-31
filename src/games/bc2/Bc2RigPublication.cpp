@@ -133,7 +133,8 @@ struct ShotPublication {WeaponShotFrame frame;ShotGuard identity;std::optional<A
     std::optional<SightSelectionEvidence> sightSelection;
     interaction::InputFrame input{};std::shared_ptr<const SelectedMeshesSnapshot> selected;
     std::optional<math::Matrix4> anatomicalWristToGrip;
-    std::shared_ptr<const Bc2PhysicalFeedPresentation> feed;};
+    std::shared_ptr<const Bc2PhysicalFeedPresentation> feed;
+    std::optional<WeaponModeCommand> sightMode;std::uint64_t sightModeObservedMs=0;};
 std::atomic<std::shared_ptr<const ShotGuard>> shotGuard;
 std::atomic<std::shared_ptr<const ShotPublication>> shotPublication;
 #ifdef FVR_BC2_CONTEXTUAL_TOOLS
@@ -2433,7 +2434,8 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
     if(pose->shot){
         const ShotGuard identity{input.soldier,input.weak,input.weapon,input.ownerGeneration,input.input.spaceGeneration,input.input.generation,input.deadline,true,targets->tracked[0],0,input.weaponActionsBlocked,input.equipmentGeneration,input.nativeEquipment};
         preparedShot=std::make_shared<const ShotPublication>(ShotPublication{*pose->shot,identity,authored.binding,measuredSupport,authoredAim,sightSelection,
-            input.input,input.selectedMeshes,handRoleReady&&handBinding?std::optional<math::Matrix4>{handBinding->wristToGrip}:std::nullopt,input.feed});
+            input.input,input.selectedMeshes,handRoleReady&&handBinding?std::optional<math::Matrix4>{handBinding->wristToGrip}:std::nullopt,input.feed,
+            input.sightMode,input.sightModeObservedMs});
     }
     if(const auto requested=visibilityGuard.load(std::memory_order_acquire);requested&&requested->enabled&&
         requested->input.sequence==input.input.generation&&requested->nativeOwner.soldier==input.soldier&&requested->nativeOwner.weak==input.weak&&
@@ -2623,10 +2625,21 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     // BodyObservation admission used by ReadBodyWeaponFrame: immutable atomic
     // publications plus bounded ReadProcessMemory equipment bookends. It never
     // calls an actor resolver/native method or accesses poseMutex scratch.
-    auto observed=ReloadNanos();
-    const auto invalid=[&](const char* reason){out<<"{\"schema\":\"fvr.bc2.live-mechanism-snapshot.v1\",\"nonce\":\""<<nonce
-        <<"\",\"valid\":false,\"invalid_reason\":\""<<reason<<"\",\"observed_ns\":"<<observed<<",\"feedObservation\":";
-        gameplay::ReportFeedObservation(out);out<<"}\n";};
+    constexpr std::size_t snapshotLimit=16384;
+    auto observed=ReloadNanos();std::string feedDiagnostics;
+    const auto invalid=[&](const char* reason){
+        std::ostringstream header;header.imbue(std::locale::classic());
+        header<<"{\"schema\":\"fvr.bc2.live-mechanism-snapshot.v1\",\"nonce\":\""<<nonce
+            <<"\",\"valid\":false,\"invalid_reason\":\""<<reason<<"\",\"observed_ns\":"<<observed;
+        const auto prefix=header.str();
+        const auto diagnostics=feedDiagnostics.empty()?std::string{}:",\"feedDiagnostics\":"+feedDiagnostics;
+        std::ostringstream observation;observation.imbue(std::locale::classic());observation<<std::boolalpha;
+        gameplay::ReportFeedObservation(observation);
+        auto payload=prefix+diagnostics+",\"feedObservation\":"+observation.str()+"}\n";
+        if(payload.size()>snapshotLimit)payload=prefix+diagnostics+",\"feedObservation\":{\"available\":false,\"omitted\":\"payload_limit\"}}\n";
+        if(payload.size()>snapshotLimit)payload=prefix+",\"diagnosticsOmitted\":\"payload_limit\"}\n";
+        out<<payload;
+    };
     const auto candidate=shotPublication.load(std::memory_order_acquire);
     if(!candidate){invalid("no_shot_publication");return;}
     if(!Fresh(candidate->frame.deadline)){invalid("shot_expired");return;}
@@ -2667,6 +2680,66 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     if(!coherent){invalid("anatomical_mapping_or_pose_invalid");return;}
     const auto selected=source->selected;
     const auto current=selected?gameplay::ReadSelectedMeshes(selected->owner,now):nullptr;
+    const auto& feed=source->feed;
+    const bool sourceFresh=!feed||Bc2FeedSourceFresh(*feed,m.owner,m.inputEvidence,identity.equipment,m.rig,now);
+    // Snapshot observation only: the original selection must precede this shot.
+    // A later immutable selection can corroborate the same identities, but its
+    // sequence is not a replacement input, selected lease or prepared pose.
+    const bool originalSelected=!feed||(selected&&Bc2FeedSelected(*selected,*feed,identity.equipment,input.generation,now));
+    const bool selectedRetained=!feed||(originalSelected&&current&&
+        Bc2FeedSelectedRetained(*selected,*current,*feed,identity.equipment,current->sequence,now));
+    const bool coverFinite=!feed||std::isfinite(feed->coverRadians);
+    const bool pouchRigid=!feed||Rigid(feed->weaponFromPouch),hingeRigid=!feed||Rigid(feed->weaponFromCoverHinge);
+    const bool pouchCarryRigid=!feed||Rigid(feed->pouchCarryWeaponWorldMeters),chainCarryRigid=!feed||Rigid(feed->chainCarryWeaponWorldMeters);
+    const bool wristRigid=!feed||!feed->mechanismWristWorldMeters||Rigid(*feed->mechanismWristWorldMeters);
+    if(feed){
+        // Fixed scalar fields and a capacity-bounded chain only. No pose values
+        // (possibly nonfinite), native reads, source writes or lease extensions.
+        std::ostringstream d;d.imbue(std::locale::classic());d<<std::boolalpha;
+        const auto clock=[&](const auto& value){d<<"{\"sequence\":"<<value.sequence<<",\"observedNs\":"<<value.observedNs
+            <<",\"deadlineNs\":"<<value.deadlineNs<<'}';};
+        const auto owner=[&](const ReloadStateOwner& value){d<<"{\"player\":"<<value.player<<",\"soldier\":"<<value.soldier
+            <<",\"weak\":"<<value.weak<<",\"weapon\":"<<value.weapon<<",\"actorGeneration\":"<<value.actorGeneration
+            <<",\"equipGeneration\":"<<value.equipGeneration<<",\"space\":"<<value.space<<'}';};
+        const auto rig=[&](const RigIdentity& value){d<<"{\"soldier\":"<<value.soldier<<",\"weak\":"<<value.weak
+            <<",\"animation\":"<<value.animation<<",\"skeleton\":"<<value.skeleton<<",\"pose\":"<<value.pose
+            <<",\"worldHeader\":"<<value.worldHeader<<",\"worldMatrices\":"<<value.worldMatrices<<",\"skinMatrices\":"<<value.skinMatrices
+            <<",\"evaluatedMatrices\":"<<value.evaluatedMatrices<<",\"count\":"<<value.count<<",\"nativeIk\":"<<value.nativeIk<<'}';};
+        d<<"{\"sourceFresh\":"<<sourceFresh<<",\"originalSelected\":"<<originalSelected<<",\"selectedRetained\":"<<selectedRetained
+            <<",\"selectedRetainedAtShotSequence\":"<<(selected&&current&&Bc2FeedSelectedRetained(*selected,*current,*feed,identity.equipment,input.generation,now))
+            <<",\"shotInputGeneration\":"<<input.generation<<",\"shotDeadlineQpc\":"<<frame->deadline<<",\"shotDeadlineNs\":"<<ReloadNanos(frame->deadline)
+            <<",\"originalSelectedClock\":";
+        if(selected)clock(*selected);else d<<"null";
+        d<<",\"currentSelectedClock\":";if(current)clock(*current);else d<<"null";
+        d<<",\"feedInputClock\":";clock(feed->input);d<<",\"currentInputClock\":";clock(m.inputEvidence);
+        d<<",\"feedInputNowNs\":"<<feed->input.nowNs<<",\"currentInputNowNs\":"<<m.inputEvidence.nowNs
+            <<",\"feedWindow\":"<<feed_presentation_detail::Window(feed->input,now)
+            <<",\"currentInputWindow\":"<<feed_presentation_detail::Window(m.inputEvidence,now)
+            <<",\"inputOwnerMatch\":"<<(feed->input.owner==m.inputEvidence.owner)
+            <<",\"inputSequenceOrdered\":"<<(feed->input.sequence<=m.inputEvidence.sequence)
+            <<",\"inputObservedOrdered\":"<<(feed->input.observedNs<=m.inputEvidence.observedNs)
+            <<",\"feedOwnerMatch\":"<<(feed->owner==m.owner)<<",\"feedRigMatch\":"<<(feed->rig==m.rig)
+            <<",\"rigOwnerMatch\":"<<(m.rig.soldier==m.owner.soldier&&m.rig.weak==m.owner.weak)
+            <<",\"feedOwner\":";owner(feed->owner);d<<",\"mappingOwner\":";owner(m.owner);
+        d<<",\"feedRig\":";rig(feed->rig);d<<",\"mappingRig\":";rig(m.rig);
+        d<<",\"selectedMatches\":";
+        if(!selected||!current)d<<"null";else d<<"{\"originalWithinShot\":"<<(selected->sequence<=input.generation)
+            <<",\"currentWithinShot\":"<<(current->sequence<=input.generation)
+            <<",\"sequenceOrdered\":"<<(current->sequence>=selected->sequence)<<",\"observedOrdered\":"<<(current->observedNs>=selected->observedNs)
+            <<",\"owner\":"<<(current->owner==selected->owner)<<",\"mappingOwner\":"<<(selected->owner==m.owner)
+            <<",\"weaponData\":"<<(current->weaponData==selected->weaponData)<<",\"inventory\":"<<(current->inventory==selected->inventory)
+            <<",\"selectedSlot\":"<<(current->selectedSlot==selected->selectedSlot)<<",\"stateTypeInfo\":"<<(current->stateTypeInfo==selected->stateTypeInfo)
+            <<",\"meshTypeInfo\":"<<(current->meshTypeInfo==selected->meshTypeInfo)<<",\"weaponName\":"<<(current->weaponName==selected->weaponName)
+            <<",\"soleConfiguredArray\":"<<(current->soleConfiguredArray==selected->soleConfiguredArray)<<",\"states\":"<<(current->states==selected->states)
+            <<",\"configurationPath\":"<<(current->configurationPath==selected->configurationPath)
+            <<",\"configurationPathPointer\":"<<(current->configurationPathPointer==selected->configurationPathPointer)<<'}';
+        d<<",\"coverFinite\":"<<coverFinite<<",\"rigid\":{\"originalWeapon\":"<<Rigid(feed->originalWeaponWorldMeters)
+            <<",\"pouch\":"<<pouchRigid<<",\"coverHinge\":"<<hingeRigid<<",\"pouchCarry\":"<<pouchCarryRigid<<",\"chainCarry\":"<<chainCarryRigid
+            <<",\"mechanismWristPresent\":"<<bool(feed->mechanismWristWorldMeters)<<",\"mechanismWrist\":"<<wristRigid
+            <<",\"chainCount\":"<<feed->chainCount<<",\"chainCountWithinCapacity\":"<<(feed->chainCount<=feed->weaponFromChain.size())<<",\"chain\":[";
+        for(std::size_t i=0;i<std::min<std::size_t>(feed->chainCount,feed->weaponFromChain.size());++i){if(i)d<<',';d<<Rigid(feed->weaponFromChain[i]);}
+        d<<"]}}";feedDiagnostics=d.str();
+    }
     const auto* aim=frame->aimEvidence?&*frame->aimEvidence:nullptr;
     if(!selected||!current||!aim||!aim->selectedRigVerified||aim->rigFingerprint!=m.rigFingerprint||
        !aim->configurationPathVerified||aim->configurationPath!=selected->configurationPath||aim->meshPath.empty()||
@@ -2680,23 +2753,86 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
        current->configurationPathPointer!=selected->configurationPathPointer){
         invalid("selected_configuration_or_rig_missing_changed_or_expired");return;
     }
-    const auto& feed=source->feed;
-    if(feed&&(!Bc2FeedSourceFresh(*feed,m.owner,m.inputEvidence,identity.equipment,m.rig,now)||
-       !Bc2FeedSelectedRetained(*selected,*current,*feed,identity.equipment,input.generation,now)||
-       !std::isfinite(feed->coverRadians)||!Rigid(feed->weaponFromPouch)||!Rigid(feed->weaponFromCoverHinge)||
-       !Rigid(feed->pouchCarryWeaponWorldMeters)||!Rigid(feed->chainCarryWeaponWorldMeters)||
-       (feed->mechanismWristWorldMeters&&!Rigid(*feed->mechanismWristWorldMeters)))){
+    if(feed&&(!sourceFresh||!selectedRetained||!coverFinite||!pouchRigid||!hingeRigid||
+       !pouchCarryRigid||!chainCarryRigid||!wristRigid)){
         invalid("feed_source_mismatched_invalid_or_expired");return;
     }
     if(feed)for(unsigned i=0;i<feed->chainCount;++i)if(!Rigid(feed->weaponFromChain[i])){invalid("feed_chain_invalid");return;}
+    // These are copies from the same committed pose as W/B/F/K above, never
+    // remeasured from a later palette or historical receiver fixture. A cached
+    // production family read is disclosed with its original GetTickCount64
+    // time; it is not a new native mode request or acknowledgement.
+    const auto& sight=frame->sight;const auto& nativeSight=frame->nativeSight;
+    const auto& support=frame->support;const auto& mode=source->sightMode;
+    const SightAdapterProfile* sightAdapter=nullptr;
+    const auto configuration=feed_presentation_detail::Text(selected->configurationPath);
+    for(const auto& adapter:SightAdapterProfiles)if(adapter.family&&SightAdapterEnabled(adapter)){
+        const auto& family=*adapter.family;
+        // Several native families share a primary/secondary configuration.
+        // A retained resolved family is the identity; the path-only lookup is
+        // useful solely when reporting a missing family observation.
+        if((mode&&adapter.family==mode->family)||(!mode&&
+           ((identity.equipment.Asset()==family.primaryAsset&&configuration==family.primaryConfiguration)||
+            (identity.equipment.Asset()==family.secondaryAsset&&configuration==family.secondaryConfiguration)))){
+            sightAdapter=&adapter;break;
+        }
+    }
+    if(mode){
+        const auto* family=mode->family;
+        if(!family||!WeaponModeFamilyEligible(*family)||!source->sightModeObservedMs||
+           source->sightModeObservedMs>GetTickCount64()||mode->inventory!=selected->inventory||
+           !mode->persistent||mode->persistent!=identity.equipment.persistence||!mode->targetWeapon||
+           mode->targetWeapon==identity.weapon||mode->targetSlot==selected->selectedSlot||
+           mode->action!=(mode->selectedSecondary?family->primaryAction:family->secondaryAction)||
+           identity.equipment.Asset()!=(mode->selectedSecondary?family->secondaryAsset:family->primaryAsset)||
+           configuration!=(mode->selectedSecondary?family->secondaryConfiguration:family->primaryConfiguration)||
+           (sightAdapter&&sightAdapter->family!=family)){
+            invalid("sight_family_source_mismatched");return;
+        }
+    }
+    // ReadWeaponFrame may revoke subtree evidence while retaining a sound body
+    // frame. Do not label that revoked contact as merely missing geometry.
+    if((source->frame.sight.valid&&!sight.valid)||(source->frame.nativeSight.valid&&!nativeSight.valid)){
+        invalid("sight_source_changed_or_expired");return;
+    }
+    using interaction::sight_grasp_detail::Finite;
+    using interaction::sight_grasp_detail::Proper;
+    if(support.valid&&(!std::isfinite(support.distanceMeters)||support.distanceMeters<0)){
+        invalid("sight_support_distance_invalid");return;
+    }
+    if(sight.valid){
+        bool valid=sightAdapter&&mode&&sight.generation==frame->generation&&sight.deadline==frame->deadline&&
+            Fresh(sight.deadline)&&sight.previewValid&&Proper(sight.sightLocalMeters)&&
+            Rigid(sight.handLocalFrameMeters)&&Rigid(sight.rawHandLocalFrameMeters)&&
+            Finite(sight.pivotMeters)&&interaction::sight_grasp_detail::Unit(sight.axis)&&
+            Finite(sight.handLocalMeters)&&Finite(sight.graspPointMeters)&&
+            Finite(sight.palmPointWristMeters)&&Finite(sight.rawPalmPointWristMeters)&&
+            std::isfinite(sight.contactDistanceMeters)&&sight.contactDistanceMeters>=0;
+        if(valid&&sightAdapter->assembly==SightAssemblyKind::OpposedLeaves)valid=Proper(sight.frontLocalMeters);
+        if(valid){
+            const auto wrist=interaction::Multiply(sight.rawHandLocalFrameMeters,m.weaponWorldMeters);
+            for(unsigned r=0;r<4;++r)for(unsigned c=0;c<4;++c)
+                valid&=std::abs(wrist.values[r][c]-m.rawLeftWristWorldMeters.values[r][c])<=.002f;
+            const auto palm=interaction::sight_grasp_detail::Point(sight.rawPalmPointWristMeters,sight.rawHandLocalFrameMeters);
+            valid&=std::hypot(palm.x-sight.handLocalMeters.x,palm.y-sight.handLocalMeters.y,palm.z-sight.handLocalMeters.z)<=.002f;
+        }
+        if(!valid){invalid("sight_contact_mismatched_invalid_or_expired");return;}
+    }
+    if(nativeSight.valid&&(!sightAdapter||!mode||nativeSight.physicalItem!=mode->persistent||!Proper(nativeSight.rear)||
+       (sightAdapter->assembly==SightAssemblyKind::OpposedLeaves&&!Proper(nativeSight.front))||
+       (nativeSight.rawHandValid&&!Rigid(nativeSight.rawHand)))){
+        invalid("sight_native_source_mismatched_or_invalid");return;
+    }
     auto until=std::min({ReloadNanos(frame->deadline),m.inputEvidence.deadlineNs,selected->deadlineNs});
     if(feed)until=std::min(until,feed->input.deadlineNs);
+    if(sight.valid)until=std::min(until,ReloadNanos(sight.deadline));
     std::ostringstream json;json.imbue(std::locale::classic());json<<std::setprecision(9)<<std::boolalpha;
     const auto text=[&](std::string_view s){json<<'"';for(const unsigned char c:s){
         if(c=='"'||c=='\\')json<<'\\'<<char(c);else if(c<32||c>=127){constexpr char hex[]="0123456789abcdef";json<<"\\u00"<<hex[c>>4]<<hex[c&15];}else json<<char(c);
     }json<<'"';};
     const auto matrix=[&](const math::Matrix4& value){json<<'[';for(unsigned r=0;r<4;++r){if(r)json<<',';json<<'[';
         for(unsigned c=0;c<4;++c){if(c)json<<',';json<<value.values[r][c];}json<<']';}json<<']';};
+    const auto vector=[&](math::Vec3 value){json<<'['<<value.x<<','<<value.y<<','<<value.z<<']';};
     const auto pose=[&](const math::Pose& value){const auto& p=value.position;const auto& q=value.orientation;
         json<<"{\"position\":["<<p.x<<','<<p.y<<','<<p.z<<"],\"orientation\":["<<q.x<<','<<q.y<<','<<q.z<<','<<q.w<<"]}";};
     const auto owner=[&](const ReloadStateOwner& value){json<<"{\"player\":"<<value.player<<",\"soldier\":"<<value.soldier
@@ -2740,6 +2876,49 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     json<<"],\"menu\":{\"owner\":"<<unsigned(input.menu.owner)<<",\"sequence\":"<<input.menu.sequence<<",\"epoch\":"<<input.menu.epoch<<",\"deadlineNs\":"<<input.menu.deadlineNs<<"}}";
     json<<",\"mapping\":{\"weaponWorldMeters\":";matrix(m.weaponWorldMeters);json<<",\"trackingBodyWorldMeters\":";matrix(m.trackingBodyWorldMeters);
     json<<",\"rawLeftWristWorldMeters\":";matrix(m.rawLeftWristWorldMeters);json<<",\"anatomicalWristToGrip\":";matrix(calibration);json<<'}';
+    json<<",\"sight\":{\"status\":";text(!sightAdapter?"unsupported_configuration":!mode?"family_unavailable":!sight.valid?"geometry_unavailable":"available");
+    json<<",\"generation\":"<<frame->generation<<",\"deadlineQpc\":"<<frame->deadline<<",\"deadlineNs\":"<<ReloadNanos(frame->deadline);
+    json<<",\"family\":";
+    if(!mode)json<<"null";else{
+        const auto& family=*mode->family;
+        json<<"{\"observedMs\":"<<source->sightModeObservedMs<<",\"physicalItem\":"<<mode->persistent
+            <<",\"selectedSecondary\":"<<mode->selectedSecondary<<",\"inventory\":"<<mode->inventory
+            <<",\"targetWeapon\":"<<mode->targetWeapon<<",\"targetSlot\":"<<mode->targetSlot<<",\"targetAction\":"<<mode->action;
+        json<<",\"primaryAsset\":";text(family.primaryAsset);json<<",\"primaryConfiguration\":";text(family.primaryConfiguration);
+        json<<",\"secondaryAsset\":";text(family.secondaryAsset);json<<",\"secondaryConfiguration\":";text(family.secondaryConfiguration);
+        json<<",\"persistentId\":";text(family.persistentId);json<<'}';
+    }
+    json<<",\"adapter\":";
+    if(!sightAdapter)json<<"null";else{
+        json<<"{\"assembly\":";text(sightAdapter->assembly==SightAssemblyKind::OpposedLeaves?"opposed_leaves":"subtree");
+        json<<",\"root\":";text(sightAdapter->root);json<<",\"rear\":";text(sightAdapter->rear);json<<",\"front\":";
+        if(sightAdapter->assembly==SightAssemblyKind::OpposedLeaves)text(sightAdapter->front);else json<<"null";
+        json<<",\"travelRadians\":"<<sightAdapter->travelRadians<<'}';
+    }
+    json<<",\"support\":{\"valid\":"<<support.valid<<",\"distanceMeters\":";
+    if(support.valid)json<<support.distanceMeters;else json<<"null";json<<'}';
+    // Geometry preference only. Occupied-hand continuation, profile eligibility,
+    // source pairing, neutral/press edges and claims remain gameplay decisions.
+    json<<",\"preferredByDistance\":";
+    if(sight.valid)json<<(sight.contactDistanceMeters<=.08f&&(!support.valid||sight.contactDistanceMeters<support.distanceMeters));else json<<"null";
+    json<<",\"contact\":";
+    if(!sight.valid)json<<"null";else{
+        json<<"{\"valid\":true,\"generation\":"<<sight.generation<<",\"deadlineQpc\":"<<sight.deadline
+            <<",\"deadlineNs\":"<<ReloadNanos(sight.deadline)<<",\"previewValid\":"<<sight.previewValid
+            <<",\"contactDistanceMeters\":"<<sight.contactDistanceMeters<<",\"pivotMeters\":";vector(sight.pivotMeters);
+        json<<",\"axis\":";vector(sight.axis);json<<",\"handLocalMeters\":";vector(sight.handLocalMeters);
+        json<<",\"graspPointMeters\":";vector(sight.graspPointMeters);json<<",\"sightLocalMeters\":";matrix(sight.sightLocalMeters);
+        json<<",\"frontLocalMeters\":";if(sightAdapter->assembly==SightAssemblyKind::OpposedLeaves)matrix(sight.frontLocalMeters);else json<<"null";
+        json<<",\"handLocalFrameMeters\":";matrix(sight.handLocalFrameMeters);json<<",\"palmPointWristMeters\":";vector(sight.palmPointWristMeters);
+        json<<",\"rawHandLocalFrameMeters\":";matrix(sight.rawHandLocalFrameMeters);json<<",\"rawPalmPointWristMeters\":";vector(sight.rawPalmPointWristMeters);json<<'}';
+    }
+    json<<",\"native\":";
+    if(!nativeSight.valid)json<<"null";else{
+        json<<"{\"valid\":true,\"physicalItem\":"<<nativeSight.physicalItem<<",\"rear\":";matrix(nativeSight.rear);
+        json<<",\"front\":";if(sightAdapter->assembly==SightAssemblyKind::OpposedLeaves)matrix(nativeSight.front);else json<<"null";
+        json<<",\"rawHand\":";if(nativeSight.rawHandValid)matrix(nativeSight.rawHand);else json<<"null";json<<'}';
+    }
+    json<<'}';
     json<<",\"feed\":";
     if(!feed)json<<"null";else {
         json<<"{\"owner\":";owner(feed->owner);json<<",\"weapon\":";key(feed->weapon);json<<",\"supply\":{\"resource\":";key(feed->supply.resource);json<<",\"container\":";key(feed->supply.container);json<<'}';
@@ -2768,7 +2947,7 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
            identity.soldier,identity.weak,identity.weapon,WeaponFrameUse::BodyObservation)){
         invalid("owner_changed_during_serialization");return;
     }
-    const auto payload=json.str();if(payload.size()>16384){invalid("payload_limit");return;}out<<payload;
+    const auto payload=json.str();if(payload.size()>snapshotLimit){invalid("payload_limit");return;}out<<payload;
 }
 void ReportLiveCounters(std::ostream& out){
     // Runs on the existing session-telemetry cadence. Read no mutable rig,

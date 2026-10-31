@@ -327,6 +327,10 @@ bool EnableMagazineRequestCycles()noexcept;
 // Neither function resets consumers, native cycles, records, or lease clocks.
 bool DeferInventoryReloadRecords(bool recovery=false)noexcept;
 bool BeginInventoryReloadRecords()noexcept;
+// Startup mechanism-snapshot marker only. Separate 300s read-only feed guard
+// journal; does not extend the full recorder, input leases or native capability.
+// Pre-Start allocation failure disables this diagnostic only.
+bool EnableFeedGuardTrace()noexcept;
 // Atomic value snapshot safe for incremental telemetry; no report serialization
 // or policy/container access while native callbacks run.
 struct MagazineEmptyControlCounters {

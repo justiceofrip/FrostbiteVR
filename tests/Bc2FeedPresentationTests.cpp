@@ -122,15 +122,28 @@ int OriginalRawLeaseAndActualHandOwnerRemainRequired(){
 int ExactSelectedConfigurationAndOriginalLeaseAreRequired(){
     const auto p=Physical();const auto old=Selected();auto current=old;
     current.sequence++;current.observedNs+=10000000;current.deadlineNs+=10000000;
-    CHECK(Bc2FeedSelectedRetained(old,current,p,Equipment(),21,1020000000));
+    // Snapshot observation may corroborate an original shot20 selection with
+    // the same identities at21. Native/presentation admission still requires
+    // both selections bounded by its caller's input, and remains strict here.
+    CHECK(Bc2FeedSelected(old,p,Equipment(),p.input.sequence,1020000000));
+    CHECK(!Bc2FeedSelectedRetained(old,current,p,Equipment(),p.input.sequence,1020000000));
+    CHECK(Bc2FeedSelectedRetained(old,current,p,Equipment(),current.sequence,1020000000));
+    // The retained check alone must not admit an original selection newer than
+    // shot20: the snapshot's separate original-source check must still refuse.
+    CHECK(Bc2FeedSelectedRetained(current,current,p,Equipment(),current.sequence,1020000000));
+    CHECK(!Bc2FeedSelected(current,p,Equipment(),p.input.sequence,1020000000));
     auto bad=current;bad.configurationPathVerified=false;CHECK(!Bc2FeedSelected(bad,p,Equipment(),21,1020000000));
     bad=current;bad.configurationPath[0]='X';CHECK(!Bc2FeedSelected(bad,p,Equipment(),21,1020000000));
     bad=current;bad.states[0].count=2;bad.states[0].meshes[1]=bad.states[0].meshes[0];
     CHECK(!Bc2FeedSelected(bad,p,Equipment(),21,1020000000));
     bad=current;++bad.states[0].meshes[0].address;CHECK(!Bc2FeedSelectedRetained(old,bad,p,Equipment(),21,1020000000));
     bad=current;++bad.configurationPathPointer;CHECK(!Bc2FeedSelectedRetained(old,bad,p,Equipment(),21,1020000000));
+    bad=current;bad.observedNs=old.observedNs-1;
+    CHECK(!Bc2FeedSelectedRetained(old,bad,p,Equipment(),bad.sequence,1020000000));
+    bad=current;bad.deadlineNs=1020000000;
+    CHECK(!Bc2FeedSelectedRetained(old,bad,p,Equipment(),bad.sequence,1020000000));
     CHECK(!Bc2FeedSelectedRetained(old,current,p,Equipment(),21,old.deadlineNs));
-    CHECK(!Bc2FeedSelected(current,p,Equipment(),20,1020000000));return 0;
+    return 0;
 }
 int RealMechanismClaimAndPairRetentionAreRequired(){
     auto p=Physical();p.mechanismWristWorldMeters=Identity();CHECK(!Bc2FeedMechanismClaimFresh(p,1020000000));

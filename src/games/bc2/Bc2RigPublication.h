@@ -93,6 +93,9 @@ struct Tracking {
     // Raw weapon remains calibration, support, shot and publication identity.
     unsigned sightPhysicalItem=0;
     const SightAdapterProfile* sightAdapter=nullptr;bool sightSecondary=false;
+    // Observation only: the production family resolver's original result/time,
+    // copied with this input. Neither publication nor snapshot renews this read.
+    std::optional<WeaponModeCommand> sightMode;std::uint64_t sightModeObservedMs=0;
     MagazineTracking magazine{};
     Bc2PumpTracking pump{};
     Bc2BoltTracking bolt{};
@@ -259,6 +262,8 @@ bool Stop()noexcept;
 void ReportLiveCounters(std::ostream&);
 // Explicit worker request only. Immutable original shot/input lease, read-only
 // BodyObservation admission; this cannot renew contact or hand ownership.
+// Additive sight observation uses weapon-local row-vector LH metres (wrist
+// landmarks remain wrist-local); missing geometry is distinct from bad leases.
 void WriteLiveMechanismSnapshot(std::ostream&,std::uint64_t nonce);
 void Report(std::ostream&);
 }

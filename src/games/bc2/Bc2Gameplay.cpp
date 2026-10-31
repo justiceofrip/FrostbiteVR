@@ -2727,6 +2727,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         if(handPoses){math::Vec3 actorPosition{};
             if(BodyPosition(owner,actorPosition)){
                 rigPublication::Tracking sample{input,owner.soldier,owner.weak,owner.weapon,rigEpoch,inputDeadline,baseYaw,consumedOffset,actorPosition};
+                sample.sightMode=familyBinding;sample.sightModeObservedMs=familyBinding?familyChecked:0;
                 sample.controllerOwner={owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
                 sample.controllerEvidence=handSample;
                 sample.selectedMeshes=selectedMeshes.Read(magazineOwner,HandNanos(clock.QuadPart));

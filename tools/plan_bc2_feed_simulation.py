@@ -279,11 +279,12 @@ def evidence(sample, owner, physical_generation, now):
             and sample["tracked"] == [True, True], "untracked or unfocused hand evidence")
 
 
-def admit(profiles, snapshot, now, nonce):
-    require(profiles["schema"] == "bc2vr.feed-simulation-profiles.v1" and len(profiles["profiles"]) == 24,
-            "need all 24 exported production registrations")
-    rows = profiles["profiles"]
-    require(len({integer(p["key"]) for p in rows}) == 24, "ambiguous registry keys")
+def admit_frame(snapshot, now, nonce):
+    """Admit the original generic body/input frame, without a feed registration.
+
+    This is observation admission only. Mechanism planners must still apply
+    their own identity, geometry and operation guards.
+    """
     require(snapshot["schema"] == "fvr.bc2.live-mechanism-snapshot.v1" and snapshot["valid"] is True,
             "snapshot admission refused")
     require(integer(snapshot["nonce"]) == nonce and nonce > 0, "snapshot request nonce mismatch")
@@ -330,6 +331,18 @@ def admit(profiles, snapshot, now, nonce):
             and integer(snapshot["valid_until_ns"]) <= integer(snapshot["native_deadline_ns"]),
             "expired native shot or snapshot extends original shot lease")
     require(any(m["path"] == selected["matchedMeshPath"] for m in selected["meshes"]), "matched mesh absent from selection")
+
+
+def admit(profiles, snapshot, now, nonce):
+    require(profiles["schema"] == "bc2vr.feed-simulation-profiles.v1" and len(profiles["profiles"]) == 24,
+            "need all 24 exported production registrations")
+    rows = profiles["profiles"]
+    require(len({integer(p["key"]) for p in rows}) == 24, "ambiguous registry keys")
+    admit_frame(snapshot, now, nonce)
+    owner, eq, rig = snapshot["owner"], snapshot["equipment"], snapshot["rig"]
+    physical = integer(snapshot["physical_equipment_generation"])
+    inp, source, selected = snapshot["input"], snapshot["input_evidence"], snapshot["selected"]
+    generation = integer(inp["generation"])
     matches = [p for p in rows if p["asset"] == eq["asset"]
                and p["configurationPath"] == selected["configurationPath"]
                and p["meshPath"] == selected["matchedMeshPath"]

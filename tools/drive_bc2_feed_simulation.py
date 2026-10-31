@@ -242,6 +242,17 @@ def stable_snapshot(before, after):
 
 
 class Driver:
+    def admit_snapshot(self, snapshot, now, nonce):
+        """Mechanism-specific admission; transport and original leases stay shared."""
+        return planner.admit(self.profiles, snapshot, now, nonce)
+
+    def stable_snapshot(self, before, after):
+        return stable_snapshot(before, after)
+
+    def validate_publication(self, lines, expected, cleanup):
+        """Optional final validation after polling, immediately before publishing."""
+        pass
+
     def __init__(self, args):
         require(os.name == "nt", "live driver requires Windows")
         self.args, self.run = args, local_path(args.run)
@@ -440,7 +451,7 @@ class Driver:
         if snapshot.get("valid") is not True:
             raise REFUSAL("native snapshot refused: " + str(snapshot.get("invalid_reason")))
         if self.reference is not None:
-            stable_snapshot(self.reference, snapshot)
+            self.stable_snapshot(self.reference, snapshot)
         evaluated = time.perf_counter_ns()
         source_deadline = min(integer(snapshot["valid_until_ns"]),
                               integer(snapshot["input_evidence"]["observedNs"]) + SNAPSHOT_PERIOD)
@@ -449,7 +460,7 @@ class Driver:
             # time only to distinguish delayed delivery from invalid admission.
             # It is never accepted as current evidence or used for a command;
             # no source/claim timestamp, owner, or deadline is changed.
-            planner.admit(self.profiles, snapshot, integer(snapshot["observed_ns"]), nonce)
+            self.admit_snapshot(snapshot, integer(snapshot["observed_ns"]), nonce)
             if self.snapshot_refresh_started is None:
                 self.snapshot_refresh_started = evaluated
                 self.snapshot_refresh_requests = 0
@@ -468,9 +479,9 @@ class Driver:
         return snapshot, raw, evaluated
 
     def accept_snapshot(self, snapshot, raw, now):
-        planner.admit(self.profiles, snapshot, now, integer(snapshot["nonce"]))
+        self.admit_snapshot(snapshot, now, integer(snapshot["nonce"]))
         if self.reference is not None:
-            stable_snapshot(self.reference, snapshot)
+            self.stable_snapshot(self.reference, snapshot)
         self.latest_snapshot = snapshot
         if self.snapshot_refresh_started is not None:
             self.bounds(time.perf_counter_ns())
@@ -547,6 +558,7 @@ class Driver:
         require(len(" | ".join(batch).encode("ascii")) < 508, "batch exceeds complete xr-sim acknowledgement bound")
         target = self.sequence + len(batch)
         raw = ("\n".join(batch) + "\n").encode("ascii")
+        self.validate_publication(lines, expected, cleanup)
         written = time.perf_counter_ns()
         if source_deadline is not None:
             require(written < source_deadline, "original source/claim lease expired before command publication")
@@ -652,7 +664,7 @@ class Driver:
         require(time.perf_counter_ns() < min(integer(snapshot["valid_until_ns"]),
                 integer(snapshot["input_evidence"]["observedNs"]) + SNAPSHOT_PERIOD), "planning consumed original source lease")
         if self.reference is not None:
-            stable_snapshot(self.reference, snapshot)
+            self.stable_snapshot(self.reference, snapshot)
         self.reference = snapshot
         self.latest_snapshot = snapshot
         self.artifacts.save(f"snapshot-{self.snapshot_index:03}.json", raw)

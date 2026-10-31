@@ -3736,6 +3736,23 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             Require(fvr::bc2::opticFilterRuntime::BeginGlobalStart(),"Begin optic observer startup");
         }
         if(workerObservation)Require(fvr::bc2::rigWorkerRuntime::BeginGlobalStart(),"Begin bounded palette worker startup");
+        // Admission is fixed at worker startup. Ordinary installed sessions do
+        // not poll the filesystem for diagnostic requests. The same marker
+        // admits the bounded read-only feed guard journal before gameplay Start.
+        const bool mechanismSnapshotsEnabled=[&]{
+            const auto marker=output.parent_path()/L"mechanism-snapshot.enable";
+            const auto file=CreateFileW(marker.c_str(),GENERIC_READ,FILE_SHARE_READ,
+                nullptr,OPEN_EXISTING,FILE_FLAG_OPEN_REPARSE_POINT,nullptr);
+            if(file==INVALID_HANDLE_VALUE)return false;
+            BY_HANDLE_FILE_INFORMATION info{};std::array<char,3> data{};DWORD length=0;
+            const bool enabled=GetFileType(file)==FILE_TYPE_DISK&&GetFileInformationByHandle(file,&info)&&
+                !(info.dwFileAttributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT))&&
+                !info.nFileSizeHigh&&info.nFileSizeLow==2&&
+                ReadFile(file,data.data(),DWORD(data.size()),&length,nullptr)&&length==2&&
+                data[0]=='1'&&data[1]=='\n';
+            CloseHandle(file);return enabled;
+        }();
+        if(mechanismSnapshotsEnabled)(void)fvr::bc2::reloadFlowRuntime::EnableFeedGuardTrace();
         hooksEnabled=true;
         const auto globalEnable=MH_EnableHook(MH_ALL_HOOKS);
         const bool workerStarted=!workerObservation||fvr::bc2::rigWorkerRuntime::CompleteGlobalStart(globalEnable==MH_OK);
@@ -3927,21 +3944,6 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
                     telemetry.flush();nextSample=now+1000;
                 }
         };
-        // Admission is fixed at worker startup. Ordinary installed sessions do
-        // not poll the filesystem for diagnostic requests.
-        const bool mechanismSnapshotsEnabled=[&]{
-            const auto marker=output.parent_path()/L"mechanism-snapshot.enable";
-            const auto file=CreateFileW(marker.c_str(),GENERIC_READ,FILE_SHARE_READ,
-                nullptr,OPEN_EXISTING,FILE_FLAG_OPEN_REPARSE_POINT,nullptr);
-            if(file==INVALID_HANDLE_VALUE)return false;
-            BY_HANDLE_FILE_INFORMATION info{};std::array<char,3> data{};DWORD length=0;
-            const bool enabled=GetFileType(file)==FILE_TYPE_DISK&&GetFileInformationByHandle(file,&info)&&
-                !(info.dwFileAttributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT))&&
-                !info.nFileSizeHigh&&info.nFileSizeLow==2&&
-                ReadFile(file,data.data(),DWORD(data.size()),&length,nullptr)&&length==2&&
-                data[0]=='1'&&data[1]=='\n';
-            CloseHandle(file);return enabled;
-        }();
         std::uint64_t mechanismSnapshotNonce=0;ULONGLONG mechanismSnapshotNext=0;
         const auto serviceMechanismSnapshot=[&]{
             if(!mechanismSnapshotsEnabled)return;

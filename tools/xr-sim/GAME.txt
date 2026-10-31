@@ -84,6 +84,30 @@ reads this marker once at startup and polls requests only when admitted. Marker
 placement does not claim native enablement: inspect the worker's own evidence.
 The switch adds no private native arguments and never enables an existing worker.
 
+Optional -PrivateGpuOrderedPresent enables the existing private host presentation
+path for one fresh run. Omit it for OFF (or use -PrivateGpuOrderedPresent:$false).
+After scrubbing every inherited FVR_/BC2_ variable, the child receives only
+FVR_PRIVATE_GPU_ORDERED_PRESENT=0 or 1; no other FVR_/BC2_ variable is admitted.
+Thus CPU copy service, early admission, extra source slots, export overlap,
+lookahead, GPU timing and phase-delay injection remain absent/off. launch.json
+and result.json record the requested value and verified child isolation; verify
+actual configured/available/composed counters and query retirement in host.json.
+This does not recompile, change installed files, registry or global settings.
+
+For a comparison, use separate fresh OFF/ON OutputDirs with the same installed
+Version/source, binary/loader/runtime/tape/game hashes, original profile hashes,
+adapter, window geometry, map/checkpoint, viewpoint and startup/resume path.
+Keep normal one-source LegacyFenced transport and verify actual 8x depth in both;
+preserve VSync=true, RefreshRate=48, RenderAheadLimit=2 and MSAA=3. Suggested bounds
+are Seconds=180, TimeoutSeconds=240 and CaptureCount=1, with one settled 20-second
+neutral world window per arm. Keep capture/layers off during measurement and
+match all commands; no firing, movement or reload during the window. Compare
+fresh-pair deltas and exact-PairTicket timings separately, retaining startup,
+timeouts, discards and overwrites. Require clean native GPU/restoration and host
+timeout/rejection/menu/feedback counters, actual query retirement/ordered drain,
+normal close and exact profile/settings preservation. Failed controls remain
+failed; this pair does not establish headset FPS or gains against historical runs.
+
 Defaults: 300 seconds of actual host life and a 420-second outer process-work
 deadline. Cleanup starts no later than outer deadline minus 60 seconds. Both
 Entry preflight and actual host may emit recorder traces into the same tape
