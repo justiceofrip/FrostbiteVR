@@ -29,6 +29,7 @@ if($LASTEXITCODE){Get-Content (Join-Path $out 'build.log') -Tail 35;throw 'Focus
 $pattern='^('+($suites -join '|')+')$'
 & ctest --test-dir $build --output-on-failure --parallel 4 -R $pattern *> (Join-Path $out 'tests.log')
 $cpu=$LASTEXITCODE
+$detail=Join-Path $build 'Testing/Temporary/LastTest.log';if(Test-Path -LiteralPath $detail){Copy-Item -LiteralPath $detail -Destination (Join-Path $out 'full-test-output.log')}
 $pythonExit=0
 if(-not $SkipPython){
  & $python -B (Join-Path $PSScriptRoot 'Run-Generator.py') *> (Join-Path $out 'generator-tests.log')

@@ -48,6 +48,9 @@ struct Fixture {
     std::uint64_t lastAcceptedInput=0;
     std::array<unsigned,10> reusedNativeByOperation{};
     bool reusedNativeUnchanged=true;
+    bool captureCadenceTrace=false;
+    std::array<std::string,64> cadenceTrace{};
+    unsigned cadenceTraceCount=0;
     Bc2PhysicalFeed physical;
     std::optional<FeedEquipmentNativeView> NativeRead(std::optional<FeedEquipmentNativeView> view)const {
         // Fault injection only: the real backend never issues mutated copies
@@ -147,7 +150,24 @@ struct Fixture {
         if(std::getenv("FVR_FEED_TEST_TRACE"))std::fprintf(stderr,"profile=%llu tick=%llu grip=%d selected=%d blocked=%d owns=%d pending=%d status=%u interaction=%u reload=%u hand=%u angle=%.4f submits=%u\n",
             static_cast<unsigned long long>(registration->key),static_cast<unsigned long long>(sequence),sample.grip,result.selected,result.blocksFire,result.ownsHand,result.pending,
             unsigned(result.status),unsigned(result.interactionStatus),unsigned(result.reloadStatus),unsigned(result.handReason),result.presentation?result.presentation->coverRadians:-99.f,submits);
+        if(captureCadenceTrace){
+            char row[512];const auto left=hands.Current(InteractionHand::Left);
+            std::snprintf(row,sizeof(row),"input=%llu source=%llu native=%llu grip=%d/%d op=%u owns=%d left=%u status=%u interaction=%u reload=%u hand=%u exit=%u submits=%u",
+                static_cast<unsigned long long>(sample.input.sequence),static_cast<unsigned long long>(sample.raw.inputEvidence.sequence),
+                static_cast<unsigned long long>(result.diagnostic.sourceNativeSequence),sample.grip,!sample.raw.inputEvidence.released[0],
+                result.presentation?unsigned(result.presentation->operation):0,result.ownsHand,left?unsigned(left->token.kind):0,
+                unsigned(result.status),unsigned(result.interactionStatus),unsigned(result.reloadStatus),unsigned(result.handReason),
+                unsigned(result.diagnostic.exit),submits);
+            cadenceTrace[cadenceTraceCount++%cadenceTrace.size()]=row;
+        }
         return result;
+    }
+    void PrintCadenceFailure(unsigned cadence,FeedPhysicalOperation operation)const {
+        std::fprintf(stderr,"Independent feed failure: profile=%llu asset=%.*s cadence=%u delayed=%d operation=%u\n",
+            static_cast<unsigned long long>(registration->key),int(registration->geometry.asset.size()),registration->geometry.asset.data(),
+            cadence,delayedRender,unsigned(operation));
+        const auto count=(std::min)(cadenceTraceCount,unsigned(cadenceTrace.size()));
+        for(unsigned n=cadenceTraceCount-count;n<cadenceTraceCount;++n)std::fprintf(stderr,"  %s\n",cadenceTrace[n%cadenceTrace.size()].c_str());
     }
     Bc2PhysicalFeedResult Tick(const fvr::math::Matrix4& wrist,bool grip,bool cancel=false){
         PrepareTick(wrist,grip,cancel);
@@ -502,6 +522,7 @@ int EveryEnrolledFeedCompletesWithIndependentPublicationClocks(){
         ++configurations;
         for(unsigned cadence=0;cadence<cadences.size();++cadence)for(bool delayed:{false,true}){
             Fixture f(&registration);f.nativeCadence=cadences[cadence];f.sequence=9004;
+            f.captureCadenceTrace=true;
             f.wristCalibration=Turn(2.29598f);f.delayedRender=f.repeatRender=delayed;
             const auto before=f.native.counts;
             const auto units=(std::min)(before.capacity-before.loaded,before.reserve);
@@ -536,7 +557,9 @@ int EveryEnrolledFeedCompletesWithIndependentPublicationClocks(){
             };
             CHECK(f.OpenCover());CHECK(reconcile(0)==0);CHECK(f.native.counts==before);
             CHECK(f.Place(FeedPhysicalOperation::DetachContainer));CHECK(reconcile(1)==0);CHECK(f.native.counts==before);
-            CHECK(f.Place(FeedPhysicalOperation::AttachContainer));CHECK(reconcile(2)==0);
+            const bool attached=f.Place(FeedPhysicalOperation::AttachContainer);
+            if(!attached)f.PrintCadenceFailure(cadence,FeedPhysicalOperation::AttachContainer);
+            CHECK(attached);CHECK(reconcile(2)==0);
             CHECK((f.native.counts==FeedAmmunitionCounts{before.loaded+units,before.reserve-units,before.capacity}));
             CHECK(f.Place(FeedPhysicalOperation::SeatFeed));CHECK(reconcile(3)==0);
             CHECK(f.Close());CHECK(reconcile(4)==0);
