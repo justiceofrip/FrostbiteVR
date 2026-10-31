@@ -1,0 +1,29 @@
+{
+  "batch": "coordinator-20261031-feedback66",
+  "source_commit": "fba0dc91efc5bbb2261813bea1ed56ec3d858ba5",
+  "source_sha256": "182fc03c1204c9a2e6bff10f1985cd2362f6062cb9b871ea37d30c05657391f7",
+  "source_pushed": true,
+  "installed_version": "0.1.30",
+  "rollback_version": "0.1.29",
+  "installed_validation": "passed; assets ready; settings unchanged; headset not checked",
+  "change": "Keep an existing feed mechanism claim within its original input lease while a newer same-item native view corroborates an expired cached sample; await fresh paired geometry without policy progress, renewal or native dispatch. Bounded diagnostic refresh and command transport corrections retained.",
+  "checks": {"x86_normal": "341/341", "x64_normal": "341/341", "affected_native": "4/4", "driver_transport": "10/10", "independent_review": "clean"},
+  "runtime_receipt": "reports/coordinator-20261031-feedback66/normal-runtime/build-receipt.json",
+  "push_receipt": "reports/coordinator-20261031-feedback66/source-push.json",
+  "installation_receipt": "reports/coordinator-20261031-feedback66/installation.json",
+  "actual_game": {
+    "run": "reports/coordinator-20261031-feedback66/xr-game03",
+    "session": "20261031-174926-368-a3b09b5f",
+    "weapon": "QJU88_sp",
+    "completed_observation": "Cover visibly fully open; submit/accepted counters advanced once. No exact typed receipt export.",
+    "failure": "Detach diagnostic rejected feed_source_mismatched_invalid_or_expired before grip acquisition, then rejected a fresh request with zero commands. Later counts changed0/687 to200/487 without a manual refill receipt; cause unproved.",
+    "normal_game_close": true,
+    "native_retired": true,
+    "all_three_profiles_restored": true,
+    "launcher_settings_preserved": true,
+    "full_reload_accepted": false,
+    "headset_accepted": false
+  },
+  "retention": "Two session storage refusals retained. Removed22 obsolete staging copies only after every file matched11 retained package archives;493570180 allocated bytes recovered. Archives, runtime symbols, profiles and test evidence retained. Exact manifest/result in reports/coordinator-20261031-feedback66/staging-prune-*.json.",
+  "remaining": "Complete real LMG reload and firing; sight/underbarrel interactions; controlled performance comparison; destruction scene; C4 and remaining campaign cards. Empty-hand holstering deferred. No duplicate external CHAT25/26/32 work."
+}

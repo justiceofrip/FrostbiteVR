@@ -5,7 +5,7 @@ Updated October 31, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
-Feedback65 source is pushed and private0.1.29 is installed, with0.1.28 rollback and settings preserved. Both normal builds pass341/341; setup/assets validation passes. Opt-in live weapon/claim snapshots and the shared24-configuration motion driver support headset-free native testing. Offline five-stage/pickup checks pass; actual-game reload/headset acceptance remains open. Feedback64's hand-target fixes are retained, and its actual BC2 VR menu accepted a simulated click and closed with profiles restored. [Receipt](../handoff/integrations/coordinator-20261031-feedback65/receipt.json).
+Feedback66 source is pushed and private0.1.30 is installed, with0.1.29 rollback and settings preserved. Both normal builds pass341/341; setup/assets validation passes. The shared feed fix preserves an existing grip while awaiting a fresh paired native sample. Actual-game simulation opened QJU88's cover, but diagnostic snapshot refusal stopped detachment before acquisition; a later uncommanded ammo change is under investigation. No full reload/headset acceptance. The session closed normally with all profiles restored. [Receipt](../handoff/integrations/coordinator-20261031-feedback66/receipt.json).
 
 The user's 0.1.27 session showed slight LMG cover motion, no magnetic hand and no completed reload. [Feedback](archive/2026-10-31-bc2vr-0.1.27-buglist.md). Retained acquisition failed OffPath with timing gates passing; its exact geometric predicate is unknown. A separate worker0xc0000005 has no stack/final report. Ghidra remains available; live simulation observation and complete shared motion driving are the next batch.
 
