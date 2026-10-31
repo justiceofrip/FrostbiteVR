@@ -53,6 +53,7 @@
 #include <atomic>
 #include <cstring>
 #include <iomanip>
+#include <locale>
 #include <cmath>
 #include <algorithm>
 namespace fvr::bc2::rigPublication {
@@ -129,7 +130,10 @@ std::shared_ptr<const PumpVisualSource> pumpVisual;
 std::atomic<std::shared_ptr<const PublishedPose>> published;
 struct ShotGuard {unsigned soldier=0,weak=0,weapon=0;std::uint64_t owner=0,space=0,generation=0;std::int64_t deadline=0;bool valid=false,leftTracked=false;std::uint64_t previewToken=0;bool weaponActionsBlocked=false;std::uint64_t equipmentGeneration=0;WeaponEquipmentIdentity equipment{};std::int64_t previewDeadline=0;};
 struct ShotPublication {WeaponShotFrame frame;ShotGuard identity;std::optional<AuthoredGripBinding> authoredGrip;std::optional<AuthoredSupportBinding> authoredSupport;std::optional<AuthoredAimBinding> authoredAim;
-    std::optional<SightSelectionEvidence> sightSelection;};
+    std::optional<SightSelectionEvidence> sightSelection;
+    interaction::InputFrame input{};std::shared_ptr<const SelectedMeshesSnapshot> selected;
+    std::optional<math::Matrix4> anatomicalWristToGrip;
+    std::shared_ptr<const Bc2PhysicalFeedPresentation> feed;};
 std::atomic<std::shared_ptr<const ShotGuard>> shotGuard;
 std::atomic<std::shared_ptr<const ShotPublication>> shotPublication;
 #ifdef FVR_BC2_CONTEXTUAL_TOOLS
@@ -1220,7 +1224,8 @@ void PublishTracking(const Tracking& source)noexcept {
     });
     if(!next.deadline)published.store({},std::memory_order_release);
 }
-std::optional<WeaponShotFrame> ReadWeaponFrame(unsigned soldier,unsigned weak,unsigned weapon,WeaponFrameUse use)noexcept {
+std::optional<WeaponShotFrame> ReadWeaponFrame(unsigned soldier,unsigned weak,unsigned weapon,WeaponFrameUse use,
+    std::shared_ptr<const ShotPublication>* admittedSource=nullptr)noexcept {
     if(!hands||!enabled.load(std::memory_order_acquire))return {};
     // An ordinary input publication may advance while these immutable pointers
     // are read. Retry a bounded number of times; do not weaken invalidation.
@@ -1246,6 +1251,7 @@ std::optional<WeaponShotFrame> ReadWeaponFrame(unsigned soldier,unsigned weak,un
                  guard->generation,ReloadNanos(guard->deadline)},ns))result.muzzleBinding.reset();
             if(shotGuard.load(std::memory_order_acquire)!=guard){++shotFrameRaces;continue;}
         }
+        if(admittedSource)*admittedSource=pose;
         return result;
     }
     return {};
@@ -2426,7 +2432,8 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
     std::shared_ptr<const ShotPublication> preparedShot;
     if(pose->shot){
         const ShotGuard identity{input.soldier,input.weak,input.weapon,input.ownerGeneration,input.input.spaceGeneration,input.input.generation,input.deadline,true,targets->tracked[0],0,input.weaponActionsBlocked,input.equipmentGeneration,input.nativeEquipment};
-        preparedShot=std::make_shared<const ShotPublication>(ShotPublication{*pose->shot,identity,authored.binding,measuredSupport,authoredAim,sightSelection});
+        preparedShot=std::make_shared<const ShotPublication>(ShotPublication{*pose->shot,identity,authored.binding,measuredSupport,authoredAim,sightSelection,
+            input.input,input.selectedMeshes,handRoleReady&&handBinding?std::optional<math::Matrix4>{handBinding->wristToGrip}:std::nullopt,input.feed});
     }
     if(const auto requested=visibilityGuard.load(std::memory_order_acquire);requested&&requested->enabled&&
         requested->input.sequence==input.input.generation&&requested->nativeOwner.soldier==input.soldier&&requested->nativeOwner.weak==input.weak&&
@@ -2611,6 +2618,158 @@ BodyHolsterPackCounters ReadBodyHolsterPackCounters()noexcept {
 }
 bool Stop()noexcept {enabled.store(false,std::memory_order_release);pumpGuard.store({},std::memory_order_release);PublishOrdinaryEquipment({});freeRightGuard.store({},std::memory_order_release);visibilityGuard.store({},std::memory_order_release);visibilityReceipt.store({},std::memory_order_release);bool okay=true;for(auto entry:hooks)if(entry){auto r=MH_DisableHook(entry);okay&=r==MH_OK||r==MH_ERROR_DISABLED;}const auto until=GetTickCount64()+2000;while(inFlight.load()&&GetTickCount64()<until)Sleep(1);return okay&&!inFlight.load();}
 void PublishM95ShotCapturePhase(unsigned phase)noexcept {if(phase<=5)m95ShotCapturePhase.store(phase,std::memory_order_release);}
+void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
+    // This runs only on an explicit worker request. ReadWeaponFrame is the same
+    // BodyObservation admission used by ReadBodyWeaponFrame: immutable atomic
+    // publications plus bounded ReadProcessMemory equipment bookends. It never
+    // calls an actor resolver/native method or accesses poseMutex scratch.
+    auto observed=ReloadNanos();
+    const auto invalid=[&](const char* reason){out<<"{\"schema\":\"fvr.bc2.live-mechanism-snapshot.v1\",\"nonce\":\""<<nonce
+        <<"\",\"valid\":false,\"invalid_reason\":\""<<reason<<"\",\"observed_ns\":"<<observed<<",\"feedObservation\":";
+        gameplay::ReportFeedObservation(out);out<<"}\n";};
+    const auto candidate=shotPublication.load(std::memory_order_acquire);
+    if(!candidate){invalid("no_shot_publication");return;}
+    if(!Fresh(candidate->frame.deadline)){invalid("shot_expired");return;}
+    std::shared_ptr<const ShotPublication> source;
+    const auto frame=ReadWeaponFrame(candidate->identity.soldier,candidate->identity.weak,candidate->identity.weapon,
+        WeaponFrameUse::BodyObservation,&source);
+    if(!frame||!source){invalid("body_admission_refused_or_expired");return;}
+    observed=ReloadNanos(); // Observer time only; no source field is restamped.
+    const auto& m=frame->mechanismControllerMapping;const auto& input=source->input;
+    const auto& identity=source->identity;const auto now=observed;
+    if(!m.valid||!source->anatomicalWristToGrip||!interaction::ValidInput(input)||
+       !input.focused||!input.headValid||!input.hands[0].gripTracked||!input.hands[1].gripTracked||
+       input.generation!=frame->generation||input.spaceGeneration!=frame->space||
+       input.worldUnitsPerMeter!=frame->unitsPerMetre||m.inputEvidence.sequence!=input.generation||
+       m.owner.soldier!=identity.soldier||m.owner.weak!=identity.weak||m.owner.weapon!=identity.weapon||
+       m.owner.actorGeneration!=identity.owner||m.owner.space!=identity.space||
+       m.inputEvidence.owner.equipGeneration!=identity.equipmentGeneration||
+       !feed_presentation_detail::Window(m.inputEvidence,now)){
+        invalid("mechanism_mapping_missing_mismatched_or_expired");return;
+    }
+    // No later Tracking can be substituted for these original input/matrices.
+    // Confirm the anatomical forward map before exposing an inverse seed.
+    using interaction::reload_insertion_detail::Rigid;
+    const auto relative=math::MakeRelativePose(input.referenceHead,input.hands[0].grip);
+    const auto view=relative?math::MakeLhViewFromOpenXRPose(*relative):std::nullopt;
+    const auto grip=view?interaction::InverseRigid(*view):std::nullopt;
+    const auto& calibration=*source->anatomicalWristToGrip;
+    bool coherent=grip&&Rigid(calibration)&&Rigid(m.weaponWorldMeters)&&Rigid(m.trackingBodyWorldMeters)&&Rigid(m.rawLeftWristWorldMeters);
+    if(coherent){const auto wrist=interaction::Multiply(interaction::Multiply(calibration,*grip),m.trackingBodyWorldMeters);
+        for(unsigned r=0;r<4;++r)for(unsigned c=0;c<4;++c)coherent&=std::abs(wrist.values[r][c]-m.rawLeftWristWorldMeters.values[r][c])<=.002f;
+    }
+    // JSON cannot represent a nonfinite pose, even if its tracked flag is false.
+    for(const auto& hand:input.hands)for(const auto* pose:{&hand.grip,&hand.aim}){
+        const auto& p=pose->position;const auto& q=pose->orientation;
+        coherent&=std::isfinite(p.x)&&std::isfinite(p.y)&&std::isfinite(p.z)&&
+            std::isfinite(q.x)&&std::isfinite(q.y)&&std::isfinite(q.z)&&std::isfinite(q.w);
+    }
+    if(!coherent){invalid("anatomical_mapping_or_pose_invalid");return;}
+    const auto selected=source->selected;
+    const auto current=selected?gameplay::ReadSelectedMeshes(selected->owner,now):nullptr;
+    const auto* aim=frame->aimEvidence?&*frame->aimEvidence:nullptr;
+    if(!selected||!current||!aim||!aim->selectedRigVerified||aim->rigFingerprint!=m.rigFingerprint||
+       !aim->configurationPathVerified||aim->configurationPath!=selected->configurationPath||aim->meshPath.empty()||
+       selected->owner!=m.owner||!selected->configurationPathVerified||selected->stateCount!=1||
+       !selected->states[0].count||selected->states[0].count>selected->states[0].meshes.size()||
+       selected->observedNs<=0||selected->observedNs>now||selected->deadlineNs<=now||selected->sequence>input.generation||
+       selected->weaponData!=identity.equipment.data||current->weaponData!=selected->weaponData||
+       current->inventory!=selected->inventory||current->selectedSlot!=selected->selectedSlot||
+       current->states!=selected->states||current->soleConfiguredArray!=selected->soleConfiguredArray||
+       !current->configurationPathVerified||current->configurationPath!=selected->configurationPath||
+       current->configurationPathPointer!=selected->configurationPathPointer){
+        invalid("selected_configuration_or_rig_missing_changed_or_expired");return;
+    }
+    const auto& feed=source->feed;
+    if(feed&&(!Bc2FeedSourceFresh(*feed,m.owner,m.inputEvidence,identity.equipment,m.rig,now)||
+       !Bc2FeedSelectedRetained(*selected,*current,*feed,identity.equipment,input.generation,now)||
+       !std::isfinite(feed->coverRadians)||!Rigid(feed->weaponFromPouch)||!Rigid(feed->weaponFromCoverHinge)||
+       !Rigid(feed->pouchCarryWeaponWorldMeters)||!Rigid(feed->chainCarryWeaponWorldMeters)||
+       (feed->mechanismWristWorldMeters&&!Rigid(*feed->mechanismWristWorldMeters)))){
+        invalid("feed_source_mismatched_invalid_or_expired");return;
+    }
+    if(feed)for(unsigned i=0;i<feed->chainCount;++i)if(!Rigid(feed->weaponFromChain[i])){invalid("feed_chain_invalid");return;}
+    auto until=std::min({ReloadNanos(frame->deadline),m.inputEvidence.deadlineNs,selected->deadlineNs});
+    if(feed)until=std::min(until,feed->input.deadlineNs);
+    std::ostringstream json;json.imbue(std::locale::classic());json<<std::setprecision(9)<<std::boolalpha;
+    const auto text=[&](std::string_view s){json<<'"';for(const unsigned char c:s){
+        if(c=='"'||c=='\\')json<<'\\'<<char(c);else if(c<32||c>=127){constexpr char hex[]="0123456789abcdef";json<<"\\u00"<<hex[c>>4]<<hex[c&15];}else json<<char(c);
+    }json<<'"';};
+    const auto matrix=[&](const math::Matrix4& value){json<<'[';for(unsigned r=0;r<4;++r){if(r)json<<',';json<<'[';
+        for(unsigned c=0;c<4;++c){if(c)json<<',';json<<value.values[r][c];}json<<']';}json<<']';};
+    const auto pose=[&](const math::Pose& value){const auto& p=value.position;const auto& q=value.orientation;
+        json<<"{\"position\":["<<p.x<<','<<p.y<<','<<p.z<<"],\"orientation\":["<<q.x<<','<<q.y<<','<<q.z<<','<<q.w<<"]}";};
+    const auto owner=[&](const ReloadStateOwner& value){json<<"{\"player\":"<<value.player<<",\"soldier\":"<<value.soldier
+        <<",\"weak\":"<<value.weak<<",\"weapon\":"<<value.weapon<<",\"actorGeneration\":"<<value.actorGeneration
+        <<",\"equipGeneration\":"<<value.equipGeneration<<",\"space\":"<<value.space<<'}';};
+    const auto evidence=[&](const interaction::HandInteractionSample& value){json<<"{\"owner\":{\"actor\":"<<value.owner.actor
+        <<",\"actorGeneration\":"<<value.owner.actorGeneration<<",\"equipGeneration\":"<<value.owner.equipGeneration<<",\"space\":"<<value.owner.space
+        <<"},\"sequence\":"<<value.sequence<<",\"observedNs\":"<<value.observedNs<<",\"deadlineNs\":"<<value.deadlineNs<<",\"nowNs\":"<<value.nowNs
+        <<",\"focused\":"<<value.focused<<",\"tracked\":["<<value.tracked[0]<<','<<value.tracked[1]<<"],\"released\":["<<value.released[0]<<','<<value.released[1]<<"]}";};
+    const auto key=[&](const auto& value){json<<"{\"id\":"<<value.id<<",\"generation\":"<<value.generation<<'}';};
+    const auto handOwner=[&](const interaction::HandInteractionOwner& value){json<<"{\"actor\":"<<value.actor
+        <<",\"actorGeneration\":"<<value.actorGeneration<<",\"equipGeneration\":"<<value.equipGeneration<<",\"space\":"<<value.space<<'}';};
+    const auto claim=[&](const interaction::HandClaim& value){const auto& token=value.token;
+        json<<"{\"token\":{\"id\":"<<token.id<<",\"owner\":";handOwner(token.owner);
+        json<<",\"hand\":"<<unsigned(token.hand)<<",\"kind\":"<<unsigned(token.kind)<<",\"item\":";key(token.item);
+        json<<",\"contact\":";key(token.contact);json<<",\"prerequisiteClaim\":"<<token.prerequisiteClaim
+            <<"},\"deadlineNs\":"<<value.deadlineNs<<",\"inputSequence\":"<<value.inputSequence<<'}';};
+    json<<"{\"schema\":\"fvr.bc2.live-mechanism-snapshot.v1\",\"nonce\":\""<<nonce<<"\",\"valid\":true,\"invalid_reason\":null,\"observed_ns\":"<<observed
+        <<",\"valid_until_ns\":"<<until<<",\"shot_input_generation\":"<<frame->generation<<",\"native_deadline_qpc\":"<<frame->deadline
+        <<",\"native_deadline_ns\":"<<ReloadNanos(frame->deadline)
+        <<",\"weapon_actions_blocked\":"<<identity.weaponActionsBlocked<<",\"physical_equipment_generation\":"<<identity.equipmentGeneration<<",\"owner\":";owner(m.owner);
+    json<<",\"equipment\":{\"weapon\":"<<identity.equipment.weapon<<",\"data\":"<<identity.equipment.data<<",\"persistence\":"<<identity.equipment.persistence<<",\"asset\":";text(identity.equipment.Asset());json<<'}';
+    const auto& rig=m.rig;
+    json<<",\"rig\":{\"soldier\":"<<rig.soldier<<",\"weak\":"<<rig.weak<<",\"animation\":"<<rig.animation<<",\"skeleton\":"<<rig.skeleton
+        <<",\"pose\":"<<rig.pose<<",\"worldHeader\":"<<rig.worldHeader<<",\"worldMatrices\":"<<rig.worldMatrices<<",\"skinMatrices\":"<<rig.skinMatrices
+        <<",\"evaluatedMatrices\":"<<rig.evaluatedMatrices<<",\"count\":"<<rig.count<<",\"nativeIk\":"<<rig.nativeIk<<",\"fingerprint\":"<<m.rigFingerprint<<'}';
+    json<<",\"selected\":{\"sequence\":"<<selected->sequence<<",\"observedNs\":"<<selected->observedNs<<",\"deadlineNs\":"<<selected->deadlineNs
+        <<",\"configurationPath\":";text(feed_presentation_detail::Text(selected->configurationPath));
+    json<<",\"configurationPathPointer\":"<<selected->configurationPathPointer<<",\"configurationPathVerified\":true,\"inventory\":"<<selected->inventory
+        <<",\"selectedSlot\":"<<selected->selectedSlot<<",\"soleConfiguredArray\":"<<selected->soleConfiguredArray<<",\"matchedMeshPath\":";text(aim->meshPath);
+    json<<",\"meshes\": [";for(unsigned i=0;i<selected->states[0].count;++i){if(i)json<<',';const auto& mesh=selected->states[0].meshes[i];
+        json<<"{\"address\":"<<mesh.address<<",\"typeInfo\":"<<mesh.typeInfo<<",\"namePointer\":"<<mesh.namePointer<<",\"path\":";text(feed_presentation_detail::Text(mesh.assetPath));json<<'}';}json<<"]}";
+    json<<",\"input_evidence\":";evidence(m.inputEvidence);
+    json<<",\"input\":{\"generation\":"<<input.generation<<",\"spaceGeneration\":"<<input.spaceGeneration<<",\"predictedNs\":"<<input.predictedNs
+        <<",\"focused\":"<<input.focused<<",\"headValid\":"<<input.headValid<<",\"floorRelative\":"<<input.floorRelative
+        <<",\"worldUnitsPerMeter\":"<<input.worldUnitsPerMeter<<",\"trackingBasisGeneration\":"<<input.trackingBasisGeneration<<",\"referenceHead\":";pose(input.referenceHead);
+    json<<",\"head\":";pose(input.head);json<<",\"hands\": [";
+    for(unsigned i=0;i<2;++i){if(i)json<<',';const auto& h=input.hands[i];json<<"{\"grip\":";pose(h.grip);json<<",\"aim\":";pose(h.aim);
+        json<<",\"gripTracked\":"<<h.gripTracked<<",\"aimTracked\":"<<h.aimTracked<<",\"active\":"<<h.active<<",\"held\":"<<h.held
+            <<",\"touchActive\":"<<h.touchActive<<",\"touched\":"<<h.touched<<",\"stickX\":"<<h.stickX<<",\"stickY\":"<<h.stickY<<",\"trigger\":"<<h.trigger<<",\"squeeze\":"<<h.squeeze<<'}';}
+    json<<"],\"menu\":{\"owner\":"<<unsigned(input.menu.owner)<<",\"sequence\":"<<input.menu.sequence<<",\"epoch\":"<<input.menu.epoch<<",\"deadlineNs\":"<<input.menu.deadlineNs<<"}}";
+    json<<",\"mapping\":{\"weaponWorldMeters\":";matrix(m.weaponWorldMeters);json<<",\"trackingBodyWorldMeters\":";matrix(m.trackingBodyWorldMeters);
+    json<<",\"rawLeftWristWorldMeters\":";matrix(m.rawLeftWristWorldMeters);json<<",\"anatomicalWristToGrip\":";matrix(calibration);json<<'}';
+    json<<",\"feed\":";
+    if(!feed)json<<"null";else {
+        json<<"{\"owner\":";owner(feed->owner);json<<",\"weapon\":";key(feed->weapon);json<<",\"supply\":{\"resource\":";key(feed->supply.resource);json<<",\"container\":";key(feed->supply.container);json<<'}';
+        json<<",\"lifetime\":"<<feed->lifetime<<",\"revision\":"<<feed->revision<<",\"registrationKey\":"<<feed->registrationKey<<",\"rigFingerprint\":"<<feed->rigFingerprint
+            <<",\"operation\":"<<unsigned(feed->operation)<<",\"targetKind\":"<<unsigned(feed->targetKind)<<",\"coverRadians\":"<<feed->coverRadians<<",\"blocksFire\":"<<feed->blocksFire
+            <<",\"chainCount\":"<<feed->chainCount<<",\"carriedPartsMask\":"<<feed->carriedPartsMask<<",\"input\":";evidence(feed->input);
+        json<<",\"mechanismInput\":";if(feed->mechanismInput)evidence(*feed->mechanismInput);else json<<"null";
+        json<<",\"mechanismClaim\":";if(feed->mechanismClaim)claim(*feed->mechanismClaim);else json<<"null";
+        json<<",\"supplyObject\":";
+        if(feed->supplyObject){const auto& object=*feed->supplyObject;const auto& id=object.identity;
+            json<<"{\"identity\":{\"owner\":";handOwner(id.owner);json<<",\"weapon\":";key(id.weapon);
+            json<<",\"profile\":";key(id.profile);json<<",\"pool\":";key(id.pool);json<<",\"trackingEpoch\":"<<id.trackingEpoch<<"},\"item\":";key(object.item);
+            json<<",\"claim\":";claim(object.claim);json<<",\"family\":"<<unsigned(object.family)<<",\"units\":"<<object.units<<'}';
+        }else json<<"null";
+        json<<",\"weaponFromPouch\":";matrix(feed->weaponFromPouch);json<<",\"weaponFromCoverHinge\":";matrix(feed->weaponFromCoverHinge);
+        json<<",\"weaponFromChain\": [";for(unsigned i=0;i<feed->chainCount;++i){if(i)json<<',';matrix(feed->weaponFromChain[i]);}json<<']';
+        json<<",\"pouchCarryWeaponWorldMeters\":";matrix(feed->pouchCarryWeaponWorldMeters);json<<",\"chainCarryWeaponWorldMeters\":";matrix(feed->chainCarryWeaponWorldMeters);
+        json<<",\"originalWeaponWorldMeters\":";matrix(feed->originalWeaponWorldMeters);json<<",\"mechanismWristWorldMeters\":";
+        if(feed->mechanismWristWorldMeters)matrix(*feed->mechanismWristWorldMeters);else json<<"null";json<<'}';
+    }
+    json<<",\"feedObservation\":";gameplay::ReportFeedObservation(json);json<<"}\n";
+    if(ReloadNanos()>=until){invalid("expired_during_serialization");return;}
+    const auto guardAfter=shotGuard.load(std::memory_order_acquire);
+    if(!enabled.load(std::memory_order_acquire)||!guardAfter||!Fresh(guardAfter->deadline)||
+       guardAfter->equipment!=identity.equipment||!WeaponFrameAdmitted(*guardAfter,identity,
+           identity.soldier,identity.weak,identity.weapon,WeaponFrameUse::BodyObservation)){
+        invalid("owner_changed_during_serialization");return;
+    }
+    const auto payload=json.str();if(payload.size()>16384){invalid("payload_limit");return;}out<<payload;
+}
 void ReportLiveCounters(std::ostream& out){
     // Runs on the existing session-telemetry cadence. Read no mutable rig,
     // Tracking, pose, native memory or evidence arrays while callbacks run.

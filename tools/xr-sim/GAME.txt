@@ -9,12 +9,17 @@ Invoke with Windows PowerShell 7.5+ and a normal token:
     -OutputDir 'G:/Unity/VRMMO/FrostbiteVR/reports/<fresh run>'
 
 RepositoryRoot is explicit because the runner can live in a separate worktree.
-StorageBudget accounts for the canonical repository, install and worktrees. A
-fresh 640 MiB session admission includes a 512 MiB raw budget: the existing eight
-bounded native images plus at most four 320x240 simulator stereo compositions.
-The runtime renders 1024x768 per eye; simulator capture size is independent.
-Each composition retains left/right PNG, the mandatory SBS duplicate and JSON.
-The output watchdog polls run plus normal-session output; it is not a disk quota.
+StorageBudget accounts for the canonical repository, install and worktrees.
+CaptureWidth/CaptureHeight default to 1024x768 and are bounded to 64..1024 by
+64..768. CaptureCount defaults to four and is bounded to 1..12. Admission counts
+512 MiB for the eight bounded native images, plus count x width x height x
+4 bytes x 2 eyes x 2 streams (eye PNGs and mandatory SBS duplicate), plus 64 KiB
+metadata/PNG overhead per composition. Per-layer and periodic capture stay off.
+The explicit 660 MiB raw ceiling admits at most 656.75 MiB; planned output and
+the watchdog add 128 MiB for logs/tape/scratch. The readable menu/mechanism
+capture exception and exact estimate are saved in storage.json/run-manifest.json.
+Storage refusal remains final. The watchdog polls run plus normal-session output;
+it is not a disk quota. Render dimensions remain 1024x768 per eye.
 
 LocalConfig uses RuntimeManifest, TapeManifestDirectory and TapeLayerName from
 the host-only README. HostPath/LoaderPath/Python there are deliberately ignored:
@@ -33,25 +38,51 @@ in use. This is actual BC2; the host-only diagnostic scene is not used.
 
 Start the wrapper asynchronously and continue observing its output. It prints
 RUN_DIRECTORY, then SESSION_FOLDER/SIM_DIRECTORY as soon as the owned supervisor
-publishes options, and SIM_HOST_PID after actual-host simulator initialization.
+publishes options, and SIM_HOST_PID only after the actual-host startup handshake.
 session-link.json exposes options.json, session.json, sim/state.json and the
-normal stop.request path while the wrapper remains active. Root can inspect the
+normal stop.request path while the wrapper remains active. run-manifest.json
+and session-link.json expose capture_plan with maximum_compositions, width,
+height, eyes and image_streams for the root sender. Root can inspect the
 normal session telemetry and send acknowledged simulator commands during this
 window. No menu navigation, saved-game selection or reload sequence is scripted.
 
-Before the host starts, command.txt contains pace free 60, capture off, capture
-size 320 240, compose oncapture, input clear and neutral head/grip poses. Both
-hands use follow off and aimtrim 0 0: this simulator derives published aim from
-grip pose plus aimtrim; its separate parsed aim pose is not used. Wait for SIM_HOST_PID and verify
-state.pid matches session.host.pid before replacing commands. For every batch,
+The simulator deliberately ignores command files older than its startup. The
+runner therefore waits for state.pid to match the retained normal session host,
+sessionRunning/actionsAttached, and zero initial cmdSeq/captureSeq. It then
+atomically publishes pace free 60, capture off, capture layers off, the admitted
+capture size, compose oncapture, input clear, neutral head/grip poses and a
+unique note nonce. Both hands use follow off and aimtrim 0 0: published aim comes
+from grip pose plus aimtrim; the separate parsed aim pose is not used.
+
+The startup handshake requires unchanged command-file bytes, exact sequence
+advancement, the nonce, the entire raw acknowledgement and neutral committed
+later-frame state. A manual/competing command cannot satisfy the startup count.
+No root commands are allowed until sim-startup.json has status ready and
+root_commands_ready true, and session-link.json agrees. Both retain the exact
+host pid/path/start_utc. Startup times out within twenty seconds of observed
+host launch; preserve sim-startup.json and sim-startup-ack.txt on failure.
+Wait for SIM_HOST_PID and verify state.pid matches session.host.pid before
+replacing commands. For every batch,
 preserve its lines, prior cmdSeq and raw ack.txt/state.json; write a temporary
 file and atomically rename over command.txt at least 25 ms after the prior write.
 Wait for exact cmdSeq advancement, empty lastCmdError and committed later-frame
-state before sending another batch. Root alone may issue at most four individually
-acknowledged shot commands with distinct names. Do not enable periodic capture,
-increase capture dimensions, reset the runtime or use turbo pacing. Review the
+state before sending another batch. Root alone may issue individually
+acknowledged shot commands with distinct names, within capture_plan's count and
+fixed dimensions. Do not enable periodic/per-layer capture, exceed the manifest,
+reset the runtime or use turbo pacing. Review the
 fresh actual menu image before deciding any controller aim/trigger commands.
 Root may stop early by writing the exposed session stop.request.
+
+Optional -MechanismSnapshots places the fixed session-local marker
+mechanism-snapshot.enable containing exactly ASCII 1 plus LF (bytes 31 0A).
+It is published atomically in the newly created normal session directory within
+five seconds of creation, before menu readiness/native staging. Existing markers,
+host/trace startup, or already-published menu/native staging evidence refuse
+placement. Pre/post checks and any ambiguous concurrent startup are retained in
+mechanism-snapshot-marker.json; ambiguity fails the run. The normal native worker
+reads this marker once at startup and polls requests only when admitted. Marker
+placement does not claim native enablement: inspect the worker's own evidence.
+The switch adds no private native arguments and never enables an existing worker.
 
 Defaults: 300 seconds of actual host life and a 420-second outer process-work
 deadline. Cleanup starts no later than outer deadline minus 60 seconds. Both

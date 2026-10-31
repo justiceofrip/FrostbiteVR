@@ -68,6 +68,7 @@
 #include <cmath>
 #include <MinHook.h>
 #include <array>
+#include <charconv>
 #include <atomic>
 #include <cstring>
 #include <intrin.h>
@@ -3926,6 +3927,63 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
                     telemetry.flush();nextSample=now+1000;
                 }
         };
+        // Admission is fixed at worker startup. Ordinary installed sessions do
+        // not poll the filesystem for diagnostic requests.
+        const bool mechanismSnapshotsEnabled=[&]{
+            const auto marker=output.parent_path()/L"mechanism-snapshot.enable";
+            const auto file=CreateFileW(marker.c_str(),GENERIC_READ,FILE_SHARE_READ,
+                nullptr,OPEN_EXISTING,FILE_FLAG_OPEN_REPARSE_POINT,nullptr);
+            if(file==INVALID_HANDLE_VALUE)return false;
+            BY_HANDLE_FILE_INFORMATION info{};std::array<char,3> data{};DWORD length=0;
+            const bool enabled=GetFileType(file)==FILE_TYPE_DISK&&GetFileInformationByHandle(file,&info)&&
+                !(info.dwFileAttributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT))&&
+                !info.nFileSizeHigh&&info.nFileSizeLow==2&&
+                ReadFile(file,data.data(),DWORD(data.size()),&length,nullptr)&&length==2&&
+                data[0]=='1'&&data[1]=='\n';
+            CloseHandle(file);return enabled;
+        }();
+        std::uint64_t mechanismSnapshotNonce=0;ULONGLONG mechanismSnapshotNext=0;
+        const auto serviceMechanismSnapshot=[&]{
+            if(!mechanismSnapshotsEnabled)return;
+            const auto tick=GetTickCount64();if(tick<mechanismSnapshotNext)return;mechanismSnapshotNext=tick+100;
+            // Opt-in, fixed session-local paths. No callback file IO, polling
+            // thread, native mutation, or continuous pose capture is introduced.
+            const auto directory=output.parent_path();
+            const auto requestPath=directory/L"mechanism-snapshot-request.txt";
+            const auto request=CreateFileW(requestPath.c_str(),GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
+                nullptr,OPEN_EXISTING,FILE_FLAG_OPEN_REPARSE_POINT,nullptr);
+            if(request==INVALID_HANDLE_VALUE)return;
+            BY_HANDLE_FILE_INFORMATION info{};std::array<char,24> data{};DWORD length=0;
+            const bool read=GetFileType(request)==FILE_TYPE_DISK&&GetFileInformationByHandle(request,&info)&&
+                !(info.dwFileAttributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT))&&
+                !info.nFileSizeHigh&&info.nFileSizeLow>0&&info.nFileSizeLow<=22&&
+                ReadFile(request,data.data(),DWORD(data.size()),&length,nullptr)&&length==info.nFileSizeLow;
+            CloseHandle(request);if(!read)return;
+            if(length&&data[length-1]=='\n'){
+                --length;if(length&&data[length-1]=='\r')--length;
+            }
+            if(!length||length>20||data[0]<'1'||data[0]>'9')return;
+            std::uint64_t nonce=0;const auto parsed=std::from_chars(data.data(),data.data()+length,nonce);
+            if(parsed.ec!=std::errc{}||parsed.ptr!=data.data()+length||nonce<=mechanismSnapshotNonce)return;
+            mechanismSnapshotNonce=nonce; // At most one observation per accepted nonce.
+            std::ostringstream snapshot;
+            fvr::bc2::rigPublication::WriteLiveMechanismSnapshot(snapshot,nonce);
+            const auto payload=snapshot.str();if(payload.empty()||payload.size()>16384)return;
+            const auto temporary=directory/L"mechanism-snapshot.pending",final=directory/L"mechanism-snapshot.json";
+            // CREATE_NEW cannot follow or truncate a pre-existing link. A stale
+            // pending file is an explicit output failure, never an unsafe target.
+            const auto file=CreateFileW(temporary.c_str(),GENERIC_WRITE,0,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr);
+            if(file==INVALID_HANDLE_VALUE)return;
+            DWORD written=0;const bool saved=WriteFile(file,payload.data(),DWORD(payload.size()),&written,nullptr)&&
+                written==payload.size()&&FlushFileBuffers(file);
+            CloseHandle(file);
+            const auto attributes=GetFileAttributesW(final.c_str());
+            const bool safe=attributes==INVALID_FILE_ATTRIBUTES||!(attributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT));
+            const bool replaced=saved&&safe&&(attributes!=INVALID_FILE_ATTRIBUTES?
+                ReplaceFileW(final.c_str(),temporary.c_str(),nullptr,0,nullptr,nullptr)!=0:
+                MoveFileExW(temporary.c_str(),final.c_str(),MOVEFILE_WRITE_THROUGH)!=0);
+            if(!replaced)DeleteFileW(temporary.c_str());
+        };
         unsigned destructionRequested=0,destructionCompleted=0,destructionFailed=0;
         const auto serviceDestructionRequest=[&]{
             if(!destructionWitnessEnabled)return;
@@ -3950,6 +4008,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         };
         if(continuous){
             while(!hostLifetime.Ended()){
+                serviceMechanismSnapshot();
                 serviceDestructionRequest();if(graphicsProvenanceEnabled)fvr::graphics::callProvenance::Flush(output.parent_path()/L"graphics-call-provenance.jsonl");
                 persistCycleFailure();sceneWriter.Flush();persistSessionTelemetry();
 #if defined(FVR_BC2_ORDINARY_RESOURCE_SCENE_PROBE)
@@ -3960,6 +4019,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         }else {
             const auto until=GetTickCount64()+config.durationMs;
             for(auto now=GetTickCount64();now<until;now=GetTickCount64()){
+                serviceMechanismSnapshot();
                 serviceDestructionRequest();if(graphicsProvenanceEnabled)fvr::graphics::callProvenance::Flush(output.parent_path()/L"graphics-call-provenance.jsonl");
                 persistCycleFailure();persistDeathReadiness();persistKnifeWitness();persistToolWitness();sceneWriter.Flush();persistSessionTelemetry();
 #if defined(FVR_BC2_ORDINARY_RESOURCE_SCENE_PROBE)

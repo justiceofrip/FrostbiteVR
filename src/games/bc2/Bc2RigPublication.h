@@ -257,5 +257,8 @@ void Start()noexcept;
 bool Stop()noexcept;
 // Independent scalar atomic counters only; not a coherent pose/pair snapshot.
 void ReportLiveCounters(std::ostream&);
+// Explicit worker request only. Immutable original shot/input lease, read-only
+// BodyObservation admission; this cannot renew contact or hand ownership.
+void WriteLiveMechanismSnapshot(std::ostream&,std::uint64_t nonce);
 void Report(std::ostream&);
 }

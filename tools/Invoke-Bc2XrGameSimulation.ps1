@@ -10,7 +10,11 @@ param(
     [Parameter(Mandatory)][ValidatePattern('^[a-f0-9]{64}$')][string]$ExpectedSourceSha256,
     [string]$ProfileDirectory=(Join-Path $env:USERPROFILE 'Documents/BFBC2'),
     [ValidateRange(15,300)][int]$Seconds=300,
-    [ValidateRange(90,420)][int]$TimeoutSeconds=420
+    [ValidateRange(90,420)][int]$TimeoutSeconds=420,
+    [ValidateRange(1,12)][int]$CaptureCount=4,
+    [ValidateRange(64,1024)][int]$CaptureWidth=1024,
+    [ValidateRange(64,768)][int]$CaptureHeight=768,
+    [switch]$MechanismSnapshots
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
@@ -22,9 +26,16 @@ $owned=@{};$profiles=@();$launcherFiles=@();$entry=$null;$folder=$null;$session=
 $outputReady=$false;$runningObserved=$false;$simObserved=$false;$restored=$false;$launcherPreserved=$false
 $stopReason=$null;$stopWritten=$false;$nativeRetired=$false;$gameClosed=$false;$lastScan=-1000L
 $clock=[Diagnostics.Stopwatch]::new();$hostStartedAt=$null;$launchUtc=$null
+$startup=$null
+$mechanismMarker=@{requested=[bool]$MechanismSnapshots;status=$(if($MechanismSnapshots){'awaiting_session'}else{'not_requested'});native_enabled_claimed=$false}
+# Two eyes, with the mandatory SBS duplicate as a second image stream. Layers stay off.
+$simRawBytes=[long]$CaptureCount*$CaptureWidth*$CaptureHeight*4*2*2+$CaptureCount*64KB
+$rawBytes=512MB+$simRawBytes;$plannedBytes=$rawBytes+128MB;$rawLimitBytes=660MB
+$capturePlan=@{maximum_compositions=$CaptureCount;width=$CaptureWidth;height=$CaptureHeight;eyes=2;image_streams=2;bytes_per_pixel=4;metadata_bytes_per_composition=64KB;raw_bytes=$simRawBytes;layers=$false;periodic=$false}
 $receipt=[ordered]@{schema='fvr.xr-game-simulation.v1';status='failed';evidence_level='actual_game_simulated_runtime';
     actual_game_started=$false;native_running_observed=$false;reload_success_claimed=$false;headset_accepted=$false;
-    limits=@{host_seconds=$Seconds;outer_seconds=$TimeoutSeconds;planned_bytes=640MB;raw_budget_bytes=(512MB+4*320*240*4*4+4*64KB);raw_budget_limit_bytes=520MB;native_maximum_raw_images=8;sim_compositions=4;sim_capture_width=320;sim_capture_height=240;render_width=1024;render_height=768;tape_max_frames=30000};
+    limits=@{host_seconds=$Seconds;outer_seconds=$TimeoutSeconds;planned_bytes=$plannedBytes;raw_budget_bytes=$rawBytes;raw_budget_limit_bytes=$rawLimitBytes;raw_budget_reason='Readable menu/mechanism captures: native eight bounded images plus at most twelve 1024x768 stereo/SBS compositions.';native_maximum_raw_images=8;sim_compositions=$CaptureCount;sim_capture_width=$CaptureWidth;sim_capture_height=$CaptureHeight;render_width=1024;render_height=768;tape_max_frames=30000};
+    capture_plan=$capturePlan;mechanism_snapshots=$mechanismMarker;
     failures=$failures;forced_termination_by_wrapper=$false}
 function Require([bool]$Condition,[string]$Message){if(-not $Condition){throw $Message}}
 function Full([string]$Path){
@@ -91,6 +102,42 @@ function Library([string]$Manifest,[string]$Path){
     if(-not [IO.Path]::IsPathFullyQualified($Path)){$Path=Join-Path ([IO.Path]::GetDirectoryName($Manifest)) $Path}
     return Full $Path
 }
+function PrepareMechanismMarker {
+    if(-not $MechanismSnapshots){return}
+    $mechanismMarker.status='refused';$mechanismMarker.path=Join-Path $folder 'mechanism-snapshot.enable'
+    try{
+        $created=(Get-Item -LiteralPath $folder).CreationTimeUtc
+        $mechanismMarker.folder_created_utc=$created.ToString('o')
+        Require ($created -ge $launchUtc -and ([DateTime]::UtcNow-$created).TotalSeconds -le 5) 'Mechanism marker requires the newly created session directory within five seconds.'
+        # These files precede native attach and are retained. Check on both sides
+        # of publication; a concurrent stage transition is refusal, never enablement.
+        foreach($phase in 'before','after'){
+            $record=Join-Path $folder 'session.json'
+            $observed=if([IO.File]::Exists($record)){Json $record}else{$null}
+            $mechanismMarker[$phase+'_session']=$observed
+            if($observed){
+                SameIdentity $observed.supervisor $owned.supervisor.identity
+                Require ($observed.state -ceq 'starting' -and -not $observed.host -and -not $observed.trace) 'Too late for mechanism marker: host/native startup already observed.'
+            }
+            $late=@('menu-ready.json','menu-resized.json','BC2NativeProbe.dll','host.stdout.log','native.stdout.log'|Where-Object {Test-Path -LiteralPath (Join-Path $folder $_)})
+            $mechanismMarker[$phase+'_startup_files']=$late
+            Require ($late.Count -eq 0) 'Too late for mechanism marker: menu readiness or native staging already observed.'
+            if($phase -ceq 'before'){
+                Assert-FvrNoLinks $mechanismMarker.path
+                Require (-not(Test-Path -LiteralPath $mechanismMarker.path)) 'Existing mechanism marker refused.'
+                $temporary=Join-Path $folder ('mechanism-snapshot-'+[guid]::NewGuid().ToString('N')+'.tmp')
+                [IO.File]::WriteAllBytes($temporary,[byte[]]@(49,10))
+                [IO.File]::Move($temporary,$mechanismMarker.path,$false)
+                $mechanismMarker.placed_utc=[DateTime]::UtcNow.ToString('o')
+                $mechanismMarker.status='placement_unconfirmed'
+            }
+        }
+        $mechanismMarker.marker=Pin $mechanismMarker.path 2
+        Require ([Convert]::ToHexString([IO.File]::ReadAllBytes($mechanismMarker.path)) -ceq '310A') 'Mechanism marker bytes differ.'
+        $mechanismMarker.status='placed_before_native_staging'
+    }catch{$mechanismMarker.error=$_.Exception.Message;throw}
+    finally{Save 'mechanism-snapshot-marker.json' $mechanismMarker}
+}
 function ObserveSession {
     if(-not $folder){
         $activePath=Join-Path $stateRoot 'active-session.json'
@@ -104,7 +151,8 @@ function ObserveSession {
         $options=Json (Join-Path $candidate 'options.json')
         Require ($options.version -ceq $Version -and $options.source_sha256 -ceq $ExpectedSourceSha256 -and $options.xr_manifest -ieq $runtimeManifest -and $options.game_sha256 -ceq $gamePin.sha256 -and -not $options.activate_window) 'Session options do not match the admitted launch.'
         $script:folder=$candidate;$receipt.session_folder=$candidate
-        Save 'session-link.json' @{folder=$candidate;options=(Join-Path $candidate 'options.json');session=(Join-Path $candidate 'session.json');sim_state=(Join-Path $simDir 'state.json');command=(Join-Path $simDir 'command.txt');stop_request=(Join-Path $candidate 'stop.request');supervisor=$owned.supervisor.identity}
+        PrepareMechanismMarker
+        Save 'session-link.json' @{folder=$candidate;options=(Join-Path $candidate 'options.json');session=(Join-Path $candidate 'session.json');sim_state=(Join-Path $simDir 'state.json');command=(Join-Path $simDir 'command.txt');startup_receipt=(Join-Path $OutputDir 'sim-startup.json');root_commands_ready=$false;capture_plan=$capturePlan;mechanism_snapshots=$mechanismMarker;stop_request=(Join-Path $candidate 'stop.request');supervisor=$owned.supervisor.identity}
         Write-Output ('SESSION_FOLDER='+$candidate)
         Write-Output ('SIM_DIRECTORY='+$simDir)
     }
@@ -130,13 +178,65 @@ function RequestStop([string]$Reason){
         $script:stopWritten=$true
     }
 }
+function ObserveSimulatorStartup($Sim){
+    if($simObserved -or $stopReason){return}
+    Require (-not $owned.host.process.HasExited) 'Actual host exited before simulator startup completed.'
+    if(-not $startup){
+        if(-not $Sim.sessionRunning -or -not $Sim.actionsAttached){return}
+        $script:startup=@{status='preparing';host=$owned.host.identity;before=$Sim;commands=$initialCommands;before_sequence=[long]$Sim.cmdSeq;target_sequence=([long]$Sim.cmdSeq+$initialCommands.Count);sent_at_seconds=$clock.Elapsed.TotalSeconds;ack_state=$null;root_commands_ready=$false}
+        Save 'sim-startup.json' $startup
+        Require ($Sim.cmdSeq -eq 0 -and $Sim.captureSeq -eq 0) 'Simulator was commanded before the runner startup handshake; preserve the competing episode.'
+        $commandPath=Join-Path $simDir 'command.txt'
+        Require (-not(Test-Path -LiteralPath $commandPath)) 'Another writer created command.txt before the runner startup handshake.'
+        # A pre-launch file is intentionally ignored by xr-sim. Publish only after
+        # the retained actual host has initialized, never to the preflight PID.
+        Start-Sleep -Milliseconds 25
+        $temporary=Join-Path $simDir 'command-startup.tmp'
+        [IO.File]::WriteAllText($temporary,($initialCommands -join "`n")+"`n",$utf8)
+        [IO.File]::Move($temporary,$commandPath,$false)
+        $startup.command_file=Pin $commandPath
+        $startup.status='awaiting_ack';Save 'sim-startup.json' $startup
+        return
+    }
+    Require ($clock.Elapsed.TotalSeconds-$startup.sent_at_seconds -le 15) 'Actual-host startup command handshake timed out.'
+    Require ((Pin $startup.command_file.path).sha256 -ceq $startup.command_file.sha256) 'Startup command file changed before ownership was handed to root.'
+    Require ($Sim.cmdSeq -ge $startup.before_sequence -and $Sim.cmdSeq -le $startup.target_sequence) 'Unexpected startup command sequence; another writer may own the simulator.'
+    if($Sim.cmdSeq -ne $startup.target_sequence){return}
+    Require ($Sim.lastCmd -ceq $initialCommands[-1]) 'Startup sequence did not acknowledge this runner nonce.'
+    if(-not $startup.ack_state){
+        $ackPath=Join-Path $simDir 'ack.txt';if(-not [IO.File]::Exists($ackPath)){return}
+        Require ((Get-Item -LiteralPath $ackPath).Length -le 4KB) 'Oversized simulator startup acknowledgement.'
+        $ackText=[IO.File]::ReadAllText($ackPath)
+        if($ackText -cnotmatch '\Aseq=(\d+) frame=(\d+) error=-\r?\nlast=([^\r\n]*)\r?\n\z'){return} # The recorder writes ack.txt in place.
+        if([long]$Matches[1] -ne $startup.target_sequence){return}
+        Require ($Matches[3] -ceq ($initialCommands -join ' | ')) 'Startup acknowledgement belongs to a different command batch.'
+        $startup.ack_frame=[long]$Matches[2];$startup.ack_text=$ackText;$startup.ack_state=$Sim
+        [IO.File]::WriteAllText((Join-Path $OutputDir 'sim-startup-ack.txt'),$ackText,$utf8)
+        $startup.status='awaiting_committed_frame';Save 'sim-startup.json' $startup
+    }
+    if(-not $Sim.sessionRunning -or $Sim.frame -lt $startup.ack_frame+2 -or $Sim.endFrames -lt $startup.ack_frame+1){return}
+    Require ($Sim.paceMode -ceq 'free' -and $Sim.refreshHz -eq 60 -and $Sim.captureSeq -eq 0 -and -not $Sim.handL.followsHead -and -not $Sim.handR.followsHead) 'Startup pacing/capture/follow state did not commit.'
+    foreach($pose in @(@{actual=$Sim.head;expected=@(0,1.60,0)},@{actual=$Sim.handL;expected=@(-0.20,1.30,-0.35)},@{actual=$Sim.handR;expected=@(0.20,1.30,-0.35)})){
+        Require ([bool]$pose.actual.valid) 'Startup pose is not valid.'
+        for($axis=0;$axis -lt 3;$axis++){Require ([Math]::Abs($pose.actual.pos[$axis]-$pose.expected[$axis]) -lt 0.001 -and [Math]::Abs($pose.actual.ypr[$axis]) -lt 0.001) 'Startup neutral pose did not commit.'}
+    }
+    foreach($name in 'a','b','x','y','menu','clickL','clickR','restL','restR','trigL','trigR','gripL','gripR','stickL','stickR'){
+        foreach($value in @($Sim.controls[$name])){Require ($value -eq 0) 'Startup input clear did not commit.'}
+    }
+    $startup.settled_state=$Sim;$startup.status='ready';$startup.root_commands_ready=$true
+    Save 'sim-startup.json' $startup;Save 'sim-host-initial.json' $Sim
+    $link=Json (Join-Path $OutputDir 'session-link.json');$link.root_commands_ready=$true;$link.host=$owned.host.identity;Save 'session-link.json' $link
+    $script:simObserved=$true
+    Write-Output ('SIM_HOST_PID='+$Sim.pid)
+}
 function ObserveBounds {
     if($clock.ElapsedMilliseconds-$lastScan -lt 1000){return};$script:lastScan=$clock.ElapsedMilliseconds
     $bytes=0L
     foreach($directory in @($OutputDir,$folder)|Where-Object {$_}){
         foreach($file in Get-ChildItem -LiteralPath $directory -File -Recurse -Force){Assert-FvrNoLinks $file.FullName;$bytes+=$file.Length}
     }
-    Require ($bytes -le 640MB) 'Run plus normal-session output exceeded the 640 MiB watchdog.'
+    Require ($bytes -le $plannedBytes) 'Run plus normal-session output exceeded the admitted byte watchdog.'
+    if($null -ne $hostStartedAt -and -not $simObserved -and -not $stopReason){Require ($clock.Elapsed.TotalSeconds-$hostStartedAt -le 20) 'Retained actual-host simulator startup did not complete within twenty seconds.'}
     $statePath=Join-Path $simDir 'state.json'
     if([IO.File]::Exists($statePath) -and $owned.ContainsKey('host')){
         $sim=Json $statePath
@@ -144,11 +244,8 @@ function ObserveBounds {
         if($sim.pid -eq $owned.host.identity.pid){
             Require ($sim.runtime -ceq 'xr-sim' -and $sim.system -ceq $systemName -and $sim.headsetConfig -ieq $profilePath) 'Actual host simulator identity differs.'
             Require ($sim.errors -eq 0 -and [string]::IsNullOrEmpty($sim.lastCmdError)) 'Simulator command/runtime error; retain state and acknowledgement.'
-            Require ($sim.captureSeq -le 4) 'More than four simulator compositions were requested.'
-            if(-not $simObserved -and $sim.cmdSeq -ge $initialCommands.Count -and $sim.sessionRunning){
-                Save 'sim-host-initial.json' $sim;$script:simObserved=$true
-                Write-Output ('SIM_HOST_PID='+$sim.pid)
-            }
+            Require ($sim.captureSeq -le $CaptureCount) 'Simulator composition count exceeded the admitted capture plan.'
+            ObserveSimulatorStartup $sim
         }
     }
 }
@@ -166,8 +263,10 @@ try{
     Require (-not(Test-Path -LiteralPath $OutputDir)) 'Existing output refused; preserve all prior episodes.'
     $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
     try{Require (-not [Security.Principal.WindowsPrincipal]::new($identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) 'Elevated Windows token refused; OpenXR environment overrides require a normal token.'}finally{$identity.Dispose()}
-    $budget=Assert-FvrStorageBudget -RepositoryRoot $RepositoryRoot -OutputPath $OutputDir -Operation Session -PlannedBytes 640MB -RawCaptureBytes (512MB+4*320*240*4*4+4*64KB) -MaxRawCaptureBytes 520MB -AdditionalRoots @($InstallRoot,$sourceRoot,(Join-Path (Split-Path -Parent $RepositoryRoot) 'bc2vr-task-worktrees'))
+    $budget=Assert-FvrStorageBudget -RepositoryRoot $RepositoryRoot -OutputPath $OutputDir -Operation Session -PlannedBytes $plannedBytes -RawCaptureBytes $rawBytes -MaxRawCaptureBytes $rawLimitBytes -AdditionalRoots @($InstallRoot,$sourceRoot,(Join-Path (Split-Path -Parent $RepositoryRoot) 'bc2vr-task-worktrees'))
+    $budget|Add-Member -NotePropertyName raw_budget_reason -NotePropertyValue $receipt.limits.raw_budget_reason
     $null=[IO.Directory]::CreateDirectory($OutputDir);$outputReady=$true;Save 'storage.json' $budget
+    Save 'run-manifest.json' @{schema='fvr.xr-game-run.v1';output_directory=$OutputDir;version=$Version;source_sha256=$ExpectedSourceSha256;artifact_binding_path=(Join-Path $OutputDir 'artifact-binding.json');limits=$receipt.limits;capture_plan=$capturePlan;mechanism_snapshots=$mechanismMarker;startup_receipt=(Join-Path $OutputDir 'sim-startup.json');command_authority='Runner owns startup. Root may send acknowledged batches only after sim-startup.json has status ready and exact retained host identity.'}
     NoOtherProcesses -BeforeLaunch
     $null=Assert-FvrVersion $Version
     $packageRoot=Get-FvrChild $InstallRoot ('versions/'+$Version)
@@ -201,6 +300,9 @@ try{
     $pePaths[$runtimeLibrary]=0x8664;$pePaths[$tapeLibrary]=0x8664;$pePaths[$gameExe]=0x14c;$pePaths[$pwsh]=0x8664
     $binaryPins=@();foreach($path in $pePaths.Keys){$binaryPins+=Pin $path 256MB;Pe $path $pePaths[$path]}
     Save 'artifact-binding.json' @{version=$Version;source_sha256=$ExpectedSourceSha256;package=(Pin (Join-Path $packageRoot 'package.json'));runtime=(Pin (Join-Path $runtimeRoot 'runtime.json'));local_config=(Pin $LocalConfig);runtime_manifest=(Pin $runtimeManifest);tape_manifest=(Pin $tapeManifest);binaries=$binaryPins;game=$gamePin}
+    $manifest=Json (Join-Path $OutputDir 'run-manifest.json')
+    $manifest.runtime_manifest=Pin $runtimeManifest;$manifest.runtime_library=Pin $runtimeLibrary 256MB;$manifest.host_executable=Pin (Join-Path $runtimeRoot 'bin/BC2XrHost.exe') 256MB
+    Save 'run-manifest.json' $manifest
     foreach($name in 'GameSettings.bin','GameSettings.ini','settings.ini'){$profiles+=Backup (Join-Path $ProfileDirectory $name) ('profile-before/'+$name)}
     foreach($name in 'active.json','data/settings.json'){$launcherFiles+=Backup (Join-Path $InstallRoot $name) ('launcher-before/'+$name)}
     Save 'originals.json' @{profiles=$profiles;launcher=$launcherFiles}
@@ -215,12 +317,12 @@ try{
         @{recommendedImageRectWidth=1024;recommendedImageRectHeight=768;maxImageRectWidth=1024;maxImageRectHeight=768;fov=@{angleLeft=-0.95;angleRight=0.75;angleUp=0.85;angleDown=-0.85}},
         @{recommendedImageRectWidth=1024;recommendedImageRectHeight=768;maxImageRectWidth=1024;maxImageRectHeight=768;fov=@{angleLeft=-0.75;angleRight=0.95;angleUp=0.85;angleDown=-0.85}})
     Write-FvrJson $profilePath @{schemaVersion=1;systemName=$systemName;views=$views}
-    $initialCommands=@('pace free 60','capture off','capture size 320 240','compose oncapture','input clear',
+    $initialCommands=@('pace free 60','capture off','capture layers off',"capture size $CaptureWidth $CaptureHeight",'compose oncapture','input clear',
         'head pose 0 1.60 0 0 0 0','hand l follow off','hand r follow off',
         'hand l grip pose -0.20 1.30 -0.35 0 0 0','hand r grip pose 0.20 1.30 -0.35 0 0 0',
-        'hand l aimtrim 0 0','hand r aimtrim 0 0')
-    [IO.File]::WriteAllText((Join-Path $simDir 'command.txt'),($initialCommands -join "`n")+"`n",$utf8)
-    Save 'initial-commands.json' @{commands=$initialCommands;capture_authority='Root may request at most four acknowledged shot commands; preserve each batch and acknowledgement.'}
+        'hand l aimtrim 0 0','hand r aimtrim 0 0',('note startup-'+[guid]::NewGuid().ToString('N')))
+    Require (($initialCommands -join ' | ').Length -lt 508) 'Startup batch exceeds simulator acknowledgement text bound.'
+    Save 'initial-commands.json' @{commands=$initialCommands;capture_plan=$capturePlan;capture_authority='Root may request individually acknowledged named shots within capture_plan after the exact-host startup handshake; preserve each batch and acknowledgement.'}
     $environment=@{XR_RUNTIME_JSON=$runtimeManifest;XR_API_LAYER_PATH=$tapeManifestDirectory;XR_ENABLE_API_LAYERS=$local.TapeLayerName;XRSIM_DIR=$simDir;XRSIM_HEADSET_CONFIG=$profilePath;XRTAPE_DIR=$tapeDir;XRTAPE_MAX_FRAMES='30000'}
     $psi=[Diagnostics.ProcessStartInfo]::new();$psi.FileName=$pwsh;$psi.WorkingDirectory=$OutputDir
     $psi.UseShellExecute=$false;$psi.CreateNoWindow=$true;$psi.WindowStyle=[Diagnostics.ProcessWindowStyle]::Hidden
@@ -232,7 +334,7 @@ try{
     # Literal paths are passed as arguments, never interpolated into shell code.
     [IO.File]::WriteAllText($launchScript,"param(`$EntryPath,`$SettingsPath,`$StateRoot,`$Log)`n`$ErrorActionPreference='Stop'`ntry { & `$EntryPath -Action Launch -SettingsPath `$SettingsPath -StateRoot `$StateRoot -StartAt MainMenu *>> `$Log } catch { [IO.File]::AppendAllText(`$Log,(`$_ | Out-String),[Text.UTF8Encoding]::new(`$false)); exit 1 }`n",$utf8)
     foreach($arg in @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$launchScript,(Join-Path $runtimeRoot 'Entry.ps1'),$settingsPath,$stateRoot,(Join-Path $OutputDir 'entry.log'))){$psi.ArgumentList.Add($arg)}
-    Save 'launch.json' @{executable=$pwsh;entry=(Join-Path $runtimeRoot 'Entry.ps1');action='Launch';start_at='MainMenu';activate_window=$false;environment=$environment;state_root=$stateRoot}
+    Save 'launch.json' @{executable=$pwsh;entry=(Join-Path $runtimeRoot 'Entry.ps1');action='Launch';start_at='MainMenu';activate_window=$false;environment=$environment;state_root=$stateRoot;capture_plan=$capturePlan;mechanism_snapshots_requested=[bool]$MechanismSnapshots}
     NoOtherProcesses -BeforeLaunch
     foreach($row in $profiles+$launcherFiles){Require ((Pin $row.original.path).sha256 -ceq $row.original.sha256) 'Original changed before launch.'}
     $launchUtc=[DateTime]::UtcNow;$clock.Start();$entry=[Diagnostics.Process]::new();$entry.StartInfo=$psi

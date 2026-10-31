@@ -100,5 +100,7 @@ bool EnableTwoGrenadeDeathObservation()noexcept;
 std::optional<TwoGrenadeNativeWitness> ReadTwoGrenadeDeathReadiness(std::int64_t nowNs)noexcept; // Normal setup only; real fresh XR menu ownership required.
 bool EnableOrdinaryGrenadeProbe()noexcept; // Private finite direct-receiver contract only.
 void ReportWeaponRoutes(std::ostream&);
+// Worker-only on-demand diagnostic; independently sampled atomic counters.
+void ReportFeedObservation(std::ostream&);
 void Report(std::ostream&);
 }

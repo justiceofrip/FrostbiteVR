@@ -3822,6 +3822,12 @@ void ReportWeaponRoutes(std::ostream& out){
     if(!enabled.load(std::memory_order_acquire)||!magazinePhysical){out<<"{\"active\":false}";return;}
     magazinePhysical->EntryTelemetry().Report(out);
 }
+void ReportFeedObservation(std::ostream& out){
+    // Same worker lifetime as ReportWeaponRoutes. These counters are separate
+    // observations, never a coherent native snapshot or permission to mutate.
+    if(!enabled.load(std::memory_order_acquire)||!physicalFeed){out<<"{\"available\":false}";return;}
+    physicalFeed->Report(out);
+}
 graphics::AmmoCounterSample ReadAmmoCounter()noexcept {
     if(!enabled.load(std::memory_order_acquire))return {};
     for(unsigned attempt=0;attempt<3;++attempt){
