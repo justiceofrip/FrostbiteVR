@@ -128,7 +128,8 @@ std::shared_ptr<const PumpVisualSource> pumpVisual;
 };
 std::atomic<std::shared_ptr<const PublishedPose>> published;
 struct ShotGuard {unsigned soldier=0,weak=0,weapon=0;std::uint64_t owner=0,space=0,generation=0;std::int64_t deadline=0;bool valid=false,leftTracked=false;std::uint64_t previewToken=0;bool weaponActionsBlocked=false;std::uint64_t equipmentGeneration=0;WeaponEquipmentIdentity equipment{};std::int64_t previewDeadline=0;};
-struct ShotPublication {WeaponShotFrame frame;ShotGuard identity;std::optional<AuthoredGripBinding> authoredGrip;std::optional<AuthoredSupportBinding> authoredSupport;std::optional<AuthoredAimBinding> authoredAim;};
+struct ShotPublication {WeaponShotFrame frame;ShotGuard identity;std::optional<AuthoredGripBinding> authoredGrip;std::optional<AuthoredSupportBinding> authoredSupport;std::optional<AuthoredAimBinding> authoredAim;
+    std::optional<SightSelectionEvidence> sightSelection;};
 std::atomic<std::shared_ptr<const ShotGuard>> shotGuard;
 std::atomic<std::shared_ptr<const ShotPublication>> shotPublication;
 #ifdef FVR_BC2_CONTEXTUAL_TOOLS
@@ -345,6 +346,15 @@ bool AimCurrent(const std::optional<AuthoredAimBinding>& binding)noexcept {
     return AuthoredAimCurrent(*binding,selected.get(),current->equipment,
         {current->soldier,current->weak,current->owner,current->equipmentGeneration,current->space,
          current->generation,ReloadNanos(current->deadline)},binding->profile->rigFingerprint,ns);
+}
+bool SightCurrent(const std::optional<SightSelectionEvidence>& evidence)noexcept {
+    if(!evidence)return true; // Opposed-leaf contacts keep their independent admission.
+    const auto current=shotGuard.load(std::memory_order_acquire);const auto ns=ReloadNanos();
+    if(!current||!current->valid||!Fresh(current->deadline)||!evidence->selected)return false;
+    const auto selected=gameplay::ReadSelectedMeshes(evidence->selected->owner,ns);
+    return SightSelectionCurrent(*evidence,selected.get(),current->equipment,
+        {current->soldier,current->weak,current->owner,current->equipmentGeneration,current->space,
+         current->generation,ReloadNanos(current->deadline)},ns);
 }
 bool FreeRightCurrent(const BodyFreeRightEvidence& source)noexcept {
     const auto current=freeRightGuard.load(std::memory_order_acquire);const auto ns=ReloadNanos();
@@ -1222,9 +1232,11 @@ std::optional<WeaponShotFrame> ReadWeaponFrame(unsigned soldier,unsigned weak,un
         if(expired<4){++shotFrameExpired;++shotFrameExpiryCauses[expired];
             std::uint64_t unset=0;shotFrameExpiryFirstInput[expired].compare_exchange_strong(unset,guard->generation);
             return {};}
+        const bool sightCurrent=SightCurrent(pose->sightSelection);
         if(shotGuard.load(std::memory_order_acquire)!=guard){++shotFrameRaces;continue;}
         if(use==WeaponFrameUse::Support&&guard->weaponActionsBlocked)++supportFramesWhileFireBlocked;
         auto result=pose->frame;
+        if(!sightCurrent){result.sight={};result.nativeSight={};}
         if(result.muzzleBinding){
             const auto& binding=*result.muzzleBinding;const auto ns=ReloadNanos();
             const auto boundSelected=MuzzleBindingSelected(binding);
@@ -1330,7 +1342,7 @@ WeaponSightContact ReadSightContact(unsigned soldier,unsigned weak,unsigned weap
            pose->identity.soldier!=soldier||pose->identity.weak!=weak||pose->identity.weapon!=weapon||
            pose->identity.owner!=owner||pose->identity.space!=space||pose->identity.equipmentGeneration!=guard->equipmentGeneration||pose->identity.generation>guard->generation||
            pose->frame.sight.generation!=pose->identity.generation||pose->frame.sight.deadline!=pose->frame.deadline||
-           !Fresh(guard->deadline)||!Fresh(pose->frame.sight.deadline)||!AuthoredCurrent(pose->authoredGrip)||!SupportCurrent(pose->authoredSupport)||!AimCurrent(pose->authoredAim))return {};
+           !Fresh(guard->deadline)||!Fresh(pose->frame.sight.deadline)||!AuthoredCurrent(pose->authoredGrip)||!SupportCurrent(pose->authoredSupport)||!AimCurrent(pose->authoredAim)||!SightCurrent(pose->sightSelection))return {};
         if(shotGuard.load(std::memory_order_acquire)!=guard||!EquipmentStillCurrent(guard->equipment))continue;
         return pose->frame.sight;
     }
@@ -1546,7 +1558,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
     std::optional<SelectedKnifeRenderBinding> selectedKnifeBinding;
 #endif
-    auto authored=BindAuthoredGrip(AuthoredGripProfiles(),gameplay::ReadCurrentSelectedMeshes(authoredNow),
+    auto authored=BindAuthoredGrip(AuthoredGripProfiles(),input.selectedMeshes,
         input.nativeEquipment,{input.soldier,input.weak,input.ownerGeneration,input.equipmentGeneration,
         input.input.spaceGeneration,input.input.generation,ReloadNanos(input.deadline)},rigFingerprint,
         authoredNow,FindWeaponProfile(input.nativeEquipment.Asset())!=nullptr,selectAcceptedAuthored);
@@ -1555,12 +1567,12 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
         if(!ChestKnifeRenderCurrent(*input.chestKnife,input.controllerOwner,input.controllerEvidence,authoredNow)){
             published.store({},std::memory_order_release);shotPublication.store({},std::memory_order_release);return;
         }
-        authored=BindAuthoredGrip(ChestKnifeGripProfiles(),gameplay::ReadCurrentSelectedMeshes(authoredNow),
+        authored=BindAuthoredGrip(ChestKnifeGripProfiles(),input.selectedMeshes,
             input.nativeEquipment,{input.soldier,input.weak,input.ownerGeneration,input.equipmentGeneration,
             input.input.spaceGeneration,input.input.generation,ReloadNanos(input.deadline)},rigFingerprint,authoredNow,false);
     }
     else if(input.selectedKnife){
-        selectedKnifeBinding=BindSelectedKnifeGrip(*input.selectedKnife,gameplay::ReadCurrentSelectedMeshes(authoredNow),
+        selectedKnifeBinding=BindSelectedKnifeGrip(*input.selectedKnife,input.selectedMeshes,
             rig->identity,rigFingerprint,authoredNow);
         if(!selectedKnifeBinding){published.store({},std::memory_order_release);shotPublication.store({},std::memory_order_release);return;}
         authored={AuthoredGripStatus::Bound,selectedKnifeBinding->grip};
@@ -1583,7 +1595,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
     // missing absolute orientation only; they grant no native firing capability.
     if(!weaponOrientation&&input.input.hands[1].gripTracked&&input.input.hands[1].aimTracked){
         const auto ns=ReloadNanos();
-        const auto alignment=BindAuthoredAim(AuthoredAimProfiles(),gameplay::ReadCurrentSelectedMeshes(ns),
+        const auto alignment=BindAuthoredAim(AuthoredAimProfiles(),input.selectedMeshes,
             input.nativeEquipment,{input.soldier,input.weak,input.ownerGeneration,input.equipmentGeneration,
             input.input.spaceGeneration,input.input.generation,ReloadNanos(input.deadline)},rigFingerprint,ns);
         if(alignment.status!=AuthoredAimStatus::NoProfile){
@@ -1716,7 +1728,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
     if(!inverseSupportItem){RejectTracking(13);return;}
     std::optional<AuthoredSupportBinding> measuredSupport;
 #ifdef FVR_BC2_AUTHORED_SUPPORT_HEADER
-    const auto supportSnapshot=gameplay::ReadCurrentSelectedMeshes(authoredNow);
+    const auto& supportSnapshot=input.selectedMeshes;
     if(!authored.binding)measuredSupport=BindAuthoredSupportReference(generated::AuthoredSupports,supportSnapshot,input.nativeEquipment,
         {input.soldier,input.weak,input.ownerGeneration,input.equipmentGeneration,input.input.spaceGeneration,input.input.generation,ReloadNanos(input.deadline)},rigFingerprint,authoredNow);
 #endif
@@ -2128,7 +2140,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
             d.rigPose=rig->identity.pose;d.rigFingerprint=SightRigFingerprint(rig->names,rig->parents,rig->inverseBind);
             d.inputGeneration=input.input.generation;d.observedNs=ns(now.QuadPart);d.deadlineNs=ns(input.deadline);d.boneCount=rig->identity.count;
             d.physicalEquipmentGeneration=input.equipmentGeneration;
-            const auto selected=gameplay::ReadCurrentSelectedMeshes(d.observedNs);
+            const auto& selected=input.selectedMeshes;
             if(selected&&ReticleSelectedValid(*selected,d.observedNs)&&selected->sequence<=input.input.generation&&
                selected->owner.soldier==input.soldier&&selected->owner.weak==input.weak&&selected->owner.weapon==input.weapon&&
                selected->owner.actorGeneration==input.ownerGeneration&&selected->owner.space==input.input.spaceGeneration&&
@@ -2350,13 +2362,17 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
         }
     }
     const auto sightSelected=input.sightAdapter&&input.sightAdapter->assembly==SightAssemblyKind::Subtree?
-        gameplay::ReadCurrentSelectedMeshes(authoredNow):std::shared_ptr<const SelectedMeshesSnapshot>{};
+        input.selectedMeshes:std::shared_ptr<const SelectedMeshesSnapshot>{};
+    std::optional<SightSelectionEvidence> sightSelection;
     if(pose->shot&&handRoleReady&&targets->tracked[0]&&targets->tracked[1]&&input.sightAdapter&&
        input.sightAdapter->assembly==SightAssemblyKind::Subtree&&input.sightPhysicalItem&&
        SightAdapterSelectedMesh(*input.sightAdapter,sightSelected.get(),input.nativeEquipment,
            {input.soldier,input.weak,input.ownerGeneration,input.equipmentGeneration,
             input.input.spaceGeneration,input.input.generation,ReloadNanos(input.deadline)},rigFingerprint,authoredNow)){
         const auto& p=*input.sightAdapter;
+        sightSelection=SightSelectionEvidence{&p,sightSelected,input.nativeEquipment,
+            {input.soldier,input.weak,input.ownerGeneration,input.equipmentGeneration,
+             input.input.spaceGeneration,input.input.generation,ReloadNanos(input.deadline)},rigFingerprint};
         AuthoredSightObservation observation;
         observation.selectedMeshPath=p.authored->meshPath;
         observation.asset=input.assetName.data();observation.configuration=authored_grip_detail::Text(sightSelected->configurationPath);
@@ -2409,7 +2425,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
     std::shared_ptr<const ShotPublication> preparedShot;
     if(pose->shot){
         const ShotGuard identity{input.soldier,input.weak,input.weapon,input.ownerGeneration,input.input.spaceGeneration,input.input.generation,input.deadline,true,targets->tracked[0],0,input.weaponActionsBlocked,input.equipmentGeneration,input.nativeEquipment};
-        preparedShot=std::make_shared<const ShotPublication>(ShotPublication{*pose->shot,identity,authored.binding,measuredSupport,authoredAim});
+        preparedShot=std::make_shared<const ShotPublication>(ShotPublication{*pose->shot,identity,authored.binding,measuredSupport,authoredAim,sightSelection});
     }
     if(const auto requested=visibilityGuard.load(std::memory_order_acquire);requested&&requested->enabled&&
         requested->input.sequence==input.input.generation&&requested->nativeOwner.soldier==input.soldier&&requested->nativeOwner.weak==input.weak&&
@@ -2482,7 +2498,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
         std::array<std::byte,64> current{};
         if(!currentRig||*currentRig!=rig->identity||!Read(at,current.data(),64)||current!=original||
            !EquipmentStillCurrent(input.nativeEquipment)||!AuthoredCurrent(authored.binding)||
-           !SupportCurrent(measuredSupport)||!AimCurrent(authoredAim)||!FeedCurrent(*pose,input.nativeEquipment))return false;
+           !SupportCurrent(measuredSupport)||!AimCurrent(authoredAim)||!SightCurrent(sightSelection)||!FeedCurrent(*pose,input.nativeEquipment))return false;
         if(pose->pistolSlide){
             // Slide admission also pins the complete original animation bytes
             // at commit. Only a still-owned slide reaches the private pose;

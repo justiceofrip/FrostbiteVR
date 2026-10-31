@@ -1,6 +1,15 @@
 #pragma once
 #include "fvr/interaction/ActionPolicy.h"
+#include <optional>
 namespace fvr::bc2 {
+struct PumpActionGates {bool blockActions=false,cancelReload=false;};
+// An unavailable observation blocks actions but cannot create owed cycle debt
+// or discard an already held shell. Native reload admission remains separate.
+inline PumpActionGates EvaluatePumpActionGates(bool selected,bool physicalBlocksFire,
+    bool physicalCycleDebt,std::optional<bool> nativeBlocksFire)noexcept {
+    return {selected&&(physicalBlocksFire||!nativeBlocksFire||*nativeBlocksFire),
+        selected&&(physicalCycleDebt||nativeBlocksFire.value_or(false))};
+}
 // Manual native debt blocks changes to the held weapon and shell operations.
 // Idle pump observation leaves ordinary shell-start pulses and body input intact.
 inline void ApplyPumpActionGate(interaction::ActionOutput& actions,bool debt)noexcept {

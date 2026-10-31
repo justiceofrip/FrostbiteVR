@@ -118,6 +118,10 @@ public:
         interaction::HandInteractionKey supportContact,interaction::HandInteraction&,interaction::SupportGrip&,std::uint64_t& intent,bool cancel)noexcept;
     void BindSupport(Bc2PumpTracking&,const interaction::SupportGripResult&,const interaction::HandInteraction&)noexcept;
     bool BlocksFire()const noexcept{return blocks_;}
+    // Unlike BlocksFire(), this excludes unavailable observations and busy
+    // control admission. These retained outcomes still owe native settlement.
+    bool HasCycleDebt()const noexcept{return cycle_||pending_||acknowledged_||
+        recoveryCycle_||recoveryPending_||recoveryAcknowledged_;}
     void Report(std::ostream&)const;
 private:
     void Record(const Bc2PhysicalPumpSample&,unsigned gate,const interaction::WeaponCycleResult&,bool recovery=false)noexcept;

@@ -95,10 +95,128 @@ int PairAndFreshness(){const auto a=Sample();CHECK(AmmoCounterPair(a,a,30,Now));
     auto shorter=a;shorter.deadlineNs=Now+10000000;CHECK(p.Receive(shorter,shorter,30,Now));
     CHECK(p.Receive(a,a,30,Now+1));CHECK(!p.Select(30,shorter.deadlineNs)); // Duplicate cannot renew original expiry.
     p.Reset();CHECK(!p.Select(30,Now));CHECK(p.Receive(newer,newer,30,newer.observedNs));
-    CHECK(!p.Receive(a,a,30,newer.observedNs));CHECK(!p.Select(30,newer.observedNs));
+    CHECK(!p.Receive(a,a,30,newer.observedNs));CHECK(p.Select(30,newer.observedNs)->sequence==newer.sequence);
     p.Reset();CHECK(p.Receive(a,a,30,Now));auto changed=a;--changed.loaded;
-    CHECK(!p.Receive(changed,changed,30,Now));CHECK(!p.Select(30,Now));
+    CHECK(!p.Receive(changed,changed,30,Now));CHECK(p.Select(30,Now)->loaded==a.loaded);
     CHECK(p.Receive(a,a,30,Now));CHECK(!p.Receive({},{},30,Now));CHECK(!p.Select(30,Now));
+    return 0;
+}
+int DisplaySurvivesAmmoGapsWithCurrentOwner(){
+    const auto native=Reserve();const auto admitted=Sample();auto current=Owner();
+    AmmoCounterPresentation hud;CHECK(hud.Receive(admitted,admitted,30,Now));
+    for(const auto elapsed:{100000000LL,200000000LL,500000000LL,3000000000LL}){
+        const auto now=Now+elapsed;
+        current.observedNs=now-1000000;current.deadlineNs=now+90000000;
+        const auto ownerOnly=AmmoCounterHostSample(native,current,now);
+        CHECK(AmmoCounterOwnerOnlyFresh(ownerOnly,now));CHECK(!AmmoCounterFresh(ownerOnly,now));
+        CHECK(!AmmoCounterPair(ownerOnly,ownerOnly,30,now));
+        CHECK(ownerOnly.observedNs==current.observedNs&&ownerOnly.deadlineNs==current.deadlineNs);
+        CHECK(hud.Receive(ownerOnly,ownerOnly,30,now));
+        const auto* shown=hud.Select(30,now);CHECK(shown&&*shown==admitted);
+        CHECK(!AmmoCounterFresh(*shown,now)); // Display retention does not fabricate native freshness.
+        CHECK(!hud.Select(30,current.deadlineNs));
+    }
+    const auto now=current.observedNs+1000000;
+    const auto missing=AmmoCounterHostSample({},current,now);
+    CHECK(hud.Receive(missing,missing,30,now));CHECK(*hud.Select(30,now)==admitted);
+    auto bad=native;bad.verified=false;
+    CHECK(hud.Receive(AmmoCounterHostSample(bad,current,now),missing,30,now));
+    CHECK(*hud.Select(30,now)==admitted);
+    auto fresh=native;++fresh.sequence;fresh.observedNs=now;fresh.deadlineNs=now+100000000;--fresh.loaded;
+    const auto updated=AmmoCounterHostSample(fresh,current,now);
+    CHECK(hud.Receive(missing,updated,30,now));CHECK(*hud.Select(30,now)==updated);
+    CHECK(hud.Receive(updated,missing,30,now));CHECK(*hud.Select(30,now)==updated);
+    auto empty=fresh;++empty.sequence;++empty.observedNs;++empty.deadlineNs;empty.loaded=empty.reserve=0;
+    const auto emptySample=AmmoCounterHostSample(empty,current,now+1);
+    CHECK(hud.Receive(missing,emptySample,30,now+1));CHECK(hud.Select(30,now+1)->loaded==0);
+    CHECK(hud.Select(30,now+1)->reserve==0); // A valid empty count still replaces retained digits.
+    AmmoCounterPresentation unseen;CHECK(!unseen.Receive(missing,missing,30,now));CHECK(!unseen.Select(30,now));
+    return 0;
+}
+int RejectedCountsCannotRenewOwnership(){
+    auto admitted=Sample();admitted.sequence=10;
+    for(unsigned fault=0;fault<4;++fault){
+        AmmoCounterPresentation hud;CHECK(hud.Receive(admitted,admitted,30,Now));
+        for(const auto elapsed:{50000000LL,100000000LL,200000000LL}){
+            const auto now=Now+elapsed;auto left=admitted;
+            left.observedNs=now;left.deadlineNs=now+AmmoCounterMaxAgeNs;
+            if(fault==1||fault==2)++left.sequence;if(fault==3)--left.sequence;
+            auto right=left;
+            if(fault==1)--right.loaded; // Conflicting counts within a sequence.
+            if(fault==2){++right.sequence;--right.observedNs;} // Sequence/time inversion.
+            CHECK(!hud.Receive(left,right,30,now));
+            CHECK(hud.Select(30,admitted.deadlineNs-1));
+            CHECK(!hud.Select(30,admitted.deadlineNs)); // Even repeated fresh-looking replays cannot extend the lease.
+        }
+    }
+    for(unsigned reverse=0;reverse<2;++reverse){
+        AmmoCounterPresentation hud;CHECK(hud.Receive(admitted,admitted,30,Now));
+        const auto now=admitted.deadlineNs;auto current=Owner();
+        current.observedNs=now;current.deadlineNs=now+AmmoCounterMaxAgeNs;
+        const auto ownerOnly=AmmoCounterHostSample({},current,now);
+        auto replay=admitted;replay.observedNs=now;replay.deadlineNs=current.deadlineNs;
+        CHECK(!hud.Receive(reverse?ownerOnly:replay,reverse?replay:ownerOnly,30,now));
+        const auto* shown=hud.Select(30,now);CHECK(shown&&*shown==admitted);
+        CHECK(!AmmoCounterFresh(*shown,now)); // Only the independent owner marker renews display continuity.
+        CHECK(!hud.Select(30,current.deadlineNs));
+    }
+    return 0;
+}
+int DisplayOwnerLifetimeAndDuplicatePackets(){
+    const auto admitted=Sample();auto current=Owner();AmmoCounterPresentation hud;
+    CHECK(hud.Receive(admitted,admitted,30,Now));
+    current.observedNs=Now+1000000;current.deadlineNs=Now+110000000;
+    const auto ownerOnly=AmmoCounterHostSample({},current,current.observedNs);
+    CHECK(hud.Receive(ownerOnly,ownerOnly,30,current.observedNs));
+    CHECK(hud.Select(30,admitted.deadlineNs));
+    auto extended=ownerOnly;extended.deadlineNs+=10000000;
+    CHECK(hud.Receive(extended,extended,30,current.observedNs+1));
+    CHECK(!hud.Select(30,ownerOnly.deadlineNs)); // Duplicate owner packets cannot renew their source deadline.
+    CHECK(!hud.Receive(ownerOnly,ownerOnly,30,ownerOnly.deadlineNs));
+    CHECK(!hud.Select(30,ownerOnly.deadlineNs));
+    for(unsigned fault=0;fault<10;++fault){
+        hud.Reset();CHECK(hud.Receive(admitted,admitted,30,Now));auto owner=Owner();
+        if(fault==0)owner.alive=false;if(fault==1)owner.onFoot=false;if(fault==2)owner.held=false;
+        if(fault==3)owner.deadlineNs=Now;if(fault==4)owner.observedNs=Now+1;
+        if(fault==5)owner.owner.weapon=0;if(fault==6)owner.owner.actorGeneration=0;
+        if(fault==7)owner.owner.equipGeneration=0;if(fault==8)owner.owner.space=0;
+        if(fault==9)owner.deadlineNs=Now+AmmoCounterOwnerMaxAgeNs+1;
+        const auto lost=AmmoCounterHostSample({},owner,Now);CHECK(lost==AmmoCounterSample{});
+        CHECK(!hud.Receive(lost,lost,30,Now));CHECK(!hud.Select(30,Now));
+        const auto recovered=AmmoCounterHostSample({},Owner(),Now);
+        CHECK(!hud.Receive(recovered,recovered,30,Now));CHECK(!hud.Select(30,Now));
+    }
+    for(unsigned changed=0;changed<3;++changed){
+        auto owner=Owner();if(changed==0)++owner.owner.actorGeneration;
+        if(changed==1)++owner.owner.equipGeneration;if(changed==2)++owner.owner.space;
+        const auto switched=AmmoCounterHostSample({},owner,Now);
+        hud.Reset();CHECK(hud.Receive(admitted,admitted,30,Now));
+        CHECK(!hud.Receive(admitted,switched,owner.owner.space,Now));CHECK(!hud.Select(30,Now));
+        hud.Reset();CHECK(hud.Receive(admitted,admitted,30,Now));
+        CHECK(!hud.Receive(switched,switched,owner.owner.space,Now));CHECK(!hud.Select(owner.owner.space,Now));
+        auto fresh=Reserve();fresh.identity.owner=owner.owner;
+        const auto sample=AmmoCounterHostSample(fresh,owner,Now);
+        CHECK(hud.Receive(switched,sample,owner.owner.space,Now));CHECK(*hud.Select(owner.owner.space,Now)==sample);
+    }
+    hud.Reset();CHECK(!hud.Select(30,Now));
+    return 0;
+}
+int OwnerMarkersCannotAdmitCounts(){
+    const auto ownerOnly=AmmoCounterHostSample({},Owner(),Now);
+    CHECK(AmmoCounterOwnerOnlyFresh(ownerOnly,Now));
+    for(unsigned fault=0;fault<10;++fault){
+        auto bad=ownerOnly;
+        if(fault==0)bad.sequence=1;if(fault==1)bad.reserved=2;if(fault==2)bad.loaded=1;
+        if(fault==3)bad.reserve=1;if(fault==4)bad.capacity=30;if(fault==5)bad.observedNs=Now+1;
+        if(fault==6)bad.deadlineNs=Now;if(fault==7)bad.actorGeneration=0;
+        if(fault==8)bad.equipmentGeneration=0;if(fault==9)bad.spaceGeneration=0;
+        CHECK(!AmmoCounterOwnerOnlyFresh(bad,Now));CHECK(!AmmoCounterFresh(bad,Now));
+        AmmoCounterPresentation hud;CHECK(hud.Receive(Sample(),Sample(),30,Now));
+        CHECK(!hud.Receive(bad,ownerOnly,30,Now));CHECK(!hud.Select(30,Now));
+    }
+    auto wrongAmmo=Reserve();++wrongAmmo.identity.owner.weapon;
+    const auto currentOnly=AmmoCounterHostSample(wrongAmmo,Owner(),Now);
+    CHECK(currentOnly==ownerOnly);CHECK(!AmmoCounterFresh(currentOnly,Now));
     return 0;
 }
 int CountsChangingBetweenEyes(){
@@ -169,6 +287,8 @@ int BitmapContents(){
     return 0;
 }
 }
-int main(){if(NativeReadOnlyAdmission()||NativeReadClockOrdering()||PublishedReserveIsPassiveAndBounded()||PairAndFreshness()||CountsChangingBetweenEyes()||WeaponSidePlacement()||BitmapContents())return 1;
-    std::cout<<"AmmoCounter: native identity/freshness, paired telemetry and bitmap checks passed; no native acceptance\n";
+int main(){if(NativeReadOnlyAdmission()||NativeReadClockOrdering()||PublishedReserveIsPassiveAndBounded()||PairAndFreshness()||
+    DisplaySurvivesAmmoGapsWithCurrentOwner()||RejectedCountsCannotRenewOwnership()||DisplayOwnerLifetimeAndDuplicatePackets()||OwnerMarkersCannotAdmitCounts()||
+    CountsChangingBetweenEyes()||WeaponSidePlacement()||BitmapContents())return 1;
+    std::cout<<"AmmoCounter: strict native samples, retained same-owner display, paired telemetry and bitmap checks passed; no native acceptance\n";
 }

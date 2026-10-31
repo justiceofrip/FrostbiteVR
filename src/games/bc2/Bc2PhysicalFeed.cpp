@@ -8,8 +8,7 @@ namespace {
 using namespace interaction;
 using namespace feed_interaction_detail;
 using feed_mechanism_detail::Pose;
-enum class FeedExit:unsigned {None,Updated,ApiUnavailable,ViewUnavailable,SelectionOrInput,
-    StorageUnavailable,MigrationUnverified,GunOrRawUnverified,LifetimeExhausted,SessionUnavailable,Blocked,PolicyStatus};
+using FeedExit=Bc2PhysicalFeedExit;
 const char* FeedExitName(FeedExit reason)noexcept {
     switch(reason){
     case FeedExit::None:return "none";case FeedExit::Updated:return "updated";
@@ -64,26 +63,27 @@ bool CurrentEquipment(const FeedEquipmentNativeView& original,const ReloadStateO
             binding->data==equipment.data&&binding->persistence==equipment.persistence&&
             binding->inventory==original.binding.inventory&&binding->switching==original.binding.switching));
 }
-bool Selected(const Bc2PhysicalFeedSample& s,const FeedEquipmentNativeView& v,const Bc2FeedRegistration& row)noexcept {
+bool Selected(const Bc2PhysicalFeedSample& s,const FeedEquipmentNativeView& v,const Bc2FeedRegistration& row,unsigned& failure)noexcept {
     const auto& g=row.geometry;
-    if(FindBc2FeedRegistration(row.key,v.config,s.asset,s.configurationPath,s.meshPath,s.rigFingerprint)!=&row||
-       !s.equipment||!CurrentEquipment(v,s.owner,*s.equipment,s.binding,row)||
-       (s.binding&&!AmmoResourceBindingFresh(*s.binding,s.owner,s.input.nowNs))||
-       !s.selectedRigVerified||!s.selected||!NativeHand(s)||!s.raw.valid||s.raw.owner!=s.owner||
-       s.raw.rig.soldier!=s.owner.soldier||s.raw.rig.weak!=s.owner.weak||
-       s.raw.rigFingerprint!=g.rigFingerprint||s.frameSequence!=s.raw.inputEvidence.sequence||
-       !Pose(s.raw.rawLeftWristWorldMeters)||!Pose(s.raw.weaponWorldMeters)||
-       !FeedEquipmentViewFresh(v,s.input.nowNs)||v.identity.owner!=s.owner)return false;
+    const auto reject=[&](unsigned reason,bool rejected){if(rejected)failure=reason;return rejected;};
+    if(reject(1,FindBc2FeedRegistration(row.key,v.config,s.asset,s.configurationPath,s.meshPath,s.rigFingerprint)!=&row)||
+       reject(2,!s.equipment)||reject(3,!CurrentEquipment(v,s.owner,*s.equipment,s.binding,row))||
+       reject(4,s.binding&&!AmmoResourceBindingFresh(*s.binding,s.owner,s.input.nowNs))||
+       reject(5,!s.selectedRigVerified)||reject(6,!s.selected)||reject(7,!NativeHand(s))||reject(8,!s.raw.valid)||reject(9,s.raw.owner!=s.owner)||
+       reject(10,s.raw.rig.soldier!=s.owner.soldier)||reject(11,s.raw.rig.weak!=s.owner.weak)||
+       reject(12,s.raw.rigFingerprint!=g.rigFingerprint)||reject(13,s.frameSequence!=s.raw.inputEvidence.sequence)||
+       reject(14,!Pose(s.raw.rawLeftWristWorldMeters))||reject(15,!Pose(s.raw.weaponWorldMeters))||
+       reject(16,!FeedEquipmentViewFresh(v,s.input.nowNs))||reject(17,v.identity.owner!=s.owner))return false;
     const auto& m=*s.selected;
-    if(m.owner!=s.owner||!m.sequence||!m.configurationPathVerified||!m.configurationPathPointer||
-       !ReloadDescriptorText(m.configurationPath,g.configurationPath)||!ReloadDescriptorText(m.weaponName,g.asset)||
-       m.weaponData!=v.binding.data||m.inventory!=v.binding.inventory||
-       m.observedNs<=0||s.input.nowNs<m.observedNs||s.input.nowNs>=m.deadlineNs||
-       m.stateCount!=1||!m.soleConfiguredArray)return false;
+    if(reject(18,m.owner!=s.owner)||reject(19,!m.sequence)||reject(20,!m.configurationPathVerified)||reject(21,!m.configurationPathPointer)||
+       reject(22,!ReloadDescriptorText(m.configurationPath,g.configurationPath))||reject(23,!ReloadDescriptorText(m.weaponName,g.asset))||
+       reject(24,m.weaponData!=v.binding.data)||reject(25,m.inventory!=v.binding.inventory)||
+       reject(26,m.observedNs<=0)||reject(27,s.input.nowNs<m.observedNs)||reject(28,s.input.nowNs>=m.deadlineNs)||
+       reject(29,m.stateCount!=1)||reject(30,!m.soleConfiguredArray))return false;
     unsigned matches=0;const auto& state=m.states[0];
-    if(state.array!=m.soleConfiguredArray||!state.count||state.count>state.meshes.size())return false;
+    if(reject(31,state.array!=m.soleConfiguredArray)||reject(32,!state.count)||reject(33,state.count>state.meshes.size()))return false;
     for(unsigned i=0;i<state.count;++i)if(ReloadDescriptorText(state.meshes[i].assetPath,g.meshPath)&&state.meshes[i].address>=0x10000)++matches;
-    return matches==1;
+    failure=matches==1?0:34;return matches==1;
 }
 math::Matrix4 BlendRigid(const math::Matrix4& a,const math::Matrix4& b,float t)noexcept {
     if(t<=0)return a;if(t>=1)return b;
@@ -292,7 +292,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         return false;
     };
     Bc2PhysicalFeedResult out;out.blocksFire=blocksFire();out.blocksEquipment=blocksEquipment();publication.store({},std::memory_order_release);
-    if(!state_)return out;auto& state=*state_;const auto now=s.input.nowNs;
+    if(!state_){out.diagnostic.exit=FeedExit::StorageUnavailable;return out;}auto& state=*state_;const auto now=s.input.nowNs;
     State::Equipment* e=nullptr;
     const Bc2FeedRegistration* registration=nullptr;
     const auto finish=[&](FeedExit reason){
@@ -303,6 +303,9 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             (unsigned(out.submitRefused||(e&&e->refused))<<4)|(unsigned(e&&e->gateFailed)<<5);
         const unsigned status=unsigned(out.status==FeedEquipmentStatus::Unbound?session.status:out.status)|
             (unsigned(out.interactionStatus)<<8)|(unsigned(out.reloadStatus)<<16)|(unsigned(out.handReason)<<24);
+        out.diagnostic.exit=reason;out.diagnostic.flags=flags;out.diagnostic.status=status;
+        if(e){out.diagnostic.operation=unsigned(e->activeOperation);
+            if(e->session)out.diagnostic.reloadPhase=unsigned(session.session.reload.phase);}
         bool changed=d.reason.exchange(reason,std::memory_order_relaxed)!=reason;
         changed=(d.flags.exchange(flags,std::memory_order_relaxed)!=flags)||changed;
         changed=(d.status.exchange(status,std::memory_order_relaxed)!=status)||changed;
@@ -363,7 +366,12 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         const bool grip=s.grip||(!s.input.released[0]&&previous&&previous->grip);
         state.packets[state.nextPacket]={s.owner,s.input,s.weapon,source,grip,s.reloadPressed,s.bodyFromHand};state.nextPacket=(state.nextPacket+1)%state.packets.size();}
     if(view)for(auto& p:state.equipment)if(p&&State::SameResource(*p,*view)){e=p.get();break;}
-    if(!view||!registration||(e&& &e->registration!=registration)||!Selected(s,*view,*registration)||s.cancel||!Window(s.input,now)){Suspend(s.input,hands);
+    // Preserve the original short-circuit order. A bit absent from checked was
+    // never evaluated; passed bits are observations, never admission authority.
+    const auto admission=[&](unsigned bit,bool passed){out.diagnostic.admissionChecked|=1u<<bit;
+        if(passed)out.diagnostic.admissionPassed|=1u<<bit;return passed;};
+    if(!admission(0,bool(view))||!admission(1,bool(registration))||!admission(2,!e||&e->registration==registration)||
+       !admission(3,Selected(s,*view,*registration,out.diagnostic.selectionFailure))||!admission(4,!s.cancel)||!admission(5,Window(s.input,now))){Suspend(s.input,hands);
         return finish(view?FeedExit::SelectionOrInput:FeedExit::ViewUnavailable);}
     out.selected=true;
     if(!e){for(auto& slot:state.equipment)if(!slot){try{
@@ -401,9 +409,13 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         right->token.kind==HandClaimKind::GunHold&&!right->token.prerequisiteClaim&&right->deadlineNs>now;
     const State::Packet* source=nullptr;
     for(const auto& p:state.packets)if(p.owner==s.owner&&p.weapon==s.weapon&&SamePacket(p.input,s.raw.inputEvidence)){source=&p;break;}
-    const bool raw=source&&source->native&&Window(source->input,now)&&source->input.observedNs>=source->native->observedNs&&
-        FeedEquipmentViewFresh(*source->native,now)&&FeedEquipmentSameItem(*source->native,*view)&&
-        source->native->counts==view->counts&&hands.HasRecordedEvidence(source->input,InteractionHand::Left);
+    const auto rawCheck=[&](unsigned bit,bool passed){out.diagnostic.rawChecked|=1u<<bit;
+        if(passed)out.diagnostic.rawPassed|=1u<<bit;return passed;};
+    (void)rawCheck(0,gun);
+    const bool raw=rawCheck(1,bool(source))&&rawCheck(2,bool(source->native))&&rawCheck(3,Window(source->input,now))&&
+        rawCheck(4,source->input.observedNs>=source->native->observedNs)&&rawCheck(5,FeedEquipmentViewFresh(*source->native,now))&&
+        rawCheck(6,FeedEquipmentSameItem(*source->native,*view))&&rawCheck(7,source->native->counts==view->counts)&&
+        rawCheck(8,hands.HasRecordedEvidence(source->input,InteractionHand::Left));
     if(!gun||!raw){Suspend(s.input,hands);out.blocksFire=e->Blocked();return finish(FeedExit::GunOrRawUnverified);}
     auto sourceInput=source->input;sourceInput.nowNs=now;
     const auto local=feed_interaction_detail::Multiply(s.raw.rawLeftWristWorldMeters,Inverse(s.raw.weaponWorldMeters));
@@ -572,6 +584,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         }
         const auto result=e->session->Update(sample);out.status=result.status;
         out.interactionStatus=result.session.interaction.status;out.reloadStatus=result.session.reload.status;
+        out.diagnostic.policyEvaluated=true;
         state.PoseTarget(*e,result.session.interaction,s.raw.weaponWorldMeters);
         if(!result.session.interaction.target&&!result.session.interaction.completion&&
            (result.session.interaction.status==FeedInteractionStatus::Interrupted||result.session.interaction.status==FeedInteractionStatus::OffPath||

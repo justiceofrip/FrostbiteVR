@@ -140,6 +140,7 @@ FeedbackWriter writeFeedback=nullptr;unsigned feedbackSent=0,feedbackDropped=0;
 std::atomic<bool> enabled=false;std::atomic<unsigned> active=0,inputThread=0;
 bool fireRouteTelemetryEnabled=false;
 FireRouteTelemetry fireRouteTelemetry;
+thread_local FireRouteRecord* interactionTrace=nullptr; // Callback-local observation only.
 std::atomic<unsigned> updates=0,localUpdates=0,gathers=0,onFoot=0,vehicle=0,stale=0,applied=0,committed=0,nativeInactive=0,mismatches=0,turnUnavailable=0,turns=0,moving=0,buttons=0;
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
 std::unique_ptr<Bc2ChestKnifeCoordinator> chestKnife;
@@ -413,7 +414,10 @@ void RecordSight(const SightRecord& record,bool event){
 }
 void ReleaseSightOwnership()noexcept;
 void CancelPendingSight(std::uint64_t)noexcept;
-void CancelSight(){sightAdapterAtGrab=nullptr;ReleaseSightOwnership();sightGrasp.reset();sightVisual.reset();sightPackets.Reset();if(sightPolicy){const auto result=sightPolicy->Update({});if(result.cancelled)++sightCancellations;CancelPendingSight(result.cancelledRequest);FinishSightGesture(result);}sightPhase=interaction::SightFlipPhase::Idle;sightAcknowledged=0;}
+void CancelSight(){sightAdapterAtGrab=nullptr;ReleaseSightOwnership();sightGrasp.reset();sightVisual.reset();sightPackets.Reset();if(sightPolicy){const auto result=sightPolicy->Update({});if(result.cancelled)++sightCancellations;CancelPendingSight(result.cancelledRequest);FinishSightGesture(result);
+    if(interactionTrace){auto& r=interactionTrace->interactions.sight;r.observed=r.reset=true;r.phase=unsigned(interaction::SightFlipPhase::Idle);
+        r.policyPhase=unsigned(result.phase);r.reason=unsigned(result.reason);r.cancelled=result.cancelled;r.released=result.released;}}
+    sightPhase=interaction::SightFlipPhase::Idle;sightAcknowledged=0;}
 
 struct ModeRecord {ULONGLONG ms=0,ackMs=0;unsigned actor=0,weak=0,from=0,target=0,action=0;std::uint64_t owner=0,space=0;bool cancelled=false;std::uint64_t gesture=0;};
 std::array<ModeRecord,32> modeRecords{};unsigned modeRecordCount=0,modeRecordNext=0;
@@ -444,6 +448,10 @@ void RetainSupportEvent(const SupportEvent& event)noexcept {
     else ++supportEventDropped;
 }
 void ResetSupportGrip(const char* reason)noexcept {
+    if(interactionTrace){auto& r=interactionTrace->interactions.support;r.observed=true;
+        r.previousToken=lastSupportSample.sample.holding?lastSupportSample.sample.token:0;
+        r.holding=false;r.token=0;r.reset={};const std::string_view label(reason);
+        std::copy_n(label.begin(),std::min(label.size(),r.reset.size()-1),r.reset.begin());}
     if(lastSupportSample.sample.holding){
         auto event=lastSupportSample;event.eventMs=GetTickCount64();event.previousToken=event.sample.token;
         event.resetReason=reason;RetainSupportEvent(event);++supportForcedResets;
@@ -720,7 +728,8 @@ void CancelPhysicalReload(PhysicalReloadResult* unpublished,unsigned sourceFlags
         physicalFixedContainer->Cancel(safety,handOwnership);fixedContainerGripHeld=false;}
     if(physicalFeed){auto safety=handSample;LARGE_INTEGER now{};
         if(QueryPerformanceCounter(&now))safety.nowNs=HandNanos(now.QuadPart);
-        physicalFeed->Suspend(safety,handOwnership);}
+        physicalFeed->Suspend(safety,handOwnership);
+        if(interactionTrace){auto& r=interactionTrace->interactions.feed;r={};r.observed=r.suspended=true;}}
     if(physicalPistolSlide){auto safety=handSample;LARGE_INTEGER now{};
         if(QueryPerformanceCounter(&now))safety.nowNs=HandNanos(now.QuadPart);
         physicalPistolSlide->Suspend(safety,handOwnership);}
@@ -739,7 +748,9 @@ void CancelPhysicalReload(PhysicalReloadResult* unpublished,unsigned sourceFlags
         if(preserveMagazine)magazinePhysical->Suspend(safety,handOwnership);
         else magazinePhysical->Cancel(safety,handOwnership);}
     if(physicalReload){auto safety=handSample;LARGE_INTEGER now{};if(QueryPerformanceCounter(&now))safety.nowNs=HandNanos(now.QuadPart);
-        physicalReload->Cancel(safety,handOwnership,sourceFlags?PhysicalReloadCancelReason::RequestedInput:PhysicalReloadCancelReason::External,sourceFlags);}
+        physicalReload->Cancel(safety,handOwnership,sourceFlags?PhysicalReloadCancelReason::RequestedInput:PhysicalReloadCancelReason::External,sourceFlags);
+        if(interactionTrace){auto& r=interactionTrace->interactions.shell;r={};r.observed=r.externalCancel=true;r.bridgePhase=~0u;
+            r.cancelReason=unsigned(sourceFlags?PhysicalReloadCancelReason::RequestedInput:PhysicalReloadCancelReason::External);r.sourceFlags=sourceFlags;}}
 }
 bool HolsterCacheCurrent(void*,const HolsterSuppressionRequest& r)noexcept {
     if(bodyHolster&&bodyHolster->DiagnosticDeadline()){
@@ -1548,11 +1559,13 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     const auto& owner=scope->owner;
     struct FireRouteGatherScope {
         FireRouteRecord record{};bool observing=false;
-        ~FireRouteGatherScope(){if(observing){LARGE_INTEGER now{};
+        FireRouteRecord* previous=interactionTrace;
+        ~FireRouteGatherScope(){interactionTrace=previous;if(observing){LARGE_INTEGER now{};
             if(QueryPerformanceCounter(&now))record.sampledNs=HandNanos(now.QuadPart);
             fireRouteTelemetry.Observe(record);}}
     } fireTrace;
     fireTrace.observing=fireRouteTelemetryEnabled;
+    interactionTrace=fireTrace.observing?&fireTrace.record:nullptr;
     if(fireTrace.observing){auto& r=fireTrace.record;
         r.owner={owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,cachedInput.spaceGeneration};
         r.equipment=owner.equipment;r.input=cachedInput.generation;r.inputEpoch=inputEpoch;r.cache=owner.cache;
@@ -2041,7 +2054,9 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     const bool pumpSelected=physicalPump&&(!ordinaryManualCycles||
         (ordinaryShotgunEquipment&&(ordinarySelectionReady||ordinaryTrackingRecovery)));
     const auto currentPump=pumpSelected?reloadFlowRuntime::ReadNativeCycleView(handSample.nowNs):std::nullopt;
-    const bool pumpDebt=pumpSelected&&(physicalPump->BlocksFire()||!currentPump||currentPump->blocksFire);
+    const auto pumpGates=EvaluatePumpActionGates(pumpSelected,physicalPump&&physicalPump->BlocksFire(),
+        physicalPump&&physicalPump->HasCycleDebt(),currentPump?std::optional(currentPump->blocksFire):std::nullopt);
+    const bool pumpDebt=pumpGates.blockActions;
     ApplyPumpActionGate(out,pumpDebt);
     std::optional<MagazineFamilyEvidence> physicalReplacementFamily;
     const ReloadStateOwner magazineOwner{owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
@@ -2103,6 +2118,11 @@ void __fastcall GatherHook(void* self,void*,void* cache){
                 frame->space==input.spaceGeneration&&frame->deadline>clock.QuadPart;
         }
         feedResult=physicalFeed->Tick(sample,handOwnership,handIntent);
+        if(fireTrace.observing){const auto& d=feedResult.diagnostic;auto& r=fireTrace.record.interactions.feed;
+            r.observed=true;r.exit=unsigned(d.exit);r.flags=d.flags;r.status=d.status;r.rawChecked=d.rawChecked;r.rawPassed=d.rawPassed;
+            r.admissionChecked=d.admissionChecked;r.admissionPassed=d.admissionPassed;r.reloadPhase=d.reloadPhase;r.operation=d.operation;r.cancel=sample.cancel;
+            r.selectionFailure=d.selectionFailure;r.policyEvaluated=d.policyEvaluated;
+            fireTrace.record.feedSource=sample.raw.inputEvidence.sequence;fireTrace.record.feedSourceDeadlineNs=sample.raw.inputEvidence.deadlineNs;}
         if(feedResult.blocksFire){constexpr auto mask=interaction::Fire|interaction::AlternateFire|interaction::Reload;
             out.held&=~mask;out.pressed&=~mask;}
     }
@@ -2216,7 +2236,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         sample.input=handSample;sample.weapon=handItem;sample.geometrySequence=input.generation;sample.trackingEpoch=input.spaceGeneration;
         sample.actionFlagsKnown=true;sample.actionHeld=out.held;sample.actionPressed=out.pressed;
         sample.gripPressed=interaction::ReloadGripActive(input.hands[0].squeeze,handSample,handOwnership.Current(interaction::InteractionHand::Left));
-        sample.cancel=pumpDebt||(resourceInventoryFixture&&resourceInventoryFixture->CancelShell())||bodyDraw.pending||magazineResult.blocksWeaponActions||(physicalReloadFixture&&physicalReloadFixture->CancelConsumer())||!aimValid||!out.active||((out.pressed|out.held)&(interaction::Fire|interaction::Use|interaction::NextWeapon|interaction::PreviousWeapon));
+        sample.cancel=pumpGates.cancelReload||(resourceInventoryFixture&&resourceInventoryFixture->CancelShell())||bodyDraw.pending||magazineResult.blocksWeaponActions||(physicalReloadFixture&&physicalReloadFixture->CancelConsumer())||!aimValid||!out.active||((out.pressed|out.held)&(interaction::Fire|interaction::Use|interaction::NextWeapon|interaction::PreviousWeapon));
         sample.asset=asset;sample.meshes=selectedMeshes.Read(sample.nativeOwner,handSample.nowNs);
         sample.raw=rigPublication::ReadReloadContact(sample.nativeOwner);
         if(const auto original=FindHandEvidence(sample.raw.inputEvidence.sequence,owner.weapon))sample.originalHandEvidence=original->sample;
@@ -2231,11 +2251,15 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             (!aimValid?ReloadCancelAimInvalid:0u)|(!out.active?ReloadCancelInactive:0u)|
             ((reloadActions&interaction::Fire)?ReloadCancelFire:0u)|((reloadActions&interaction::Use)?ReloadCancelUse:0u)|
             ((reloadActions&interaction::NextWeapon)?ReloadCancelNextWeapon:0u)|((reloadActions&interaction::PreviousWeapon)?ReloadCancelPreviousWeapon:0u)|
-            (!pouch?ReloadCancelNoPouch:0u)|(pumpDebt?ReloadCancelPumpDebt:0u);
+            (!pouch?ReloadCancelNoPouch:0u)|(pumpGates.cancelReload?ReloadCancelPumpDebt:0u);
 #ifdef FVR_BC2_ARMING_EMPTY_PROBE
         if(armingEmptyFixture&&armingEmptyFixture->CancelConsumer()){sample.cancel=true;sample.cancelFlags|=ReloadCancelFixture;}
 #endif
         physicalResult=physicalReload->Tick(sample,handOwnership,handIntent);
+        if(fireTrace.observing){const auto d=physicalReload->Diagnostic();auto& r=fireTrace.record.interactions.shell;
+            r.observed=true;r.cancelReason=d.cancelReason;r.supplyReason=d.supplyReason;r.flags=d.flags;r.sourceFlags=d.sourceFlags;
+            r.bridgePhase=d.bridgePhase;r.cycle=d.cycle;r.active=d.active;r.reloadHeld=physicalResult.reloadHeld;r.ammoOwnsHand=physicalResult.ammoOwnsHand;
+            fireTrace.record.shellSource=sample.raw.inputEvidence.sequence;fireTrace.record.shellSourceDeadlineNs=sample.raw.inputEvidence.deadlineNs;}
         // The receipt event is presentation-only. Keep the exact selected
         // manual cycle as audio owner through its stock finish tail; no native
         // reload/pump clock, hand claim or ammunition authority is changed.
@@ -2359,6 +2383,10 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         supportEvidence->support:interaction::SupportGripContact{};
     std::optional<WeaponModeCommand> physicalMode;std::uint64_t physicalRequest=0;
     bool sightOwnsHand=false;rigPublication::SightPreview sightPreview;
+    if(fireTrace.observing&&sightFlip){auto& r=fireTrace.record.interactions.sight;r.observed=true;r.phase=unsigned(sightPhase);
+        r.admissionFlags=(fixedResult.ammoOwnsHand?1u:0u)|(fixedResult.mechanismOwnsHand?2u:0u)|(boltResult.ownsGunCustody?4u:0u)|
+            (pumpResult.ownsHand?8u:0u)|(physicalResult.ammoOwnsHand?16u:0u)|(magazineResult.ownsLeftHand?32u:0u)|
+            (magazineResult.blocksWeaponActions?64u:0u)|(bodyDraw.pending?128u:0u);}
     if(sightFlip&&!fixedResult.ammoOwnsHand&&!fixedResult.mechanismOwnsHand&&!boltResult.ownsGunCustody&&!pumpResult.ownsHand&&!physicalResult.ammoOwnsHand&&!magazineResult.ownsLeftHand&&!magazineResult.blocksWeaponActions&&!bodyDraw.pending){
         const auto sightEvidence=rigPublication::ReadWeaponShotFrame(owner.soldier,owner.weak,owner.weapon);
         // Sight preference and support distance come from one immutable pose.
@@ -2403,6 +2431,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             // publication generation and deadline even when raw input is newer.
             auto proposed=*sightPolicy;
             sightResult=proposed.Update(packet.sample);
+            if(fireTrace.observing)fireTrace.record.interactions.sight.evaluated=true;
             gatherSightAck=live.acknowledgedRequest;
             if(sightResult.phase!=interaction::SightFlipPhase::Idle){
                 const bool geometry=packet.paired&&contact.valid&&packet.geometrySequence==contact.generation;
@@ -2425,6 +2454,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
                     // keep the original unexpired reservation without new pose.
                     owned=acknowledged&&existing&&existing->token.kind==interaction::HandClaimKind::Sight;
                 }
+                if(fireTrace.observing){auto& r=fireTrace.record.interactions.sight;r.ownershipAttempted=true;r.ownershipAccepted=owned;}
                 if(!owned){
                     // Cancel the original pending interaction, not the trial
                     // state that may already have consumed its acknowledgement.
@@ -2490,7 +2520,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
                 const auto expected=sightResult.request->target==interaction::SightMode::Secondary?33u:36u;
                 if(mode&&mode->action==expected&&!pendingMode){
                     physicalMode=mode;physicalRequest=sightResult.request->id;++sightRequests;
-                }else{++modeRejections;CancelSight();}
+                }else{++modeRejections;CancelSight();if(fireTrace.observing)fireTrace.record.interactions.sight.dispatchRejected=true;}
             }
             const auto claim=handOwnership.Current(interaction::InteractionHand::Left);
             sightOwnsHand=sightPhase!=interaction::SightFlipPhase::Idle&&claim&&claim->token.kind==interaction::HandClaimKind::Sight;
@@ -2506,6 +2536,13 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         record.preferred=preferred;record.tracked=live.tracked;record.familyValid=bool(familyBinding);
         record.paired=packet.paired;record.advanced=packet.advanced;
         RecordSight(record,sightResult.grabbed||sightResult.request||sightResult.cancelled||sightResult.committedMode||sightResult.released);
+        if(fireTrace.observing){auto& r=fireTrace.record.interactions.sight;r.packetObserved=true;r.phase=unsigned(sightPhase);r.policyPhase=record.phase;
+            r.reason=record.cancel;r.packetReason=record.packetReason;r.request=record.request;r.familyValid=record.familyValid;
+            r.adapterEnabled=sightAdapter&&SightAdapterEnabled(*sightAdapter);r.contact=record.contact;r.preferred=record.preferred;
+            r.paired=record.paired;r.advanced=record.advanced;r.grabbed=record.grabbed;r.committed=record.committed;
+            r.cancelled=sightResult.cancelled||r.cancelled;r.released=sightResult.released||r.released;
+            fireTrace.record.sightDistance=record.distance;fireTrace.record.sightAngle=record.angle;
+            fireTrace.record.sightSource=contact.generation;fireTrace.record.sightSourceDeadlineNs=HandNanos(contact.deadline);}
     }
     if(sightOwnsHand){out.held&=~interaction::Fire;out.pressed&=~interaction::Fire;}
     const auto boltRawInput=input; // Preserve actual prepared controller pose before support guidance.
@@ -2553,6 +2590,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         if(supported.holding){
             const bool owned=supportEvidence&&OwnLeft(interaction::HandClaimKind::WeaponSupport,supported.engaged,
                 supportEvidence->generation,supportEvidence->deadline,owner.weapon,&supported,cancel);
+            if(fireTrace.observing){auto& r=fireTrace.record.interactions.support;r.ownershipAttempted=true;r.ownershipAccepted=owned;}
             if(!owned){
                 // Re-evaluate the original state with cancellation: a rejected
                 // trial grab is not logged as an accepted grab/release pair.
@@ -2599,6 +2637,20 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         evidence.cancelFlags=(sightOwnsHand?1u:0u)|(!aimValid?2u:0u)|(!out.active?4u:0u)|(((out.pressed|out.held)&interaction::Use)?8u:0u)|(((out.pressed|out.held)&interaction::NextWeapon)?16u:0u)|(((out.pressed|out.held)&interaction::PreviousWeapon)?32u:0u)|(physicalResult.ammoOwnsHand?64u:0u)|(MagazineBlocksSupport(magazineResult,HandNanos(supportClock.QuadPart))?128u:0u);
         evidence.focused=input.focused;evidence.headTracked=input.headValid;evidence.leftGripTracked=input.hands[0].gripTracked;evidence.rightGripTracked=input.hands[1].gripTracked;evidence.rightAimTracked=input.hands[1].aimTracked;
         evidence.leftGrip=input.hands[0].grip.position;evidence.rightGrip=input.hands[1].grip.position;
+        if(fireTrace.observing){auto& r=fireTrace.record.interactions.support;r.observed=r.evaluated=true;r.reason=evidence.sample.reason;
+            r.cancelFlags=evidence.cancelFlags|(bodyDraw.pending?256u:0u)|(fixedResult.ammoOwnsHand?512u:0u)|
+                (fixedResult.mechanismOwnsHand?1024u:0u)|(feedResult.ownsHand?2048u:0u)|(pistolSlideResult.ownsHand?4096u:0u)|
+                (boltResult.tracking.custody==interaction::BoltCustodyPhase::Manipulating?8192u:0u)|(pumpResult.ownsHand?16384u:0u);
+            r.token=supported.token;r.previousToken=evidence.previousToken;r.holding=supported.holding;
+            r.engaged=supported.engaged;r.released=supported.released;r.contact=contact.valid;r.handBusy=handBusy;r.cancel=cancel;
+            r.inputFlags=(evidence.focused?1u:0u)|(evidence.headTracked?2u:0u)|(evidence.leftGripTracked?4u:0u)|
+                (evidence.rightGripTracked?8u:0u)|(evidence.rightAimTracked?16u:0u)|(input.hands[0].squeeze>=.7f?32u:0u);
+            r.distanceBand=!contact.valid||!std::isfinite(contact.distanceMeters)?0:
+                contact.distanceMeters<=interaction::SupportGripAcquireRadiusMeters?1:
+                contact.distanceMeters<=interaction::SupportGripRetentionRadiusMeters?2:3;
+            fireTrace.record.supportDistance=contact.distanceMeters;fireTrace.record.leftSqueeze=input.hands[0].squeeze;
+            fireTrace.record.supportSource=supportEvidence?supportEvidence->generation:0;
+            fireTrace.record.supportSourceDeadlineNs=supportEvidence?HandNanos(supportEvidence->deadline):0;}
         // Retain first/changed failed squeeze, never a per-frame retry stream.
         // Ordinary records roll over before users finish describing a delay.
         const bool failedAttempt=input.hands[0].squeeze>=.7f&&!supported.holding;
@@ -2671,6 +2723,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
                 rigPublication::Tracking sample{input,owner.soldier,owner.weak,owner.weapon,rigEpoch,inputDeadline,baseYaw,consumedOffset,actorPosition};
                 sample.controllerOwner={owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
                 sample.controllerEvidence=handSample;
+                sample.selectedMeshes=selectedMeshes.Read(magazineOwner,HandNanos(clock.QuadPart));
                 sample.equipmentGeneration=twoHandGrip?handEquip:renderEquipmentEpoch;sample.nativeEquipment=owner.equipment;sample.sightPhysicalItem=familyBinding?familyBinding->persistent:0;sample.sightAdapter=familyBinding?SightAdapterForFamily(familyBinding->family):nullptr;sample.sightSecondary=familyBinding&&familyBinding->selectedSecondary;sample.weaponProfile=itemProfile;sample.assetName=weaponAsset;sample.supportHolding=supportHeld;sample.supportToken=supportToken;sample.sightPreview=sightPreview;sample.reload=physicalResult.tracking;sample.pump=pumpResult.tracking;sample.bolt=boltResult.tracking;sample.boltRawInput=boltRawInput;sample.magazine=magazineResult.tracking;sample.bodyMagazine=magazineResult.bodyAmmo;sample.fixedContainer=fixedResult.tracking;if(fixedResult.bodyAmmo&&fixedResult.bodyVisual){BodyAmmoTracking fixed;fixed.visual=*fixedResult.bodyVisual;fixed.fixed=fixedResult.bodyAmmo;sample.fixedBodyAmmo=std::move(fixed);}sample.feed=feedResult.presentation;if(feedResult.bodyAmmo&&feedResult.bodyVisual){BodyAmmoTracking feed;feed.visual=*feedResult.bodyVisual;feed.feed=feedResult.bodyAmmo;sample.feedBodyAmmo=std::move(feed);}sample.pistolSlide=pistolSlideResult.presentation;sample.weaponActionsBlocked=fixedResult.blocksFire||pistolSlideResult.blocksFire||feedResult.blocksFire||magazineResult.blocksWeaponActions||pumpResult.blocksFire||boltResult.blocksFire;if(bodyHolster||magazineDetached)holsterTracking=sample;else rigPublication::PublishTracking(sample);
             }
             else{++bodyReadFailures;rigPublication::PublishTracking({});}

@@ -79,6 +79,11 @@ struct PhysicalReloadProbeState {
     std::optional<Bc2AmmoReserveLease> reserve;
     ReloadHoldIdentity identity{};std::uint64_t cycle=0;
 };
+struct PhysicalReloadDiagnostic {
+    unsigned cancelReason=~0u,supplyReason=~0u,flags=0,sourceFlags=0,bridgePhase=0;
+    std::uint64_t cycle=0;
+    bool active=false;
+};
 class Bc2PhysicalReload {
 public:
     static interaction::AmmoSupplyConfig DefaultPouch()noexcept;
@@ -102,6 +107,8 @@ public:
     void Cancel(const interaction::HandInteractionSample&,interaction::HandInteraction&,
         PhysicalReloadCancelReason reason=PhysicalReloadCancelReason::External,unsigned sourceFlags=0)noexcept;
     void Report(std::ostream&)const;
+    // Same serialized Gameplay callback only; not a worker-thread reader.
+    PhysicalReloadDiagnostic Diagnostic()const noexcept {return diagnostic_;}
     bool BlocksEquipment()const noexcept {return active_||supply_.Held().has_value()||
         ((retiring_||supply_.Pending().has_value())&&blocksCurrent_);}
     PhysicalReloadProbeState ProbeState(std::int64_t now)const noexcept {
@@ -109,6 +116,7 @@ public:
             bool(supply_.Pending()),acquired_,submitted_,completed_,reserve_,native_,cycle_};
     }
 private:
+    PhysicalReloadDiagnostic diagnostic_{};
     struct Evidence {interaction::AmmoSupplySample supply{};interaction::HandClaim item{},gun{};};
     struct DeferredSeat {
         Bc2ReloadInteractionSample contact{};interaction::ReloadInsertionSeat seat{};

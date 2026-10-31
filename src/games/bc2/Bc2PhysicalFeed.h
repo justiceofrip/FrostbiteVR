@@ -68,7 +68,18 @@ struct Bc2PhysicalFeedSample {
     bool selectedRigVerified=false;
     bool grip=false,reloadPressed=false,cancel=false;
 };
+// Observation labels only; ordinal order is the session telemetry schema.
+enum class Bc2PhysicalFeedExit:unsigned {None,Updated,ApiUnavailable,ViewUnavailable,SelectionOrInput,
+    StorageUnavailable,MigrationUnverified,GunOrRawUnverified,LifetimeExhausted,SessionUnavailable,Blocked,PolicyStatus};
+struct Bc2PhysicalFeedDiagnostic {
+    Bc2PhysicalFeedExit exit=Bc2PhysicalFeedExit::None;
+    unsigned flags=0,status=0,rawChecked=0,rawPassed=0,admissionChecked=0,admissionPassed=0;
+    unsigned reloadPhase=~0u,operation=~0u;
+    unsigned selectionFailure=~0u;
+    bool policyEvaluated=false;
+};
 struct Bc2PhysicalFeedResult {
+    Bc2PhysicalFeedDiagnostic diagnostic{};
     bool selected=false,blocksFire=false,ownsHand=false,pending=false,submitRefused=false;
     // An idle unfinished mechanism may be stowed. Only a live hand operation
     // or an unresolved native request prevents an equipment transition.

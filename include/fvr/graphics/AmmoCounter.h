@@ -21,10 +21,20 @@ struct alignas(8) AmmoCounterSample {
 static_assert(sizeof(AmmoCounterSample)==64&&offsetof(AmmoCounterSample,loaded)==48);
 static_assert(std::is_trivially_copyable_v<AmmoCounterSample>);
 inline constexpr std::int64_t AmmoCounterMaxAgeNs=100000000;
+// An owner-only packet carries no ammunition observation. Its original times
+// describe current held ownership, allowing the HUD to keep its last digits.
+// Older wire consumers reject the reserved tag; the 64-byte layout is unchanged.
+inline constexpr std::uint32_t AmmoCounterOwnerOnly=1;
+inline constexpr std::int64_t AmmoCounterOwnerMaxAgeNs=250000000;
 inline bool AmmoCounterFresh(const AmmoCounterSample& s,std::int64_t now)noexcept {
     return s.sequence&&s.actorGeneration&&s.equipmentGeneration&&s.spaceGeneration&&!s.reserved&&
         s.observedNs>0&&s.observedNs<=now&&s.deadlineNs>now&&s.deadlineNs-s.observedNs<=AmmoCounterMaxAgeNs&&
         s.capacity>0&&s.capacity<=1000000&&s.loaded>=0&&s.loaded<=s.capacity&&s.reserve>=0&&s.reserve<=1000000;
+}
+inline bool AmmoCounterOwnerOnlyFresh(const AmmoCounterSample& s,std::int64_t now)noexcept {
+    return !s.sequence&&s.reserved==AmmoCounterOwnerOnly&&s.actorGeneration&&s.equipmentGeneration&&s.spaceGeneration&&
+        !s.loaded&&!s.reserve&&!s.capacity&&s.observedNs>0&&s.observedNs<=now&&s.deadlineNs>now&&
+        s.deadlineNs-s.observedNs<=AmmoCounterOwnerMaxAgeNs;
 }
 inline bool SameAmmoCounterOwner(const AmmoCounterSample& a,const AmmoCounterSample& b)noexcept {
     return a.actorGeneration==b.actorGeneration&&a.equipmentGeneration==b.equipmentGeneration&&a.spaceGeneration==b.spaceGeneration;
@@ -46,25 +56,46 @@ inline std::optional<AmmoCounterSample> AmmoCounterPair(const AmmoCounterSample&
     out.deadlineNs=(std::min)(a.deadlineNs,b.deadlineNs);
     return AmmoCounterFresh(out,now)?std::optional{out}:std::nullopt;
 }
-// Counts have their own expiry, even while the host retains a world image.
+// Count admission stays strict, but admitted digits are presentation state.
+// Only independent current-owner evidence can keep them visible through an
+// ammo-publication gap. Never renew the saved ammunition observation itself.
 class AmmoCounterPresentation {
 public:
-    void Reset()noexcept {visible_=false;last_={};}
+    void Reset()noexcept {last_={};owner_={};}
     bool Receive(const AmmoCounterSample& a,const AmmoCounterSample& b,std::uint64_t space,std::int64_t now)noexcept {
-        visible_=false;auto next=AmmoCounterPair(a,b,space,now);if(!next)return false;
-        if(last_.sequence&&SameAmmoCounterOwner(last_,*next)){
-            if(next->sequence<last_.sequence||next->observedNs<last_.observedNs)return false;
+        const bool countA=AmmoCounterFresh(a,now),countB=AmmoCounterFresh(b,now);
+        if(!space||a.spaceGeneration!=space||!SameAmmoCounterOwner(a,b)||
+           (!countA&&!AmmoCounterOwnerOnlyFresh(a,now))||(!countB&&!AmmoCounterOwnerOnlyFresh(b,now))){Reset();return false;}
+        if(owner_.actorGeneration&&!SameAmmoCounterOwner(owner_,a))Reset();
+        const auto renewOwner=[&](const AmmoCounterSample& left,const AmmoCounterSample& right)noexcept {
+            auto owner=left.observedNs>=right.observedNs?left:right;
+            owner.deadlineNs=(std::min)(left.deadlineNs,right.deadlineNs);
+            if(owner.observedNs==owner_.observedNs)owner.deadlineNs=(std::min)(owner.deadlineNs,owner_.deadlineNs);
+            if(owner.observedNs>=owner_.observedNs)owner_=owner;
+        };
+        if(!countA&&!countB){renewOwner(a,b);return Select(space,now)!=nullptr;}
+        const auto rejectCount=[&]()noexcept {
+            // Rejected count metadata cannot renew ownership. An independently
+            // valid owner-only marker in the other eye still can.
+            if(!countA)renewOwner(a,a);if(!countB)renewOwner(b,b);return false;
+        };
+        auto next=countA&&countB?AmmoCounterPair(a,b,space,now):std::optional{countA?a:b};
+        if(!next)return rejectCount();
+        if(last_.sequence){
+            if(next->sequence<last_.sequence||next->observedNs<last_.observedNs)return rejectCount();
             if(next->sequence==last_.sequence){
-                if(next->observedNs!=last_.observedNs||!SameAmmoCounterCounts(last_,*next))return false;
+                if(next->observedNs!=last_.observedNs||!SameAmmoCounterCounts(last_,*next))return rejectCount();
                 next->deadlineNs=(std::min)(next->deadlineNs,last_.deadlineNs);
             }
         }
-        if(!AmmoCounterFresh(*next,now))return false;last_=*next;visible_=true;return true;
+        if(!AmmoCounterFresh(*next,now))return rejectCount();
+        renewOwner(*next,countA&&countB?*next:countA?b:a);last_=*next;return true;
     }
     const AmmoCounterSample* Select(std::uint64_t space,std::int64_t now)const noexcept {
-        return visible_&&last_.spaceGeneration==space&&AmmoCounterFresh(last_,now)?&last_:nullptr;
+        return last_.sequence&&last_.spaceGeneration==space&&SameAmmoCounterOwner(last_,owner_)&&
+            last_.observedNs<=now&&owner_.observedNs<=now&&owner_.deadlineNs>now?&last_:nullptr;
     }
-private:AmmoCounterSample last_{};bool visible_=false;
+private:AmmoCounterSample last_{},owner_{};
 };
 struct AmmoCounterText {std::array<char,24> data{};std::size_t size=0;};
 inline AmmoCounterText FormatAmmoCounter(std::int32_t loaded,std::int32_t reserve)noexcept {

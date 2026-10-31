@@ -101,7 +101,135 @@ void ProducerContentionCounterexampleAndCommit(){
     Check(skipped&&oldSplit&&newMatched);
     std::cout<<"Rig input producer contention: legacy native-root/private-hand split reproduced; immutable input + real commit/handoff matched\n";
 }
-void Run(){LatestInputSurvivesScratchContention();ProducerContentionCounterexampleAndCommit();}
+void SelectedConfigurationStaysWithCapturedInput(){
+    static constexpr std::int64_t now=1000000000;
+    constexpr std::string_view digest="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    const SightAdapterProfile* sight=nullptr;
+    for(const auto& p:SightAdapterProfiles)if(p.family&&p.family->primaryAsset=="AN94_sp_k"&&
+        p.assembly==SightAssemblyKind::Subtree&&p.authored){sight=&p;break;}
+    Check(sight&&SightAdapterEnabled(*sight));
+    const auto text=[](auto& bytes,std::string_view value){bytes={};std::copy(value.begin(),value.end(),bytes.begin());};
+    math::Matrix4 identity{};for(unsigned n=0;n<4;++n)identity.values[n][n]=1;
+    AuthoredGripProfile profile{sight->family->primaryAsset,sight->authored->meshPath,digest,digest,digest,
+        sight->authored->rigFingerprint,identity,identity};
+    profile.leftInWeapon.values[3][2]=.4f;profile.authoredRifleSupport=true;
+    AuthoredSupportProfile support{profile.assetName,profile.meshPath,digest,digest,digest,
+        profile.rigFingerprint,profile.leftInWeapon,true};
+    Tracking source;source.soldier=10;source.weak=11;source.weapon=15;source.ownerGeneration=12;
+    source.equipmentGeneration=13;source.input.spaceGeneration=14;source.input.generation=22;
+    source.input.predictedNs=now;source.input.focused=source.input.headValid=true;source.deadline=now+90000000;
+    for(auto& hand:source.input.hands){hand.gripTracked=hand.aimTracked=true;hand.active=interaction::Components;}
+    source.input.hands[0].grip.position.z=-.4f;source.input.hands[0].squeeze=1;
+    source.nativeEquipment.weapon=15;source.nativeEquipment.data=16;text(source.nativeEquipment.asset,profile.assetName);
+    auto selected=std::make_shared<SelectedMeshesSnapshot>();
+    selected->owner={9,10,11,15,12,18,14};selected->sequence=20;selected->observedNs=now-10000000;
+    selected->deadlineNs=now+190000000;selected->weaponData=16;selected->stateTypeInfo=1;selected->meshTypeInfo=2;
+    selected->inventory=3;selected->selectedSlot=4;selected->stateCount=1;selected->soleConfiguredArray=5;
+    text(selected->weaponName,profile.assetName);text(selected->configurationPath,sight->family->primaryConfiguration);
+    selected->configurationPathVerified=true;selected->configurationPathPointer=8;
+    auto& state=selected->states[0];state.array=5;state.state=6;state.count=1;
+    state.meshes[0].address=7;state.meshes[0].typeInfo=2;state.meshes[0].namePointer=8;
+    text(state.meshes[0].assetPath,profile.meshPath);source.selectedMeshes=selected;
+    std::atomic<std::shared_ptr<const Tracking>> publication;
+    PublishRigInputAfterGuard(publication,std::make_shared<const Tracking>(source),[]{});
+    const auto captured=ReadRigInputForPose(publication,[&](std::int64_t deadline){return now<deadline;});
+    Check(captured&&captured->selectedMeshes==selected);
+    const AuthoredGripOwner owner{10,11,12,13,14,captured->input.generation,captured->deadline};
+    // The input is already captured when a same-owner observation advances.
+    // Old code independently loaded this newer source while posing input22.
+    auto newer=std::make_shared<SelectedMeshesSnapshot>(*selected);
+    newer->sequence=30;newer->observedNs=now;newer->deadlineNs=now+200000000;
+    std::atomic<std::shared_ptr<const SelectedMeshesSnapshot>> current(newer);
+    const auto legacy=BindAuthoredGrip({&profile,1},current.load(),source.nativeEquipment,owner,profile.rigFingerprint,now,false);
+    Check(legacy.status==AuthoredGripStatus::Expired&&!legacy.binding);
+    Check(!BindAuthoredSupportReference({&support,1},current.load(),source.nativeEquipment,owner,profile.rigFingerprint,now));
+    Check(!SightAdapterSelectedMesh(*sight,current.load().get(),source.nativeEquipment,owner,profile.rigFingerprint,now));
+    const auto bound=BindAuthoredGrip({&profile,1},captured->selectedMeshes,source.nativeEquipment,owner,profile.rigFingerprint,now,false);
+    const auto boundSupport=BindAuthoredSupportReference({&support,1},captured->selectedMeshes,source.nativeEquipment,owner,profile.rigFingerprint,now);
+    Check(bound.binding&&AuthoredRifleSupport(*bound.binding)&&boundSupport);
+    Check(SightAdapterSelectedMesh(*sight,captured->selectedMeshes.get(),source.nativeEquipment,owner,profile.rigFingerprint,now));
+    // Reproduce the resulting policy drop, then retain the same held grasp
+    // using the matching original contact. No synthetic neutral/regrab occurs.
+    interaction::SupportGrip policy;auto neutral=source.input;neutral.generation=20;neutral.hands[0].squeeze=0;
+    const interaction::SupportGripOwner gripOwner{1,12,15};
+    policy.Update(gripOwner,neutral,{true,0,{}});auto pressed=source.input;pressed.generation=21;
+    const auto grabbed=policy.Update(gripOwner,pressed,{true,0,{}});Check(grabbed.engaged&&grabbed.holding);
+    auto legacyPolicy=policy;const auto dropped=legacyPolicy.Update(gripOwner,source.input,{});
+    Check(dropped.released&&dropped.reason==interaction::SupportRelease::Contact);
+    const auto retained=policy.Update(gripOwner,source.input,{true,0,{}});
+    Check(retained.holding&&!retained.engaged&&!retained.released&&retained.token==grabbed.token);
+    // Current-global admission still checks replacement and the original lease.
+    auto currentOwner=owner;currentOwner.inputSequence=30;currentOwner.inputDeadlineNs=now+100000000;
+    const auto stillCurrent=[&](const SelectedMeshesSnapshot* value,const AuthoredGripOwner& live,std::int64_t at=now){
+        return AuthoredGripCurrent(*bound.binding,value,source.nativeEquipment,live,at)&&
+            AuthoredSupportCurrent(*boundSupport,value,source.nativeEquipment,live,at);
+    };
+    Check(stillCurrent(current.load().get(),currentOwner));
+    const rigPublication::SightSelectionEvidence sightEvidence{
+        sight,captured->selectedMeshes,source.nativeEquipment,owner,profile.rigFingerprint};
+    const auto sightCurrent=[&](const SelectedMeshesSnapshot* value,const AuthoredGripOwner& live,std::int64_t at=now){
+        return rigPublication::SightSelectionCurrent(sightEvidence,value,source.nativeEquipment,live,at);
+    };
+    // The selected observation can advance before either the original pose or
+    // its input guard advances. It confirms identity without becoming a source.
+    Check(sightCurrent(newer.get(),owner)&&sightCurrent(newer.get(),currentOwner));
+    const RigPaletteCopyState commitState{{source.soldier,source.weak,source.weapon,
+        source.ownerGeneration,source.equipmentGeneration,source.input.spaceGeneration},
+        owner.inputSequence,owner.inputDeadlineNs,true};
+    auto liveState=commitState;liveState.input=currentOwner.inputSequence;liveState.deadline=currentOwner.inputDeadlineNs;
+    std::array<unsigned,3> outputs{11,12,13};unsigned commits=0;
+    const auto commitSight=[&](){
+        return TryCommitRigPublication(commitState,[&]{return RigPaletteCopyObservation{liveState,now};},
+            [&]{return stillCurrent(current.load().get(),currentOwner)&&sightCurrent(current.load().get(),currentOwner);},
+            [&]()noexcept {outputs={21,22,23};++commits;});
+    };
+    for(unsigned loss=0;loss<5;++loss){
+        auto lost=std::make_shared<SelectedMeshesSnapshot>(*newer);
+        if(loss==0||loss==2)lost->configurationPathPointer=0;
+        if(loss==1||loss==2)lost->configurationPathVerified=false;
+        if(loss==3)text(lost->configurationPath,"unrelated/configuration");
+        if(loss==4)++lost->configurationPathPointer;
+        current.store(lost);
+        // Reproduce the reviewed hole: cached sight admission and the existing
+        // grip/support checks all pass after CURRENT configuration proof is lost.
+        Check(SightAdapterSelectedMesh(*sight,captured->selectedMeshes.get(),source.nativeEquipment,owner,profile.rigFingerprint,now));
+        Check(stillCurrent(lost.get(),currentOwner));
+        Check(!commitSight()&&commits==0&&(outputs==std::array<unsigned,3>{11,12,13}));
+        Check(!sightCurrent(lost.get(),currentOwner)); // Same gate at contact consumption.
+    }
+    current.store(newer);Check(commitSight()&&commits==1&&(outputs==std::array<unsigned,3>{21,22,23}));
+    auto lostAfterCommit=std::make_shared<SelectedMeshesSnapshot>(*newer);
+    ++lostAfterCommit->sequence;lostAfterCommit->configurationPathPointer=0;lostAfterCommit->configurationPathVerified=false;
+    current.store(lostAfterCommit);Check(!sightCurrent(current.load().get(),currentOwner));
+    auto recovered=std::make_shared<SelectedMeshesSnapshot>(*newer);recovered->sequence=lostAfterCommit->sequence+1;
+    current.store(recovered);Check(sightCurrent(current.load().get(),currentOwner));
+    Check(!sightCurrent(nullptr,currentOwner));
+    Check(!sightCurrent(newer.get(),currentOwner,owner.inputDeadlineNs));
+    auto extendedSightOwner=currentOwner;extendedSightOwner.inputDeadlineNs=now+240000000;
+    Check(!sightCurrent(newer.get(),extendedSightOwner,selected->deadlineNs));
+    auto staleSight=*newer;staleSight.deadlineNs=now;Check(!sightCurrent(&staleSight,currentOwner));
+    auto changedSight=*newer;++changedSight.states[0].header[1];Check(!sightCurrent(&changedSight,currentOwner));
+    auto replacedSightOwner=currentOwner;++replacedSightOwner.equipmentGeneration;Check(!sightCurrent(newer.get(),replacedSightOwner));
+    Check(sightEvidence.selected==captured->selectedMeshes&&sightEvidence.owner.inputSequence==owner.inputSequence&&
+        sightEvidence.owner.inputDeadlineNs==owner.inputDeadlineNs);
+    Check(!stillCurrent(nullptr,currentOwner));
+    auto changed=*newer;++changed.owner.soldier;Check(!stillCurrent(&changed,currentOwner));
+    changed=*newer;++changed.owner.space;Check(!stillCurrent(&changed,currentOwner));
+    changed=*newer;++changed.weaponData;Check(!stillCurrent(&changed,currentOwner));
+    changed=*newer;++changed.states[0].header[1];Check(!stillCurrent(&changed,currentOwner));
+    auto replacedOwner=currentOwner;++replacedOwner.equipmentGeneration;Check(!stillCurrent(newer.get(),replacedOwner));
+    Check(!stillCurrent(newer.get(),currentOwner,owner.inputDeadlineNs));
+    auto extended=currentOwner;extended.inputDeadlineNs=now+240000000;
+    Check(!stillCurrent(newer.get(),extended,selected->deadlineNs));
+    Check(!SightAdapterSelectedMesh(*sight,captured->selectedMeshes.get(),source.nativeEquipment,owner,profile.rigFingerprint,owner.inputDeadlineNs));
+    auto wrongOwner=owner;++wrongOwner.space;
+    Check(!SightAdapterSelectedMesh(*sight,captured->selectedMeshes.get(),source.nativeEquipment,wrongOwner,profile.rigFingerprint,now));
+    source.selectedMeshes=newer;
+    Check(captured->selectedMeshes==selected&&captured->selectedMeshes->sequence==20);
+    std::cout<<"Rig configuration/input interleave: future grip/support/sight rejection reproduced; paired source retains grasp with original lifetime gates\n";
+    std::cout<<"Rig subtree sight configuration: current proof loss rejects commit/contact; matching newer sequence preserves the original lease\n";
+}
+void Run(){LatestInputSurvivesScratchContention();ProducerContentionCounterexampleAndCommit();SelectedConfigurationStaysWithCapturedInput();}
 }
 namespace publication_commit_regression {
 using namespace fvr::bc2;

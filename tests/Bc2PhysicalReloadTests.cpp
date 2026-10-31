@@ -940,6 +940,37 @@ int PumpIdleAllowsChestShellPulseAndActualInsertion(){
  }
  return 0;
 }
+int MissingPumpObservationPreservesShellWithoutGrantingNativeAuthority(){
+ for(bool physicalBlocked:{false,true}){Fixture f;CHECK(f.Begin());
+  const auto shell=f.hands.Current(InteractionHand::Left)->token;
+  const auto gates=EvaluatePumpActionGates(true,physicalBlocked,false,std::nullopt);
+  ActionOutput actions;actions.held=actions.pressed=Fire|Reload|Use|NextWeapon;
+  ApplyPumpActionGate(actions,gates.blockActions);CHECK(!actions.held&&!actions.pressed);
+  f.s.cancel=gates.cancelReload;
+  for(unsigned n=0;n<3;++n){f.Send(true,-.05f);
+   CHECK(f.cancels==0&&f.result.ammoOwnsHand&&f.starts==1&&f.submits==0);
+   CHECK(f.hands.Current(InteractionHand::Left)->token==shell);
+   CHECK(!f.policy->ProbeState(f.now).nativeHolding&&f.reserve.loaded==2&&f.reserve.reserve==8);}
+  // Only a genuine native hold admits insertion after the observation returns.
+  f.held=true;f.s.cancel=EvaluatePumpActionGates(true,false,false,false).cancelReload;
+  for(float z:{-.05f,-.05f,-.02f,0.f,.025f,.05f,.05f,.05f,.05f,.05f,.05f,.05f})f.Send(true,z);
+  CHECK(f.submits==1&&f.cancels==0);f.Ack();f.Send(true,.05f);
+  CHECK(f.policy->ProbeState(f.now).completed==1&&f.reserve.loaded==3&&f.reserve.reserve==7);
+ }
+ // A retained physical cycle or observed native debt still cancels custody.
+ for(bool physicalDebt:{false,true}){Fixture f;CHECK(f.Begin());
+  const auto gates=EvaluatePumpActionGates(true,true,physicalDebt,physicalDebt?std::nullopt:std::optional(true));
+  CHECK(gates.blockActions&&gates.cancelReload);f.s.cancel=gates.cancelReload;f.Send(true);
+  CHECK(f.cancels==1&&!f.result.ammoOwnsHand&&f.submits==0);}
+ // Observation loss cannot override real release, tracking loss or replacement.
+ for(unsigned fault=0;fault<3;++fault){Fixture f;CHECK(f.Begin());
+  f.s.cancel=EvaluatePumpActionGates(true,true,false,std::nullopt).cancelReload;
+  if(fault==1)f.s.input.tracked[0]=false;if(fault==2)++f.s.nativeOwner.equipGeneration;
+  f.Send(fault!=0);CHECK(!f.result.ammoOwnsHand&&f.submits==0);
+  if(fault)CHECK(f.cancels==1);
+ }
+ return 0;
+}
 int PumpDebtBlocksNewShellAndBodyActionsWithoutInventingNeutral(){
  Fixture f;Bc2NativeCycleService pump;f.pump=&pump;
  Bc2NativeCycleControl control{f.s.nativeOwner,f.s.input,f.s.weapon,{991,17},{},true};CHECK(pump.Control(control));
@@ -1150,6 +1181,7 @@ int ExpiredHoldGapRequiresCurrentCustodyAndOwner(){
 
 #include "Bc2ShellStartDeferralChecks.inc"
 int main(int argc,char** argv){
+ CHECK(MissingPumpObservationPreservesShellWithoutGrantingNativeAuthority()==0);
  CHECK(StockShellHideFollowsManualGunNotTheNativeTransaction()==0);
  if(argc==2&&std::strcmp(argv[1],"--expired-held-cohort")==0){
   CHECK(SecondHeldShellSurvivesTypedReadAcrossHoldExpiry()==0);

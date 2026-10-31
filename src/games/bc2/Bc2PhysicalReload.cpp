@@ -601,6 +601,7 @@ void Bc2PhysicalReload::ObserveAvailability(const PhysicalReloadSample& s,const 
     flag(25,reserve&&reserve_->allThreeIdle);flag(26,reserve&&reserve_->reloadInputReady);flag(27,source);flag(28,beltEnabled_);
     flag(29,pouch_.alternateContact.has_value());flag(30,s.cancel&&!s.cancelFlags);
     if(reserve){v.loaded=reserve_->loaded;v.reserve=reserve_->reserve;v.capacity=reserve_->capacity;row.reserveObserved=reserve_->observedNs;row.reserveDeadline=reserve_->deadlineNs;}
+    diagnostic_={v.cancelReason,v.supplyReason,v.flags,v.sourceFlags,unsigned(bridge_.Phase()),cycle_,active_};
     if(availabilityLast_&&*availabilityLast_==v)return;
     availabilityLast_=v;++availabilityTransitions_;row.sequence=in.sequence;row.geometrySequence=s.geometrySequence;
     row.rawSequence=s.raw.inputEvidence.sequence;row.rawObserved=s.raw.inputEvidence.observedNs;row.rawDeadline=s.raw.inputEvidence.deadlineNs;

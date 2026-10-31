@@ -75,7 +75,7 @@ int Run(){
         hud.Receive(nullptr,ticket,now);CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(hud.Errors()==0);
         CHECK(hud.ValidSamples()==5&&hud.InvalidSamples()==2);
         // Count changes during a stereo pair choose one newest sample for both
-        // eyes. A delayed upload can retain old digits only until THEIR expiry.
+        // eyes. A delayed upload retains old digits while the current owner is fresh.
         for(auto& e:frame.eyes){++e.ammo.sequence;e.ammo.observedNs=now;e.ammo.deadlineNs=now+100000000;e.ammo.loaded=5;}
         hud.Receive(&frame,ticket,now);CHECK(hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(PixelsMatch(5,0)==0);
         now+=90000000;
@@ -83,14 +83,23 @@ int Run(){
         ++frame.eyes[1].ammo.sequence;frame.eyes[1].ammo.loaded=4;
         hud.Receive(&frame,ticket,now);waitResult=XR_TIMEOUT_EXPIRED;
         CHECK(hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(PixelsMatch(5,0)==0);
-        now+=9999999;clockReads=0;clockAdvanceAt=3;clockAdvanceNs=1;
-        CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true)); // Old image expires INSIDE Layer; newer count remains fresh.
+        now+=9999999;clockReads=0;clockAdvanceAt=2;clockAdvanceNs=1;
+        CHECK(hud.Layer(Handle<XrSpace>(4),input,Clock,true)); // Old image count expires inside Layer; current owner remains fresh.
+        CHECK(PixelsMatch(5,0)==0);
         clockAdvanceAt=0;
         waitResult=XR_SUCCESS;CHECK(hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(PixelsMatch(4,0)==0);
         for(auto& e:frame.eyes){++e.ammo.equipmentGeneration;++e.ammo.sequence;e.ammo.loaded=3;}
         hud.Receive(&frame,ticket,now);waitResult=XR_TIMEOUT_EXPIRED;
         CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true)); // Cannot display another weapon's count.
         waitResult=XR_SUCCESS;CHECK(hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(PixelsMatch(3,0)==0);
+        const auto ownerDeadline=frame.eyes[0].ammo.deadlineNs;
+        for(auto& e:frame.eyes){++e.ammo.sequence;e.ammo.loaded=2;}
+        hud.Receive(&frame,ticket,now);waitResult=XR_TIMEOUT_EXPIRED;
+        now=ownerDeadline-1;clockReads=0;clockAdvanceAt=2;clockAdvanceNs=1;
+        CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true)); // Current owner expires inside Layer during a pending upload.
+        CHECK(clockReads==2&&now==ownerDeadline);CHECK(PixelsMatch(3,0)==0);
+        clockAdvanceAt=0;CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true));
+        waitResult=XR_SUCCESS;CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(acquired==released);
     }
     CHECK(destroyed==1);return 0;
 }

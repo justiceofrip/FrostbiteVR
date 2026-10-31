@@ -48,6 +48,36 @@ struct SightPreview {
     float gestureAngle=0,nativeProgress=0,rawProgress=0;bool nativeObserved=false,rawObserved=false;
     std::uint64_t rawGeneration=0;
 };
+// Subtree contacts retain the selected configuration from their original input.
+// A newer observation may confirm it, but cannot supply or renew that source.
+struct SightSelectionEvidence {
+    const SightAdapterProfile* adapter=nullptr;
+    std::shared_ptr<const SelectedMeshesSnapshot> selected;
+    WeaponEquipmentIdentity equipment{};
+    AuthoredGripOwner owner{};
+    std::uint64_t rigFingerprint=0;
+};
+inline bool SightSelectionCurrent(const SightSelectionEvidence& evidence,const SelectedMeshesSnapshot* current,
+    const WeaponEquipmentIdentity& equipment,const AuthoredGripOwner& owner,std::int64_t now)noexcept {
+    if(!evidence.adapter||evidence.adapter->assembly!=SightAssemblyKind::Subtree||!current||
+       !SightAdapterSelectedMesh(*evidence.adapter,evidence.selected.get(),evidence.equipment,
+           evidence.owner,evidence.rigFingerprint,now)||
+       evidence.equipment!=equipment||evidence.owner.soldier!=owner.soldier||evidence.owner.weak!=owner.weak||
+       evidence.owner.actorGeneration!=owner.actorGeneration||evidence.owner.equipmentGeneration!=owner.equipmentGeneration||
+       evidence.owner.space!=owner.space||evidence.owner.inputSequence>owner.inputSequence||owner.inputDeadlineNs<=now)return false;
+    const auto& original=*evidence.selected;
+    // Validate current proof separately from source admission: its sequence may
+    // be newer than the captured input while the exact configuration is unchanged.
+    return authored_grip_detail::Fresh(*current,now)&&current->owner==original.owner&&
+        current->sequence>=original.sequence&&current->observedNs>=original.observedNs&&
+        current->weaponData==original.weaponData&&current->inventory==original.inventory&&
+        current->selectedSlot==original.selectedSlot&&current->stateTypeInfo==original.stateTypeInfo&&
+        current->meshTypeInfo==original.meshTypeInfo&&current->weaponName==original.weaponName&&
+        current->stateCount==original.stateCount&&current->soleConfiguredArray==original.soleConfiguredArray&&
+        current->states==original.states&&current->configurationPathVerified&&
+        current->configurationPathPointer==original.configurationPathPointer&&
+        current->configurationPath==original.configurationPath;
+}
 struct Tracking {
     interaction::InputFrame input{};
     unsigned soldier=0,weak=0,weapon=0;
@@ -81,6 +111,10 @@ struct Tracking {
     std::shared_ptr<const BodyFreeRightEvidence> freeRight; // Actual released claim + native suppression + accepted hide.
     std::uint64_t equipmentGeneration=0;
     WeaponEquipmentIdentity nativeEquipment{};
+    // Original selected configuration captured with this input packet. A newer
+    // global observation confirms lifetime at output; it cannot replace this
+    // source while an older immutable packet is being posed.
+    std::shared_ptr<const SelectedMeshesSnapshot> selectedMeshes;
     std::optional<interaction::BodySlotAssignment> bodyHolsterSlot;
     interaction::BodyAnchorConfig bodyAnchors{};
     std::shared_ptr<const BodyInventoryDisplay> bodyInventoryDisplay;
