@@ -466,11 +466,20 @@ int EveryEnrolledFeedRetainsRepeatedPacketThroughOpenCover(){
         for(unsigned step=0;step<f.DwellPackets()&&!f.submitted;++step)f.Tick(pose(12),true);
         CHECK(f.submitted&&f.submits==1&&f.result.pending);
         CHECK(f.submitted->command.authority.operation==FeedPhysicalOperation::OpenCover);
-        // Receipt service must keep running even when no new source packet is
-        // rendered. A repeated packet cannot dispatch this endpoint twice.
-        const auto endpoint=f.sample.raw;f.Consume(&endpoint);CHECK(f.result.pending&&f.submits==1);
+        // Dispatch releases the mechanism claim and invalidates that endpoint's
+        // hand evidence. Its repeat must preserve the exact native debt, even
+        // though the early raw refusal does not populate result.pending.
+        const auto endpoint=f.sample.raw;const auto command=f.submitted->command;
+        CHECK(!f.hands.HasRecordedEvidence(endpoint.inputEvidence,InteractionHand::Left));
+        f.sample.input.nowNs=f.now+2;f.Consume(&endpoint);
+        CHECK(f.result.diagnostic.exit==Bc2PhysicalFeedExit::GunOrRawUnverified);
+        CHECK((f.result.diagnostic.rawChecked&(1u<<8))&&!(f.result.diagnostic.rawPassed&(1u<<8)));
+        CHECK(!f.result.diagnostic.policyEvaluated&&f.result.blocksEquipment&&f.result.blocksFire&&f.submits==1);
+        CHECK(f.backend.Pending()&&f.backend.Pending()->command==command);
+        // Receipt service precedes raw admission, so the same refused endpoint
+        // must still reconcile the callback without another dispatch.
         CHECK(f.Callback());f.sample.input.nowNs=f.now+20;f.Consume(&endpoint);
-        CHECK(!f.result.pending&&f.submits==1&&f.result.blocksFire);
+        CHECK(!f.backend.Pending()&&!f.result.blocksEquipment&&!f.result.pending&&f.submits==1&&f.result.blocksFire);
         ++configurations;
     }
     CHECK(configurations==24);return 0;
