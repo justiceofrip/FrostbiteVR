@@ -974,17 +974,30 @@ int PartialCoverRequiresFreshRegraspAndPreservesProgress(){
                 CHECK(!f.result.ownsHand);waited=true;
                 if(fault){
                     f.nativeCadence={0};
+                    const auto nativeBeforeFault=f.backend.Read(f.sample.owner,f.sample.input.nowNs);CHECK(nativeBeforeFault);
                     if(fault==1)f.now=source->deadlineNs-10*Ms;
                     else f.mutateNativeObserved=true;
+                    const auto changedInput=f.sequence+1;
                     f.Tick(pose(.5),false);
+                    if(fault==2&&delayed){
+                        // Native mutation is attached to the new real packet;
+                        // this render still carries the earlier unchanged one.
+                        CHECK(f.sample.raw.inputEvidence.sequence<changedInput);
+                        CHECK(f.submits==0&&!f.result.pending&&!f.result.ownsHand);
+                        f.Tick(pose(.5),false);
+                    }
                     CHECK(f.submits==0&&!f.backend.Pending()&&!f.result.pending&&f.BlocksFire());
                     if(fault==1){
                         CHECK(!f.backend.Read(f.sample.owner,f.sample.input.nowNs));
                         CHECK(f.result.diagnostic.exit==Bc2PhysicalFeedExit::ViewUnavailable);
                         CHECK(!f.result.ownsHand&&!f.result.presentation);
                     }else {
-                        CHECK(f.result.interactionStatus==FeedInteractionStatus::Interrupted);
-                        CHECK(f.result.reloadStatus==FeedReloadStatus::SnapshotMismatch);
+                        CHECK(f.sample.raw.inputEvidence.sequence==changedInput);
+                        CHECK(f.result.diagnostic.sourceNativeSequence==nativeBeforeFault->sequence);
+                        CHECK(f.result.diagnostic.sourceNativeObservedNs==nativeBeforeFault->observedNs+1);
+                        CHECK(f.result.diagnostic.sourceNativeDeadlineNs==nativeBeforeFault->deadlineNs);
+                        CHECK(reached(f.result.interactionStatus==FeedInteractionStatus::Interrupted,"mutated source rejected"));
+                        CHECK(reached(f.result.reloadStatus==FeedReloadStatus::SnapshotMismatch,"mutated snapshot rejected"));
                         CHECK(f.result.presentation&&Near(f.result.presentation->coverRadians,partial));
                     }
                     break;
