@@ -1,26 +1,28 @@
-Feedback63: independent controller and native feed observations
+Feedback63: shared feed timing and reusable Ghidra toolkit
 
-User reports0.1.26 still has no functioning LMG reload. Installed and session DLL
-both match the tested source2a532f8e; this was the new binary in a new BC2 process.
-Session20261031-142055-690-9fea78b2 first retained attempt4982 acquired internally;
-4983 advanced source8956->8957 and rejected SnapshotMismatch19/InvalidInput9.
-All native/raw admission flags passed. Native snapshot sequence was not explicitly
-logged, but that status has an exact same-native-sequence comparison in source.
-Another attempt reached7 internal Moving rows; no pending/native dispatch occurred.
-Source9006 repeated publication was retained, confirming feedback62's narrow fix;
-this did not establish visible cover movement.35 earlier records were overwritten.
+User 0.1.26 still failed before native reload dispatch. Its installed/session DLLs
+matched the tested build. Full session retained and closed normally; no desktop
+or new headset test was started. 35 overwritten earlier telemetry rows remain a limit.
 
-The fixture published native data before every controller update. Production uses
-independent clocks. Shared feed policy now admits a newer controller input against
-an identical, still-fresh native-bound observation. Actual native sequence, time,
-deadline, counts and receipt joins remain unchanged; mutations and expiry reject.
-The new fixture exercises full24-profile cycles with2:1,3:1,irregular and faster
-native schedules, immediate/lagged/repeated rendering. Backend receipts are mocked;
-these deterministic tests cannot establish a successful live native transfer.
+The prior fixture coupled controller/native publications. The new matrix rejects
+released 0.1.26 and covers 24 configurations across four native cadences and both
+immediate and lagged/repeated rendering: 192 full cycles, 960 mocked receipts.
+Shared policy now permits new controller input against unchanged fresh native
+state, retains chest preparation and safely waits for the actual released raw
+packet. Original deadlines, identity/count checks and tracking-loss barriers hold.
+Partial-cover recovery waits for a newer native observation and fresh regrasp.
+New telemetry records source-native sequence/time/deadline without extra tick logs.
 
-Bounded telemetry adds the missing source-native sequence/time/deadline without
-making publication cadence a new logging event. Validation/deployment pending;
-receipt.json will record actual results. No movement result was separately reported.
-Full native report saved; normal StopVR released resolution guard, game closed normally.
-Agent findings and derived first300s: worktree reports/coordinator-20261031-feedback63.
-Baseline matrix02 linked the new fixture against pinned0.1.26 feed/core objects and matching normal-build configuration. Legacy24-profile cycles pass; the new independent-clock matrix fails OpenCover, matching the missing timing contract. Correction validation remains pending.
+Normal x86/x64:341/341 each. PhysicalFeed focused07 and HandInteraction focused05
+pass; prior failures retained. No actual-game native/headset completion is inferred.
+Private 0.1.27 installed with 0.1.26 rollback; setup/assets validation passes,
+source pushed and settings/logging preserved. Exact identities: receipt.json.
+
+Ghidra 12.2 and Temurin 25 installed on G:, with initial and cached exports verified.
+Agents use tools/Invoke-GhidraAnalysis.ps1; tools/ghidra/README.txt explains reuse.
+Databases/decompilation remain local and ignored; system settings unchanged.
+This batch records a 42 GiB normal-build allowance for the new toolkit after removing
+download archives and lossless compression. Global 40 GiB/15 GiB-free defaults remain.
+
+Existing movement, underbarrel, aim, destruction, C4 and performance acceptance
+gaps remain; empty-hand stow stays deferred. All assigned agents retired.

@@ -1,0 +1,71 @@
+Historical report: written before feedback63 validation and0.1.27 installation.
+Current delivery status is in receipt.json and docs/CURRENT.md.
+
+BC2 VR progress and delivery report — October 31, 2026
+
+There is real progress, but broad, reliable weapon support has not been delivered.
+The Discord can be told about specific confirmed improvements. It should not be
+told that all manual reloads, underbarrels or rendering problems are solved.
+
+The main coordination failure was treating implementation coverage and passing
+offline tests as stronger evidence of usable gameplay than they were. Shared code,
+a generated profile and a passing simulation do not establish that a player can
+complete an interaction in the real game. I did not keep that distinction clear
+enough when describing fixes, readiness and the scaling pipeline.
+
+Why the work has felt circular:
+- Fixes often addressed the first observed failure without exercising the entire
+  interaction under realistic timing. A headset retest then found the next barrier.
+- The feed fixture published a new game snapshot for every controller update.
+  Real controller, game and render updates arrive independently. Legitimate input
+  was rejected when a fresh controller update reused an unchanged game snapshot.
+- Family coverage was sometimes coverage of separate pieces. Pump-family tests
+  exercise strokes, shell transfer and sound cues, but the complete joined path
+  through native readiness, support-grip return and another shot is not established
+  for every configuration by those separate tests.
+- Version numbers and large test totals made internal implementation progress look
+  more complete than the visible result. You repeatedly had to perform integration
+  diagnosis in the headset. That burden should have been reduced much earlier.
+
+The source and reusable mechanics are real. There are shared reload mechanisms,
+profile generation and build/test tools. A dependable end-to-end process that turns
+one family change into reliable behavior across every supported weapon is still
+unfinished. Calling that a proven scaling pipeline was premature.
+
+Player-confirmed improvements, with their actual limits:
+- Two-hand grips work on multiple weapons; the latest reported LMG grip works again.
+- AN94 manual reload worked in the earlier headset test.
+- The bursty automatic-fire feeling was reported fixed.
+- The tested shotgun's shell insertion and pump behavior improved substantially;
+  the latest limited test felt close to SPAS. All pump actions are not accepted.
+- Ammo-counter flicker was absent on the guns checked in the latest positive report.
+- Holster swapping became more reliable, but a movement-lock report remains open
+  until its correction is actually confirmed.
+
+Still unfinished or unconfirmed: a working full LMG reload, reliable underbarrels,
+all-weapon reload coverage, destruction rendering, broader performance improvement,
+and the other campaign-specific acceptance gaps recorded in coordinator state.
+
+What is different in the current work:
+The new full-feed test matrix varies game/controller update rates and includes
+lagged and repeated rendering across all 24 enrolled feed configurations. Running
+that new fixture against the retained 0.1.26 code fails at opening the cover even
+though the older family tests pass. The correction gets farther; the expanded
+matrix has also exposed later-stage failures, which are being resolved offline.
+It is deliberately blocking delivery of the next candidate while those fail.
+These tests use mocked native callbacks. Passing them will still not be a claim
+that the complete reload has succeeded in the actual game or headset.
+
+Current delivery status: 0.1.26 remains installed. The next candidate is not ready
+or installed yet. No new completion claim or release date is supported at present.
+
+Suggested Discord update:
+"BC2 VR is making progress: we've confirmed multiweapon two-hand grips, working
+AN94 manual reload, smoother firing, better shotgun interactions and a more stable
+ammo display on tested guns. Full weapon support is still unfinished. LMG reloads
+and underbarrels are not ready, and rendering/performance issues remain open.
+Recent testing exposed shared timing and interaction-state bugs that the previous
+automated tests missed. We're fixing those and testing complete reload sequences
+across the supported family before the next candidate. I don't have a reliable
+completion date yet; the next announcement should be based on a working gameplay
+milestone rather than a weapon count or test total."

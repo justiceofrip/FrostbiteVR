@@ -1,0 +1,76 @@
+{
+  "schema": "fvr.feedback63.integration.v1",
+  "built_source_commit": "2f723c9510f4c6c426213f07c2bc459cfe7e7f4d",
+  "native_source_sha256": "e27ce7b0430e549602c69f97aaf243919d7b94736980b441915448ea926c06f2",
+  "build_receipt": "reports/coordinator-20261031-feedback63/normal-runtime/build-receipt.json",
+  "build_receipt_sha256": "5c53ec1006c740bc8716dc2a7ce1a2e4a27b2e7895f5f396f8c33ff369933397",
+  "included_commits": [
+    "20d48e5e55c986379fc267a5151d21b6ec253ccc",
+    "cbd9aeb7df7d8629b07cf402363c99abcc1224a1",
+    "cf9e105cc69765cc664d6cd28c65946d7e942e9b",
+    "59027d784cc7caa2f1f633b7aa29b4da53fd02ea",
+    "47cd649a2a8f4e1394fa3239868562fd5d986977",
+    "a4eeab8d72c3cdea6ff0735d94c7a5c4a88bac34",
+    "e0e4545449e50acd8538e5ff950a0e9a8e327acd",
+    "9f605768a832ec89e1a93e546d75a7dfb7bfc74b",
+    "2f723c9510f4c6c426213f07c2bc459cfe7e7f4d"
+  ],
+  "normal_checks": {
+    "x86": "341/341",
+    "x64": "341/341"
+  },
+  "focused_checks": {
+    "feed": "focused-07",
+    "hand": "focused-05:HandInteraction",
+    "earlier_generic_passes": "focused-01:ten passing suites; normal builds revalidate all"
+  },
+  "independent_clocks": {
+    "configurations": 24,
+    "complete_cycles": 192,
+    "mocked_adapter_receipts": 960,
+    "actual_game_receipts": false
+  },
+  "prior_failures_retained": true,
+  "source_changes": [
+    "independent controller/native feed observations with immutable native identity and deadlines",
+    "chest-neutral preparation retained through neutral jitter",
+    "exact delayed release retained without crossing hand invalidation; partial recovery waits safely",
+    "source-native sequence/time/deadline diagnostics",
+    "reusable local Ghidra decompilation toolkit"
+  ],
+  "baseline_reproduction": "baseline-matrix-02 rejects installed0.1.26 OpenCover with new asynchronous fixture",
+  "ghidra": {
+    "version": "12.2",
+    "jdk": "25.0.5",
+    "first_and_cached_exports_pass": true,
+    "entry": "tools/Invoke-GhidraAnalysis.ps1",
+    "instructions": "tools/ghidra/README.txt",
+    "evidence": "reports/coordinator-20261031-feedback63/ghidra-validation.json"
+  },
+  "private_candidate": "0.1.27",
+  "installed": true,
+  "rollback_version": "0.1.26",
+  "package_files": 101,
+  "runtime_files": 93,
+  "package_sha256": "e6eb76f726e2eda5909577bfffe89ff9a55dd52aae94b4d2acaf91b1117ebb55",
+  "settings_preserved": true,
+  "installed_validation_passed": true,
+  "installation_evidence": "reports/coordinator-20261031-feedback63/installation.json",
+  "installed_validation_evidence": "reports/coordinator-20261031-feedback63/installed-validation.log",
+  "source_pushed": "2f723c9510f4c6c426213f07c2bc459cfe7e7f4d",
+  "source_push_evidence": "reports/coordinator-20261031-feedback63/source-push.json",
+  "user_failure_session": "20261031-142055-690-9fea78b2",
+  "new_game_started": false,
+  "live_emulated_input_performed": false,
+  "user_session_closed_normally": true,
+  "headset_accepted": false,
+  "agents_retired": true,
+  "public_release": false,
+  "storage_exception": "reports/coordinator-20261031-feedback63/storage-exception.json:42GiB for this normal build batch; global40GiB/15GiB-free defaults unchanged",
+  "remaining": [
+    "LMG native/headset completion and movement confirmation",
+    "all-weapon completion, underbarrels, aim, destruction, C4 and measured performance acceptance"
+  ],
+  "final_status_push_and_lease_close": "reports/coordinator-20261031-feedback63/close.json",
+  "xr_tools_assessment": "reports/coordinator-20261031-feedback63/xr-tools-fit.json: xr-sim/xr-tape assessed; neither installed nor tested with BC2"
+}
