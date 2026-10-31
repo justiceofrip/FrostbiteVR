@@ -527,6 +527,10 @@ int EveryEnrolledFeedCompletesWithIndependentPublicationClocks(){
             const auto before=f.native.counts;
             const auto units=(std::min)(before.capacity-before.loaded,before.reserve);
             std::uint64_t lifetime=0;
+            const auto attempted=[&](FeedPhysicalOperation operation,bool completed){
+                if(!completed)f.PrintCadenceFailure(cadence,operation);
+                return completed;
+            };
             const auto reconcile=[&](unsigned stage)->int{
                 CHECK(f.submitted&&f.submits==stage+1&&f.backend.Pending());
                 const auto command=f.submitted->command;
@@ -555,14 +559,12 @@ int EveryEnrolledFeedCompletesWithIndependentPublicationClocks(){
                 CHECK(f.BlocksFire()==(stage!=4));
                 return 0;
             };
-            CHECK(f.OpenCover());CHECK(reconcile(0)==0);CHECK(f.native.counts==before);
-            CHECK(f.Place(FeedPhysicalOperation::DetachContainer));CHECK(reconcile(1)==0);CHECK(f.native.counts==before);
-            const bool attached=f.Place(FeedPhysicalOperation::AttachContainer);
-            if(!attached)f.PrintCadenceFailure(cadence,FeedPhysicalOperation::AttachContainer);
-            CHECK(attached);CHECK(reconcile(2)==0);
+            CHECK(attempted(FeedPhysicalOperation::OpenCover,f.OpenCover()));CHECK(attempted(operations[0],reconcile(0)==0));CHECK(f.native.counts==before);
+            CHECK(attempted(FeedPhysicalOperation::DetachContainer,f.Place(FeedPhysicalOperation::DetachContainer)));CHECK(attempted(operations[1],reconcile(1)==0));CHECK(f.native.counts==before);
+            CHECK(attempted(FeedPhysicalOperation::AttachContainer,f.Place(FeedPhysicalOperation::AttachContainer)));CHECK(attempted(operations[2],reconcile(2)==0));
             CHECK((f.native.counts==FeedAmmunitionCounts{before.loaded+units,before.reserve-units,before.capacity}));
-            CHECK(f.Place(FeedPhysicalOperation::SeatFeed));CHECK(reconcile(3)==0);
-            CHECK(f.Close());CHECK(reconcile(4)==0);
+            CHECK(attempted(FeedPhysicalOperation::SeatFeed,f.Place(FeedPhysicalOperation::SeatFeed)));CHECK(attempted(operations[3],reconcile(3)==0));
+            CHECK(attempted(FeedPhysicalOperation::CloseCover,f.Close()));CHECK(attempted(operations[4],reconcile(4)==0));
             CHECK(f.submits==5&&!f.BlocksFire()&&f.reusedNativeUnchanged);
             std::ostringstream report;f.physical.Report(report);
             CHECK(report.str().find("\"receipts_accepted\":5")!=std::string::npos);
