@@ -647,8 +647,18 @@ int EveryEnrolledSupplyPresentsDelayedPickupOffsetAndDropsLostHand(){
         if(trackingLoss){
             f.sample.input.tracked[0]=false;f.Tick(movedWrist,true);
             CHECK(!f.result.presentation&&!f.result.ownsHand&&f.BlocksFire());
+            // Untracked mapping returns an empty raw packet. Restore the
+            // independently observed rig before constructing the recovery packet.
+            f.sample.raw.rig=moved.rig;
             f.sample.input.tracked[0]=true;f.Tick(movedWrist,false);
         }else f.Tick(movedWrist,false);
+        if(!f.result.presentation||f.result.presentation->mechanismWristWorldMeters||f.result.presentation->mechanismClaim)
+            std::fprintf(stderr,"Supply release failure: profile=%llu trackingLoss=%d input=%llu source=%llu raw=%d exit=%u selection=%u presentation=%d wrist=%d claim=%d\n",
+                static_cast<unsigned long long>(registration.key),trackingLoss,static_cast<unsigned long long>(f.sample.input.sequence),
+                static_cast<unsigned long long>(f.sample.raw.inputEvidence.sequence),f.sample.raw.valid,unsigned(f.result.diagnostic.exit),
+                f.result.diagnostic.selectionFailure,bool(f.result.presentation),
+                bool(f.result.presentation&&f.result.presentation->mechanismWristWorldMeters),
+                bool(f.result.presentation&&f.result.presentation->mechanismClaim));
         CHECK(f.result.presentation&&!f.result.presentation->mechanismWristWorldMeters&&!f.result.presentation->mechanismClaim);
         CHECK(!f.result.ownsHand&&Near(f.result.presentation->coverRadians,cover)&&f.native.counts==counts);
         CHECK(NearPose(feed_interaction_detail::Multiply(f.result.presentation->weaponFromPouch,
