@@ -1,0 +1,32 @@
+Private0.1.21 test candidate
+Check receipt.json for actual installation status; this file alone is not installation proof.
+
+New in this batch:
+- Magazine contact activation for21previously blocked configurations, including AN94.
+- Native feed/fixed reload control, including the last round fired within an Update.
+- Reduced native rig-read calls and one deferred frame-feedback retry before XR submission.
+- Final input-expiry check; automatic weapon firing rates are unchanged.
+
+Useful headset checks:
+- Magazine (AN94 and another rifle/SMG): release support grip, grip and pull out the
+  magazine, release it, take a replacement from the ammo pouch with a fresh grip,
+  then align and seat it. Check ammunition and post-reload firing.
+- Belt-fed LMG, partly loaded and empty: open cover, remove container, take replacement
+  ammunition from the chest pouch, attach container, seat belt, close cover.
+  Release/regrip between steps. Hold container/belt briefly at its destination before
+  releasing. This sequence has no separate latch or charging-handle step.
+- Tube/pump shotgun: complete any owed rearward-and-forward pump stroke before loading;
+  take and insert one shell at a time, releasing/regripping for each shell.
+- Test a magazine-fed pistol separately; a slide action is only needed when its
+  supported after-feed policy requires it.
+- Hold XM8 automatic fire and assess both shooting cadence and general frame smoothness.
+- Check LMG bullet alignment and destruction appearance; their previous fixes are retained.
+
+The source checks cover128magazine configurations and24feed rows; they do not prove
+all in-headset reload completions. Bursty feel, measured FPS, cutscene cameras and
+other scene-specific acceptance remain open. Empty-hand holstering remains deferred.
+Logging/settings are preserved. Note weapon, mission, failed step and approximate time.
+Open logs opens the installation's data folder; sessions are under data/runtime/sessions,
+identified by data/runtime/active-session.json. Report feedback creates bounded excerpts,
+not a complete session trace. Existing logs need no duplicate copy. Steam support still
+needs the unavailable executable.

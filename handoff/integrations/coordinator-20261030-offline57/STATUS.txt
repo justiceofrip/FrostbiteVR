@@ -21,4 +21,5 @@ Bursty feel, LMG aim, destruction and full in-headset reload completion remain u
 Prior destruction/visual-axis/underbarrel fixes are retained; no redundant re-enrollment.
 Independent reload review: no actionable findings. Completed agents retired.
 Root owns combined builds, source push, private packaging and installation status.
+Final source e9fffc5 passes normal x86/x64 builds, 341/341 each; six binary/symbol pairs frozen.
 PIPELINE.txt identifies actual source stages and what their checks establish.

@@ -4,21 +4,30 @@ Updated October 31, 2026. Root coordinates this run; agents own disjoint runtime
 There is working batch asset/profile tooling. There is NOT yet an established
 all-weapons working reload implementation. Prior enrollment counts overstated
 practical completion when described as finished weapons.
+The workflow uses separate scripts and runtime adapters, coordinated manually.
+It does not automatically establish that every enrolled weapon works in VR.
 
 1. Identify exact weapon configurations and their source assets
    tools/bc2_firearm_magazine_batch.py
    tools/bc2_weapon_animation_pipeline.py
    handoff/tasks/WEAPONS/20261030-roster43/roster.json
    These read source identities, skeletons, clips, geometry and equipment families.
-   Existing roster:77 names/181 configurations. Do not repeat enrollment.
+   Existing roster: 77 names / 181 configurations. Do not repeat enrollment.
 
 2. Generate tables and connect them to the normal build
    profiles/weapons43/Enrollment.cmake
    profiles/weapons45-magazines/Enrollment.cmake
    profiles/mechanism-family41/Enrollment.cmake
    These select generated support, magazine, shotgun, bolt, feed, slide and muzzle
-   definitions. Source routes:128 magazine,25 shell/pump,24 feed,4 clip/cylinder.
+   definitions. Source routes: 128 magazine, 25 shell/pump, 24 feed, 4 clip/cylinder.
    Table inclusion proves configuration coverage, not successful live interaction.
+
+   Family                Configurations   Current connection/check
+   Detachable magazine   128              Production raw-contact chain checked
+   Shell/pump             25              Independent tube path wired; source checked
+   Feed mechanism         24              Native dispatch/completion checked
+   Clip/cylinder           4              Separate fixed-container route
+   These are source routes, not a list of headset-confirmed working weapons.
 
 3. Produce real hand/weapon contact from the running game
    src/games/bc2/Bc2RigPublication.cpp
@@ -30,6 +39,7 @@ practical completion when described as finished weapons.
 4. Run the physical reload and keep its ammunition/mechanical state
    src/games/bc2/Bc2MagazinePhysicalReload.cpp
    src/games/bc2/Bc2PhysicalFeed.cpp
+   src/games/bc2/Bc2PhysicalReload.cpp (tube/shell, independent of magazine path)
    src/games/bc2/Bc2ReloadFlowRuntime.cpp
    This is the runtime connection being repaired. It must start from actual
    contact, suppress conflicting stock actions, dispatch the native operation
@@ -43,34 +53,37 @@ practical completion when described as finished weapons.
    Build.ps1 (required normal x86/x64 builds)
    Old component tests supplied valid raw input directly. The new magazine check
    goes through the production palette reader, publication admission, contact
-   builder and physical consumer instead. It samples178 selected asset bindings;
+   builder and physical consumer instead. It samples 178 selected asset bindings;
    that count differs from the reload-family roster and is not a success count.
 
 Current source changes
-- Magazine: complete verified co-located skeleton descendants for21configs,
+- Magazine: complete verified co-located skeleton descendants for 21 configurations,
   including AN94 variants. Moving/hidden parts retain their rejection checks.
 - Native reload: feed/fixed stock-reload suppression and retained mechanism gates;
   explicit physical-feed activation and tested native command/completion route.
-  Empty-Step suppression now covers bounded250ms simulation hitches while the
+  Empty-Step suppression now covers bounded 250 ms simulation hitches while the
   original authority remains valid; controller input is never renewed by a hitch.
 - Fire: reject a command whose original input expired during processing.
-- Rig reads: group adjacent used fields, saving10 native calls per snapshot.
+- Rig reads: group adjacent used fields, saving 10 native calls per snapshot.
 - Host: retry deferred completed-frame feedback once before EndFrame; forced
   contention, cancellation and exact acknowledgement pass offline GPU checks.
 - Agents completed their scoped jobs and retired; root validates/integrates.
 
 Evidence limits
 Magazine, rig and held-fire focused checks pass both architectures. The raw-contact
-check accepts all128ready magazine configurations, including21completed subtrees.
-Feed dispatch passes24rows on x86/x64 using normal AttachContainer/CloseCover
-routing. Normal combined builds are pending at this source checkpoint.
+check accepts all 128 ready magazine configurations, including 21 completed subtrees.
+Feed dispatch passes 24 rows on x86/x64 using normal AttachContainer/CloseCover
+routing. Final normal combined builds pass 341/341 each on x86 and x64.
+The independent tube route was followed from BuildReloadRawContact through
+publication, physicalReload and SpasTube native dispatch for all 25 enrolled rows.
+No source-visible missing activation was found; that is not an actual reload pass.
 Initial fixture failures and the test-launch manifest issue remain recorded in
 reports/coordinator-20261030-offline57; they are not counted as product defects.
 Native-code emulation confirms the same-Update last-round stock-reload leak and
 scoped Step fix. It uses explicit allocator/listener substitutes, not a live game.
-Native timer emulation groups2/3shots after160/240ms hitches even with held Fire.
+Native timer emulation groups 2/3 shots after 160/240 ms hitches even with held Fire.
 That is a mechanism, not the established user-session cause; bursty feel is open.
-Private0.1.20 remains installed at this source checkpoint; installation is separate.
+Private 0.1.20 remains installed at this source checkpoint; installation is separate.
 User-confirmed progress: multiweapon two-hand grips, reliable swaps, LMG counter.
 No weapon is counted as working merely because its profile or unit check exists.
 
