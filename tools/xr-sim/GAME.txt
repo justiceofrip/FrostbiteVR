@@ -1,0 +1,85 @@
+Bounded developer actual-game xr-sim session (root-owned execution only)
+
+Invoke with Windows PowerShell 7.5+ and a normal token:
+  pwsh -File tools/Invoke-Bc2XrGameSimulation.ps1 `
+    -RepositoryRoot 'G:/Unity/VRMMO/FrostbiteVR' `
+    -InstallRoot 'G:/Unity/VRMMO/BC2VR-Launcher' -Version '<installed version>' `
+    -ExpectedSourceSha256 '<installed normal runtime source SHA256>' `
+    -LocalConfig 'G:/Unity/VRMMO/FrostbiteVR/build/toolkit/xr-tools.local.json' `
+    -OutputDir 'G:/Unity/VRMMO/FrostbiteVR/reports/<fresh run>'
+
+RepositoryRoot is explicit because the runner can live in a separate worktree.
+StorageBudget accounts for the canonical repository, install and worktrees. A
+fresh 640 MiB session admission includes a 512 MiB raw budget: the existing eight
+bounded native images plus at most four 320x240 simulator stereo compositions.
+The runtime renders 1024x768 per eye; simulator capture size is independent.
+Each composition retains left/right PNG, the mandatory SBS duplicate and JSON.
+The output watchdog polls run plus normal-session output; it is not a disk quota.
+
+LocalConfig uses RuntimeManifest, TapeManifestDirectory and TapeLayerName from
+the host-only README. HostPath/LoaderPath/Python there are deliberately ignored:
+the selected installed package supplies its own normal host, loader and Python.
+The runner verifies package files, runtime files, active version, requested source
+hash, game hash, x86 native PEs and x64 host/loader/runtime/recorder PEs. Its asset
+cache must already be complete. It does not install or prepare replacement assets.
+
+The installed Entry.ps1 launches MainMenu through a hidden owned pwsh child.
+Only this child's environment map receives XR_RUNTIME_JSON, XRSIM_DIR,
+XRSIM_HEADSET_CONFIG and recorder variables. Its descendants inherit them; the
+game/native helpers do not load OpenXR. There are no caller/global XR changes,
+registry edits, production-launcher edits, desktop input or activation requests.
+The normal native-resolution guard and production NativeTrace arguments remain
+in use. This is actual BC2; the host-only diagnostic scene is not used.
+
+Start the wrapper asynchronously and continue observing its output. It prints
+RUN_DIRECTORY, then SESSION_FOLDER/SIM_DIRECTORY as soon as the owned supervisor
+publishes options, and SIM_HOST_PID after actual-host simulator initialization.
+session-link.json exposes options.json, session.json, sim/state.json and the
+normal stop.request path while the wrapper remains active. Root can inspect the
+normal session telemetry and send acknowledged simulator commands during this
+window. No menu navigation, saved-game selection or reload sequence is scripted.
+
+Before the host starts, command.txt contains pace free 60, capture off, capture
+size 320 240, compose oncapture, input clear and neutral head/grip poses. Both
+hands use follow off and aimtrim 0 0: this simulator derives published aim from
+grip pose plus aimtrim; its separate parsed aim pose is not used. Wait for SIM_HOST_PID and verify
+state.pid matches session.host.pid before replacing commands. For every batch,
+preserve its lines, prior cmdSeq and raw ack.txt/state.json; write a temporary
+file and atomically rename over command.txt at least 25 ms after the prior write.
+Wait for exact cmdSeq advancement, empty lastCmdError and committed later-frame
+state before sending another batch. Root alone may issue at most four individually
+acknowledged shot commands with distinct names. Do not enable periodic capture,
+increase capture dimensions, reset the runtime or use turbo pacing. Review the
+fresh actual menu image before deciding any controller aim/trigger commands.
+Root may stop early by writing the exposed session stop.request.
+
+Defaults: 300 seconds of actual host life and a 420-second outer process-work
+deadline. Cleanup starts no later than outer deadline minus 60 seconds. Both
+Entry preflight and actual host may emit recorder traces into the same tape
+directory. All traces are retained; tape-index.json identifies the actual host
+by recorded PID/executable, rather than assuming there is only one trace. The
+frame cap is 30000; a missing footer or cap/truncation fails the wrapper. Run the official checker against each full relevant trace
+afterward, and retain all results, including cap/truncation or conformance failure.
+The wrapper does not run the checker or claim tape conformance.
+
+GameSettings.bin, GameSettings.ini and settings.ini are backed up byte-for-byte
+before launch (default current user's Documents/BFBC2; explicit ProfileDirectory
+is available). Install active.json and data/settings.json hashes/backups are
+also retained. Stop requests let the normal supervisor stop the host, drain the
+native adapter and release resolution. Before close, the wrapper independently
+requires remote native exit, hooks disabled and reload flow drained, or the
+specific pre-activation refusal. It closes only its retained new game identity
+with CloseMainWindow and a bounded wait. It never kills any process. The normal
+supervisor's own forced-host shutdown flag, if any, remains in session-final.json.
+If a helper remains live, ownership is uncertain or cleanup cannot be proven,
+the wrapper fails and preserves game/profiles for root action. It never restores
+profiles while any game or retained helper is live, overwrites launcher settings,
+erases failed runs or treats later success as replacement evidence. Profiles are
+restored exactly only after all owners exit. Original post-run bytes are retained.
+
+result.json distinguishes observed normal input connection and safe closure from
+failure. This runner never establishes successful native reload, broad gameplay
+acceptance, image correctness, performance or physical-headset acceptance. Those
+claims require separately reviewed native/controller/image evidence for the exact
+episode. Preserve all session logs, native reports, simulator state/captures,
+command acknowledgements and recorder traces even when startup or cleanup fails.

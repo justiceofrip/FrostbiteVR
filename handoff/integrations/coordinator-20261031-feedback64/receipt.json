@@ -1,0 +1,38 @@
+{
+  "settings_preserved": true,
+  "completed_agents_retired": true,
+  "continuing_batch": "feedback65 live observation and shared simulator motion",
+  "installed_version": "0.1.28",
+  "built_source_commit": "77e29e0149de710ddc8bdbbd8519938bde88b641",
+  "host_simulation": {
+    "stereo_capture_passed": true,
+    "tape_failed": 1,
+    "failure": "never_submits_zero_layers:5 startup frames",
+    "tape_skipped": 1,
+    "tape_passed": 18,
+    "input_focus_tracking_negative_passed": true,
+    "actual_host": true,
+    "game_checked": false
+  },
+  "rollback_version": "0.1.27",
+  "setup_assets_passed": true,
+  "limitations": [
+    "LMG reload remains unaccepted; initial acquisition OffPath predicate unknown",
+    "Separate0.1.27 worker0xc0000005 remains unlocated",
+    "Host simulation is not gameplay/headset acceptance"
+  ],
+  "runtime_receipt": "reports/coordinator-20261031-feedback64/normal-runtime/build-receipt.json",
+  "leases_retained_for_continuation": true,
+  "source_sha256": "e0f5fd510798cfe59869dcc9f7d84d631a4064f55c1c0bbf1e05f26374dd44b0",
+  "focused": [
+    "Bc2FeedPresentation focused02 pass",
+    "Bc2PhysicalFeed focused03 pass"
+  ],
+  "batch": "coordinator-20261031-feedback64",
+  "evidence": "reports/coordinator-20261031-feedback64",
+  "normal_checks": {
+    "x64": 341,
+    "x86": 341
+  },
+  "source_pushed": true
+}

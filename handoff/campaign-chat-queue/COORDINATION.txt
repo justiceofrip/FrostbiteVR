@@ -11,6 +11,11 @@ Ownership: prior CHAT25/26 close.json confirms lease release, idle helpers and
 exact profile restoration. Coordinator acquired the lease before shared mutations.
 External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned.
 
+Feedback64: source77e29e0 pushed; native e0f5fd51, private0.1.28 installed.
+Both normal builds341/341; hand-target/current-placement and supply-claim checks pass.
+Settings/assets preserved;0.1.27 rollback. Actual XR host simulation works; native gameplay reload unaccepted.
+Receipt: handoff/integrations/coordinator-20261031-feedback64/receipt.json. Coordinator continues65 under existing leases.
+
 Feedback63: built/pushed 2f723c95, native e27ce7b0; normal x86/x64 pass341/341 each.
 Private 0.1.27 installed; setup/assets validation passes; settings/logging preserved, 0.1.26 rollback.
 Independent feed clocks, chest preparation, delayed release and partial recovery fixed in shared policy.
