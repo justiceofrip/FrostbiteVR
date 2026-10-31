@@ -452,6 +452,34 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         rawCheck(4,source->input.observedNs>=source->native->observedNs)&&rawCheck(5,FeedEquipmentViewFresh(*source->native,now))&&
         rawCheck(6,FeedEquipmentSameItem(*source->native,*view))&&rawCheck(7,source->native->counts==view->counts);
     const bool raw=rawContext&&rawCheck(8,hands.HasRecordedEvidence(source->input,InteractionHand::Left));
+    if(!raw&&gun&&source&&source->native&&e->claim&&!e->releaseWait&&e->session&&
+       e->session->State().status==FeedEquipmentStatus::Ready&&!e->pending&&!e->refused&&!e->gateFailed&&!e->motionDirty&&
+       e->activeOperation!=FeedPhysicalOperation::None&&s.grip&&!s.input.released[0]&&source->grip&&
+       Window(source->input,now)&&hands.HasRecordedEvidence(source->input,InteractionHand::Left)&&
+       FeedEquipmentViewFresh(*source->native,source->input.observedNs)&&now>=source->native->deadlineNs&&
+       view->sequence>source->native->sequence&&view->observedNs>=source->native->observedNs&&
+       FeedEquipmentSameItem(*source->native,*view)&&source->native->counts==view->counts){
+        const auto claim=hands.Current(InteractionHand::Left);
+        const State::Packet* held=nullptr;
+        for(const auto& packet:state.packets)if(packet.owner==s.owner&&packet.weapon==s.weapon&&
+            packet.input.sequence==e->lastInput){held=&packet;break;}
+        if(claim&&claim->token==*e->claim&&claim->token.prerequisiteClaim==right->token.id&&
+           held&&held->contact&&held->native&&held->grip&&claim->inputSequence==held->input.sequence&&
+           claim->deadlineNs==held->input.deadlineNs&&Window(held->input,now)&&
+           hands.HasRecordedEvidence(held->input,InteractionHand::Left)&&source->input.sequence>=held->input.sequence&&
+           source->native->sequence>=held->native->sequence&&source->native->observedNs>=held->native->observedNs&&
+           FeedEquipmentSameItem(*held->native,*view)&&held->native->counts==view->counts){
+            // A delayed renderer packet may outlive its older native sample.
+            // The current exact item/count observation preserves existing
+            // ownership only within the admitted hand's original lease. It
+            // cannot replace that packet's snapshot: newer native time cannot
+            // authorize older geometry. Wait for a separately paired raw
+            // packet without policy progress, claim renewal or presentation.
+            out.ownsHand=true;out.blocksEquipment=true;out.blocksFire=e->Blocked();
+            out.status=e->session->State().status;
+            return finish(FeedExit::GunOrRawUnverified);
+        }
+    }
     if(e->releaseWait||(!raw&&gun&&rawContext)){
         const auto heldInput=e->releaseWait?e->releaseWait->heldInput:e->lastInput;
         const State::Packet* held=nullptr;

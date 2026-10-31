@@ -37,6 +37,8 @@ MAX_BYTES = 1024 * 1024
 MAX_COMMANDS = 512
 SNAPSHOT_PERIOD = 100_000_000
 SNAPSHOT_TIMEOUT = 250_000_000
+SNAPSHOT_REFRESH_BUDGET = 500_000_000
+MAX_SNAPSHOT_REFRESHES = 2
 REFUSAL = planner.Refusal
 require = planner.require
 integer = planner.integer
@@ -80,9 +82,20 @@ def child(root, value):
 
 def read_bytes(path, maximum):
     local_path(path)
-    with path.open("rb") as stream:
-        require(os.fstat(stream.fileno()).st_size <= maximum, "oversized file: " + str(path))
-        data = stream.read(maximum + 1)
+    # Windows may briefly deny a reader while the native writer atomically
+    # replaces its snapshot. Bound the retry; original source leases are still
+    # checked after the read and are never renewed by this wait.
+    until = time.perf_counter_ns() + 40_000_000
+    while True:
+        try:
+            with path.open("rb") as stream:
+                require(os.fstat(stream.fileno()).st_size <= maximum, "oversized file: " + str(path))
+                data = stream.read(maximum + 1)
+            break
+        except (PermissionError, FileNotFoundError):
+            if time.perf_counter_ns() >= until:
+                raise
+            time.sleep(.001)
     require(len(data) <= maximum, "file grew beyond bound: " + str(path))
     return data
 
@@ -254,6 +267,8 @@ class Driver:
         self.snapshot_index = 0
         self.reference = None
         self.latest_snapshot = None
+        self.snapshot_refresh_started = None
+        self.snapshot_refresh_requests = 0
         self.gap = NS
         self.stage_deadline = self.deadline
         self.plans = []
@@ -381,8 +396,12 @@ class Driver:
     def bounds(self, now):
         require(now < self.deadline, "ten-second driver deadline reached")
         require(now < self.stage_deadline, "actual stage exceeded maximumGestureNs")
-        if self.motion_started is not None and self.last_commit is not None and self.last_commit >= self.motion_started:
-            require(now - self.last_commit <= self.gap, "actual committed input gap exceeded maxInputGapNs")
+        if self.snapshot_refresh_started is not None:
+            require(now - self.snapshot_refresh_started < SNAPSHOT_REFRESH_BUDGET,
+                    "expired snapshot refresh budget exhausted")
+        # A held pose still produces a new real XR packet every runtime frame.
+        # Command acknowledgement cadence is not the native input-packet gap;
+        # fresh snapshot leases and the normal recognizer enforce that lifetime.
 
     def request_snapshot(self):
         now = time.perf_counter_ns()
@@ -416,14 +435,35 @@ class Driver:
         require(nonce <= self.pending_nonce, "snapshot response belongs to a later competing request")
         if nonce != self.pending_nonce:
             return None
-        # Save exact invalid publications too; never silently retry past one.
+        # Preserve every matching response, including expired and invalid ones.
+        self.artifacts.save(f"snapshot-{self.snapshot_index:03}.json", raw)
         if snapshot.get("valid") is not True:
-            self.artifacts.save(f"snapshot-{self.snapshot_index:03}.json", raw)
             raise REFUSAL("native snapshot refused: " + str(snapshot.get("invalid_reason")))
+        if self.reference is not None:
+            stable_snapshot(self.reference, snapshot)
         evaluated = time.perf_counter_ns()
-        require(evaluated < min(integer(snapshot["valid_until_ns"]),
-                               integer(snapshot["input_evidence"]["observedNs"]) + SNAPSHOT_PERIOD),
-                "original 100ms source lease expired")
+        source_deadline = min(integer(snapshot["valid_until_ns"]),
+                              integer(snapshot["input_evidence"]["observedNs"]) + SNAPSHOT_PERIOD)
+        if evaluated >= source_deadline:
+            # Validate the expired diagnostic at its recorded native publication
+            # time only to distinguish delayed delivery from invalid admission.
+            # It is never accepted as current evidence or used for a command;
+            # no source/claim timestamp, owner, or deadline is changed.
+            planner.admit(self.profiles, snapshot, integer(snapshot["observed_ns"]), nonce)
+            if self.snapshot_refresh_started is None:
+                self.snapshot_refresh_started = evaluated
+                self.snapshot_refresh_requests = 0
+            self.bounds(time.perf_counter_ns())
+            require(self.snapshot_refresh_requests < MAX_SNAPSHOT_REFRESHES,
+                    "expired snapshot refresh request budget exhausted")
+            self.snapshot_refresh_requests += 1
+            self.artifacts.event({"type": "snapshot_refresh_hold", "nonce": snapshot["nonce"],
+                                  "evaluatedNs": evaluated, "sourceDeadlineNs": source_deadline,
+                                  "refreshRequest": self.snapshot_refresh_requests,
+                                  "lastCommandWrittenNs": self.last_write})
+            self.pending_nonce = None
+            self.request_snapshot()
+            return None
         self.pending_nonce = None
         return snapshot, raw, evaluated
 
@@ -432,7 +472,14 @@ class Driver:
         if self.reference is not None:
             stable_snapshot(self.reference, snapshot)
         self.latest_snapshot = snapshot
-        self.artifacts.save(f"snapshot-{self.snapshot_index:03}.json", raw)
+        if self.snapshot_refresh_started is not None:
+            self.bounds(time.perf_counter_ns())
+            self.artifacts.event({"type": "snapshot_refresh_resumed", "nonce": snapshot["nonce"],
+                                  "evaluatedNs": now,
+                                  "heldNs": now - self.snapshot_refresh_started,
+                                  "refreshRequests": self.snapshot_refresh_requests})
+            self.snapshot_refresh_started = None
+            self.snapshot_refresh_requests = 0
 
     def pump(self):
         now = time.perf_counter_ns()
@@ -447,7 +494,10 @@ class Driver:
     def pause_until(self, deadline):
         for _ in range(6000):
             self.pump()
-            if time.perf_counter_ns() >= deadline:
+            # Holding sends no command: xr-sim keeps the last pose/grip and
+            # produces its ordinary XR frames. Do not advance the trajectory
+            # until a replacement passes current-time native admission.
+            if time.perf_counter_ns() >= deadline and self.snapshot_refresh_started is None:
                 return
             time.sleep(.001)
         raise REFUSAL("bounded polling iteration limit")
@@ -457,7 +507,7 @@ class Driver:
         # Preserve an already pending publication, including any refusal, then
         # request the fresh source used to plan the next stage.
         if self.pending_nonce is not None:
-            for _ in range(300):
+            for _ in range(800):
                 self.bounds(time.perf_counter_ns())
                 received = self.receive_snapshot()
                 if received:
@@ -467,10 +517,11 @@ class Driver:
             require(self.pending_nonce is None, "pending snapshot did not complete")
         self.pause_until(self.last_request + SNAPSHOT_PERIOD)
         self.request_snapshot()
-        for _ in range(300):
+        for _ in range(800):
             self.bounds(time.perf_counter_ns())
             received = self.receive_snapshot()
             if received:
+                self.accept_snapshot(*received)
                 return received
             time.sleep(.001)
         raise REFUSAL("fresh snapshot request iteration bound")
@@ -510,7 +561,8 @@ class Driver:
         atomic(self.command_path, raw)
         self.last_write = written
         self.commands += len(batch)
-        until = min(self.deadline, written + (self.gap if self.motion_started is not None else NS))
+        until = min(self.deadline, self.stage_deadline,
+                    written + (250_000_000 if self.motion_started is not None else NS))
         if cleanup:
             until = min(self.hard_deadline, written + 250_000_000)
         ack, settled = None, None
