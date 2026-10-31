@@ -25,7 +25,8 @@ int ScopedReadiness(){auto sample=Sample();auto i=test::Input();
  i.context.inputFlags=4;i.context.fireRequested=false;i.context.reloadRequested=true;
  CHECK(MagazineEmptyStepEligible(sample,i.config,ReloadRequestCyclePhase::Finished,i.context,T+1));
  return 0;}
-int StrictBoundaries(){for(unsigned bad=0;bad<14;++bad){auto s=Sample();auto i=test::Input();auto now=T+1;
+int StrictBoundaries(){for(float delta:{.005f,.16f,.24f,.25f})for(unsigned bad=0;bad<14;++bad){auto s=Sample();auto i=test::Input();auto now=T+1;
+ i.context.deltaSeconds=delta;
  switch(bad){case 0:s.profile=static_cast<NativeMagazineProfileId>(255);break;
  case 1:i.config.assetName={};break;case 2:i.config.fireLogicType=4;break;
  case 3:i.config.reloadType=0;break;case 4:s.ownerRevision=0;break;
@@ -143,17 +144,36 @@ int DiagnosticCannotChangeEmptyAdmissionOrGrantReceipts(){
 }
 int BoundedHitchKeepsOriginalAuthority(){
  auto sample=Sample();auto input=test::Input();
- for(float hitch:{.0596221f,.1f})for(unsigned branch=0;branch<3;++branch){
+ CHECK(ValidManualReloadDelta(.1f)&&!ValidManualReloadDelta(std::nextafter(.1f,1.f)));
+ for(float hitch:{.0596221f,.1f,.16f,.24f,.25f})for(unsigned branch=0;branch<3;++branch){
   sample=Sample(branch);input.context.deltaSeconds=hitch;
+  CHECK(ValidManualEmptyStepDelta(hitch,hitch)&&ValidManualEmptyStepDelta(.005f,hitch));
+  CHECK(!ValidManualEmptyStepDelta(std::nextafter(hitch,1.f),hitch));
+  CHECK(ValidManualReloadDelta(hitch)==(hitch<=.1f));
   CHECK(MagazineEmptyStepEligible(sample,input.config,ReloadRequestCyclePhase::Idle,input.context,T+1));
   CHECK(!MagazineEmptyStepEligible(sample,input.config,ReloadRequestCyclePhase::Idle,input.context,sample.deadlineNs));
+  CHECK(sample.sourceSequence==77&&sample.observedNs==T&&sample.deadlineNs==T+100000000);
+  auto bounded=sample;bounded.deadlineNs=MagazineEmptyEvidenceDeadline(bounded.observedNs,T+500000000);
+  CHECK(bounded.deadlineNs==T+200000000);
+  CHECK(MagazineEmptyStepEligible(bounded,input.config,ReloadRequestCyclePhase::Idle,input.context,T+199999999));
+  CHECK(!MagazineEmptyStepEligible(bounded,input.config,ReloadRequestCyclePhase::Idle,input.context,T+200000000));
   auto other=sample;++other.identity.owner.space;other.before.address+=4;
   CHECK(!MagazineEmptyStepEligible(other,input.config,ReloadRequestCyclePhase::Idle,input.context,T+1));
-  CHECK(!MagazineEmptyStepEligible(sample,input.config,ReloadRequestCyclePhase::Holding,input.context,T+1));
+  for(auto phase:{ReloadRequestCyclePhase::Disabled,ReloadRequestCyclePhase::Holding,ReloadRequestCyclePhase::Advancing})
+   CHECK(!MagazineEmptyStepEligible(sample,input.config,phase,input.context,T+1));
   auto reload=input.context;reload.reloadRequested=true;reload.inputFlags=4;
   CHECK(!MagazineEmptyStepEligible(sample,input.config,ReloadRequestCyclePhase::Arming,reload,T+1));
+  for(unsigned bad=0;bad<8;++bad){auto context=input.context;
+   switch(bad){case 0:context.reloadTimeMultiplier=2;break;case 1:context.flags24Through28[0]=false;break;
+   case 2:context.flags24Through28[2]=true;break;case 3:context.flags24Through28[4]=true;break;
+   case 4:context.orderRequested=true;context.inputFlags=2;break;case 5:context.inputFlags=8;break;
+   case 6:context.fireRequested=true;break;case 7:context.reloadRequested=true;break;}
+   CHECK(!MagazineEmptyStepEligible(sample,input.config,ReloadRequestCyclePhase::Idle,context,T+1));
+  }
  }
- for(float invalid:{0.f,-.01f,std::nextafter(.1f,1.f),std::numeric_limits<float>::infinity(),std::numeric_limits<float>::quiet_NaN()}){
+ for(float invalid:{0.f,-.01f,std::nextafter(.25f,1.f),std::numeric_limits<float>::infinity(),std::numeric_limits<float>::quiet_NaN()}){
+  CHECK(!ValidManualEmptyStepDelta(invalid,.25f)&&!ValidManualEmptyStepDelta(.005f,invalid));
+  CHECK(!ValidManualReloadDelta(invalid));
   input.context.deltaSeconds=invalid;
   CHECK(!MagazineEmptyStepEligible(sample,input.config,ReloadRequestCyclePhase::Idle,input.context,T+1));
  }

@@ -1989,7 +1989,7 @@ void __fastcall Step(void* self,void*,void* context,float delta){
                 // Simulation delta and evidence age are independent. Skipping
                 // this scoped Step on a bounded hitch permits native auto reload.
                 // The current context, exact owner and original lease still gate it.
-                if(ValidManualReloadDelta(delta)&&decoded&&delta<=decoded->deltaSeconds){
+                if(decoded&&ValidManualEmptyStepDelta(delta,decoded->deltaSeconds)){
                 bool directFamily=false;
 #ifdef FVR_BC2_NATIVE_AMMO_BACKEND
                 directFamily=feedEquipmentReloadEnabled&&FeedEquipmentConfigMatches(lease->snapshot.config);

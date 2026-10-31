@@ -3,6 +3,10 @@ Magazine skeleton closure fixes21configurations, including AN94;128ready configu
 pass production palette/publication/contact/physical-removal tests on x86/x64.
 Feed/fixed native control now suppresses stock reload at the actual Step boundary,
 retains physical debt across publication loss and requires explicit feed activation.
+The scoped empty-Step inhibitor admits finite hitches through250ms while keeping
+original owner/input deadlines and the shared100ms hold/transfer/recovery limit.
+New exact-code runs at160/240/250ms preserve the shot subscriber context and restore
+the temporary byte; focused regressions cover expiry, malformed boundaries and exceptions.
 The production command/own-Update completion test covers24normal feed rows.
 Actual executable emulation checks70reload configurations and the last-round leak;
 configuration, allocator and round-consuming listener substitutes are explicit.

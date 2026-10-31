@@ -1,5 +1,5 @@
 param([ValidateSet('x86','x64')][string]$Architecture='x86',[string]$Attempt='01',[string]$ReuseRuntimeFrom='',
- [ValidateSet('Bc2RigReadBatch','Bc2Rig','Bc2MagazineRawContactPipeline','Bc2MagazineAssembly','Bc2HeldFireCadence','Bc2ReloadFamilyDispatch')]
+ [ValidateSet('Bc2RigReadBatch','Bc2Rig','Bc2MagazineRawContactPipeline','Bc2MagazineAssembly','Bc2HeldFireCadence','Bc2ReloadFamilyDispatch','Bc2MagazineEmptyControl','Bc2ManualEmptyNative','Bc2ManualEmptyFamily','Bc2EmptyBoundaryDiagnostic')]
  [string[]]$Suites=@('Bc2MagazineRawContactPipeline','Bc2HeldFireCadence','Bc2ReloadFamilyDispatch'))
 $ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$false
 $work=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
@@ -19,6 +19,7 @@ $arch=if($Architecture -eq 'x64'){'amd64'}else{'x86'}
 $common=@('/nologo','/std:c++20','/EHsc','/MT','/O2','/Ob1','/DNDEBUG','/DNOMINMAX','/DWIN32_LEAN_AND_MEAN',('/I'+(Join-Path $work 'include')),('/I'+(Join-Path $work 'tests')),('/I'+(Join-Path $work 'src/games/bc2')),('/I'+(Join-Path $work 'third_party/minhook-1.3.4/include')),('/I'+(Join-Path $canonical "build/$Architecture/generated/bc2-operation")))
 $libs=@('BC2Camera','FvrCore','FrostbiteDiscovery','FrostbiteCamera','BC2Profile')|ForEach-Object {Join-Path $canonical "build/$Architecture/$_.lib"}
 $paths=@()
+$paths+=@('src/games/bc2/Bc2MagazineEmptyControl.h','src/games/bc2/Bc2MagazineEmptyDiagnostic.h')
 $needRig=@($Suites|Where-Object {$_ -in @('Bc2RigReadBatch','Bc2Rig','Bc2MagazineRawContactPipeline','Bc2MagazineAssembly')}).Count -gt 0
 if($needRig){$paths+=@('src/games/bc2/Bc2Rig.cpp','src/games/bc2/Bc2Rig.h')}
 if(($Suites -contains 'Bc2MagazineRawContactPipeline') -or ($Suites -contains 'Bc2MagazineAssembly')){$paths+=@('src/games/bc2/Bc2MagazinePresentation.cpp','src/games/bc2/Bc2MagazinePresentation.h','src/games/bc2/Bc2RigPublication.h','tests/Bc2MagazineRawContactPipelineFixture.generated.h')}

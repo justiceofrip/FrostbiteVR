@@ -51,6 +51,8 @@ Current source changes
   including AN94 variants. Moving/hidden parts retain their rejection checks.
 - Native reload: feed/fixed stock-reload suppression and retained mechanism gates;
   explicit physical-feed activation and tested native command/completion route.
+  Empty-Step suppression now covers bounded250ms simulation hitches while the
+  original authority remains valid; controller input is never renewed by a hitch.
 - Fire: reject a command whose original input expired during processing.
 - Rig reads: group adjacent used fields, saving10 native calls per snapshot.
 - Host: retry deferred completed-frame feedback once before EndFrame; forced

@@ -1,0 +1,25 @@
+Scoped empty-Step control during a bounded frame hitch
+
+An Update beginning with one loaded round can fire it and enter stock reload
+inside the same Update. Entry-only empty checks miss that transition. The scoped
+Step inhibitor fixes it, but its previous100ms simulation-delta admission still
+refused the long-frame case while original owner evidence remained current.
+
+Only empty-Step admission now accepts finite0 < step <= context <=250ms.
+Shared100ms hold/transfer/recovery admission is unchanged. Simulation delta never
+extends input or owner lifetime; exact TLS links, selected configuration, state,
+phase, cancellation and adjacent owner checks remain required. Only context+28
+changes temporarily, with exact restoration. Native simulation time is unchanged.
+
+New original-instruction cases at160/240/250ms end idle2/2, loaded0/reserve191,
+with one synthetic shot, two patches and two exact restorations. Shot-subscriber
+and returned Update contexts match the original bytes. The endpoint also checks
+immutable configuration and bounded writes. This is emulator evidence only:
+bounded RNG allocation, synthetic round-consuming listener, other listeners empty.
+No native actor/prediction scheduling or headset acceptance is inferred.
+
+Executable SHA256:3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258.
+Private fixture SHA256:bd2d1ff1d1c6a0be5f5b581cd55aba1a96127fc551a9e7eab028053fcc8b3f3d.
+Local evidence: canonical reports/coordinator-20261030-offline57/hitch-boundary-evidence.json.
+The original harness and earlier failures remain in worktree reports/...offline57/fire-timing.
+Focused x86-08/x64-03 pass boundary, family, decoder, exception restoration and feed dispatch checks.

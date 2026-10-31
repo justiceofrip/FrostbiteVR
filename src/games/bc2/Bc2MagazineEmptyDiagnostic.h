@@ -26,10 +26,10 @@ inline ManualEmptyBoundaryDiagnosticReason ManualEmptyBoundaryControlReason(floa
  const std::optional<ReloadUpdateContext>& context)noexcept {
  if(!std::isfinite(step))return ManualEmptyBoundaryDiagnosticReason::StepDeltaNonFinite;
  if(step<=0)return ManualEmptyBoundaryDiagnosticReason::StepDeltaNonPositive;
- if(!ValidManualReloadDelta(step))return ManualEmptyBoundaryDiagnosticReason::StepDeltaTooLarge;
+ if(!ValidManualEmptyStepDelta(step,step))return ManualEmptyBoundaryDiagnosticReason::StepDeltaTooLarge;
  if(!context)return ManualEmptyBoundaryDiagnosticReason::ContextDecodeFailed;
  if(step>context->deltaSeconds)return ManualEmptyBoundaryDiagnosticReason::StepDeltaExceedsContext;
- if(!ValidManualReloadDelta(context->deltaSeconds))return ManualEmptyBoundaryDiagnosticReason::ContextDeltaTooLarge;
+ if(!ValidManualEmptyStepDelta(context->deltaSeconds,context->deltaSeconds))return ManualEmptyBoundaryDiagnosticReason::ContextDeltaTooLarge;
  if(context->reloadTimeMultiplier!=1)return ManualEmptyBoundaryDiagnosticReason::ContextMultiplierNotOne;
  if(context->orderRequested||(context->inputFlags&~5u))return ManualEmptyBoundaryDiagnosticReason::UnsupportedInput;
  if(!context->flags24Through28[0]||context->flags24Through28[2]||context->flags24Through28[4])return ManualEmptyBoundaryDiagnosticReason::UnsupportedContextFlags;

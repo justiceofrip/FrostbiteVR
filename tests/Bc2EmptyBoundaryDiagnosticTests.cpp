@@ -17,13 +17,18 @@ int Reads(){auto b=Boundary();CHECK(ManualEmptyDiagnosticContextReadAllowed(b));
 }
 int Reasons(){using R=ManualEmptyBoundaryDiagnosticReason;ReloadUpdateContext ctx;ctx.deltaSeconds=.05f;ctx.reloadTimeMultiplier=1;ctx.flags24Through28[0]=true;
  CHECK(ManualEmptyBoundaryControlReason(.01f,ctx)==R::None);CHECK(ManualEmptyBoundaryControlReason(.05f,ctx)==R::None);
- CHECK(ManualEmptyBoundaryControlReason(std::nextafter(.1f,1.f),ctx)==R::StepDeltaTooLarge);
+ CHECK(ManualEmptyBoundaryControlReason(std::nextafter(.25f,1.f),ctx)==R::StepDeltaTooLarge);
  CHECK(ManualEmptyBoundaryControlReason(0,ctx)==R::StepDeltaNonPositive);CHECK(ManualEmptyBoundaryControlReason(-.01f,ctx)==R::StepDeltaNonPositive);
  CHECK(ManualEmptyBoundaryControlReason(std::numeric_limits<float>::quiet_NaN(),ctx)==R::StepDeltaNonFinite);
  CHECK(ManualEmptyBoundaryControlReason(std::numeric_limits<float>::infinity(),ctx)==R::StepDeltaNonFinite);
  CHECK(ManualEmptyBoundaryControlReason(.01f,{})==R::ContextDecodeFailed);ctx.deltaSeconds=.005f;CHECK(ManualEmptyBoundaryControlReason(.01f,ctx)==R::StepDeltaExceedsContext);
- for(float hitch:{.0596221f,.1f}){ctx.deltaSeconds=hitch;CHECK(ManualEmptyBoundaryControlReason(hitch,ctx)==R::None);}
- ctx.deltaSeconds=std::nextafter(.1f,1.f);CHECK(ManualEmptyBoundaryControlReason(.01f,ctx)==R::ContextDeltaTooLarge);
+ for(float hitch:{.0596221f,.1f,.16f,.24f,.25f}){ctx.deltaSeconds=hitch;
+  CHECK(ManualEmptyBoundaryControlReason(hitch,ctx)==R::None);
+  CHECK(ManualEmptyBoundaryControlReason(.005f,ctx)==R::None);
+  CHECK(ValidManualReloadDelta(hitch)==(hitch<=.1f));}
+ for(float invalid:{std::nextafter(.25f,1.f),std::numeric_limits<float>::infinity(),std::numeric_limits<float>::quiet_NaN()}){
+  ctx.deltaSeconds=invalid;CHECK(ManualEmptyBoundaryControlReason(.01f,ctx)==R::ContextDeltaTooLarge);}
+ for(float invalid:{0.f,-.01f}){ctx.deltaSeconds=invalid;CHECK(ManualEmptyBoundaryControlReason(.01f,ctx)==R::StepDeltaExceedsContext);}
  ctx.deltaSeconds=.02f;ctx.reloadTimeMultiplier=2;CHECK(ManualEmptyBoundaryControlReason(.01f,ctx)==R::ContextMultiplierNotOne);
  ctx.reloadTimeMultiplier=1;ctx.inputFlags=2;ctx.orderRequested=true;CHECK(ManualEmptyBoundaryControlReason(.01f,ctx)==R::UnsupportedInput);
  ctx.inputFlags=0;ctx.orderRequested=false;ctx.flags24Through28[2]=true;CHECK(ManualEmptyBoundaryControlReason(.01f,ctx)==R::UnsupportedContextFlags);
@@ -33,7 +38,7 @@ struct Native {unsigned calls=0,writes=0;std::uint8_t flag=0;};
 bool Exchange(void* context,std::uint8_t expected,std::uint8_t replacement,std::uint8_t& observed){auto& n=*static_cast<Native*>(context);observed=n.flag;if(observed!=expected)return false;n.flag=replacement;++n.writes;return true;}
 int OriginalUnchanged(){Native n;MagazineEmptyByteOverride patch;ReloadUpdateContext ctx;ctx.deltaSeconds=.05f;ctx.reloadTimeMultiplier=1;ctx.flags24Through28[0]=true;ctx.reloadTimeMultiplier=1;ctx.flags24Through28[0]=true;
  // A Step still cannot claim more elapsed time than its actual parent context.
- const float delta=.06f;const bool control=ValidManualReloadDelta(delta)&&delta<=ctx.deltaSeconds;
+ const float delta=.06f;const bool control=ValidManualEmptyStepDelta(delta,ctx.deltaSeconds);
  CHECK(!control&&ManualEmptyDiagnosticContextReadAllowed(Boundary()));
  RunMagazineEmptyByteOverride({&n,Exchange},n.flag,control,[](void* context){++static_cast<Native*>(context)->calls;},&n,patch);
  CHECK(n.calls==1&&n.writes==0&&n.flag==0&&!patch.applied&&!patch.restored);return 0;
@@ -42,7 +47,7 @@ int Retention(){MagazineEmptyDiagnosticJournal j;MagazineEmptyDiagnosticRecord r
  r.sample.branch=0;r.sample.identity.owner={0x10000,0x20000,0x30000,0x40000,1,1,1};r.sample.before.address=0x50000;
  r.hasBefore=r.hasAfter=true;r.sample.before.currentState=r.sample.before.nextState=2;r.sample.before.loaded=0;r.after=r.sample.before;r.after.nextState=10;
  r.boundaryReasonKnown=r.rawContextKnown=true;r.boundaryReason=unsigned(ManualEmptyBoundaryDiagnosticReason::StepDeltaTooLarge);
- r.stepDeltaBits=std::bit_cast<unsigned>(.06f);r.contextDeltaBits=std::bit_cast<unsigned>(.1f);j.Observe(r);
+ r.stepDeltaBits=std::bit_cast<unsigned>(std::nextafter(.25f,1.f));r.contextDeltaBits=std::bit_cast<unsigned>(.25f);j.Observe(r);
  for(unsigned n=0;n<10000;++n){MagazineEmptyDiagnosticRecord noise;noise.sample.before.address=0x80000000+n*4;j.Observe(noise);}
  CHECK(j.Size()==1&&j.Row(0).hasAfter&&j.Row(0).boundaryReason==unsigned(ManualEmptyBoundaryDiagnosticReason::StepDeltaTooLarge));
  auto undecoded=r;undecoded.boundaryReason=unsigned(ManualEmptyBoundaryDiagnosticReason::ContextDecodeFailed);undecoded.rawContextFlags[3]=2;j.Observe(undecoded);

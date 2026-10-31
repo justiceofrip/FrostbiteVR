@@ -4,12 +4,20 @@
 #include "Bc2ReloadRequestCycle.h"
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <optional>
 #include <cstdint>
 
 namespace fvr::bc2 {
 // Only the verified Step state-2 reload-entry branch consumes this override.
 // Never wrap Update: its shot subscribers also receive the complete context.
+inline bool ValidManualEmptyStepDelta(float step,float contextDelta)noexcept {
+    // The scoped +28 reload-entry inhibitor is proved through a 250 ms hitch.
+    // It neither changes simulation time nor extends the original owner lease.
+    // Holds, transfers and recovery retain ValidManualReloadDelta's 100 ms limit.
+    return std::isfinite(step)&&std::isfinite(contextDelta)&&step>0&&
+        step<=contextDelta&&contextDelta<=.25f;
+}
 inline std::int64_t MagazineEmptyEvidenceDeadline(std::int64_t observed,std::int64_t ownerDeadline)noexcept {
     // Every branch also consumes the original server-owner read (200 ms).
     if(observed<=0||observed>INT64_MAX-200000000||ownerDeadline<=observed)return 0;
@@ -44,7 +52,7 @@ inline bool ManualEmptyStepBoundaryEligible(const MagazineEmptyStep& s,
         b.address>=0x10000&&b.wrapperOffset==(s.branch==0?0x3cu:s.branch==1?0x40u:0x10u)&&
         b.currentState==2&&b.nextState==2&&std::isfinite(b.phaseTimer)&&b.phaseTimer>=0&&
         b.loaded>=0&&b.loaded<=1000000&&b.reserve>=0&&b.reserve<=1000000&&!(b.flagsA8&(8|16))&&
-        ValidManualReloadDelta(context.deltaSeconds)&&
+        ValidManualEmptyStepDelta(context.deltaSeconds,context.deltaSeconds)&&
         context.reloadTimeMultiplier==1&&!context.orderRequested&&!(context.inputFlags&~5u)&&
         context.fireRequested==bool(context.inputFlags&1)&&context.reloadRequested==bool(context.inputFlags&4)&&
         context.flags24Through28[0]&&!context.flags24Through28[2]&&!context.flags24Through28[4];
