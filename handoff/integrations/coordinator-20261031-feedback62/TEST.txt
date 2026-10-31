@@ -1,0 +1,14 @@
+Private 0.1.26 candidate -- headset acceptance pending
+
+Start through the launcher after reopening it; confirm it shows0.1.26.
+Logging stays enabled. Stop VR saves the complete native report.
+
+1. LMG: try the cover grab and lift, then the existing container/refill/feed/close
+   sequence. This candidate fixes the immediate cancellation on a repeated input
+   packet. Record whether the cover actually moves and which first stage stops.
+2. Holster swap while holding the movement stick, then while sprinting. Movement
+   should continue across equipment-only swaps. A real focus/tracking loss still
+   needs the stick/buttons released before movement resumes.
+
+Keep prior shotgun/grip/HUD progress separate; this is not all-weapons acceptance.
+No controller actions are requested until the user chooses to test.

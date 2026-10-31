@@ -1,0 +1,67 @@
+{
+  "schema": "fvr.feedback62.integration.v1",
+  "built_source_commit": "7b096be8f69001b3b6f32bf9b18bc4cc5a745177",
+  "native_source_sha256": "2a532f8eb5f395f82a4825b2d19c2e9671314c1ec02d003f4dd35f7fca8df7da",
+  "build_receipt": "reports/coordinator-20261031-feedback62/normal-runtime/build-receipt.json",
+  "build_receipt_sha256": "91836585f7d61e02ace7d7a935461c5be4278128f4df6d45d25e6d5303c8c8e6",
+  "included_commits": [
+    "ac17a703a30eb8b7e406edcbc1df507f42bd889c",
+    "7b096be8f69001b3b6f32bf9b18bc4cc5a745177"
+  ],
+  "normal_checks": {
+    "x86": "341/341",
+    "x64": "341/341"
+  },
+  "focused_checks": "8/8: seven unchanged focused-01 passes and corrected feed focused-02",
+  "prior_focused_failure_retained": true,
+  "source_changes": [
+    "retain original feed contact geometry across repeated controller packets, preserving current admission and original leases",
+    "separate movement/sprint lifetime from equipment button rearming on verified same actor/control route; real pauses and losses still rearm"
+  ],
+  "recorded_failure": {
+    "session": "20261031-134127-052-2cef713c",
+    "version": "0.1.25",
+    "native_report_complete": true,
+    "feed_serials": [
+      308,
+      309,
+      310
+    ],
+    "internal_grab_cancelled_next_update": true,
+    "visible_cover_motion_confirmed": false,
+    "movement_lock_reproduced": false
+  },
+  "user_feedback": [
+    "pump shotgun nearly as good as SPAS in limited use",
+    "LMG two-hand grip works again",
+    "ammo counter stable in tested guns",
+    "LMG manual reload still failed",
+    "movement sometimes stuck after holster swap"
+  ],
+  "private_candidate": "0.1.26",
+  "installed": true,
+  "rollback_version": "0.1.25",
+  "package_files": 101,
+  "runtime_files": 93,
+  "package_sha256": "a1f6d5266110ea352999b5474c5356b76a6517454e52a6ca4060142a58983b44",
+  "settings_preserved": true,
+  "installed_validation_passed": true,
+  "installation_evidence": "reports/coordinator-20261031-feedback62/installation.json",
+  "installed_validation_evidence": "reports/coordinator-20261031-feedback62/installed-validation.log",
+  "source_pushed": "7b096be8f69001b3b6f32bf9b18bc4cc5a745177",
+  "source_push_evidence": "reports/coordinator-20261031-feedback62/source-push.json",
+  "user_session_observed": true,
+  "new_game_started": false,
+  "live_emulated_input_performed": false,
+  "session_cleanup": "ended",
+  "resolution_guard_released": true,
+  "headset_accepted": false,
+  "agents_retired": true,
+  "public_release": false,
+  "remaining": [
+    "new feed/movement behavior needs headset confirmation",
+    "all-weapon manual completion remains unaccepted",
+    "underbarrel, aim, destruction, C4 and measured performance acceptance remain open"
+  ],
+  "final_status_push_and_lease_close": "reports/coordinator-20261031-feedback62/close.json"
+}

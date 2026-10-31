@@ -14,8 +14,11 @@ Real pauses, focus/tracking/reference/actor loss still require neutral recovery.
 This is a source-supported fix; this session did not reproduce the user's lock.
 
 Three narrow implementers and one independent reviewer finished and retired.
-Validation/install result will be recorded in receipt.json. Runtime success and
+Validation/install result is recorded in receipt.json. Runtime success and
 all-weapon acceptance are not established by these deterministic checks.
 Raw session is retained under launcher data/runtime/sessions/20261031-134127-052-2cef713c.
 Derived first300s and agent findings: coordinator worktree reports/coordinator-20261031-feedback62.
 Normal Stop VR saved full report, released resolution guard; original game closed normally.
+Private0.1.26 installed, rollback0.1.25; source pushed, settings/logging preserved.
+Normal x86/x64 341/341 each, focused8/8; failed fixture retained.
+No candidate headset success is claimed.

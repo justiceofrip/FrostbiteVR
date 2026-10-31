@@ -5,9 +5,9 @@ Updated October 31, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
-Feedback61 is pushed and private 0.1.25 is installed: acquired-grasp feed pickup, current aim-confirmation ordering and pump recovery custody are corrected. Both normal builds pass 341/341, focused 13/13 and generator 22/22 pass; generated production header matches pinned inputs. Setup/assets validation passes; settings/logging preserved, 0.1.24 rollback. [Receipt](../handoff/integrations/coordinator-20261031-feedback61/receipt.json). New headset behavior remains unaccepted.
+Feedback62 is pushed and private 0.1.26 is installed: feed contact stays stable across repeated controller packets; verified equipment-only swaps preserve movement/sprint without carrying weapon-button holds. Both normal builds pass 341/341 and eight affected focused suites pass. Setup/assets validation passes; settings/logging preserved, 0.1.25 rollback. [Receipt](../handoff/integrations/coordinator-20261031-feedback62/receipt.json). Corrected headset behavior remains unaccepted.
 
-The user's 0.1.24 session still failed T194 partial-pump and QJU88 grip/reload; [feedback](archive/2026-10-31-bc2vr-0.1.24-buglist.md). Its complete native report identifies feed orientation refusal. The initial native held-lease loss remains unattributed; aim ordering is source-supported. Earlier T194 shell/rail progress remains, without a new acceptance claim.
+The user's 0.1.25 session reports better pump-shotgun behavior, restored LMG two-hand grip and stable ammo display in tested guns; LMG reload still failed and holster swaps sometimes blocked movement. [Feedback](archive/2026-10-31-bc2vr-0.1.25-buglist.md). The logged LMG grab cancelled on its next update; it did not prove visible cover movement. Movement rearming is source-supported, not reproduced in the idle session. Full report saved, resolution guard released, game closed normally.
 
 The user's 0.1.22 headset session confirms AN94 manual magazine reload and smooth firing. It reports support-grip drops, T194 shell insertion/QJU88 reload failures, underbarrel failure and HUD flicker; [feedback](archive/2026-10-31-bc2vr-0.1.22-buglist.md). Cadence58's Fire-continuity correction remains included. [Test card](../handoff/integrations/coordinator-20261031-feedback59/TEST.txt).
 
