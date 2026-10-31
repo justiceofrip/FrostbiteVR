@@ -793,6 +793,10 @@ struct Host {
         }
         if(menu){const auto before=layers.size();timed(HostStage::Menu,[&]{menu->Layers(local,layers);});
             diagnostic.menuLayers=std::uint32_t(layers.size()-before);report.menuFrames=menu->Frames();report.menuErrors=menu->Errors();}
+        // Normal copy completion may have deferred its sole ACK on IPC
+        // contention. Retry once after composition, before EndFrame can wait;
+        // cancellation already precedes feedback and Busy keeps the receipt.
+        if(provider)timed(HostStage::Feedback,[&]{provider->ServiceFeedback();});
         XrFrameEndInfo end{XR_TYPE_FRAME_END_INFO};end.displayTime=frameTime;end.environmentBlendMode=XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
         end.layerCount=std::uint32_t(layers.size());end.layers=layers.data();
         diagnostic.worldLayer=submit;diagnostic.layers=end.layerCount;diagnostic.endAttempted=true;

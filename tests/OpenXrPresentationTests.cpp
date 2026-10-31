@@ -81,11 +81,15 @@ int NormalCopyPollRegression(){
 struct Delayed final:runtime::IFrameProvider {
     ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;std::array<ComPtr<ID3D11Texture2D>,2> images;
     graphics::D3D11PairProducer producer;runtime::TrackingFrame pending{};unsigned consumed=0,discarded=0;std::uint64_t epoch=0;
+    graphics::PairTicket deferred{},lastCompleted{};unsigned(*runtimeLayers)()=nullptr;
+    unsigned completedLayers=0,feedbackAttempts=0,preEndServices=0,busyServices=0,recoveredServices=0,acknowledged=0;
+    bool feedbackPending=false;
     bool faultInjected=false,invalidPoseInjected=false;std::string error;
     bool TryGetPair(const runtime::PresentationRequirements&,const runtime::TrackingFrame&,graphics::TextureDescriptor&,graphics::PairTicket&)noexcept override{return false;}
     void Suspend()noexcept override{pending={};}
     bool TryGetCompletedPair(const runtime::PresentationRequirements& req,const runtime::TrackingFrame& current,runtime::TrackingFrame& rendered,graphics::TextureDescriptor& d,graphics::PairTicket& ticket)noexcept override{
         try {
+            if(feedbackPending){error="provider queried while exact ACK remained deferred";return false;}
             const unsigned frame=unsigned((current.predictedNs-1000000000)/11000000);
             if(frame>=40&&frame<=67){pending={};return false;}
             if(!pending.generation||pending.spaceGeneration!=current.spaceGeneration){pending=current;return false;}
@@ -105,7 +109,29 @@ struct Delayed final:runtime::IFrameProvider {
             return true;
         }catch(...){error="fixture failed";return false;}
     }
-    void PairConsumed(const graphics::PairTicket& ticket,bool okay)noexcept override{if(okay)++consumed;else {++discarded;producer.Reset();}producer.Acknowledge(ticket,okay);}
+    void PairConsumed(const graphics::PairTicket& ticket,bool okay)noexcept override {
+        if(feedbackPending||std::memcmp(&ticket,&lastCompleted,sizeof(ticket))==0){error="duplicate completion or overwritten deferred ACK";return;}
+        lastCompleted=ticket;
+        if(!okay){++discarded;producer.Reset();producer.Acknowledge(ticket,false);return;}
+        ++consumed;
+        // Force the first ACK attempt Busy after real host copy completion.
+        // Retain the exact producer source until ServiceFeedback succeeds.
+        deferred=ticket;feedbackPending=true;feedbackAttempts=0;completedLayers=runtimeLayers();
+    }
+    void ServiceFeedback()noexcept override {
+        if(!feedbackPending)return;
+        if(++feedbackAttempts==1){
+            // Every accepted keyed copy is presented by this normal-path run.
+            // The runtime increments its layer count only inside EndFrame.
+            if(runtimeLayers()!=completedLayers)error="deferred ACK first serviced after EndFrame";
+            ++preEndServices;
+            if(consumed%2==0){++busyServices;return;} // Final retry also Busy.
+        }else {
+            if(feedbackAttempts!=2||runtimeLayers()!=completedLayers+1)error="Busy ACK lost or retried again before EndFrame";
+            ++recoveredServices;
+        }
+        producer.Acknowledge(deferred,true);feedbackPending=false;++acknowledged;
+    }
 };
 struct InputObserver final:runtime::IFrameProvider {
     unsigned samples=0,tracked=0,released=0,invalid=0;bool floor=false;
@@ -658,17 +684,22 @@ int wmain(int argc,wchar_t** argv){
     if(argc==2&&std::wstring(argv[1])==L"--normal-copy-poll")return NormalCopyPollRegression();
     if(argc==2&&std::wstring(argv[1])==L"--lifetime-child"){Sleep(1000);return 0;}CHECK(argc==2);const auto path=std::filesystem::absolute(argv[1]);HMODULE runtime=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);CHECK(runtime);
     CHECK(NormalCopyPollRegression()==0);
-    Delayed provider;xr::HostOptions options;options.loaderPath=path;options.probeOnly=false;options.seconds=3;options.provider=&provider;
+    const auto layers=reinterpret_cast<unsigned(*)()>(GetProcAddress(runtime,"FakeXrLayers"));CHECK(layers);
+    Delayed provider;provider.runtimeLayers=layers;xr::HostOptions options;options.loaderPath=path;options.probeOnly=false;options.seconds=3;options.provider=&provider;
     const auto reportStorage=RunHostOnHeap(options);const auto& report=*reportStorage;
     if(!report.okay)std::cerr<<report.error<<'\n';CHECK(report.okay);
     const auto errors=reinterpret_cast<unsigned(*)()>(GetProcAddress(runtime,"FakeXrErrors"));
     const auto reuses=reinterpret_cast<unsigned(*)()>(GetProcAddress(runtime,"FakeXrReuses"));
-    const auto layers=reinterpret_cast<unsigned(*)()>(GetProcAddress(runtime,"FakeXrLayers"));CHECK(errors&&reuses&&layers);
+    CHECK(errors&&reuses);
     std::cout<<"frames="<<report.endedFrames<<" fresh="<<report.submittedPairs<<" reused="<<report.reusedFrames<<" blank="<<report.blankFrames<<" rejected="<<report.rejectedPairs<<" errors="<<errors()<<'\n';
     CHECK(errors()==0);CHECK(report.endedFrames==100);CHECK(report.reusedFrames>35);CHECK(reuses()>35);CHECK(report.presentedFrames==layers());
     CHECK(report.presentedFrames==report.submittedPairs+report.reusedFrames);CHECK(report.endedFrames==report.presentedFrames+report.blankFrames);
     CHECK(report.submittedPairs==provider.consumed);CHECK(provider.faultInjected&&provider.invalidPoseInjected&&provider.discarded==2&&report.rejectedPairs==2);
     CHECK(report.maxRetainedAgeNs<=250000000&&report.maxRetainedAgeNs>100000000);CHECK(provider.error.empty());
+    CHECK(provider.preEndServices==provider.consumed&&provider.acknowledged==provider.consumed&&!provider.feedbackPending);
+    CHECK(provider.busyServices>0&&provider.recoveredServices==provider.busyServices);
+    CHECK(report.privateHostCopyService.budgetMs==0&&!report.privateGpuOrderedPresent.configured);
+    std::cout<<"Normal final feedback: forced Busy ACK, one retry before EndFrame, second-Busy retention/recovery and exactly one completion per source passed\n";
     const auto& diagnostic=report.frameDiagnostics;
     CHECK(diagnostic.frames==report.endedFrames&&diagnostic.noWorldFrames==report.blankFrames);
     CHECK(diagnostic.zeroLayerFrames==report.blankFrames&&diagnostic.menuOnlyFrames==0);

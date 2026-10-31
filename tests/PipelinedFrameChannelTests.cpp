@@ -201,7 +201,7 @@ int DeferredAcknowledgement(){
     CHECK(f.producer.PollOutcome()==ipc::Outcome::Discarded);return 0;
 }
 int ServiceDeferredFeedbackWithoutProviderQuery(){
-    for(bool cancel:{false,true}){
+    for(bool busyAtEnd:{false,true})for(unsigned cancellation=0;cancellation<3;++cancellation){
         ipc::RemoteFrameProvider host;CHECK(host.Create());CHECK(host.SetRequestLifetime(200));
         ipc::FrameChannel producer;CHECK(producer.ConnectProducer(host.Token()));
         const auto requirements=Requirements();runtime::TrackingFrame rendered{};
@@ -211,15 +211,23 @@ int ServiceDeferredFeedbackWithoutProviderQuery(){
         CHECK(producer.Publish(d,ticket)==Result::Ok);
         CHECK(host.TryGetCompletedPair(requirements,Tracking(1),rendered,d,ticket));
         HeldChannelMutex blocker(host.Token());CHECK(blocker.Ready());
-        host.PairConsumed(ticket,true); // GPU done; local Ready image still held.
         runtime::IFrameProvider& service=host;
-        if(cancel)service.Suspend();
-        service.ServiceFeedback();CHECK(producer.PollOutcome()==ipc::Outcome::Pending);
-        blocker.Release();service.ServiceFeedback();
+        if(cancellation==1)service.Suspend(); // Cancellation before GPU completion.
+        host.PairConsumed(ticket,true); // First ACK Busy; GPU done, local image held.
+        CHECK(producer.PollOutcome()==ipc::Outcome::Pending);
+        if(cancellation==2)service.Suspend(); // Cancellation before final ACK retry.
+        if(!busyAtEnd)blocker.Release();
+        service.ServiceFeedback(); // Host's final zero-wait service before EndFrame.
+        if(busyAtEnd){
+            CHECK(producer.PollOutcome()==ipc::Outcome::Pending);
+            CHECK(host.Statistics().completed==1&&host.Statistics().requested==2);
+            blocker.Release();service.ServiceFeedback(); // Next service recovers.
+        }
         // This virtual service neither re-queries nor admits another request.
         CHECK(host.Statistics().completed==1&&host.Statistics().requested==2);
         CHECK(producer.PollOutcome()==ipc::Outcome::Consumed);
-        if(cancel)CHECK(producer.TryTake(request)==Result::Busy);
+        service.ServiceFeedback(); // Idempotent after the exact receipt was sent.
+        if(cancellation)CHECK(producer.TryTake(request)==Result::Busy);
         else {CHECK(producer.TryTake(request)==Result::Ok);
             CHECK(request.trackingGeneration==Tracking(1).generation);
             CHECK(producer.Skip()==Result::Ok);}

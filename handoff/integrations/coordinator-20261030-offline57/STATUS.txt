@@ -10,6 +10,9 @@ Held-fire dispatch rechecks original input lifetime at the final write.
 Native timer emulation demonstrates shot grouping after hitches, not user-cause proof.
 Rig read batching saves10 native calls per snapshot with scalar fallback and both
 ownership bookends. Focused equivalence/ownership checks pass both architectures.
+Host retries deferred completed-frame feedback once before EndFrame. Forced-Busy,
+cancellation and exact-ACK checks pass in the emulated-runtime GPU/channel suites.
+This closes a scheduling gap; neither measured FPS nor a bursty-fire fix is claimed.
 Bursty feel, LMG aim, destruction and full in-headset reload completion remain unaccepted.
 Prior destruction/visual-axis/underbarrel fixes are retained; no redundant re-enrollment.
 Independent reload review: no actionable findings. Completed agents retired.

@@ -53,6 +53,8 @@ Current source changes
   explicit physical-feed activation and tested native command/completion route.
 - Fire: reject a command whose original input expired during processing.
 - Rig reads: group adjacent used fields, saving10 native calls per snapshot.
+- Host: retry deferred completed-frame feedback once before EndFrame; forced
+  contention, cancellation and exact acknowledgement pass offline GPU checks.
 - Agents completed their scoped jobs and retired; root validates/integrates.
 
 Evidence limits
