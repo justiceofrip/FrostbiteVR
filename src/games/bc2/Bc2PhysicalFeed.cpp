@@ -111,6 +111,11 @@ struct Bc2PhysicalFeed::State {
         std::optional<FeedEquipmentNativeView> native;bool grip=false,reload=false;std::optional<math::Matrix4> bodyFromHand;
         std::optional<PolicyContact> contact;};
     struct ReleaseWait {HandInteractionSample input{};std::uint64_t heldInput=0;std::int64_t deadlineNs=0;};
+    struct HandGrip {
+        HandClaimToken claim{};
+        FeedInteractionTargetKind kind=FeedInteractionTargetKind::None;
+        math::Matrix4 targetFromWrist{},weaponFromContact{};
+    };
     struct Equipment {
         explicit Equipment(const Bc2FeedRegistration& row)noexcept
             :registration(row),pose(row.geometry.poses[unsigned(Bc2FeedPoseId::Resting)]){}
@@ -127,6 +132,7 @@ struct Bc2PhysicalFeed::State {
         bool supplyNeutral=false;
         std::optional<FeedEquipmentSubmission> pending;
         std::optional<HandClaimToken> claim;
+        std::optional<HandGrip> handGrip;
         std::optional<FeedObservedContact> recoveryContact;
         std::optional<math::Matrix4> presentationSource;
         std::optional<FeedEquipmentGate> gate;
@@ -248,6 +254,21 @@ struct Bc2PhysicalFeed::State {
             e.chainBasis=weaponWorld;e.carriedPartsMask=ChainMask(g.chainCount);
             if(op!=FeedPhysicalOperation::SeatFeed){e.pouchBasis=weaponWorld;e.carriedPartsMask|=1;}}
     }
+    void GripTarget(Equipment& e,const HandClaimToken& claim,const math::Matrix4& rawWrist,
+        const math::Matrix4& target,FeedInteractionTargetKind kind,bool acquired)noexcept {
+        if(!Pose(rawWrist)||!Pose(target)||kind==FeedInteractionTargetKind::None){e.handGrip.reset();return;}
+        if(acquired||!e.handGrip||e.handGrip->claim!=claim||e.handGrip->kind!=kind){
+            auto relative=feed_interaction_detail::Multiply(rawWrist,Inverse(target));
+            // Contact is the measured anatomical wrist frame, not the cover
+            // bone or hinge. Constrain position, retaining the actual grasp's
+            // orientation. A loose object instead retains the complete actual
+            // wrist-to-object pickup offset, including its translation.
+            if(kind==FeedInteractionTargetKind::Contact)for(unsigned axis=0;axis<3;++axis)relative.values[3][axis]=0;
+            if(!Pose(relative)){e.handGrip.reset();return;}
+            e.handGrip=HandGrip{claim,kind,relative,target};
+        }
+        e.handGrip->weaponFromContact=target;
+    }
     void Applied(Equipment& e,const FeedAmmunitionReceipt& r)noexcept {
         switch(r.command.request.completion.candidate.operation){
         case FeedPhysicalOperation::OpenCover:e.cover=FeedCoverState::Open;break;
@@ -283,6 +304,7 @@ void Bc2PhysicalFeed::Suspend(const HandInteractionSample& input,HandInteraction
     publication.store({},std::memory_order_release);if(!state_)return;
     state_->diagnostics.suspends.fetch_add(1,std::memory_order_relaxed);
     for(auto& e:state_->equipment)if(e){if(e->claim){(void)hands.Release(input,*e->claim);e->claim.reset();}
+        e->handGrip.reset();
         e->ammunitionSupply.Suspend(input,hands);e->supplyNeutral=false;e->releaseWait.reset();
         if(e->session)e->motionDirty=true;
         // A rejected current packet may be newer than the last renderer
@@ -489,6 +511,11 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     const auto left=hands.Current(InteractionHand::Left);
     const auto& supplyHeld=e->ammunitionSupply.Held();
     const bool supplyHand=supplyHeld&&left&&left->token==supplyHeld->claim.token;
+    if(acquiredSupply&&supplyHand){
+        // Until the pickup's raw packet arrives, use the real delayed wrist
+        // and the acquired object's exact pose; the newer claim is independent.
+        state.GripTarget(*e,left->token,local,e->pose.weaponFromPouch,FeedInteractionTargetKind::Object,true);
+    }
     bool available=!left||(e->claim&&left->token==*e->claim)||supplyHand;
     if(e->claim&&(!left||left->token!=*e->claim))e->claim.reset();
     // Neutral arms the input edge, not contact. Like FeedInteraction, accept a
@@ -665,6 +692,14 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         out.interactionStatus=result.session.interaction.status;out.reloadStatus=result.session.reload.status;
         out.diagnostic.policyEvaluated=true;
         state.PoseTarget(*e,result.session.interaction,s.raw.weaponWorldMeters);
+        const auto& interaction=result.session.interaction;
+        if(interaction.target){
+            const auto hand=hands.Current(InteractionHand::Left);
+            if(hand&&((e->claim&&hand->token==*e->claim)||
+                (e->ammunitionSupply.Held()&&hand->token==e->ammunitionSupply.Held()->claim.token)))
+                state.GripTarget(*e,hand->token,local,*interaction.target,interaction.targetKind,
+                    interaction.status==FeedInteractionStatus::Acquired);
+        }else if(interaction.status!=FeedInteractionStatus::Duplicate&&!acquiredSupply)e->handGrip.reset();
         if(!result.session.interaction.target&&!result.session.interaction.completion&&
            (result.session.interaction.status==FeedInteractionStatus::Interrupted||result.session.interaction.status==FeedInteractionStatus::OffPath||
             result.session.interaction.status==FeedInteractionStatus::MotionJump||result.session.interaction.status==FeedInteractionStatus::Expired))e->motionDirty=true;
@@ -702,12 +737,22 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         p->originalWeaponWorldMeters=s.raw.weaponWorldMeters;p->operation=e->activeOperation;
         if(e->claim){const auto claim=hands.Current(InteractionHand::Left);
             if(claim&&claim->token==*e->claim&&claim->inputSequence==sourceInput.sequence&&claim->deadlineNs>now){
-                p->mechanismClaim=claim;p->mechanismWristWorldMeters=s.raw.rawLeftWristWorldMeters;
-                p->targetKind=e->motions.operations[unsigned(e->activeOperation)].kind==FeedMotionKind::FreePlacement?
-                    FeedInteractionTargetKind::Object:FeedInteractionTargetKind::Contact;}}
-        else if(const auto& held=e->ammunitionSupply.Held();held&&held->claim.inputSequence==sourceInput.sequence){
-            p->supplyObject=held;p->mechanismClaim=held->claim;p->mechanismWristWorldMeters=s.raw.rawLeftWristWorldMeters;
-            p->targetKind=FeedInteractionTargetKind::Object;
+                p->mechanismClaim=claim;p->mechanismInput=sourceInput;}}
+        else if(const auto& held=e->ammunitionSupply.Held();held&&held->claim.inputSequence==s.input.sequence&&held->claim.deadlineNs>now){
+            p->supplyObject=held;p->mechanismClaim=held->claim;p->mechanismInput=s.input;
+        }
+        if(p->mechanismClaim&&e->handGrip&&e->handGrip->claim==p->mechanismClaim->token){
+            const auto& grip=*e->handGrip;
+            const bool terminal=e->activeOperation==FeedPhysicalOperation::SeatFeed;
+            const auto& target=grip.kind==FeedInteractionTargetKind::Contact?grip.weaponFromContact:
+                terminal?pose->weaponFromChain[pose->chainCount-1]:pose->weaponFromPouch;
+            const auto& basis=grip.kind==FeedInteractionTargetKind::Contact?s.raw.weaponWorldMeters:
+                terminal?e->chainBasis:e->pouchBasis;
+            const auto wrist=feed_interaction_detail::Multiply(feed_interaction_detail::Multiply(grip.targetFromWrist,target),basis);
+            if(Pose(wrist)){p->mechanismWristWorldMeters=wrist;p->targetKind=grip.kind;}
+        }else if(!p->mechanismClaim)e->handGrip.reset();
+        if(!p->mechanismWristWorldMeters){
+            p->mechanismClaim.reset();p->mechanismInput.reset();p->supplyObject.reset();
         }
         math::Matrix4 identity{};for(unsigned i=0;i<4;++i)identity.values[i][i]=1;
         p->weaponFromCoverHinge=feed_interaction_detail::Multiply(Along(identity,FeedMotionKind::Hinge,e->coverRadians),e->registration.geometry.weaponFromHinge);

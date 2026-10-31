@@ -91,6 +91,8 @@ inline bool Bc2FeedSourceFresh(const Bc2PhysicalFeedPresentation& p,const Reload
         p.owner==owner&&p.rig==rig&&rig.soldier==owner.soldier&&rig.weak==owner.weak&&
         p.lifetime&&p.revision&&p.rigFingerprint&&Window(p.input,now)&&Window(current,now)&&
         p.input.owner==current.owner&&p.input.sequence<=current.sequence&&p.input.observedNs<=current.observedNs&&
+        (!p.mechanismInput||(p.mechanismInput->owner==current.owner&&
+            p.mechanismInput->sequence<=current.sequence&&p.mechanismInput->observedNs<=current.observedNs))&&
         current.owner.actor==((std::uint64_t(owner.weak)<<32)|owner.soldier)&&
         current.owner.actorGeneration==owner.actorGeneration&&current.owner.space==owner.space&&current.owner.equipGeneration&&
         p.weapon.id==owner.weapon&&p.weapon.generation==current.owner.equipGeneration&&equipment.weapon==owner.weapon&&
@@ -98,14 +100,31 @@ inline bool Bc2FeedSourceFresh(const Bc2PhysicalFeedPresentation& p,const Reload
         interaction::feed_mechanism_detail::Supply(p.supply,true)&&!(p.carriedPartsMask&~CarryMask(p.chainCount))&&
         interaction::feed_mechanism_detail::Pose(p.originalWeaponWorldMeters);
 }
+inline std::optional<math::Matrix4> Bc2FeedMechanismWristWorld(const Bc2PhysicalFeedPresentation& p,
+    const math::Matrix4& placedWeaponWorldMeters)noexcept {
+    using namespace interaction::feed_interaction_detail;
+    if(!p.mechanismWristWorldMeters||!Pose(*p.mechanismWristWorldMeters))return {};
+    if(p.targetKind==interaction::FeedInteractionTargetKind::Object)return p.mechanismWristWorldMeters;
+    if(p.targetKind!=interaction::FeedInteractionTargetKind::Contact||
+       !Pose(p.originalWeaponWorldMeters)||!Pose(placedWeaponWorldMeters))return {};
+    // The cover follows the current renderer placement. Its anatomical contact
+    // must follow the same placement even when gameplay published an older pose.
+    const auto wrist=Multiply(Multiply(*p.mechanismWristWorldMeters,Inverse(p.originalWeaponWorldMeters)),placedWeaponWorldMeters);
+    return Pose(wrist)?std::optional<math::Matrix4>{wrist}:std::nullopt;
+}
 inline bool Bc2FeedMechanismClaimFresh(const Bc2PhysicalFeedPresentation& p,std::int64_t now)noexcept {
-    if(!p.mechanismClaim||!p.mechanismWristWorldMeters||!feed_presentation_detail::Window(p.input,now))return false;
+    if(!p.mechanismClaim||!p.mechanismInput||!p.mechanismWristWorldMeters||
+       !feed_presentation_detail::Window(p.input,now)||!feed_presentation_detail::Window(*p.mechanismInput,now))return false;
     const auto& claim=*p.mechanismClaim;const auto& token=claim.token;
+    const auto& hand=*p.mechanismInput;
     const auto* row=FindBc2FeedRegistration(p.registrationKey);
     const bool mechanism=token.kind==interaction::HandClaimKind::Mechanism&&token.item==p.weapon&&
-        token.contact.id&&token.contact.generation==p.lifetime&&token.prerequisiteClaim&&!p.supplyObject;
+        token.contact.id&&token.contact.generation==p.lifetime&&token.prerequisiteClaim&&!p.supplyObject&&
+        hand.sequence==p.input.sequence&&hand.observedNs==p.input.observedNs&&hand.deadlineNs==p.input.deadlineNs&&
+        hand.released==p.input.released;
     const bool supply=row&&p.supplyObject&&token.kind==interaction::HandClaimKind::AmmoObject&&!token.prerequisiteClaim&&
-        p.supplyObject->claim.token==token&&p.supplyObject->item==token.item&&p.supplyObject->units&&
+        p.supplyObject->claim.token==token&&p.supplyObject->claim.inputSequence==claim.inputSequence&&
+        p.supplyObject->claim.deadlineNs==claim.deadlineNs&&p.supplyObject->item==token.item&&p.supplyObject->units&&
         token.item.id==Bc2FeedSupplyConfig().itemNamespace&&token.item.generation&&
         p.supplyObject->family==interaction::ReloadInsertionFamily::Magazine&&
         p.supplyObject->identity.owner==p.input.owner&&p.supplyObject->identity.weapon==p.weapon&&
@@ -113,9 +132,12 @@ inline bool Bc2FeedMechanismClaimFresh(const Bc2PhysicalFeedPresentation& p,std:
         p.supplyObject->identity.trackingEpoch==p.input.owner.space&&
         token.contact==Bc2FeedSupplyConfig().pouch&&p.operation==interaction::FeedPhysicalOperation::AttachContainer;
     return token.id&&token.hand==interaction::InteractionHand::Left&&(mechanism||supply)&&
-        token.owner==p.input.owner&&
-        claim.inputSequence==p.input.sequence&&claim.deadlineNs>now&&claim.deadlineNs<=p.input.deadlineNs&&
-        !p.input.released[0]&&p.operation!=interaction::FeedPhysicalOperation::None&&
+        token.owner==p.input.owner&&hand.owner==p.input.owner&&
+        hand.sequence>=p.input.sequence&&hand.observedNs>=p.input.observedNs&&
+        (hand.sequence!=p.input.sequence||(hand.observedNs==p.input.observedNs&&
+            hand.deadlineNs==p.input.deadlineNs&&hand.released==p.input.released))&&
+        claim.inputSequence==hand.sequence&&claim.deadlineNs>now&&claim.deadlineNs<=hand.deadlineNs&&
+        !hand.released[0]&&!hand.released[1]&&p.operation!=interaction::FeedPhysicalOperation::None&&
         p.targetKind!=interaction::FeedInteractionTargetKind::None&&
         interaction::feed_mechanism_detail::Pose(*p.mechanismWristWorldMeters);
 }
@@ -163,6 +185,8 @@ inline bool Bc2FeedPresentationRetained(const Bc2PhysicalFeedPresentation& origi
        (original.supplyObject&&(original.supplyObject->identity!=current.supplyObject->identity||
         original.supplyObject->item!=current.supplyObject->item||original.supplyObject->units!=current.supplyObject->units)))return false;
     return !posedHand||(Bc2FeedMechanismClaimFresh(original,now)&&Bc2FeedMechanismClaimFresh(current,now)&&
+        current.mechanismInput->sequence>=original.mechanismInput->sequence&&
+        current.mechanismInput->observedNs>=original.mechanismInput->observedNs&&
         original.mechanismClaim->token==current.mechanismClaim->token&&original.operation==current.operation&&
         original.targetKind==current.targetKind);
 }

@@ -30,6 +30,9 @@ struct Bc2PhysicalFeedPresentation {
     math::Matrix4 originalWeaponWorldMeters{};
     std::optional<math::Matrix4> mechanismWristWorldMeters;
     std::optional<interaction::HandClaim> mechanismClaim;
+    // Exact packet that owns the hand claim. Supply pickup/renewal can precede
+    // its rendered raw contact (input); neither packet renews the other lease.
+    std::optional<interaction::HandInteractionSample> mechanismInput;
     std::optional<interaction::AmmoSupplyObject> supplyObject;
     interaction::FeedPhysicalOperation operation=interaction::FeedPhysicalOperation::None;
     interaction::FeedInteractionTargetKind targetKind=interaction::FeedInteractionTargetKind::None;

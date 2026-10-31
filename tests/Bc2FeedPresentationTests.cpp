@@ -48,6 +48,7 @@ SelectedMeshesSnapshot Selected(){
     Text(state.meshes[0].assetPath,Geometry().meshPath);return s;
 }
 void Claim(Bc2PhysicalFeedPresentation& p){
+    p.mechanismInput=p.input;
     p.mechanismClaim=HandClaim{{40,p.input.owner,InteractionHand::Left,HandClaimKind::Mechanism,
         p.weapon,{902,p.lifetime},39},p.input.deadlineNs,p.input.sequence};
     p.mechanismWristWorldMeters=Identity();p.operation=FeedPhysicalOperation::DetachContainer;
@@ -136,6 +137,7 @@ int RealMechanismClaimAndPairRetentionAreRequired(){
     Claim(p);CHECK(Bc2FeedMechanismClaimFresh(p,1020000000));
     auto current=p;++current.revision;++current.input.sequence;current.input.observedNs+=10000000;current.input.deadlineNs+=10000000;
     current.mechanismClaim->inputSequence=current.input.sequence;current.mechanismClaim->deadlineNs=current.input.deadlineNs;
+    current.mechanismInput=current.input;
     CHECK(Bc2FeedPresentationRetained(p,current,true,1020000000));
     auto bad=current;bad.mechanismClaim.reset();CHECK(!Bc2FeedPresentationRetained(p,bad,true,1020000000));
     CHECK(Bc2FeedPresentationRetained(p,bad,false,1020000000)); // Rest geometry needs no hand claim.
@@ -154,6 +156,7 @@ int SupplyHandKeepsItsActualAmmoClaim(){
     object.claim={{55,p.input.owner,InteractionHand::Left,HandClaimKind::AmmoObject,object.item,config.pouch,0},
         p.input.deadlineNs,p.input.sequence};
     p.supplyObject=object;p.mechanismClaim=object.claim;p.mechanismWristWorldMeters=Identity();
+    p.mechanismInput=p.input;
     p.operation=FeedPhysicalOperation::AttachContainer;p.targetKind=FeedInteractionTargetKind::Object;
     CHECK(Bc2FeedMechanismClaimFresh(p,1020000000));
     auto bad=p;bad.supplyObject.reset();CHECK(!Bc2FeedMechanismClaimFresh(bad,1020000000));
@@ -161,6 +164,40 @@ int SupplyHandKeepsItsActualAmmoClaim(){
     bad=p;bad.operation=FeedPhysicalOperation::OpenCover;CHECK(!Bc2FeedMechanismClaimFresh(bad,1020000000));
     bad=p;++bad.supplyObject->units;CHECK(!Bc2FeedPresentationRetained(p,bad,false,1020000000));
     bad=p;bad.input.released[0]=true;CHECK(!Bc2FeedMechanismClaimFresh(bad,1020000000));return 0;
+}
+int SupplyClaimAndDelayedRawKeepIndependentOriginalLeases(){
+    auto p=Physical();const auto config=Bc2FeedSupplyConfig();const auto* row=FindBc2FeedRegistration(p.registrationKey);CHECK(row);
+    p.input.released[0]=true; // Real delayed neutral geometry can precede pickup.
+    auto hand=p.input;++hand.sequence;hand.observedNs+=10000000;hand.deadlineNs+=10000000;hand.released[0]=false;
+    AmmoSupplyObject object;object.identity={hand.owner,p.weapon,{row->key,row->mechanism.revision},{1234,19},hand.owner.space};
+    object.item={config.itemNamespace,2};object.family=ReloadInsertionFamily::Magazine;object.units=80;
+    object.claim={{55,hand.owner,InteractionHand::Left,HandClaimKind::AmmoObject,object.item,config.pouch,0},hand.deadlineNs,hand.sequence};
+    p.supplyObject=object;p.mechanismClaim=object.claim;p.mechanismInput=hand;p.mechanismWristWorldMeters=Identity();
+    p.operation=FeedPhysicalOperation::AttachContainer;p.targetKind=FeedInteractionTargetKind::Object;
+    CHECK(Bc2FeedMechanismClaimFresh(p,1020000000));
+    CHECK(Bc2FeedSourceFresh(p,p.owner,hand,Equipment(),p.rig,1020000000));
+    CHECK(!Bc2FeedSourceFresh(p,p.owner,p.input,Equipment(),p.rig,1020000000));
+    auto renewed=p;++renewed.mechanismInput->sequence;renewed.mechanismInput->observedNs+=10000000;renewed.mechanismInput->deadlineNs+=10000000;
+    renewed.mechanismClaim->inputSequence=renewed.mechanismInput->sequence;renewed.mechanismClaim->deadlineNs=renewed.mechanismInput->deadlineNs;
+    renewed.supplyObject->claim=*renewed.mechanismClaim;
+    CHECK(Bc2FeedPresentationRetained(p,renewed,true,1020000000));
+    CHECK(!Bc2FeedPresentationRetained(p,renewed,true,p.input.deadlineNs));
+    CHECK(p.input.sequence==20&&p.input.deadlineNs==1100000000&&p.mechanismClaim->inputSequence==21);
+    for(unsigned fault=0;fault<7;++fault){
+        auto bad=p;
+        if(fault==0)bad.mechanismInput.reset();
+        if(fault==1)bad.mechanismInput->released[0]=true;
+        if(fault==2)bad.mechanismInput->tracked[0]=false;
+        if(fault==3)++bad.mechanismInput->owner.equipGeneration;
+        if(fault==4)++bad.mechanismClaim->inputSequence;
+        if(fault==5)--bad.mechanismInput->deadlineNs;
+        if(fault==6)++bad.supplyObject->claim.inputSequence;
+        CHECK(!Bc2FeedMechanismClaimFresh(bad,1020000000));
+    }
+    auto mechanism=Physical();Claim(mechanism);mechanism.mechanismInput=hand;
+    mechanism.mechanismClaim->inputSequence=hand.sequence;mechanism.mechanismClaim->deadlineNs=hand.deadlineNs;
+    CHECK(!Bc2FeedMechanismClaimFresh(mechanism,1020000000)); // A mechanism never borrows newer supply evidence.
+    return 0;
 }
 int CarryMaskSelectsSeparateRetainedWorldBases(){
     auto p=Physical();p.carriedPartsMask=61;p.pouchCarryWeaponWorldMeters=Identity();p.chainCarryWeaponWorldMeters=Identity();
@@ -313,9 +350,10 @@ int main(){
     CHECK(ExactSelectedConfigurationAndOriginalLeaseAreRequired()==0);
     CHECK(RealMechanismClaimAndPairRetentionAreRequired()==0);
     CHECK(SupplyHandKeepsItsActualAmmoClaim()==0);
+    CHECK(SupplyClaimAndDelayedRawKeepIndependentOriginalLeases()==0);
     CHECK(CarryMaskSelectsSeparateRetainedWorldBases()==0);
     CHECK(IndependentSixBoneChainUsesOwnRolesAndCoverFrame()==0);
     CHECK(RigidCoverSiblingsKeepOwnTargetsAndNativeDescendants()==0);
     CHECK(RegistrationAndChainIdentitySurvivePairRetention()==0);
-    std::puts("Bc2FeedPresentationTests: 12 geometry/lease/selector/claim/carry groups; no native/headset acceptance");
+    std::puts("Bc2FeedPresentationTests: 15 geometry/lease/selector/claim/carry groups; no native/headset acceptance");
 }

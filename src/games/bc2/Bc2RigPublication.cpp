@@ -2063,9 +2063,10 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
             const auto ordinaryWrites=writes;bool valid=true;
             auto feedSolved=solved;auto wrist=freeLeft;
             if(feedHandClaimed){
-                valid=handRoleReady&&Bc2FeedMechanismClaimFresh(*input.feed,ReloadNanos());
+                const auto feedWrist=Bc2FeedMechanismWristWorld(*input.feed,placedMeters);
+                valid=handRoleReady&&feedWrist&&Bc2FeedMechanismClaimFresh(*input.feed,ReloadNanos());
                 if(valid){
-                    wrist=feed_presentation_detail::ScaleTranslation(*input.feed->mechanismWristWorldMeters,input.input.worldUnitsPerMeter);
+                    wrist=feed_presentation_detail::ScaleTranslation(*feedWrist,input.input.worldUnitsPerMeter);
                     feedSolved=interaction::SolveTrackedArms(rig->parents,armNative,rig->left,rig->right,
                         {wrist,targets->arms[0].poleDirection,targets->arms[0].shoulder,true,trackedReach},{{},{},{},false});
                     valid=feedSolved&&!feedSolved->reachClamped[0]&&feedSolved->targetError[0]<=.0001f*input.input.worldUnitsPerMeter;

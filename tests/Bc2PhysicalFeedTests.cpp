@@ -1,4 +1,6 @@
 #include "Bc2PhysicalFeed.h"
+#include "Bc2FeedPresentation.h"
+#include "Bc2HandPose.h"
 #include "Bc2SupportControllerMapping.h"
 #include "Test.h"
 #include <cmath>
@@ -18,6 +20,10 @@ template<std::size_t N>void Text(std::array<char,N>& out,std::string_view text){
 fvr::math::Matrix4 Identity(){fvr::math::Matrix4 m{};for(unsigned i=0;i<4;++i)m.values[i][i]=1;return m;}
 fvr::math::Matrix4 Turn(float angle){auto m=Identity();const auto c=std::cos(angle),s=std::sin(angle);
     m.values[0][0]=m.values[1][1]=c;m.values[0][1]=s;m.values[1][0]=-s;return m;}
+bool NearPose(const fvr::math::Matrix4& a,const fvr::math::Matrix4& b,float tolerance=.00005f){
+    for(unsigned r=0;r<4;++r)for(unsigned c=0;c<4;++c)if(!Near(a.values[r][c],b.values[r][c],tolerance))return false;
+    return true;
+}
 ReloadRawContact RepublishFeedContact(const ReloadRawContact&,const fvr::math::Matrix4&,std::int64_t);
 struct Fixture {
     const Bc2FeedRegistration* registration=FindBc2FeedRegistration(bc2_feed_profile_detail::M60Registration.key);
@@ -288,6 +294,66 @@ struct Fixture {
     }
     bool BlocksFire()const {return sample.equipment&&physical.BlocksFire(sample.owner,*sample.equipment,sample.binding);}
 };
+int FeedPresentationReachesArmAndHand(const Fixture& f,const fvr::math::Matrix4& expected,
+    const std::optional<fvr::math::Matrix4>& currentWeapon=std::nullopt){
+    const auto& p=*f.result.presentation;const auto now=f.sample.input.nowNs;const auto& g=f.registration->geometry;
+    CHECK(Bc2FeedSourceFresh(p,f.sample.owner,f.sample.input,*f.sample.equipment,p.rig,now));
+    CHECK(Bc2FeedMechanismClaimFresh(p,now)&&p.mechanismWristWorldMeters);
+    const auto placed=currentWeapon?*currentWeapon:f.sample.raw.weaponWorldMeters;
+    const auto targetWrist=Bc2FeedMechanismWristWorld(p,placed);CHECK(targetWrist&&NearPose(*targetWrist,expected));
+    // Structural anatomy/parts fixture drives the same pure palette, IK and
+    // MechanismGrip consumers as RigPublication. It grants no production
+    // fingerprint binding, native callback execution or headset acceptance.
+    RigSnapshot rig;rig.identity=p.rig;rig.weaponBone=g.rootBone.index;
+    const auto count=rig.identity.count;rig.names.resize(count);rig.parents.assign(count,std::int32_t(rig.weaponBone));
+    CHECK(rig.weaponBone<count);
+    rig.evaluatedWorld.assign(count,Identity());rig.inverseBind.assign(count,Identity());
+    std::vector<bool> used(count,false);
+    for(unsigned i=0;i<count;++i)rig.names[i]="synthetic"+std::to_string(i);
+    rig.parents[rig.weaponBone]=-1;rig.names[rig.weaponBone]=g.rootBone.bone;used[rig.weaponBone]=true;
+    const auto part=[&](const Bc2FeedChainBone& bone){
+        if(bone.index>=count||bone.parentIndex>=count)return false;
+        rig.names[bone.index]=bone.bone;rig.parents[bone.index]=std::int32_t(bone.parentIndex);used[bone.index]=true;
+        return true;
+    };
+    CHECK(part(g.pouchBone)&&part(g.coverBone));for(unsigned i=0;i<g.chainCount;++i)CHECK(part(g.chain[i]));
+    for(unsigned i=0;i<g.coverCompanionCount;++i)CHECK(part(g.coverCompanions[i].bone));
+    std::vector<unsigned> free;for(unsigned i=0;i<count;++i)if(!used[i])free.push_back(i);CHECK(free.size()>=21);
+    rig.left={free[0],free[1],free[2]};rig.right={free[3],free[4],free[5]};
+    const auto at=[&](float x,float y,float z){auto m=Identity();m.values[3]={x,y,z,1};return m;};
+    const auto x=expected.values[3][0],y=expected.values[3][1],z=expected.values[3][2];
+    for(const auto arm:{rig.left,rig.right}){
+        rig.parents[arm.elbow]=std::int32_t(arm.shoulder);rig.parents[arm.wrist]=std::int32_t(arm.elbow);
+        rig.evaluatedWorld[arm.shoulder]=at(x-.4f,y+.3f,z);rig.evaluatedWorld[arm.elbow]=at(x-.2f,y+.1f,z);
+        rig.evaluatedWorld[arm.wrist]=at(x+.03f,y,z);
+    }
+    rig.names[rig.left.wrist]="LeftHand";
+    const std::array<const char*,5> fingers{"Thumb","Index","Middle","Ring","Pinky"};
+    for(unsigned digit=0;digit<5;++digit)for(unsigned joint=0;joint<3;++joint){
+        const auto index=free[6+digit*3+joint];const auto parent=joint?free[6+digit*3+joint-1]:rig.left.wrist;
+        rig.names[index]=std::string("LeftHand")+fingers[digit]+std::to_string(joint+1);rig.parents[index]=std::int32_t(parent);
+        const auto local=joint?(digit==0?at(.016f,0,.023f):at(0,0,joint==1?.03f:.022f)):
+            (digit==0?at(.03f,-.018f,.022f):at((2.5f-float(digit))*.02f,0,.065f));
+        rig.evaluatedWorld[index]=feed_interaction_detail::Multiply(local,rig.evaluatedWorld[parent]);
+    }
+    for(unsigned i=0;i<count;++i)rig.inverseBind[i]=feed_interaction_detail::Inverse(rig.evaluatedWorld[i]);
+    const auto binding=feed_presentation_detail::Derive(rig,g);CHECK(binding);
+    const auto bases=Bc2FeedWorldBases(p,placed);CHECK(bases);
+    const Bc2FeedPresentation parts{p.supply,p.weaponFromPouch,p.weaponFromChain,p.chainCount};
+    const auto frames=Bc2FeedPartWorldFrames(g,parts,p.weaponFromCoverHinge,*bases,1);CHECK(frames);
+    const auto writes=BuildBc2FeedPartWrites(*binding,rig,*frames);CHECK(writes);
+    CHECK(std::any_of(writes->begin(),writes->end(),[&](const auto& w){return w.index==g.coverBone.index&&NearPose(w.transform,(*frames)[1]);}));
+    const auto wrist=feed_presentation_detail::ScaleTranslation(*targetWrist,1);
+    const auto solved=SolveTrackedArms(rig.parents,rig.evaluatedWorld,rig.left,rig.right,
+        {wrist,{0,0,1},{},true,ArmReachPolicy::ExtendToAdmittedWrist},{{},{},{},false});
+    CHECK(solved&&!solved->reachClamped[0]&&solved->targetError[0]<=.0001f);
+    CHECK(std::any_of(solved->writes.begin(),solved->writes.end(),[&](const auto& w){return w.index==rig.left.wrist&&NearPose(w.transform,expected);}));
+    const auto hand=bc2_hand_detail::Derive(rig.names,rig.parents,rig.inverseBind,1);CHECK(hand);
+    const auto fingersPosed=GenerateHandPose(rig.parents,hand->referenceWorld,rig.evaluatedWorld,hand->pose,wrist,
+        LeftHandTargets(HandPoseRole::MechanismGrip,0,0));CHECK(fingersPosed&&fingersPosed->writes.size()==16);
+    CHECK(std::any_of(fingersPosed->writes.begin(),fingersPosed->writes.end(),[&](const auto& w){return w.index==rig.left.wrist&&NearPose(w.transform,expected);}));
+    return 0;
+}
 int ExactSelectedJoinAndPhysicalOwner(){
     Fixture f;CHECK(f.OpenCover());CHECK(f.submits==1);CHECK(f.result.blocksFire&&f.result.pending);
     CHECK(FindBc2FeedRegistration(f.submitted->source.config)==f.registration);
@@ -476,10 +542,38 @@ int EveryEnrolledFeedAcceptsObservedGraspWithDelayedPublication(){
         CHECK(f.result.diagnostic.neutralAgeNs==23880001);
         CHECK(f.result.ownsHand&&f.result.interactionStatus==FeedInteractionStatus::Acquired&&f.submits==0);
         CHECK(f.result.presentation&&f.result.presentation->mechanismWristWorldMeters);
-        CHECK(f.result.presentation->mechanismWristWorldMeters->values==wrist.values);
+        auto constrained=wrist;constrained.values[3]=contact.values[3];
+        CHECK(feed_interaction_detail::Distance(*f.result.presentation->mechanismWristWorldMeters,wrist)>contactOffset*.99f);
+        CHECK(FeedPresentationReachesArmAndHand(f,constrained)==0);
+        CHECK(f.result.presentation->mechanismInput->sequence==pressed.inputEvidence.sequence);
+        CHECK(f.result.presentation->mechanismClaim->deadlineNs==pressed.inputEvidence.deadlineNs);
         f.Consume(&pressed); // Duplicate render publication cannot add motion.
         CHECK(f.result.ownsHand&&!f.result.pending&&f.submits==0);
-        f.Tick(wrist,false);CHECK(!f.result.ownsHand&&!f.result.pending&&f.submits==0);
+        CHECK(FeedPresentationReachesArmAndHand(f,constrained)==0);
+        const auto moved=feed_interaction_detail::Multiply(feed_interaction_detail::Along(
+            feed_interaction_detail::Multiply(wrist,feed_interaction_detail::Inverse(m.weaponFromMotion)),m.kind,m.travel/12),m.weaponFromMotion);
+        const auto constrainedMoved=feed_interaction_detail::Multiply(feed_interaction_detail::Along(
+            feed_interaction_detail::Multiply(constrained,feed_interaction_detail::Inverse(m.weaponFromMotion)),m.kind,m.travel/12),m.weaponFromMotion);
+        f.Tick(moved,true);CHECK(f.result.interactionStatus==FeedInteractionStatus::Moving);
+        CHECK(FeedPresentationReachesArmAndHand(f,constrainedMoved)==0);
+        const auto movingRaw=f.sample.raw;const auto angle=f.result.presentation->coverRadians;
+        CHECK(angle!=0&&NearPose(movingRaw.rawLeftWristWorldMeters,moved)); // Guided wrist never becomes recognition input.
+        f.PrepareTick(moved,true);
+        auto world=Turn(.37f);world.values[3]={1.2f,-.3f,.2f,1};
+        // Palette construction can place the weapon after this publication.
+        // The cover and its attached wrist must move together without republishing input.
+        CHECK(FeedPresentationReachesArmAndHand(f,feed_interaction_detail::Multiply(constrainedMoved,world),world)==0);
+        // This fixture's original raw has structural rig metadata only; keep
+        // the same exact source evidence while moving its display transforms.
+        auto repeated=movingRaw;repeated.weaponWorldMeters=world;
+        repeated.rawLeftWristWorldMeters=feed_interaction_detail::Multiply(moved,world);
+        f.Consume(&repeated);CHECK(f.result.interactionStatus==FeedInteractionStatus::Duplicate);
+        CHECK(FeedPresentationReachesArmAndHand(f,feed_interaction_detail::Multiply(constrainedMoved,world))==0);
+        CHECK(f.result.presentation->coverRadians==angle&&f.result.presentation->input.deadlineNs==movingRaw.inputEvidence.deadlineNs);
+        CHECK(!Bc2FeedMechanismClaimFresh(*f.result.presentation,movingRaw.inputEvidence.deadlineNs));
+        f.sample.raw.weaponWorldMeters=Identity();f.Tick(moved,false);
+        CHECK(!f.result.ownsHand&&!f.result.pending&&f.submits==0);
+        CHECK(f.result.presentation&&Near(f.result.presentation->coverRadians,angle)&&!f.result.presentation->mechanismWristWorldMeters);
     }
     return 0;
 }
@@ -504,6 +598,65 @@ int EveryEnrolledFeedStartsFromReleasedApproach(){
         CHECK(f.Reconcile());
     }
     return 0;
+}
+int EveryEnrolledSupplyPresentsDelayedPickupOffsetAndDropsLostHand(){
+    using namespace feed_interaction_detail;unsigned configurations=0;
+    for(const auto& registration:RegisteredBc2FeedProfiles())for(bool trackingLoss:{false,true}){
+        Fixture f(&registration);f.wristCalibration=Identity();
+        CHECK(f.OpenCover()&&f.Reconcile());
+        CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&f.Reconcile());f.submitted.reset();
+        auto chest=Identity();const auto config=Bc2FeedSupplyConfig();
+        for(unsigned axis=0;axis<3;++axis)chest.values[3][axis]=config.pouchCenterMeters[axis];
+        f.sample.bodyFromHand=chest;f.Tick(chest,false);f.Tick(chest,false);const auto neutral=f.sample.raw;
+        auto pickup=feed_interaction_detail::Multiply(Turn(.4f),chest);pickup.values[3][0]+=.008f;
+        f.PrepareTick(pickup,true);const auto pressed=f.sample.raw;f.Consume(&neutral);
+        CHECK(f.result.presentation&&f.result.presentation->supplyObject&&f.result.ownsHand);
+        CHECK(f.result.presentation->input.sequence==neutral.inputEvidence.sequence);
+        CHECK(f.result.presentation->mechanismInput->sequence==pressed.inputEvidence.sequence);
+        CHECK(f.result.presentation->mechanismClaim->inputSequence==pressed.inputEvidence.sequence);
+        CHECK(FeedPresentationReachesArmAndHand(f,chest)==0);
+        const auto firstPouch=f.result.presentation->weaponFromPouch;
+        f.PrepareTick(pickup,true);f.Consume(&pressed);
+        CHECK(f.result.interactionStatus==FeedInteractionStatus::Acquired&&f.result.presentation->supplyObject);
+        CHECK(FeedPresentationReachesArmAndHand(f,pickup)==0);
+        CHECK(NearPose(f.result.presentation->weaponFromPouch,firstPouch)); // Pickup keeps the real loose object.
+        const auto acquired=f.result.presentation;
+        const auto objectWorld=feed_interaction_detail::Multiply(acquired->weaponFromPouch,acquired->pouchCarryWeaponWorldMeters);
+        const auto objectFromWrist=feed_interaction_detail::Multiply(pickup,Inverse(objectWorld));
+        CHECK(Distance(objectFromWrist,registration.geometry.poses[unsigned(Bc2FeedPoseId::PouchWithdrawn)].sourceFromWrist)>.004f);
+        auto movedWrist=pickup;movedWrist.values[3][0]+=.012f;
+        f.PrepareTick(movedWrist,true);const auto moved=f.sample.raw;
+        auto weapon=Turn(.37f);weapon.values[3]={1.2f,-.3f,.2f,1};
+        CHECK(FeedPresentationReachesArmAndHand(f,pickup,weapon)==0); // Loose objects do not follow later weapon placement.
+        const auto repeated=RepublishFeedContact(pressed,weapon,f.sample.input.nowNs);CHECK(repeated.valid);
+        f.Consume(&repeated);
+        CHECK(f.result.interactionStatus==FeedInteractionStatus::Duplicate&&f.result.presentation->supplyObject);
+        CHECK(FeedPresentationReachesArmAndHand(f,pickup)==0); // Carried object stays in its retained world basis.
+        CHECK(NearPose(f.result.presentation->weaponFromPouch,firstPouch));
+        CHECK(f.result.presentation->input.deadlineNs==pressed.inputEvidence.deadlineNs);
+        CHECK(f.result.presentation->mechanismClaim->inputSequence==f.sample.input.sequence);
+        CHECK(Bc2FeedPresentationRetained(*acquired,*f.result.presentation,true,f.sample.input.nowNs));
+        f.Consume(&moved);
+        CHECK(f.result.interactionStatus==FeedInteractionStatus::Moving&&f.result.presentation->supplyObject);
+        CHECK(FeedPresentationReachesArmAndHand(f,movedWrist)==0);
+        const auto carried=f.result.presentation;
+        const auto carriedWorld=feed_interaction_detail::Multiply(carried->weaponFromPouch,carried->pouchCarryWeaponWorldMeters);
+        CHECK(NearPose(feed_interaction_detail::Multiply(objectFromWrist,carriedWorld),movedWrist));
+        CHECK(!Bc2FeedMechanismClaimFresh(*carried,carried->input.deadlineNs));
+        const auto cover=carried->coverRadians;const auto counts=f.native.counts;
+        if(trackingLoss){
+            f.sample.input.tracked[0]=false;f.Tick(movedWrist,true);
+            CHECK(!f.result.presentation&&!f.result.ownsHand&&f.BlocksFire());
+            f.sample.input.tracked[0]=true;f.Tick(movedWrist,false);
+        }else f.Tick(movedWrist,false);
+        CHECK(f.result.presentation&&!f.result.presentation->mechanismWristWorldMeters&&!f.result.presentation->mechanismClaim);
+        CHECK(!f.result.ownsHand&&Near(f.result.presentation->coverRadians,cover)&&f.native.counts==counts);
+        CHECK(NearPose(feed_interaction_detail::Multiply(f.result.presentation->weaponFromPouch,
+            f.result.presentation->pouchCarryWeaponWorldMeters),carriedWorld));
+        CHECK(f.submits==2&&!f.submitted&&f.BlocksFire());
+        if(!trackingLoss)++configurations;
+    }
+    CHECK(configurations==24);return 0;
 }
 ReloadRawContact RepublishFeedContact(const ReloadRawContact& source,const fvr::math::Matrix4& world,std::int64_t now){
     using namespace feed_interaction_detail;
@@ -746,8 +899,7 @@ int EveryEnrolledFeedRetainsRepeatedPacketThroughOpenCover(){
         CHECK(retained->deadlineNs==acquired->deadlineNs&&retained->inputSequence==pressed.inputEvidence.sequence);
         CHECK(f.result.presentation&&f.result.presentation->coverRadians==cover);
         CHECK(f.result.presentation->originalWeaponWorldMeters.values==world.values);
-        CHECK(f.result.presentation->mechanismWristWorldMeters&&
-            f.result.presentation->mechanismWristWorldMeters->values==repeated.rawLeftWristWorldMeters.values);
+        CHECK(FeedPresentationReachesArmAndHand(f,feed_interaction_detail::Multiply(pose(0),world))==0);
         f.Consume(&next);CHECK(f.result.interactionStatus==FeedInteractionStatus::Moving&&f.result.ownsHand);
         for(unsigned step=2;step<=12;++step)f.Tick(pose(step),true);
         for(unsigned step=0;step<f.DwellPackets()&&!f.submitted;++step)f.Tick(pose(12),true);
@@ -1155,6 +1307,7 @@ int main(){
     CHECK(EveryEnrolledFeedUsesAnatomicalControllerMapping()==0);
     CHECK(EveryEnrolledFeedAcceptsObservedGraspWithDelayedPublication()==0);
     CHECK(EveryEnrolledFeedStartsFromReleasedApproach()==0);
+    CHECK(EveryEnrolledSupplyPresentsDelayedPickupOffsetAndDropsLostHand()==0);
     CHECK(EveryEnrolledFeedCompletesWithIndependentPublicationClocks()==0);
     CHECK(ChestPreparationSurvivesNeutralJitterButNotContactLoss()==0);
     CHECK(DelayedReleasePreservesExactGestureWithinOriginalDeadlines()==0);
@@ -1170,5 +1323,5 @@ int main(){
     CHECK(SameAddressReplacementDoesNotInheritFeedDebt()==0);
     CHECK(RealNoEntryReceiptRecoversCompletedEndpointWithNewId()==0);
     CHECK(DrainedActorReplacementReclaimsSlotsWithoutInventingAmmunitionSuccess()==0);
-    std::puts("Bc2PhysicalFeedTests: 29 deterministic owner/arbiter/callback compositions; no game or headset acceptance");
+    std::puts("Bc2PhysicalFeedTests: 30 deterministic owner/arbiter/callback/presentation compositions; no game or headset acceptance");
 }
