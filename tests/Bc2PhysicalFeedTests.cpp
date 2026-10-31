@@ -372,10 +372,16 @@ int EveryEnrolledFeedAcceptsObservedGraspWithDelayedPublication(){
         Fixture f(&registration);const auto m=f.Open();
         const auto contact=feed_interaction_detail::Multiply(m.motionFromContact,m.weaponFromMotion);
         auto wrist=feed_interaction_detail::Multiply(Turn(2.29598f),contact);
-        // The trace logs distance/angle, not the full wrist matrix. Reconstruct
-        // those scalars, with a radial offset that cannot cross the hinge axis.
+        const bool observedConfiguration=registration.geometry.asset=="QJU88_sp"&&
+            registration.geometry.configurationPath=="Objects/Weapons/Handheld/MEC_lmg_QJY88/SP_lmg_QJY88";
+        const auto contactOffset=observedConfiguration?.0453684f:
+            .75f*registration.mechanism.contacts[unsigned(FeedPart::Cover)].radiusMeters;
+        // Serial 1640 logs distance/angle, not the full wrist matrix. Keep its
+        // exact distance for QJU88_sp; other weapons have different contact
+        // radii. Test the same wrist angle and publication lag inside each
+        // one's own contact, with a radial offset away from the hinge axis.
         const auto x=m.motionFromContact.values[3][0],y=m.motionFromContact.values[3][1],radius=std::hypot(x,y);
-        for(unsigned axis=0;axis<3;++axis)wrist.values[3][axis]+=.0453684f*
+        for(unsigned axis=0;axis<3;++axis)wrist.values[3][axis]+=contactOffset*
             (x*m.weaponFromMotion.values[0][axis]+y*m.weaponFromMotion.values[1][axis])/radius;
         f.sequence=7049;f.Tick(wrist,false);const auto neutral=f.sample.raw;
         f.now+=3880000;f.PrepareTick(wrist,true);const auto pressed=f.sample.raw;f.Consume(&neutral);
@@ -383,7 +389,7 @@ int EveryEnrolledFeedAcceptsObservedGraspWithDelayedPublication(){
         CHECK(f.sample.input.sequence==7052&&f.sample.raw.inputEvidence.sequence==7051);
         CHECK(f.result.diagnostic.rawPassed==511&&f.result.diagnostic.admissionPassed==63);
         CHECK(f.result.diagnostic.idlePassed==2045); // All acquisition gates; release is false.
-        CHECK(f.result.diagnostic.coverDistanceMeters&&std::abs(*f.result.diagnostic.coverDistanceMeters-.0453684f)<.00001f);
+        CHECK(f.result.diagnostic.coverDistanceMeters&&std::abs(*f.result.diagnostic.coverDistanceMeters-contactOffset)<.00001f);
         CHECK(f.result.diagnostic.coverAngleRadians&&std::abs(*f.result.diagnostic.coverAngleRadians-2.29598f)<.00001f);
         CHECK(f.result.diagnostic.neutralAgeNs==23880001);
         CHECK(f.result.ownsHand&&f.result.interactionStatus==FeedInteractionStatus::Acquired&&f.submits==0);

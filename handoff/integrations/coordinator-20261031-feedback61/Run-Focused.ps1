@@ -31,7 +31,7 @@ $pattern='^('+($suites -join '|')+')$'
 $cpu=$LASTEXITCODE
 $pythonExit=0
 if(-not $SkipPython){
- & $python -B (Join-Path $repo 'tools/test_bc2_mechanism_registry_header.py') *> (Join-Path $out 'generator-tests.log')
+ & $python -B (Join-Path $PSScriptRoot 'Run-Generator.py') *> (Join-Path $out 'generator-tests.log')
  $pythonExit=$LASTEXITCODE
  if(-not $pythonExit){& $python -B (Join-Path $PSScriptRoot 'Verify-Feed.py') *> (Join-Path $out 'generated-feed-check.log');$pythonExit=$LASTEXITCODE}
  Get-Content (Join-Path $out 'generator-tests.log') -Tail 6
