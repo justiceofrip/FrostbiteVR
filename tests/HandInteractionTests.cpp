@@ -419,6 +419,39 @@ int HistoricalReleaseAndTrackingBarriers(){
     CHECK(!f.arbiter.AcquireFrom(f.sample,lost,request).accepted);
     return 0;
 }
+int RecordedReleaseContinuationIsReadOnlyAndCannotCrossInvalidation(){
+    for(unsigned fault=0;fault<13;++fault){
+        Fixture f;auto gun=f.Gun();CHECK(gun.claim);auto support=f.Support(gun.claim->token);CHECK(support.claim);
+        const auto held=f.sample;
+        if(fault>=1&&fault<=7){
+            f.Next();
+            if(fault==1){auto loss=f.sample;loss.tracked[0]=false;f.arbiter.Update(loss);}
+            if(fault==2){auto loss=f.sample;loss.focused=false;f.arbiter.Update(loss);}
+            if(fault==3)f.arbiter.Reset();
+            if(fault==4)CHECK(f.arbiter.Release(f.sample,support.claim->token).accepted);
+            if(fault==5){f.sample.released[0]=true;f.arbiter.Update(f.sample);f.Next();f.sample.released[0]=false;f.arbiter.Update(f.sample);}
+            if(fault==6){auto loss=f.sample;++loss.owner.actorGeneration;f.arbiter.Update(loss);}
+            if(fault==7)CHECK(f.arbiter.Release(f.sample,gun.claim->token).accepted);
+        }
+        f.Next(fault==8?150*ms:10*ms);f.sample.released[0]=true;const auto released=f.sample;f.arbiter.Update(f.sample);
+        if(fault==9){f.Next();f.sample.released[0]=false;f.arbiter.Update(f.sample);f.Next();f.sample.released[0]=true;f.arbiter.Update(f.sample);}
+        else {f.Next();f.arbiter.Update(f.sample);}
+        auto source=held,release=released;
+        if(fault==10)++source.deadlineNs;
+        if(fault==11)++release.observedNs;
+        const auto before=f.arbiter.Current(right);
+        CHECK(f.arbiter.HasRecordedReleaseContinuation(source,release,fault==12?static_cast<InteractionHand>(255):left)==(fault==0));
+        CHECK(!f.arbiter.Current(left)&&!f.arbiter.HasRecordedEvidence(held,left));
+        const auto after=f.arbiter.Current(right);CHECK(bool(before)==bool(after));
+        if(before)CHECK(after->token==before->token&&after->deadlineNs==before->deadlineNs&&after->inputSequence==before->inputSequence);
+        if(!fault){
+            CHECK(f.arbiter.HasRecordedReleaseContinuation(held,released,left));
+            auto request=f.Request(left,HandClaimKind::Mechanism,rifle,3,gun.claim->token.id);request.contact=From(held,3);
+            CHECK(!f.arbiter.AcquireFrom(f.sample,held,request).accepted&&!f.arbiter.Current(left));
+        }
+    }
+    return 0;
+}
 int DelayedGeometryWithinOneNeutralRun(){
     for(unsigned lag:{2u,3u})for(unsigned beforeSource:{0u,1u}){
         Fixture f;auto g=f.Gun();CHECK(g.claim);auto support=f.Support(g.claim->token);CHECK(support.claim);
@@ -636,6 +669,7 @@ int main(){
     if(OverlappingGunInputRenewsBeforeExpiry()||GunRenewalNeverExtendsDependentEvidence()||GunRenewalRejectsInvalidContinuity()||GunRenewalCannotResurrect()||ClaimDropPreservesInnerFailureEvidence()||QueuedOwnershipAfterConsumerAdoption()||FailedAndSuccessfulTransfers()||ExplicitSharingAndCrossHandTransfer()||DependencyAndPerHandTracking()||
        IdentityFocusResetAndFreshIntent()||LeasesRenewalAndContactIdentity()||MalformedAndImmutableInput()||
         UnavailableIntentCannotReplay()||HistoricalTransferAndExactSource()||HistoricalReleaseAndTrackingBarriers()||
+        RecordedReleaseContinuationIsReadOnlyAndCannotCrossInvalidation()||
         DelayedGeometryWithinOneNeutralRun()||NewReleaseRunRejectsEarlierNeutralGeometry()||
         DelayedNeutralGeometryCannotCrossSafetyLoss()||DelayedNeutralGeometryCannotStealOccupiedHand()||
        DuplicateSafetyLossCannotBecomeNeutralEvidence()||HistoricalRenewalIsMonotonic()||

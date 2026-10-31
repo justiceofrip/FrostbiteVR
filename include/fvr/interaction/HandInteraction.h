@@ -189,6 +189,20 @@ public:
         return ValidHand(hand)&&initialized_&&!blocked_&&sample_.focused&&sample_.tracked[Index(hand)]&&
             Evidence(source,hand,result);
     }
+    // Read-only continuity for a consumer waiting on the real release pose.
+    // The old held packet never regains hand/contact authority or a new lease.
+    bool HasRecordedReleaseContinuation(const HandInteractionSample& held,const HandInteractionSample& released,
+        InteractionHand hand)const noexcept {
+        if(!ValidHand(hand)||!initialized_||blocked_)return false;
+        const auto h=Index(hand);HandInteractionResult result;
+        if(!sample_.focused||!sample_.tracked[h]||!sample_.released[h]||claims_[h]||sample_.nowNs>=sample_.deadlineNs||
+           held.owner!=released.owner||held.sequence>=released.sequence||held.observedNs>=released.observedNs||
+           held.released[h]||!released.released[h]||releaseBarrier_[h]!=released.sequence||
+           !Evidence(released,hand,result)||!Evidence(held,hand,result,true))return false;
+        for(const auto& packet:history_)if(packet.owner==held.owner&&packet.sequence>held.sequence&&
+            packet.sequence<released.sequence&&packet.released[h])return false;
+        return true;
+    }
 private:
     static bool ValidHand(InteractionHand h)noexcept {return h==InteractionHand::Left||h==InteractionHand::Right;}
     static std::size_t Index(InteractionHand h)noexcept {return static_cast<std::size_t>(h);}
@@ -203,7 +217,7 @@ private:
     void DropDependents(HandInteractionResult&)noexcept;
     bool Available(InteractionHand,HandInteractionResult&)const noexcept;
     bool Contact(const HandContactProof&,HandInteractionResult&,const HandInteractionSample* evidence=nullptr)const noexcept;
-    bool Evidence(const HandInteractionSample&,InteractionHand,HandInteractionResult&)const noexcept;
+    bool Evidence(const HandInteractionSample&,InteractionHand,HandInteractionResult&,bool awaitingRelease=false)const noexcept;
     void Remember(const HandInteractionSample& s)noexcept {history_[historyNext_]=s;historyNext_=(historyNext_+1)%history_.size();}
     bool Exact(const HandClaimToken&)const noexcept;
     HandInteractionResult UpdateImpl(const HandInteractionSample&,const HandClaimToken* deferredGun=nullptr,const HandClaim* renewedGun=nullptr)noexcept;
@@ -337,13 +351,14 @@ inline bool HandInteraction::Available(InteractionHand hand,HandInteractionResul
     if(sample_.released[Index(hand)]){out.reason=HandInteractionReason::Released;return false;}
     return true;
 }
-inline bool HandInteraction::Evidence(const HandInteractionSample& source,InteractionHand hand,HandInteractionResult& out)const noexcept {
+inline bool HandInteraction::Evidence(const HandInteractionSample& source,InteractionHand hand,HandInteractionResult& out,bool awaitingRelease)const noexcept {
     if(source.owner!=sample_.owner){out.reason=HandInteractionReason::WrongOwner;return false;}
     if(!source.sequence||source.sequence>sample_.sequence||source.observedNs<=0||source.observedNs>sample_.observedNs||
        source.deadlineNs<=source.observedNs||source.deadlineNs-source.observedNs>config_.maxInputLifetimeNs||
        source.deadlineNs<=sample_.nowNs||!source.focused||!source.tracked[Index(hand)]||
-       source.sequence<=invalidationBarrier_[Index(hand)]||source.sequence<releaseBarrier_[Index(hand)]||
-       (source.sequence==releaseBarrier_[Index(hand)]&&!source.released[Index(hand)])){
+       source.sequence<=invalidationBarrier_[Index(hand)]||(!awaitingRelease&&
+       (source.sequence<releaseBarrier_[Index(hand)]||
+        (source.sequence==releaseBarrier_[Index(hand)]&&!source.released[Index(hand)])))){
         out.reason=HandInteractionReason::ContactMismatch;return false;
     }
     for(const auto& recorded:history_)if(recorded.sequence==source.sequence&&recorded.owner==source.owner){

@@ -110,6 +110,7 @@ struct Bc2PhysicalFeed::State {
     struct Packet {ReloadStateOwner owner{};HandInteractionSample input{};HandInteractionKey weapon{};
         std::optional<FeedEquipmentNativeView> native;bool grip=false,reload=false;std::optional<math::Matrix4> bodyFromHand;
         std::optional<PolicyContact> contact;};
+    struct ReleaseWait {HandInteractionSample input{};std::uint64_t heldInput=0;std::int64_t deadlineNs=0;};
     struct Equipment {
         explicit Equipment(const Bc2FeedRegistration& row)noexcept
             :registration(row),pose(row.geometry.poses[unsigned(Bc2FeedPoseId::Resting)]){}
@@ -135,6 +136,7 @@ struct Bc2PhysicalFeed::State {
         bool refused=false,motionDirty=false;
         FeedPhysicalOperation activeOperation=FeedPhysicalOperation::None;
         std::optional<FeedEquipmentSessionSample> neutral;
+        std::optional<ReleaseWait> releaseWait;
         bool Blocked()const noexcept {return pending||refused||gateFailed||cover!=FeedCoverState::Closed||
             container!=FeedContainerState::Attached||seat!=FeedSeatState::Seated||
             (session&&session->State().status!=FeedEquipmentStatus::Complete);}
@@ -281,7 +283,7 @@ void Bc2PhysicalFeed::Suspend(const HandInteractionSample& input,HandInteraction
     publication.store({},std::memory_order_release);if(!state_)return;
     state_->diagnostics.suspends.fetch_add(1,std::memory_order_relaxed);
     for(auto& e:state_->equipment)if(e){if(e->claim){(void)hands.Release(input,*e->claim);e->claim.reset();}
-        e->ammunitionSupply.Suspend(input,hands);e->supplyNeutral=false;
+        e->ammunitionSupply.Suspend(input,hands);e->supplyNeutral=false;e->releaseWait.reset();
         if(e->session)e->motionDirty=true;
         // A rejected current packet may be newer than the last renderer
         // source. Its delayed release cannot re-arm this equipment lifetime.
@@ -424,10 +426,41 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     const auto rawCheck=[&](unsigned bit,bool passed){out.diagnostic.rawChecked|=1u<<bit;
         if(passed)out.diagnostic.rawPassed|=1u<<bit;return passed;};
     (void)rawCheck(0,gun);
-    const bool raw=rawCheck(1,bool(source))&&rawCheck(2,bool(source->native))&&rawCheck(3,Window(source->input,now))&&
+    const bool rawContext=rawCheck(1,bool(source))&&rawCheck(2,bool(source->native))&&rawCheck(3,Window(source->input,now))&&
         rawCheck(4,source->input.observedNs>=source->native->observedNs)&&rawCheck(5,FeedEquipmentViewFresh(*source->native,now))&&
-        rawCheck(6,FeedEquipmentSameItem(*source->native,*view))&&rawCheck(7,source->native->counts==view->counts)&&
-        rawCheck(8,hands.HasRecordedEvidence(source->input,InteractionHand::Left));
+        rawCheck(6,FeedEquipmentSameItem(*source->native,*view))&&rawCheck(7,source->native->counts==view->counts);
+    const bool raw=rawContext&&rawCheck(8,hands.HasRecordedEvidence(source->input,InteractionHand::Left));
+    if(e->releaseWait||(!raw&&gun&&rawContext)){
+        const auto heldInput=e->releaseWait?e->releaseWait->heldInput:e->lastInput;
+        const State::Packet* held=nullptr;
+        for(const auto& packet:state.packets)if(packet.owner==s.owner&&packet.weapon==s.weapon&&packet.input.sequence==heldInput){held=&packet;break;}
+        const bool released=s.input.released[0]&&!s.grip&&source&&source->input.owner==s.input.owner;
+        const bool retained=e->session&&e->session->State().status==FeedEquipmentStatus::Ready&&
+            !e->pending&&!e->refused&&!e->gateFailed&&!e->motionDirty&&
+            e->activeOperation!=FeedPhysicalOperation::None&&
+            (e->releaseWait||e->claim||e->ammunitionSupply.Held());
+        const bool fresh=held&&held->grip&&held->contact&&held->native&&source&&source->native&&
+            Window(held->input,now)&&FeedEquipmentViewFresh(*held->native,now)&&
+            hands.HasRecordedReleaseContinuation(held->input,e->releaseWait?e->releaseWait->input:s.input,InteractionHand::Left)&&
+            Bc2FeedBodyRetained(state.BodyAmmo(*e,*held->native),state.BodyAmmo(*e,*source->native))&&
+            Bc2FeedBodyRetained(state.BodyAmmo(*e,*held->native),state.BodyAmmo(*e,*view));
+        if(gun&&released&&retained&&fresh&&(!e->releaseWait||now<e->releaseWait->deadlineNs)){
+            if(e->releaseWait&&raw&&SamePacket(source->input,e->releaseWait->input)&&!source->grip){
+                e->releaseWait.reset(); // Only the real recorded release may complete the retained gesture.
+            }else if(!raw&&rawContext&&source->grip&&
+                source->input.sequence<(e->releaseWait?e->releaseWait->input.sequence:s.input.sequence)){
+                // Current release revokes older held hand authority before its
+                // rendered raw packet arrives. Preserve the admitted gesture,
+                // not that stale raw pose or claim, within the original leases.
+                if(!e->releaseWait)e->releaseWait=State::ReleaseWait{s.input,heldInput,
+                    (std::min)({held->input.deadlineNs,held->native->deadlineNs,s.input.deadlineNs})};
+                if(e->claim){(void)hands.Release(s.input,*e->claim);e->claim.reset();}
+                e->ammunitionSupply.Suspend(s.input,hands);
+                out.blocksFire=e->Blocked();out.blocksEquipment=false;
+                return finish(FeedExit::GunOrRawUnverified);
+            }else {Suspend(s.input,hands);out.blocksFire=e->Blocked();return finish(FeedExit::GunOrRawUnverified);}
+        }else {Suspend(s.input,hands);out.blocksFire=e->Blocked();return finish(FeedExit::GunOrRawUnverified);}
+    }
     if(!gun||!raw){Suspend(s.input,hands);out.blocksFire=e->Blocked();return finish(FeedExit::GunOrRawUnverified);}
     auto sourceInput=source->input;sourceInput.nowNs=now;
     // The renderer solves the placed weapon again on each native publication,

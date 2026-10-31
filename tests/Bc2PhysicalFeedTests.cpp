@@ -244,7 +244,7 @@ struct Fixture {
         const auto hand=hands.Current(InteractionHand::Left);
         return hand&&hand->token.kind==HandClaimKind::AmmoObject&&result.ownsHand;
     }
-    bool Place(FeedPhysicalOperation op,bool acquireSupply=true){
+    bool Place(FeedPhysicalOperation op,bool acquireSupply=true,bool release=true){
         const bool picked=op==FeedPhysicalOperation::AttachContainer&&acquireSupply;
         if(picked&&!PickSupply())return false;
         if(!result.presentation)return false;
@@ -272,7 +272,10 @@ struct Fixture {
             motion->placement.weaponFromSource,motion->placement.weaponFromDestination,double(step)/30)),true);
         const auto end=contact(motion->placement.weaponFromDestination);
         for(unsigned step=0;step<DwellPackets();++step)Tick(end,true);
-        Tick(end,false);return submitted&&submitted->command.authority.operation==op;
+        if(!release)return result.interactionStatus==FeedInteractionStatus::Endpoint&&result.ownsHand&&!submitted;
+        Tick(end,false);
+        if(delayedRender)Tick(end,false); // Deliver the actual delayed release packet.
+        return submitted&&submitted->command.authority.operation==op;
     }
     bool Close(){
         const auto motion=BuildBc2FeedMotion(registration->geometry,FeedPhysicalOperation::CloseCover,registration->interactionPolicy);
@@ -617,6 +620,69 @@ int ChestPreparationSurvivesNeutralJitterButNotContactLoss(){
             CHECK(f.backend.Read(f.sample.owner,f.sample.input.nowNs)==admitted);
         }
         CHECK(f.submits==2&&f.native.counts==before&&!f.result.pending&&f.BlocksFire());
+    }
+    return 0;
+}
+int DelayedReleasePreservesExactGestureWithinOriginalDeadlines(){
+    // Normal native advancement, expiry, repress, owner, tracking, focus,
+    // cancel, native counts, raw loss, skipped release, packet mutation,
+    // native identity, same-sequence native mutation and safety changes that
+    // the hand arbiter observes between physical-feed ticks.
+    for(unsigned fault=0;fault<18;++fault){
+        Fixture f;CHECK(f.OpenCover()&&f.Reconcile());
+        CHECK(f.Place(FeedPhysicalOperation::DetachContainer,true,false));
+        const auto held=f.sample.raw;const auto end=f.lastWrist;
+        const auto original=f.backend.Read(f.sample.owner,f.sample.input.nowNs);CHECK(original);
+        const auto counts=f.native.counts;
+        if(fault==12){f.nativeCadence={0};f.mutateNativeObserved=true;}
+        if(fault>=13){
+            f.PrepareTick(end,true);
+            if(fault==13){auto loss=f.sample.input;loss.tracked[0]=false;(void)f.hands.Update(loss);}
+            if(fault==14){auto loss=f.sample.input;loss.focused=false;(void)f.hands.Update(loss);}
+            if(fault==15){const auto left=f.hands.Current(InteractionHand::Left);CHECK(left);CHECK(f.hands.Release(f.sample.input,left->token).accepted);}
+            if(fault==16)(void)f.hands.Reset();
+            if(fault==17){f.PrepareTick(end,false);f.PrepareTick(end,true);}
+        }
+        f.PrepareTick(end,false);const auto released=f.sample.raw;
+        const auto releaseNative=f.backend.Read(f.sample.owner,f.sample.input.nowNs);CHECK(releaseNative);
+        f.Consume(&held);
+        CHECK(!f.result.diagnostic.policyEvaluated&&!f.result.ownsHand&&!f.hands.Current(InteractionHand::Left));
+        CHECK(f.result.diagnostic.rawPassed==255&&f.result.blocksFire&&!f.result.pending&&f.submits==1);
+        if(!fault){
+            f.PrepareTick(end,false);f.Consume(&held);
+            CHECK(!f.result.diagnostic.policyEvaluated&&!f.result.ownsHand&&!f.result.pending&&f.submits==1);
+        }
+        if(fault==1)f.now=original->deadlineNs-10*Ms;
+        if(fault==3)++f.sample.input.owner.actorGeneration;
+        if(fault==7)++f.native.counts.reserve;
+        if(fault==11)f.native.identity.firing[0]+=0x10;
+        f.PrepareTick(end,fault==2,fault==6);
+        auto raw=released;
+        if(fault==4){f.sample.input.tracked[0]=false;(void)f.hands.Update(f.sample.input);}
+        if(fault==5){f.sample.input.focused=false;(void)f.hands.Update(f.sample.input);}
+        if(fault==8)raw.valid=false;
+        if(fault==9)raw=f.sample.raw;
+        if(fault==10)++raw.inputEvidence.observedNs;
+        f.Consume(&raw);
+        if(!fault){
+            CHECK(f.submitted&&f.submits==2&&f.result.pending);
+            const auto command=f.submitted->command;
+            CHECK(command.authority.operation==FeedPhysicalOperation::DetachContainer&&command.request.id==2);
+            CHECK(command.before.sequence==releaseNative->sequence&&command.before.observedNs==releaseNative->observedNs);
+            CHECK(command.before.deadlineNs==releaseNative->deadlineNs&&command.before.counts==counts);
+            CHECK(f.backend.Read(f.sample.owner,f.sample.input.nowNs)->sequence>command.before.sequence);
+            CHECK(f.Reconcile());
+            const auto receipt=f.backend.Receipt(command.request.lifetime,command.request.id);CHECK(receipt);
+            CHECK(receipt->command==command&&receipt->post.counts==counts&&f.native.counts==counts);
+        }else {
+            CHECK(f.submits==1&&!f.result.pending&&!f.backend.Pending()&&f.BlocksFire());
+            f.sample.input.owner=held.inputEvidence.owner;f.sample.input.focused=true;f.sample.input.tracked={true,true};
+            f.mutateNativeObserved=false;
+            f.PrepareTick(end,false);f.Consume(&released);
+            CHECK(f.submits==1&&!f.result.pending&&!f.backend.Pending()&&f.BlocksFire());
+            auto expected=counts;if(fault==7)++expected.reserve;
+            CHECK(f.native.counts==expected);
+        }
     }
     return 0;
 }
@@ -1072,6 +1138,7 @@ int main(){
     CHECK(EveryEnrolledFeedStartsFromReleasedApproach()==0);
     CHECK(EveryEnrolledFeedCompletesWithIndependentPublicationClocks()==0);
     CHECK(ChestPreparationSurvivesNeutralJitterButNotContactLoss()==0);
+    CHECK(DelayedReleasePreservesExactGestureWithinOriginalDeadlines()==0);
     CHECK(IndependentNativeClockExpiryAndMutationAreRejected()==0);
     CHECK(EveryEnrolledFeedRetainsRepeatedPacketThroughOpenCover()==0);
     CHECK(RepeatedFeedPacketRejectsChangedSourceAndExpiredAuthority()==0);
@@ -1084,5 +1151,5 @@ int main(){
     CHECK(SameAddressReplacementDoesNotInheritFeedDebt()==0);
     CHECK(RealNoEntryReceiptRecoversCompletedEndpointWithNewId()==0);
     CHECK(DrainedActorReplacementReclaimsSlotsWithoutInventingAmmunitionSuccess()==0);
-    std::puts("Bc2PhysicalFeedTests: 28 deterministic owner/arbiter/callback compositions; no game or headset acceptance");
+    std::puts("Bc2PhysicalFeedTests: 29 deterministic owner/arbiter/callback compositions; no game or headset acceptance");
 }
