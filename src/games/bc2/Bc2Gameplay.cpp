@@ -1887,11 +1887,20 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     // only the exact shared scoped-XM8 mesh/persistence/mode-map family.
     static unsigned familySoldier=0,familyWeak=0,familyWeapon=0,familyData=0;static WeaponEquipmentIdentity familyEquipment{};static std::uint64_t familyEpoch=0;
     static std::optional<WeaponModeCommand> familyBinding;static ULONGLONG familyChecked=0;
+    static std::shared_ptr<const rigPublication::WeaponModeObservation> familyObservation;
+    const bool observeFamily=rigPublication::WeaponModeObservationRequested(HandNanos(clock.QuadPart));
     const auto nowFamily=GetTickCount64();const auto data=U32(owner.weapon+4);
     if(familySoldier!=owner.soldier||familyWeak!=owner.weak||familyWeapon!=owner.weapon||familyData!=data||familyEquipment!=owner.equipment||familyEpoch!=rigEpoch||nowFamily-familyChecked>=500){
         familySoldier=owner.soldier;familyWeak=owner.weak;familyWeapon=owner.weapon;familyData=data;familyEpoch=rigEpoch;familyChecked=nowFamily;familyEquipment=owner.equipment;
         const WeaponModeMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t size){return Read(at,dst,size);},[](void*,unsigned at,const char* expected){return Type(at,expected);}};
-        familyBinding=ResolveWeaponMode(memory,owner.soldier,owner.weapon);
+        // Explicit snapshot demand observes this original periodic resolver call;
+        // it never forces a reread or changes its candidate/dispatch admission.
+        std::shared_ptr<rigPublication::WeaponModeObservation> observation;
+        if(observeFamily)try{observation=std::make_shared<rigPublication::WeaponModeObservation>();}catch(...){}
+        if(observation){observation->owner={owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
+            observation->equipment=owner.equipment;observation->inputGeneration=input.generation;observation->observedMs=familyChecked;}
+        familyBinding=ResolveWeaponMode(memory,owner.soldier,owner.weapon,observation?&observation->resolution:nullptr);
+        familyObservation=std::move(observation);
     }
     const auto itemProfile=(asset!="40mmgl"||familyBinding)?itemProfileCandidate:nullptr;
     const auto coreProfile=itemProfile?&itemProfile->core:nullptr;
@@ -2053,6 +2062,10 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     Bc2BoltControllerContact boltContact;
     const bool pumpSelected=physicalPump&&(!ordinaryManualCycles||
         (ordinaryShotgunEquipment&&(ordinarySelectionReady||ordinaryTrackingRecovery)));
+    std::optional<rigPublication::ShellPumpObservation> shellPumpObservation;
+    if(pumpSelected&&rigPublication::ShellPumpObservationRequested(handSample.nowNs)){
+        shellPumpObservation.emplace();shellPumpObservation->equipment=ordinaryManualCycles?ordinaryShotgunEquipment:DefaultSpasShotgunEquipment();
+    }
     const auto currentPump=pumpSelected?reloadFlowRuntime::ReadNativeCycleView(handSample.nowNs):std::nullopt;
     const auto pumpGates=EvaluatePumpActionGates(pumpSelected,physicalPump&&physicalPump->BlocksFire(),
         physicalPump&&physicalPump->HasCycleDebt(),currentPump?std::optional(currentPump->blocksFire):std::nullopt);
@@ -2244,6 +2257,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         sample.cancel=pumpGates.cancelReload||(resourceInventoryFixture&&resourceInventoryFixture->CancelShell())||bodyDraw.pending||magazineResult.blocksWeaponActions||(physicalReloadFixture&&physicalReloadFixture->CancelConsumer())||!aimValid||!out.active||((out.pressed|out.held)&(interaction::Fire|interaction::Use|interaction::NextWeapon|interaction::PreviousWeapon));
         sample.asset=asset;sample.meshes=selectedMeshes.Read(sample.nativeOwner,handSample.nowNs);
         sample.raw=rigPublication::ReadReloadContact(sample.nativeOwner);
+        if(shellPumpObservation){shellPumpObservation->shellRaw=sample.raw;shellPumpObservation->shellTicked=true;}
         if(const auto original=FindHandEvidence(sample.raw.inputEvidence.sequence,owner.weapon))sample.originalHandEvidence=original->sample;
         const auto pouch=bodyInventory?interaction::BodyAnchorHandPose(input,interaction::InteractionHand::Left):PhysicalReloadPouchPose(input);
         if(pouch)sample.bodyFromHand=*pouch;else sample.cancel=true;
@@ -2308,6 +2322,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         Bc2PhysicalPumpSample sample;sample.nativeOwner={owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
         sample.input=handSample;sample.item=handItem;sample.asset=asset;
         sample.raw=rigPublication::ReadPumpContact(sample.nativeOwner);
+        if(shellPumpObservation){shellPumpObservation->pumpRaw=sample.raw;shellPumpObservation->pumpTicked=true;}
         sample.grip=interaction::ReloadGripActive(input.hands[0].squeeze,handSample,handOwnership.Current(interaction::InteractionHand::Left));
         sample.cancel=(physicalPumpFixture&&physicalPumpFixture->Failed())||(resourcePumpCombination&&resourceInventoryFixture&&resourceInventoryFixture->CancelConsumer())||!aimValid||!out.active||bodyDraw.pending||(physicalReload&&physicalReload->BlocksEquipment())||physicalResult.ammoOwnsHand||magazineResult.blocksWeaponActions||
             ((out.pressed|out.held)&(interaction::Use|interaction::NextWeapon|interaction::PreviousWeapon));
@@ -2728,8 +2743,20 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             if(BodyPosition(owner,actorPosition)){
                 rigPublication::Tracking sample{input,owner.soldier,owner.weak,owner.weapon,rigEpoch,inputDeadline,baseYaw,consumedOffset,actorPosition};
                 sample.sightMode=familyBinding;sample.sightModeObservedMs=familyBinding?familyChecked:0;
+                if(observeFamily)sample.sightResolution=familyObservation;
                 sample.controllerOwner={owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
                 sample.controllerEvidence=handSample;
+                if(shellPumpObservation){auto& o=*shellPumpObservation;
+                    o.owner=sample.controllerOwner;o.input=handSample;
+                    if(physicalReload)o.shell=physicalReload->Observation(handSample.nowNs);
+                    o.pump=physicalPump->Observation();o.pumpTracking=pumpResult.tracking;
+                    LARGE_INTEGER observed{};QueryPerformanceCounter(&observed);o.nativeReadNs=HandNanos(observed.QuadPart);
+                    o.native=reloadFlowRuntime::ReadNativeCycleView(o.nativeReadNs);
+                    o.left=handOwnership.Current(interaction::InteractionHand::Left);o.gun=handOwnership.Current(interaction::InteractionHand::Right);
+                    o.reloadHeld=physicalResult.reloadHeld;o.ammoOwnsHand=physicalResult.ammoOwnsHand;
+                    o.pumpBlocksFire=pumpResult.blocksFire;o.pumpOwnsHand=pumpResult.ownsHand;o.supportHolding=supportHeld;o.supportToken=supportToken;
+                    try{sample.shellPumpObservation=std::make_shared<const rigPublication::ShellPumpObservation>(std::move(o));}catch(...){}
+                }
                 sample.selectedMeshes=selectedMeshes.Read(magazineOwner,HandNanos(clock.QuadPart));
                 sample.equipmentGeneration=twoHandGrip?handEquip:renderEquipmentEpoch;sample.nativeEquipment=owner.equipment;sample.sightPhysicalItem=familyBinding?familyBinding->persistent:0;sample.sightAdapter=familyBinding?SightAdapterForFamily(familyBinding->family):nullptr;sample.sightSecondary=familyBinding&&familyBinding->selectedSecondary;sample.weaponProfile=itemProfile;sample.assetName=weaponAsset;sample.supportHolding=supportHeld;sample.supportToken=supportToken;sample.sightPreview=sightPreview;sample.reload=physicalResult.tracking;sample.pump=pumpResult.tracking;sample.bolt=boltResult.tracking;sample.boltRawInput=boltRawInput;sample.magazine=magazineResult.tracking;sample.bodyMagazine=magazineResult.bodyAmmo;sample.fixedContainer=fixedResult.tracking;if(fixedResult.bodyAmmo&&fixedResult.bodyVisual){BodyAmmoTracking fixed;fixed.visual=*fixedResult.bodyVisual;fixed.fixed=fixedResult.bodyAmmo;sample.fixedBodyAmmo=std::move(fixed);}sample.feed=feedResult.presentation;if(feedResult.bodyAmmo&&feedResult.bodyVisual){BodyAmmoTracking feed;feed.visual=*feedResult.bodyVisual;feed.feed=feedResult.bodyAmmo;sample.feedBodyAmmo=std::move(feed);}sample.pistolSlide=pistolSlideResult.presentation;sample.weaponActionsBlocked=fixedResult.blocksFire||pistolSlideResult.blocksFire||feedResult.blocksFire||magazineResult.blocksWeaponActions||pumpResult.blocksFire||boltResult.blocksFire;if(bodyHolster||magazineDetached)holsterTracking=sample;else rigPublication::PublishTracking(sample);
             }

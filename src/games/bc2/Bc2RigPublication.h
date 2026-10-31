@@ -4,12 +4,14 @@
 #include "Bc2ContextualToolSource.h"
 #endif
 #include "Bc2PhysicalPump.h"
+#include "Bc2PhysicalReload.h"
 #include "Bc2BoltRuntimeGeometry.h"
 #include "Bc2FixedContainerPresentation.h"
 #include "Bc2EquipmentIdentity.h"
 #include "Bc2MuzzleAdmission.h"
 #include "Bc2ReloadProducerBinding.h"
 #include "Bc2WeaponProfiles.h"
+#include "Bc2WeaponMode.h"
 #include "Bc2SightContact.h"
 #include "Bc2SightAdapter.h"
 #include "Bc2ReloadPreview.h"
@@ -78,6 +80,26 @@ inline bool SightSelectionCurrent(const SightSelectionEvidence& evidence,const S
         current->configurationPathPointer==original.configurationPathPointer&&
         current->configurationPath==original.configurationPath;
 }
+// Immutable diagnostic packet travels with the original Tracking/ShotPublication.
+// The worker never reads the mutable physical consumers or renews their leases.
+struct ShellPumpObservation {
+    ReloadStateOwner owner{};interaction::HandInteractionSample input{};
+    const ShotgunReloadEquipmentProfile* equipment=nullptr;
+    ReloadRawContact shellRaw{};Bc2PumpRawContact pumpRaw{};
+    PhysicalReloadObservation shell{};Bc2PumpObservation pump{};
+    Bc2PumpTracking pumpTracking{};
+    std::optional<Bc2NativeCycleView> native;
+    std::int64_t nativeReadNs=0;
+    std::optional<interaction::HandClaim> left,gun;
+    bool shellTicked=false,pumpTicked=false,reloadHeld=false,ammoOwnsHand=false;
+    bool pumpBlocksFire=false,pumpOwnsHand=false,supportHolding=false;
+    std::uint64_t supportToken=0;
+};
+struct WeaponModeObservation {
+    ReloadStateOwner owner{};WeaponEquipmentIdentity equipment{};
+    std::uint64_t inputGeneration=0,observedMs=0;
+    WeaponModeResolution resolution{};
+};
 struct Tracking {
     interaction::InputFrame input{};
     unsigned soldier=0,weak=0,weapon=0;
@@ -96,8 +118,10 @@ struct Tracking {
     // Observation only: the production family resolver's original result/time,
     // copied with this input. Neither publication nor snapshot renews this read.
     std::optional<WeaponModeCommand> sightMode;std::uint64_t sightModeObservedMs=0;
+    std::shared_ptr<const WeaponModeObservation> sightResolution;
     MagazineTracking magazine{};
     Bc2PumpTracking pump{};
+    std::shared_ptr<const ShellPumpObservation> shellPumpObservation;
     Bc2BoltTracking bolt{};
     // Same immutable Gameplay packet; never substitute a later global feed pose.
     // Family keys resolve immutable rows; render admission separately checks
@@ -264,6 +288,10 @@ void ReportLiveCounters(std::ostream&);
 // BodyObservation admission; this cannot renew contact or hand ownership.
 // Additive sight observation uses weapon-local row-vector LH metres (wrist
 // landmarks remain wrist-local); missing geometry is distinct from bad leases.
+// One relaxed atomic load on the normal path. Demand expires after one second;
+// this diagnostic clock is never an input, native, contact or claim lease.
+bool ShellPumpObservationRequested(std::int64_t nowNs)noexcept;
+bool WeaponModeObservationRequested(std::int64_t nowNs)noexcept;
 void WriteLiveMechanismSnapshot(std::ostream&,std::uint64_t nonce);
 void Report(std::ostream&);
 }

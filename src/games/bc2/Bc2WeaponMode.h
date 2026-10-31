@@ -3,6 +3,8 @@
 #include "Bc2WeaponModeFamilies.h"
 #include <cstdint>
 #include <optional>
+#include <ostream>
+#include <string>
 namespace fvr::bc2 {
 struct WeaponModeMemory {
     void* context=nullptr;
@@ -13,14 +15,48 @@ struct WeaponModeCommand {
     std::uint32_t action=0,targetWeapon=0,targetSlot=0,inventory=0,persistent=0;
     const WeaponModeFamilyProfile* family=nullptr;bool selectedSecondary=false;
 };
+// Optional, bounded observation of the resolver's original reads. Unreached
+// fields retain defaults; none of these fields grant command admission.
+struct WeaponModeItemObservation {
+    std::uint32_t weapon=0,data=0,slot=0,persistent=0;
+    std::string asset,configuration;
+};
+struct WeaponModeRouteObservation {
+    const char* status="not_reached";
+    std::uint32_t from=0,action=0,wanted=0,row=0,state=0,input=0,first=0,last=0;
+    std::uint32_t matching=0,targetsRead=0,firstOccupiedSlot=UINT32_MAX,firstOccupiedWeapon=0;
+    std::array<std::uint32_t,11> targets{};
+};
+struct WeaponModeCandidateObservation {
+    const WeaponModeFamilyProfile* family=nullptr;
+    const char* status="not_reached";
+    std::uint32_t inventory=0,switching=0,begin=0,end=0,selected=0,flags=0,itemCount=0;
+    std::array<std::uint32_t,64> items{};
+    std::uint64_t typedItems=0,namedItems=0;
+    WeaponModeItemObservation lastItem,primary,secondary;
+    std::string persistentId;
+    std::uint32_t mapBegin=0,mapEnd=0;
+    std::array<WeaponModeRouteObservation,2> routes{};
+    std::uint64_t bookendAddress=0;std::uint32_t bookendExpected=0,bookendObserved=0;bool bookendRead=false;
+};
+struct WeaponModeResolution {
+    const char* status="not_observed";
+    std::uint32_t soldier=0,weapon=0,data=0,candidateCount=0,candidatesDropped=0;
+    std::string asset,configuration;
+    // The enrolled roster currently has at most six matches for a selected
+    // configuration. Extra attempts remain authoritative but are counted only.
+    std::array<WeaponModeCandidateObservation,8> candidates{};
+};
+void WriteWeaponModeResolution(std::ostream&,const WeaponModeResolution&);
 // Read-only candidate for an exact enrolled linked pair. Native
 // eligibility, ammo, equipment animation and selection remain authoritative.
 // Invoke no native function and never write the equipped pointer.
 std::optional<WeaponModeCommand> ResolveWeaponMode(const WeaponModeMemory&,
-    std::uint32_t soldier,std::uint32_t currentWeapon);
+    std::uint32_t soldier,std::uint32_t currentWeapon,WeaponModeResolution* observation=nullptr);
 // Read-only evidence seam. A returned command is not native dispatch admission.
 std::optional<WeaponModeCommand> ObserveWeaponModeFamily(const WeaponModeMemory&,
-    std::uint32_t soldier,std::uint32_t currentWeapon,const WeaponModeFamilyProfile&);
+    std::uint32_t soldier,std::uint32_t currentWeapon,const WeaponModeFamilyProfile&,
+    WeaponModeCandidateObservation* observation=nullptr);
 struct WeaponModeCandidates {
     std::uint32_t selector=0,update=0,edgeReader=0,booleanReader=0,scalarReader=0;
 };

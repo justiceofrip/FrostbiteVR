@@ -161,6 +161,7 @@ Bc2PhysicalPumpResult Bc2PhysicalPump::Tick(const Bc2PhysicalPumpSample& s,HandI
     if(view&&view->ready){
         if(!acknowledged_&&physical_.ReconcileReady(*view->ready,s.input.nowNs))acknowledged_=view->ready;
         if(acknowledged_&&api_.ack(api_.context,*acknowledged_)){++acks_;out.settled=acknowledged_;
+            observationSettled_=acknowledged_;observationAcknowledgedNs_=s.input.nowNs;
             acknowledged_.reset();pending_.reset();deferredControl_.reset();cycle_.reset();}
         view=api_.view(api_.context,s.input.nowNs);
     }
@@ -170,6 +171,7 @@ Bc2PhysicalPumpResult Bc2PhysicalPump::Tick(const Bc2PhysicalPumpSample& s,HandI
             if(!recoveryAcknowledged_&&recoveryPhysical_.ReconcileReady(*recovered->ready,s.input.nowNs))recoveryAcknowledged_=recovered->ready;
             if(recoveryAcknowledged_&&api_.recovery.ack(api_.context,*recoveryAcknowledged_)){
                 ++acks_;out.recovered=recoveryAcknowledged_;
+                observationRecovered_=recoveryAcknowledged_;observationRecoveryAcknowledgedNs_=s.input.nowNs;
                 recoveryAcknowledged_.reset();recoveryPending_.reset();deferredRecovery_.reset();recoveryCycle_.reset();cycle_.reset();
             }
         }
@@ -469,6 +471,8 @@ std::optional<math::Matrix4> ResolvePumpSupportWrist(const Bc2PumpTracking& t,co
 }
 void Bc2PhysicalPump::Record(const Bc2PhysicalPumpSample& s,unsigned gate,const WeaponCycleResult& result,bool recovery,
     const Bc2NativeCycleView* native,bool retained)noexcept {
+    observationGesture_={s.input.sequence,s.raw.input.sequence,s.input.nowNs,gate,unsigned(result.phase),
+        unsigned(result.failure),result.travel,result.rotation,recovery};
     std::unique_lock lock(journalMutex_,std::try_to_lock);if(!lock.owns_lock())return;
     GestureRow row{s.input.sequence,s.raw.input.sequence,cycle_?cycle_->cycle:recoveryCycle_?recoveryCycle_->cycle:0,s.input.nowNs,gate,
         unsigned(result.phase),unsigned(result.failure),s.nativeOwner.weapon,result.travel,result.rotation,

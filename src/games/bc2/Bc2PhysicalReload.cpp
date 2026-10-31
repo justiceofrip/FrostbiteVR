@@ -370,6 +370,7 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
     if(completion_&&acknowledgement_&&lease_&&reserve_&&supply_.Pending()){
         if(const auto receipt=ShotgunAmmoSupplyReceipt(equipment_,*supply_.Pending(),bridge_.Owners(),*completion_,*acknowledgement_,*lease_,*reserve_,s.input.nowNs)){
             if(supply_.Resolve(s.input,hands,*receipt).accepted){physicalAck=*completion_->acknowledged;++completed_;Journal(4,s.input.nowNs);
+                observationAcknowledged_=acknowledgement_;observationAcknowledgedNs_=s.input.nowNs;
                 supportReturn_.Observe(s.input,gun,cancelInput,hands.Current(InteractionHand::Left).has_value(),s.cancelFlags);
                 supportReturn_.Complete(receipt->reservation.request,receipt->observedNs);
                 Feedback(out,interaction::FeedbackKind::ReloadApplied,s.input);
@@ -510,6 +511,7 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
         if(supply_.ReleaseSubmitted(s.input,hands,*reservation)&&!hands.Current(InteractionHand::Left))
             supportReturn_.Arm(reservation->request,s.input,*gun);
         ++submitted_;Journal(3,s.input.nowNs);
+        observationSubmitted_=prepared.submit;observationSubmittedNs_=s.input.nowNs;
         if(transactionCount_<transactions_.size()){
             auto& t=transactions_[transactionCount_++];t.reservation=*reservation;t.before=prepared.submit->heldLease;
             t.original=retained.original.supply.input;t.current=s.input;t.submittedNs=s.input.nowNs;
@@ -695,6 +697,8 @@ void Bc2PhysicalReload::ObserveGeometry(const Bc2ReloadInteractionSample& s,cons
     row.phase=unsigned(result.insertion.phase);row.adapterReason=unsigned(result.reason);row.insertionReason=unsigned(result.insertion.reason);
     row.progress=result.insertion.progress;row.alignment=result.insertion.alignment;row.captured=result.insertion.captured;row.seated=result.insertion.seat.has_value();
     row.withinCapture=CaptureGeometry(raw,p);
+    observationGeometry_={i.identity,s.native.cycle,i.sequence,current,i.observedNs,i.deadlineNs,
+        row.phase,row.adapterReason,row.insertionReason,row.progress,row.alignment,row.captured,row.seated};
     ++geometryTotal_;if(result.insertion.phase==ReloadInsertionPhase::Free)++geometryFree_;else ++geometryGuided_;
     if(row.captured)++geometryCaptured_;if(row.seated)++geometrySeated_;if(result.insertion.reason==ReloadInsertionReason::PoseJump)++geometryPoseJumps_;
     GeometryNearest* nearest=nullptr;

@@ -134,7 +134,10 @@ struct ShotPublication {WeaponShotFrame frame;ShotGuard identity;std::optional<A
     interaction::InputFrame input{};std::shared_ptr<const SelectedMeshesSnapshot> selected;
     std::optional<math::Matrix4> anatomicalWristToGrip;
     std::shared_ptr<const Bc2PhysicalFeedPresentation> feed;
-    std::optional<WeaponModeCommand> sightMode;std::uint64_t sightModeObservedMs=0;};
+    std::optional<WeaponModeCommand> sightMode;std::uint64_t sightModeObservedMs=0;
+    std::shared_ptr<const ShellPumpObservation> shellPumpObservation;
+    std::shared_ptr<const WeaponModeObservation> sightResolution;};
+std::atomic<std::int64_t> shellPumpObservationUntil=0;
 std::atomic<std::shared_ptr<const ShotGuard>> shotGuard;
 std::atomic<std::shared_ptr<const ShotPublication>> shotPublication;
 #ifdef FVR_BC2_CONTEXTUAL_TOOLS
@@ -2435,7 +2438,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
         const ShotGuard identity{input.soldier,input.weak,input.weapon,input.ownerGeneration,input.input.spaceGeneration,input.input.generation,input.deadline,true,targets->tracked[0],0,input.weaponActionsBlocked,input.equipmentGeneration,input.nativeEquipment};
         preparedShot=std::make_shared<const ShotPublication>(ShotPublication{*pose->shot,identity,authored.binding,measuredSupport,authoredAim,sightSelection,
             input.input,input.selectedMeshes,handRoleReady&&handBinding?std::optional<math::Matrix4>{handBinding->wristToGrip}:std::nullopt,input.feed,
-            input.sightMode,input.sightModeObservedMs});
+            input.sightMode,input.sightModeObservedMs,input.shellPumpObservation,input.sightResolution});
     }
     if(const auto requested=visibilityGuard.load(std::memory_order_acquire);requested&&requested->enabled&&
         requested->input.sequence==input.input.generation&&requested->nativeOwner.soldier==input.soldier&&requested->nativeOwner.weak==input.weak&&
@@ -2620,6 +2623,12 @@ BodyHolsterPackCounters ReadBodyHolsterPackCounters()noexcept {
 }
 bool Stop()noexcept {enabled.store(false,std::memory_order_release);pumpGuard.store({},std::memory_order_release);PublishOrdinaryEquipment({});freeRightGuard.store({},std::memory_order_release);visibilityGuard.store({},std::memory_order_release);visibilityReceipt.store({},std::memory_order_release);bool okay=true;for(auto entry:hooks)if(entry){auto r=MH_DisableHook(entry);okay&=r==MH_OK||r==MH_ERROR_DISABLED;}const auto until=GetTickCount64()+2000;while(inFlight.load()&&GetTickCount64()<until)Sleep(1);return okay&&!inFlight.load();}
 void PublishM95ShotCapturePhase(unsigned phase)noexcept {if(phase<=5)m95ShotCapturePhase.store(phase,std::memory_order_release);}
+bool ShellPumpObservationRequested(std::int64_t nowNs)noexcept {
+    return nowNs>0&&nowNs<shellPumpObservationUntil.load(std::memory_order_relaxed);
+}
+bool WeaponModeObservationRequested(std::int64_t nowNs)noexcept {
+    return ShellPumpObservationRequested(nowNs);
+}
 void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     // This runs only on an explicit worker request. ReadWeaponFrame is the same
     // BodyObservation admission used by ReadBodyWeaponFrame: immutable atomic
@@ -2627,6 +2636,9 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     // calls an actor resolver/native method or accesses poseMutex scratch.
     constexpr std::size_t snapshotLimit=16384;
     auto observed=ReloadNanos();std::string feedDiagnostics;
+    // Explicit snapshot request opts in subsequent serialized Gameplay copies.
+    // No source deadline is changed; an initial request may report pending.
+    shellPumpObservationUntil.store(observed+1000000000ll,std::memory_order_relaxed);
     const auto invalid=[&](const char* reason){
         std::ostringstream header;header.imbue(std::locale::classic());
         header<<"{\"schema\":\"fvr.bc2.live-mechanism-snapshot.v1\",\"nonce\":\""<<nonce
@@ -2888,6 +2900,17 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
         json<<",\"secondaryAsset\":";text(family.secondaryAsset);json<<",\"secondaryConfiguration\":";text(family.secondaryConfiguration);
         json<<",\"persistentId\":";text(family.persistentId);json<<'}';
     }
+    json<<",\"resolutionObservation\":";
+    if(!source->sightResolution)json<<"{\"status\":\"capture_pending_or_not_requested\"}";
+    else{const auto& original=*source->sightResolution;
+        const bool joined=original.owner==m.owner&&original.equipment==identity.equipment&&
+            original.resolution.soldier==m.owner.soldier&&original.resolution.weapon==identity.weapon&&
+            original.resolution.data==identity.equipment.data&&original.inputGeneration&&original.inputGeneration<=input.generation&&
+            original.observedMs&&original.observedMs<=GetTickCount64();
+        json<<"{\"observationOnly\":true,\"unreachedFieldsAreDefaultValues\":true,\"sourceMatchesSnapshot\":"<<joined
+            <<",\"observedMs\":"<<original.observedMs<<",\"inputGeneration\":"<<original.inputGeneration<<",\"owner\":";owner(original.owner);
+        json<<",\"resolution\":";WriteWeaponModeResolution(json,original.resolution);json<<'}';
+    }
     json<<",\"adapter\":";
     if(!sightAdapter)json<<"null";else{
         json<<"{\"assembly\":";text(sightAdapter->assembly==SightAssemblyKind::OpposedLeaves?"opposed_leaves":"subtree");
@@ -2938,6 +2961,139 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
         json<<",\"pouchCarryWeaponWorldMeters\":";matrix(feed->pouchCarryWeaponWorldMeters);json<<",\"chainCarryWeaponWorldMeters\":";matrix(feed->chainCarryWeaponWorldMeters);
         json<<",\"originalWeaponWorldMeters\":";matrix(feed->originalWeaponWorldMeters);json<<",\"mechanismWristWorldMeters\":";
         if(feed->mechanismWristWorldMeters)matrix(*feed->mechanismWristWorldMeters);else json<<"null";json<<'}';
+    }
+    json<<",\"shellPump\":";
+    const auto* pumpEquipment=FindShotgunEquipment(configuration,identity.equipment.Asset(),aim->meshPath,m.rigFingerprint);
+    const auto& observation=source->shellPumpObservation;
+    const bool observationJoined=observation&&observation->owner==m.owner&&observation->equipment==pumpEquipment&&
+        observation->input.owner==m.inputEvidence.owner&&observation->input.sequence==m.inputEvidence.sequence&&
+        observation->input.observedNs==m.inputEvidence.observedNs&&observation->input.deadlineNs==m.inputEvidence.deadlineNs&&
+        feed_presentation_detail::Window(observation->input,now);
+    if(!pumpEquipment||!observationJoined){json<<"{\"available\":false,\"reason\":";
+        text(!pumpEquipment?"unsupported_configuration":!observation?"capture_pending_or_not_requested":"source_mismatched_or_expired");json<<'}';
+    }else{
+        const auto& o=*observation;const auto& s=o.shell;const auto& p=o.pump;const auto& t=o.pumpTracking;
+        const auto scalar=[&](float value){if(std::isfinite(value))json<<value;else json<<"null";};
+        const auto rigidMatrix=[&](const math::Matrix4& value){if(Rigid(value))matrix(value);else json<<"null";};
+        const auto clock=[&](const auto& value){json<<"\"sequence\":"<<value.sequence<<",\"observedNs\":"<<value.observedNs<<",\"deadlineNs\":"<<value.deadlineNs;};
+        const auto nativeIdentity=[&](const ReloadHoldIdentity& value){json<<"{\"owner\":";owner(value.owner);
+            json<<",\"firing\":["<<value.firing[0]<<','<<value.firing[1]<<','<<value.firing[2]<<"],\"serverPlayer\":"<<value.serverPlayer
+                <<",\"serverSoldier\":"<<value.serverSoldier<<",\"serverItem\":"<<value.serverItem<<'}';};
+        const auto counts=[&](const auto& value){json<<"\"loaded\":"<<value.loaded<<",\"reserve\":"<<value.reserve<<",\"capacity\":"<<value.capacity;};
+        const auto roundLease=[&](const ReloadRoundLease& value){json<<"{\"identity\":";nativeIdentity(value.identity);
+            json<<",\"cycle\":"<<value.cycle<<',';clock(value);json<<',';counts(value);
+            json<<",\"nativeBindingVerified\":"<<value.nativeBindingVerified<<",\"allThreeHeld\":"<<value.allThreeHeld
+                <<",\"fresh\":"<<(value.identity.owner==o.owner&&value.observedNs>0&&value.observedNs<=now&&value.deadlineNs>now)<<'}';};
+        const auto token=[&](const interaction::HandClaimToken& value){json<<"{\"id\":"<<value.id<<",\"owner\":";handOwner(value.owner);
+            json<<",\"hand\":"<<unsigned(value.hand)<<",\"kind\":"<<unsigned(value.kind)<<",\"item\":";key(value.item);
+            json<<",\"contact\":";key(value.contact);json<<",\"prerequisiteClaim\":"<<value.prerequisiteClaim<<'}';};
+        const auto cycleLease=[&](const auto& value){json<<"{\"owner\":";handOwner(value.owner);json<<",\"item\":";key(value.item);
+            json<<",\"mechanism\":";key(value.mechanism);json<<",\"cycle\":"<<value.cycle<<",\"shot\":"<<value.shot<<',';clock(value);
+            json<<",\"fresh\":"<<(value.owner==o.input.owner&&interaction::weapon_cycle_detail::Lease(value,now));
+            if constexpr(requires{value.held;}){
+                json<<",\"held\":"<<value.held<<",\"advancing\":";
+                if(!value.advancing)json<<"null";else{const auto& a=*value.advancing;json<<"{\"guardEpoch\":"<<a.guardEpoch<<",\"updates\":["
+                    <<a.updates[0]<<','<<a.updates[1]<<','<<a.updates[2]<<"],";counts(a);json<<'}';}
+            }else{
+                const auto& d=value.grant.debt;json<<",\"grantNonce\":"<<value.grant.nonce<<",\"guardEpoch\":"<<d.guardEpoch<<',';counts(d);
+                json<<",\"first\":["<<value.first[0]<<','<<value.first[1]<<','<<value.first[2]<<"],\"second\":["
+                    <<value.second[0]<<','<<value.second[1]<<','<<value.second[2]<<"],\"grantDetailAvailable\":false";
+            }json<<'}';};
+        const auto release=[&](const auto& value){json<<"{\"cycle\":";cycleLease(value.cycle);json<<",\"request\":"<<value.request
+            <<",\"inputSequence\":"<<value.inputSequence<<",\"observedNs\":"<<value.observedNs<<",\"deadlineNs\":"<<value.deadlineNs<<'}';};
+        const auto ready=[&](const auto& value){json<<"{\"release\":";release(value.release);json<<',';clock(value);
+            json<<",\"nativeReady\":"<<value.nativeReady<<",\"unchangedAmmunition\":"<<value.unchangedAmmunition<<'}';};
+        json<<"{\"available\":true,\"input\":";evidence(o.input);
+        json<<",\"observationOnly\":true,\"retainedEventsAreHistorical\":true,\"perBranchAmmunitionAvailable\":false,\"profile\":{\"registrationId\":"<<pumpEquipment->native->id
+            <<",\"rigFingerprint\":"<<pumpEquipment->rigFingerprint<<",\"configurationPath\":";text(pumpEquipment->native->config->assetPath);
+        const auto& insertion=*pumpEquipment->shellInsertion;
+        json<<",\"shell\":{\"id\":"<<insertion.id<<",\"revision\":"<<insertion.revision<<",\"approach\":"<<unsigned(insertion.approach)
+            <<",\"orientation\":"<<unsigned(insertion.orientation)<<",\"travelMeters\":";scalar(insertion.travelMeters);
+        json<<",\"captureDistanceMeters\":";scalar(insertion.captureDistanceMeters);
+        json<<",\"maxStepMeters\":";scalar(insertion.maxStepMeters);json<<",\"maxStepRadians\":";scalar(insertion.maxStepRadians);
+        json<<",\"maxSampleGapNs\":"<<insertion.maxSampleGapNs<<",\"maxGuidedNs\":"<<insertion.maxGuidedNs;
+        json<<",\"postCaptureTravelMeters\":";scalar(insertion.postCaptureTravelMeters);json<<",\"seatDwellNs\":"<<insertion.seatDwellNs
+            <<",\"alignmentNs\":"<<insertion.alignmentNs<<",\"travelDirection\":["<<insertion.travelDirection[0]<<','<<insertion.travelDirection[1]<<','<<insertion.travelDirection[2]<<']';
+        json<<",\"itemFromHand\":";rigidMatrix(insertion.itemFromHand);json<<",\"itemFromInsertion\":";rigidMatrix(insertion.itemFromInsertion);
+        json<<",\"weaponFromEntry\":";rigidMatrix(insertion.weaponFromEntry);json<<"},\"pump\":";
+        if(!pumpEquipment->pump)json<<"null";else{const auto& c=*pumpEquipment->pump;
+            json<<"{\"id\":"<<c.profileId<<",\"revision\":"<<c.revision<<",\"rearDirection\":"<<c.rearDirection<<",\"strokeMeters\":";scalar(c.geometry.stroke);
+            json<<",\"axis\":["<<c.geometry.axis[0]<<','<<c.geometry.axis[1]<<','<<c.geometry.axis[2]<<"],\"closedWrist\":";rigidMatrix(c.closedWrist);json<<'}';}
+        json<<"},\"leftClaim\":";if(o.left)claim(*o.left);else json<<"null";
+        json<<",\"gunClaim\":";if(o.gun)claim(*o.gun);else json<<"null";
+        json<<",\"shell\":{\"ticked\":"<<o.shellTicked<<",\"active\":"<<s.state.active<<",\"held\":"<<s.state.held
+            <<",\"nativeHolding\":"<<s.state.nativeHolding<<",\"pending\":"<<s.state.pending<<",\"reloadHeld\":"<<o.reloadHeld
+            <<",\"ammoOwnsHand\":"<<o.ammoOwnsHand<<",\"cycle\":"<<s.state.cycle<<",\"identity\":";nativeIdentity(s.state.identity);
+        json<<",\"lifetimeCounters\":{\"acquired\":"<<s.state.acquired<<",\"submitted\":"<<s.state.submitted<<",\"completed\":"<<s.state.completed<<'}';
+        json<<",\"diagnostic\":{\"cancelReason\":"<<s.diagnostic.cancelReason<<",\"supplyReason\":"<<s.diagnostic.supplyReason
+            <<",\"flags\":"<<s.diagnostic.flags<<",\"sourceFlags\":"<<s.diagnostic.sourceFlags<<",\"bridgePhase\":"<<s.diagnostic.bridgePhase<<",\"cycle\":"<<s.diagnostic.cycle<<'}';
+        const auto& sg=s.geometry;
+        json<<",\"geometry\":{\"available\":"<<bool(sg.sourceSequence)<<",\"owner\":";handOwner(sg.identity.owner);json<<",\"item\":";key(sg.identity.item);
+        json<<",\"cycle\":"<<sg.cycle<<",\"sourceSequence\":"<<sg.sourceSequence<<",\"currentSequence\":"<<sg.currentSequence
+            <<",\"observedNs\":"<<sg.observedNs<<",\"deadlineNs\":"<<sg.deadlineNs<<",\"phase\":"<<sg.phase
+            <<",\"adapterReason\":"<<sg.adapterReason<<",\"insertionReason\":"<<sg.insertionReason<<",\"captured\":"<<sg.captured<<",\"seated\":"<<sg.seated
+            <<",\"progress\":";scalar(sg.progress);json<<",\"alignment\":";scalar(sg.alignment);json<<'}';
+        const auto& raw=o.shellRaw;
+        json<<",\"raw\":{\"valid\":"<<raw.valid<<",\"nativeShellVisible\":"<<raw.nativeShellVisible
+            <<",\"ownerMatches\":"<<(raw.owner==o.owner)<<",\"rigMatches\":"<<(raw.rig==m.rig)<<",\"rigFingerprint\":"<<raw.rigFingerprint
+            <<",\"profileMatches\":"<<(raw.equipment==pumpEquipment)<<",\"input\":";evidence(raw.inputEvidence);
+        json<<",\"current\":"<<(raw.valid&&raw.owner==o.owner&&raw.rig==m.rig&&raw.rigFingerprint==m.rigFingerprint&&raw.equipment==pumpEquipment&&
+            raw.inputEvidence.owner==o.input.owner&&raw.inputEvidence.sequence<=o.input.sequence&&raw.inputEvidence.observedNs<=o.input.observedNs&&
+            feed_presentation_detail::Window(raw.inputEvidence,now))<<",\"rawWristWorldMeters\":";rigidMatrix(raw.rawLeftWristWorldMeters);
+        json<<",\"weaponWorldMeters\":";rigidMatrix(raw.weaponWorldMeters);json<<'}';
+        json<<",\"pouch\":{\"frame\":"<<unsigned(s.pouchFrame)<<",\"centerMeters\":["<<s.pouch.centerMeters[0]<<','<<s.pouch.centerMeters[1]<<','<<s.pouch.centerMeters[2]
+            <<"],\"radiusMeters\":";scalar(s.pouch.radiusMeters);json<<"},";
+        json<<"\"reserve\":";if(!s.state.reserve)json<<"null";else{const auto& r=*s.state.reserve;
+            json<<"{\"identity\":";nativeIdentity(r.identity);json<<',';clock(r);json<<',';counts(r);
+            json<<",\"verified\":"<<r.verified<<",\"reloadInputReady\":"<<r.reloadInputReady<<",\"allThreeIdle\":"<<r.allThreeIdle
+                <<",\"fresh\":"<<(r.identity.owner==o.owner&&r.observedNs>0&&r.observedNs<=now&&r.deadlineNs>now)<<'}';}
+        json<<",\"heldLease\":";if(s.lease)roundLease(*s.lease);else json<<"null";
+        json<<",\"item\":";if(!s.item)json<<"null";else{json<<"{\"key\":";key(s.item->item);json<<",\"claim\":";claim(s.item->claim);
+            json<<",\"units\":"<<s.item->units<<",\"profile\":";key(s.item->identity.profile);json<<'}';}
+        json<<",\"pendingRequest\":";if(!s.pending)json<<"null";else{const auto& r=*s.pending;json<<"{\"request\":"<<r.request<<",\"cycle\":"<<r.cycle
+            <<",\"seat\":"<<r.seat<<",\"sourceSequence\":"<<r.sourceSequence<<",\"startedNs\":"<<r.startedNs<<",\"item\":";key(r.item);json<<",\"claim\":";token(r.claim);json<<'}';}
+        json<<",\"lastSubmitted\":";if(!s.submitted)json<<"null";else{const auto& r=*s.submitted;json<<"{\"request\":"<<r.request.id
+            <<",\"operation\":"<<unsigned(r.request.operation)<<",\"submittedNs\":"<<s.submittedNs<<",\"heldLease\":";roundLease(r.heldLease);
+            json<<",\"reservation\":{\"request\":"<<r.reservation.request<<",\"cycle\":"<<r.reservation.cycle<<",\"seat\":"<<r.reservation.seat<<",\"item\":";
+            key(r.reservation.item);json<<",\"claim\":";token(r.reservation.claim);json<<"}}";}
+        json<<",\"lastAcknowledged\":";if(!s.acknowledged)json<<"null";else{const auto& a=*s.acknowledged;const auto& r=a.acknowledgement;
+            json<<"{\"identity\":";nativeIdentity(r.identity);json<<",\"cycle\":"<<r.cycle<<",\"request\":"<<r.semantic.request
+                <<",\"operation\":"<<unsigned(r.semantic.operation)<<",\"status\":"<<unsigned(r.semantic.status)<<",\"sampleSequence\":"<<r.sampleSequence
+                <<",\"serverInvocation\":"<<r.serverInvocation<<",\"observedNs\":"<<a.observedNs<<",\"deadlineNs\":"<<a.deadlineNs
+                <<",\"verified\":"<<a.verified<<",\"acknowledgedNs\":"<<s.acknowledgedNs<<'}';}
+        json<<"},\"pump\":{\"ticked\":"<<o.pumpTicked<<",\"phase\":"<<p.phase<<",\"recoveryPhase\":"<<p.recoveryPhase<<",\"debt\":"<<p.debt
+            <<",\"blocksFire\":"<<o.pumpBlocksFire<<",\"ownsHand\":"<<o.pumpOwnsHand<<",\"companionReturning\":"<<t.companionReturning;
+        const auto& g=p.gesture;
+        json<<",\"gesture\":{\"available\":"<<bool(g.input)<<",\"evaluated\":"<<(g.input&&g.gate==0)<<",\"input\":"<<g.input<<",\"rawInput\":"<<g.rawInput<<",\"observedNs\":"<<g.observedNs<<",\"gate\":"<<g.gate
+            <<",\"phase\":"<<g.phase<<",\"failure\":"<<g.failure<<",\"recovery\":"<<g.recovery<<",\"travelMeters\":";scalar(g.travel);
+        json<<",\"rotationRadians\":";scalar(g.rotation);json<<'}';
+        const auto& pr=o.pumpRaw;
+        json<<",\"raw\":{\"valid\":"<<pr.valid<<",\"ownerMatches\":"<<(pr.nativeOwner==o.owner)<<",\"rigMatches\":"<<(pr.rig==m.rig)
+            <<",\"rigFingerprint\":"<<pr.rigFingerprint<<",\"mappingValid\":"<<pr.mappingValid<<",\"input\":";evidence(pr.input);
+        json<<",\"current\":"<<(pr.valid&&pr.nativeOwner==o.owner&&pr.rig==m.rig&&pr.rigFingerprint==m.rigFingerprint&&
+            pr.input.owner==o.input.owner&&pr.input.sequence<=o.input.sequence&&pr.input.observedNs<=o.input.observedNs&&
+            feed_presentation_detail::Window(pr.input,now))<<",\"contact\":";rigidMatrix(pr.contact);json<<'}';
+        json<<",\"held\":";if(p.held)cycleLease(*p.held);else json<<"null";
+        json<<",\"pending\":";if(p.pending)release(*p.pending);else json<<"null";
+        json<<",\"recovery\":";if(p.recovery)cycleLease(*p.recovery);else json<<"null";
+        json<<",\"recoveryPending\":";if(p.recoveryPending)release(*p.recoveryPending);else json<<"null";
+        json<<",\"mechanismClaim\":";if(t.mechanism)claim(*t.mechanism);else json<<"null";
+        json<<",\"target\":";
+        const auto target=[&](const auto& value){json<<"{\"profile\":"<<value.profile<<",\"revision\":"<<value.revision<<",\"inputSequence\":"<<value.inputSequence
+            <<",\"observedNs\":"<<value.observedNs<<",\"deadlineNs\":"<<value.deadlineNs<<",\"travelMeters\":";scalar(value.travel);json<<'}';};
+        if(t.target)target(*t.target);else json<<"null";
+        json<<",\"recoveryTarget\":";if(t.recoveryTarget)target(*t.recoveryTarget);else json<<"null";
+        json<<",\"lastSettled\":";if(p.settled)ready(*p.settled);else json<<"null";
+        json<<",\"acknowledgedNs\":"<<p.acknowledgedNs<<",\"lastRecovered\":";if(p.recovered)ready(*p.recovered);else json<<"null";
+        json<<",\"recoveryAcknowledgedNs\":"<<p.recoveryAcknowledgedNs<<",\"supportReturnPending\":"<<p.supportReturnPending
+            <<",\"supportReturnsLifetime\":"<<p.supportReturns<<",\"supportHolding\":"<<o.supportHolding<<",\"supportToken\":"<<o.supportToken;
+        json<<",\"native\":";if(!o.native)json<<"null";else{const auto& n=*o.native;
+            json<<"{\"countsFreshnessAvailable\":false,\"ownerMatchesSnapshot\":"<<(n.native.owner==o.owner)<<",\"readNs\":"<<o.nativeReadNs<<",\"phase\":"<<unsigned(n.phase)<<",\"failure\":"<<unsigned(n.failure)
+                <<",\"identity\":";nativeIdentity(n.native);json<<",\"cycle\":"<<n.cycle<<",\"shot\":"<<n.shot
+                <<",\"failureInvocation\":"<<n.failureInvocation<<",\"blocksFire\":"<<n.blocksFire<<",\"heldSuspended\":"<<n.heldSuspended<<',';counts(n);
+            json<<",\"held\":";if(n.held)cycleLease(*n.held);else json<<"null";
+            json<<",\"ready\":";if(n.ready)ready(*n.ready);else json<<"null";json<<'}';}
+        json<<"}}";
     }
     json<<",\"feedObservation\":";gameplay::ReportFeedObservation(json);json<<"}\n";
     if(ReloadNanos()>=until){invalid("expired_during_serialization");return;}

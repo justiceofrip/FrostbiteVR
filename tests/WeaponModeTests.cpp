@@ -2,13 +2,17 @@
 #include "Bc2WeaponMode.h"
 #include <array>
 #include <cstring>
+#include <sstream>
 #include <string>
 #include <unordered_map>
+#include <vector>
 using namespace fvr;
 namespace {
 struct Fixture {
     std::array<std::byte,0x10000> bytes{};
     std::unordered_map<unsigned,std::string> types;
+    std::vector<std::pair<unsigned,std::size_t>> reads;
+    std::vector<std::pair<unsigned,std::string>> typeReads;
     unsigned currentReads=0;bool changeCurrent=false;
     static constexpr unsigned soldier=0x10000,inventory=0x11000,items=0x12000,
         rifle=0x13000,launcher=0x13200,rifleData=0x14000,launcherData=0x14400,
@@ -37,11 +41,12 @@ struct Fixture {
     bc2::WeaponModeMemory Memory(){
         return {this,[](void* ctx,unsigned at,void* out,std::size_t n){
             auto& f=*static_cast<Fixture*>(ctx);
+            f.reads.emplace_back(at,n);
             if(at<0x10000||std::uint64_t(at)+n>0x20000)return false;
             if(at==inventory+0x14c&&f.changeCurrent&&++f.currentReads>1){unsigned changed=3;std::memcpy(out,&changed,4);return true;}
             std::memcpy(out,f.bytes.data()+at-0x10000,n);return true;
         },[](void* ctx,unsigned at,const char* expected){
-            const auto& f=*static_cast<Fixture*>(ctx);const auto found=f.types.find(at);
+            auto& f=*static_cast<Fixture*>(ctx);f.typeReads.emplace_back(at,expected);const auto found=f.types.find(at);
             return found!=f.types.end()&&found->second==expected;
         }};
     }
@@ -53,9 +58,21 @@ int main(){
     for(const auto& profile:bc2::WeaponModeFamilies){
         Fixture pair;pair.Text(0x16000,profile.primaryAsset.data());pair.Text(0x16100,profile.secondaryAsset.data());
         pair.Text(0x16200,profile.primaryConfiguration.data());pair.Text(0x16300,profile.secondaryConfiguration.data());
-        pair.Text(0x16400,profile.persistentId.data());const auto untouched=pair.bytes;
+        pair.Text(0x16400,profile.persistentId.data());const auto untouched=pair.bytes;Fixture observed=pair;
         auto mode=bc2::ResolveWeaponMode(pair.Memory(),pair.soldier,pair.rifle);
         CHECK(mode&&mode->family==&profile&&mode->action==33&&mode->targetWeapon==pair.launcher&&pair.bytes==untouched);
+        bc2::WeaponModeResolution diagnosis;
+        const auto same=bc2::ResolveWeaponMode(observed.Memory(),observed.soldier,observed.rifle,&diagnosis);
+        CHECK(same&&same->family==mode->family&&same->targetWeapon==mode->targetWeapon&&same->action==mode->action);
+        CHECK(observed.bytes==untouched&&observed.reads==pair.reads&&observed.typeReads==pair.typeReads);
+        CHECK(std::string_view(diagnosis.status)=="resolved"&&diagnosis.candidatesDropped==0);
+        const bc2::WeaponModeCandidateObservation* accepted=nullptr;
+        for(unsigned i=0;i<diagnosis.candidateCount;++i)if(diagnosis.candidates[i].family==&profile)accepted=&diagnosis.candidates[i];
+        CHECK(accepted&&std::string_view(accepted->status)=="resolved"&&accepted->inventory==pair.inventory);
+        CHECK(accepted->primary.weapon==pair.rifle&&accepted->secondary.weapon==pair.launcher);
+        CHECK(accepted->routes[0].targetsRead==2&&accepted->routes[0].targets[0]==3&&accepted->routes[0].firstOccupiedWeapon==pair.launcher);
+        std::ostringstream json;bc2::WriteWeaponModeResolution(json,diagnosis);
+        CHECK(json.str().size()<10000&&json.str().find("\"candidatesDropped\":0")!=std::string::npos);
         pair.Word(pair.inventory+0x14c,3);mode=bc2::ResolveWeaponMode(pair.Memory(),pair.soldier,pair.launcher);
         CHECK(mode&&mode->family==&profile&&mode->action==36&&mode->targetWeapon==pair.rifle);
         pair.Word(pair.map+24+16,33);CHECK(!bc2::ResolveWeaponMode(pair.Memory(),pair.soldier,pair.launcher));
@@ -98,5 +115,36 @@ int main(){
     {Fixture g;g.changeCurrent=true;CHECK(!bc2::ResolveWeaponMode(g.Memory(),g.soldier,g.rifle));}
     {Fixture g;g.Word(g.soldier+0x248,0xfffffff0);CHECK(!bc2::ResolveWeaponMode(g.Memory(),g.soldier,g.rifle));}
     {Fixture g;auto mem=g.Memory();mem.type=nullptr;CHECK(!bc2::ResolveWeaponMode(mem,g.soldier,g.rifle));}
+    // The observed campaign primary occupies slot zero. This is already valid
+    // when both native routes point to the linked pair; no one-gun slot override.
+    for(const auto& profile:bc2::WeaponModeFamilies){Fixture g;
+        g.Text(0x16000,profile.primaryAsset.data());g.Text(0x16100,profile.secondaryAsset.data());
+        g.Text(0x16200,profile.primaryConfiguration.data());g.Text(0x16300,profile.secondaryConfiguration.data());g.Text(0x16400,profile.persistentId.data());
+        g.Word(g.items,g.rifle);g.Word(g.items+4,0x13500);g.Word(g.inventory+0x14c,0);g.Word(g.map+20,0);g.Word(g.backward,0);
+        bc2::WeaponModeCandidateObservation diagnosis;
+        const auto valid=bc2::ObserveWeaponModeFamily(g.Memory(),g.soldier,g.rifle,profile,&diagnosis);
+        CHECK(valid&&valid->family==&profile&&std::string_view(diagnosis.status)=="resolved");
+        g.Word(g.backward,1);Fixture without=g;g.reads.clear();g.typeReads.clear();without.reads.clear();without.typeReads.clear();
+        CHECK(!bc2::ObserveWeaponModeFamily(g.Memory(),g.soldier,g.rifle,profile,&diagnosis));
+        CHECK(!bc2::ObserveWeaponModeFamily(without.Memory(),without.soldier,without.rifle,profile));
+        CHECK(g.reads==without.reads&&g.typeReads==without.typeReads);
+        CHECK(std::string_view(diagnosis.status)=="primary_route"&&std::string_view(diagnosis.routes[1].status)=="first_target_mismatch");
+        CHECK(diagnosis.selected==0&&diagnosis.routes[1].wanted==0&&diagnosis.routes[1].firstOccupiedSlot==1&&diagnosis.routes[1].firstOccupiedWeapon==0x13500);
+    }
+    const auto diagnose=[](Fixture& g){bc2::WeaponModeCandidateObservation out;
+        if(bc2::ObserveWeaponModeFamily(g.Memory(),g.soldier,g.rifle,bc2::WeaponModeFamilies[0],&out))out.status="unexpected_success";
+        return out;};
+    {Fixture g;g.Text(0x16300,"Other/ExactConfiguration");const auto d=diagnose(g);
+        CHECK(std::string_view(d.status)=="item_configuration_mismatch"&&d.lastItem.weapon==g.launcher&&d.lastItem.configuration=="Other/ExactConfiguration");}
+    {Fixture g;g.Word(g.items+20,g.rifle);const auto d=diagnose(g);
+        CHECK(std::string_view(d.status)=="duplicate_asset_item"&&d.lastItem.slot==5&&d.primary.weapon==g.rifle);}
+    {Fixture g;g.Word(g.launcherData+0x64,g.persistent+4);g.types[g.persistent+4]="PersistentWeapon";const auto d=diagnose(g);
+        CHECK(std::string_view(d.status)=="linked_persistence_mismatch"&&d.primary.persistent==g.persistent&&d.secondary.persistent==g.persistent+4);}
+    {Fixture g;g.Word(g.forward,9);const auto d=diagnose(g);
+        CHECK(std::string_view(d.status)=="secondary_route"&&std::string_view(d.routes[0].status)=="target_out_of_range"&&d.routes[0].targets[0]==9);}
+    {Fixture g;g.changeCurrent=true;const auto d=diagnose(g);
+        CHECK(std::string_view(d.status)=="owner_or_selection_changed"&&d.bookendAddress==g.inventory+0x14c&&d.bookendExpected==1&&d.bookendObserved==3);}
+    {Fixture g;g.Word(g.items+12,0);const auto d=diagnose(g);
+        CHECK(std::string_view(d.status)=="linked_pair_missing"&&d.itemCount==9&&d.items[3]==0&&d.namedItems==(1ull<<1));}
     return 0;
 }

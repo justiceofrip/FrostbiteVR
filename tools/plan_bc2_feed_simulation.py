@@ -279,7 +279,7 @@ def evidence(sample, owner, physical_generation, now):
             and sample["tracked"] == [True, True], "untracked or unfocused hand evidence")
 
 
-def admit_frame(snapshot, now, nonce):
+def admit_frame(snapshot, now, nonce, *, mechanism_admission=None):
     """Admit the original generic body/input frame, without a feed registration.
 
     This is observation admission only. Mechanism planners must still apply
@@ -294,8 +294,6 @@ def admit_frame(snapshot, now, nonce):
     # is open. BodyObservation supplies geometry through that block; it does not
     # authorize firing or bypass the native operation's own preflight.
     feed_block = snapshot.get("feed") is not None and snapshot["feed"].get("blocksFire") is True
-    require(snapshot["weapon_actions_blocked"] is False or feed_block,
-            "weapon actions blocked without a retained feed reload")
     owner, eq, rig = snapshot["owner"], snapshot["equipment"], snapshot["rig"]
     require(all(integer(owner[k]) > 0 for k in ("player", "soldier", "weak", "weapon", "actorGeneration", "equipGeneration", "space")),
             "missing native owner lifetime")
@@ -331,6 +329,13 @@ def admit_frame(snapshot, now, nonce):
             and integer(snapshot["valid_until_ns"]) <= integer(snapshot["native_deadline_ns"]),
             "expired native shot or snapshot extends original shot lease")
     require(any(m["path"] == selected["matchedMeshPath"] for m in selected["meshes"]), "matched mesh absent from selection")
+    # An opt-in observer may validate its own exact same-owner debt. Pass the
+    # ORIGINAL snapshot, after all common guards, and never clear its Fire block.
+    # Existing feed/sight callers retain their previous admission behavior.
+    mechanism_block = (snapshot["weapon_actions_blocked"] is True and mechanism_admission is not None
+                       and callable(mechanism_admission) and mechanism_admission(snapshot, now) is True)
+    require(snapshot["weapon_actions_blocked"] is False or feed_block or mechanism_block,
+            "weapon actions blocked without an admitted retained mechanism")
 
 
 def admit(profiles, snapshot, now, nonce):

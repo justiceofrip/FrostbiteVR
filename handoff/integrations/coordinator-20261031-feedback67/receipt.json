@@ -1,0 +1,38 @@
+{
+  "source_commit": "9b42d8739fe84b242041aef15a01a2f2e67365e3",
+  "source_sha256": "cb6cafb9ccb5a4ec5cdaeb36ccc776a706028d42817a1b07cf4cf84ff419fd56",
+  "installation_receipt": "reports/coordinator-20261031-feedback67/installation.json",
+  "batch": "coordinator-20261031-feedback67",
+  "source_pushed": true,
+  "rollback_version": "0.1.30",
+  "change": "Correct snapshot corroboration of an original selected frame, expose production sight geometry, and retain a bounded opt-in feed guard journal. Add guarded sight driving and isolated presentation comparison.",
+  "actual_game": {
+    "observed": "QJU88_sp OpenCover and Detach advanced accepted counters to2. Loaded/reserve stayed0/687. Attach stopped before input because retained feed presentation disappeared; full reload not completed.",
+    "run": "reports/coordinator-20261031-feedback67/xr-game01",
+    "native_retired": true,
+    "normal_game_close": true,
+    "headset_accepted": false,
+    "underbarrel": "XM8_sp_s/SP_rgl_XM8_Scoped remained family_unavailable; driver sent0 commands.",
+    "session": "20261031-183826-136-33b9d7d9",
+    "exact_three_profiles_restored": true,
+    "full_reload_accepted": false,
+    "settings_preserved": true
+  },
+  "runtime_receipt": "reports/coordinator-20261031-feedback67/normal-runtime/build-receipt.json",
+  "checks": {
+    "python_drivers": "22/22",
+    "python_sight": "4/4",
+    "python_feed": "5/5",
+    "x86_normal": "341/341,118.84s",
+    "x64_normal": "341/341,27.00s",
+    "affected_native": "5/5"
+  },
+  "push_receipt": "reports/coordinator-20261031-feedback67/source-push.json",
+  "next": "Feedback68 shared detached-carry precision fix, pump observation/planner/driver, exact family rejection evidence; then native completion. C4 and other campaign cards remain open.",
+  "subsequent_observations": {
+    "destruction": "Feedback68 destruction01 loaded retained SP02 checkpoint then gameAV0xc0000005 beforeworld; no native final report or visual acceptance. All processes exited, all3 original profiles restored. Crash XML retained; bounded existing watcher capture being prepared.",
+    "performance": "Feedback68 on/off actual GPU flag verified, but native yaw differed98.294degrees; comparison inconclusive, no promotion."
+  },
+  "installed_version": "0.1.31",
+  "installed_validation": "Passed; assets ready, settings unchanged. No headset check."
+}

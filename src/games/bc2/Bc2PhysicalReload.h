@@ -84,6 +84,28 @@ struct PhysicalReloadDiagnostic {
     std::uint64_t cycle=0;
     bool active=false;
 };
+// Copied only by the serialized Gameplay callback after an explicit live
+// snapshot request. Retained receipts keep their original identity and clocks.
+struct PhysicalReloadGeometryObservation {
+    interaction::ReloadInsertionIdentity identity{};
+    std::uint64_t cycle=0,sourceSequence=0,currentSequence=0;
+    std::int64_t observedNs=0,deadlineNs=0;
+    unsigned phase=0,adapterReason=0,insertionReason=0;
+    float progress=0,alignment=0;bool captured=false,seated=false;
+};
+struct PhysicalReloadObservation {
+    PhysicalReloadProbeState state{};
+    PhysicalReloadDiagnostic diagnostic{};
+    PhysicalReloadGeometryObservation geometry{};
+    std::optional<ReloadRoundLease> lease;
+    std::optional<interaction::AmmoSupplyObject> item;
+    std::optional<interaction::AmmoSupplyReservation> pending;
+    std::optional<Bc2ReloadNativeRequest> submitted;
+    std::optional<Bc2ReloadAckEvidence> acknowledged;
+    std::int64_t submittedNs=0,acknowledgedNs=0;
+    interaction::AmmoSupplyContact pouch{};
+    interaction::SupplyAnchorFrame pouchFrame=interaction::SupplyAnchorFrame::HeadYaw;
+};
 class Bc2PhysicalReload {
 public:
     static interaction::AmmoSupplyConfig DefaultPouch()noexcept;
@@ -109,6 +131,11 @@ public:
     void Report(std::ostream&)const;
     // Same serialized Gameplay callback only; not a worker-thread reader.
     PhysicalReloadDiagnostic Diagnostic()const noexcept {return diagnostic_;}
+    PhysicalReloadObservation Observation(std::int64_t now)const noexcept {
+        return {ProbeState(now),diagnostic_,observationGeometry_,lease_,supply_.Held(),supply_.Pending(),
+            observationSubmitted_,observationAcknowledged_,observationSubmittedNs_,observationAcknowledgedNs_,
+            BodyAmmoContact(),beltFrame_};
+    }
     bool BlocksEquipment()const noexcept {return active_||supply_.Held().has_value()||
         ((retiring_||supply_.Pending().has_value())&&blocksCurrent_);}
     PhysicalReloadProbeState ProbeState(std::int64_t now)const noexcept {
@@ -117,6 +144,11 @@ public:
     }
 private:
     PhysicalReloadDiagnostic diagnostic_{};
+    PhysicalReloadGeometryObservation observationGeometry_{};
+    // Latest actual events, bounded to one each; never consumed as authority.
+    std::optional<Bc2ReloadNativeRequest> observationSubmitted_;
+    std::optional<Bc2ReloadAckEvidence> observationAcknowledged_;
+    std::int64_t observationSubmittedNs_=0,observationAcknowledgedNs_=0;
     struct Evidence {interaction::AmmoSupplySample supply{};interaction::HandClaim item{},gun{};};
     struct DeferredSeat {
         Bc2ReloadInteractionSample contact{};interaction::ReloadInsertionSeat seat{};

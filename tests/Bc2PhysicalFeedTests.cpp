@@ -38,6 +38,7 @@ struct Fixture {
     std::int64_t now=1000*Ms;
     Bc2PhysicalFeedSample sample{};
     std::optional<fvr::math::Matrix4> wristCalibration;
+    std::optional<fvr::math::Matrix4> placedWeapon;
     fvr::math::Matrix4 lastWrist=Identity();
     Bc2PhysicalFeedResult result{};
     std::optional<FeedEquipmentSubmission> submitted;
@@ -128,6 +129,10 @@ struct Fixture {
             auto rig=sample.raw.rig;rig.pose=0x110000;rig.skeleton=0x120000;
             sample.raw=BuildSupportControllerMapping(sample.owner,sample.input,input,rig,sample.rigFingerprint,
                 feed_interaction_detail::Multiply(*wristCalibration,wrist),Identity(),Identity(),1,sample.input.nowNs);
+        }
+        if(placedWeapon){
+            sample.raw.weaponWorldMeters=*placedWeapon;
+            sample.raw.rawLeftWristWorldMeters=feed_interaction_detail::Multiply(sample.raw.rawLeftWristWorldMeters,*placedWeapon);
         }
         const HandContactProof gunProof{{1,7},sequence,sample.input.deadlineNs,true};
         const auto gun=hands.Current(InteractionHand::Right);
@@ -266,7 +271,9 @@ struct Fixture {
         if(picked){
             // The retained source already follows the calibrated pickup hand.
             // Preserve that grasp, then undo calibration for PrepareTick's input.
-            sourceFromWrist=feed_interaction_detail::Multiply(sample.raw.rawLeftWristWorldMeters,
+            const auto localWrist=feed_interaction_detail::Multiply(sample.raw.rawLeftWristWorldMeters,
+                feed_interaction_detail::Inverse(sample.raw.weaponWorldMeters));
+            sourceFromWrist=feed_interaction_detail::Multiply(localWrist,
                 feed_interaction_detail::Inverse(motion->placement.weaponFromSource));
             if(wristCalibration)sourceFromWrist=feed_interaction_detail::Multiply(
                 feed_interaction_detail::Inverse(*wristCalibration),sourceFromWrist);
@@ -473,6 +480,64 @@ int ReattachingWithoutChestSupplyCannotRefill(){
     CHECK(f.Place(FeedPhysicalOperation::AttachContainer));CHECK(f.submitted);
     CHECK(f.submitted->command.authority.rounds==80);CHECK(f.Reconcile());
     CHECK((f.native.counts==FeedAmmunitionCounts{100,50,100}));return 0;
+}
+int DetachedDwellKeepsOriginalCarryAndRequiresFreshSupply(){
+    // feedback67 Detach snapshot020 and the later refused Attach snapshot001:
+    // same exact equipment, cover open, loaded/reserve 0/687, released hand,
+    // and native weapon transforms with ordinary float orthogonality error.
+    const auto* registration=FindBc2FeedRegistration(5358977986686110024ull);
+    CHECK(registration&&registration->geometry.asset=="QJU88_sp");
+    Fixture f(registration);f.native.counts={0,687,200};
+    auto world=Identity();
+    world.values={{{-.896846652f,3.16649675e-8f,-.442341506f,0},
+        {6.70552254e-8f,1,1.49011612e-7f,0},{.442341536f,-1.49011612e-8f,-.896846712f,0},
+        {164.812531f,170.831558f,378.542969f,1}}};
+    CHECK(feed_mechanism_detail::Pose(world));f.placedWeapon=world;
+    CHECK(f.OpenCover()&&f.Reconcile());
+    CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&f.Reconcile());
+    CHECK(f.submits==2&&f.result.presentation&&f.BlocksFire());
+    const auto detached=f.result.presentation;const auto counts=f.native.counts;
+    const auto released=f.lastWrist;f.submitted.reset();
+    for(unsigned packet=0;packet<600;++packet){
+        if(packet==300){
+            world.values={{{-.896846771f,-2.32830644e-9f,-.442341566f,0},
+                {3.7252903e-8f,1,6.70552254e-8f,0},{.442341536f,7.4505806e-9f,-.896846831f,0},
+                {164.812561f,170.833389f,378.542938f,1}}};
+            CHECK(feed_mechanism_detail::Pose(world));f.placedWeapon=world;
+        }
+        f.PrepareTick(released,false);
+        // Native/gameplay can consume several publications of one real input.
+        // None is a new hand claim or a reason to move the detached object.
+        for(unsigned publication=0;publication<3;++publication){
+            f.Consume();
+            CHECK(f.result.diagnostic.exit==Bc2PhysicalFeedExit::Updated&&f.result.selected);
+            CHECK(f.result.status==FeedEquipmentStatus::PreflightRejected);
+            CHECK(f.result.interactionStatus==FeedInteractionStatus::Interrupted&&f.result.reloadStatus==FeedReloadStatus::Suspended);
+            CHECK(f.result.presentation&&f.result.blocksFire&&!f.result.pending&&!f.result.ownsHand&&!f.result.blocksEquipment);
+            CHECK(f.result.presentation->input.sequence==f.sample.input.sequence);
+            CHECK(f.result.presentation->input.deadlineNs==f.sample.input.deadlineNs);
+            CHECK(!f.result.presentation->mechanismClaim&&!f.result.presentation->mechanismInput&&!f.result.presentation->supplyObject);
+            CHECK(!f.hands.Current(InteractionHand::Left)&&f.submits==2&&f.native.counts==counts);
+        }
+    }
+    const auto retained=f.result.presentation;
+    CHECK(retained->lifetime==detached->lifetime&&retained->supply==detached->supply&&retained->owner==detached->owner);
+    CHECK(retained->coverRadians==detached->coverRadians&&retained->carriedPartsMask==detached->carriedPartsMask);
+    CHECK(retained->weaponFromPouch.values==detached->weaponFromPouch.values);
+    CHECK(retained->pouchCarryWeaponWorldMeters.values==detached->pouchCarryWeaponWorldMeters.values);
+    CHECK(retained->chainCarryWeaponWorldMeters.values==detached->chainCarryWeaponWorldMeters.values);
+    for(unsigned bone=0;bone<retained->chainCount;++bone)
+        CHECK(retained->weaponFromChain[bone].values==detached->weaponFromChain[bone].values);
+    CHECK(!ReadBc2PhysicalFeedPresentation(f.sample.owner,retained->input.deadlineNs));
+    // Pickup is still a new neutral/contact/grip claim. Refill remains exactly
+    // one receipt-bound operation after the long detached interval.
+    CHECK(f.Place(FeedPhysicalOperation::AttachContainer));
+    CHECK(f.submitted&&f.submitted->command.request.lifetime==detached->lifetime);
+    CHECK(f.submitted->command.request.id==3&&f.submitted->command.authority.rounds==200);
+    CHECK(f.native.counts==counts&&f.Reconcile());
+    CHECK((f.native.counts==FeedAmmunitionCounts{200,487,200}));
+    CHECK(f.Place(FeedPhysicalOperation::SeatFeed)&&f.Reconcile());
+    CHECK(f.Close()&&f.Reconcile());CHECK(f.submits==5&&!f.BlocksFire());return 0;
 }
 int EveryEnrolledFeedUsesTheSharedChestRefillPath(){
     unsigned configurations=0;
@@ -1388,6 +1453,7 @@ int main(){
     CHECK(BackendLifetimesIncreaseAcrossOwners()==0);
     CHECK(FiveStagesRetainPartialAmmoAndRefillOnlyAtAttachment()==0);
     CHECK(ReattachingWithoutChestSupplyCannotRefill()==0);
+    CHECK(DetachedDwellKeepsOriginalCarryAndRequiresFreshSupply()==0);
     CHECK(EveryEnrolledFeedUsesTheSharedChestRefillPath()==0);
     CHECK(EveryEnrolledFeedUsesAnatomicalControllerMapping()==0);
     CHECK(EveryEnrolledFeedAcceptsObservedGraspWithDelayedPublication()==0);
@@ -1409,5 +1475,5 @@ int main(){
     CHECK(SameAddressReplacementDoesNotInheritFeedDebt()==0);
     CHECK(RealNoEntryReceiptRecoversCompletedEndpointWithNewId()==0);
     CHECK(DrainedActorReplacementReclaimsSlotsWithoutInventingAmmunitionSuccess()==0);
-    std::puts("Bc2PhysicalFeedTests: 31 deterministic owner/arbiter/callback/presentation compositions; no game or headset acceptance");
+    std::puts("Bc2PhysicalFeedTests: 32 deterministic owner/arbiter/callback/presentation compositions; no game or headset acceptance");
 }

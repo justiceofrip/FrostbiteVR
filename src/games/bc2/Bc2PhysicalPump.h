@@ -104,6 +104,23 @@ struct Bc2PhysicalPumpResult {
     std::optional<interaction::WeaponCycleIdleDebtReady> recovered;
     std::optional<interaction::MechanismAudioEvent> audio;
 };
+// Observation only. All receipts retain their original clocks and owner/cycle.
+struct Bc2PumpGestureObservation {
+    std::uint64_t input=0,rawInput=0;std::int64_t observedNs=0;
+    unsigned gate=0,phase=0,failure=0;float travel=0,rotation=0;bool recovery=false;
+};
+struct Bc2PumpObservation {
+    unsigned phase=0,recoveryPhase=0;bool debt=false;
+    Bc2PumpGestureObservation gesture{};
+    std::optional<interaction::WeaponCycleLease> held;
+    std::optional<interaction::WeaponCycleRelease> pending;
+    std::optional<interaction::WeaponCycleIdleDebtLease> recovery;
+    std::optional<interaction::WeaponCycleIdleDebtRelease> recoveryPending;
+    std::optional<interaction::WeaponCycleReady> settled;
+    std::optional<interaction::WeaponCycleIdleDebtReady> recovered;
+    std::int64_t acknowledgedNs=0,recoveryAcknowledgedNs=0;
+    bool supportReturnPending=false;std::uint64_t supportReturns=0;
+};
 struct Bc2PumpPackCounters {unsigned contacts=0,poses=0,copies=0,pairs=0,fallbacks=0,restPoses=0,restCopies=0,restPairs=0;};
 class Bc2PhysicalPump {
 public:
@@ -122,6 +139,12 @@ public:
     // control admission. These retained outcomes still owe native settlement.
     bool HasCycleDebt()const noexcept{return cycle_||pending_||acknowledged_||
         recoveryCycle_||recoveryPending_||recoveryAcknowledged_;}
+    // Same serialized Gameplay callback only; never call from a worker.
+    Bc2PumpObservation Observation()const noexcept {
+        return {unsigned(physical_.Phase()),unsigned(recoveryPhysical_.Phase()),HasCycleDebt(),observationGesture_,
+            cycle_,pending_,recoveryCycle_,recoveryPending_,observationSettled_,observationRecovered_,
+            observationAcknowledgedNs_,observationRecoveryAcknowledgedNs_,bool(supportReturn_),supportReturns_.load(std::memory_order_relaxed)};
+    }
     void Report(std::ostream&)const;
 private:
     void Record(const Bc2PhysicalPumpSample&,unsigned gate,const interaction::WeaponCycleResult&,bool recovery=false,
@@ -151,6 +174,10 @@ private:
     std::optional<Bc2PumpSupportCapture> supportCapture_;
     Bc2PumpRawContact supportRaw_{};
     bool blocks_=false;
+    Bc2PumpGestureObservation observationGesture_{};
+    std::optional<interaction::WeaponCycleReady> observationSettled_;
+    std::optional<interaction::WeaponCycleIdleDebtReady> observationRecovered_;
+    std::int64_t observationAcknowledgedNs_=0,observationRecoveryAcknowledgedNs_=0;
     struct GestureRow {
         std::uint64_t input=0,rawInput=0,cycle=0;std::int64_t now=0;
         unsigned gate=0,phase=0,failure=0,weapon=0;float travel=0,rotation=0;

@@ -225,10 +225,15 @@ struct Bc2PhysicalFeed::State {
             x.rounds=(std::min)(a.counts.capacity-a.counts.loaded,a.counts.reserve);}
         return x;
     }
-    void ReprojectCarry(Equipment& e,const math::Matrix4& currentWeapon)noexcept {
-        const auto inverse=Inverse(currentWeapon);
-        if(e.carriedPartsMask&1){e.pose.weaponFromPouch=feed_interaction_detail::Multiply(feed_interaction_detail::Multiply(e.pose.weaponFromPouch,e.pouchBasis),inverse);e.pouchBasis=currentWeapon;}
-        if(e.carriedPartsMask&ChainMask(e.registration.geometry.chainCount)){e.pose.weaponFromFeedRoot=feed_interaction_detail::Multiply(feed_interaction_detail::Multiply(e.pose.weaponFromFeedRoot,e.chainBasis),inverse);e.chainBasis=currentWeapon;}
+    Bc2FeedPose PoseInWeaponFrame(const Equipment& e,const math::Matrix4& currentWeapon)const noexcept {
+        auto pose=e.pose;const auto inverse=Inverse(currentWeapon);
+        // Preparing a gesture is not movement of the retained object. In
+        // particular, detached/no-supply suspension may prepare on every
+        // publication. Always derive from the original carry basis rather
+        // than accumulating float inverse/reprojection error in custody.
+        if(e.carriedPartsMask&1)pose.weaponFromPouch=feed_interaction_detail::Multiply(feed_interaction_detail::Multiply(e.pose.weaponFromPouch,e.pouchBasis),inverse);
+        if(e.carriedPartsMask&ChainMask(e.registration.geometry.chainCount))pose.weaponFromFeedRoot=feed_interaction_detail::Multiply(feed_interaction_detail::Multiply(e.pose.weaponFromFeedRoot,e.chainBasis),inverse);
+        return pose;
     }
     void PoseTarget(Equipment& e,const FeedInteractionResult& r,const math::Matrix4& weaponWorld)noexcept {
         if(!r.target)return;const auto& g=e.registration.geometry;const auto op=e.activeOperation;
@@ -660,22 +665,22 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
                     feed_interaction_detail::Multiply(recovery->Motion().placement.sourceFromGrip,held):held;
                 auto recovered=sample.snapshot;recovered.contacts[unsigned(query.candidate->part)].weaponFromContact=contact;
                 if(e->session->RecoverMotion(recovered,sample.ammunition,*recovery,now,frame)){
-                    state.ReprojectCarry(*e,s.raw.weaponWorldMeters);e->gestureStart=e->pose;e->presentationSource=held;
+                    e->gestureStart=state.PoseInWeaponFrame(*e,s.raw.weaponWorldMeters);e->presentationSource=held;
                     e->recoveryContact=recovered.contacts[unsigned(query.candidate->part)];e->motionDirty=false;sample.snapshot=recovered;
                     recoveryEstablished=true;
                 }
             }else if(e->motionDirty&&op!=FeedPhysicalOperation::OpenCover&&op!=FeedPhysicalOperation::CloseCover){
-                state.ReprojectCarry(*e,s.raw.weaponWorldMeters);
-                const auto motion=BuildBc2FeedMotionFromRetainedPose(e->registration.geometry,op,e->registration.interactionPolicy,e->pose);
+                const auto pose=state.PoseInWeaponFrame(*e,s.raw.weaponWorldMeters);
+                const auto motion=BuildBc2FeedMotionFromRetainedPose(e->registration.geometry,op,e->registration.interactionPolicy,pose);
                 auto rebased=sample.snapshot;
                 if(motion)rebased.contacts[unsigned(query.candidate->part)].weaponFromContact=
                     feed_interaction_detail::Multiply(motion->placement.sourceFromGrip,motion->placement.weaponFromSource);
                 if(motion&&e->session->UpdateMotion(rebased,sample.ammunition,*query.candidate,*motion,now)){
-                    e->motions.operations[unsigned(op)]=*motion;e->motionDirty=false;e->gestureStart=e->pose;
+                    e->motions.operations[unsigned(op)]=*motion;e->motionDirty=false;e->gestureStart=pose;
                     sample.snapshot=state.Snapshot(*e,sample.ammunition,sourceInput);}
             }else if(e->motionDirty&&!recoverable)e->motionDirty=false;
             sample.authority=state.Authority(*e,sample.ammunition,op);
-            if(e->activeOperation!=op){e->activeOperation=op;e->gestureStart=e->pose;e->gestureCoverRadians=e->coverRadians;
+            if(e->activeOperation!=op){e->activeOperation=op;e->gestureStart=state.PoseInWeaponFrame(*e,s.raw.weaponWorldMeters);e->gestureCoverRadians=e->coverRadians;
                 e->recoveryContact.reset();e->presentationSource.reset();}
         }
         // RecoverMotion binds the retained proof to this observation. Its first
