@@ -4,7 +4,9 @@ Private 0.1.22 headset feedback confirms AN94 magazine reload and smooth firing.
 The remaining report is recorded in
 [`0.1.22-buglist.md`](../../../docs/archive/2026-10-31-bc2vr-0.1.22-buglist.md).
 
-This batch prepares these shared corrections:
+Private 0.1.23 is installed and source20b1708 is pushed. Normal x86/x64 checks pass341/341; focused9/9, launcher56 and HUD WARP pass. Setup/assets validation passes, settings/logging are preserved and0.1.22 is rollback.
+
+This batch contains these shared corrections:
 
 - Pose grip/support/aim/sight from the selected mesh observation captured with
   that input, preserving current ownership and original lifetime checks.
@@ -15,6 +17,9 @@ This batch prepares these shared corrections:
   current-owner lease. This does not change firing or native ammo authority.
 - Persist bounded interaction outcomes in the normal 1 Hz session log, so
   support/sight/shell/feed rejection reasons survive a lost final native report.
+
+Stop reports the actual request/no-session outcome; the launcher retains a bounded
+command history and does not wait on unfinished output pipes on its UI thread.
 
 Independent reviews identified lost sight-configuration proof and rejected
 count metadata renewing HUD ownership; both were corrected before validation.

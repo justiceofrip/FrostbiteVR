@@ -1,5 +1,5 @@
-Feedback59 headset check (after receipt confirms private0.1.23 installation)
-Use the normal launcher. Existing settings and logging are preserved.
+Feedback59 headset check: private0.1.23 installed
+Reopen the normal launcher. Existing settings and logging are preserved.
 
 In one normal play session, use whichever supported guns you encounter:
 - Keep the second hand gripping while moving/aiming; check for the half-second release.

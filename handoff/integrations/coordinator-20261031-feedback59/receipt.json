@@ -1,0 +1,57 @@
+{
+  "schema": "fvr.feedback59.integration.v1",
+  "built_source_commit": "20b1708d18796d4a9e04f50fac84108b019b6252",
+  "native_source_sha256": "53289d2bb2c26344443228f9396c86ccde4944e5f1cf79da10afa4048946d2a8",
+  "build_receipt": "reports/coordinator-20261031-feedback59/normal-runtime/build-receipt.json",
+  "build_receipt_sha256": "b207d6e33fed5cb8c76575d6ff3ac51f6c49cc319f3e6be9d01ee234300102d2",
+  "included_commits": [
+    "7d595d6e7f3def5c76550165cfe681e72804667c",
+    "20b1708d18796d4a9e04f50fac84108b019b6252"
+  ],
+  "normal_checks": {
+    "x86": "341/341",
+    "x64": "341/341"
+  },
+  "focused_checks": "9/9; focused-02 unchanged passes plus focused-03 corrected fixtures",
+  "launcher_checks": 56,
+  "hud_warp_passed": true,
+  "prior_focused_failures_retained": true,
+  "source_changes": [
+    "pair grip/support/aim/sight with original input selected meshes and retain current lifetime checks",
+    "preserve shell custody during missing pump observations without allowing unknown actions",
+    "retain HUD digits under independent fresh same-owner evidence",
+    "persist bounded support/sight/shell/feed outcomes in existing session telemetry",
+    "preserve actual Stop result and bounded launcher command lifecycle; avoid blocking UI on unfinished output tasks"
+  ],
+  "prior_user_headset_confirmed": [
+    "0.1.22 AN94 magazine reload works",
+    "0.1.22 firing no longer feels bursty"
+  ],
+  "prior_user_session": "20261031-084804-592-431f89fc",
+  "review_resolutions": "reports/coordinator-20261031-feedback59/review-resolution.txt",
+  "task_evidence": "G:/Unity/VRMMO/bc2vr-task-worktrees/campaign-coordinator-20261028-r1/reports/coordinator-20261031-feedback59",
+  "private_candidate": "0.1.23",
+  "installed": true,
+  "installed_version": "0.1.23",
+  "rollback_version": "0.1.22",
+  "package_files": 101,
+  "runtime_files": 93,
+  "package_sha256": "ed0875038af10d6b5c77494e4a4502c00d01e93f16e8562dcf801008d64e661f",
+  "settings_preserved": true,
+  "installed_validation_passed": true,
+  "installation_evidence": "reports/coordinator-20261031-feedback59/installation.json",
+  "installed_validation_evidence": "reports/coordinator-20261031-feedback59/installed-validation.log",
+  "source_pushed": "20b1708d18796d4a9e04f50fac84108b019b6252",
+  "source_push_evidence": "reports/coordinator-20261031-feedback59/source-push.json",
+  "game_started": false,
+  "headset_accepted": false,
+  "agents_retired": true,
+  "remaining": [
+    "new grip/shell/HUD behavior needs headset confirmation",
+    "distinct QJU88 feed-reload failure is not diagnosed",
+    "underbarrel completion remains unaccepted",
+    "original Stop non-dispatch cause remains unproven; worker remains busy until pipes complete"
+  ],
+  "public_release": false,
+  "final_status_push_and_lease_close": "reports/coordinator-20261031-feedback59/close.json"
+}

@@ -5,7 +5,9 @@ Updated October 31, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
-Cadence58 is pushed and private 0.1.22 is installed: idle ammo-publication gaps preserve valid held Fire while reload/equipment and pending-state gates remain blocked. Both normal builds pass 341/341; installed setup/assets validation passes, settings/logging are preserved and 0.1.21 is rollback. [Receipt](../handoff/integrations/coordinator-20261031-cadence58/receipt.json). This corrects a demonstrated trigger-interruption mechanism; the user's session attribution, headset improvement and frame-pacing contribution remain unconfirmed. No game session ran.
+Feedback59 is pushed and private 0.1.23 is installed: paired grip/sight sources, shell custody through missing pump observations, independent HUD continuity, persistent interaction reasons and truthful Stop status are combined. Both normal builds pass 341/341; focused, launcher and HUD WARP checks pass. Installed setup/assets validation passes; settings/logging are preserved and 0.1.22 is rollback. [Receipt](../handoff/integrations/coordinator-20261031-feedback59/receipt.json). No new game/headset test; QJU88 reload and underbarrel completion remain unaccepted.
+
+The user's 0.1.22 headset session confirms AN94 manual magazine reload and smooth firing. It reports support-grip drops, T194 shell insertion/QJU88 reload failures, underbarrel failure and HUD flicker; [feedback](archive/2026-10-31-bc2vr-0.1.22-buglist.md). Cadence58's Fire-continuity correction is retained; no firing policy changed in feedback59. [Test card](../handoff/integrations/coordinator-20261031-feedback59/TEST.txt).
 
 Offline57's shared magazine/feed reload connections, bounded hitch protection, fewer rig reads and deferred frame-feedback service are retained. [Prior receipt](../handoff/integrations/coordinator-20261030-offline57/receipt.json) and [actual pipeline](../handoff/integrations/coordinator-20261030-offline57/PIPELINE.txt). All-weapon reload completion, measured FPS, aim and destruction acceptance remain open.
 
