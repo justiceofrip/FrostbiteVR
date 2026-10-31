@@ -1,5 +1,6 @@
 [CmdletBinding()]
-param([ValidateSet('Prepare','x86','x64')][string]$Mode='Prepare',[string]$Attempt='01')
+param([ValidateSet('Prepare','x86','x64')][string]$Mode='Prepare',[string]$Attempt='01',
+      [ValidateRange(1,[long]::MaxValue)][long]$MaxGeneratedBytes=40GB)
 $ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$false
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'));$run=Join-Path $repo 'reports/coordinator-20261031-feedback63'
 $lease=Get-Content -LiteralPath (Join-Path $run 'leases.json') -Raw|ConvertFrom-Json
@@ -7,7 +8,7 @@ if((Get-Content -LiteralPath $lease.INTEGRATION.path -Raw|ConvertFrom-Json).owne
 if(Get-Process cl,link,cmake,ninja,ctest,MSBuild,BFBC2Game,BC2NativeTrace,BC2NativeIpcProbe,BC2XrHost -ErrorAction SilentlyContinue){throw 'Shared resources not idle'}
 . (Join-Path $repo 'tools/StorageBudget.ps1')
 # Prior measured writes: x86 891MB, x64 922MB logical; 2GiB reserves incremental replacement and scratch.
-$budget=Assert-FvrStorageBudget -RepositoryRoot $repo -OutputPath $run -Operation Build -PlannedBytes $(if($Mode -eq 'Prepare'){16MB}else{2GB}) -AdditionalRoots @('G:/Unity/VRMMO/bc2vr-task-worktrees','G:/Unity/VRMMO/BC2VR-Launcher')
+$budget=Assert-FvrStorageBudget -RepositoryRoot $repo -OutputPath $run -Operation Build -PlannedBytes $(if($Mode -eq 'Prepare'){16MB}else{2GB}) -MaxGeneratedBytes $MaxGeneratedBytes -AdditionalRoots @('G:/Unity/VRMMO/bc2vr-task-worktrees','G:/Unity/VRMMO/BC2VR-Launcher')
 function Save($name,$value){$path=Join-Path $run $name;if(Test-Path -LiteralPath $path){throw "Preserve $path"};[IO.File]::WriteAllText($path,($value|ConvertTo-Json -Depth 40),[Text.UTF8Encoding]::new($false))}
 function Sha($p){(Get-FileHash -LiteralPath $p).Hash.ToLowerInvariant()}
 Save "$Mode-$Attempt-storage.json" $budget
@@ -37,7 +38,7 @@ $vs='C:/Program Files/Microsoft Visual Studio/18/Community';$arch=if($Mode -eq '
 & cmake -S $repo -B (Join-Path $repo "build/$Mode") -C (Join-Path $repo 'profiles/weapons43/Enrollment.cmake') "-DBC2_NATIVE_OPERATION_CAPABILITIES_HEADER:FILEPATH=$($state.reviewed_header.Replace('\','/'))" "-DBC2_NATIVE_OPERATION_SOURCE_RECEIPT:FILEPATH=$($state.source_receipt.Replace('\','/'))" "-DBC2_NATIVE_OPERATION_SOURCE_SHA256:STRING=$($state.source_sha256)" *> (Join-Path $run "$Mode-$Attempt-configure-binding.log")
 if($LASTEXITCODE){Get-Content (Join-Path $run "$Mode-$Attempt-configure-binding.log") -Tail 35;throw 'Binding configuration failed'}
 $failure=$null;$started=[DateTime]::UtcNow
-try {& (Join-Path $repo 'Build.ps1') -Architecture $Mode -Jobs 4 *> (Join-Path $run "$Mode-$Attempt-build-console.log")}catch{$failure=$_}
+try {& (Join-Path $repo 'Build.ps1') -Architecture $Mode -Jobs 4 -MaxGeneratedBytes $MaxGeneratedBytes *> (Join-Path $run "$Mode-$Attempt-build-console.log")}catch{$failure=$_}
 foreach($name in @('configure.log','build.log','tests.log','build.json')){
  $p=Join-Path $repo "reports/$Mode-$name"
  if((Test-Path -LiteralPath $p) -and (Get-Item -LiteralPath $p).LastWriteTimeUtc -ge $started -and -not($failure -and $name -eq 'build.json')){Copy-Item -LiteralPath $p -Destination (Join-Path $run "$Mode-$Attempt-$name")}
