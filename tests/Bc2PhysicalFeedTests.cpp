@@ -579,6 +579,45 @@ int EveryEnrolledFeedCompletesWithIndependentPublicationClocks(){
     std::printf("Independent feed clocks: %u profiles, %u full cycles, %u offline mocked adapter receipts\n",configurations,cycles,receipts);
     return 0;
 }
+int ChestPreparationSurvivesNeutralJitterButNotContactLoss(){
+    for(bool loseContact:{false,true}){
+        Fixture f;f.wristCalibration=Turn(2.29598f);
+        CHECK(f.OpenCover()&&f.Reconcile());
+        CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&f.Reconcile());
+        const auto before=f.native.counts;
+        f.nativeCadence={1,0,0,0};f.nativeTick=0;
+        auto chest=Identity();const auto config=Bc2FeedSupplyConfig();
+        for(unsigned n=0;n<3;++n)chest.values[3][n]=config.pouchCenterMeters[n];
+        f.sample.bodyFromHand=chest;f.Tick(chest,false);
+        CHECK(f.result.interactionStatus==FeedInteractionStatus::Armed&&f.result.reloadStatus==FeedReloadStatus::Armed);
+        const auto admitted=f.backend.Read(f.sample.owner,f.sample.input.nowNs);CHECK(admitted);
+        for(float offset:{.004f,-.004f}){
+            auto jitter=chest;jitter.values[3][0]+=offset;CHECK(Bc2FeedSupplyContact(jitter));
+            f.sample.bodyFromHand=jitter;f.Tick(jitter,false);
+            CHECK(f.result.interactionStatus==FeedInteractionStatus::Armed&&f.result.reloadStatus==FeedReloadStatus::Armed);
+            CHECK(f.backend.Read(f.sample.owner,f.sample.input.nowNs)==admitted);
+            CHECK(f.result.diagnostic.sourceNativeSequence==admitted->sequence);
+            CHECK(f.result.diagnostic.sourceNativeObservedNs==admitted->observedNs);
+            CHECK(f.result.diagnostic.sourceNativeDeadlineNs==admitted->deadlineNs);
+            CHECK(f.submits==2&&!f.result.ownsHand&&f.native.counts==before);
+        }
+        if(loseContact){
+            auto away=chest;away.values[3][0]+=1;CHECK(!Bc2FeedSupplyContact(away));
+            f.sample.bodyFromHand=away;f.Tick(away,false);
+        }
+        f.sample.bodyFromHand=chest;f.Tick(chest,true);
+        const auto left=f.hands.Current(InteractionHand::Left);
+        if(loseContact)CHECK(!left&&!f.result.ownsHand);
+        else {
+            CHECK(left&&left->token.kind==HandClaimKind::AmmoObject&&f.result.ownsHand);
+            CHECK(f.result.interactionStatus==FeedInteractionStatus::Acquired);
+            CHECK(f.result.reloadStatus==FeedReloadStatus::AwaitingPhysicalCompletion);
+            CHECK(f.backend.Read(f.sample.owner,f.sample.input.nowNs)==admitted);
+        }
+        CHECK(f.submits==2&&f.native.counts==before&&!f.result.pending&&f.BlocksFire());
+    }
+    return 0;
+}
 int IndependentNativeClockExpiryAndMutationAreRejected(){
     using namespace feed_interaction_detail;
     for(bool mutate:{false,true}){
@@ -1030,6 +1069,7 @@ int main(){
     CHECK(EveryEnrolledFeedAcceptsObservedGraspWithDelayedPublication()==0);
     CHECK(EveryEnrolledFeedStartsFromReleasedApproach()==0);
     CHECK(EveryEnrolledFeedCompletesWithIndependentPublicationClocks()==0);
+    CHECK(ChestPreparationSurvivesNeutralJitterButNotContactLoss()==0);
     CHECK(IndependentNativeClockExpiryAndMutationAreRejected()==0);
     CHECK(EveryEnrolledFeedRetainsRepeatedPacketThroughOpenCover()==0);
     CHECK(RepeatedFeedPacketRejectsChangedSourceAndExpiredAuthority()==0);
@@ -1042,5 +1082,5 @@ int main(){
     CHECK(SameAddressReplacementDoesNotInheritFeedDebt()==0);
     CHECK(RealNoEntryReceiptRecoversCompletedEndpointWithNewId()==0);
     CHECK(DrainedActorReplacementReclaimsSlotsWithoutInventingAmmunitionSuccess()==0);
-    std::puts("Bc2PhysicalFeedTests: 27 deterministic owner/arbiter/callback compositions; no game or headset acceptance");
+    std::puts("Bc2PhysicalFeedTests: 28 deterministic owner/arbiter/callback compositions; no game or headset acceptance");
 }
