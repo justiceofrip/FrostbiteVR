@@ -152,12 +152,12 @@ struct Fixture {
             unsigned(result.status),unsigned(result.interactionStatus),unsigned(result.reloadStatus),unsigned(result.handReason),result.presentation?result.presentation->coverRadians:-99.f,submits);
         if(captureCadenceTrace){
             char row[512];const auto left=hands.Current(InteractionHand::Left);
-            std::snprintf(row,sizeof(row),"input=%llu source=%llu native=%llu grip=%d/%d op=%u owns=%d left=%u status=%u interaction=%u reload=%u hand=%u exit=%u submits=%u",
+            std::snprintf(row,sizeof(row),"input=%llu source=%llu native=%llu grip=%d/%d op=%u owns=%d left=%u status=%u interaction=%u reload=%u hand=%u exit=%u cover=%.4f submits=%u",
                 static_cast<unsigned long long>(sample.input.sequence),static_cast<unsigned long long>(sample.raw.inputEvidence.sequence),
                 static_cast<unsigned long long>(result.diagnostic.sourceNativeSequence),sample.grip,!sample.raw.inputEvidence.released[0],
                 result.presentation?unsigned(result.presentation->operation):0,result.ownsHand,left?unsigned(left->token.kind):0,
                 unsigned(result.status),unsigned(result.interactionStatus),unsigned(result.reloadStatus),unsigned(result.handReason),
-                unsigned(result.diagnostic.exit),submits);
+                unsigned(result.diagnostic.exit),result.presentation?result.presentation->coverRadians:-99.f,submits);
             cadenceTrace[cadenceTraceCount++%cadenceTrace.size()]=row;
         }
         return result;
@@ -943,12 +943,18 @@ int PartialCoverRequiresFreshRegraspAndPreservesProgress(){
     }
     for(bool delayed:{false,true})for(unsigned fault=0;fault<3;++fault){
         Fixture f;using namespace feed_interaction_detail;const auto m=f.Open();
-        f.nativeCadence={1,0,0};f.delayedRender=f.repeatRender=delayed;
+        f.wristCalibration=Identity(); // Repeated rendering rebuilds the real mapping, including its verified rig identity.
+        f.nativeCadence={1,0,0};f.delayedRender=f.repeatRender=delayed;f.captureCadenceTrace=true;
+        const auto reached=[&](bool condition,const char* stage){
+            if(!condition){std::fprintf(stderr,"Partial feed recovery failure: delayed=%d fault=%u stage=%s\n",delayed,fault,stage);
+                f.PrintCadenceFailure(1,FeedPhysicalOperation::OpenCover);}
+            return condition;
+        };
         const auto pose=[&](double t){return feed_interaction_detail::Multiply(Along(m.motionFromContact,m.kind,m.travel*t),m.weaponFromMotion);};
         f.Tick(pose(0),false);f.Tick(pose(0),true);
         for(unsigned step=1;step<=6;++step)f.Tick(pose(double(step)/12),true);
         f.Tick(pose(.5),true); // Deliver the final partial-motion source under render lag.
-        CHECK(!f.submitted&&f.result.presentation&&f.result.presentation->coverRadians>.7f);
+        CHECK(reached(!f.submitted&&f.result.presentation&&f.result.presentation->coverRadians>.7f,"partial motion"));
         const auto partial=f.result.presentation->coverRadians;
         const auto lifetime=f.result.presentation->lifetime;
         // Publish at suspension, then leave two controller packets on that
@@ -959,7 +965,7 @@ int PartialCoverRequiresFreshRegraspAndPreservesProgress(){
         for(unsigned packet=0;packet<8;++packet){
             f.Tick(pose(.5),false);
             CHECK(!f.submitted&&!f.result.pending&&f.BlocksFire());
-            CHECK(f.result.presentation&&Near(f.result.presentation->coverRadians,partial));
+            CHECK(reached(f.result.presentation&&Near(f.result.presentation->coverRadians,partial),"retained partial pose"));
             CHECK(f.result.presentation->lifetime==lifetime);
             const auto source=f.backend.ReadAt(f.sample.owner,f.sample.raw.inputEvidence.observedNs,f.sample.input.nowNs);
             CHECK(source);
@@ -987,17 +993,17 @@ int PartialCoverRequiresFreshRegraspAndPreservesProgress(){
             if(f.result.diagnostic.policyEvaluated&&f.result.interactionStatus==FeedInteractionStatus::Armed){armed=true;break;}
             previousNative=source;
         }
-        CHECK(waited);
+        CHECK(reached(waited,"same native recovery wait"));
         if(fault)continue;
-        CHECK(armed);
+        CHECK(reached(armed,"recovery armed"));
         f.Tick(pose(.5),true);if(delayed)f.Tick(pose(.5),true);
-        CHECK(f.result.ownsHand&&f.result.interactionStatus==FeedInteractionStatus::Acquired);
+        CHECK(reached(f.result.ownsHand&&f.result.interactionStatus==FeedInteractionStatus::Acquired,"recovery acquired"));
         CHECK(f.result.presentation&&Near(f.result.presentation->coverRadians,partial));
         for(unsigned step=7;step<=12;++step)f.Tick(pose(double(step)/12),true);
         for(unsigned packet=0;packet<f.DwellPackets()+3;++packet)f.Tick(pose(1),true);
-        CHECK(!f.submitted&&f.result.presentation&&f.result.presentation->coverRadians>1.4f);
+        CHECK(reached(!f.submitted&&f.result.presentation&&f.result.presentation->coverRadians>1.4f,"recovered endpoint"));
         f.Tick(pose(1),false);if(delayed)f.Tick(pose(1),false);
-        CHECK(f.submitted&&f.submits==1&&f.submitted->command.request.id==1);
+        CHECK(reached(f.submitted&&f.submits==1&&f.submitted->command.request.id==1,"released completion"));
         CHECK(f.submitted->command.request.lifetime==lifetime);
         CHECK(f.submitted->command.authority.operation==FeedPhysicalOperation::OpenCover);
         CHECK(f.submitted->command.before.observedNs==f.submitted->source.observedNs);
