@@ -8,6 +8,8 @@ restating them.
 - Always: [docs/CURRENT.md](docs/CURRENT.md).
 - Changing native integration: also [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
   (contracts and invariants only).
+- For targeted executable decompilation, use [tools/ghidra/README.txt](tools/ghidra/README.txt).
+  Reuse its per-executable analysis database and keep native output in ignored storage.
 - Everything else is on demand. `docs/history/`, `docs/archive/`, `handoff/`,
   `third_party/` and profile/coverage JSON are hidden from default search by
   `.ignore`. Read them by path when a task names a checkpoint or run (R55, 426),
