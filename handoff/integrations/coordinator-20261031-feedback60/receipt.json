@@ -1,0 +1,55 @@
+{
+  "schema": "fvr.feedback60.integration.v1",
+  "built_source_commit": "2b9b463530f352bff66fe960114a24dfec5568bd",
+  "native_source_sha256": "28311277a6776a549d477fa233a3dc74b711a87d286d1e1e1566dc4603bf692e",
+  "build_receipt": "reports/coordinator-20261031-feedback60/normal-runtime/build-receipt.json",
+  "build_receipt_sha256": "6382648ab00788006eb469c8af4db170dab7fcac60608adc3055f045ebd77fdb",
+  "included_commits": [
+    "a4f12fc8a1e61e757b62aaed2e2090a039955e33",
+    "2b9b463530f352bff66fe960114a24dfec5568bd"
+  ],
+  "normal_checks": {
+    "x86": "341/341",
+    "x64": "341/341"
+  },
+  "focused_checks": "9/9: eight unchanged focused-01 passes plus corrected feed focused-02",
+  "generator_checks": "12/12",
+  "prior_focused_failure_retained": true,
+  "review_resolution": "reports/coordinator-20261031-feedback60/review-resolution.txt",
+  "source_changes": [
+    "independent live grip observation deadlines across production support profiles",
+    "retain held shell during missing renderer contact within original accepted owner lease",
+    "shared feed cover startup from released approach with rejected-input sequence barrier",
+    "exact selected shotgun animation bindings route shared SPAS pump and insertion cues",
+    "bounded feed idle rejection diagnostics"
+  ],
+  "prior_user_headset_confirmed": [
+    "AN94 manual magazine reload",
+    "smooth firing",
+    "T194 shell insertion and magnetic rail improvement"
+  ],
+  "prior_user_session": "20261031-112229-034-02c620f6",
+  "private_candidate": "0.1.24",
+  "installed": true,
+  "installed_version": "0.1.24",
+  "rollback_version": "0.1.23",
+  "package_files": 101,
+  "runtime_files": 93,
+  "package_sha256": "b6fc83c3be02e3e0b9b515c4c8f11cf323b5841515b9f3c9bc1febe4000f7988",
+  "settings_preserved": true,
+  "installed_validation_passed": true,
+  "installation_evidence": "reports/coordinator-20261031-feedback60/installation.json",
+  "installed_validation_evidence": "reports/coordinator-20261031-feedback60/installed-validation.log",
+  "source_pushed": "2b9b463530f352bff66fe960114a24dfec5568bd",
+  "source_push_evidence": "reports/coordinator-20261031-feedback60/source-push.json",
+  "game_started": false,
+  "headset_accepted": false,
+  "agents_retired": true,
+  "remaining": [
+    "new shared corrections need headset confirmation",
+    "exact previous QJU88 idle rejection predicate was not recorded",
+    "underbarrel, aim, destruction and performance acceptance remain open"
+  ],
+  "public_release": false,
+  "final_status_push_and_lease_close": "reports/coordinator-20261031-feedback60/close.json"
+}

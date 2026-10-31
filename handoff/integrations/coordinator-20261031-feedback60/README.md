@@ -28,6 +28,12 @@ scoped agent reports. The original stream retains all 15,168 transition events
 without drops. The final native report is empty; do not repeat that capture.
 The exact user-failing feed idle predicate was not previously recorded.
 
-`receipt.json` records combined validation and installation when completed.
+`receipt.json` records completed validation and installation.
 No new game/headset check or public release is implied by offline evidence.
 Preserve AN94 manual reload, smooth firing and the improved shell rail.
+
+Completed: private 0.1.24 installed; settings/logging preserved; 0.1.23 rollback.
+Source pushed; both normal builds 341/341, focused 9/9 and generator 12/12 pass.
+Focused01 stale-neutral fixture failure is retained; corrected feed-only check passes.
+Native source was unchanged by that fixture correction. All agents retired.
+No game/headset session ran. See receipt.json for exact pins and limits.
