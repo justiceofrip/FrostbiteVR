@@ -454,7 +454,10 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         const auto contact=feed_interaction_detail::Multiply(m.motionFromContact,m.weaponFromMotion);
         const auto& policy=profile.contacts[unsigned(FeedPart::Cover)];
         const auto distance=Distance(local,contact),angle=Angle(local,contact);
-        const bool touch=distance<=policy.radiusMeters&&angle<=policy.maxAngleRadians;
+        // A cover grasp binds the actual anatomical wrist at the measured
+        // contact; the recognizer constrains motion relative to that grasp.
+        const bool orientation=policy.orientation==FeedContactOrientation::Acquired||angle<=policy.maxAngleRadians;
+        const bool touch=distance<=policy.radiusMeters&&orientation;
         const bool freshSequence=sourceInput.sequence>e->lastInput&&sourceInput.sequence>e->rejectedInput;
         if(!source->grip&&sourceInput.released[0]&&available&&freshSequence){
             FeedEquipmentSessionSample neutral;neutral.interaction.contact.weaponFromHandContact=local;
@@ -469,7 +472,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             if(passed)diagnostic.idlePassed|=1u<<bit;return passed;};
         (void)idleCheck(0,available);(void)idleCheck(1,!source->grip&&sourceInput.released[0]);
         (void)idleCheck(2,freshSequence);(void)idleCheck(3,source->grip);
-        (void)idleCheck(4,distance<=policy.radiusMeters);(void)idleCheck(5,angle<=policy.maxAngleRadians);
+        (void)idleCheck(4,distance<=policy.radiusMeters);(void)idleCheck(5,orientation);
         (void)idleCheck(6,bool(neutral));
         const bool afterNeutral=idleCheck(7,neutral&&sourceInput.sequence>neutral->interaction.contact.inputSequence);
         const bool freshNeutral=idleCheck(8,neutral&&diagnostic.neutralAgeNs>=0&&diagnostic.neutralAgeNs<profile.maxAgeNs);

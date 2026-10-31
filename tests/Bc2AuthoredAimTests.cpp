@@ -1,6 +1,8 @@
 #include "Test.h"
 #include "Bc2AuthoredAim.h"
+#include "Bc2AuthoredSupport.h"
 #include "../profiles/weapons56-aim/Aim.generated.h"
+#include "../profiles/weapons43/CombinedSupport.h"
 #include "fvr/interaction/AimFrame.h"
 #include "fvr/interaction/SupportGrip.h"
 #include <iostream>
@@ -67,9 +69,72 @@ int OriginalLeasesAndIdentity(){
     ++f.equipment.data;CHECK(!f.Current(b));f.equipment=b.equipment;
     ++f.owner.equipmentGeneration;CHECK(!f.Current(b));f.owner=b.owner;
     ++f.owner.space;CHECK(!f.Current(b));f.owner=b.owner;
-    f.snapshot->sequence=f.owner.inputSequence+1;CHECK(!f.Current(b));*f.snapshot=s;
+    f.snapshot->sequence=f.owner.inputSequence+1;CHECK(f.Current(b));
+    CHECK(f.Bind().status==AuthoredAimStatus::Expired); // confirmation is not new pose authority
+    *f.snapshot=s;
     CHECK(!AuthoredAimCurrent(b,f.snapshot.get(),f.equipment,f.owner,f.profile.rigFingerprint+1,Fixture::now));
     f.snapshot->owner.weapon++;CHECK(f.Bind().status==AuthoredAimStatus::IdentityMismatch);
+    return 0;
+}
+int ConfigurationRefreshBeforeGuardPublication(){
+    constexpr std::int64_t ms=1000000;
+    unsigned checked=0;bool qju88=false,t194=false;
+    for(const auto& profile:generated::AuthoredAims){
+        Fixture f;f.Reset(profile);f.owner.inputSequence=2549;
+        f.snapshot->sequence=2540;
+        const auto bound=f.Bind();CHECK(bound.binding);
+        const auto& aim=*bound.binding;
+        const auto supportBinding=BindAuthoredSupportReference(generated::AuthoredSupports,
+            f.snapshot,f.equipment,f.owner,profile.rigFingerprint,Fixture::now);
+        if(profile.assetName=="QJU88_sp"||profile.assetName=="T194_sp"){
+            CHECK(supportBinding&&AuthoredSupportContact(supportBinding));
+            qju88|=profile.assetName=="QJU88_sp";t194|=profile.assetName=="T194_sp";
+        }
+        InputFrame input{};input.generation=2549;input.spaceGeneration=f.owner.space;
+        input.predictedNs=Fixture::now;input.focused=input.headValid=true;
+        for(auto& hand:input.hands){hand.gripTracked=hand.aimTracked=true;hand.active=Components;}
+        input.hands[0].grip.position.z=-.4f;
+        const SupportGripOwner supportOwner{1,2,3};SupportGrip policy;
+        const auto contact=[&](const SelectedMeshesSnapshot* current,std::int64_t now){
+            // ReadWeaponFrame admits the shared contact only if every bound
+            // authored source is current, including the independent aim axes.
+            const bool valid=AuthoredAimCurrent(aim,current,f.equipment,f.owner,profile.rigFingerprint,now)&&
+                (!supportBinding||AuthoredSupportCurrent(*supportBinding,current,f.equipment,f.owner,now));
+            return SupportGripContact{valid,.135149f,{}};
+        };
+        CHECK(!policy.Update(supportOwner,input,contact(f.snapshot.get(),Fixture::now)).holding);
+        ++input.generation;++f.owner.inputSequence;input.predictedNs+=ms;input.hands[0].squeeze=1;
+        const auto grabbed=policy.Update(supportOwner,input,contact(f.snapshot.get(),Fixture::now+ms));
+        CHECK(grabbed.engaged&&grabbed.holding);
+
+        // Model the source-supported ordering for event232: configuration2551 is published at Gather's start,
+        // while the live rendered pose2549 and controller guard2550 remain.
+        auto refreshed=*f.snapshot;refreshed.sequence=2551;
+        refreshed.observedNs=Fixture::now+10*ms;refreshed.deadlineNs=Fixture::now+210*ms;
+        ++input.generation;input.predictedNs=refreshed.observedNs;
+        CHECK(refreshed.sequence>f.owner.inputSequence);
+        const auto held=policy.Update(supportOwner,input,contact(&refreshed,input.predictedNs));
+        CHECK(held.holding&&!held.released&&!held.engaged&&held.token==grabbed.token);
+        // Event233 already recovered source on the same controller packet.
+        f.owner.inputSequence=input.generation;
+        const auto repeated=policy.Update(supportOwner,input,contact(&refreshed,input.predictedNs+ms));
+        CHECK(repeated.holding&&!repeated.released&&repeated.token==grabbed.token);
+        CHECK(aim.selected==f.snapshot&&aim.owner.inputSequence==2549);
+        CHECK(aim.owner.inputDeadlineNs==Fixture::now+90*ms);
+        CHECK(!contact(nullptr,input.predictedNs).valid);
+        auto replaced=refreshed;++replaced.owner.equipGeneration;CHECK(!contact(&replaced,input.predictedNs).valid);
+        replaced=refreshed;++replaced.states[0].meshes[0].address;CHECK(!contact(&replaced,input.predictedNs).valid);
+        replaced=refreshed;++replaced.configurationPathPointer;CHECK(!contact(&replaced,input.predictedNs).valid);
+        replaced=refreshed;replaced.observedNs=input.predictedNs+ms;CHECK(!contact(&replaced,input.predictedNs).valid);
+        replaced=refreshed;replaced.sequence=f.snapshot->sequence-1;CHECK(!contact(&replaced,input.predictedNs).valid);
+        auto olderGuard=f.owner;olderGuard.inputSequence=aim.owner.inputSequence-1;
+        CHECK(!AuthoredAimCurrent(aim,&refreshed,f.equipment,olderGuard,profile.rigFingerprint,input.predictedNs));
+        CHECK(!contact(&refreshed,aim.owner.inputDeadlineNs).valid);
+        auto longer=aim;longer.owner.inputDeadlineNs=f.owner.inputDeadlineNs=Fixture::now+300*ms;
+        CHECK(!AuthoredAimCurrent(longer,&refreshed,f.equipment,f.owner,profile.rigFingerprint,aim.selected->deadlineNs));
+        ++checked;
+    }
+    CHECK(checked==193&&qju88&&t194);
     return 0;
 }
 int InvalidEvidenceAndAxes(){
@@ -133,7 +198,8 @@ int AbsoluteAlignmentKeepsAttachmentAndNativeChildren(){
 }
 }
 int main(){
-    if(ExactBatchAndConfiguration()||OriginalLeasesAndIdentity()||InvalidEvidenceAndAxes()||AbsoluteAlignmentKeepsAttachmentAndNativeChildren())return 1;
+    if(ExactBatchAndConfiguration()||OriginalLeasesAndIdentity()||ConfigurationRefreshBeforeGuardPublication()||
+       InvalidEvidenceAndAxes()||AbsoluteAlignmentKeepsAttachmentAndNativeChildren())return 1;
     std::cout<<"Authored aim: exact reviewed enrollment, lease/configuration refusal, independent orientation and preserved attachments passed\n";
     return 0;
 }

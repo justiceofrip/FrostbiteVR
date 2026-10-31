@@ -271,7 +271,6 @@ Bc2PhysicalPumpResult Bc2PhysicalPump::Tick(const Bc2PhysicalPumpSample& s,HandI
         weapon_cycle_detail::Window(raw.input.observedNs,raw.input.deadlineNs,s.input.nowNs)&&Point(raw.pointWrist)&&
         (!cycle_||SamePoint(pointWrist_,raw.pointWrist));
     if(!view->held){
-        Record(s,4,{});
         // A native view can retain the exact held debt while temporarily
         // publishing no live lease. This is no new physical/native authority,
         // but it is not a release gesture either. Keep only the already-live
@@ -282,6 +281,7 @@ Bc2PhysicalPumpResult Bc2PhysicalPump::Tick(const Bc2PhysicalPumpSample& s,HandI
             view->native.owner==s.nativeOwner&&cycle_&&view->cycle==cycle_->cycle&&view->shot==cycle_->shot&&
             retainExistingGrasp();
         if(out.ownsHand&&physical_.RetainGrasp(s.input,s.input,gun->token,hands))++graspRenewals_;
+        Record(s,4,{},false,&*view,out.ownsHand);
         if(!out.ownsHand)DropPhysical(s.input,hands);
         return out;
     }
@@ -342,11 +342,24 @@ Bc2PhysicalPumpResult Bc2PhysicalPump::TickRecovery(const Bc2PhysicalPumpSample&
        view.authority->mechanism!=HandInteractionKey{calibration_->profileId,s.item.generation}||
        !weapon_cycle_detail::Lease(*view.authority,s.input.nowNs)||
        (cycle_&&(cycle_->owner!=view.authority->owner||cycle_->item!=view.authority->item||
-        cycle_->mechanism!=view.authority->mechanism||cycle_->cycle!=view.authority->cycle||cycle_->shot!=view.authority->shot))||
-       !raw.valid||raw.nativeOwner!=s.nativeOwner||raw.rigFingerprint!=calibration_->rigFingerprint||
-       raw.input.owner!=s.input.owner||raw.input.sequence>s.input.sequence||raw.input.observedNs>s.input.observedNs||
-       !weapon_cycle_detail::Window(raw.input.observedNs,raw.input.deadlineNs,s.input.nowNs)||!Point(raw.pointWrist)||
-       ((cycle_||recoveryCycle_)&&!SamePoint(pointWrist_,raw.pointWrist))){DropPhysical(s.input,hands);return out;}
+         cycle_->mechanism!=view.authority->mechanism||cycle_->cycle!=view.authority->cycle||cycle_->shot!=view.authority->shot))){
+        Record(s,7,{},true);DropPhysical(s.input,hands);return out;}
+    const bool rawBinding=raw.nativeOwner==s.nativeOwner&&raw.rigFingerprint==calibration_->rigFingerprint&&
+        raw.input.owner==s.input.owner&&raw.input.sequence<=s.input.sequence&&raw.input.observedNs<=s.input.observedNs&&
+        Point(raw.pointWrist)&&(!(cycle_||recoveryCycle_)||SamePoint(pointWrist_,raw.pointWrist));
+    if(!raw.valid||!rawBinding||!weapon_cycle_detail::Window(raw.input.observedNs,raw.input.deadlineNs,s.input.nowNs)){
+        // Recovery still owns the same physical grasp when a renderer packet
+        // is temporarily missing. Current controller evidence can retain that
+        // exact hand claim; it cannot move the pump or publish a guided target.
+        // Keep the existing recognizer/travel so source N returning later in
+        // this same controller packet continues the unfinished stroke.
+        const bool delayed=!raw.valid||(rawBinding&&raw.input.deadlineNs<=s.input.nowNs);
+        out.ownsHand=delayed&&recoveryCycle_&&weapon_cycle_detail::Same(*recoveryCycle_,*view.authority)&&
+            s.grip&&!s.input.released[0]&&recoveryPhysical_.RetainGrasp(s.input,s.input,gun->token,hands);
+        if(out.ownsHand)++graspRenewals_;
+        Record(s,8,{},true,nullptr,out.ownsHand);
+        if(!out.ownsHand)DropPhysical(s.input,hands);return out;
+    }
     if(recoveryCycle_&&!weapon_cycle_detail::Same(*recoveryCycle_,*view.authority)){
         if(recoveryPhysical_.Phase()!=WeaponCyclePhase::Cancelled||recoveryCycle_->cycle!=view.authority->cycle||
            recoveryCycle_->shot!=view.authority->shot||recoveryCycle_->grant.debt!=view.authority->grant.debt){DropPhysical(s.input,hands);return out;}
@@ -454,14 +467,22 @@ std::optional<math::Matrix4> ResolvePumpSupportWrist(const Bc2PumpTracking& t,co
     if(!binding||binding->fingerprint!=t.calibration->rigFingerprint||rig.identity.soldier!=t.nativeOwner.soldier||rig.identity.weak!=t.nativeOwner.weak)return {};
     return t.calibration->closedWrist;
 }
-void Bc2PhysicalPump::Record(const Bc2PhysicalPumpSample& s,unsigned gate,const WeaponCycleResult& result,bool recovery)noexcept {
+void Bc2PhysicalPump::Record(const Bc2PhysicalPumpSample& s,unsigned gate,const WeaponCycleResult& result,bool recovery,
+    const Bc2NativeCycleView* native,bool retained)noexcept {
     std::unique_lock lock(journalMutex_,std::try_to_lock);if(!lock.owns_lock())return;
-    GestureRow row{s.input.sequence,s.raw.input.sequence,cycle_?cycle_->cycle:0,s.input.nowNs,gate,
+    GestureRow row{s.input.sequence,s.raw.input.sequence,cycle_?cycle_->cycle:recoveryCycle_?recoveryCycle_->cycle:0,s.input.nowNs,gate,
         unsigned(result.phase),unsigned(result.failure),s.nativeOwner.weapon,result.travel,result.rotation,
         weapon_cycle_detail::Position(s.raw.contact),recovery,s.grip,s.input.released[0]};
+    row.evidence=(s.raw.valid?1u:0u)|(retained?2u:0u);
+    if(native){row.nativePhase=unsigned(native->phase);row.nativeFailure=unsigned(native->failure);
+        row.nativeCycle=native->cycle;row.nativeShot=native->shot;
+        row.evidence|=(native->native.owner==s.nativeOwner?4u:0u)|(native->heldSuspended?8u:0u)|
+            (cycle_&&native->cycle==cycle_->cycle&&native->shot==cycle_->shot?16u:0u)|(native->held?32u:0u);}
     if(lastRow_&&lastRow_->gate==row.gate&&lastRow_->phase==row.phase&&lastRow_->failure==row.failure&&
        lastRow_->weapon==row.weapon&&lastRow_->cycle==row.cycle&&lastRow_->recovery==row.recovery&&
-       lastRow_->grip==row.grip&&lastRow_->released==row.released&&
+       lastRow_->grip==row.grip&&lastRow_->released==row.released&&lastRow_->evidence==row.evidence&&
+       lastRow_->nativePhase==row.nativePhase&&lastRow_->nativeFailure==row.nativeFailure&&
+       lastRow_->nativeCycle==row.nativeCycle&&lastRow_->nativeShot==row.nativeShot&&
        (row.now-lastRow_->now<50000000||std::abs(row.travel-lastRow_->travel)<.01f))return;
     lastRow_=row;
     // Keep the first cause, including small failed strokes; never overwrite it
@@ -475,13 +496,16 @@ void Bc2PhysicalPump::Report(std::ostream& out)const {
        <<",\"releases\":"<<releases_.load()<<",\"acknowledgements\":"<<acks_.load()
        <<",\"support_returns\":"<<supportReturns_.load()<<",\"support_return_lost\":"<<supportReturnLost_.load();
     std::lock_guard lock(journalMutex_);
-    out<<",\"gesture_gates\":{\"updated\":0,\"unsafe\":1,\"control_rejected\":2,\"view_missing\":3,\"not_held\":4,\"raw_invalid\":5,\"control_busy\":6}"
+    out<<",\"gesture_gates\":{\"updated\":0,\"unsafe\":1,\"control_rejected\":2,\"view_missing\":3,\"not_held\":4,\"raw_invalid\":5,\"control_busy\":6,\"recovery_authority_invalid\":7,\"recovery_raw_invalid\":8}"
+       <<",\"gesture_evidence_bits\":{\"raw_valid\":1,\"grasp_retained\":2,\"native_owner_matches\":4,\"native_held_suspended\":8,\"native_cycle_matches\":16,\"native_held_present\":32}"
        <<",\"gesture_rows_dropped\":"<<journalDropped_<<",\"gestures\":[";
     for(unsigned n=0;n<journalCount_;++n){if(n)out<<',';const auto& r=journal_[n];
         out<<"{\"input\":"<<r.input<<",\"raw_input\":"<<r.rawInput<<",\"cycle\":"<<r.cycle<<",\"now_ns\":"<<r.now
            <<",\"gate\":"<<r.gate<<",\"phase\":"<<r.phase<<",\"failure\":"<<r.failure<<",\"weapon\":"<<r.weapon
            <<",\"travel_m\":"<<r.travel<<",\"rotation_rad\":"<<r.rotation<<",\"raw\":["<<r.raw[0]<<','<<r.raw[1]<<','<<r.raw[2]
-           <<"],\"recovery\":"<<(r.recovery?"true":"false")<<",\"grip\":"<<(r.grip?"true":"false")<<",\"released\":"<<(r.released?"true":"false")<<'}';}
+           <<"],\"recovery\":"<<(r.recovery?"true":"false")<<",\"grip\":"<<(r.grip?"true":"false")<<",\"released\":"<<(r.released?"true":"false")
+           <<",\"native_phase\":"<<r.nativePhase<<",\"native_failure\":"<<r.nativeFailure<<",\"native_cycle\":"<<r.nativeCycle
+           <<",\"native_shot\":"<<r.nativeShot<<",\"evidence\":"<<r.evidence<<'}';}
     out<<"]}";
 }
 }

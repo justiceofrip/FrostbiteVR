@@ -411,6 +411,8 @@ inline const Bc2FeedRegistration M60Registration=[] {
     auto& m=out.mechanism;m.family=interaction::FeedFamily::Belt;m.id=0x4d363046454544ull;m.revision=1;m.ammunitionKind=1;
     m.cover=m.container=m.containerNeedsOpen=m.feedNeedsOpen=m.sameContainerReplenishment=m.coupledContainerDetach=true;
     m.maxAgeNs=100000000;m.contacts[0]={1,.08f,.65f};m.contacts[2]={2,.08f,.65f};m.contacts[3]={3,.08f,.65f};
+    for(auto part:{interaction::FeedPart::Cover,interaction::FeedPart::Container,interaction::FeedPart::Feed})
+        m.contacts[unsigned(part)].orientation=interaction::FeedContactOrientation::Acquired;
     out.config={M60Geometry.asset,M60Geometry.configurationPath,
         {2,1,8,29,100,2,0,7.8f,.7f,0,0,0,false,false},M60ReloadTiming,ReloadDescriptorAdmission::ReviewedNative};
     out.nativeClass=Bc2FeedNativeClass::AutomaticMagazineZeroBoltTransfer;out.enabled=out.reviewed=true;

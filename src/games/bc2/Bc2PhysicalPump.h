@@ -124,7 +124,8 @@ public:
         recoveryCycle_||recoveryPending_||recoveryAcknowledged_;}
     void Report(std::ostream&)const;
 private:
-    void Record(const Bc2PhysicalPumpSample&,unsigned gate,const interaction::WeaponCycleResult&,bool recovery=false)noexcept;
+    void Record(const Bc2PhysicalPumpSample&,unsigned gate,const interaction::WeaponCycleResult&,bool recovery=false,
+        const Bc2NativeCycleView* native=nullptr,bool retained=false)noexcept;
     void DropPhysical(const interaction::HandInteractionSample&,interaction::HandInteraction&)noexcept;
     Bc2PhysicalPumpResult TickRecovery(const Bc2PhysicalPumpSample&,const Bc2NativeCycleRecoveryView&,
         interaction::HandInteraction&,std::uint64_t& intent)noexcept;
@@ -154,6 +155,8 @@ private:
         std::uint64_t input=0,rawInput=0,cycle=0;std::int64_t now=0;
         unsigned gate=0,phase=0,failure=0,weapon=0;float travel=0,rotation=0;
         std::array<float,3> raw{};bool recovery=false,grip=false,released=false;
+        unsigned nativePhase=~0u,nativeFailure=0,evidence=0;
+        std::uint64_t nativeCycle=0,nativeShot=0;
     };
     mutable std::mutex journalMutex_;
     std::array<GestureRow,256> journal_{};unsigned journalCount_=0,journalDropped_=0;

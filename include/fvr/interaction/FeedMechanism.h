@@ -48,9 +48,13 @@ enum class FeedPhysicalOperation:std::uint8_t {
     None,ReleaseLatch,OpenCover,WithdrawFeed,DetachContainer,AttachContainer,
     SeatFeed,CloseCover,EngageLatch,CycleAction
 };
+enum class FeedContactOrientation:std::uint8_t {Authored,Acquired};
 struct FeedContactBinding {
     std::uint32_t role=0;
     float radiusMeters=0,maxAngleRadians=0;
+    // Acquired binds the player's actual grasp. Subsequent motion still has
+    // the same angular/path constraints; authored contact position is required.
+    FeedContactOrientation orientation=FeedContactOrientation::Authored;
     bool operator==(const FeedContactBinding&)const=default;
 };
 // Replacement remains the default. Replenishment and coupled pouch/feed
@@ -197,7 +201,8 @@ inline FeedPart OperationPart(FeedPhysicalOperation op)noexcept {
        (p.coupledContainerDetach&&(!p.container||p.detachNeedsUnseated)))return false;
     for(unsigned n=0;n<p.contacts.size();++n){
         const auto& c=p.contacts[n];
-        if(!Part(p,n)){if(c.role||c.radiusMeters!=0||c.maxAngleRadians!=0)return false;continue;}
+        if(c.orientation!=FeedContactOrientation::Authored&&c.orientation!=FeedContactOrientation::Acquired)return false;
+        if(!Part(p,n)){if(c.role||c.radiusMeters!=0||c.maxAngleRadians!=0||c.orientation!=FeedContactOrientation::Authored)return false;continue;}
         if(!c.role||!std::isfinite(c.radiusMeters)||c.radiusMeters<=0||
            !std::isfinite(c.maxAngleRadians)||c.maxAngleRadians<0||c.maxAngleRadians>3.141592654f)return false;
         for(unsigned j=0;j<n;++j)if(Part(p,j)&&p.contacts[j].role==c.role)return false;
@@ -304,7 +309,8 @@ inline FeedPart OperationPart(FeedPhysicalOperation op)noexcept {
     out.distanceMeters=std::sqrt(squared);
     out.angleRadians=static_cast<float>(std::acos(std::clamp((trace-1.0)*.5,-1.0,1.0)));
     const auto& binding=p.contacts[index];
-    out.status=out.distanceMeters<=binding.radiusMeters&&out.angleRadians<=binding.maxAngleRadians?
+    out.status=out.distanceMeters<=binding.radiusMeters&&
+        (binding.orientation==FeedContactOrientation::Acquired||out.angleRadians<=binding.maxAngleRadians)?
         FeedMechanismStatus::ContactMatch:FeedMechanismStatus::ContactMiss;
     out.target=target;return out;
 }

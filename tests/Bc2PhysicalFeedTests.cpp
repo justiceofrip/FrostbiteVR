@@ -15,6 +15,8 @@ template<std::size_t N>void Text(std::array<char,N>& out,std::string_view text){
     out={};std::memcpy(out.data(),text.data(),(std::min)(text.size(),N-1));
 }
 fvr::math::Matrix4 Identity(){fvr::math::Matrix4 m{};for(unsigned i=0;i<4;++i)m.values[i][i]=1;return m;}
+fvr::math::Matrix4 Turn(float angle){auto m=Identity();const auto c=std::cos(angle),s=std::sin(angle);
+    m.values[0][0]=m.values[1][1]=c;m.values[0][1]=s;m.values[1][0]=-s;return m;}
 struct Fixture {
     const Bc2FeedRegistration* registration=FindBc2FeedRegistration(bc2_feed_profile_detail::M60Registration.key);
     // Production keeps these native histories in static storage. Keep each
@@ -28,6 +30,7 @@ struct Fixture {
     std::int64_t now=1000*Ms;
     Bc2PhysicalFeedSample sample{};
     std::optional<fvr::math::Matrix4> wristCalibration;
+    fvr::math::Matrix4 lastWrist=Identity();
     Bc2PhysicalFeedResult result{};
     std::optional<FeedEquipmentSubmission> submitted;
     bool refuse=false,occupyLeft=false;unsigned submits=0;
@@ -73,6 +76,7 @@ struct Fixture {
         sample.raw.weaponWorldMeters=Identity();
     }
     void PrepareTick(const fvr::math::Matrix4& wrist,bool grip,bool cancel=false){
+        lastWrist=wrist;
         const auto age=(std::min)(100*Ms,registration->mechanism.maxAgeNs);
         now+=10*Ms;++sequence;native.observedNs=now-1;native.deadlineNs=native.observedNs+age;
         native.binding.observedNs=native.observedNs;native.binding.deadlineNs=native.deadlineNs;(void)backend.Publish(native,now);
@@ -137,8 +141,8 @@ struct Fixture {
     }
     bool Reconcile(){
         if(!Callback())return false;
-        Tick(sample.raw.rawLeftWristWorldMeters,false);
-        Tick(sample.raw.rawLeftWristWorldMeters,false);
+        Tick(lastWrist,false);
+        Tick(lastWrist,false);
         return !result.pending;
     }
     bool NoEntryCallbacks(){
@@ -173,7 +177,16 @@ struct Fixture {
             retained->weaponFromChain[i+1],feed_interaction_detail::Inverse(retained->weaponFromChain[i]));
         const auto motion=BuildBc2FeedMotionFromRetainedPose(registration->geometry,op,registration->interactionPolicy,pose);
         if(!motion)return false;submitted.reset();
-        const auto contact=[&](const fvr::math::Matrix4& object){return feed_interaction_detail::Multiply(motion->placement.sourceFromGrip,object);};
+        auto sourceFromWrist=motion->placement.sourceFromGrip;
+        if(picked){
+            // The retained source already follows the calibrated pickup hand.
+            // Preserve that grasp, then undo calibration for PrepareTick's input.
+            sourceFromWrist=feed_interaction_detail::Multiply(sample.raw.rawLeftWristWorldMeters,
+                feed_interaction_detail::Inverse(motion->placement.weaponFromSource));
+            if(wristCalibration)sourceFromWrist=feed_interaction_detail::Multiply(
+                feed_interaction_detail::Inverse(*wristCalibration),sourceFromWrist);
+        }
+        const auto contact=[&](const fvr::math::Matrix4& object){return feed_interaction_detail::Multiply(sourceFromWrist,object);};
         const auto start=contact(motion->placement.weaponFromSource);
         if(!picked){Tick(start,false);Tick(start,false);}Tick(start,true);
         for(unsigned step=1;step<=30;++step)Tick(contact(reload_insertion_detail::BlendRigid(
@@ -317,6 +330,9 @@ int EveryEnrolledFeedUsesTheSharedChestRefillPath(){
     unsigned configurations=0;
     for(const auto& registration:RegisteredBc2FeedProfiles()){
         Fixture f(&registration);const auto before=f.native.counts;
+        // The player does not reproduce the stock animation's wrist rotation.
+        // Keep a non-identity grasp through all five operations and receipts.
+        f.wristCalibration=Turn(2.29598f);
         const auto units=(std::min)(before.capacity-before.loaded,before.reserve);
         CHECK(f.OpenCover());CHECK(f.Reconcile());CHECK(f.Place(FeedPhysicalOperation::DetachContainer));CHECK(f.Reconcile());
         CHECK(!f.Place(FeedPhysicalOperation::AttachContainer,false));CHECK(f.native.counts==before);
@@ -330,15 +346,14 @@ int EveryEnrolledFeedUsesTheSharedChestRefillPath(){
 }
 int EveryEnrolledFeedUsesAnatomicalControllerMapping(){
     for(const auto& registration:RegisteredBc2FeedProfiles()){
-        Fixture anatomical(&registration),support(&registration);
-        anatomical.wristCalibration=Identity();support.wristCalibration=Identity();
-        support.wristCalibration->values[1][1]=support.wristCalibration->values[2][2]=-1;
-        // The same controller position can carry different native support and
-        // anatomical wrist orientations. Exercise publication mapping through
-        // real feed acquisition and completion, including its orientation gate.
-        CHECK(anatomical.OpenCover());CHECK(!support.OpenCover());
-        CHECK(anatomical.sample.raw.valid&&support.sample.raw.valid);
-        const auto& a=anatomical.sample.raw;const auto& s=support.sample.raw;
+        Fixture anatomical(&registration),rotated(&registration);
+        anatomical.wristCalibration=Identity();rotated.wristCalibration=Turn(2.29598f);
+        CHECK(registration.mechanism.contacts[unsigned(FeedPart::Cover)].orientation==FeedContactOrientation::Acquired);
+        // Both are independently tracked anatomical grasps, including one
+        // with the actual failed attempt's angular difference from authored.
+        CHECK(anatomical.OpenCover());CHECK(rotated.OpenCover());
+        CHECK(anatomical.sample.raw.valid&&rotated.sample.raw.valid);
+        const auto& a=anatomical.sample.raw;const auto& s=rotated.sample.raw;
         CHECK(feed_interaction_detail::Distance(a.rawLeftWristWorldMeters,s.rawLeftWristWorldMeters)<.00001f);
         CHECK(feed_interaction_detail::Angle(a.rawLeftWristWorldMeters,s.rawLeftWristWorldMeters)>
             registration.mechanism.contacts[unsigned(FeedPart::Cover)].maxAngleRadians);
@@ -348,7 +363,35 @@ int EveryEnrolledFeedUsesAnatomicalControllerMapping(){
             a.inputEvidence.deadlineNs==anatomical.sample.input.deadlineNs);
         CHECK(anatomical.result.pending&&anatomical.submits==1);
         CHECK(anatomical.submitted->command.authority.operation==FeedPhysicalOperation::OpenCover);
-        CHECK(support.result.selected&&!support.result.ownsHand&&!support.result.pending&&!support.result.blocksFire&&support.submits==0);
+        CHECK(rotated.result.selected&&rotated.result.pending&&rotated.result.blocksFire&&rotated.submits==1);
+    }
+    return 0;
+}
+int EveryEnrolledFeedAcceptsObservedGraspWithDelayedPublication(){
+    for(const auto& registration:RegisteredBc2FeedProfiles()){
+        Fixture f(&registration);const auto m=f.Open();
+        const auto contact=feed_interaction_detail::Multiply(m.motionFromContact,m.weaponFromMotion);
+        auto wrist=feed_interaction_detail::Multiply(Turn(2.29598f),contact);
+        // The trace logs distance/angle, not the full wrist matrix. Reconstruct
+        // those scalars, with a radial offset that cannot cross the hinge axis.
+        const auto x=m.motionFromContact.values[3][0],y=m.motionFromContact.values[3][1],radius=std::hypot(x,y);
+        for(unsigned axis=0;axis<3;++axis)wrist.values[3][axis]+=.0453684f*
+            (x*m.weaponFromMotion.values[0][axis]+y*m.weaponFromMotion.values[1][axis])/radius;
+        f.sequence=7049;f.Tick(wrist,false);const auto neutral=f.sample.raw;
+        f.now+=3880000;f.PrepareTick(wrist,true);const auto pressed=f.sample.raw;f.Consume(&neutral);
+        f.PrepareTick(wrist,true);f.Consume(&pressed);
+        CHECK(f.sample.input.sequence==7052&&f.sample.raw.inputEvidence.sequence==7051);
+        CHECK(f.result.diagnostic.rawPassed==511&&f.result.diagnostic.admissionPassed==63);
+        CHECK(f.result.diagnostic.idlePassed==2045); // All acquisition gates; release is false.
+        CHECK(f.result.diagnostic.coverDistanceMeters&&std::abs(*f.result.diagnostic.coverDistanceMeters-.0453684f)<.00001f);
+        CHECK(f.result.diagnostic.coverAngleRadians&&std::abs(*f.result.diagnostic.coverAngleRadians-2.29598f)<.00001f);
+        CHECK(f.result.diagnostic.neutralAgeNs==23880001);
+        CHECK(f.result.ownsHand&&f.result.interactionStatus==FeedInteractionStatus::Acquired&&f.submits==0);
+        CHECK(f.result.presentation&&f.result.presentation->mechanismWristWorldMeters);
+        CHECK(f.result.presentation->mechanismWristWorldMeters->values==wrist.values);
+        f.Consume(&pressed); // Duplicate render publication cannot add motion.
+        CHECK(f.result.ownsHand&&!f.result.pending&&f.submits==0);
+        f.Tick(wrist,false);CHECK(!f.result.ownsHand&&!f.result.pending&&f.submits==0);
     }
     return 0;
 }
@@ -634,6 +677,7 @@ int main(){
     CHECK(ReattachingWithoutChestSupplyCannotRefill()==0);
     CHECK(EveryEnrolledFeedUsesTheSharedChestRefillPath()==0);
     CHECK(EveryEnrolledFeedUsesAnatomicalControllerMapping()==0);
+    CHECK(EveryEnrolledFeedAcceptsObservedGraspWithDelayedPublication()==0);
     CHECK(EveryEnrolledFeedStartsFromReleasedApproach()==0);
     CHECK(EveryEnrolledFeedConsumesMissedStartupEdge()==0);
     CHECK(EveryEnrolledFeedStartupPreservesAdmissionGates()==0);
@@ -644,5 +688,5 @@ int main(){
     CHECK(SameAddressReplacementDoesNotInheritFeedDebt()==0);
     CHECK(RealNoEntryReceiptRecoversCompletedEndpointWithNewId()==0);
     CHECK(DrainedActorReplacementReclaimsSlotsWithoutInventingAmmunitionSuccess()==0);
-    std::puts("Bc2PhysicalFeedTests: 22 deterministic owner/arbiter/callback compositions; no game or headset acceptance");
+    std::puts("Bc2PhysicalFeedTests: 23 deterministic owner/arbiter/callback compositions; no game or headset acceptance");
 }

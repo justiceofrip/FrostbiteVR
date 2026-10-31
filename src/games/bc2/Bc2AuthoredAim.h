@@ -80,6 +80,9 @@ inline AuthoredAimResult BindAuthoredAim(std::span<const AuthoredAimProfile> pro
 }
 // Recheck at publication and every consumer/Pack. A refreshed snapshot confirms
 // identity only; it cannot renew either original lease or the original rig.
+// Gather observes configuration before publishing its controller guard. The
+// confirming snapshot may therefore be newer than that still-live guard; only
+// the pose's original binding must precede it. Both original leases remain gates.
 inline bool AuthoredAimCurrent(const AuthoredAimBinding& b,const SelectedMeshesSnapshot* current,
     const WeaponEquipmentIdentity& equipment,const AuthoredAimOwner& owner,
     std::uint64_t rigFingerprint,std::int64_t now)noexcept {
@@ -88,7 +91,7 @@ inline bool AuthoredAimCurrent(const AuthoredAimBinding& b,const SelectedMeshesS
        b.owner.soldier!=owner.soldier||b.owner.weak!=owner.weak||
        b.owner.actorGeneration!=owner.actorGeneration||b.owner.equipmentGeneration!=owner.equipmentGeneration||
        b.owner.space!=owner.space||b.owner.inputSequence>owner.inputSequence||
-       b.owner.inputDeadlineNs<=now||owner.inputDeadlineNs<=now||current->sequence>owner.inputSequence)return false;
+       b.owner.inputDeadlineNs<=now||owner.inputDeadlineNs<=now)return false;
     const auto& old=*b.selected;
     return BindAuthoredAim(std::span(b.profile,1),b.selected,b.equipment,b.owner,rigFingerprint,now).binding.has_value()&&
         authored_grip_detail::Fresh(*current,now)&&authored_aim_detail::Configuration(*b.profile,*current)&&

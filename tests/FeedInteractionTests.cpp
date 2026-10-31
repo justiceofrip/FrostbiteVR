@@ -17,7 +17,7 @@ struct Fixture {
     FeedMechanismProfile p{};FeedInteractionProfile geometry{};FeedMechanismSnapshot s{};
     FeedSupplyKey old{{10,1},{20,1}},desired{{30,2},{40,2}};
     FeedInteraction controller{};FeedInteractionSample sample{};FeedInteractionResult result{};
-    Op operation=Op::ReleaseLatch;std::int64_t now=1000;
+    Op operation=Op::ReleaseLatch;std::int64_t now=1000;Matrix graspOrientation=Identity();
     explicit Fixture(Op op=Op::ReleaseLatch){
         p.family=FeedFamily::Belt;p.id=1;p.revision=2;p.ammunitionKind=3;p.maxAgeNs=100;
         p.cover=p.latch=p.container=p.charge=true;
@@ -70,7 +70,7 @@ struct Fixture {
     void SetContact(){s.contacts[Part()].weaponFromContact=Pose(0);}
     void Prepare(float progress,bool grip=true,std::int64_t advance=10){
         now+=advance;++s.sequence;++s.inputSequence;s.observedNs=now;
-        sample.contact={s.owner,s.mechanism,s.sequence,s.inputSequence,now,true,true,Pose(progress)};sample.grip=grip;
+        sample.contact={s.owner,s.mechanism,s.sequence,s.inputSequence,now,true,true,Product(graspOrientation,Pose(progress))};sample.grip=grip;
     }
     FeedInteractionResult Run(){result=controller.Update(p,geometry,s,desired,sample,now);return result;}
     FeedInteractionResult Step(float progress,bool grip=true,std::int64_t advance=10){Prepare(progress,grip,advance);return Run();}
@@ -78,6 +78,26 @@ struct Fixture {
     FeedInteractionResult Outbound(){for(float point:{.2f,.4f,.6f,.8f,.95f})Step(point);
         Step(.95f);return Step(.95f);}
 };
+int AcquiredOrientationBindsTheActualGrasp(){
+    for(const auto op:{Op::SeatFeed,Op::OpenCover,Op::CloseCover}){
+        Fixture authored(op);authored.graspOrientation=Turn(2.29598f);
+        CHECK(authored.Step(0,false).status==Status::Armed);
+        CHECK(authored.Step(0).status==Status::ContactMiss);
+        Fixture acquired(op);acquired.p.contacts[acquired.Part()].orientation=FeedContactOrientation::Acquired;
+        acquired.graspOrientation=Turn(2.29598f);CHECK(acquired.Acquire());
+        CHECK(acquired.Outbound().completion);
+        Fixture twist(op);twist.p.contacts[twist.Part()].orientation=FeedContactOrientation::Acquired;
+        twist.graspOrientation=Turn(2.29598f);CHECK(twist.Acquire());twist.Step(.2f);
+        twist.graspOrientation=Turn(2.44598f);
+        CHECK(twist.Step(.2f).status==Status::OffPath&&!twist.result.completion);
+        Fixture changed(op);changed.p.contacts[changed.Part()].orientation=FeedContactOrientation::Acquired;
+        CHECK(changed.Acquire());auto before=changed.p;
+        changed.p.contacts[changed.Part()].orientation=FeedContactOrientation::Authored;
+        CHECK(before!=changed.p&&!feed_interaction_detail::Same(before,changed.p));
+        CHECK(changed.Step(.2f).status==Status::CandidateChanged);
+    }
+    return 0;
+}
 int LinearReceiptAndNoStateMutation(){
     Fixture f(Op::SeatFeed);CHECK(f.Acquire());CHECK(f.result.targetKind==FeedInteractionTargetKind::Contact);
     const auto before=f.s;auto r=f.Outbound();
@@ -586,7 +606,7 @@ int ReplenishmentPolicyAndEvidenceCannotChangeDuringGesture(){
 }
 }
 int main(){
-    if(LinearReceiptAndNoStateMutation()||EveryOperationKeepsItsTypeAndResource()||RotatedTranslatedMetreFrame()||
+    if(AcquiredOrientationBindsTheActualGrasp()||LinearReceiptAndNoStateMutation()||EveryOperationKeepsItsTypeAndResource()||RotatedTranslatedMetreFrame()||
        LinearRotatedAxisAndNegativeTravel()||InitialHeldAndMissedPressNeedNeutral()||FreshNeutralAndNewPressForEveryReceipt()||
        HysteresisPreservesDwellWithinBand()||HysteresisResetsBelowRelease()||DuplicateCannotAccrueDwell()||
        ReturnStrokeRequiresRearAndFreshFrontDwell()||TrackingLossCannotFinishOrResumeHeld()||InputGapCannotBridgeGesture()||
@@ -605,5 +625,5 @@ int main(){
        ReplenishmentPolicyAndEvidenceCannotChangeDuringGesture()||PartialHingeRecoveryRetainsTravelAndRequiresFreshRelease()||
        EndpointPlacementRecoveryCannotReuseOldDwell()||RecoveryProofCannotAuthorizeAnotherOwnerProfileOrRecognizer()||
        WorldCarryRecoveryProjectsOnlyRetainedMovementFrame())return 1;
-    std::puts("FeedInteraction: 44 deterministic cases passed (synthetic measured geometry; no native acceptance).");return 0;
+    std::puts("FeedInteraction: 45 deterministic cases passed (synthetic measured geometry; no native acceptance).");return 0;
 }

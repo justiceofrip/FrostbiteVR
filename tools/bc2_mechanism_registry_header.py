@@ -533,7 +533,8 @@ def emit_row(index, entry, evidence):
         for part, contact in m['contacts'].items():
             target = f'out.mechanism.contacts[static_cast<unsigned>(interaction::FeedPart::{part})]'
             out += [f'    {target}.role={contact["role"]}u;', f'    {target}.radiusMeters={literal(contact["radiusMeters"])};',
-                    f'    {target}.maxAngleRadians={literal(contact["maxAngleRadians"])};']
+                    f'    {target}.maxAngleRadians={literal(contact["maxAngleRadians"])};',
+                    f'    {target}.orientation=interaction::FeedContactOrientation::Acquired;']
     else:
         out += [f'    out.geometry=&{prefix}Geometry;', f'    out.interaction=&{prefix}Policy;',
                 f'    out.configuration=MechanismNative{index};',

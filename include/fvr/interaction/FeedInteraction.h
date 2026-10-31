@@ -146,7 +146,8 @@ inline bool Same(const FeedMechanismProfile& a,const FeedMechanismProfile& b)noe
        a.detachNeedsUnseated!=b.detachNeedsUnseated||a.maxAgeNs!=b.maxAgeNs||
        a.sameContainerReplenishment!=b.sameContainerReplenishment||a.coupledContainerDetach!=b.coupledContainerDetach)return false;
     for(unsigned i=0;i<a.contacts.size();++i)if(a.contacts[i].role!=b.contacts[i].role||
-       a.contacts[i].radiusMeters!=b.contacts[i].radiusMeters||a.contacts[i].maxAngleRadians!=b.contacts[i].maxAngleRadians)return false;
+       a.contacts[i].radiusMeters!=b.contacts[i].radiusMeters||a.contacts[i].maxAngleRadians!=b.contacts[i].maxAngleRadians||
+       a.contacts[i].orientation!=b.contacts[i].orientation)return false;
     return true;
 }
 inline bool Motion(const FeedMotionProfile& m)noexcept {
@@ -314,7 +315,8 @@ public:
             const auto& observed=snapshot.contacts[static_cast<unsigned>(candidate.part)].weaponFromContact;
             const auto& binding=mechanismProfile.contacts[static_cast<unsigned>(candidate.part)];
             if(Distance(start,observed)>motion.pathToleranceMeters||Angle(start,observed)>motion.orientationToleranceRadians||
-               Distance(start,contact.weaponFromHandContact)>binding.radiusMeters||Angle(start,contact.weaponFromHandContact)>binding.maxAngleRadians)
+               Distance(start,contact.weaponFromHandContact)>binding.radiusMeters||
+               (binding.orientation==FeedContactOrientation::Authored&&Angle(start,contact.weaponFromHandContact)>binding.maxAngleRadians))
                 return fail(FeedInteractionStatus::OffPath);
             // Preserve the actual pickup offset: neither hand nor carried
             // object jumps to the measured grip or destination socket.

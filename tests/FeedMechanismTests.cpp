@@ -148,7 +148,11 @@ int ContactTranslationAndAngle(){
     h.weaponFromHandContact.values[3][0]=.026f;CHECK(f.Contact(c,h).status==Status::ContactMiss);
     h=f.Hand(c);const float angle=.3f;h.weaponFromHandContact.values[0][0]=std::cos(angle);h.weaponFromHandContact.values[0][1]=std::sin(angle);
     h.weaponFromHandContact.values[1][0]=-std::sin(angle);h.weaponFromHandContact.values[1][1]=std::cos(angle);
-    r=f.Contact(c,h);CHECK(r.status==Status::ContactMiss&&Near(r.angleRadians,angle));return 0;
+    r=f.Contact(c,h);CHECK(r.status==Status::ContactMiss&&Near(r.angleRadians,angle));
+    auto& binding=f.p.contacts[unsigned(c.part)];binding.orientation=FeedContactOrientation::Acquired;
+    r=f.Contact(c,h);CHECK(r.status==Status::ContactMatch&&Near(r.angleRadians,angle));
+    h.weaponFromHandContact.values[3][0]=.026f;CHECK(f.Contact(c,h).status==Status::ContactMiss);
+    binding.orientation=static_cast<FeedContactOrientation>(2);CHECK(!ValidateFeedMechanismProfile(f.p));return 0;
 }
 int IdentityInvalidatesCandidate(){
     for(unsigned i=0;i<10;++i){Fixture f;const auto c=*f.Query().candidate;switch(i){case 0:++f.s.owner.actor;break;case 1:++f.s.owner.actorGeneration;break;

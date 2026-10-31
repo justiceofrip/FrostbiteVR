@@ -110,13 +110,13 @@ struct Fixture {
         sample.input.nowNs=1000000000;sample.input.focused=true;sample.input.tracked={true,true};
     }
     void Shot(){native.state.phase=Bc2NativeCyclePhase::Held;native.state.blocksFire=true;native.state.cycle=native.state.shot=1;}
-    Bc2PhysicalPumpResult Tick(float travel,bool grip=true){
+    Bc2PhysicalPumpResult Tick(float travel,bool grip=true,bool missingRaw=false){
         auto& s=sample.input;++s.sequence;s.nowNs+=10000000;s.observedNs=s.nowNs;s.deadlineNs=s.nowNs+100000000;s.released[0]=!grip;sample.grip=grip;
         hands.Update(s);auto gun=hands.Current(InteractionHand::Right);
         if(gun)hands.Renew(s,gun->token,{{1,4},s.sequence,s.deadlineNs,true});
         else hands.Acquire(s,{s.owner,InteractionHand::Right,HandClaimKind::GunHold,sample.item,{{1,4},s.sequence,s.deadlineNs,true},++intent,0});
         if(native.state.phase==Bc2NativeCyclePhase::Held)native.state.held=WeaponCycleLease{s.owner,sample.item,{0x5350415350554d50ull,4},1,1,++lease,s.nowNs,s.deadlineNs,true};
-        sample.raw=prior;result=pump.Tick(sample,hands,intent);
+        sample.raw=missingRaw?Bc2PumpRawContact{}:prior;result=pump.Tick(sample,hands,intent);
         if(result.audio&&audioLedger.Accept(*result.audio,s.nowNs)==MechanismAudioAdmission::Accepted)sounds.push_back(*result.audio);
         if(useSupport)SupportTick();
         prior=BuildPumpRawContact(result.tracking,rig,Pose(travel),Pose(),{.02f,0,0},1,s.nowNs);
@@ -181,10 +181,58 @@ int RecoveryCannotBorrowSqueezedOrExpiredOrForeignAuthority(){
             const auto original=f.result.tracking;
             if(failure==1){f.native.stopEvidence=true;f.sample.input.nowNs+=100000000;}
             else f.native.wrongOwner=true;
-            f.Tick(.02f);CHECK(!f.result.tracking.recoveryTarget);
+            f.Tick(.02f);CHECK(!f.result.tracking.recoveryTarget&&!f.result.ownsHand);
             if(failure==1)CHECK(!BuildPumpPresentation(original,f.rig,Pose(),1,f.sample.input.nowNs).part);
         }
         CHECK(!f.native.recoveryReleased&&!f.native.recoveryAcked&&!f.native.released&&f.result.blocksFire);
+    }return 0;
+}
+int RecoveryRawGapRetainsPartialStrokeWithoutMotion(){
+    Fixture f;f.Tick(0,false);f.Tick(0,false);f.native.Recover(f.sample);
+    for(unsigned n=0;n<6;++n)f.Tick(0,false);f.Tick(0);f.Tick(0);
+    CHECK(f.result.ownsHand&&f.result.tracking.recoveryTarget);
+    f.Tick(.02f);f.Tick(.04f);f.Tick(.04f);
+    const auto before=*f.result.tracking.recoveryTarget;
+    CHECK(before.travel>.03f&&before.travel<.05f);
+    const auto held=f.hands.Current(InteractionHand::Left);CHECK(held);
+    const auto cancelled=f.native.cancelled;const auto grant=*f.native.grant;
+    // Actual failure shape: source0 on the first gather, then sourceN becomes
+    // available on a second gather of the SAME current controller packet.
+    f.Tick(.04f,true,true);
+    CHECK(f.result.ownsHand&&f.result.blocksFire&&!f.result.tracking.recoveryTarget&&!f.result.tracking.target);
+    CHECK(!f.result.audio&&!f.native.recoveryReleased&&!f.native.recoveryAcked&&f.native.cancelled==cancelled);
+    const auto retained=f.hands.Current(InteractionHand::Left);CHECK(retained&&retained->token==held->token);
+    CHECK(retained->inputSequence==f.sample.input.sequence&&retained->deadlineNs==f.sample.input.deadlineNs);
+    CHECK(f.native.grant&&*f.native.grant==grant);
+    const auto input=f.sample.input;
+    f.sample.raw=f.prior;f.sample.input.nowNs+=5000000;
+    f.result=f.pump.Tick(f.sample,f.hands,f.intent);
+    CHECK(f.sample.input.sequence==input.sequence&&f.sample.input.observedNs==input.observedNs&&f.sample.input.deadlineNs==input.deadlineNs);
+    CHECK(f.result.ownsHand&&f.result.tracking.recoveryTarget);
+    const auto& resumed=*f.result.tracking.recoveryTarget;
+    CHECK(resumed.mechanism==before.mechanism&&resumed.lease.grant==before.lease.grant&&Near(resumed.travel,before.travel));
+    CHECK(f.native.cancelled==cancelled&&!f.native.recoveryReleased&&!f.native.recoveryAcked);
+    // Finish only the remaining rear/forward travel. A reset to AwaitingGrip
+    // or lost accumulated travel would fail this completion without regrip.
+    for(float t:{.06f,.08f,SpasObservedForeEndStroke,SpasObservedForeEndStroke,SpasObservedForeEndStroke,
+                 .075f,.055f,.035f,.015f,0.f,0.f,0.f,0.f,0.f,0.f})f.Tick(t);
+    for(unsigned n=0;n<6;++n)f.Tick(0);
+    CHECK(f.native.recoveryReleased==1&&f.native.recoveryAcked==1&&!f.native.released&&!f.native.acked&&!f.result.blocksFire);
+    CHECK(f.native.debt.shot==1&&f.native.debt.loaded==7&&f.native.debt.reserve==24);return 0;
+}
+int RecoveryRawGapCannotAcquireOrRetainContradictoryCustody(){
+    for(unsigned failure=0;failure<4;++failure){
+        Fixture f;f.Tick(0,false);f.Tick(0,false);f.native.Recover(f.sample);
+        for(unsigned n=0;n<6;++n)f.Tick(0,false);
+        if(failure==0){f.Tick(0,true,true);CHECK(!f.result.ownsHand&&!f.hands.Current(InteractionHand::Left));}
+        else {
+            f.Tick(0);f.Tick(0);f.Tick(.02f);CHECK(f.result.ownsHand);
+            if(failure==1)f.Tick(.04f,false,true);
+            else if(failure==2){f.sample.input.tracked[0]=false;f.Tick(.04f,true,true);}
+            else {++f.prior.nativeOwner.weapon;f.Tick(.04f);}
+            CHECK(!f.result.ownsHand&&!f.hands.Current(InteractionHand::Left));
+        }
+        CHECK(!f.result.tracking.recoveryTarget&&!f.native.recoveryReleased&&!f.native.recoveryAcked&&f.result.blocksFire);
     }return 0;
 }
 int RecoveryInterruptionRequiresNewGrantAndFreshStroke(){
@@ -255,6 +303,6 @@ int RecoveryPrecheckExpiryNeedsNewGesture(unsigned busy){
     CHECK(f.native.recoveryReleased==1&&f.native.recoveryAcked==1&&!f.result.blocksFire&&f.native.attempts.back().request>old.request);
     CHECK(f.native.attempts.back().cycle.cycle==old.cycle.cycle&&f.native.debt.shot==1&&f.native.debt.loaded==7&&f.native.debt.reserve==24);return 0;
 }
-int main(){if(RecoveryPrecheckExpiryNeedsNewGesture(0)||RecoveryPrecheckExpiryNeedsNewGesture(2)||ReleaseRacingNativeRecoveryRequiresFreshWholeStroke(0)||ReleaseRacingNativeRecoveryRequiresFreshWholeStroke(2)||ExpiredBusyRecoveryRequiresNewFullGesture()||DisconnectedPumpRetainsDebtThenRealRecoveredStroke(2)||OriginalNativeIdleWithoutAnyHeldLeaseStillOwesRealStroke()||DisconnectedPumpRetainsDebtThenRealRecoveredStroke()||RecoveryCannotBorrowSqueezedOrExpiredOrForeignAuthority()||
+int main(){if(RecoveryRawGapRetainsPartialStrokeWithoutMotion()||RecoveryRawGapCannotAcquireOrRetainContradictoryCustody()||RecoveryPrecheckExpiryNeedsNewGesture(0)||RecoveryPrecheckExpiryNeedsNewGesture(2)||ReleaseRacingNativeRecoveryRequiresFreshWholeStroke(0)||ReleaseRacingNativeRecoveryRequiresFreshWholeStroke(2)||ExpiredBusyRecoveryRequiresNewFullGesture()||DisconnectedPumpRetainsDebtThenRealRecoveredStroke(2)||OriginalNativeIdleWithoutAnyHeldLeaseStillOwesRealStroke()||DisconnectedPumpRetainsDebtThenRealRecoveredStroke()||RecoveryCannotBorrowSqueezedOrExpiredOrForeignAuthority()||
     RecoveryInterruptionRequiresNewGrantAndFreshStroke())return 1;
-    std::puts("Pump disconnect recovery: 4 groups; shared gesture, hand arbitration, private part and support return; native convergence mocked.");}
+    std::puts("Pump recovery: controller/render gaps, shared gesture, hand arbitration, part and support return; native convergence mocked.");}
