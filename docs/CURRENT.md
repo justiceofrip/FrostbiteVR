@@ -1,13 +1,15 @@
 # Current state — shared normal integration / public 0.1.15
 
-Updated October 30, 2026. This replaces old next-step instructions; prior evidence remains in
+Updated October 31, 2026. This replaces old next-step instructions; prior evidence remains in
 [history/](history/README.md) (search it by run number; never read a log whole).
 
 ## Active work
 
-Feedback56 source is pushed and private0.1.20 is installed with anatomical feed contacts, reviewed weapon visual axes, skin-decal/soot projection correction and one nonblocking host copy poll; both normal builds pass337/337 and installed setup/assets validation passes. Settings/logging are preserved;0.1.19 is rollback. [Batch receipt](../handoff/integrations/coordinator-20261030-feedback56/receipt.json). Native menu navigation is observed, but campaign loading/reloads, destruction appearance and firing/performance improvement remain unaccepted.
+Offline57 is pushed and private 0.1.21 is installed: shared magazine activation and feed reload control, bounded hitch protection, fewer rig reads and deferred frame-feedback service. Both normal builds pass 341/341; installed setup/assets validation passes, settings/logging are preserved and 0.1.20 is rollback. [Receipt](../handoff/integrations/coordinator-20261030-offline57/receipt.json) and [actual pipeline](../handoff/integrations/coordinator-20261030-offline57/PIPELINE.txt). No game session ran; all-weapon reload completion, bursty fire, measured FPS, aim and destruction acceptance remain open.
 
-Integration55 supplied0.1.19's weapon/ammo/underbarrel wiring and depth-target reuse, now retained in0.1.20. [Integration receipt](../handoff/integrations/coordinator-20261030-integration55/receipt.json). No headset acceptance or measured performance gain is inferred from setup validation.
+Feedback56's anatomical feed contacts, reviewed visual axes, skin-decal/soot correction and host copy poll are retained. [Prior receipt](../handoff/integrations/coordinator-20261030-feedback56/receipt.json). Its native menu observation did not establish campaign reload or headset acceptance.
+
+Integration55 supplied0.1.19's weapon/ammo/underbarrel wiring and depth-target reuse, retained in the current candidate. [Integration receipt](../handoff/integrations/coordinator-20261030-integration55/receipt.json). No headset acceptance or measured performance gain is inferred from setup validation.
 
 Headset52 integrates firearm roster enrollment: 77 names/181 configurations,
 both normal builds pass331/331; private0.1.18 was installed and setup/assets passed.
@@ -18,25 +20,16 @@ reload/ammo, muzzle, empty-hand stow and underbarrel/sight failures remain open.
 [Feedback53](archive/2026-10-30-bc2vr-0.1.18-buglist.md) records shared runtime gaps;
 the weapons job is not complete. C4 was not tested; other earlier bugs remain open.
 Wiring54's shared ammo/feed, measured muzzle/underbarrel connections and depth-target reuse
-are included in installed 0.1.19. [Original source evidence](../handoff/integrations/coordinator-20261030-wiring54/STATUS.txt).
+first shipped in 0.1.19 and remain included. [Original source evidence](../handoff/integrations/coordinator-20261030-wiring54/STATUS.txt).
 
-Private0.1.17 includes the launcher retained-handle image fix;38 identity/43 portable
-checks pass. Its verified package reuses the staged cache, which now passes both
-production CPU consumer tests for all49 parts. [Evidence and package](../handoff/integrations/coordinator-20261029-evidence08/README.md).
+The retained launcher identity and 49-part cache checks are recorded in [Evidence08](../handoff/integrations/coordinator-20261029-evidence08/README.md).
 [User headset feedback on 0.1.17](archive/2026-10-29-bc2vr-0.1.17-buglist.md): C4 progression blocker, severe performance/choppy fire, destruction and cutscene bugs; interactions improved. Acceptance remains open.
-Runtime05's stock black captures and cleanup remain in its
-[diagnostic handoff](../handoff/integrations/coordinator-20261029-runtime05/README.md).
+Runtime05's stock black captures and cleanup remain in its [diagnostic handoff](../handoff/integrations/coordinator-20261029-runtime05/README.md).
 
-Runtime02 adds read-only Windows desktop diagnosis and rejects window operations
-from an unverified input desktop;33window tests and3package checks pass. Stock
-scene02 held foreground during an agreed test but produced black captures; the
-game exited without attachment/gameplay input, and all profiles were restored.
-The [continuation handoff](../handoff/integrations/coordinator-20261028-runtime02/README.md)
-retains those failures. Nambu diagnostic build/binding passed, separate from normal
-interaction acceptance. The user now reports a connected-headset test with visible BC2. Earlier desktop
-black output limits visually guided stock diagnostics; it does not establish VR
-failure or require a desktop fix before a direct headset check. PC access is
-authorized while the user is away; the current test installation is recorded above.
+Runtime02's guarded desktop tools, stock black failure and exact cleanup remain in
+its [handoff](../handoff/integrations/coordinator-20261028-runtime02/README.md).
+BC2 is visible with the headset connected. The desktop failure does not establish
+VR failure or require repair before a headset check; do not repeat unchanged desktop tests.
 
 CHAT07/CHAT23 source is combined with finished CHAT25/26: coherent loaded-count
 changes retain the same chest reserve prop across both eyes; grenade/reload

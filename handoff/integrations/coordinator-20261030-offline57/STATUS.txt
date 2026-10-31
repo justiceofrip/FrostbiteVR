@@ -22,4 +22,6 @@ Prior destruction/visual-axis/underbarrel fixes are retained; no redundant re-en
 Independent reload review: no actionable findings. Completed agents retired.
 Root owns combined builds, source push, private packaging and installation status.
 Final source e9fffc5 passes normal x86/x64 builds, 341/341 each; six binary/symbol pairs frozen.
+Source pushed db5dc0b. Private0.1.21 installed and setup/assets validation passed;
+settings preserved,0.1.20 rollback, no game session. Exact identities are in receipt.json.
 PIPELINE.txt identifies actual source stages and what their checks establish.

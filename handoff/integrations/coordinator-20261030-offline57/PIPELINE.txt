@@ -83,7 +83,8 @@ Native-code emulation confirms the same-Update last-round stock-reload leak and
 scoped Step fix. It uses explicit allocator/listener substitutes, not a live game.
 Native timer emulation groups 2/3 shots after 160/240 ms hitches even with held Fire.
 That is a mechanism, not the established user-session cause; bursty feel is open.
-Private 0.1.20 remains installed at this source checkpoint; installation is separate.
+Private 0.1.21 is installed; setup/assets validation passed, with 0.1.20 as rollback.
+Source is pushed. receipt.json records the exact runtime and installation evidence.
 User-confirmed progress: multiweapon two-hand grips, reliable swaps, LMG counter.
 No weapon is counted as working merely because its profile or unit check exists.
 
