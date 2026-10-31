@@ -2634,7 +2634,7 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     // BodyObservation admission used by ReadBodyWeaponFrame: immutable atomic
     // publications plus bounded ReadProcessMemory equipment bookends. It never
     // calls an actor resolver/native method or accesses poseMutex scratch.
-    constexpr std::size_t snapshotLimit=16384;
+    constexpr std::size_t snapshotLimit=LiveMechanismSnapshotLimit;
     auto observed=ReloadNanos();std::string feedDiagnostics;
     // Explicit snapshot request opts in subsequent serialized Gameplay copies.
     // No source deadline is changed; an initial request may report pending.

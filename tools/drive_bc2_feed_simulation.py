@@ -423,7 +423,7 @@ class Driver:
             require(re.fullmatch(rb"[1-9][0-9]{0,19}\r?\n?", raw) is not None, "unexpected snapshot request writer")
             existing = int(raw)
         if self.snapshot_path.exists():
-            previous, _ = read_json(self.snapshot_path, 16384)
+            previous, _ = read_json(self.snapshot_path, planner.SNAPSHOT_LIMIT)
             existing = max(existing, integer(previous["nonce"]))
         nonce = max(time.time_ns(), existing + 1)
         require(0 < nonce < 2**64, "snapshot nonce overflow")
@@ -441,7 +441,7 @@ class Driver:
         require(now - self.last_request <= SNAPSHOT_TIMEOUT, "snapshot publication exceeded bounded cadence")
         if not self.snapshot_path.exists():
             return None
-        snapshot, raw = read_json(self.snapshot_path, 16384)
+        snapshot, raw = read_json(self.snapshot_path, planner.SNAPSHOT_LIMIT)
         nonce = integer(snapshot["nonce"])
         require(nonce <= self.pending_nonce, "snapshot response belongs to a later competing request")
         if nonce != self.pending_nonce:

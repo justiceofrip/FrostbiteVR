@@ -292,6 +292,9 @@ void ReportLiveCounters(std::ostream&);
 // this diagnostic clock is never an input, native, contact or claim lease.
 bool ShellPumpObservationRequested(std::int64_t nowNs)noexcept;
 bool WeaponModeObservationRequested(std::int64_t nowNs)noexcept;
+// A populated pump snapshot retains both shell and cycle receipts. Keep a
+// bounded margin for exact profile paths and native identity widths.
+inline constexpr std::size_t LiveMechanismSnapshotLimit=32768;
 void WriteLiveMechanismSnapshot(std::ostream&,std::uint64_t nonce);
 void Report(std::ostream&);
 }

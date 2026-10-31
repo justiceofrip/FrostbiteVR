@@ -290,7 +290,7 @@ def main(argv=None):
         require(args.output.suffix.lower() == ".json" and args.output.name.lower() not in
                 {"command.json", "state.json", "mechanism-snapshot.json"}, "output must be a separate offline JSON artifact")
         require(args.output.resolve() != args.snapshot.resolve(), "output cannot replace source evidence")
-        snapshot, source_hash = frame.load_json(args.snapshot, 16384)
+        snapshot, source_hash = frame.load_json(args.snapshot, frame.SNAPSHOT_LIMIT)
         now = args.now_ns if args.now_ns is not None else time.perf_counter_ns()
         result = plan(snapshot, now, args.nonce, args.step_ms*1_000_000, args.target)
         result["evaluationClock"] = "explicit historical QPC nanoseconds" if args.now_ns is not None else "local QPC perf_counter_ns"

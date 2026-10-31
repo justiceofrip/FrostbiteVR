@@ -559,7 +559,7 @@ def main(argv=None):
                 {"state.json", "command.json", "mechanism-snapshot.json"}, "output must be a separate offline JSON artifact")
         require(args.output.resolve() not in {args.snapshot.resolve(), args.pickup_plan.resolve() if args.pickup_plan else None},
                 "output cannot replace input evidence")
-        snapshot, digest = frame.load_json(args.snapshot, 16384)
+        snapshot, digest = frame.load_json(args.snapshot, frame.SNAPSHOT_LIMIT)
         pickup = frame.load_json(args.pickup_plan, 4*1024*1024)[0] if args.pickup_plan else None
         result = plan(snapshot, args.stage, time.perf_counter_ns() if args.now_ns is None else args.now_ns,
                       args.nonce, args.step_ms*1_000_000, pickup_plan=pickup)

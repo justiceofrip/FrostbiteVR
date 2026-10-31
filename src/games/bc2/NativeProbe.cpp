@@ -3970,7 +3970,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             mechanismSnapshotNonce=nonce; // At most one observation per accepted nonce.
             std::ostringstream snapshot;
             fvr::bc2::rigPublication::WriteLiveMechanismSnapshot(snapshot,nonce);
-            const auto payload=snapshot.str();if(payload.empty()||payload.size()>16384)return;
+            const auto payload=snapshot.str();if(payload.empty()||payload.size()>fvr::bc2::rigPublication::LiveMechanismSnapshotLimit)return;
             const auto temporary=directory/L"mechanism-snapshot.pending",final=directory/L"mechanism-snapshot.json";
             // CREATE_NEW cannot follow or truncate a pre-existing link. A stale
             // pending file is an explicit output failure, never an unsafe target.
