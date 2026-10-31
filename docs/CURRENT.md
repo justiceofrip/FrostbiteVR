@@ -5,7 +5,7 @@ Updated October 31, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
-Feedback64 is pushed and private 0.1.28 is installed: feed hand targets follow the constrained anatomical contact and current weapon placement; carried-object pickup offsets and independently timed supply claims are retained. Both normal builds pass341/341. Setup/assets validation passes; settings preserved,0.1.27 rollback. The actual XR host runs under local xr-sim with controller/focus/invalid-hand checks and stereo capture; tape retains one startup zero-layer assertion failure. Actual-game reload/headset acceptance remains open. [Receipt](../handoff/integrations/coordinator-20261031-feedback64/receipt.json).
+Feedback65 source is pushed and private0.1.29 is installed, with0.1.28 rollback and settings preserved. Both normal builds pass341/341; setup/assets validation passes. Opt-in live weapon/claim snapshots and the shared24-configuration motion driver support headset-free native testing. Offline five-stage/pickup checks pass; actual-game reload/headset acceptance remains open. Feedback64's hand-target fixes are retained, and its actual BC2 VR menu accepted a simulated click and closed with profiles restored. [Receipt](../handoff/integrations/coordinator-20261031-feedback65/receipt.json).
 
 The user's 0.1.27 session showed slight LMG cover motion, no magnetic hand and no completed reload. [Feedback](archive/2026-10-31-bc2vr-0.1.27-buglist.md). Retained acquisition failed OffPath with timing gates passing; its exact geometric predicate is unknown. A separate worker0xc0000005 has no stack/final report. Ghidra remains available; live simulation observation and complete shared motion driving are the next batch.
 

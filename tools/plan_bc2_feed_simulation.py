@@ -289,7 +289,12 @@ def admit(profiles, snapshot, now, nonce):
     require(integer(snapshot["nonce"]) == nonce and nonce > 0, "snapshot request nonce mismatch")
     require(0 < integer(snapshot["observed_ns"]) <= now < integer(snapshot["valid_until_ns"]),
             "stale snapshot or evaluation time precedes snapshot")
-    require(snapshot["weapon_actions_blocked"] is False, "snapshot has weapon actions blocked")
+    # The normal feed reload deliberately blocks Fire while its cover/container
+    # is open. BodyObservation supplies geometry through that block; it does not
+    # authorize firing or bypass the native operation's own preflight.
+    feed_block = snapshot.get("feed") is not None and snapshot["feed"].get("blocksFire") is True
+    require(snapshot["weapon_actions_blocked"] is False or feed_block,
+            "weapon actions blocked without a retained feed reload")
     owner, eq, rig = snapshot["owner"], snapshot["equipment"], snapshot["rig"]
     require(all(integer(owner[k]) > 0 for k in ("player", "soldier", "weak", "weapon", "actorGeneration", "equipGeneration", "space")),
             "missing native owner lifetime")

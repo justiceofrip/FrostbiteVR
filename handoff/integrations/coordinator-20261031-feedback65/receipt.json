@@ -1,0 +1,26 @@
+{
+  "batch": "coordinator-20261031-feedback65",
+  "source_pushed": true,
+  "installed_version": "0.1.29",
+  "driver": "exact-host startup/command acknowledgement; bounded readable captures; opt-in native snapshot and claim/counter observation",
+  "continuing": "Actual-game complete LMG sequence; other mechanisms/destruction; narrow performance timestamp seam task active",
+  "leases_retained_for_continuation": true,
+  "focused_suites": 5,
+  "settings_preserved": true,
+  "tools_followup": "Driver embeddedPython import, common-world-motion stability and retained feed Fire-block admission fixed; no native artifact change",
+  "source_sha256": "13ae04573941dc65ccfcde31ab2153a036e87a60b3b12df6c6addad0f3980405",
+  "completed_agents_retired": true,
+  "evidence": "reports/coordinator-20261031-feedback65 and worktree same folder",
+  "actual_game_precedent": "feedback64/xr-game01 menu displayed, simulated Singleplayer click accepted, native drained/game closed/profiles restored",
+  "normal_checks": {
+    "x64": 341,
+    "x86": 341
+  },
+  "rollback_version": "0.1.28",
+  "native_reload_accepted": false,
+  "planner": "all24/five stages plus chest and alternate pickup synthetic fixtures pass; original leases and native gates retained",
+  "headset_accepted": false,
+  "built_source_commit": "8c03debafc2550ef2086b3b08cf5d17f35a57c96",
+  "runtime_receipt": "reports/coordinator-20261031-feedback65/normal-runtime/build-receipt.json",
+  "setup_assets_passed": true
+}

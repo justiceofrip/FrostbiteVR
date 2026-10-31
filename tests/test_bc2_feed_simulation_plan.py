@@ -84,7 +84,7 @@ def synthetic_snapshot(row, stage="OpenCover", now=NOW, sequence=100):
                 supply=dict(resource=dict(id=22, generation=23), container=dict(id=14, generation=23)),
                 operation={"OpenCover": 0, "DetachContainer": 2, "SupplyPickup": 4,
                            "AttachContainer": 5, "SeatFeed": 5, "CloseCover": 6}[stage],
-                targetKind=0, chainCount=g["chainCount"], input=copy.deepcopy(evidence),
+                targetKind=0, blocksFire=stage != "OpenCover", chainCount=g["chainCount"], input=copy.deepcopy(evidence),
                 mechanismInput=None, mechanismWristWorldMeters=None, mechanismClaim=None, supplyObject=None,
                 coverRadians=angle, weaponFromCoverHinge=p.multiply(p.along(p.identity(), angle), g["weaponFromHinge"]),
                 weaponFromPouch=geom["weaponFromPouch"], weaponFromChain=chain,
@@ -107,7 +107,7 @@ def synthetic_snapshot(row, stage="OpenCover", now=NOW, sequence=100):
     local[3][0] += .006
     snapshot = dict(schema="fvr.bc2.live-mechanism-snapshot.v1", valid=True, nonce=sequence,
                     observed_ns=now-1_000_000, valid_until_ns=now+60_000_000,
-                    native_deadline_ns=now+65_000_000, weapon_actions_blocked=False,
+                    native_deadline_ns=now+65_000_000, weapon_actions_blocked=stage != "OpenCover",
                     physical_equipment_generation=physical, shot_input_generation=sequence,
                     owner=owner, equipment=dict(weapon=14, data=22, asset=row["asset"]),
                     rig=dict(soldier=12, weak=13, count=128, skeleton=24, pose=25, fingerprint=row["rigFingerprint"]),
@@ -269,6 +269,7 @@ class FeedSimulationPlanTests(unittest.TestCase):
         row = self.profiles["profiles"][0]
         base = synthetic_snapshot(row)
         faults = [lambda s: s.update(valid_until_ns=NOW), lambda s: s.update(native_deadline_ns=NOW),
+                  lambda s: s.update(weapon_actions_blocked=True),
                   lambda s: s.update(nonce=999), lambda s: s["owner"].update(weapon=999),
                   lambda s: s["selected"].update(matchedMeshPath="wrong"),
                   lambda s: s["rig"].update(fingerprint=999), lambda s: s["input"].update(generation=999),

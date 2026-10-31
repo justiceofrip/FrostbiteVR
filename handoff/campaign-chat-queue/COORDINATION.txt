@@ -11,6 +11,11 @@ Ownership: prior CHAT25/26 close.json confirms lease release, idle helpers and
 exact profile restoration. Coordinator acquired the lease before shared mutations.
 External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned.
 
+Feedback65: built/pushed8c03deb; native13ae0457, private0.1.29 installed,0.1.28 rollback.
+Both normal341/341 and affected5/5 pass; setup/assets/settings verified.
+On-demand geometry/claim snapshot,24-profile planner and actual-game simulator driver; reload completion remains open.
+Receipt: handoff/integrations/coordinator-20261031-feedback65/receipt.json. Root continues native simulation under retained leases.
+
 Feedback64: source77e29e0 pushed; native e0f5fd51, private0.1.28 installed.
 Both normal builds341/341; hand-target/current-placement and supply-claim checks pass.
 Settings/assets preserved;0.1.27 rollback. Actual XR host simulation works; native gameplay reload unaccepted.
