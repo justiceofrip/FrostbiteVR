@@ -21,8 +21,8 @@ def supported_handover(doc,group):
         if not weapons or row["weapon"]!=weapons[-1]:weapons.append(row["weapon"])
     if len(weapons)!=2 or weapons[0]==weapons[1]:return False
     raw=rig.get("weapon_profile_samples",[])
-    supported={"XM8_sp_s":("Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8_Scoped",1),
-               "40mmgl":("Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM320_Scoped",3)}
+    supported={"XM8_sp_s":"Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8_Scoped",
+               "40mmgl":"Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM320_Scoped"}
     observations=[]
     for weapon in weapons:
         samples=[x for x in raw if (x.get("weapon"),x.get("owner_generation"),x.get("space"))==(weapon,first["owner"],first["space"])]
@@ -55,19 +55,21 @@ def supported_handover(doc,group):
         if not configs:return False
         config_values=set()
         for config in configs:
-            owner=config.get("owner",{});expected_path,slot=supported[value[0]]
-            if not config.get("configuration_path_verified") or config.get("configuration_path")!=expected_path or config.get("weapon_name")!=value[0] or config.get("selected_slot")!=slot or config.get("weapon_data")!=value[4] or owner.get("soldier")!=value[2] or owner.get("weak")!=value[3] or not config.get("inventory"):return False
-            config_values.add(config["inventory"])
+            owner=config.get("owner",{});expected_path=supported[value[0]];slot=config.get("selected_slot")
+            if not config.get("configuration_path_verified") or config.get("configuration_path")!=expected_path or config.get("weapon_name")!=value[0] or type(slot) is not int or not 0<=slot<9 or config.get("weapon_data")!=value[4] or owner.get("soldier")!=value[2] or owner.get("weak")!=value[3] or not config.get("inventory"):return False
+            config_values.add((config["inventory"],slot))
         if len(config_values)!=1:return False
         observations.append((value,config_values.pop()))
     old,new=observations
-    if {old[0][0],new[0][0]}!={"XM8_sp_s","40mmgl"} or old[1]!=new[1] or old[0][1:4]!=new[0][1:4]:return False
-    expected_action=33 if old[0][0]=="XM8_sp_s" else 36
-    expected_start=0 if expected_action==33 else 1
+    if {old[0][0],new[0][0]}!={"XM8_sp_s","40mmgl"} or old[1][0]!=new[1][0] or old[1][1]==new[1][1] or old[0][1:4]!=new[0][1:4]:return False
+    expected_start=0 if old[0][0]=="XM8_sp_s" else 1
     if gesture.get("start_mode")!=expected_start:return False
     records=[x for x in gameplay.get("weapon_mode_records",[]) if x.get("gesture")==gesture["request"]]
     if len(records)!=1:return False
     record=records[0]
+    primary_action=record.get("primary_action",36)
+    if type(primary_action) is not int or primary_action not in (25,36):return False
+    expected_action=33 if expected_start==0 else primary_action
     if (record.get("from"),record.get("target"),record.get("action"),record.get("actor"),record.get("weak"),record.get("owner"),record.get("space"))!=(weapons[0],weapons[1],expected_action,old[0][2],old[0][3],first["owner"],first["space"]):return False
     return record.get("cancelled") is False and record.get("ack_ms",0)>=record.get("ms",0)>0
 

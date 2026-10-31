@@ -217,13 +217,22 @@ int main(){
     a.pressed=0;a.held=interaction::NextWeapon;
     {bc2::InputOverride s;CHECK(s.Apply(bytes,a));CHECK(get(0x24)==0);CHECK(s.Restore());}
     // Dedicated mode commands touch only their verified selection bit. Other
-    // high-word commands and subsequent native changes survive exact rollback.
+    // cache words and subsequent native changes survive exact rollback.
     a.held=a.pressed=0;
     for(auto mode:{bc2::EntryAction::GrenadeLauncher,bc2::EntryAction::DynamicGadget2}){
         bc2::InputOverride s;CHECK(s.Apply(bytes,a,{},{},mode));
         CHECK(get(0x9c)==(0x80000000u|(1u<<(unsigned(mode)-32))));
         CHECK(s.Restore());CHECK(bytes==original);
     }
+    // EiaSelectEntry7 is Boolean action 25, distinct from scalar cycle action 7.
+    {bc2::InputOverride s;CHECK(s.Apply(bytes,a,{},{},bc2::EntryAction::SelectEntry7));
+     CHECK(get(0x98)==((1u<<28)|(1u<<25))&&get(0x9c)==0x80000000u&&get(0x24)==0);
+     CHECK(s.Restore());CHECK(bytes==original);}
+    {bc2::InputOverride s;CHECK(s.Apply(bytes,a,{},{},bc2::EntryAction::SelectEntry7));
+     put(0x98,(get(0x98)&~(1u<<25))|(1u<<24));CHECK(!s.Restore());
+     CHECK(get(0x98)==((1u<<28)|(1u<<24))&&get(0x9c)==0x80000000u);}
+    bytes=original;
+    {bc2::InputOverride s;CHECK(!s.Apply(bytes,a,{},{},bc2::EntryAction::SwitchPrimaryWeapon));CHECK(bytes==original);}
     {bc2::InputOverride s;CHECK(!s.Apply(bytes,a,{},{},bc2::EntryAction::ThrowGrenade));CHECK(bytes==original);}
     {bc2::InputOverride s;CHECK(s.Apply(bytes,a,{},{},bc2::EntryAction::GrenadeLauncher));
      put(0x9c,0x80000004u);CHECK(!s.Restore());CHECK(get(0x9c)==0x80000004u);}

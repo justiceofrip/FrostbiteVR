@@ -63,6 +63,10 @@ def selection_state(before, after, expected):
     old_family = before["sight"]["family"]
     family = after.get("sight", {}).get("family")
     require(isinstance(family, dict), "live selected sight family disappeared")
+    primary_action = integer(family.get("primaryAction", 0))
+    require(primary_action in (25, 36)
+            and primary_action == integer(old_family.get("primaryAction", 0))
+            and primary_action == integer(expected.get("primaryAction", 0)), "native sight primary route changed or missing")
     for key in ("physicalItem", "inventory", "persistentId", "primaryAsset", "primaryConfiguration",
                 "secondaryAsset", "secondaryConfiguration"):
         require(family[key] == old_family[key], "native sight family changed: " + key)
@@ -95,7 +99,7 @@ def selection_state(before, after, expected):
     # After selection, the live family describes the inverse native target.
     require(integer(family["targetWeapon"]) == integer(expected["sourceWeapon"])
             and integer(family["targetSlot"]) == integer(before["selected"]["selectedSlot"])
-            and integer(family["targetAction"]) == (36 if mode == "secondary" else 33),
+            and integer(family["targetAction"]) == (primary_action if mode == "secondary" else 33),
             "native selected family inverse target does not match original source")
     return "target"
 

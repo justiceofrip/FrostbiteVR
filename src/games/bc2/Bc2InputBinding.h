@@ -10,7 +10,7 @@ namespace fvr::bc2 {
 // EntryInputActionEnum, NOT the device Concept enum. Verified by native
 // metadata, float/bit setters and the local player gather/consume path.
 enum class EntryAction : unsigned {Throttle=0,Strafe=1,Yaw=4,Pitch=5,SwitchPrimaryWeapon=7,Fire=8,
-    Zoom=14,Jump=15,ChangeVehicle=16,ChangePose=26,Interact=27,Reload=29,Sprint=31,Menu=32,GrenadeLauncher=33,DynamicGadget2=36,MeleeAttack=37,ThrowGrenade=38};
+    Zoom=14,Jump=15,ChangeVehicle=16,SelectEntry7=25,ChangePose=26,Interact=27,Reload=29,Sprint=31,Menu=32,GrenadeLauncher=33,DynamicGadget2=36,MeleeAttack=37,ThrowGrenade=38};
 inline constexpr std::size_t InputBytes=0xa0;
 // Classify only an already-validated, current selected-item observation.
 // This supplies input semantics, never attack/custody/damage authority.

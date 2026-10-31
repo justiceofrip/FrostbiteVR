@@ -28,16 +28,17 @@ struct Reader {
     }
 };
 struct Item {std::uint32_t weapon=0,data=0,slot=0,persistent=0;};
-bool FirstTarget(const Reader& r,std::uint32_t begin,std::uint32_t end,
+enum class RouteResult { Missing, Empty, Different, Resolved, Invalid };
+RouteResult FirstTarget(const Reader& r,std::uint32_t begin,std::uint32_t end,
     std::uint32_t from,std::uint32_t action,std::span<const std::uint32_t> items,std::uint32_t wanted,
     WeaponModeRouteObservation* observation){
     if(observation){*observation={};observation->from=from;observation->action=action;observation->wanted=wanted;}
-    const auto fail=[&](const char* status){if(observation)observation->status=status;return false;};
+    const auto fail=[&](const char* status,RouteResult result=RouteResult::Invalid){if(observation)observation->status=status;return result;};
     const auto row=[&](std::uint64_t at,unsigned state,unsigned input){if(observation){
         observation->row=std::uint32_t(at);observation->state=state;observation->input=input;
         observation->first=observation->last=observation->targetsRead=observation->firstOccupiedWeapon=0;
         observation->firstOccupiedSlot=UINT32_MAX;observation->targets={};}};
-    unsigned matching=0;bool correct=false;
+    unsigned matching=0;bool correct=false,occupied=false;
     for(std::uint64_t at=begin;at<end;at+=24){
         std::uint32_t state=0,input=0;
         if(!r.U32(at+20,state)||!r.U32(at+16,input)){row(at,state,input);return fail("route_tags_read_failed");}
@@ -58,10 +59,10 @@ bool FirstTarget(const Reader& r,std::uint32_t begin,std::uint32_t end,
             if(!resolved&&items[slot]){correct=slot==wanted;resolved=true;
                 if(observation){observation->firstOccupiedSlot=slot;observation->firstOccupiedWeapon=items[slot];}}
         }
-        if(!resolved)return fail("no_occupied_target");
+        occupied=resolved;
     }
-    if(observation)observation->status=matching!=1?"no_matching_route":correct?"resolved":"first_target_mismatch";
-    return matching==1&&correct;
+    if(observation)observation->status=matching!=1?"no_matching_route":!occupied?"no_occupied_target":correct?"resolved":"first_target_mismatch";
+    return matching!=1?RouteResult::Missing:!occupied?RouteResult::Empty:correct?RouteResult::Resolved:RouteResult::Different;
 }
 std::uint32_t U32(std::span<const std::byte> b,std::size_t at){
     std::uint32_t value=0;std::memcpy(&value,b.data()+at,4);return value;
@@ -94,7 +95,7 @@ std::optional<WeaponModeCommand> ObserveWeaponModeFamily(const WeaponModeMemory&
     const auto fail=[&](const char* status)->std::optional<WeaponModeCommand>{if(observation)observation->status=status;return {};};
     if(profile.primaryAsset.empty()||profile.secondaryAsset.empty()||profile.primaryAsset==profile.secondaryAsset||
        profile.primaryConfiguration.empty()||profile.secondaryConfiguration.empty()||profile.primaryConfiguration==profile.secondaryConfiguration||
-       profile.secondaryAction!=33||profile.primaryAction!=36)return fail("invalid_profile");
+       profile.secondaryAction!=33)return fail("invalid_profile");
     Reader r{memory};if(!r.Type(soldier,"ClientSoldierEntity")||!currentWeapon)return fail("owner_type_or_weapon");
     unsigned char flags=0;std::uint32_t inventory=0,begin=0,end=0,current=0,data=0;
     if(!r.Read(std::uint64_t(soldier)+0x114,&flags,1))return fail("owner_flags_read");
@@ -148,8 +149,24 @@ std::optional<WeaponModeCommand> ObserveWeaponModeFamily(const WeaponModeMemory&
     if(mapEnd<=mapBegin||mapEnd-mapBegin>128*24||(mapEnd-mapBegin)%24)return fail("invalid_map_bounds");
     // Require both directions to resolve to this same physical item family.
     // Reject an earlier occupied foreign target rather than guessing eligibility.
-    if(!FirstTarget(r,mapBegin,mapEnd,rifle->slot,profile.secondaryAction,items,launcher->slot,observation?&observation->routes[0]:nullptr))return fail("secondary_route");
-    if(!FirstTarget(r,mapBegin,mapEnd,launcher->slot,profile.primaryAction,items,rifle->slot,observation?&observation->routes[1]:nullptr))return fail("primary_route");
+    if(FirstTarget(r,mapBegin,mapEnd,rifle->slot,profile.secondaryAction,items,launcher->slot,observation?&observation->routes[0]:nullptr)!=RouteResult::Resolved)return fail("secondary_route");
+    // The two direct primary selectors are native map actions, not properties
+    // of a gun asset. In campaign inventories 36 commonly returns to slot 1,
+    // while 25 returns to slot 0. Admit only one exact first-occupied route;
+    // never use the cycling action or skip a foreign occupied target.
+    std::uint32_t primaryAction=0;
+    constexpr std::array primaryActions{36u,25u};
+    for(unsigned i=0;i<primaryActions.size();++i){
+        auto* route=observation?&observation->primaryRoutes[i]:nullptr;
+        const auto result=FirstTarget(r,mapBegin,mapEnd,launcher->slot,primaryActions[i],items,rifle->slot,route);
+        if(observation&&!primaryAction&&(i==0||result!=RouteResult::Missing))observation->routes[1]=*route;
+        if(result==RouteResult::Invalid){if(observation)observation->routes[1]=*route;return fail("primary_route");}
+        if(result!=RouteResult::Resolved)continue;
+        if(primaryAction){if(observation)observation->routes[1].status="ambiguous_primary_routes";return fail("primary_route");}
+        primaryAction=primaryActions[i];
+        if(observation)observation->routes[1]=*route;
+    }
+    if(!primaryAction)return fail("primary_route");
     std::uint32_t again=0;
     const auto unchanged=[&](std::uint64_t at,unsigned expected){const bool read=r.U32(at,again);
         if(observation){observation->bookendAddress=at;observation->bookendExpected=expected;observation->bookendObserved=again;observation->bookendRead=read;}
@@ -161,7 +178,7 @@ std::optional<WeaponModeCommand> ObserveWeaponModeFamily(const WeaponModeMemory&
     if(!r.Read(begin,after.data(),after.size()*4)||after!=items)return fail("items_changed");
     const bool toLauncher=currentWeapon==rifle->weapon;const auto& target=toLauncher?*launcher:*rifle;
     if(observation)observation->status="resolved";
-    return WeaponModeCommand{toLauncher?profile.secondaryAction:profile.primaryAction,target.weapon,target.slot,inventory,rifle->persistent,&profile,!toLauncher};
+    return WeaponModeCommand{toLauncher?profile.secondaryAction:primaryAction,target.weapon,target.slot,inventory,rifle->persistent,&profile,!toLauncher,primaryAction};
 }
 std::optional<WeaponModeCommand> ResolveWeaponMode(const WeaponModeMemory& memory,std::uint32_t soldier,std::uint32_t currentWeapon,WeaponModeResolution* observation){
     if(observation){*observation={};observation->soldier=soldier;observation->weapon=currentWeapon;observation->status="selected_data_read_or_type";}
@@ -197,6 +214,12 @@ void WriteWeaponModeResolution(std::ostream& out,const WeaponModeResolution& obs
     const auto item=[&](const WeaponModeItemObservation& value){out<<"{\"slot\":"<<value.slot<<",\"weapon\":"<<value.weapon
         <<",\"data\":"<<value.data<<",\"persistence\":"<<value.persistent<<",\"asset\":";text(value.asset);
         out<<",\"configuration\":";text(value.configuration);out<<'}';};
+    const auto route=[&](const WeaponModeRouteObservation& value){out<<"{\"status\":";text(value.status);
+        out<<",\"from\":"<<value.from<<",\"action\":"<<value.action<<",\"wanted\":"<<value.wanted<<",\"row\":"<<value.row
+            <<",\"state\":"<<value.state<<",\"input\":"<<value.input<<",\"first\":"<<value.first<<",\"last\":"<<value.last
+            <<",\"matching\":"<<value.matching<<",\"firstOccupiedSlot\":"<<value.firstOccupiedSlot
+            <<",\"firstOccupiedWeapon\":"<<value.firstOccupiedWeapon<<",\"targets\":[";
+        for(unsigned k=0;k<std::min<unsigned>(value.targetsRead,unsigned(value.targets.size()));++k){if(k)out<<',';out<<value.targets[k];}out<<"]}";};
     out<<"{\"status\":";text(observation.status);out<<",\"soldier\":"<<observation.soldier<<",\"weapon\":"<<observation.weapon
         <<",\"data\":"<<observation.data<<",\"asset\":";text(observation.asset);out<<",\"configuration\":";text(observation.configuration);
     out<<",\"candidatesDropped\":"<<observation.candidatesDropped<<",\"candidates\":[";
@@ -214,12 +237,9 @@ void WriteWeaponModeResolution(std::ostream& out,const WeaponModeResolution& obs
         out<<",\"typedItemsMask\":"<<c.typedItems<<",\"namedItemsMask\":"<<c.namedItems<<",\"primary\":";item(c.primary);
         out<<",\"secondary\":";item(c.secondary);out<<",\"lastItem\":";item(c.lastItem);
         out<<",\"persistenceId\":";text(c.persistentId);out<<",\"mapBegin\":"<<c.mapBegin<<",\"mapEnd\":"<<c.mapEnd<<",\"routes\":[";
-        for(unsigned j=0;j<c.routes.size();++j){if(j)out<<',';const auto& route=c.routes[j];out<<"{\"status\":";text(route.status);
-            out<<",\"from\":"<<route.from<<",\"action\":"<<route.action<<",\"wanted\":"<<route.wanted<<",\"row\":"<<route.row
-                <<",\"state\":"<<route.state<<",\"input\":"<<route.input<<",\"first\":"<<route.first<<",\"last\":"<<route.last
-                <<",\"matching\":"<<route.matching<<",\"firstOccupiedSlot\":"<<route.firstOccupiedSlot
-                <<",\"firstOccupiedWeapon\":"<<route.firstOccupiedWeapon<<",\"targets\":[";
-            for(unsigned k=0;k<std::min<unsigned>(route.targetsRead,unsigned(route.targets.size()));++k){if(k)out<<',';out<<route.targets[k];}out<<"]}";}
+        for(unsigned j=0;j<c.routes.size();++j){if(j)out<<',';route(c.routes[j]);}
+        out<<"],\"primaryRoutes\":[";
+        for(unsigned j=0;j<c.primaryRoutes.size()&&c.primaryRoutes[j].action;++j){if(j)out<<',';route(c.primaryRoutes[j]);}
         out<<"],\"lastBookend\":{\"address\":"<<c.bookendAddress<<",\"read\":"<<(c.bookendRead?"true":"false")
             <<",\"expected\":"<<c.bookendExpected<<",\"observed\":"<<c.bookendObserved<<"}}";
     }
@@ -229,7 +249,7 @@ std::optional<WeaponModeCandidates> DiscoverWeaponMode(std::span<const std::byte
     const auto input=DiscoverInputBinding(b,pe);if(!input)return {};
     const auto nt=U32(b,0x3c),base=U32(b,std::size_t(nt)+24+28);
     const auto table=Offset(b,pe,input->entryActions,50*24);if(!table)return {};
-    for(const auto pair:{std::pair{33u,"EiaGrenadeLauncher"},std::pair{36u,"EiaDynamicGadget2"}}){
+    for(const auto pair:{std::pair{25u,"EiaSelectEntry7"},std::pair{33u,"EiaGrenadeLauncher"},std::pair{36u,"EiaDynamicGadget2"}}){
         const auto at=*table+pair.first*24;const auto name=U32(b,at);const auto size=std::strlen(pair.second)+1;
         if(name<base||U32(b,at+16)!=pair.first)return {};
         const auto text=Offset(b,pe,name-base,size);if(!text||std::memcmp(b.data()+*text,pair.second,size))return {};

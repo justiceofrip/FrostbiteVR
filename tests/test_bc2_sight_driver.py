@@ -34,7 +34,7 @@ def fixture(now, nonce=1):
     for hand in snapshot["input"]["hands"]:
         hand["trigger"] = 0.
     snapshot["sight"] = dict(status="available", family=dict(observedMs=100, physicalItem=20,
-        selectedSecondary=False, inventory=14, targetWeapon=40, targetSlot=2, targetAction=33,
+        selectedSecondary=False, inventory=14, targetWeapon=40, targetSlot=2, targetAction=33, primaryAction=36,
         primaryAsset="test1", primaryConfiguration="config1", secondaryAsset="test2",
         secondaryConfiguration="config2", persistentId="synthetic-physical-item"))
     return profiles, snapshot
@@ -52,7 +52,8 @@ def transition(snapshot):
                               selectedSlot=2, soleConfiguredArray=150, matchedMeshPath="mesh2",
                               meshes=[dict(path="mesh2")])
     after["sight"].update(status="geometry_unavailable", contact=None)
-    after["sight"]["family"].update(selectedSecondary=True, targetWeapon=4, targetSlot=1, targetAction=36)
+    after["sight"]["family"].update(selectedSecondary=True, targetWeapon=4,
+        targetSlot=snapshot["selected"]["selectedSlot"], targetAction=snapshot["sight"]["family"]["primaryAction"])
     return after
 
 
@@ -62,7 +63,7 @@ def harness(testcase, ack_ms=5):
     v.__class__ = s.SightDriver
     v.args = SimpleNamespace(target="secondary", step_ms=20)
     v.sight_plan = dict(expectedTransition=dict(sourceMode="primary", targetMode="secondary",
-        sourceWeapon=4, targetWeapon=40, targetSlot=2, targetAction=33, asset="test2",
+        sourceWeapon=4, targetWeapon=40, targetSlot=2, targetAction=33, primaryAction=36, asset="test2",
         configurationPath="config2", inventory=14, physicalItem=20, persistentId="synthetic-physical-item"))
     v.transition_observation, v.release_authorized = None, False
     return h
@@ -121,13 +122,43 @@ class SightDriverTests(unittest.TestCase):
         primary = copy.deepcopy(h.driver.reference)
         secondary = transition(primary)
         expected = dict(sourceMode="secondary", targetMode="primary", sourceWeapon=40,
-                        targetWeapon=4, targetSlot=1, targetAction=36, asset="test1",
+                        targetWeapon=4, targetSlot=1, targetAction=36, primaryAction=36, asset="test1",
                         configurationPath="config1", inventory=14, physicalItem=20,
                         persistentId="synthetic-physical-item")
         self.assertEqual(s.selection_state(secondary, primary, expected), "target")
         primary["sight"]["family"]["targetAction"] = 36
         with self.assertRaisesRegex(s.REFUSAL, "inverse target"):
             s.selection_state(secondary, primary, expected)
+
+    def test_slot_zero_route_roundtrip_and_changed_route_refusals(self):
+        h = harness(self)
+        primary = copy.deepcopy(h.driver.reference)
+        primary["selected"]["selectedSlot"] = 0
+        primary["sight"]["family"]["primaryAction"] = 25
+        expected = dict(h.driver.sight_plan["expectedTransition"], primaryAction=25)
+        secondary = transition(primary)
+        self.assertEqual(s.selection_state(primary, secondary, expected), "target")
+        reverse = dict(expected, sourceMode="secondary", targetMode="primary", sourceWeapon=40,
+                       targetWeapon=4, targetSlot=0, targetAction=25, asset="test1", configurationPath="config1")
+        self.assertEqual(s.selection_state(secondary, primary, reverse), "target")
+        for value in (None, 7, 33, 36, 38):
+            changed = copy.deepcopy(secondary)
+            if value is None:
+                del changed["sight"]["family"]["primaryAction"]
+            else:
+                changed["sight"]["family"]["primaryAction"] = value
+            with self.subTest(value=value), self.assertRaisesRegex(s.REFUSAL, "primary route"):
+                s.selection_state(primary, changed, expected)
+        for source in (primary, expected):
+            changed = copy.deepcopy(source)
+            if source is primary:
+                del changed["sight"]["family"]["primaryAction"]
+                args = (changed, secondary, expected)
+            else:
+                del changed["primaryAction"]
+                args = (primary, secondary, changed)
+            with self.assertRaisesRegex(s.REFUSAL, "primary route"):
+                s.selection_state(*args)
 
     def test_expired_target_is_retained_but_does_not_authorize_release(self):
         h = harness(self)

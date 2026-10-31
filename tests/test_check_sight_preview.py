@@ -97,6 +97,28 @@ class SightPreviewCheckerTests(unittest.TestCase):
         self.assertTrue(result["passed"], result["failures"])
         self.assertLess(result["max_angle_error_rad"], 1e-8)
 
+    def test_slot_zero_handover_requires_recorded_primary_route(self):
+        doc = fixture()
+        configs = doc["gameplay"]["selected_meshes_observer"]["configuration_identity_samples"]
+        configs[0]["selected_slot"], configs[1]["selected_slot"] = 0, 2
+        modes = doc["gameplay"]["weapon_mode_records"]
+        for mode in modes:
+            mode["primary_action"] = 25
+        modes[1]["action"] = 25
+        result = self.check(doc)
+        self.assertTrue(result["passed"], result["failures"])
+        for value in (None, 7, 33, 36):
+            changed = copy.deepcopy(doc)
+            mode = changed["gameplay"]["weapon_mode_records"][1]
+            if value is None:
+                del mode["primary_action"]
+            else:
+                mode["primary_action"] = value
+            with self.subTest(value=value):
+                self.rejects(changed, "Unproven native weapon handover inside fixed grasp")
+        configs[1]["selected_slot"] = 0
+        self.rejects(doc, "Unproven native weapon handover inside fixed grasp")
+
     def test_delayed_zero_angle_sample_within_episode(self):
         doc = fixture()
         for row in self.rows(doc):

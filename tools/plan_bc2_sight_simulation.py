@@ -78,6 +78,8 @@ def admit(snapshot, now, nonce, target):
     inp, selected, eq = snapshot["input"], snapshot["selected"], snapshot["equipment"]
     require(isinstance(family["selectedSecondary"], bool), "invalid native sight mode")
     secondary = family["selectedSecondary"]
+    primary_action = integer(family.get("primaryAction", 0))
+    require(primary_action in (25, 36), "missing or invalid resolved primary action")
     require(secondary != (target == "secondary"), "requested sight mode is already selected")
     for key in ("primaryAsset", "secondaryAsset", "primaryConfiguration", "secondaryConfiguration", "persistentId"):
         require(isinstance(family[key], str) and bool(family[key]), "missing exact sight family identity")
@@ -92,7 +94,7 @@ def admit(snapshot, now, nonce, target):
             and integer(family["targetWeapon"]) != integer(eq["weapon"])
             and 0 <= integer(family["targetSlot"]) != integer(selected["selectedSlot"])
             and integer(selected["selectedSlot"]) >= 0
-            and integer(family["targetAction"]) == (36 if secondary else 33), "sight opposite target/inventory/action mismatch")
+            and integer(family["targetAction"]) == (primary_action if secondary else 33), "sight opposite target/inventory/action mismatch")
     require(integer(selected["configurationPathPointer"]) > 0 and integer(selected["soleConfiguredArray"]) > 0
             and integer(snapshot["rig"]["fingerprint"]) > 0, "missing exact sight selection/rig evidence")
     require(len([m for m in selected["meshes"] if m["path"] == selected["matchedMeshPath"]]) == 1
@@ -240,7 +242,7 @@ def plan(snapshot, now_ns, expected_nonce, step_ns=20_000_000, target="secondary
     family = sight["family"]
     transition = dict(sourceMode="secondary" if family["selectedSecondary"] else "primary", targetMode=target,
                       sourceWeapon=snapshot["owner"]["weapon"], targetWeapon=family["targetWeapon"],
-                      targetSlot=family["targetSlot"], targetAction=family["targetAction"],
+                      targetSlot=family["targetSlot"], targetAction=family["targetAction"], primaryAction=family["primaryAction"],
                       asset=family[target+"Asset"], configurationPath=family[target+"Configuration"],
                       inventory=family["inventory"], physicalItem=family["physicalItem"], persistentId=family["persistentId"],
                       nativeAcceptanceRequiresExactRequestAcknowledgement=True)

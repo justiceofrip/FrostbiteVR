@@ -52,7 +52,7 @@ int wmain(int argc,wchar_t** argv){
     const auto mode=fvr::bc2::DiscoverWeaponMode(bytes,pe.image);CHECK(mode);
     for(unsigned rva:{mode->selector+0x4f,mode->selector+0x100,mode->selector+0x1ae,mode->update+0x4d,
         mode->update+0x83,mode->edgeReader+0xf,mode->edgeReader+0x1f,mode->booleanReader+0x55,mode->scalarReader+0x3a,
-        binding->entryActions+33*24+16,binding->entryActions+36*24+16}){
+        binding->entryActions+25*24,binding->entryActions+25*24+16,binding->entryActions+33*24+16,binding->entryActions+36*24+16}){
         const auto at=offset(rva);CHECK(at);const auto saved=bytes[at];bytes[at]^=std::byte{1};
         CHECK(!fvr::bc2::DiscoverWeaponMode(bytes,pe.image));bytes[at]=saved;++mutations;
     }

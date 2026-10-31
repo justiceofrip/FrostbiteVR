@@ -2795,7 +2795,8 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
            source->sightModeObservedMs>GetTickCount64()||mode->inventory!=selected->inventory||
            !mode->persistent||mode->persistent!=identity.equipment.persistence||!mode->targetWeapon||
            mode->targetWeapon==identity.weapon||mode->targetSlot==selected->selectedSlot||
-           mode->action!=(mode->selectedSecondary?family->primaryAction:family->secondaryAction)||
+           (mode->primaryAction!=25&&mode->primaryAction!=36)||
+           mode->action!=(mode->selectedSecondary?mode->primaryAction:family->secondaryAction)||
            identity.equipment.Asset()!=(mode->selectedSecondary?family->secondaryAsset:family->primaryAsset)||
            configuration!=(mode->selectedSecondary?family->secondaryConfiguration:family->primaryConfiguration)||
            (sightAdapter&&sightAdapter->family!=family)){
@@ -2895,7 +2896,8 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
         const auto& family=*mode->family;
         json<<"{\"observedMs\":"<<source->sightModeObservedMs<<",\"physicalItem\":"<<mode->persistent
             <<",\"selectedSecondary\":"<<mode->selectedSecondary<<",\"inventory\":"<<mode->inventory
-            <<",\"targetWeapon\":"<<mode->targetWeapon<<",\"targetSlot\":"<<mode->targetSlot<<",\"targetAction\":"<<mode->action;
+            <<",\"targetWeapon\":"<<mode->targetWeapon<<",\"targetSlot\":"<<mode->targetSlot<<",\"targetAction\":"<<mode->action
+            <<",\"primaryAction\":"<<mode->primaryAction;
         json<<",\"primaryAsset\":";text(family.primaryAsset);json<<",\"primaryConfiguration\":";text(family.primaryConfiguration);
         json<<",\"secondaryAsset\":";text(family.secondaryAsset);json<<",\"secondaryConfiguration\":";text(family.secondaryConfiguration);
         json<<",\"persistentId\":";text(family.persistentId);json<<'}';

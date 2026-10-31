@@ -2,6 +2,7 @@
 #include "Bc2WeaponMode.h"
 #include <array>
 #include <cstring>
+#include <initializer_list>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -19,6 +20,31 @@ struct Fixture {
         persistent=0x15000,switching=0x17000,map=0x18000,forward=0x19000,backward=0x19100;
     void Word(unsigned at,unsigned value){std::memcpy(bytes.data()+at-0x10000,&value,4);}
     void Text(unsigned at,const char* value){std::memcpy(bytes.data()+at-0x10000,value,std::strlen(value)+1);}
+    void Route(unsigned row,unsigned state,unsigned action,std::initializer_list<unsigned> targets){
+        const auto at=map+row*24,list=forward+row*44;
+        Word(at+8,list);Word(at+12,list+unsigned(targets.size())*4);Word(at+16,action);Word(at+20,state);
+        unsigned n=0;for(const auto slot:targets)Word(list+4*n++,slot);
+    }
+    void CampaignMap(unsigned primarySlot=0){
+        // All 44 rows from feedback68/destruction03/run01/native-mode-inspection.json.
+        // Slot zero/launcher two is the observed XM8 inventory; slot one checks
+        // the other native primary route against the same complete map.
+        struct Row {unsigned state,action;std::initializer_list<unsigned> targets;};
+        const Row rows[]{
+            {0,36,{1}},{0,33,{2,3}},{0,35,{5}},{0,37,{7}},{0,38,{8}},{0,34,{4}},{0,7,{2,3,5,0,1}},
+            {1,25,{0}},{1,33,{3,2}},{1,35,{5}},{1,37,{7}},{1,38,{8}},{1,34,{4,9,10}},{1,7,{0,3,2,5,1}},
+            {2,25,{0}},{2,36,{1}},{2,35,{5}},{2,37,{7}},{2,38,{8}},{2,34,{4}},{2,33,{3,2}},{2,7,{5,2,1,0}},
+            {3,25,{0}},{3,36,{1}},{3,35,{5}},{3,37,{7}},{3,38,{8}},{3,34,{4}},{3,33,{2,3}},{3,7,{5,3,1,0}},
+            {5,25,{0}},{5,33,{2,3}},{5,36,{1}},{5,37,{7}},{5,38,{8}},{5,34,{4}},{5,7,{5,1,0,2,3}},
+            {4,25,{0}},{4,33,{2,3}},{4,36,{1}},{4,36,{1}},{4,38,{8}},{4,37,{7}},{4,7,{9,10}}};
+        static_assert(std::size(rows)==44);
+        Word(soldier+0x114,3);Word(soldier+0x24c,inventory);Word(soldier+0x264,items+10*4);
+        for(unsigned slot=0;slot<10;++slot)Word(items+slot*4,0);
+        Word(items+primarySlot*4,rifle);Word(items+8,launcher);
+        Word(items+16,0x13500);Word(items+28,0x13600);Word(items+32,0x13700);
+        Word(inventory+0x14c,primarySlot);Word(switching+0x1c,map+44*24);
+        unsigned n=0;for(const auto& row:rows)Route(n++,row.state,row.action,row.targets);
+    }
     Fixture(){
         types={{soldier,"ClientSoldierEntity"},{rifleData,"SoldierWeaponData"},
             {launcherData,"SoldierWeaponData"},{persistent,"PersistentWeapon"},{switching,"WeaponSwitchingData"}};
@@ -115,22 +141,38 @@ int main(){
     {Fixture g;g.changeCurrent=true;CHECK(!bc2::ResolveWeaponMode(g.Memory(),g.soldier,g.rifle));}
     {Fixture g;g.Word(g.soldier+0x248,0xfffffff0);CHECK(!bc2::ResolveWeaponMode(g.Memory(),g.soldier,g.rifle));}
     {Fixture g;auto mem=g.Memory();mem.type=nullptr;CHECK(!bc2::ResolveWeaponMode(mem,g.soldier,g.rifle));}
-    // The observed campaign primary occupies slot zero. This is already valid
-    // when both native routes point to the linked pair; no one-gun slot override.
-    for(const auto& profile:bc2::WeaponModeFamilies){Fixture g;
+    // Replay the observed slot-zero/launcher-two map for every enrolled family,
+    // then exercise its slot-one path. Identity remains exact in both directions.
+    for(const auto& profile:bc2::WeaponModeFamilies)for(unsigned primarySlot:{0u,1u}){Fixture g;g.CampaignMap(primarySlot);
         g.Text(0x16000,profile.primaryAsset.data());g.Text(0x16100,profile.secondaryAsset.data());
         g.Text(0x16200,profile.primaryConfiguration.data());g.Text(0x16300,profile.secondaryConfiguration.data());g.Text(0x16400,profile.persistentId.data());
-        g.Word(g.items,g.rifle);g.Word(g.items+4,0x13500);g.Word(g.inventory+0x14c,0);g.Word(g.map+20,0);g.Word(g.backward,0);
+        const auto original=g.bytes;Fixture without=g;
         bc2::WeaponModeCandidateObservation diagnosis;
         const auto valid=bc2::ObserveWeaponModeFamily(g.Memory(),g.soldier,g.rifle,profile,&diagnosis);
-        CHECK(valid&&valid->family==&profile&&std::string_view(diagnosis.status)=="resolved");
-        g.Word(g.backward,1);Fixture without=g;g.reads.clear();g.typeReads.clear();without.reads.clear();without.typeReads.clear();
-        CHECK(!bc2::ObserveWeaponModeFamily(g.Memory(),g.soldier,g.rifle,profile,&diagnosis));
-        CHECK(!bc2::ObserveWeaponModeFamily(without.Memory(),without.soldier,without.rifle,profile));
-        CHECK(g.reads==without.reads&&g.typeReads==without.typeReads);
-        CHECK(std::string_view(diagnosis.status)=="primary_route"&&std::string_view(diagnosis.routes[1].status)=="first_target_mismatch");
-        CHECK(diagnosis.selected==0&&diagnosis.routes[1].wanted==0&&diagnosis.routes[1].firstOccupiedSlot==1&&diagnosis.routes[1].firstOccupiedWeapon==0x13500);
+        const unsigned primaryAction=primarySlot==0?25:36;
+        CHECK(valid&&valid->family==&profile&&valid->action==33&&valid->primaryAction==primaryAction&&valid->targetSlot==2);
+        CHECK(std::string_view(diagnosis.status)=="resolved"&&diagnosis.routes[1].action==primaryAction&&diagnosis.routes[1].firstOccupiedSlot==primarySlot);
+        CHECK(bc2::ObserveWeaponModeFamily(without.Memory(),without.soldier,without.rifle,profile));
+        CHECK(g.bytes==original&&g.reads==without.reads&&g.typeReads==without.typeReads);
+        CHECK(bc2::ResolveWeaponMode(g.Memory(),g.soldier,g.rifle));
+        g.Word(g.inventory+0x14c,2);const auto reverse=bc2::ResolveWeaponMode(g.Memory(),g.soldier,g.launcher);
+        CHECK(reverse&&reverse->family==&profile&&reverse->selectedSecondary&&reverse->action==primaryAction&&reverse->primaryAction==primaryAction&&reverse->targetSlot==primarySlot&&reverse->targetWeapon==g.rifle);
     }
+    // No route fallback past foreign targets, duplicate rows, two exact inverse
+    // actions, malformed targets, or a lost owner/selection bookend.
+    {Fixture g;g.CampaignMap();g.Route(14,2,25,{4,0});bc2::WeaponModeCandidateObservation d;
+        CHECK(!bc2::ObserveWeaponModeFamily(g.Memory(),g.soldier,g.rifle,bc2::WeaponModeFamilies[0],&d));
+        CHECK(std::string_view(d.status)=="primary_route"&&std::string_view(d.routes[1].status)=="first_target_mismatch"&&d.routes[1].action==25&&d.routes[1].firstOccupiedSlot==4);}
+    {Fixture g;g.CampaignMap();g.Route(15,2,36,{0});bc2::WeaponModeCandidateObservation d;
+        CHECK(!bc2::ObserveWeaponModeFamily(g.Memory(),g.soldier,g.rifle,bc2::WeaponModeFamilies[0],&d));
+        CHECK(std::string_view(d.routes[1].status)=="ambiguous_primary_routes");}
+    for(unsigned action:{25u,36u}){Fixture g;g.CampaignMap();g.Route(44,2,action,{0});g.Word(g.switching+0x1c,g.map+45*24);
+        CHECK(!bc2::ResolveWeaponMode(g.Memory(),g.soldier,g.rifle));}
+    for(unsigned action:{7u,33u,35u}){Fixture g;g.CampaignMap();g.Route(14,2,action,{0});
+        CHECK(!bc2::ResolveWeaponMode(g.Memory(),g.soldier,g.rifle));}
+    {Fixture g;g.CampaignMap();g.Route(14,2,25,{9,0});CHECK(!bc2::ResolveWeaponMode(g.Memory(),g.soldier,g.rifle));}
+    {Fixture g;g.CampaignMap();g.Route(14,2,25,{1,0});CHECK(bc2::ResolveWeaponMode(g.Memory(),g.soldier,g.rifle));}
+    {Fixture g;g.CampaignMap();g.changeCurrent=true;CHECK(!bc2::ResolveWeaponMode(g.Memory(),g.soldier,g.rifle));}
     const auto diagnose=[](Fixture& g){bc2::WeaponModeCandidateObservation out;
         if(bc2::ObserveWeaponModeFamily(g.Memory(),g.soldier,g.rifle,bc2::WeaponModeFamilies[0],&out))out.status="unexpected_success";
         return out;};

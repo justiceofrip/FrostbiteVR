@@ -419,7 +419,7 @@ void CancelSight(){sightAdapterAtGrab=nullptr;ReleaseSightOwnership();sightGrasp
         r.policyPhase=unsigned(result.phase);r.reason=unsigned(result.reason);r.cancelled=result.cancelled;r.released=result.released;}}
     sightPhase=interaction::SightFlipPhase::Idle;sightAcknowledged=0;}
 
-struct ModeRecord {ULONGLONG ms=0,ackMs=0;unsigned actor=0,weak=0,from=0,target=0,action=0;std::uint64_t owner=0,space=0;bool cancelled=false;std::uint64_t gesture=0;};
+struct ModeRecord {ULONGLONG ms=0,ackMs=0;unsigned actor=0,weak=0,from=0,target=0,action=0;std::uint64_t owner=0,space=0;bool cancelled=false;std::uint64_t gesture=0;unsigned primaryAction=0;};
 std::array<ModeRecord,32> modeRecords{};unsigned modeRecordCount=0,modeRecordNext=0;
 std::optional<unsigned> pendingMode;
 std::atomic<unsigned> modeRequests=0,modeRejections=0,modeAcknowledgements=0;
@@ -2538,8 +2538,9 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             if(sightResult.request){
                 const WeaponModeMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t size){return Read(at,dst,size);},[](void*,unsigned at,const char* expected){return Type(at,expected);}};
                 const auto mode=weaponModeBindingVerified?ResolveWeaponMode(memory,owner.soldier,owner.weapon):std::nullopt;
-                const auto expected=sightResult.request->target==interaction::SightMode::Secondary?33u:36u;
-                if(mode&&mode->action==expected&&!pendingMode){
+                const bool toSecondary=sightResult.request->target==interaction::SightMode::Secondary;
+                if(mode&&mode->selectedSecondary!=toSecondary&&
+                   mode->action==(toSecondary?mode->family->secondaryAction:mode->primaryAction)&&!pendingMode){
                     physicalMode=mode;physicalRequest=sightResult.request->id;++sightRequests;
                 }else{++modeRejections;CancelSight();if(fireTrace.observing)fireTrace.record.interactions.sight.dispatchRejected=true;}
             }
@@ -2792,7 +2793,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     const auto queueMode=[&](const WeaponModeCommand& mode,std::uint64_t gesture){
         const auto index=modeRecordNext;modeRecordNext=(modeRecordNext+1)%unsigned(modeRecords.size());
         modeRecordCount=(std::min)(modeRecordCount+1,unsigned(modeRecords.size()));
-        modeRecords[index]={GetTickCount64(),0,owner.soldier,owner.weak,owner.weapon,mode.targetWeapon,mode.action,rigEpoch,input.spaceGeneration,false,gesture};
+        modeRecords[index]={GetTickCount64(),0,owner.soldier,owner.weak,owner.weapon,mode.targetWeapon,mode.action,rigEpoch,input.spaceGeneration,false,gesture,mode.primaryAction};
         pendingMode=index;++modeRequests;
     };
     std::optional<EntryAction> weaponMode;
@@ -4365,7 +4366,7 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
 
     out<<"],\"weapon_mode_records\":[";
     for(unsigned n=0;n<modeRecordCount;++n){const auto& r=modeRecords[(modeRecordNext+modeRecords.size()-modeRecordCount+n)%modeRecords.size()];if(n)out<<',';
-        out<<"{\"ms\":"<<r.ms<<",\"ack_ms\":"<<r.ackMs<<",\"actor\":"<<r.actor<<",\"weak\":"<<r.weak<<",\"owner\":"<<r.owner<<",\"space\":"<<r.space<<",\"gesture\":"<<r.gesture<<",\"from\":"<<r.from<<",\"target\":"<<r.target<<",\"action\":"<<r.action<<",\"cancelled\":"<<(r.cancelled?"true":"false")<<'}';
+        out<<"{\"ms\":"<<r.ms<<",\"ack_ms\":"<<r.ackMs<<",\"actor\":"<<r.actor<<",\"weak\":"<<r.weak<<",\"owner\":"<<r.owner<<",\"space\":"<<r.space<<",\"gesture\":"<<r.gesture<<",\"from\":"<<r.from<<",\"target\":"<<r.target<<",\"action\":"<<r.action<<",\"primary_action\":"<<r.primaryAction<<",\"cancelled\":"<<(r.cancelled?"true":"false")<<'}';
     }
     out<<"],\"hand_ownership\":{\"schema\":1,\"event_capacity\":"<<handEvents.size()
        <<",\"checks\":"<<handChecks<<",\"overlap_failures\":"<<handOverlap

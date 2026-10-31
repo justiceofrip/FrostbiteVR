@@ -93,7 +93,12 @@ def check(folder, receiver=None, support=False, sight_start_secondary=False):
     require(gameplay.get("weapon_mode_binding_verified") is True, "native mode binding was not verified")
     require(gameplay.get("weapon_mode_requests") == 2 and gameplay.get("weapon_mode_acknowledgements") == 2
             and gameplay.get("weapon_mode_rejections") == 0 and len(mode_rows) == 2, "mode request/ack coverage is not two complete transitions")
-    expected_actions = [36, 33] if sight_start_secondary else [33, 36]
+    # Legacy reports retain their action36 scope; a new route must be recorded
+    # consistently on both exact acknowledged transitions, never inferred by slot.
+    primary_actions = {record.get("primary_action", 36) for record in mode_rows}
+    primary_action = next(iter(primary_actions)) if len(primary_actions) == 1 else None
+    require(primary_action in (25, 36), "missing or inconsistent native primary route")
+    expected_actions = [primary_action, 33] if sight_start_secondary else [33, primary_action]
     require([record.get("action") for record in mode_rows] == expected_actions,
             "native action order disagrees with the explicit fixture start mode")
     if len(episodes) == 3 and len(mode_rows) == 2:

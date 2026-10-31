@@ -18,7 +18,7 @@ def matrix(position, angles):
     return f.from_pose(dict(position=position, orientation=f.ypr_quaternion(angles)))
 
 
-def snapshot(secondary=False, subtree=False):
+def snapshot(secondary=False, subtree=False, primary_slot=1):
     """Explicitly invented owners/leases and transformed geometry, never live evidence."""
     owner = dict(player=11, soldier=12, weak=13, weapon=14, actorGeneration=15, equipGeneration=16, space=17)
     reference = f.to_pose(matrix([.43, 1.5, -.27], [33, -9, 7]))
@@ -35,8 +35,9 @@ def snapshot(secondary=False, subtree=False):
                     focused=True, tracked=[True, True], released=[True, False])
     primary = "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8_Scoped"
     secondary_config = "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM320_Scoped"
-    family = dict(observedMs=500, physicalItem=44, selectedSecondary=secondary, inventory=26,
-                  targetWeapon=34, targetSlot=1 if secondary else 2, targetAction=36 if secondary else 33,
+    primary_action = 25 if primary_slot == 0 else 36
+    family = dict(observedMs=500, physicalItem=44, selectedSecondary=secondary, inventory=26, primaryAction=primary_action,
+                  targetWeapon=34, targetSlot=primary_slot if secondary else 2, targetAction=primary_action if secondary else 33,
                   primaryAsset="XM8_sp_s", primaryConfiguration=primary, secondaryAsset="40mmgl",
                   secondaryConfiguration=secondary_config, persistentId="synthetic-xm8-family")
     w = matrix([2.3, 1.7, -3.1], [21, -12, 8])
@@ -73,7 +74,7 @@ def snapshot(secondary=False, subtree=False):
                 rig=dict(soldier=12, weak=13, count=128, skeleton=24, pose=25, fingerprint=0xa7f219a1426216ab),
                 selected=dict(configurationPathVerified=True, sequence=100, observedNs=NOW-10_000_000,
                               deadlineNs=NOW+70_000_000, configurationPath=secondary_config if secondary else primary,
-                              configurationPathPointer=27, inventory=26, selectedSlot=2 if secondary else 1, soleConfiguredArray=28,
+                              configurationPathPointer=27, inventory=26, selectedSlot=2 if secondary else primary_slot, soleConfiguredArray=28,
                               matchedMeshPath="synthetic/mesh", meshes=[dict(path="synthetic/mesh", address=29, typeInfo=30, namePointer=31)]),
                 input=inp, input_evidence=evidence, feed=None, sight=sight,
                 mapping=dict(weaponWorldMeters=w, trackingBodyWorldMeters=b, rawLeftWristWorldMeters=wrist, anatomicalWristToGrip=k))
@@ -132,6 +133,26 @@ class SightSimulationPlanTests(unittest.TestCase):
         self.assertIsNone(plan["geometry"]["frontLocalMeters"])
         self.assertEqual(plan["expectedTransition"]["targetAction"], 36)
         self.assertEqual(plan["expectedTransition"]["asset"], "XM8_sp_s")
+
+    def test_both_primary_slots_use_observed_reciprocal_action(self):
+        for primary_slot, primary_action in ((0, 25), (1, 36)):
+            for secondary in (False, True):
+                with self.subTest(primary_slot=primary_slot, secondary=secondary):
+                    source = snapshot(secondary=secondary, primary_slot=primary_slot)
+                    plan = p.plan(source, NOW, 100, target="primary" if secondary else "secondary")
+                    self.assertEqual(plan["expectedTransition"]["primaryAction"], primary_action)
+                    self.assertEqual(plan["expectedTransition"]["targetAction"], primary_action if secondary else 33)
+                    self.assertEqual(plan["sourceValidUntilNs"], source["valid_until_ns"])
+
+    def test_primary_action_cannot_be_missing_or_borrowed_from_other_slot(self):
+        for value in (None, 7, 33, 38, 36):
+            source = snapshot(secondary=True, primary_slot=0)
+            if value is None:
+                del source["sight"]["family"]["primaryAction"]
+            else:
+                source["sight"]["family"]["primaryAction"] = value
+            with self.subTest(value=value), self.assertRaises(p.Refusal):
+                p.plan(source, NOW, 100, target="primary")
 
     def test_stale_identity_and_geometry_refusals(self):
         mutations = {

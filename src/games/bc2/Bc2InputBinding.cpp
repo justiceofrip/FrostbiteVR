@@ -57,7 +57,8 @@ bool InputOverride::Apply(std::span<std::byte> cache,const interaction::ActionOu
     if(verifiedFireAction!=EntryAction::Fire&&verifiedFireAction!=EntryAction::MeleeAttack)return false;
     // Mode commands are adapter-resolved native map actions. Do not accept
     // arbitrary entry bits through this narrow path.
-    if(verifiedWeaponMode&&*verifiedWeaponMode!=EntryAction::GrenadeLauncher&&*verifiedWeaponMode!=EntryAction::DynamicGadget2)return false;
+    if(verifiedWeaponMode&&*verifiedWeaponMode!=EntryAction::SelectEntry7&&
+       *verifiedWeaponMode!=EntryAction::GrenadeLauncher&&*verifiedWeaponMode!=EntryAction::DynamicGadget2)return false;
     // Axis signedness verified by native float setter mask 0x6f3.
     const float values[]={action.forward,action.strafe,(verifiedFireAction==EntryAction::Fire&&(action.held&interaction::Fire))?1.f:0.f};
     const EntryAction axes[]={EntryAction::Throttle,EntryAction::Strafe,EntryAction::Fire};

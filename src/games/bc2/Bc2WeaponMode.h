@@ -14,6 +14,9 @@ struct WeaponModeMemory {
 struct WeaponModeCommand {
     std::uint32_t action=0,targetWeapon=0,targetSlot=0,inventory=0,persistent=0;
     const WeaponModeFamilyProfile* family=nullptr;bool selectedSecondary=false;
+    // Reciprocal action observed in this inventory's map, not family metadata.
+    // Body selection commands without a linked mode family leave this zero.
+    std::uint32_t primaryAction=0;
 };
 // Optional, bounded observation of the resolver's original reads. Unreached
 // fields retain defaults; none of these fields grant command admission.
@@ -37,6 +40,7 @@ struct WeaponModeCandidateObservation {
     std::string persistentId;
     std::uint32_t mapBegin=0,mapEnd=0;
     std::array<WeaponModeRouteObservation,2> routes{};
+    std::array<WeaponModeRouteObservation,2> primaryRoutes{};
     std::uint64_t bookendAddress=0;std::uint32_t bookendExpected=0,bookendObserved=0;bool bookendRead=false;
 };
 struct WeaponModeResolution {

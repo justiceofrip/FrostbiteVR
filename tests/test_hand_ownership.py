@@ -146,6 +146,18 @@ class HandOwnershipTests(unittest.TestCase):
         self.doc = fixture(); del self.doc["gameplay"]["weapon_mode_records"][0]["gesture"]
         self.reject("identity join")
 
+    def test_primary_25_requires_explicit_native_route_evidence(self):
+        mode = self.doc["gameplay"]["weapon_mode_records"][0]
+        mode.update(action=25, primary_action=25)
+        self.assertTrue(self.run_audit()["passed"])
+        for value in (None, 7, 33, 36):
+            if value is None:
+                mode.pop("primary_action", None)
+            else:
+                mode["primary_action"] = value
+            with self.subTest(value=value):
+                self.reject("unexpected native mode action")
+
     def test_support_correlates_exact_native_token_owner_and_release(self):
         self.doc["gameplay"]["two_hand_support"]["events"][0]["sample"]["grasp_token"] = 12
         self.reject("engagement evidence")

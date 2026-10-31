@@ -223,7 +223,10 @@ def check(native, coverage="both"):
                         "native mode owner/space mismatch")
                 require(mode["from"] == weapon and mode["target"] != weapon and mode["target"] > 0,
                         "native mode source/target mismatch")
-                require(mode["action"] in (33, 36), "unexpected native mode action")
+                # Older fixed-route captures lack primary_action; they retain
+                # their original action-36 scope. Action25 needs explicit evidence.
+                primary_action = integer(mode.get("primary_action", 36), "native primary action")
+                require(primary_action in (25, 36) and mode["action"] in (33, primary_action), "unexpected native mode action")
                 require(mode["ack_ms"] == 0 or mode["ack_ms"] >= mode["ms"], "native ack precedes request")
                 if gesture in acknowledgements or gesture in commits:
                     require(mode["ack_ms"] > 0 and mode["cancelled"] is False,
