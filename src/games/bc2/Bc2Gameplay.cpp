@@ -651,7 +651,7 @@ bool Writable(unsigned at,unsigned n)noexcept {
 struct Callback {Callback(){++active;}~Callback(){--active;}};
 struct Scope {Owner owner{};InputOverride patch;bool used=false;std::uint64_t nativeTick=0;};thread_local Scope* scope=nullptr;
 Owner lastOwner{};NativeInputEpochs nativeEpochs{};
-auto& epoch=nativeEpochs.equipment;auto& inputEpoch=nativeEpochs.input;
+auto& epoch=nativeEpochs.equipment;auto& inputEpoch=nativeEpochs.input;auto& movementEpoch=nativeEpochs.movement;
 std::uint64_t rigEpoch=0,renderEquipmentEpoch=0,nativeInputPauses=0;ULONGLONG lastTick=0;
 #ifdef FVR_BC2_ORDINARY_RESOURCE_PAUSE_PROBE
 struct NativeInputPauseProbe {bool ran=false,sameOwner=false;ULONGLONG begin=0,end=0;
@@ -1830,7 +1830,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     const bool pumpFireFixture=physicalPumpFixture&&physicalPump;
     const bool deferActions=(holsterFireFixture||pumpFireFixture||physicalBoltFixture.has_value()||ordinaryBoltInputFixture.has_value()||resourceInventoryFixture.has_value())&&fresh&&nativePlaying&&
         interaction::ValidInput(input)&&input.focused&&input.headValid;
-    auto out=deferActions?interaction::ActionOutput{}:actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying,true,rigEpoch},input.predictedNs,HandNanos(clock.QuadPart));
+    auto out=deferActions?interaction::ActionOutput{}:actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying,true,rigEpoch,movementEpoch},input.predictedNs,HandNanos(clock.QuadPart));
     fireTrace.record.mapped=(out.held&interaction::Fire)!=0;
     if(m95StockShotFixture&&actionInput.hands[1].trigger<.75f){out.held&=~interaction::Fire;out.pressed&=~interaction::Fire;}
     if(!fresh||!nativePlaying||!interaction::ValidInput(input)||!input.focused||!input.headValid){ClearReloadOwner(ReloadOwnerLoss::PresentationUnavailable);CancelSight();weaponModeHeld=true;ResetSupportGrip(!fresh?"stale_input":!nativePlaying?"native_inactive":!interaction::ValidInput(input)?"invalid_input":!input.focused?"focus_loss":"head_untracked");ResetHandOwnership("input_unavailable"); {std::lock_guard lock(shotPoseMutex);shotHistory.Reset();} rigPublication::PublishTracking({});roomscale.Suspend();
@@ -1922,7 +1922,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         ordinaryBoltInputFixture->Prepare(input,current,asset,raw,native,reserve,
             HandNanos(inputDeadline-handFrequency/10),HandNanos(inputDeadline),now);
         actionInput=input;if(reloadRequestMode)actionInput.hands[0].trigger=0;
-        out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!ordinaryBoltInputFixture->Failed(),true,rigEpoch},input.predictedNs,HandNanos(clock.QuadPart));
+        out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!ordinaryBoltInputFixture->Failed(),true,rigEpoch,movementEpoch},input.predictedNs,HandNanos(clock.QuadPart));
         if(ordinaryBoltInputFixture->NeedsNeutralFire(now)){out.held&=~interaction::Fire;out.pressed&=~interaction::Fire;}
         if(!out.active||out.owner!=owner.soldier){out={};out.owner=owner.soldier;}
     }
@@ -1933,7 +1933,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         physicalBoltFixture->Prepare(input,current,asset,raw,reloadFlowRuntime::ReadNativeCycleView(now),reserve,
             HandNanos(inputDeadline-handFrequency/10),HandNanos(inputDeadline),now);
         actionInput=input;if(reloadRequestMode)actionInput.hands[0].trigger=0;
-        out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!physicalBoltFixture->Failed(),true,rigEpoch},input.predictedNs,HandNanos(clock.QuadPart));
+        out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!physicalBoltFixture->Failed(),true,rigEpoch,movementEpoch},input.predictedNs,HandNanos(clock.QuadPart));
         if(!out.active||out.owner!=owner.soldier){out={};out.owner=owner.soldier;}
     }
     if(physicalPumpFixture&&physicalPump){
@@ -1943,7 +1943,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         physicalPumpFixture->Prepare(input,current,asset,raw,reloadFlowRuntime::ReadNativeCycleView(now),
             HandNanos(inputDeadline-handFrequency/10),HandNanos(inputDeadline),now);
         actionInput=input;if(reloadRequestMode)actionInput.hands[0].trigger=0;
-        out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!physicalPumpFixture->Failed(),true,rigEpoch},input.predictedNs,HandNanos(clock.QuadPart));
+        out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!physicalPumpFixture->Failed(),true,rigEpoch,movementEpoch},input.predictedNs,HandNanos(clock.QuadPart));
         if(!out.active||out.owner!=owner.soldier){out={};out.owner=owner.soldier;}
     }
     if(magazineResourceFixture&&magazinePhysical){
@@ -1974,7 +1974,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         if(resourceInventoryFixture->Recording())reloadFlowRuntime::BeginInventoryReloadRecords();
         // First and only mapping for this generation, after fixture Prepare.
         actionInput=input;if(reloadRequestMode)actionInput.hands[0].trigger=0;
-        out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!resourceInventoryFixture->CancelConsumer(),true,rigEpoch},input.predictedNs,HandNanos(clock.QuadPart));
+        out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!resourceInventoryFixture->CancelConsumer(),true,rigEpoch,movementEpoch},input.predictedNs,HandNanos(clock.QuadPart));
         if(!out.active||out.owner!=owner.soldier){out={};out.owner=owner.soldier;}
     }
     if(inventoryReloadFixture&&magazinePhysical&&bodyInventory){
@@ -2011,7 +2011,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         bodyHolsterFixture->Prepare(input,current,asset,ReadBodyHolsterProbe(ns),HandNanos(inputDeadline-handFrequency/10),HandNanos(inputDeadline),ns,diagnosticAmmo);
         if(bodyHolsterFixture->Failed())InvalidateBodyHolster(false,BodyHolsterLifecycleReason::DiagnosticFailed);
         if(holsterFireFixture){actionInput=input;if(reloadRequestMode)actionInput.hands[0].trigger=0;
-            out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!bodyHolsterFixture->Failed(),true,rigEpoch},input.predictedNs,HandNanos(clock.QuadPart));
+            out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!bodyHolsterFixture->Failed(),true,rigEpoch,movementEpoch},input.predictedNs,HandNanos(clock.QuadPart));
             if(!out.active||out.owner!=owner.soldier){out={};out.owner=owner.soldier;}
             if(bodyHolsterFixture->NeedsNeutralFire()){out.held&=~interaction::Fire;out.pressed&=~interaction::Fire;}}
     }
@@ -3032,7 +3032,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             FireRouteStaleInput:FireRouteOwnerUnavailable;
         // Match a stale reception's semantic invalidation. A processing stall
         // must not leave a held trigger armed after its command was refused.
-        (void)actions.Update({}, {owner.soldier,inputEpoch,false,true,rigEpoch},0,
+        (void)actions.Update({}, {owner.soldier,inputEpoch,false,true,rigEpoch,movementEpoch},0,
             dispatchClockOkay?HandNanos(dispatchClock.QuadPart):0);
         return;
     }
@@ -3385,7 +3385,11 @@ void __fastcall UpdateHook(void* self,void*,float dt){
         bodyHolsterLifecycle.Observe(accepted?BodyHolsterLifecycleReason::NativeInputGapAccepted:BodyHolsterLifecycleReason::NativeInputGapRejected,
             accepted,previous,bodyHolster->Phase(),source,before.equipGeneration);
     }
-    const auto advanced=AdvanceNativeInputEpochs(nativeEpochs,ownerChanged,inputPause);
+    // A selected weapon changes button authority, not the player's locomotion.
+    // Keep movement armed only on the same actor and complete native input route.
+    const bool movementOwnerChanged=actorChanged||local.owner.router!=lastOwner.router||
+        local.owner.cache!=lastOwner.cache||local.owner.foot!=lastOwner.foot||local.owner.role!=lastOwner.role;
+    const auto advanced=AdvanceNativeInputEpochs(nativeEpochs,ownerChanged,inputPause,movementOwnerChanged);
     if(!advanced){ClearReloadOwner();returnOriginal(SceneOwnerOutcome::Unresolved);return;}
     nativeEpochs=*advanced;lastOwner=local.owner;lastTick=now;
 #ifdef FVR_BC2_ORDINARY_RESOURCE_PAUSE_PROBE
@@ -4263,7 +4267,7 @@ bool Stop()noexcept {
     return okay&&!active.load();
 }
 void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true":"false")
-    <<",\"native_equipment_epoch\":"<<epoch<<",\"native_input_epoch\":"<<inputEpoch<<",\"native_input_pauses\":"<<nativeInputPauses
+    <<",\"native_equipment_epoch\":"<<epoch<<",\"native_input_epoch\":"<<inputEpoch<<",\"native_movement_epoch\":"<<movementEpoch<<",\"native_input_pauses\":"<<nativeInputPauses
     <<",\"thread\":"<<inputThread.load()<<",\"updates\":"<<updates.load()<<",\"local_updates\":"<<localUpdates.load()
     <<",\"gathers\":"<<gathers.load()<<",\"on_foot\":"<<onFoot.load()<<",\"vehicle_gated\":"<<vehicle.load()
     <<",\"stale_or_missing\":"<<stale.load()<<",\"applied\":"<<applied.load()<<",\"committed\":"<<committed.load()

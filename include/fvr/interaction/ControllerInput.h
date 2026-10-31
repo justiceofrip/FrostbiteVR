@@ -38,6 +38,10 @@ struct InputOwner {
     // Optional durable actor lifetime, separate from button/input rearming.
     // Adapters without a separate lifetime retain the generation convention.
     std::uint64_t actorGeneration=0;
+    // Optional movement lifetime, valid only with a separate actor lifetime.
+    // Keep it across equipment-only changes; advance it for input pauses and
+    // actor/control-route transitions. Zero retains full generation rearming.
+    std::uint64_t movementGeneration=0;
 };
 // Emits semantic requests only; engine adapters own native dispatch and aiming.
 class ControllerActions {
@@ -48,9 +52,11 @@ public:
     ActionOutput Update(const InputFrame&,const InputOwner&,std::int64_t nowNs,std::int64_t menuNowNs=0) noexcept;
 private:
     std::array<ActionPolicy,2> policies_;
+    ActionPolicy movementPolicy_;
     CrouchToggle crouch_;
     bool leftActionsActive_=false,sprintChordBlocked_=false;
-    std::uint64_t ownerGeneration_=0,spaceGeneration_=0;
+    std::uint64_t ownerGeneration_=0,actorGeneration_=0,movementGeneration_=0,spaceGeneration_=0;
+    bool separateMovement_=false;
     float heading_=0;
 };
 struct RecenterEvidence {

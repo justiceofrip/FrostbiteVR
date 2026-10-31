@@ -194,8 +194,95 @@ int CrouchFreshnessAndSourceTransitions(){
     repeated.f.hands[0].held=repeated.f.hands[1].held=0;CHECK(!(repeated.Step().held&Crouch));
     CHECK(repeated.Click().pressed==Crouch);return 0;
 }
+int MovementEquipmentRearm(){
+    // The legacy contract reproduces the reported failure mechanism: a held
+    // movement stick/click stays blocked after equipment changes even after
+    // the independent right controller has rearmed. The explicit movement
+    // lifetime must keep the same sequence moving without carrying Fire/Use.
+    for(bool separate:{false,true})for(bool sprint:{false,true}){
+        CrouchFixture p;p.owner.movementGeneration=separate?41:0;p.Arm();
+        p.f.hands[0].stickX=.4f;p.f.hands[0].stickY=.8f;
+        p.f.hands[0].held=Primary|(sprint?StickClick:0u);
+        p.f.hands[1].trigger=1;p.f.hands[1].held=Primary|Secondary;
+        const auto before=p.Step();const auto movement=sprint?Sprint:0u;
+        constexpr auto buttons=Use|Fire|Jump|Reload;
+        CHECK(before.active&&before.forward>0&&before.strafe>0&&before.held==(buttons|movement));
+        ++p.owner.generation; // Native input epoch advances for equipment only.
+        auto out=p.Step();CHECK(out.released==(buttons|(separate?0u:movement))&&!out.pressed);
+        CHECK(out.held==(separate?movement:0u));
+        CHECK(out.forward==(separate?before.forward:0)&&out.strafe==(separate?before.strafe:0));
+        for(unsigned n=0;n<8;++n){
+            out=p.Step();CHECK(out.held==(separate?movement:0u)&&!out.pressed&&!out.released);
+            CHECK(out.forward==(separate?before.forward:0)&&out.strafe==(separate?before.strafe:0));
+            const auto duplicate=p.actions.Update(p.f,p.owner,p.f.predictedNs);
+            CHECK(duplicate.forward==out.forward&&duplicate.strafe==out.strafe&&duplicate.held==out.held);
+            CHECK(!duplicate.pressed&&!duplicate.released);
+        }
+        p.f.hands[1].trigger=0;p.f.hands[1].held=0;p.Step();p.Step();
+        p.f.hands[1].trigger=1;p.f.hands[1].held=Primary|Secondary;
+        out=p.Step();CHECK(out.active&&out.pressed==(Fire|Jump|Reload)&&!(out.held&Use));
+        CHECK(out.forward==(separate?before.forward:0)&&out.strafe==(separate?before.strafe:0));
+        CHECK(bool(out.held&Sprint)==(separate&&sprint));
+        p.f.hands[0].held=0;p.f.hands[0].stickX=p.f.hands[0].stickY=0;p.Arm();
+        p.f.hands[0].held=Primary|StickClick;p.f.hands[0].stickY=1;
+        out=p.Step();CHECK(out.forward>.99f&&out.pressed==(Use|Sprint));
+    }
+    return 0;
+}
+int MovementEquipmentContinuityKeepsSafetyGates(){
+    for(unsigned fault=0;fault<17;++fault){
+        CrouchFixture p;p.owner.movementGeneration=41;p.Arm();
+        p.f.hands[0].held=Primary|StickClick;p.f.hands[0].stickY=1;
+        const auto before=p.Step();CHECK(before.forward>.99f&&before.held==(Use|Sprint));
+        const auto saved=p.f;const auto owner=p.owner;
+        ++p.owner.generation; // Equipment change does not excuse a safety loss.
+        ActionOutput out;
+        switch(fault){
+        case 0:p.f.focused=false;p.f.hands={};break;
+        case 1:p.f.headValid=false;break;
+        case 2:p.f.hands[0].gripTracked=false;break;
+        case 3:p.owner.playing=false;break;
+        case 4:p.owner.bindingsVerified=false;break;
+        case 5:++p.owner.movementGeneration;break; // Pause simultaneous with equip.
+        case 6:p.owner.generation=owner.generation;++p.owner.actorGeneration;break; // Actor-only replacement.
+        case 7:++p.f.spaceGeneration;break;
+        case 8:++p.owner.owner;break;
+        case 9:break; // Missing publication longer than the action lease.
+        case 10:break; // Existing publication observed after its freshness lease.
+        case 11:p.f.hands[0].stickX=std::numeric_limits<float>::quiet_NaN();break;
+        case 12:p.f.generation-=2;p.f.predictedNs-=30000000;break;
+        case 13:p.owner.movementGeneration=0;break;
+        case 14:p.owner.actorGeneration=0;break;
+        case 15:p.owner.generation=0;break;
+        case 16:p.f.hands[0].active&=~StickClick;break;
+        }
+        if(fault==9)out=p.Step(160000000);
+        else if(fault==10)out=p.actions.Update(p.f,p.owner,p.f.predictedNs+100000001);
+        else if(fault==12)out=p.actions.Update(p.f,p.owner,p.f.predictedNs);
+        else out=p.Step();
+        CHECK(!out.forward&&!out.strafe&&!(out.held&(Use|Sprint))&&bool(out.released&Sprint));
+        // Recovery still needs actual neutral axes AND buttons on that hand.
+        const auto sequence=p.f.generation;const auto time=p.f.predictedNs;
+        p.f=saved;p.f.generation=sequence;p.f.predictedNs=time;p.owner=owner;
+        for(unsigned n=0;n<6;++n){out=p.Step();CHECK(!out.forward&&!(out.held&(Use|Sprint)));}
+        p.f.hands[0].stickY=0;
+        for(unsigned n=0;n<4;++n){out=p.Step();CHECK(!out.forward&&!(out.held&(Use|Sprint)));}
+        p.f.hands[0].held=Primary;
+        for(unsigned n=0;n<4;++n){out=p.Step();CHECK(!out.forward&&!(out.held&(Use|Sprint)));}
+        p.f.hands[0].held=0;p.Arm();p.f.hands[0].held=Primary|StickClick;p.f.hands[0].stickY=1;
+        out=p.Step();CHECK(out.forward>.99f&&out.pressed==(Use|Sprint));
+    }
+    // An actor lifetime alone cannot certify movement continuity through a
+    // pause; a movement lifetime without an actor lifetime is also insufficient.
+    CrouchFixture p;p.owner.actorGeneration=0;p.owner.movementGeneration=41;p.Arm();
+    p.f.hands[0].stickY=1;p.f.hands[0].held=StickClick;CHECK(p.Step().forward>.99f);
+    ++p.owner.generation;CHECK(!p.Step().forward);
+    for(unsigned n=0;n<6;++n)CHECK(!p.Step().forward);
+    return 0;
+}
 }
 int main(){
+    CHECK(MovementEquipmentRearm()==0);CHECK(MovementEquipmentContinuityKeepsSafetyGates()==0);
     CHECK(CrouchClickWhileMoving()==0);CHECK(CrouchIndependentMenuClock()==0);CHECK(CrouchRecenterOwnsBothClicks()==0);
     CHECK(CrouchLossSuspendsWithoutToggling()==0);CHECK(CrouchFreshnessAndSourceTransitions()==0);
     CHECK(CrouchPersistsAcrossRecenterAndPause()==0);

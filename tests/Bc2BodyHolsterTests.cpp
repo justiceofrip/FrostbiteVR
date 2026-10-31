@@ -627,6 +627,66 @@ int NativePauseSeparatesEquipmentAndButtons(){
     CHECK(!AdvanceNativeInputEpochs({1,UINT64_MAX},false,true));
     CHECK(!AdvanceNativeInputEpochs({},false,true));return 0;
 }
+int NativeEquipmentSwapKeepsMovement(){
+    // Compose the native producer with the actual controller policy. The left
+    // stick stays held through an equip transition while weapon buttons rearm.
+    for(unsigned sprint=0;sprint<2;++sprint)for(unsigned loss=0;loss<3;++loss){
+        auto epochs=AdvanceNativeInputEpochs({},true,false,true);CHECK(epochs);
+        CHECK(epochs->equipment==1&&epochs->input==1&&epochs->movement==1);
+        ControllerActions actions;InputFrame input;input.generation=1;input.spaceGeneration=1;
+        input.predictedNs=1000000000;input.focused=input.headValid=true;
+        for(auto& hand:input.hands){hand.gripTracked=hand.aimTracked=true;hand.active=Components;}
+        const auto step=[&]{++input.generation;input.predictedNs+=16000000;
+            return actions.Update(input,{0x20000,epochs->input,true,true,4,epochs->movement},input.predictedNs);};
+        step();step();step();input.hands[0].stickY=1;
+        if(sprint)input.hands[0].held=StickClick;
+        input.hands[1].trigger=1;auto out=step();
+        CHECK(out.forward==1&&(out.pressed&Fire));CHECK(bool(out.held&Sprint)==bool(sprint));
+        epochs=AdvanceNativeInputEpochs(*epochs,true,false,false);CHECK(epochs);
+        CHECK(epochs->equipment==2&&epochs->input==2&&epochs->movement==1);
+        out=step();CHECK(out.forward==1&&(out.released&Fire)&&!(out.held&Fire));
+        CHECK(bool(out.held&Sprint)==bool(sprint));
+        for(unsigned repeat=0;repeat<3;++repeat){
+            epochs=AdvanceNativeInputEpochs(*epochs,false,false,false);CHECK(epochs);
+            CHECK(epochs->movement==1&&epochs->equipment==2&&epochs->input==2);
+            out=step();CHECK(out.forward==1&&!(out.held&Fire));
+            CHECK(bool(out.held&Sprint)==bool(sprint));
+        }
+        input.hands[1].trigger=0;step();step();input.hands[1].trigger=1;
+        out=step();CHECK(out.forward==1&&(out.pressed&Fire));
+        // Pause, control-route-only replacement, and a pause during equipment
+        // replacement all disarm held movement until a real neutral sample.
+        epochs=AdvanceNativeInputEpochs(*epochs,loss==2,loss!=1,loss==1);CHECK(epochs);
+        CHECK(epochs->movement==2);
+        CHECK(epochs->equipment==(loss==2?3u:2u)&&epochs->input==(loss==1?2u:3u));
+        out=step();CHECK(!out.forward&&!(out.held&Sprint));
+        CHECK(bool(out.released&Sprint)==bool(sprint));
+        for(unsigned repeat=0;repeat<3;++repeat){out=step();CHECK(!out.forward&&!(out.held&Sprint));}
+        input.hands[0].stickY=0;input.hands[0].held=0;step();step();
+        input.hands[0].stickY=1;if(sprint)input.hands[0].held=StickClick;
+        out=step();CHECK(out.forward==1);CHECK(bool(out.held&Sprint)==bool(sprint));
+    }return 0;
+}
+int NativeMovementEpochValidity(){
+    // Aggregate initializers from older adapters acquire the missing movement
+    // lifetime exactly once, without inventing equipment or button changes.
+    auto epochs=AdvanceNativeInputEpochs({7,11},false,false,false);CHECK(epochs);
+    CHECK(epochs->equipment==7&&epochs->input==11&&epochs->movement==1);
+    epochs=AdvanceNativeInputEpochs(*epochs,false,false,false);CHECK(epochs&&epochs->movement==1);
+    epochs=AdvanceNativeInputEpochs(*epochs,true,false);CHECK(epochs&&epochs->movement==2);
+    CHECK(!AdvanceNativeInputEpochs({1,1,UINT64_MAX},false,true,false));
+    CHECK(!AdvanceNativeInputEpochs({1,1,UINT64_MAX},false,false,true));
+    CHECK(!AdvanceNativeInputEpochs({1,1,UINT64_MAX},true,true,false));
+    epochs=AdvanceNativeInputEpochs({1,1,UINT64_MAX},true,false,false);
+    CHECK(epochs&&epochs->equipment==2&&epochs->input==2&&epochs->movement==UINT64_MAX);
+    CHECK(!AdvanceNativeInputEpochs({UINT64_MAX,1,1},true,false,false));
+    CHECK(!AdvanceNativeInputEpochs({1,UINT64_MAX,1},false,true,false));
+    CHECK(!AdvanceNativeInputEpochs({1,0,1},true,false,true));
+    CHECK(!AdvanceNativeInputEpochs({0,1,0},false,false,false));
+    CHECK(!AdvanceNativeInputEpochs({0,0,1},false,false,false));
+    CHECK(!AdvanceNativeInputEpochs({},false,false,true));
+    CHECK(!AdvanceNativeInputEpochs({},false,true,false));return 0;
+}
 int NativePauseKeepsEmptyWithFreshEvidence(){
     Fixture f;CHECK(f.Empty());const auto before=f.s.nativeOwner;const auto old=*f.out.freeRight;
     CHECK(f.adapter.ObserveNativeInputPause(before));
@@ -664,7 +724,7 @@ int ProcessingClockKeepsOriginalInput(){
         if(mode!=1)CHECK(!f.out.freeRight&&!f.out.visibility.enabled);
     }return 0;}
 }
-int main(){if(NativePauseSeparatesEquipmentAndButtons()||NativePauseKeepsEmptyWithFreshEvidence()||NativePauseRejectsChangedEquipment()||FailedInputApplyCannotInventDraw()||NativeExchangeReconcilesRebuiltCarriedInventory()||CarriedMutationInvalidatesPendingOrdinaryPair()||UnsupportedExchangeRequiresNewOrdinaryPair()||OrdinaryRetirementRejectsStaleOrForgedPair()||OrdinaryRetirementIsOnlyExactSelectedSlotReplacement()||OrdinaryRetirementCancellationCannotReplayPair()||OrdinaryRetirementCannotStealLeftClaimOrSkipSuppression()||OrdinaryRetirementNeedsReleasedThenNewTrigger()||ReceiptGapBeforePauseEpochKeepsEmpty()||ReceiptGapDoesNotMigrateChangedIdentity()||ReceiptRehideRequiresNewSuppressionAndPair()||PauseEpochNeedsFreshRehide()||NativeGapAdmissionRequiresCommittedExactEpoch()||NativeGapDoesNotHideReplacementOrCancellation()||NativeGapCannotBlessAnUnobservedEpoch()||RepeatedNativeGapStillNeedsLatestReceipt()||SameSpaceTrackingGapKeepsCommittedEmpty()||SameSpaceExplicitCancellationStillShows()||SecondGapWhileRebindingDoesNotDraw()||TrackingGapRebindRequiresNewEvidence()||RebaseCannotMigrateCancellationOrIdentity()||RebaseDuringRebindGetsAnotherRequest()||IncompleteHolsterDoesNotBecomeCommittedOnRebase()||RebaseKeepsCommittedEmptyIntent()||ScopedXm8AdmissionIsBoundedAndSeparate()||CrossDrawSourceOnlyGestures()||DrawIntoOrdinaryXm8()||OrdinaryXm8RecoveryNeedsFreshOwner()||ProcessingClockKeepsOriginalInput()||DiagnosticAdmission()||DiagnosticBoundsActualSequence()||DiagnosticDrawAndOriginalSource()||DefaultOff()||BothCapabilities()||UnsupportedProfile()||NativeMask()||NativeFailure()||ProtectedEquipment()||HideThenRelease()||NoPackOnlyEmpty()||InvalidReceipt()||ExpiryRecovery()||SameItemDraw()||ChangedEquipDraw()||ReplacementAndTracking()||SharedClaims()||LostTrackingSuppression()||ActualRenderGuard()||FreePose())return 1;std::puts("53 holster coordinator groups passed");return 0;}
+int main(){if(NativeEquipmentSwapKeepsMovement()||NativeMovementEpochValidity()||NativePauseSeparatesEquipmentAndButtons()||NativePauseKeepsEmptyWithFreshEvidence()||NativePauseRejectsChangedEquipment()||FailedInputApplyCannotInventDraw()||NativeExchangeReconcilesRebuiltCarriedInventory()||CarriedMutationInvalidatesPendingOrdinaryPair()||UnsupportedExchangeRequiresNewOrdinaryPair()||OrdinaryRetirementRejectsStaleOrForgedPair()||OrdinaryRetirementIsOnlyExactSelectedSlotReplacement()||OrdinaryRetirementCancellationCannotReplayPair()||OrdinaryRetirementCannotStealLeftClaimOrSkipSuppression()||OrdinaryRetirementNeedsReleasedThenNewTrigger()||ReceiptGapBeforePauseEpochKeepsEmpty()||ReceiptGapDoesNotMigrateChangedIdentity()||ReceiptRehideRequiresNewSuppressionAndPair()||PauseEpochNeedsFreshRehide()||NativeGapAdmissionRequiresCommittedExactEpoch()||NativeGapDoesNotHideReplacementOrCancellation()||NativeGapCannotBlessAnUnobservedEpoch()||RepeatedNativeGapStillNeedsLatestReceipt()||SameSpaceTrackingGapKeepsCommittedEmpty()||SameSpaceExplicitCancellationStillShows()||SecondGapWhileRebindingDoesNotDraw()||TrackingGapRebindRequiresNewEvidence()||RebaseCannotMigrateCancellationOrIdentity()||RebaseDuringRebindGetsAnotherRequest()||IncompleteHolsterDoesNotBecomeCommittedOnRebase()||RebaseKeepsCommittedEmptyIntent()||ScopedXm8AdmissionIsBoundedAndSeparate()||CrossDrawSourceOnlyGestures()||DrawIntoOrdinaryXm8()||OrdinaryXm8RecoveryNeedsFreshOwner()||ProcessingClockKeepsOriginalInput()||DiagnosticAdmission()||DiagnosticBoundsActualSequence()||DiagnosticDrawAndOriginalSource()||DefaultOff()||BothCapabilities()||UnsupportedProfile()||NativeMask()||NativeFailure()||ProtectedEquipment()||HideThenRelease()||NoPackOnlyEmpty()||InvalidReceipt()||ExpiryRecovery()||SameItemDraw()||ChangedEquipDraw()||ReplacementAndTracking()||SharedClaims()||LostTrackingSuppression()||ActualRenderGuard()||FreePose())return 1;std::puts("55 holster coordinator groups passed");return 0;}
 
 
 

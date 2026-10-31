@@ -423,6 +423,91 @@ int EveryEnrolledFeedStartsFromReleasedApproach(){
     }
     return 0;
 }
+ReloadRawContact RepublishFeedContact(const ReloadRawContact& source,const fvr::math::Matrix4& world,std::int64_t now){
+    using namespace feed_interaction_detail;
+    InputFrame input;input.generation=source.inputEvidence.sequence;input.spaceGeneration=source.owner.space;
+    input.predictedNs=source.inputEvidence.observedNs;input.focused=input.headValid=true;
+    for(auto& hand:input.hands)hand.gripTracked=hand.aimTracked=true;
+    const auto local=feed_interaction_detail::Multiply(source.rawLeftWristWorldMeters,Inverse(source.weaponWorldMeters));
+    return BuildSupportControllerMapping(source.owner,source.inputEvidence,input,source.rig,source.rigFingerprint,
+        feed_interaction_detail::Multiply(local,world),world,world,1,now);
+}
+int EveryEnrolledFeedRetainsRepeatedPacketThroughOpenCover(){
+    using namespace feed_interaction_detail;unsigned configurations=0;
+    for(const auto& registration:RegisteredBc2FeedProfiles()){
+        Fixture f(&registration);f.wristCalibration=Identity();const auto m=f.Open();
+        const auto pose=[&](unsigned step){return feed_interaction_detail::Multiply(
+            Along(m.motionFromContact,m.kind,m.travel*step/12),m.weaponFromMotion);};
+        f.sequence=2644;f.Tick(pose(0),false);f.Tick(pose(0),true);
+        CHECK(f.result.interactionStatus==FeedInteractionStatus::Acquired&&f.result.ownsHand);
+        const auto pressed=f.sample.raw;const auto acquired=f.hands.Current(InteractionHand::Left);CHECK(acquired);
+        const auto cover=f.result.presentation->coverRadians;
+        f.PrepareTick(pose(1),true);const auto next=f.sample.raw;
+        // Real render producer: the same controller evidence is mapped again
+        // into current native world/placed-weapon transforms. Float inversion
+        // need not reproduce the first local matrix bit for bit.
+        auto world=Turn(.37f);world.values[3][0]=127.123f;world.values[3][1]=-32.567f;world.values[3][2]=6.891f;
+        const auto repeated=RepublishFeedContact(pressed,world,f.sample.input.nowNs);CHECK(repeated.valid);
+        CHECK(feed_interaction_detail::Multiply(repeated.rawLeftWristWorldMeters,Inverse(repeated.weaponWorldMeters)).values!=
+            feed_interaction_detail::Multiply(pressed.rawLeftWristWorldMeters,Inverse(pressed.weaponWorldMeters)).values);
+        f.Consume(&repeated);
+        CHECK(f.sample.input.sequence==2647&&f.sample.raw.inputEvidence.sequence==2646);
+        CHECK(f.result.diagnostic.rawPassed==511&&f.result.diagnostic.admissionPassed==63);
+        CHECK(f.result.interactionStatus==FeedInteractionStatus::Duplicate&&f.result.reloadStatus==FeedReloadStatus::DuplicatePacket);
+        CHECK(f.result.ownsHand&&!f.result.pending&&f.submits==0);
+        const auto retained=f.hands.Current(InteractionHand::Left);CHECK(retained&&retained->token==acquired->token);
+        CHECK(retained->deadlineNs==acquired->deadlineNs&&retained->inputSequence==pressed.inputEvidence.sequence);
+        CHECK(f.result.presentation&&f.result.presentation->coverRadians==cover);
+        CHECK(f.result.presentation->originalWeaponWorldMeters.values==world.values);
+        CHECK(f.result.presentation->mechanismWristWorldMeters&&
+            f.result.presentation->mechanismWristWorldMeters->values==repeated.rawLeftWristWorldMeters.values);
+        f.Consume(&next);CHECK(f.result.interactionStatus==FeedInteractionStatus::Moving&&f.result.ownsHand);
+        for(unsigned step=2;step<=12;++step)f.Tick(pose(step),true);
+        for(unsigned step=0;step<f.DwellPackets()&&!f.submitted;++step)f.Tick(pose(12),true);
+        CHECK(f.submitted&&f.submits==1&&f.result.pending);
+        CHECK(f.submitted->command.authority.operation==FeedPhysicalOperation::OpenCover);
+        // Receipt service must keep running even when no new source packet is
+        // rendered. A repeated packet cannot dispatch this endpoint twice.
+        const auto endpoint=f.sample.raw;f.Consume(&endpoint);CHECK(f.result.pending&&f.submits==1);
+        CHECK(f.Callback());f.sample.input.nowNs=f.now+20;f.Consume(&endpoint);
+        CHECK(!f.result.pending&&f.submits==1&&f.result.blocksFire);
+        ++configurations;
+    }
+    CHECK(configurations==24);return 0;
+}
+int RepeatedFeedPacketRejectsChangedSourceAndExpiredAuthority(){
+    using namespace feed_interaction_detail;
+    for(unsigned defect=0;defect<12;++defect){
+        Fixture f;f.wristCalibration=Identity();const auto m=f.Open();
+        const auto start=feed_interaction_detail::Multiply(m.motionFromContact,m.weaponFromMotion);
+        f.Tick(start,false);f.Tick(start,true);CHECK(f.result.interactionStatus==FeedInteractionStatus::Acquired);
+        auto repeated=f.sample.raw;f.PrepareTick(start,true);
+        switch(defect){
+        case 0:++repeated.inputEvidence.observedNs;break;
+        case 1:++repeated.inputEvidence.deadlineNs;break;
+        case 2:repeated.inputEvidence.released[0]=true;break;
+        case 3:++repeated.inputEvidence.owner.space;break;
+        case 4:++repeated.rig.skeleton;break;
+        case 5:f.sample.binding->deadlineNs=f.sample.input.nowNs;break;
+        case 6:f.selected->deadlineNs=f.sample.input.nowNs;break;
+        case 7:{const auto gun=f.hands.Current(InteractionHand::Right);CHECK(gun);
+            CHECK(f.hands.Release(f.sample.input,gun->token).accepted);break;}
+        case 8:f.sample.input.focused=false;break;
+        case 9:f.sample.input.tracked[0]=false;break;
+        case 10:f.sample.cancel=true;break;
+        case 11:
+            // Current input/native evidence remains fresh; the exact source
+            // packet has expired and cannot borrow the newer packet's lease.
+            f.sample.input.nowNs=repeated.inputEvidence.deadlineNs;break;
+        }
+        f.Consume(&repeated);
+        CHECK(!f.result.ownsHand&&!f.result.pending&&!f.result.diagnostic.policyEvaluated&&f.submits==0);
+        CHECK(f.result.blocksFire&&!f.result.presentation&&!f.hands.Current(InteractionHand::Left));
+        if(defect<5)CHECK(f.result.diagnostic.exit==Bc2PhysicalFeedExit::GunOrRawUnverified);
+        if(defect==11)CHECK(f.result.diagnostic.rawChecked==15&&f.result.diagnostic.rawPassed==7);
+    }
+    return 0;
+}
 int EveryEnrolledFeedConsumesMissedStartupEdge(){
     using namespace feed_interaction_detail;
     for(const auto& registration:RegisteredBc2FeedProfiles()){
@@ -685,6 +770,8 @@ int main(){
     CHECK(EveryEnrolledFeedUsesAnatomicalControllerMapping()==0);
     CHECK(EveryEnrolledFeedAcceptsObservedGraspWithDelayedPublication()==0);
     CHECK(EveryEnrolledFeedStartsFromReleasedApproach()==0);
+    CHECK(EveryEnrolledFeedRetainsRepeatedPacketThroughOpenCover()==0);
+    CHECK(RepeatedFeedPacketRejectsChangedSourceAndExpiredAuthority()==0);
     CHECK(EveryEnrolledFeedConsumesMissedStartupEdge()==0);
     CHECK(EveryEnrolledFeedStartupPreservesAdmissionGates()==0);
     CHECK(EveryEnrolledFeedRejectsDelayedNeutralAfterRejectedPress()==0);
@@ -694,5 +781,5 @@ int main(){
     CHECK(SameAddressReplacementDoesNotInheritFeedDebt()==0);
     CHECK(RealNoEntryReceiptRecoversCompletedEndpointWithNewId()==0);
     CHECK(DrainedActorReplacementReclaimsSlotsWithoutInventingAmmunitionSuccess()==0);
-    std::puts("Bc2PhysicalFeedTests: 23 deterministic owner/arbiter/callback compositions; no game or headset acceptance");
+    std::puts("Bc2PhysicalFeedTests: 25 deterministic owner/arbiter/callback compositions; no game or headset acceptance");
 }

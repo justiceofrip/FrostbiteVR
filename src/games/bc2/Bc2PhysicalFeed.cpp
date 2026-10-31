@@ -106,8 +106,10 @@ struct Bc2PhysicalFeed::State {
         std::atomic<std::uint64_t> registrationKey=0,lastSelectedKey=0;
         std::atomic<int> loaded=-1,reserve=-1,capacity=-1;
     } diagnostics;
+    struct PolicyContact {RigIdentity rig{};math::Matrix4 local{},weaponWorld{};};
     struct Packet {ReloadStateOwner owner{};HandInteractionSample input{};HandInteractionKey weapon{};
-        std::optional<FeedEquipmentNativeView> native;bool grip=false,reload=false;std::optional<math::Matrix4> bodyFromHand;};
+        std::optional<FeedEquipmentNativeView> native;bool grip=false,reload=false;std::optional<math::Matrix4> bodyFromHand;
+        std::optional<PolicyContact> contact;};
     struct Equipment {
         explicit Equipment(const Bc2FeedRegistration& row)noexcept
             :registration(row),pose(row.geometry.poses[unsigned(Bc2FeedPoseId::Resting)]){}
@@ -413,8 +415,9 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     const auto right=hands.Current(InteractionHand::Right);
     const bool gun=right&&right->token.owner==s.input.owner&&right->token.item==s.weapon&&
         right->token.kind==HandClaimKind::GunHold&&!right->token.prerequisiteClaim&&right->deadlineNs>now;
-    const State::Packet* source=nullptr;
-    for(const auto& p:state.packets)if(p.owner==s.owner&&p.weapon==s.weapon&&SamePacket(p.input,s.raw.inputEvidence)){source=&p;break;}
+    State::Packet* source=nullptr;
+    for(auto& p:state.packets)if(p.owner==s.owner&&p.weapon==s.weapon&&SamePacket(p.input,s.raw.inputEvidence)&&
+        (!p.contact||p.contact->rig==s.raw.rig)){source=&p;break;}
     const auto rawCheck=[&](unsigned bit,bool passed){out.diagnostic.rawChecked|=1u<<bit;
         if(passed)out.diagnostic.rawPassed|=1u<<bit;return passed;};
     (void)rawCheck(0,gun);
@@ -424,7 +427,14 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         rawCheck(8,hands.HasRecordedEvidence(source->input,InteractionHand::Left));
     if(!gun||!raw){Suspend(s.input,hands);out.blocksFire=e->Blocked();return finish(FeedExit::GunOrRawUnverified);}
     auto sourceInput=source->input;sourceInput.nowNs=now;
-    const auto local=feed_interaction_detail::Multiply(s.raw.rawLeftWristWorldMeters,Inverse(s.raw.weaponWorldMeters));
+    // The renderer solves the placed weapon again on each native publication,
+    // even while controllerEvidence still names the same original packet.
+    // Keep that packet's first admitted policy geometry immutable, just like
+    // its native snapshot. Recomputed display transforms remain current below;
+    // they are neither a new motion sample nor permission to extend a lease.
+    if(!source->contact)source->contact=State::PolicyContact{s.raw.rig,
+        feed_interaction_detail::Multiply(s.raw.rawLeftWristWorldMeters,Inverse(s.raw.weaponWorldMeters)),s.raw.weaponWorldMeters};
+    const auto& local=source->contact->local;
     const auto body=state.BodyAmmo(*e,*view);
     const bool acquiredSupply=e->ammunitionSupply.Update(body,s.input,s.bodyFromHand,s.grip,
         e->container==FeedContainerState::Detached&&e->supplyNeutral&&!e->pending,hands,intent);
@@ -579,7 +589,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         sample.interaction.hand={1,sourceInput.owner.equipGeneration};sample.interaction.trackingGeneration=sourceInput.owner.space;
         sample.interaction.focused=s.input.focused;sample.interaction.grip=source->grip;
         if(e->motions.operations[unsigned(e->activeOperation)].kind==FeedMotionKind::FreePlacement)
-            sample.interaction.weaponWorld=s.raw.weaponWorldMeters;
+            sample.interaction.weaponWorld=source->contact->weaponWorld;
         sample.held=available&&(source->grip||sourceInput.released[0])&&!e->refused&&!e->gateFailed&&!e->motionDirty&&
             (!needsSupply||supplied||pickupAwaitingRaw||(chestNeutral&&e->supplyNeutral));
         if(prior.session.reload.pending&&prior.ammunition.lastReceipt&&!prior.ammunition.pending&&
