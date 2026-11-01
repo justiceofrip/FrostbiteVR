@@ -361,7 +361,7 @@ class FeedSimulationPlanTests(unittest.TestCase):
                     return snap, b"synthetic", clock[0]
                 def pause(deadline):
                     clock[0] = max(clock[0], deadline)
-                def send(lines, expected=None, source_deadline=None):
+                def send(lines, expected=None, source_deadline=None, final_release=False):
                     if source_deadline is not None:
                         self.assertLess(clock[0], source_deadline)
                     sent.append(expected["phase"])

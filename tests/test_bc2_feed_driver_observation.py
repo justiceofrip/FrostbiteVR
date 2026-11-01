@@ -126,6 +126,12 @@ class Harness:
             self.response_due = None
         if self.command_due is not None and self.now >= self.command_due:
             batch = self.files[self.driver.command_path].decode("ascii").splitlines()
+            for command in batch:
+                if command.startswith("grip l "):
+                    self.state["controls"]["gripL"] = float(command.split()[-1])
+                elif command.startswith("hand l grip pose "):
+                    pose = [float(value) for value in command.split()[4:]]
+                    self.state["handL"].update(pos=pose[:3], ypr=pose[3:])
             self.state.update(cmdSeq=self.state["cmdSeq"] + len(batch), lastCmd=batch[-1], frame=103, endFrames=102)
             self.files[self.driver.ack_path] = (
                 f"seq={self.state['cmdSeq']} frame=101 error=-\nlast={' | '.join(batch)}\n").encode("ascii")

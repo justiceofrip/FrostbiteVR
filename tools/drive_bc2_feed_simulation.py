@@ -636,7 +636,8 @@ class Driver:
             time.sleep(.001)
         raise REFUSAL("fresh snapshot request iteration bound")
 
-    def send(self, lines, expected=None, capture=None, cleanup=False, source_deadline=None):
+    def send(self, lines, expected=None, capture=None, cleanup=False, source_deadline=None,
+             final_release=False):
         require(0 < len(lines) <= 8 and all(isinstance(x, str) and "\n" not in x and "\r" not in x for x in lines),
                 "invalid command batch")
         require(self.commands + len(lines) + 1 <= MAX_COMMANDS, "512-command budget exhausted")
@@ -659,6 +660,19 @@ class Driver:
         raw = ("\n".join(batch) + "\n").encode("ascii")
         self.validate_publication(lines, expected, cleanup)
         written = time.perf_counter_ns()
+        if final_release:
+            require(not cleanup and capture is None and expected is not None
+                    and expected["phase"] == "release" and expected["grip"] == 0
+                    and lines == expected["commands"] and len(lines) == 2
+                    and lines[0] == "hand l grip pose " + " ".join(
+                        f"{v:.9f}" for v in expected["positionMeters"] + expected["yawPitchRollDegrees"])
+                    and lines[1] == "grip l 0" and self.monitor
+                    and self.motion_started is not None and self.held_left
+                    and not (self.pending_command or self.unsafe_owner or self.held_right
+                             or self.held_trigger or self.held_buttons),
+                    "observation handoff requires the exact planned final ordinary release")
+            self.admit_snapshot(self.latest_snapshot, written, integer(self.latest_snapshot["nonce"]))
+            self.stable_snapshot(self.reference, self.latest_snapshot)
         if source_deadline is not None:
             require(written < source_deadline, "original source/claim lease expired before command publication")
         if self.last_commit is not None and not cleanup:
@@ -670,6 +684,12 @@ class Driver:
         self.pending_batch, self.pending_before = batch, before
         self.save_owner(True)
         atomic(self.command_path, raw)
+        if final_release:
+            # Release may retire the feed presentation before xr-sim's commit
+            # is observed. Only this successfully published final plan batch
+            # stops command admission. Keep its pending snapshot/leases intact
+            # for the read-only observer after the exact bounded acknowledgement.
+            self.monitor = False
         self.last_write = written
         self.commands += len(batch)
         until = min(self.deadline, self.stage_deadline,
@@ -838,7 +858,8 @@ class Driver:
             source_deadline = min(integer(plan["sourceValidUntilNs"]),
                                   integer(snapshot["input_evidence"]["observedNs"]) + SNAPSHOT_PERIOD)
             self.send(target["commands"], expected=target,
-                      source_deadline=source_deadline if target is plan["schedule"][0] else acquisition_deadline)
+                      source_deadline=source_deadline if target is plan["schedule"][0] else acquisition_deadline,
+                      final_release=name != "SupplyPickup" and target is plan["schedule"][-1])
             acquisition_deadline = None
             if target["phase"] == "acquire" and plan["requiresPostAcquisitionReobservation"]:
                 acquisition_deadline = self.observe_acquisition(row, plan, self.last_write)
