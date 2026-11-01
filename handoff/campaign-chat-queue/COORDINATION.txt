@@ -11,15 +11,16 @@ Ownership: prior CHAT25/26 close.json confirms lease release, idle helpers and
 exact profile restoration. Coordinator acquired the lease before shared mutations.
 External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned.
 
-Feedback77: built/pushed1717263; native14ef23ae; private0.1.37 installed/validated,0.1.36 rollback and settings preserved.
-Both normal341/341 and nine focused suites pass. Shared launcher hand/native-ammunition binding, native-ready diagnostic driving and actual rendered-eye evidence are integrated; prior immutable publication/Feed admission changes remain.
+Feedback80: built/pushed530f3bb; nativef0a92d35; private0.1.38 installed/validated,0.1.37 rollback and settings preserved.
+Both normal341/341 and four focused suites pass. Optional current holster observations and prior shared launcher hand/native-ammunition binding, native-ready diagnostic driving and actual rendered-eye evidence are integrated.
+Actual38 xr-game01 reached genuineEmpty, drew QJU88 and opened its cover; DetachContainer lost its claim without accepted receipt. Normal close/native retirement/allthree profiles/settings restoration passed. Full reload remains open.
 Prior72+73 all80 measured underbarrel configurations/306-part cache and neutral pickup correction remain. Actual72 reached QJU replacement Attach/200-487; belt and complete reload remain unaccepted.
 Actual76 game01 Open/Detach followed a transient released publication gap, then same-owner Attach state/receipts2. Game03 selected40mmgl but remained1/7 after trigger; fixed-loader tracking was uninitialized. Both normal closed/restored.
 Actual37 XM8 launcher fired1/7->0/7 with visible wall damage; reload stopped before acquisition on expiring diagnostic family evidence. Normal close/native retirement/profiles/settings restoration all passed.
-Feedback78 diagnostic-only correction includes original family deadline in bounded refresh; fixed17/feed10/pump17/snapshot7 pass and review found no issue. No native rebuild/install; complete reload remains open.
-Receipts: handoff/integrations/coordinator-20261101-feedback77/README.txt and feedback78/README.txt; reports77/installation.json. No all-weapon/headset completion claim; prior69AVs unresolved.
+Feedback78 diagnostic-only correction includes original family deadline in bounded refresh; fixed17/feed10/pump17/snapshot7 pass. Feedback79 removes redundant firststage request; fixed18 pass. Both are included38; native fixed-loader admission remains unresolved.
+Receipts: handoff/integrations/coordinator-20261101-feedback80/README.txt; reports80/installation.json and source-push.json. No all-weapon/headset completion claim or publicrelease; prior69AVs unresolved.
 Retained70sight01: XM8->launcher->XM8, native mode acknowledgements2/sight commits2 and visible1/7; no firing/reload claim. Its two closed sessions are hash-preserved under reports72/archived-sessions.
-68 performance comparison inconclusive due native yaw mismatch. Actual37 rendered-eye identities/matrices validate, but long-run retention lacks comparison coverage; brief37 trials are being prepared. General destruction rendering remains unaccepted despite one visible XM8 wall blast.
+68 performance comparison inconclusive due native yaw mismatch. Actual37 rendered-eye identities/matrices validate, but long-run retention lacks comparison coverage. Brief37 OFF trial refused a wrong session-path preflight; saved tail indicates copy-completion delay, not an accepted gain. Matched38 comparison is being prepared. General destruction rendering remains unaccepted despite visible XM8 wall blasts.
 Historical68: private0.1.32; carry precision, pump observation/driver and native underbarrel inventory action pairing. Receipt coordinator-20261031-feedback68/receipt.json.
 Historical66: paired native sample wait; snapshot refusal blocked Detach. Private0.1.30; receipt coordinator-20261031-feedback66/receipt.json.
 Historical65:0.1.29 opt-in live snapshots/shared24-configuration driver; receipt coordinator-20261031-feedback65/receipt.json.

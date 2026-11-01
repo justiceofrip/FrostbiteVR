@@ -5,9 +5,9 @@ Updated November 1, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
-Feedback77 source is pushed and private0.1.37 is installed and validated, with0.1.36 rollback and settings preserved. Both normal builds pass341/341. Shared launcher hand/native-ammunition binding, native-ready diagnostic driving and actual rendered-eye evidence are included. [Handoff](../handoff/integrations/coordinator-20261101-feedback77/README.txt). Feedback72+73's80 measured underbarrel configurations and306-part cache remain included.
+Feedback80 source is pushed and private0.1.38 is installed and validated, with0.1.37 rollback and settings preserved. Both normal builds pass341/341. Current holster observations, shared launcher hand/native-ammunition binding and bounded diagnostic driving are included. [Handoff](../handoff/integrations/coordinator-20261101-feedback80/README.txt). The80 measured underbarrel configurations and306-part cache remain included.
 
-Actual37 XM8 launcher fired, consumed1/7->0/7 and visibly damaged a wall; manual reload stopped before acquisition on an expiring diagnostic family lease. The run closed normally with native retirement and profiles/settings restored. Feedback78 corrects diagnostic freshness using the original lease and bounded refresh; no native rebuild is required. Actual72 QJU88 reached replacement Attach/200-487, but belt seating and complete reload remain unaccepted. General destruction rendering, performance and headset acceptance remain open; prior loading/shutdown AVs remain unresolved.
+Actual38 ordinary holstering reached Empty, drew QJU88 and opened its cover; container removal then lost its claim without an accepted operation. The run closed normally with native retirement and profiles/settings restored (reports/coordinator-20261101-feedback80/xr-game01). Actual37 XM8 launcher fired1/7->0/7 and visibly damaged a wall, but native reload admission remains unresolved. Feedback78/79 diagnostic deadline and redundant-request corrections are included. Complete LMG/underbarrel reloads, general destruction rendering, measured performance and headset acceptance remain open; prior loading/shutdown AVs remain unresolved.
 
 The user's 0.1.27 session showed slight LMG cover motion, no magnetic hand and no completed reload. [Feedback](archive/2026-10-31-bc2vr-0.1.27-buglist.md). Retained acquisition failed OffPath with timing gates passing; its exact geometric predicate is unknown. A separate worker0xc0000005 has no stack/final report. Ghidra remains available; live simulation observation and complete shared motion driving are the next batch.
 
@@ -223,16 +223,16 @@ Preserve qualified performance comparisons; no guaranteed90Hz/headset performanc
 claim follows from diagnostic pairs. HUD flicker, knife hit/audio polish,
 cutscene orientation, scope/weapon polish and vehicle reticles remain on
 [the backlog](PREALPHA-BACKLOG.md). LMG manual loading, broader bolt/pistol
-chambering and scope coverage remain incomplete. Physical grenade/underbarrel
-reloads are deferred; full body/MP/other Frostbite ports are later scope.
+chambering and scope coverage remain incomplete. Underbarrel manual reloads are
+active work; physical grenade reloads, full body/MP/other Frostbite ports are later scope.
 
 ## Public release and storage
 
 [Public0.1.15](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.15) remains
 unchanged. Its launcher fixes missing image-path identity and exposes the narrow
 experimental Steam option. Actual Steam rendering/equipment support remains
-unverified. It retains the checkpoint434 native binaries; private0.1.17 is packaged
-and installed locally for testing, not published. Public product commit13d7574bd682ae883a935a9adae52a59409b576f.
+unverified. It retains the checkpoint434 native binaries; private0.1.38 is installed
+locally for development testing, not published. Public product commit13d7574bd682ae883a935a9adae52a59409b576f.
 
 Use G: and process-local TEMP/TMP/TMPDIR. Player installs may use their selected
 drive. Keep40GiB allocated/15GiB free,3GiB normal-build reserve and512MiB raw/run.
