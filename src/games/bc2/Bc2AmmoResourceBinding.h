@@ -23,6 +23,16 @@ inline bool AmmoResourceBindingFresh(const AmmoResourceBinding& b,const ReloadSt
 }
 // Latest gather publication. A busy writer invalidates the previous sample,
 // rather than leaving old item identity available during replacement.
+// Optional diagnostic copy from this same read attempt; no new authority.
+enum class AmmoResourceBindingReadReason:unsigned {
+    NotAttempted,Available,Busy,Unpublished,Revision,NoBinding,Owner,Future,Expired,Invalid
+};
+struct AmmoResourceBindingReadObservation {
+    AmmoResourceBindingReadReason reason=AmmoResourceBindingReadReason::NotAttempted;
+    bool gateHeld=false,revisionRead=false;
+    std::uint64_t storedRevision=0,currentRevision=0;
+    std::optional<AmmoResourceBinding> value;
+};
 class AmmoResourceBindingChannel {
 public:
     bool Publish(const std::optional<AmmoResourceBinding>& binding)noexcept {
@@ -31,9 +41,29 @@ public:
         Gate gate(gate_);if(!gate.held||revision!=revision_.load(std::memory_order_acquire))return false;
         value_=binding;storedRevision_=revision;return true;
     }
-    std::optional<AmmoResourceBinding> Read(const ReloadStateOwner& owner,std::int64_t now)noexcept {
-        Gate gate(gate_);if(!gate.held||!storedRevision_||storedRevision_!=revision_.load(std::memory_order_acquire)||
-            !value_||!AmmoResourceBindingFresh(*value_,owner,now))return {};
+    std::optional<AmmoResourceBinding> Read(const ReloadStateOwner& owner,std::int64_t now,
+        AmmoResourceBindingReadObservation* observation=nullptr)noexcept {
+        if(observation)*observation={};
+        const auto reject=[&](AmmoResourceBindingReadReason reason)->std::optional<AmmoResourceBinding>{
+            if(observation)observation->reason=reason;return {};
+        };
+        Gate gate(gate_);
+        if(!gate.held)return reject(AmmoResourceBindingReadReason::Busy);
+        if(observation){observation->gateHeld=true;observation->storedRevision=storedRevision_;}
+        if(!storedRevision_)return reject(AmmoResourceBindingReadReason::Unpublished);
+        const auto revision=revision_.load(std::memory_order_acquire);
+        if(observation){observation->revisionRead=true;observation->currentRevision=revision;}
+        if(storedRevision_!=revision)return reject(AmmoResourceBindingReadReason::Revision);
+        if(!value_)return reject(AmmoResourceBindingReadReason::NoBinding);
+        if(observation)observation->value=value_;
+        if(!AmmoResourceBindingFresh(*value_,owner,now)){
+            // Classification uses the already locked value. It never retries.
+            const auto reason=value_->owner!=owner?AmmoResourceBindingReadReason::Owner:
+                now<value_->observedNs?AmmoResourceBindingReadReason::Future:
+                now>=value_->deadlineNs?AmmoResourceBindingReadReason::Expired:AmmoResourceBindingReadReason::Invalid;
+            return reject(reason);
+        }
+        if(observation)observation->reason=AmmoResourceBindingReadReason::Available;
         return value_;
     }
 private:

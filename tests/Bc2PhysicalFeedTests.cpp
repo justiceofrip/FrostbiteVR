@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <memory>
 #include <sstream>
 #include <vector>
@@ -42,7 +43,7 @@ struct Fixture {
     fvr::math::Matrix4 lastWrist=Identity();
     Bc2PhysicalFeedResult result{};
     std::optional<FeedEquipmentSubmission> submitted;
-    bool refuse=false,occupyLeft=false;unsigned submits=0;
+    bool refuse=false,occupyLeft=false,refuseGate=false;unsigned submits=0,nativeReads=0,nativeReadAts=0;
     // Native simulation, controller input and render publication have separate
     // clocks. Defaults preserve the original one-publication-per-input fixture.
     std::vector<unsigned> nativeCadence{1};
@@ -67,16 +68,17 @@ struct Fixture {
     }
     Bc2PhysicalFeedApi Api(){return {this,
         [](void* p,const ReloadStateOwner& o,std::int64_t now)noexcept{auto& f=*static_cast<Fixture*>(p);
+            ++f.nativeReads;
             return f.missingCurrentView?std::optional<FeedEquipmentNativeView>{}:f.NativeRead(f.backend.Read(o,now));},
         [](void* p,const FeedEquipmentSubmission& s)noexcept{auto& f=*static_cast<Fixture*>(p);++f.submits;f.submitted=s;
             return !f.refuse&&f.backend.Submit(s,f.now+1);},
         [](void* p,std::uint64_t life,std::uint64_t id)noexcept{return static_cast<Fixture*>(p)->backend.Receipt(life,id);},
         [](void* p,const ReloadStateOwner& o,std::int64_t observed,std::int64_t now)noexcept{
-            auto& f=*static_cast<Fixture*>(p);return f.NativeRead(f.backend.ReadAt(o,observed,now));},
+            auto& f=*static_cast<Fixture*>(p);++f.nativeReadAts;return f.NativeRead(f.backend.ReadAt(o,observed,now));},
         [](void* p,const FeedEquipmentSubmission& s,bool noEntryOnly)noexcept{auto& f=*static_cast<Fixture*>(p);
             if(!noEntryOnly){++f.submits;f.submitted=s;}
             return f.backend.SubmitResult(s,f.now+1,noEntryOnly||f.refuse);},
-        [](void* p,const FeedEquipmentGate& gate)noexcept{auto& f=*static_cast<Fixture*>(p);return f.backend.PublishGate(gate,f.now+1);},
+        [](void* p,const FeedEquipmentGate& gate)noexcept{auto& f=*static_cast<Fixture*>(p);return !f.refuseGate&&f.backend.PublishGate(gate,f.now+1);},
         [](void* p,const AmmoResourceIdentity& resource)noexcept{return static_cast<Fixture*>(p)->backend.ReadGate(resource);},
         [](void* p,std::uint64_t after)noexcept{return static_cast<Fixture*>(p)->backend.Retirement(after);}};}
     explicit Fixture(const Bc2FeedRegistration* row=nullptr):physical(Api()){
@@ -508,6 +510,142 @@ int AdmissionObservationRetainsFirstSeatPressWithoutGrantingAuthority(){
     CHECK(failure.find("\"selectionFailure\":8")!=std::string::npos);
     CHECK(failure.find("\"contact\":null")!=std::string::npos);
     f.now+=1000*Ms;f.Tick(wrist,true);CHECK(observe()==failed); // No renewal after the opt-in window.
+    return 0;
+}
+int AdmissionObservationExplainsMissingViewRetentionBeforeSuspension(){
+    const auto observe=[](){std::ostringstream out;out<<std::boolalpha;WriteBc2PhysicalFeedAdmissionObservation(out);return out.str();};
+    const auto field=[](const std::string& text,const char* begin,const char* end){
+        const auto at=text.find(begin),until=text.find(end,at);
+        return at==std::string::npos||until==std::string::npos?std::string{}:text.substr(at,until-at);
+    };
+    const auto* registration=FindBc2FeedRegistration(5358977986686110024ull);
+    CHECK(registration&&registration->geometry.asset=="QJU88_sp");
+    for(unsigned fault=0;fault<4;++fault){
+        Fixture f(registration);CHECK(f.OpenCover()&&f.Reconcile());f.submitted.reset();
+        const auto motion=BuildBc2FeedMotionFromRetainedPose(registration->geometry,FeedPhysicalOperation::DetachContainer,
+            registration->interactionPolicy,registration->geometry.poses[unsigned(Bc2FeedPoseId::Resting)]);
+        CHECK(motion);const auto wrist=feed_interaction_detail::Multiply(motion->placement.sourceFromGrip,motion->placement.weaponFromSource);
+        f.Tick(wrist,false);f.Tick(wrist,false);RequestBc2PhysicalFeedAdmissionObservation(f.now);f.Tick(wrist,true);
+        CHECK(f.result.ownsHand&&f.result.interactionStatus==FeedInteractionStatus::Acquired);
+        const auto held=f.hands.Current(InteractionHand::Left);CHECK(held);
+        const auto native=f.backend.ReadAt(f.sample.owner,f.sample.input.observedNs,f.sample.input.nowNs);CHECK(native);
+        const auto original=f.result.presentation;CHECK(original);
+        const auto first=observe();const auto firstPress=field(first,"\"firstPress\":",",\"latestChange\":");CHECK(!firstPress.empty());
+        CHECK(first.find("\"failedRetention\":null")!=std::string::npos);
+        const auto counts=f.native.counts;const auto reads=f.nativeReads,readAts=f.nativeReadAts;
+        // Actual feedback80/82 shape: repeat the admitted input while its
+        // original native and hand leases are both live, then lose current view.
+        f.missingCurrentView=true;
+        if(fault==1)f.refuseGate=true;
+        if(fault==2)f.sample.raw.valid=false;
+        if(fault==3)++f.sample.equipment->data;
+        CHECK(f.sample.input.nowNs<held->deadlineNs&&f.sample.input.nowNs<native->deadlineNs);
+        f.Consume();
+        CHECK(f.nativeReads==reads+1&&f.nativeReadAts==readAts); // Observer cannot re-read native evidence.
+        CHECK(f.result.diagnostic.exit==Bc2PhysicalFeedExit::ViewUnavailable&&!f.result.diagnostic.policyEvaluated);
+        CHECK(!f.result.presentation&&!f.result.pending&&!f.backend.Pending()&&!f.submitted&&f.submits==1&&f.native.counts==counts);
+        const auto observed=observe();CHECK(field(observed,"\"firstPress\":",",\"latestChange\":")==firstPress);
+        const auto latest=field(observed,"\"latestChange\":",",\"failedRetention\":");CHECK(!latest.empty());
+        CHECK(latest.find("\"retention\":{\"checked\":63,\"passed\":63,\"firstFailure\":null")!=std::string::npos);
+        CHECK(latest.find("\"registrationKey\":"+std::to_string(registration->key)+",\"lifetime\":"+
+            std::to_string(original->lifetime)+",\"claim\":"+std::to_string(held->token.id))!=std::string::npos);
+        const auto failed=field(observed,"\"failedRetention\":",",\"retentionEntryPredicates\":");CHECK(!failed.empty());
+        if(!fault){
+            CHECK(f.result.ownsHand&&f.result.blocksEquipment);
+            const auto retained=f.hands.Current(InteractionHand::Left);CHECK(retained&&retained->token==held->token);
+            CHECK(retained->inputSequence==held->inputSequence&&retained->deadlineNs==held->deadlineNs);
+            CHECK(latest.find("\"checked\":17179869183,\"passed\":17179869183,\"firstFailure\":null,\"selectionFailure\":0")!=std::string::npos);
+            CHECK(failed=="\"failedRetention\":null");
+        }else{
+            CHECK(!f.result.ownsHand&&!f.hands.Current(InteractionHand::Left));
+            CHECK(failed.find("\"leftFeedClaim\":{\"slot\":0,\"registrationKey\":"+std::to_string(registration->key)+
+                ",\"lifetime\":"+std::to_string(original->lifetime)+",\"lost\":true}")!=std::string::npos);
+            const char* expected=fault==1?"\"checked\":127,\"passed\":63,\"firstFailure\":\"gate_published\",\"selectionFailure\":null":
+                fault==2?"\"checked\":17179869183,\"passed\":8589934591,\"firstFailure\":\"selected\",\"selectionFailure\":8":
+                "\"checked\":4095,\"passed\":2047,\"firstFailure\":\"current_equipment\",\"selectionFailure\":null";
+            CHECK(latest.find(expected)!=std::string::npos&&failed.find(expected)!=std::string::npos);
+            // Later held/default observations and a neutral release must not
+            // erase the original failed transition or its preceding first press.
+            f.refuseGate=false;f.sample.raw.valid=true;if(fault==3)--f.sample.equipment->data;
+            f.Consume();const auto after=observe();
+            CHECK(field(after,"\"failedRetention\":",",\"retentionEntryPredicates\":")==failed);
+            CHECK(field(after,"\"firstPress\":",",\"latestChange\":")==firstPress);
+            f.Tick(wrist,false);CHECK(observe()==after);
+        }
+        if(fault==0||fault==2){
+            CHECK(latest.find("\"heldInput\":{\"sequence\":"+std::to_string(held->inputSequence))!=std::string::npos);
+            CHECK(latest.find("\"heldNative\":{\"sequence\":"+std::to_string(native->sequence)+",\"observedNs\":"+
+                std::to_string(native->observedNs)+",\"deadlineNs\":"+std::to_string(native->deadlineNs))!=std::string::npos);
+        }
+        std::ostringstream full,compact;full<<std::boolalpha;compact<<std::boolalpha;
+        WriteBc2PhysicalFeedAdmissionObservation(full,&compact);
+        CHECK(field(compact.str(),"\"failedRetention\":",",\"retentionEntryPredicates\":")==failed);
+        CHECK(compact.str().find("\"latestChange\":{\"omitted\":\"payload_limit\"}")!=std::string::npos);
+        const auto fullPress=field(full.str(),"\"firstPress\":",",\"latestChange\":");
+        const auto compactPress=field(compact.str(),"\"firstPress\":",",\"latestChange\":");
+        CHECK(field(compactPress,"\"firstPress\":",",\"leftBefore\":")==field(fullPress,"\"firstPress\":",",\"admissionChecked\":"));
+        CHECK(field(compactPress,"\"leftBefore\":",",\"omitted\":")==field(fullPress,"\"leftBefore\":",",\"policy\":"));
+        // Reserve the independently conservative fixed-gate/header bound and
+        // 4 KiB for all three populated native Feed-gate rows plus metadata.
+        CHECK(compact.str().size()+11702+4096<=32768);
+    }
+    return 0;
+}
+int AdmissionObservationIgnoresUnrelatedMechanismClaim(){
+    Fixture f;CHECK(f.OpenCover()&&f.Reconcile());
+    f.PrepareTick(Identity(),true);
+    const auto unrelated=f.hands.Acquire(f.sample.input,{f.sample.input.owner,InteractionHand::Left,
+        HandClaimKind::Mechanism,{999,1},{{998,1},f.sequence,f.sample.input.deadlineNs,true},++f.intent,0});
+    CHECK(unrelated.accepted&&unrelated.claim);
+    RequestBc2PhysicalFeedAdmissionObservation(f.now);f.missingCurrentView=true;
+    const auto reads=f.nativeReads,readAts=f.nativeReadAts,submits=f.submits;const auto counts=f.native.counts;
+    f.Consume();
+    CHECK(f.result.diagnostic.exit==Bc2PhysicalFeedExit::ViewUnavailable&&!f.result.ownsHand);
+    const auto retained=f.hands.Current(InteractionHand::Left);CHECK(retained);
+    CHECK(retained->token==unrelated.claim->token&&retained->inputSequence==unrelated.claim->inputSequence&&
+        retained->deadlineNs==unrelated.claim->deadlineNs);
+    CHECK(f.nativeReads==reads+1&&f.nativeReadAts==readAts+1&&f.submits==submits&&f.native.counts==counts);
+    std::ostringstream full,compact;full<<std::boolalpha;compact<<std::boolalpha;
+    WriteBc2PhysicalFeedAdmissionObservation(full,&compact);
+    for(const auto* text:{&full,&compact}){
+        CHECK(text->str().find("\"failedRetention\":null")!=std::string::npos);
+        CHECK(text->str().find("\"leftFeedClaim\":null")!=std::string::npos);
+        CHECK(text->str().find("\"leftBefore\":{\"id\":"+std::to_string(retained->token.id)+",")!=std::string::npos);
+    }
+    return 0;
+}
+// Replace the diagnostic publication deterministically during full output. A
+// second publication load for compact output would mix two different presses.
+class FeedObservationInterleavingBuffer final:public std::stringbuf {
+    std::function<void()> onWrite;
+    void Interleave(){if(onWrite){auto callback=std::move(onWrite);onWrite={};callback();}}
+    std::streamsize xsputn(const char* text,std::streamsize count)override{
+        Interleave();return std::stringbuf::xsputn(text,count);
+    }
+    int_type overflow(int_type value)override{Interleave();return std::stringbuf::overflow(value);}
+public:
+    explicit FeedObservationInterleavingBuffer(std::function<void()> callback):onWrite(std::move(callback)){}
+};
+int CompactAdmissionUsesSameImmutableFailureAndPress(){
+    Fixture f;const auto motion=f.Open();
+    const auto wrist=feed_interaction_detail::Multiply(motion.motionFromContact,motion.weaponFromMotion);
+    f.Tick(wrist,false);RequestBc2PhysicalFeedAdmissionObservation(f.now);f.Tick(wrist,true);
+    CHECK(f.result.ownsHand);const auto held=f.hands.Current(InteractionHand::Left);CHECK(held);
+    f.missingCurrentView=true;f.sample.raw.valid=false;f.Consume();CHECK(!f.result.ownsHand);
+    std::ostringstream before,beforeCompact;before<<std::boolalpha;beforeCompact<<std::boolalpha;
+    WriteBc2PhysicalFeedAdmissionObservation(before,&beforeCompact);
+    CHECK(before.str().find("\"failedRetention\":null")==std::string::npos);
+    bool replaced=false;
+    FeedObservationInterleavingBuffer buffer([&]{
+        f.sample.grip=false;f.Consume();f.sample.grip=true;f.Consume();replaced=true;
+    });
+    std::ostream full(&buffer);full<<std::boolalpha;std::ostringstream compact;compact<<std::boolalpha;
+    WriteBc2PhysicalFeedAdmissionObservation(full,&compact);
+    CHECK(replaced&&buffer.str()==before.str()&&compact.str()==beforeCompact.str());
+    std::ostringstream after;after<<std::boolalpha;WriteBc2PhysicalFeedAdmissionObservation(after);
+    CHECK(after.str()!=before.str()&&after.str().find("\"failedRetention\":null")!=std::string::npos);
+    CHECK(compact.str().find("\"leftBefore\":{\"id\":"+std::to_string(held->token.id)+",")!=std::string::npos);
+    CHECK(compact.str().size()+11702+4096<=32768);
     return 0;
 }
 int BackendLifetimesIncreaseAcrossOwners(){
@@ -1694,5 +1832,8 @@ int main(){
     CHECK(RealNoEntryReceiptRecoversCompletedEndpointWithNewId()==0);
     CHECK(DrainedActorReplacementReclaimsSlotsWithoutInventingAmmunitionSuccess()==0);
     CHECK(AdmissionObservationRetainsFirstSeatPressWithoutGrantingAuthority()==0);
-    std::puts("Bc2PhysicalFeedTests: 35 deterministic owner/arbiter/callback/presentation compositions; no game or headset acceptance");
+    CHECK(AdmissionObservationExplainsMissingViewRetentionBeforeSuspension()==0);
+    CHECK(AdmissionObservationIgnoresUnrelatedMechanismClaim()==0);
+    CHECK(CompactAdmissionUsesSameImmutableFailureAndPress()==0);
+    std::puts("Bc2PhysicalFeedTests: 38 deterministic owner/arbiter/callback/presentation compositions; no game or headset acceptance");
 }

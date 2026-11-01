@@ -7,6 +7,7 @@
 #include "Bc2KnifeTimingObservation.h"
 #endif
 #include "Bc2OriginalFiringObserver.h"
+#include "Bc2DiagnosticObservationWindow.h"
 #include "Bc2NativeCycleRuntime.h"
 #include "Bc2NativeCycleRecovery.h"
 #include "Bc2NativeCycleFailureJournal.h"
@@ -629,7 +630,12 @@ std::atomic_flag nativeCycleRoutingGate=ATOMIC_FLAG_INIT;
 Bc2NativeCycleService nativeCycle;
 Bc2CycleReloadRouting nativeCycleReload;
 bool fixedContainerReloadEnabled=false; // Pre-Start, exact descriptor admission only.
-struct FixedContainerNativeGate {FixedContainerGate gate;ReloadHoldIdentity identity;ReloadObservedConfig config;bool fault=false;};
+struct FixedGateFault {
+    FixedContainerInputGuard input{};ReloadHoldIdentity identity{};
+    std::int64_t observedNs=0;std::uint64_t invocation=0,observationEpoch=0;
+};
+struct FixedContainerNativeGate {FixedContainerGate gate;ReloadHoldIdentity identity;ReloadObservedConfig config;bool fault=false;
+    std::optional<FixedGateFault> faultEvidence{};};
 std::array<std::optional<FixedContainerNativeGate>,64> fixedContainerGates{};
 std::atomic_flag fixedContainerGateLock=ATOMIC_FLAG_INIT;
 std::uint64_t fixedContainerLastLifetime=0;
@@ -692,6 +698,89 @@ struct Frame {Frame* previous=nullptr;std::uint64_t id=0,update=0,ownerRevision=
 thread_local Frame* currentFrame=nullptr;
 struct RequestBoundaryEvidence {unsigned stage=0,readBranch=3;ReloadFlowBoundaryDiagnostic client{};ReloadServerBoundaryDiagnostic server{};};
 std::int64_t Now()noexcept;
+
+struct FixedGateCurrent {
+    bool checked=false,enabled=false,revisionRead=false;std::uint64_t currentRevision=0;
+};
+struct FixedGateOwnerEvidence {
+    unsigned reason=0; // 1:no server,2:no binding,3:initial current,4..6:client0/client1/server,7:final current
+    FixedGateCurrent initial{},final{};
+};
+struct FixedGateObservation {
+    FixedContainerGate publication{};
+    const char* refusal=nullptr;std::int64_t beginNs=0,endNs=0,ownerReadNs=0,bindingReadNs=0,viewReadNs=0;
+    ReloadPolicyLockEvidence ownerLock{};FixedGateCurrent current{};FixedGateOwnerEvidence ownerEvidence{};
+    RequestBoundaryEvidence boundary{};
+    bool nativeCopied=false,nativeServer=false;
+    ReloadStateOwner nativeOwner{};std::uint64_t nativeSequence=0,nativeRevision=0,cleanupEpoch=0,completionCycle=0;
+    std::int64_t nativeObservedNs=0,nativeDeadlineNs=0;
+    AmmoResourceBindingReadObservation bindingRead{};
+    int resourceLock=-1,gateLock=-1,serviceActive=-1,ledgerPresent=-1,ledgerPending=-1,ledgerPhase=-1,viewPresent=-1;
+    std::optional<interaction::AmmunitionSnapshot> ledger;
+    std::optional<AmmoResourceBinding> viewBinding;std::optional<interaction::AmmunitionSnapshot> viewSnapshot;
+    std::optional<FixedContainerGate> retained;bool retainedFault=false;
+    std::optional<FixedGateFault> fault;
+    std::optional<std::uint64_t> lastLifetime;
+};
+std::atomic_flag fixedGateObservationLock=ATOMIC_FLAG_INIT;
+using FixedGateObservationWindow=DiagnosticObservationWindow<FixedGateObservation>;
+FixedGateObservationWindow fixedGateObservations(fixedGateObservationLock);
+// Sole diagnostic lock: one try, no allocation, no gameplay lock acquisition.
+// Declared before gameplay guards, so destruction publishes after they release.
+class FixedGateCapture {
+    FixedGateObservationWindow::Ticket ticket_;
+public:
+    FixedGateObservation row;
+    FixedGateCapture(const FixedContainerGate& p,std::int64_t now)noexcept:
+        ticket_(fixedGateObservations.Begin(now)){
+        if(Requested()){row.publication=p;row.beginNs=now;}
+    }
+    bool Requested()const noexcept{return ticket_.epoch!=0;}
+    bool Reject(const char* reason)noexcept{row.refusal=reason;return false;}
+    ~FixedGateCapture(){
+        if(!Requested())return;
+        row.endNs=Now();
+        fixedGateObservations.Publish(ticket_,row,row.refusal!=nullptr);
+    }
+};
+enum FeedGatePredicate:unsigned {
+    FeedGateReloadEnabled,FeedGateRuntimeEnabled,FeedGateProbeHeld,
+    FeedGateInputRetained,FeedGateFaultBlocksFire,FeedGateAdapterPublished
+};
+constexpr std::array<const char*,6> feedGatePredicateNames{
+    "feed_reload_enabled","runtime_enabled","ammo_move_probe_gate",
+    "retained_input_scope","fault_requires_blocks_fire","adapter_publish_gate"};
+struct FeedGateObservation {
+    FeedEquipmentGate publication{};
+    std::int64_t beginNs=0,endNs=0;
+    unsigned checked=0,passed=0;const char* refusal=nullptr;
+    int currentResourceMatch=-1,currentReadAvailable=-1,scopeFaulted=-1;
+};
+std::atomic_flag feedGateObservationLock=ATOMIC_FLAG_INIT;
+using FeedGateObservationWindow=DiagnosticObservationWindow<FeedGateObservation>;
+FeedGateObservationWindow feedGateObservations(feedGateObservationLock);
+// As with the fixed gate, publish only after the original gameplay guard releases.
+class FeedGateCapture {
+    FeedGateObservationWindow::Ticket ticket_;
+public:
+    FeedGateObservation row;
+    FeedGateCapture(const FeedEquipmentGate& p,std::int64_t now)noexcept:
+        ticket_(feedGateObservations.Begin(now)){
+        if(Requested()){row.publication=p;row.beginNs=now;}
+    }
+    bool Requested()const noexcept{return ticket_.epoch!=0;}
+    bool Check(FeedGatePredicate predicate,bool passed)noexcept {
+        if(Requested()){
+            const auto bit=1u<<predicate;row.checked|=bit;
+            if(passed)row.passed|=bit;else if(!row.refusal)row.refusal=feedGatePredicateNames[predicate];
+        }
+        return passed;
+    }
+    ~FeedGateCapture(){
+        if(!Requested())return;
+        row.endNs=Now();feedGateObservations.Publish(ticket_,row,row.refusal!=nullptr);
+    }
+};
 struct ObservationReadMiss {
     std::int64_t observedNs=0;unsigned thread=0,firing=0,branch=3,stage=0;
     ReloadFlowEvent kind{};bool exit=false;std::uint64_t invocation=0;
@@ -842,14 +931,19 @@ void RequestMissing(unsigned firing,unsigned stage,unsigned kind,const RequestBo
 }
 std::int64_t Now()noexcept{LARGE_INTEGER value{};if(frequency<=0||!QueryPerformanceCounter(&value)||value.QuadPart<=0)return 0;
     return (value.QuadPart/frequency)*1000000000+(value.QuadPart%frequency)*1000000000/frequency;}
-bool IsCurrent(const Lease& lease,std::int64_t now)noexcept{
-    if(lease.cleanupEpoch)return enabled.load(std::memory_order_acquire)&&
-        ReloadCleanupObservationCurrent(lease.cleanupEpoch,cleanupOwnerEpoch.load(std::memory_order_acquire),
+bool IsCurrent(const Lease& lease,std::int64_t now,FixedGateCurrent* observation=nullptr)noexcept{
+    if(observation){*observation={};observation->checked=true;}
+    const auto enabledValue=[&](bool value)noexcept{if(observation)observation->enabled=value;return value;};
+    const auto revisionValue=[&](std::uint64_t value)noexcept{
+        if(observation){observation->revisionRead=true;observation->currentRevision=value;}return value;
+    };
+    if(lease.cleanupEpoch)return enabledValue(enabled.load(std::memory_order_acquire))&&
+        ReloadCleanupObservationCurrent(lease.cleanupEpoch,revisionValue(cleanupOwnerEpoch.load(std::memory_order_acquire)),
             lease.snapshot.observedNs,lease.deadline,now);
-    if(lease.completionCycle)return enabled.load(std::memory_order_acquire)&&
-        nativeCycleCompletionId.load(std::memory_order_acquire)==lease.completionCycle&&
+    if(lease.completionCycle)return enabledValue(enabled.load(std::memory_order_acquire))&&
+        revisionValue(nativeCycleCompletionId.load(std::memory_order_acquire))==lease.completionCycle&&
         now>=lease.snapshot.observedNs&&now<lease.deadline&&now-lease.snapshot.observedNs<=200000000;
-    return enabled.load(std::memory_order_acquire)&&lease.revision==ownerRevision.load(std::memory_order_acquire)&&
+    return enabledValue(enabled.load(std::memory_order_acquire))&&lease.revision==revisionValue(ownerRevision.load(std::memory_order_acquire))&&
         now>=lease.snapshot.observedNs&&now<lease.deadline;
 }
 ReloadHoldIdentity RoundIdentity(const Lease&)noexcept;
@@ -992,8 +1086,13 @@ std::optional<ReloadFlowBoundary> BoundaryFor(const Lease& lease,unsigned firing
 template<std::size_t N>bool Context(unsigned address,std::array<std::byte,N>& out)noexcept{
     return address>=0x10000&&address<=UINT32_MAX-out.size()&&memory.read&&memory.read(memory.context,address,out.data(),out.size());
 }
-bool RequestOwnerEvidence(const Lease& lease,std::int64_t now,RequestBoundaryEvidence* evidence=nullptr)noexcept {
-    if(!lease.server||!serverBinding||!IsCurrent(lease,now))return false;
+bool RequestOwnerEvidence(const Lease& lease,std::int64_t now,RequestBoundaryEvidence* evidence=nullptr,
+    FixedGateOwnerEvidence* observation=nullptr)noexcept {
+    if(observation)*observation={};
+    const auto reject=[&](unsigned reason)noexcept{if(observation)observation->reason=reason;return false;};
+    if(!lease.server)return reject(1);
+    if(!serverBinding)return reject(2);
+    if(!IsCurrent(lease,now,observation?&observation->initial:nullptr))return reject(3);
     // Ownership is structural. Requiring a sibling's mutable timer/state to
     // stand still here falsely cancels valid overlapping client/server updates.
     // Each own-event boundary and PrepareHold still require full state evidence.
@@ -1007,8 +1106,8 @@ bool RequestOwnerEvidence(const Lease& lease,std::int64_t now,RequestBoundaryEvi
             valid=ReadReloadPhaseCoherent([&](std::int64_t at,ReloadFlowBoundaryDiagnostic& d){
                 return ReadReloadFlowOwner(memory,binding,base,lease.snapshot,lease.deadline,firing,at,&d);},Now,Now(),read.client,retry);
             RecordPhaseRetry(PhaseRetryPath::ClientOwner,firing,lease,lease.deadline,retry);}
-        if(!valid){if(evidence)*evidence=read;return false;}}
-    return IsCurrent(lease,Now());
+        if(!valid){if(evidence)*evidence=read;return reject(4+branch);}}
+    return IsCurrent(lease,Now(),observation?&observation->final:nullptr)?true:reject(7);
 }
 struct Observation {
     Frame frame{};std::optional<Lease> lease;unsigned context=0,snapshot=0,callbackCaller=0;
@@ -1353,7 +1452,12 @@ void OriginalUpdateWithPistol(Observation& observation,void* self,void* context,
                 [](void* value){const auto& c=*static_cast<Call*>(value);originalUpdate(c.self,c.context,c.extra);},&call,observation.fixedInput);
             if(!observation.fixedInput.Exact()){
                 Gate gate(fixedContainerGateLock);if(gate.held)for(auto& slot:fixedContainerGates)
-                    if(slot&&slot->identity==identity)slot->fault=true;
+                    if(slot&&slot->identity==identity){
+                        const auto window=fixedGateObservations.Begin(observation.entry.nowNs);
+                        if(!slot->fault&&window.epoch)
+                            slot->faultEvidence=FixedGateFault{observation.fixedInput,identity,observation.entry.nowNs,observation.entry.nativeInvocation,window.epoch};
+                        slot->fault=true;
+                    }
             }
             return;
         }
@@ -3415,42 +3519,204 @@ bool EnableFixedContainerReload()noexcept {
     return false;
 #endif
 }
+void RequestFixedContainerGateObservation(std::int64_t observedNs,std::int64_t existingObservationUntilNs)noexcept{
+    // Copy only the existing live snapshot window; no native/input lease changes.
+    fixedGateObservations.Request(observedNs,existingObservationUntilNs);
+    feedGateObservations.Request(observedNs,existingObservationUntilNs);
+}
+void WriteFixedContainerGateObservation(std::ostream& out){
+    FixedGateObservationWindow::Snapshot captured;
+    if(!fixedGateObservations.Read(captured)){out<<"{\"available\":false,\"reason\":\"diagnostic_busy\"}";return;}
+    // The bounded copy has released its diagnostic flag before serialization.
+    const auto& first=captured.firstFailure;const auto& preceding=captured.precedingAccepted;const auto& latest=captured.latest;
+    const auto dropped=fixedGateObservations.Drops();
+    const auto owner=[&](const ReloadStateOwner& o){
+        out<<"{\"player\":"<<o.player<<",\"soldier\":"<<o.soldier<<",\"weak\":"<<o.weak<<",\"weapon\":"<<o.weapon
+            <<",\"actorGeneration\":"<<o.actorGeneration<<",\"equipGeneration\":"<<o.equipGeneration<<",\"space\":"<<o.space<<'}';};
+    const auto context=[&](const interaction::AmmoResourceContext& c){
+        const auto& r=c.resource;out<<"{\"resource\":{\"actor\":"<<r.actor<<",\"actorGeneration\":"<<r.actorGeneration
+            <<",\"weapon\":"<<r.weapon<<",\"weaponGeneration\":"<<r.weaponGeneration<<"},\"equipGeneration\":"<<c.equipGeneration<<",\"space\":"<<c.space<<'}';};
+    const auto binding=[&](const AmmoResourceBinding& b){
+        out<<"{\"owner\":";owner(b.owner);out<<",\"context\":";context(b.context);
+        out<<",\"inventory\":"<<b.inventory<<",\"switching\":"<<b.switching<<",\"data\":"<<b.data<<",\"persistence\":"<<b.persistence
+            <<",\"observedNs\":"<<b.observedNs<<",\"deadlineNs\":"<<b.deadlineNs<<'}';};
+    const auto publication=[&](const FixedContainerGate& p){
+        out<<"{\"binding\":";binding(p.binding);out<<",\"handOwner\":{\"actor\":"<<p.handOwner.actor
+            <<",\"actorGeneration\":"<<p.handOwner.actorGeneration<<",\"equipGeneration\":"<<p.handOwner.equipGeneration<<",\"space\":"<<p.handOwner.space
+            <<"},\"lifetime\":"<<p.lifetime<<",\"revision\":"<<p.revision<<",\"inputSequence\":"<<p.inputSequence
+            <<",\"observedNs\":"<<p.observedNs<<",\"deadlineNs\":"<<p.deadlineNs
+            <<",\"blocksFire\":"<<p.blocksFire<<",\"closedVerified\":"<<p.closedVerified<<'}';};
+    const auto current=[&](const FixedGateCurrent& c){
+        if(!c.checked){out<<"null";return;}
+        out<<"{\"enabled\":"<<c.enabled<<",\"currentRevision\":";
+        if(c.revisionRead)out<<c.currentRevision;else out<<"null";out<<'}';};
+    const auto snapshot=[&](const std::optional<interaction::AmmunitionSnapshot>& s){
+        if(!s){out<<"null";return;}out<<"{\"context\":";context(s->context);
+        out<<",\"sequence\":"<<s->sequence<<",\"observedNs\":"<<s->observedNs<<",\"deadlineNs\":"<<s->deadlineNs
+            <<",\"loaded\":"<<s->counts.loaded<<",\"reserve\":"<<s->counts.reserve<<",\"capacity\":"<<s->counts.capacity
+            <<",\"coherentIdleVerified\":"<<s->coherentIdleVerified<<'}';};
+    const auto row=[&](const std::optional<FixedGateObservationWindow::Entry>& value,bool details){
+        if(!value){out<<"null";return;}const auto& r=value->value;
+        out<<"{\"windowEpoch\":"<<value->window.epoch<<",\"windowBeginNs\":"<<value->window.beginNs<<",\"windowEndNs\":"<<value->window.endNs
+            <<",\"refusal\":\""<<(r.refusal?r.refusal:"accepted")<<"\",\"beginNs\":"<<r.beginNs<<",\"endNs\":"<<r.endNs<<",\"publication\":";
+        publication(r.publication);if(!details){out<<'}';return;}
+        out<<",\"ownerLock\":{\"held\":"<<r.ownerLock.held<<",\"contended\":"<<r.ownerLock.contended
+            <<",\"failure\":"<<unsigned(r.ownerLock.failure)<<",\"attempts\":"<<r.ownerLock.attempts
+            <<",\"beginNs\":"<<r.ownerLock.beginNs<<",\"endNs\":"<<r.ownerLock.endNs<<"},\"native\":";
+        if(!r.nativeCopied)out<<"null";else {
+            out<<"{\"owner\":";owner(r.nativeOwner);out<<",\"sequence\":"<<r.nativeSequence<<",\"revision\":"<<r.nativeRevision
+                <<",\"observedNs\":"<<r.nativeObservedNs<<",\"deadlineNs\":"<<r.nativeDeadlineNs
+                <<",\"cleanupEpoch\":"<<r.cleanupEpoch<<",\"completionCycle\":"<<r.completionCycle<<",\"server\":"<<r.nativeServer<<",\"current\":";
+            current(r.current);out<<'}';
+        }
+        out<<",\"ownerRead\":{\"nowNs\":"<<r.ownerReadNs<<",\"reason\":"<<r.ownerEvidence.reason<<",\"initialCurrent\":";
+        current(r.ownerEvidence.initial);out<<",\"finalCurrent\":";current(r.ownerEvidence.final);
+        const auto& c=r.boundary.client;const auto& s=r.boundary.server;
+        out<<",\"branch\":"<<r.boundary.readBranch<<",\"client\":{\"failure\":"<<unsigned(c.failure)
+            <<",\"beforeSoldierFlags\":"<<unsigned(c.beforeSoldierFlags)<<",\"afterSoldierFlags\":"<<unsigned(c.afterSoldierFlags)
+            <<",\"changedOffset\":"<<c.changedOffset<<",\"changedBefore\":"<<unsigned(c.changedBefore)<<",\"changedAfter\":"<<unsigned(c.changedAfter)
+            <<",\"differsOnlySoldierFlags\":"<<c.differsOnlySoldierFlags<<"},\"server\":{\"failure\":"<<unsigned(s.failure)
+            <<",\"stateFailure\":"<<s.stateFailure<<",\"expectedSoldierFlags\":"<<unsigned(s.expectedSoldierFlags)
+            <<",\"observedSoldierFlags\":"<<unsigned(s.observedSoldierFlags)<<",\"afterSoldierFlags\":"<<unsigned(s.afterSoldierFlags)
+            <<",\"changedOffset\":"<<s.changedOffset<<",\"changedBefore\":"<<unsigned(s.changedBefore)<<",\"changedAfter\":"<<unsigned(s.changedAfter)
+            <<",\"differsOnlySoldierFlags\":"<<s.differsOnlySoldierFlags<<",\"changedOnlySoldierFlags\":"<<s.changedOnlySoldierFlags
+            <<",\"linkDifferenceCount\":"<<s.linkDifference.count<<",\"links\":[";
+        for(unsigned n=0;n<std::min<unsigned>(s.linkDifference.count,unsigned(s.linkDifference.first.size()));++n){
+            const auto& link=s.linkDifference.first[n];if(n)out<<',';
+            out<<"{\"field\":\""<<link.field<<"\",\"index\":"<<link.index<<",\"expected\":"<<link.expected<<",\"observed\":"<<link.observed<<'}';
+        }out<<"]}},\"bindingRead\":{\"nowNs\":"<<r.bindingReadNs<<",\"reason\":"<<unsigned(r.bindingRead.reason)
+            <<",\"gateHeld\":"<<r.bindingRead.gateHeld<<",\"storedRevision\":"<<r.bindingRead.storedRevision<<",\"currentRevision\":";
+        if(r.bindingRead.revisionRead)out<<r.bindingRead.currentRevision;else out<<"null";
+        out<<",\"binding\":";if(r.bindingRead.value)binding(*r.bindingRead.value);else out<<"null";
+        out<<"},\"resourceLock\":"<<r.resourceLock<<",\"gateLock\":"<<r.gateLock
+            <<",\"serviceActive\":"<<r.serviceActive<<",\"ledgerPresent\":"<<r.ledgerPresent<<",\"ledgerPending\":"<<r.ledgerPending
+            <<",\"ledgerPhase\":"<<r.ledgerPhase<<",\"ledger\":";snapshot(r.ledger);
+        out<<",\"viewPresent\":"<<r.viewPresent<<",\"viewReadNs\":"<<r.viewReadNs<<",\"viewBinding\":";
+        if(r.viewBinding)binding(*r.viewBinding);else out<<"null";out<<",\"viewSnapshot\":";snapshot(r.viewSnapshot);
+        out<<",\"retained\":";if(r.retained)publication(*r.retained);else out<<"null";
+        out<<",\"retainedFault\":"<<r.retainedFault<<",\"lastLifetime\":";
+        if(r.lastLifetime)out<<*r.lastLifetime;else out<<"null";
+        out<<",\"faultInput\":";
+        if(!r.fault)out<<"null";else {
+            const auto& f=*r.fault;out<<"{\"windowEpoch\":"<<f.observationEpoch<<",\"observedNs\":"<<f.observedNs<<",\"invocation\":"<<f.invocation<<",\"identity\":{\"owner\":";owner(f.identity.owner);
+            out<<",\"firing\":["<<f.identity.firing[0]<<','<<f.identity.firing[1]<<','<<f.identity.firing[2]
+                <<"],\"serverPlayer\":"<<f.identity.serverPlayer<<",\"serverSoldier\":"<<f.identity.serverSoldier<<",\"serverItem\":"<<f.identity.serverItem
+                <<"},\"requested\":"<<f.input.requested<<",\"applied\":"<<f.input.applied<<",\"restored\":"<<f.input.restored
+                <<",\"unexpectedWrite\":"<<f.input.unexpectedWrite<<",\"original\":["<<f.input.original[0]<<','<<f.input.original[1]
+                <<"],\"effective\":["<<f.input.effective[0]<<','<<f.input.effective[1]<<"],\"beforeRestore\":["
+                <<f.input.beforeRestore[0]<<','<<f.input.beforeRestore[1]<<"]}";
+        }out<<'}';
+    };
+    out<<"{\"schema\":\"fvr.bc2.fixed-gate-observation.v1\",\"available\":"<<bool(latest)
+        <<",\"windowEpoch\":"<<captured.window.epoch<<",\"windowBeginNs\":"<<captured.window.beginNs<<",\"windowEndNs\":"<<captured.window.endNs
+        <<",\"publishedCalls\":"<<captured.calls<<",\"publishedRejected\":"<<captured.rejected<<",\"lateEpochDropped\":"<<captured.lateEpochDropped
+        <<",\"publicationDropped\":"<<dropped.publication<<",\"requestDropped\":"<<dropped.request<<",\"snapshotDropped\":"<<dropped.snapshot
+        <<",\"busyDropCounterScope\":\"process\""
+        <<",\"ownerReasonNames\":[\"none\",\"no_server\",\"no_server_binding\",\"initial_current\",\"client0\",\"client1\",\"server\",\"final_current\"]"
+        <<",\"bindingReasonNames\":[\"not_attempted\",\"available\",\"busy\",\"unpublished\",\"revision\",\"no_binding\",\"owner\",\"future\",\"expired\",\"invalid\"]"
+        <<",\"unobservedInteger\":-1,\"firstFailure\":";row(first,true);
+    out<<",\"precedingAccepted\":";row(preceding,false);
+    const bool joined=first&&preceding&&first->window.epoch==preceding->window.epoch&&
+        first->value.publication.binding.context==preceding->value.publication.binding.context&&
+        first->value.publication.binding.owner==preceding->value.publication.binding.owner&&
+        first->value.publication.lifetime==preceding->value.publication.lifetime&&
+        first->value.publication.inputSequence==preceding->value.publication.inputSequence&&
+        first->value.publication.revision>0&&preceding->value.publication.revision==first->value.publication.revision-1;
+    out<<",\"precedingAcceptedSameInput\":"<<joined<<",\"latest\":";row(latest,false);out<<'}';
+}
 bool PublishFixedContainerGate(const FixedContainerGate& publication)noexcept {
 #ifdef FVR_BC2_AMMO_RESOURCE_HANDS
     const auto now=Now();const auto& binding=publication.binding;const auto& hand=publication.handOwner;
-    if(!fixedContainerReloadEnabled||!enabled.load(std::memory_order_acquire)||!publication.lifetime||!publication.revision||
-       !publication.inputSequence||publication.observedNs<=0||publication.observedNs>now||now>=publication.deadlineNs||
-       publication.deadlineNs-publication.observedNs>100000000||
-       !AmmoResourceBindingFresh(binding,binding.owner,now)||
-       hand.actor!=((std::uint64_t(binding.owner.weak)<<32)|binding.owner.soldier)||
-       hand.actorGeneration!=binding.owner.actorGeneration||hand.space!=binding.owner.space||!hand.equipGeneration||
-       (!publication.blocksFire&&!publication.closedVerified))return false;
+    FixedGateCapture capture(publication,now);auto& diagnostic=capture.row;
+    if(!fixedContainerReloadEnabled)return capture.Reject("fixed_disabled");
+    if(!enabled.load(std::memory_order_acquire))return capture.Reject("runtime_disabled");
+    if(!publication.lifetime)return capture.Reject("lifetime_zero");
+    if(!publication.revision)return capture.Reject("revision_zero");
+    if(!publication.inputSequence)return capture.Reject("input_sequence_zero");
+    if(publication.observedNs<=0)return capture.Reject("input_observed_invalid");
+    if(publication.observedNs>now)return capture.Reject("input_future");
+    if(now>=publication.deadlineNs)return capture.Reject("input_expired");
+    if(publication.deadlineNs-publication.observedNs>100000000)return capture.Reject("input_span");
+    if(!AmmoResourceBindingFresh(binding,binding.owner,now))return capture.Reject("input_binding_invalid");
+    if(hand.actor!=((std::uint64_t(binding.owner.weak)<<32)|binding.owner.soldier))return capture.Reject("hand_actor");
+    if(hand.actorGeneration!=binding.owner.actorGeneration)return capture.Reject("hand_actor_generation");
+    if(hand.space!=binding.owner.space)return capture.Reject("hand_space");
+    if(!hand.equipGeneration)return capture.Reject("hand_equip_generation_zero");
+    if(!publication.blocksFire&&!publication.closedVerified)return capture.Reject("closure_unverified");
     std::optional<Lease> lease;
-    {OwnerCopyGate owner;if(!owner.held||!IsCurrent(published,now)||published.snapshot.owner!=binding.owner||!published.server)return false;lease=published;}
-    if(!ReadFixedContainerNativeConfig(memory,lease->snapshot.config)||!RequestOwnerEvidence(*lease,Now()))return false;
-    const auto current=ammoResourceBindings.Read(binding.owner,Now());
-    if(!current||current->context!=binding.context||current->inventory!=binding.inventory||current->switching!=binding.switching||
-       current->data!=binding.data||current->persistence!=binding.persistence)return false;
+    {OwnerCopyGate owner;
+        if(capture.Requested())diagnostic.ownerLock=owner.lock.Evidence();
+        if(!owner.held)return capture.Reject("owner_lock");
+        if(capture.Requested()){
+            diagnostic.nativeCopied=true;diagnostic.nativeOwner=published.snapshot.owner;
+            diagnostic.nativeSequence=published.snapshot.sequence;diagnostic.nativeRevision=published.revision;
+            diagnostic.nativeObservedNs=published.snapshot.observedNs;diagnostic.nativeDeadlineNs=published.deadline;
+            diagnostic.cleanupEpoch=published.cleanupEpoch;diagnostic.completionCycle=published.completionCycle;
+            diagnostic.nativeServer=bool(published.server);
+        }
+        if(!IsCurrent(published,now,capture.Requested()?&diagnostic.current:nullptr))return capture.Reject("owner_current");
+        if(published.snapshot.owner!=binding.owner)return capture.Reject("owner_identity");
+        if(!published.server)return capture.Reject("owner_server_missing");
+        lease=published;
+    }
+    if(!ReadFixedContainerNativeConfig(memory,lease->snapshot.config))return capture.Reject("native_config");
+    const auto ownerNow=Now();if(capture.Requested())diagnostic.ownerReadNs=ownerNow;
+    if(!RequestOwnerEvidence(*lease,ownerNow,capture.Requested()?&diagnostic.boundary:nullptr,
+        capture.Requested()?&diagnostic.ownerEvidence:nullptr))return capture.Reject("native_owner");
+    const auto bindingNow=Now();if(capture.Requested())diagnostic.bindingReadNs=bindingNow;
+    const auto current=ammoResourceBindings.Read(binding.owner,bindingNow,capture.Requested()?&diagnostic.bindingRead:nullptr);
+    if(!current)return capture.Reject("binding_read");
+    if(current->context!=binding.context)return capture.Reject("binding_context");
+    if(current->inventory!=binding.inventory)return capture.Reject("binding_inventory");
+    if(current->switching!=binding.switching)return capture.Reject("binding_switching");
+    if(current->data!=binding.data)return capture.Reject("binding_data");
+    if(current->persistence!=binding.persistence)return capture.Reject("binding_persistence");
     Gate resource(ammoMoveProbeGate);Gate gate(fixedContainerGateLock);
-    if(!resource.held||!gate.held)return false;
+    if(capture.Requested()){diagnostic.resourceLock=resource.held;diagnostic.gateLock=gate.held;}
+    if(!resource.held)return capture.Reject("resource_lock");
+    if(!gate.held)return capture.Reject("gate_lock");
     if(!publication.blocksFire){
         const auto* ledger=ammoPlayerService.Inventory().Find(binding.context.resource);
         const auto& view=ammoPlayerService.View();
-        if(ammoPlayerService.Active()||!ledger||ledger->Pending()||ledger->Phase()!=interaction::AmmunitionLedgerPhase::Ready||
-           ledger->Snapshot().context!=binding.context||!view||view->binding.context!=binding.context||!AmmoResourceViewFresh(*view,Now()))return false;
+        const bool active=bool(ammoPlayerService.Active());
+        if(capture.Requested()){diagnostic.serviceActive=active;diagnostic.ledgerPresent=bool(ledger);diagnostic.viewPresent=bool(view);}
+        if(active)return capture.Reject("service_active");
+        if(!ledger)return capture.Reject("ledger_missing");
+        const bool pending=bool(ledger->Pending());if(capture.Requested())diagnostic.ledgerPending=pending;
+        if(pending)return capture.Reject("ledger_pending");
+        const auto phase=ledger->Phase();if(capture.Requested())diagnostic.ledgerPhase=int(phase);
+        if(phase!=interaction::AmmunitionLedgerPhase::Ready)return capture.Reject("ledger_phase");
+        const auto& snapshot=ledger->Snapshot();if(capture.Requested())diagnostic.ledger=snapshot;
+        if(snapshot.context!=binding.context)return capture.Reject("ledger_context");
+        if(!view)return capture.Reject("view_missing");
+        if(capture.Requested()){diagnostic.viewBinding=view->binding;diagnostic.viewSnapshot=view->snapshot;}
+        if(view->binding.context!=binding.context)return capture.Reject("view_context");
+        const auto viewNow=Now();if(capture.Requested())diagnostic.viewReadNs=viewNow;
+        if(!AmmoResourceViewFresh(*view,viewNow))return capture.Reject("view_freshness");
     }
     std::optional<FixedContainerNativeGate>* available=nullptr;
     for(auto& slot:fixedContainerGates){
         if(!slot){if(!available)available=&slot;continue;}
         if(slot->gate.binding.context.resource!=binding.context.resource)continue;
-        if(publication.revision<=slot->gate.revision||publication.inputSequence<slot->gate.inputSequence||
-           publication.observedNs<slot->gate.observedNs||slot->fault)return false;
-        if(publication.lifetime!=slot->gate.lifetime&&(publication.lifetime<=fixedContainerLastLifetime||
-           slot->gate.blocksFire||!slot->gate.closedVerified))return false;
+        if(capture.Requested()){
+            diagnostic.retained=slot->gate;diagnostic.retainedFault=slot->fault;diagnostic.fault=slot->faultEvidence;
+            diagnostic.lastLifetime=fixedContainerLastLifetime;
+        }
+        if(publication.revision<=slot->gate.revision)return capture.Reject("retained_revision");
+        if(publication.inputSequence<slot->gate.inputSequence)return capture.Reject("retained_input_sequence");
+        if(publication.observedNs<slot->gate.observedNs)return capture.Reject("retained_observed");
+        if(slot->fault)return capture.Reject("retained_fault");
+        if(publication.lifetime!=slot->gate.lifetime){
+            if(publication.lifetime<=fixedContainerLastLifetime)return capture.Reject("transition_lifetime");
+            if(slot->gate.blocksFire)return capture.Reject("transition_blocks_fire");
+            if(!slot->gate.closedVerified)return capture.Reject("transition_unverified");
+        }
         if(publication.lifetime!=slot->gate.lifetime)fixedContainerLastLifetime=publication.lifetime;
         slot=FixedContainerNativeGate{publication,RoundIdentity(*lease),lease->snapshot.config};return true;
     }
-    if(!available||publication.lifetime<=fixedContainerLastLifetime)return false;
+    if(capture.Requested())diagnostic.lastLifetime=fixedContainerLastLifetime;
+    if(!available)return capture.Reject("capacity");
+    if(publication.lifetime<=fixedContainerLastLifetime)return capture.Reject("new_lifetime");
     *available=FixedContainerNativeGate{publication,RoundIdentity(*lease),lease->snapshot.config};
     fixedContainerLastLifetime=publication.lifetime;return true;
 #else
@@ -3563,16 +3829,49 @@ FeedEquipmentSubmitResult SubmitFeedEquipmentCommandResult(const FeedEquipmentSu
     (void)request;(void)noEntryOnly;return FeedEquipmentSubmitResult::Invalid;
 #endif
 }
+void WriteFeedEquipmentGateObservation(std::ostream& out){
+    FeedGateObservationWindow::Snapshot captured;
+    if(!feedGateObservations.Read(captured)){out<<"{\"available\":false,\"reason\":\"diagnostic_busy\"}";return;}
+    const auto dropped=feedGateObservations.Drops();
+    const auto row=[&](const std::optional<FeedGateObservationWindow::Entry>& value){
+        if(!value){out<<"null";return;}
+        const auto& r=value->value;const auto& p=r.publication;const auto& resource=p.resource;
+        out<<"{\"windowEpoch\":"<<value->window.epoch<<",\"windowBeginNs\":"<<value->window.beginNs<<",\"windowEndNs\":"<<value->window.endNs
+            <<",\"refusal\":\""<<(r.refusal?r.refusal:"accepted")<<"\",\"beginNs\":"<<r.beginNs<<",\"endNs\":"<<r.endNs
+            <<",\"checked\":"<<r.checked<<",\"passed\":"<<r.passed
+            <<",\"publication\":{\"resource\":{\"actor\":"<<resource.actor<<",\"actorGeneration\":"<<resource.actorGeneration
+            <<",\"weapon\":"<<resource.weapon<<",\"weaponGeneration\":"<<resource.weaponGeneration
+            <<"},\"lifetime\":"<<p.lifetime<<",\"revision\":"<<p.revision<<",\"blocksFire\":"<<p.blocksFire<<",\"closedVerified\":"<<p.closedVerified
+            <<"},\"currentResourceMatch\":"<<r.currentResourceMatch<<",\"currentReadAvailable\":"<<r.currentReadAvailable
+            <<",\"scopeFaulted\":"<<r.scopeFaulted<<'}';
+    };
+    out<<"{\"schema\":\"fvr.bc2.feed-gate-observation.v1\",\"available\":"<<bool(captured.latest)
+        <<",\"windowEpoch\":"<<captured.window.epoch<<",\"windowBeginNs\":"<<captured.window.beginNs<<",\"windowEndNs\":"<<captured.window.endNs
+        <<",\"publishedCalls\":"<<captured.calls<<",\"publishedRejected\":"<<captured.rejected<<",\"lateEpochDropped\":"<<captured.lateEpochDropped
+        <<",\"publicationDropped\":"<<dropped.publication<<",\"requestDropped\":"<<dropped.request<<",\"snapshotDropped\":"<<dropped.snapshot
+        <<",\"busyDropCounterScope\":\"process\",\"predicateNames\":[";
+    for(unsigned n=0;n<feedGatePredicateNames.size();++n){if(n)out<<',';out<<'\"'<<feedGatePredicateNames[n]<<'\"';}
+    out<<"],\"unobservedInteger\":-1,\"firstFailure\":";row(captured.firstFailure);
+    out<<",\"precedingAccepted\":";row(captured.precedingAccepted);
+    out<<",\"latest\":";row(captured.latest);out<<'}';
+}
 bool PublishFeedEquipmentGate(const FeedEquipmentGate& publication)noexcept {
 #ifdef FVR_BC2_NATIVE_AMMO_BACKEND
-    if(!feedEquipmentReloadEnabled||!enabled.load(std::memory_order_acquire))return false;
-    Gate gate(ammoMoveProbeGate);if(!gate.held)return false;
-    if(feedEquipmentCurrent&&feedEquipmentCurrent->binding.context.resource==publication.resource){
+    FeedGateCapture capture(publication,Now());
+    if(!capture.Check(FeedGateReloadEnabled,feedEquipmentReloadEnabled)||
+       !capture.Check(FeedGateRuntimeEnabled,enabled.load(std::memory_order_acquire)))return false;
+    Gate gate(ammoMoveProbeGate);if(!capture.Check(FeedGateProbeHeld,gate.held))return false;
+    const bool currentMatches=feedEquipmentCurrent&&feedEquipmentCurrent->binding.context.resource==publication.resource;
+    if(capture.Requested())capture.row.currentResourceMatch=currentMatches;
+    if(currentMatches){
         const auto current=feedEquipment.Read(feedEquipmentCurrent->identity.owner,Now());
-        if(current&&!feedInputScopes.Retain(*current,Now()))return false;
+        if(capture.Requested())capture.row.currentReadAvailable=bool(current);
+        if(current&&!capture.Check(FeedGateInputRetained,feedInputScopes.Retain(*current,Now())))return false;
     }
-    if(feedInputScopes.Faulted(publication.resource)&&!publication.blocksFire)return false;
-    return feedEquipment.PublishGate(publication,Now());
+    const bool faulted=feedInputScopes.Faulted(publication.resource);
+    if(capture.Requested())capture.row.scopeFaulted=faulted;
+    if(faulted&&!capture.Check(FeedGateFaultBlocksFire,publication.blocksFire))return false;
+    return capture.Check(FeedGateAdapterPublished,feedEquipment.PublishGate(publication,Now()));
 #else
     (void)publication;return false;
 #endif
@@ -4764,6 +5063,8 @@ std::optional<AmmoResourceView> ReadAmmoResourceView(const ReloadStateOwner&,std
 AmmoResourceRead ReadAmmoResourceObserved(const ReloadStateOwner&,std::int64_t)noexcept{return {AmmoResourceReadReason::Invalid,{}};}
 bool SubmitAmmoResourceRequest(const AmmoResourceRequest&)noexcept{return false;}
 bool EnableFixedContainerReload()noexcept{return false;}
+void RequestFixedContainerGateObservation(std::int64_t,std::int64_t)noexcept{}
+void WriteFixedContainerGateObservation(std::ostream& out){out<<"{\"available\":false,\"reason\":\"unsupported_architecture\"}";}
 bool PublishFixedContainerGate(const FixedContainerGate&)noexcept{return false;}
 std::optional<FixedContainerGate> ReadFixedContainerGate(const interaction::AmmoResourceIdentity&)noexcept{return {};}
 bool WithAmmoResourceLedger(const AmmoResourceBinding&,const interaction::HandInteractionOwner&,void*,bool (*)(void*,interaction::AmmunitionLedger&)noexcept)noexcept{return false;}
@@ -4780,6 +5081,7 @@ FeedEquipmentSubmitResult SubmitFeedEquipmentCommandResult(const FeedEquipmentSu
 bool SubmitFeedEquipmentCommand(const FeedEquipmentSubmission&)noexcept{return false;}
 std::optional<interaction::FeedAmmunitionReceipt> ReadFeedEquipmentReceipt(std::uint64_t,std::uint64_t)noexcept{return {};}
 bool PublishFeedEquipmentGate(const FeedEquipmentGate&)noexcept{return false;}
+void WriteFeedEquipmentGateObservation(std::ostream& out){out<<"{\"available\":false,\"reason\":\"unsupported_architecture\"}";}
 std::optional<FeedEquipmentGate> ReadFeedEquipmentGate(const interaction::AmmoResourceIdentity&)noexcept{return {};}
 std::optional<FeedEquipmentActorRetirement> ReadFeedEquipmentActorRetirement(std::uint64_t)noexcept{return {};}
 void Report(std::ostream& out){out<<"{\"installed\":false,\"unsupported_architecture\":true,\"observation_only\":true}";}

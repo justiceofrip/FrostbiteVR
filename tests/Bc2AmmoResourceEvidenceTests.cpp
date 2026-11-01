@@ -2,6 +2,7 @@
 #include "Bc2AmmoResourceEvidence.h"
 #include "Bc2AmmoResourceHandoff.h"
 #include "Bc2AmmoResourceBinding.h"
+#include "Bc2DiagnosticObservationWindow.h"
 #include <chrono>
 #include <iostream>
 #include <string>
@@ -128,12 +129,99 @@ int ConcurrentHandoff(){
 int BindingPublication(){
     const auto i=Identity();const auto s=Snapshot(i,22,191,30,Now);
     AmmoResourceBinding b{i.owner,s.context,0x80000,0x90000,0xa0000,0,Now,Now+100000000};
-    AmmoResourceBindingChannel channel;CHECK(!channel.Read(i.owner,Now));
-    CHECK(channel.Publish(b)&&channel.Read(i.owner,Now));
-    auto wrong=i.owner;++wrong.equipGeneration;CHECK(!channel.Read(wrong,Now));
-    CHECK(!channel.Read(i.owner,Now-1)&&!channel.Read(i.owner,b.deadlineNs));
-    CHECK(channel.Publish({})&&!channel.Read(i.owner,Now));
-    b.context.resource.weaponGeneration=0;CHECK(channel.Publish(b)&&!channel.Read(i.owner,Now));
+    AmmoResourceBindingChannel channel;
+    const auto parity=[&](const ReloadStateOwner& owner,std::int64_t now,AmmoResourceBindingReadReason reason,
+        const std::optional<AmmoResourceBinding>& raw,std::uint64_t revision)->int {
+        const auto plain=channel.Read(owner,now);
+        // Dirty fields ensure an early refusal resets the observation rather
+        // than retaining a previous successful read's facts.
+        AmmoResourceBindingReadObservation diagnostic;
+        diagnostic.reason=AmmoResourceBindingReadReason::Busy;diagnostic.gateHeld=diagnostic.revisionRead=true;
+        diagnostic.storedRevision=diagnostic.currentRevision=99;diagnostic.value=b;
+        const auto observed=channel.Read(owner,now,&diagnostic);
+        CHECK(plain==observed&&channel.Read(owner,now)==plain);
+        CHECK(bool(observed)==(reason==AmmoResourceBindingReadReason::Available));
+        CHECK(diagnostic.reason==reason&&diagnostic.gateHeld&&diagnostic.value==raw);
+        CHECK(diagnostic.storedRevision==revision&&diagnostic.currentRevision==revision);
+        CHECK(diagnostic.revisionRead==(revision!=0));
+        if(observed)CHECK(observed==raw);return 0;
+    };
+    CHECK(parity(i.owner,Now,AmmoResourceBindingReadReason::Unpublished,{},0)==0);
+    CHECK(channel.Publish(b));
+    CHECK(parity(i.owner,Now,AmmoResourceBindingReadReason::Available,b,1)==0);
+    auto wrong=i.owner;++wrong.equipGeneration;
+    CHECK(parity(wrong,Now,AmmoResourceBindingReadReason::Owner,b,1)==0);
+    CHECK(parity(i.owner,Now-1,AmmoResourceBindingReadReason::Future,b,1)==0);
+    CHECK(parity(i.owner,b.deadlineNs-1,AmmoResourceBindingReadReason::Available,b,1)==0);
+    CHECK(parity(i.owner,b.deadlineNs,AmmoResourceBindingReadReason::Expired,b,1)==0);
+    CHECK(channel.Publish({}));
+    CHECK(parity(i.owner,Now,AmmoResourceBindingReadReason::NoBinding,{},2)==0);
+    b.context.resource.weaponGeneration=0;CHECK(channel.Publish(b));
+    CHECK(parity(i.owner,Now,AmmoResourceBindingReadReason::Invalid,b,3)==0);
+    b.context.resource.weaponGeneration=1;b.deadlineNs=Now+100000001;CHECK(channel.Publish(b));
+    CHECK(parity(i.owner,Now,AmmoResourceBindingReadReason::Invalid,b,4)==0);
+    return 0;
+}
+int ObservationWindows(){
+    using Window=DiagnosticObservationWindow<AmmoResourceBindingReadObservation>;
+    std::atomic_flag flag=ATOMIC_FLAG_INIT;Window journal(flag);Window::Snapshot copy;
+    const auto i=Identity();const auto s=Snapshot(i,22,191,30,Now);
+    AmmoResourceBinding b{i.owner,s.context,0x80000,0x90000,0xa0000,0,Now,Now+100000000};
+    AmmoResourceBindingChannel channel;CHECK(channel.Publish(b));
+    AmmoResourceBindingReadObservation accepted,failureA,failureB;
+    CHECK(channel.Read(i.owner,Now,&accepted));
+    auto wrong=i.owner;++wrong.equipGeneration;CHECK(!channel.Read(wrong,Now,&failureA));
+    CHECK(failureA.reason==AmmoResourceBindingReadReason::Owner);
+    CHECK(!journal.Begin(Now).epoch&&!journal.Publish({},failureA,true));
+    CHECK(!journal.Request(0,Now)&&!journal.Request(Now,Now));
+    CHECK(journal.Request(Now,Now+100));
+    const auto a=journal.Begin(Now+1),lateA=journal.Begin(Now+2);
+    CHECK(a.epoch&&a.beginNs==Now&&a.endNs==Now+100);
+    CHECK(!journal.Begin(Now-1).epoch&&!journal.Begin(Now+100).epoch);
+    CHECK(journal.Publish(a,accepted,false)&&journal.Publish(a,failureA,true));
+    CHECK(journal.Read(copy)&&copy.calls==2&&copy.rejected==1);
+    CHECK(copy.firstFailure&&copy.firstFailure->value.reason==AmmoResourceBindingReadReason::Owner);
+    CHECK(copy.precedingAccepted&&copy.precedingAccepted->window.epoch==a.epoch);
+    CHECK(copy.precedingAccepted->value.reason==AmmoResourceBindingReadReason::Available);
+
+    // A failed reset cannot activate the new window or clear the old evidence.
+    CHECK(!flag.test_and_set(std::memory_order_acquire));
+    CHECK(!journal.Request(Now+200,Now+300)&&!journal.Begin(Now+201).epoch);
+    CHECK(!journal.Publish(lateA,failureA,true)&&!journal.Read(copy));
+    flag.clear(std::memory_order_release);
+    const auto drops=journal.Drops();CHECK(drops.request==1&&drops.publication==1&&drops.snapshot==1);
+    CHECK(journal.Read(copy)&&copy.window.epoch==a.epoch&&copy.calls==2);
+
+    CHECK(journal.Request(Now+200,Now+300));const auto next=journal.Begin(Now+201);
+    CHECK(next.epoch==a.epoch+1&&next.beginNs==Now+200&&next.endNs==Now+300);
+    CHECK(journal.Read(copy)&&copy.calls==0&&copy.rejected==0&&copy.lateEpochDropped==0);
+    CHECK(!copy.firstFailure&&!copy.precedingAccepted&&!copy.lastAccepted&&!copy.latest);
+    // The late A capture must not become B's first failure, last acceptance, or
+    // preceding acceptance. Its drop is visible in B's per-window accounting.
+    CHECK(!journal.Publish(lateA,failureA,true)&&!journal.Publish(lateA,accepted,false));
+    CHECK(journal.Read(copy)&&copy.lateEpochDropped==2&&!copy.firstFailure&&!copy.lastAccepted);
+    b.context.resource.weaponGeneration=0;b.observedNs=Now+200;CHECK(channel.Publish(b));
+    CHECK(!channel.Read(i.owner,Now+201,&failureB));
+    CHECK(failureB.reason==AmmoResourceBindingReadReason::Invalid&&failureB.value==b);
+    CHECK(journal.Publish(next,accepted,false)&&journal.Publish(next,failureB,true));
+
+    // Poll refreshes keep the first retained failure and the original ticket's
+    // bounds even when a later successful publication becomes latest.
+    CHECK(journal.Request(Now+250,Now+400)&&journal.Publish(journal.Begin(Now+301),accepted,false));
+    CHECK(journal.Request(Now+260,Now+350)); // delayed poll cannot shorten the live window
+    CHECK(journal.Read(copy)&&copy.window.epoch==next.epoch&&copy.window.endNs==Now+400);
+    CHECK(copy.calls==3&&copy.rejected==1&&copy.lateEpochDropped==2);
+    CHECK(copy.firstFailure&&copy.firstFailure->window.epoch==next.epoch&&copy.firstFailure->window.endNs==Now+300);
+    CHECK(copy.firstFailure->value.reason==AmmoResourceBindingReadReason::Invalid&&copy.firstFailure->value.value==b);
+    CHECK(copy.precedingAccepted&&copy.precedingAccepted->window.epoch==next.epoch);
+    CHECK(copy.latest&&copy.latest->value.reason==AmmoResourceBindingReadReason::Available);
+    CHECK(!journal.Publish(lateA,failureA,true));
+    CHECK(journal.Read(copy)&&copy.calls==3&&copy.lateEpochDropped==3&&copy.firstFailure->value.value==b);
+    CHECK(!journal.Begin(Now+400).epoch&&!journal.Request(Now+400,Now+400));
+    CHECK(journal.Request(Now+400,Now+500));
+    CHECK(journal.Read(copy)&&copy.window.epoch==next.epoch+1&&copy.calls==0&&copy.rejected==0&&copy.lateEpochDropped==0);
+    CHECK(!copy.firstFailure&&!copy.precedingAccepted&&!copy.latest);
+    CHECK(journal.Drops().request==1&&journal.Drops().publication==1&&journal.Drops().snapshot==1);
     return 0;
 }
 void ReadOwner(ReloadStateOwner& o){std::cin>>o.player>>o.soldier>>o.weak>>o.weapon>>o.actorGeneration>>o.equipGeneration>>o.space;}
@@ -175,6 +263,6 @@ int Replay(){
 }
 int main(int argc,char** argv){
     if(argc==2&&std::string(argv[1])=="--replay")return Replay();
-    CHECK(argc==1&&Regression()==0&&DelayedServerCompletion()==0&&ConcurrentHandoff()==0&&BindingPublication()==0);
+    CHECK(argc==1&&Regression()==0&&DelayedServerCompletion()==0&&ConcurrentHandoff()==0&&BindingPublication()==0&&ObservationWindows()==0);
     std::puts("Bc2AmmoResourceEvidence: actual server invocation and independent client completion required");return 0;
 }

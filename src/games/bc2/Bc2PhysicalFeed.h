@@ -44,10 +44,14 @@ std::shared_ptr<const Bc2PhysicalFeedPresentation> ReadBc2PhysicalFeedPresentati
     const ReloadStateOwner&,std::int64_t nowNs)noexcept;
 // Explicit mechanism-snapshot observation only; retained failures grant no pose,
 // hand, ammunition or native authority. No source lease is refreshed.
-// Retains the first observed press in the request window and its latest gate
-// change; a request begun while held does not establish the physical press edge.
+// Retains the first observed press, latest gate change and first missing-view
+// claim-loss transition in the request window, including the original ordered
+// retention checks. A request begun while held does not establish the press edge.
 void RequestBc2PhysicalFeedAdmissionObservation(std::int64_t nowNs)noexcept;
-void WriteBc2PhysicalFeedAdmissionObservation(std::ostream&);
+// Both forms use one immutable publication load. Compact keeps the complete
+// first failed retention and first-press identity/input/claim receipts; later
+// changes and first-press geometry/checks are explicitly omitted.
+void WriteBc2PhysicalFeedAdmissionObservation(std::ostream&,std::ostream* compact=nullptr);
 struct Bc2PhysicalFeedApi {
     void* context=nullptr;
     std::optional<FeedEquipmentNativeView> (*read)(void*,const ReloadStateOwner&,std::int64_t)noexcept=nullptr;

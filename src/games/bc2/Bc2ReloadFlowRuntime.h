@@ -403,6 +403,12 @@ bool SubmitAmmoResourceRequest(const AmmoResourceRequest&)noexcept;
 // Explicit fixed-container backend; exact descriptors and physical policy are
 // separate admissions. The callback is synchronous under the resource gate.
 bool EnableFixedContainerReload()noexcept;
+// Diagnostic only: the caller forwards the existing live snapshot observation window
+// to both fixed-container and Feed gate journals.
+// Captures are bounded/nonblocking, retained across invalid weapon snapshots.
+// Polls refresh one epoch; a request after expiry resets its retained evidence.
+void RequestFixedContainerGateObservation(std::int64_t observedNs,std::int64_t existingObservationUntilNs)noexcept;
+void WriteFixedContainerGateObservation(std::ostream&);
 bool PublishFixedContainerGate(const FixedContainerGate&)noexcept;
 std::optional<FixedContainerGate> ReadFixedContainerGate(const interaction::AmmoResourceIdentity&)noexcept;
 bool WithAmmoResourceLedger(const AmmoResourceBinding&,const interaction::HandInteractionOwner&,
@@ -427,6 +433,8 @@ FeedEquipmentSubmitResult SubmitFeedEquipmentCommandResult(const FeedEquipmentSu
 bool SubmitFeedEquipmentCommand(const FeedEquipmentSubmission&)noexcept;
 std::optional<interaction::FeedAmmunitionReceipt> ReadFeedEquipmentReceipt(std::uint64_t lifetime,std::uint64_t request)noexcept;
 bool PublishFeedEquipmentGate(const FeedEquipmentGate&)noexcept;
+// Read the separate Feed gate journal armed by RequestFixedContainerGateObservation.
+void WriteFeedEquipmentGateObservation(std::ostream&);
 std::optional<FeedEquipmentGate> ReadFeedEquipmentGate(const interaction::AmmoResourceIdentity&)noexcept;
 // Earliest retained actor-retirement event after the supplied cursor. This is
 // lifetime evidence only; release old claims before reclaiming exact old slots.

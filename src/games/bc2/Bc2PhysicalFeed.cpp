@@ -24,6 +24,29 @@ const char* FeedExitName(FeedExit reason)noexcept {
 }
 std::atomic<std::uint64_t> nextLifetime=0;
 std::atomic<std::shared_ptr<const Bc2PhysicalFeedPresentation>> publication;
+struct FeedRetentionChecks {
+    std::uint64_t checked=0,passed=0;
+    unsigned firstFailure=~0u;
+    bool Check(unsigned bit,bool pass)noexcept {
+        checked|=1ull<<bit;if(pass)passed|=1ull<<bit;else if(firstFailure==~0u)firstFailure=bit;
+        return pass;
+    }
+    bool operator==(const FeedRetentionChecks&)const=default;
+};
+constexpr const char* RetentionEntryPredicates[]={"view_unavailable","not_cancelled","current_grip",
+    "not_released","current_input_window","equipment_present"};
+constexpr const char* RetentionSlotPredicates[]={"slot_present","claim_present","session_present","session_ready",
+    "no_pending","not_refused","gate_published","motion_clean","no_release_wait","active_operation",
+    "weapon_match","current_equipment","right_claim","right_owner","right_item","right_gun_hold",
+    "right_no_prerequisite","right_lease","left_claim","left_token","left_prerequisite","held_packet",
+    "held_native","held_contact","held_grip","held_owner","held_sequence","left_input_sequence",
+    "left_deadline","held_input_window","recorded_left_evidence","held_native_fresh","native_identity","selected"};
+struct FeedRetentionSlot {
+    FeedRetentionChecks checks{};
+    std::uint64_t registrationKey=0,lifetime=0,claim=0,heldInputSequence=0,nativeSequence=0;
+    std::int64_t heldObservedNs=0,heldDeadlineNs=0,nativeObservedNs=0,nativeDeadlineNs=0;
+    unsigned selectionFailure=~0u;
+};
 struct FeedAdmissionDecision {
     bool rawPresent=false,currentGrip=false,sourceLookedUp=false,sourcePresent=false,sourceGrip=false;
     bool eligibilityEvaluated=false,available=false,heldBeforeOwnership=false,heldAtUpdate=false;
@@ -41,20 +64,32 @@ struct FeedAdmissionAttempt {
     std::optional<HandClaim> leftBefore,rightBefore,ownershipClaim;
     Bc2PhysicalFeedDiagnostic diagnostic{};FeedAdmissionDecision decision{};
     std::uint64_t registrationKey=0,lifetime=0;
+    unsigned leftFeedSlot=~0u;
+    std::uint64_t leftFeedRegistrationKey=0,leftFeedLifetime=0;
+    bool leftFeedClaimLost=false;
     bool cancel=false,contactGeometryEvaluated=false;
     double distanceMeters=0;float angleRadians=0,radiusMeters=0,maxAngleRadians=0;
     unsigned orientation=0;
+    FeedRetentionChecks retention{};
+    std::array<FeedRetentionSlot,8> retentionSlots{};
 };
 struct FeedAdmissionObservation {
     FeedAdmissionAttempt firstPress{},latestChange{};
+    std::optional<FeedAdmissionAttempt> failedRetention;
 };
 std::atomic<std::int64_t> admissionObservationUntil=0;
 std::atomic<std::shared_ptr<const FeedAdmissionObservation>> admissionObservation;
 bool SameAdmissionDecision(const FeedAdmissionAttempt& a,const FeedAdmissionAttempt& b)noexcept {
     const auto& x=a.diagnostic;const auto& y=b.diagnostic;
+    if(a.retention!=b.retention)return false;
+    for(unsigned i=0;i<a.retentionSlots.size();++i){const auto& p=a.retentionSlots[i];const auto& q=b.retentionSlots[i];
+        if(p.checks!=q.checks||p.registrationKey!=q.registrationKey||p.lifetime!=q.lifetime||p.claim!=q.claim||
+            p.selectionFailure!=q.selectionFailure)return false;}
     // Time/sequence and sub-radius jitter alone do not allocate or publish on
     // every frame. The first squeeze remains intact when a gate later changes.
     return a.owner==b.owner&&a.weapon==b.weapon&&a.registrationKey==b.registrationKey&&a.lifetime==b.lifetime&&
+        a.leftFeedSlot==b.leftFeedSlot&&a.leftFeedRegistrationKey==b.leftFeedRegistrationKey&&
+        a.leftFeedLifetime==b.leftFeedLifetime&&a.leftFeedClaimLost==b.leftFeedClaimLost&&
         a.cancel==b.cancel&&a.decision==b.decision&&x.exit==y.exit&&x.flags==y.flags&&x.status==y.status&&
         a.current.released==b.current.released&&a.current.tracked==b.current.tracked&&a.current.focused==b.current.focused&&
         (!a.originalPacket||!b.originalPacket||(a.originalPacket->released==b.originalPacket->released&&
@@ -137,20 +172,24 @@ std::shared_ptr<const Bc2PhysicalFeedPresentation> ReadBc2PhysicalFeedPresentati
 void RequestBc2PhysicalFeedAdmissionObservation(std::int64_t now)noexcept {
     if(now>0&&now<=INT64_MAX-1000000000ll)admissionObservationUntil.store(now+1000000000ll,std::memory_order_relaxed);
 }
-void WriteBc2PhysicalFeedAdmissionObservation(std::ostream& out){
-    const auto observation=admissionObservation.load(std::memory_order_acquire);
+namespace {
+void WriteFeedAdmission(std::ostream& out,const FeedAdmissionObservation* observation,bool compact){
     if(!observation){out<<"{\"observationOnly\":true,\"status\":\"capture_pending_or_no_press\"}";return;}
     const auto owner=[&](const HandInteractionOwner& o){out<<'['<<o.actor<<','<<o.actorGeneration<<','<<o.equipGeneration<<','<<o.space<<']';};
     const auto input=[&](const HandInteractionSample& s){out<<"{\"owner\":";owner(s.owner);
         out<<",\"sequence\":"<<s.sequence<<",\"observedNs\":"<<s.observedNs<<",\"deadlineNs\":"<<s.deadlineNs<<",\"nowNs\":"<<s.nowNs
             <<",\"focused\":"<<s.focused<<",\"tracked\":["<<s.tracked[0]<<','<<s.tracked[1]<<"],\"released\":["<<s.released[0]<<','<<s.released[1]<<"]}";};
     const auto claim=[&](const std::optional<HandClaim>& c){if(!c){out<<"null";return;}const auto& t=c->token;
-        out<<"{\"id\":"<<t.id<<",\"kind\":"<<unsigned(t.kind)<<",\"owner\":";owner(t.owner);
+        out<<"{\"id\":"<<t.id<<",\"kind\":"<<unsigned(t.kind)<<",\"hand\":"<<unsigned(t.hand)<<",\"owner\":";owner(t.owner);
         out<<",\"item\":["<<t.item.id<<','<<t.item.generation<<"],\"contact\":["<<t.contact.id<<','<<t.contact.generation
             <<"],\"prerequisiteClaim\":"<<t.prerequisiteClaim<<",\"inputSequence\":"<<c->inputSequence<<",\"deadlineNs\":"<<c->deadlineNs<<'}';};
     const auto scalar=[&](double x){if(std::isfinite(x))out<<x;else out<<"null";};
     const auto status=[&](unsigned x){if(x==~0u)out<<"null";else out<<x;};
-    const auto attempt=[&](const FeedAdmissionAttempt& a){const auto& d=a.diagnostic;const auto& v=a.decision;
+    const auto checks=[&](const FeedRetentionChecks& c,const auto& names){
+        out<<"\"checked\":"<<c.checked<<",\"passed\":"<<c.passed<<",\"firstFailure\":";
+        if(c.firstFailure==~0u)out<<"null";else out<<'"'<<names[c.firstFailure]<<'"';
+    };
+    const auto attempt=[&](const FeedAdmissionAttempt& a,bool essential=false){const auto& d=a.diagnostic;const auto& v=a.decision;
         out<<"{\"owner\":["<<a.owner.player<<','<<a.owner.soldier<<','<<a.owner.weak<<','<<a.owner.weapon<<','
             <<a.owner.actorGeneration<<','<<a.owner.equipGeneration<<','<<a.owner.space<<"],\"weapon\":["<<a.weapon.id<<','<<a.weapon.generation
             <<"],\"registrationKey\":"<<a.registrationKey<<",\"lifetime\":"<<a.lifetime<<",\"cancel\":"<<a.cancel<<",\"current\":";input(a.current);
@@ -158,7 +197,8 @@ void WriteBc2PhysicalFeedAdmissionObservation(std::ostream& out){
         out<<",\"sourceLookedUp\":"<<v.sourceLookedUp<<",\"originalPacket\":";
         if(a.originalPacket){out<<"{\"grip\":"<<v.sourceGrip<<",\"input\":";input(*a.originalPacket);out<<'}';}else out<<"null";
         out<<",\"sourceNative\":{\"sequence\":"<<d.sourceNativeSequence<<",\"observedNs\":"<<d.sourceNativeObservedNs<<",\"deadlineNs\":"<<d.sourceNativeDeadlineNs
-            <<"},\"exit\":\""<<FeedExitName(d.exit)<<"\",\"admissionChecked\":"<<d.admissionChecked<<",\"admissionPassed\":"<<d.admissionPassed
+            <<"},\"exit\":\""<<FeedExitName(d.exit)<<'"';
+        if(!essential){out<<",\"admissionChecked\":"<<d.admissionChecked<<",\"admissionPassed\":"<<d.admissionPassed
             <<",\"selectionFailure\":";status(d.selectionFailure);
         out<<",\"rawChecked\":"<<d.rawChecked<<",\"rawPassed\":"<<d.rawPassed<<",\"idleChecked\":"<<d.idleChecked<<",\"idlePassed\":"<<d.idlePassed
             <<",\"neutralAgeNs\":"<<d.neutralAgeNs<<",\"candidate\":{\"status\":";status(v.queryStatus);
@@ -172,18 +212,41 @@ void WriteBc2PhysicalFeedAdmissionObservation(std::ostream& out){
         if(!v.contactStage)out<<"null";else{out<<"{\"kind\":\""<<(v.contactStage==1?"idle_cover":"candidate")<<"\",\"status\":";status(v.contactStatus);
             out<<",\"geometryEvaluated\":"<<a.contactGeometryEvaluated<<",\"distanceMeters\":";if(a.contactGeometryEvaluated)scalar(a.distanceMeters);else out<<"null";
             out<<",\"angleRadians\":";if(a.contactGeometryEvaluated)scalar(a.angleRadians);else out<<"null";
-            out<<",\"radiusMeters\":";scalar(a.radiusMeters);out<<",\"maxAngleRadians\":";scalar(a.maxAngleRadians);out<<",\"orientation\":"<<a.orientation<<'}';}
+            out<<",\"radiusMeters\":";scalar(a.radiusMeters);out<<",\"maxAngleRadians\":";scalar(a.maxAngleRadians);out<<",\"orientation\":"<<a.orientation<<'}';}}
         out<<",\"leftBefore\":";claim(a.leftBefore);out<<",\"rightBefore\":";claim(a.rightBefore);
         out<<",\"ownership\":{\"action\":\""<<(v.ownershipAction==1?"acquire":v.ownershipAction==2?"renew":v.ownershipAction==3?"supply_evidence":"not_attempted")
             <<"\",\"inputValid\":"<<v.ownershipInputValid<<",\"accepted\":"<<v.ownershipAccepted<<",\"reason\":"<<v.ownershipReason<<",\"claim\":";claim(a.ownershipClaim);
-        out<<"},\"policy\":{\"evaluated\":"<<d.policyEvaluated<<",\"recoveryEstablished\":"<<v.recoveryEstablished
+        out<<"},\"leftFeedClaim\":";
+        if(a.leftFeedSlot==~0u)out<<"null";
+        else out<<"{\"slot\":"<<a.leftFeedSlot<<",\"registrationKey\":"<<a.leftFeedRegistrationKey
+            <<",\"lifetime\":"<<a.leftFeedLifetime<<",\"lost\":"<<a.leftFeedClaimLost<<'}';
+        if(essential){out<<",\"omitted\":[\"admissionChecks\",\"candidate\",\"eligibility\",\"contact\",\"policy\",\"retention\"]}";return;}
+        out<<",\"policy\":{\"evaluated\":"<<d.policyEvaluated<<",\"recoveryEstablished\":"<<v.recoveryEstablished
             <<",\"recognitionEnabled\":"<<v.recognitionEnabled<<",\"equipmentStatus\":"<<(d.status&255)
             <<",\"interactionStatus\":"<<((d.status>>8)&255)<<",\"interactionEvidence\":";status(v.interactionEvidence);
-        out<<",\"reloadStatus\":"<<((d.status>>16)&255)<<",\"reloadPhase\":";status(d.reloadPhase);out<<"}}";
+        out<<",\"reloadStatus\":"<<((d.status>>16)&255)<<",\"reloadPhase\":";status(d.reloadPhase);out<<"},\"retention\":{";
+        checks(a.retention,RetentionEntryPredicates);out<<",\"slots\":[";bool comma=false;
+        for(unsigned i=0;i<a.retentionSlots.size();++i){const auto& r=a.retentionSlots[i];if(!r.checks.checked)continue;
+            if(comma)out<<',';comma=true;out<<"{\"index\":"<<i<<",\"registrationKey\":"<<r.registrationKey
+                <<",\"lifetime\":"<<r.lifetime<<",\"claim\":"<<r.claim<<',';checks(r.checks,RetentionSlotPredicates);
+            out<<",\"selectionFailure\":";status(r.selectionFailure);
+            out<<",\"heldInput\":{\"sequence\":"<<r.heldInputSequence<<",\"observedNs\":"<<r.heldObservedNs<<",\"deadlineNs\":"<<r.heldDeadlineNs
+                <<"},\"heldNative\":{\"sequence\":"<<r.nativeSequence<<",\"observedNs\":"<<r.nativeObservedNs<<",\"deadlineNs\":"<<r.nativeDeadlineNs<<"}}";
+        }out<<"]}}";
     };
     out<<"{\"observationOnly\":true,\"retainedPress\":true,\"unreachedFieldsAreDefaultValues\":true,\"ownerFields\":[\"player\",\"soldier\",\"weak\",\"weapon\",\"actorGeneration\",\"equipGeneration\",\"space\"]"
-        <<",\"inputOwnerFields\":[\"actor\",\"actorGeneration\",\"equipGeneration\",\"space\"],\"firstPress\":";attempt(observation->firstPress);
-    out<<",\"latestChange\":";attempt(observation->latestChange);out<<'}';
+        <<",\"inputOwnerFields\":[\"actor\",\"actorGeneration\",\"equipGeneration\",\"space\"],\"firstPress\":";attempt(observation->firstPress,compact);
+    out<<",\"latestChange\":";if(compact)out<<"{\"omitted\":\"payload_limit\"}";else attempt(observation->latestChange);
+    out<<",\"failedRetention\":";if(observation->failedRetention)attempt(*observation->failedRetention);else out<<"null";
+    const auto names=[&](const auto& values){out<<'[';bool comma=false;for(const auto* name:values){if(comma)out<<',';comma=true;out<<'"'<<name<<'"';}out<<']';};
+    out<<",\"retentionEntryPredicates\":";names(RetentionEntryPredicates);
+    out<<",\"retentionSlotPredicates\":";names(RetentionSlotPredicates);out<<'}';
+}
+}
+void WriteBc2PhysicalFeedAdmissionObservation(std::ostream& out,std::ostream* compact){
+    const auto observation=admissionObservation.load(std::memory_order_acquire);
+    WriteFeedAdmission(out,observation.get(),false);
+    if(compact)WriteFeedAdmission(*compact,observation.get(),true);
 }
 struct Bc2PhysicalFeed::State {
     // Single Gameplay writer; Report reads only relaxed atomics. These are
@@ -434,6 +497,9 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         a.decision.currentGrip=s.grip;a.decision.rawPresent=s.raw.valid;
         a.leftBefore=hands.Current(InteractionHand::Left);a.rightBefore=hands.Current(InteractionHand::Right);
         a.decision.leftClaim=a.leftBefore?a.leftBefore->token.id:0;a.decision.rightClaim=a.rightBefore?a.rightBefore->token.id:0;
+        if(a.leftBefore)for(unsigned i=0;i<state.equipment.size();++i){const auto& slot=state.equipment[i];
+            if(slot&&slot->claim&&*slot->claim==a.leftBefore->token){
+                a.leftFeedSlot=i;a.leftFeedRegistrationKey=slot->registration.key;a.leftFeedLifetime=slot->lifetime;break;}}
     }
     State::Equipment* e=nullptr;
     const Bc2FeedRegistration* registration=nullptr;
@@ -450,9 +516,14 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             if(e->session)out.diagnostic.reloadPhase=unsigned(session.session.reload.phase);}
         if(observation){auto& a=*observation;a.diagnostic=out.diagnostic;
             a.registrationKey=registration?registration->key:0;a.lifetime=e?e->lifetime:0;
+            if(a.leftFeedSlot!=~0u){const auto leftAfter=hands.Current(InteractionHand::Left);
+                a.leftFeedClaimLost=!leftAfter||leftAfter->token!=a.leftBefore->token;}
             if(newPress||!SameAdmissionDecision(state.admission->latestChange,a))try{
                 auto next=std::make_shared<FeedAdmissionObservation>();
                 next->firstPress=newPress?a:state.admission->firstPress;next->latestChange=a;
+                if(!newPress)next->failedRetention=state.admission->failedRetention;
+                if(!next->failedRetention&&(a.retention.passed&1)&&a.leftFeedSlot!=~0u&&
+                    a.leftFeedClaimLost&&!out.ownsHand)next->failedRetention=a;
                 state.admission=next;admissionObservation.store(std::move(next),std::memory_order_release);
             }catch(...){} // Observation allocation cannot alter admission.
         }
@@ -516,26 +587,41 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         const bool grip=s.grip||(!s.input.released[0]&&previous&&previous->grip);
         state.packets[state.nextPacket]={s.owner,s.input,s.weapon,source,grip,s.reloadPressed,s.bodyFromHand};state.nextPacket=(state.nextPacket+1)%state.packets.size();}
     if(view)for(auto& p:state.equipment)if(p&&State::SameResource(*p,*view)){e=p.get();break;}
-    if(!view&&!s.cancel&&s.grip&&!s.input.released[0]&&Window(s.input,now)&&s.equipment){
+    // Observe the original short-circuit results only. Slot checks are separate
+    // so a later empty/unrelated slot cannot erase the held slot's rejection.
+    const auto retainEntry=[&](unsigned bit,bool pass){return observation?observation->retention.Check(bit,pass):pass;};
+    if(retainEntry(0,!view)&&retainEntry(1,!s.cancel)&&retainEntry(2,s.grip)&&retainEntry(3,!s.input.released[0])&&
+        retainEntry(4,Window(s.input,now))&&retainEntry(5,bool(s.equipment))){
         const auto right=hands.Current(InteractionHand::Right);
         const auto left=hands.Current(InteractionHand::Left);
-        for(auto& slot:state.equipment)if(slot&&slot->claim&&slot->session&&
-            slot->session->State().status==FeedEquipmentStatus::Ready&&!slot->pending&&!slot->refused&&
-            !slot->gateFailed&&!slot->motionDirty&&!slot->releaseWait&&slot->activeOperation!=FeedPhysicalOperation::None&&
-            slot->weapon==s.weapon&&CurrentEquipment(slot->original,s.owner,*s.equipment,s.binding,slot->registration)){
+        unsigned slotIndex=0;
+        for(auto& slot:state.equipment){auto* observed=observation?&observation->retentionSlots[slotIndex]:nullptr;++slotIndex;
+            if(observed&&slot){observed->registrationKey=slot->registration.key;observed->lifetime=slot->lifetime;
+                observed->claim=slot->claim?slot->claim->id:0;}
+            const auto retain=[&](unsigned bit,bool pass){return observed?observed->checks.Check(bit,pass):pass;};
+            if(retain(0,bool(slot))&&retain(1,bool(slot->claim))&&retain(2,bool(slot->session))&&
+            retain(3,slot->session->State().status==FeedEquipmentStatus::Ready)&&retain(4,!slot->pending)&&retain(5,!slot->refused)&&
+            retain(6,!slot->gateFailed)&&retain(7,!slot->motionDirty)&&retain(8,!slot->releaseWait)&&retain(9,slot->activeOperation!=FeedPhysicalOperation::None)&&
+            retain(10,slot->weapon==s.weapon)&&retain(11,CurrentEquipment(slot->original,s.owner,*s.equipment,s.binding,slot->registration))){
             const State::Packet* held=nullptr;
             for(const auto& packet:state.packets)if(packet.owner==s.owner&&packet.weapon==s.weapon&&
                 packet.input.sequence==slot->lastInput){held=&packet;break;}
+            if(observed&&held){observed->heldInputSequence=held->input.sequence;observed->heldObservedNs=held->input.observedNs;
+                observed->heldDeadlineNs=held->input.deadlineNs;
+                if(held->native){observed->nativeSequence=held->native->sequence;observed->nativeObservedNs=held->native->observedNs;
+                    observed->nativeDeadlineNs=held->native->deadlineNs;}}
             unsigned selectionFailure=0;
-            if(right&&right->token.owner==s.input.owner&&right->token.item==s.weapon&&
-                right->token.kind==HandClaimKind::GunHold&&!right->token.prerequisiteClaim&&right->deadlineNs>now&&
-                left&&left->token==*slot->claim&&left->token.prerequisiteClaim==right->token.id&&
-                held&&held->native&&held->contact&&held->grip&&held->input.owner==s.input.owner&&
-                held->input.sequence<=s.input.sequence&&left->inputSequence==held->input.sequence&&
-                left->deadlineNs==held->input.deadlineNs&&Window(held->input,now)&&
-                hands.HasRecordedEvidence(held->input,InteractionHand::Left)&&
-                FeedEquipmentViewFresh(*held->native,now)&&slot->original.identity==held->native->identity&&
-                Selected(s,*held->native,slot->registration,selectionFailure)){
+            const auto selected=[&](){const bool pass=Selected(s,*held->native,slot->registration,selectionFailure);
+                if(observed)observed->selectionFailure=selectionFailure;return pass;};
+            if(retain(12,bool(right))&&retain(13,right->token.owner==s.input.owner)&&retain(14,right->token.item==s.weapon)&&
+                retain(15,right->token.kind==HandClaimKind::GunHold)&&retain(16,!right->token.prerequisiteClaim)&&retain(17,right->deadlineNs>now)&&
+                retain(18,bool(left))&&retain(19,left->token==*slot->claim)&&retain(20,left->token.prerequisiteClaim==right->token.id)&&
+                retain(21,bool(held))&&retain(22,bool(held->native))&&retain(23,bool(held->contact))&&retain(24,held->grip)&&retain(25,held->input.owner==s.input.owner)&&
+                retain(26,held->input.sequence<=s.input.sequence)&&retain(27,left->inputSequence==held->input.sequence)&&
+                retain(28,left->deadlineNs==held->input.deadlineNs)&&retain(29,Window(held->input,now))&&
+                retain(30,hands.HasRecordedEvidence(held->input,InteractionHand::Left))&&
+                retain(31,FeedEquipmentViewFresh(*held->native,now))&&retain(32,slot->original.identity==held->native->identity)&&
+                retain(33,selected())){
                 // A missing current publication is not evidence of release.
                 // Retain only this already admitted gesture within its original
                 // input, native and claim leases. Cached counts cannot advance
@@ -546,6 +632,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
                 out.status=e->session->State().status;
                 return finish(FeedExit::ViewUnavailable);
             }
+        }
         }
     }
     // Preserve the original short-circuit order. A bit absent from checked was

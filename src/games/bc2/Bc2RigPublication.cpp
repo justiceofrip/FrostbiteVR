@@ -2649,12 +2649,21 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     // No source deadline is changed; an initial request may report pending.
     shellPumpObservationUntil.store(observed+1000000000ll,std::memory_order_relaxed);
     RequestBc2PhysicalFeedAdmissionObservation(observed);
+    reloadFlowRuntime::RequestFixedContainerGateObservation(observed,shellPumpObservationUntil.load(std::memory_order_relaxed));
     // One immutable retained attempt is independent of pose admission. Capture
     // it once so an invalid snapshot cannot replace the first failed squeeze
     // with unrelated later atomics, or omit it when there is no Feed pose.
-    std::ostringstream admission;admission.imbue(std::locale::classic());admission.precision(17);admission<<std::boolalpha;
-    WriteBc2PhysicalFeedAdmissionObservation(admission);
+    std::ostringstream admission,compactAdmission;
+    for(auto* stream:{&admission,&compactAdmission}){stream->imbue(std::locale::classic());stream->precision(17);*stream<<std::boolalpha;}
+    WriteBc2PhysicalFeedAdmissionObservation(admission,&compactAdmission);
     const auto feedAdmission=",\"feedAdmission\":"+admission.str();
+    const auto compactFeedAdmission=",\"feedAdmission\":"+compactAdmission.str();
+    std::ostringstream fixedAdmission;fixedAdmission.imbue(std::locale::classic());fixedAdmission<<std::boolalpha;
+    reloadFlowRuntime::WriteFixedContainerGateObservation(fixedAdmission);
+    const auto fixedGateAdmission=",\"fixedGateAdmission\":"+fixedAdmission.str();
+    std::ostringstream nativeFeedAdmission;nativeFeedAdmission.imbue(std::locale::classic());nativeFeedAdmission<<std::boolalpha;
+    reloadFlowRuntime::WriteFeedEquipmentGateObservation(nativeFeedAdmission);
+    const auto feedGateAdmission=",\"feedGateAdmission\":"+nativeFeedAdmission.str();
     const auto invalid=[&](const char* reason){
         std::ostringstream header;header.imbue(std::locale::classic());
         header<<"{\"schema\":\"fvr.bc2.live-mechanism-snapshot.v1\",\"nonce\":\""<<nonce
@@ -2664,10 +2673,13 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
         const auto diagnostics=feedDiagnostics.empty()?std::string{}:",\"feedDiagnostics\":"+feedDiagnostics;
         std::ostringstream observation;observation.imbue(std::locale::classic());observation<<std::boolalpha;
         gameplay::ReportFeedObservation(observation);
-        auto payload=prefix+feedAdmission+diagnostics+",\"feedObservation\":"+observation.str()+"}\n";
-        if(payload.size()>snapshotLimit)payload=prefix+feedAdmission+diagnostics+",\"feedObservation\":{\"available\":false,\"omitted\":\"payload_limit\"}}\n";
-        if(payload.size()>snapshotLimit)payload=prefix+feedAdmission+",\"diagnosticsOmitted\":\"payload_limit\"}\n";
-        if(payload.size()>snapshotLimit)payload=prefix+",\"diagnosticsOmitted\":\"payload_limit\"}\n";
+        auto payload=prefix+feedAdmission+fixedGateAdmission+feedGateAdmission+diagnostics+",\"feedObservation\":"+observation.str()+"}\n";
+        if(payload.size()>snapshotLimit)payload=prefix+feedAdmission+fixedGateAdmission+feedGateAdmission+diagnostics+",\"feedObservation\":{\"available\":false,\"omitted\":\"payload_limit\"}}\n";
+        if(payload.size()>snapshotLimit)payload=prefix+feedAdmission+fixedGateAdmission+feedGateAdmission+",\"diagnosticsOmitted\":\"payload_limit\"}\n";
+        // Bounded compact Feed retains the complete first failed retention and
+        // original press receipts alongside both bounded native gate journals.
+        // It was serialized from the same load as feedAdmission above.
+        if(payload.size()>snapshotLimit)payload=prefix+compactFeedAdmission+fixedGateAdmission+feedGateAdmission+",\"diagnosticsOmitted\":\"payload_limit\"}\n";
         out<<payload;
     };
     const auto candidate=shotPublication.load(std::memory_order_acquire);
@@ -3184,7 +3196,7 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
             json<<",\"ready\":";if(n.ready)ready(*n.ready);else json<<"null";json<<'}';}
         json<<"}}";
     }
-    json<<feedAdmission<<",\"feedObservation\":";gameplay::ReportFeedObservation(json);json<<"}\n";
+    json<<feedAdmission<<fixedGateAdmission<<feedGateAdmission<<",\"feedObservation\":";gameplay::ReportFeedObservation(json);json<<"}\n";
     if(ReloadNanos()>=until){invalid("expired_during_serialization");return;}
     const auto guardAfter=shotGuard.load(std::memory_order_acquire);
     if(!enabled.load(std::memory_order_acquire)||!guardAfter||!Fresh(guardAfter->deadline)||
