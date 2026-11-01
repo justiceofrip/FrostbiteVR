@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import sys
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -134,6 +135,22 @@ def add_synthetic_custody(profiles, row, snapshot):
     feed["supplyObject"] = dict(identity=dict(owner=token["owner"], weapon=feed["weapon"],
         profile=dict(id=row["key"], generation=row["mechanism"]["revision"]),
         pool=dict(id=26, generation=23), trackingEpoch=17), item=item, claim=copy.deepcopy(claim), family=1, units=30)
+
+
+def add_synthetic_feed_claim(row, snapshot, stage):
+    feed = snapshot["feed"]
+    part = {"OpenCover": 0, "DetachContainer": 2, "SeatFeed": 3, "CloseCover": 0}[stage]
+    contact = dict(id=(p.integer(row["key"])+part-1) % (2**64-1)+1, generation=feed["lifetime"])
+    token = dict(id=28, owner=copy.deepcopy(feed["input"]["owner"]), hand=0, kind=4,
+                 item=copy.deepcopy(feed["weapon"]), contact=contact, prerequisiteClaim=27)
+    feed["input"]["released"] = [False, False]
+    snapshot["input_evidence"]["released"] = [False, False]
+    snapshot["input"]["hands"][0]["squeeze"] = 1.
+    feed.update(operation=p.STAGES[stage], targetKind=1 if stage in ("OpenCover", "CloseCover") else 2,
+                mechanismInput=copy.deepcopy(feed["input"]),
+                mechanismClaim=dict(token=token, inputSequence=feed["input"]["sequence"],
+                                    deadlineNs=feed["input"]["deadlineNs"]),
+                mechanismWristWorldMeters=copy.deepcopy(snapshot["mapping"]["rawLeftWristWorldMeters"]))
 
 
 class FeedSimulationPlanTests(unittest.TestCase):
@@ -264,6 +281,105 @@ class FeedSimulationPlanTests(unittest.TestCase):
         snap["feed"]["coverRadians"] = .1
         with self.assertRaises(p.Refusal):
             p.plan(self.profiles, snap, "OpenCover", NOW, snap["nonce"])
+
+    def test_all24_fresh_feed_claim_before_mechanism_motion(self):
+        for row in self.profiles["profiles"]:
+            for stage in ("OpenCover", "DetachContainer", "SeatFeed", "CloseCover"):
+                with self.subTest(asset=row["asset"], stage=stage):
+                    before = synthetic_snapshot(row, stage)
+                    plan = p.plan(self.profiles, before, stage, NOW, before["nonce"])
+                    self.assertTrue(plan["requiresPostAcquisitionReobservation"])
+                    after = synthetic_snapshot(row, stage, NOW+100_000_000, sequence=102)
+                    after["feed"]["revision"] += 2
+                    add_synthetic_feed_claim(row, after, stage)
+                    original = copy.deepcopy(after)
+                    claim = p.held_feed(self.profiles, row, after, NOW+100_000_000, plan, NOW+80_000_000)
+                    self.assertEqual(claim, after["feed"]["mechanismClaim"])
+                    self.assertEqual(after, original, "observation must not renew evidence or claims")
+                    # A current poll can be newer than the admitted raw source;
+                    # processing nowNs is not original packet identity.
+                    after["input"]["generation"] = after["shot_input_generation"] = 104
+                    after["input_evidence"]["sequence"] = 104
+                    after["input_evidence"]["observedNs"] += 1_000_000
+                    after["feed"]["mechanismInput"]["nowNs"] -= 1_000_000
+                    self.assertEqual(p.held_feed(self.profiles, row, after, NOW+100_000_000,
+                                                 plan, NOW+80_000_000), claim)
+
+    def test_feed_acquisition_refuses_support_stale_or_unbound_claim(self):
+        row = self.profiles["profiles"][0]
+        before = synthetic_snapshot(row, "SeatFeed")
+        plan = p.plan(self.profiles, before, "SeatFeed", NOW, before["nonce"])
+        base = synthetic_snapshot(row, "SeatFeed", NOW+100_000_000, sequence=102)
+        base["feed"]["revision"] += 2
+        add_synthetic_feed_claim(row, base, "SeatFeed")
+        faults = [lambda s: s["feed"].update(mechanismClaim=None),
+                  lambda s: s["feed"]["mechanismClaim"]["token"].update(kind=2),
+                  lambda s: s["feed"]["mechanismClaim"]["token"].update(kind=5),
+                  lambda s: s["feed"]["mechanismClaim"]["token"].update(prerequisiteClaim=0),
+                  lambda s: s["feed"]["mechanismClaim"]["token"]["contact"].update(id=999),
+                  lambda s: s["feed"]["mechanismClaim"]["token"]["item"].update(generation=999),
+                  lambda s: s["feed"]["mechanismClaim"]["token"]["owner"].update(space=999),
+                  lambda s: s["feed"]["mechanismClaim"].update(inputSequence=100),
+                  lambda s: s["feed"]["mechanismClaim"].update(deadlineNs=NOW+100_000_000),
+                  lambda s: s["feed"]["mechanismInput"].update(released=[True, False]),
+                  lambda s: s["feed"].update(operation=5),
+                  lambda s: s["feed"].update(targetKind=0),
+                  lambda s: s["feed"].update(mechanismWristWorldMeters=None),
+                  lambda s: s["feed"].update(revision=plan["sourceFeedRevision"]),
+                  lambda s: s.update(nonce=plan["snapshotNonce"]),
+                  lambda s: s["input"]["hands"][0].update(squeeze=0),
+                  lambda s: s["feed"]["mechanismWristWorldMeters"][3].__setitem__(0, 100)]
+        for fault in faults:
+            snap = copy.deepcopy(base)
+            fault(snap)
+            with self.assertRaises(p.Refusal):
+                p.held_feed(self.profiles, row, snap, NOW+100_000_000, plan, NOW+80_000_000)
+        with self.assertRaisesRegex(p.Refusal, "post-squeeze"):
+            p.held_feed(self.profiles, row, base, NOW+100_000_000, plan, NOW+95_000_000)
+
+    def test_driver_does_not_move_without_reobserved_feed_claim(self):
+        spec = importlib.util.spec_from_file_location("feed_driver", ROOT / "tools/drive_bc2_feed_simulation.py")
+        driver = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(driver)
+        row = self.profiles["profiles"][0]
+        for owned in (False, True):
+            with self.subTest(owned=owned):
+                clock, sent = [NOW], []
+                instance = driver.Driver.__new__(driver.Driver)
+                instance.profiles, instance.args = self.profiles, argparse.Namespace(step_ms=20)
+                instance.reference, instance.snapshot_index = None, 1
+                instance.plans, instance.commands, instance.last_commit = [], 0, None
+                instance.deadline, instance.last_write = NOW+10_000_000_000, 0
+                instance.artifacts = mock.Mock()
+                def fresh():
+                    clock[0] += 20_000_000
+                    snap = synthetic_snapshot(row, "SeatFeed", clock[0], sequence=100+len(sent))
+                    if sent:
+                        snap["feed"]["revision"] += 2
+                        if owned:
+                            add_synthetic_feed_claim(row, snap, "SeatFeed")
+                    return snap, b"synthetic", clock[0]
+                def pause(deadline):
+                    clock[0] = max(clock[0], deadline)
+                def send(lines, expected=None, source_deadline=None):
+                    if source_deadline is not None:
+                        self.assertLess(clock[0], source_deadline)
+                    sent.append(expected["phase"])
+                    instance.last_write = instance.last_commit = clock[0]
+                instance.fresh, instance.pause_until, instance.send = fresh, pause, send
+                instance.accept_snapshot = mock.Mock()
+                instance.observe_stage_receipt = mock.Mock()
+                with mock.patch.object(driver.time, "perf_counter_ns", side_effect=lambda: clock[0]):
+                    if owned:
+                        instance.stage("SeatFeed")
+                        self.assertIn("move", sent)
+                        instance.observe_stage_receipt.assert_called_once()
+                    else:
+                        with self.assertRaisesRegex(driver.REFUSAL, "owned Feed mechanism claim"):
+                            instance.stage("SeatFeed")
+                        self.assertEqual(sent[-1], "acquire")
+                        self.assertNotIn("move", sent)
+                        instance.observe_stage_receipt.assert_not_called()
 
     def test_stale_and_mismatched_sources_refuse(self):
         row = self.profiles["profiles"][0]

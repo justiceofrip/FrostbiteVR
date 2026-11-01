@@ -683,6 +683,7 @@ class Driver:
         self.stage_deadline = min(self.deadline, start + maximum)
         self.monitor = True
         last_time = -1
+        acquisition_deadline = None
         for target in plan["schedule"]:
             at = integer(target["atNs"])
             require(at > last_time and at <= maximum, "nonmonotonic or oversized plan")
@@ -694,7 +695,10 @@ class Driver:
             source_deadline = min(integer(plan["sourceValidUntilNs"]),
                                   integer(snapshot["input_evidence"]["observedNs"]) + SNAPSHOT_PERIOD)
             self.send(target["commands"], expected=target,
-                      source_deadline=source_deadline if target is plan["schedule"][0] else None)
+                      source_deadline=source_deadline if target is plan["schedule"][0] else acquisition_deadline)
+            acquisition_deadline = None
+            if target["phase"] == "acquire" and plan["requiresPostAcquisitionReobservation"]:
+                acquisition_deadline = self.observe_acquisition(row, plan, self.last_write)
         self.plans[-1]["actualDurationNs"] = time.perf_counter_ns() - start
         self.motion_started = None
         self.stage_deadline = self.deadline
@@ -708,6 +712,22 @@ class Driver:
         else:
             self.observe_stage_receipt(snapshot)
         return plan
+
+    def observe_acquisition(self, row, plan, command_written_ns):
+        # Hold the committed pose and squeeze while ordinary XR frames continue.
+        # No move, synthetic input or extended deadline may stand in for a claim.
+        self.plans[-1]["acquisitionCommandWrittenNs"] = command_written_ns
+        snapshot, raw, evaluated = self.fresh()
+        self.accept_snapshot(snapshot, raw, evaluated)
+        self.plans[-1]["postAcquisitionNonce"] = snapshot["nonce"]
+        claim = planner.held_feed(self.profiles, row, snapshot, time.perf_counter_ns(), plan, command_written_ns)
+        self.plans[-1]["postAcquisitionClaim"] = claim
+        self.artifacts.event({"type": "feed_acquisition_observed", "stage": plan["stage"],
+                              "nonce": snapshot["nonce"], "claim": claim,
+                              "commandWrittenNs": command_written_ns, "nativeReceiptProof": False})
+        self.monitor = True
+        return min(integer(snapshot["valid_until_ns"]), integer(claim["deadlineNs"]),
+                   integer(snapshot["input_evidence"]["observedNs"]) + SNAPSHOT_PERIOD)
 
     def observe_stage_receipt(self, before):
         """A bounded diagnostic gate, never a replacement for native trace review."""

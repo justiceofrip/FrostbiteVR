@@ -267,6 +267,65 @@ def held_supply(profiles, row, snapshot, now, pickup_plan):
     return obj
 
 
+def held_feed(profiles, row, snapshot, now, acquisition_plan, command_written_ns):
+    """Require native ownership after the actual squeeze, before moving a part."""
+    selected = admit(profiles, snapshot, now, integer(snapshot["nonce"]))
+    stage = acquisition_plan["stage"]
+    require(stage in ("OpenCover", "DetachContainer", "SeatFeed", "CloseCover"),
+            "stage does not acquire a Feed mechanism claim")
+    require(integer(selected["key"]) == integer(row["key"]) == integer(acquisition_plan["selection"]["key"])
+            and selected["profileDigest"] == row["profileDigest"] == acquisition_plan["selection"]["profileDigest"]
+            and snapshot["owner"] == acquisition_plan["owner"], "feed acquisition identity changed")
+    feed, inp = snapshot["feed"], snapshot["input"]
+    require(feed is not None and feed.get("mechanismClaim") is not None
+            and feed.get("mechanismInput") is not None,
+            stage + " requires reobserved owned Feed mechanism claim before motion")
+    claim, hand = feed["mechanismClaim"], feed["mechanismInput"]
+    token = claim["token"]
+    part = {"OpenCover": 0, "DetachContainer": 2, "SeatFeed": 3, "CloseCover": 0}[stage]
+    contact_id = integer(row["key"]) + part
+    if contact_id > 2**64-1:
+        contact_id -= 2**64-1  # Bc2PhysicalFeed::PartKey skips zero on wrap.
+    require(integer(token["id"]) > 0 and integer(token["hand"]) == 0 and integer(token["kind"]) == 4
+            and integer(token["prerequisiteClaim"]) > 0 and token["owner"] == hand["owner"]
+            and key_equal(token["item"], feed["weapon"])
+            and integer(token["contact"]["id"]) == contact_id
+            and integer(token["contact"]["generation"]) == integer(feed["lifetime"])
+            and feed.get("supplyObject") is None, "feed acquisition claim owner/kind/part mismatch")
+    # Mechanism claims use the exact original raw packet, unlike independently
+    # acquired reserve custody. Neither the command nor this check renews it.
+    packet_fields = ("owner", "sequence", "observedNs", "deadlineNs", "focused", "tracked", "released")
+    require(all(hand[k] == feed["input"][k] for k in packet_fields)
+            and integer(claim["inputSequence"]) == integer(hand["sequence"])
+            and now < integer(claim["deadlineNs"]) <= integer(hand["deadlineNs"])
+            and hand["released"] == [False, False] and finite(inp["hands"][0]["squeeze"]) >= .7,
+            "feed acquisition lacks current held original-source evidence")
+    motion = row["operations"][stage]["motion"]
+    require(integer(feed["operation"]) == STAGES[stage]
+            and integer(feed["targetKind"]) == (1 if motion["kind"] == "Hinge" else 2)
+            and feed["mechanismWristWorldMeters"] is not None,
+            "feed acquisition lacks bound operation/wrist")
+    require(integer(snapshot["nonce"]) != integer(acquisition_plan["snapshotNonce"])
+            and integer(snapshot["observed_ns"]) > integer(acquisition_plan["evaluatedAtNs"])
+            and 0 < command_written_ns <= integer(hand["observedNs"])
+            and integer(hand["sequence"]) > integer(acquisition_plan["sourceInputSequence"])
+            and integer(feed["revision"]) > integer(acquisition_plan["sourceFeedRevision"] or 0),
+            "feed acquisition needs fresh post-squeeze reobservation")
+    require(stage == "OpenCover" or integer(feed["lifetime"]) == integer(acquisition_plan["sourceFeedLifetime"]),
+            "feed acquisition lifetime changed")
+    require(all(inp[k] == acquisition_plan["preserve"][k] for k in
+                ("referenceHead", "head", "spaceGeneration", "trackingBasisGeneration", "worldUnitsPerMeter"))
+            and inp["hands"][1]["grip"] == acquisition_plan["preserve"]["rightGrip"],
+            "feed acquisition reference/right-hand basis changed")
+    distance, angle = pose_error(rigid(feed["mechanismWristWorldMeters"]),
+                                 rigid(snapshot["mapping"]["rawLeftWristWorldMeters"]))
+    policy = motion["policy"]
+    require(distance <= finite(policy["pathToleranceMeters"])
+            and angle <= finite(policy["orientationToleranceRadians"]),
+            "reobserve feed acquisition after its actual raw contact arrives")
+    return claim
+
+
 def evidence(sample, owner, physical_generation, now):
     expected = {"actor": (integer(owner["weak"]) << 32) | integer(owner["soldier"]),
                 "actorGeneration": integer(owner["actorGeneration"]),
@@ -559,6 +618,7 @@ def plan(profiles, snapshot, stage, now_ns, expected_nonce, step_ns=20_000_000, 
             "sourceFeedLifetime": feed["lifetime"] if feed else None,
             "sourceValidUntilNs": source_until, "owner": snapshot["owner"],
             "heldSupply": supply_object, "requiresPostPickupReobservation": supply_pickup,
+            "requiresPostAcquisitionReobservation": not supply_pickup and not continuation,
             "fieldSources": {"mapping": "original admitted shot input; LH row metres, never rescale rotation/translation",
                              "referenceAndGrips": "same original input generation and XR tracking/reference space",
                              "calibration": "F * inverse(B) * inverse(C(grip) * inverse(C(referenceHead))); checked against actual bind",
@@ -570,6 +630,7 @@ def plan(profiles, snapshot, stage, now_ns, expected_nonce, step_ns=20_000_000, 
                          "worldUnitsPerMeter": inp["worldUnitsPerMeter"]},
             "executionConditions": ["Geometric plan only: existing native preflight and exact previous-stage receipt must admit the requested stage.",
                                     "Reserve pickup ends held: reobserve actual custody/relocated pouch before AttachContainer; its continuation retains grip.",
+                                    "After each fresh squeeze, reobserve the exact owned Feed mechanism claim before any motion; an xr-sim acknowledgement is insufficient.",
                                     "Other start/regrasps require fresh neutral; reobserve after neutral, owner, reference, weapon/body basis or right-hand changes.",
                                     "Before each batch require fresh matching owner/config/mesh/rig/reference evidence; this snapshot lease is never extended by this schedule.",
                                     "Wait for xr-sim cmdSeq, lastCmdError=0 and committed frame acknowledgement; abort if actual input gap exceeds policy.",
