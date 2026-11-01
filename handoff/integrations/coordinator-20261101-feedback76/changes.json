@@ -1,0 +1,20 @@
+{
+  "schema": "fvr.coordinator.source-batch.v1",
+  "batch": "coordinator-20261101-feedback76",
+  "base": "0423327",
+  "scope": "Shared diagnostic delivery and exact first-press Feed admission observation",
+  "changes": [
+    "Snapshot reads permit Windows atomic replacement while retaining original handle bytes",
+    "Native publisher retains one immutable response for at most one sharing/lock retry; other failures are explicit and later nonces remain possible",
+    "Exact monotonic request deadlines, refused late response and native failure stage/error are retained without widening the250ms budget",
+    "Opt-in immutable Feed first-press/latest-gate observation preserves original/current raw pairing, contact and ownership evidence even without a render pose"
+  ],
+  "checks": {
+    "snapshot_publication_python": "Six initial behavioral methods passed; Windows-sharing method was sandbox-ACL blocked, then alone passed with normal file access. Failed log retained.",
+    "feed_observation_python": "10/10 passed",
+    "feed_planner_python": "75's8 methods including24 configurations reused: stage and claim predicates unchanged",
+    "native": "Pending combined focused and both normal architectures"
+  },
+  "assets": "Same306-record cache as35; no extraction or geometry changes",
+  "limits": ["Historical publication failure branch unproved", "Actual SeatFeed first-squeeze rejection still needs new capture", "No full reload/headset/performance/destruction acceptance"]
+}

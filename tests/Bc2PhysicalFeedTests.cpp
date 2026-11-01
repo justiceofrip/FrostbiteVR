@@ -453,6 +453,63 @@ int OccupiedHandAndExactRigAreRequired(){
     Fixture wrong;wrong.sample.configurationPath="Objects/Weapons/Handheld/BU_lmg_M60/other";
     CHECK(!wrong.OpenCover());CHECK(wrong.submits==0);return 0;
 }
+int AdmissionObservationRetainsFirstSeatPressWithoutGrantingAuthority(){
+    const auto observe=[](){std::ostringstream out;out<<std::boolalpha;WriteBc2PhysicalFeedAdmissionObservation(out);return out.str();};
+    const auto original=observe();
+    Fixture f;CHECK(f.OpenCover()&&f.Reconcile());
+    CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&f.Reconcile());
+    CHECK(f.Place(FeedPhysicalOperation::AttachContainer)&&f.Reconcile());
+    CHECK(f.submits==3&&f.result.presentation&&!f.result.ownsHand);
+    CHECK(observe()==original); // Normal gameplay does not opt in diagnostics.
+    const auto& p=*f.result.presentation;
+    auto pose=f.registration->geometry.poses[unsigned(Bc2FeedPoseId::Resting)];
+    pose.chainCount=p.chainCount;pose.weaponFromPouch=p.weaponFromPouch;pose.weaponFromFeedRoot=p.weaponFromChain[0];
+    for(unsigned i=0;i+1<pose.chainCount;++i)pose.parentFromChainChild[i]=feed_interaction_detail::Multiply(
+        p.weaponFromChain[i+1],feed_interaction_detail::Inverse(p.weaponFromChain[i]));
+    const auto motion=BuildBc2FeedMotionFromRetainedPose(f.registration->geometry,FeedPhysicalOperation::SeatFeed,f.registration->interactionPolicy,pose);
+    CHECK(motion);const auto wrist=feed_interaction_detail::Multiply(motion->placement.sourceFromGrip,motion->placement.weaponFromSource);
+    f.Tick(wrist,false);f.Tick(wrist,false);const auto neutral=f.sample.raw;
+    RequestBc2PhysicalFeedAdmissionObservation(f.now);
+    f.PrepareTick(wrist,true);const auto pressed=f.sample.raw;f.Consume(&neutral);
+    CHECK(!f.result.ownsHand&&f.submits==3);
+    const auto first=observe();const auto split=first.find(",\"latestChange\":");CHECK(split!=std::string::npos);
+    const auto firstPrefix=first.substr(0,split);
+    const auto stamp=[](const HandInteractionSample& s){return "\"sequence\":"+std::to_string(s.sequence)+",\"observedNs\":"+
+        std::to_string(s.observedNs)+",\"deadlineNs\":"+std::to_string(s.deadlineNs)+",\"nowNs\":"+std::to_string(s.nowNs);};
+    CHECK(firstPrefix.find(stamp(pressed.inputEvidence))!=std::string::npos);
+    CHECK(firstPrefix.find(stamp(neutral.inputEvidence))!=std::string::npos);
+    CHECK(firstPrefix.find("\"currentGrip\":true,\"rawPresent\":true")!=std::string::npos);
+    CHECK(firstPrefix.find("\"originalPacket\":{\"grip\":false")!=std::string::npos);
+    CHECK(firstPrefix.find("\"contact\":null")!=std::string::npos);
+    CHECK(firstPrefix.find("\"ownership\":{\"action\":\"not_attempted\"")!=std::string::npos);
+    // The separately recorded held source can now acquire; the observer must
+    // preserve the missed current squeeze, and the actual claim's old lease.
+    f.PrepareTick(wrist,true);f.Consume(&pressed);
+    CHECK(f.result.ownsHand&&f.result.presentation&&f.result.presentation->mechanismClaim&&f.submits==3);
+    CHECK(f.result.presentation->mechanismClaim->inputSequence==pressed.inputEvidence.sequence);
+    CHECK(f.result.presentation->mechanismClaim->deadlineNs==pressed.inputEvidence.deadlineNs);
+    const auto acquired=observe();CHECK(acquired.substr(0,acquired.find(",\"latestChange\":"))==firstPrefix);
+    const auto latest=acquired.substr(acquired.find(",\"latestChange\":"));
+    CHECK(latest.find("\"originalPacket\":{\"grip\":true")!=std::string::npos);
+    CHECK(latest.find("\"contact\":{\"kind\":\"candidate\",\"status\":"+std::to_string(unsigned(FeedMechanismStatus::ContactMatch)))!=std::string::npos);
+    CHECK(latest.find("\"geometryEvaluated\":true,\"distanceMeters\":")!=std::string::npos);
+    CHECK(latest.find("\"ownership\":{\"action\":\"acquire\",\"inputValid\":true,\"accepted\":true")!=std::string::npos);
+    CHECK(latest.find("\"recognitionEnabled\":true")!=std::string::npos);
+    CHECK(acquired.size()<8192); // Leave room for the existing 32 KiB snapshot.
+    f.Consume(&pressed);const auto duplicate=observe();f.Consume(&pressed);CHECK(observe()==duplicate);
+    // A raw-less failure has no Feed pose, but still carries its coherent
+    // current packet and explicit unreached source/contact/ownership fields.
+    f.PrepareTick(wrist,true);f.sample.raw.valid=false;f.Consume();
+    CHECK(!f.result.presentation&&!f.result.ownsHand&&f.submits==3);
+    const auto failed=observe();CHECK(failed.substr(0,failed.find(",\"latestChange\":"))==firstPrefix);
+    const auto failure=failed.substr(failed.find(",\"latestChange\":"));
+    CHECK(failure.find("\"rawPresent\":false")!=std::string::npos);
+    CHECK(failure.find("\"sourceLookedUp\":false,\"originalPacket\":null")!=std::string::npos);
+    CHECK(failure.find("\"selectionFailure\":8")!=std::string::npos);
+    CHECK(failure.find("\"contact\":null")!=std::string::npos);
+    f.now+=1000*Ms;f.Tick(wrist,true);CHECK(observe()==failed); // No renewal after the opt-in window.
+    return 0;
+}
 int BackendLifetimesIncreaseAcrossOwners(){
     Fixture first;CHECK(first.OpenCover());Fixture second;CHECK(second.OpenCover());
     CHECK(second.submitted->command.request.lifetime>first.submitted->command.request.lifetime);
@@ -1636,5 +1693,6 @@ int main(){
     CHECK(SameAddressReplacementDoesNotInheritFeedDebt()==0);
     CHECK(RealNoEntryReceiptRecoversCompletedEndpointWithNewId()==0);
     CHECK(DrainedActorReplacementReclaimsSlotsWithoutInventingAmmunitionSuccess()==0);
-    std::puts("Bc2PhysicalFeedTests: 34 deterministic owner/arbiter/callback/presentation compositions; no game or headset acceptance");
+    CHECK(AdmissionObservationRetainsFirstSeatPressWithoutGrantingAuthority()==0);
+    std::puts("Bc2PhysicalFeedTests: 35 deterministic owner/arbiter/callback/presentation compositions; no game or headset acceptance");
 }

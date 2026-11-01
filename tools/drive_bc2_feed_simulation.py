@@ -80,6 +80,29 @@ def child(root, value):
     return path
 
 
+def open_snapshot(path):
+    """Share replacement with the native publisher; the open handle stays immutable."""
+    if os.name != "nt":
+        return path.open("rb")
+    import msvcrt
+    api = ctypes.WinDLL("kernel32", use_last_error=True)
+    api.CreateFileW.argtypes = (wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                               ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE)
+    api.CreateFileW.restype = wintypes.HANDLE
+    api.CloseHandle.argtypes = (wintypes.HANDLE,)
+    # OPEN_EXISTING / OPEN_REPARSE_POINT never creates or follows the final link.
+    handle = api.CreateFileW(str(path), 0x80000000, 0x1 | 0x2 | 0x4,
+                             None, 3, 0x00200000, None)
+    if handle == wintypes.HANDLE(-1).value:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        descriptor = msvcrt.open_osfhandle(handle, os.O_RDONLY | os.O_BINARY)
+    except BaseException:
+        api.CloseHandle(handle)
+        raise
+    return os.fdopen(descriptor, "rb")
+
+
 def read_bytes(path, maximum):
     local_path(path)
     # Windows may briefly deny a reader while the native writer atomically
@@ -88,7 +111,7 @@ def read_bytes(path, maximum):
     until = time.perf_counter_ns() + 40_000_000
     while True:
         try:
-            with path.open("rb") as stream:
+            with (open_snapshot(path) if path.name == "mechanism-snapshot.json" else path.open("rb")) as stream:
                 require(os.fstat(stream.fileno()).st_size <= maximum, "oversized file: " + str(path))
                 data = stream.read(maximum + 1)
             break
@@ -429,20 +452,90 @@ class Driver:
         require(0 < nonce < 2**64, "snapshot nonce overflow")
         raw = (str(nonce) + "\n").encode("ascii")
         atomic(self.request_path, raw)
+        published = time.perf_counter_ns()
         self.snapshot_index += 1
-        self.artifacts.save(f"request-{self.snapshot_index:03}.txt", raw)
         self.pending_nonce, self.last_request, self.request_bytes = nonce, now, raw
+        self.last_request_published = published
+        self.artifacts.save(f"request-{self.snapshot_index:03}.txt", raw)
+        self.artifacts.save(f"request-{self.snapshot_index:03}-timing.json", {
+            "nonce": nonce, "clock": "perf_counter_ns", "requestStartedNs": now,
+            "requestPublishedNs": published, "responseDeadlineNs": now + SNAPSHOT_TIMEOUT,
+            "budgetNs": SNAPSHOT_TIMEOUT})
+
+    def snapshot_failure(self):
+        path = self.snapshot_path.with_name("mechanism-snapshot-failure.json")
+        if not path.exists():
+            return None
+        raw = read_bytes(path, 1024)
+        # The native worker retains this CREATE_NEW handle and only rewrites it
+        # on terminal failure. A partial in-place update is never an outcome.
+        if not raw.endswith(b"\n"):
+            return None
+        try:
+            value = json.loads(raw)
+        except (UnicodeError, json.JSONDecodeError):
+            return None
+        require(isinstance(value, dict) and value.get("schema") == "fvr.bc2.mechanism-snapshot-failure.v1",
+                "unexpected snapshot failure record")
+        nonce = integer(value["nonce"])
+        if nonce != integer(value["nonce_end"]) or nonce != integer(value["publication"]["nonce"]):
+            return None
+        require(nonce <= self.pending_nonce, "snapshot failure belongs to a later competing request")
+        if nonce != self.pending_nonce:
+            return None
+        require(value["publication"]["status"] == "failed", "nonterminal snapshot failure record")
+        self.artifacts.save(f"snapshot-{self.snapshot_index:03}-failure.json", raw)
+        return value["publication"]
+
+    def snapshot_timeout(self, now, response=None):
+        """Preserve a late/stale response as refused evidence, never as admission."""
+        read_error = None
+        if response is None and self.snapshot_path.exists():
+            try:
+                response = read_json(self.snapshot_path, planner.SNAPSHOT_LIMIT)
+            except (OSError, ValueError, REFUSAL) as exc:
+                read_error = str(exc)
+        if response is not None:
+            snapshot, raw = response
+            self.artifacts.save(f"snapshot-{self.snapshot_index:03}-at-timeout.json", raw)
+            self.last_observed_response_nonce = snapshot.get("nonce") if isinstance(snapshot, dict) else None
+        event = {"type": "snapshot_response_timeout", "nonce": self.pending_nonce,
+                 "clock": "perf_counter_ns", "requestStartedNs": self.last_request,
+                 "requestPublishedNs": getattr(self, "last_request_published", None),
+                 "timeoutEvaluatedNs": now, "elapsedNs": now - self.last_request,
+                 "responseDeadlineNs": self.last_request + SNAPSHOT_TIMEOUT,
+                 "budgetNs": SNAPSHOT_TIMEOUT,
+                 "lastObservedResponseNonce": getattr(self, "last_observed_response_nonce", None),
+                 "diagnosticReadError": read_error}
+        self.artifacts.event(event)
+        raise REFUSAL("snapshot response not received within request budget: "
+                      f"nonce={self.pending_nonce} elapsed_ns={now - self.last_request} "
+                      f"budget_ns={SNAPSHOT_TIMEOUT}")
 
     def receive_snapshot(self):
         if self.pending_nonce is None:
             return None
         require(read_bytes(self.request_path, 22) == self.request_bytes, "snapshot request changed by another writer")
+        failure = self.snapshot_failure()
         now = time.perf_counter_ns()
-        require(now - self.last_request <= SNAPSHOT_TIMEOUT, "snapshot publication exceeded bounded cadence")
+        if now - self.last_request > SNAPSHOT_TIMEOUT:
+            self.snapshot_timeout(now)
+        if failure is not None:
+            self.artifacts.event({"type": "snapshot_publication_failure", "nonce": self.pending_nonce,
+                                  "receivedNs": now, "requestStartedNs": self.last_request,
+                                  "requestPublishedNs": getattr(self, "last_request_published", None),
+                                  "publication": failure})
+            raise REFUSAL("native snapshot publication failed: "
+                          f"nonce={self.pending_nonce} stage={failure['stage']} "
+                          f"win32_error={failure['win32_error']} attempts={failure['attempts']}")
         if not self.snapshot_path.exists():
             return None
         snapshot, raw = read_json(self.snapshot_path, planner.SNAPSHOT_LIMIT)
         nonce = integer(snapshot["nonce"])
+        self.last_observed_response_nonce = nonce
+        now = time.perf_counter_ns()
+        if now - self.last_request > SNAPSHOT_TIMEOUT:
+            self.snapshot_timeout(now, (snapshot, raw))
         require(nonce <= self.pending_nonce, "snapshot response belongs to a later competing request")
         if nonce != self.pending_nonce:
             return None
@@ -453,6 +546,8 @@ class Driver:
         if self.reference is not None:
             self.stable_snapshot(self.reference, snapshot)
         evaluated = time.perf_counter_ns()
+        if evaluated - self.last_request > SNAPSHOT_TIMEOUT:
+            self.snapshot_timeout(evaluated, (snapshot, raw))
         source_deadline = min(integer(snapshot["valid_until_ns"]),
                               integer(snapshot["input_evidence"]["observedNs"]) + SNAPSHOT_PERIOD)
         if evaluated >= source_deadline:

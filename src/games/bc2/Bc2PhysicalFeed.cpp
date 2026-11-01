@@ -24,6 +24,45 @@ const char* FeedExitName(FeedExit reason)noexcept {
 }
 std::atomic<std::uint64_t> nextLifetime=0;
 std::atomic<std::shared_ptr<const Bc2PhysicalFeedPresentation>> publication;
+struct FeedAdmissionDecision {
+    bool rawPresent=false,currentGrip=false,sourceLookedUp=false,sourcePresent=false,sourceGrip=false;
+    bool eligibilityEvaluated=false,available=false,heldBeforeOwnership=false,heldAtUpdate=false;
+    bool needsSupply=false,supplied=false,pickupAwaitingRaw=false,chestNeutral=false,supplyNeutral=false;
+    bool refused=false,gateFailed=false,motionDirty=false,nativePending=false,ammoPending=false,reloadPending=false;
+    bool recoveryEstablished=false,recognitionEnabled=false,ownershipAccepted=false,ownershipInputValid=false;
+    unsigned queryStatus=~0u,candidateOperation=~0u,candidatePart=~0u,contactStatus=~0u;
+    unsigned contactStage=0,ownershipAction=0,ownershipReason=0,interactionEvidence=~0u;
+    std::uint64_t leftClaim=0,rightClaim=0,resultClaim=0;
+    bool operator==(const FeedAdmissionDecision&)const=default;
+};
+struct FeedAdmissionAttempt {
+    ReloadStateOwner owner{};HandInteractionKey weapon{};
+    HandInteractionSample current{},raw{};std::optional<HandInteractionSample> originalPacket;
+    std::optional<HandClaim> leftBefore,rightBefore,ownershipClaim;
+    Bc2PhysicalFeedDiagnostic diagnostic{};FeedAdmissionDecision decision{};
+    std::uint64_t registrationKey=0,lifetime=0;
+    bool cancel=false,contactGeometryEvaluated=false;
+    double distanceMeters=0;float angleRadians=0,radiusMeters=0,maxAngleRadians=0;
+    unsigned orientation=0;
+};
+struct FeedAdmissionObservation {
+    FeedAdmissionAttempt firstPress{},latestChange{};
+};
+std::atomic<std::int64_t> admissionObservationUntil=0;
+std::atomic<std::shared_ptr<const FeedAdmissionObservation>> admissionObservation;
+bool SameAdmissionDecision(const FeedAdmissionAttempt& a,const FeedAdmissionAttempt& b)noexcept {
+    const auto& x=a.diagnostic;const auto& y=b.diagnostic;
+    // Time/sequence and sub-radius jitter alone do not allocate or publish on
+    // every frame. The first squeeze remains intact when a gate later changes.
+    return a.owner==b.owner&&a.weapon==b.weapon&&a.registrationKey==b.registrationKey&&a.lifetime==b.lifetime&&
+        a.cancel==b.cancel&&a.decision==b.decision&&x.exit==y.exit&&x.flags==y.flags&&x.status==y.status&&
+        a.current.released==b.current.released&&a.current.tracked==b.current.tracked&&a.current.focused==b.current.focused&&
+        (!a.originalPacket||!b.originalPacket||(a.originalPacket->released==b.originalPacket->released&&
+            a.originalPacket->tracked==b.originalPacket->tracked&&a.originalPacket->focused==b.originalPacket->focused))&&
+        x.rawChecked==y.rawChecked&&x.rawPassed==y.rawPassed&&x.admissionChecked==y.admissionChecked&&
+        x.admissionPassed==y.admissionPassed&&x.selectionFailure==y.selectionFailure&&
+        x.idleChecked==y.idleChecked&&x.idlePassed==y.idlePassed&&x.policyEvaluated==y.policyEvaluated;
+}
 std::uint64_t Lifetime()noexcept {
     auto old=nextLifetime.load();
     while(old!=UINT64_MAX)if(nextLifetime.compare_exchange_weak(old,old+1))return old+1;
@@ -95,6 +134,57 @@ std::shared_ptr<const Bc2PhysicalFeedPresentation> ReadBc2PhysicalFeedPresentati
     const auto p=publication.load(std::memory_order_acquire);
     return p&&p->owner==owner&&Window(p->input,now)?p:nullptr;
 }
+void RequestBc2PhysicalFeedAdmissionObservation(std::int64_t now)noexcept {
+    if(now>0&&now<=INT64_MAX-1000000000ll)admissionObservationUntil.store(now+1000000000ll,std::memory_order_relaxed);
+}
+void WriteBc2PhysicalFeedAdmissionObservation(std::ostream& out){
+    const auto observation=admissionObservation.load(std::memory_order_acquire);
+    if(!observation){out<<"{\"observationOnly\":true,\"status\":\"capture_pending_or_no_press\"}";return;}
+    const auto owner=[&](const HandInteractionOwner& o){out<<'['<<o.actor<<','<<o.actorGeneration<<','<<o.equipGeneration<<','<<o.space<<']';};
+    const auto input=[&](const HandInteractionSample& s){out<<"{\"owner\":";owner(s.owner);
+        out<<",\"sequence\":"<<s.sequence<<",\"observedNs\":"<<s.observedNs<<",\"deadlineNs\":"<<s.deadlineNs<<",\"nowNs\":"<<s.nowNs
+            <<",\"focused\":"<<s.focused<<",\"tracked\":["<<s.tracked[0]<<','<<s.tracked[1]<<"],\"released\":["<<s.released[0]<<','<<s.released[1]<<"]}";};
+    const auto claim=[&](const std::optional<HandClaim>& c){if(!c){out<<"null";return;}const auto& t=c->token;
+        out<<"{\"id\":"<<t.id<<",\"kind\":"<<unsigned(t.kind)<<",\"owner\":";owner(t.owner);
+        out<<",\"item\":["<<t.item.id<<','<<t.item.generation<<"],\"contact\":["<<t.contact.id<<','<<t.contact.generation
+            <<"],\"prerequisiteClaim\":"<<t.prerequisiteClaim<<",\"inputSequence\":"<<c->inputSequence<<",\"deadlineNs\":"<<c->deadlineNs<<'}';};
+    const auto scalar=[&](double x){if(std::isfinite(x))out<<x;else out<<"null";};
+    const auto status=[&](unsigned x){if(x==~0u)out<<"null";else out<<x;};
+    const auto attempt=[&](const FeedAdmissionAttempt& a){const auto& d=a.diagnostic;const auto& v=a.decision;
+        out<<"{\"owner\":["<<a.owner.player<<','<<a.owner.soldier<<','<<a.owner.weak<<','<<a.owner.weapon<<','
+            <<a.owner.actorGeneration<<','<<a.owner.equipGeneration<<','<<a.owner.space<<"],\"weapon\":["<<a.weapon.id<<','<<a.weapon.generation
+            <<"],\"registrationKey\":"<<a.registrationKey<<",\"lifetime\":"<<a.lifetime<<",\"cancel\":"<<a.cancel<<",\"current\":";input(a.current);
+        out<<",\"currentGrip\":"<<v.currentGrip<<",\"rawPresent\":"<<v.rawPresent<<",\"rawInput\":";input(a.raw);
+        out<<",\"sourceLookedUp\":"<<v.sourceLookedUp<<",\"originalPacket\":";
+        if(a.originalPacket){out<<"{\"grip\":"<<v.sourceGrip<<",\"input\":";input(*a.originalPacket);out<<'}';}else out<<"null";
+        out<<",\"sourceNative\":{\"sequence\":"<<d.sourceNativeSequence<<",\"observedNs\":"<<d.sourceNativeObservedNs<<",\"deadlineNs\":"<<d.sourceNativeDeadlineNs
+            <<"},\"exit\":\""<<FeedExitName(d.exit)<<"\",\"admissionChecked\":"<<d.admissionChecked<<",\"admissionPassed\":"<<d.admissionPassed
+            <<",\"selectionFailure\":";status(d.selectionFailure);
+        out<<",\"rawChecked\":"<<d.rawChecked<<",\"rawPassed\":"<<d.rawPassed<<",\"idleChecked\":"<<d.idleChecked<<",\"idlePassed\":"<<d.idlePassed
+            <<",\"neutralAgeNs\":"<<d.neutralAgeNs<<",\"candidate\":{\"status\":";status(v.queryStatus);
+        out<<",\"operation\":";status(v.candidateOperation);out<<",\"part\":";status(v.candidatePart);out<<"},\"eligibility\":";
+        if(!v.eligibilityEvaluated)out<<"null";else out<<"{\"available\":"<<v.available<<",\"heldBeforeOwnership\":"<<v.heldBeforeOwnership
+            <<",\"heldAtUpdate\":"<<v.heldAtUpdate<<",\"needsSupply\":"<<v.needsSupply<<",\"supplied\":"<<v.supplied
+            <<",\"pickupAwaitingRaw\":"<<v.pickupAwaitingRaw<<",\"chestNeutral\":"<<v.chestNeutral<<",\"supplyNeutral\":"<<v.supplyNeutral
+            <<",\"refused\":"<<v.refused<<",\"gateFailed\":"<<v.gateFailed<<",\"motionDirty\":"<<v.motionDirty
+            <<",\"nativePending\":"<<v.nativePending<<",\"ammoPending\":"<<v.ammoPending<<",\"reloadPending\":"<<v.reloadPending<<'}';
+        out<<",\"contact\":";
+        if(!v.contactStage)out<<"null";else{out<<"{\"kind\":\""<<(v.contactStage==1?"idle_cover":"candidate")<<"\",\"status\":";status(v.contactStatus);
+            out<<",\"geometryEvaluated\":"<<a.contactGeometryEvaluated<<",\"distanceMeters\":";if(a.contactGeometryEvaluated)scalar(a.distanceMeters);else out<<"null";
+            out<<",\"angleRadians\":";if(a.contactGeometryEvaluated)scalar(a.angleRadians);else out<<"null";
+            out<<",\"radiusMeters\":";scalar(a.radiusMeters);out<<",\"maxAngleRadians\":";scalar(a.maxAngleRadians);out<<",\"orientation\":"<<a.orientation<<'}';}
+        out<<",\"leftBefore\":";claim(a.leftBefore);out<<",\"rightBefore\":";claim(a.rightBefore);
+        out<<",\"ownership\":{\"action\":\""<<(v.ownershipAction==1?"acquire":v.ownershipAction==2?"renew":v.ownershipAction==3?"supply_evidence":"not_attempted")
+            <<"\",\"inputValid\":"<<v.ownershipInputValid<<",\"accepted\":"<<v.ownershipAccepted<<",\"reason\":"<<v.ownershipReason<<",\"claim\":";claim(a.ownershipClaim);
+        out<<"},\"policy\":{\"evaluated\":"<<d.policyEvaluated<<",\"recoveryEstablished\":"<<v.recoveryEstablished
+            <<",\"recognitionEnabled\":"<<v.recognitionEnabled<<",\"equipmentStatus\":"<<(d.status&255)
+            <<",\"interactionStatus\":"<<((d.status>>8)&255)<<",\"interactionEvidence\":";status(v.interactionEvidence);
+        out<<",\"reloadStatus\":"<<((d.status>>16)&255)<<",\"reloadPhase\":";status(d.reloadPhase);out<<"}}";
+    };
+    out<<"{\"observationOnly\":true,\"retainedPress\":true,\"unreachedFieldsAreDefaultValues\":true,\"ownerFields\":[\"player\",\"soldier\",\"weak\",\"weapon\",\"actorGeneration\",\"equipGeneration\",\"space\"]"
+        <<",\"inputOwnerFields\":[\"actor\",\"actorGeneration\",\"equipGeneration\",\"space\"],\"firstPress\":";attempt(observation->firstPress);
+    out<<",\"latestChange\":";attempt(observation->latestChange);out<<'}';
+}
 struct Bc2PhysicalFeed::State {
     // Single Gameplay writer; Report reads only relaxed atomics. These are
     // independent observations, never a coherent native snapshot or authority.
@@ -148,6 +238,9 @@ struct Bc2PhysicalFeed::State {
             (session&&session->State().status!=FeedEquipmentStatus::Complete);}
     };
     Bc2PhysicalFeedApi api{};std::array<Packet,32> packets{};unsigned nextPacket=0;
+    // Gameplay alone mutates this pair; worker snapshots read its immutable copy.
+    std::shared_ptr<const FeedAdmissionObservation> admission;
+    bool admissionPressed=false;
     std::array<std::unique_ptr<Equipment>,8> equipment{};
     std::uint64_t retirementEvent=0;
     explicit State(Bc2PhysicalFeedApi a):api(a){}
@@ -330,6 +423,18 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     };
     Bc2PhysicalFeedResult out;out.blocksFire=blocksFire();out.blocksEquipment=blocksEquipment();publication.store({},std::memory_order_release);
     if(!state_){out.diagnostic.exit=FeedExit::StorageUnavailable;return out;}auto& state=*state_;const auto now=s.input.nowNs;
+    const bool observePress=now>0&&now<admissionObservationUntil.load(std::memory_order_relaxed)&&
+        s.grip&&SupportedAsset(s.asset);
+    const bool newPress=!state.admissionPressed||!state.admission||state.admission->latestChange.owner!=s.owner||
+        state.admission->latestChange.weapon!=s.weapon;
+    state.admissionPressed=observePress;
+    std::optional<FeedAdmissionAttempt> observation;
+    if(observePress){observation.emplace();auto& a=*observation;
+        a.owner=s.owner;a.weapon=s.weapon;a.current=s.input;a.raw=s.raw.inputEvidence;a.cancel=s.cancel;
+        a.decision.currentGrip=s.grip;a.decision.rawPresent=s.raw.valid;
+        a.leftBefore=hands.Current(InteractionHand::Left);a.rightBefore=hands.Current(InteractionHand::Right);
+        a.decision.leftClaim=a.leftBefore?a.leftBefore->token.id:0;a.decision.rightClaim=a.rightBefore?a.rightBefore->token.id:0;
+    }
     State::Equipment* e=nullptr;
     const Bc2FeedRegistration* registration=nullptr;
     const auto finish=[&](FeedExit reason){
@@ -343,6 +448,14 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         out.diagnostic.exit=reason;out.diagnostic.flags=flags;out.diagnostic.status=status;
         if(e){out.diagnostic.operation=unsigned(e->activeOperation);
             if(e->session)out.diagnostic.reloadPhase=unsigned(session.session.reload.phase);}
+        if(observation){auto& a=*observation;a.diagnostic=out.diagnostic;
+            a.registrationKey=registration?registration->key:0;a.lifetime=e?e->lifetime:0;
+            if(newPress||!SameAdmissionDecision(state.admission->latestChange,a))try{
+                auto next=std::make_shared<FeedAdmissionObservation>();
+                next->firstPress=newPress?a:state.admission->firstPress;next->latestChange=a;
+                state.admission=next;admissionObservation.store(std::move(next),std::memory_order_release);
+            }catch(...){} // Observation allocation cannot alter admission.
+        }
         bool changed=d.reason.exchange(reason,std::memory_order_relaxed)!=reason;
         changed=(d.flags.exchange(flags,std::memory_order_relaxed)!=flags)||changed;
         changed=(d.status.exchange(status,std::memory_order_relaxed)!=status)||changed;
@@ -479,6 +592,8 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     State::Packet* source=nullptr;
     for(auto& p:state.packets)if(p.owner==s.owner&&p.weapon==s.weapon&&SamePacket(p.input,s.raw.inputEvidence)&&
         (!p.contact||p.contact->rig==s.raw.rig)){source=&p;break;}
+    if(observation){auto& a=*observation;a.decision.sourceLookedUp=true;a.decision.sourcePresent=bool(source);
+        if(source){a.originalPacket=source->input;a.decision.sourceGrip=source->grip;}}
     if(source&&source->native){out.diagnostic.sourceNativeSequence=source->native->sequence;
         out.diagnostic.sourceNativeObservedNs=source->native->observedNs;
         out.diagnostic.sourceNativeDeadlineNs=source->native->deadlineNs;}
@@ -592,6 +707,9 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         const auto contact=feed_interaction_detail::Multiply(m.motionFromContact,m.weaponFromMotion);
         const auto& policy=profile.contacts[unsigned(FeedPart::Cover)];
         const auto distance=Distance(local,contact),angle=Angle(local,contact);
+        if(observation){auto& a=*observation;a.decision.contactStage=1;a.contactGeometryEvaluated=true;
+            a.distanceMeters=distance;a.angleRadians=float(angle);a.radiusMeters=policy.radiusMeters;
+            a.maxAngleRadians=policy.maxAngleRadians;a.orientation=unsigned(policy.orientation);}
         // A cover grasp binds the actual anatomical wrist at the measured
         // contact; the recognizer constrains motion relative to that grasp.
         const bool orientation=policy.orientation==FeedContactOrientation::Acquired||angle<=policy.maxAngleRadians;
@@ -693,6 +811,8 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         const auto prior=e->session->State();
         bool recoveryEstablished=false;
         const auto query=EvaluateFeedMechanism(profile,sample.snapshot,e->supply,now);
+        if(observation){auto& v=observation->decision;v.queryStatus=unsigned(query.status);
+            if(query.candidate){v.candidateOperation=unsigned(query.candidate->operation);v.candidatePart=unsigned(query.candidate->part);}}
         if(query.candidate){const auto op=query.candidate->operation;
             const auto recovery=e->session->RecoveryMotion();
             const bool recoverable=recovery&&Same(recovery->Candidate(),*query.candidate);
@@ -728,6 +848,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         // RecoverMotion binds the retained proof to this observation. Its first
         // neutral/gesture packet must be newer; replaying this one would revoke
         // that proof as InvalidInput before the player can regrasp.
+        if(observation)observation->decision.recoveryEstablished=recoveryEstablished;
         if(!recoveryEstablished){
         sample.interaction.contact={sample.snapshot.owner,e->mechanism,sample.snapshot.sequence,sourceInput.sequence,
             sourceInput.observedNs,true,available,local};
@@ -737,6 +858,10 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             sample.interaction.weaponWorld=source->contact->weaponWorld;
         sample.held=available&&(source->grip||sourceInput.released[0])&&!e->refused&&!e->gateFailed&&!e->motionDirty&&
             (!needsSupply||supplied||pickupAwaitingRaw||(chestNeutral&&e->supplyNeutral));
+        if(observation){auto& v=observation->decision;v.eligibilityEvaluated=true;v.available=available;v.heldBeforeOwnership=sample.held;
+            v.needsSupply=needsSupply;v.supplied=supplied;v.pickupAwaitingRaw=pickupAwaitingRaw;v.chestNeutral=chestNeutral;v.supplyNeutral=e->supplyNeutral;
+            v.refused=e->refused;v.gateFailed=e->gateFailed;v.motionDirty=e->motionDirty;v.nativePending=bool(e->pending);
+            v.ammoPending=bool(prior.ammunition.pending);v.reloadPending=bool(prior.session.reload.pending);}
         if(prior.session.reload.pending&&prior.ammunition.lastReceipt&&!prior.ammunition.pending&&
            prior.ammunition.lastReceipt->command.request==*prior.session.reload.pending){
             auto ack=prior.ammunition.lastReceipt->acknowledgement;
@@ -745,6 +870,10 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         }
         if(source->grip&&sample.held&&query.candidate&&!prior.ammunition.pending&&!prior.session.reload.pending){
             const auto contact=EvaluateFeedContact(profile,sample.snapshot,e->supply,*query.candidate,sample.interaction.contact,now);
+            if(observation){auto& a=*observation;const auto& policy=profile.contacts[unsigned(query.candidate->part)];
+                a.decision.contactStage=2;a.decision.contactStatus=unsigned(contact.status);a.contactGeometryEvaluated=bool(contact.target);
+                a.distanceMeters=contact.distanceMeters;a.angleRadians=contact.angleRadians;
+                a.radiusMeters=policy.radiusMeters;a.maxAngleRadians=policy.maxAngleRadians;a.orientation=unsigned(policy.orientation);}
             // AcquireFrom/RenewFrom preserve the exact recorded raw packet.
             // Native authority has its own independently checked deadline.
             const HandContactProof proof{{PartKey(e->registration.key,unsigned(query.candidate->part)),e->lifetime},sourceInput.sequence,
@@ -753,17 +882,26 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
                 // AmmoSupply owns this exact hand; do not manufacture or steal
                 // a Mechanism claim for a carried reserve object.
                 if(!hands.HasRecordedEvidence(sourceInput,InteractionHand::Left))sample.held=false;
+                if(observation){auto& v=observation->decision;v.ownershipAction=3;v.ownershipAccepted=sample.held;}
             }else if(e->claim){const auto renewed=hands.RenewFrom(s.input,sourceInput,*e->claim,proof);out.handReason=renewed.reason;
+                if(observation){auto& a=*observation;a.decision.ownershipAction=2;a.decision.ownershipInputValid=renewed.inputValid;
+                    a.decision.ownershipAccepted=renewed.accepted;a.decision.ownershipReason=unsigned(renewed.reason);
+                    a.ownershipClaim=renewed.claim;a.decision.resultClaim=renewed.claim?renewed.claim->token.id:0;}
                 if(!renewed.accepted){e->claim.reset();sample.held=false;}}
             else if(contact.status==FeedMechanismStatus::ContactMatch&&intent!=UINT64_MAX){
                 const HandClaimRequest request{s.input.owner,InteractionHand::Left,HandClaimKind::Mechanism,
                     s.weapon,proof,++intent,right->token.id};
                 const auto acquired=hands.AcquireFrom(s.input,sourceInput,request);
+                if(observation){auto& a=*observation;a.decision.ownershipAction=1;a.decision.ownershipInputValid=acquired.inputValid;
+                    a.decision.ownershipAccepted=acquired.accepted;a.decision.ownershipReason=unsigned(acquired.reason);
+                    a.ownershipClaim=acquired.claim;a.decision.resultClaim=acquired.claim?acquired.claim->token.id:0;}
                 out.handReason=acquired.reason;
                 if(acquired.claim)e->claim=acquired.claim->token;else sample.held=false;
             }else sample.held=false;
         }
         const auto result=e->session->Update(sample);out.status=result.status;
+        if(observation){auto& v=observation->decision;v.heldAtUpdate=sample.held;v.recognitionEnabled=result.session.recognitionEnabled;
+            v.interactionEvidence=unsigned(result.session.interaction.evidence);}
         out.interactionStatus=result.session.interaction.status;out.reloadStatus=result.session.reload.status;
         out.diagnostic.policyEvaluated=true;
         state.PoseTarget(*e,result.session.interaction,s.raw.weaponWorldMeters);

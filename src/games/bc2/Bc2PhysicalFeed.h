@@ -42,6 +42,12 @@ struct Bc2PhysicalFeedPresentation {
 // Serialized Gameplay publishes; renderer reads a bounded immutable copy.
 std::shared_ptr<const Bc2PhysicalFeedPresentation> ReadBc2PhysicalFeedPresentation(
     const ReloadStateOwner&,std::int64_t nowNs)noexcept;
+// Explicit mechanism-snapshot observation only; retained failures grant no pose,
+// hand, ammunition or native authority. No source lease is refreshed.
+// Retains the first observed press in the request window and its latest gate
+// change; a request begun while held does not establish the physical press edge.
+void RequestBc2PhysicalFeedAdmissionObservation(std::int64_t nowNs)noexcept;
+void WriteBc2PhysicalFeedAdmissionObservation(std::ostream&);
 struct Bc2PhysicalFeedApi {
     void* context=nullptr;
     std::optional<FeedEquipmentNativeView> (*read)(void*,const ReloadStateOwner&,std::int64_t)noexcept=nullptr;

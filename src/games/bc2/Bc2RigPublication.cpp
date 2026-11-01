@@ -2648,6 +2648,13 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     // Explicit snapshot request opts in subsequent serialized Gameplay copies.
     // No source deadline is changed; an initial request may report pending.
     shellPumpObservationUntil.store(observed+1000000000ll,std::memory_order_relaxed);
+    RequestBc2PhysicalFeedAdmissionObservation(observed);
+    // One immutable retained attempt is independent of pose admission. Capture
+    // it once so an invalid snapshot cannot replace the first failed squeeze
+    // with unrelated later atomics, or omit it when there is no Feed pose.
+    std::ostringstream admission;admission.imbue(std::locale::classic());admission.precision(17);admission<<std::boolalpha;
+    WriteBc2PhysicalFeedAdmissionObservation(admission);
+    const auto feedAdmission=",\"feedAdmission\":"+admission.str();
     const auto invalid=[&](const char* reason){
         std::ostringstream header;header.imbue(std::locale::classic());
         header<<"{\"schema\":\"fvr.bc2.live-mechanism-snapshot.v1\",\"nonce\":\""<<nonce
@@ -2656,8 +2663,9 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
         const auto diagnostics=feedDiagnostics.empty()?std::string{}:",\"feedDiagnostics\":"+feedDiagnostics;
         std::ostringstream observation;observation.imbue(std::locale::classic());observation<<std::boolalpha;
         gameplay::ReportFeedObservation(observation);
-        auto payload=prefix+diagnostics+",\"feedObservation\":"+observation.str()+"}\n";
-        if(payload.size()>snapshotLimit)payload=prefix+diagnostics+",\"feedObservation\":{\"available\":false,\"omitted\":\"payload_limit\"}}\n";
+        auto payload=prefix+feedAdmission+diagnostics+",\"feedObservation\":"+observation.str()+"}\n";
+        if(payload.size()>snapshotLimit)payload=prefix+feedAdmission+diagnostics+",\"feedObservation\":{\"available\":false,\"omitted\":\"payload_limit\"}}\n";
+        if(payload.size()>snapshotLimit)payload=prefix+feedAdmission+",\"diagnosticsOmitted\":\"payload_limit\"}\n";
         if(payload.size()>snapshotLimit)payload=prefix+",\"diagnosticsOmitted\":\"payload_limit\"}\n";
         out<<payload;
     };
@@ -3116,7 +3124,7 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
             json<<",\"ready\":";if(n.ready)ready(*n.ready);else json<<"null";json<<'}';}
         json<<"}}";
     }
-    json<<",\"feedObservation\":";gameplay::ReportFeedObservation(json);json<<"}\n";
+    json<<feedAdmission<<",\"feedObservation\":";gameplay::ReportFeedObservation(json);json<<"}\n";
     if(ReloadNanos()>=until){invalid("expired_during_serialization");return;}
     const auto guardAfter=shotGuard.load(std::memory_order_acquire);
     if(!enabled.load(std::memory_order_acquire)||!guardAfter||!Fresh(guardAfter->deadline)||

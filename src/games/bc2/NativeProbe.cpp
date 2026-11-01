@@ -3902,6 +3902,37 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
 #endif
         // Finite emulated runs need the same crash-surviving evidence as live
         // sessions. Snapshot readers never wait for a gameplay transaction.
+        struct MechanismSnapshotPublication {
+            std::uint64_t nonce=0;std::int64_t acceptedNs=0,serializedNs=0,completedNs=0;
+            unsigned attempts=0;DWORD error=0,firstError=0,cleanupError=0,failureRecordError=0;
+            const char* status="idle";const char* stage="none";const char* firstStage="none";
+            std::string payload;
+            HANDLE failureFile=INVALID_HANDLE_VALUE;
+            ~MechanismSnapshotPublication(){if(failureFile!=INVALID_HANDLE_VALUE)CloseHandle(failureFile);}
+            void Write(std::ostream& out)const{
+                out<<"{\"nonce\":"<<nonce<<",\"clock\":\"qpc_nanoseconds\",\"status\":\""<<status<<"\",\"stage\":\""<<stage
+                    <<"\",\"win32_error\":"<<error<<",\"first_failure_stage\":\""<<firstStage
+                    <<"\",\"first_win32_error\":"<<firstError<<",\"cleanup_error\":"<<cleanupError
+                    <<",\"failure_record_error\":"<<failureRecordError<<",\"attempts\":"<<attempts
+                    <<",\"accepted_ns\":"<<acceptedNs<<",\"serialized_ns\":"<<serializedNs
+                    <<",\"completed_ns\":"<<completedNs<<",\"payload_bytes\":"<<payload.size()<<'}';
+            }
+        } mechanismPublication;
+        const auto mechanismSnapshotNow=[](){
+            LARGE_INTEGER q{},f{};QueryPerformanceCounter(&q);QueryPerformanceFrequency(&f);
+            return (q.QuadPart/f.QuadPart)*1000000000ll+(q.QuadPart%f.QuadPart)*1000000000ll/f.QuadPart;
+        };
+        if(mechanismSnapshotsEnabled){
+            // Reserve an independent failure channel before accepting a nonce.
+            // Retain the handle: failure reporting needs no rename or reopen and
+            // cannot follow/truncate a pre-existing link. Normal play is unchanged.
+            mechanismPublication.failureFile=CreateFileW((output.parent_path()/L"mechanism-snapshot-failure.json").c_str(),
+                GENERIC_WRITE,FILE_SHARE_READ,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr);
+            if(mechanismPublication.failureFile==INVALID_HANDLE_VALUE){
+                mechanismPublication.status="unavailable";mechanismPublication.stage="create_failure_record";
+                mechanismPublication.error=GetLastError();
+            }
+        }
         std::ofstream telemetry(output.parent_path()/L"session-telemetry.jsonl");
         const auto sessionStarted=GetTickCount64();auto nextSample=sessionStarted;
         const auto persistSessionTelemetry=[&](bool force=false){
@@ -3938,6 +3969,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
                     fvr::bc2::selectedKnife::WriteTelemetry(telemetry,knife);
                     telemetry<<",\"rig_publication\":";
                     fvr::bc2::rigPublication::ReportLiveCounters(telemetry);
+                    telemetry<<",\"mechanism_snapshot_publication\":";mechanismPublication.Write(telemetry);
                     telemetry<<",\"weapon_routes\":";fvr::bc2::gameplay::ReportWeaponRoutes(telemetry);
                     telemetry<<",\"fire_routes\":";fvr::bc2::gameplay::ReportFireRouteTelemetry(telemetry);
                     telemetry<<"}\n";
@@ -3945,8 +3977,23 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
                 }
         };
         std::uint64_t mechanismSnapshotNonce=0;ULONGLONG mechanismSnapshotNext=0;
+        const auto failMechanismSnapshot=[&](const char* stage,DWORD error){
+            auto& p=mechanismPublication;p.status="failed";p.stage=stage;p.error=error;p.completedNs=mechanismSnapshotNow();
+            // One small latest-failure record, not an unbounded journal. Readers
+            // require complete JSON, newline and matching nonce bookends before
+            // consuming an in-place update. It carries no gameplay authority.
+            std::ostringstream out;
+            out<<"{\"schema\":\"fvr.bc2.mechanism-snapshot-failure.v1\",\"nonce\":"<<p.nonce<<",\"publication\":";
+            p.Write(out);out<<",\"nonce_end\":"<<p.nonce<<"}\n";const auto bytes=out.str();
+            LARGE_INTEGER begin{};DWORD written=0;
+            if(bytes.size()>1024)p.failureRecordError=ERROR_BUFFER_OVERFLOW;
+            else if(!SetFilePointerEx(p.failureFile,begin,nullptr,FILE_BEGIN))p.failureRecordError=GetLastError();
+            else if(!WriteFile(p.failureFile,bytes.data(),DWORD(bytes.size()),&written,nullptr))p.failureRecordError=GetLastError();
+            else if(written!=bytes.size())p.failureRecordError=ERROR_WRITE_FAULT;
+            else if(!SetEndOfFile(p.failureFile)||!FlushFileBuffers(p.failureFile))p.failureRecordError=GetLastError();
+        };
         const auto serviceMechanismSnapshot=[&]{
-            if(!mechanismSnapshotsEnabled)return;
+            if(!mechanismSnapshotsEnabled||mechanismPublication.failureFile==INVALID_HANDLE_VALUE)return;
             const auto tick=GetTickCount64();if(tick<mechanismSnapshotNext)return;mechanismSnapshotNext=tick+100;
             // Opt-in, fixed session-local paths. No callback file IO, polling
             // thread, native mutation, or continuous pose capture is introduced.
@@ -3954,37 +4001,74 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             const auto requestPath=directory/L"mechanism-snapshot-request.txt";
             const auto request=CreateFileW(requestPath.c_str(),GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
                 nullptr,OPEN_EXISTING,FILE_FLAG_OPEN_REPARSE_POINT,nullptr);
-            if(request==INVALID_HANDLE_VALUE)return;
+            const bool retry=std::strcmp(mechanismPublication.status,"pending_retry")==0;
+            if(request==INVALID_HANDLE_VALUE){const auto error=GetLastError();if(retry)failMechanismSnapshot("retry_request_open",error);return;}
             BY_HANDLE_FILE_INFORMATION info{};std::array<char,24> data{};DWORD length=0;
-            const bool read=GetFileType(request)==FILE_TYPE_DISK&&GetFileInformationByHandle(request,&info)&&
-                !(info.dwFileAttributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT))&&
-                !info.nFileSizeHigh&&info.nFileSizeLow>0&&info.nFileSizeLow<=22&&
-                ReadFile(request,data.data(),DWORD(data.size()),&length,nullptr)&&length==info.nFileSizeLow;
-            CloseHandle(request);if(!read)return;
+            DWORD readError=0;bool read=false;
+            if(GetFileType(request)==FILE_TYPE_DISK){
+                if(!GetFileInformationByHandle(request,&info))readError=GetLastError();
+                else if(!(info.dwFileAttributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT))&&
+                        !info.nFileSizeHigh&&info.nFileSizeLow>0&&info.nFileSizeLow<=22){
+                    if(!ReadFile(request,data.data(),DWORD(data.size()),&length,nullptr))readError=GetLastError();
+                    else read=length==info.nFileSizeLow;
+                }
+            }
+            CloseHandle(request);if(!read){if(retry)failMechanismSnapshot("retry_request_read",readError);return;}
             if(length&&data[length-1]=='\n'){
                 --length;if(length&&data[length-1]=='\r')--length;
             }
-            if(!length||length>20||data[0]<'1'||data[0]>'9')return;
+            if(!length||length>20||data[0]<'1'||data[0]>'9'){if(retry)failMechanismSnapshot("retry_request_invalid",0);return;}
             std::uint64_t nonce=0;const auto parsed=std::from_chars(data.data(),data.data()+length,nonce);
-            if(parsed.ec!=std::errc{}||parsed.ptr!=data.data()+length||nonce<=mechanismSnapshotNonce)return;
-            mechanismSnapshotNonce=nonce; // At most one observation per accepted nonce.
-            std::ostringstream snapshot;
-            fvr::bc2::rigPublication::WriteLiveMechanismSnapshot(snapshot,nonce);
-            const auto payload=snapshot.str();if(payload.empty()||payload.size()>fvr::bc2::rigPublication::LiveMechanismSnapshotLimit)return;
+            if(parsed.ec!=std::errc{}||parsed.ptr!=data.data()+length){if(retry)failMechanismSnapshot("retry_request_invalid",0);return;}
+            auto& p=mechanismPublication;
+            // A newer request cannot cause an old retained payload to be
+            // published as its response. Observe it on the next normal pass.
+            if(retry&&nonce!=p.nonce){failMechanismSnapshot("retry_request_superseded",0);return;}
+            if(!retry){
+                if(nonce<=mechanismSnapshotNonce)return;
+                mechanismSnapshotNonce=nonce;p.nonce=nonce;p.acceptedNs=mechanismSnapshotNow();
+                p.serializedNs=p.completedNs=0;p.attempts=0;p.error=p.firstError=p.cleanupError=p.failureRecordError=0;
+                p.status="serializing";p.stage=p.firstStage="none";
+                std::ostringstream snapshot;
+                fvr::bc2::rigPublication::WriteLiveMechanismSnapshot(snapshot,nonce);
+                p.payload=snapshot.str();p.serializedNs=mechanismSnapshotNow();
+                if(p.payload.empty()||p.payload.size()>fvr::bc2::rigPublication::LiveMechanismSnapshotLimit){
+                    failMechanismSnapshot("payload_size",0);return;
+                }
+            }
+            ++p.attempts;
             const auto temporary=directory/L"mechanism-snapshot.pending",final=directory/L"mechanism-snapshot.json";
             // CREATE_NEW cannot follow or truncate a pre-existing link. A stale
             // pending file is an explicit output failure, never an unsafe target.
             const auto file=CreateFileW(temporary.c_str(),GENERIC_WRITE,0,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr);
-            if(file==INVALID_HANDLE_VALUE)return;
-            DWORD written=0;const bool saved=WriteFile(file,payload.data(),DWORD(payload.size()),&written,nullptr)&&
-                written==payload.size()&&FlushFileBuffers(file);
-            CloseHandle(file);
-            const auto attributes=GetFileAttributesW(final.c_str());
-            const bool safe=attributes==INVALID_FILE_ATTRIBUTES||!(attributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT));
-            const bool replaced=saved&&safe&&(attributes!=INVALID_FILE_ATTRIBUTES?
-                ReplaceFileW(final.c_str(),temporary.c_str(),nullptr,0,nullptr,nullptr)!=0:
-                MoveFileExW(temporary.c_str(),final.c_str(),MOVEFILE_WRITE_THROUGH)!=0);
-            if(!replaced)DeleteFileW(temporary.c_str());
+            const char* failedStage=nullptr;DWORD error=0;
+            if(file==INVALID_HANDLE_VALUE){failedStage="create_pending";error=GetLastError();}
+            else {
+                DWORD written=0;
+                if(!WriteFile(file,p.payload.data(),DWORD(p.payload.size()),&written,nullptr)){failedStage="write_pending";error=GetLastError();}
+                else if(written!=p.payload.size())failedStage="short_write_pending";
+                else if(!FlushFileBuffers(file)){failedStage="flush_pending";error=GetLastError();}
+                if(!CloseHandle(file)&&!failedStage){failedStage="close_pending";error=GetLastError();}
+                if(!failedStage){
+                    const auto attributes=GetFileAttributesW(final.c_str());
+                    const auto attributeError=attributes==INVALID_FILE_ATTRIBUTES?GetLastError():ERROR_SUCCESS;
+                    if(attributes==INVALID_FILE_ATTRIBUTES&&attributeError!=ERROR_FILE_NOT_FOUND){failedStage="inspect_final";error=attributeError;}
+                    else if(attributes!=INVALID_FILE_ATTRIBUTES&&(attributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT)))failedStage="unsafe_final";
+                    else if(attributes!=INVALID_FILE_ATTRIBUTES){
+                        if(!ReplaceFileW(final.c_str(),temporary.c_str(),nullptr,0,nullptr,nullptr)){failedStage="replace_final";error=GetLastError();}
+                    }else if(!MoveFileExW(temporary.c_str(),final.c_str(),MOVEFILE_WRITE_THROUGH)){failedStage="move_final";error=GetLastError();}
+                }
+                if(failedStage&&!DeleteFileW(temporary.c_str()))p.cleanupError=GetLastError();
+            }
+            if(!failedStage){p.status="published";p.stage="published";p.error=0;p.completedNs=mechanismSnapshotNow();return;}
+            if(p.attempts==1){p.firstStage=failedStage;p.firstError=error;}
+            // Only known transient sharing/locking errors get one later worker
+            // attempt. Never sleep here, resample, renew a lease or delete an
+            // unowned pre-existing pending file. All other outcomes are terminal.
+            if(p.attempts==1&&!p.cleanupError&&(error==ERROR_SHARING_VIOLATION||error==ERROR_LOCK_VIOLATION)){
+                p.status="pending_retry";p.stage=failedStage;p.error=error;return;
+            }
+            failMechanismSnapshot(failedStage,error);
         };
         unsigned destructionRequested=0,destructionCompleted=0,destructionFailed=0;
         const auto serviceDestructionRequest=[&]{
@@ -4035,6 +4119,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
 Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4||config.chestKnifeProbe)?50:100,until-now)));
             }
         }
+        if(std::strcmp(mechanismPublication.status,"pending_retry")==0)failMechanismSnapshot("worker_stopped_before_retry",0);
         persistCycleFailure();sceneWriter.Flush();
 #if defined(FVR_BC2_ORDINARY_RESOURCE_SCENE_PROBE)
                 fvr::bc2::graphicsThreadObservation::Flush(output.parent_path()/L"graphics-threads.jsonl");
