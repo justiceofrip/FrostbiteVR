@@ -1,0 +1,38 @@
+{
+  "batch": "coordinator-20261031-feedback68",
+  "source_commit": "280a2a423dbe4116a1315851b049a83948784eb2",
+  "source_sha256": "0e9dd735650874a746d7d6942c4bba16405e1c69ee82d22b1e704ef1855f48ca",
+  "source_pushed": true,
+  "installed_version": "0.1.32",
+  "rollback_version": "0.1.31",
+  "runtime_receipt": "reports/coordinator-20261031-feedback68/normal-runtime/build-receipt.json",
+  "installation_receipt": "reports/coordinator-20261031-feedback68/installation02.json",
+  "push_receipt": "reports/coordinator-20261031-feedback68/source-push.json",
+  "change": "Preserve detached carry geometry; derive unique underbarrel return action25/36 from actual inventory pairing; add shared pump observations/driver and bounded32KB snapshots.",
+  "checks": {
+    "x86_normal": "341/341,104.44s",
+    "x64_normal": "341/341,26.45s",
+    "affected_native": "7/7 before snapshot-cap-only change; full suites rerun on final source",
+    "python": "sight19, preview11, hand15, feed observation10; pump planner12/driver17,Resume15,crash7 reused",
+    "executable_discovery": "93 mutations rejected, no native writes",
+    "independent_route_review": "clean"
+  },
+  "installation": "Initial validation hit retained-evidence4GiB cap and rolled back. Three ended sessions archived with every hash preserved; installation02 validates32/assets/settings and31 rollback. Builds survived PC restart; no rebuild repeated.",
+  "actual_game": {
+    "failed_startup": "xr-game01 worker/game0xc0000005 during Resume; no final native report. Profiles/settings restored and all owned processes exited. Failure retained.",
+    "run": "reports/coordinator-20261031-feedback68/xr-game02",
+    "session": "20261101-025748-847-0ebd7902",
+    "lmg": "QJU88_sp OpenCover accepted once at0/687; DetachContainer produced no new submit/receipt. Full reload failed.",
+    "sight": "XM8 family now available with exactprimary25. Test fixture stowed already-held XM8, so sight correctly refused0commands. Actual sight gesture remains untested.",
+    "watcher": "Two menu-only windows expired before input; third coupled readiness/Resume loaded world,0 AV records in30s. Intermittent startup fault remains unresolved.",
+    "normal_game_close": true,
+    "native_retired": true,
+    "exact_three_profiles_restored": true,
+    "settings_preserved": true,
+    "full_reload_accepted": false,
+    "headset_accepted": false
+  },
+  "later_sight_attempt": "sight01 stopped before host startup after process-observation Resolve race; no mechanic commands. Original profiles/settings restored, gameexit0. Runner correction pending69.",
+  "other_tasks": "Pump/C4 exact checkpoint prerequisites remain. Destruction03 loaded retainedSP02 scene without AV but no destructive shot; no rendering acceptance. GPU comparison mismatched native yaw; no performance gain or default promotion.",
+  "next": "Feedback69 reproduce transient feed ViewUnavailable interrupting acquired detach; correct owned-helper discovery race; observe initial held rifle before any shoulder gesture. Retain original authority clocks."
+}

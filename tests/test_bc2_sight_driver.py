@@ -80,6 +80,19 @@ def admit_current(h, target=False):
     return snapshot
 
 
+def expire_during_publication_checks(h):
+    read_state, reads = h.driver.read_state, 0
+
+    def delayed_read():
+        nonlocal reads
+        reads += 1
+        if reads == 2:
+            h.now = s.source_deadline(h.driver.latest_snapshot)
+        return read_state()
+
+    h.driver.read_state = delayed_read
+
+
 class SightDriverTests(unittest.TestCase):
     def test_same_source_and_exact_target_allow_only_family_selection_change(self):
         h = harness(self)
@@ -217,6 +230,64 @@ class SightDriverTests(unittest.TestCase):
         self.assertEqual(v.reference, original)
         self.assertLess(h.command_writes[0][0], s.source_deadline(v.latest_snapshot))
         self.assertEqual(len(h.command_writes), 1)
+
+    def test_source_expiring_in_transport_wait_refreshes_before_publication(self):
+        h = harness(self)
+        v = h.driver
+        original = copy.deepcopy(admit_current(h))
+        reference, stage_deadline = copy.deepcopy(v.reference), v.stage_deadline
+        started = h.now
+        expire_during_publication_checks(h)
+        v.send(["grip l 1"])
+        self.assertEqual(len(h.command_writes), 1)
+        written = h.command_writes[0][0]
+        self.assertGreaterEqual(written, started + s.transport.SNAPSHOT_PERIOD + h.response_after)
+        self.assertLess(written, s.source_deadline(v.latest_snapshot))
+        self.assertGreater(v.latest_snapshot["nonce"], original["nonce"])
+        self.assertEqual(v.snapshot_index, 2)  # Consume the next request, without an extra fresh() cycle.
+        self.assertEqual(v.reference, reference)
+        self.assertEqual(v.stage_deadline, stage_deadline)
+        self.assertEqual(original["valid_until_ns"], started + 80 * MS)
+
+    def test_publication_refresh_refuses_new_native_frame_with_stale_input(self):
+        h = harness(self)
+        v = h.driver
+        original = copy.deepcopy(admit_current(h))
+        expire_during_publication_checks(h)
+
+        def stale_input(now, nonce=1):
+            profiles, snapshot = fixture(now, nonce)
+            snapshot["input_evidence"] = copy.deepcopy(original["input_evidence"])
+            return profiles, snapshot
+
+        with patch.object(memory, "fixture", stale_input):
+            with self.assertRaisesRegex(s.sight.Refusal, "stale or invalid original hand evidence lease"):
+                v.send(["grip l 1"])
+        self.assertEqual(h.command_writes, [])
+        self.assertEqual(v.latest_snapshot, original)
+        self.assertIn("snapshot-002.json", v.artifacts.saved)
+
+    def test_publication_refresh_does_not_extend_original_plan_deadline(self):
+        h = harness(self)
+        v = h.driver
+        original = copy.deepcopy(admit_current(h))
+        expire_during_publication_checks(h)
+        with self.assertRaisesRegex(s.REFUSAL, "original source/claim lease expired"):
+            v.send(["grip l 1"], source_deadline=s.source_deadline(original))
+        self.assertEqual(h.command_writes, [])
+        self.assertGreater(v.latest_snapshot["nonce"], original["nonce"])
+        self.assertEqual(original["valid_until_ns"], original["observed_ns"] + 80 * MS)
+
+    def test_publication_refresh_rechecks_writer_after_wait(self):
+        h = harness(self)
+        v = h.driver
+        admit_current(h)
+        expire_during_publication_checks(h)
+        h.on_sleep = lambda: h.files.update({v.command_path: b"another writer\n"})
+        with self.assertRaisesRegex(s.REFUSAL, "command file replaced"):
+            v.send(["grip l 1"])
+        self.assertEqual(h.command_writes, [])
+        self.assertTrue(v.unsafe_owner)
 
     def test_acquisition_requires_fresh_sight_preference(self):
         h = harness(self)

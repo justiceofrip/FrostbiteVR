@@ -63,9 +63,25 @@ function Bind([string]$Name,$Identity,[string]$ExpectedPath,[int]$ParentId){
     if($owned.ContainsKey($Name)){SameIdentity $owned[$Name].identity $Identity;return}
     $process=Find-Bc2OwnedProcess $Identity
     if(-not $process){return} # Preserve failed/short-lived identities in session.json; never select by name.
-    Require ([FvrStorage.NativeSize]::ParentPid($process.Id) -eq $ParentId) "Unexpected $Name process parent."
-    $owned[$Name]=@{process=$process;identity=(Get-Bc2ProcessIdentity $process -RequireLive $true)}
-    Save ($Name+'-identity.json') $owned[$Name].identity
+    $retained=$false
+    try{
+        Require ([FvrStorage.NativeSize]::ParentPid($process.Id) -eq $ParentId) "Unexpected $Name process parent."
+        try{$observed=Get-Bc2ProcessIdentity $process -RequireLive $true}
+        catch{
+            $cause=$_.Exception;while($cause.InnerException){$cause=$cause.InnerException}
+            # Find already proved this handle's exact birth/path and parentage
+            # passed above. Only the brief resolution helpers may finish here.
+            # Keep their session receipt; never turn an exited handle into live
+            # authority, reopen its PID, or hide any other identity failure.
+            if($Name -in @('resolution_helper','resolution_release_helper') -and
+               $cause -is [InvalidOperationException] -and $cause.Message -ceq 'Retained process is no longer live' -and
+               $process.HasExited){return}
+            throw
+        }
+        SameIdentity $observed $Identity
+        $owned[$Name]=@{process=$process;identity=$observed};$retained=$true
+        Save ($Name+'-identity.json') $owned[$Name].identity
+    }finally{if(-not $retained){$process.Dispose()}}
 }
 function NoOtherProcesses([switch]$BeforeLaunch){
     foreach($process in @(Get-Process BFBC2Game,BC2XrHost,BC2NativeTrace,BC2NativeIpcProbe,BC2NativeResolution -ErrorAction SilentlyContinue)){

@@ -11,12 +11,12 @@ Ownership: prior CHAT25/26 close.json confirms lease release, idle helpers and
 exact profile restoration. Coordinator acquired the lease before shared mutations.
 External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned.
 
-Feedback67: built/pushed9b42d873; nativecb6cafb9, private0.1.31 installed,0.1.30 rollback.
-Both normal341/341, affected5/5, Python sight4/feed5/drivers22; setup/assets/settings verified.
-Actual QJU88 Open/Detach accepted counter2; Attach stopped on lost feed presentation. XM8 family unavailable; no full reload.
-Receipt: handoff/integrations/coordinator-20261031-feedback67/receipt.json. Session closed normally, exact3 profiles restored.
-Root continues68: shared detached carry precision fix, all-pump observation/driver, exact sight resolver rejection diagnostics.
-68 performance comparison inconclusive due native yaw mismatch. Destruction scene crashed beforeworld; originalprofiles restored, crash capture preparing.
+Feedback68: built/pushed280a2a4; native0e9dd735, private0.1.32 validated,0.1.31 rollback/settings preserved.
+Both normal341/341, focused7/7; affected Python and executable discovery pass. Builds survived PC restart.
+Actual QJU88 Open accepted; Detach no receipt. XM8 family recognized withprimary25; fixture stowed rifle before sight. No full reload/sight acceptance.
+Receipt: handoff/integrations/coordinator-20261031-feedback68/receipt.json. Completedrun native retired, exact3 profiles restored; failed loading/startup episodes preserved.
+Root continues69: bounded missing-view wait preserving original detach authority; owned-helper process race; corrected initial-held observation.
+68 performance comparison inconclusive due native yaw mismatch. Destruction loaded under watcher without repeated AV but no destructive shot; no rendering acceptance.
 Historical66: paired native sample wait; snapshot refusal blocked Detach. Private0.1.30; receipt coordinator-20261031-feedback66/receipt.json.
 Historical65:0.1.29 opt-in live snapshots/shared24-configuration driver; receipt coordinator-20261031-feedback65/receipt.json.
 

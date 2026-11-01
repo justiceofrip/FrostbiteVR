@@ -403,6 +403,38 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         const bool grip=s.grip||(!s.input.released[0]&&previous&&previous->grip);
         state.packets[state.nextPacket]={s.owner,s.input,s.weapon,source,grip,s.reloadPressed,s.bodyFromHand};state.nextPacket=(state.nextPacket+1)%state.packets.size();}
     if(view)for(auto& p:state.equipment)if(p&&State::SameResource(*p,*view)){e=p.get();break;}
+    if(!view&&!s.cancel&&s.grip&&!s.input.released[0]&&Window(s.input,now)&&s.equipment){
+        const auto right=hands.Current(InteractionHand::Right);
+        const auto left=hands.Current(InteractionHand::Left);
+        for(auto& slot:state.equipment)if(slot&&slot->claim&&slot->session&&
+            slot->session->State().status==FeedEquipmentStatus::Ready&&!slot->pending&&!slot->refused&&
+            !slot->gateFailed&&!slot->motionDirty&&!slot->releaseWait&&slot->activeOperation!=FeedPhysicalOperation::None&&
+            slot->weapon==s.weapon&&CurrentEquipment(slot->original,s.owner,*s.equipment,s.binding,slot->registration)){
+            const State::Packet* held=nullptr;
+            for(const auto& packet:state.packets)if(packet.owner==s.owner&&packet.weapon==s.weapon&&
+                packet.input.sequence==slot->lastInput){held=&packet;break;}
+            unsigned selectionFailure=0;
+            if(right&&right->token.owner==s.input.owner&&right->token.item==s.weapon&&
+                right->token.kind==HandClaimKind::GunHold&&!right->token.prerequisiteClaim&&right->deadlineNs>now&&
+                left&&left->token==*slot->claim&&left->token.prerequisiteClaim==right->token.id&&
+                held&&held->native&&held->contact&&held->grip&&held->input.owner==s.input.owner&&
+                held->input.sequence<=s.input.sequence&&left->inputSequence==held->input.sequence&&
+                left->deadlineNs==held->input.deadlineNs&&Window(held->input,now)&&
+                hands.HasRecordedEvidence(held->input,InteractionHand::Left)&&
+                FeedEquipmentViewFresh(*held->native,now)&&slot->original.identity==held->native->identity&&
+                Selected(s,*held->native,slot->registration,selectionFailure)){
+                // A missing current publication is not evidence of release.
+                // Retain only this already admitted gesture within its original
+                // input, native and claim leases. Cached counts cannot advance
+                // policy, renew custody, publish a pose or submit native work.
+                e=slot.get();registration=&e->registration;
+                out.diagnostic.admissionChecked=1;
+                out.ownsHand=true;out.blocksEquipment=true;out.blocksFire=e->Blocked();
+                out.status=e->session->State().status;
+                return finish(FeedExit::ViewUnavailable);
+            }
+        }
+    }
     // Preserve the original short-circuit order. A bit absent from checked was
     // never evaluated; passed bits are observations, never admission authority.
     const auto admission=[&](unsigned bit,bool passed){out.diagnostic.admissionChecked|=1u<<bit;

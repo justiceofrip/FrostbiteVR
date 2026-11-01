@@ -1,13 +1,13 @@
 # Current state — shared normal integration / public 0.1.15
 
-Updated October 31, 2026. This replaces old next-step instructions; prior evidence remains in
+Updated November 1, 2026. This replaces old next-step instructions; prior evidence remains in
 [history/](history/README.md) (search it by run number; never read a log whole).
 
 ## Active work
 
-Feedback67 source is pushed and private0.1.31 is installed, with0.1.30 rollback and settings preserved. Both normal builds pass341/341; setup/assets validation passes. Actual-game simulation now opened and detached QJU88's container, then stopped because its retained feed presentation disappeared. XM8's underbarrel family remained unavailable. The game closed normally and all profiles were restored. Full reload and headset acceptance remain open. [Receipt](../handoff/integrations/coordinator-20261031-feedback67/receipt.json).
+Feedback68 source is pushed and private0.1.32 is installed, with0.1.31 rollback and settings preserved. Both normal builds pass341/341; setup/assets validation passes. Actual QJU88 cover opening succeeded, but box detachment produced no receipt. XM8's native underbarrel pair is recognized. A corrected held-rifle run reached the weapon, but the driver expired its source snapshot before the grab; the gesture remains unaccepted. The completed run closed normally and restored profiles. Full reload and headset acceptance remain open. [Receipt](../handoff/integrations/coordinator-20261031-feedback68/receipt.json).
 
-Feedback68 is preparing a shared detached-carry precision fix and pump cycle observations/driving. Its performance toggle comparison is inconclusive because native yaw differed. The retained destruction checkpoint crashed before rendering; the original profiles were restored and crash evidence retained. No performance or destruction acceptance follows from those attempts.
+Feedback69 is correcting the transient missing native observation that interrupted detachment and the sight driver's pre-publication timing. Its process-discovery correction passed a complete startup/close run. Feedback68 includes shared carry precision, pump observations/driving and actual-inventory underbarrel routing. One loading attempt faulted; an instrumented attempt loaded without reproducing it. Performance comparison remains inconclusive because native yaw differed; destruction checkpoint loading alone establishes no rendering acceptance.
 The user's 0.1.27 session showed slight LMG cover motion, no magnetic hand and no completed reload. [Feedback](archive/2026-10-31-bc2vr-0.1.27-buglist.md). Retained acquisition failed OffPath with timing gates passing; its exact geometric predicate is unknown. A separate worker0xc0000005 has no stack/final report. Ghidra remains available; live simulation observation and complete shared motion driving are the next batch.
 
 The user's 0.1.26 session still had no functioning LMG reload. [Feedback](archive/2026-10-31-bc2vr-0.1.26-buglist.md). Logged grabs cancelled before native dispatch when controller and game publications advanced independently; the new offline fixture reproduces that failure against 0.1.26. Earlier limited shotgun/grip/HUD improvements remain reported; movement correction was not separately confirmed. Full session saved and closed normally.

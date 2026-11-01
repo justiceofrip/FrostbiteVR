@@ -49,7 +49,7 @@ struct Fixture {
     std::size_t nativeTick=0;
     unsigned nativePublications=0,delayedRenders=0,repeatedRenders=0;
     std::uint64_t firstRepeatedSource=0;
-    bool delayedRender=false,repeatRender=false,mutateNativeObserved=false;
+    bool delayedRender=false,repeatRender=false,mutateNativeObserved=false,missingCurrentView=false;
     std::optional<ReloadRawContact> awaitingRender,lastRendered;
     std::optional<FeedEquipmentNativeView> lastAcceptedNative;
     std::uint64_t lastAcceptedInput=0;
@@ -66,7 +66,8 @@ struct Fixture {
         return view;
     }
     Bc2PhysicalFeedApi Api(){return {this,
-        [](void* p,const ReloadStateOwner& o,std::int64_t now)noexcept{auto& f=*static_cast<Fixture*>(p);return f.NativeRead(f.backend.Read(o,now));},
+        [](void* p,const ReloadStateOwner& o,std::int64_t now)noexcept{auto& f=*static_cast<Fixture*>(p);
+            return f.missingCurrentView?std::optional<FeedEquipmentNativeView>{}:f.NativeRead(f.backend.Read(o,now));},
         [](void* p,const FeedEquipmentSubmission& s)noexcept{auto& f=*static_cast<Fixture*>(p);++f.submits;f.submitted=s;
             return !f.refuse&&f.backend.Submit(s,f.now+1);},
         [](void* p,std::uint64_t life,std::uint64_t id)noexcept{return static_cast<Fixture*>(p)->backend.Receipt(life,id);},
@@ -1022,6 +1023,87 @@ int DelayedDetachWaitsForPairedNativeWithoutRenewingOwnership(){
     }
     return 0;
 }
+int MissingCurrentViewPreservesOnlyLiveDetachClaims(){
+    // Feedback68/source32: QJU88 input16633 at 26765943514100 ns lost
+    // its current native publication during an admitted DetachContainer hold.
+    // Exercise that publication drop through the real adapter/hand/session
+    // composition, then require an actual three-branch detach acknowledgement.
+    const auto exercise=[](const Bc2FeedRegistration& registration,unsigned fault)->int {
+        Fixture f(&registration);CHECK(f.OpenCover()&&f.Reconcile());f.submitted.reset();
+        const auto motion=BuildBc2FeedMotionFromRetainedPose(registration.geometry,FeedPhysicalOperation::DetachContainer,
+            registration.interactionPolicy,registration.geometry.poses[unsigned(Bc2FeedPoseId::Resting)]);
+        CHECK(motion);
+        const auto pose=[&](unsigned step){return feed_interaction_detail::Multiply(motion->placement.sourceFromGrip,
+            reload_insertion_detail::BlendRigid(motion->placement.weaponFromSource,motion->placement.weaponFromDestination,double(step)/30));};
+        f.Tick(pose(0),false);f.Tick(pose(0),false);f.Tick(pose(0),true);
+        CHECK(f.result.ownsHand&&f.result.interactionStatus==FeedInteractionStatus::Acquired);
+        for(unsigned step=1;step<=12;++step)f.Tick(pose(step),true);
+        const auto native=f.backend.Read(f.sample.owner,f.sample.input.nowNs);CHECK(native);
+        // An independently older native publication leaves separate native
+        // and input expiry boundaries; do not refresh either cached lease.
+        f.nativeCadence={0};f.now=native->observedNs+20*Ms-10*Ms;f.Tick(pose(13),true);
+        const auto held=f.hands.Current(InteractionHand::Left);CHECK(held&&f.result.ownsHand);
+        const auto retained=f.result.presentation;CHECK(retained);
+        const auto heldInput=f.sample.input;const auto counts=f.native.counts;
+        CHECK(f.result.interactionStatus==FeedInteractionStatus::Moving&&f.submits==1);
+        f.nativeCadence={1};f.missingCurrentView=true;
+        if(fault==8)f.now=held->deadlineNs-10*Ms;
+        if(fault==9)f.now=native->deadlineNs-10*Ms;
+        f.PrepareTick(pose(14),fault!=1,fault==2);
+        if(fault==3){f.sample.input.tracked[0]=false;(void)f.hands.Update(f.sample.input);}
+        if(fault==4)++f.sample.owner.actorGeneration;
+        if(fault==5)++f.sample.weapon.generation;
+        if(fault==6){++f.sample.input.owner.equipGeneration;(void)f.hands.Update(f.sample.input);}
+        if(fault==7){++f.sample.input.owner.space;(void)f.hands.Update(f.sample.input);}
+        if(fault==10)CHECK(f.hands.Release(f.sample.input,held->token).accepted);
+        if(fault==11){const auto gun=f.hands.Current(InteractionHand::Right);CHECK(gun);
+            CHECK(f.hands.Release(f.sample.input,gun->token).accepted);}
+        if(fault==12)f.sample.selectedRigVerified=false;
+        if(fault==13)++f.sample.equipment->data;
+        if(fault==14){f.sample.grip=false;f.sample.input.released[0]=false;}
+        f.Consume();
+        CHECK(f.result.diagnostic.exit==Bc2PhysicalFeedExit::ViewUnavailable);
+        CHECK(!f.result.diagnostic.policyEvaluated&&!f.result.presentation&&!f.result.pending);
+        CHECK(!f.backend.Pending()&&f.submits==1&&!f.submitted&&f.native.counts==counts);
+        if(fault){
+            CHECK(!f.result.ownsHand&&!f.hands.Current(InteractionHand::Left));
+            if(fault==9)CHECK(f.sample.input.nowNs>=native->deadlineNs&&f.sample.input.nowNs<held->deadlineNs);
+            return 0;
+        }
+        CHECK(f.result.ownsHand&&f.result.blocksEquipment&&f.result.blocksFire);
+        CHECK(f.result.status==FeedEquipmentStatus::Ready);
+        auto claim=f.hands.Current(InteractionHand::Left);CHECK(claim&&claim->token==held->token);
+        CHECK(claim->inputSequence==held->inputSequence&&claim->deadlineNs==held->deadlineNs);
+        CHECK(f.backend.ReadAt(f.sample.owner,heldInput.observedNs,f.sample.input.nowNs)==native);
+        // Another missing publication, even with fresh controller input,
+        // must retain the original claim without advancing or renewing it.
+        f.Tick(pose(14),true);
+        claim=f.hands.Current(InteractionHand::Left);CHECK(claim&&claim->token==held->token);
+        CHECK(claim->inputSequence==held->inputSequence&&claim->deadlineNs==held->deadlineNs);
+        CHECK(f.result.ownsHand&&!f.result.diagnostic.policyEvaluated&&!f.result.presentation&&f.submits==1);
+        f.missingCurrentView=false;f.Tick(pose(14),true);
+        CHECK(f.result.ownsHand&&f.result.interactionStatus==FeedInteractionStatus::Moving&&f.result.presentation);
+        CHECK(f.hands.Current(InteractionHand::Left)->token==held->token);
+        CHECK(f.result.presentation->lifetime==retained->lifetime&&f.result.presentation->coverRadians==retained->coverRadians);
+        for(unsigned step=15;step<=30;++step)f.Tick(pose(step),true);
+        for(unsigned step=0;step<f.DwellPackets();++step)f.Tick(pose(30),true);
+        CHECK(!f.submitted&&f.result.interactionStatus==FeedInteractionStatus::Endpoint);
+        f.Tick(pose(30),false);
+        CHECK(f.submitted&&f.submits==2&&f.backend.Pending()&&!f.result.submitRefused);
+        CHECK(f.submitted->command.authority.operation==FeedPhysicalOperation::DetachContainer);
+        CHECK(f.submitted->command.request.lifetime==retained->lifetime&&f.submitted->command.request.id==2);
+        CHECK(FeedEquipmentSubmissionValid(*f.submitted,f.sample.input.nowNs));
+        CHECK(f.submitted->source==*f.backend.ReadAt(f.sample.owner,f.sample.input.observedNs,f.sample.input.nowNs));
+        CHECK(f.submitted->command.before.counts==counts&&f.native.counts==counts);
+        CHECK(f.Reconcile()&&!f.backend.Pending()&&f.native.counts==counts&&f.submits==2);
+        return 0;
+    };
+    for(const auto& registration:RegisteredBc2FeedProfiles())CHECK(exercise(registration,0)==0);
+    const auto* registration=FindBc2FeedRegistration(5358977986686110024ull);
+    CHECK(registration&&registration->geometry.asset=="QJU88_sp");
+    for(unsigned fault=1;fault<=14;++fault)CHECK(exercise(*registration,fault)==0);
+    return 0;
+}
 int EveryEnrolledFeedRetainsRepeatedPacketThroughOpenCover(){
     using namespace feed_interaction_detail;unsigned configurations=0;
     for(const auto& registration:RegisteredBc2FeedProfiles()){
@@ -1464,6 +1546,7 @@ int main(){
     CHECK(DelayedReleasePreservesExactGestureWithinOriginalDeadlines()==0);
     CHECK(IndependentNativeClockExpiryAndMutationAreRejected()==0);
     CHECK(DelayedDetachWaitsForPairedNativeWithoutRenewingOwnership()==0);
+    CHECK(MissingCurrentViewPreservesOnlyLiveDetachClaims()==0);
     CHECK(EveryEnrolledFeedRetainsRepeatedPacketThroughOpenCover()==0);
     CHECK(RepeatedFeedPacketRejectsChangedSourceAndExpiredAuthority()==0);
     CHECK(EveryEnrolledFeedConsumesMissedStartupEdge()==0);
@@ -1475,5 +1558,5 @@ int main(){
     CHECK(SameAddressReplacementDoesNotInheritFeedDebt()==0);
     CHECK(RealNoEntryReceiptRecoversCompletedEndpointWithNewId()==0);
     CHECK(DrainedActorReplacementReclaimsSlotsWithoutInventingAmmunitionSuccess()==0);
-    std::puts("Bc2PhysicalFeedTests: 32 deterministic owner/arbiter/callback/presentation compositions; no game or headset acceptance");
+    std::puts("Bc2PhysicalFeedTests: 33 deterministic owner/arbiter/callback/presentation compositions; no game or headset acceptance");
 }

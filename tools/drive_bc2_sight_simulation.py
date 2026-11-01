@@ -34,6 +34,10 @@ class SelectionObserved(Exception):
     """Stop publishing old-configuration poses once the exact target is selected."""
 
 
+class SourceExpired(REFUSAL):
+    """Retry admission only while the base transport has not published a command."""
+
+
 def source_deadline(snapshot):
     return min(integer(snapshot["valid_until_ns"]),
                integer(snapshot["input_evidence"]["observedNs"]) + transport.SNAPSHOT_PERIOD)
@@ -147,9 +151,17 @@ class SightDriver(transport.Driver):
                 self.artifacts.save("selected-transition.json", self.transition_observation)
 
     def current_source(self):
-        if self.latest_snapshot is None or time.perf_counter_ns() >= source_deadline(self.latest_snapshot):
+        if self.latest_snapshot is None:
             self.fresh()
         self.monitor = True
+        # As in pump motion, consume the pending publication through the shared
+        # polling path. fresh() drains it and requests again for stage starts;
+        # repeating that on a motion lease boundary wastes current authority.
+        for _ in range(800):
+            self.pump()
+            if self.latest_snapshot is not None and time.perf_counter_ns() < source_deadline(self.latest_snapshot):
+                break
+            time.sleep(.001)
         require(time.perf_counter_ns() < source_deadline(self.latest_snapshot), "current sight snapshot lease expired")
 
     def validate_publication(self, lines, expected, cleanup):
@@ -157,8 +169,8 @@ class SightDriver(transport.Driver):
         if cleanup:
             require(lines == ["grip l 0"], "sight cleanup permits only ordinary owned left release")
             return
-        require(self.latest_snapshot is not None
-                and time.perf_counter_ns() < source_deadline(self.latest_snapshot), "original sight source lease expired before command publication")
+        if self.latest_snapshot is None or time.perf_counter_ns() >= source_deadline(self.latest_snapshot):
+            raise SourceExpired("original sight source lease expired before command publication")
         if self.transition_observation is not None and not self.release_authorized:
             raise SelectionObserved()
         if self.release_authorized:
@@ -174,14 +186,22 @@ class SightDriver(transport.Driver):
     def send(self, lines, expected=None, capture=None, cleanup=False, source_deadline=None):
         ordinary_left(lines)
         require(capture is None, "sight driver does not request captures")
-        if not cleanup:
-            self.pause_until(max(self.last_write + 25_000_000, time.perf_counter_ns()))
+        if cleanup:
+            return super().send(lines, expected=expected, cleanup=True, source_deadline=source_deadline)
+        for _ in range(800):
             self.current_source()
             state = self.read_state()
             require({k: v for k, v in state["controls"].items() if k != "gripL"}
                     == {k: v for k, v in self.initial_sim["controls"].items() if k != "gripL"},
                     "unrelated simulator controls changed during sight operation")
-        return super().send(lines, expected=expected, cleanup=cleanup, source_deadline=source_deadline)
+            try:
+                return super().send(lines, expected=expected, source_deadline=source_deadline)
+            except SourceExpired:
+                # The base wait/state reads can consume the admitted lease.
+                # Nothing was published: obtain current native evidence, then
+                # repeat every ownership check. Keep any original plan deadline.
+                continue
+        raise REFUSAL("sight publication refresh iteration bound")
 
     def await_transition(self, maximum):
         until = min(self.stage_deadline, self.deadline, time.perf_counter_ns() + integer(maximum))
