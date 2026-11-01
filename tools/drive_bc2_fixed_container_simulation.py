@@ -192,8 +192,18 @@ class FixedContainerDriver(shared.PumpDriver):
                 self.stage_deadline, self.monitor = previous_deadline, True
         raise transport.REFUSAL("fixed-container gate iteration bound: "+gate["id"]+": "+last_error)
 
-    def stage(self, name, pickup=None):
-        snapshot, _, _ = self.fresh_available()
+    def stage(self, name, pickup=None, initial_snapshot=None):
+        if initial_snapshot is None:
+            snapshot, _, _ = self.fresh_available()
+        else:
+            # Reload already obtained an admitted source to choose its first
+            # stage. Plan from that exact source while its original leases are
+            # current; requesting again can discard readiness before any input.
+            require(self.active_plan is None and self.commands == 0 and self.demand_finished
+                    and not self.held_left and not self.pending_command
+                    and initial_snapshot is self.latest_snapshot,
+                    "initial stage source is not the untouched admitted readiness observation")
+            snapshot = initial_snapshot
         plan = planner.plan(snapshot, name, time.perf_counter_ns(), integer(snapshot["nonce"]), self.args.step_ms*1_000_000, pickup)
         require(time.perf_counter_ns() < min(integer(plan["sourceValidUntilNs"]), self.snapshot_source_deadline(snapshot)),
                 "planning consumed original source lease")
@@ -236,8 +246,8 @@ class FixedContainerDriver(shared.PumpDriver):
         step = integer(snapshot["fixedContainer"]["tracking"]["step"])
         require(step in (0, 2), "reload starts only from actual unopened/insert-ready empty loader")
         if step == 0:
-            self.stage("Open")
-        pickup = self.stage("Pickup")
+            self.stage("Open", initial_snapshot=snapshot)
+        pickup = self.stage("Pickup", initial_snapshot=snapshot if step == 2 else None)
         self.stage("Insert", pickup)
         if integer(self.latest_snapshot["fixedContainer"]["profile"]["kind"]) == 3:
             self.stage("Close")

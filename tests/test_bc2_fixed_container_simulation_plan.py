@@ -3,6 +3,7 @@ import copy
 import importlib.util
 import math
 from pathlib import Path
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -399,6 +400,61 @@ class FixedContainerSimulationPlanTests(unittest.TestCase):
             else: x["leftClaim"] = copy.deepcopy(x["tracking"]["gun"])
             with self.subTest(mutation=mutation), self.assertRaises(p.Refusal):
                 p.plan(s, "Pickup", NOW, 100)
+
+
+class FixedContainerReadinessTests(unittest.TestCase):
+    def test_reload_uses_admitted_readiness_before_requesting_another_observation(self):
+        # Actual37 had a ready snapshot002, then the redundant pre-Open request
+        # returned disabled tracking or missing raw contact. Neither run sent a
+        # command. Exercise that sequence through real planning/publication gates.
+        class FirstPublication(Exception):
+            pass
+
+        for missing in ("tracking", "raw"):
+            with self.subTest(missing=missing):
+                ready = snapshot(3)
+                invalid = refresh(ready, NOW+100_000_000, 101)
+                x = invalid["fixedContainer"]
+                if missing == "tracking":
+                    x["tracking"].update(enabled=False, current=False)
+                else:
+                    x["raw"].update(valid=False, current=False, admittedAtTick=False,
+                                    ownerMatches=False, rigMatches=False, profileMatches=False)
+                v = object.__new__(d.FixedContainerDriver)
+                v.args = SimpleNamespace(step_ms=40)
+                v.active_plan, v.reference, v.latest_snapshot = None, None, None
+                v.commands, v.plans, v.gate_receipts = 0, [], []
+                v.demand_finished, v.held_left, v.pending_command = True, False, False
+                v.deadline, v.stage_deadline = NOW+9*d.NS, NOW+9*d.NS
+                v.artifacts = memory.MemoryArtifacts()
+                requests, publications = [], []
+
+                def fresh():
+                    s = ready if not requests else invalid
+                    requests.append(s)
+                    d.planner.admit(s, NOW if s is ready else NOW+100_000_000, int(s["nonce"]))
+                    v.latest_snapshot = s
+                    return s, d.transport.json_bytes(s), NOW
+
+                def send(lines, expected=None, source_deadline=None):
+                    v.validate_publication(lines, expected, False)
+                    self.assertEqual(source_deadline, v.snapshot_source_deadline(ready))
+                    publications.append(lines)
+                    raise FirstPublication()
+
+                with patch.object(d.time, "perf_counter_ns", return_value=NOW), \
+                     patch.object(v, "fresh_available", side_effect=fresh), \
+                     patch.object(v, "pause_until"), patch.object(v, "send", side_effect=send):
+                    with self.assertRaises(FirstPublication):
+                        v.reload()
+                self.assertEqual(len(requests), 1)
+                self.assertEqual(len(publications), 1)
+                self.assertEqual(v.plans[0]["stage"], "Open")
+                self.assertIs(v.reference, ready)
+                # The later unavailable observation remains a refusal even
+                # after a plan exists; no invalid held source becomes current.
+                with self.assertRaises(d.planner.Refusal):
+                    v.admit_snapshot(invalid, NOW+100_000_000, 101)
 
 
 class FixedContainerDeadlineTests(unittest.TestCase):
