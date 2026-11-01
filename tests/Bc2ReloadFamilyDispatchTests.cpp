@@ -63,24 +63,27 @@ struct Fixture {
         if(!plan)return false;Put(f.firing[2],0x7c,plan->expectedLoaded);Put(f.firing[2],0x80,plan->expectedReserve);
         if(f.corruptCall)f.firing[2][0xa4]=std::byte{0};return true;
     },[](void* p)noexcept{return ++static_cast<Fixture*>(p)->now;}};}
+    bool Enroll(const Bc2FeedRegistration& registration){
+        FeedEquipmentNativeView view;view.identity=identity;view.config=config;
+        view.binding={identity.owner,{{identity.owner.soldier,1,identity.owner.weapon,19},2,3},0xb0000,0xc0000,config.weaponData,0xe0000,now,now+100000000};
+        view.counts={Get<int>(firing[2],0x7c),Get<int>(firing[2],0x80),config.baseCapacity};view.observedNs=now;
+        // Match TryFeedEquipment's original native/profile deadline.
+        view.deadlineNs=(std::min)(view.binding.deadlineNs,now+(std::min)(registration.mechanism.maxAgeNs,std::int64_t{100000000}));
+        if(!adapter.Publish(view,now))return false;
+        const auto issued=adapter.Read(identity.owner,now);if(!issued)return false;
+        if(!adapter.PublishGate({issued->binding.context.resource,10,1,false,true},now))return false;
+        submission.source=*issued;return true;
+    }
     bool Submit(const Bc2FeedRegistration& registration,FeedAmmunitionEffect effect=FeedAmmunitionEffect::RefillLoaded){
         const auto fail=[&](const char* stage){
             std::fprintf(stderr,"Feed fixture rejected at %s: %.*s, loaded=%d, effect=%u\n",stage,
                 int(registration.config.assetName.size()),registration.config.assetName.data(),Get<int>(firing[2],0x7c),unsigned(effect));
             return false;
         };
-        FeedEquipmentNativeView view;view.identity=identity;view.config=config;
-        view.binding={identity.owner,{{identity.owner.soldier,1,identity.owner.weapon,19},2,3},0xb0000,0xc0000,config.weaponData,0xe0000,now,now+100000000};
-        view.counts={Get<int>(firing[2],0x7c),Get<int>(firing[2],0x80),config.baseCapacity};view.observedNs=now;
-        // Match TryFeedEquipment's original native/profile deadline. Generated
-        // rows can have a shorter lease than the adapter's 100 ms upper bound.
-        view.deadlineNs=(std::min)(view.binding.deadlineNs,now+(std::min)(registration.mechanism.maxAgeNs,std::int64_t{100000000}));
-        if(!adapter.Publish(view,now))return fail("publish view");
-        const auto issued=adapter.Read(identity.owner,now);if(!issued)return fail("read issued view");
-        if(!adapter.PublishGate({issued->binding.context.resource,10,1,false,true},now))return fail("enroll gate");
-        submission.source=*issued;auto& g=submission.geometry;g.profile=registration.mechanism;g.registrationKey=registration.key;
+        if(!Enroll(registration))return fail("enroll source");
+        const auto& view=submission.source;auto& g=submission.geometry;g.profile=registration.mechanism;g.registrationKey=registration.key;
         g.rigFingerprint=registration.geometry.rigFingerprint;g.inputSequence=50;g.observedNs=now;
-        g.deadlineNs=(std::min)(issued->deadlineNs,now+90000000);g.selectedRigVerified=true;
+        g.deadlineNs=(std::min)(view.deadlineNs,now+90000000);g.selectedRigVerified=true;
         // Match the normal physical owner's Authority selection: attachment
         // refills the same supply; closing the cover only changes the mechanism.
         const auto operation=effect==FeedAmmunitionEffect::RefillLoaded?FeedPhysicalOperation::AttachContainer:FeedPhysicalOperation::CloseCover;
@@ -88,7 +91,7 @@ struct Fixture {
         const auto motion=BuildBc2FeedMotion(registration.geometry,operation,registration.interactionPolicy);
         if(!motion)return fail("registered physical motion");g.motion=*motion;
         const auto owner=FeedEquipmentOwner(identity.owner);const FeedKey mechanism{30,1},binding{40,1};const FeedSupplyKey supply{{60,1},{61,1}};
-        FeedAmmunitionSnapshot before{owner,mechanism,10,issued->sequence,issued->observedNs,issued->deadlineNs,issued->counts,supply,true};
+        FeedAmmunitionSnapshot before{owner,mechanism,10,view.sequence,view.observedNs,view.deadlineNs,view.counts,supply,true};
         ledger.emplace(g.profile,owner,mechanism,supply,10);if(!ledger->Bind(before,now))return fail("bind ledger");
         FeedPhysicalCandidate candidate{owner,mechanism,operation==FeedPhysicalOperation::AttachContainer?supply:FeedSupplyKey{},
             supply,g.profile.id,g.profile.revision,before.sequence,operation,part,g.profile.contacts[unsigned(part)].role};
@@ -106,6 +109,11 @@ struct Fixture {
         out.branch=std::uint8_t(branch);out.current=Get<unsigned>(b,0x3c);out.previous=Get<unsigned>(b,0x40);out.next=Get<unsigned>(b,0x44);
         out.timer=Get<float>(b,0x50);out.loaded=Get<int>(b,0x7c);out.reserve=Get<int>(b,0x80);out.flagsA8=std::to_integer<unsigned char>(b[0xa8]);
         if(branch==2){out.serverPlayer=identity.serverPlayer;out.serverSoldier=identity.serverSoldier;out.serverItem=identity.serverItem;}return out;
+    }
+    ReloadFlowEventInput StockTransfer(unsigned branch){
+        ReloadFlowEventInput entry;entry.kind=ReloadFlowEvent::Transfer;entry.nativeInvocation=99;
+        entry.boundary=Boundary(branch);entry.boundary.current=12;entry.boundary.next=1;
+        entry.transferPath=ReloadTransferPath::OrdinaryState12;return entry;
     }
     std::optional<ReloadFlowRecord> Update(unsigned branch,std::uint64_t id,bool dispatch=false,bool code=true){
         ReloadFlowEventInput entry;entry.kind=ReloadFlowEvent::Update;entry.thread=1;entry.depth=1;entry.nowNs=++now;
@@ -126,6 +134,11 @@ int PartialEmptyAndPhysicalOnlyDispatch(){
     CHECK(!RegisteredBc2FeedProfiles().empty());
     for(const auto& row:RegisteredBc2FeedProfiles())for(int loaded:{0,row.config.values.baseCapacity-1})for(bool physicalOnly:{false,true}){
         Fixture f(row.config,loaded);CHECK(f.Submit(row,physicalOnly?FeedAmmunitionEffect::PhysicalOnly:FeedAmmunitionEffect::RefillLoaded));
+        ReloadFeedInputScopes scopes;CHECK(scopes.Retain(f.submission.source,f.now));
+        const auto scope=scopes.Find(f.identity.firing[2]);const auto gate=f.adapter.ReadGate(f.submission.source.binding.context.resource);
+        // A pending manual command never exempts an unrelated stock Transfer.
+        // Its admitted direct trampoline dispatch below remains available.
+        CHECK(scope&&gate&&ReloadFeedStockTransferVeto(*scope,*gate,f.identity,f.config,f.StockTransfer(2)));
         const auto source=f.firing;const auto server=f.Update(2,100,true);CHECK(server&&f.dispatchResult&&server->exit.feedInput.Exact());
         CHECK(f.nativeCalls==unsigned(!physicalOnly)&&f.originalCalls==1&&!f.Observe(*server));
         // A helper result and a server row cannot manufacture prediction convergence.
@@ -192,9 +205,57 @@ int PersistentScopeAndExactCompletionContext(){
         CHECK(!ReloadFamilyOwnUpdate(bad).neutralContext);}
     return 0;
 }
+int StockRefillCannotPayRetainedFeedDebt(){
+    // Actual feedback69: Update observation loss admitted state2->11 while
+    // enrolled/blocked; later state11->12 refilled despite exact input guard.
+    // Exercise the transfer policy after that entry, with no manual command.
+    for(const auto& row:RegisteredBc2FeedProfiles())for(int loaded:{0,row.config.values.baseCapacity-1})for(unsigned state=0;state<3;++state){
+        Fixture f(row.config,loaded);CHECK(f.Enroll(row));const auto resource=f.submission.source.binding.context.resource;
+        if(state)CHECK(f.adapter.PublishGate({resource,10,2,true,false},f.now));
+        ReloadFeedInputScopes scopes;CHECK(scopes.Retain(f.submission.source,f.now));if(state==2)scopes.Fault(f.identity);
+        const auto gate=f.adapter.ReadGate(resource);CHECK(gate&&!f.adapter.Pending());
+        const auto before=f.firing;
+        for(unsigned branch=0;branch<3;++branch){const auto scope=scopes.Find(f.identity.firing[branch]);CHECK(scope);
+            for(const auto path:{ReloadTransferPath::OrdinaryState12,ReloadTransferPath::TimedInterruption,ReloadTransferPath::ZeroDurationPreparation}){
+                auto entry=f.StockTransfer(branch);entry.transferPath=path;
+                CHECK(ReloadFeedStockTransferVeto(*scope,*gate,f.identity,f.config,entry));
+            }
+        }
+        CHECK(f.firing==before&&f.nativeCalls==0&&!f.adapter.Receipt(10,1)&&!f.adapter.Pending());
+        CHECK(f.adapter.ReadGate(resource)==gate); // No closure, receipt or gate reset.
+        scopes.Retire(f.identity);for(auto firing:f.identity.firing)CHECK(!scopes.Find(firing));
+    }return 0;
+}
+int StockTransferVetoRejectsForeignOrUnknownEvidence(){
+    const auto& row=RegisteredBc2FeedProfiles().front();Fixture f(row.config,0);CHECK(f.Enroll(row));
+    ReloadFeedInputScopes scopes;CHECK(scopes.Retain(f.submission.source,f.now));
+    const auto source=*scopes.Find(f.identity.firing[2]);const auto enrollment=*f.adapter.ReadGate(source.resource);
+    const auto stock=f.StockTransfer(2);CHECK(ReloadFeedStockTransferVeto(source,enrollment,f.identity,f.config,stock));
+    for(unsigned failure=0;failure<14;++failure){auto scope=source;auto gate=enrollment;auto current=f.identity;auto config=f.config;auto entry=stock;
+        switch(failure){
+        case 0:gate.lifetime=0;break;
+        case 1:gate.revision=0;break;
+        case 2:gate.blocksFire=gate.closedVerified=false;break;
+        case 3:gate.resource.weapon++;break;
+        case 4:current.owner.actorGeneration++;break;
+        case 5:current.firing[2]++;break;
+        case 6:config.assetName[0]='?';scope.config=config;break;
+        case 7:entry.kind=ReloadFlowEvent::Update;break;
+        case 8:entry.nativeInvocation=0;break;
+        case 9:entry.transferPath.reset();break;
+        case 10:entry.transferPath=ReloadTransferPath::SpecialLogic4;break;
+        case 11:entry.boundary.branch=3;break;
+        case 12:entry.boundary.wrapperOffset=0x3c;break;
+        case 13:entry.boundary.serverItem++;break;
+        }
+        CHECK(!ReloadFeedStockTransferVeto(scope,gate,current,config,entry));
+    }
+    return 0;
+}
 }
 int main(){
     if(PartialEmptyAndPhysicalOnlyDispatch()||FailedDispatchCannotRetryOrForgiveDebt()||
-       InputScopeAndStepUseExactFamilyProof()||PersistentScopeAndExactCompletionContext())return 1;
-    std::printf("Four production reload family dispatch/completion groups passed with exact native-layout memory stubs; no game/headset claim.\n");return 0;
+       InputScopeAndStepUseExactFamilyProof()||PersistentScopeAndExactCompletionContext()||
+       StockRefillCannotPayRetainedFeedDebt()||StockTransferVetoRejectsForeignOrUnknownEvidence())return 1;
+    std::printf("Six production reload family dispatch/completion groups passed with exact native-layout memory stubs; no game/headset claim.\n");return 0;
 }

@@ -201,6 +201,21 @@ void ReloadFeedInputScopes::Retire(const ReloadHoldIdentity& identity)noexcept {
     for(auto& slot:slots_)if(slot&&slot->identity.owner.actorGeneration==identity.owner.actorGeneration&&
         AmmoResourceSameNativeActor(slot->identity,identity))slot.reset();
 }
+bool ReloadFeedStockTransferVeto(const ReloadFeedInputScopes::Scope& scope,const FeedEquipmentGate& gate,
+    const ReloadHoldIdentity& current,const ReloadObservedConfig& config,const ReloadFlowEventInput& entry)noexcept {
+    const auto& b=entry.boundary;
+    if(!gate.lifetime||!gate.revision||(!gate.blocksFire&&!gate.closedVerified)||gate.resource!=scope.resource||
+       scope.identity!=current||scope.config!=config||!FeedEquipmentConfigMatches(config)||
+       !OwnerValid(current.owner)||entry.kind!=ReloadFlowEvent::Transfer||!entry.nativeInvocation||
+       !entry.transferPath||b.owner!=current.owner||b.branch>=3||b.firing!=current.firing[b.branch]||
+       b.wrapperOffset!=(b.branch==0?0x3cu:b.branch==1?0x40u:0x10u)||
+       (b.branch==2&&(b.serverPlayer!=current.serverPlayer||b.serverSoldier!=current.serverSoldier||b.serverItem!=current.serverItem)))return false;
+    switch(*entry.transferPath){
+    case ReloadTransferPath::OrdinaryState12:case ReloadTransferPath::TimedInterruption:
+    case ReloadTransferPath::ZeroDurationPreparation:return true;
+    default:return false;
+    }
+}
 AmmoResourceOwnUpdate ReloadFamilyOwnUpdate(const ReloadFlowRecord& record)noexcept {
     if(!record.exit.boundary||record.entry.kind!=ReloadFlowEvent::Update)return {};
     const auto& a=*record.exit.boundary;const auto& b=record.entry.boundary;
@@ -2592,9 +2607,33 @@ void __fastcall Commit(void* self,void*,void* context){
 }
 void __fastcall Transfer(void* self,void*,unsigned rawArgument){
     Active activeScope;NativeCycleCallback cycleCallback(NativeCycleCallbackKind::Transfer,unsigned(self),0);
-    Observation observation(ReloadFlowEvent::Transfer,unsigned(self),unsigned(_ReturnAddress()),0,rawArgument);
+    const auto caller=unsigned(_ReturnAddress());
+    Observation observation(ReloadFlowEvent::Transfer,unsigned(self),caller,0,rawArgument);
     const auto cycleInvocation=observation.frame.invocation.Record().id;cycleCallback.scope.BindInvocation(cycleInvocation);
     if(observation.frame.cleanupOnly){originalTransfer(self,rawArgument);return;}
+#ifdef FVR_BC2_NATIVE_AMMO_BACKEND
+    if(requestMode&&feedEquipmentReloadEnabled&&holdCodeVerified&&observation.lease&&observation.entry.transferPath){
+        const auto& lease=*observation.lease;const auto* profile=FindBc2FeedRegistration(lease.snapshot.config);
+        std::array<std::byte,5> site{};
+        // A missed input observation can already have admitted stock reload.
+        // Veto its still-unexecuted transfer, never undo a completed transfer.
+        // Manual feed dispatch uses its separately verified original trampoline
+        // and exact command/postcheck path; it does not enter this stock hook.
+        if(profile&&caller>=5&&Reader{memory}.Read(caller-5,site.data(),site.size())&&site[0]==std::byte{0xe8}&&
+           std::int64_t(caller)+Word<std::int32_t>(site.data(),1)==std::int64_t(base)+binding.state.code[4].rva&&
+           NativeAmmoRefillTrampolineVerified(memory,base,binding.state,unsigned(&Transfer),unsigned(originalTransfer))&&
+           ReadReloadDescriptorTiming(memory,lease.snapshot.config,profile->config)&&
+           IsCurrent(lease,Now())&&RequestOwnerEvidence(lease,Now())){
+            const auto adjacent=BoundaryFor(lease,unsigned(self),Now());
+            if(adjacent&&SameIdentity(observation.entry.boundary,*adjacent)){
+                Gate gate(ammoMoveProbeGate);
+                if(gate.held&&IsCurrent(lease,Now()))if(const auto scope=feedInputScopes.Find(unsigned(self)))
+                    if(const auto enrolled=feedEquipment.ReadGate(scope->resource))
+                        if(ReloadFeedStockTransferVeto(*scope,*enrolled,RoundIdentity(lease),lease.snapshot.config,observation.entry))return;
+            }
+        }
+    }
+#endif
     // Ammo transfer is outside the admitted positive-ammunition pump cycle.
     if(NativeCycleTarget(unsigned(self)))NativeCycleMissing(unsigned(self),cycleInvocation);
     originalTransfer(self,rawArgument);

@@ -132,6 +132,12 @@ public:
 private:
     std::array<std::optional<Scope>,64> slots_{};
 };
+// Enrollment forbids stock ammunition transfers even if an earlier Update
+// missed its input guard and stock reload is already in progress. The native
+// caller must separately recheck the current owner, descriptor and installed
+// Transfer/call-site proof. This grants no manual command or receipt.
+bool ReloadFeedStockTransferVeto(const ReloadFeedInputScopes::Scope&,const FeedEquipmentGate&,
+    const ReloadHoldIdentity& current,const ReloadObservedConfig&,const ReloadFlowEventInput&)noexcept;
 // Pure captured-data comparison: consumers need no executable-hook runtime.
 inline bool ReloadRestoreMatched(const ReloadFlowRecord& record)noexcept{
     if(record.entry.kind!=ReloadFlowEvent::Restore||!record.finished||!record.identityRetained||!record.exit.boundary||

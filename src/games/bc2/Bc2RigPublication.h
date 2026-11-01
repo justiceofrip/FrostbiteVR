@@ -50,7 +50,7 @@ struct SightPreview {
     float gestureAngle=0,nativeProgress=0,rawProgress=0;bool nativeObserved=false,rawObserved=false;
     std::uint64_t rawGeneration=0;
 };
-// Subtree contacts retain the selected configuration from their original input.
+// Both sight assemblies retain the selected configuration from their original input.
 // A newer observation may confirm it, but cannot supply or renew that source.
 struct SightSelectionEvidence {
     const SightAdapterProfile* adapter=nullptr;
@@ -61,7 +61,7 @@ struct SightSelectionEvidence {
 };
 inline bool SightSelectionCurrent(const SightSelectionEvidence& evidence,const SelectedMeshesSnapshot* current,
     const WeaponEquipmentIdentity& equipment,const AuthoredGripOwner& owner,std::int64_t now)noexcept {
-    if(!evidence.adapter||evidence.adapter->assembly!=SightAssemblyKind::Subtree||!current||
+    if(!evidence.adapter||!current||
        !SightAdapterSelectedMesh(*evidence.adapter,evidence.selected.get(),evidence.equipment,
            evidence.owner,evidence.rigFingerprint,now)||
        evidence.equipment!=equipment||evidence.owner.soldier!=owner.soldier||evidence.owner.weak!=owner.weak||
@@ -79,6 +79,18 @@ inline bool SightSelectionCurrent(const SightSelectionEvidence& evidence,const S
         current->states==original.states&&current->configurationPathVerified&&
         current->configurationPathPointer==original.configurationPathPointer&&
         current->configurationPath==original.configurationPath;
+}
+inline bool SightSelectionModeMatches(const SightAdapterProfile& adapter,const SelectedMeshesSnapshot* selected,
+    const WeaponEquipmentIdentity& equipment,const WeaponModeCommand& mode)noexcept {
+    if(!selected||!SightAdapterEnabled(adapter)||mode.family!=adapter.family||
+       mode.inventory!=selected->inventory||!mode.persistent||mode.persistent!=equipment.persistence||
+       !mode.targetWeapon||mode.targetWeapon==equipment.weapon||mode.targetSlot==selected->selectedSlot||
+       (mode.primaryAction!=25&&mode.primaryAction!=36))return false;
+    const auto& family=*adapter.family;
+    return mode.action==(mode.selectedSecondary?mode.primaryAction:family.secondaryAction)&&
+        equipment.Asset()==(mode.selectedSecondary?family.secondaryAsset:family.primaryAsset)&&
+        selected->configurationPathVerified&&authored_grip_detail::Text(selected->configurationPath)==
+            (mode.selectedSecondary?family.secondaryConfiguration:family.primaryConfiguration);
 }
 // Immutable diagnostic packet travels with the original Tracking/ShotPublication.
 // The worker never reads the mutable physical consumers or renews their leases.
@@ -197,7 +209,19 @@ struct ShotAimEvidence {
  bool authoredBinding=false,authoredAxes=false,preSupportInputAvailable=false;
  // Exact configured mesh and rig identity, independent of primary-hand/aim authority.
  bool selectedRigVerified=false;
+ bool sightSelectedRig=false;
 };
+// Measured sight geometry supplies configuration/rig identity even when its
+// secondary has no authored grip. It grants no aim, support or muzzle binding.
+inline bool ApplySightSelectionRigEvidence(ShotAimEvidence& aim,const SightSelectionEvidence& sight,
+    std::int64_t now)noexcept {
+    if(aim.selectedRigVerified||aim.equipment!=sight.equipment||
+       !SightSelectionCurrent(sight,sight.selected.get(),sight.equipment,sight.owner,now))return false;
+    aim.configurationPath=sight.selected->configurationPath;aim.configurationPathVerified=true;
+    aim.configurationSequence=sight.selected->sequence;aim.configurationDeadlineNs=sight.selected->deadlineNs;
+    aim.meshPath=SightAdapterMeshPath(*sight.adapter);aim.rigFingerprint=sight.rigFingerprint;
+    aim.selectedRigVerified=aim.sightSelectedRig=true;return true;
+}
 // Current-input body base using the original bounded native eye/stance source.
 // Does not reuse or restamp the previous published tracked body frame.
 std::optional<math::Matrix4> BuildCurrentEyeBase(const Tracking&)noexcept;

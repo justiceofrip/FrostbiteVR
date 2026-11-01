@@ -356,7 +356,7 @@ bool AimCurrent(const std::optional<AuthoredAimBinding>& binding)noexcept {
          current->generation,ReloadNanos(current->deadline)},binding->profile->rigFingerprint,ns);
 }
 bool SightCurrent(const std::optional<SightSelectionEvidence>& evidence)noexcept {
-    if(!evidence)return true; // Opposed-leaf contacts keep their independent admission.
+    if(!evidence)return true;
     const auto current=shotGuard.load(std::memory_order_acquire);const auto ns=ReloadNanos();
     if(!current||!current->valid||!Fresh(current->deadline)||!evidence->selected)return false;
     const auto selected=gameplay::ReadSelectedMeshes(evidence->selected->owner,ns);
@@ -1245,7 +1245,8 @@ std::optional<WeaponShotFrame> ReadWeaponFrame(unsigned soldier,unsigned weak,un
         if(shotGuard.load(std::memory_order_acquire)!=guard){++shotFrameRaces;continue;}
         if(use==WeaponFrameUse::Support&&guard->weaponActionsBlocked)++supportFramesWhileFireBlocked;
         auto result=pose->frame;
-        if(!sightCurrent){result.sight={};result.nativeSight={};}
+        if(!sightCurrent){result.sight={};result.nativeSight={};
+            if(result.aimEvidence&&result.aimEvidence->sightSelectedRig)result.aimEvidence->selectedRigVerified=false;}
         if(result.muzzleBinding){
             const auto& binding=*result.muzzleBinding;const auto ns=ReloadNanos();
             const auto boundSelected=MuzzleBindingSelected(binding);
@@ -2308,11 +2309,24 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
             }
         }
     }
+    const auto sightSelected=input.selectedMeshes;
+    std::optional<SightSelectionEvidence> sightSelection;
+    if(pose->shot&&input.sightAdapter&&input.sightMode&&input.sightModeObservedMs&&
+       input.sightPhysicalItem==input.nativeEquipment.persistence&&input.sightSecondary==input.sightMode->selectedSecondary&&
+       SightSelectionModeMatches(*input.sightAdapter,sightSelected.get(),input.nativeEquipment,*input.sightMode)&&
+       SightAdapterSelectedMesh(*input.sightAdapter,sightSelected.get(),input.nativeEquipment,
+           {input.soldier,input.weak,input.ownerGeneration,input.equipmentGeneration,
+            input.input.spaceGeneration,input.input.generation,ReloadNanos(input.deadline)},rigFingerprint,authoredNow)){
+        sightSelection=SightSelectionEvidence{input.sightAdapter,sightSelected,input.nativeEquipment,
+            {input.soldier,input.weak,input.ownerGeneration,input.equipmentGeneration,
+             input.input.spaceGeneration,input.input.generation,ReloadNanos(input.deadline)},rigFingerprint};
+        if(pose->shot->aimEvidence)ApplySightSelectionRigEvidence(*pose->shot->aimEvidence,*sightSelection,authoredNow);
+    }
     // Contact is computed from the independent left controller target, never
     // the support-snapped or reach-clamped visible wrist. Source sight geometry
     // remains authored by BC2; only its relation to the placed gun is measured.
-    if(pose->shot&&handRoleReady&&targets->tracked[0]&&targets->tracked[1]&&
-       input.sightAdapter&&SightAdapterEnabled(*input.sightAdapter)&&input.sightAdapter->assembly==SightAssemblyKind::OpposedLeaves){
+    if(pose->shot&&handRoleReady&&targets->tracked[0]&&targets->tracked[1]&&sightSelection&&
+       input.sightAdapter->assembly==SightAssemblyKind::OpposedLeaves){
         const auto sight=std::find(rig->names.begin(),rig->names.end(),input.sightAdapter->rear);
         if(sight!=rig->names.end()){
             const auto index=unsigned(sight-rig->names.begin());
@@ -2372,18 +2386,9 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
             }
         }
     }
-    const auto sightSelected=input.sightAdapter&&input.sightAdapter->assembly==SightAssemblyKind::Subtree?
-        input.selectedMeshes:std::shared_ptr<const SelectedMeshesSnapshot>{};
-    std::optional<SightSelectionEvidence> sightSelection;
-    if(pose->shot&&handRoleReady&&targets->tracked[0]&&targets->tracked[1]&&input.sightAdapter&&
-       input.sightAdapter->assembly==SightAssemblyKind::Subtree&&input.sightPhysicalItem&&
-       SightAdapterSelectedMesh(*input.sightAdapter,sightSelected.get(),input.nativeEquipment,
-           {input.soldier,input.weak,input.ownerGeneration,input.equipmentGeneration,
-            input.input.spaceGeneration,input.input.generation,ReloadNanos(input.deadline)},rigFingerprint,authoredNow)){
+    if(pose->shot&&handRoleReady&&targets->tracked[0]&&targets->tracked[1]&&sightSelection&&
+       input.sightAdapter->assembly==SightAssemblyKind::Subtree){
         const auto& p=*input.sightAdapter;
-        sightSelection=SightSelectionEvidence{&p,sightSelected,input.nativeEquipment,
-            {input.soldier,input.weak,input.ownerGeneration,input.equipmentGeneration,
-             input.input.spaceGeneration,input.input.generation,ReloadNanos(input.deadline)},rigFingerprint};
         AuthoredSightObservation observation;
         observation.selectedMeshPath=p.authored->meshPath;
         observation.asset=input.assetName.data();observation.configuration=authored_grip_detail::Text(sightSelected->configurationPath);
@@ -2803,7 +2808,7 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
             invalid("sight_family_source_mismatched");return;
         }
     }
-    // ReadWeaponFrame may revoke subtree evidence while retaining a sound body
+    // ReadWeaponFrame may revoke sight evidence while retaining a sound body
     // frame. Do not label that revoked contact as merely missing geometry.
     if((source->frame.sight.valid&&!sight.valid)||(source->frame.nativeSight.valid&&!nativeSight.valid)){
         invalid("sight_source_changed_or_expired");return;

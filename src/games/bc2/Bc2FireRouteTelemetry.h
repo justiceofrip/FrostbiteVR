@@ -156,10 +156,16 @@ public:
         if(sameOwner&&!r.configuration.observed)r.configuration=latest_.configuration;
         auto outcome=r.interactions;
         const auto feedStatus=(outcome.feed.status>>8)&255u,previousFeedStatus=(lastOutcome_.feed.status>>8)&255u;
-        // A duplicate is not a new policy result. Keep the previous result for
-        // comparison, while latest_ still exposes the actual duplicate packet.
-        if(sameOwner&&outcome.feed.observed&&lastOutcome_.feed.observed&&feedStatus==7&&previousFeedStatus<7)
+        // The same feed packet reports both interaction Duplicate and reload
+        // DuplicatePacket. Preserve both prior outcomes for comparison; either
+        // toggle alone would fill the ring between telemetry drains. Other
+        // reload results, gates and ownership remain independent transitions,
+        // while records/latest still expose the actual unmodified packet.
+        if(sameOwner&&outcome.feed.observed&&lastOutcome_.feed.observed&&feedStatus==7&&previousFeedStatus!=7){
             outcome.feed.status=(outcome.feed.status&~0xff00u)|(previousFeedStatus<<8);
+            if(((outcome.feed.status>>16)&255u)==14)
+                outcome.feed.status=(outcome.feed.status&~0xff0000u)|(lastOutcome_.feed.status&0xff0000u);
+        }
         r.inputAgeNs=r.inputPresent&&r.inputObservedNs>0&&r.sampledNs>=r.inputObservedNs?
             r.sampledNs-r.inputObservedNs:-1;
         r.changes=haveLatest_?0u:FireRouteFirst;

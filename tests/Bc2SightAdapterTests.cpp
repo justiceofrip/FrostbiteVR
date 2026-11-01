@@ -181,8 +181,11 @@ int EveryMeasuredAssembly(){
  CHECK(an94>0&&subtrees>an94);return 0;
 }
 int SelectedMeshWithoutGunGrip(){
+ unsigned opposed=0,subtree=0;
  for(const auto& p:SightAdapterProfiles){
-  if(!p.authored)continue;
+  if(p.assembly==SightAssemblyKind::OpposedLeaves)++opposed;else ++subtree;
+  const auto meshPath=SightAdapterMeshPath(p);const auto fingerprint=SightAdapterRigFingerprint(p);
+  CHECK(!meshPath.empty()&&fingerprint);
   for(bool secondary:{false,true}){
    const auto& family=*p.family;const auto asset=secondary?family.secondaryAsset:family.primaryAsset;
    const auto configuration=secondary?family.secondaryConfiguration:family.primaryConfiguration;
@@ -193,10 +196,10 @@ int SelectedMeshWithoutGunGrip(){
    const auto text=[](auto& dst,std::string_view src){std::fill(dst.begin(),dst.end(),0);std::copy(src.begin(),src.end(),dst.begin());};
    text(s.weaponName,asset);text(s.configurationPath,configuration);
    auto& state=s.states[0];state.state=1000;state.array=800;state.count=1;
-   auto& mesh=state.meshes[0];mesh.address=1100;mesh.namePointer=1200;mesh.typeInfo=600;text(mesh.assetPath,p.authored->meshPath);
+   auto& mesh=state.meshes[0];mesh.address=1100;mesh.namePointer=1200;mesh.typeInfo=600;text(mesh.assetPath,meshPath);
    WeaponEquipmentIdentity equipment;equipment.weapon=4;equipment.data=400;text(equipment.asset,asset);
    AuthoredGripOwner owner{2,3,5,6,7,10,200};
-   CHECK(SightAdapterSelectedMesh(p,&s,equipment,owner,p.authored->rigFingerprint,100));
+   CHECK(SightAdapterSelectedMesh(p,&s,equipment,owner,fingerprint,100));
    for(unsigned mutation=0;mutation<9;++mutation){
     auto bad=s;
     if(mutation==0)bad.configurationPathVerified=false;
@@ -208,11 +211,14 @@ int SelectedMeshWithoutGunGrip(){
     if(mutation==6){bad.states[0].count=2;bad.states[0].meshes[1]=bad.states[0].meshes[0];}
     if(mutation==7)bad.owner.actorGeneration++;
     if(mutation==8)bad.deadlineNs=150; // mesh lease must cover the published contact
-    CHECK(!SightAdapterSelectedMesh(p,&bad,equipment,owner,p.authored->rigFingerprint,100));
+    CHECK(!SightAdapterSelectedMesh(p,&bad,equipment,owner,fingerprint,100));
    }
-   CHECK(!SightAdapterSelectedMesh(p,&s,equipment,owner,p.authored->rigFingerprint+1,100));
+   CHECK(!SightAdapterSelectedMesh(p,&s,equipment,owner,fingerprint+1,100));
+   auto missing=p;missing.authored=nullptr;missing.opposed=nullptr;
+   CHECK(!SightAdapterSelectedMesh(missing,&s,equipment,owner,fingerprint,100));
   }
  }
+ CHECK(opposed>0&&subtree>0);
  return 0;
 }
 }

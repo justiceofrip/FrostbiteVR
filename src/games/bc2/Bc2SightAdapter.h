@@ -19,13 +19,23 @@ struct SightAdapterProfile {
 inline bool SightAdapterEnabled(const SightAdapterProfile& p)noexcept {
  return p.family&&WeaponModeFamilyEligible(*p.family)&&(p.nativeSightAccepted||p.sharedGeometryEligible);
 }
+inline std::string_view SightAdapterMeshPath(const SightAdapterProfile& p)noexcept {
+ return p.assembly==SightAssemblyKind::OpposedLeaves?(p.opposed?p.opposed->meshPath:std::string_view{}):
+     p.assembly==SightAssemblyKind::Subtree&&p.authored?p.authored->meshPath:std::string_view{};
+}
+inline std::uint64_t SightAdapterRigFingerprint(const SightAdapterProfile& p)noexcept {
+ return p.assembly==SightAssemblyKind::OpposedLeaves?(p.opposed?p.opposed->skeletonFingerprint:0):
+     p.assembly==SightAssemblyKind::Subtree&&p.authored?p.authored->rigFingerprint:0;
+}
 // Sight contact depends on the current selected mesh, not availability of an
 // authored gun-grip pose. Underbarrel variants can use their ordinary tracked
 // grip while consuming an independently measured sight on that same mesh.
 inline bool SightAdapterSelectedMesh(const SightAdapterProfile& p,const SelectedMeshesSnapshot* snapshot,
  const WeaponEquipmentIdentity& equipment,const AuthoredGripOwner& owner,std::uint64_t rigFingerprint,
  std::int64_t now)noexcept {
- if(!SightAdapterEnabled(p)||!p.authored||!snapshot||p.authored->rigFingerprint!=rigFingerprint)return false;
+ const auto meshPath=SightAdapterMeshPath(p);
+ if(!SightAdapterEnabled(p)||meshPath.empty()||!snapshot||!rigFingerprint||
+    SightAdapterRigFingerprint(p)!=rigFingerprint)return false;
  const auto& s=*snapshot;const auto& o=s.owner;
  if(!equipment.weapon||!equipment.data||!owner.soldier||!owner.weak||!owner.actorGeneration||
     !owner.equipmentGeneration||!owner.space||!owner.inputSequence||!o.player||!o.equipGeneration||
@@ -42,7 +52,7 @@ inline bool SightAdapterSelectedMesh(const SightAdapterProfile& p,const Selected
  unsigned matches=0;
  for(unsigned n=0;n<s.states[0].count;++n){const auto& mesh=s.states[0].meshes[n];
   if(!mesh.address||mesh.typeInfo!=s.meshTypeInfo||!mesh.namePointer||authored_grip_detail::Text(mesh.assetPath).empty())return false;
-  if(authored_grip_detail::Text(mesh.assetPath)==p.authored->meshPath)++matches;
+  if(authored_grip_detail::Text(mesh.assetPath)==meshPath)++matches;
  }
  return matches==1;
 }

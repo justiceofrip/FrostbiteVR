@@ -229,7 +229,75 @@ void SelectedConfigurationStaysWithCapturedInput(){
     std::cout<<"Rig configuration/input interleave: future grip/support/sight rejection reproduced; paired source retains grasp with original lifetime gates\n";
     std::cout<<"Rig subtree sight configuration: current proof loss rejects commit/contact; matching newer sequence preserves the original lease\n";
 }
-void Run(){LatestInputSurvivesScratchContention();ProducerContentionCounterexampleAndCommit();SelectedConfigurationStaysWithCapturedInput();}
+void SightRigEvidenceSurvivesSecondarySelection(){
+    constexpr std::int64_t now=1000000000;
+    const auto text=[](auto& bytes,std::string_view value){bytes={};std::copy(value.begin(),value.end(),bytes.begin());};
+    for(const auto& adapter:SightAdapterProfiles)for(bool secondary:{false,true}){
+        const auto& family=*adapter.family;
+        const auto asset=secondary?family.secondaryAsset:family.primaryAsset;
+        const auto configuration=secondary?family.secondaryConfiguration:family.primaryConfiguration;
+        WeaponEquipmentIdentity equipment;equipment.weapon=secondary?15:14;equipment.data=secondary?16:17;
+        equipment.persistence=18;text(equipment.asset,asset);
+        auto selected=std::make_shared<SelectedMeshesSnapshot>();
+        selected->owner={9,10,11,equipment.weapon,12,secondary?20u:19u,21};
+        selected->sequence=22;selected->observedNs=now-10000000;selected->deadlineNs=now+190000000;
+        selected->weaponData=equipment.data;selected->stateTypeInfo=1;selected->meshTypeInfo=2;
+        selected->inventory=3;selected->selectedSlot=secondary?2:0;selected->stateCount=1;selected->soleConfiguredArray=5;
+        selected->configurationPathVerified=true;selected->configurationPathPointer=8;
+        text(selected->weaponName,asset);text(selected->configurationPath,configuration);
+        auto& state=selected->states[0];state.array=5;state.state=6;state.count=1;
+        state.meshes[0].address=7;state.meshes[0].typeInfo=2;state.meshes[0].namePointer=8;
+        text(state.meshes[0].assetPath,SightAdapterMeshPath(adapter));
+        const AuthoredGripOwner owner{10,11,12,30,21,22,now+90000000};
+        const WeaponModeCommand mode{secondary?25u:family.secondaryAction,secondary?14u:15u,
+            secondary?0u:2u,3,18,&family,secondary,25};
+        Check(rigPublication::SightSelectionModeMatches(adapter,selected.get(),equipment,mode));
+        for(unsigned mutation=0;mutation<7;++mutation){auto wrong=mode;
+            if(mutation==0)wrong.family=nullptr;
+            if(mutation==1)++wrong.persistent;
+            if(mutation==2)wrong.selectedSecondary=!secondary;
+            if(mutation==3)wrong.action=0;
+            if(mutation==4)wrong.targetWeapon=equipment.weapon;
+            if(mutation==5)wrong.targetSlot=selected->selectedSlot;
+            if(mutation==6)++wrong.inventory;
+            Check(!rigPublication::SightSelectionModeMatches(adapter,selected.get(),equipment,wrong));
+        }
+        const rigPublication::SightSelectionEvidence source{&adapter,selected,equipment,owner,SightAdapterRigFingerprint(adapter)};
+        // Neither authored-grip nor support binding exists for this input. The
+        // exact selected family and measured rig still publish their own proof.
+        rigPublication::ShotAimEvidence aim;aim.equipment=equipment;
+        Check(rigPublication::ApplySightSelectionRigEvidence(aim,source,now));
+        Check(aim.selectedRigVerified&&aim.sightSelectedRig&&aim.configurationPathVerified&&
+            aim.configurationPath==selected->configurationPath&&aim.configurationSequence==selected->sequence&&
+            aim.configurationDeadlineNs==selected->deadlineNs&&aim.meshPath==SightAdapterMeshPath(adapter)&&
+            aim.rigFingerprint==SightAdapterRigFingerprint(adapter));
+        Check(!aim.authoredBinding&&!aim.authoredAxes&&aim.bindingDigest.empty()&&aim.axisEvidence.empty());
+        auto current=*selected;current.sequence+=3;current.observedNs+=1000000;current.deadlineNs+=1000000;
+        Check(rigPublication::SightSelectionCurrent(source,&current,equipment,owner,now));
+        for(unsigned mutation=0;mutation<6;++mutation){auto bad=current;
+            if(mutation==0)text(bad.configurationPath,"foreign/configuration");
+            if(mutation==1)++bad.owner.weapon;
+            if(mutation==2)++bad.owner.equipGeneration;
+            if(mutation==3)bad.deadlineNs=now;
+            if(mutation==4)text(bad.states[0].meshes[0].assetPath,"foreign/mesh");
+            if(mutation==5)bad.configurationPathVerified=false;
+            Check(!rigPublication::SightSelectionCurrent(source,&bad,equipment,owner,now));
+        }
+        Check(!rigPublication::SightSelectionCurrent(source,nullptr,equipment,owner,now));
+        // A later matching publication cannot extend the original input/config.
+        Check(!rigPublication::SightSelectionCurrent(source,&current,equipment,owner,owner.inputDeadlineNs));
+        auto expired=source;expired.owner.inputDeadlineNs=selected->deadlineNs+1000000;
+        Check(!rigPublication::SightSelectionCurrent(expired,&current,equipment,expired.owner,selected->deadlineNs));
+        rigPublication::ShotAimEvidence rejected;rejected.equipment=equipment;
+        auto wrongRig=source;++wrongRig.rigFingerprint;
+        Check(!rigPublication::ApplySightSelectionRigEvidence(rejected,wrongRig,now)&&!rejected.selectedRigVerified);
+        Check(!rigPublication::ApplySightSelectionRigEvidence(rejected,source,owner.inputDeadlineNs));
+        // Existing independent authored evidence remains its original source.
+        auto authored=aim;authored.sightSelectedRig=false;authored.authoredBinding=true;
+        Check(!rigPublication::ApplySightSelectionRigEvidence(authored,source,now)&&authored.authoredBinding&&!authored.sightSelectedRig);
+    }
+}
+void Run(){LatestInputSurvivesScratchContention();ProducerContentionCounterexampleAndCommit();SelectedConfigurationStaysWithCapturedInput();SightRigEvidenceSurvivesSecondarySelection();}
 }
 namespace publication_commit_regression {
 using namespace fvr::bc2;

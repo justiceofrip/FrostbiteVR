@@ -75,9 +75,11 @@ struct WeaponSightObservation {
 struct OpposedSightGeometry {
     std::uint64_t skeletonFingerprint=0;
     std::string_view root,rear,front;
+    std::string_view meshPath;
 };
 inline constexpr OpposedSightGeometry Xm320OpposedSightGeometry{
-    0xa7f219a1426216abull,"jntWpn_1","jntWpn_9","jntWpn_11"};
+    0xa7f219a1426216abull,"jntWpn_1","jntWpn_9","jntWpn_11",
+    "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh"};
 // October 1 source/projection evidence: scoped XM8 and its XM320 mode share this
 // rig. jntWpn_9 is the rear ladder, direct child of jntWpn_1. Its observed ladder
 // extends about11cm along joint-local -Z; row0 is the hinge axis. This function

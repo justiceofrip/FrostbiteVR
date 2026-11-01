@@ -21,8 +21,83 @@ Bc2AmmoReserveLease Ammo(const FireRouteRecord& r) {
     a.sequence=1;a.observedNs=r.sampledNs-1000000;a.deadlineNs=r.sampledNs+100000000;
     a.verified=true;a.loaded=a.capacity=30;a.reserve=180;return a;
 }
+int FeedEndpointDuplicateFloodPreservesFailure() {
+    // Feedback69/xr-game03 reached Endpoint, then lost its held claim inside
+    // 19 overwritten rows: 147 transitions arrived between 1.063s drains.
+    // Replay the observed Endpoint/AwaitingPhysicalCompletion <->
+    // Duplicate/DuplicatePacket cadence around an injected raw-evidence loss.
+    // The lost native row's exact cause remains unknown.
+    FireRouteTelemetry journal;FireRouteTelemetryBatch batch;auto r=Sample();
+    auto& feed=r.interactions.feed;
+    constexpr unsigned endpoint=1u|(4u<<8)|(1u<<16),duplicate=1u|(7u<<8)|(14u<<16);
+    feed.observed=feed.policyEvaluated=true;feed.exit=1;feed.flags=11;feed.status=endpoint;
+    feed.admissionChecked=feed.admissionPassed=63;feed.rawChecked=feed.rawPassed=511;
+    feed.reloadPhase=1;feed.operation=4;
+    r.gatherNs=r.sampledNs=41044304052400;r.input=r.feedSource=6842;
+    r.inputObservedNs=41044292903900;r.inputDeadlineNs=r.feedSourceDeadlineNs=41044392903900;
+    r.feedNativeSource=734;r.feedNativeObservedNs=41044287187100;r.feedNativeDeadlineNs=41044367187100;
+    CHECK(journal.Observe(r));
+    feed.status=duplicate;CHECK(journal.Observe(r));
+    r.gatherNs=r.sampledNs=41044351369500;r.input=6845;
+    feed.exit=7;feed.flags=3;feed.rawPassed=255;feed.policyEvaluated=false;
+    const auto failure=r;CHECK(journal.Observe(r));
+    feed.exit=1;feed.flags=11;feed.rawPassed=511;feed.policyEvaluated=true;feed.status=endpoint;
+    ++r.sampledNs;CHECK(journal.Observe(r));
+    for(unsigned i=0;i<1000;++i){
+        feed.status=i%2?duplicate:endpoint;++r.input;++r.feedSource;++r.feedNativeSource;
+        ++r.gatherNs;++r.sampledNs;++r.inputObservedNs;++r.inputDeadlineNs;
+        ++r.feedSourceDeadlineNs;++r.feedNativeObservedNs;++r.feedNativeDeadlineNs;
+        CHECK(journal.Observe(r));
+    }
+    CHECK(journal.TryDrain(batch)&&batch.count==3&&batch.events==3&&batch.overwritten==0);
+    CHECK(batch.records[1].sampledNs==failure.sampledNs&&batch.records[1].input==failure.input);
+    CHECK(batch.records[1].interactions.feed==failure.interactions.feed);
+    CHECK(batch.records[1].changes==FireRouteInteractionChanged&&batch.records[2].interactions.feed.status==endpoint);
+    CHECK(batch.latest.interactions.feed.status==duplicate&&batch.latest.input==r.input);
+    CHECK(batch.latest.feedSource==r.feedSource&&batch.latest.feedNativeSource==r.feedNativeSource);
+    CHECK(batch.latest.inputDeadlineNs==r.inputDeadlineNs&&batch.latest.feedSourceDeadlineNs==r.feedSourceDeadlineNs);
+    CHECK(batch.latest.feedNativeObservedNs==r.feedNativeObservedNs&&batch.latest.feedNativeDeadlineNs==r.feedNativeDeadlineNs);
+
+    // Duplicate provenance must not suppress claim loss, expired authority,
+    // count changes or a different owner, nor rewrite their captured values.
+    feed.flags=3;CHECK(journal.Observe(r)&&journal.TryDrain(batch)&&batch.count==1);
+    CHECK(batch.records[0].changes==FireRouteInteractionChanged&&batch.records[0].interactions.feed.flags==3);
+    feed.rawChecked=63;feed.rawPassed=31;r.feedNativeDeadlineNs=r.sampledNs;
+    CHECK(journal.Observe(r)&&journal.TryDrain(batch)&&batch.count==1);
+    CHECK(batch.records[0].interactions.feed.rawPassed==31&&batch.records[0].feedNativeDeadlineNs==r.sampledNs);
+    r.inputFresh=false;r.inputDeadlineNs=r.sampledNs;
+    CHECK(journal.Observe(r)&&journal.TryDrain(batch)&&batch.count==1);
+    CHECK((batch.records[0].changes&FireRouteInputChanged)&&batch.records[0].inputDeadlineNs==r.sampledNs);
+    r.ammo=FireRouteAmmo::Valid;r.loaded=0;r.reserve=687;r.capacity=200;
+    CHECK(journal.Observe(r)&&journal.TryDrain(batch)&&batch.count==1);
+    r.loaded=200;r.reserve=487;
+    CHECK(journal.Observe(r)&&journal.TryDrain(batch)&&batch.count==1);
+    CHECK((batch.records[0].changes&FireRouteAmmoChanged)&&batch.records[0].loaded==200&&batch.records[0].reserve==487);
+    ++r.owner.equipGeneration;
+    CHECK(journal.Observe(r)&&journal.TryDrain(batch)&&batch.count==1);
+    CHECK((batch.records[0].changes&FireRouteOwnerChanged)&&batch.records[0].interactions.feed.status==duplicate);
+
+    // A real reload refusal on a duplicate interaction remains an event, and
+    // the next genuine policy result must still record its recovery.
+    feed.status=endpoint;CHECK(journal.Observe(r)&&journal.TryDrain(batch)&&batch.count==1);
+    feed.status=1u|(7u<<8)|(11u<<16);
+    CHECK(journal.Observe(r)&&journal.TryDrain(batch)&&batch.count==1);
+    CHECK(batch.records[0].changes==FireRouteInteractionChanged&&batch.records[0].interactions.feed.status==feed.status);
+    feed.status=endpoint;CHECK(journal.Observe(r)&&journal.TryDrain(batch)&&batch.count==1);
+    CHECK(batch.records[0].interactions.feed.status==endpoint);
+    constexpr unsigned invalid=1u|(9u<<8)|(11u<<16);
+    feed.status=invalid;const auto rejected=r;CHECK(journal.Observe(r));
+    for(unsigned i=0;i<1000;++i){feed.status=i%2?duplicate:invalid;++r.sampledNs;CHECK(journal.Observe(r));}
+    CHECK(journal.TryDrain(batch)&&batch.count==1&&batch.overwritten==0);
+    CHECK(batch.records[0].sampledNs==rejected.sampledNs&&batch.records[0].interactions.feed.status==invalid);
+    CHECK(batch.latest.interactions.feed.status==duplicate&&batch.latest.sampledNs==r.sampledNs);
+    feed.status=endpoint;CHECK(journal.Observe(r)&&journal.TryDrain(batch)&&batch.count==1);
+    CHECK(batch.records[0].interactions.feed.status==endpoint);
+    return 0;
+}
 }
 int main() {
+    CHECK(FeedEndpointDuplicateFloodPreservesFailure()==0);
     // Time/sequence churn and duplicate controller packets do not fill the ring.
     FireRouteTelemetry journal;auto r=Sample();CHECK(journal.Observe(r));
     for(unsigned i=0;i<1000;++i){++r.input;++r.sampledNs;CHECK(journal.Observe(r));}

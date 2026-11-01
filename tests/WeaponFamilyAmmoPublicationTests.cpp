@@ -12,7 +12,7 @@ constexpr std::int64_t Now=1000000000;
 struct Fixture {
     ReloadObservedConfig config{};
     std::array<std::uint32_t,1025> words{};
-    unsigned reads=0;
+    unsigned reads=0,corruptRead=~0u;
     bool fail=false,change=false;
     explicit Fixture(const ReloadConfigDescriptor& descriptor){
         auto& c=config;const auto& v=descriptor.values;
@@ -32,6 +32,7 @@ struct Fixture {
         if(fixture.fail||count!=4||at<fixture.config.primaryFire||at>fixture.config.primaryFire+4096||(at&3))return false;
         auto word=fixture.words[(at-fixture.config.primaryFire)/4];
         if(fixture.change&&fixture.reads>0)word^=1;
+        if(fixture.reads==fixture.corruptRead)word^=1;
         ++fixture.reads;std::memcpy(destination,&word,4);return true;
     },nullptr};}
 };
@@ -53,6 +54,37 @@ int RegisteredConfiguration(const ReloadConfigDescriptor& descriptor,WeaponFamil
         CHECK(!ReadWeaponFamilyAmmoConfig(bad.Memory(),bad.config));
     }
     CHECK(!ReadWeaponFamilyAmmoConfig({},fixture.config));
+    if(expected==WeaponFamilyAmmoSource::Underbarrel){
+        CHECK(fixture.reads==12&&descriptor.timing.size()==6);
+        CHECK(!FindMagazineNativeProfile(fixture.config)&&!ManualPumpConfig(fixture.config));
+        CHECK(!FindBc2FeedRegistration(fixture.config)&&!ResolveFixedContainerNative(fixture.config));
+        Bc2ReloadNativePolicy manual;
+        CHECK(!manual.MatchesSelectedConfig(fixture.config));
+        CHECK(manual.ConfigureMagazine()&&!manual.MatchesSelectedConfig(fixture.config));
+        for(unsigned n=0;n<6;++n){
+            Fixture wrongWord(descriptor);wrongWord.words[descriptor.timing[n].offset/4]^=1;
+            CHECK(!ReadWeaponFamilyAmmoConfig(wrongWord.Memory(),wrongWord.config));
+            Fixture secondPass(descriptor);secondPass.corruptRead=6+n;
+            CHECK(!ReadWeaponFamilyAmmoConfig(secondPass.Memory(),secondPass.config));
+        }
+        for(unsigned fault=0;fault<13;++fault){
+            Fixture bad(descriptor);auto& c=bad.config;
+            if(fault==0)++c.fireLogicType;
+            if(fault==1)++c.reloadType;
+            if(fault==2)++c.fireInputAction;
+            if(fault==3)++c.reloadInputAction;
+            if(fault==4)++c.numberOfMagazines;
+            if(fault==5)c.reloadDelay+=.25f;
+            if(fault==6)c.reloadTime+=.25f;
+            if(fault==7)c.reloadThreshold+=.25f;
+            if(fault==8)c.postReloadTime+=.25f;
+            if(fault==9)c.boltDelay+=.25f;
+            if(fault==10)c.boltTime+=.25f;
+            if(fault==11)c.holdBoltUntilFireRelease=!c.holdBoltUntilFireRelease;
+            if(fault==12)c.holdBoltUntilZoomRelease=!c.holdBoltUntilZoomRelease;
+            CHECK(!ReadWeaponFamilyAmmoConfig(bad.Memory(),c)&&bad.reads==0);
+        }
+    }
 
     // A previous magazine operation can still own its native policy while the
     // newly selected family supplies display counts. Reading cannot hand off,
@@ -94,7 +126,7 @@ int RegisteredConfiguration(const ReloadConfigDescriptor& descriptor,WeaponFamil
 }
 }
 int main(){
-    std::array<unsigned,4> counts{};
+    std::array<unsigned,5> counts{};
     for(const auto& row:RegisteredMagazineNativeProfiles())if(row.enabled&&row.profile&&ResolveMagazineNativeProfile(row.id)==row.profile){
         if(RegisteredConfiguration(row.profile->configuration,WeaponFamilyAmmoSource::Magazine))return 1;++counts[0];}
     Bc2ReloadNativePolicy tube;
@@ -105,7 +137,16 @@ int main(){
         if(RegisteredConfiguration(row.config,WeaponFamilyAmmoSource::Feed))return 1;++counts[2];}
     for(const auto* row:FixedContainerConfigs){
         if(RegisteredConfiguration(*row,WeaponFamilyAmmoSource::Fixed))return 1;++counts[3];}
+    std::array<unsigned,3> underbarrelCounts{};
+    for(const auto& row:UnderbarrelAmmoConfigs){
+        if(RegisteredConfiguration(row,WeaponFamilyAmmoSource::Underbarrel))return 1;++counts[4];
+        if(row.assetName=="40mmgl")++underbarrelCounts[0];
+        else if(row.assetName=="40mmsg")++underbarrelCounts[1];
+        else if(row.assetName=="40mmsmk")++underbarrelCounts[2];
+        else CHECK(false);
+    }
     CHECK(counts[0]>=2&&counts[1]>1&&counts[2]>=1&&counts[3]==FixedContainerConfigs.size());
-    std::printf("Family ammo dispatch/publication: magazine=%u tube=%u feed=%u fixed=%u; exact identity/timing, retained operation, three-copy counts and expiry gates passed.\n",
-        counts[0],counts[1],counts[2],counts[3]);
+    CHECK(counts[4]==80&&underbarrelCounts[0]==32&&underbarrelCounts[1]==24&&underbarrelCounts[2]==24);
+    std::printf("Family ammo dispatch/publication: magazine=%u tube=%u feed=%u fixed=%u underbarrel=%u; exact identity/timing, retained operation, three-copy counts and expiry gates passed.\n",
+        counts[0],counts[1],counts[2],counts[3],counts[4]);
 }
