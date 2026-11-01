@@ -10,13 +10,23 @@ and reports the exact rejection and original source times from one retained load
 Gameplay's legacy reader, source deadlines, identity joins and native operation
 table are unchanged. No renewed hand lease or gameplay authority is granted.
 Regression cases cover publication replacement, delayed reads and every refusal.
-Both normal builds and candidate packaging remain pending at this source commit.
+Sourcee3b2220/nativec9776d83 pushed; both normal builds341/341 and two focused suites
+per architecture passed. Normal runtime receipt SHA256:
+dd472d935da8414d3696f9f385e65593168e168eac0e1c20935b2560ba045174.
 
 Private driver88 holds unchanged input for at most500ms/two replacement reads on
 missing observations, requiring the original admission checks before advancing.
-Its verification is separate from native gameplay acceptance.
+All17 offline driver checks pass; verification is separate from native acceptance.
 
-Private38 remains installed. The later39 run retired native hooks successfully,
+Private40 installed/setup validated with38 fallback and unchanged settings.
+The initial installation restored38 after launcher evidence-cap refusal. Two ended
+85 sessions are now in reports88/archived-sessions, mapped by the hash-preserving
+session-archive-manifest.json; installation02.json records successful validation.
+Actual40 completed ordinary Empty->QJU draw/release and OpenCover counter advance.
+DetachContainer driver refused blocked actions during a pending native result;
+its final native outcome is under review. Normal native retirement, game close,
+all6 owned exits and exact three-profile/settings restoration passed.
+The later39 run retired native hooks successfully,
 but game shutdown returned0xc0000005; profiles/settings were restored. Earlier
 loading AVs affect both38 and39. The separately prepared pre-device graphics
 experiment has not established causation or a game fix. No full reload, all-weapon,

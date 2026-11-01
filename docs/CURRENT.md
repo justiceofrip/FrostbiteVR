@@ -5,7 +5,9 @@ Updated November 1, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
-Feedback88 corrects the diagnostic holster reader's load/clock ordering and records the exact rejected predicate without changing gameplay leases or native operation authority. Combined validation is pending; private0.1.38 remains installed. [Handoff](../handoff/integrations/coordinator-20261101-feedback88/README.txt). This is prealpha work; no public update or complete reload acceptance.
+Feedback88 source e3b2220 is pushed; both normal builds pass341/341. Private0.1.40 is installed and setup/assets validation passes, with0.1.38 fallback and unchanged settings. The diagnostic holster reader now loads before sampling its observer clock and records exact refusals without changing gameplay leases or native operation authority. [Handoff](../handoff/integrations/coordinator-20261101-feedback88/README.txt). No public update or complete reload acceptance.
+
+Actual40 rendered both eyes, completed ordinary Empty->QJU88 draw/release and advanced the OpenCover receipt counter. DetachContainer's driver stopped on blocked actions during its pending result; native outcome review is ongoing. Native retirement, normal game close, all owned exits and exact profile/settings restoration passed (reports/coordinator-20261101-feedback88/feed40/xr-game01). No shot/muzzle test or full reload acceptance.
 
 The later actual39 diagnostic reached the world and rendered both eyes. Native stow reached Empty, but an unavailable diagnostic sample stopped the driver before LMG draw. Native retirement completed; game shutdown returned0xc0000005 with no fault module identified. All owned processes exited and profiles/settings were restored;0.1.38 was restored through the normal verified switch. Evidence: reports/coordinator-20261101-feedback85/feed39-resume86/xr-game01. Earlier loading AVs affect both38 and39; the observed SINGLETHREADED device used across native threads is being investigated separately, with causation unproved.
 
