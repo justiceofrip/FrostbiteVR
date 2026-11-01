@@ -252,17 +252,29 @@ int LinearPartsFollowTheirOwnMeasuredTravel(){
     CHECK(independent>0);return 0;
 }
 int MeasuredUnderbarrelLoadsOneRoundAndCloses(){
+    unsigned linkedCases=0,nativeItemCases=0;
     for(const auto& e:generated::UnderbarrelFixedContainerEquipment){
         const bool breech=e.interaction.kind==FixedContainerKind::SingleRoundBreech;
         CHECK(breech||e.interaction.kind==FixedContainerKind::SingleRoundMuzzle);
         Fixture f(&e,0,1);f.observe=true;const auto& insertion=e.interaction.geometry[2].motion;
         for(const auto& family:WeaponModeFamilies)if(WeaponModeFamilyEligible(family)&&
             family.secondaryConfiguration==e.configurationPath&&family.secondaryAsset==e.asset){f.linkedFamily=&family;break;}
-        CHECK(f.linkedFamily);
+        // These exact unscoped AN94 variants and their primary have authored
+        // AltDeployId 0 (weapons54 enrollment and weapons71 AN94 source).
+        // Their measured reload uses native-item custody; it grants no linked alias.
+        const bool nativeItem=
+            (e.asset=="40mmgl"&&e.configurationPath=="Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan")||
+            (e.asset=="40mmsg"&&e.configurationPath=="Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_shg_AN94Abakan")||
+            (e.asset=="40mmsmk"&&e.configurationPath=="Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_smk_AN94Abakan");
+        if(nativeItem){CHECK(!f.linkedFamily);++nativeItemCases;}
+        else{CHECK(f.linkedFamily);++linkedCases;}
+        const auto physicalItem=nativeItem?f.binding.context.resource.weapon:f.binding.persistence;
         f.Send(At(e.interaction.geometry[breech?0:2].motion,0),false);
         CHECK(f.result.bodyAmmo&&f.result.bodyVisual&&f.result.bodyAmmo->equipment==&e);
-        CHECK(f.result.tracking.gun.token.item.id==f.binding.persistence);
-        CHECK(f.result.bodyVisual->source.identity.weapon.id==f.binding.persistence);
+        CHECK(f.result.tracking.gun.token.item.id==physicalItem);
+        CHECK(f.result.bodyVisual->source.identity.weapon.id==physicalItem);
+        CHECK(f.result.tracking.source.family.has_value()==!nativeItem);
+        CHECK(f.result.bodyAmmo->family.has_value()==!nativeItem);
         CHECK(f.result.tracking.source.ammunition.context.resource.weapon==f.native.owner.weapon);
         BodyAmmoTracking body;body.fixed=f.result.bodyAmmo;body.visual=*f.result.bodyVisual;
         CHECK(BodyAmmoFresh(body,f.now)&&body.visual.source.objectUnits==1&&body.visual.source.reserveUnits==1);
@@ -305,12 +317,13 @@ int MeasuredUnderbarrelLoadsOneRoundAndCloses(){
 
         // Opening an unfired breech preserves its live round and cannot draw
         // another round. The muzzle family likewise cannot top up a full tube.
-        Fixture loaded(&e,1,1);
+        Fixture loaded(&e,1,1);loaded.linkedFamily=f.linkedFamily;
         if(breech){loaded.Hinge(0);CHECK(loaded.result.tracking.step==FixedContainerStep::Close);loaded.Hinge(3);}
         else{loaded.Send(At(insertion,0),false);loaded.Send(At(insertion,0),true,true);}
         CHECK(loaded.calls==0&&!loaded.submitted&&!loaded.result.ammoOwnsHand);
         CHECK((loaded.service.View()->snapshot.counts==AmmunitionCounts{1,1,1}));
     }
+    CHECK(linkedCases==77&&nativeItemCases==3&&linkedCases+nativeItemCases==generated::UnderbarrelFixedContainerEquipment.size());
     return 0;
 }
 int LinkedLoaderRejectsUnverifiedPhysicalAliases(){
