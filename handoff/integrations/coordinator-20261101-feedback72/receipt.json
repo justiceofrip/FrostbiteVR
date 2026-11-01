@@ -1,0 +1,28 @@
+{
+  "schema": "fvr.coordinator.integration.v1",
+  "batch": "coordinator-20261101-feedback72+73",
+  "source_commit": "89e48ecd53b7a8d5af66ea023c511d655070b1fb",
+  "source_sha256": "bc246538120d97edce1b722f7f0a03bdfab30bf06952dce6483c64edf04d3e19",
+  "pushed": true,
+  "installed": {
+    "version": "0.1.35",
+    "rollback": "0.1.34",
+    "validated": true,
+    "settings_preserved": true,
+    "receipt": "reports/coordinator-20261101-feedback72/install-retry01.json",
+    "runtime_receipt": "reports/coordinator-20261101-feedback72/normal-runtime/build-receipt.json",
+    "runtime_receipt_sha256": "d215130320d368d1945f1820b89060165a23d54e5db91a053dc9d7132fc0fef8"
+  },
+  "checks": {"x86": 341, "x64": 341, "focused_native": 9, "geometry_python": 33, "decoder_python_reused": 34, "body_cache_python": 6, "fixed_loader_python": 10},
+  "actual": {
+    "run": "reports/coordinator-20261101-feedback72/xr-game01",
+    "feed": "Open/Detach/Attach driver stages and aggregate acceptance0->1->2->3; visible replacement and200/487. SeatFeed refused changed native right orientation while simulator controls stayed unchanged. Counters do not prove exact consumed receipts.",
+    "native_reload_accepted": false,
+    "headset_accepted": false,
+    "normal_close_native_retirement_profiles_settings_restored": true,
+    "crash_limit": "No AV during bounded loading/shutdown watcher windows; watchers detached before game exit. Prior69 AVs unresolved."
+  },
+  "retention": "Initial install-validation rollback and session admission refusal retained. Two closed70 sessions archived losslessly with hash manifest. Owned file/session compression preserves every logical byte; no deletion.",
+  "limits": ["Full LMG and all-weapon reload acceptance pending", "Underbarrel insertion uses FreePlacement; bore rail deferred", "Underbarrel actual reload/firing pending", "No measured performance or destruction acceptance"],
+  "next": "Resolve new SeatFeed/support interaction from actual evidence; continue independent underbarrel, destruction and performance checks."
+}
