@@ -1,0 +1,35 @@
+{
+  "batch": "coordinator-20261101-feedback69",
+  "native_source_commit": "bb48d09313e1e5e635a60b9f791efaaf9ba8b855",
+  "native_source_sha256": "31b77be364bea12ffe4081102a90cd12028bdc69663c259fd9e149dd0d99dfef",
+  "native_source_pushed": true,
+  "installed_version": "0.1.33",
+  "rollback_version": "0.1.32",
+  "settings_preserved": true,
+  "runtime_receipt": "reports/coordinator-20261101-feedback69/normal-runtime/build-receipt.json",
+  "runtime_receipt_sha256": "b202798b4d41f7d9ae0fa0ff40b2592ef17d5996e949cfe8ee1cdfea9d4a2ad6",
+  "installation_receipt": "reports/coordinator-20261101-feedback69/installation.json",
+  "validation": "installed-validation.log: validated/assets_ready true",
+  "checks": {
+    "x86": "341/341,129.98s",
+    "x64": "341/341,37.08s",
+    "physical_feed": "1/1,33 compositions incl all enrolled profiles and14 missing-view refusals",
+    "sight_driver": "21 regressions pass",
+    "runner_reader": "7 contention/failure fixtures pass; native closure unchanged",
+    "reviews": "feed guard and process race clean"
+  },
+  "changes": [
+    "Original-lease retention during a brief missing native feed observation.",
+    "Shared sight driver consumes fresh publications after transport delay; neutral approach is separate from acquisition gesture deadline.",
+    "Runner retains exact helper ownership and retries only bounded transient file-sharing errors."
+  ],
+  "actual": {
+    "xr-game01": "World loaded; runner state-read sharing violation, then normal cleanup; no reload commands. Tool fixed separately.",
+    "xr-game02": "Normal close/restore. Sight no native transition; approached but timed out before squeeze. Native inventory proves right shoulder selected QJU88; extra left selected XM8 again.",
+    "xr-game03": "QJU88 correctly selected. OpenCover receipt advanced; DetachContainer no accepted receipt. native retired and profiles/settings restored, but game exited0xc0000005 during shutdown. All owned processes exited.",
+    "full_reload_accepted": false,
+    "headset_accepted": false
+  },
+  "storage": "Session admission first refused before game.23 linker files compressed287823360->40538112 bytes, all hashes preserved. Closed episodes compressed; no evidence deleted.",
+  "next": "Feedback70 exact detach diagnosis; actual corrected sight gesture; isolated performance trial and destruction actual scene. Shutdown AV needs instrumentation on a future stop, not a repeated blind retry."
+}

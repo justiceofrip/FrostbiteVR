@@ -228,11 +228,17 @@ class SightDriver(transport.Driver):
                 "sight plan and ordinary release exceed bounded command budget")
         require(schedule[-1].get("requiresObservedFamilyTransition") is True
                 and schedule[-1]["phase"] == "release", "sight plan lacks conditional observed-family release")
-        require(integer(plan["durationNs"]) < integer(policy["gestureTimeoutNs"]), "sight plan exceeds gesture budget")
+        require(integer(plan["gestureNs"]) < integer(policy["gestureTimeoutNs"]), "sight plan exceeds gesture budget")
         self.plans.append(dict(stage="SightFlip", target=self.args.target, nonce=snapshot["nonce"],
                                samples=len(schedule), nominalDurationNs=plan["durationNs"], nativeAcceptance=False))
         start = time.perf_counter_ns()
-        self.motion_started, self.stage_deadline = start, min(self.deadline, start + integer(policy["gestureTimeoutNs"]))
+        # SightFlip starts grabbedAt_ on acquisition, not during neutral approach.
+        # Keep the existing global approach bound and 250ms motion command ack
+        # limit. No native/input/contact lease is extended by this distinction.
+        self.motion_started, self.stage_deadline = start, self.deadline
+        gesture_start, gesture_at = None, None
+        self.plans[-1].update(approachStartedNs=start, approachDeadlineNs=self.deadline,
+                              gestureBudgetStartedNs=None, gestureDeadlineNs=None)
         self.monitor = True
         last_at = -1
         for target in schedule:
@@ -243,11 +249,26 @@ class SightDriver(transport.Driver):
                 break
             if self.transition_observation is not None:
                 break
-            due = max(start + at, self.last_write + self.args.step_ms * 1_000_000)
+            origin = start if gesture_start is None else gesture_start - gesture_at
+            due = max(origin + at, self.last_write + self.args.step_ms * 1_000_000)
             self.pause_until(due)
             if target.get("requiresFreshSightPreference"):
                 self.fresh()
                 self.monitor = True
+            if target["phase"] == "acquire":
+                require(gesture_start is None and target["grip"] == 1
+                        and target.get("requiresFreshSightPreference") is True,
+                        "sight acquisition must be one fresh intentional squeeze")
+                # Anchor before send, including its admission/refresh and ack
+                # latency. Publication retries must never restart this clock.
+                gesture_start, gesture_at = time.perf_counter_ns(), at
+                self.stage_deadline = min(self.deadline, gesture_start + integer(policy["gestureTimeoutNs"]))
+                self.plans[-1].update(approachDurationNs=gesture_start - start,
+                                      gestureBudgetStartedNs=gesture_start, gestureDeadlineNs=self.stage_deadline)
+            else:
+                require((gesture_start is None and target["phase"] in ("neutral", "approach", "neutral_at_contact")
+                         and target["grip"] == 0) or gesture_start is not None,
+                        "sight motion must follow bounded neutral approach and acquisition")
             try:
                 self.send(target["commands"], expected=target,
                           source_deadline=source_deadline(snapshot) if target is schedule[0] else None)

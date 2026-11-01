@@ -93,7 +93,113 @@ def expire_during_publication_checks(h):
     h.driver.read_state = delayed_read
 
 
+def stage_harness(testcase, approach_samples=32, move_samples=4, ack_ms=80, select_target=True):
+    """Exercise the complete stage with real guarded transport and a synthetic plan."""
+    h = harness(testcase, ack_ms)
+    v = h.driver
+    v.args.step_ms = 30
+    v.plans, v.held_left = [], False
+    h.state["controls"]["gripL"] = 0.
+    h.state["handL"] = dict(pos=[0., 0., 0.], ypr=[0., 0., 0.], followsHead=False)
+    v.initial_sim = copy.deepcopy(h.state)
+    phases = ["neutral"] + ["approach"] * approach_samples + ["neutral_at_contact", "acquire"]
+    phases += ["move"] * move_samples + ["detent_dwell"] * 3 + ["await_acknowledgement", "release"]
+    acquire = phases.index("acquire")
+    rows = []
+    for index, phase in enumerate(phases):
+        grip = int(index >= acquire and phase != "release")
+        row = dict(atNs=index * 30 * MS, phase=phase, grip=grip,
+                   positionMeters=[0., 0., 0.], yawPitchRollDegrees=[0., 0., 0.],
+                   commands=["hand l grip pose 0 0 0 0 0 0", f"grip l {grip}"])
+        if phase == "acquire":
+            row["requiresFreshSightPreference"] = True
+        if phase == "await_acknowledgement":
+            row["maximumWaitNs"] = s.sight.POLICY["ackTimeoutNs"]
+        if phase == "release":
+            row["requiresObservedFamilyTransition"] = True
+        rows.append(row)
+    plan = dict(expectedTransition=copy.deepcopy(v.sight_plan["expectedTransition"]),
+                durationNs=rows[-1]["atNs"], gestureNs=rows[-1]["atNs"] - rows[acquire]["atNs"],
+                policy=copy.deepcopy(s.sight.POLICY), schedule=rows)
+    h.selected_target = False
+
+    def observed(now, nonce=1):
+        profiles, snapshot = fixture(now, nonce)
+        return profiles, transition(snapshot) if h.selected_target else snapshot
+
+    original_sleep = h.sleep
+
+    def committed_sleep(seconds):
+        pending = h.command_due is not None
+        original_sleep(seconds)
+        if pending and h.command_due is None:
+            # The shared harness models one commit. Advance frames and actual
+            # controls for this multi-command stage, retaining real ack checks.
+            h.state.update(frame=100 + v.sequence, endFrames=99 + v.sequence)
+            lines = h.files[v.command_path].decode("ascii").splitlines()
+            for line in lines:
+                if line.startswith("grip l "):
+                    h.state["controls"]["gripL"] = float(line.split()[-1])
+            if select_target and len(h.command_writes) == phases.index("await_acknowledgement") + 1:
+                h.selected_target = True
+
+    testcase.enterContext(patch.object(memory, "fixture", observed))
+    testcase.enterContext(patch.object(s.time, "sleep", committed_sleep))
+    testcase.enterContext(patch.object(s.sight, "plan", return_value=plan))
+    testcase.enterContext(patch.object(s.sight, "admit", return_value=dict(preferredByDistance=True)))
+    return h, plan
+
+
 class SightDriverTests(unittest.TestCase):
+    def test_slow_neutral_approach_does_not_consume_acquisition_budget_or_skip_commands(self):
+        h, plan = stage_harness(self)
+        v = h.driver
+        v.stage()
+        timing = v.plans[-1]
+        self.assertGreater(timing["approachDurationNs"], plan["policy"]["gestureTimeoutNs"])
+        commits = [e for e in v.artifacts.events if e["type"] == "command_commit"]
+        acquire_index = next(i for i, row in enumerate(plan["schedule"]) if row["phase"] == "acquire")
+        acquired = commits[acquire_index]
+        self.assertLessEqual(timing["gestureBudgetStartedNs"], acquired["writtenNs"])
+        self.assertLess(acquired["writtenNs"], acquired["committedNs"])
+        self.assertEqual(timing["gestureDeadlineNs"],
+                         timing["gestureBudgetStartedNs"] + plan["policy"]["gestureTimeoutNs"])
+        actual = [raw.decode("ascii").splitlines()[:-1] for _, raw in h.command_writes]
+        self.assertEqual(actual, [r["commands"] for r in plan["schedule"][:-1]] + [["grip l 0"]])
+        self.assertTrue(v.transition_observation)
+        self.assertFalse(v.held_left)
+        self.assertEqual(v.stage_deadline, v.deadline)
+
+    def test_neutral_approach_retains_global_watchdog(self):
+        h, _ = stage_harness(self)
+        h.driver.deadline = h.now + 600 * MS
+        with self.assertRaisesRegex(s.REFUSAL, "driver deadline"):
+            h.driver.stage()
+        self.assertIsNone(h.driver.plans[-1]["gestureBudgetStartedNs"])
+        self.assertFalse(h.driver.held_left)
+        self.assertFalse(any(b"grip l 1" in raw for _, raw in h.command_writes))
+
+    def test_neutral_approach_retains_250ms_command_ack_bound(self):
+        h, _ = stage_harness(self, ack_ms=250)
+        with self.assertRaisesRegex(s.REFUSAL, "acknowledgement/commit deadline"):
+            h.driver.stage()
+        self.assertIsNone(h.driver.plans[-1]["gestureBudgetStartedNs"])
+        self.assertEqual(len(h.command_writes), 1)
+
+    def test_acquisition_budget_is_not_restarted_by_slow_motion_or_fresh_snapshots(self):
+        h, plan = stage_harness(self, approach_samples=1, move_samples=20, ack_ms=180, select_target=False)
+        v = h.driver
+        with self.assertRaisesRegex(s.REFUSAL, "maximumGestureNs"):
+            v.stage()
+        timing = v.plans[-1]
+        acquired = next(e for e in v.artifacts.events
+                        if e["type"] == "command_request" and "grip l 1" in e["commands"])
+        self.assertLessEqual(timing["gestureBudgetStartedNs"], acquired["atNs"])
+        self.assertEqual(v.stage_deadline,
+                         timing["gestureBudgetStartedNs"] + plan["policy"]["gestureTimeoutNs"])
+        self.assertGreater(v.snapshot_index, 4)
+        self.assertIsNone(v.transition_observation)
+
     def test_same_source_and_exact_target_allow_only_family_selection_change(self):
         h = harness(self)
         v = h.driver
