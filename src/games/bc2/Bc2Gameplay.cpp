@@ -3279,7 +3279,10 @@ void __fastcall GatherHook(void* self,void*,void* cache){
                 }
                 rigPublication::PublishTracking(*holsterTracking);}
             else {InvalidateBodyHolsterState(BodyHolsterLifecycleReason::TrackingPublicationUnavailable);rigPublication::PublishTracking({});}
-            if(bodyHolster->DiagnosticDeadline()||inventoryReloadFixture||resourceInventoryFixture||ordinaryBoltInputFixture){
+            const bool holsterDiagnostic=bodyHolster->DiagnosticDeadline()||inventoryReloadFixture||resourceInventoryFixture||ordinaryBoltInputFixture;
+            // The existing bounded snapshot request only observes ordinary
+            // state. It grants no diagnostic admission or gameplay authority.
+            if(holsterDiagnostic||rigPublication::ShellPumpObservationRequested(holsterBodySample->hand.nowNs)){
                 try{auto sample=std::make_shared<BodyHolsterProbeSample>();LARGE_INTEGER now{};QueryPerformanceCounter(&now);
                     sample->sampledNs=HandNanos(now.QuadPart);sample->trialStartNs=bodyHolster->DiagnosticStart();sample->trialDeadlineNs=bodyHolster->DiagnosticDeadline();
                     CaptureBodyHolsterProbeSource(*sample,*holsterBodySample);
@@ -3294,7 +3297,8 @@ void __fastcall GatherHook(void* self,void*,void* cache){
                     if(bodyHolsterFixture){LARGE_INTEGER after{};QueryPerformanceCounter(&after);const auto ns=HandNanos(after.QuadPart);
                         bodyHolsterFixture->Observe(ReadBodyHolsterProbe(ns),ns);
                         bodyHolsterFixtureSample.store(std::make_shared<const BodyHolsterFixtureSample>(bodyHolsterFixture->Sample()),std::memory_order_release);}
-                }catch(...){bodyHolsterSample.store({},std::memory_order_release);InvalidateBodyHolsterState(BodyHolsterLifecycleReason::ProbePublicationFailed);}
+                }catch(...){bodyHolsterSample.store({},std::memory_order_release);
+                    if(holsterDiagnostic)InvalidateBodyHolsterState(BodyHolsterLifecycleReason::ProbePublicationFailed);}
             }
         }
         if(weaponVisibilityProbe){

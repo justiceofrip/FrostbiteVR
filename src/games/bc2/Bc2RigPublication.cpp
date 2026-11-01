@@ -2658,7 +2658,8 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     const auto invalid=[&](const char* reason){
         std::ostringstream header;header.imbue(std::locale::classic());
         header<<"{\"schema\":\"fvr.bc2.live-mechanism-snapshot.v1\",\"nonce\":\""<<nonce
-            <<"\",\"valid\":false,\"invalid_reason\":\""<<reason<<"\",\"observed_ns\":"<<observed;
+            <<"\",\"valid\":false,\"invalid_reason\":\""<<reason<<"\",\"observed_ns\":"<<observed
+            <<",\"bodyHolster\":{\"available\":false,\"reason\":\"snapshot_unavailable\"}";
         const auto prefix=header.str();
         const auto diagnostics=feedDiagnostics.empty()?std::string{}:",\"feedDiagnostics\":"+feedDiagnostics;
         std::ostringstream observation;observation.imbue(std::locale::classic());observation<<std::boolalpha;
@@ -2854,6 +2855,30 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
         invalid("sight_native_source_mismatched_or_invalid");return;
     }
     auto until=std::min({ReloadNanos(frame->deadline),m.inputEvidence.deadlineNs,selected->deadlineNs});
+    // Gameplay and render publish independently. Read one still-leased probe;
+    // disclose its input ordering, never substitute/restamp the render input.
+    const auto holster=gameplay::ReadBodyHolsterProbe(now);
+    const bool holsterInputMatches=holster&&holster->hand.sequence==m.inputEvidence.sequence&&
+        holster->hand.observedNs==m.inputEvidence.observedNs&&holster->hand.deadlineNs==m.inputEvidence.deadlineNs;
+    const bool holsterJoined=holster&&holster->nativeOwner==m.owner&&holster->nativeTick&&
+        holster->hand.owner==m.inputEvidence.owner&&holster->hand.sequence&&
+        holster->hand.deadlineNs-holster->hand.observedNs<=150000000&&
+        (holster->hand.sequence!=m.inputEvidence.sequence||holsterInputMatches)&&
+        holster->hand.focused&&holster->hand.tracked[0]&&holster->hand.tracked[1]&&
+        interaction::ValidInput(holster->input)&&holster->input.generation==holster->hand.sequence&&
+        holster->input.spaceGeneration==input.spaceGeneration&&
+        holster->physicalGun.id&&holster->physicalGun.generation==holster->hand.owner.equipGeneration;
+    const auto* freeRight=holsterJoined&&holster->outcome.freeRight?&*holster->outcome.freeRight:nullptr;
+    const bool freeRightCurrent=freeRight&&BodyFreeRightEvidenceCurrent(*freeRight,now)&&
+        freeRight->visibility.nativeOwner==holster->nativeOwner&&freeRight->visibility.request==holster->request&&
+        freeRight->input.owner==holster->hand.owner&&freeRight->input.sequence==holster->hand.sequence&&
+        freeRight->input.observedNs==holster->hand.observedNs&&freeRight->input.deadlineNs==holster->hand.deadlineNs&&
+        freeRight->suppression.nativeTick==holster->nativeTick;
+    // Optional holster evidence carries its own original expiry. It must not
+    // shorten unrelated feed/pump/sight observations from this publication.
+    auto holsterUntil=holsterJoined?std::min(holster->hand.deadlineNs,holster->sampledNs+150000000):0;
+    if(freeRightCurrent){holsterUntil=std::min(holsterUntil,freeRight->receipt.deadlineNs);
+        if(freeRight->authorizationDeadlineNs)holsterUntil=std::min(holsterUntil,freeRight->authorizationDeadlineNs);}
     if(feed)until=std::min(until,feed->input.deadlineNs);
     if(sight.valid)until=std::min(until,ReloadNanos(sight.deadline));
     const auto* fixedEquipment=FindFixedContainerEquipment(configuration,aim->meshPath,m.rigFingerprint);
@@ -2904,6 +2929,41 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     json<<",\"meshes\": [";for(unsigned i=0;i<selected->states[0].count;++i){if(i)json<<',';const auto& mesh=selected->states[0].meshes[i];
         json<<"{\"address\":"<<mesh.address<<",\"typeInfo\":"<<mesh.typeInfo<<",\"namePointer\":"<<mesh.namePointer<<",\"path\":";text(feed_presentation_detail::Text(mesh.assetPath));json<<'}';}json<<"]}";
     json<<",\"input_evidence\":";evidence(m.inputEvidence);
+    json<<",\"bodyHolster\":{\"available\":"<<holsterJoined;
+    if(!holsterJoined){json<<",\"reason\":";text(holster?"owner_or_input_lease_not_joined":"pending_or_expired");}
+    else{const auto& h=*holster;
+        const bool actualEmpty=h.phase==BodyHolsterPhase::Empty&&h.outcome.phase==BodyHolsterPhase::Empty&&
+            h.outcome.inventory.emptyHands&&!h.left&&!h.right&&freeRightCurrent&&
+            h.outcome.blockWeaponActions&&!h.outcome.allowAutomaticGunHold;
+        json<<",\"sampledNs\":"<<h.sampledNs<<",\"validUntilNs\":"<<holsterUntil<<",\"phase\":"<<unsigned(h.phase)<<",\"actualEmpty\":"<<actualEmpty
+            <<",\"nativeTick\":"<<h.nativeTick<<",\"request\":"<<h.request<<",\"nativeOwner\":";owner(h.nativeOwner);
+        json<<",\"inputEvidence\":";evidence(h.hand);json<<",\"physicalGun\":";key(h.physicalGun);
+        json<<",\"inputMatchesSnapshot\":"<<holsterInputMatches<<",\"inputSequenceRelation\":";
+        text(h.hand.sequence<input.generation?"older":h.hand.sequence>input.generation?"newer":"same");
+        bool neutral=h.input.focused&&h.input.headValid;
+        for(const auto& hand:h.input.hands)neutral&=hand.gripTracked&&hand.aimTracked&&!hand.held&&
+            hand.squeeze<=.01f&&hand.trigger<=.01f&&hand.stickX==0&&hand.stickY==0;
+        json<<",\"neutralTrackedInput\":"<<neutral<<",\"input\":{\"generation\":"<<h.input.generation
+            <<",\"spaceGeneration\":"<<h.input.spaceGeneration<<",\"focused\":"<<h.input.focused<<",\"headValid\":"<<h.input.headValid<<",\"hands\":[";
+        for(unsigned i=0;i<2;++i){if(i)json<<',';const auto& hand=h.input.hands[i];
+            json<<"{\"gripTracked\":"<<hand.gripTracked<<",\"aimTracked\":"<<hand.aimTracked<<",\"held\":"<<hand.held
+                <<",\"squeeze\":"<<hand.squeeze<<",\"trigger\":"<<hand.trigger<<",\"stickX\":"<<hand.stickX<<",\"stickY\":"<<hand.stickY<<'}';}json<<"]}";
+        json<<",\"selectedSlot\":";if(!h.selectedSlot)json<<"null";else{json<<"{\"slot\":"<<unsigned(h.selectedSlot->slot)<<",\"item\":";key(h.selectedSlot->item);json<<'}';}
+        json<<",\"leftClaim\":";if(h.left)claim(*h.left);else json<<"null";
+        json<<",\"rightClaim\":";if(h.right)claim(*h.right);else json<<"null";
+        json<<",\"inventoryEvaluation\":"<<unsigned(h.outcome.inventoryEvaluation)<<",\"emptyHands\":"<<h.outcome.inventory.emptyHands
+            <<",\"blockWeaponActions\":"<<h.outcome.blockWeaponActions<<",\"allowAutomaticGunHold\":"<<h.outcome.allowAutomaticGunHold
+            <<",\"freeRightCurrent\":"<<freeRightCurrent<<",\"freeRight\":";
+        if(!freeRight)json<<"null";else{const auto& v=freeRight->receipt;const auto& s=freeRight->suppression;
+            json<<"{\"authorizationDeadlineNs\":"<<freeRight->authorizationDeadlineNs<<",\"inputEvidence\":";evidence(freeRight->input);
+            json<<",\"visibility\":{\"nativeOwner\":";owner(v.nativeOwner);
+            json<<",\"request\":"<<v.request<<",\"inputSequence\":"<<v.inputSequence<<",\"physicalEquipGeneration\":"<<v.physicalEquipGeneration
+                <<",\"drawSerial\":"<<v.drawSerial<<",\"observedNs\":"<<v.observedNs<<",\"deadlineNs\":"<<v.deadlineNs
+                <<",\"verifiedCopyMask\":"<<v.verifiedCopyMask<<",\"hidden\":"<<v.hidden<<",\"submittedVisibilityVerified\":false}"
+                <<",\"suppression\":{\"owner\":";owner(s.owner);json<<",\"inputEvidence\":";evidence(s.input);
+            json<<",\"request\":"<<s.request<<",\"nativeTick\":"<<s.nativeTick<<",\"cache\":"<<s.cache
+                <<",\"equipmentDispatched\":"<<s.equipmentDispatched<<"}}";}
+    }json<<'}';
     json<<",\"input\":{\"generation\":"<<input.generation<<",\"spaceGeneration\":"<<input.spaceGeneration<<",\"predictedNs\":"<<input.predictedNs
         <<",\"focused\":"<<input.focused<<",\"headValid\":"<<input.headValid<<",\"floorRelative\":"<<input.floorRelative
         <<",\"worldUnitsPerMeter\":"<<input.worldUnitsPerMeter<<",\"trackingBasisGeneration\":"<<input.trackingBasisGeneration<<",\"referenceHead\":";pose(input.referenceHead);
