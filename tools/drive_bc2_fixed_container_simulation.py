@@ -71,6 +71,36 @@ class FixedContainerDriver(shared.PumpDriver):
         if before.get("fixedContainer", {}).get("available") is True:
             require(planner.selection(before) == planner.selection(after), "exact fixed-container profile changed")
 
+    def snapshot_source_deadline(self, snapshot):
+        deadlines = [super().snapshot_source_deadline(snapshot)]
+        x = snapshot.get("fixedContainer")
+        if isinstance(x, dict) and x.get("available") is True:
+            # The same original leases already bound the fixed-container plan.
+            # In particular, a current-at-publication family can expire before
+            # delivery while the newer frame/input leases remain current.
+            deadlines.extend(integer(value) for value in (
+                snapshot["native_deadline_ns"], x["input"]["deadlineNs"],
+                x["raw"]["input"]["deadlineNs"], x["view"]["snapshot"]["deadlineNs"],
+                x["view"]["binding"]["deadlineNs"], x["tracking"]["gun"]["deadlineNs"]))
+            if x.get("physicalFamily") is not None:
+                deadlines.append(integer(x["physicalFamily"]["deadlineNs"]))
+            if x["tracking"]["hand"] is not None:
+                deadlines.append(integer(x["tracking"]["hand"]["deadlineNs"]))
+        return min(deadlines)
+
+    def current_source(self):
+        if self.latest_snapshot is None:
+            self.fresh_available()
+        self.monitor = True
+        # Hold the committed pose while the shared transport requests and
+        # admits a replacement; retain its request/refresh/stage bounds.
+        for _ in range(800):
+            self.pump()
+            if self.latest_snapshot is not None and time.perf_counter_ns() < self.snapshot_source_deadline(self.latest_snapshot):
+                return
+            time.sleep(.001)
+        raise transport.REFUSAL("original fixed-container source expired")
+
     def accept_snapshot(self, snapshot, raw, now):
         transport.Driver.accept_snapshot(self, snapshot, raw, now)
         if self.demand_reference is not None:
@@ -95,7 +125,7 @@ class FixedContainerDriver(shared.PumpDriver):
         require(self.demand_finished and self.active_plan is not None and self.latest_snapshot is not None,
                 "unadmitted observation cannot authorize input")
         current, now = self.latest_snapshot, time.perf_counter_ns()
-        require(now < shared.source_deadline(current), "original source expired before publication")
+        require(now < self.snapshot_source_deadline(current), "original source expired before publication")
         self.admit_snapshot(current, now, integer(current["nonce"]))
         planner.ammo(current, now, idle=True)
         self.stable_snapshot(self.reference, current)
@@ -165,7 +195,7 @@ class FixedContainerDriver(shared.PumpDriver):
     def stage(self, name, pickup=None):
         snapshot, _, _ = self.fresh_available()
         plan = planner.plan(snapshot, name, time.perf_counter_ns(), integer(snapshot["nonce"]), self.args.step_ms*1_000_000, pickup)
-        require(time.perf_counter_ns() < min(integer(plan["sourceValidUntilNs"]), shared.source_deadline(snapshot)),
+        require(time.perf_counter_ns() < min(integer(plan["sourceValidUntilNs"]), self.snapshot_source_deadline(snapshot)),
                 "planning consumed original source lease")
         if self.reference is not None:
             self.stable_snapshot(self.reference, snapshot)

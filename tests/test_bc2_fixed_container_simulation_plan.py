@@ -4,6 +4,7 @@ import importlib.util
 import math
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -18,6 +19,8 @@ def module(name, path):
 p = module("fixed_planner_test", ROOT / "tools/plan_bc2_fixed_container_simulation.py")
 d = module("fixed_driver_test", ROOT / "tools/drive_bc2_fixed_container_simulation.py")
 fixture = module("fixed_sight_fixture", ROOT / "tests/test_bc2_sight_simulation_plan.py")
+memory = module("fixed_transport_memory", ROOT / "tests/test_bc2_feed_driver_observation.py")
+memory.d = d.transport
 f, NOW = p.frame, 1_000_000_000
 
 
@@ -396,6 +399,158 @@ class FixedContainerSimulationPlanTests(unittest.TestCase):
             else: x["leftClaim"] = copy.deepcopy(x["tracking"]["gun"])
             with self.subTest(mutation=mutation), self.assertRaises(p.Refusal):
                 p.plan(s, "Pickup", NOW, 100)
+
+
+class FixedContainerDeadlineTests(unittest.TestCase):
+    """In-memory delivery delays retain original leases and command ownership."""
+    MS = 1_000_000
+
+    def response(self, now, nonce=1, kind=3, family_remaining=300_000_000):
+        s = refresh(snapshot(kind), now, now//self.MS)
+        s.update(nonce=nonce, observed_ns=now)
+        x = s["fixedContainer"]
+        x["physicalFamily"] = dict(owner=copy.deepcopy(s["owner"]),
+            observedNs=now+family_remaining-500_000_000, deadlineNs=now+family_remaining,
+            current=True, physicalItem=s["equipment"]["persistence"],
+            inventory=s["selected"]["inventory"], selectedSecondary=True, targetWeapon=15, targetSlot=0,
+            action=25, primaryAction=25, configurationPath=s["selected"]["configurationPath"],
+            asset=s["equipment"]["asset"], persistentId="sp_xm8_s")
+        x["tracking"]["gun"]["token"]["item"]["id"] = s["equipment"]["persistence"]
+        return None, s
+
+    def harness(self, kind=3):
+        self.enterContext(patch.object(memory, "fixture", lambda now, nonce=1: self.response(now, nonce, kind)))
+        h = memory.Harness(self)
+        v = h.driver
+        v.__class__ = d.FixedContainerDriver
+        v.active_plan, v.demand_reference, v.demand_started = None, None, None
+        v.demand_finished, v.gate_receipts, v.release_authorized = True, [], False
+        v.acquired_claim = None
+        _, delayed = self.response(h.now-20*self.MS, v.pending_nonce, kind, 10*self.MS)
+        h.publish(delayed)
+        return h, delayed
+
+    def test_family_expired_in_delivery_holds_then_admits_real_replacement(self):
+        for kind in (3, 4):
+            with self.subTest(kind=kind):
+                h, delayed = self.harness(kind)
+                v = h.driver
+                original, raw = copy.deepcopy(v.reference), h.files[v.snapshot_path]
+                stage_deadline, last_write, started = v.stage_deadline, v.last_write, h.now
+                self.assertLess(h.now, d.shared.source_deadline(delayed))
+                self.assertGreaterEqual(h.now, v.snapshot_source_deadline(delayed))
+                def held():
+                    self.assertEqual(h.command_writes, [])
+                    self.assertEqual(v.last_write, last_write)
+                    self.assertTrue(v.held_left)
+                h.on_sleep = held
+                v.current_source()
+                self.assertGreaterEqual(h.now, started+40*self.MS)
+                self.assertEqual(v.artifacts.saved["snapshot-001.json"], raw)
+                self.assertEqual(v.reference, original)
+                self.assertEqual(v.stage_deadline, stage_deadline)
+                self.assertGreater(v.latest_snapshot["nonce"], delayed["nonce"])
+                self.assertEqual(v.latest_snapshot["fixedContainer"]["physicalFamily"]["deadlineNs"]
+                                 - v.latest_snapshot["fixedContainer"]["physicalFamily"]["observedNs"], 500*self.MS)
+                self.assertIsNone(v.snapshot_refresh_started)
+                self.assertEqual([e["type"] for e in v.artifacts.events],
+                                 ["snapshot_refresh_hold", "snapshot_refresh_resumed"])
+                self.assertEqual(v.artifacts.events[0]["sourceDeadlineNs"],
+                                 delayed["fixedContainer"]["physicalFamily"]["deadlineNs"])
+                self.assertEqual(h.command_writes, [])
+
+    def test_accepted_family_expiry_holds_until_new_admitted_source(self):
+        h, _ = self.harness()
+        v = h.driver
+        _, current = self.response(h.now, 2, family_remaining=10*self.MS)
+        v.pending_nonce, v.last_request = None, h.now
+        v.accept_snapshot(current, d.transport.json_bytes(current), h.now)
+        h.now += 11*self.MS
+        self.assertLess(h.now, d.shared.source_deadline(current))
+        v.current_source()
+        self.assertGreater(v.latest_snapshot["nonce"], current["nonce"])
+        self.assertLess(h.now, v.snapshot_source_deadline(v.latest_snapshot))
+        self.assertEqual(current["fixedContainer"]["physicalFamily"]["deadlineNs"],
+                         current["observed_ns"]+10*self.MS)
+        self.assertEqual(h.command_writes, [])
+
+    def test_expired_family_with_invalid_identity_is_not_refreshed(self):
+        for mutation in ("owner", "item", "current", "unbounded"):
+            with self.subTest(mutation=mutation):
+                h, delayed = self.harness()
+                v = h.driver
+                proof = delayed["fixedContainer"]["physicalFamily"]
+                if mutation == "owner": proof["owner"]["weapon"] += 1
+                elif mutation == "item": proof["physicalItem"] += 1
+                elif mutation == "current": proof["current"] = False
+                else: proof["observedNs"] -= 1
+                # No prior selection makes historical native admission, rather
+                # than the stable-selection check, reject the invalid proof.
+                v.reference = None
+                h.publish(delayed)
+                with self.assertRaisesRegex(d.planner.Refusal, "physical family"):
+                    v.receive_snapshot()
+                self.assertIsNone(v.snapshot_refresh_started)
+                self.assertEqual(v.snapshot_index, 1)
+                self.assertIn("snapshot-001.json", v.artifacts.saved)
+                self.assertEqual(h.command_writes, [])
+
+    def test_family_refresh_retains_request_count_and_elapsed_bounds(self):
+        for bound in ("requests", "response", "refresh", "stage", "driver"):
+            with self.subTest(bound=bound):
+                h, _ = self.harness()
+                v = h.driver
+                self.assertIsNone(v.receive_snapshot())
+                if bound == "requests":
+                    h.response_stale = True
+                    message = "refresh request budget exhausted"
+                elif bound == "response":
+                    h.response_due = None
+                    message = "within request budget"
+                else:
+                    h.response_due = None
+                    if bound == "refresh":
+                        h.now += d.transport.SNAPSHOT_REFRESH_BUDGET
+                        message = "refresh budget exhausted"
+                    elif bound == "stage":
+                        v.stage_deadline = h.now
+                        message = "maximumGestureNs"
+                    else:
+                        v.deadline = h.now
+                        message = "driver deadline"
+                with self.assertRaisesRegex(d.transport.REFUSAL, message):
+                    v.pause_until(h.now)
+                if bound == "requests":
+                    self.assertEqual(v.snapshot_refresh_requests, 2)
+                    self.assertIn("snapshot-003.json", v.artifacts.saved)
+                self.assertEqual(h.command_writes, [])
+
+    def test_publication_refuses_family_that_expired_after_current_source(self):
+        h, delayed = self.harness()
+        v = h.driver
+        v.latest_snapshot, v.active_plan = delayed, {"schedule": []}
+        with self.assertRaisesRegex(d.transport.REFUSAL, "source expired before publication"):
+            v.validate_publication(["grip l 1"], None, False)
+        self.assertEqual(h.command_writes, [])
+
+    def test_source_deadline_retains_fixed_plan_leases_and_pending_capture(self):
+        v = object.__new__(d.FixedContainerDriver)
+        for kind, stage in ((3, "Open"), (4, "Pickup")):
+            _, s = self.response(NOW, 100, kind, 10*self.MS)
+            plan = p.plan(s, stage, NOW, 100)
+            self.assertEqual(v.snapshot_source_deadline(s), plan["sourceValidUntilNs"])
+        s = snapshot()
+        x = s["fixedContainer"]
+        for lease in (x["input"], x["raw"]["input"], x["view"]["snapshot"],
+                      x["view"]["binding"], x["tracking"]["gun"]):
+            original = lease["deadlineNs"]
+            lease["deadlineNs"] = NOW+5*self.MS
+            self.assertEqual(v.snapshot_source_deadline(s), NOW+5*self.MS)
+            lease["deadlineNs"] = original
+        x["tracking"]["hand"] = {"deadlineNs": NOW+4*self.MS}
+        self.assertEqual(v.snapshot_source_deadline(s), NOW+4*self.MS)
+        s["fixedContainer"] = dict(available=False, reason="capture_pending_or_not_requested")
+        self.assertEqual(v.snapshot_source_deadline(s), d.shared.source_deadline(s))
 
 
 if __name__ == "__main__":

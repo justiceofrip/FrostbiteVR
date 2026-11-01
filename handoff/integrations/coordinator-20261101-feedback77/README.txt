@@ -20,6 +20,11 @@ Python: readiness6 methods/all24 profiles, sight30, fixedplanner11 PASS;
 postrelease7 + existing observation10 remain passing. Private rendered-view
 qualifier19 PASS (one sandbox ACL rerun only). Failed attempts are retained.
 Independent native review findings were corrected before freeze: acquired-state
-read ordering and host-prop family lease bounds. Native focused/normal builds,
-private0.1.37 installation and actual-game checks are pending.
+read ordering and host-prop family lease bounds. All nine focused suites and both
+normal builds341/341 pass. Source1717263 is pushed; private0.1.37 is installed
+and validated with0.1.36 rollback and settings preserved.
+Actual37 XM8 launcher fired1/7->0/7 and visibly damaged a wall. Reload stopped
+before acquisition on an expired diagnostic family lease, addressed by78.
+Run closed normally; native retired and profiles/settings restored. No complete
+manual reload, general destruction, measured performance or headset acceptance.
 Local evidence: reports/coordinator-20261101-feedback77; prior actual runs76.

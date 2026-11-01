@@ -512,6 +512,11 @@ class Driver:
                       f"nonce={self.pending_nonce} elapsed_ns={now - self.last_request} "
                       f"budget_ns={SNAPSHOT_TIMEOUT}")
 
+    def snapshot_source_deadline(self, snapshot):
+        """Adapters may include shorter original mechanism evidence leases."""
+        return min(integer(snapshot["valid_until_ns"]),
+                   integer(snapshot["input_evidence"]["observedNs"]) + SNAPSHOT_PERIOD)
+
     def receive_snapshot(self):
         if self.pending_nonce is None:
             return None
@@ -548,8 +553,7 @@ class Driver:
         evaluated = time.perf_counter_ns()
         if evaluated - self.last_request > SNAPSHOT_TIMEOUT:
             self.snapshot_timeout(evaluated, (snapshot, raw))
-        source_deadline = min(integer(snapshot["valid_until_ns"]),
-                              integer(snapshot["input_evidence"]["observedNs"]) + SNAPSHOT_PERIOD)
+        source_deadline = self.snapshot_source_deadline(snapshot)
         if evaluated >= source_deadline:
             # Validate the expired diagnostic at its recorded native publication
             # time only to distinguish delayed delivery from invalid admission.
