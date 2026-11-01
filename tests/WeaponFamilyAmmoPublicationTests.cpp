@@ -153,7 +153,7 @@ int main(){
     }
     CHECK(counts[0]>=2&&counts[1]>1&&counts[2]>=1);
     CHECK(counts[3]==FixedContainerConfigs.size()+generated::UnderbarrelFixedContainerEquipment.size());
-    CHECK(counts[4]>0&&counts[4]+generated::UnderbarrelFixedContainerEquipment.size()==80);
+    CHECK(counts[4]==0&&generated::UnderbarrelFixedContainerEquipment.size()==UnderbarrelAmmoConfigs.size());
     CHECK(underbarrelCounts[0]==32&&underbarrelCounts[1]==24&&underbarrelCounts[2]==24);
     std::printf("Family ammo dispatch/publication: magazine=%u tube=%u feed=%u fixed=%u underbarrel=%u; exact identity/timing, retained operation, three-copy counts and expiry gates passed.\n",
         counts[0],counts[1],counts[2],counts[3],counts[4]);

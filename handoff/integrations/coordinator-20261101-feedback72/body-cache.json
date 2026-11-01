@@ -1,56 +1,39 @@
 {
+  "native_headset_acceptance": false,
   "coverage": {
-    "measured_configurations": 40,
-    "unique_keys": 18,
+    "unique_keys": 42,
+    "measured_configurations": 80,
     "assets": [
       "40mmgl",
       "40mmsg",
       "40mmsmk"
     ],
     "family_key_counts": {
-      "AN94Abakan": 6,
-      "M16A2": 6,
-      "XM8": 6
-    },
-    "key": [
-      "asset",
-      "mesh",
-      "part",
-      "rig_fingerprint"
-    ],
-    "parts": {
-      "XM8": [
-        "jntWpn_13:100",
-        "jntWpnwpnJnt_14:114"
-      ],
-      "AN94": [
-        "jntWpnwpnJnt_16:39",
-        "jntWpn_17:99"
-      ],
-      "M16A2": [
-        "jntWpnwpnJnt_16:39",
-        "jntWpn_17:99"
-      ]
+      "an94": 6,
+      "m16": 6,
+      "xm8": 6,
+      "aek": 6,
+      "hk416": 6,
+      "f2000": 6,
+      "aug": 6
     }
   },
+  "schema": "fvr.private-measured-underbarrel-cache.v1",
+  "source": "reports/coordinator-20261101-feedback73/cache02/extraction-receipt.json",
+  "cache": {
+    "bytes": 61898800,
+    "added_bytes": 650930,
+    "sha256": "7a5a332fd28d02acacb2e76a0bf0352d52f2481be4c82d6359f0a52f981dd819",
+    "path": "reports/coordinator-20261101-feedback73/cache02/body-ammo.fvrprop",
+    "added_parts": 24,
+    "parts": 306
+  },
   "preserved": {
-    "records": 264,
     "cache_record_bytes_exact": true,
     "catalog_row_bytes_exact": true,
-    "prior_cache_sha256": "7e3d16f5bcc0af74ff7ab3afe2740197b1b4b9ac18dc9f61416325861af8f49e",
-    "prior_catalog_sha256": "cce44a5b1506afd3fc8f82496a06b5aa1fa8a9fe956c3b5d8d2525c4dfafecff",
-    "prior_semantic_sha256": "91d00ab05df00306305bfad49be129675ade29d2bfadad42081f282e118237b4"
-  },
-  "source": "reports/coordinator-20261101-feedback72/underbarrel-body-cache.json",
-  "native_headset_acceptance": false,
-  "schema": "fvr.private-measured-underbarrel-cache.v1",
-  "cache": {
-    "path": "reports/coordinator-20261101-feedback72/cache/body-ammo.fvrprop",
-    "sha256": "b887c502f38bd8bf3dee122691e11b11c8bb885e9c818972dc37cc36862833f0",
-    "bytes": 61247870,
-    "parts": 282,
-    "added_parts": 18,
-    "added_bytes": 463458
+    "prior_catalog_sha256": "45ba85e0e92a5ab6683e9322d8c2f835dcfcdb6afb701478394e57d1f2ef1519",
+    "records": 282,
+    "prior_cache_sha256": "b887c502f38bd8bf3dee122691e11b11c8bb885e9c818972dc37cc36862833f0"
   },
   "redistributable": false
 }

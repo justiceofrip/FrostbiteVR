@@ -1,5 +1,6 @@
 #include "Test.h"
 #include <iostream>
+#include <sstream>
 #include "Bc2PhysicalFixedContainer.h"
 #include "Bc2BodyAmmo.h"
 using namespace fvr::bc2;using namespace fvr::interaction;
@@ -18,6 +19,7 @@ struct Fixture {
     HandInteractionOwner owner{(std::uint64_t(0x30000)<<32)|0x20000,1,71,3};
     const FixedContainerEquipmentProfile* equipment;
     Bc2PhysicalFixedContainerSample sample{};Bc2PhysicalFixedContainerResult result{};
+    Bc2FixedContainerObservation observation{};bool observe=false;
     std::optional<AmmoResourceRequest> submitted;std::optional<FixedContainerGate> gate;
     std::optional<Bc2FixedContainerRawContact> previousRaw;
     AmmunitionCounts counts{};bool delayedRaw=false;
@@ -46,6 +48,7 @@ struct Fixture {
         AmmunitionSnapshot ammunition{binding.context,sequence,now,now+100000000,counts,true};
         service.Select(binding,native,ammunition,now);
         sample={};sample.nativeOwner=native.owner;sample.input={owner,sequence,now,now+100000000,now,true,{true,true},{priorGrip&&!grip,false}};
+        sample.observation=observe?&observation:nullptr;
         sample.weapon={binding.context.resource.weapon,owner.equipGeneration};sample.equipment=equipment;
         sample.configurationPath=equipment->configurationPath;sample.mesh=equipment->mesh;sample.rigFingerprint=equipment->rigFingerprint;
         sample.geometrySequence=sequence;sample.trackingEpoch=owner.space;sample.bodyFromHand=Identity();
@@ -125,12 +128,14 @@ int ClipQueuesOneSharedCommand(){
     }return 0;
 }
 int PriorRendererFrameQueuesAndCompletesOnceAfterReequip(){
-    Fixture f(1);f.delayedRaw=true;const auto& motion=f.equipment->interaction.geometry[2].motion;
+    Fixture f(1);f.delayedRaw=true;f.observe=true;const auto& motion=f.equipment->interaction.geometry[2].motion;
     f.Send(At(motion,0),false);f.Send(At(motion,0),true,true);f.Send(At(motion,0),true,true);
     CHECK(f.result.ammoOwnsHand);
     f.Send(At(motion,0),true);for(unsigned n=1;n<=30;++n)f.Send(At(motion,n/30.),true);
     for(unsigned n=0;n<8;++n)f.Send(At(motion,1),true);f.Send(At(motion,1),false);
     CHECK(f.calls==1&&f.submitted&&f.submitted->preparedCommand&&f.result.tracking.pending);
+    CHECK(f.observation.pendingRequest==f.submitted&&!f.observation.lastCompletion);
+    const auto pendingSupply=f.observation.supply;
     CHECK(f.sample.raw.input.observedNs<f.service.View()->snapshot.observedNs);
     const auto request=*f.submitted;const auto command=*request.preparedCommand;
     CHECK(command.admissionDeadlineNs==f.sample.raw.input.deadlineNs);
@@ -154,8 +159,54 @@ int PriorRendererFrameQueuesAndCompletesOnceAfterReequip(){
     f.Send(At(motion,1),false); // New counts/context, old raw context: consume receipt without pose authority.
     CHECK(f.result.tracking.step==FixedContainerStep::Complete&&!f.result.tracking.pending);
     CHECK(!f.result.blocksFire&&!f.result.ammoOwnsHand&&f.calls==1&&nativeCalls==1);
+    CHECK(f.observation.lastCompletion&&!f.observation.pendingRequest);
+    const auto completion=*f.observation.lastCompletion;
+    CHECK(completion.supply==pendingSupply&&completion.lifetime==f.result.tracking.lifetime);
+    CHECK(completion.outcome.request==request&&completion.outcome.receipt&&completion.outcome.nativeDispatched);
+    CHECK(completion.outcome.state==AmmoResourceRequestState::Completed&&completion.outcome.receipt->command==command);
+    CHECK(completion.postSnapshot.context==f.binding.context&&completion.postSnapshot.context!=command.context);
+    CHECK(completion.postSnapshot.sequence==f.sequence&&completion.postSnapshot.counts==command.after&&completion.acceptedNs==f.now);
     f.Send(At(motion,1),false);CHECK(f.calls==1&&nativeCalls==1);
+    CHECK(f.observation.lastCompletion&&f.observation.lastCompletion->outcome.request==request);
+    CHECK(f.observation.lastCompletion->outcome.receipt==completion.outcome.receipt&&
+        f.observation.lastCompletion->postSnapshot.sequence==completion.postSnapshot.sequence&&
+        f.observation.lastCompletion->postSnapshot.deadlineNs==completion.postSnapshot.deadlineNs&&
+        f.observation.lastCompletion->acceptedNs==completion.acceptedNs);
     CHECK(f.service.View()->snapshot.counts==command.after);return 0;
+}
+int ObservationPreservesSourceLeasesAndRejectsWrongIdentity(){
+    Fixture f(1);const auto& motion=f.equipment->interaction.geometry[2].motion;
+    f.observation.owner.weapon=123;f.Send(At(motion,0),false);
+    CHECK(f.observation.owner.weapon==123); // The normal path never fills diagnostics.
+    f.observe=true;f.delayedRaw=true;f.Send(At(motion,0),false);
+    const auto captured=f.observation;
+    CHECK(captured.raw.input.sequence<captured.input.sequence&&captured.raw.input.deadlineNs<captured.input.deadlineNs);
+    CHECK(FixedContainerObservationJoined(captured,f.native.owner,f.sample.input,f.equipment,f.now));
+    auto processed=f.sample.input;processed.nowNs+=2000000;
+    CHECK(FixedContainerObservationJoined(captured,f.native.owner,processed,f.equipment,processed.nowNs));
+    CHECK(captured.input.observedNs==processed.observedNs&&captured.input.deadlineNs==processed.deadlineNs);
+    auto restamped=processed;++restamped.deadlineNs;
+    CHECK(!FixedContainerObservationJoined(captured,f.native.owner,restamped,f.equipment,processed.nowNs));
+    processed.nowNs=captured.input.nowNs-1;
+    CHECK(!FixedContainerObservationJoined(captured,f.native.owner,processed,f.equipment,f.now));
+    auto wrongOwner=f.native.owner;++wrongOwner.weapon;
+    CHECK(!FixedContainerObservationJoined(captured,wrongOwner,f.sample.input,f.equipment,f.now));
+    auto wrongInput=f.sample.input;++wrongInput.sequence;
+    CHECK(!FixedContainerObservationJoined(captured,f.native.owner,wrongInput,f.equipment,f.now));
+    CHECK(!FixedContainerObservationJoined(captured,f.native.owner,f.sample.input,&generated::FixedContainerEquipment[2],f.now));
+    CHECK(!FixedContainerObservationJoined(captured,f.native.owner,f.sample.input,f.equipment,captured.input.deadlineNs));
+    std::ostringstream staleRaw;
+    WriteFixedContainerObservation(staleRaw,&captured,f.native.owner,f.sample.input,captured.raw.rig,f.equipment,captured.raw.input.deadlineNs);
+    CHECK(staleRaw.str().find("\"raw\":{\"valid\":true,\"current\":false")!=std::string::npos);
+    CHECK(captured.raw.input.deadlineNs==f.observation.raw.input.deadlineNs);
+    std::ostringstream wrong;
+    WriteFixedContainerObservation(wrong,&captured,wrongOwner,f.sample.input,captured.raw.rig,f.equipment,f.now);
+    CHECK(wrong.str().find("\"available\":false")!=std::string::npos&&wrong.str().find("\"profile\":")==std::string::npos);
+    ++f.counts.loaded;--f.counts.reserve;f.Send(At(motion,0),false);
+    CHECK(f.observation.view&&f.observation.view->snapshot.counts==f.counts);
+    CHECK(!f.observation.lastCompletion&&!f.observation.pendingRequest&&f.calls==0); // Counts cannot mint a receipt.
+    CHECK(!FixedContainerObservationJoined(captured,f.native.owner,f.sample.input,f.equipment,f.now));
+    return 0;
 }
 int PartialCylinderMigrationReacquiresAtRetainedContact(){
     Fixture f;const auto& motion=f.equipment->interaction.geometry[0].motion;
@@ -176,11 +227,31 @@ int PartialCylinderMigrationReacquiresAtRetainedContact(){
         {before.hand->token.contact,f.sequence,f.sample.input.deadlineNs,true}).accepted);
     CHECK(f.calls==0&&f.service.View()->snapshot.counts==f.counts);return 0;
 }
+int LinearPartsFollowTheirOwnMeasuredTravel(){
+    unsigned independent=0;
+    for(const auto& e:generated::UnderbarrelFixedContainerEquipment){
+        const auto& motion=e.interaction.geometry[0].motion;
+        if(motion.kind!=FeedMotionKind::Linear)continue;
+        Fixture f(&e,0,1);f.Send(At(motion,0),false);f.Send(At(motion,0),true);
+        for(unsigned n=1;n<=10;++n)f.Send(At(motion,n/20.),true);
+        CHECK(f.result.mechanismOwnsHand&&f.result.tracking.step==FixedContainerStep::Open);
+        const auto barrelDelta=Multiply(feed_interaction_detail::Inverse(At(motion,0)),At(motion,.5));
+        for(unsigned n=0;n<e.parts.size();++n)if(e.parts[n].coupledOpening){
+            const auto& part=e.parts[n];
+            const auto expected=reload_insertion_detail::BlendRigid(part.weaponFromStepStart[0],part.weaponFromStepEnd[0],.5);
+            const auto commonDelta=Multiply(part.weaponFromStepStart[0],barrelDelta);
+            if(feed_interaction_detail::Distance(expected,commonDelta)>.0001)++independent;
+            CHECK(feed_interaction_detail::Distance(f.result.tracking.parts[n],expected)<.00001);
+            CHECK(feed_interaction_detail::Angle(f.result.tracking.parts[n],expected)<.001);
+        }
+    }
+    CHECK(independent>0);return 0;
+}
 int MeasuredUnderbarrelLoadsOneRoundAndCloses(){
     for(const auto& e:generated::UnderbarrelFixedContainerEquipment){
         const bool breech=e.interaction.kind==FixedContainerKind::SingleRoundBreech;
         CHECK(breech||e.interaction.kind==FixedContainerKind::SingleRoundMuzzle);
-        Fixture f(&e,0,1);const auto& insertion=e.interaction.geometry[2].motion;
+        Fixture f(&e,0,1);f.observe=true;const auto& insertion=e.interaction.geometry[2].motion;
         f.Send(At(e.interaction.geometry[breech?0:2].motion,0),false);
         CHECK(f.result.bodyAmmo&&f.result.bodyVisual&&f.result.bodyAmmo->equipment==&e);
         BodyAmmoTracking body;body.fixed=f.result.bodyAmmo;body.visual=*f.result.bodyVisual;
@@ -209,9 +280,18 @@ int MeasuredUnderbarrelLoadsOneRoundAndCloses(){
         f.counts=command.after;f.Send(At(insertion,1),false);
         CHECK(!f.result.tracking.pending&&!f.result.bodyAmmo);
         if(breech){CHECK(f.result.tracking.step==FixedContainerStep::Close&&f.result.blocksFire);f.Hinge(3);}
+        if(f.result.tracking.step!=FixedContainerStep::Complete||f.result.blocksFire)
+            std::cerr<<"Measured launcher close: "<<e.configurationPath<<" step="<<unsigned(f.result.tracking.step)
+                <<" status="<<unsigned(f.result.status)<<" blocked="<<f.result.blocksFire<<'\n';
         CHECK(f.result.tracking.step==FixedContainerStep::Complete&&!f.result.blocksFire);
         CHECK(f.calls==1&&nativeCalls==1&&f.service.View()->snapshot.counts==command.after);
         CHECK(command.before.loaded+command.before.reserve==command.after.loaded+command.after.reserve);
+        CHECK(f.observation.lastCompletion&&f.observation.lastCompletion->outcome.request==request);
+        CHECK(f.observation.lastCompletion->postSnapshot.counts==command.after);
+        std::ostringstream json;WriteFixedContainerObservation(json,&f.observation,f.native.owner,f.sample.input,f.sample.raw.rig,&e,f.now);
+        CHECK(json.str().find("bc2vr.fixed-container-observation.v1")!=std::string::npos);
+        CHECK(json.str().find("\"authorityVerified\":true,\"copiesVerified\":true")!=std::string::npos);
+        CHECK(json.str().size()<20000); // Leave room for the shared 32 KiB snapshot envelope.
 
         // Opening an unfired breech preserves its live round and cannot draw
         // another round. The muzzle family likewise cannot top up a full tube.
@@ -226,4 +306,4 @@ int MeasuredUnderbarrelLoadsOneRoundAndCloses(){
 }
 int main(){return ExactSelectorsAndSupply()||GateBeforePhysicalAndExactOwner()||CylinderFlickReturnAndClose()||ClipQueuesOneSharedCommand()||
     PriorRendererFrameQueuesAndCompletesOnceAfterReequip()||PartialCylinderMigrationReacquiresAtRetainedContact()||
-    MeasuredUnderbarrelLoadsOneRoundAndCloses();}
+    ObservationPreservesSourceLeasesAndRejectsWrongIdentity()||LinearPartsFollowTheirOwnMeasuredTravel()||MeasuredUnderbarrelLoadsOneRoundAndCloses();}

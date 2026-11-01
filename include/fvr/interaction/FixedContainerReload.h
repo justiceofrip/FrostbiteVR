@@ -204,7 +204,7 @@ public:
         if(step_==FixedContainerStep::Insert&&(profile_.kind==FixedContainerKind::Cylinder||
             profile_.kind==FixedContainerKind::SingleRoundBreech)&&
            (x.finishLoading||a.counts.loaded==a.counts.capacity||a.counts.reserve==0)){
-            step_=FixedContainerStep::Close;out.step=step_;return stop(FixedContainerStatus::NeedNeutral);
+            step_=FixedContainerStep::Close;out.step=step_;RetireCompletedMotion();return stop(FixedContainerStatus::NeedNeutral);
         }
         if(step_==FixedContainerStep::Insert&&(a.counts.loaded==a.counts.capacity||a.counts.reserve==0))
             return stop(FixedContainerStatus::NoAmmunition);
@@ -237,7 +237,7 @@ public:
             FixedContainerStep::Insert:FixedContainerStep::EjectSpent;
         else if(step_==FixedContainerStep::EjectSpent)step_=FixedContainerStep::Insert;
         else if(step_==FixedContainerStep::Close)step_=FixedContainerStep::Complete;
-        Suspend();out.step=step_;out.status=FixedContainerStatus::PhysicalStep;return out;
+        RetireCompletedMotion();out.step=step_;out.status=FixedContainerStatus::PhysicalStep;return out;
     }
     [[nodiscard]] bool Complete(const FixedContainerRequest& request,const AmmunitionReceipt& receipt,
         const AmmunitionSnapshot& post,std::int64_t now)noexcept {
@@ -254,7 +254,7 @@ public:
         const auto& current=ledger_.Snapshot();
         if(!(current.context==post.context&&current.sequence==post.sequence&&current.observedNs==post.observedNs&&
              current.deadlineNs==post.deadlineNs&&current.counts==post.counts)&&!ledger_.Bind(post,now))return false;
-        lastRequest_=request;lastReceipt_=receipt;pending_.reset();Suspend();
+        lastRequest_=request;lastReceipt_=receipt;pending_.reset();RetireCompletedMotion();
         lastSnapshot_=post.sequence;lastNow_=now;
         if(profile_.kind==FixedContainerKind::EnBlocClip||profile_.kind==FixedContainerKind::SingleRoundMuzzle)
             step_=FixedContainerStep::Complete;
@@ -281,7 +281,7 @@ public:
         // Ready/no pending makes Complete an exact idempotent service-receipt
         // check; even plausible final counts and a fabricated receipt fail.
         if(!ledger_.Complete(receipt,now))return false;
-        lastRequest_=request;lastReceipt_=receipt;pending_.reset();Suspend();
+        lastRequest_=request;lastReceipt_=receipt;pending_.reset();RetireCompletedMotion();
         lastSnapshot_=current.sequence;lastNow_=now;
         if(profile_.kind==FixedContainerKind::EnBlocClip||profile_.kind==FixedContainerKind::SingleRoundMuzzle)
             step_=FixedContainerStep::Complete;
@@ -308,6 +308,12 @@ private:
             hand.actor&&hand.actorGeneration==context_.resource.actorGeneration&&hand.equipGeneration&&hand.space==context_.space&&
             feed_mechanism_detail::Key(mechanism_)&&feed_mechanism_detail::Key(binding_)&&lifetime_&&
             feed_mechanism_detail::Supply(supply_,profile_.kind==FixedContainerKind::EnBlocClip);
+    }
+    void RetireCompletedMotion()noexcept {
+        // A committed step has consumed its held object/contact. Its recovery
+        // pose must not become the next operation's contact. Ordinary Suspend
+        // still retains unfinished motion, including pending native transfer.
+        Suspend();gesture_.recovery_.reset();
     }
     bool Snapshot(const AmmunitionSnapshot& a,std::int64_t now)const noexcept {
         return SnapshotFor(a,context_,now);

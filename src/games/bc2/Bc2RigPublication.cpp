@@ -136,7 +136,8 @@ struct ShotPublication {WeaponShotFrame frame;ShotGuard identity;std::optional<A
     std::shared_ptr<const Bc2PhysicalFeedPresentation> feed;
     std::optional<WeaponModeCommand> sightMode;std::uint64_t sightModeObservedMs=0;
     std::shared_ptr<const ShellPumpObservation> shellPumpObservation;
-    std::shared_ptr<const WeaponModeObservation> sightResolution;};
+    std::shared_ptr<const WeaponModeObservation> sightResolution;
+    std::shared_ptr<const Bc2FixedContainerObservation> fixedContainerObservation;};
 std::atomic<std::int64_t> shellPumpObservationUntil=0;
 std::atomic<std::shared_ptr<const ShotGuard>> shotGuard;
 std::atomic<std::shared_ptr<const ShotPublication>> shotPublication;
@@ -2443,7 +2444,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
         const ShotGuard identity{input.soldier,input.weak,input.weapon,input.ownerGeneration,input.input.spaceGeneration,input.input.generation,input.deadline,true,targets->tracked[0],0,input.weaponActionsBlocked,input.equipmentGeneration,input.nativeEquipment};
         preparedShot=std::make_shared<const ShotPublication>(ShotPublication{*pose->shot,identity,authored.binding,measuredSupport,authoredAim,sightSelection,
             input.input,input.selectedMeshes,handRoleReady&&handBinding?std::optional<math::Matrix4>{handBinding->wristToGrip}:std::nullopt,input.feed,
-            input.sightMode,input.sightModeObservedMs,input.shellPumpObservation,input.sightResolution});
+            input.sightMode,input.sightModeObservedMs,input.shellPumpObservation,input.sightResolution,input.fixedContainerObservation});
     }
     if(const auto requested=visibilityGuard.load(std::memory_order_acquire);requested&&requested->enabled&&
         requested->input.sequence==input.input.generation&&requested->nativeOwner.soldier==input.soldier&&requested->nativeOwner.weak==input.weak&&
@@ -2632,6 +2633,9 @@ bool ShellPumpObservationRequested(std::int64_t nowNs)noexcept {
     return nowNs>0&&nowNs<shellPumpObservationUntil.load(std::memory_order_relaxed);
 }
 bool WeaponModeObservationRequested(std::int64_t nowNs)noexcept {
+    return ShellPumpObservationRequested(nowNs);
+}
+bool FixedContainerObservationRequested(std::int64_t nowNs)noexcept {
     return ShellPumpObservationRequested(nowNs);
 }
 void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
@@ -2844,6 +2848,14 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     auto until=std::min({ReloadNanos(frame->deadline),m.inputEvidence.deadlineNs,selected->deadlineNs});
     if(feed)until=std::min(until,feed->input.deadlineNs);
     if(sight.valid)until=std::min(until,ReloadNanos(sight.deadline));
+    const auto* fixedEquipment=FindFixedContainerEquipment(configuration,aim->meshPath,m.rigFingerprint);
+    const auto& fixedObservation=source->fixedContainerObservation;
+    if(fixedObservation&&FixedContainerObservationJoined(*fixedObservation,m.owner,m.inputEvidence,fixedEquipment,now)){
+        const auto& o=*fixedObservation;
+        if(o.view&&AmmoResourceViewFresh(*o.view,now))
+            until=std::min({until,o.view->binding.deadlineNs,o.view->snapshot.deadlineNs});
+        if(o.raw.valid&&feed_presentation_detail::Window(o.raw.input,now))until=std::min(until,o.raw.input.deadlineNs);
+    }
     std::ostringstream json;json.imbue(std::locale::classic());json<<std::setprecision(9)<<std::boolalpha;
     const auto text=[&](std::string_view s){json<<'"';for(const unsigned char c:s){
         if(c=='"'||c=='\\')json<<'\\'<<char(c);else if(c<32||c>=127){constexpr char hex[]="0123456789abcdef";json<<"\\u00"<<hex[c>>4]<<hex[c&15];}else json<<char(c);
@@ -2969,6 +2981,8 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
         json<<",\"originalWeaponWorldMeters\":";matrix(feed->originalWeaponWorldMeters);json<<",\"mechanismWristWorldMeters\":";
         if(feed->mechanismWristWorldMeters)matrix(*feed->mechanismWristWorldMeters);else json<<"null";json<<'}';
     }
+    json<<",\"fixedContainer\":";
+    WriteFixedContainerObservation(json,fixedObservation.get(),m.owner,m.inputEvidence,m.rig,fixedEquipment,now);
     json<<",\"shellPump\":";
     const auto* pumpEquipment=FindShotgunEquipment(configuration,identity.equipment.Asset(),aim->meshPath,m.rigFingerprint);
     const auto& observation=source->shellPumpObservation;

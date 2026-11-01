@@ -13,7 +13,8 @@ import bc2_underbarrel_reload_geometry as underbarrel
 
 OUTPUT = ROOT / 'profiles/weapons71-underbarrel-reload'
 FAMILY = OUTPUT / 'xm8'
-FAMILIES = [OUTPUT / name for name in ('xm8', 'an94', 'm16')]
+FAMILY_COUNTS = {'xm8': 11, 'an94': 11, 'm16': 18, 'aek': 11, 'hk416': 9, 'f2000': 11, 'aug': 9}
+FAMILIES = [OUTPUT / name for name in FAMILY_COUNTS]
 
 
 class UnderbarrelReloadGeometry(unittest.TestCase):
@@ -213,8 +214,8 @@ class UnderbarrelReloadGeometry(unittest.TestCase):
 
     def test_artifacts_reproduce_without_reports_or_installed_assets(self):
         result = underbarrel.generate(FAMILIES, OUTPUT, verify=True)
-        self.assertEqual(result['families'], 3)
-        self.assertEqual(result['configurations'], 40)
+        self.assertEqual(result['families'], 7)
+        self.assertEqual(result['configurations'], 80)
         self.assertFalse(result['runtime_registered'])
         for family in FAMILIES:
             for receipt in underbarrel.fixed.load(family / 'source.json')['provenance']:
@@ -228,9 +229,9 @@ class UnderbarrelReloadGeometry(unittest.TestCase):
         measured = underbarrel.fixed.load(OUTPUT / name / 'measurements.json')
         return source, measured, underbarrel.model_profile(source, measured)
 
-    def test_three_exact_families_keep_typed_ammunition_names(self):
+    def test_seven_exact_families_keep_typed_ammunition_names(self):
         keys = []
-        for name, count in (('xm8', 11), ('an94', 11), ('m16', 18)):
+        for name, count in FAMILY_COUNTS.items():
             source, measured, model = self.family(name)
             rows = {r['configuration']: r for r in source['configurations']}
             self.assertEqual(len(model['selectors']), count)
@@ -243,6 +244,9 @@ class UnderbarrelReloadGeometry(unittest.TestCase):
                 keys.append((selector['configurationPath'], selector['mesh'], selector['rigFingerprint']))
             self.assertEqual(measured['coordinates'], underbarrel.coordinate_tuple(source['chain']))
         self.assertEqual(len(keys), len(set(keys)))
+        enrollment = underbarrel.fixed.load(ROOT / 'profiles/weapons54-underbarrel/enrollment.json')
+        self.assertEqual({key[0] for key in keys}, {row['configuration'] for row in enrollment['configurations']
+                         if row['asset'] in {'40mmgl', '40mmsg', '40mmsmk'}})
 
     def test_an94_fixed_muzzle_has_only_insertion_and_no_fake_opening(self):
         source, measured, model = self.family('an94')
@@ -326,6 +330,164 @@ class UnderbarrelReloadGeometry(unittest.TestCase):
                     del measured['supply']['part_in_root']['jntWpn_17']
                 with self.subTest(name=name, change=change), self.assertRaises(ValueError):
                     underbarrel.model_profile(source, measured)
+
+    def test_original_forty_model_rows_and_transforms_are_preserved(self):
+        models = {model['label']: model for unused, measured, model in
+                  (self.family(name) for name in ('xm8', 'an94', 'm16'))}
+        self.assertEqual(underbarrel.digest(models),
+                         'dae297e0cf97ecb99c8effeb48a51ee9d6d38090b4031cee25fef09c3e4daa32')
+
+    def test_aek_fixed_muzzle_uses_distinct_12_13_geometry(self):
+        source, measured, model = self.family('aek')
+        self.assertEqual(model['interaction']['kind'], 'SingleRoundMuzzle')
+        self.assertEqual(set(model['interaction']['geometry']), {'Insert'})
+        self.assertEqual(set(model['grasps']), {'Insert'})
+        self.assertEqual(measured['mechanism']['bone'], 'jntWpn_1')
+        self.assertEqual(measured['mechanism']['closed'], measured['mechanism']['open'])
+        self.assertEqual([(p['bone'], p['bone_index']) for p in model['parts']],
+                         [('jntWpn_12', 38), ('jntWpn_13', 100)])
+        self.assertEqual([p['visible_triangles'] for p in measured['parts'].values()], [140, 200])
+        self.assertTrue(all(p['supplyPart'] and not p['coupledOpening'] for p in model['parts']))
+        self.assertEqual(measured['bore']['inward_part'], [0, 0, 1])
+        self.assertEqual(model['grasps']['Insert']['sample'], 30)
+        self.assertEqual(measured['supply']['seat_sample'], 'HandsIKPose')
+        self.assertEqual(measured['supply']['part_in_root']['jntWpn_13'][14], -.04886011)
+        self.assertEqual(measured['supply']['destination'][14], -.69611317)
+
+    def test_report73_sliders_keep_distinct_bones_samples_and_endpoint_travel(self):
+        for name, bone, index, supply_sample, seat_sample, travel in (
+                ('hk416', 'jntWpn_9', 34, 30, 57, .10615205),
+                ('f2000', 'jntWpn_5', 42, 24, 'HandsIKPose', .11232941),
+                ('aug', 'jntWpn_12', 38, 27, 47, .10690527)):
+            source, measured, model = self.family(name)
+            with self.subTest(name=name):
+                self.assertEqual(measured['mechanism']['bone'], bone)
+                self.assertEqual(source['skeleton_bones'][bone]['index'], index)
+                self.assertEqual(model['interaction']['kind'], 'SingleRoundBreech')
+                self.assertEqual(set(model['interaction']['geometry']), {'Open', 'Insert', 'Close'})
+                self.assertEqual(model['grasps']['Open'], model['grasps']['Close'])
+                self.assertEqual(model['grasps']['Open']['sample'], 5)
+                self.assertEqual(model['grasps']['Insert']['sample'], supply_sample)
+                self.assertEqual(measured['supply']['seat_sample'], seat_sample)
+                self.assertEqual(measured['mechanism']['closed_sample'], 0)
+                for step, end in (('Open', 'open'), ('Close', 'closed')):
+                    motion = model['interaction']['geometry'][step]['motion']
+                    self.assertEqual(motion['kind'], 'Linear')
+                    self.assertAlmostEqual(motion['travel'], travel, places=8)
+                    actual = underbarrel.mag.multiply(underbarrel.fixed.along(
+                        motion['motionFromContact'], 'Linear', motion['travel']), motion['weaponFromMotion'])
+                    expected = underbarrel.mag.multiply(model['grasps'][step]['part_from_wrist'],
+                                                        measured['mechanism'][end])
+                    self.assert_matrix_close(actual, expected)
+
+    def test_report73_supply_bone_joins_and_same_frame_handshapes(self):
+        for name in underbarrel.REPORT73_FAMILIES:
+            source, measured, model = self.family(name)
+            parts = {part['bone']: part for part in model['parts']}
+            root_name, child_name = measured['supply']['parts']
+            root, child = parts[root_name], parts[child_name]
+            self.assertEqual((root['bone_index'], child['bone_index']),
+                             (100, 114) if name == 'aug' else (38, 100))
+            for key in ('weaponFromStepStart', 'weaponFromStepEnd'):
+                for root_frame, child_frame in zip(root[key], child[key]):
+                    self.assert_matrix_close(underbarrel.mag.multiply(child['supplyFromPart'], root_frame), child_frame)
+            for step, grasp in model['grasps'].items():
+                section = 'supply' if step == 'Insert' else 'mechanism'
+                self.assertEqual(len(grasp['wrist_from_fingers']), 15)
+                for bone, matrix in grasp['wrist_from_fingers'].items():
+                    self.assert_matrix_close(underbarrel.mag.multiply(matrix, grasp['part_from_wrist']),
+                                             measured[section]['grasp']['fingers_to_part'][bone])
+                self.assertEqual(model['interaction']['geometry'][step]['contact']['radiusMeters'], .035)
+            self.assertEqual(model['interaction']['geometry']['Insert']['motion']['kind'], 'FreePlacement')
+            self.assertFalse(source['policy']['rail_enforced'])
+            self.assertFalse(source['policy']['delete_live_ammunition'])
+            self.assertTrue(source['policy']['spent_case_visual_removal_only'])
+
+    def test_aug_additional_render_part_preserves_independent_endpoints(self):
+        source, measured, model = self.family('aug')
+        extra = measured['mechanism']['render_parts']['jntWpn_9']
+        part = next(p for p in model['parts'] if p['bone'] == 'jntWpn_9')
+        self.assertEqual(part['bone_index'], 34)
+        self.assertFalse(part['supplyPart'])
+        self.assertTrue(part['coupledOpening'])
+        self.assertFalse(extra['semantic_role_proved'])
+        self.assertEqual(set(model['grasps']), {'Open', 'Insert', 'Close'})
+        self.assertEqual(part['weaponFromClosed'], extra['closed'])
+        self.assertEqual(part['weaponFromOpen'], extra['open'])
+        self.assertEqual(part['weaponFromStepStart'], [extra['closed'], extra['open'], extra['open'], extra['open']])
+        self.assertEqual(part['weaponFromStepEnd'], [extra['open'], extra['open'], extra['open'], extra['closed']])
+        self.assertAlmostEqual(extra['closed'][14] - extra['open'][14], .10615192, places=8)
+        barrel_delta = underbarrel.mag.multiply(underbarrel.mag.inverse_rigid(measured['mechanism']['closed']),
+                                               measured['mechanism']['open'])
+        copied = underbarrel.mag.multiply(extra['closed'], barrel_delta)
+        self.assertGreater(underbarrel.mag.norm(underbarrel.mag.sub(copied[12:15], extra['open'][12:15])), .0007)
+
+    def test_report73_measurements_are_pinned_to_their_exact_source(self):
+        coordinates = []
+        for name in underbarrel.REPORT73_FAMILIES:
+            source, measured, unused = self.family(name)
+            self.assertEqual(source['measurements_sha256'], underbarrel.digest(measured))
+            coordinates.append(tuple(source['chain'][key] for key in ('clip_sha256', 'mesh_sha256', 'lod_sha256')))
+            measured['supply']['source'][12] += .001
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, 'geometry pin'):
+                underbarrel.model_profile(source, measured)
+        self.assertEqual(len(set(coordinates)), 4)
+
+    def test_report73_rejects_crossed_bones_even_after_measurement_repin(self):
+        for name in underbarrel.REPORT73_FAMILIES:
+            for change in ('bone_index', 'parent', 'missing_finger', 'seat', 'ammunition_part'):
+                source, measured, unused = self.family(name)
+                root = measured['supply']['root']
+                if change == 'bone_index':
+                    measured['parts'][root]['bone_index'] = 34
+                elif change == 'parent':
+                    measured['parts'][root]['parent'] = 'LeftHand'
+                elif change == 'missing_finger':
+                    del measured['supply']['grasp']['fingers_to_part']['LeftHandThumb3']
+                elif change == 'seat':
+                    measured['supply']['destination'][12] += .001
+                else:
+                    measured['supply']['parts'].append(measured['mechanism']['bone'])
+                source['measurements_sha256'] = underbarrel.digest(measured)
+                with self.subTest(name=name, change=change), self.assertRaises(ValueError):
+                    underbarrel.model_profile(source, measured)
+
+    def test_report73_nonrepresentative_configuration_tuples_remain_exact(self):
+        for name in underbarrel.REPORT73_FAMILIES:
+            for change in ('tree', 'mesh', 'skeleton', 'archive_bytes', 'missing_variant'):
+                source, measured, unused = self.family(name)
+                row = source['configurations'][-1]
+                state = row['states'][0]
+                if change == 'tree':
+                    state['tree']['sha256'] = '0' * 64
+                elif change == 'mesh':
+                    state['meshes'][0] = 'objects/weapons/handheld/wrong/wrong/00000000-0000-0000-0000-000000000000'
+                elif change == 'skeleton':
+                    state['roles']['handsikpose']['skeleton_reference'] += '/wrong'
+                elif change == 'archive_bytes':
+                    source['variants'][-1]['mesh_sha256'] = '0' * 64
+                else:
+                    source['variants'].pop()
+                if change != 'missing_variant':
+                    self.repin(source)
+                with self.subTest(name=name, change=change), self.assertRaises(ValueError):
+                    underbarrel.model_profile(source, measured)
+
+    def test_aug_extra_part_requires_measured_render_only_slider(self):
+        for change in ('missing_part', 'semantic_role', 'rotation', 'unbounded_travel'):
+            source, measured, unused = self.family('aug')
+            extra = measured['mechanism']['render_parts']['jntWpn_9']
+            if change == 'missing_part':
+                del measured['parts']['jntWpn_9']
+            elif change == 'semantic_role':
+                extra['semantic_role_proved'] = True
+            elif change == 'rotation':
+                extra['open'][0] = -1
+            else:
+                extra['open'][14] -= 2
+            source['measurements_sha256'] = underbarrel.digest(measured)
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                underbarrel.model_profile(source, measured)
 
 
 if __name__ == '__main__':

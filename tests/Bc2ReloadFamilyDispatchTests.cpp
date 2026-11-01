@@ -196,7 +196,7 @@ int InputScopeAndStepUseExactFamilyProof(){
             CHECK(!guard.requested&&f.originalCalls==1&&f.context==before);
         }
     }
-    CHECK(measured==generated::UnderbarrelFixedContainerEquipment.size()&&readOnly>0);
+    CHECK(measured==generated::UnderbarrelFixedContainerEquipment.size()&&measured==UnderbarrelAmmoConfigs.size()&&readOnly==0);
     return 0;
 }
 int PersistentScopeAndExactCompletionContext(){

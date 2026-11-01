@@ -7,6 +7,7 @@
 #include "Bc2PhysicalReload.h"
 #include "Bc2BoltRuntimeGeometry.h"
 #include "Bc2FixedContainerPresentation.h"
+#include "Bc2PhysicalFixedContainer.h"
 #include "Bc2EquipmentIdentity.h"
 #include "Bc2MuzzleAdmission.h"
 #include "Bc2ReloadProducerBinding.h"
@@ -141,6 +142,7 @@ struct Tracking {
     std::shared_ptr<const Bc2PhysicalFeedPresentation> feed;
     std::shared_ptr<const Bc2PhysicalPistolSlidePresentation> pistolSlide;
     Bc2FixedContainerTracking fixedContainer{};
+    std::shared_ptr<const Bc2FixedContainerObservation> fixedContainerObservation;
     std::optional<BodyAmmoTracking> fixedBodyAmmo;
     std::optional<BodyAmmoTracking> feedBodyAmmo;
     interaction::InputFrame boltRawInput{}; // Before support-orientation guidance; same original generation.
@@ -316,6 +318,7 @@ void ReportLiveCounters(std::ostream&);
 // this diagnostic clock is never an input, native, contact or claim lease.
 bool ShellPumpObservationRequested(std::int64_t nowNs)noexcept;
 bool WeaponModeObservationRequested(std::int64_t nowNs)noexcept;
+bool FixedContainerObservationRequested(std::int64_t nowNs)noexcept;
 // A populated pump snapshot retains both shell and cycle receipts. Keep a
 // bounded margin for exact profile paths and native identity widths.
 inline constexpr std::size_t LiveMechanismSnapshotLimit=32768;

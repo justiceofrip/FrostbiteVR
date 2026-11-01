@@ -149,6 +149,7 @@ int SingleRoundCycleRequiresCloseAndRejectsDuplicateAndForeignAuthority(){
     Fixture f(FixedContainerKind::SingleRoundBreech,0,3);CHECK(!f.reload->BlocksFire());
     CHECK(f.Acquire()&&f.reload->BlocksFire());
     CHECK(f.Finish().step==Step::Insert&&f.reload->BlocksFire());
+    CHECK(!f.reload->RecoveryMotion());
     CHECK(f.Acquire());auto foreign=f.claim;++foreign.owner.actor;f.x.claim=foreign;
     CHECK(f.reload->Update(f.x,f.hands).status==Status::Suspended&&!f.reload->Pending());
     CHECK((f.ledger.Snapshot().counts==AmmunitionCounts{0,3,1}));
@@ -156,14 +157,17 @@ int SingleRoundCycleRequiresCloseAndRejectsDuplicateAndForeignAuthority(){
     CHECK(sent.dispatch->ammunition.operation==AmmunitionOperation::InsertRounds);
     CHECK((sent.dispatch->ammunition.after==AmmunitionCounts{1,2,1}));
     CHECK(f.reload->Step()==Step::Insert&&f.reload->BlocksFire());
+    CHECK(f.reload->RecoveryMotion());
     CHECK(!f.reload->Update(f.x,f.hands).dispatch&&!f.Run().dispatch);
     CHECK((f.ledger.Snapshot().counts==AmmunitionCounts{0,3,1}));
     auto foreignPost=f.x.ammunition;foreignPost.counts=sent.dispatch->ammunition.after;
     ++foreignPost.context.resource.weapon;
     CHECK(!f.reload->Complete(*sent.dispatch,f.Receipt(*sent.dispatch),foreignPost,f.x.input.nowNs));
     CHECK(f.reload->Pending()==sent.dispatch&&f.reload->BlocksFire());
+    CHECK(f.reload->RecoveryMotion());
     CHECK(f.Complete(*sent.dispatch));
     CHECK(f.reload->Step()==Step::Close&&f.reload->BlocksFire());
+    CHECK(!f.reload->RecoveryMotion());
     CHECK(f.reload->Complete(*sent.dispatch,f.Receipt(*sent.dispatch),f.x.ammunition,f.x.input.nowNs));
     CHECK(f.reload->Step()==Step::Close&&!f.Run().dispatch&&f.reload->BlocksFire());
     CHECK(f.Acquire()&&f.reload->BlocksFire());

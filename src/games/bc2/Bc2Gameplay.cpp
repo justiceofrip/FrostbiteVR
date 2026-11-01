@@ -2059,6 +2059,9 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     fireTrace.record.mapped=(out.held&interaction::Fire)!=0;
     Bc2PhysicalPistolSlideResult pistolSlideResult;
     Bc2PhysicalFixedContainerResult fixedResult;
+    std::optional<Bc2FixedContainerObservation> fixedContainerObservation;
+    if(physicalFixedContainer&&rigPublication::FixedContainerObservationRequested(handSample.nowNs))
+        fixedContainerObservation.emplace();
     Bc2BoltControllerContact boltContact;
     const bool pumpSelected=physicalPump&&(!ordinaryManualCycles||
         (ordinaryShotgunEquipment&&(ordinarySelectionReady||ordinaryTrackingRecovery)));
@@ -2077,6 +2080,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     const auto magazineProfile=magazineProfileId?FindMagazineEquipment(*magazineProfileId):nullptr;
     if(physicalFixedContainer){
         Bc2PhysicalFixedContainerSample sample;sample.nativeOwner=magazineOwner;sample.input=handSample;sample.weapon=handItem;
+        sample.observation=fixedContainerObservation?&*fixedContainerObservation:nullptr;
         sample.geometrySequence=input.generation;sample.trackingEpoch=input.spaceGeneration;
         sample.grip=input.hands[0].squeeze>=.7f;sample.gripPressed=sample.grip&&!fixedContainerGripHeld;
         if(input.hands[0].squeeze<=.35f)fixedContainerGripHeld=false;else if(sample.grip)fixedContainerGripHeld=true;
@@ -2747,6 +2751,10 @@ void __fastcall GatherHook(void* self,void*,void* cache){
                 if(observeFamily)sample.sightResolution=familyObservation;
                 sample.controllerOwner={owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
                 sample.controllerEvidence=handSample;
+                if(fixedContainerObservation){
+                    fixedContainerObservation->leftClaim=handOwnership.Current(interaction::InteractionHand::Left);
+                    try{sample.fixedContainerObservation=std::make_shared<const Bc2FixedContainerObservation>(std::move(*fixedContainerObservation));}catch(...){}
+                }
                 if(shellPumpObservation){auto& o=*shellPumpObservation;
                     o.owner=sample.controllerOwner;o.input=handSample;
                     if(physicalReload)o.shell=physicalReload->Observation(handSample.nowNs);

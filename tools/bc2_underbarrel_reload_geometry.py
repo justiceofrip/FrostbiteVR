@@ -2,6 +2,7 @@
 
 `prepare-xm8` reduces the retained report71 measurements to a portable input.
 `prepare-an94` and `prepare-m16` normalize the pinned report72 packets.
+`prepare-aek`, `prepare-hk416`, `prepare-f2000` and `prepare-aug` use report73.
 `generate --family DIR [--family DIR ...] --output DIR` accepts that same
 source/measurement contract for subsequent independently measured families.
 No installed resources are read. Insertion currently uses FreePlacement;
@@ -81,6 +82,9 @@ def validate_family(source, measured):
         require(source['schema'] == SOURCE_SCHEMA and measured['schema'] == MEASUREMENT_SCHEMA,
                 'Measured family schema')
         require(source['family'] == measured['family'] and source['family'], 'Measured family identity')
+        if 'measurements_sha256' in source:
+            require(sha(source['measurements_sha256']) == digest(measured),
+                    'Exact measured geometry pin mismatch')
         chain = source['chain']
         for key, kind in (('config', 'GameSharedResources.SoldierWeaponData'),
                           ('tree', 'Animation.SpecificAnimTreeData'), ('reload', 'Animation.AnimationAsset'),
@@ -159,7 +163,18 @@ def validate_family(source, measured):
         require(mechanism['motion_kind'] == p['opening_kind'] and
                 p['opening_kind'] in (('Fixed',) if fixed_tube else ('Hinge', 'Linear')),
                 'Explicit measured opening mechanism required')
-        mechanism_parts = set() if fixed_tube else {mechanism['bone']}
+        render_parts = mechanism.get('render_parts', {})
+        require(not render_parts or not fixed_tube, 'Fixed tube has no moving render assembly')
+        require(not (set(render_parts) & (set(supply['parts']) | {mechanism['bone']})),
+                'Moving render part cannot replace mechanism or ammunition')
+        for bone, part in render_parts.items():
+            require(bone in bones and part['motion_kind'] == 'Linear' and
+                    part['semantic_role_proved'] is False, 'Explicit render-only measured part required')
+            fixed.rigid(part['closed']); fixed.rigid(part['open'])
+            require(max(abs(part['closed'][k] - part['open'][k]) for k in range(12)) < 1e-6 and
+                    .06 < mag.norm(mag.sub(part['open'][12:15], part['closed'][12:15])) < 1,
+                    'Render-only measured slider endpoints required')
+        mechanism_parts = set() if fixed_tube else {mechanism['bone']} | set(render_parts)
         require(mechanism['bone'] in bones and supply['root'] in bones and supply['root'] in supply['parts'] and
                 mechanism['bone'] not in supply['parts'] and
                 set(measured['parts']) == mechanism_parts | set(supply['parts']) and
@@ -253,6 +268,9 @@ def model_profile(source, measured):
         seat = mag.multiply(offset, supply['seat_in_mechanism']) if is_supply else mag.identity()
         closed = mag.multiply(seat, mechanism['closed'])
         opened = mag.multiply(seat, mechanism['open'])
+        if bone in mechanism.get('render_parts', {}):
+            closed = mechanism['render_parts'][bone]['closed']
+            opened = mechanism['render_parts'][bone]['open']
         start = [closed, opened, opened, opened]
         end = [opened, opened, opened, closed]
         if is_supply:
@@ -592,10 +610,190 @@ def prepare_m16(reports, output, replace=False):
     return {'prepared_family': source['family'], 'configurations': len(names)}
 
 
+REPORT73_FAMILIES = {
+    'aek': ('AEK_GP30', 11, 83, 'retained_family_coordinates'),
+    'hk416': ('HK416', 9, 76, 'retained_nine'),
+    'f2000': ('F2000', 11, 78, 'retained_eleven'),
+    'aug': ('AUG_M203', 9, 81, 'retained_nine'),
+}
+
+
+def report73_inputs(reports, slug):
+    """Close every new typed join against the retained, reviewed byte tuples."""
+    family, count, samples, retained = REPORT73_FAMILIES[slug]
+    names = [slug + '-loading-geometry.json', slug + '-measurements.json']
+    if slug != 'aek':
+        names.append(slug + '-frames-aperture.json')
+    paths, values, group, configurations, rows, variants = report72_inputs(reports, family, names)
+    review, data = (values[name] for name in names[:2])
+    require(review['done'] and review['review_image_inspected'] and review['family'] == family and
+            review['configuration_count'] == len(configurations) == count,
+            'Exact report73 family review mismatch')
+    for name, expected in review['files'].items():
+        path = Path(reports) / name
+        require(pin(path)['sha256'] == expected, 'Reviewed report73 packet changed: ' + name)
+        paths[name] = path
+    for name, expected in {**data.get('source_pins', {}), **data.get('decoder_related_tool_pins', {})}.items():
+        path = ROOT / name.replace('\\', '/')
+        require(pin(path)['sha256'] == expected, 'Report73 source pin changed: ' + name)
+        paths[name] = path
+    if 'catalog_sha256' in data:
+        require(data['catalog_sha256'] == pin(paths['catalog'])['sha256'], 'Report73 catalog changed')
+    decoder = ROOT / 'tools/bc2_granny_curves.py'
+    require(pin(decoder)['sha256'] == data['decoder_sha256'] == review['pins']['decoder'],
+            'Report73 decoder changed')
+    paths['decoder'] = decoder
+    require(not data['failures'] and not data['clip_summary']['unsupported_tracks'] and
+            data['sample_count'] == len(data['samples']) == samples and
+            [s['i'] for s in data['samples']] == list(range(samples)) and
+            data[retained] == variants and len(variants) == count, 'Incomplete report73 measured coordinates')
+    joins = {r['configuration']: r for r in data['typed_chains']}
+    require(len(joins) == len(data['typed_chains']) == count and set(joins) == set(configurations),
+            'Incomplete exact report73 typed joins')
+    first = joins[configurations[0]]
+    chain = {key: normalized_typed(first[key]) for key in ('config', 'tree', 'reload', 'mesh', 'skeleton')}
+    archive = data['archives'][0] if slug == 'aek' else data['archive']
+    hashes = archive['hashes']
+    require(archive['archive'] == group['representative']['archive'] and
+            archive['index_sha256'] == group['representative']['index_sha256'] and
+            hashes['clip'] == group['reload']['sha256'] == review['pins']['reload'] and
+            hashes['mesh'] == group['mesh_sha256'] == review['pins']['mesh'] and
+            hashes['lod'] == group['lod0_sha256'] == review['pins']['lod0'] and
+            [hashes['pose'], hashes['alt']] == group['enrolled_pose_clip_hashes'] and
+            data['rig'] == review['pins']['rig'], 'Crossed report73 byte-coordinate tuple')
+    chain.update(mesh_skeleton=first['skeleton_reference'], skeleton_sha256=data['skeleton_sha256'], rig=data['rig'],
+        clip_sha256=hashes['clip'], closed_sha256=hashes['pose'], mesh_sha256=hashes['mesh'], lod_sha256=hashes['lod'],
+        common_index_sha256=data['common']['index_sha256'], weapon_index_sha256=archive['index_sha256'])
+    resources = {r['resource']: r['sha256'] for r in data['common']['selected_resources']}
+    for row in rows:
+        joined = joins[row['configuration']]
+        require(joined['state'] == 0 and normalized_typed(joined['config']) == row['source'] and all(
+            normalized_typed(joined[key]) == chain[key] for key in ('tree', 'reload', 'mesh', 'skeleton')) and
+            joined['skeleton_reference'] == chain['mesh_skeleton'] and
+            joined['replacement_reference'] == reference(chain['reload']), 'Crossed report73 typed join')
+        for key in ('config', 'tree', 'reload', 'mesh', 'skeleton'):
+            require(resources[joined[key]['resource']] == joined[key]['sha256'],
+                    'Report73 typed source not in pinned common resources')
+    return paths, values, group, configurations, rows, variants, chain, review, data
+
+
+def report73_parts(source, data, bones):
+    parts = {}
+    for bone in bones:
+        part = data['part_geometry'][bone]
+        parts[bone] = dict(bone_index=source['skeleton_bones'][bone]['index'], parent=part['parent'],
+            bounds=[part['minimum'], part['maximum']], mixed_triangles=part['mixed_triangles'],
+            visible_triangles=sum(s['triangles'] for s in part['sections'] if not s['name'].endswith('_ZOnly')),
+            sections=part['sections'])
+    return parts
+
+
+def snapshot_grasp(frames, bone, sample, proximity):
+    inverse = mag.inverse_rigid(frames[bone])
+    return dict(sample=sample, hand_to_part=mag.multiply(frames['LeftHand'], inverse),
+        fingers_to_part={finger: mag.multiply(frames[finger], inverse) for finger in mag.FINGERS},
+        anatomical_proximity=proximity)
+
+
+def prepare_report73(reports, output, slug, replace=False):
+    paths, values, group, names, rows, variants, chain, review, data = report73_inputs(reports, slug)
+    family = group['id']
+    if slug == 'aek':
+        barrel, root, child = 'jntWpn_1', 'jntWpn_12', 'jntWpn_13'
+        source = family_source(family, chain, group, names, rows, variants, paths,
+            [barrel, root, child], 'SingleRoundMuzzle', 'Fixed')
+        load = data['loading_geometry']
+        require(load['launcher_skin_owner'] == barrel and load['child13_in_round12_max_component_spread'] == 0 and
+                data['part_geometry'][barrel]['maximum_displacement_m'] == 0,
+                'AEK fixed tube or rigid supply assembly changed')
+        frames = load['phase_frames']['30']['hand_round_and_finger_frames_weapon']
+        closed = data['part_geometry'][barrel]['closed_part_in_weapon']
+        mechanism = dict(bone=barrel, motion_kind='Fixed', closed=closed, open=closed)
+        supply = dict(root=root, parts=[root, child], source_sample=30, seat_sample='HandsIKPose',
+            assembly_sample='HandsIKPose', source=frames[root], destination=load['round_seat_in_weapon'],
+            seat_in_mechanism=mag.multiply(load['round_seat_in_weapon'], mag.inverse_rigid(closed)),
+            part_in_root={root: mag.identity(), child: load['child13_in_round12_closed']},
+            grasp=snapshot_grasp(frames, root, 30, load['contacts'][30]['minimum']))
+        parts = report73_parts(source, data, [root, child])
+        bore = dict(inward_part=load['inward_axis_weapon'], mouth_center_part=load['muzzle_center_weapon'],
+            mouth_frame=load['mouth_frame_weapon'], polygon_min_inradius_m=load['muzzle_polygon_minimum_edge_radius_m'],
+            static_aligned_radial_clearance_m=load['aligned_radial_clearance_m'], rail_enforced=False,
+            swept_collision_proved=False)
+        source['policy'].update(opening='Fixed launcher tube: no Open or Close gesture exists.',
+            closing='No closure required for this measured fixed tube.',
+            supply='Freeze exact HandsIKPose rigid12+13 assembly; same-frame30 wrist and complete finger shape.',
+            clearance='Static radial gap and stock approach do not prove swept clearance; no bore rail is enforced.')
+    else:
+        aperture = values[slug + '-frames-aperture.json']
+        opening, round_data = aperture['opening'], aperture['round']
+        barrel, root, child = opening['part'], round_data['case'], round_data['nose']
+        expected = {'hk416': ('jntWpn_9', 'jntWpn_12', 'jntWpn_13', 30),
+                    'f2000': ('jntWpn_5', 'jntWpn_12', 'jntWpn_13', 12),
+                    'aug': ('jntWpn_12', 'jntWpn_13', 'jntWpnwpnJnt_14', 27)}[slug]
+        require((barrel, root, child) == expected[:3] and round_data['child_relation_max_component_deviation'] == 0 and
+                opening['close_required'] and opening['open_travel_m'] == review['mechanism']['open_travel_m'],
+                'Report73 distinct measured assembly/slide mismatch')
+        selected_bones = [barrel, root, child] + (['jntWpn_9'] if slug == 'aug' else [])
+        source = family_source(family, chain, group, names, rows, variants, paths,
+            selected_bones, 'SingleRoundBreech', 'Linear')
+        # Reload sample0 and open use the same decoded basis. HandsIKPose differs
+        # by small measured rotations in HK416/AUG; do not relax linear validation
+        # or silently zero either measured orientation to combine those clips.
+        closed, opened = data['samples'][0]['parts'][barrel], data['samples'][expected[3]]['parts'][barrel]
+        require(opened == opening['open_barrel_to_weapon'], 'Report73 open sample changed')
+        open_sample, supply_sample = opening['contact_sample'], round_data['supply_sample']
+        open_frames = aperture['snapshots'][str(open_sample)]['weapon_relative']
+        supply_frames = aperture['snapshots'][str(supply_sample)]['weapon_relative']
+        mechanism = dict(bone=barrel, motion_kind='Linear', closed_sample=0, open_sample=expected[3],
+            closed=closed, open=opened,
+            grasp=snapshot_grasp(open_frames, barrel, open_sample, opening['contact']))
+        seat_key = {'hk416': 'terminal_case_to_barrel', 'f2000': 'canonical_seat_case_to_barrel',
+                    'aug': 'seated_case_to_barrel'}[slug]
+        seat = round_data[seat_key]
+        seat_sample = 'HandsIKPose' if slug == 'f2000' else round_data['seat_sample']
+        supply = dict(root=root, parts=[root, child], source_sample=supply_sample, seat_sample=seat_sample,
+            assembly_sample=seat_sample, source=supply_frames[root], destination=mag.multiply(seat, opened),
+            seat_in_mechanism=seat, part_in_root={root: mag.identity(), child: round_data['nose_to_case']},
+            grasp=snapshot_grasp(supply_frames, root, supply_sample, round_data['supply_contact']))
+        parts = report73_parts(source, data, selected_bones)
+        if slug == 'aug':
+            extra = aperture['additional_moving_part']
+            require(extra['part'] == 'jntWpn_9' and extra['parent'] == 'jntWpn_1' and
+                    extra['open_part_to_weapon'] == data['samples'][expected[3]]['parts']['jntWpn_9'],
+                    'Crossed AUG independent render part')
+            mechanism['render_parts'] = {'jntWpn_9': dict(motion_kind='Linear', semantic_role_proved=False,
+                closed=extra['closed_part_to_weapon'], open=extra['open_part_to_weapon'],
+                closed_sample='HandsIKPose', open_sample=expected[3],
+                maximum_delta_difference_from_barrel_m=extra['maximum_delta_difference_from_barrel_m'])}
+            source['policy']['additional_render_motion'] = (
+                'Part9 has independent measured endpoints with no proved semantic role. '
+                'Linear rendering must interpolate each part endpoint using recognized progress, not one barrel delta.')
+        bore = dict(inward_part=aperture['aperture']['inward_axis_barrel'],
+            mouth_frame=aperture['aperture']['mouth_frame_barrel'],
+            polygon_min_inradius_m=aperture['aperture']['rear_polygon_inradius_m'],
+            rail_enforced=False, swept_collision_proved=False,
+            clearance_limit=aperture.get('clearance_limit', aperture.get('clearance')))
+        source['policy'].update(opening='Exact reload0/open%d linear endpoints; same-frame5 wrist/shape and 35 mm wrist tolerance.' % expected[3],
+            closing='Reverse measured reload endpoints with the same captured grip; closure required.',
+            supply='Freeze measured rigid assembly; same-frame%d wrist and complete finger shape.' % supply_sample,
+            clearance='Render seating does not establish swept clearance or chamber lock; no bore rail is enforced.')
+    measured = dict(schema=MEASUREMENT_SCHEMA, family=family, coordinates=coordinate_tuple(chain),
+        parts=parts, mechanism=mechanism, supply=supply, bore=bore,
+        evidence_level='Exact offline geometry plus explicit VR policy; no native/game/headset qualification.')
+    source['measurements_sha256'] = digest(measured)
+    validate_family(source, measured)
+    write_new(Path(output) / 'source.json', source, replace)
+    write_new(Path(output) / 'measurements.json', measured, replace)
+    return {'prepared_family': family, 'configurations': len(names)}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     adapters = {'prepare-xm8': prepare_xm8, 'prepare-an94': prepare_an94, 'prepare-m16': prepare_m16}
+    for slug in REPORT73_FAMILIES:
+        adapters['prepare-' + slug] = lambda reports, output, replace=False, slug=slug: prepare_report73(
+            reports, output, slug, replace)
     for name in adapters:
         prepare = commands.add_parser(name)
         prepare.add_argument('--reports', type=Path, required=True)

@@ -58,7 +58,7 @@ if($Mode -eq 'Prepare'){
   if(-not(Test-Bc2AssetCache $target $recipe $gameHash) -or (Sha (Join-Path $primary 'data/settings.json')) -ne $before){throw 'Final cache/settings verification failed'}
   Save 'package-verification.json' @{version=$version;zip_sha256=Sha $zip;package_files=$verifiedManifest.files.Count;runtime_files=$config.files.Count;recipe_sha256=$recipe;cache=$target;cache_files=$files;settings_sha256=$before;source_sha256=$config.source_sha256;installed=$false;game_started=$false;headset_accepted=$false}
  } finally {$lock.Dispose()}
- Write-Output 'Private0.1.35 payload and282-record local cache prepared and verified.'
+ Write-Output 'Private0.1.35 payload and306-record local cache prepared and verified.'
  return
 }
 $verification=Read-FvrJson (Join-Path $run 'package-verification.json')

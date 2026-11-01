@@ -1,4 +1,5 @@
 from pathlib import Path
+from collections import Counter
 import hashlib,importlib.util,json,struct,sys,unittest
 TOOLS=Path(__file__).resolve().parents[1]/'tools'
 sys.path.insert(0,str(TOOLS))
@@ -15,10 +16,10 @@ class Format(unittest.TestCase):
     def test_reviewed_catalog_reproduces_compiled_header(self):
         root=TOOLS.parent;rows=json.loads((root/'config/body-ammo-assets.json').read_text())['profiles']
         self.assertEqual(assets.catalog_header(rows),(root/'src/games/bc2/Bc2BodyAmmoAssetProfiles.h').read_text())
-        self.assertEqual(len(rows),282)
+        self.assertEqual(len(rows),306)
         supplies=[r for r in rows if not r.get('display_only')]
         supply_names={r['asset'] for r in supplies}
-        self.assertEqual(len(supplies),99)
+        self.assertEqual(len(supplies),123)
         self.assertEqual(len(supply_names),80)
         self.assertTrue({'XM8_sp_s','SPAS12_sp','AEK971_sp','XM8C','M416','MG36','XM8 LMG','SCAR_sp','SCAR_sp_s','F2000_sp','MP443_sp','Nambu100'}<=supply_names)
         self.assertTrue({'MP412','Garand','NS2000','870MCS','M24','SV98','GOL','M95'}<=supply_names)
@@ -52,7 +53,10 @@ class Format(unittest.TestCase):
         root=TOOLS.parent;rows=json.loads((root/'config/body-ammo-assets.json').read_text())['profiles']
         prior=json.dumps(rows[:264],sort_keys=True,separators=(',',':'),allow_nan=False).encode()
         self.assertEqual(hashlib.sha256(prior).hexdigest(),'91d00ab05df00306305bfad49be129675ade29d2bfadad42081f282e118237b4')
+        retained=json.dumps(rows[:282],sort_keys=True,separators=(',',':'),allow_nan=False).encode()
+        self.assertEqual(hashlib.sha256(retained).hexdigest(),'027dc8579ffc715878da0cdb97916ffa002b84b60b6d402ca606210e189cdcdc')
         models=json.loads((root/'profiles/weapons71-underbarrel-reload/geometry.json').read_text())['models']
+        self.assertEqual(len(models),7)
         additions={underbarrel.cache_key(r):r for r in rows[264:]}
         expected=set();configurations=set()
         for model in models:
@@ -64,11 +68,48 @@ class Format(unittest.TestCase):
                     self.assertEqual(row['mesh_sha256'],selector['meshSha256'])
                     self.assertFalse(row.get('display_only'))
                     self.assertGreater(sum(s['part_triangles'] for s in row['sections']),0)
-        self.assertEqual(len(configurations),40)
+        self.assertEqual(len(configurations),80)
         self.assertEqual(set(additions),expected)
-        self.assertEqual(len(expected),18)
+        self.assertEqual(len(expected),42)
         for asset in ('40mmgl','40mmsg','40mmsmk'):
-            self.assertEqual(sum(r['asset']==asset for r in additions.values()),6)
+            self.assertEqual(sum(r['asset']==asset for r in additions.values()),14)
+        jobs=[]
+        for family, (count, parts) in underbarrel.FAMILIES.items():
+            source=json.loads((root/underbarrel.PROFILES/family/'source.json').read_text())
+            measured=json.loads((root/underbarrel.PROFILES/family/'measurements.json').read_text())
+            self.assertEqual(len(source['configuration_paths']),count)
+            self.assertEqual(tuple(measured['supply']['parts']),parts)
+            mesh=source['chain']['mesh']['resource'][:-4]
+            family_rows=[r for r in additions.values() if r['mesh']==mesh]
+            self.assertEqual({(r['asset'],r['part']) for r in family_rows},
+                             {(asset,part) for asset in underbarrel.ASSETS for part in parts})
+            for row in family_rows:
+                profile={k:row[k] for k in ('asset','mesh','part','rig_fingerprint','archive',
+                                           'archive_index_sha256','mesh_sha256','lod_sha256')}
+                jobs.append(dict(profile=profile,family=family,
+                                 triangles=measured['parts'][row['part']]['visible_triangles']))
+        pending=underbarrel.pending_jobs(rows[:282],jobs)
+        self.assertEqual(len(pending),24)
+        self.assertEqual({underbarrel.cache_key(j['profile']) for j in pending},
+                         {underbarrel.cache_key(r) for r in rows[282:]})
+        with self.assertRaisesRegex(ValueError,'remaining measured keys'):
+            underbarrel.pending_jobs(rows[:282],jobs[:-1])
+        corrupt=list(rows[:282]);corrupt[-1]=dict(corrupt[-1],mesh_sha256='0'*64)
+        with self.assertRaisesRegex(ValueError,'Retained underbarrel supply'):
+            underbarrel.pending_jobs(corrupt,jobs)
+    def test_generated_header_preserves_existing_mixed_line_endings(self):
+        root=TOOLS.parent;row=json.loads((root/'config/body-ammo-assets.json').read_text())['profiles'][264]
+        lines=assets.catalog_header([row]).encode().splitlines()
+        original=b''.join(line+(b'\r\n' if i%2 else b'\n') for i,line in enumerate(lines))
+        added=dict(row,asset='new_supply')
+        result=underbarrel.append_header_bytes(original,[row],[added])
+        self.assertEqual(result.decode().splitlines(),assets.catalog_header([row,added]).splitlines())
+        retained=Counter(line for line in original.splitlines(keepends=True)
+                         if not line.startswith(b'inline constexpr std::array<BodyAmmoAssetProfile,'))
+        actual=Counter(result.splitlines(keepends=True))
+        self.assertTrue(all(actual[line]>=count for line,count in retained.items()))
+        with self.assertRaisesRegex(ValueError,'generated header differs'):
+            underbarrel.append_header_bytes(original.replace(b'40mmgl',b'unknown'),[row],[added])
     def test_append_preserves_catalog_bytes_and_cache_records(self):
         original=b'{\r\n  "profiles": [\r\n    {"asset": "old", "value": 1.000}\r\n  ]\r\n}\r\n'
         result=underbarrel.append_catalog_bytes(original,[{'asset':'new'}])
@@ -92,4 +133,6 @@ class Format(unittest.TestCase):
         corrupt=dict(new,asset='40mmgl')
         with self.assertRaisesRegex(ValueError,'key differs'):
             underbarrel.append_cache([row],baseline,[corrupt],[record(new)])
+        with self.assertRaisesRegex(ValueError,'addition bound'):
+            underbarrel.append_cache([row],baseline,[new]*25,[record(new)]*25)
 if __name__=='__main__':unittest.main()

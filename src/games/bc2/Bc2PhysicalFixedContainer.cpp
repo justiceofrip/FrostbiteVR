@@ -1,5 +1,6 @@
 #include "Bc2PhysicalFixedContainer.h"
 #include <algorithm>
+#include <iomanip>
 #include <limits>
 
 namespace fvr::bc2 {
@@ -34,6 +35,7 @@ struct Bc2PhysicalFixedContainer::Slot {
     std::array<math::Matrix4,16> parts{};
     std::optional<AmmoResourceRequest> request;
     std::optional<FixedContainerRequest> physicalRequest;
+    std::optional<Bc2FixedContainerCompletionObservation> lastCompletion;
 };
 Bc2PhysicalFixedContainer::Bc2PhysicalFixedContainer(bool enabled,Bc2PhysicalFixedContainerApi api)noexcept:enabled_(enabled),api_(api){}
 Bc2PhysicalFixedContainer::~Bc2PhysicalFixedContainer()=default;
@@ -48,11 +50,26 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
     HandInteraction& hands,std::uint64_t& intent)noexcept {
     ++ticks_;Bc2PhysicalFixedContainerResult out;
     const auto* e=KnownFixedContainerEquipment(s.equipment);
+    if(s.observation){
+        *s.observation={};s.observation->owner=s.nativeOwner;s.observation->input=s.input;
+        s.observation->equipment=e;s.observation->raw=s.raw;s.observation->pouch=pouch_;s.observation->frame=frame_;
+    }
+    Slot* observedSlot=nullptr;
+    struct Capture {
+        Bc2FixedContainerObservation* observation;const Bc2PhysicalFixedContainerResult& result;
+        Slot*& slot;HandInteraction& hands;
+        ~Capture(){if(!observation)return;
+            observation->tracking=result.tracking;observation->status=result.status;
+            observation->leftClaim=hands.Current(InteractionHand::Left);
+            if(slot){observation->supply=slot->supply;observation->pendingRequest=slot->request;observation->lastCompletion=slot->lastCompletion;}
+        }
+    } capture{s.observation,out,observedSlot,hands};
     if(!enabled_||!api_.read||!api_.withLedger||!api_.submit||!api_.outcome||!api_.publishGate||!api_.nextRequest||!e||
        e!=FindFixedContainerEquipment(s.configurationPath,s.mesh,s.rigFingerprint)||s.cancel||!Fresh(s.input,s.input.nowNs)){
         Cancel(s.input,hands);return out;
     }
     const auto view=api_.read(api_.context,s.nativeOwner,s.input.nowNs);
+    if(s.observation)s.observation->view=view;
     if(!view||!AmmoResourceViewFresh(*view,s.input.nowNs)||!FixedContainerHandOwner(view->binding,s.input.owner)||
        s.weapon!=HandInteractionKey{view->binding.context.resource.weapon,s.input.owner.equipGeneration}||
        view->snapshot.counts.capacity!=e->interaction.capacity){Cancel(s.input,hands);return out;}
@@ -74,6 +91,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
     }
     if(!slot||e->parts.size()>slot->parts.size())return out;
     if(active_&&active_!=slot)Cancel(s.input,hands);active_=slot;
+    observedSlot=slot;
     const auto terminal=slot->request&&api_.outcome?api_.outcome(api_.context,slot->request->intent.id,slot->request->intent.context):std::nullopt;
     const auto& raw=s.raw;
     const bool releasedRaw=s.releaseEvidence&&slot->hand&&s.input.released[0]&&
@@ -86,6 +104,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
         raw.rig.soldier==s.nativeOwner.soldier&&raw.rig.weak==s.nativeOwner.weak&&
         feed_mechanism_detail::Pose(raw.weaponFromWrist)&&feed_mechanism_detail::Pose(raw.weaponWorldMeters)&&
         (hands.HasRecordedEvidence(raw.input,InteractionHand::Left)||releasedRaw);
+    if(s.observation)s.observation->rawAdmitted=rawFresh;
     if(slot->policy&&slot->policy->Step()==FixedContainerStep::Complete&&!slot->request&&!slot->restart&&rawFresh&&raw.gripPressed&&
        view->snapshot.counts.loaded<view->snapshot.counts.capacity&&view->snapshot.counts.reserve>0){
         if(nextLifetime_==UINT64_MAX)return out;
@@ -119,6 +138,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
                (z.binding.context==v.binding.context?
                 z.policy->Complete(*z.physicalRequest,*terminal->receipt,v.snapshot,now):
                 z.policy->CompleteAfterContextChange(*z.physicalRequest,*terminal->receipt,v.snapshot,now))){
+                z.lastCompletion=Bc2FixedContainerCompletionObservation{z.lifetime,z.supply,*terminal,v.snapshot,now};
                 ++self.completed_;z.request.reset();z.physicalRequest.reset();z.carried=false;z.carriedSupply.reset();z.target.reset();z.recoveryPrepared=false;
                 if(z.hand){(void)h.Release(x.input,z.hand->token);z.hand.reset();}
             }else if(terminal&&terminal->request==*z.request&&!terminal->nativeDispatched&&
@@ -221,7 +241,10 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
             else {
                 const auto delta=Multiply(feed_interaction_detail::Inverse(Contact(g.motion)),*result.interaction.target);
                 for(unsigned n=0;n<z.equipment->parts.size();++n)if(z.equipment->parts[n].coupledOpening)
-                    z.parts[n]=Multiply(z.equipment->parts[n].weaponFromStepStart[index],delta);
+                    z.parts[n]=g.motion.kind==FeedMotionKind::Linear?
+                        reload_insertion_detail::BlendRigid(z.equipment->parts[n].weaponFromStepStart[index],
+                            z.equipment->parts[n].weaponFromStepEnd[index],std::clamp(result.interaction.progress,0.,1.)):
+                        Multiply(z.equipment->parts[n].weaponFromStepStart[index],delta);
             }
         }
         if(result.status==FixedContainerStatus::PhysicalStep){
@@ -278,5 +301,122 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
 }
 void Bc2PhysicalFixedContainer::Report(std::ostream& out)const {
     out<<"{\"ticks\":"<<ticks_<<",\"submitted\":"<<submitted_<<",\"completed\":"<<completed_<<",\"rejected\":"<<rejected_<<'}';
+}
+bool FixedContainerObservationJoined(const Bc2FixedContainerObservation& o,const ReloadStateOwner& owner,
+    const HandInteractionSample& input,const FixedContainerEquipmentProfile* equipment,std::int64_t now)noexcept {
+    return KnownFixedContainerEquipment(equipment)&&o.equipment==equipment&&o.owner==owner&&
+        o.input.owner==input.owner&&o.input.sequence==input.sequence&&o.input.observedNs==input.observedNs&&
+        o.input.deadlineNs==input.deadlineNs&&o.input.observedNs<=o.input.nowNs&&
+        o.input.nowNs<=input.nowNs&&input.nowNs<=now&&o.input.focused==input.focused&&
+        o.input.tracked==input.tracked&&o.input.released==input.released&&Fresh(o.input,now);
+}
+void WriteFixedContainerObservation(std::ostream& out,const Bc2FixedContainerObservation* observation,
+    const ReloadStateOwner& owner,const HandInteractionSample& input,const RigIdentity& rig,
+    const FixedContainerEquipmentProfile* equipment,std::int64_t now){
+    out<<std::boolalpha<<std::setprecision(9);
+    const auto text=[&](std::string_view s){out<<'"';for(const unsigned char c:s){
+        if(c=='"'||c=='\\')out<<'\\'<<char(c);else if(c<32||c>=127){constexpr char h[]="0123456789abcdef";out<<"\\u00"<<h[c>>4]<<h[c&15];}
+        else out<<char(c);}out<<'"';};
+    out<<"{\"schema\":\"bc2vr.fixed-container-observation.v1\",\"available\":";
+    const auto* e=KnownFixedContainerEquipment(equipment);
+    if(!e||!observation||!FixedContainerObservationJoined(*observation,owner,input,e,now)){
+        out<<"false,\"reason\":";text(!e?"unsupported_configuration":!observation?"capture_pending_or_not_requested":"source_mismatched_or_expired");out<<'}';return;
+    }
+    const auto& o=*observation;const auto& t=o.tracking;const auto& r=o.raw;
+    const auto scalar=[&](float value){if(std::isfinite(value))out<<value;else out<<"null";};
+    const auto matrix=[&](const math::Matrix4& value){
+        if(!feed_mechanism_detail::Pose(value)){out<<"null";return;}
+        out<<'[';for(unsigned a=0;a<4;++a){if(a)out<<',';out<<'[';for(unsigned b=0;b<4;++b){if(b)out<<',';out<<value.values[a][b];}out<<']';}out<<']';};
+    const auto nativeOwner=[&](const ReloadStateOwner& v){out<<"{\"player\":"<<v.player<<",\"soldier\":"<<v.soldier<<",\"weak\":"<<v.weak
+        <<",\"weapon\":"<<v.weapon<<",\"actorGeneration\":"<<v.actorGeneration<<",\"equipGeneration\":"<<v.equipGeneration<<",\"space\":"<<v.space<<'}';};
+    const auto handOwner=[&](const HandInteractionOwner& v){out<<"{\"actor\":"<<v.actor<<",\"actorGeneration\":"<<v.actorGeneration
+        <<",\"equipGeneration\":"<<v.equipGeneration<<",\"space\":"<<v.space<<'}';};
+    const auto evidence=[&](const HandInteractionSample& v){out<<"{\"owner\":";handOwner(v.owner);
+        out<<",\"sequence\":"<<v.sequence<<",\"observedNs\":"<<v.observedNs<<",\"deadlineNs\":"<<v.deadlineNs<<",\"nowNs\":"<<v.nowNs
+            <<",\"focused\":"<<v.focused<<",\"tracked\":["<<v.tracked[0]<<','<<v.tracked[1]<<"],\"released\":["<<v.released[0]<<','<<v.released[1]<<"]}";};
+    const auto key=[&](const auto& v){out<<"{\"id\":"<<v.id<<",\"generation\":"<<v.generation<<'}';};
+    const auto supply=[&](const FeedSupplyKey& v){out<<"{\"resource\":";key(v.resource);out<<",\"container\":";key(v.container);out<<'}';};
+    const auto claim=[&](const HandClaim& v){const auto& k=v.token;out<<"{\"token\":{\"id\":"<<k.id<<",\"owner\":";handOwner(k.owner);
+        out<<",\"hand\":"<<unsigned(k.hand)<<",\"kind\":"<<unsigned(k.kind)<<",\"item\":";key(k.item);out<<",\"contact\":";key(k.contact);
+        out<<",\"prerequisiteClaim\":"<<k.prerequisiteClaim<<"},\"deadlineNs\":"<<v.deadlineNs<<",\"inputSequence\":"<<v.inputSequence<<'}';};
+    const auto resource=[&](const AmmoResourceIdentity& v){out<<"{\"actor\":"<<v.actor<<",\"actorGeneration\":"<<v.actorGeneration
+        <<",\"weapon\":"<<v.weapon<<",\"weaponGeneration\":"<<v.weaponGeneration<<'}';};
+    const auto context=[&](const AmmoResourceContext& v){out<<"{\"resource\":";resource(v.resource);out<<",\"equipGeneration\":"<<v.equipGeneration<<",\"space\":"<<v.space<<'}';};
+    const auto counts=[&](const AmmunitionCounts& v){out<<"{\"loaded\":"<<v.loaded<<",\"reserve\":"<<v.reserve<<",\"capacity\":"<<v.capacity<<'}';};
+    const auto binding=[&](const AmmoResourceBinding& v){out<<"{\"owner\":";nativeOwner(v.owner);out<<",\"context\":";context(v.context);
+        out<<",\"inventory\":"<<v.inventory<<",\"switching\":"<<v.switching<<",\"data\":"<<v.data<<",\"persistence\":"<<v.persistence
+            <<",\"observedNs\":"<<v.observedNs<<",\"deadlineNs\":"<<v.deadlineNs<<'}';};
+    const auto snapshot=[&](const AmmunitionSnapshot& v){out<<"{\"context\":";context(v.context);out<<",\"sequence\":"<<v.sequence
+        <<",\"observedNs\":"<<v.observedNs<<",\"deadlineNs\":"<<v.deadlineNs<<",\"counts\":";counts(v.counts);out<<",\"coherentIdleVerified\":"<<v.coherentIdleVerified<<'}';};
+    const auto original=[&](const std::optional<RemovedMagazineResource>& v){if(!v){out<<"null";return;}out<<"{\"owner\":";resource(v->owner);
+        out<<",\"id\":"<<v->id<<",\"rounds\":"<<v->rounds<<",\"capacity\":"<<v->capacity<<'}';};
+    const auto command=[&](const AmmunitionCommand& v){out<<"{\"context\":";context(v.context);out<<",\"id\":"<<v.id<<",\"sourceSequence\":"<<v.sourceSequence
+        <<",\"requestedNs\":"<<v.requestedNs<<",\"admissionDeadlineNs\":"<<v.admissionDeadlineNs<<",\"deadlineNs\":"<<v.deadlineNs
+        <<",\"operation\":"<<unsigned(v.operation)<<",\"before\":";counts(v.before);out<<",\"after\":";counts(v.after);
+        out<<",\"original\":";original(v.original);out<<",\"mutationRequired\":"<<v.mutationRequired<<'}';};
+    const auto receipt=[&](const AmmunitionReceipt& v){out<<"{\"command\":";command(v.command);
+        out<<",\"authorityInvocation\":"<<v.authorityInvocation<<",\"beganNs\":"<<v.beganNs<<",\"completedNs\":"<<v.completedNs<<",\"before\":";counts(v.before);
+        out<<",\"after\":";counts(v.after);out<<",\"authorityVerified\":"<<v.authorityVerified<<",\"copiesVerified\":"<<v.copiesVerified<<'}';};
+    const auto request=[&](const AmmoResourceRequest& v){out<<"{\"binding\":";binding(v.binding);const auto& i=v.intent;
+        out<<",\"intent\":{\"context\":";context(i.context);out<<",\"id\":"<<i.id<<",\"observedNs\":"<<i.observedNs<<",\"deadlineNs\":"<<i.deadlineNs
+            <<",\"operation\":"<<unsigned(i.operation)<<",\"original\":";original(i.original);out<<",\"rounds\":"<<i.rounds<<"},\"discard\":"<<v.discard<<",\"sourceProof\":";
+        if(!v.sourceProof)out<<"null";else{const auto& p=*v.sourceProof;out<<"{\"constructedNs\":"<<p.constructedNs<<",\"inputSequence\":"<<p.inputSequence
+            <<",\"snapshotSequence\":"<<p.snapshotSequence<<",\"snapshotObservedNs\":"<<p.snapshotObservedNs<<",\"snapshotDeadlineNs\":"<<p.snapshotDeadlineNs<<'}';}
+        out<<",\"preparedCommand\":";if(v.preparedCommand)command(*v.preparedCommand);else out<<"null";out<<'}';};
+    const auto identity=[&](const ReloadHoldIdentity& v){out<<"{\"owner\":";nativeOwner(v.owner);out<<",\"firing\":["<<v.firing[0]<<','<<v.firing[1]<<','<<v.firing[2]
+        <<"],\"serverPlayer\":"<<v.serverPlayer<<",\"serverSoldier\":"<<v.serverSoldier<<",\"serverItem\":"<<v.serverItem<<'}';};
+    const auto outcome=[&](const AmmoResourceOutcome& v){out<<"{\"request\":";request(v.request);out<<",\"state\":"<<unsigned(v.state)<<",\"receipt\":";
+        if(v.receipt)receipt(*v.receipt);else out<<"null";out<<",\"resolvedNs\":"<<v.resolvedNs<<",\"nativeDispatched\":"<<v.nativeDispatched<<",\"actorRetirement\":";
+        if(!v.actorRetirement)out<<"null";else{const auto& a=*v.actorRetirement;out<<"{\"event\":"<<a.event<<",\"callbackRevision\":"<<a.callbackRevision
+            <<",\"lifetimeEndEpoch\":"<<a.lifetimeEndEpoch<<",\"observedNs\":"<<a.observedNs<<",\"previous\":";identity(a.previous);
+            out<<",\"replacement\":";identity(a.replacement);out<<",\"pending\":";if(a.pending)command(*a.pending);else out<<"null";
+            out<<",\"retiredItems\":"<<a.retiredItems<<",\"nativeDispatched\":"<<a.nativeDispatched<<'}';}out<<'}';};
+    out<<"true,\"observationOnly\":true,\"retainedEventsAreHistorical\":true,\"owner\":";nativeOwner(o.owner);out<<",\"input\":";evidence(o.input);
+    const auto& p=e->interaction;
+    out<<",\"status\":"<<unsigned(o.status)<<",\"profile\":{\"id\":"<<p.id<<",\"revision\":"<<p.revision<<",\"kind\":"<<unsigned(p.kind)
+        <<",\"ammunitionKind\":"<<p.ammunitionKind<<",\"capacity\":"<<p.capacity<<",\"roundsPerInsertion\":"<<p.roundsPerInsertion<<",\"maxAgeNs\":"<<p.maxAgeNs
+        <<",\"configurationPath\":";text(e->configurationPath);out<<",\"meshPath\":";text(e->mesh);out<<",\"rigFingerprint\":"<<e->rigFingerprint<<",\"geometry\":[";
+    for(unsigned n=0;n<p.geometry.size();++n){if(n)out<<',';
+        if(((p.kind==FixedContainerKind::SingleRoundMuzzle||p.kind==FixedContainerKind::EnBlocClip)&&n!=2)||
+           (p.kind==FixedContainerKind::SingleRoundBreech&&n==1)){out<<"null";continue;}
+        const auto& g=p.geometry[n];const auto& m=g.motion;
+        out<<"{\"contact\":{\"role\":"<<g.contact.role<<",\"radiusMeters\":";scalar(g.contact.radiusMeters);out<<",\"maxAngleRadians\":";scalar(g.contact.maxAngleRadians);
+        out<<",\"orientation\":"<<unsigned(g.contact.orientation)<<"},\"motion\":{\"kind\":";text(m.kind==FeedMotionKind::Hinge?"Hinge":m.kind==FeedMotionKind::FreePlacement?"FreePlacement":"Linear");
+        out<<",\"measured\":"<<m.measured<<",\"returnToStart\":"<<m.returnToStart<<",\"travel\":";scalar(m.travel);
+        out<<",\"policy\":{\"completeFraction\":";scalar(m.completeFraction);out<<",\"releaseFraction\":";scalar(m.releaseFraction);
+        out<<",\"pathToleranceMeters\":";scalar(m.pathToleranceMeters);out<<",\"orientationToleranceRadians\":";scalar(m.orientationToleranceRadians);
+        out<<",\"maxStepMeters\":";scalar(m.maxStepMeters);out<<",\"maxStepRadians\":";scalar(m.maxStepRadians);
+        out<<",\"endpointDwellNs\":"<<m.endpointDwellNs<<",\"maximumGestureNs\":"<<m.maximumGestureNs<<",\"maxInputGapNs\":"<<m.maxInputGapNs<<"},\"weaponFromMotion\":";
+        matrix(m.weaponFromMotion);out<<",\"motionFromContact\":";matrix(m.motionFromContact);out<<",\"placement\":{\"weaponFromSource\":";matrix(m.placement.weaponFromSource);
+        out<<",\"weaponFromDestination\":";matrix(m.placement.weaponFromDestination);out<<",\"sourceFromGrip\":";matrix(m.placement.sourceFromGrip);out<<"}}}";
+    }
+    out<<"]},\"tracking\":{\"enabled\":"<<t.enabled<<",\"current\":"<<FixedContainerTrackingFresh(t,now)<<",\"blocksFire\":"<<t.blocksFire
+        <<",\"carried\":"<<t.carried<<",\"pending\":"<<t.pending<<",\"step\":"<<unsigned(t.step)<<",\"targetStep\":"<<unsigned(t.targetStep)
+        <<",\"lifetime\":"<<t.lifetime<<",\"revision\":"<<t.revision<<",\"gun\":";claim(t.gun);out<<",\"hand\":";if(t.hand)claim(*t.hand);else out<<"null";
+    out<<",\"target\":";if(t.target)matrix(*t.target);else out<<"null";out<<",\"carriedSupply\":";if(t.carriedSupply)matrix(*t.carriedSupply);else out<<"null";
+    out<<",\"pouchContact\":"<<t.pouchContact<<",\"grip\":"<<t.grip<<",\"gripPressed\":"<<t.gripPressed<<"},\"leftClaim\":";if(o.leftClaim)claim(*o.leftClaim);else out<<"null";
+    const bool rawCurrent=r.valid&&r.nativeOwner==o.owner&&r.rig==rig&&r.equipment==e&&r.input.owner==o.input.owner&&
+        r.input.sequence<=o.input.sequence&&r.input.observedNs<=o.input.observedNs&&Fresh(r.input,now)&&
+        feed_mechanism_detail::Pose(r.weaponFromWrist)&&feed_mechanism_detail::Pose(r.weaponWorldMeters);
+    const auto* rawEquipment=KnownFixedContainerEquipment(r.equipment);
+    out<<",\"raw\":{\"valid\":"<<r.valid<<",\"current\":"<<rawCurrent<<",\"admittedAtTick\":"<<o.rawAdmitted<<",\"ownerMatches\":"<<(r.nativeOwner==o.owner)<<",\"rigMatches\":"<<(r.rig==rig)
+        <<",\"profileMatches\":"<<(r.equipment==e)<<",\"rigFingerprint\":"<<(rawEquipment?rawEquipment->rigFingerprint:0)<<",\"input\":";evidence(r.input);
+    out<<",\"owner\":";nativeOwner(r.nativeOwner);const auto& rr=r.rig;
+    out<<",\"rig\":{\"soldier\":"<<rr.soldier<<",\"weak\":"<<rr.weak<<",\"animation\":"<<rr.animation<<",\"skeleton\":"<<rr.skeleton
+        <<",\"pose\":"<<rr.pose<<",\"worldHeader\":"<<rr.worldHeader<<",\"worldMatrices\":"<<rr.worldMatrices<<",\"skinMatrices\":"<<rr.skinMatrices
+        <<",\"evaluatedMatrices\":"<<rr.evaluatedMatrices<<",\"count\":"<<rr.count<<",\"nativeIk\":"<<rr.nativeIk<<'}';
+    out<<",\"weaponFromWrist\":";matrix(r.weaponFromWrist);out<<",\"weaponWorldMeters\":";matrix(r.weaponWorldMeters);
+    out<<",\"grip\":"<<r.grip<<",\"gripPressed\":"<<r.gripPressed<<",\"pouchContact\":"<<r.pouchContact<<"},\"pouch\":{\"frame\":"<<unsigned(o.frame)<<",\"centerMeters\":[";
+    for(unsigned n=0;n<3;++n){if(n)out<<',';scalar(o.pouch.centerMeters[n]);}out<<"],\"radiusMeters\":";scalar(o.pouch.radiusMeters);out<<"},\"supply\":";supply(o.supply);
+    out<<",\"viewFresh\":"<<(o.view&&o.view->binding.owner==o.owner&&FixedContainerHandOwner(o.view->binding,o.input.owner)&&
+        o.view->snapshot.counts.capacity==p.capacity&&AmmoResourceViewFresh(*o.view,now))<<",\"view\":";
+    if(!o.view)out<<"null";else{const auto& v=*o.view;out<<"{\"binding\":";binding(v.binding);out<<",\"identity\":";identity(v.identity);out<<",\"snapshot\":";snapshot(v.snapshot);
+        out<<",\"phase\":"<<unsigned(v.phase)<<",\"command\":";if(v.command)command(*v.command);else out<<"null";
+        out<<",\"request\":"<<v.request<<",\"requestState\":"<<unsigned(v.requestState)<<",\"wellEmpty\":"<<v.wellEmpty<<",\"receipt\":";
+        if(v.receipt)receipt(*v.receipt);else out<<"null";out<<",\"terminal\":";if(v.terminal)outcome(*v.terminal);else out<<"null";out<<'}';}
+    out<<",\"pendingRequest\":";if(o.pendingRequest)request(*o.pendingRequest);else out<<"null";
+    out<<",\"lastCompletion\":";if(!o.lastCompletion)out<<"null";else{const auto& c=*o.lastCompletion;
+        out<<"{\"lifetime\":"<<c.lifetime<<",\"supply\":";supply(c.supply);out<<",\"outcome\":";outcome(c.outcome);
+        out<<",\"postSnapshot\":";snapshot(c.postSnapshot);out<<",\"acceptedNs\":"<<c.acceptedNs<<'}';}out<<'}';
 }
 }

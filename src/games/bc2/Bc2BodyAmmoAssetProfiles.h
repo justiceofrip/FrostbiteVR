@@ -993,7 +993,79 @@ inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections280{{
 inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections281{{
 {"40mmsmk","Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh","jntWpnwpnJnt_14","jntWpn_6_Ammo",{834,64,3,2,graphics::RigidPropPosition::Float3,0x924d2fd5524463dbull,0x73c7e4eb48e7ddefull,120}},
 }};
-inline constexpr std::array<BodyAmmoAssetProfile,282> BodyAmmoAssetProfiles{{
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections282{{
+{"40mmgl","Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh","jntWpn_12","jntWpn_6_Ammo",{1338,64,3,2,graphics::RigidPropPosition::Float3,0xfb09d6cb1769ab15ull,0x3027b5f3e41e04a5ull,140}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections283{{
+{"40mmgl","Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh","jntWpn_13","jntWpn_6_Ammo",{1338,64,3,1,graphics::RigidPropPosition::Float3,0xfb09d6cb1769ab15ull,0x3027b5f3e41e04a5ull,200}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections284{{
+{"40mmsg","Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh","jntWpn_12","jntWpn_6_Ammo",{1338,64,3,2,graphics::RigidPropPosition::Float3,0xfb09d6cb1769ab15ull,0x3027b5f3e41e04a5ull,140}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections285{{
+{"40mmsg","Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh","jntWpn_13","jntWpn_6_Ammo",{1338,64,3,1,graphics::RigidPropPosition::Float3,0xfb09d6cb1769ab15ull,0x3027b5f3e41e04a5ull,200}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections286{{
+{"40mmsmk","Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh","jntWpn_12","jntWpn_6_Ammo",{1338,64,3,2,graphics::RigidPropPosition::Float3,0xfb09d6cb1769ab15ull,0x3027b5f3e41e04a5ull,140}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections287{{
+{"40mmsmk","Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh","jntWpn_13","jntWpn_6_Ammo",{1338,64,3,1,graphics::RigidPropPosition::Float3,0xfb09d6cb1769ab15ull,0x3027b5f3e41e04a5ull,200}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections288{{
+{"40mmgl","Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh","jntWpn_12","jntWpn_12_Ammo",{1032,64,3,0,graphics::RigidPropPosition::Float3,0x4617013295312421ull,0x61313b0d5316d79dull,120}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections289{{
+{"40mmgl","Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh","jntWpn_13","jntWpn_12_Ammo",{1032,64,3,1,graphics::RigidPropPosition::Float3,0x4617013295312421ull,0x61313b0d5316d79dull,120}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections290{{
+{"40mmsg","Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh","jntWpn_12","jntWpn_12_Ammo",{1032,64,3,0,graphics::RigidPropPosition::Float3,0x4617013295312421ull,0x61313b0d5316d79dull,120}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections291{{
+{"40mmsg","Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh","jntWpn_13","jntWpn_12_Ammo",{1032,64,3,1,graphics::RigidPropPosition::Float3,0x4617013295312421ull,0x61313b0d5316d79dull,120}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections292{{
+{"40mmsmk","Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh","jntWpn_12","jntWpn_12_Ammo",{1032,64,3,0,graphics::RigidPropPosition::Float3,0x4617013295312421ull,0x61313b0d5316d79dull,120}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections293{{
+{"40mmsmk","Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh","jntWpn_13","jntWpn_12_Ammo",{1032,64,3,1,graphics::RigidPropPosition::Float3,0x4617013295312421ull,0x61313b0d5316d79dull,120}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections294{{
+{"40mmgl","Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh","jntWpn_12","jntWpn_17_Ammo",{1074,64,3,2,graphics::RigidPropPosition::Float3,0x92e56c7744ab44bfull,0x36e5c877f4865d4full,120}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections295{{
+{"40mmgl","Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh","jntWpn_13","jntWpn_17_Ammo",{1074,64,3,1,graphics::RigidPropPosition::Float3,0x92e56c7744ab44bfull,0x36e5c877f4865d4full,120}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections296{{
+{"40mmsg","Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh","jntWpn_12","jntWpn_17_Ammo",{1074,64,3,2,graphics::RigidPropPosition::Float3,0x92e56c7744ab44bfull,0x36e5c877f4865d4full,120}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections297{{
+{"40mmsg","Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh","jntWpn_13","jntWpn_17_Ammo",{1074,64,3,1,graphics::RigidPropPosition::Float3,0x92e56c7744ab44bfull,0x36e5c877f4865d4full,120}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections298{{
+{"40mmsmk","Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh","jntWpn_12","jntWpn_17_Ammo",{1074,64,3,2,graphics::RigidPropPosition::Float3,0x92e56c7744ab44bfull,0x36e5c877f4865d4full,120}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections299{{
+{"40mmsmk","Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh","jntWpn_13","jntWpn_17_Ammo",{1074,64,3,1,graphics::RigidPropPosition::Float3,0x92e56c7744ab44bfull,0x36e5c877f4865d4full,120}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections300{{
+{"40mmgl","Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Mesh","jntWpn_13","jntWpn_6_Ammo",{1266,64,3,1,graphics::RigidPropPosition::Float3,0x287643774b29a124ull,0x82590e39fe1b1f20ull,160}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections301{{
+{"40mmgl","Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Mesh","jntWpnwpnJnt_14","jntWpn_6_Ammo",{1266,64,3,2,graphics::RigidPropPosition::Float3,0x287643774b29a124ull,0x82590e39fe1b1f20ull,220}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections302{{
+{"40mmsg","Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Mesh","jntWpn_13","jntWpn_6_Ammo",{1266,64,3,1,graphics::RigidPropPosition::Float3,0x287643774b29a124ull,0x82590e39fe1b1f20ull,160}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections303{{
+{"40mmsg","Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Mesh","jntWpnwpnJnt_14","jntWpn_6_Ammo",{1266,64,3,2,graphics::RigidPropPosition::Float3,0x287643774b29a124ull,0x82590e39fe1b1f20ull,220}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections304{{
+{"40mmsmk","Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Mesh","jntWpn_13","jntWpn_6_Ammo",{1266,64,3,1,graphics::RigidPropPosition::Float3,0x287643774b29a124ull,0x82590e39fe1b1f20ull,160}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections305{{
+{"40mmsmk","Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Mesh","jntWpnwpnJnt_14","jntWpn_6_Ammo",{1266,64,3,2,graphics::RigidPropPosition::Float3,0x287643774b29a124ull,0x82590e39fe1b1f20ull,220}},
+}};
+inline constexpr std::array<BodyAmmoAssetProfile,306> BodyAmmoAssetProfiles{{
 {"XM8_sp_s","Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh","jntWpn_6",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections0},
 {"SPAS12_sp","Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh","jntWpn_7",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections1},
 {"AEK971_sp","Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh","jntWpn_6",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections2},
@@ -1276,5 +1348,29 @@ inline constexpr std::array<BodyAmmoAssetProfile,282> BodyAmmoAssetProfiles{{
 {"40mmsg","Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh","jntWpnwpnJnt_14",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections279},
 {"40mmsmk","Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh","jntWpn_13",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections280},
 {"40mmsmk","Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh","jntWpnwpnJnt_14",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections281},
+{"40mmgl","Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh","jntWpn_12",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections282},
+{"40mmgl","Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh","jntWpn_13",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections283},
+{"40mmsg","Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh","jntWpn_12",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections284},
+{"40mmsg","Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh","jntWpn_13",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections285},
+{"40mmsmk","Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh","jntWpn_12",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections286},
+{"40mmsmk","Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh","jntWpn_13",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections287},
+{"40mmgl","Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh","jntWpn_12",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections288},
+{"40mmgl","Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh","jntWpn_13",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections289},
+{"40mmsg","Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh","jntWpn_12",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections290},
+{"40mmsg","Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh","jntWpn_13",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections291},
+{"40mmsmk","Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh","jntWpn_12",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections292},
+{"40mmsmk","Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh","jntWpn_13",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections293},
+{"40mmgl","Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh","jntWpn_12",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections294},
+{"40mmgl","Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh","jntWpn_13",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections295},
+{"40mmsg","Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh","jntWpn_12",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections296},
+{"40mmsg","Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh","jntWpn_13",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections297},
+{"40mmsmk","Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh","jntWpn_12",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections298},
+{"40mmsmk","Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh","jntWpn_13",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections299},
+{"40mmgl","Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Mesh","jntWpn_13",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections300},
+{"40mmgl","Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Mesh","jntWpnwpnJnt_14",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections301},
+{"40mmsg","Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Mesh","jntWpn_13",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections302},
+{"40mmsg","Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Mesh","jntWpnwpnJnt_14",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections303},
+{"40mmsmk","Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Mesh","jntWpn_13",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections304},
+{"40mmsmk","Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Mesh","jntWpnwpnJnt_14",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections305},
 }};
 }

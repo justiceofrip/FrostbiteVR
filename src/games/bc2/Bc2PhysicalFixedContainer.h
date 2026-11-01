@@ -4,6 +4,36 @@
 #include <ostream>
 
 namespace fvr::bc2 {
+// Bounded diagnostic copies only. Historical receipts never grant a current
+// input/native lease; the post snapshot is the one consumed by policy Complete.
+struct Bc2FixedContainerCompletionObservation {
+    std::uint64_t lifetime=0;
+    interaction::FeedSupplyKey supply{};
+    AmmoResourceOutcome outcome{};
+    interaction::AmmunitionSnapshot postSnapshot{};
+    std::int64_t acceptedNs=0;
+};
+struct Bc2FixedContainerObservation {
+    ReloadStateOwner owner{};
+    interaction::HandInteractionSample input{};
+    const FixedContainerEquipmentProfile* equipment=nullptr;
+    Bc2FixedContainerRawContact raw{};
+    Bc2FixedContainerTracking tracking{};
+    interaction::FeedSupplyKey supply{};
+    interaction::AmmoSupplyContact pouch{};
+    interaction::SupplyAnchorFrame frame=interaction::SupplyAnchorFrame::RecenteredBody;
+    std::optional<AmmoResourceView> view;
+    std::optional<AmmoResourceRequest> pendingRequest;
+    std::optional<interaction::HandClaim> leftClaim;
+    std::optional<Bc2FixedContainerCompletionObservation> lastCompletion;
+    interaction::FixedContainerStatus status=interaction::FixedContainerStatus::Invalid;
+    bool rawAdmitted=false; // Exact Tick predicate, including recorded hand evidence.
+};
+bool FixedContainerObservationJoined(const Bc2FixedContainerObservation&,const ReloadStateOwner&,
+    const interaction::HandInteractionSample&,const FixedContainerEquipmentProfile*,std::int64_t now)noexcept;
+// Pure serialization of immutable copies/static profiles. No native/service reads.
+void WriteFixedContainerObservation(std::ostream&,const Bc2FixedContainerObservation*,const ReloadStateOwner&,
+    const interaction::HandInteractionSample&,const RigIdentity&,const FixedContainerEquipmentProfile*,std::int64_t now);
 struct Bc2PhysicalFixedContainerApi {
     void* context=nullptr;
     std::optional<AmmoResourceView> (*read)(void*,const ReloadStateOwner&,std::int64_t)noexcept=nullptr;
@@ -26,6 +56,7 @@ struct Bc2PhysicalFixedContainerSample {
     Bc2FixedContainerRawContact raw{};
     std::optional<interaction::FixedContainerReleaseEvidence> releaseEvidence;
     bool grip=false,gripPressed=false,cancel=false,finishLoading=false;
+    Bc2FixedContainerObservation* observation=nullptr; // On-demand stack copy; never retained.
 };
 struct Bc2PhysicalFixedContainerResult {
     Bc2FixedContainerTracking tracking{};

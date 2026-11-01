@@ -1,0 +1,33 @@
+{
+  "evidence": [
+    "reports/coordinator-20261101-feedback72/focused-01",
+    "reports/coordinator-20261101-feedback72/focused-close-diagnostic05",
+    "coordinator worktree/reports/coordinator-20261101-feedback73"
+  ],
+  "batch": "coordinator-20261101-feedback72",
+  "limits": [
+    "No all-weapon native/headset reload acceptance",
+    "FreePlacement insertion; physical bore rail not enforced",
+    "No measured performance or destruction acceptance"
+  ],
+  "base": "6e83a6c4c9d756d05e2583466d413d02abcd1afd",
+  "schema": "fvr.coordinator.source-batch.v1",
+  "changes": [
+    "Refresh released feed supply approach before pickup; preserve acquired custody/deadlines",
+    "Shared single-round breech/muzzle manual loaders and80 exact seven-family configurations",
+    "Retire consumed recovery after committed step or exact native insertion receipt; preserve unfinished movement",
+    "Per-part measured linear render endpoints; hinge behavior retained",
+    "On-demand immutable fixed-container snapshots, exact consumed native receipt/post view, bounded shared simulation driver",
+    "306-part private local ammo cache; no game assets committed"
+  ],
+  "scope": "Combined72+73; one normal native build/install candidate0.1.35",
+  "checks": {
+    "geometry_python": 33,
+    "geometry_note": "32 initial methods passed; coverage-only fixture fixed to compare secondary asset descriptors, then that method passed",
+    "native": "Pending combined checks. Initial72focused8/9 passed; close failure retained in reports and corrected in this source.",
+    "decoder_python": 34,
+    "body_cache_python": 6,
+    "fixed_loader_python": 7
+  },
+  "initial_source": "c36cb198c60785edd4ff64301a0c7903c1841081"
+}

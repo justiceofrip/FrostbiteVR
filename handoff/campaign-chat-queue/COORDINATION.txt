@@ -16,7 +16,7 @@ Both normal341/341; focused5/5 and Python13 pass. Same-source sight driver21 and
 Actual70sight01: XM8->launcher->XM8, native acknowledgements2/sight commits2, valid secondary rig and visible1/7 HUD; no firing/reload/headset claim.
 Actual70xr-game01: QJU88 Open/Detach dispatches and aggregate acceptance2; reserve pickup acquired hand claim but stale prepared pose caused ContactMiss. Exact accepted receipts not retained. Transfer calls0, so new stock veto unexercised.
 Both70runs closed normally, exact profiles/settings restored. Prior69shutdown AV remains unresolved; watcher no-AV window does not establish whole-exit coverage.
-Receipt: handoff/integrations/coordinator-20261101-feedback70/receipt.json. Root prepares72 neutral-source fix, shared single-round policies and measured40-configuration manual launcher wiring/cache; not installed yet.
+Receipt: handoff/integrations/coordinator-20261101-feedback70/receipt.json. Root prepares72 neutral-source fix, shared single-round policies and measured80-configuration manual launcher wiring/cache; not installed yet.
 68 performance comparison inconclusive due native yaw mismatch.69 copy-service0|2ms trial prepared, unrun. Destruction loaded knownSP02 scene, no destructive shot or rendering acceptance.
 Historical68: private0.1.32; carry precision, pump observation/driver and native underbarrel inventory action pairing. Receipt coordinator-20261031-feedback68/receipt.json.
 Historical66: paired native sample wait; snapshot refusal blocked Detach. Private0.1.30; receipt coordinator-20261031-feedback66/receipt.json.
