@@ -28,6 +28,7 @@ transport = load_sibling("bc2_sight_guarded_transport", "drive_bc2_feed_simulati
 sight = load_sibling("bc2_sight_live_planner", "plan_bc2_sight_simulation.py")
 require, integer, REFUSAL = transport.require, transport.integer, transport.REFUSAL
 NS = transport.NS
+SELECTION_UNAVAILABLE = "selected_configuration_or_rig_missing_changed_or_expired"
 
 
 class SelectionObserved(Exception):
@@ -113,6 +114,9 @@ class SightDriver(transport.Driver):
         self.sight_plan = None
         self.transition_observation = None
         self.release_authorized = False
+        self.selection_wait_armed = False
+        self.selection_hold_until = None
+        self.selection_hold_requests = 0
         # Feed transport setup remains identical; sight owns its explicit opt-in
         # below and does not invent a feed profile or enable snapshots at runtime.
         args.stage, args.profiles, args.capture, args.menu_batches, args.pickup_first = None, None, None, None, False
@@ -137,7 +141,71 @@ class SightDriver(transport.Driver):
         state = selection_state(before, after, self.sight_plan["expectedTransition"])
         require(self.transition_observation is None or state == "target", "native selection reverted after observed sight transition")
 
+    def bounds(self, now):
+        super().bounds(now)
+        if self.selection_hold_until is not None and self.transition_observation is None:
+            require(now < self.selection_hold_until, "sight selection publication hold deadline exceeded")
+
+    def receive_snapshot(self):
+        # Only an acknowledged held detent can enter this observation-only
+        # recovery. A missing publication contains no owner/pose authority.
+        if (self.selection_wait_armed and self.held_left and self.sight_plan is not None
+                and self.transition_observation is None and self.pending_nonce is not None
+                and self.snapshot_path.exists()):
+            require(transport.read_bytes(self.request_path, 22) == self.request_bytes,
+                    "snapshot request changed by another writer")
+            failure = self.snapshot_failure()
+            now = time.perf_counter_ns()
+            if now - self.last_request > transport.SNAPSHOT_TIMEOUT:
+                self.snapshot_timeout(now)
+            snapshot, raw = transport.read_json(self.snapshot_path, sight.frame.SNAPSHOT_LIMIT)
+            now = time.perf_counter_ns()
+            if now - self.last_request > transport.SNAPSHOT_TIMEOUT:
+                self.snapshot_timeout(now, (snapshot, raw))
+            if (failure is None and integer(snapshot["nonce"]) == self.pending_nonce
+                    and snapshot.get("valid") is False
+                    and snapshot.get("invalid_reason") == SELECTION_UNAVAILABLE):
+                self.artifacts.save(f"snapshot-{self.snapshot_index:03}.json", raw)
+                require(snapshot.get("schema") == "fvr.bc2.live-mechanism-snapshot.v1"
+                        and self.last_request <= integer(snapshot["observed_ns"]) <= now,
+                        "invalid sight selection publication identity/time")
+                state = self.read_state()
+                if not self.pending_command:
+                    self.ownership(state)
+                else:
+                    # The original send retains its acknowledgement deadline
+                    # and settles this already-published command after pump().
+                    require(transport.digest(transport.read_bytes(self.command_path, 4096)) == self.command_hash,
+                            "concurrent command writer")
+                    require((integer(state["cmdSeq"]), state["lastCmd"]) in (
+                        (self.sequence, self.sentinel),
+                        (integer(self.pending_before["cmdSeq"]), self.pending_before["lastCmd"])),
+                        "unexpected command sequence advancement")
+                require(integer(state["captureSeq"]) == self.capture_sequence, "unrequested capture occurred")
+                if self.selection_hold_until is None:
+                    self.selection_hold_until = min(self.stage_deadline, self.deadline,
+                        self.last_request + integer(self.sight_plan["policy"]["ackTimeoutNs"]),
+                        now + transport.SNAPSHOT_REFRESH_BUDGET)
+                self.bounds(time.perf_counter_ns())
+                require(self.selection_hold_requests < transport.MAX_SNAPSHOT_REFRESHES,
+                        "sight selection publication refresh request budget exhausted")
+                self.selection_hold_requests += 1
+                self.artifacts.event(dict(type="sight_selection_publication_hold", nonce=snapshot["nonce"],
+                    evaluatedNs=now, deadlineNs=self.selection_hold_until,
+                    refreshRequest=self.selection_hold_requests, lastCommandWrittenNs=self.last_write))
+                self.pending_nonce = None
+                self.request_snapshot()
+                return None
+        return super().receive_snapshot()
+
     def accept_snapshot(self, snapshot, raw, now):
+        if (self.selection_hold_until is not None
+                and selection_state(self.reference, snapshot, self.sight_plan["expectedTransition"]) == "target"):
+            self.bounds(now)
+            native = snapshot["sight"].get("native")
+            require(isinstance(native, dict) and native.get("valid") is True
+                    and integer(native.get("physicalItem", 0)) == integer(self.sight_plan["expectedTransition"]["physicalItem"]),
+                    "sight selection recovery requires valid same-item native evidence")
         super().accept_snapshot(snapshot, raw, now)
         if self.reference is None or self.sight_plan is None:
             return
@@ -159,17 +227,23 @@ class SightDriver(transport.Driver):
         # repeating that on a motion lease boundary wastes current authority.
         for _ in range(800):
             self.pump()
-            if self.latest_snapshot is not None and time.perf_counter_ns() < source_deadline(self.latest_snapshot):
+            if (self.latest_snapshot is not None and self.snapshot_refresh_started is None
+                    and (self.selection_hold_until is None or self.transition_observation is not None)
+                    and time.perf_counter_ns() < source_deadline(self.latest_snapshot)):
                 break
             time.sleep(.001)
-        require(time.perf_counter_ns() < source_deadline(self.latest_snapshot), "current sight snapshot lease expired")
+        require(self.latest_snapshot is not None and self.snapshot_refresh_started is None
+                and (self.selection_hold_until is None or self.transition_observation is not None)
+                and time.perf_counter_ns() < source_deadline(self.latest_snapshot), "current sight snapshot lease expired")
 
     def validate_publication(self, lines, expected, cleanup):
         ordinary_left(lines)
         if cleanup:
             require(lines == ["grip l 0"], "sight cleanup permits only ordinary owned left release")
             return
-        if self.latest_snapshot is None or time.perf_counter_ns() >= source_deadline(self.latest_snapshot):
+        if (self.latest_snapshot is None or self.snapshot_refresh_started is not None
+                or (self.selection_hold_until is not None and self.transition_observation is None)
+                or time.perf_counter_ns() >= source_deadline(self.latest_snapshot)):
             raise SourceExpired("original sight source lease expired before command publication")
         if self.transition_observation is not None and not self.release_authorized:
             raise SelectionObserved()
@@ -274,6 +348,8 @@ class SightDriver(transport.Driver):
                           source_deadline=source_deadline(snapshot) if target is schedule[0] else None)
             except SelectionObserved:
                 break
+            if target["phase"] in ("detent_dwell", "await_acknowledgement"):
+                self.selection_wait_armed = True
             if target["phase"] == "await_acknowledgement":
                 self.await_transition(target["maximumWaitNs"])
                 break

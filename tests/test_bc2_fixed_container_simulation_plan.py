@@ -174,6 +174,41 @@ def completed(before, plan, now=NOW+500_000_000):
 
 
 class FixedContainerSimulationPlanTests(unittest.TestCase):
+    def test_linked_physical_custody_preserves_native_ammunition_identity(self):
+        s = snapshot(3)
+        x = s["fixedContainer"]
+        x["physicalFamily"] = dict(owner=copy.deepcopy(s["owner"]), observedNs=NOW-200_000_000,
+            deadlineNs=NOW+300_000_000, current=True, physicalItem=s["equipment"]["persistence"],
+            inventory=s["selected"]["inventory"], selectedSecondary=True, targetWeapon=15, targetSlot=0,
+            action=25, primaryAction=25, configurationPath=s["selected"]["configurationPath"],
+            asset=s["equipment"]["asset"], persistentId="sp_xm8_s")
+        x["tracking"]["gun"]["token"]["item"]["id"] = s["equipment"]["persistence"]
+        plan = p.plan(s, "Open", NOW, 100)
+        self.assertEqual(plan["baseline"]["binding"], p.binding_key(x["view"]["binding"]))
+        self.assertEqual(plan["baseline"]["nativeIdentity"]["owner"]["weapon"], s["owner"]["weapon"])
+        self.assertEqual(plan["selection"]["physicalFamily"]["physicalItem"], s["equipment"]["persistence"])
+        self.assertIn(x["physicalFamily"]["deadlineNs"], plan["originalLeases"])
+        # Resolver renewal is allowed without changing the verified relationship.
+        renewed = copy.deepcopy(s)
+        renewed["fixedContainer"]["physicalFamily"]["observedNs"] += 10_000_000
+        renewed["fixedContainer"]["physicalFamily"]["deadlineNs"] += 10_000_000
+        self.assertEqual(p.selection(s), p.selection(renewed))
+        for field, value in (("current", False), ("selectedSecondary", False), ("inventory", 1),
+                             ("physicalItem", s["owner"]["weapon"]), ("configurationPath", "wrong"),
+                             ("asset", "wrong"), ("deadlineNs", NOW), ("observedNs", NOW+1),
+                             ("targetWeapon", s["owner"]["weapon"]), ("primaryAction", 36)):
+            with self.subTest(field=field):
+                bad = copy.deepcopy(s)
+                bad["fixedContainer"]["physicalFamily"][field] = value
+                with self.assertRaises(p.Refusal):
+                    p.plan(bad, "Open", NOW, 100)
+        for mutate in (lambda value: value.pop("physicalFamily"),
+                       lambda value: value["physicalFamily"]["owner"].update(weapon=99)):
+            bad = copy.deepcopy(s)
+            mutate(bad["fixedContainer"])
+            with self.assertRaises(p.Refusal):
+                p.plan(bad, "Open", NOW, 100)
+
     def pipeline(self, kind=4):
         s = snapshot(kind)
         s["fixedContainer"]["tracking"]["step"] = 2

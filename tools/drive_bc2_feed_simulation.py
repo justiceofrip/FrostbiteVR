@@ -743,8 +743,52 @@ class Driver:
         b = planner.from_pose({"position": [0, 0, 0], "orientation": expected})
         require(planner.pose_error(a, b)[1] <= .001, "left controller orientation did not commit")
 
+    def fresh_stage_ready(self, name):
+        received = self.fresh()
+        if received[0]["feed"] is not None or name == "AttachContainer":
+            return received
+        # A valid body/rig observation can precede the native feed's idle view
+        # during draw/equip animation. Stay released until ordinary native
+        # publication arms neutral; a missed squeeze cannot acquire later while
+        # held. These observations never extend a source or gesture deadline.
+        baseline = received[0]
+        started = time.perf_counter_ns()
+        for _ in range(100):
+            snapshot, raw, evaluated = received
+            self.bounds(time.perf_counter_ns())
+            require(self.motion_started is None and not self.pending_command and not self.unsafe_owner
+                    and not (self.held_left or self.held_right or self.held_trigger or self.held_buttons),
+                    "feed readiness requires neutral input before stage motion")
+            state = self.read_state()
+            self.ownership(state)
+            require(all(state[key] == self.state[key] for key in ("head", "handL", "handR", "controls")),
+                    "feed readiness simulator input changed")
+            self.stable_snapshot(baseline, snapshot)
+            require(snapshot["input_evidence"]["released"][0] is True
+                    and all(hand["squeeze"] == 0 and hand["trigger"] == 0 and hand["held"] == 0
+                            and hand["stickX"] == 0 and hand["stickY"] == 0 for hand in snapshot["input"]["hands"]),
+                    "feed readiness contains held input")
+            require(all(p <= .0002 and a <= .001 for p, a in
+                        (planner.pose_error(planner.from_pose(baseline["input"]["hands"][0][key]),
+                                            planner.from_pose(snapshot["input"]["hands"][0][key]))
+                         for key in ("grip", "aim"))), "feed readiness left-controller pose changed")
+            feed = snapshot["feed"]
+            if feed is not None:
+                require(feed["input"]["released"][0] is True and feed["mechanismClaim"] is None
+                        and feed["mechanismInput"] is None and feed["supplyObject"] is None,
+                        "feed readiness requires a fresh unclaimed neutral publication")
+                self.artifacts.event({"type": "feed_stage_ready", "stage": name, "nonce": snapshot["nonce"],
+                                      "waitedNs": time.perf_counter_ns() - started,
+                                      "registrationKey": feed["registrationKey"], "nativeReceiptProof": False})
+                return received
+            self.artifacts.event({"type": "feed_stage_readiness_wait", "stage": name,
+                                  "nonce": snapshot["nonce"], "evaluatedNs": evaluated,
+                                  "reason": "native_feed_not_published"})
+            received = self.fresh()
+        raise REFUSAL("feed stage readiness observation iteration bound")
+
     def stage(self, name, pickup=None):
-        snapshot, raw, evaluated = self.fresh()
+        snapshot, raw, evaluated = self.fresh_stage_ready(name)
         row = planner.admit(self.profiles, snapshot, evaluated, integer(snapshot["nonce"]))
         policy = row["operations"]["AttachContainer" if name == "SupplyPickup" else name]["motion"]["policy"]
         step = self.args.step_ms * 1_000_000 if self.args.step_ms else min(60_000_000, integer(policy["maxInputGapNs"]) // 2)
@@ -829,14 +873,23 @@ class Driver:
         baseline = before["feedObservation"]
         require(baseline["observations"] == "independent_atomics_not_native_proof", "unknown feed observation contract")
         deadline = min(self.deadline, time.perf_counter_ns() + 600_000_000)
+        retained = self.latest_snapshot
         for _ in range(4):
             require(time.perf_counter_ns() < deadline, "post-stage receipt observation timed out")
-            snapshot, raw, evaluated = self.fresh()
-            self.accept_snapshot(snapshot, raw, evaluated)
+            snapshot, raw, evaluated = self.fresh_postrelease_observation(deadline)
+            self.check_postrelease_observation(retained, snapshot, evaluated)
             observation = snapshot["feedObservation"]
+            require(observation["observations"] == "independent_atomics_not_native_proof", "feed observation contract changed")
+            if snapshot["feed"] is None:
+                # This is a refused command source, not an admitted mechanism.
+                # Retain it and spend only the existing observation budget.
+                self.artifacts.event({"type": "postrelease_feed_unpublished", "nonce": snapshot["nonce"],
+                                      "evaluatedNs": evaluated, "observationDeadlineNs": deadline,
+                                      "lastCommandWrittenNs": self.last_write, "nativeReceiptProof": False})
+                continue
+            self.accept_snapshot(snapshot, raw, evaluated)
             self.plans[-1]["feedObservationAfter"] = observation
             self.plans[-1]["postStageNonce"] = snapshot["nonce"]
-            require(observation["observations"] == "independent_atomics_not_native_proof", "feed observation contract changed")
             attempts = integer(observation["submit_attempts"]) - integer(baseline["submit_attempts"])
             accepted = integer(observation["receipts_accepted"]) - integer(baseline["receipts_accepted"])
             require(attempts >= 0 and accepted >= 0, "feed observation counters regressed")
@@ -845,6 +898,59 @@ class Driver:
                 self.plans[-1]["nativeReceiptProof"] = False
                 return
         raise REFUSAL("ordinary stage has no observed accepted-receipt counter advancement; retain native trace")
+
+    def fresh_postrelease_observation(self, deadline):
+        """Read only; never turn a missing retained presentation into command admission."""
+        self.monitor = False
+        for _ in range(800):
+            now = time.perf_counter_ns()
+            require(now < deadline, "post-stage receipt observation timed out")
+            self.bounds(now)
+            if self.pending_nonce is None and now - self.last_request >= SNAPSHOT_PERIOD:
+                self.request_snapshot()
+            received = self.receive_snapshot()
+            if received:
+                require(time.perf_counter_ns() < deadline, "post-stage receipt observation timed out")
+                return received
+            time.sleep(.001)
+        raise REFUSAL("post-stage receipt observation iteration bound")
+
+    def check_postrelease_observation(self, retained, snapshot, now):
+        require(self.motion_started is None and not self.pending_command and not self.unsafe_owner
+                and not (self.held_left or self.held_right or self.held_trigger or self.held_buttons)
+                and self.last_commit is not None and self.last_commit >= self.last_write
+                and self.pending_batch[-2:] == ["grip l 0", self.sentinel],
+                "post-stage observation requires acknowledged ordinary release without held motion/input")
+        state = self.read_state()
+        self.ownership(state)
+        require(all(state[key] == self.state[key] for key in ("head", "handL", "handR", "controls")),
+                "post-release simulator input changed")
+        self.stable_snapshot(retained, snapshot)
+        source = retained["feed"]
+        require(source is not None, "post-release observation lacks retained feed identity")
+        require(snapshot["input_evidence"]["released"][0] is True
+                and integer(snapshot["input_evidence"]["observedNs"]) >= self.last_write
+                and all(hand["squeeze"] == 0 and hand["trigger"] == 0 and hand["held"] == 0
+                        and hand["stickX"] == 0 and hand["stickY"] == 0 for hand in snapshot["input"]["hands"]),
+                "post-release observation contains held or preceding input")
+        left = planner.from_pose({"position": state["handL"]["pos"],
+                                  "orientation": planner.ypr_quaternion(state["handL"]["ypr"])})
+        require(all(p <= .0002 and a <= .001 for p, a in
+                    (planner.pose_error(left, planner.from_pose(snapshot["input"]["hands"][0][key]))
+                     for key in ("grip", "aim"))), "post-release left-controller pose changed")
+        feed = snapshot["feed"]
+        if feed is None:
+            require(source["blocksFire"] is True and snapshot["weapon_actions_blocked"] is True
+                    and snapshot["feedObservation"]["latest_tick"]["claim"] is False,
+                    "missing post-release feed is not an unclaimed retained Fire block")
+            # The existing common frame hook validates original leases/owners;
+            # it supplies no feed, claim, success, or command-capable snapshot.
+            planner.admit_frame(snapshot, now, integer(snapshot["nonce"]),
+                                mechanism_admission=lambda original, evaluated: original is snapshot and evaluated == now)
+        else:
+            require(all(feed[key] == source[key] for key in
+                        ("owner", "weapon", "registrationKey", "rigFingerprint", "lifetime")),
+                    "post-release retained feed identity changed")
 
     def capture(self, name):
         require(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,47}", name) is not None, "invalid capture tag")

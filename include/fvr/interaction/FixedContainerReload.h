@@ -100,9 +100,9 @@ public:
     FixedContainerReload(FixedContainerProfile profile,AmmoResourceContext context,
         FeedKey mechanism,FeedKey binding,FeedSupplyKey supply,std::uint64_t lifetime,
         AmmunitionLedger& ledger,bool externalAdmission=false,
-        std::optional<HandInteractionOwner> handOwner={})noexcept:
+        std::optional<HandInteractionOwner> handOwner={},std::optional<HandInteractionKey> handItem={})noexcept:
         profile_(profile),context_(context),mechanism_(mechanism),binding_(binding),supply_(supply),
-        lifetime_(lifetime),ledger_(ledger),externalAdmission_(externalAdmission),handOwner_(handOwner),gesture_(lifetime),
+        lifetime_(lifetime),ledger_(ledger),externalAdmission_(externalAdmission),handOwner_(handOwner),handItem_(handItem),gesture_(lifetime),
         step_(profile.kind==FixedContainerKind::EnBlocClip||profile.kind==FixedContainerKind::SingleRoundMuzzle?
             FixedContainerStep::Insert:FixedContainerStep::Open){}
     FixedContainerReload(const FixedContainerReload&)=delete;
@@ -125,20 +125,22 @@ public:
             mechanismTouched_&&step_!=FixedContainerStep::Complete);
     }
     void Suspend()noexcept {gesture_.Interrupt();gestureClaim_.reset();}
-    [[nodiscard]] bool RebindContext(const AmmunitionSnapshot& snapshot,const HandInteractionOwner& hand,std::int64_t now)noexcept {
+    [[nodiscard]] bool RebindContext(const AmmunitionSnapshot& snapshot,const HandInteractionOwner& hand,std::int64_t now,
+        std::optional<HandInteractionKey> item={})noexcept {
         if(!bound_||pending_||snapshot.context.resource!=context_.resource||hand.actor!=HandOwner().actor||
            hand.actorGeneration!=context_.resource.actorGeneration||!hand.equipGeneration||hand.space!=snapshot.context.space||
            ledger_.Phase()!=AmmunitionLedgerPhase::Ready||ledger_.Pending()||ledger_.Snapshot().context!=snapshot.context||
            ledger_.Snapshot().counts!=snapshot.counts||ledger_.Snapshot().sequence!=snapshot.sequence||
            ledger_.Snapshot().observedNs!=snapshot.observedNs||ledger_.Snapshot().deadlineNs!=snapshot.deadlineNs||
            !ledger_.Snapshot().coherentIdleVerified||ledger_.WellEmpty()||
-           now<lastNow_||snapshot.sequence<lastSnapshot_)return false;
+           now<lastNow_||snapshot.sequence<lastSnapshot_||
+           (handItem_&&(!item||item->id!=handItem_->id||item->generation!=hand.equipGeneration)))return false;
         const auto previous=context_;const auto before=Owner();context_=snapshot.context;
         if(!Snapshot(snapshot,now)){context_=previous;return false;}
         // Migrate retained mechanical geometry, never the prior hand claim or
         // armed grip. Recovery still needs a fresh neutral/current contact.
         gesture_.MigrateContext(before,Owner());gestureClaim_.reset();
-        handOwner_=hand;lastSnapshot_=snapshot.sequence;lastNow_=now;lastInput_=0;return true;
+        handOwner_=hand;if(handItem_)handItem_=item;lastSnapshot_=snapshot.sequence;lastNow_=now;lastInput_=0;return true;
     }
     // Rebase a newly picked-up object's source between grips. Destination,
     // anatomical grip and motion policy stay pinned; no held object teleports.
@@ -305,6 +307,7 @@ private:
     bool Valid()const noexcept {
         const auto hand=HandOwner();
         return fixed_container_detail::Profile(profile_)&&feed_mechanism_detail::Owner(Owner())&&context_.resource.weaponGeneration&&
+            (!handItem_||(externalAdmission_&&handOwner_&&handItem_->id&&handItem_->generation==hand.equipGeneration))&&
             hand.actor&&hand.actorGeneration==context_.resource.actorGeneration&&hand.equipGeneration&&hand.space==context_.space&&
             feed_mechanism_detail::Key(mechanism_)&&feed_mechanism_detail::Key(binding_)&&lifetime_&&
             feed_mechanism_detail::Supply(supply_,profile_.kind==FixedContainerKind::EnBlocClip);
@@ -334,7 +337,8 @@ private:
         if(t.hand!=InteractionHand::Left&&t.hand!=InteractionHand::Right)return false;
         const auto h=static_cast<unsigned>(t.hand);
         const auto other=hands.Current(h?InteractionHand::Left:InteractionHand::Right);
-        const HandInteractionKey gun{context_.resource.weapon,handOwner_?HandOwner().equipGeneration:context_.resource.weaponGeneration};
+        const HandInteractionKey gun=handItem_.value_or(HandInteractionKey{context_.resource.weapon,
+            handOwner_?HandOwner().equipGeneration:context_.resource.weaponGeneration});
         if(!other||other->token.kind!=HandClaimKind::GunHold||other->token.owner!=HandOwner()||other->token.item!=gun||
            other->deadlineNs<=x.input.nowNs||t.owner!=HandOwner()||
            t.contact!=HandInteractionKey{profile_.geometry[static_cast<unsigned>(step_)].contact.role,profile_.revision})return false;
@@ -392,6 +396,7 @@ private:
     AmmunitionLedger& ledger_;
     const bool externalAdmission_;
     std::optional<HandInteractionOwner> handOwner_;
+    std::optional<HandInteractionKey> handItem_;
     FeedInteraction gesture_;
     FixedContainerStep step_;
     bool bound_=false,mechanismTouched_=false;

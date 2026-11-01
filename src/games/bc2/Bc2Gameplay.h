@@ -13,6 +13,7 @@
 #include "Bc2BodyHolster.h"
 #include "Bc2BodyHolsterObservation.h"
 #include "Bc2BodyHolsterProbe.h"
+#include "Bc2RenderedViewEvidence.h"
 #include "fvr/interaction/BodyAnchors.h"
 #include "fvr/graphics/VehicleReticle.h"
 #include <memory>
@@ -79,7 +80,13 @@ std::shared_ptr<const SelectedMeshesSnapshot> ReadSelectedMeshes(const ReloadSta
 std::shared_ptr<const SelectedMeshesSnapshot> ReadCurrentSelectedMeshes(std::int64_t nowNs)noexcept;
 bool BodyDisplayNativeCurrent(const BodyInventoryDisplay&)noexcept;
 graphics::AmmoCounterSample ReadAmmoCounter()noexcept;
-bool AdjustViewBase(std::array<RenderViewCopy,2>&,const runtime::TrackingFrame&)noexcept;
+bool AdjustViewBase(std::array<RenderViewCopy,2>&,const runtime::TrackingFrame&,
+    const ipc::FrameLease* renderLease=nullptr,RenderedViewEvidence* renderSample=nullptr)noexcept;
+// Value-only bounded enrichment. These callbacks never wait for the report
+// reader, access native/GPU state, allocate, or reenter the frame producer.
+void ObserveRenderedView(const RenderedViewEvidence&)noexcept;
+void ObserveRenderedViewAccepted(const ipc::FrameLease&,bool accepted)noexcept;
+void ObserveRenderedViewPublication(const ipc::FrameLease&,const graphics::PairTicket&)noexcept;
 // Bounded read-only plan and post-setter camera evidence; no native writes.
 bool ObserveVehicleCameraPlan(unsigned,const runtime::TrackingFrame&,const RenderViewCopy&,const RenderViewCopy&,const std::array<RenderViewCopy,2>&)noexcept;
 void ObserveVehicleCameraApplied(unsigned,unsigned,const RenderViewCopy&)noexcept;

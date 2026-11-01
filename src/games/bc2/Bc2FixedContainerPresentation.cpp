@@ -21,6 +21,11 @@ bool FixedContainerRigMatches(const FixedContainerEquipmentProfile& e,const RigS
     return true;
 }
 bool FixedContainerTrackingRetained(const Bc2FixedContainerTracking& a,const Bc2FixedContainerTracking& b,std::int64_t now)noexcept {
+    if(bool(a.source.family)!=bool(b.source.family))return false;
+    if(a.source.family){const auto& x=a.source.family->mode;const auto& y=b.source.family->mode;
+        if(a.source.family->owner!=b.source.family->owner||x.family!=y.family||x.persistent!=y.persistent||
+           x.inventory!=y.inventory||x.targetWeapon!=y.targetWeapon||x.targetSlot!=y.targetSlot||
+           x.action!=y.action||x.primaryAction!=y.primaryAction||x.selectedSecondary!=y.selectedSecondary)return false;}
     if(!FixedContainerTrackingFresh(a,now)||!FixedContainerTrackingFresh(b,now)||a.source.equipment!=b.source.equipment||
        a.source.binding.context!=b.source.binding.context||a.source.binding.owner!=b.source.binding.owner||a.lifetime!=b.lifetime||
        a.revision>b.revision||a.step!=b.step||a.targetStep!=b.targetStep||a.blocksFire!=b.blocksFire||
@@ -90,6 +95,10 @@ std::vector<graphics::BodyPropInstance> FixedContainerHostInstances(const Bc2Fix
         for(const auto* t:{&before,&current}){
             instance.observedNs=(std::max)({instance.observedNs,t->input.observedNs,t->source.binding.observedNs,t->source.ammunition.observedNs});
             instance.deadlineNs=(std::min)({instance.deadlineNs,t->input.deadlineNs,t->gun.deadlineNs,t->source.binding.deadlineNs,t->source.ammunition.deadlineNs});
+            if(t->source.family){
+                instance.observedNs=(std::max)(instance.observedNs,t->source.family->observedNs);
+                instance.deadlineNs=(std::min)(instance.deadlineNs,t->source.family->deadlineNs);
+            }
             if(t->hand)instance.deadlineNs=(std::min)(instance.deadlineNs,t->hand->deadlineNs);
         }
         if(!graphics::BodyPropFresh(instance,now))return {};out.push_back(instance);

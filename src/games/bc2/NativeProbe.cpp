@@ -418,7 +418,10 @@ bool RestoreBorrowed(const ListSnapshot& callbacks,const std::array<CallbackSnap
     }return okay;
 }
 std::atomic<unsigned> inputSamples=0,inputTrackedSamples=0;std::uint64_t lastInputGeneration=0;
-bool opticEvidenceEnabled=false;bool passEvidenceEnabled=false,uncapMirror=false;bool streamMode=false;std::wstring streamToken;fvr::graphics::D3D11FrameBridge frameBridge;
+bool opticEvidenceEnabled=false;bool passEvidenceEnabled=false,uncapMirror=false;bool streamMode=false;std::wstring streamToken;
+fvr::graphics::D3D11FrameBridge frameBridge{[](const fvr::ipc::FrameLease& lease,const fvr::graphics::PairTicket& ticket)noexcept {
+    fvr::bc2::gameplay::ObserveRenderedViewPublication(lease,ticket);
+}};
 fvr::graphics::PrivatePresentationExperiment privatePresentationExperiment;
 struct PrivatePresentProgress {
     unsigned budgetMs=0;
@@ -514,6 +517,7 @@ struct TrackedTransaction {
     std::atomic<unsigned> state=0,restoreFailures=0;
     fvr::ipc::FrameLease lease{};std::array<fvr::bc2::RenderViewCopy,2> saved{},written{},observed{},right{};
     bool capturesOkay=true;
+    fvr::bc2::RenderedViewEvidence renderedView;
     fvr::bc2::BodyPropPair bodyPropPair;
     std::array<float,16> savedAnchor{},writtenAnchor{};bool anchorWritten=false;
 } tracked;
@@ -1614,7 +1618,7 @@ void BeginTrackedFrame(unsigned incomingFrame)noexcept {
     if(tracked.restoreFailures.load()||contextRestoreFailures.load()||(stereoColorScalePair.counts.restoreFailures||stereoEffectPair.counts.restoreFailures||stereoPostProcessPair.RestoreFailed())){RecordStereoProgress(fvr::bc2::StereoProgressReason::BeginRestoreFailure,incomingFrame);return;}
     fvr::ipc::FrameLease lease{};if(!frameBridge.TryBegin({(std::uint64_t(e.world)<<32)|e.request,incomingFrame,1},lease)){RecordStereoProgress(fvr::bc2::StereoProgressReason::BridgeNoLease,incomingFrame);return;}
     weaponContextCount.store(0);weaponContextFailures.BeginFrame();derivedCount.store(0);derivedFrameFailed.store(false);for(auto& binding:derivedProjections)binding.frame.store(0);
-    tracked.lease=lease;tracked.bodyPropPair.Reset();stereoColorScalePair.Reset();stereoEffectPair.Reset();stereoPostProcessPair.Reset();tracked.capturesOkay=true;tracked.state.store(3,std::memory_order_release);
+    tracked.lease=lease;tracked.renderedView={};tracked.bodyPropPair.Reset();stereoColorScalePair.Reset();stereoEffectPair.Reset();stereoPostProcessPair.Reset();tracked.capturesOkay=true;tracked.state.store(3,std::memory_order_release);
     std::array<unsigned,4> viewport{};if(!Read(e.main+layout.viewportOffset,viewport.data(),16)){stereoRecovery.cancelUnwrittenRequest.store(lease.requestId,std::memory_order_release);RecordStereoProgress(fvr::bc2::StereoProgressReason::ViewportUnreadable,incomingFrame);return;}
     if(viewport[2]!=lease.requirements.width||viewport[3]!=lease.requirements.height){stereoRecovery.cancelUnwrittenRequest.store(lease.requestId,std::memory_order_release);RecordStereoProgress(fvr::bc2::StereoProgressReason::ViewportSizeChanged,incomingFrame);return;}
     // Acquire before native update, but apply after its per-view far/LOD edits.
@@ -1632,7 +1636,7 @@ void ApplyTrackedView(unsigned world,unsigned request,unsigned view)noexcept {
         if(!fvr::runtime::ApplyUnwrittenFrame(stereoRecovery.cancelUnwrittenRequest.load(std::memory_order_acquire),tracked.lease.requestId,[&]()noexcept {
         for(unsigned i=0;i<2;++i)if(!Read(e.main+(i?layout.secondaryOffset:layout.primaryOffset),tracked.saved[i].bytes.data(),0x460)){cancel();return;}
         if(privatePresentationExperiment.Enabled())privatePresentationCameras.Observe(privatePresentationExperiment.Phase(),tracked.saved[0],tracked.lease);
-        auto source=tracked.saved;if(!fvr::bc2::gameplay::AdjustViewBase(source,tracked.lease.tracking)){cancel();return;}
+        auto source=tracked.saved;if(!fvr::bc2::gameplay::AdjustViewBase(source,tracked.lease.tracking,&tracked.lease,&tracked.renderedView)){cancel();return;}
         auto plan=fvr::bc2::BuildTrackedViews(source,tracked.lease.tracking,tracked.lease.tracking.worldUnitsPerMeter);if(!plan){cancel();return;}
         for(auto& eye:plan->camera)for(auto& camera:eye)fvr::bc2::PrecomputeCameraCaches(camera,updateView,updateProjection,updateFrustum,updateScale);
         vehicleCameraEvidenceFrame.store(fvr::bc2::gameplay::ObserveVehicleCameraPlan(e.frame,tracked.lease.tracking,tracked.saved[0],source[0],{plan->camera[0][0],plan->camera[1][0]})?e.frame.load():0,std::memory_order_release);
@@ -1686,12 +1690,19 @@ void FinishTrackedFrame(bool completePair,TrackedFinishCallsite callsite)noexcep
     unsigned evaluated=0,passed=0,visibility=0;
     const auto check=[&](unsigned bit,bool value)noexcept {evaluated|=1u<<bit;if(value)passed|=1u<<bit;return value;};
     auto admission=fvr::graphics::RestoredPublicationResult::NotAttempted;
-    const bool published=check(0,completePair)&&check(1,restored)&&check(2,tracked.capturesOkay)&&
+    const bool publicationEligible=check(0,completePair)&&check(1,restored)&&check(2,tracked.capturesOkay)&&
         check(3,stereoColorScalePair.Ready(CurrentColorScaleKey(e.world,e.request)))&&
         check(4,stereoEffectPair.Ready(CurrentColorScaleKey(e.world,e.request)))&&
         check(5,stereoPostProcessPair.Ready(CurrentColorScaleKey(e.world,e.request)))&&
-        check(6,(visibility=e.visibilityMask.load(std::memory_order_acquire))==3)&&
-        check(7,frameBridge.PublishRestored(tracked.lease,&admission));
+        check(6,(visibility=e.visibilityMask.load(std::memory_order_acquire))==3);
+    if(tracked.renderedView.Sampled()){
+        tracked.renderedView.Finish(fvr::bc2::RenderedViewLeaseKey(tracked.lease),restored,publicationEligible);
+        fvr::bc2::gameplay::ObserveRenderedView(tracked.renderedView);
+    }
+    // PublishRestored can emit Published synchronously or during a later
+    // LegacyFenced pump. The complete sampled row must precede either event.
+    const bool published=publicationEligible&&check(7,frameBridge.PublishRestored(tracked.lease,&admission));
+    if(tracked.renderedView.Sampled())fvr::bc2::gameplay::ObserveRenderedViewAccepted(tracked.lease,published);
     if(!published){
         firstTrackedFinishFailure.Observe(tracked.lease,callsite,state,evaluated,passed,visibility,admission,GraphicsBootstrapThreadForDiagnostics());
         frameBridge.Cancel(tracked.lease);
@@ -2835,6 +2846,13 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
         reinterpret_cast<unsigned>(self)==stereoExperiment.world&&reinterpret_cast<unsigned>(request)==stereoExperiment.request&&
         U32(stereoExperiment.world+0x88)==stereoExperiment.frame&&U32(address)==imageBase+layout.vtable&&
         U32(address+0x70)==stereoExperiment.request&&U32(stereoExperiment.request+8)==stereoExperiment.world;
+    const bool renderedEyeOwned=trackedEvidence&&tracked.renderedView.Sampled()&&
+        reinterpret_cast<unsigned>(self)==stereoExperiment.world&&reinterpret_cast<unsigned>(request)==stereoExperiment.request&&
+        tracked.lease.native.owner==((std::uint64_t(stereoExperiment.world)<<32)|stereoExperiment.request)&&
+        tracked.lease.native.frameId==stereoExperiment.frame&&U32(stereoExperiment.world+0x88)==stereoExperiment.frame&&
+        U32(address)==imageBase+layout.vtable&&U32(address+0x70)==stereoExperiment.request&&
+        U32(stereoExperiment.request+8)==stereoExperiment.world;
+    const auto renderedDrawKey=renderedEyeOwned?fvr::bc2::RenderedViewLeaseKey(tracked.lease):fvr::bc2::RenderedViewKey{};
     const auto bodySourcesBefore=bodyAmmoEyeOwned?ReadBodySources():fvr::bc2::BodyPropSources{};
     const auto& bodyAmmoBefore=bodySourcesBefore.ammo;
     const auto bodyPairKey=bodyAmmoEyeOwned?fvr::bc2::CarriedPairKey(tracked.lease):fvr::bc2::BodyCarriedPairKey{};
@@ -2947,9 +2965,23 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
             else weatherImageInvalidMask.fetch_or(1u<<eye,std::memory_order_relaxed);
         }else weatherImageInvalidMask.fetch_or(1u<<eye,std::memory_order_relaxed);
     }
-    if(bodyAmmoEyeOwned&&tracked.state.load(std::memory_order_acquire)==1&&
+    const bool bodyAmmoEyeCurrent=bodyAmmoEyeOwned&&tracked.state.load(std::memory_order_acquire)==1&&
         U32(stereoExperiment.world+0x88)==stereoExperiment.frame&&U32(address)==imageBase+layout.vtable&&
-        U32(address+0x70)==stereoExperiment.request&&U32(stereoExperiment.request+8)==stereoExperiment.world){
+        U32(address+0x70)==stereoExperiment.request&&U32(stereoExperiment.request+8)==stereoExperiment.world;
+    const bool renderedEyeCurrent=renderedEyeOwned&&tracked.state.load(std::memory_order_acquire)==1&&
+        fvr::bc2::RenderedViewLeaseKey(tracked.lease)==renderedDrawKey&&
+        address==(evidenceEye?stereoExperiment.eye:stereoExperiment.main)&&
+        tracked.lease.native.owner==((std::uint64_t(stereoExperiment.world)<<32)|stereoExperiment.request)&&
+        tracked.lease.native.frameId==stereoExperiment.frame&&U32(stereoExperiment.world+0x88)==stereoExperiment.frame&&
+        U32(address)==imageBase+layout.vtable&&U32(address+0x70)==stereoExperiment.request&&
+        U32(stereoExperiment.request+8)==stereoExperiment.world;
+    fvr::graphics::BodyPropEye renderedProps;bool renderedMatricesValid=false;
+    const auto readRenderedMatrices=[&]()noexcept {
+        fvr::math::Matrix4 nativeView{},nativeProjection{};
+        if(Read(address+layout.primaryOffset+0x220,&nativeView,64)&&Read(address+layout.primaryOffset+0x2e0,&nativeProjection,64))
+            if(const auto eye=fvr::bc2::CanonicalBodyPropEye(nativeView,nativeProjection)){renderedProps=*eye;renderedMatricesValid=true;}
+    };
+    if(bodyAmmoEyeCurrent){
         const auto bodySourcesAfter=ReadBodySources();const auto& after=bodySourcesAfter.ammo;
         const auto now=ReloadDrawNowNs();
         const fvr::bc2::BodyAmmoEyeKey key{stereoExperiment.world,stereoExperiment.request,address,stereoExperiment.frame.load(),evidenceEye};
@@ -2964,12 +2996,7 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
         // Host-only composition packet: copying owned metadata cannot affect
         // native query state, depth or simulation. Image/metadata publication
         // remains one frame-channel transaction after exact restoration.
-        fvr::graphics::BodyPropEye props;fvr::math::Matrix4 nativeView{},nativeProjection{};
-        if(Read(address+layout.primaryOffset+0x220,&nativeView,64)&&Read(address+layout.primaryOffset+0x2e0,&nativeProjection,64)){
-            if(const auto eye=fvr::bc2::CanonicalBodyPropEye(nativeView,nativeProjection)){
-                props=*eye;
-            }
-        }
+        readRenderedMatrices();auto props=renderedProps;
         // Optional per-eye ammo HUD telemetry is assigned to props.ammo here.
         // The pair helper preserves it independently of prop admission.
         props.ammo=fvr::bc2::gameplay::ReadAmmoCounter();
@@ -3007,16 +3034,28 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
                 frameBridge.SetBodyPropPair(tracked.lease,*pair);
             }
     }
+    if(renderedEyeCurrent){
+        if(!bodyAmmoEyeCurrent)readRenderedMatrices();
+        const bool retained=tracked.state.load(std::memory_order_acquire)==1&&
+            fvr::bc2::RenderedViewLeaseKey(tracked.lease)==renderedDrawKey&&
+            address==(evidenceEye?stereoExperiment.eye:stereoExperiment.main)&&
+            U32(stereoExperiment.world+0x88)==renderedDrawKey.frame.frame&&U32(address)==imageBase+layout.vtable&&
+            U32(address+0x70)==stereoExperiment.request&&U32(stereoExperiment.request+8)==stereoExperiment.world;
+        tracked.renderedView.Eye(renderedDrawKey,evidenceEye,address,
+            retained&&renderedMatricesValid?&renderedProps.view:nullptr,retained&&renderedMatricesValid?&renderedProps.projection:nullptr);
+    }
     if(stereoMode){
         const auto& e=stereoExperiment;
         if((!streamMode||tracked.state.load(std::memory_order_acquire)==1)&&e.stage.load(std::memory_order_acquire)==StereoExperiment::Armed&&reinterpret_cast<unsigned>(self)==e.world&&reinterpret_cast<unsigned>(request)==e.request&&U32(e.world+0x88)==e.frame){
             if(address==e.main){if(streamMode&&tracked.state.load(std::memory_order_acquire)==1){const bool captured=CaptureTrackedEye(0);tracked.capturesOkay=tracked.capturesOkay&&captured;
+                if(tracked.renderedView.Sampled())tracked.renderedView.Capture(fvr::bc2::RenderedViewLeaseKey(tracked.lease),0,captured);
                 const bool capturesOkay=tracked.capturesOkay;
                 const bool colorComplete=colorScope.Complete(CurrentColorScaleKey(e.world,e.request),capturesOkay);
                 const bool effectComplete=effectScope.Complete(CurrentColorScaleKey(e.world,e.request),capturesOkay);
                 const bool postProcessComplete=postProcessScope.Complete(CurrentColorScaleKey(e.world,e.request),capturesOkay);
                 if(!colorComplete||!effectComplete||!postProcessComplete)tracked.capturesOkay=false;}CaptureWorldColor(colorCaptures[1],e.frame);stereoExperiment.drawMask.fetch_or(1,std::memory_order_release);}
-            if(address==e.eye){if(streamMode&&tracked.state.load(std::memory_order_acquire)==1){const bool captured=tracked.capturesOkay&&CaptureTrackedEye(1);tracked.capturesOkay=tracked.capturesOkay&&captured;
+            if(address==e.eye){if(streamMode&&tracked.state.load(std::memory_order_acquire)==1){const bool captureAttempted=tracked.capturesOkay;const bool captured=tracked.capturesOkay&&CaptureTrackedEye(1);tracked.capturesOkay=tracked.capturesOkay&&captured;
+                if(captureAttempted&&tracked.renderedView.Sampled())tracked.renderedView.Capture(fvr::bc2::RenderedViewLeaseKey(tracked.lease),1,captured);
                 const bool capturesOkay=tracked.capturesOkay;
                 const bool colorComplete=colorScope.Complete(CurrentColorScaleKey(e.world,e.request),capturesOkay);
                 const bool effectComplete=effectScope.Complete(CurrentColorScaleKey(e.world,e.request),capturesOkay);

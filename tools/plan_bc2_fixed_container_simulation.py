@@ -36,6 +36,28 @@ def key(value):
     return value
 
 
+def physical_item(snapshot, now):
+    x, owner = snapshot["fixedContainer"], snapshot["owner"]
+    proof = x.get("physicalFamily")
+    item = integer(owner["weapon"])
+    if proof is not None:
+        b = x["view"]["binding"]
+        start, end = integer(proof["observedNs"]), integer(proof["deadlineNs"])
+        item = integer(proof["physicalItem"])
+        require(proof["current"] is True and proof["owner"] == owner and proof["selectedSecondary"] is True
+                and 0 < start <= now < end and 0 < end-start <= 500_000_000
+                and item == integer(b["persistence"]) == integer(snapshot["equipment"]["persistence"])
+                and item > 0 and item != integer(owner["weapon"])
+                and integer(proof["inventory"]) == integer(b["inventory"]) == integer(snapshot["selected"]["inventory"])
+                and integer(proof["targetWeapon"]) > 0 and integer(proof["targetWeapon"]) not in (item, integer(owner["weapon"]))
+                and 0 <= integer(proof["targetSlot"]) < 9
+                and integer(proof["action"]) == integer(proof["primaryAction"]) > 0
+                and proof["configurationPath"] == x["profile"]["configurationPath"] == snapshot["selected"]["configurationPath"]
+                and proof["asset"] == snapshot["equipment"]["asset"] and bool(proof["persistentId"]),
+                "missing exact current selected-secondary physical family")
+    return dict(id=item, generation=integer(snapshot["physical_equipment_generation"]))
+
+
 def claim(value, source, now, hand, kind):
     require(isinstance(value, dict), "missing actual hand custody")
     token = value["token"]
@@ -120,7 +142,7 @@ def extension(snapshot, now):
             and integer(raw["input"]["observedNs"]) <= integer(source["observedNs"]), "raw contact is newer than its publication")
     frame.rigid(raw["weaponFromWrist"]); frame.rigid(raw["weaponWorldMeters"])
     gun = claim(t["gun"], source, now, 1, 1)
-    require(gun["item"] == dict(id=integer(snapshot["owner"]["weapon"]), generation=integer(snapshot["physical_equipment_generation"]))
+    require(gun["item"] == physical_item(snapshot, now)
             and integer(gun["prerequisiteClaim"]) == 0 and source["released"][1] is False, "missing exact right GunHold root")
     key(x["supply"]["resource"])
     require((t["pending"] is True) == (x["pendingRequest"] is not None), "pending transaction observation disagrees")
@@ -206,7 +228,9 @@ def require_preserved(before, after):
 
 
 def selection(snapshot):
-    return dict(owner=snapshot["owner"], equipment=snapshot["equipment"], rig=snapshot["rig"],
+    proof = snapshot["fixedContainer"].get("physicalFamily")
+    family = None if proof is None else {k: v for k, v in proof.items() if k not in ("observedNs", "deadlineNs", "current")}
+    return dict(owner=snapshot["owner"], equipment=snapshot["equipment"], rig=snapshot["rig"], physicalFamily=family,
                 physical=snapshot["physical_equipment_generation"], profile=snapshot["fixedContainer"]["profile"])
 
 
@@ -440,6 +464,8 @@ def plan(snapshot, stage, now_ns, expected_nonce, step_ns=40_000_000, pickup_pla
     require(duration < maximum, "motion exceeds native gesture duration")
     leases = [snapshot["valid_until_ns"], snapshot["native_deadline_ns"], x["input"]["deadlineNs"],
               x["raw"]["input"]["deadlineNs"], v["snapshot"]["deadlineNs"], v["binding"]["deadlineNs"], t["gun"]["deadlineNs"]]
+    if x.get("physicalFamily") is not None:
+        leases.append(x["physicalFamily"]["deadlineNs"])
     if t["hand"] is not None:
         leases.append(t["hand"]["deadlineNs"])
     return dict(schema=SCHEMA, offlineOnly=True, executionAuthorized=False, nativeAcceptance=False, headsetAcceptance=False,

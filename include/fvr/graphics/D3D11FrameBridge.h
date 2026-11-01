@@ -94,8 +94,12 @@ struct PipelineGraphicsSnapshot {
 // All GPU/setup calls belong to the original immediate-context thread.
 class D3D11FrameBridge final:public runtime::IFrameProvider {
 public:
-    D3D11FrameBridge():channel_(*this,ObservePublication,this){}
-    ~D3D11FrameBridge(){CloseGraphics();}
+    // Optional immutable, value-only Published observer. It runs under the
+    // channel gate on graphics: no waiting, allocation, I/O or producer reentry.
+    // No borrowed context is retained; the function must outlive this bridge.
+    using PublicationObserver=void(*)(const ipc::FrameLease&,const PairTicket&)noexcept;
+    explicit D3D11FrameBridge(PublicationObserver observer=nullptr):publicationObserver_(observer),channel_(*this,ObservePublication,this){}
+    ~D3D11FrameBridge(){publicationObserver_=nullptr;CloseGraphics();}
     bool ConnectGraphics(ID3D11Device*,const std::wstring&,FrameSharingPreference preference=FrameSharingPreference::Automatic)noexcept;
     bool TryBegin(const ipc::NativeFrameKey&,ipc::FrameLease&)noexcept;
     ipc::ChannelResult ReadInput(interaction::InputFrame& out,std::int64_t* deadlineQpc=nullptr)noexcept{return channel_.ReadInput(out,deadlineQpc);}
@@ -203,6 +207,7 @@ private:
     void PipelineConsumed(const PairTicket&,bool)noexcept;
 
     static void ObservePublication(void*,const ipc::FrameLease&,const PairTicket&,ipc::StagedFrameObservation)noexcept;
+    PublicationObserver publicationObserver_=nullptr;
     bool TryGetPair(const runtime::PresentationRequirements&,const runtime::TrackingFrame&,TextureDescriptor&,PairTicket&)noexcept override{return false;}
     void PairConsumed(const PairTicket&,bool)noexcept override;
     bool PrepareGraphics(const ipc::FrameLease&,RestoredPublicationResult* observation=nullptr)noexcept;

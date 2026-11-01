@@ -51,7 +51,8 @@ def transition(snapshot):
     after["selected"].update(configurationPath="config2", configurationPathPointer=130,
                               selectedSlot=2, soleConfiguredArray=150, matchedMeshPath="mesh2",
                               meshes=[dict(path="mesh2")])
-    after["sight"].update(status="geometry_unavailable", contact=None)
+    after["sight"].update(status="geometry_unavailable", contact=None,
+                          native=dict(valid=True, physicalItem=20))
     after["sight"]["family"].update(selectedSecondary=True, targetWeapon=4,
         targetSlot=snapshot["selected"]["selectedSlot"], targetAction=snapshot["sight"]["family"]["primaryAction"])
     return after
@@ -64,8 +65,10 @@ def harness(testcase, ack_ms=5):
     v.args = SimpleNamespace(target="secondary", step_ms=20)
     v.sight_plan = dict(expectedTransition=dict(sourceMode="primary", targetMode="secondary",
         sourceWeapon=4, targetWeapon=40, targetSlot=2, targetAction=33, primaryAction=36, asset="test2",
-        configurationPath="config2", inventory=14, physicalItem=20, persistentId="synthetic-physical-item"))
+        configurationPath="config2", inventory=14, physicalItem=20, persistentId="synthetic-physical-item"),
+        policy=copy.deepcopy(s.sight.POLICY))
     v.transition_observation, v.release_authorized = None, False
+    v.selection_wait_armed, v.selection_hold_until, v.selection_hold_requests = False, None, 0
     return h
 
 
@@ -91,6 +94,17 @@ def expire_during_publication_checks(h):
         return read_state()
 
     h.driver.read_state = delayed_read
+
+
+def selection_unavailable(h, armed=True, reason=s.SELECTION_UNAVAILABLE):
+    v = h.driver
+    admit_current(h)
+    v.selection_wait_armed = armed
+    v.request_snapshot()
+    snapshot = dict(schema="fvr.bc2.live-mechanism-snapshot.v1", nonce=v.pending_nonce,
+                    valid=False, invalid_reason=reason, observed_ns=h.now)
+    h.publish(snapshot)
+    return snapshot
 
 
 def stage_harness(testcase, approach_samples=32, move_samples=4, ack_ms=80, select_target=True):
@@ -169,6 +183,30 @@ class SightDriverTests(unittest.TestCase):
         self.assertTrue(v.transition_observation)
         self.assertFalse(v.held_left)
         self.assertEqual(v.stage_deadline, v.deadline)
+
+    def test_stage_observes_selection_gap_after_held_detent_then_releases(self):
+        h, _ = stage_harness(self)
+        v = h.driver
+        observed = memory.fixture
+        gap_writes = []
+
+        def gap_once(now, nonce=1):
+            profiles, snapshot = observed(now, nonce)
+            if h.selected_target and not gap_writes:
+                gap_writes.append(len(h.command_writes))
+                snapshot = dict(schema=snapshot["schema"], nonce=nonce, observed_ns=now,
+                                valid=False, invalid_reason=s.SELECTION_UNAVAILABLE)
+            return profiles, snapshot
+
+        with patch.object(memory, "fixture", gap_once):
+            v.stage()
+        self.assertTrue(v.selection_wait_armed)
+        self.assertEqual(v.selection_hold_requests, 1)
+        self.assertEqual(len(h.command_writes), gap_writes[0] + 1)
+        self.assertEqual(h.command_writes[-1][1].decode().splitlines()[:-1], ["grip l 0"])
+        self.assertTrue(v.plans[-1]["selectedTransitionObserved"])
+        self.assertTrue(v.plans[-1]["ordinaryLeftReleaseAcknowledged"])
+        self.assertFalse(v.held_left)
 
     def test_neutral_approach_retains_global_watchdog(self):
         h, _ = stage_harness(self)
@@ -290,6 +328,162 @@ class SightDriverTests(unittest.TestCase):
         self.assertEqual(v.snapshot_refresh_requests, 1)
         self.assertIn("snapshot-001.json", v.artifacts.saved)
         self.assertEqual(h.command_writes, [])
+
+    def test_selection_publication_gap_holds_even_fresh_source_until_exact_target(self):
+        h = harness(self)
+        v = h.driver
+        missing = selection_unavailable(h)
+        original = copy.deepcopy(v.reference)
+        stage_deadline, driver_deadline, last_write = v.stage_deadline, v.deadline, v.last_write
+        responses = 0
+
+        def observed(now, nonce=1):
+            nonlocal responses
+            responses += 1
+            profiles, snapshot = fixture(now, nonce)
+            return profiles, transition(snapshot) if responses > 1 else snapshot
+
+        with patch.object(memory, "fixture", observed):
+            with self.assertRaises(s.SelectionObserved):
+                v.send(["hand l grip pose 0 0 0 0 0 0", "grip l 1"])
+        self.assertEqual(h.command_writes, [])
+        self.assertEqual(v.last_write, last_write)
+        self.assertGreaterEqual(responses, 2)
+        self.assertEqual(v.reference, original)
+        self.assertEqual((v.stage_deadline, v.deadline), (stage_deadline, driver_deadline))
+        self.assertEqual(v.artifacts.saved["snapshot-002.json"], s.transport.json_bytes(missing))
+        self.assertEqual(v.selection_hold_requests, 1)
+        self.assertFalse(v.transition_observation["nativeAcceptance"])
+        v.release_authorized = True
+        v.send(["grip l 0"])
+        self.assertFalse(v.held_left)
+        self.assertEqual(len(h.command_writes), 1)
+        self.assertEqual(h.command_writes[0][1].decode().splitlines()[:-1], ["grip l 0"])
+
+    def test_selection_gap_requires_acknowledged_detent_and_exact_reason(self):
+        for armed, reason in ((False, s.SELECTION_UNAVAILABLE), (True, "native_owner_changed")):
+            with self.subTest(armed=armed, reason=reason):
+                h = harness(self)
+                selection_unavailable(h, armed, reason)
+                with self.assertRaisesRegex(s.REFUSAL, "native snapshot refused"):
+                    h.driver.send(["grip l 1"])
+                self.assertEqual(h.driver.selection_hold_requests, 0)
+                self.assertEqual(h.command_writes, [])
+
+    def test_selection_gap_has_fixed_budget_and_does_not_resume_source_motion(self):
+        h = harness(self)
+        v = h.driver
+        selection_unavailable(h)
+        started = h.now
+        with self.assertRaisesRegex(s.REFUSAL, "selection publication hold deadline"):
+            v.send(["grip l 1"])
+        self.assertEqual(v.selection_hold_until, started + s.transport.SNAPSHOT_REFRESH_BUDGET)
+        self.assertIsNone(v.transition_observation)
+        self.assertEqual(h.command_writes, [])
+        self.assertEqual(v.release_after_failure(), "ordinary owned controller release acknowledged")
+        self.assertFalse(v.held_left)
+
+    def test_repeated_selection_gaps_exhaust_original_refresh_count(self):
+        h = harness(self)
+        v = h.driver
+        selection_unavailable(h)
+
+        def unavailable(now, nonce=1):
+            return {}, dict(schema="fvr.bc2.live-mechanism-snapshot.v1", nonce=nonce,
+                            valid=False, invalid_reason=s.SELECTION_UNAVAILABLE, observed_ns=now)
+
+        with patch.object(memory, "fixture", unavailable):
+            with self.assertRaisesRegex(s.REFUSAL, "selection publication refresh request budget"):
+                v.send(["grip l 1"])
+        self.assertEqual(v.selection_hold_requests, s.transport.MAX_SNAPSHOT_REFRESHES)
+        self.assertEqual(h.command_writes, [])
+
+    def test_selection_gap_recovery_rechecks_native_family_and_input(self):
+        for change in ("native", "family", "actor", "input"):
+            with self.subTest(change=change):
+                h = harness(self)
+                v = h.driver
+                selection_unavailable(h)
+
+                def changed(now, nonce=1):
+                    profiles, snapshot = fixture(now, nonce)
+                    snapshot = transition(snapshot)
+                    if change == "native":
+                        snapshot["sight"]["native"]["valid"] = False
+                    elif change == "family":
+                        snapshot["sight"]["family"]["physicalItem"] = 99
+                    elif change == "actor":
+                        snapshot["owner"]["actorGeneration"] = 99
+                    else:
+                        snapshot["input_evidence"]["tracked"] = [False, True]
+                    return profiles, snapshot
+
+                with patch.object(memory, "fixture", changed):
+                    with self.assertRaises((s.REFUSAL, s.sight.Refusal)):
+                        v.send(["grip l 1"])
+                self.assertIsNone(v.transition_observation)
+                self.assertEqual(h.command_writes, [])
+
+    def test_expired_target_after_selection_gap_never_authorizes_a_command(self):
+        h = harness(self)
+        v = h.driver
+        selection_unavailable(h)
+        responses = 0
+
+        def observed(now, nonce=1):
+            nonlocal responses
+            responses += 1
+            profiles, snapshot = fixture(now - (120 * MS if responses == 1 else 0), nonce)
+            return profiles, transition(snapshot)
+
+        with patch.object(memory, "fixture", observed):
+            with self.assertRaises(s.SelectionObserved):
+                v.send(["grip l 1"])
+        self.assertEqual(responses, 2)
+        self.assertEqual(h.command_writes, [])
+        self.assertIn("snapshot-003.json", v.artifacts.saved)
+        self.assertEqual(v.transition_observation["nonce"], v.latest_snapshot["nonce"])
+        self.assertLess(h.now, s.source_deadline(v.latest_snapshot))
+
+    def test_selection_gap_does_not_extend_gesture_or_request_deadlines(self):
+        for bound in ("gesture", "request"):
+            with self.subTest(bound=bound):
+                h = harness(self)
+                v = h.driver
+                selection_unavailable(h)
+                if bound == "gesture":
+                    v.stage_deadline = h.now + 20 * MS
+                    message = "maximumGestureNs"
+                else:
+                    h.response_after = None
+                    message = "response not received within request budget"
+                with self.assertRaisesRegex(s.REFUSAL, message):
+                    v.send(["grip l 1"])
+                self.assertEqual(h.command_writes, [])
+
+    def test_selection_gap_during_pending_command_keeps_original_ack_deadline(self):
+        h = harness(self, ack_ms=250)
+        v = h.driver
+        admit_current(h)
+        v.selection_wait_armed = True
+        v.request_snapshot()
+        responses = 0
+
+        def observed(now, nonce=1):
+            nonlocal responses
+            responses += 1
+            profiles, snapshot = fixture(now, nonce)
+            if responses == 1:
+                snapshot.update(valid=False, invalid_reason=s.SELECTION_UNAVAILABLE)
+            else:
+                snapshot = transition(snapshot)
+            return profiles, snapshot
+
+        with patch.object(memory, "fixture", observed):
+            with self.assertRaisesRegex(s.REFUSAL, "acknowledgement/commit deadline"):
+                v.send(["grip l 1"])
+        self.assertEqual(len(h.command_writes), 1)
+        self.assertEqual(v.selection_hold_requests, 1)
 
     def test_fresh_selection_stops_old_mapping_pose_publication(self):
         h = harness(self)

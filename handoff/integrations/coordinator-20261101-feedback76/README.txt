@@ -12,6 +12,9 @@ records current/raw/original packets and the actual evaluated rejection gates.
 This is evidence to resolve the remaining grab failure, not a claimed reload fix.
 
 Root Python checks pass17 methods (one Windows sandbox refusal retained).
-Both normal native builds and actual-game fault/acquisition checks are pending.
-Private candidate0.1.36 reuses35's306-record asset cache. Installed35 is unchanged
-until the normal combined validation, freeze, source push and installation gates.
+Both normal native builds pass341/341; source dd09631 is pushed. Private0.1.36
+is installed and validated, preserving settings and0.1.35 rollback. It reuses
+the306-record asset cache. Installation: reports/coordinator-20261101-feedback76/installation.json.
+Actual76 game01 and game03 closed/restored normally. New feed release/acquisition
+and underbarrel initialization failures are retained; complete reload and
+headset acceptance remain open. Forced native publisher fault paths are untested.

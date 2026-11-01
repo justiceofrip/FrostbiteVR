@@ -22,7 +22,8 @@ struct Fixture {
     Bc2FixedContainerObservation observation{};bool observe=false;
     std::optional<AmmoResourceRequest> submitted;std::optional<FixedContainerGate> gate;
     std::optional<Bc2FixedContainerRawContact> previousRaw;
-    AmmunitionCounts counts{};bool delayedRaw=false;
+    AmmunitionCounts counts{};bool delayedRaw=false,missingRaw=false;
+    const WeaponModeFamilyProfile* linkedFamily=nullptr;
     std::unique_ptr<Bc2PhysicalFixedContainer> physical;HandClaimToken gun{};
     std::int64_t now=1000000000;bool priorGrip=false,allowGate=true;unsigned calls=0;
     explicit Fixture(unsigned index=0):Fixture(&generated::FixedContainerEquipment[index],2,20){}
@@ -49,7 +50,9 @@ struct Fixture {
         service.Select(binding,native,ammunition,now);
         sample={};sample.nativeOwner=native.owner;sample.input={owner,sequence,now,now+100000000,now,true,{true,true},{priorGrip&&!grip,false}};
         sample.observation=observe?&observation:nullptr;
-        sample.weapon={binding.context.resource.weapon,owner.equipGeneration};sample.equipment=equipment;
+        sample.weapon={linkedFamily?binding.persistence:binding.context.resource.weapon,owner.equipGeneration};sample.equipment=equipment;
+        if(linkedFamily)sample.family=FixedContainerBodyAmmo::FamilyBinding{native.owner,
+            WeaponModeCommand{25,0xf0000,0,binding.inventory,binding.persistence,linkedFamily,true,25},now,now+500000000};
         sample.configurationPath=equipment->configurationPath;sample.mesh=equipment->mesh;sample.rigFingerprint=equipment->rigFingerprint;
         sample.geometrySequence=sequence;sample.trackingEpoch=owner.space;sample.bodyFromHand=Identity();
         const auto contact=Bc2PhysicalFixedContainer::BodyAmmoContact();for(unsigned n=0;n<3;++n)sample.bodyFromHand.values[3][n]=contact.centerMeters[n];
@@ -65,6 +68,7 @@ struct Fixture {
         sample.raw.equipment=equipment;sample.raw.input=sample.input;sample.raw.weaponFromWrist=wrist;sample.raw.weaponWorldMeters=Identity();
         sample.raw.valid=true;sample.raw.grip=grip;sample.raw.gripPressed=sample.gripPressed;sample.raw.pouchContact=pouch;
         const auto currentRaw=sample.raw;if(delayedRaw&&previousRaw)sample.raw=*previousRaw;previousRaw=currentRaw;
+        if(missingRaw)sample.raw={};
         priorGrip=grip;result=physical->Tick(sample,hands,intent);return result;
     }
     void Hinge(unsigned step){const auto& motion=equipment->interaction.geometry[step].motion;
@@ -252,8 +256,14 @@ int MeasuredUnderbarrelLoadsOneRoundAndCloses(){
         const bool breech=e.interaction.kind==FixedContainerKind::SingleRoundBreech;
         CHECK(breech||e.interaction.kind==FixedContainerKind::SingleRoundMuzzle);
         Fixture f(&e,0,1);f.observe=true;const auto& insertion=e.interaction.geometry[2].motion;
+        for(const auto& family:WeaponModeFamilies)if(WeaponModeFamilyEligible(family)&&
+            family.secondaryConfiguration==e.configurationPath&&family.secondaryAsset==e.asset){f.linkedFamily=&family;break;}
+        CHECK(f.linkedFamily);
         f.Send(At(e.interaction.geometry[breech?0:2].motion,0),false);
         CHECK(f.result.bodyAmmo&&f.result.bodyVisual&&f.result.bodyAmmo->equipment==&e);
+        CHECK(f.result.tracking.gun.token.item.id==f.binding.persistence);
+        CHECK(f.result.bodyVisual->source.identity.weapon.id==f.binding.persistence);
+        CHECK(f.result.tracking.source.ammunition.context.resource.weapon==f.native.owner.weapon);
         BodyAmmoTracking body;body.fixed=f.result.bodyAmmo;body.visual=*f.result.bodyVisual;
         CHECK(BodyAmmoFresh(body,f.now)&&body.visual.source.objectUnits==1&&body.visual.source.reserveUnits==1);
         if(breech){f.Hinge(0);CHECK(f.result.blocksFire);}
@@ -303,7 +313,44 @@ int MeasuredUnderbarrelLoadsOneRoundAndCloses(){
     }
     return 0;
 }
+int LinkedLoaderRejectsUnverifiedPhysicalAliases(){
+    const auto& e=generated::UnderbarrelFixedContainerEquipment.front();Fixture f(&e,1,7);
+    const auto& initial=e.interaction.geometry[e.interaction.kind==FixedContainerKind::SingleRoundMuzzle?2:0].motion;
+    for(const auto& family:WeaponModeFamilies)if(WeaponModeFamilyEligible(family)&&
+        family.secondaryConfiguration==e.configurationPath&&family.secondaryAsset==e.asset){f.linkedFamily=&family;break;}
+    CHECK(f.linkedFamily);f.missingRaw=true;f.Send(At(initial,0),false);
+    CHECK(f.result.tracking.enabled&&f.result.tracking.lifetime&&f.result.blocksFire);
+    CHECK(FixedContainerTrackingFresh(f.result.tracking,f.now)&&f.gate&&f.gate->blocksFire);
+    f.missingRaw=false;f.Send(At(initial,0),false);
+    CHECK(f.result.tracking.enabled&&!f.result.blocksFire&&f.gate&&f.gate->closedVerified&&!f.gate->blocksFire);
+    CHECK((f.service.View()->snapshot.counts==AmmunitionCounts{1,7,1})&&f.calls==0);
+    const auto original=f.sample;CHECK(f.result.tracking.enabled);
+    const auto source=f.result.tracking.source;
+    CHECK(FixedContainerHandItem(source,f.owner,f.now));
+    CHECK(!FixedContainerHandItem(source,f.owner,source.family->deadlineNs));
+    for(unsigned fault=0;fault<9;++fault){
+        auto bad=original;
+        switch(fault){
+        case 0:bad.family.reset();break;
+        case 1:++bad.family->mode.inventory;break;
+        case 2:++bad.family->mode.persistent;break;
+        case 3:bad.family->mode.selectedSecondary=false;break;
+        case 4:++bad.family->owner.weapon;break;
+        case 5:bad.family->deadlineNs=f.now;break;
+        case 6:bad.family->mode.family=nullptr;break;
+        case 7:++bad.nativeOwner.weapon;break;
+        case 8:bad.family->mode.targetWeapon=bad.nativeOwner.weapon;break;
+        }
+        f.gate.reset();const auto rejected=f.physical->Tick(bad,f.hands,f.intent);
+        CHECK(!rejected.tracking.enabled&&!rejected.mechanismOwnsHand&&!rejected.ammoOwnsHand&&!f.submitted&&!f.gate);
+    }
+    auto wrong=source;
+    for(const auto& family:WeaponModeFamilies)if(family.secondaryConfiguration!=e.configurationPath){wrong.family->mode.family=&family;break;}
+    CHECK(!FixedContainerHandItem(wrong,f.owner,f.now));
+    return 0;
+}
 }
 int main(){return ExactSelectorsAndSupply()||GateBeforePhysicalAndExactOwner()||CylinderFlickReturnAndClose()||ClipQueuesOneSharedCommand()||
     PriorRendererFrameQueuesAndCompletesOnceAfterReequip()||PartialCylinderMigrationReacquiresAtRetainedContact()||
-    ObservationPreservesSourceLeasesAndRejectsWrongIdentity()||LinearPartsFollowTheirOwnMeasuredTravel()||MeasuredUnderbarrelLoadsOneRoundAndCloses();}
+    ObservationPreservesSourceLeasesAndRejectsWrongIdentity()||LinearPartsFollowTheirOwnMeasuredTravel()||MeasuredUnderbarrelLoadsOneRoundAndCloses()||
+    LinkedLoaderRejectsUnverifiedPhysicalAliases();}

@@ -519,8 +519,9 @@ std::atomic<unsigned> aimSamples=0,baseViews=0;
 // Request samples and snapshot outcomes, not native charge/throw acknowledgements.
 std::atomic<unsigned> expackReloadRequests=0,expackReloadZoomRoutes=0,expackReloadUnresolved=0;
 std::array<std::atomic<unsigned>,unsigned(ReloadStateStatus::ChangedDuringRead)+1> expackReloadReads{};
-struct BaseRecord {float nativeYaw=0,nativePitch=0,sourceYaw=0,viewYaw=0,bodyYaw=0;bool sharedEye=false,inputMaskRead=false;math::Vec3 sourcePosition{},eyePosition{};unsigned weapon=0,player=0,soldier=0,weak=0,controlled=0,inputMask=0;ULONGLONG ms=0;std::uint64_t space=0;};
+struct BaseRecord {float nativeYaw=0,nativePitch=0,sourceYaw=0,viewYaw=0,bodyYaw=0;bool sharedEye=false,inputMaskRead=false;math::Vec3 sourcePosition{},eyePosition{};unsigned weapon=0,player=0,soldier=0,weak=0,controlled=0,inputMask=0;ULONGLONG ms=0;std::uint64_t space=0;RenderedViewEvidence rendered{};};
 ViewBasisEvidence<BaseRecord> baseRecords;std::mutex baseRecordMutex;ULONGLONG baseRecordTime=0;
+std::atomic<std::uint64_t> renderedViewLockDrops=0,renderedViewEvictedUpdates=0;
 void PublishAnchor(unsigned soldier,unsigned weak,std::uint64_t space,float yaw,float units)noexcept {
     anchor.sequence.fetch_add(1,std::memory_order_acq_rel);
     anchor.soldier.store(soldier);anchor.weak.store(weak);anchor.space.store(space);anchor.yaw.store(yaw);anchor.consumedX.store(consumedOffset.x);anchor.consumedZ.store(consumedOffset.z);anchor.units.store(units);
@@ -1887,10 +1888,12 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     // only the exact shared scoped-XM8 mesh/persistence/mode-map family.
     static unsigned familySoldier=0,familyWeak=0,familyWeapon=0,familyData=0;static WeaponEquipmentIdentity familyEquipment{};static std::uint64_t familyEpoch=0;
     static std::optional<WeaponModeCommand> familyBinding;static ULONGLONG familyChecked=0;
+    static ReloadStateOwner familyOwner{};static std::int64_t familyObservedNs=0;
     static std::shared_ptr<const rigPublication::WeaponModeObservation> familyObservation;
     const bool observeFamily=rigPublication::WeaponModeObservationRequested(HandNanos(clock.QuadPart));
     const auto nowFamily=GetTickCount64();const auto data=U32(owner.weapon+4);
-    if(familySoldier!=owner.soldier||familyWeak!=owner.weak||familyWeapon!=owner.weapon||familyData!=data||familyEquipment!=owner.equipment||familyEpoch!=rigEpoch||nowFamily-familyChecked>=500){
+    const ReloadStateOwner familyCurrent{owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
+    if(familySoldier!=owner.soldier||familyWeak!=owner.weak||familyWeapon!=owner.weapon||familyData!=data||familyEquipment!=owner.equipment||familyEpoch!=rigEpoch||familyOwner!=familyCurrent||nowFamily-familyChecked>=500){
         familySoldier=owner.soldier;familyWeak=owner.weak;familyWeapon=owner.weapon;familyData=data;familyEpoch=rigEpoch;familyChecked=nowFamily;familyEquipment=owner.equipment;
         const WeaponModeMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t size){return Read(at,dst,size);},[](void*,unsigned at,const char* expected){return Type(at,expected);}};
         // Explicit snapshot demand observes this original periodic resolver call;
@@ -1900,6 +1903,9 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         if(observation){observation->owner={owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
             observation->equipment=owner.equipment;observation->inputGeneration=input.generation;observation->observedMs=familyChecked;}
         familyBinding=ResolveWeaponMode(memory,owner.soldier,owner.weapon,observation?&observation->resolution:nullptr);
+        // Keep the original resolver lease when joining physical loader custody
+        // to the separately fresh selected native ammunition resource.
+        familyOwner=familyCurrent;familyObservedNs=HandNanos(clock.QuadPart);
         familyObservation=std::move(observation);
     }
     const auto itemProfile=(asset!="40mmgl"||familyBinding)?itemProfileCandidate:nullptr;
@@ -2080,6 +2086,8 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     const auto magazineProfile=magazineProfileId?FindMagazineEquipment(*magazineProfileId):nullptr;
     if(physicalFixedContainer){
         Bc2PhysicalFixedContainerSample sample;sample.nativeOwner=magazineOwner;sample.input=handSample;sample.weapon=handItem;
+        if(familyBinding)sample.family=FixedContainerBodyAmmo::FamilyBinding{
+            familyOwner,*familyBinding,familyObservedNs,familyObservedNs+500000000};
         sample.observation=fixedContainerObservation?&*fixedContainerObservation:nullptr;
         sample.geometrySequence=input.generation;sample.trackingEpoch=input.spaceGeneration;
         sample.grip=input.hands[0].squeeze>=.7f;sample.gripPressed=sample.grip&&!fixedContainerGripHeld;
@@ -4122,7 +4130,9 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
     if(MH_CreateHook(update,UpdateHook,reinterpret_cast<void**>(&updateOriginal))!=MH_OK)return false;hooks[0]=update;
     if(MH_CreateHook(gather,GatherHook,reinterpret_cast<void**>(&gatherOriginal))!=MH_OK)return false;hooks[1]=gather;return true;
 }
-bool AdjustViewBase(std::array<RenderViewCopy,2>& copies,const runtime::TrackingFrame& tracking)noexcept {
+bool AdjustViewBase(std::array<RenderViewCopy,2>& copies,const runtime::TrackingFrame& tracking,
+    const ipc::FrameLease* renderLease,RenderedViewEvidence* renderSample)noexcept {
+    if(renderSample)*renderSample={};
     if(!enabled.load(std::memory_order_acquire))return true;
     const auto space=tracking.spaceGeneration;
     Owner viewOwner{};
@@ -4191,9 +4201,32 @@ bool AdjustViewBase(std::array<RenderViewCopy,2>& copies,const runtime::Tracking
     if(now-baseRecordTime>=ViewBasisEvidence<BaseRecord>::MinimumIntervalMs){
         record.player=owner.player;record.soldier=owner.soldier;record.weak=owner.weak;record.controlled=owner.controlled;
         record.inputMaskRead=Read(owner.cache+0x98,&record.inputMask,sizeof(record.inputMask));
-        std::lock_guard lock(baseRecordMutex);baseRecords.Observe(record,now);baseRecordTime=now;
+        if(renderLease)record.rendered.key=RenderedViewLeaseKey(*renderLease);
+        std::unique_lock lock(baseRecordMutex,std::try_to_lock);
+        if(lock){if(baseRecords.Observe(record,now)&&renderSample)*renderSample=record.rendered;baseRecordTime=now;}
+        else ++renderedViewLockDrops;
     }
     ++baseViews;return true;
+}
+void ObserveRenderedView(const RenderedViewEvidence& rendered)noexcept {
+    if(!rendered.Sampled())return;
+    std::unique_lock lock(baseRecordMutex,std::try_to_lock);if(!lock){++renderedViewLockDrops;return;}
+    if(!baseRecords.Enrich([&](const BaseRecord& row){return row.rendered.key==rendered.key;},
+        [&](BaseRecord& row){row.rendered=rendered;}))++renderedViewEvictedUpdates;
+}
+void ObserveRenderedViewAccepted(const ipc::FrameLease& lease,bool accepted)noexcept {
+    const auto key=RenderedViewLeaseKey(lease);
+    std::unique_lock lock(baseRecordMutex,std::try_to_lock);if(!lock){++renderedViewLockDrops;return;}
+    if(!baseRecords.Enrich([&](const BaseRecord& row){return row.rendered.key==key;},
+        [&](BaseRecord& row){row.rendered.publicationAccepted=accepted;}))++renderedViewEvictedUpdates;
+}
+void ObserveRenderedViewPublication(const ipc::FrameLease& lease,const graphics::PairTicket& ticket)noexcept {
+    const auto key=RenderedViewLeaseKey(lease);
+    std::unique_lock lock(baseRecordMutex,std::try_to_lock);if(!lock){++renderedViewLockDrops;return;}
+    // Unsampled publications are normal. Full owned values stay with each
+    // retained sample even after the independent timing journal wraps.
+    baseRecords.Enrich([&](const BaseRecord& row){return row.rendered.Sampled()&&row.rendered.key==key;},
+        [&](BaseRecord& row){row.rendered.Published(key,ticket);});
 }
 bool ObserveVehicleCameraPlan(unsigned frame,const runtime::TrackingFrame& tracking,const RenderViewCopy& native,const RenderViewCopy& adjusted,const std::array<RenderViewCopy,2>& planned)noexcept {
     std::lock_guard lock(vehicleViewMutex);
@@ -4368,9 +4401,12 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
     const auto bases=[] {std::lock_guard lock(baseRecordMutex);return baseRecords;}();
     out<<",\"view_basis_retention\":{\"policy\":\"bounded_decimation_with_latest\",\"capacity\":"<<bases.MaxRecords
        <<",\"minimum_interval_ms\":"<<bases.MinimumIntervalMs<<",\"eligible_samples\":"<<bases.Samples()
-       <<",\"stride_samples\":"<<bases.Stride()<<",\"compactions\":"<<bases.Compactions()<<",\"covers_all_frames\":false},\"view_basis_evidence\":[";
+       <<",\"stride_samples\":"<<bases.Stride()<<",\"compactions\":"<<bases.Compactions()<<",\"covers_all_frames\":false"
+       <<",\"rendered_schema\":1,\"rendered_matrix_layout\":\"canonical_row_vector_lh\",\"rendered_lock_drops\":"<<renderedViewLockDrops.load()
+       <<",\"rendered_evicted_updates\":"<<renderedViewEvictedUpdates.load()<<"},\"view_basis_evidence\":[";
     for(std::size_t i=0;i<bases.Size();++i){const auto& r=bases.At(i);if(i)out<<',';
-        out<<"{\"weapon\":"<<r.weapon<<",\"ms\":"<<r.ms<<",\"space\":"<<r.space<<",\"native_yaw\":"<<r.nativeYaw<<",\"native_pitch\":"<<r.nativePitch<<",\"source_yaw\":"<<r.sourceYaw<<",\"view_yaw\":"<<r.viewYaw<<",\"body_yaw\":"<<r.bodyYaw<<",\"shared_eye\":"<<(r.sharedEye?"true":"false")<<",\"source_position\":["<<r.sourcePosition.x<<','<<r.sourcePosition.y<<','<<r.sourcePosition.z<<"],\"eye_position\":["<<r.eyePosition.x<<','<<r.eyePosition.y<<','<<r.eyePosition.z<<"],\"player\":"<<r.player<<",\"soldier\":"<<r.soldier<<",\"weak\":"<<r.weak<<",\"controlled\":"<<r.controlled<<",\"input_mask_read\":"<<(r.inputMaskRead?"true":"false")<<",\"input_mask\":"<<r.inputMask<<'}';}
+        out<<"{\"weapon\":"<<r.weapon<<",\"ms\":"<<r.ms<<",\"space\":"<<r.space<<",\"native_yaw\":"<<r.nativeYaw<<",\"native_pitch\":"<<r.nativePitch<<",\"source_yaw\":"<<r.sourceYaw<<",\"view_yaw\":"<<r.viewYaw<<",\"body_yaw\":"<<r.bodyYaw<<",\"shared_eye\":"<<(r.sharedEye?"true":"false")<<",\"source_position\":["<<r.sourcePosition.x<<','<<r.sourcePosition.y<<','<<r.sourcePosition.z<<"],\"eye_position\":["<<r.eyePosition.x<<','<<r.eyePosition.y<<','<<r.eyePosition.z<<"],\"player\":"<<r.player<<",\"soldier\":"<<r.soldier<<",\"weak\":"<<r.weak<<",\"controlled\":"<<r.controlled<<",\"input_mask_read\":"<<(r.inputMaskRead?"true":"false")<<",\"input_mask\":"<<r.inputMask
+           <<",\"rendered_view\":";r.rendered.Write(out);out<<'}';}
 
     out<<"],\"weapon_mode_records\":[";
     for(unsigned n=0;n<modeRecordCount;++n){const auto& r=modeRecords[(modeRecordNext+modeRecords.size()-modeRecordCount+n)%modeRecords.size()];if(n)out<<',';

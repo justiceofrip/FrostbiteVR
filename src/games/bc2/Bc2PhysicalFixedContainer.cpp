@@ -70,8 +70,8 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
     }
     const auto view=api_.read(api_.context,s.nativeOwner,s.input.nowNs);
     if(s.observation)s.observation->view=view;
-    if(!view||!AmmoResourceViewFresh(*view,s.input.nowNs)||!FixedContainerHandOwner(view->binding,s.input.owner)||
-       s.weapon!=HandInteractionKey{view->binding.context.resource.weapon,s.input.owner.equipGeneration}||
+    const auto physical=view?FixedContainerHandItem({e,view->binding,view->snapshot,s.family},s.input.owner,s.input.nowNs):std::nullopt;
+    if(!view||view->binding.owner!=s.nativeOwner||!AmmoResourceViewFresh(*view,s.input.nowNs)||!physical||s.weapon!=*physical||
        view->snapshot.counts.capacity!=e->interaction.capacity){Cancel(s.input,hands);return out;}
     const auto gun=hands.Current(InteractionHand::Right);
     if(!gun||gun->token.kind!=HandClaimKind::GunHold||gun->token.item!=s.weapon||gun->token.owner!=s.input.owner||
@@ -129,7 +129,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
         if(z.ledger&&z.ledger!=&ledger)return false;
         if(!z.policy){
             try{z.policy=std::make_unique<FixedContainerReload>(profile,v.binding.context,FeedKey{profile.id,z.lifetime},
-                FeedKey{profile.id,profile.revision},z.supply,z.lifetime,ledger,true,x.input.owner);}catch(...){return false;}
+                FeedKey{profile.id,profile.revision},z.supply,z.lifetime,ledger,true,x.input.owner,x.weapon);}catch(...){return false;}
             if(!z.policy->Bind(v.snapshot,now)){z.policy.reset();return false;}z.ledger=&ledger;
         }
         if(z.physicalRequest&&z.request){
@@ -155,7 +155,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
             }
         }
         if(z.binding.context!=v.binding.context||z.handOwner!=x.input.owner){
-            if(!z.policy->RebindContext(v.snapshot,x.input.owner,now))return false;
+            if(!z.policy->RebindContext(v.snapshot,x.input.owner,now,x.weapon))return false;
             z.hand.reset();z.target.reset();z.handOwner=x.input.owner;z.recoveryPrepared=false;
         }
         z.binding=v.binding;
@@ -163,7 +163,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
         // Start another reload only after the prior physical cycle truly closed.
         if(z.restart){
             try{z.policy=std::make_unique<FixedContainerReload>(profile,v.binding.context,FeedKey{profile.id,z.lifetime},
-                FeedKey{profile.id,profile.revision},z.supply,z.lifetime,ledger,true,x.input.owner);}catch(...){return false;}
+                FeedKey{profile.id,profile.revision},z.supply,z.lifetime,ledger,true,x.input.owner,x.weapon);}catch(...){return false;}
             if(!z.policy->Bind(v.snapshot,now))return false;z.lastRaw=0;z.restart=false;z.seedNeutral=true;
         }
         if(!w.rawFresh||x.raw.input.sequence<=z.lastRaw){
@@ -280,7 +280,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
         // ledger lock. Neither accepted submission nor final counts are a receipt.
         if(!published||!out.blocksFire||!api_.submit(api_.context,*dispatch))slot->submissionFailed=true;else ++submitted_;
     }
-    auto& t=out.tracking;t.enabled=published;t.source={e,view->binding,view->snapshot};t.input=s.input;t.gun=*gun;t.hand=slot->hand;
+    auto& t=out.tracking;t.enabled=published;t.source={e,view->binding,view->snapshot,s.family};t.input=s.input;t.gun=*gun;t.hand=slot->hand;
     t.blocksFire=out.blocksFire;t.carried=slot->carried;t.pending=bool(slot->request);t.step=slot->policy->Step();t.targetStep=slot->targetStep;
     t.lifetime=slot->lifetime;t.revision=slot->revision;t.target=slot->target;t.carriedSupply=slot->carriedSupply;t.parts=slot->parts;t.partCount=unsigned(e->parts.size());
     t.grip=s.grip;t.gripPressed=s.gripPressed;
@@ -414,6 +414,14 @@ void WriteFixedContainerObservation(std::ostream& out,const Bc2FixedContainerObs
         out<<",\"phase\":"<<unsigned(v.phase)<<",\"command\":";if(v.command)command(*v.command);else out<<"null";
         out<<",\"request\":"<<v.request<<",\"requestState\":"<<unsigned(v.requestState)<<",\"wellEmpty\":"<<v.wellEmpty<<",\"receipt\":";
         if(v.receipt)receipt(*v.receipt);else out<<"null";out<<",\"terminal\":";if(v.terminal)outcome(*v.terminal);else out<<"null";out<<'}';}
+    out<<",\"physicalFamily\":";
+    if(!t.source.family)out<<"null";else{const auto& proof=*t.source.family;const auto& m=proof.mode;
+        out<<"{\"owner\":";nativeOwner(proof.owner);out<<",\"observedNs\":"<<proof.observedNs<<",\"deadlineNs\":"<<proof.deadlineNs
+            <<",\"current\":"<<bool(FixedContainerHandItem(t.source,t.input.owner,now))<<",\"physicalItem\":"<<m.persistent
+            <<",\"inventory\":"<<m.inventory<<",\"selectedSecondary\":"<<m.selectedSecondary<<",\"targetWeapon\":"<<m.targetWeapon
+            <<",\"targetSlot\":"<<m.targetSlot<<",\"action\":"<<m.action<<",\"primaryAction\":"<<m.primaryAction<<",\"configurationPath\":";
+        text(m.family?m.family->secondaryConfiguration:std::string_view{});out<<",\"asset\":";text(m.family?m.family->secondaryAsset:std::string_view{});
+        out<<",\"persistentId\":";text(m.family?m.family->persistentId:std::string_view{});out<<'}';}
     out<<",\"pendingRequest\":";if(o.pendingRequest)request(*o.pendingRequest);else out<<"null";
     out<<",\"lastCompletion\":";if(!o.lastCompletion)out<<"null";else{const auto& c=*o.lastCompletion;
         out<<"{\"lifetime\":"<<c.lifetime<<",\"supply\":";supply(c.supply);out<<",\"outcome\":";outcome(c.outcome);

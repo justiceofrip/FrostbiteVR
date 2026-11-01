@@ -41,6 +41,17 @@ public:
     const Record& At(std::size_t index)const noexcept {
         return index<count_?history_[index].record:latest_.record;
     }
+    // Enrich owned values by exact identity, never by a journal index. The
+    // latest slot can duplicate a history row; update both before compaction.
+    // Caller serializes this with Observe/snapshots, using a nonblocking lock
+    // when invoked from a native/publication callback.
+    template<class Match,class Update>
+    bool Enrich(Match matches,Update update)noexcept {
+        bool found=false;
+        for(std::size_t i=0;i<count_;++i)if(matches(history_[i].record)){update(history_[i].record);found=true;}
+        if(samples_&&matches(latest_.record)){update(latest_.record);found=true;}
+        return found;
+    }
     std::uint64_t Samples()const noexcept {return samples_;}
     std::uint64_t Stride()const noexcept {return stride_;}
     std::uint64_t Compactions()const noexcept {return compactions_;}

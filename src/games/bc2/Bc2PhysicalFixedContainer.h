@@ -49,6 +49,7 @@ struct Bc2PhysicalFixedContainerSample {
     ReloadStateOwner nativeOwner{};
     interaction::HandInteractionSample input{};
     interaction::HandInteractionKey weapon{};
+    std::optional<FixedContainerBodyAmmo::FamilyBinding> family;
     const FixedContainerEquipmentProfile* equipment=nullptr;
     std::string_view configurationPath,mesh;
     std::uint64_t rigFingerprint=0,geometrySequence=0,trackingEpoch=0;

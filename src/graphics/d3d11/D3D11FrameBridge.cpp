@@ -38,6 +38,8 @@ bool D3D11FrameBridge::PreparedGraphicsMatches(const ipc::FrameLease& lease)cons
 }
 void D3D11FrameBridge::ObservePublication(void* context,const ipc::FrameLease& lease,const PairTicket& ticket,ipc::StagedFrameObservation event)noexcept {
     auto& bridge=*static_cast<D3D11FrameBridge*>(context);
+    if(event==ipc::StagedFrameObservation::Published&&bridge.publicationObserver_)
+        bridge.publicationObserver_(lease,ticket);
     if(bridge.pipelineEnabled_){
         if(lease.sourceSlotCount!=bridge.pipelineSourceCount_||lease.sourceSlot>=bridge.pipelineSourceCount_)return;
         auto& journal=bridge.pipelineTiming_[lease.sourceSlot];

@@ -11,12 +11,12 @@ Ownership: prior CHAT25/26 close.json confirms lease release, idle helpers and
 exact profile restoration. Coordinator acquired the lease before shared mutations.
 External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned.
 
-Feedback72+73: built/pushed89e48ec; nativebc246538; private0.1.35 installed/validated,0.1.34 rollback/settings preserved.
-Both normal341/341; focused9/9; geometry33, decoder34 reused, cache6, fixed-loader10 pass. No unchanged rebuilds.
-Shared neutral pickup correction; physical single-round loaders across all80 measured underbarrel configurations;306-part cache; consumed-motion retirement and per-part sliding travel.
-Actual72xr-game01: QJU88 Open/Detach/Attach aggregate acceptance3, visible replacement and200/487. SeatFeed refused native right-orientation change under stationary simulator controllers; full reload unaccepted. Exact native receipt review remains separate from counters.
-72run closed normally; native retirement, exact3profiles/settings restoration true. Bounded watchers recorded noAV but detached before exit; prior69AVs remain unresolved.
-Receipt: handoff/integrations/coordinator-20261101-feedback72/receipt.json. Root continues new SeatFeed/support diagnosis and other ready actual checks; no all-weapon/headset completion claim.
+Feedback76: built/pushed dd09631; native f43ce268; private0.1.36 installed/validated,0.1.35 rollback and settings preserved.
+Both normal341/341, focusedFeed and17Python methods pass. Immutable snapshot publication/terminal failures/ShareDelete reads and original Feed admission observations are integrated; gameplay admission unchanged.
+Prior72+73 all80 measured underbarrel configurations/306-part cache and neutral pickup correction remain. Actual72 reached QJU replacement Attach/200-487; belt and complete reload remain unaccepted.
+Actual76 game01 Open/Detach followed a transient released publication gap, then same-owner Attach state/receipts2. Game03 selected40mmgl but remained1/7 after trigger; fixed-loader tracking was uninitialized. Both normal closed/restored.
+Batch77 prepared: rendered-eye full publication evidence, bounded postrelease driver observation; shared underbarrel hand/native identity fix and bounded sight transition observation in progress. Root integrates only after writers stop and combined checks pass.
+Receipt: handoff/integrations/coordinator-20261101-feedback76/README.txt and reports76/installation.json. No all-weapon/headset completion claim; prior69AVs unresolved.
 Retained70sight01: XM8->launcher->XM8, native mode acknowledgements2/sight commits2 and visible1/7; no firing/reload claim. Its two closed sessions are hash-preserved under reports72/archived-sessions.
 68 performance comparison inconclusive due native yaw mismatch.74 prepares35-bound copy-service trial with composed-view admission; unrun. Destruction loaded knownSP02 scene, no destructive shot or rendering acceptance.
 Historical68: private0.1.32; carry precision, pump observation/driver and native underbarrel inventory action pairing. Receipt coordinator-20261031-feedback68/receipt.json.
