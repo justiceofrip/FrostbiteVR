@@ -931,7 +931,7 @@ void RequestMissing(unsigned firing,unsigned stage,unsigned kind,const RequestBo
 }
 std::int64_t Now()noexcept{LARGE_INTEGER value{};if(frequency<=0||!QueryPerformanceCounter(&value)||value.QuadPart<=0)return 0;
     return (value.QuadPart/frequency)*1000000000+(value.QuadPart%frequency)*1000000000/frequency;}
-bool IsCurrent(const Lease& lease,std::int64_t now,FixedGateCurrent* observation=nullptr)noexcept{
+bool IsCurrentObserved(const Lease& lease,std::int64_t now,FixedGateCurrent* observation)noexcept{
     if(observation){*observation={};observation->checked=true;}
     const auto enabledValue=[&](bool value)noexcept{if(observation)observation->enabled=value;return value;};
     const auto revisionValue=[&](std::uint64_t value)noexcept{
@@ -946,6 +946,8 @@ bool IsCurrent(const Lease& lease,std::int64_t now,FixedGateCurrent* observation
     return enabledValue(enabled.load(std::memory_order_acquire))&&lease.revision==revisionValue(ownerRevision.load(std::memory_order_acquire))&&
         now>=lease.snapshot.observedNs&&now<lease.deadline;
 }
+// Keep the original two-argument callable used by owner-publication helpers.
+bool IsCurrent(const Lease& lease,std::int64_t now)noexcept{return IsCurrentObserved(lease,now,nullptr);}
 ReloadHoldIdentity RoundIdentity(const Lease&)noexcept;
 std::optional<Lease> Owner(unsigned firing,std::int64_t now)noexcept{
     std::optional<Lease> regular;
@@ -1092,7 +1094,7 @@ bool RequestOwnerEvidence(const Lease& lease,std::int64_t now,RequestBoundaryEvi
     const auto reject=[&](unsigned reason)noexcept{if(observation)observation->reason=reason;return false;};
     if(!lease.server)return reject(1);
     if(!serverBinding)return reject(2);
-    if(!IsCurrent(lease,now,observation?&observation->initial:nullptr))return reject(3);
+    if(!IsCurrentObserved(lease,now,observation?&observation->initial:nullptr))return reject(3);
     // Ownership is structural. Requiring a sibling's mutable timer/state to
     // stand still here falsely cancels valid overlapping client/server updates.
     // Each own-event boundary and PrepareHold still require full state evidence.
@@ -1107,7 +1109,7 @@ bool RequestOwnerEvidence(const Lease& lease,std::int64_t now,RequestBoundaryEvi
                 return ReadReloadFlowOwner(memory,binding,base,lease.snapshot,lease.deadline,firing,at,&d);},Now,Now(),read.client,retry);
             RecordPhaseRetry(PhaseRetryPath::ClientOwner,firing,lease,lease.deadline,retry);}
         if(!valid){if(evidence)*evidence=read;return reject(4+branch);}}
-    return IsCurrent(lease,Now(),observation?&observation->final:nullptr)?true:reject(7);
+    return IsCurrentObserved(lease,Now(),observation?&observation->final:nullptr)?true:reject(7);
 }
 struct Observation {
     Frame frame{};std::optional<Lease> lease;unsigned context=0,snapshot=0,callbackCaller=0;
@@ -3654,7 +3656,7 @@ bool PublishFixedContainerGate(const FixedContainerGate& publication)noexcept {
             diagnostic.cleanupEpoch=published.cleanupEpoch;diagnostic.completionCycle=published.completionCycle;
             diagnostic.nativeServer=bool(published.server);
         }
-        if(!IsCurrent(published,now,capture.Requested()?&diagnostic.current:nullptr))return capture.Reject("owner_current");
+        if(!IsCurrentObserved(published,now,capture.Requested()?&diagnostic.current:nullptr))return capture.Reject("owner_current");
         if(published.snapshot.owner!=binding.owner)return capture.Reject("owner_identity");
         if(!published.server)return capture.Reject("owner_server_missing");
         lease=published;
