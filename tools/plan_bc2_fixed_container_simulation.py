@@ -187,8 +187,22 @@ def admit(snapshot, now, nonce):
 def preserved(snapshot):
     i, m = snapshot["input"], snapshot["mapping"]
     return dict(referenceHead=i["referenceHead"], head=i["head"], right=i["hands"][1],
-                weaponWorldMeters=m["weaponWorldMeters"], trackingBodyWorldMeters=m["trackingBodyWorldMeters"],
+                spaceGeneration=i["spaceGeneration"], trackingBasisGeneration=i["trackingBasisGeneration"],
+                worldUnitsPerMeter=i["worldUnitsPerMeter"], floorRelative=i["floorRelative"],
+                trackingBodyFromWeapon=frame.multiply(frame.rigid(m["weaponWorldMeters"]),
+                    frame.inverse(frame.rigid(m["trackingBodyWorldMeters"]))),
                 anatomicalWristToGrip=m["anatomicalWristToGrip"])
+
+
+def require_preserved(before, after):
+    relative = "trackingBodyFromWeapon"
+    require({k: v for k, v in before.items() if k != relative}
+            == {k: v for k, v in after.items() if k != relative},
+            "fixed-container head/right/controller basis changed; replan")
+    # Match the shared transport's W * inverse(B) admission: common world
+    # motion cancels without relaxing independent weapon/body drift limits.
+    position, angle = frame.pose_error(frame.rigid(before[relative]), frame.rigid(after[relative]))
+    require(position <= .002 and angle <= .005, "fixed-container relative weapon/body basis changed; replan")
 
 
 def selection(snapshot):
@@ -217,8 +231,8 @@ def held(snapshot, now, kind):
 
 def reobserve(previous, snapshot, now, nonce):
     x = admit(snapshot, now, nonce)
-    require(previous["schema"] == SCHEMA and previous["selection"] == selection(snapshot)
-            and previous["preserve"] == preserved(snapshot), "owner/profile/controller basis changed; replan")
+    require(previous["schema"] == SCHEMA and previous["selection"] == selection(snapshot), "owner/profile changed; replan")
+    require_preserved(previous["preserve"], preserved(snapshot))
     baseline, t = previous["baseline"], x["tracking"]
     require(integer(snapshot["nonce"]) != integer(previous["snapshotNonce"])
             and integer(snapshot["observed_ns"]) > integer(previous["evaluatedAtNs"])

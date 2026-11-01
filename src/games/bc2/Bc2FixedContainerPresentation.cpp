@@ -7,7 +7,6 @@
 namespace fvr::bc2 {
 using namespace interaction;
 namespace {
-bool Fresh(std::int64_t a,std::int64_t b,std::int64_t now)noexcept{return a>0&&a<=now&&now<b&&b-a<=100000000;}
 math::Matrix4 World(math::Matrix4 local,const math::Matrix4& placed,float units,bool geometry=false)noexcept {
     for(unsigned n=0;n<3;++n)local.values[3][n]*=units;
     if(geometry)for(unsigned i=0;i<3;++i)for(unsigned j=0;j<3;++j)local.values[i][j]*=units;
@@ -20,17 +19,6 @@ bool FixedContainerRigMatches(const FixedContainerEquipmentProfile& e,const RigS
     for(const auto& p:e.parts)if(p.boneIndex>=rig.names.size()||rig.names[p.boneIndex]!=p.bone||
        std::count(rig.names.begin(),rig.names.end(),p.bone)!=1)return false;
     return true;
-}
-bool FixedContainerTrackingFresh(const Bc2FixedContainerTracking& t,std::int64_t now)noexcept {
-    const auto* e=KnownFixedContainerEquipment(t.source.equipment);const auto& a=t.source.ammunition;const auto& i=t.input;const auto& g=t.gun;
-    return t.enabled&&e&&t.lifetime&&t.revision&&FixedContainerHandOwner(t.source.binding,i.owner)&&
-        AmmoResourceBindingFresh(t.source.binding,t.source.binding.owner,now)&&a.context==t.source.binding.context&&
-        a.coherentIdleVerified&&a.sequence&&Fresh(a.observedNs,a.deadlineNs,now)&&a.counts.capacity==e->interaction.capacity&&
-        a.counts.loaded>=0&&a.counts.loaded<=a.counts.capacity&&a.counts.reserve>=0&&a.counts.reserve<=1000000&&
-        i.sequence&&i.focused&&i.tracked[0]&&i.tracked[1]&&!i.released[1]&&Fresh(i.observedNs,i.deadlineNs,now)&&
-        g.token.id&&g.token.owner==i.owner&&g.token.kind==HandClaimKind::GunHold&&g.token.hand==InteractionHand::Right&&
-        g.token.item==HandInteractionKey{a.context.resource.weapon,i.owner.equipGeneration}&&g.inputSequence==i.sequence&&
-        g.deadlineNs>now&&g.deadlineNs<=i.deadlineNs&&t.partCount==e->parts.size()&&t.partCount<=t.parts.size();
 }
 bool FixedContainerTrackingRetained(const Bc2FixedContainerTracking& a,const Bc2FixedContainerTracking& b,std::int64_t now)noexcept {
     if(!FixedContainerTrackingFresh(a,now)||!FixedContainerTrackingFresh(b,now)||a.source.equipment!=b.source.equipment||

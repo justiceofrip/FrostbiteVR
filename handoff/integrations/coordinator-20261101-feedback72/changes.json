@@ -24,10 +24,10 @@
   "checks": {
     "geometry_python": 33,
     "geometry_note": "32 initial methods passed; coverage-only fixture fixed to compare secondary asset descriptors, then that method passed",
-    "native": "Pending combined checks. Initial72focused8/9 passed; close failure retained in reports and corrected in this source.",
+    "native": "Pending combined checks. Initial72focused8/9 passed; M16 close recovery corrected. Combined focused04 exposed a pure-helper link dependency, now separated from renderer implementation.",
     "decoder_python": 34,
     "body_cache_python": 6,
-    "fixed_loader_python": 7
+    "fixed_loader_python": 10
   },
   "initial_source": "c36cb198c60785edd4ff64301a0c7903c1841081"
 }

@@ -25,7 +25,19 @@ struct Bc2FixedContainerTracking {
     // Persistent mod-owned transforms. They do not renew controller authority.
     std::array<math::Matrix4,16> parts{};unsigned partCount=0;
 };
-bool FixedContainerTrackingFresh(const Bc2FixedContainerTracking&,std::int64_t now)noexcept;
+inline bool FixedContainerTrackingFresh(const Bc2FixedContainerTracking& t,std::int64_t now)noexcept {
+    using namespace interaction;
+    const auto fresh=[now](std::int64_t a,std::int64_t b){return a>0&&a<=now&&now<b&&b-a<=100000000;};
+    const auto* e=KnownFixedContainerEquipment(t.source.equipment);const auto& a=t.source.ammunition;const auto& i=t.input;const auto& g=t.gun;
+    return t.enabled&&e&&t.lifetime&&t.revision&&FixedContainerHandOwner(t.source.binding,i.owner)&&
+        AmmoResourceBindingFresh(t.source.binding,t.source.binding.owner,now)&&a.context==t.source.binding.context&&
+        a.coherentIdleVerified&&a.sequence&&fresh(a.observedNs,a.deadlineNs)&&a.counts.capacity==e->interaction.capacity&&
+        a.counts.loaded>=0&&a.counts.loaded<=a.counts.capacity&&a.counts.reserve>=0&&a.counts.reserve<=1000000&&
+        i.sequence&&i.focused&&i.tracked[0]&&i.tracked[1]&&!i.released[1]&&fresh(i.observedNs,i.deadlineNs)&&
+        g.token.id&&g.token.owner==i.owner&&g.token.kind==HandClaimKind::GunHold&&g.token.hand==InteractionHand::Right&&
+        g.token.item==HandInteractionKey{a.context.resource.weapon,i.owner.equipGeneration}&&g.inputSequence==i.sequence&&
+        g.deadlineNs>now&&g.deadlineNs<=i.deadlineNs&&t.partCount==e->parts.size()&&t.partCount<=t.parts.size();
+}
 bool FixedContainerTrackingRetained(const Bc2FixedContainerTracking&,const Bc2FixedContainerTracking&,std::int64_t now)noexcept;
 bool FixedContainerRigMatches(const FixedContainerEquipmentProfile&,const RigSnapshot&)noexcept;
 Bc2FixedContainerRawContact BuildFixedContainerRawContact(const Bc2FixedContainerTracking&,const RigSnapshot&,

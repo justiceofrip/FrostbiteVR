@@ -16,6 +16,7 @@ def module(name, path):
 
 
 p = module("fixed_planner_test", ROOT / "tools/plan_bc2_fixed_container_simulation.py")
+d = module("fixed_driver_test", ROOT / "tools/drive_bc2_fixed_container_simulation.py")
 fixture = module("fixed_sight_fixture", ROOT / "tests/test_bc2_sight_simulation_plan.py")
 f, NOW = p.frame, 1_000_000_000
 
@@ -36,6 +37,16 @@ def set_local(s, local):
     s["input"]["hands"][0]["aim"] = f.to_pose(absolute)
     if "fixedContainer" in s:
         s["fixedContainer"]["raw"]["weaponFromWrist"] = copy.deepcopy(local)
+
+
+def move_world(source, transform):
+    """Synthetic common native motion; controller input and source leases stay original."""
+    s = copy.deepcopy(source)
+    for field in ("weaponWorldMeters", "trackingBodyWorldMeters", "rawLeftWristWorldMeters"):
+        s["mapping"][field] = f.multiply(s["mapping"][field], transform)
+    raw = s["fixedContainer"]["raw"]
+    raw["weaponWorldMeters"] = f.multiply(raw["weaponWorldMeters"], transform)
+    return s
 
 
 def snapshot(kind=4, motion_kind="Hinge"):
@@ -200,6 +211,77 @@ class FixedContainerSimulationPlanTests(unittest.TestCase):
         self.assertEqual(insertion["schedule"][-1]["grip"], 0)
         self.assertEqual(insertion["receiptGates"][0]["minimumObservationSpanNs"], 60_000_000)
         self.assertEqual(insertion["receiptGates"][-1]["id"], "fixed_inserted")
+
+    def test_common_world_motion_preserves_commands_pickup_and_insertion_receipts(self):
+        s, pickup, held, _ = self.pipeline()
+        original = copy.deepcopy(held)
+        moved = move_world(held, fixture.matrix([3.2, -1.1, 2.4], [37, -23, 19]))
+        self.assertEqual(held, original)
+        self.assertEqual(moved["input"], held["input"])
+        self.assertEqual(moved["fixedContainer"]["raw"]["input"], held["fixedContainer"]["raw"]["input"])
+        self.assertNotEqual(s["mapping"]["weaponWorldMeters"], moved["mapping"]["weaponWorldMeters"])
+        self.assertNotEqual(s["mapping"]["trackingBodyWorldMeters"], moved["mapping"]["trackingBodyWorldMeters"])
+        # The already emitted controller schedule still reaches the same local
+        # geometry after a substantial common translation and rotation.
+        for row in pickup["schedule"]:
+            position, angle = f.pose_error(fixture.emitted_local(s, row), fixture.emitted_local(moved, row))
+            self.assertLess(position, 1e-7)
+            self.assertLess(angle, 1e-6)
+        driver = object.__new__(d.FixedContainerDriver)
+        driver.stable_snapshot(s, moved)
+        self.assertTrue(p.check_gate(pickup, moved, "fixed_held", NOW+200_000_000, 110)["observed"])
+        insertion = p.plan(moved, "Insert", NOW+200_000_000, 110, pickup_plan=pickup)
+        done = move_world(completed(moved, insertion), fixture.matrix([-1.7, .8, 2.1], [-29, 17, -11]))
+        driver.stable_snapshot(moved, done)
+        self.assertTrue(p.check_gate(insertion, done, "fixed_inserted", NOW+500_000_000, 120)["observed"])
+
+    def test_relative_weapon_or_body_drift_uses_shared_transport_limits(self):
+        s, pickup, held, _ = self.pipeline()
+        driver = object.__new__(d.FixedContainerDriver)
+        for field in ("weaponWorldMeters", "trackingBodyWorldMeters"):
+            for distance, radians, accepted in ((.0019, 0, True), (.0021, 0, False),
+                                               (0, .0049, True), (0, .0051, False)):
+                with self.subTest(field=field, distance=distance, radians=radians):
+                    changed = copy.deepcopy(held)
+                    # Rotate in place so the angular boundary is exercised
+                    # independently of the translational boundary.
+                    matrix = changed["mapping"][field]
+                    turned = f.multiply(matrix, fixture.matrix([0, 0, 0], [math.degrees(radians), 0, 0]))
+                    turned[3][:3] = [matrix[3][0]+distance, *matrix[3][1:3]]
+                    changed["mapping"][field] = turned
+                    set_local(changed, changed["fixedContainer"]["raw"]["weaponFromWrist"])
+                    changed["fixedContainer"]["raw"]["weaponWorldMeters"] = copy.deepcopy(changed["mapping"]["weaponWorldMeters"])
+                    if accepted:
+                        driver.stable_snapshot(s, changed)
+                        self.assertTrue(p.check_gate(pickup, changed, "fixed_held", NOW+200_000_000, 110)["observed"])
+                    else:
+                        with self.assertRaises(d.transport.REFUSAL):
+                            driver.stable_snapshot(s, changed)
+                        with self.assertRaisesRegex(p.Refusal, "relative weapon/body basis changed"):
+                            p.check_gate(pickup, changed, "fixed_held", NOW+200_000_000, 110)
+
+    def test_common_world_motion_keeps_generations_controls_and_original_leases_pinned(self):
+        s, pickup, held, _ = self.pipeline()
+        moved = move_world(held, fixture.matrix([2, -1, 3], [31, -17, 13]))
+        driver = object.__new__(d.FixedContainerDriver)
+        for mutation in ("trackingBasisGeneration", "spaceGeneration", "physical", "worldUnitsPerMeter",
+                         "floorRelative", "referenceHead", "head", "right", "calibration"):
+            bad = copy.deepcopy(moved)
+            if mutation == "physical": bad["physical_equipment_generation"] += 1
+            elif mutation == "floorRelative": bad["input"][mutation] = not bad["input"][mutation]
+            elif mutation in ("referenceHead", "head"): bad["input"][mutation]["position"][0] += .001
+            elif mutation == "right": bad["input"]["hands"][1]["squeeze"] = .9
+            elif mutation == "calibration": bad["mapping"]["anatomicalWristToGrip"][3][0] += .001
+            else: bad["input"][mutation] += 1
+            with self.subTest(mutation=mutation):
+                with self.assertRaises((d.transport.REFUSAL, d.planner.Refusal)):
+                    driver.stable_snapshot(s, bad)
+                with self.assertRaises(p.Refusal):
+                    p.check_gate(pickup, bad, "fixed_held", NOW+200_000_000, 110)
+        bad = copy.deepcopy(moved)
+        bad["fixedContainer"]["raw"]["input"]["deadlineNs"] = NOW+200_000_000
+        with self.assertRaises(p.Refusal):
+            p.check_gate(pickup, bad, "fixed_held", NOW+200_000_000, 110)
 
     def test_insertion_requires_new_actual_pickup_and_same_supply_claim(self):
         s, pickup, held, _ = self.pipeline()

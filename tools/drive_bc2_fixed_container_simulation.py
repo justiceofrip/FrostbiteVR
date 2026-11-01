@@ -67,7 +67,7 @@ class FixedContainerDriver(shared.PumpDriver):
 
     def stable_snapshot(self, before, after):
         transport.stable_snapshot(before, after)
-        require(planner.preserved(before) == planner.preserved(after), "fixed-container head/right/controller basis changed")
+        planner.require_preserved(planner.preserved(before), planner.preserved(after))
         if before.get("fixedContainer", {}).get("available") is True:
             require(planner.selection(before) == planner.selection(after), "exact fixed-container profile changed")
 
