@@ -5,7 +5,9 @@ Updated November 1, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
-Feedback80 source is pushed and private0.1.38 is installed and validated, with0.1.37 rollback and settings preserved. Both normal builds pass341/341. Current holster observations, shared launcher hand/native-ammunition binding and bounded diagnostic driving are included. [Handoff](../handoff/integrations/coordinator-20261101-feedback80/README.txt). The80 measured underbarrel configurations and306-part cache remain included.
+Feedback83/84 source is pushed; both normal builds pass341/341. Passive LMG grips now retain their original leases through a failed native gate publication, with exact bounded refusal diagnostics. Private0.1.39 installed and passed setup, but crashed during level Resume before the reload check;0.1.38 is restored and validated with settings preserved. [Handoff](../handoff/integrations/coordinator-20261101-feedback83/README.txt). This is a prealpha candidate; no public update or complete reload acceptance.
+
+Actual39 recorded first/second-chance read access violations in amdxx32.dll+0x686c0. The cause and whether it is a regression remain unknown. Profiles/settings restored, all owned processes exited; normal native retirement was not proved. Exact evidence: reports/coordinator-20261101-feedback83/xr-game01. The rejected39 payload is retained for diagnosis, not recommended as a rollback target.
 
 Actual38 ordinary holstering reached Empty, drew QJU88 and opened its cover; container removal then lost its claim without an accepted operation. The run closed normally with native retirement and profiles/settings restored (reports/coordinator-20261101-feedback80/xr-game01). Actual37 XM8 launcher fired1/7->0/7 and visibly damaged a wall, but native reload admission remains unresolved. Feedback78/79 diagnostic deadline and redundant-request corrections are included. Complete LMG/underbarrel reloads, general destruction rendering, measured performance and headset acceptance remain open; prior loading/shutdown AVs remain unresolved.
 
