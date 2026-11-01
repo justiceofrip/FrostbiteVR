@@ -50,8 +50,18 @@ function Pin([string]$Path,[long]$Maximum=4MB){
     return @{path=$Path;bytes=$item.Length;sha256=(Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()}
 }
 function Json([string]$Path,[long]$Maximum=128KB){
-    Require ((Get-Item -LiteralPath $Path).Length -le $Maximum) "JSON exceeds bound: $Path"
-    return [IO.File]::ReadAllText($Path)|ConvertFrom-Json -AsHashtable -DateKind String -Depth 100
+    for($attempt=0;$attempt -lt 5;$attempt++){
+        Require ((Get-Item -LiteralPath $Path).Length -le $Maximum) "JSON exceeds bound: $Path"
+        try{$text=[IO.File]::ReadAllText($Path);break}
+        catch{
+            $cause=$_.Exception;while($cause.InnerException){$cause=$cause.InnerException}
+            # The producer can briefly deny reads. Retry only Win32 sharing/lock
+            # violations (32/33), with at most 40 ms of backoff on existing deadlines.
+            if($cause -isnot [IO.IOException] -or $cause.HResult -notin @(-2147024864,-2147024863) -or $attempt -eq 4){throw}
+            Start-Sleep -Milliseconds 10
+        }
+    }
+    return $text|ConvertFrom-Json -AsHashtable -DateKind String -Depth 100
 }
 function Save([string]$Name,$Value){Write-FvrJson (Join-Path $OutputDir $Name) $Value}
 function SameIdentity($Actual,$Expected){
