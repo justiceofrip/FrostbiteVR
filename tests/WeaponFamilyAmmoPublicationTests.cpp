@@ -54,10 +54,14 @@ int RegisteredConfiguration(const ReloadConfigDescriptor& descriptor,WeaponFamil
         CHECK(!ReadWeaponFamilyAmmoConfig(bad.Memory(),bad.config));
     }
     CHECK(!ReadWeaponFamilyAmmoConfig({},fixture.config));
-    if(expected==WeaponFamilyAmmoSource::Underbarrel){
+    if(FindUnderbarrelAmmoConfig(fixture.config)){
         CHECK(fixture.reads==12&&descriptor.timing.size()==6);
         CHECK(!FindMagazineNativeProfile(fixture.config)&&!ManualPumpConfig(fixture.config));
-        CHECK(!FindBc2FeedRegistration(fixture.config)&&!ResolveFixedContainerNative(fixture.config));
+        CHECK(!FindBc2FeedRegistration(fixture.config));
+        const auto* manualFixed=ResolveUnderbarrelFixedContainerNative(fixture.config);
+        CHECK(ResolveFixedContainerNative(fixture.config)==manualFixed);
+        CHECK(manualFixed?(expected==WeaponFamilyAmmoSource::Fixed&&manualFixed==&descriptor):
+            expected==WeaponFamilyAmmoSource::Underbarrel);
         Bc2ReloadNativePolicy manual;
         CHECK(!manual.MatchesSelectedConfig(fixture.config));
         CHECK(manual.ConfigureMagazine()&&!manual.MatchesSelectedConfig(fixture.config));
@@ -139,14 +143,18 @@ int main(){
         if(RegisteredConfiguration(*row,WeaponFamilyAmmoSource::Fixed))return 1;++counts[3];}
     std::array<unsigned,3> underbarrelCounts{};
     for(const auto& row:UnderbarrelAmmoConfigs){
-        if(RegisteredConfiguration(row,WeaponFamilyAmmoSource::Underbarrel))return 1;++counts[4];
+        Fixture fixture(row);const bool measured=ResolveUnderbarrelFixedContainerNative(fixture.config)!=nullptr;
+        if(RegisteredConfiguration(row,measured?WeaponFamilyAmmoSource::Fixed:WeaponFamilyAmmoSource::Underbarrel))return 1;
+        ++counts[measured?3:4];
         if(row.assetName=="40mmgl")++underbarrelCounts[0];
         else if(row.assetName=="40mmsg")++underbarrelCounts[1];
         else if(row.assetName=="40mmsmk")++underbarrelCounts[2];
         else CHECK(false);
     }
-    CHECK(counts[0]>=2&&counts[1]>1&&counts[2]>=1&&counts[3]==FixedContainerConfigs.size());
-    CHECK(counts[4]==80&&underbarrelCounts[0]==32&&underbarrelCounts[1]==24&&underbarrelCounts[2]==24);
+    CHECK(counts[0]>=2&&counts[1]>1&&counts[2]>=1);
+    CHECK(counts[3]==FixedContainerConfigs.size()+generated::UnderbarrelFixedContainerEquipment.size());
+    CHECK(counts[4]>0&&counts[4]+generated::UnderbarrelFixedContainerEquipment.size()==80);
+    CHECK(underbarrelCounts[0]==32&&underbarrelCounts[1]==24&&underbarrelCounts[2]==24);
     std::printf("Family ammo dispatch/publication: magazine=%u tube=%u feed=%u fixed=%u underbarrel=%u; exact identity/timing, retained operation, three-copy counts and expiry gates passed.\n",
         counts[0],counts[1],counts[2],counts[3],counts[4]);
 }

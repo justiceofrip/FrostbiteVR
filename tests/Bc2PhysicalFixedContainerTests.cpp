@@ -23,8 +23,9 @@ struct Fixture {
     AmmunitionCounts counts{};bool delayedRaw=false;
     std::unique_ptr<Bc2PhysicalFixedContainer> physical;HandClaimToken gun{};
     std::int64_t now=1000000000;bool priorGrip=false,allowGate=true;unsigned calls=0;
-    explicit Fixture(unsigned index=0):equipment(&generated::FixedContainerEquipment[index]){
-        counts={2,20,equipment->interaction.capacity};
+    explicit Fixture(unsigned index=0):Fixture(&generated::FixedContainerEquipment[index],2,20){}
+    Fixture(const FixedContainerEquipmentProfile* profile,int loaded,int reserve):equipment(profile){
+        counts={loaded,reserve,equipment->interaction.capacity};
         Bc2PhysicalFixedContainerApi api;api.context=this;
         api.read=[](void* p,const ReloadStateOwner&,std::int64_t)noexcept{return static_cast<Fixture*>(p)->service.View();};
         api.withLedger=[](void* p,const AmmoResourceBinding& b,const HandInteractionOwner&,void* arg,
@@ -175,6 +176,54 @@ int PartialCylinderMigrationReacquiresAtRetainedContact(){
         {before.hand->token.contact,f.sequence,f.sample.input.deadlineNs,true}).accepted);
     CHECK(f.calls==0&&f.service.View()->snapshot.counts==f.counts);return 0;
 }
+int MeasuredUnderbarrelLoadsOneRoundAndCloses(){
+    for(const auto& e:generated::UnderbarrelFixedContainerEquipment){
+        const bool breech=e.interaction.kind==FixedContainerKind::SingleRoundBreech;
+        CHECK(breech||e.interaction.kind==FixedContainerKind::SingleRoundMuzzle);
+        Fixture f(&e,0,1);const auto& insertion=e.interaction.geometry[2].motion;
+        f.Send(At(e.interaction.geometry[breech?0:2].motion,0),false);
+        CHECK(f.result.bodyAmmo&&f.result.bodyVisual&&f.result.bodyAmmo->equipment==&e);
+        BodyAmmoTracking body;body.fixed=f.result.bodyAmmo;body.visual=*f.result.bodyVisual;
+        CHECK(BodyAmmoFresh(body,f.now)&&body.visual.source.objectUnits==1&&body.visual.source.reserveUnits==1);
+        if(breech){f.Hinge(0);CHECK(f.result.blocksFire);}
+        CHECK(f.result.tracking.step==FixedContainerStep::Insert&&f.calls==0);
+        f.Send(At(insertion,0),false);f.Send(At(insertion,0),true,true);CHECK(f.result.ammoOwnsHand);
+        f.Send(At(insertion,0),true);for(unsigned n=1;n<=30;++n)f.Send(At(insertion,n/30.),true);
+        for(unsigned n=0;n<8;++n)f.Send(At(insertion,1),true);f.Send(At(insertion,1),false);
+        CHECK(f.calls==1&&f.submitted&&f.submitted->preparedCommand&&f.result.tracking.pending&&f.result.blocksFire);
+        const auto request=*f.submitted;const auto command=*request.preparedCommand;
+        CHECK((command.before==AmmunitionCounts{0,1,1})&&(command.after==AmmunitionCounts{1,0,1}));
+        CHECK(f.service.View()->snapshot.counts==command.before);
+        CHECK(f.service.Accept(request,f.now)==command);AmmoResourceNativeCall actual;unsigned nativeCalls=0;
+        CHECK(f.service.InvokeNative(f.service.View()->snapshot,[&]()noexcept{return f.now;},[&](std::int64_t began)noexcept{
+            ++nativeCalls;actual={f.native,command.id,900,began,began+1,command.before,command.after,true,true,true};return actual;
+        }));
+        for(unsigned branch=0;branch<3;++branch){
+            AmmoResourceOwnUpdate row;row.beforeOwner=row.afterOwner=f.native.owner;row.firing=f.native.firing[branch];
+            row.serverPlayer=f.native.serverPlayer;row.serverSoldier=f.native.serverSoldier;row.serverItem=f.native.serverItem;
+            row.invocation=actual.invocation+(branch==2?0:branch+1);row.beginNs=actual.beginNs-1;row.endNs=actual.endNs+10+branch;
+            row.branch=branch;row.depth=1;row.loadedBefore=0;row.reserveBefore=1;row.loadedAfter=1;row.reserveAfter=0;
+            row.current=row.next=2;row.finished=row.identityRetained=row.neutralContext=true;
+            CHECK(f.service.Observe(row,actual.endNs+100)==(branch==2));
+        }
+        f.counts=command.after;f.Send(At(insertion,1),false);
+        CHECK(!f.result.tracking.pending&&!f.result.bodyAmmo);
+        if(breech){CHECK(f.result.tracking.step==FixedContainerStep::Close&&f.result.blocksFire);f.Hinge(3);}
+        CHECK(f.result.tracking.step==FixedContainerStep::Complete&&!f.result.blocksFire);
+        CHECK(f.calls==1&&nativeCalls==1&&f.service.View()->snapshot.counts==command.after);
+        CHECK(command.before.loaded+command.before.reserve==command.after.loaded+command.after.reserve);
+
+        // Opening an unfired breech preserves its live round and cannot draw
+        // another round. The muzzle family likewise cannot top up a full tube.
+        Fixture loaded(&e,1,1);
+        if(breech){loaded.Hinge(0);CHECK(loaded.result.tracking.step==FixedContainerStep::Close);loaded.Hinge(3);}
+        else{loaded.Send(At(insertion,0),false);loaded.Send(At(insertion,0),true,true);}
+        CHECK(loaded.calls==0&&!loaded.submitted&&!loaded.result.ammoOwnsHand);
+        CHECK((loaded.service.View()->snapshot.counts==AmmunitionCounts{1,1,1}));
+    }
+    return 0;
+}
 }
 int main(){return ExactSelectorsAndSupply()||GateBeforePhysicalAndExactOwner()||CylinderFlickReturnAndClose()||ClipQueuesOneSharedCommand()||
-    PriorRendererFrameQueuesAndCompletesOnceAfterReequip()||PartialCylinderMigrationReacquiresAtRetainedContact();}
+    PriorRendererFrameQueuesAndCompletesOnceAfterReequip()||PartialCylinderMigrationReacquiresAtRetainedContact()||
+    MeasuredUnderbarrelLoadsOneRoundAndCloses();}

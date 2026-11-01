@@ -8,7 +8,7 @@ using Step=FixedContainerStep;using Status=FixedContainerStatus;
 using Matrix=fvr::math::Matrix4;
 static_assert(!std::is_copy_constructible_v<FixedContainerReload>);
 Matrix Identity(){Matrix m{};for(unsigned i=0;i<4;++i)m.values[i][i]=1;return m;}
-// Synthetic geometry tests policy, not MP412/Garand calibration or native ABI.
+// Synthetic geometry tests policy, not weapon calibration or native ABI.
 struct Fixture {
     FixedContainerProfile profile{};FixedContainerSample x{};AmmunitionLedger ledger{};HandInteraction hands{};
     std::unique_ptr<FixedContainerReload> reload;
@@ -18,8 +18,9 @@ struct Fixture {
     bool heldClaim=false;
     Fixture(FixedContainerKind kind=FixedContainerKind::Cylinder,int loaded=2,int reserve=4){
         profile.kind=kind;profile.id=20;profile.revision=21;profile.ammunitionKind=22;
-        profile.capacity=kind==FixedContainerKind::Cylinder?6:8;
-        profile.roundsPerInsertion=kind==FixedContainerKind::Cylinder?1:8;profile.maxAgeNs=1000;
+        profile.capacity=kind==FixedContainerKind::SingleRoundBreech||kind==FixedContainerKind::SingleRoundMuzzle?
+            1:kind==FixedContainerKind::Cylinder?6:8;
+        profile.roundsPerInsertion=kind==FixedContainerKind::EnBlocClip?8:1;profile.maxAgeNs=1000;
         if(kind==FixedContainerKind::EnBlocClip)supply.container={13,14};
         for(unsigned i=0;i<4;++i){auto& g=profile.geometry[i];g.contact={100+i,.02f,.1f};
             auto& m=g.motion;m.operation=fixed_container_detail::Operation(static_cast<Step>(i));
@@ -28,7 +29,10 @@ struct Fixture {
             m.orientationToleranceRadians=.1f;m.maxStepMeters=.04f;m.maxStepRadians=.25f;
             m.endpointDwellNs=20;m.maximumGestureNs=1000;m.maxInputGapNs=40;
         }
-        if(kind==FixedContainerKind::EnBlocClip){auto& m=profile.geometry[2].motion;
+        if(kind==FixedContainerKind::SingleRoundBreech)profile.geometry[1]={};
+        if(kind==FixedContainerKind::SingleRoundMuzzle)for(unsigned i:{0u,1u,3u})profile.geometry[i]={};
+        if(kind==FixedContainerKind::EnBlocClip||kind==FixedContainerKind::SingleRoundBreech||
+           kind==FixedContainerKind::SingleRoundMuzzle){auto& m=profile.geometry[2].motion;
             m.kind=FeedMotionKind::FreePlacement;m.placement.weaponFromSource=Identity();
             m.placement.weaponFromDestination=Identity();m.placement.weaponFromDestination.values[3][0]=.1f;
             m.placement.sourceFromGrip=Identity();}
@@ -38,9 +42,13 @@ struct Fixture {
         x.interaction.focused=true;x.interaction.contact.tracked=true;
         reload=std::make_unique<FixedContainerReload>(profile,context,mechanism,binding,supply,30,ledger);
         (void)reload->Bind(x.ammunition,x.input.nowNs);
+        (void)AcquireGun();
+    }
+    bool AcquireGun(){
         HandClaimRequest q{x.input.owner,InteractionHand::Right,HandClaimKind::GunHold,{3,4},
-            {{300,1},1,2000,true},++intent,0};
-        const auto g=hands.Acquire(x.input,q);if(g.claim)gun=g.claim->token;
+            {{300,1},x.input.sequence,x.input.deadlineNs,true},++intent,0};
+        const auto g=hands.Acquire(x.input,q);if(!g.claim)return false;
+        gun=g.claim->token;return true;
     }
     void Tick(float progress=0,bool grip=true){
         ++x.ammunition.sequence;++x.input.sequence;x.input.nowNs+=10;
@@ -58,11 +66,11 @@ struct Fixture {
         if(heldClaim)hands.Renew(x.input,claim,{claim.contact,x.input.sequence,x.input.deadlineNs,true});
     }
     FixedContainerResult Run(float progress=0,bool grip=true){Tick(progress,grip);Renew();return reload->Update(x,hands);}
-    bool Acquire(){
-        if(heldClaim){Tick(0,false);Renew();hands.Release(x.input,claim);heldClaim=false;x.claim.reset();}
-        const auto neutral=Run(0,false);
+    bool Acquire(float progress=0){
+        if(heldClaim){Tick(progress,false);Renew();hands.Release(x.input,claim);heldClaim=false;x.claim.reset();}
+        const auto neutral=Run(progress,false);
         if(neutral.interaction.status!=FeedInteractionStatus::Armed)return false;
-        Tick();Renew();const auto step=reload->Step();
+        Tick(progress);Renew();const auto step=reload->Step();
         HandClaimRequest q{x.input.owner,InteractionHand::Left,
             step==Step::Insert?HandClaimKind::AmmoObject:HandClaimKind::Mechanism,
             step==Step::Insert?HandInteractionKey{11,12}:HandInteractionKey{3,4},
@@ -74,8 +82,9 @@ struct Fixture {
     }
     FixedContainerResult Finish(){
         FixedContainerResult r;
+        const bool releaseToFinish=profile.geometry[static_cast<unsigned>(reload->Step())].motion.kind==FeedMotionKind::FreePlacement;
         for(float p:{.2f,.4f,.6f,.8f,1.f,1.f,1.f})r=Run(p);
-        if(profile.kind==FixedContainerKind::EnBlocClip){
+        if(releaseToFinish){
             // Policy ticks the arbiter before a release consumes its claim.
             Tick(1,false);x.input.released[0]=true;r=reload->Update(x,hands);heldClaim=false;
         }
@@ -118,6 +127,134 @@ int ClipOneAtomicBoundedTransferAndNoExtraChamber(){
         CHECK(!f.Run().dispatch&&f.ledger.Snapshot().counts.loaded<=8);
     }return 0;
 }
+int SingleRoundProfileAndOpeningPreserveLiveAmmunition(){
+    Fixture f(FixedContainerKind::SingleRoundBreech,1,2);
+    CHECK(fixed_container_detail::Profile(f.profile));
+    CHECK(!f.profile.geometry[static_cast<unsigned>(Step::EjectSpent)].contact.role);
+    auto invalid=f.profile;invalid.capacity=2;CHECK(!fixed_container_detail::Profile(invalid));
+    invalid=f.profile;invalid.roundsPerInsertion=2;CHECK(!fixed_container_detail::Profile(invalid));
+    for(const auto step:{Step::Open,Step::Insert,Step::Close}){
+        invalid=f.profile;invalid.geometry[static_cast<unsigned>(step)].motion.measured=false;
+        CHECK(!fixed_container_detail::Profile(invalid));
+    }
+    CHECK(f.Acquire());const auto opened=f.Finish();
+    CHECK(opened.status==Status::PhysicalStep&&opened.step==Step::Insert&&!opened.dispatch);
+    CHECK((f.ledger.Snapshot().counts==AmmunitionCounts{1,2,1}));
+    CHECK(!f.reload->Pending()&&!f.ledger.Pending()&&f.reload->BlocksFire());
+    CHECK(f.Run().step==Step::Close&&f.reload->BlocksFire());
+    CHECK(f.Acquire());CHECK(f.Finish().step==Step::Complete&&!f.reload->BlocksFire());
+    CHECK((f.ledger.Snapshot().counts==AmmunitionCounts{1,2,1}));return 0;
+}
+int SingleRoundCycleRequiresCloseAndRejectsDuplicateAndForeignAuthority(){
+    Fixture f(FixedContainerKind::SingleRoundBreech,0,3);CHECK(!f.reload->BlocksFire());
+    CHECK(f.Acquire()&&f.reload->BlocksFire());
+    CHECK(f.Finish().step==Step::Insert&&f.reload->BlocksFire());
+    CHECK(f.Acquire());auto foreign=f.claim;++foreign.owner.actor;f.x.claim=foreign;
+    CHECK(f.reload->Update(f.x,f.hands).status==Status::Suspended&&!f.reload->Pending());
+    CHECK((f.ledger.Snapshot().counts==AmmunitionCounts{0,3,1}));
+    CHECK(f.Acquire());const auto sent=f.Finish();CHECK(sent.dispatch&&sent.dispatch->supply==f.supply);
+    CHECK(sent.dispatch->ammunition.operation==AmmunitionOperation::InsertRounds);
+    CHECK((sent.dispatch->ammunition.after==AmmunitionCounts{1,2,1}));
+    CHECK(f.reload->Step()==Step::Insert&&f.reload->BlocksFire());
+    CHECK(!f.reload->Update(f.x,f.hands).dispatch&&!f.Run().dispatch);
+    CHECK((f.ledger.Snapshot().counts==AmmunitionCounts{0,3,1}));
+    auto foreignPost=f.x.ammunition;foreignPost.counts=sent.dispatch->ammunition.after;
+    ++foreignPost.context.resource.weapon;
+    CHECK(!f.reload->Complete(*sent.dispatch,f.Receipt(*sent.dispatch),foreignPost,f.x.input.nowNs));
+    CHECK(f.reload->Pending()==sent.dispatch&&f.reload->BlocksFire());
+    CHECK(f.Complete(*sent.dispatch));
+    CHECK(f.reload->Step()==Step::Close&&f.reload->BlocksFire());
+    CHECK(f.reload->Complete(*sent.dispatch,f.Receipt(*sent.dispatch),f.x.ammunition,f.x.input.nowNs));
+    CHECK(f.reload->Step()==Step::Close&&!f.Run().dispatch&&f.reload->BlocksFire());
+    CHECK(f.Acquire()&&f.reload->BlocksFire());
+    const auto closed=f.Finish();CHECK(closed.step==Step::Complete&&!closed.dispatch&&!f.reload->BlocksFire());
+    CHECK(!f.Run().dispatch&&(f.ledger.Snapshot().counts==AmmunitionCounts{1,2,1}));return 0;
+}
+int SingleRoundPendingAndPartialCloseResumeAfterStowAndTrackingLoss(){
+    Fixture f(FixedContainerKind::SingleRoundBreech,0,2);
+    CHECK(f.Acquire());CHECK(f.Finish().step==Step::Insert);CHECK(f.Acquire());
+    const auto sent=f.Finish();CHECK(sent.dispatch);
+    f.x.held=false;f.Tick();f.x.input.released={true,true};
+    CHECK(f.reload->Update(f.x,f.hands).status==Status::AwaitingReceipt);
+    CHECK(!f.hands.Current(InteractionHand::Left)&&!f.hands.Current(InteractionHand::Right));
+    CHECK(f.reload->Pending()==sent.dispatch&&f.ledger.Pending()==sent.dispatch->ammunition);
+    CHECK((f.ledger.Snapshot().counts==AmmunitionCounts{0,2,1})&&f.reload->BlocksFire());
+    CHECK(f.Complete(*sent.dispatch));
+    CHECK(f.reload->Step()==Step::Close&&f.reload->BlocksFire());
+    CHECK(f.Run().status==Status::Suspended&&!f.reload->Pending());
+    f.x.held=true;f.Tick(0,false);CHECK(f.AcquireGun());
+    CHECK(f.Acquire());CHECK(f.Run(.2f).interaction.status==FeedInteractionStatus::Moving);
+    const auto partial=f.reload->RecoveryMotion();CHECK(partial);
+    f.x.input.tracked={false,false};CHECK(f.Run(.4f).status==Status::Suspended);
+    CHECK(!f.hands.Current(InteractionHand::Left)&&!f.hands.Current(InteractionHand::Right));
+    CHECK(f.reload->Step()==Step::Close&&f.reload->BlocksFire()&&f.reload->RecoveryMotion());
+    CHECK((f.ledger.Snapshot().counts==AmmunitionCounts{1,1,1}));
+    f.heldClaim=false;f.x.claim.reset();f.x.input.tracked={true,true};f.Tick(.2f,false);
+    f.x.weaponFromContact=partial->WeaponFromHeld();
+    CHECK(f.reload->RecoverMotion(f.x,*partial));CHECK(f.AcquireGun());CHECK(f.Acquire(.2f));
+    CHECK(f.reload->BlocksFire());
+    FixedContainerResult closed;for(float p:{.4f,.6f,.8f,1.f,1.f,1.f})closed=f.Run(p);
+    CHECK(!closed.dispatch&&closed.step==Step::Close&&f.reload->BlocksFire());
+    f.Tick(1,false);f.x.input.released[0]=true;closed=f.reload->Update(f.x,f.hands);f.heldClaim=false;
+    CHECK(closed.step==Step::Complete&&!closed.dispatch&&!f.reload->BlocksFire());
+    CHECK((f.ledger.Snapshot().counts==AmmunitionCounts{1,1,1}));return 0;
+}
+int MuzzleRequiresOnlyMeasuredInsertionAndRejectsClipOrBreechPolicy(){
+    Fixture f(FixedContainerKind::SingleRoundMuzzle,0,2);
+    CHECK(fixed_container_detail::Profile(f.profile)&&f.reload->Step()==Step::Insert&&!f.reload->BlocksFire());
+    for(const auto step:{Step::Open,Step::EjectSpent,Step::Close}){
+        const auto& unused=f.profile.geometry[static_cast<unsigned>(step)];
+        CHECK(!unused.contact.role&&!unused.motion.measured);
+    }
+    auto invalid=f.profile;invalid.kind=FixedContainerKind::SingleRoundBreech;
+    CHECK(!fixed_container_detail::Profile(invalid));
+    invalid=f.profile;invalid.capacity=2;CHECK(!fixed_container_detail::Profile(invalid));
+    invalid=f.profile;invalid.roundsPerInsertion=2;CHECK(!fixed_container_detail::Profile(invalid));
+    invalid=f.profile;invalid.geometry[2].motion.measured=false;CHECK(!fixed_container_detail::Profile(invalid));
+    auto clip=f.supply;clip.container={13,14};AmmunitionLedger other;
+    FixedContainerReload fakeClip(f.profile,f.context,f.mechanism,f.binding,clip,31,other);
+    CHECK(!fakeClip.Bind(f.x.ammunition,f.x.input.nowNs));
+    for(const auto counts:{AmmunitionCounts{1,2,1},AmmunitionCounts{0,0,1}}){
+        Fixture empty(FixedContainerKind::SingleRoundMuzzle,counts.loaded,counts.reserve);
+        empty.x.finishLoading=true;const auto stopped=empty.Run();
+        CHECK(stopped.status==Status::NoAmmunition&&stopped.step==Step::Insert&&!stopped.dispatch);
+        CHECK(!empty.reload->Pending()&&empty.ledger.Snapshot().counts==counts);
+    }return 0;
+}
+int MuzzlePartialInsertionAndPendingStowRequireExactReceipt(){
+    Fixture f(FixedContainerKind::SingleRoundMuzzle,0,2);f.x.finishLoading=true;
+    CHECK(f.Acquire()&&f.reload->BlocksFire());CHECK(f.Run(.2f).interaction.status==FeedInteractionStatus::Moving);
+    const auto partial=f.reload->RecoveryMotion();CHECK(partial);
+    f.x.held=false;f.Tick(.4f);f.x.input.released={true,true};
+    CHECK(f.reload->Update(f.x,f.hands).status==Status::Suspended);
+    CHECK(!f.hands.Current(InteractionHand::Left)&&!f.hands.Current(InteractionHand::Right));
+    CHECK(f.reload->Step()==Step::Insert&&f.reload->BlocksFire()&&f.reload->RecoveryMotion());
+    CHECK(!f.reload->Pending()&&(f.ledger.Snapshot().counts==AmmunitionCounts{0,2,1}));
+    f.heldClaim=false;f.x.claim.reset();f.x.held=true;f.Tick(.2f,false);
+    f.x.weaponFromContact=partial->WeaponFromHeld();
+    CHECK(f.reload->RecoverMotion(f.x,*partial)&&f.AcquireGun()&&f.Acquire(.2f));
+    const auto sent=f.Finish();CHECK(sent.dispatch&&sent.dispatch->supply==f.supply);
+    CHECK(sent.dispatch->ammunition.operation==AmmunitionOperation::InsertRounds);
+    CHECK((sent.dispatch->ammunition.after==AmmunitionCounts{1,1,1}));
+    CHECK(f.reload->Step()==Step::Insert&&f.reload->BlocksFire());
+    f.x.held=false;f.Tick();f.x.input.released={true,true};
+    CHECK(f.reload->Update(f.x,f.hands).status==Status::AwaitingReceipt);
+    CHECK(!f.hands.Current(InteractionHand::Left)&&!f.hands.Current(InteractionHand::Right));
+    CHECK(f.reload->Pending()==sent.dispatch&&f.ledger.Pending()==sent.dispatch->ammunition);
+    CHECK(!f.Run().dispatch&&(f.ledger.Snapshot().counts==AmmunitionCounts{0,2,1}));
+    auto post=f.x.ammunition;post.counts=sent.dispatch->ammunition.after;
+    auto foreign=post;++foreign.context.resource.weapon;
+    CHECK(!f.reload->Complete(*sent.dispatch,f.Receipt(*sent.dispatch),foreign,f.x.input.nowNs));
+    auto bad=f.Receipt(*sent.dispatch);++bad.command.id;
+    CHECK(!f.reload->Complete(*sent.dispatch,bad,post,f.x.input.nowNs));
+    bad=f.Receipt(*sent.dispatch);bad.copiesVerified=false;
+    CHECK(!f.reload->Complete(*sent.dispatch,bad,post,f.x.input.nowNs));
+    CHECK(f.reload->Pending()==sent.dispatch&&f.reload->Step()==Step::Insert&&f.reload->BlocksFire());
+    CHECK(f.ledger.Phase()==AmmunitionLedgerPhase::NeedsReconciliation&&f.Complete(*sent.dispatch));
+    CHECK(f.reload->Step()==Step::Complete&&!f.reload->BlocksFire());
+    CHECK(f.reload->Complete(*sent.dispatch,f.Receipt(*sent.dispatch),f.x.ammunition,f.x.input.nowNs));
+    CHECK(!f.Run().dispatch&&(f.ledger.Snapshot().counts==AmmunitionCounts{1,1,1}));return 0;
+}
 int TrackingAndStowRetainMechanicalDebtAndPendingReceipt(){
     Fixture f;CHECK(f.Acquire());f.Run(.2f);f.x.interaction.contact.tracked=false;
     CHECK(f.Run(.4f).status==Status::Suspended&&f.reload->BlocksFire());
@@ -130,15 +267,19 @@ int TrackingAndStowRetainMechanicalDebtAndPendingReceipt(){
     f.x.held=true;CHECK(!f.Run().dispatch);return 0;
 }
 int WrongClaimsAndTeleportCannotLoad(){
-    Fixture f(FixedContainerKind::EnBlocClip,0,8);CHECK(f.Acquire());
-    CHECK(f.reload->Update(f.x,f.hands).interaction.status==FeedInteractionStatus::Duplicate);
-    const auto jumped=f.Run(1);
-    CHECK(jumped.status==Status::Suspended&&jumped.interaction.status==FeedInteractionStatus::MotionJump);
-    CHECK(!jumped.dispatch&&f.ledger.Snapshot().counts.loaded==0);
-    CHECK(f.Acquire());auto wrong=f.claim;++wrong.id;f.x.claim=wrong;
-    CHECK(f.reload->Update(f.x,f.hands).status==Status::Suspended&&!f.reload->Pending());
-    CHECK(f.Acquire());f.x.input.focused=false;
-    CHECK(f.Run(.2f).status==Status::Suspended&&!f.reload->Pending());return 0;
+    for(const auto kind:{FixedContainerKind::EnBlocClip,FixedContainerKind::SingleRoundMuzzle}){
+        Fixture f(kind,0,8);CHECK(f.Acquire());
+        CHECK(f.reload->Update(f.x,f.hands).interaction.status==FeedInteractionStatus::Duplicate);
+        const auto jumped=f.Run(1);
+        CHECK(jumped.status==Status::Suspended&&jumped.interaction.status==FeedInteractionStatus::MotionJump);
+        CHECK(!jumped.dispatch&&f.ledger.Snapshot().counts.loaded==0);
+        CHECK(f.Acquire());auto wrong=f.claim;++wrong.id;f.x.claim=wrong;
+        CHECK(f.reload->Update(f.x,f.hands).status==Status::Suspended&&!f.reload->Pending());
+        CHECK(f.Acquire());wrong=f.claim;++wrong.owner.actor;f.x.claim=wrong;
+        CHECK(f.reload->Update(f.x,f.hands).status==Status::Suspended&&!f.reload->Pending());
+        CHECK(f.Acquire());f.x.input.focused=false;
+        CHECK(f.Run(.2f).status==Status::Suspended&&!f.reload->Pending());
+    }return 0;
 }
 int ExactTypedReceiptAndDuplicateCannotFinishOtherTransfer(){
     Fixture f;CHECK(f.Acquire());f.Finish();CHECK(f.Acquire());f.Finish();CHECK(f.Acquire());
@@ -188,6 +329,11 @@ int PlacementRebasePinsDestinationAndRejectsHeldMutation(){
 int main(){
     CHECK(CylinderPreservesLiveRoundsAndClosesPartiallyLoaded()==0);
     CHECK(ClipOneAtomicBoundedTransferAndNoExtraChamber()==0);
+    CHECK(SingleRoundProfileAndOpeningPreserveLiveAmmunition()==0);
+    CHECK(SingleRoundCycleRequiresCloseAndRejectsDuplicateAndForeignAuthority()==0);
+    CHECK(SingleRoundPendingAndPartialCloseResumeAfterStowAndTrackingLoss()==0);
+    CHECK(MuzzleRequiresOnlyMeasuredInsertionAndRejectsClipOrBreechPolicy()==0);
+    CHECK(MuzzlePartialInsertionAndPendingStowRequireExactReceipt()==0);
     CHECK(TrackingAndStowRetainMechanicalDebtAndPendingReceipt()==0);
     CHECK(WrongClaimsAndTeleportCannotLoad()==0);
     CHECK(ExactTypedReceiptAndDuplicateCannotFinishOtherTransfer()==0);

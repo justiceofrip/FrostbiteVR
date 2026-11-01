@@ -3,7 +3,7 @@
 #include "fvr/interaction/HandInteraction.h"
 
 namespace fvr::interaction {
-enum class FixedContainerKind:std::uint8_t {Unknown,Cylinder,EnBlocClip};
+enum class FixedContainerKind:std::uint8_t {Unknown,Cylinder,EnBlocClip,SingleRoundBreech,SingleRoundMuzzle};
 enum class FixedContainerStep:std::uint8_t {Open,EjectSpent,Insert,Close,Complete};
 struct FixedContainerGeometry {
     FeedContactBinding contact{};
@@ -65,11 +65,16 @@ inline FeedPhysicalOperation Operation(FixedContainerStep s)noexcept {
     }
 }
 inline bool Profile(const FixedContainerProfile& p)noexcept {
-    if((p.kind!=FixedContainerKind::Cylinder&&p.kind!=FixedContainerKind::EnBlocClip)||
+    if((p.kind!=FixedContainerKind::Cylinder&&p.kind!=FixedContainerKind::EnBlocClip&&
+        p.kind!=FixedContainerKind::SingleRoundBreech&&p.kind!=FixedContainerKind::SingleRoundMuzzle)||
        !p.id||!p.revision||!p.ammunitionKind||p.capacity<=0||p.capacity>1000000||
        p.roundsPerInsertion<=0||p.roundsPerInsertion>p.capacity||p.maxAgeNs<=0||p.maxAgeNs>100000000)return false;
+    if((p.kind==FixedContainerKind::SingleRoundBreech||p.kind==FixedContainerKind::SingleRoundMuzzle)&&
+       (p.capacity!=1||p.roundsPerInsertion!=1))return false;
     for(unsigned i=0;i<p.geometry.size();++i){
-        if(p.kind==FixedContainerKind::EnBlocClip&&i!=static_cast<unsigned>(FixedContainerStep::Insert))continue;
+        if((p.kind==FixedContainerKind::EnBlocClip||p.kind==FixedContainerKind::SingleRoundMuzzle)&&
+           i!=static_cast<unsigned>(FixedContainerStep::Insert))continue;
+        if(p.kind==FixedContainerKind::SingleRoundBreech&&i==static_cast<unsigned>(FixedContainerStep::EjectSpent))continue;
         const auto& g=p.geometry[i];
         if(!g.contact.role||!std::isfinite(g.contact.radiusMeters)||g.contact.radiusMeters<=0||
            !std::isfinite(g.contact.maxAngleRadians)||g.contact.maxAngleRadians<0||g.contact.maxAngleRadians>3.141592654f||
@@ -79,13 +84,17 @@ inline bool Profile(const FixedContainerProfile& p)noexcept {
 }
 }
 
-// Explicit cylinder/clip policy, using the existing physical recognizer and
-// the caller's ONE stable-weapon ammunition ledger. The internal FeedFamily
+// Explicit cylinder/clip/single-round policy, using the existing physical
+// recognizer and the caller's ONE stable-weapon ammunition ledger. The internal FeedFamily
 // projection is a recognizer implementation detail, not a physical belt,
 // a native mechanism observation, or FeedAmmunition transfer authority.
 // Open/eject/close update mod-owned physical state only. EjectSpent never
 // removes live rounds. Insert emits one exact ledger command; only Complete
 // can accept its native effect. Pending work survives tracking loss and stow.
+// SingleRoundBreech presents the spent case automatically on opening as mod
+// policy, with no eject gesture, live-round removal or native ammunition write.
+// SingleRoundMuzzle uses only measured insertion into a fixed tube. No clip,
+// opening, closing or eject gesture is implied; its exact receipt completes it.
 class FixedContainerReload {
 public:
     FixedContainerReload(FixedContainerProfile profile,AmmoResourceContext context,
@@ -94,7 +103,8 @@ public:
         std::optional<HandInteractionOwner> handOwner={})noexcept:
         profile_(profile),context_(context),mechanism_(mechanism),binding_(binding),supply_(supply),
         lifetime_(lifetime),ledger_(ledger),externalAdmission_(externalAdmission),handOwner_(handOwner),gesture_(lifetime),
-        step_(profile.kind==FixedContainerKind::EnBlocClip?FixedContainerStep::Insert:FixedContainerStep::Open){}
+        step_(profile.kind==FixedContainerKind::EnBlocClip||profile.kind==FixedContainerKind::SingleRoundMuzzle?
+            FixedContainerStep::Insert:FixedContainerStep::Open){}
     FixedContainerReload(const FixedContainerReload&)=delete;
     FixedContainerReload& operator=(const FixedContainerReload&)=delete;
     [[nodiscard]] bool Bind(const AmmunitionSnapshot& s,std::int64_t now)noexcept {
@@ -110,7 +120,8 @@ public:
     // A mechanical interlock only. Root must separately establish native fire
     // readiness; an inactive native bolt never creates an extra chamber.
     [[nodiscard]] bool BlocksFire()const noexcept {
-        return pending_.has_value()||gestureClaim_.has_value()||(profile_.kind==FixedContainerKind::Cylinder&&
+        return pending_.has_value()||gestureClaim_.has_value()||((profile_.kind==FixedContainerKind::Cylinder||
+            profile_.kind==FixedContainerKind::SingleRoundBreech||profile_.kind==FixedContainerKind::SingleRoundMuzzle)&&
             mechanismTouched_&&step_!=FixedContainerStep::Complete);
     }
     void Suspend()noexcept {gesture_.Interrupt();gestureClaim_.reset();}
@@ -189,8 +200,9 @@ public:
            !x.interaction.focused||!c.tracked||!x.input.tracked[0]||!x.input.tracked[1])
             return stop(FixedContainerStatus::Suspended);
         // Closing early is an explicit player choice and retains all rounds
-        // already committed. A button alone never closes the cylinder.
-        if(step_==FixedContainerStep::Insert&&profile_.kind==FixedContainerKind::Cylinder&&
+        // already committed. A button alone never closes the mechanism.
+        if(step_==FixedContainerStep::Insert&&(profile_.kind==FixedContainerKind::Cylinder||
+            profile_.kind==FixedContainerKind::SingleRoundBreech)&&
            (x.finishLoading||a.counts.loaded==a.counts.capacity||a.counts.reserve==0)){
             step_=FixedContainerStep::Close;out.step=step_;return stop(FixedContainerStatus::NeedNeutral);
         }
@@ -221,7 +233,8 @@ public:
             pending_=FixedContainerRequest{FeedReloadRequest{completion.id,lifetime_,binding_,completion,x.input.nowNs},supply_,*command};
             out.dispatch=pending_;out.status=externalAdmission_?FixedContainerStatus::NativeQueued:FixedContainerStatus::NativeDispatched;return out;
         }
-        if(step_==FixedContainerStep::Open)step_=FixedContainerStep::EjectSpent;
+        if(step_==FixedContainerStep::Open)step_=profile_.kind==FixedContainerKind::SingleRoundBreech?
+            FixedContainerStep::Insert:FixedContainerStep::EjectSpent;
         else if(step_==FixedContainerStep::EjectSpent)step_=FixedContainerStep::Insert;
         else if(step_==FixedContainerStep::Close)step_=FixedContainerStep::Complete;
         Suspend();out.step=step_;out.status=FixedContainerStatus::PhysicalStep;return out;
@@ -243,7 +256,9 @@ public:
              current.deadlineNs==post.deadlineNs&&current.counts==post.counts)&&!ledger_.Bind(post,now))return false;
         lastRequest_=request;lastReceipt_=receipt;pending_.reset();Suspend();
         lastSnapshot_=post.sequence;lastNow_=now;
-        if(profile_.kind==FixedContainerKind::EnBlocClip)step_=FixedContainerStep::Complete;
+        if(profile_.kind==FixedContainerKind::EnBlocClip||profile_.kind==FixedContainerKind::SingleRoundMuzzle)
+            step_=FixedContainerStep::Complete;
+        else if(profile_.kind==FixedContainerKind::SingleRoundBreech)step_=FixedContainerStep::Close;
         return true;
     }
     // The service may finish the original command while this weapon is
@@ -268,7 +283,9 @@ public:
         if(!ledger_.Complete(receipt,now))return false;
         lastRequest_=request;lastReceipt_=receipt;pending_.reset();Suspend();
         lastSnapshot_=current.sequence;lastNow_=now;
-        if(profile_.kind==FixedContainerKind::EnBlocClip)step_=FixedContainerStep::Complete;
+        if(profile_.kind==FixedContainerKind::EnBlocClip||profile_.kind==FixedContainerKind::SingleRoundMuzzle)
+            step_=FixedContainerStep::Complete;
+        else if(profile_.kind==FixedContainerKind::SingleRoundBreech)step_=FixedContainerStep::Close;
         return true;
     }
     // External service has rejected/cancelled this exact queued command before

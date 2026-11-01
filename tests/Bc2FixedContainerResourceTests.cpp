@@ -1,5 +1,6 @@
 #include "Test.h"
 #include "Bc2AmmoResourceService.h"
+#include "Bc2FixedContainerEquipment.h"
 #include "fvr/interaction/FixedContainerReload.h"
 #include <memory>
 using namespace fvr::bc2;using namespace fvr::interaction;
@@ -254,9 +255,39 @@ int NativeCountClockMayBeNewerThanOriginalRendererClock(){
     CHECK(f.Update().status==FixedContainerStatus::Invalid);
     CHECK(!f.policy->Pending());return 0;
 }
+int MeasuredSingleRoundSourcesKeepExactOwnership(){
+    Fixture f;
+    for(const auto& e:generated::UnderbarrelFixedContainerEquipment){
+        CHECK(KnownFixedContainerEquipment(&e)==&e);
+        CHECK(FindFixedContainerEquipment(e.configurationPath,e.mesh,e.rigFingerprint)==&e);
+        CHECK(!FindFixedContainerEquipment(e.asset,e.mesh,e.rigFingerprint));
+        CHECK(!FindFixedContainerEquipment(e.configurationGuid,e.mesh,e.rigFingerprint));
+        CHECK(!FindFixedContainerEquipment(e.configurationPath,"unknown-mesh",e.rigFingerprint));
+        CHECK(!FindFixedContainerEquipment(e.configurationPath,e.mesh,e.rigFingerprint+1));
+        CHECK(fixed_container_detail::Profile(e.interaction));
+        FixedContainerBodyAmmo source{&e,f.binding,f.x.ammunition};source.ammunition.counts={0,4,1};
+        const auto supply=FixedContainerBodySource(source,f.x.input,f.x.input.nowNs);
+        CHECK(supply&&supply->objectUnits==1&&supply->reserveUnits==4);
+        CHECK((supply->identity.profile==HandInteractionKey{e.interaction.id,e.interaction.revision}));
+        for(unsigned fault=0;fault<7;++fault){auto bad=source;
+            if(fault==0)++bad.binding.owner.weak;
+            if(fault==1)++bad.ammunition.context.resource.weaponGeneration;
+            if(fault==2)bad.ammunition.deadlineNs=f.x.input.nowNs;
+            if(fault==3)bad.ammunition.counts.loaded=1;
+            if(fault==4)bad.ammunition.counts.reserve=0;
+            if(fault==5)bad.ammunition.counts.capacity=2;
+            if(fault==6)bad.ammunition.coherentIdleVerified=false;
+            CHECK(!FixedContainerBodySource(bad,f.x.input,f.x.input.nowNs));
+        }
+        auto copied=e;source.equipment=&copied;
+        CHECK(!KnownFixedContainerEquipment(&copied)&&!FixedContainerBodySource(source,f.x.input,f.x.input.nowNs));
+    }
+    return 0;
+}
 }
 int main(){CHECK(SharedLedgerRequiresActualServiceReceipt()==0);CHECK(PreparedCommandCannotBeSubstitutedOrRestamped()==0);
     CHECK(ScopedNativeInterlockRestoresInputs()==0);CHECK(OlderRendererEvidenceUsesCurrentSafetyWithoutRollback()==0);
     CHECK(StableResourceRebindPreservesMechanismState()==0);CHECK(ActualCentralReleaseEventCompletesPlacement()==0);
     CHECK(PendingServiceReceiptCompletesAfterStowAndContextChange()==0);CHECK(ChangedCountsWithoutServiceReceiptCannotConsumePending()==0);
-    CHECK(NativeCountClockMayBeNewerThanOriginalRendererClock()==0);return 0;}
+    CHECK(NativeCountClockMayBeNewerThanOriginalRendererClock()==0);
+    CHECK(MeasuredSingleRoundSourcesKeepExactOwnership()==0);return 0;}

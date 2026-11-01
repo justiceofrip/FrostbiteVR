@@ -852,6 +852,83 @@ int ChestPreparationSurvivesNeutralJitterButNotContactLoss(){
     }
     return 0;
 }
+int EveryEnrolledSupplyRefreshesNeutralApproachBeforePickup(){
+    using namespace feed_interaction_detail;
+    for(const auto& registration:RegisteredBc2FeedProfiles())for(bool delayed:{false,true}){
+        Fixture f(&registration);CHECK(f.OpenCover()&&f.Reconcile());
+        CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&f.Reconcile());f.submitted.reset();
+        const auto before=f.native.counts;const auto detached=f.result.presentation;CHECK(detached);
+        auto chest=Identity();const auto config=Bc2FeedSupplyConfig();
+        for(unsigned axis=0;axis<3;++axis)chest.values[3][axis]=config.pouchCenterMeters[axis];
+        f.sample.bodyFromHand=chest;f.Tick(chest,false);
+        CHECK(f.result.interactionStatus==FeedInteractionStatus::Armed&&f.result.reloadStatus==FeedReloadStatus::Armed);
+        const auto admitted=f.backend.Read(f.sample.owner,f.sample.input.nowNs);CHECK(admitted);
+        auto approach=chest;const auto radius=registration.mechanism.contacts[unsigned(FeedPart::Container)].radiusMeters;
+        approach.values[3][0]+=(std::max)(.0773f,1.25f*radius);
+        CHECK(Distance(chest,approach)>radius&&Bc2FeedSupplyContact(approach));
+        // Moving within the pouch on the same native observation must retain
+        // the old arm; it cannot rebase or manufacture a new native lease.
+        f.nativeCadence={0};f.sample.bodyFromHand=approach;f.Tick(approach,false);
+        CHECK(f.result.interactionStatus==FeedInteractionStatus::Armed&&f.result.reloadStatus==FeedReloadStatus::Armed);
+        CHECK(f.backend.Read(f.sample.owner,f.sample.input.nowNs)==admitted);
+        f.Consume();CHECK(f.result.interactionStatus==FeedInteractionStatus::Duplicate);
+        CHECK(f.result.reloadStatus==FeedReloadStatus::DuplicatePacket&&!f.result.ownsHand);
+        // A newer paired neutral may now move the prepared pickup source.
+        // Preparation never moves the detached, unheld object itself.
+        f.nativeCadence={1};f.Tick(approach,false);const auto neutral=f.sample.raw;
+        CHECK(f.result.diagnostic.sourceNativeSequence>admitted->sequence);
+        CHECK(f.result.diagnostic.sourceNativeObservedNs>admitted->observedNs);
+        CHECK(f.result.interactionStatus==FeedInteractionStatus::Armed&&f.result.reloadStatus==FeedReloadStatus::Armed);
+        CHECK(f.result.presentation&&NearPose(f.result.presentation->weaponFromPouch,detached->weaponFromPouch));
+        f.Consume();CHECK(f.result.interactionStatus==FeedInteractionStatus::Duplicate);
+        CHECK(f.result.reloadStatus==FeedReloadStatus::DuplicatePacket&&f.native.counts==before&&f.submits==2);
+        auto pickup=approach;pickup.values[3][0]+=.008f;CHECK(Bc2FeedSupplyContact(pickup));
+        f.sample.bodyFromHand=pickup;f.PrepareTick(pickup,true);const auto pressed=f.sample.raw;
+        f.Consume(delayed?&neutral:nullptr);
+        CHECK(f.result.ownsHand&&f.result.presentation&&f.result.presentation->supplyObject);
+        const auto acquiredPouch=f.result.presentation->weaponFromPouch;
+        if(delayed){
+            CHECK(f.result.presentation->input.sequence==neutral.inputEvidence.sequence);
+            CHECK(f.result.presentation->mechanismClaim->inputSequence==pressed.inputEvidence.sequence);
+            f.PrepareTick(pickup,true);f.Consume(&pressed);
+        }
+        CHECK(f.result.interactionStatus==FeedInteractionStatus::Acquired);
+        CHECK(f.result.reloadStatus==FeedReloadStatus::AwaitingPhysicalCompletion);
+        CHECK(f.result.presentation->supplyObject&&NearPose(f.result.presentation->weaponFromPouch,acquiredPouch));
+        CHECK(f.result.presentation->input.deadlineNs==pressed.inputEvidence.deadlineNs);
+        const auto claim=f.hands.Current(InteractionHand::Left);CHECK(claim&&claim->token.kind==HandClaimKind::AmmoObject);
+        f.Consume(&pressed);CHECK(f.result.interactionStatus==FeedInteractionStatus::Duplicate);
+        CHECK(f.hands.Current(InteractionHand::Left)->token==claim->token&&f.result.ownsHand);
+        CHECK(NearPose(f.result.presentation->weaponFromPouch,acquiredPouch));
+        CHECK(f.result.presentation->input.deadlineNs==pressed.inputEvidence.deadlineNs);
+        // Complete from the actual retained grasp, then keep the exact refill
+        // pending through further neutral movement until its callback receipt.
+        const auto retained=f.result.presentation;auto pose=registration.geometry.poses[unsigned(Bc2FeedPoseId::Resting)];
+        pose.weaponFromPouch=retained->weaponFromPouch;pose.weaponFromFeedRoot=retained->weaponFromChain[0];
+        for(unsigned i=0;i+1<pose.chainCount;++i)pose.parentFromChainChild[i]=feed_interaction_detail::Multiply(
+            retained->weaponFromChain[i+1],Inverse(retained->weaponFromChain[i]));
+        const auto motion=BuildBc2FeedMotionFromRetainedPose(registration.geometry,FeedPhysicalOperation::AttachContainer,
+            registration.interactionPolicy,pose);CHECK(motion);
+        const auto grasp=feed_interaction_detail::Multiply(pickup,Inverse(motion->placement.weaponFromSource));
+        const auto wrist=[&](const fvr::math::Matrix4& object){return feed_interaction_detail::Multiply(grasp,object);};
+        for(unsigned step=1;step<=30;++step)f.Tick(wrist(reload_insertion_detail::BlendRigid(
+            motion->placement.weaponFromSource,motion->placement.weaponFromDestination,double(step)/30)),true);
+        const auto end=wrist(motion->placement.weaponFromDestination);
+        for(unsigned step=0;step<f.DwellPackets();++step)f.Tick(end,true);
+        f.Tick(end,false);
+        CHECK(f.submitted&&f.submits==3&&f.result.pending&&f.backend.Pending());
+        const auto command=f.submitted->command;
+        CHECK(command.authority.operation==FeedPhysicalOperation::AttachContainer&&command.before.counts==before);
+        CHECK(command.mutationRequired&&!f.result.ownsHand&&f.native.counts==before);
+        for(const auto& neutralWrist:{chest,approach,chest}){
+            f.sample.bodyFromHand=neutralWrist;f.Tick(neutralWrist,false);
+            CHECK(f.result.pending&&f.result.blocksEquipment&&f.BlocksFire()&&f.submits==3);
+            CHECK(f.backend.Pending()&&f.backend.Pending()->command==command&&f.native.counts==before);
+        }
+        CHECK(f.Reconcile());CHECK(f.native.counts==command.after&&f.submits==3&&!f.backend.Pending());
+    }
+    return 0;
+}
 int DelayedReleasePreservesExactGestureWithinOriginalDeadlines(){
     // Normal native advancement, expiry, repress, owner, tracking, focus,
     // cancel, native counts, raw loss, skipped release, packet mutation,
@@ -1543,6 +1620,7 @@ int main(){
     CHECK(EveryEnrolledSupplyPresentsDelayedPickupOffsetAndDropsLostHand()==0);
     CHECK(EveryEnrolledFeedCompletesWithIndependentPublicationClocks()==0);
     CHECK(ChestPreparationSurvivesNeutralJitterButNotContactLoss()==0);
+    CHECK(EveryEnrolledSupplyRefreshesNeutralApproachBeforePickup()==0);
     CHECK(DelayedReleasePreservesExactGestureWithinOriginalDeadlines()==0);
     CHECK(IndependentNativeClockExpiryAndMutationAreRejected()==0);
     CHECK(DelayedDetachWaitsForPairedNativeWithoutRenewingOwnership()==0);
@@ -1558,5 +1636,5 @@ int main(){
     CHECK(SameAddressReplacementDoesNotInheritFeedDebt()==0);
     CHECK(RealNoEntryReceiptRecoversCompletedEndpointWithNewId()==0);
     CHECK(DrainedActorReplacementReclaimsSlotsWithoutInventingAmmunitionSuccess()==0);
-    std::puts("Bc2PhysicalFeedTests: 33 deterministic owner/arbiter/callback/presentation compositions; no game or headset acceptance");
+    std::puts("Bc2PhysicalFeedTests: 34 deterministic owner/arbiter/callback/presentation compositions; no game or headset acceptance");
 }

@@ -78211,6 +78211,744 @@
           "part_triangles": 240
         }
       ]
+    },
+    {
+      "asset": "40mmgl",
+      "archive": "Dist/win32/async/weapon/bu_rgl_an94abakan-00.fbrb",
+      "archive_index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "part": "jntWpnwpnJnt_16",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpn_13_Ammo",
+          "count": 1338,
+          "stride": 64,
+          "palette_size": 3,
+          "part_palette_index": 1,
+          "position": "Float3",
+          "vertex_skin_hash": "a27baebdae2eaaf1",
+          "position_hash": "df96194cbc678121",
+          "part_triangles": 140
+        }
+      ]
+    },
+    {
+      "asset": "40mmgl",
+      "archive": "Dist/win32/async/weapon/bu_rgl_an94abakan-00.fbrb",
+      "archive_index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "part": "jntWpn_17",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpn_13_Ammo",
+          "count": 1338,
+          "stride": 64,
+          "palette_size": 3,
+          "part_palette_index": 2,
+          "position": "Float3",
+          "vertex_skin_hash": "a27baebdae2eaaf1",
+          "position_hash": "df96194cbc678121",
+          "part_triangles": 200
+        }
+      ]
+    },
+    {
+      "asset": "40mmsg",
+      "archive": "Dist/win32/async/weapon/bu_shg_an94abakan-00.fbrb",
+      "archive_index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "part": "jntWpnwpnJnt_16",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpn_13_Ammo",
+          "count": 1338,
+          "stride": 64,
+          "palette_size": 3,
+          "part_palette_index": 1,
+          "position": "Float3",
+          "vertex_skin_hash": "a27baebdae2eaaf1",
+          "position_hash": "df96194cbc678121",
+          "part_triangles": 140
+        }
+      ]
+    },
+    {
+      "asset": "40mmsg",
+      "archive": "Dist/win32/async/weapon/bu_shg_an94abakan-00.fbrb",
+      "archive_index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "part": "jntWpn_17",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpn_13_Ammo",
+          "count": 1338,
+          "stride": 64,
+          "palette_size": 3,
+          "part_palette_index": 2,
+          "position": "Float3",
+          "vertex_skin_hash": "a27baebdae2eaaf1",
+          "position_hash": "df96194cbc678121",
+          "part_triangles": 200
+        }
+      ]
+    },
+    {
+      "asset": "40mmsmk",
+      "archive": "Dist/win32/async/weapon/bu_smk_an94abakan-00.fbrb",
+      "archive_index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "part": "jntWpnwpnJnt_16",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpn_13_Ammo",
+          "count": 1338,
+          "stride": 64,
+          "palette_size": 3,
+          "part_palette_index": 1,
+          "position": "Float3",
+          "vertex_skin_hash": "a27baebdae2eaaf1",
+          "position_hash": "df96194cbc678121",
+          "part_triangles": 140
+        }
+      ]
+    },
+    {
+      "asset": "40mmsmk",
+      "archive": "Dist/win32/async/weapon/bu_smk_an94abakan-00.fbrb",
+      "archive_index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "part": "jntWpn_17",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpn_13_Ammo",
+          "count": 1338,
+          "stride": 64,
+          "palette_size": 3,
+          "part_palette_index": 2,
+          "position": "Float3",
+          "vertex_skin_hash": "a27baebdae2eaaf1",
+          "position_hash": "df96194cbc678121",
+          "part_triangles": 200
+        }
+      ]
+    },
+    {
+      "asset": "40mmgl",
+      "archive": "Dist/win32/async/weapon/bu_rgl_m16a2-00.fbrb",
+      "archive_index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Mesh",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "part": "jntWpnwpnJnt_16",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpnwpnJnt_16_Ammo",
+          "count": 1245,
+          "stride": 64,
+          "palette_size": 3,
+          "part_palette_index": 0,
+          "position": "Float3",
+          "vertex_skin_hash": "1f80f47ee8fc394e",
+          "position_hash": "127da862db913ce1",
+          "part_triangles": 120
+        }
+      ]
+    },
+    {
+      "asset": "40mmgl",
+      "archive": "Dist/win32/async/weapon/bu_rgl_m16a2-00.fbrb",
+      "archive_index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Mesh",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "part": "jntWpn_17",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpnwpnJnt_16_Ammo",
+          "count": 1245,
+          "stride": 64,
+          "palette_size": 3,
+          "part_palette_index": 1,
+          "position": "Float3",
+          "vertex_skin_hash": "1f80f47ee8fc394e",
+          "position_hash": "127da862db913ce1",
+          "part_triangles": 120
+        }
+      ]
+    },
+    {
+      "asset": "40mmsg",
+      "archive": "Dist/win32/async/weapon/bu_shg_m16a2-00.fbrb",
+      "archive_index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Mesh",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "part": "jntWpnwpnJnt_16",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpnwpnJnt_16_Ammo",
+          "count": 1245,
+          "stride": 64,
+          "palette_size": 3,
+          "part_palette_index": 0,
+          "position": "Float3",
+          "vertex_skin_hash": "1f80f47ee8fc394e",
+          "position_hash": "127da862db913ce1",
+          "part_triangles": 120
+        }
+      ]
+    },
+    {
+      "asset": "40mmsg",
+      "archive": "Dist/win32/async/weapon/bu_shg_m16a2-00.fbrb",
+      "archive_index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Mesh",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "part": "jntWpn_17",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpnwpnJnt_16_Ammo",
+          "count": 1245,
+          "stride": 64,
+          "palette_size": 3,
+          "part_palette_index": 1,
+          "position": "Float3",
+          "vertex_skin_hash": "1f80f47ee8fc394e",
+          "position_hash": "127da862db913ce1",
+          "part_triangles": 120
+        }
+      ]
+    },
+    {
+      "asset": "40mmsmk",
+      "archive": "Dist/win32/async/weapon/bu_smk_m16a2-00.fbrb",
+      "archive_index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Mesh",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "part": "jntWpnwpnJnt_16",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpnwpnJnt_16_Ammo",
+          "count": 1245,
+          "stride": 64,
+          "palette_size": 3,
+          "part_palette_index": 0,
+          "position": "Float3",
+          "vertex_skin_hash": "1f80f47ee8fc394e",
+          "position_hash": "127da862db913ce1",
+          "part_triangles": 120
+        }
+      ]
+    },
+    {
+      "asset": "40mmsmk",
+      "archive": "Dist/win32/async/weapon/bu_smk_m16a2-00.fbrb",
+      "archive_index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Mesh",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "part": "jntWpn_17",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpnwpnJnt_16_Ammo",
+          "count": 1245,
+          "stride": 64,
+          "palette_size": 3,
+          "part_palette_index": 1,
+          "position": "Float3",
+          "vertex_skin_hash": "1f80f47ee8fc394e",
+          "position_hash": "127da862db913ce1",
+          "part_triangles": 120
+        }
+      ]
+    },
+    {
+      "asset": "40mmgl",
+      "archive": "Dist/win32/async/weapon/us_rgl_xm320-00.fbrb",
+      "archive_index_sha256": "2efc05a36bf29f270e41174887504df2b59885f67f3a9d39354e95f973281225",
+      "mesh": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh",
+      "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+      "lod_sha256": "84f22b14e2727f2bd9b1ef54e66de1c11d1865070e3dd681c50b774043f7b99e",
+      "part": "jntWpn_13",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpn_6_Ammo",
+          "count": 834,
+          "stride": 64,
+          "palette_size": 3,
+          "part_palette_index": 1,
+          "position": "Float3",
+          "vertex_skin_hash": "924d2fd5524463db",
+          "position_hash": "73c7e4eb48e7ddef",
+          "part_triangles": 120
+        }
+      ]
+    },
+    {
+      "asset": "40mmgl",
+      "archive": "Dist/win32/async/weapon/us_rgl_xm320-00.fbrb",
+      "archive_index_sha256": "2efc05a36bf29f270e41174887504df2b59885f67f3a9d39354e95f973281225",
+      "mesh": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh",
+      "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+      "lod_sha256": "84f22b14e2727f2bd9b1ef54e66de1c11d1865070e3dd681c50b774043f7b99e",
+      "part": "jntWpnwpnJnt_14",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpn_6_Ammo",
+          "count": 834,
+          "stride": 64,
+          "palette_size": 3,
+          "part_palette_index": 2,
+          "position": "Float3",
+          "vertex_skin_hash": "924d2fd5524463db",
+          "position_hash": "73c7e4eb48e7ddef",
+          "part_triangles": 120
+        }
+      ]
+    },
+    {
+      "asset": "40mmsg",
+      "archive": "Dist/win32/async/weapon/us_shg_xm320-00.fbrb",
+      "archive_index_sha256": "2efc05a36bf29f270e41174887504df2b59885f67f3a9d39354e95f973281225",
+      "mesh": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh",
+      "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+      "lod_sha256": "84f22b14e2727f2bd9b1ef54e66de1c11d1865070e3dd681c50b774043f7b99e",
+      "part": "jntWpn_13",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpn_6_Ammo",
+          "count": 834,
+          "stride": 64,
+          "palette_size": 3,
+          "part_palette_index": 1,
+          "position": "Float3",
+          "vertex_skin_hash": "924d2fd5524463db",
+          "position_hash": "73c7e4eb48e7ddef",
+          "part_triangles": 120
+        }
+      ]
+    },
+    {
+      "asset": "40mmsg",
+      "archive": "Dist/win32/async/weapon/us_shg_xm320-00.fbrb",
+      "archive_index_sha256": "2efc05a36bf29f270e41174887504df2b59885f67f3a9d39354e95f973281225",
+      "mesh": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh",
+      "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+      "lod_sha256": "84f22b14e2727f2bd9b1ef54e66de1c11d1865070e3dd681c50b774043f7b99e",
+      "part": "jntWpnwpnJnt_14",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpn_6_Ammo",
+          "count": 834,
+          "stride": 64,
+          "palette_size": 3,
+          "part_palette_index": 2,
+          "position": "Float3",
+          "vertex_skin_hash": "924d2fd5524463db",
+          "position_hash": "73c7e4eb48e7ddef",
+          "part_triangles": 120
+        }
+      ]
+    },
+    {
+      "asset": "40mmsmk",
+      "archive": "Dist/win32/async/weapon/us_smk_xm320-00.fbrb",
+      "archive_index_sha256": "2efc05a36bf29f270e41174887504df2b59885f67f3a9d39354e95f973281225",
+      "mesh": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh",
+      "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+      "lod_sha256": "84f22b14e2727f2bd9b1ef54e66de1c11d1865070e3dd681c50b774043f7b99e",
+      "part": "jntWpn_13",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpn_6_Ammo",
+          "count": 834,
+          "stride": 64,
+          "palette_size": 3,
+          "part_palette_index": 1,
+          "position": "Float3",
+          "vertex_skin_hash": "924d2fd5524463db",
+          "position_hash": "73c7e4eb48e7ddef",
+          "part_triangles": 120
+        }
+      ]
+    },
+    {
+      "asset": "40mmsmk",
+      "archive": "Dist/win32/async/weapon/us_smk_xm320-00.fbrb",
+      "archive_index_sha256": "2efc05a36bf29f270e41174887504df2b59885f67f3a9d39354e95f973281225",
+      "mesh": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh",
+      "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+      "lod_sha256": "84f22b14e2727f2bd9b1ef54e66de1c11d1865070e3dd681c50b774043f7b99e",
+      "part": "jntWpnwpnJnt_14",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpn_6_Ammo",
+          "count": 834,
+          "stride": 64,
+          "palette_size": 3,
+          "part_palette_index": 2,
+          "position": "Float3",
+          "vertex_skin_hash": "924d2fd5524463db",
+          "position_hash": "73c7e4eb48e7ddef",
+          "part_triangles": 120
+        }
+      ]
     }
   ]
 }

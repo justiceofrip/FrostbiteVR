@@ -49,7 +49,20 @@ class Curve:
                 return ((time-knot(i))/left*basis(i,p-1) if left else 0.)+((knot(i+p+1)-time)/right*basis(i+1,p-1) if right else 0.)
             weights=[(max(0,min(n-1,i+1)),basis(i,degree)) for i in range(span-degree,span+1)]
             if abs(sum(w for _,w in weights)-1)>1e-7:raise ValueError('Spline basis partition')
+            if self.dimension==4:
+                # Authored controls must pass the original unit tolerance even
+                # when a Curve is constructed directly instead of via decode().
+                for i,w in weights:
+                    if w:unit(self.controls[i])
             result=tuple(sum(self.controls[i][c]*w for i,w in weights) for c in range(self.dimension))
+            if self.dimension==4:
+                # A polynomial blend of valid unit controls need not be unit.
+                # Normalize the evaluated spline, not malformed authored input;
+                # retain encoded signs and reject cancellation. The compact
+                # basis remains an offline candidate, not verified BC2 motion.
+                finite(result);length=math.sqrt(sum(v*v for v in result))
+                if length<=1e-8:raise ValueError('Degenerate interpolated orientation')
+                return tuple(v/length for v in result)
         return unit(result) if self.dimension==4 else tuple(result)
 
 def decode(curve,dimension):

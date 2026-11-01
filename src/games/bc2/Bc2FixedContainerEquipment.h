@@ -1,15 +1,24 @@
 #pragma once
 #include "../../../profiles/weapons46-special/FixedContainer.generated.h"
+#include "../../../profiles/weapons71-underbarrel-reload/FixedContainer.generated.h"
 #include "Bc2AmmoResourceService.h"
 #include "fvr/interaction/AmmoSupplyVisual.h"
 
 namespace fvr::bc2 {
 using FixedContainerEquipmentProfile=generated::FixedContainerEquipmentProfile;
 inline const FixedContainerEquipmentProfile* KnownFixedContainerEquipment(const FixedContainerEquipmentProfile* p)noexcept {
-    for(const auto& e:generated::FixedContainerEquipment)if(p==&e)return p;return nullptr;
+    for(const auto& e:generated::FixedContainerEquipment)if(p==&e)return p;
+    for(const auto& e:generated::UnderbarrelFixedContainerEquipment)if(p==&e)return p;
+    return nullptr;
 }
 inline const FixedContainerEquipmentProfile* FindFixedContainerEquipment(std::string_view config,std::string_view mesh,std::uint64_t rig)noexcept {
-    return generated::FindFixedContainerEquipment(config,mesh,rig);
+    const FixedContainerEquipmentProfile* found=nullptr;
+    for(const auto profiles:{std::span<const FixedContainerEquipmentProfile>(generated::FixedContainerEquipment),
+                             std::span<const FixedContainerEquipmentProfile>(generated::UnderbarrelFixedContainerEquipment)})
+        for(const auto& e:profiles)if(e.configurationPath==config&&e.mesh==mesh&&e.rigFingerprint==rig){
+            if(found)return nullptr;found=&e;
+        }
+    return found;
 }
 inline bool FixedContainerHandOwner(const AmmoResourceBinding& b,const interaction::HandInteractionOwner& h)noexcept {
     return h.actor==((std::uint64_t(b.owner.weak)<<32)|b.owner.soldier)&&h.actorGeneration==b.owner.actorGeneration&&

@@ -11,11 +11,12 @@ Ownership: prior CHAT25/26 close.json confirms lease release, idle helpers and
 exact profile restoration. Coordinator acquired the lease before shared mutations.
 External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned.
 
-Feedback69: native built/pushedbb48d09; native31b77be3; private0.1.33 validated,0.1.32 rollback/settings preserved.
-Both normal341/341, focusedPhysicalFeed1/1; sightdriver21 passes. Later runner/sight tools do not change native closure; no repeated build.
-Actual69xr-game03 QJU88 Open accepted; Detach no receipt. Sight02 reached approach but timed out before squeeze; tool clock correction awaits actual check. Full reload/sight acceptance remains open.
-Receipt: handoff/integrations/coordinator-20261101-feedback69/receipt.json. xr-game03 native retired/profiles restored, but game0xc0000005 duringshutdown; preserve failure. Earlier xr-game01 state-file contention closed normally and is corrected.
-Root continues70 from fresh Detach evidence. Source/tool identities stay distinct from built native/runtime receipt.
+Feedback70: built/pushed6e83a6c; native3d3b0238; private0.1.34 validated,0.1.33 rollback/settings preserved.
+Both normal341/341; focused5/5 and Python13 pass. Same-source sight driver21 and runner sharing7 checks reused.
+Actual70sight01: XM8->launcher->XM8, native acknowledgements2/sight commits2, valid secondary rig and visible1/7 HUD; no firing/reload/headset claim.
+Actual70xr-game01: QJU88 Open/Detach dispatches and aggregate acceptance2; reserve pickup acquired hand claim but stale prepared pose caused ContactMiss. Exact accepted receipts not retained. Transfer calls0, so new stock veto unexercised.
+Both70runs closed normally, exact profiles/settings restored. Prior69shutdown AV remains unresolved; watcher no-AV window does not establish whole-exit coverage.
+Receipt: handoff/integrations/coordinator-20261101-feedback70/receipt.json. Root prepares72 neutral-source fix, shared single-round policies and measured40-configuration manual launcher wiring/cache; not installed yet.
 68 performance comparison inconclusive due native yaw mismatch.69 copy-service0|2ms trial prepared, unrun. Destruction loaded knownSP02 scene, no destructive shot or rendering acceptance.
 Historical68: private0.1.32; carry precision, pump observation/driver and native underbarrel inventory action pairing. Receipt coordinator-20261031-feedback68/receipt.json.
 Historical66: paired native sample wait; snapshot refusal blocked Detach. Private0.1.30; receipt coordinator-20261031-feedback66/receipt.json.

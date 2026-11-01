@@ -145,6 +145,37 @@ class CurveTests(unittest.TestCase):
     def test_linear_spline_known_value(self):
         c=Curve('synthetic',1,3,(0.,1.),((0.,0.,0.),(2.,4.,6.)))
         self.assertEqual(c.evaluate(.25),(.5,1.,1.5))
+    def test_quaternion_spline_normalizes_valid_controls(self):
+        c=Curve('synthetic',1,4,(0.,1.),((0.,0.,0.,1.),(1.,0.,0.,0.)))
+        for actual,expected in zip(c.evaluate(.5),(math.sqrt(.5),0.,0.,math.sqrt(.5))):
+            self.assertAlmostEqual(actual,expected)
+    def test_launcher_packed_quaternion_neighborhood(self):
+        # Exact knot/control indices 61..67 from jntWpn_13 OrientationCurve,
+        # XM320 1P_Reload SHA256 1f59b1739a6acc24d9ddfb078b8687947eb0c87d8cc390daf8cba920263402aa.
+        # Seven knots preserve the full support at both failed sample times.
+        packed=bytes.fromhex('7a7c7e808284864bbd4648bb4529b9437abf4340beab3fc0bf40bfbf')
+        c=decode({'CurveData':{'CurveDataHeader_D4nK8uC7u':{'Format':9,'Degree':2},
+            'ScaleOffsetTableEntries':0,'OneOverKnotScale':95.625,'KnotsControls':list(packed)}},4)
+        for q in c.controls:self.assertAlmostEqual(sum(v*v for v in q),1.,places=12)
+        # Independent uniform-quadratic weights: ((1-u)^2/2, .5+u-u^2, u^2/2).
+        # Pre-normalization lengths are .9097903507974 and .9056794096392;
+        # these are valid interpolation results, not invalid decoded controls.
+        samples=((1.3333333730697632,(-.05813839126321256,.043603813112527506,.9972384470548296,.01530080582993351)),
+                 (1.3666667073965073,(.00277361706388132,-.003752291524829033,-.0031042146940769453,.9999842954805984)))
+        for time,expected in samples:
+            with self.subTest(time=time):
+                for actual,value in zip(c.evaluate(time),expected):self.assertAlmostEqual(actual,value,places=12)
+    def test_quaternion_spline_does_not_repair_invalid_controls(self):
+        for q in ((0.,0.,0.,.5),(0.,0.,0.,1.5),(0.,0.,0.,float('nan'))):
+            with self.assertRaises(ValueError):decode(const('D4Constant32f',q),4)
+        # This malformed direct curve would blend to unit length at its middle.
+        c=Curve('synthetic',1,4,(0.,1.),((0.,0.,0.,.5),(0.,0.,0.,1.5)))
+        with self.assertRaisesRegex(ValueError,'Non-unit authored orientation'):c.evaluate(.5)
+        c=Curve('synthetic',1,4,(0.,1.),((0.,0.,0.,1.),(0.,0.,0.,-1.)))
+        with self.assertRaisesRegex(ValueError,'Degenerate interpolated orientation'):c.evaluate(.5)
+        malformed={'CurveData':{'CurveDataHeader_D4nK8uC7u':{'Format':9,'Degree':1},
+            'ScaleOffsetTableEntries':0,'OneOverKnotScale':1.,'KnotsControls':[0,127,127,127]}}
+        with self.assertRaisesRegex(ValueError,'Invalid packed quaternion'):decode(malformed,4)
     def test_repeated_knots_and_constant_curve(self):
         c=Curve('synthetic',2,3,(0.,0.,1.),((2.,3.,4.),)*3)
         for actual,expected in zip(c.evaluate(.3),(2.,3.,4.)):self.assertAlmostEqual(actual,expected)

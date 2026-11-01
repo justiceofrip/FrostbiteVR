@@ -650,14 +650,24 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         if(supplied&&source->grip)e->supplyNeutral=false;
         const bool chestNeutral=needsSupply&&!e->ammunitionSupply.Custody()&&!source->grip&&sourceInput.released[0]&&
             available&&source->bodyFromHand&&Bc2FeedSupplyContact(*source->bodyFromHand);
-        // Keep one admitted chest preparation through released input while
-        // the hand remains in the supply region. Re-suspending each neutral
-        // would erase its arm whenever the native clock has not advanced;
-        // ordinary hand jitter is not a new placement source. Actual contact
-        // loss invalidates preparation, while acquired custody keeps the
-        // delayed neutral-to-pickup handoff above intact.
+        // Follow a meaningful released approach within the broader supply
+        // region before pickup. Rebase only against newer paired native and
+        // input evidence: suspending on an identical native observation would
+        // erase its arm, while changing that snapshot's source would mutate
+        // its evidence. Small jitter keeps the admitted source unchanged.
+        bool refreshChest=false;
+        if(chestNeutral&&e->supplyNeutral&&!e->motionDirty&&!e->pending){
+            const auto previous=e->session->ContextObservation();
+            const auto part=unsigned(FeedPart::Container);
+            refreshChest=previous&&sourceInput.sequence>previous->snapshot.inputSequence&&
+                sourceInput.observedNs>previous->ammunition.observedNs&&
+                ammunition.sequence>previous->ammunition.sequence&&ammunition.observedNs>previous->ammunition.observedNs&&
+                Distance(local,sample.snapshot.contacts[part].weaponFromContact)>profile.contacts[part].radiusMeters*.5;
+        }
+        // Contact loss invalidates preparation; custody preserves the exact
+        // delayed pickup and prohibits rebasing an already carried object.
         if(needsSupply&&!custody&&!chestNeutral)e->supplyNeutral=false;
-        if(chestNeutral&&(!e->supplyNeutral||e->motionDirty)){
+        if(chestNeutral&&(!e->supplyNeutral||e->motionDirty||refreshChest)){
             // Arm from the actual neutral chest/belt contact. A detached pouch
             // is not moved by this preparation; the pickup edge moves it.
             FeedEquipmentSessionSample pause;pause.nowNs=now;(void)e->session->Update(pause);

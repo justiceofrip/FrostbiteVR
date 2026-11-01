@@ -1,0 +1,821 @@
+{
+  "schema": "fvr.bc2.underbarrel_reload_source.v1",
+  "family": "AN94",
+  "state": 0,
+  "binding_status": "typed_reload_mesh_skeleton_proved",
+  "chain": {
+    "config": {
+      "resource": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan.dbx",
+      "sha256": "20ad931c84e70b19b6a7cd10a4cbcfd92af391d50385fa7fbc6d7879a96addd3",
+      "instance_guid": "b41b01a8-15bd-4c31-8636-9d1bc738b139",
+      "type": "GameSharedResources.SoldierWeaponData"
+    },
+    "tree": {
+      "resource": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_AnimTree1P.dbx",
+      "sha256": "21fdc264fe4ad44126a9b1803444d088c47f1ff085098925cd65924756c579ca",
+      "instance_guid": "72d4757d-7045-4f57-a543-36f2071022c0",
+      "type": "Animation.SpecificAnimTreeData"
+    },
+    "reload": {
+      "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/1P_Reload.dbx",
+      "sha256": "c1ce176f868aa3e86c01eb6c11678c0e5f111628fff10467ddc710a170ae62db",
+      "instance_guid": "22c61060-3c2e-43ed-bbc1-4ee08366824a",
+      "type": "Animation.AnimationAsset"
+    },
+    "mesh": {
+      "resource": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh.dbx",
+      "sha256": "6db4e6b0e43c91ad12d8f100c40f5a025fd385e6142598a8e576667e03366c7b",
+      "instance_guid": "e483539b-910b-11db-a947-9f6e30240d09",
+      "type": "Render.SkinnedMeshAsset"
+    },
+    "skeleton": {
+      "resource": "Characters/Skeletons/ske01.dbx",
+      "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+      "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+      "type": "Animation.SkeletonAsset"
+    },
+    "mesh_skeleton": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+    "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+    "rig": "fnv1a64:a7f219a1426216ab",
+    "clip_sha256": "8056c674cbc674899312a4fdbb0e50f7d8404c4bd718df587a85b2db5c8cff3e",
+    "closed_sha256": "d0ae45afc98271c7a75e4fb79ae3d272fdd3a0fa55d6badabcca8644e29c771e",
+    "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+    "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+    "common_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965",
+    "weapon_index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4"
+  },
+  "configuration_paths": [
+    "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan",
+    "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_Kobra",
+    "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_Scoped",
+    "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_shg_AN94Abakan",
+    "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_shg_AN94Abakan_Kobra",
+    "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_shg_AN94Abakan_Scoped",
+    "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_smk_AN94Abakan",
+    "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_smk_AN94Abakan_Kobra",
+    "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_smk_AN94Abakan_Scoped",
+    "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rgl_AN94Abakan_Kobra",
+    "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rgl_AN94Abakan_Scoped"
+  ],
+  "configurations": [
+    {
+      "asset": "40mmgl",
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan",
+      "weapon_class": "wcUgl",
+      "source": {
+        "resource": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan.dbx",
+        "sha256": "20ad931c84e70b19b6a7cd10a4cbcfd92af391d50385fa7fbc6d7879a96addd3",
+        "instance_guid": "b41b01a8-15bd-4c31-8636-9d1bc738b139",
+        "type": "GameSharedResources.SoldierWeaponData"
+      },
+      "alt_deploy_id": 0,
+      "persistence_reference": "persistence/weapons/4fb0819a-eead-4e14-9b0e-cfe980c0a086",
+      "persistent_id": "40mmgl",
+      "states": [
+        {
+          "index": 0,
+          "meshes": [
+            "objects/weapons/handheld/bu_rif_an94abakan/bu_rif_an94abakan_mesh/e483539b-910b-11db-a947-9f6e30240d09"
+          ],
+          "roles": {
+            "1p_altdeploy": {
+              "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/1P_AltDeploy.res",
+              "asset": {
+                "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/1P_AltDeploy.dbx",
+                "sha256": "55ad5e2d54218894accfd59203d9cace04cd86790b570ff1e02c2c6e477c1eb3",
+                "instance_guid": "dfb95c6f-dd38-4229-9c66-f38a1f813bdb",
+                "type": "Animation.AnimationAsset"
+              },
+              "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+            },
+            "handsikpose": {
+              "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/HandsIkPose.res",
+              "asset": {
+                "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/HandsIkPose.dbx",
+                "sha256": "f8ff80045501b8941cb34119fdfaba7d4da44d13fbc3cc09bc3e34a431b4683f",
+                "instance_guid": "75c68325-5488-4cf4-8154-91c4bfd176d2",
+                "type": "Animation.AnimationAsset"
+              },
+              "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+            }
+          },
+          "tree": {
+            "resource": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_AnimTree1P.dbx",
+            "sha256": "21fdc264fe4ad44126a9b1803444d088c47f1ff085098925cd65924756c579ca",
+            "instance_guid": "72d4757d-7045-4f57-a543-36f2071022c0",
+            "type": "Animation.SpecificAnimTreeData"
+          }
+        }
+      ]
+    },
+    {
+      "asset": "40mmgl",
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_Kobra",
+      "weapon_class": "wcUgl",
+      "source": {
+        "resource": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_Kobra.dbx",
+        "sha256": "91335a0c92636e8a698ae7ef269d7071a9307f2782699411e0b20a6c4a34e36f",
+        "instance_guid": "4597f6d5-04c5-4ffd-940b-62010c429543",
+        "type": "GameSharedResources.SoldierWeaponData"
+      },
+      "alt_deploy_id": 20,
+      "persistence_reference": "persistence/weapons/4fb0819a-eead-4e14-9b0e-cfe980c0a086",
+      "persistent_id": "40mmgl",
+      "states": [
+        {
+          "index": 0,
+          "meshes": [
+            "objects/weapons/handheld/bu_rif_an94abakan/bu_rif_an94abakan_mesh/e483539b-910b-11db-a947-9f6e30240d09",
+            "objects/weapons/unlock/ru_scope_reddot_kobra/ru_scope_reddot_kobra_mesh/f11b5955-e6dd-44b5-84a8-9345c574c211"
+          ],
+          "roles": {
+            "1p_altdeploy": {
+              "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/1P_AltDeploy.res",
+              "asset": {
+                "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/1P_AltDeploy.dbx",
+                "sha256": "55ad5e2d54218894accfd59203d9cace04cd86790b570ff1e02c2c6e477c1eb3",
+                "instance_guid": "dfb95c6f-dd38-4229-9c66-f38a1f813bdb",
+                "type": "Animation.AnimationAsset"
+              },
+              "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+            },
+            "handsikpose": {
+              "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/HandsIkPose.res",
+              "asset": {
+                "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/HandsIkPose.dbx",
+                "sha256": "f8ff80045501b8941cb34119fdfaba7d4da44d13fbc3cc09bc3e34a431b4683f",
+                "instance_guid": "75c68325-5488-4cf4-8154-91c4bfd176d2",
+                "type": "Animation.AnimationAsset"
+              },
+              "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+            }
+          },
+          "tree": {
+            "resource": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_AnimTree1P.dbx",
+            "sha256": "21fdc264fe4ad44126a9b1803444d088c47f1ff085098925cd65924756c579ca",
+            "instance_guid": "72d4757d-7045-4f57-a543-36f2071022c0",
+            "type": "Animation.SpecificAnimTreeData"
+          }
+        }
+      ]
+    },
+    {
+      "asset": "40mmgl",
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_Scoped",
+      "weapon_class": "wcUgl",
+      "source": {
+        "resource": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_Scoped.dbx",
+        "sha256": "1c51e5b88876b1551a46b0a8f8cf197083632299c46d0580a5f8c3f395c903bf",
+        "instance_guid": "cf97eea8-5356-4faa-b74b-12b879a67064",
+        "type": "GameSharedResources.SoldierWeaponData"
+      },
+      "alt_deploy_id": 10,
+      "persistence_reference": "persistence/weapons/4fb0819a-eead-4e14-9b0e-cfe980c0a086",
+      "persistent_id": "40mmgl",
+      "states": [
+        {
+          "index": 0,
+          "meshes": [
+            "objects/weapons/handheld/bu_rif_an94abakan/bu_rif_an94abakan_mesh/e483539b-910b-11db-a947-9f6e30240d09",
+            "objects/weapons/unlock/acog_4x/us_acog_4x_mesh/62360b4a-8ee5-11dd-9ccd-dde5da16fae6"
+          ],
+          "roles": {
+            "1p_altdeploy": {
+              "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/1P_AltDeploy.res",
+              "asset": {
+                "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/1P_AltDeploy.dbx",
+                "sha256": "55ad5e2d54218894accfd59203d9cace04cd86790b570ff1e02c2c6e477c1eb3",
+                "instance_guid": "dfb95c6f-dd38-4229-9c66-f38a1f813bdb",
+                "type": "Animation.AnimationAsset"
+              },
+              "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+            },
+            "handsikpose": {
+              "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/HandsIkPose.res",
+              "asset": {
+                "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/HandsIkPose.dbx",
+                "sha256": "f8ff80045501b8941cb34119fdfaba7d4da44d13fbc3cc09bc3e34a431b4683f",
+                "instance_guid": "75c68325-5488-4cf4-8154-91c4bfd176d2",
+                "type": "Animation.AnimationAsset"
+              },
+              "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+            }
+          },
+          "tree": {
+            "resource": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_AnimTree1P.dbx",
+            "sha256": "21fdc264fe4ad44126a9b1803444d088c47f1ff085098925cd65924756c579ca",
+            "instance_guid": "72d4757d-7045-4f57-a543-36f2071022c0",
+            "type": "Animation.SpecificAnimTreeData"
+          }
+        }
+      ]
+    },
+    {
+      "asset": "40mmsg",
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_shg_AN94Abakan",
+      "weapon_class": "wcUgl",
+      "source": {
+        "resource": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_shg_AN94Abakan.dbx",
+        "sha256": "1704e210a3c74b455201d79fc8afa8a351289d94fec14d54b6659d36c24a0549",
+        "instance_guid": "17730dcd-68dd-446b-8f36-fe5f170dbd73",
+        "type": "GameSharedResources.SoldierWeaponData"
+      },
+      "alt_deploy_id": 0,
+      "persistence_reference": "persistence/weapons/ffca75e4-df69-4df8-911b-02ce8ac7f234",
+      "persistent_id": "40mmsg",
+      "states": [
+        {
+          "index": 0,
+          "meshes": [
+            "objects/weapons/handheld/bu_rif_an94abakan/bu_rif_an94abakan_mesh/e483539b-910b-11db-a947-9f6e30240d09"
+          ],
+          "roles": {
+            "1p_altdeploy": {
+              "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/1P_AltDeploy.res",
+              "asset": {
+                "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/1P_AltDeploy.dbx",
+                "sha256": "55ad5e2d54218894accfd59203d9cace04cd86790b570ff1e02c2c6e477c1eb3",
+                "instance_guid": "dfb95c6f-dd38-4229-9c66-f38a1f813bdb",
+                "type": "Animation.AnimationAsset"
+              },
+              "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+            },
+            "handsikpose": {
+              "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/HandsIkPose.res",
+              "asset": {
+                "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/HandsIkPose.dbx",
+                "sha256": "f8ff80045501b8941cb34119fdfaba7d4da44d13fbc3cc09bc3e34a431b4683f",
+                "instance_guid": "75c68325-5488-4cf4-8154-91c4bfd176d2",
+                "type": "Animation.AnimationAsset"
+              },
+              "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+            }
+          },
+          "tree": {
+            "resource": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_AnimTree1P.dbx",
+            "sha256": "21fdc264fe4ad44126a9b1803444d088c47f1ff085098925cd65924756c579ca",
+            "instance_guid": "72d4757d-7045-4f57-a543-36f2071022c0",
+            "type": "Animation.SpecificAnimTreeData"
+          }
+        }
+      ]
+    },
+    {
+      "asset": "40mmsg",
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_shg_AN94Abakan_Kobra",
+      "weapon_class": "wcUgl",
+      "source": {
+        "resource": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_shg_AN94Abakan_Kobra.dbx",
+        "sha256": "f7066a5ecfdfef48f132048dc2e494ce0f34b5abcbdd79cdca3c57492281180c",
+        "instance_guid": "98538a0a-6726-4c7a-aa82-d77d0bef2777",
+        "type": "GameSharedResources.SoldierWeaponData"
+      },
+      "alt_deploy_id": 20,
+      "persistence_reference": "persistence/weapons/ffca75e4-df69-4df8-911b-02ce8ac7f234",
+      "persistent_id": "40mmsg",
+      "states": [
+        {
+          "index": 0,
+          "meshes": [
+            "objects/weapons/handheld/bu_rif_an94abakan/bu_rif_an94abakan_mesh/e483539b-910b-11db-a947-9f6e30240d09",
+            "objects/weapons/unlock/ru_scope_reddot_kobra/ru_scope_reddot_kobra_mesh/f11b5955-e6dd-44b5-84a8-9345c574c211"
+          ],
+          "roles": {
+            "1p_altdeploy": {
+              "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/1P_AltDeploy.res",
+              "asset": {
+                "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/1P_AltDeploy.dbx",
+                "sha256": "55ad5e2d54218894accfd59203d9cace04cd86790b570ff1e02c2c6e477c1eb3",
+                "instance_guid": "dfb95c6f-dd38-4229-9c66-f38a1f813bdb",
+                "type": "Animation.AnimationAsset"
+              },
+              "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+            },
+            "handsikpose": {
+              "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/HandsIkPose.res",
+              "asset": {
+                "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/HandsIkPose.dbx",
+                "sha256": "f8ff80045501b8941cb34119fdfaba7d4da44d13fbc3cc09bc3e34a431b4683f",
+                "instance_guid": "75c68325-5488-4cf4-8154-91c4bfd176d2",
+                "type": "Animation.AnimationAsset"
+              },
+              "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+            }
+          },
+          "tree": {
+            "resource": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_AnimTree1P.dbx",
+            "sha256": "21fdc264fe4ad44126a9b1803444d088c47f1ff085098925cd65924756c579ca",
+            "instance_guid": "72d4757d-7045-4f57-a543-36f2071022c0",
+            "type": "Animation.SpecificAnimTreeData"
+          }
+        }
+      ]
+    },
+    {
+      "asset": "40mmsg",
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_shg_AN94Abakan_Scoped",
+      "weapon_class": "wcUgl",
+      "source": {
+        "resource": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_shg_AN94Abakan_Scoped.dbx",
+        "sha256": "77c388fdf068a87cfba0d90d1ec14b5ffb9a4782c19beaeabc8ae3cb74067d38",
+        "instance_guid": "3cf580fc-55d4-4e17-b7dd-8f4492ce7847",
+        "type": "GameSharedResources.SoldierWeaponData"
+      },
+      "alt_deploy_id": 10,
+      "persistence_reference": "persistence/weapons/ffca75e4-df69-4df8-911b-02ce8ac7f234",
+      "persistent_id": "40mmsg",
+      "states": [
+        {
+          "index": 0,
+          "meshes": [
+            "objects/weapons/handheld/bu_rif_an94abakan/bu_rif_an94abakan_mesh/e483539b-910b-11db-a947-9f6e30240d09",
+            "objects/weapons/unlock/acog_4x/us_acog_4x_mesh/62360b4a-8ee5-11dd-9ccd-dde5da16fae6"
+          ],
+          "roles": {
+            "1p_altdeploy": {
+              "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/1P_AltDeploy.res",
+              "asset": {
+                "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/1P_AltDeploy.dbx",
+                "sha256": "55ad5e2d54218894accfd59203d9cace04cd86790b570ff1e02c2c6e477c1eb3",
+                "instance_guid": "dfb95c6f-dd38-4229-9c66-f38a1f813bdb",
+                "type": "Animation.AnimationAsset"
+              },
+              "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+            },
+            "handsikpose": {
+              "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/HandsIkPose.res",
+              "asset": {
+                "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/HandsIkPose.dbx",
+                "sha256": "f8ff80045501b8941cb34119fdfaba7d4da44d13fbc3cc09bc3e34a431b4683f",
+                "instance_guid": "75c68325-5488-4cf4-8154-91c4bfd176d2",
+                "type": "Animation.AnimationAsset"
+              },
+              "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+            }
+          },
+          "tree": {
+            "resource": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_AnimTree1P.dbx",
+            "sha256": "21fdc264fe4ad44126a9b1803444d088c47f1ff085098925cd65924756c579ca",
+            "instance_guid": "72d4757d-7045-4f57-a543-36f2071022c0",
+            "type": "Animation.SpecificAnimTreeData"
+          }
+        }
+      ]
+    },
+    {
+      "asset": "40mmsmk",
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_smk_AN94Abakan",
+      "weapon_class": "wcUgl",
+      "source": {
+        "resource": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_smk_AN94Abakan.dbx",
+        "sha256": "198b0d710b4da061756db9280b7236fd9e9f874ff11da19001dc9be4544c63de",
+        "instance_guid": "72ab59bc-6576-4af1-aa69-c5e560ef7cba",
+        "type": "GameSharedResources.SoldierWeaponData"
+      },
+      "alt_deploy_id": 0,
+      "persistence_reference": "persistence/weapons/b1234f6e-ce9b-49dd-bcf7-36259ba75abc",
+      "persistent_id": "40mmsmk",
+      "states": [
+        {
+          "index": 0,
+          "meshes": [
+            "objects/weapons/handheld/bu_rif_an94abakan/bu_rif_an94abakan_mesh/e483539b-910b-11db-a947-9f6e30240d09"
+          ],
+          "roles": {
+            "1p_altdeploy": {
+              "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/1P_AltDeploy.res",
+              "asset": {
+                "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/1P_AltDeploy.dbx",
+                "sha256": "55ad5e2d54218894accfd59203d9cace04cd86790b570ff1e02c2c6e477c1eb3",
+                "instance_guid": "dfb95c6f-dd38-4229-9c66-f38a1f813bdb",
+                "type": "Animation.AnimationAsset"
+              },
+              "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+            },
+            "handsikpose": {
+              "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/HandsIkPose.res",
+              "asset": {
+                "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/HandsIkPose.dbx",
+                "sha256": "f8ff80045501b8941cb34119fdfaba7d4da44d13fbc3cc09bc3e34a431b4683f",
+                "instance_guid": "75c68325-5488-4cf4-8154-91c4bfd176d2",
+                "type": "Animation.AnimationAsset"
+              },
+              "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+            }
+          },
+          "tree": {
+            "resource": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_AnimTree1P.dbx",
+            "sha256": "21fdc264fe4ad44126a9b1803444d088c47f1ff085098925cd65924756c579ca",
+            "instance_guid": "72d4757d-7045-4f57-a543-36f2071022c0",
+            "type": "Animation.SpecificAnimTreeData"
+          }
+        }
+      ]
+    },
+    {
+      "asset": "40mmsmk",
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_smk_AN94Abakan_Kobra",
+      "weapon_class": "wcUgl",
+      "source": {
+        "resource": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_smk_AN94Abakan_Kobra.dbx",
+        "sha256": "8eb1feaaf1468edda96f816e3e2446e3dd1749c82e00be0b17e8c3ad96f1d53e",
+        "instance_guid": "c72021c0-c062-4f1a-88b6-7a1d10a05680",
+        "type": "GameSharedResources.SoldierWeaponData"
+      },
+      "alt_deploy_id": 20,
+      "persistence_reference": "persistence/weapons/b1234f6e-ce9b-49dd-bcf7-36259ba75abc",
+      "persistent_id": "40mmsmk",
+      "states": [
+        {
+          "index": 0,
+          "meshes": [
+            "objects/weapons/handheld/bu_rif_an94abakan/bu_rif_an94abakan_mesh/e483539b-910b-11db-a947-9f6e30240d09",
+            "objects/weapons/unlock/ru_scope_reddot_kobra/ru_scope_reddot_kobra_mesh/f11b5955-e6dd-44b5-84a8-9345c574c211"
+          ],
+          "roles": {
+            "1p_altdeploy": {
+              "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/1P_AltDeploy.res",
+              "asset": {
+                "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/1P_AltDeploy.dbx",
+                "sha256": "55ad5e2d54218894accfd59203d9cace04cd86790b570ff1e02c2c6e477c1eb3",
+                "instance_guid": "dfb95c6f-dd38-4229-9c66-f38a1f813bdb",
+                "type": "Animation.AnimationAsset"
+              },
+              "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+            },
+            "handsikpose": {
+              "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/HandsIkPose.res",
+              "asset": {
+                "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/HandsIkPose.dbx",
+                "sha256": "f8ff80045501b8941cb34119fdfaba7d4da44d13fbc3cc09bc3e34a431b4683f",
+                "instance_guid": "75c68325-5488-4cf4-8154-91c4bfd176d2",
+                "type": "Animation.AnimationAsset"
+              },
+              "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+            }
+          },
+          "tree": {
+            "resource": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_AnimTree1P.dbx",
+            "sha256": "21fdc264fe4ad44126a9b1803444d088c47f1ff085098925cd65924756c579ca",
+            "instance_guid": "72d4757d-7045-4f57-a543-36f2071022c0",
+            "type": "Animation.SpecificAnimTreeData"
+          }
+        }
+      ]
+    },
+    {
+      "asset": "40mmsmk",
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_smk_AN94Abakan_Scoped",
+      "weapon_class": "wcUgl",
+      "source": {
+        "resource": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_smk_AN94Abakan_Scoped.dbx",
+        "sha256": "5c647d51d050895e07da77e3d204f1b0009201fc70a3029cdc56aa01dbdb6592",
+        "instance_guid": "0ee6bde5-83c3-4f4f-b71f-2e458c383823",
+        "type": "GameSharedResources.SoldierWeaponData"
+      },
+      "alt_deploy_id": 10,
+      "persistence_reference": "persistence/weapons/b1234f6e-ce9b-49dd-bcf7-36259ba75abc",
+      "persistent_id": "40mmsmk",
+      "states": [
+        {
+          "index": 0,
+          "meshes": [
+            "objects/weapons/handheld/bu_rif_an94abakan/bu_rif_an94abakan_mesh/e483539b-910b-11db-a947-9f6e30240d09",
+            "objects/weapons/unlock/acog_4x/us_acog_4x_mesh/62360b4a-8ee5-11dd-9ccd-dde5da16fae6"
+          ],
+          "roles": {
+            "1p_altdeploy": {
+              "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/1P_AltDeploy.res",
+              "asset": {
+                "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/1P_AltDeploy.dbx",
+                "sha256": "55ad5e2d54218894accfd59203d9cace04cd86790b570ff1e02c2c6e477c1eb3",
+                "instance_guid": "dfb95c6f-dd38-4229-9c66-f38a1f813bdb",
+                "type": "Animation.AnimationAsset"
+              },
+              "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+            },
+            "handsikpose": {
+              "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/HandsIkPose.res",
+              "asset": {
+                "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/HandsIkPose.dbx",
+                "sha256": "f8ff80045501b8941cb34119fdfaba7d4da44d13fbc3cc09bc3e34a431b4683f",
+                "instance_guid": "75c68325-5488-4cf4-8154-91c4bfd176d2",
+                "type": "Animation.AnimationAsset"
+              },
+              "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+            }
+          },
+          "tree": {
+            "resource": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_AnimTree1P.dbx",
+            "sha256": "21fdc264fe4ad44126a9b1803444d088c47f1ff085098925cd65924756c579ca",
+            "instance_guid": "72d4757d-7045-4f57-a543-36f2071022c0",
+            "type": "Animation.SpecificAnimTreeData"
+          }
+        }
+      ]
+    },
+    {
+      "asset": "40mmgl",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rgl_AN94Abakan_Kobra",
+      "weapon_class": "wcUgl",
+      "source": {
+        "resource": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rgl_AN94Abakan_Kobra.dbx",
+        "sha256": "41200c6b8af69a7da4e0d027b0085f31bb6bca476e80b223ba3db2155e19b8c0",
+        "instance_guid": "eca8dac6-6b89-46eb-9a90-4819993ad73c",
+        "type": "GameSharedResources.SoldierWeaponData"
+      },
+      "alt_deploy_id": 20,
+      "persistence_reference": "persistence/weapons/4fb0819a-eead-4e14-9b0e-cfe980c0a086",
+      "persistent_id": "40mmgl",
+      "states": [
+        {
+          "index": 0,
+          "meshes": [
+            "objects/weapons/handheld/bu_rif_an94abakan/bu_rif_an94abakan_mesh/e483539b-910b-11db-a947-9f6e30240d09",
+            "objects/weapons/unlock/ru_scope_reddot_kobra/ru_scope_reddot_kobra_mesh/f11b5955-e6dd-44b5-84a8-9345c574c211"
+          ],
+          "roles": {
+            "1p_altdeploy": {
+              "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/1P_AltDeploy.res",
+              "asset": {
+                "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/1P_AltDeploy.dbx",
+                "sha256": "55ad5e2d54218894accfd59203d9cace04cd86790b570ff1e02c2c6e477c1eb3",
+                "instance_guid": "dfb95c6f-dd38-4229-9c66-f38a1f813bdb",
+                "type": "Animation.AnimationAsset"
+              },
+              "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+            },
+            "handsikpose": {
+              "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/HandsIkPose.res",
+              "asset": {
+                "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/HandsIkPose.dbx",
+                "sha256": "f8ff80045501b8941cb34119fdfaba7d4da44d13fbc3cc09bc3e34a431b4683f",
+                "instance_guid": "75c68325-5488-4cf4-8154-91c4bfd176d2",
+                "type": "Animation.AnimationAsset"
+              },
+              "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+            }
+          },
+          "tree": {
+            "resource": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_AnimTree1P.dbx",
+            "sha256": "21fdc264fe4ad44126a9b1803444d088c47f1ff085098925cd65924756c579ca",
+            "instance_guid": "72d4757d-7045-4f57-a543-36f2071022c0",
+            "type": "Animation.SpecificAnimTreeData"
+          }
+        }
+      ]
+    },
+    {
+      "asset": "40mmgl",
+      "configuration": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rgl_AN94Abakan_Scoped",
+      "weapon_class": "wcUgl",
+      "source": {
+        "resource": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rgl_AN94Abakan_Scoped.dbx",
+        "sha256": "1613ff5213ec5b80e9482c6e035a62784cede727260d22795cabaaf16e0d5174",
+        "instance_guid": "25c9ccb1-ae9e-4ba2-92f1-8fda873592a4",
+        "type": "GameSharedResources.SoldierWeaponData"
+      },
+      "alt_deploy_id": 10,
+      "persistence_reference": "persistence/weapons/4fb0819a-eead-4e14-9b0e-cfe980c0a086",
+      "persistent_id": "40mmgl",
+      "states": [
+        {
+          "index": 0,
+          "meshes": [
+            "objects/weapons/handheld/bu_rif_an94abakan/bu_rif_an94abakan_mesh/e483539b-910b-11db-a947-9f6e30240d09",
+            "objects/weapons/unlock/acog_4x/us_acog_4x_mesh/62360b4a-8ee5-11dd-9ccd-dde5da16fae6"
+          ],
+          "roles": {
+            "1p_altdeploy": {
+              "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/1P_AltDeploy.res",
+              "asset": {
+                "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/1P_AltDeploy.dbx",
+                "sha256": "55ad5e2d54218894accfd59203d9cace04cd86790b570ff1e02c2c6e477c1eb3",
+                "instance_guid": "dfb95c6f-dd38-4229-9c66-f38a1f813bdb",
+                "type": "Animation.AnimationAsset"
+              },
+              "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+            },
+            "handsikpose": {
+              "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/HandsIkPose.res",
+              "asset": {
+                "resource": "Animations/Weapons/Handheld/BU_rgl_AN94Abakan/1P/HandsIkPose.dbx",
+                "sha256": "f8ff80045501b8941cb34119fdfaba7d4da44d13fbc3cc09bc3e34a431b4683f",
+                "instance_guid": "75c68325-5488-4cf4-8154-91c4bfd176d2",
+                "type": "Animation.AnimationAsset"
+              },
+              "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+            }
+          },
+          "tree": {
+            "resource": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_AnimTree1P.dbx",
+            "sha256": "21fdc264fe4ad44126a9b1803444d088c47f1ff085098925cd65924756c579ca",
+            "instance_guid": "72d4757d-7045-4f57-a543-36f2071022c0",
+            "type": "Animation.SpecificAnimTreeData"
+          }
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_Kobra",
+      "archive": "Dist/win32/async/weapon/bu_rgl_an94abakan_kobra-00.fbrb",
+      "index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "clip_hashes": [
+        "d0ae45afc98271c7a75e4fb79ae3d272fdd3a0fa55d6badabcca8644e29c771e",
+        "56885aa32a11408253fc969bc81feb96f8e041ad295372ce0528eaedcd2c9dcf"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_Scoped",
+      "archive": "Dist/win32/async/weapon/bu_rgl_an94abakan_scoped-00.fbrb",
+      "index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "clip_hashes": [
+        "d0ae45afc98271c7a75e4fb79ae3d272fdd3a0fa55d6badabcca8644e29c771e",
+        "56885aa32a11408253fc969bc81feb96f8e041ad295372ce0528eaedcd2c9dcf"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_shg_AN94Abakan_Kobra",
+      "archive": "Dist/win32/async/weapon/bu_shg_an94abakan_kobra-00.fbrb",
+      "index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "clip_hashes": [
+        "d0ae45afc98271c7a75e4fb79ae3d272fdd3a0fa55d6badabcca8644e29c771e",
+        "56885aa32a11408253fc969bc81feb96f8e041ad295372ce0528eaedcd2c9dcf"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_shg_AN94Abakan_Scoped",
+      "archive": "Dist/win32/async/weapon/bu_shg_an94abakan_scoped-00.fbrb",
+      "index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "clip_hashes": [
+        "d0ae45afc98271c7a75e4fb79ae3d272fdd3a0fa55d6badabcca8644e29c771e",
+        "56885aa32a11408253fc969bc81feb96f8e041ad295372ce0528eaedcd2c9dcf"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_smk_AN94Abakan_Kobra",
+      "archive": "Dist/win32/async/weapon/bu_smk_an94abakan_kobra-00.fbrb",
+      "index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "clip_hashes": [
+        "d0ae45afc98271c7a75e4fb79ae3d272fdd3a0fa55d6badabcca8644e29c771e",
+        "56885aa32a11408253fc969bc81feb96f8e041ad295372ce0528eaedcd2c9dcf"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_smk_AN94Abakan_Scoped",
+      "archive": "Dist/win32/async/weapon/bu_smk_an94abakan_scoped-00.fbrb",
+      "index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "clip_hashes": [
+        "d0ae45afc98271c7a75e4fb79ae3d272fdd3a0fa55d6badabcca8644e29c771e",
+        "56885aa32a11408253fc969bc81feb96f8e041ad295372ce0528eaedcd2c9dcf"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rgl_AN94Abakan_Kobra",
+      "archive": "Dist/win32/async/weapon/sp_rgl_an94abakan_kobra-00.fbrb",
+      "index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "clip_hashes": [
+        "d0ae45afc98271c7a75e4fb79ae3d272fdd3a0fa55d6badabcca8644e29c771e",
+        "56885aa32a11408253fc969bc81feb96f8e041ad295372ce0528eaedcd2c9dcf"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rgl_AN94Abakan_Scoped",
+      "archive": "Dist/win32/async/weapon/sp_rgl_an94abakan_scoped-00.fbrb",
+      "index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "clip_hashes": [
+        "d0ae45afc98271c7a75e4fb79ae3d272fdd3a0fa55d6badabcca8644e29c771e",
+        "56885aa32a11408253fc969bc81feb96f8e041ad295372ce0528eaedcd2c9dcf"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan",
+      "archive": "Dist/win32/async/weapon/bu_rgl_an94abakan-00.fbrb",
+      "index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "clip_hashes": [
+        "d0ae45afc98271c7a75e4fb79ae3d272fdd3a0fa55d6badabcca8644e29c771e",
+        "56885aa32a11408253fc969bc81feb96f8e041ad295372ce0528eaedcd2c9dcf"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_shg_AN94Abakan",
+      "archive": "Dist/win32/async/weapon/bu_shg_an94abakan-00.fbrb",
+      "index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "clip_hashes": [
+        "d0ae45afc98271c7a75e4fb79ae3d272fdd3a0fa55d6badabcca8644e29c771e",
+        "56885aa32a11408253fc969bc81feb96f8e041ad295372ce0528eaedcd2c9dcf"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_smk_AN94Abakan",
+      "archive": "Dist/win32/async/weapon/bu_smk_an94abakan-00.fbrb",
+      "index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "clip_hashes": [
+        "d0ae45afc98271c7a75e4fb79ae3d272fdd3a0fa55d6badabcca8644e29c771e",
+        "56885aa32a11408253fc969bc81feb96f8e041ad295372ce0528eaedcd2c9dcf"
+      ]
+    }
+  ],
+  "pose_clip_hashes": [
+    "d0ae45afc98271c7a75e4fb79ae3d272fdd3a0fa55d6badabcca8644e29c771e",
+    "56885aa32a11408253fc969bc81feb96f8e041ad295372ce0528eaedcd2c9dcf"
+  ],
+  "skeleton_bones": {
+    "jntWpn_1": {
+      "index": 10,
+      "parent": "jntWpn_0"
+    },
+    "jntWpnwpnJnt_16": {
+      "index": 39,
+      "parent": "jntWpn_1"
+    },
+    "jntWpn_17": {
+      "index": 99,
+      "parent": "jntWpnwpnJnt_16"
+    }
+  },
+  "provenance": [
+    {
+      "path": "reports/coordinator-20261101-feedback72/an94-loading-geometry.json",
+      "sha256": "169d0dc3ef801c47d5ce8919fa5a39e228683f2cdfc0d8736f725b5ab2e9d764"
+    },
+    {
+      "path": "reports/coordinator-20261101-feedback72/an94-measurements.json",
+      "sha256": "5a55adf0142ce96191b16cf790239725297e21ab87e817ab74e1a316c10ab3d7"
+    },
+    {
+      "path": "reports/coordinator-20261101-feedback71/underbarrel-family-catalog.json",
+      "sha256": "5c18b756ea7ddd90a835f16524d7c81a06b1cf1ed05a0e2fe642b91de327fad6"
+    },
+    {
+      "path": "profiles/weapons54-underbarrel/enrollment.json",
+      "sha256": "189adf334f829944fab90c64c2e6981092394099fde91c012d97250e1cc405da"
+    },
+    {
+      "path": "profiles/weapons54-underbarrel/variant-coordinates.json",
+      "sha256": "bf5a1ba9f69461be842485e5ef8b24bf490e35344a8ba7cdbc40664c9b906989"
+    },
+    {
+      "path": "profiles/opening426/reference-bindings.json",
+      "sha256": "61331da83be53569732982c1c3c935604c1fccd0f2bf0bd15ebcb87f64baa39b"
+    }
+  ],
+  "policy": {
+    "kind": "SingleRoundMuzzle",
+    "capacity": 1,
+    "rounds_per_insertion": 1,
+    "opening_kind": "Fixed",
+    "opening_radius_m": 0.035,
+    "supply_radius_m": 0.035,
+    "insertion_kind": "FreePlacement",
+    "rail_enforced": false,
+    "spent_case_visual_removal_only": true,
+    "delete_live_ammunition": false,
+    "contact": "Same-frame anatomical wrist and 15-joint shape; explicit 35 mm mod acquisition tolerance, not glove collision.",
+    "insertion": "FreePlacement to exact measured seat; bore rail remains unenforced pending shared adapter.",
+    "visibility": "Hide supply geometry while absent; retain live loaded ammunition. No stock visibility or custody events inferred.",
+    "semantics": "Render-part labels and stock motion do not establish ammunition transfer or spent-case identity.",
+    "admission": "Offline profile only; current native identity, body-part cache and actual-game/headset acceptance remain separate.",
+    "opening": "Fixed launcher tube: no Open or Close gesture exists.",
+    "closing": "No closure required for this measured fixed tube.",
+    "supply": "Freeze measured rigid16+17 assembly; same-frame30 wrist and finger shape.",
+    "clearance": "Measured static radial gap is not swept collision clearance or an enforced rail."
+  },
+  "tuple_digests": {
+    "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan": "b5cf99ea2c1c032c394d5646f13bd9d9b5b726b2a8ae3f4e40c585a442a84382",
+    "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_Kobra": "7f9d4e34186cf4485c9282d6ac0954e827e618a86d02a44d6ffe8d13d638741f",
+    "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_Scoped": "63029531cf88128a5da8edc3884cae14eef6b28072197e61257817f29dd28c8a",
+    "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_shg_AN94Abakan": "d448fe0c618fe034fdb21b7ccae699cca4e0a8a275a8a3bec4d7a22fbceb2510",
+    "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_shg_AN94Abakan_Kobra": "5ef9e52a27a02f20a75cc8f9762b8b906a5db187db70e47a44714c44d6bcee41",
+    "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_shg_AN94Abakan_Scoped": "1170b050912f18dbb36fec4165952288db7f7bf1e32e0a24bded03a6d31ee5e3",
+    "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_smk_AN94Abakan": "b4d5f946d447c9aeb7eae2d927acd3e034903353e3a36947c971644b903b4f15",
+    "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_smk_AN94Abakan_Kobra": "b3be5dec842d9d8d53116361788f9d88d3772330ba3c3299e63813697a0638ec",
+    "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_smk_AN94Abakan_Scoped": "2f24824ebd222f880fd7a829e6e05564345d5e7834e6195a0812d01e85ba4720",
+    "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rgl_AN94Abakan_Kobra": "e215cac7d72b1924f07851aa3c30569e3d9723ad28fa07756e935b7d91ecc490",
+    "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rgl_AN94Abakan_Scoped": "06570443325d50ab873dbcccb7ad7ec1eec8517a4ea741ca0d9beef312014083"
+  }
+}

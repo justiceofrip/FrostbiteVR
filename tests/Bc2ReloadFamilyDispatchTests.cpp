@@ -186,6 +186,17 @@ int InputScopeAndStepUseExactFamilyProof(){
     };
     for(const auto& row:RegisteredBc2FeedProfiles())if(exercise(row.config))return 1;
     for(const auto* row:FixedContainerConfigs)if(exercise(*row))return 1;
+    unsigned measured=0,readOnly=0;
+    for(const auto& row:UnderbarrelAmmoConfigs){
+        Fixture f(row,0);
+        if(ResolveUnderbarrelFixedContainerNative(f.config)){if(exercise(row))return 1;++measured;}
+        else{
+            ++readOnly;const auto before=f.context;FixedContainerInputGuard guard;
+            CHECK(!RunReloadFamilyInput(f.Memory(),f.config,f.Input(),{0,0},true,0,Fixture::Original,&f,guard));
+            CHECK(!guard.requested&&f.originalCalls==1&&f.context==before);
+        }
+    }
+    CHECK(measured==generated::UnderbarrelFixedContainerEquipment.size()&&readOnly>0);
     return 0;
 }
 int PersistentScopeAndExactCompletionContext(){
