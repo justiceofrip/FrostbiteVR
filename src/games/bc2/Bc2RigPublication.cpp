@@ -2867,12 +2867,13 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
         invalid("sight_native_source_mismatched_or_invalid");return;
     }
     auto until=std::min({ReloadNanos(frame->deadline),m.inputEvidence.deadlineNs,selected->deadlineNs});
-    // Gameplay and render publish independently. Read one still-leased probe;
-    // disclose its input ordering, never substitute/restamp the render input.
-    const auto holster=gameplay::ReadBodyHolsterProbe(now);
-    const bool holsterInputMatches=holster&&holster->hand.sequence==m.inputEvidence.sequence&&
+    // Gameplay and render publish independently. Clock after loading one probe;
+    // disclose that observer time, never substitute/restamp the render input.
+    const auto holsterObservation=gameplay::ReadBodyHolsterProbeObservation();
+    const auto& holster=holsterObservation.sample;
+    const bool holsterInputMatches=holsterObservation.Available()&&holster->hand.sequence==m.inputEvidence.sequence&&
         holster->hand.observedNs==m.inputEvidence.observedNs&&holster->hand.deadlineNs==m.inputEvidence.deadlineNs;
-    const bool holsterJoined=holster&&holster->nativeOwner==m.owner&&holster->nativeTick&&
+    const bool holsterJoined=holsterObservation.Available()&&holster->nativeOwner==m.owner&&holster->nativeTick&&
         holster->hand.owner==m.inputEvidence.owner&&holster->hand.sequence&&
         holster->hand.deadlineNs-holster->hand.observedNs<=150000000&&
         (holster->hand.sequence!=m.inputEvidence.sequence||holsterInputMatches)&&
@@ -2881,7 +2882,7 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
         holster->input.spaceGeneration==input.spaceGeneration&&
         holster->physicalGun.id&&holster->physicalGun.generation==holster->hand.owner.equipGeneration;
     const auto* freeRight=holsterJoined&&holster->outcome.freeRight?&*holster->outcome.freeRight:nullptr;
-    const bool freeRightCurrent=freeRight&&BodyFreeRightEvidenceCurrent(*freeRight,now)&&
+    const bool freeRightCurrent=freeRight&&BodyFreeRightEvidenceCurrent(*freeRight,holsterObservation.observedNs)&&
         freeRight->visibility.nativeOwner==holster->nativeOwner&&freeRight->visibility.request==holster->request&&
         freeRight->input.owner==holster->hand.owner&&freeRight->input.sequence==holster->hand.sequence&&
         freeRight->input.observedNs==holster->hand.observedNs&&freeRight->input.deadlineNs==holster->hand.deadlineNs&&
@@ -2941,8 +2942,14 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     json<<",\"meshes\": [";for(unsigned i=0;i<selected->states[0].count;++i){if(i)json<<',';const auto& mesh=selected->states[0].meshes[i];
         json<<"{\"address\":"<<mesh.address<<",\"typeInfo\":"<<mesh.typeInfo<<",\"namePointer\":"<<mesh.namePointer<<",\"path\":";text(feed_presentation_detail::Text(mesh.assetPath));json<<'}';}json<<"]}";
     json<<",\"input_evidence\":";evidence(m.inputEvidence);
-    json<<",\"bodyHolster\":{\"available\":"<<holsterJoined;
-    if(!holsterJoined){json<<",\"reason\":";text(holster?"owner_or_input_lease_not_joined":"pending_or_expired");}
+    json<<",\"bodyHolster\":{\"available\":"<<holsterJoined<<",\"observedNs\":"<<holsterObservation.observedNs
+        <<",\"probeRead\":{\"enabled\":"<<holsterObservation.enabled<<",\"samplePresent\":"<<bool(holster)<<",\"reason\":";
+    if(holsterObservation.Available())json<<"null";else text(holsterObservation.rejectionReason);
+    if(holster)json<<",\"sampledNs\":"<<holster->sampledNs<<",\"inputObservedNs\":"<<holster->hand.observedNs
+        <<",\"inputDeadlineNs\":"<<holster->hand.deadlineNs<<",\"inputNowNs\":"<<holster->hand.nowNs
+        <<",\"inputSequence\":"<<holster->hand.sequence<<",\"trialStartNs\":"<<holster->trialStartNs<<",\"trialDeadlineNs\":"<<holster->trialDeadlineNs;
+    json<<'}';
+    if(!holsterJoined){json<<",\"reason\":";text(holsterObservation.Available()?"owner_or_input_lease_not_joined":holsterObservation.rejectionReason);}
     else{const auto& h=*holster;
         const bool actualEmpty=h.phase==BodyHolsterPhase::Empty&&h.outcome.phase==BodyHolsterPhase::Empty&&
             h.outcome.inventory.emptyHands&&!h.left&&!h.right&&freeRightCurrent&&

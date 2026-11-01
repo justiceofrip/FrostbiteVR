@@ -3,9 +3,40 @@
 #include "Bc2BodyHolsterChallenge.h"
 #include "Bc2BodyHolsterProbeSession.h"
 #include "Bc2DiagnosticFireAmmo.h"
+#include <atomic>
 #include <ostream>
 #include <string_view>
 namespace fvr::bc2 {
+// Diagnostic read only: retain even a refused immutable publication so its
+// original clocks and exact first failed predicate describe the same load.
+struct BodyHolsterProbeObservation {
+    std::shared_ptr<const BodyHolsterProbeSample> sample;
+    std::int64_t observedNs=0;
+    bool enabled=false;
+    std::string_view rejectionReason="sample_missing";
+    bool Available()const noexcept{return rejectionReason.empty();}
+};
+inline std::string_view BodyHolsterProbeReadRejection(const BodyHolsterProbeSample* sample,bool enabled,std::int64_t now)noexcept {
+    if(!enabled)return "gameplay_disabled";
+    if(!sample)return "sample_missing";
+    if(sample->sampledNs<=0)return "sample_time_nonpositive";
+    if(sample->sampledNs>now)return "sample_time_future";
+    if(now-sample->sampledNs>150000000)return "sample_age_expired";
+    if(sample->hand.observedNs<=0)return "input_time_nonpositive";
+    if(sample->hand.observedNs>now)return "input_time_future";
+    if(sample->hand.deadlineNs<=now)return "input_lease_expired";
+    return {};
+}
+template<class Clock>
+BodyHolsterProbeObservation ObserveBodyHolsterProbe(const std::atomic<std::shared_ptr<const BodyHolsterProbeSample>>& publication,
+    const std::atomic<bool>& enabled,Clock clock)noexcept {
+    BodyHolsterProbeObservation result;
+    result.sample=publication.load(std::memory_order_acquire);
+    result.observedNs=clock(); // Must follow the single load; never restamp its source.
+    result.enabled=enabled.load();
+    result.rejectionReason=BodyHolsterProbeReadRejection(result.sample.get(),result.enabled,result.observedNs);
+    return result;
+}
 enum class BodyHolsterFixturePhase:unsigned {Warmup,Baseline,ReachHolster,PressHolster,WaitEmpty,
     FreeA,FreeB,ReachDraw,PressDraw,WaitDraw,Restored,Done,Failed,FirePulse,FireReleased};
 struct BodyHolsterFixtureSample {

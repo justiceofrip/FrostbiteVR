@@ -3657,6 +3657,11 @@ std::shared_ptr<const BodyHolsterProbeSample> ReadBodyHolsterProbe(std::int64_t 
         sample->hand.observedNs<=0||sample->hand.observedNs>now||sample->hand.deadlineNs<=now)return {};
     return sample; // Original source/trial bounds remain immutable, including expiry.
 }
+BodyHolsterProbeObservation ReadBodyHolsterProbeObservation()noexcept {
+    return ObserveBodyHolsterProbe(bodyHolsterSample,enabled,[]()noexcept {
+        LARGE_INTEGER clock{};return QueryPerformanceCounter(&clock)?HandNanos(clock.QuadPart):0;
+    });
+}
 bool EnableBoatHeadAim(bool enableFire)noexcept {
     if(enabled.load(std::memory_order_acquire)||!hooks[0]||!hooks[1]||boatHeadAim)return false;
     const VehicleRouteMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t n){return Read(at,dst,n);},[](void*,unsigned at,const char* name){return Type(at,name);}};

@@ -69,6 +69,8 @@ bool EnableBodyHolsterDiagnostic(std::uint32_t lifetimeMs=15000,BodyHolsterDiagn
 bool EnableBodyHolsterFixture(BodyHolsterDiagnosticProfile profile=BodyHolsterDiagnosticProfile::Spas)noexcept;
 std::shared_ptr<const BodyHolsterFixtureSample> ReadBodyHolsterFixture(std::int64_t nowNs)noexcept;
 std::shared_ptr<const BodyHolsterProbeSample> ReadBodyHolsterProbe(std::int64_t nowNs)noexcept;
+// Diagnostic-only single load followed by a fresh observer clock; no lease renewal.
+BodyHolsterProbeObservation ReadBodyHolsterProbeObservation()noexcept;
 // Isolated bounded diagnostic, before Start. No inventory acknowledgement.
 bool EnableEmptyFireProbe()noexcept; // Explicit input-only diagnostic before Start.
 bool EnableWeaponVisibilityProbe()noexcept;
