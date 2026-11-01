@@ -3196,7 +3196,14 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
             json<<",\"ready\":";if(n.ready)ready(*n.ready);else json<<"null";json<<'}';}
         json<<"}}";
     }
-    json<<feedAdmission<<fixedGateAdmission<<feedGateAdmission<<",\"feedObservation\":";gameplay::ReportFeedObservation(json);json<<"}\n";
+    std::ostringstream feedObservation;feedObservation.imbue(std::locale::classic());feedObservation<<std::boolalpha;
+    gameplay::ReportFeedObservation(feedObservation);
+    const auto snapshotPrefix=json.str();
+    const auto diagnosticSuffix=fixedGateAdmission+feedGateAdmission+",\"feedObservation\":"+feedObservation.str()+"}\n";
+    auto payload=snapshotPrefix+feedAdmission+diagnosticSuffix;
+    // Optional diagnostics may grow after a failure. Try the already captured
+    // compact form before discarding otherwise current pose/mapping evidence.
+    if(payload.size()>snapshotLimit)payload=snapshotPrefix+compactFeedAdmission+diagnosticSuffix;
     if(ReloadNanos()>=until){invalid("expired_during_serialization");return;}
     const auto guardAfter=shotGuard.load(std::memory_order_acquire);
     if(!enabled.load(std::memory_order_acquire)||!guardAfter||!Fresh(guardAfter->deadline)||
@@ -3204,7 +3211,7 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
            identity.soldier,identity.weak,identity.weapon,WeaponFrameUse::BodyObservation)){
         invalid("owner_changed_during_serialization");return;
     }
-    const auto payload=json.str();if(payload.size()>snapshotLimit){invalid("payload_limit");return;}out<<payload;
+    if(payload.size()>snapshotLimit){invalid("payload_limit");return;}out<<payload;
 }
 void ReportLiveCounters(std::ostream& out){
     // Runs on the existing session-telemetry cadence. Read no mutable rig,

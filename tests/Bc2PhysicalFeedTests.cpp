@@ -108,7 +108,7 @@ struct Fixture {
         sample.raw.rig.weak=sample.owner.weak;sample.raw.rig.count=170;sample.raw.rigFingerprint=g.rigFingerprint;
         sample.raw.weaponWorldMeters=Identity();
     }
-    void PrepareTick(const fvr::math::Matrix4& wrist,bool grip,bool cancel=false){
+    void PrepareTick(const fvr::math::Matrix4& wrist,bool grip,bool cancel=false,std::int64_t inputAge=100*Ms){
         lastWrist=wrist;
         const auto age=(std::min)(100*Ms,registration->mechanism.maxAgeNs);
         now+=10*Ms;++sequence;
@@ -123,7 +123,7 @@ struct Fixture {
         }
         sample.binding=native.binding;
         selected->sequence=sequence;selected->observedNs=native.observedNs;selected->deadlineNs=native.deadlineNs;
-        sample.input.sequence=sequence;sample.input.observedNs=now;sample.input.deadlineNs=now+age;sample.input.nowNs=now+1;
+        sample.input.sequence=sequence;sample.input.observedNs=now;sample.input.deadlineNs=now+(std::min)(age,inputAge);sample.input.nowNs=now+1;
         sample.input.released[0]=!grip;sample.grip=grip;sample.cancel=cancel;
         sample.raw.inputEvidence=sample.input;sample.raw.rawLeftWristWorldMeters=wrist;sample.frameSequence=sequence;
         if(wristCalibration){
@@ -550,19 +550,19 @@ int AdmissionObservationExplainsMissingViewRetentionBeforeSuspension(){
         CHECK(latest.find("\"registrationKey\":"+std::to_string(registration->key)+",\"lifetime\":"+
             std::to_string(original->lifetime)+",\"claim\":"+std::to_string(held->token.id))!=std::string::npos);
         const auto failed=field(observed,"\"failedRetention\":",",\"retentionEntryPredicates\":");CHECK(!failed.empty());
-        if(!fault){
-            CHECK(f.result.ownsHand&&f.result.blocksEquipment);
+        if(fault<=1){
+            CHECK(f.result.ownsHand&&f.result.blocksEquipment&&f.result.blocksFire);
+            CHECK(bool(f.result.diagnostic.flags&(1u<<5))==(fault==1));
             const auto retained=f.hands.Current(InteractionHand::Left);CHECK(retained&&retained->token==held->token);
             CHECK(retained->inputSequence==held->inputSequence&&retained->deadlineNs==held->deadlineNs);
-            CHECK(latest.find("\"checked\":17179869183,\"passed\":17179869183,\"firstFailure\":null,\"selectionFailure\":0")!=std::string::npos);
+            CHECK(latest.find("\"checked\":8589934591,\"passed\":8589934591,\"firstFailure\":null,\"selectionFailure\":0")!=std::string::npos);
             CHECK(failed=="\"failedRetention\":null");
         }else{
             CHECK(!f.result.ownsHand&&!f.hands.Current(InteractionHand::Left));
             CHECK(failed.find("\"leftFeedClaim\":{\"slot\":0,\"registrationKey\":"+std::to_string(registration->key)+
                 ",\"lifetime\":"+std::to_string(original->lifetime)+",\"lost\":true}")!=std::string::npos);
-            const char* expected=fault==1?"\"checked\":127,\"passed\":63,\"firstFailure\":\"gate_published\",\"selectionFailure\":null":
-                fault==2?"\"checked\":17179869183,\"passed\":8589934591,\"firstFailure\":\"selected\",\"selectionFailure\":8":
-                "\"checked\":4095,\"passed\":2047,\"firstFailure\":\"current_equipment\",\"selectionFailure\":null";
+            const char* expected=fault==2?"\"checked\":8589934591,\"passed\":4294967295,\"firstFailure\":\"selected\",\"selectionFailure\":8":
+                "\"checked\":2047,\"passed\":1023,\"firstFailure\":\"current_equipment\",\"selectionFailure\":null";
             CHECK(latest.find(expected)!=std::string::npos&&failed.find(expected)!=std::string::npos);
             // Later held/default observations and a neutral release must not
             // erase the original failed transition or its preceding first press.
@@ -572,7 +572,7 @@ int AdmissionObservationExplainsMissingViewRetentionBeforeSuspension(){
             CHECK(field(after,"\"firstPress\":",",\"latestChange\":")==firstPress);
             f.Tick(wrist,false);CHECK(observe()==after);
         }
-        if(fault==0||fault==2){
+        if(fault<=2){
             CHECK(latest.find("\"heldInput\":{\"sequence\":"+std::to_string(held->inputSequence))!=std::string::npos);
             CHECK(latest.find("\"heldNative\":{\"sequence\":"+std::to_string(native->sequence)+",\"observedNs\":"+
                 std::to_string(native->observedNs)+",\"deadlineNs\":"+std::to_string(native->deadlineNs))!=std::string::npos);
@@ -1295,12 +1295,64 @@ int DelayedDetachWaitsForPairedNativeWithoutRenewingOwnership(){
     }
     return 0;
 }
+int FailedGatePublicationRetainsOnlyOriginalMissingViewLeases(){
+    const auto* registration=FindBc2FeedRegistration(5358977986686110024ull);
+    CHECK(registration&&registration->geometry.asset=="QJU88_sp");
+    for(bool inputExpiresFirst:{false,true}){
+        Fixture f(registration);CHECK(f.OpenCover()&&f.Reconcile());f.submitted.reset();
+        const auto motion=BuildBc2FeedMotionFromRetainedPose(registration->geometry,FeedPhysicalOperation::DetachContainer,
+            registration->interactionPolicy,registration->geometry.poses[unsigned(Bc2FeedPoseId::Resting)]);
+        CHECK(motion);const auto wrist=feed_interaction_detail::Multiply(motion->placement.sourceFromGrip,motion->placement.weaponFromSource);
+        f.Tick(wrist,false);f.Tick(wrist,false);
+        f.PrepareTick(wrist,true,false,inputExpiresFirst?30*Ms:100*Ms);f.Consume();
+        CHECK(f.result.ownsHand&&f.result.interactionStatus==FeedInteractionStatus::Acquired);
+        const auto held=f.hands.Current(InteractionHand::Left);CHECK(held);
+        const auto heldInput=f.sample.input;
+        const auto native=f.backend.ReadAt(f.sample.owner,heldInput.observedNs,heldInput.nowNs);CHECK(native);
+        CHECK((held->deadlineNs<native->deadlineNs)==inputExpiresFirst);
+        const auto expires=(std::min)(held->deadlineNs,native->deadlineNs);
+        const auto gate=f.backend.ReadGate(native->binding.context.resource);CHECK(gate);
+        const auto counts=f.native.counts;
+        f.missingCurrentView=true;f.refuseGate=true;
+        // Cover both the repeated admitted packet and fresh controller packets.
+        // Neither can renew the old claim/native lease or advance the gesture.
+        for(unsigned step=0;step<3;++step){
+            if(step==2)f.now=expires-10*Ms-2;
+            if(step)f.PrepareTick(wrist,true);
+            const auto reads=f.nativeReads,readAts=f.nativeReadAts;
+            f.Consume();
+            CHECK(f.nativeReads==reads+1&&f.nativeReadAts==readAts+(step?1:0));
+            CHECK(f.result.diagnostic.exit==Bc2PhysicalFeedExit::ViewUnavailable&&(f.result.diagnostic.flags&(1u<<5)));
+            CHECK(f.result.ownsHand&&f.result.blocksEquipment&&f.result.blocksFire);
+            CHECK(!f.result.diagnostic.policyEvaluated&&!f.result.presentation&&!f.result.pending&&!f.backend.Pending());
+            CHECK(!ReadBc2PhysicalFeedPresentation(f.sample.owner,f.sample.input.nowNs));
+            const auto claim=f.hands.Current(InteractionHand::Left);CHECK(claim&&claim->token==held->token);
+            CHECK(claim->inputSequence==held->inputSequence&&claim->deadlineNs==held->deadlineNs);
+            CHECK(f.backend.ReadAt(f.sample.owner,heldInput.observedNs,f.sample.input.nowNs)==native);
+            CHECK(f.backend.ReadGate(native->binding.context.resource)==gate);
+            CHECK(f.submits==1&&!f.submitted&&f.native.counts==counts);
+        }
+        CHECK(f.sample.input.nowNs==expires-1&&f.sample.input.deadlineNs>expires);
+        // At the original earliest deadline, a newer live input/native view
+        // cannot extend the retained gesture, even by one nanosecond.
+        const auto reads=f.nativeReads,readAts=f.nativeReadAts;
+        f.sample.input.nowNs=expires;f.Consume();
+        CHECK(f.nativeReads==reads+1&&f.nativeReadAts==readAts);
+        CHECK(f.result.diagnostic.exit==Bc2PhysicalFeedExit::ViewUnavailable);
+        CHECK(!f.result.ownsHand&&!f.hands.Current(InteractionHand::Left));
+        CHECK(!f.result.diagnostic.policyEvaluated&&!f.result.presentation&&!f.result.pending&&!f.backend.Pending());
+        CHECK(f.submits==1&&!f.submitted&&f.native.counts==counts);
+        f.Tick(wrist,true);
+        CHECK(!f.result.ownsHand&&!f.hands.Current(InteractionHand::Left)&&!f.result.presentation&&f.submits==1);
+    }
+    return 0;
+}
 int MissingCurrentViewPreservesOnlyLiveDetachClaims(){
     // Feedback68/source32: QJU88 input16633 at 26765943514100 ns lost
     // its current native publication during an admitted DetachContainer hold.
     // Exercise that publication drop through the real adapter/hand/session
     // composition, then require an actual three-branch detach acknowledgement.
-    const auto exercise=[](const Bc2FeedRegistration& registration,unsigned fault)->int {
+    const auto exercise=[](const Bc2FeedRegistration& registration,unsigned fault,bool failedGate=false)->int {
         Fixture f(&registration);CHECK(f.OpenCover()&&f.Reconcile());f.submitted.reset();
         const auto motion=BuildBc2FeedMotionFromRetainedPose(registration.geometry,FeedPhysicalOperation::DetachContainer,
             registration.interactionPolicy,registration.geometry.poses[unsigned(Bc2FeedPoseId::Resting)]);
@@ -1318,7 +1370,7 @@ int MissingCurrentViewPreservesOnlyLiveDetachClaims(){
         const auto retained=f.result.presentation;CHECK(retained);
         const auto heldInput=f.sample.input;const auto counts=f.native.counts;
         CHECK(f.result.interactionStatus==FeedInteractionStatus::Moving&&f.submits==1);
-        f.nativeCadence={1};f.missingCurrentView=true;
+        f.nativeCadence={1};f.missingCurrentView=true;f.refuseGate=failedGate;
         if(fault==8)f.now=held->deadlineNs-10*Ms;
         if(fault==9)f.now=native->deadlineNs-10*Ms;
         f.PrepareTick(pose(14),fault!=1,fault==2);
@@ -1333,6 +1385,17 @@ int MissingCurrentViewPreservesOnlyLiveDetachClaims(){
         if(fault==12)f.sample.selectedRigVerified=false;
         if(fault==13)++f.sample.equipment->data;
         if(fault==14){f.sample.grip=false;f.sample.input.released[0]=false;}
+        if(fault==15)++f.sample.binding->context.resource.weaponGeneration;
+        if(fault==16){
+            const auto previous=f.native.identity;auto replacement=previous;
+            replacement.owner.soldier+=0x10000;replacement.owner.weak+=0x10000;
+            ++replacement.owner.actorGeneration;replacement.serverSoldier+=0x10000;
+            Bc2AmmoReserveLease lease;lease.identity=replacement;lease.sequence=f.sequence+1;
+            lease.observedNs=f.now+1;lease.deadlineNs=f.now+100*Ms;
+            lease.loaded=counts.loaded;lease.reserve=counts.reserve;lease.capacity=counts.capacity;lease.verified=lease.allThreeIdle=true;
+            FeedEquipmentActorDrain drain{previous,++f.invocation,1,f.now+2,f.now+99*Ms,true};
+            CHECK(f.backend.RetireForReplacementActor(lease,f.now+3,drain));f.sample.input.nowNs=f.now+4;
+        }
         f.Consume();
         CHECK(f.result.diagnostic.exit==Bc2PhysicalFeedExit::ViewUnavailable);
         CHECK(!f.result.diagnostic.policyEvaluated&&!f.result.presentation&&!f.result.pending);
@@ -1353,7 +1416,7 @@ int MissingCurrentViewPreservesOnlyLiveDetachClaims(){
         claim=f.hands.Current(InteractionHand::Left);CHECK(claim&&claim->token==held->token);
         CHECK(claim->inputSequence==held->inputSequence&&claim->deadlineNs==held->deadlineNs);
         CHECK(f.result.ownsHand&&!f.result.diagnostic.policyEvaluated&&!f.result.presentation&&f.submits==1);
-        f.missingCurrentView=false;f.Tick(pose(14),true);
+        f.missingCurrentView=false;f.refuseGate=false;f.Tick(pose(14),true);
         CHECK(f.result.ownsHand&&f.result.interactionStatus==FeedInteractionStatus::Moving&&f.result.presentation);
         CHECK(f.hands.Current(InteractionHand::Left)->token==held->token);
         CHECK(f.result.presentation->lifetime==retained->lifetime&&f.result.presentation->coverRadians==retained->coverRadians);
@@ -1373,7 +1436,10 @@ int MissingCurrentViewPreservesOnlyLiveDetachClaims(){
     for(const auto& registration:RegisteredBc2FeedProfiles())CHECK(exercise(registration,0)==0);
     const auto* registration=FindBc2FeedRegistration(5358977986686110024ull);
     CHECK(registration&&registration->geometry.asset=="QJU88_sp");
-    for(unsigned fault=1;fault<=14;++fault)CHECK(exercise(*registration,fault)==0);
+    for(unsigned fault=0;fault<=16;++fault){
+        if(fault)CHECK(exercise(*registration,fault)==0);
+        CHECK(exercise(*registration,fault,true)==0);
+    }
     return 0;
 }
 int EveryEnrolledFeedRetainsRepeatedPacketThroughOpenCover(){
@@ -1820,6 +1886,7 @@ int main(){
     CHECK(IndependentNativeClockExpiryAndMutationAreRejected()==0);
     CHECK(DelayedDetachWaitsForPairedNativeWithoutRenewingOwnership()==0);
     CHECK(MissingCurrentViewPreservesOnlyLiveDetachClaims()==0);
+    CHECK(FailedGatePublicationRetainsOnlyOriginalMissingViewLeases()==0);
     CHECK(EveryEnrolledFeedRetainsRepeatedPacketThroughOpenCover()==0);
     CHECK(RepeatedFeedPacketRejectsChangedSourceAndExpiredAuthority()==0);
     CHECK(EveryEnrolledFeedConsumesMissedStartupEdge()==0);

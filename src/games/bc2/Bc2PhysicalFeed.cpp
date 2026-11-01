@@ -36,7 +36,7 @@ struct FeedRetentionChecks {
 constexpr const char* RetentionEntryPredicates[]={"view_unavailable","not_cancelled","current_grip",
     "not_released","current_input_window","equipment_present"};
 constexpr const char* RetentionSlotPredicates[]={"slot_present","claim_present","session_present","session_ready",
-    "no_pending","not_refused","gate_published","motion_clean","no_release_wait","active_operation",
+    "no_pending","not_refused","motion_clean","no_release_wait","active_operation",
     "weapon_match","current_equipment","right_claim","right_owner","right_item","right_gun_hold",
     "right_no_prerequisite","right_lease","left_claim","left_token","left_prerequisite","held_packet",
     "held_native","held_contact","held_grip","held_owner","held_sequence","left_input_sequence",
@@ -601,8 +601,8 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             const auto retain=[&](unsigned bit,bool pass){return observed?observed->checks.Check(bit,pass):pass;};
             if(retain(0,bool(slot))&&retain(1,bool(slot->claim))&&retain(2,bool(slot->session))&&
             retain(3,slot->session->State().status==FeedEquipmentStatus::Ready)&&retain(4,!slot->pending)&&retain(5,!slot->refused)&&
-            retain(6,!slot->gateFailed)&&retain(7,!slot->motionDirty)&&retain(8,!slot->releaseWait)&&retain(9,slot->activeOperation!=FeedPhysicalOperation::None)&&
-            retain(10,slot->weapon==s.weapon)&&retain(11,CurrentEquipment(slot->original,s.owner,*s.equipment,s.binding,slot->registration))){
+            retain(6,!slot->motionDirty)&&retain(7,!slot->releaseWait)&&retain(8,slot->activeOperation!=FeedPhysicalOperation::None)&&
+            retain(9,slot->weapon==s.weapon)&&retain(10,CurrentEquipment(slot->original,s.owner,*s.equipment,s.binding,slot->registration))){
             const State::Packet* held=nullptr;
             for(const auto& packet:state.packets)if(packet.owner==s.owner&&packet.weapon==s.weapon&&
                 packet.input.sequence==slot->lastInput){held=&packet;break;}
@@ -613,16 +613,17 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             unsigned selectionFailure=0;
             const auto selected=[&](){const bool pass=Selected(s,*held->native,slot->registration,selectionFailure);
                 if(observed)observed->selectionFailure=selectionFailure;return pass;};
-            if(retain(12,bool(right))&&retain(13,right->token.owner==s.input.owner)&&retain(14,right->token.item==s.weapon)&&
-                retain(15,right->token.kind==HandClaimKind::GunHold)&&retain(16,!right->token.prerequisiteClaim)&&retain(17,right->deadlineNs>now)&&
-                retain(18,bool(left))&&retain(19,left->token==*slot->claim)&&retain(20,left->token.prerequisiteClaim==right->token.id)&&
-                retain(21,bool(held))&&retain(22,bool(held->native))&&retain(23,bool(held->contact))&&retain(24,held->grip)&&retain(25,held->input.owner==s.input.owner)&&
-                retain(26,held->input.sequence<=s.input.sequence)&&retain(27,left->inputSequence==held->input.sequence)&&
-                retain(28,left->deadlineNs==held->input.deadlineNs)&&retain(29,Window(held->input,now))&&
-                retain(30,hands.HasRecordedEvidence(held->input,InteractionHand::Left))&&
-                retain(31,FeedEquipmentViewFresh(*held->native,now))&&retain(32,slot->original.identity==held->native->identity)&&
-                retain(33,selected())){
-                // A missing current publication is not evidence of release.
+            if(retain(11,bool(right))&&retain(12,right->token.owner==s.input.owner)&&retain(13,right->token.item==s.weapon)&&
+                retain(14,right->token.kind==HandClaimKind::GunHold)&&retain(15,!right->token.prerequisiteClaim)&&retain(16,right->deadlineNs>now)&&
+                retain(17,bool(left))&&retain(18,left->token==*slot->claim)&&retain(19,left->token.prerequisiteClaim==right->token.id)&&
+                retain(20,bool(held))&&retain(21,bool(held->native))&&retain(22,bool(held->contact))&&retain(23,held->grip)&&retain(24,held->input.owner==s.input.owner)&&
+                retain(25,held->input.sequence<=s.input.sequence)&&retain(26,left->inputSequence==held->input.sequence)&&
+                retain(27,left->deadlineNs==held->input.deadlineNs)&&retain(28,Window(held->input,now))&&
+                retain(29,hands.HasRecordedEvidence(held->input,InteractionHand::Left))&&
+                retain(30,FeedEquipmentViewFresh(*held->native,now))&&retain(31,slot->original.identity==held->native->identity)&&
+                retain(32,selected())){
+                // Missing current view or failed gate publication is not a
+                // lifetime-revocation receipt for this passive hand claim.
                 // Retain only this already admitted gesture within its original
                 // input, native and claim leases. Cached counts cannot advance
                 // policy, renew custody, publish a pose or submit native work.
