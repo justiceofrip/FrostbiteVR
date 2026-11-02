@@ -67,14 +67,29 @@ class PortablePackageTests(unittest.TestCase):
             self.assertFalse(result['bundled_ffmpeg'])
             self.assertTrue((out/'Dependencies.ps1').is_file())
             self.assertTrue((out/'Resolution.ps1').is_file())
-            for name in ('BC2NativeResolution.exe','BC2ResolutionBootstrap.dll'):
+            self.assertEqual(package.RECEIPT_BINARIES['graphics_creation32'],'Bc2GraphicsCreation32.dll')
+            self.assertEqual(package.RECEIPT_BINARIES['graphics_creation64'],'Bc2GraphicsCreation64.dll')
+            for name in ('BC2NativeResolution.exe','BC2ResolutionBootstrap.dll','Bc2GraphicsCreation32.dll','Bc2GraphicsCreation64.dll'):
                 self.assertEqual((out/'bin'/name).read_bytes(),(root/name).read_bytes())
+            for source,name in ((ROOT/'launcher/runtime/GraphicsCreation.ps1','GraphicsCreation.ps1'),
+                                (ROOT/'licenses/Detours-MIT.txt','licenses/Detours-MIT.txt'),
+                                (ROOT/'launcher/runtime/THIRD_PARTY_NOTICES.md','THIRD_PARTY_NOTICES.md')):
+                self.assertEqual((out/name).read_bytes(),source.read_bytes())
+            self.assertEqual(package.sha(out/'licenses/Detours-MIT.txt'),
+                             'b301808b732cfaa60df2b4b422d78cd97d2a15058b207e7e33f0535ba5170dd6')
             self.assertTrue((out/'config/ffmpeg-download.json').is_file())
             self.assertNotIn('G:\\',(out/'runtime.json').read_text())
             self.assertFalse(any(p.suffix in ('.fvrprop','.wav','.res','.fbrb') for p in out.rglob('*')))
             for entry in runtime['files']:
                 self.assertEqual(package.sha(out/entry['path']),entry['sha256'])
-            for key in ('resolution','resolution_bootstrap'):
+            manifest_paths=[entry['path'] for entry in runtime['files']]
+            self.assertEqual(len(manifest_paths),len(set(manifest_paths)))
+            self.assertEqual(set(manifest_paths),{p.relative_to(out).as_posix() for p in out.rglob('*') if p.is_file()}-{'runtime.json'})
+            for name in ('GraphicsCreation.ps1','bin/Bc2GraphicsCreation32.dll','bin/Bc2GraphicsCreation64.dll','licenses/Detours-MIT.txt','THIRD_PARTY_NOTICES.md'):
+                self.assertEqual(manifest_paths.count(name),1)
+                self.assertRegex(next(entry['sha256'] for entry in runtime['files'] if entry['path']==name),r'^[a-f0-9]{64}$')
+            self.assertFalse(any(name.startswith(('reports/','handoff/','private/')) or 'graphics-creation.json' in name for name in manifest_paths))
+            for key in ('resolution','resolution_bootstrap','graphics_creation32','graphics_creation64'):
                 entry=record['binaries'].pop(key)
                 receipt.write_text(json.dumps(record),encoding='utf-8')
                 missing=root/('missing-'+key)
@@ -83,11 +98,23 @@ class PortablePackageTests(unittest.TestCase):
                 self.assertFalse(missing.exists())
                 record['binaries'][key]=entry
                 original=Path(entry['path']).read_bytes()
-                Path(entry['path']).write_bytes(b'changed resolution helper')
+                Path(entry['path']).write_bytes(b'changed required helper')
                 receipt.write_text(json.dumps(record),encoding='utf-8')
                 with self.assertRaisesRegex(ValueError,'Frozen binary changed: '+key):
                     package.stage(ROOT,receipt,package.sha(receipt),root/('changed-'+key),'0.1.4')
                 Path(entry['path']).write_bytes(original)
+            for key in ('graphics_creation32','graphics_creation64'):
+                entry=record['binaries'][key]
+                original_path=entry['path']
+                wrong=root/('unexpected-'+Path(original_path).name)
+                wrong.write_bytes(Path(original_path).read_bytes())
+                entry['path']=str(wrong)
+                receipt.write_text(json.dumps(record),encoding='utf-8')
+                rejected=root/('wrong-name-'+key)
+                with self.assertRaisesRegex(ValueError,'Unexpected frozen binary name: '+key):
+                    package.stage(ROOT,receipt,package.sha(receipt),rejected,'0.1.4')
+                self.assertFalse(rejected.exists())
+                entry['path']=original_path
             receipt.write_text(json.dumps(record),encoding='utf-8')
             dependency=root/'dependencies.json'
             dependency.write_text(json.dumps({'files':[{'path':'ffmpeg/ffmpeg.exe','source':binaries['host']['path'],'sha256':binaries['host']['sha256']}]}),encoding='utf-8')

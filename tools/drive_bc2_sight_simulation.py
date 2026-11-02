@@ -5,8 +5,11 @@ must own the process, simulator command channel and startup snapshot opt-in.
 Exact observed family selection gates ordinary release. Native sight request,
 commit and action acknowledgement still require separate native trace review.
 No process launch, capture, right input, native writes or fabricated registration.
+Numbered snapshot response artifacts retain original bytes as .json.gz files;
+the separate snapshot-observed.json input contract is unchanged.
 """
 import argparse
+import gzip
 import importlib.util
 import json
 import math
@@ -29,6 +32,32 @@ sight = load_sibling("bc2_sight_live_planner", "plan_bc2_sight_simulation.py")
 require, integer, REFUSAL = transport.require, transport.integer, transport.REFUSAL
 NS = transport.NS
 SELECTION_UNAVAILABLE = "selected_configuration_or_rig_missing_changed_or_expired"
+# Actual40 retained 57 snapshots / 902,600 source bytes before the 1 MiB
+# artifact cap refused during neutral approach. Gzip level 1 retains those exact
+# bytes in 254,159 bytes. Keep the shared disk cap and its cleanup/result reserves;
+# separately bound decoded retention to 128 maximum-size (32 KiB) responses.
+MAX_SIGHT_SNAPSHOT_BYTES = 4 * 1024 * 1024
+
+
+class SightArtifacts(transport.Artifacts):
+    """Lossless snapshot retention within the unchanged transport disk budget."""
+    def __init__(self, existing):
+        self.directory, self.sizes = existing.directory, existing.sizes
+        self.snapshot_sizes = {}
+
+    def save(self, name, data, final=False):
+        if transport.re.fullmatch(r"snapshot-\d{3,}(?:-(?:failure|at-timeout))?\.json", name):
+            if not isinstance(data, bytes):
+                data = transport.json_bytes(data)
+            require(len(data) <= sight.frame.SNAPSHOT_LIMIT, "oversized sight snapshot artifact")
+            require(sum(self.snapshot_sizes.values()) - self.snapshot_sizes.get(name, 0) + len(data)
+                    <= MAX_SIGHT_SNAPSHOT_BYTES, "sight decoded snapshot artifact budget would exceed 4 MiB")
+            # Preserve the original response, including invalid/expired/timeout
+            # evidence. Admission still uses the untouched in-memory raw bytes.
+            super().save(name + ".gz", gzip.compress(data, compresslevel=1, mtime=0), final=final)
+            self.snapshot_sizes[name] = len(data)
+            return
+        super().save(name, data, final=final)
 
 
 class SelectionObserved(Exception):
@@ -121,6 +150,7 @@ class SightDriver(transport.Driver):
         # below and does not invent a feed profile or enable snapshots at runtime.
         args.stage, args.profiles, args.capture, args.menu_batches, args.pickup_first = None, None, None, None, False
         super().__init__(args)
+        self.artifacts = SightArtifacts(self.artifacts)
         require(self.link["mechanism_snapshots"]["requested"] is True
                 and transport.read_bytes(self.folder / "mechanism-snapshot.enable", 2) == b"1\n",
                 "session did not opt in to mechanism snapshots before native startup")
@@ -128,6 +158,10 @@ class SightDriver(transport.Driver):
                             driverSha256=transport.digest(Path(__file__).read_bytes()),
                             plannerSha256=transport.digest(Path(sight.__file__).read_bytes()),
                             transportSha256=transport.digest(Path(transport.__file__).read_bytes()),
+                            snapshotArtifactEncoding="gzip-original-bytes",
+                            snapshotArtifactNaming="snapshot-NNN[-failure|-at-timeout].json.gz",
+                            maximumArtifactBytes=transport.MAX_BYTES,
+                            maximumDecodedSnapshotBytes=MAX_SIGHT_SNAPSHOT_BYTES,
                             requestAcknowledgementAvailable=False, nativeAcceptance=False))
 
     def admit_snapshot(self, snapshot, now, nonce):

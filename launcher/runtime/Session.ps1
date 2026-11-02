@@ -5,6 +5,7 @@ $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Runtime.Core.ps1')
 . (Join-Path $PSScriptRoot 'Startup.ps1')
 . (Join-Path $PSScriptRoot 'Resolution.ps1')
+. (Join-Path $PSScriptRoot 'GraphicsCreation.ps1')
 $options=Read-FvrJson $OptionsPath
 $folder=Get-FvrChild $options.state_root $options.relative_folder
 Assert-FvrNoLinks $folder
@@ -98,8 +99,7 @@ try {
     if(-not(Test-Bc2AssetCache $options.cache $config.asset_recipe_sha256 $options.game_sha256)){throw 'Prepared assets changed before launch.'}
     # Audio settings are attached only to this new game process, never to the
     # machine/user environment or a guessed already-running game.
-    $game=Start-Process -FilePath $exe -WorkingDirectory $options.game_path -Environment (Get-Bc2AudioEnvironment $options.cache) -PassThru
-    $state.game=Get-Bc2ProcessIdentity $game;$state.audio_environment_inherited=$true;Save-State
+    $game=Start-Bc2GraphicsGame $exe $config
     $creation=$game.StartTime.ToUniversalTime().ToFileTimeUtc().ToString()
     & $options.python -B (Join-Path $PSScriptRoot 'tools/wait_main_menu.py') --pid $game.Id --creation-filetime $creation --exe $exe --expected-sha256 $options.game_sha256 --output (Join-Path $folder 'menu-ready.json') @menuCompatibilityArguments *> (Join-Path $folder 'menu-ready.log')
     if($LASTEXITCODE){
@@ -112,6 +112,7 @@ try {
     if(-not $menuReady.passed -or $menuReady.width -le 0 -or $menuReady.height -le 0 -or $menuReady.width -gt 16384 -or $menuReady.height -gt 16384 -or [long]$menuReady.width*$menuReady.height -gt 32000000){throw 'The live game resolution could not be verified. No VR adapter was attached.'}
     $state.initial_width=$menuReady.width;$state.initial_height=$menuReady.height
     if(Test-Path -LiteralPath $stopFile){$state.state='stopped';return}
+    Assert-Bc2GraphicsArmed
     $state.phase='Using the headset render resolution for this VR session; desktop resolution changes resume after VR stops.'
     $resolutionDll=Join-Path $PSScriptRoot 'bin/BC2ResolutionBootstrap.dll'
     $resolutionLease=New-Bc2ResolutionLease $state.game $state.supervisor (Get-FileHash -LiteralPath $resolutionDll -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -196,6 +197,7 @@ try {
         throw (Get-Bc2StartupFailure $folder 'host' ('OpenXR session did not become ready at the verified headset resolution using '+$options.xr_label+'. If its render-resolution setting changed during startup, restart BC2 from the launcher.'))
     }
     if($game.HasExited -or -not(Find-Bc2OwnedProcess $state.game)){throw 'Original BC2 game exited before attach.'}
+    Assert-Bc2GraphicsArmed
     $token=(Get-Content -LiteralPath $channel -Raw).Trim();if(-not $token){throw 'Missing VR channel.'}
     $nativeArguments=@('--game',$options.game_path,'--dll',(Join-Path $folder 'BC2NativeProbe.dll'),'--report',(Join-Path $folder 'native-trace.json'),'--stream',$token,'--controllers','--motion-aim','--body-follow','--pose-observe','--hand-poses','--muzzle-fire','--two-hand-grip','--sight-flip','--physical-reload','--magazine-reload','--body-inventory','--boat-head-aim','--boat-head-fire','--uncap-mirror','--until-host-exit',[string]$hostProcess.Id)
     $trace=Start-Bc2Child (Join-Path $PSScriptRoot 'bin/BC2NativeTrace.exe') $nativeArguments $folder 'native'
@@ -253,6 +255,7 @@ finally {
             $state.error+=' Resolution cleanup remains unconfirmed because the original BC2 process could not be verified.'
         }else{$state.error+=" $($_.Exception.Message)"}
     }
+    try {Complete-Bc2GraphicsCreation}catch{$state.state='failed';$state.error+=" Graphics creation cleanup failed: $($_.Exception.Message)"}
     if(-not $state.ContainsKey('activation_process_outcome') -and $state.state -eq 'failed' -and $game -and -not $game.HasExited -and $state.game -and (Find-Bc2OwnedProcess $state.game)){
         $state.restart_required=$true
         $state.error+=' BC2 remains open. Enable Restart BC2 before launch, or close BC2 normally and launch again. Reinstalling BC2VR is unnecessary.'

@@ -18,6 +18,8 @@ RECEIPT_BINARIES={
     'host':'BC2XrHost.exe',
     'resolution':'BC2NativeResolution.exe',
     'resolution_bootstrap':'BC2ResolutionBootstrap.dll',
+    'graphics_creation32':'Bc2GraphicsCreation32.dll',
+    'graphics_creation64':'Bc2GraphicsCreation64.dll',
 }
 AUDIO_GUARD="    if output.drive.upper()!='G:' or output==Path(__file__).resolve().parents[1] or Path(__file__).resolve().parents[1] in output.parents:\n        raise ValueError('Private audio cache must be outside the source repository on G:')"
 SHELL_GUARD="    if output.drive.upper() != 'G:' or output == source or source in output.parents:\n        raise ValueError('Private audio cache must be outside the source repository on G:')"
@@ -90,7 +92,7 @@ def stage(repo, receipt_path, expected_receipt_sha, output, version, dependencie
     loader=repo/'build/x64/runtime/openxr/win64/openxr_loader.dll'
     if sha(loader)!=LOADER_SHA: raise ValueError('OpenXR loader changed')
     copy(loader,'bin/openxr_loader.dll')
-    for name in ('Entry.ps1','Runtime.Core.ps1','Dependencies.ps1','Session.ps1','Startup.ps1','Resolution.ps1'):
+    for name in ('Entry.ps1','Runtime.Core.ps1','Dependencies.ps1','Session.ps1','Startup.ps1','Resolution.ps1','GraphicsCreation.ps1'):
         copy(repo/'launcher/runtime'/name,name)
     for name in ('prepare_runtime_assets.py','wait_main_menu.py','activate_game_once.py','runtime_process.py'):
         copy(repo/'launcher/runtime'/name,'tools/'+name)
@@ -104,7 +106,7 @@ def stage(repo, receipt_path, expected_receipt_sha, output, version, dependencie
             transforms.append({'path':target,'original_sha256':sha(source),'packaged_sha256':sha(output/target),'change':'output placement validation only; PCM/asset logic unchanged'})
     copy(repo/'config/body-ammo-assets.json','config/body-ammo-assets.json')
     copy(repo/'config/ffmpeg-download.json','config/ffmpeg-download.json')
-    for name in ('BFVR-MIT.txt','MinHook-BSD.txt','OpenXR-Apache-2.0.txt','JsonCpp-MIT.txt','LSLib-MIT.txt'):
+    for name in ('BFVR-MIT.txt','MinHook-BSD.txt','Detours-MIT.txt','OpenXR-Apache-2.0.txt','JsonCpp-MIT.txt','LSLib-MIT.txt'):
         copy(repo/'licenses'/name,'licenses/'+name)
     copy(repo/'launcher/runtime/THIRD_PARTY_NOTICES.md','THIRD_PARTY_NOTICES.md')
     if dependencies:

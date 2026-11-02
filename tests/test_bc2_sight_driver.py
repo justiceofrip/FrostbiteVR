@@ -4,8 +4,11 @@ Run: python -B -m unittest discover -s tests -p test_bc2_sight_driver.py
 The existing feed harness supplies in-memory files, simulator and QPC clock.
 """
 import copy
+import gzip
 import importlib.util
 from pathlib import Path
+import random
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -634,6 +637,97 @@ class SightDriverTests(unittest.TestCase):
             with self.subTest(command=line), self.assertRaises((s.REFUSAL, ValueError)):
                 s.ordinary_left([line])
         s.ordinary_left(["hand l follow off", "hand l aimtrim 0 0", "hand l grip pose 0 0 0 0 0 0", "grip l 1"])
+
+
+class SightArtifactTests(unittest.TestCase):
+    def store(self, compressed=True):
+        directory = Path(self.enterContext(tempfile.TemporaryDirectory(dir=ROOT / "reports")))
+        store = s.transport.Artifacts(directory)
+        return s.SightArtifacts(store) if compressed else store
+
+    def response(self, size, seed=0):
+        # Incompressible diagnostic values plus repeated JSON text exercise a
+        # stored size near the measured 3.5-4.5 KiB, rather than an all-zero blob.
+        raw = s.transport.json_bytes(dict(valid=True, diagnostic=random.Random(seed).randbytes(3500).hex()))
+        self.assertLessEqual(len(raw), size)
+        return raw[:-1] + b" " * (size - len(raw)) + b"\n"
+
+    def test_measured_exhaustion_retains_all_bytes_through_100_responses(self):
+        plain, compressed = self.store(False), self.store()
+        # Actual40: 57 responses / 902,600 bytes plus 119,158 other bytes;
+        # the next measured-maximum-size response crosses the ordinary cap.
+        sizes = [10033] + [15939] * 55 + [15922]
+        self.assertEqual(sum(sizes), 902600)
+        other = b"x" * 119158
+        for store in (plain, compressed):
+            store.save("other-evidence.bin", other)
+        for index, size in enumerate(sizes, 1):
+            raw = self.response(size, index)
+            name = f"snapshot-{index:03}.json"
+            plain.save(name, raw)
+            compressed.save(name, raw)
+            self.assertEqual(gzip.decompress((compressed.directory / (name + ".gz")).read_bytes()), raw)
+        self.assertEqual(sum(plain.sizes.values()), 1021758)
+        with self.assertRaisesRegex(s.REFUSAL, "1 MiB"):
+            plain.save("snapshot-058.json", self.response(16097, 58))
+        for index in range(58, 101):
+            raw = self.response(16097, index)
+            name = f"snapshot-{index:03}.json"
+            compressed.save(name, raw)
+            self.assertEqual(gzip.decompress((compressed.directory / (name + ".gz")).read_bytes()), raw)
+        self.assertEqual(len(compressed.snapshot_sizes), 100)
+        self.assertLess(sum(compressed.sizes.values()), s.transport.MAX_BYTES - 12288)
+        self.assertEqual((compressed.directory / "other-evidence.bin").read_bytes(), other)
+        self.assertEqual(s.transport.MAX_BYTES, 1024 * 1024)
+
+    def test_refused_expired_timeout_bytes_retained_and_observed_contract_unchanged(self):
+        store = self.store()
+        for name in ("snapshot-001.json", "snapshot-002-failure.json", "snapshot-003-at-timeout.json"):
+            raw = b'{"valid":false,"invalid_reason":"synthetic_expired"}\r\n'
+            store.save(name, raw)
+            self.assertEqual(gzip.decompress((store.directory / (name + ".gz")).read_bytes()), raw)
+            self.assertFalse((store.directory / name).exists())
+        observed = b'{"full":"snapshot-observed input"}\n'
+        store.save("snapshot-observed.json", observed)
+        self.assertEqual((store.directory / "snapshot-observed.json").read_bytes(), observed)
+        self.assertNotIn("snapshot-observed.json", store.snapshot_sizes)
+
+    def test_decoded_cap_counts_replacements_once_and_refuses_before_write(self):
+        store = self.store()
+        raw = b"x" * s.sight.frame.SNAPSHOT_LIMIT
+        self.assertEqual(s.MAX_SIGHT_SNAPSHOT_BYTES, 4 * 1024 * 1024)
+        count = s.MAX_SIGHT_SNAPSHOT_BYTES // len(raw)
+        self.assertEqual(count, 128)
+        for index in range(count):
+            store.save(f"snapshot-{index:03}.json", raw)
+        store.save("snapshot-000.json", raw)
+        sizes = store.sizes.copy()
+        with self.assertRaisesRegex(s.REFUSAL, "4 MiB"):
+            store.save("snapshot-128.json", b"x")
+        with self.assertRaisesRegex(s.REFUSAL, "oversized sight snapshot"):
+            store.save("snapshot-000.json", raw + b"x")
+        self.assertEqual(store.sizes, sizes)
+        self.assertEqual(sum(store.snapshot_sizes.values()), s.MAX_SIGHT_SNAPSHOT_BYTES)
+        self.assertFalse((store.directory / "snapshot-128.json.gz").exists())
+
+    def test_disk_cap_and_cleanup_result_reserves_remain_enforced(self):
+        store = self.store()
+        store.save("other-evidence.bin", b"x" * (s.transport.MAX_BYTES - 12288))
+        sizes = store.sizes.copy()
+        with self.assertRaisesRegex(s.REFUSAL, "1 MiB"):
+            store.save("snapshot-001.json", b"{}\n")
+        self.assertEqual(store.sizes, sizes)
+        self.assertEqual(store.snapshot_sizes, {})
+        self.assertFalse((store.directory / "snapshot-001.json.gz").exists())
+        with self.assertRaisesRegex(s.REFUSAL, "artifact budget exhausted"):
+            store.event(dict(type="ordinary"))
+        store.event(dict(type="cleanup"), cleanup=True)
+        with self.assertRaisesRegex(s.REFUSAL, "artifact budget exhausted"):
+            store.event(dict(padding="x" * 4096), cleanup=True)
+        store.save("result.json", dict(status="refused"), final=True)
+        with self.assertRaisesRegex(s.REFUSAL, "1 MiB"):
+            store.save("too-large-result.json", b"x" * 8192, final=True)
+        self.assertLessEqual(sum(store.sizes.values()), s.transport.MAX_BYTES - 4096)
 
 
 if __name__ == "__main__":

@@ -402,6 +402,36 @@ if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8)
   endif()
 endif()
 
+if(WIN32)
+  # Exact upstream Detours sources; one static-CRT dependency for both launch halves.
+  set(FVR_DETOURS_SOURCE third_party/detours-1dbd4ea/src)
+  add_library(FvrDetours STATIC
+    ${FVR_DETOURS_SOURCE}/detours.cpp ${FVR_DETOURS_SOURCE}/modules.cpp
+    ${FVR_DETOURS_SOURCE}/disasm.cpp ${FVR_DETOURS_SOURCE}/image.cpp
+    ${FVR_DETOURS_SOURCE}/creatwth.cpp ${FVR_DETOURS_SOURCE}/disolx86.cpp
+    ${FVR_DETOURS_SOURCE}/disolx64.cpp ${FVR_DETOURS_SOURCE}/disolia64.cpp
+    ${FVR_DETOURS_SOURCE}/disolarm.cpp ${FVR_DETOURS_SOURCE}/disolarm64.cpp)
+  target_include_directories(FvrDetours PUBLIC ${FVR_DETOURS_SOURCE})
+  target_compile_definitions(FvrDetours PRIVATE WIN32_LEAN_AND_MEAN DETOUR_DEBUG=0)
+  if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+    set(FVR_GRAPHICS_CREATION_TARGET Bc2GraphicsCreation32)
+    add_library(${FVR_GRAPHICS_CREATION_TARGET} SHARED src/platform/windows/Bc2GraphicsCreationBootstrap32.cpp)
+    target_link_libraries(${FVR_GRAPHICS_CREATION_TARGET} PRIVATE d3d11 dxgi)
+  else()
+    set(FVR_GRAPHICS_CREATION_TARGET Bc2GraphicsCreation64)
+    add_library(${FVR_GRAPHICS_CREATION_TARGET} SHARED src/platform/windows/Bc2GraphicsLaunchBridge64.cpp)
+  endif()
+  target_link_libraries(${FVR_GRAPHICS_CREATION_TARGET} PRIVATE FvrDetours kernel32)
+  target_compile_definitions(${FVR_GRAPHICS_CREATION_TARGET} PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+  if(BUILD_TESTING)
+    add_executable(Bc2GraphicsCreationTests tests/Bc2GraphicsCreationTests.cpp)
+    target_link_libraries(Bc2GraphicsCreationTests PRIVATE FvrDetours d3d11 dxgi kernel32)
+    target_compile_definitions(Bc2GraphicsCreationTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+    add_test(NAME Bc2GraphicsCreation COMMAND Bc2GraphicsCreationTests)
+    set_tests_properties(Bc2GraphicsCreation PROPERTIES TIMEOUT 30)
+  endif()
+endif()
+
 if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4)
   add_library(BC2ResolutionBootstrap SHARED src/games/bc2/Bc2ResolutionBootstrap.cpp src/games/bc2/Bc2ResolutionBootstrap.def)
   target_link_libraries(BC2ResolutionBootstrap PRIVATE BC2Camera FvrMinHook dxgi)

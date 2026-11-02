@@ -4,6 +4,8 @@ BC2 VR is independent software, not an EA/DICE product. Battlefield and Frostbit
 
 The framework and BFVR-derived code use MIT; notices are in `licenses/BFVR-MIT.txt` and the package's `LICENSE`. MinHook is statically linked under its retained BSD notices in `licenses/MinHook-BSD.txt`. OpenXR loader and headers use Apache 2.0 (`licenses/OpenXR-Apache-2.0.txt`); its bundled JsonCpp uses MIT (`licenses/JsonCpp-MIT.txt`). The Granny curve parser adapts Norbyte LSLib layouts under MIT (`licenses/LSLib-MIT.txt`).
 
+The graphics creation DLLs statically link Microsoft Detours under MIT. The complete upstream notice is retained in `licenses/Detours-MIT.txt`; source revision: [1dbd4ea281d73d478aa8d09a8b83fbd265f715f7](https://github.com/microsoft/Detours/tree/1dbd4ea281d73d478aa8d09a8b83fbd265f715f7). Both DLLs, the graphics startup script and the retained notice have exact SHA-256 entries in `runtime.json`.
+
 The portable Python distribution retains its included license. Its source and release information are at https://www.python.org/downloads/windows/ . Supplied dependency hashes are recorded in `runtime.json`.
 
 FFmpeg is not included in this package. First-time asset preparation downloads a pinned, unmodified LGPL shared build directly from https://github.com/BtbN/FFmpeg-Builds and retains its license beside the executable. The provider is listed at https://ffmpeg.org/download.html . The exact upstream release, archive and retained file hashes are recorded in `config/ffmpeg-download.json`; the local cache receipt records that recipe. Downloads and extracted files stay on the chosen installation drive. FFmpeg is used only to decode audio from the player's installed game. Setup validation and launches with prepared assets do not download it.

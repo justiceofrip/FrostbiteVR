@@ -523,6 +523,7 @@ struct TrackedTransaction {
 } tracked;
 enum class TrackedFinishCallsite {RightEyeDraw,WorldReturn,UnwrittenCancellation};
 unsigned GraphicsBootstrapThreadForDiagnostics()noexcept;
+ID3D11Device* GraphicsBootstrapConnectionDevice(unsigned renderer)noexcept;
 struct FirstTrackedFinishFailure {
     // Single assignment, no waiting. A callback publishes only a complete row;
     // final serialization additionally requires the existing callback drain.
@@ -1722,9 +1723,10 @@ void PumpFrameBridge()noexcept {
     fvr::runtime::DrainUnwrittenFrameCancellation(stereoRecovery.cancelUnwrittenRequest,tracked.lease.requestId,
         tracked.state.load(std::memory_order_acquire)==3,[]{FinishTrackedFrame(false,TrackedFinishCallsite::UnwrittenCancellation);});
     if(!frameBridge.Connected()){
-        static bool attempted=false;if(attempted)return;attempted=true;
-        const auto renderer=U32(imageBase+profile.rendererGlobal);if(U32(renderer)!=imageBase+profile.rendererVtable)return;
-        const auto device=U32(renderer+0x7c);frameBridge.ConnectGraphics(reinterpret_cast<ID3D11Device*>(device),streamToken);
+        static bool attempted=false;if(attempted)return;
+        auto* device=GraphicsBootstrapConnectionDevice(U32(imageBase+profile.rendererGlobal));if(!device)return;
+        attempted=true;
+        frameBridge.ConnectGraphics(device,streamToken);
     }
     frameBridge.PumpGraphics();
     stereoRecovery.sourceTransition.Service(frameBridge.OnGraphicsThread(),[](const fvr::runtime::RenderOwnerTransition::Request& request)noexcept {
@@ -1774,6 +1776,13 @@ GraphicsBootstrapSnapshot graphicsBootstrapEvidence;
 std::atomic<bool> graphicsRuntimeReady=false;
 unsigned GraphicsBootstrapThreadForDiagnostics()noexcept {
     return graphicsRuntimeReady.load(std::memory_order_acquire)?graphicsBootstrapEvidence.thread:0;
+}
+ID3D11Device* GraphicsBootstrapConnectionDevice(unsigned renderer)noexcept {
+    // This bootstrap admits one renderer lifetime; a replacement needs fresh evidence.
+    if(!graphicsRuntimeReady.load(std::memory_order_acquire)||renderer!=observedRenderer||
+        GetCurrentThreadId()!=graphicsBootstrapEvidence.thread||U32(renderer)!=imageBase+profile.rendererVtable||
+        U32(renderer+0x7c)!=graphicsBootstrapEvidence.device||U32(renderer+0x88)!=reinterpret_cast<unsigned>(observedSwapChain))return nullptr;
+    return reinterpret_cast<ID3D11Device*>(graphicsBootstrapEvidence.device);
 }
 unsigned graphicsBootstrapWorkerThread=0;
 void ClosePrivatePresentationExperiment()noexcept {
@@ -1910,7 +1919,7 @@ HRESULT STDMETHODCALLTYPE DesktopPresentHook(IDXGISwapChain* chain,UINT interval
     fvr::graphics::FrameBridgePresentService::Scope serviceBoundary(desktopFrameService,
         GetCurrentThreadId(),graphicsBootstrapEvidence.thread,
         reinterpret_cast<std::uintptr_t>(chain),reinterpret_cast<std::uintptr_t>(observedSwapChain));
-    // The native device may be SINGLETHREADED. The owner/nesting guard must
+    // Qualified device flags do not serialize the context. The owner/nesting guard must
     // cover menu capture, desktop diagnostics and mirror work too, before any
     // added D3D/chain calls. Keep the scope held across the original Present.
     if(!serviceBoundary.Owned())return desktopPresentOriginal(chain,interval,flags);
@@ -3671,6 +3680,9 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             Require(captured->thread!=graphicsBootstrapWorkerThread&&captured->device==U32(renderer+0x7c)&&
                 U32(imageBase+profile.rendererGlobal)==renderer&&U32(renderer)==imageBase+profile.rendererVtable&&
                 U32(renderer+0x88)==reinterpret_cast<unsigned>(observedSwapChain),"Graphics bootstrap identity changed");
+            // Launch arming is separate from this actual-device admission proof.
+            Require((captured->deviceFlags&D3D11_CREATE_DEVICE_SINGLETHREADED)==0,
+                "Native VR graphics creation contract unqualified: existing device is SINGLETHREADED; close BC2 normally and start a fresh corrected launch");
             graphicsBootstrapEvidence=*captured;
             observedImmediateContext=reinterpret_cast<ID3D11DeviceContext*>(captured->context);
             if(graphicsProvenanceEnabled){
@@ -4361,6 +4373,7 @@ Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4
             <<R"(,"main_menu_completed":)"<<(mainMenuPassed?"true":"false")
             <<R"(,"world_stereo_tested":)"<<(mainMenuOnly?"false":"true")
             <<R"(,"present_thread":)"<<graphicsBootstrapEvidence.thread<<R"(,"device_flags":)"<<graphicsBootstrapEvidence.deviceFlags
+            <<R"(,"creation_contract":")"<<(graphicsBootstrapEvidence.thread?"qualified_singlethreaded_clear":"unobserved")<<'"'
             <<R"(,"device":)"<<graphicsBootstrapEvidence.device<<R"(,"context":)"<<graphicsBootstrapEvidence.context
             <<R"(,"worker_com_calls":0,"temporary_refs_released_before_publication":true})";
 

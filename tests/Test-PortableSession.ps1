@@ -42,8 +42,7 @@ function New-FakeProcess($Id,$Name,$Exited=$false){
     return $p
 }
 function Start-Process {param($FilePath,$WorkingDirectory,$Environment,[switch]$PassThru)
-    [IO.File]::WriteAllText((Join-Path $folder 'game-created.txt'),'fixture only')
-    $script:fakeGame=New-FakeProcess 100 'BFBC2Game.exe';return $script:fakeGame
+    throw 'Direct process startup bypassed the fixture graphics creation boundary.'
 }
 function Invoke-FixturePython {
     $out=$args[[Array]::IndexOf($args,'--output')+1]
@@ -174,7 +173,54 @@ function Write-FvrJson($Path,$Value){
 }
 '@
     [IO.File]::WriteAllText((Join-Path $runtime 'Runtime.Core.ps1'),$fake)
+    # Replace the complete graphics process boundary, never load the production
+    # bridge or launch the fixture executable. Native/ABI behavior has its own suite.
+    $fakeGraphics=@'
+$script:graphicsCreated=$false
+$script:graphicsArmChecks=0
+function Start-Bc2GraphicsGame([string]$Exe,$RuntimeConfig){
+    [IO.File]::AppendAllText((Join-Path $folder 'boundary-order.txt'),"graphics-start`n")
+    if($Exe -cne (Join-Path $options.game_path 'BFBC2Game.exe') -or
+       $RuntimeConfig.version -cne $options.version -or $RuntimeConfig.source_sha256 -cne $options.source_sha256){
+        throw 'Graphics startup did not receive the admitted executable and runtime identity.'
+    }
+    Write-FvrJson (Join-Path $folder 'graphics-arguments.json') @{exe=$Exe;version=$RuntimeConfig.version;source_sha256=$RuntimeConfig.source_sha256}
+    if($RuntimeConfig.scenario -eq 'graphics_start_failure'){throw 'Fixture graphics creation refused before game startup.'}
+    $script:fakeGame=New-FakeProcess 100 $Exe
+    $script:fakeGame|Add-Member ScriptMethod Kill {throw 'The coordinator must not terminate the game.'}
+    $script:game=$script:fakeGame;$script:graphicsCreated=$true
+    [IO.File]::WriteAllText((Join-Path $folder 'game-created.txt'),'fixture only')
+    $state.game=Get-Bc2ProcessIdentity $script:fakeGame;$state.audio_environment_inherited=$true
+    $state.graphics_creation=@{schema='bc2vr.graphics-creation.v1';resumed=($RuntimeConfig.scenario -ne 'graphics_suspended_failure');policy='clear_singlethreaded';lifetime='game_process';device_flags_verification='native_adapter_required';status=@{armed=1;attach_error=0}}
+    Save-State
+    if(-not $state.graphics_creation.resumed){throw 'Fixture graphics startup failed while the owned child was suspended.'}
+    return $script:fakeGame
+}
+function Assert-Bc2GraphicsArmed {
+    $script:graphicsArmChecks++
+    [IO.File]::AppendAllText((Join-Path $folder 'boundary-order.txt'),"graphics-arm-$script:graphicsArmChecks`n")
+    if(-not $script:graphicsCreated -or -not $state.graphics_creation.resumed){throw 'Graphics arming checked without a resumed owned game.'}
+    $cfg=Get-Bc2RuntimeConfig
+    if(($cfg.scenario -eq 'graphics_unarmed' -and $script:graphicsArmChecks -eq 1) -or
+       ($cfg.scenario -eq 'graphics_attach_unarmed' -and $script:graphicsArmChecks -eq 2)){
+        $state.graphics_creation.status.armed=0
+        throw 'Fixture graphics startup could not be verified.'
+    }
+}
+function Complete-Bc2GraphicsCreation {
+    [IO.File]::AppendAllText((Join-Path $folder 'boundary-order.txt'),"graphics-cleanup`n")
+    if(-not $script:graphicsCreated){return}
+    if(-not $state.graphics_creation.resumed){
+        $script:fakeGame.HasExited=$true
+        [IO.File]::WriteAllText((Join-Path $folder 'graphics-suspended-aborted.txt'),'fixture only')
+    }
+    if((Get-Bc2RuntimeConfig).scenario -eq 'graphics_cleanup_failure'){throw 'Fixture graphics evidence stop failed.'}
+    $state.graphics_creation.cleanup='collection_stopped'
+}
+'@
+    [IO.File]::WriteAllText((Join-Path $runtime 'GraphicsCreation.ps1'),$fakeGraphics)
     foreach($scenario in @('success','activation_success','activation_exit','activation_exit_zero','activation_exit_unknown','activation_live_unverified','activation_access_unavailable',
+        'graphics_start_failure','graphics_suspended_failure','graphics_unarmed','graphics_attach_unarmed','graphics_cleanup_failure',
         'native_failure','bad_host_size','wrong_renderer','normal_game_close','game_close_exit_unknown','game_process_fault','stop_after_attach_game_fault','native_game_exit_live','native_exception_game_gone','native_exception_game_live',
         'invalid_plan','resolution_failure','resolution_hook_live','resolution_callback_live','resolution_timeout','wrong_native_size','wrong_native_pid','renderer_did_not_resize','changed_xr_recommendation','stop_during_resolution',
         'missing_setup_report','wrong_guard_token','wrong_guard_supervisor','stale_guard_game','stale_guard_supervisor','guard_not_armed','missing_guard_proof',
@@ -193,6 +239,17 @@ function Write-FvrJson($Path,$Value){
         & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -NonInteractive -File (Join-Path $runtime 'Session.ps1') -OptionsPath $options *> (Join-Path $run 'coordinator.log')
         $code=$LASTEXITCODE
         $state=Read-FvrJson (Join-Path $run 'session.json');$history=Get-Content -LiteralPath (Join-Path $run 'state-history.txt')
+        $order=@(Get-Content -LiteralPath (Join-Path $run 'boundary-order.txt'))
+        Check ($order[-1] -ceq 'graphics-cleanup' -and @($order|Where-Object {$_ -ceq 'graphics-cleanup'}).Count -eq 1) ($scenario+' completes the graphics boundary once after other cleanup')
+        if($scenario -notin @('invalid_plan','graphics_start_failure')){
+            $graphicsCall=Read-FvrJson (Join-Path $run 'graphics-arguments.json')
+            Check ($graphicsCall.exe -ceq $exe -and $graphicsCall.version -ceq '0.1.6' -and $graphicsCall.source_sha256 -ceq ('a'*64) -and
+                $state.game.pid -eq 100 -and $state.game.path -ceq $exe -and $state.audio_environment_inherited -eq $true) ($scenario+' preserves admitted startup arguments and owned game/audio state')
+            if($scenario -ne 'graphics_cleanup_failure'){
+                Check ($state.graphics_creation.cleanup -ceq 'collection_stopped' -and $state.graphics_creation.lifetime -ceq 'game_process' -and
+                    $state.graphics_creation.device_flags_verification -ceq 'native_adapter_required') ($scenario+' records collection cleanup without treating wrapper arming as renderer proof')
+            }
+        }
         if($scenario -in @('success','activation_success')){
             Check ($code -eq 0 -and $state.state -eq 'ended' -and 'running' -in $history) 'actual session coordinator requires native input then completes cleanly'
             $hostCall=Read-FvrJson (Join-Path $run 'host-arguments.json')
@@ -200,7 +257,7 @@ function Write-FvrJson($Path,$Value){
             Check ($hostCall.arguments[$w+1] -eq '2784' -and $hostCall.arguments[$h+1] -eq '3024') 'runtime-recommended tall dimensions reach host instead of initial desktop size'
             Check ($state.initial_width -eq 1920 -and $state.initial_height -eq 1080 -and $state.native_resolution_verified -eq $true) 'native resize is independently verified after helper completion'
             $order=Get-Content -LiteralPath (Join-Path $run 'boundary-order.txt')
-            $expectedOrder='initial_menu,resolution,resized_menu,'+$(if($scenario -eq 'activation_success'){'activation,'}else{''})+'host,native,native-exited,host-stopped,resolution-release'
+            $expectedOrder='graphics-start,initial_menu,graphics-arm-1,resolution,resized_menu,'+$(if($scenario -eq 'activation_success'){'activation,'}else{''})+'host,graphics-arm-2,native,native-exited,host-stopped,resolution-release,graphics-cleanup'
             Check (($order -join ',') -eq $expectedOrder) 'setup/readback and optional single activation precede attachment; release follows host/native cleanup'
             Check (-not $state.ContainsKey('activation_process_outcome')) 'verified original process does not receive a failed-ownership diagnosis'
             $resolutionCall=Read-FvrJson (Join-Path $run 'resolution-arguments.json')
@@ -208,11 +265,36 @@ function Write-FvrJson($Path,$Value){
             Check ($resolutionCall.arguments[$pidIndex+1] -eq '100' -and $resolutionCall.arguments[$createdIndex+1] -eq ([DateTime]'2026-10-18T00:00:00Z').ToUniversalTime().ToFileTimeUtc().ToString()) 'native helper binds the exact original game process and creation'
             Check ($hostCall.environment.XR_RUNTIME_JSON -eq 'fixture-openxr.json') 'session uses same selected OpenXR runtime as preflight'
             Check ($state.resolution_cleanup -eq 'released' -and $state.resolution_guard_released -eq $true -and $state.resolution_guard_active -eq $false) 'normal completion explicitly releases the exact session guard'
+        }elseif($scenario -like 'graphics_*'){
+            Check ($code -ne 0 -and $state.state -ceq 'failed' -and $state.ContainsKey('ended_utc')) ($scenario+' fails closed and persists the final session state')
+            if($scenario -eq 'graphics_cleanup_failure'){
+                Check ('running' -in $history -and $state.error.Contains('Graphics creation cleanup failed: Fixture graphics evidence stop failed.') -and
+                    -not $state.graphics_creation.ContainsKey('cleanup') -and $state.resolution_cleanup -ceq 'released' -and $state.restart_required -eq $true) 'graphics cleanup failure remains visible after successful native and resolution cleanup'
+            }else{
+                Check ('running' -notin $history -and -not(Test-Path -LiteralPath (Join-Path $run 'session-telemetry.jsonl'))) ($scenario+' never starts the native adapter')
+                if($scenario -eq 'graphics_attach_unarmed'){
+                    Check (($order -join ',') -ceq 'graphics-start,initial_menu,graphics-arm-1,resolution,resized_menu,host,graphics-arm-2,host-stopped,resolution-release,graphics-cleanup' -and
+                        $state.resolution_cleanup -ceq 'released' -and $state.restart_required -eq $true) 'arming loss before native attach stops the host and releases the original resolution lease'
+                }else{
+                    Check (-not(Test-Path -LiteralPath (Join-Path $run 'resolution-arguments.json')) -and
+                        -not(Test-Path -LiteralPath (Join-Path $run 'host-arguments.json'))) ($scenario+' refuses resolution and headset startup')
+                }
+                if($scenario -eq 'graphics_start_failure'){
+                    Check (($order -join ',') -ceq 'graphics-start,graphics-cleanup' -and -not $state.game -and
+                        -not(Test-Path -LiteralPath (Join-Path $run 'game-created.txt'))) 'graphics create refusal never reaches a game or main-menu observation'
+                }elseif($scenario -eq 'graphics_suspended_failure'){
+                    Check (($order -join ',') -ceq 'graphics-start,graphics-cleanup' -and -not $state.graphics_creation.resumed -and
+                        (Test-Path -LiteralPath (Join-Path $run 'graphics-suspended-aborted.txt')) -and -not $state.ContainsKey('restart_required')) 'failed suspended startup reaches owned graphics abort cleanup before any menu observation'
+                }elseif($scenario -eq 'graphics_unarmed'){
+                    Check (($order -join ',') -ceq 'graphics-start,initial_menu,graphics-arm-1,graphics-cleanup' -and $state.restart_required -eq $true -and
+                        -not(Test-Path -LiteralPath (Join-Path $run 'graphics-suspended-aborted.txt'))) 'unarmed resumed startup fails before resolution and preserves the live game'
+                }
+            }
         }elseif($scenario -like 'activation_*'){
             $observation=$state.activation_process_outcome
             $order=Get-Content -LiteralPath (Join-Path $run 'boundary-order.txt')
             Check ($code -ne 0 -and $state.state -eq 'failed' -and 'running' -notin $history -and
-                ($order -join ',') -eq 'initial_menu,resolution,resized_menu,activation') ($scenario+' rejects failed ownership after exactly one activation without attachment or cleanup calls into an unverified game')
+                ($order -join ',') -eq 'graphics-start,initial_menu,graphics-arm-1,resolution,resized_menu,activation,graphics-cleanup') ($scenario+' rejects failed ownership after exactly one activation without attachment or resolution cleanup calls into an unverified game')
             Check (-not(Test-Path -LiteralPath (Join-Path $run 'host-arguments.json')) -and
                 -not(Test-Path -LiteralPath (Join-Path $run 'session-telemetry.jsonl')) -and
                 $observation.schema -ceq 'bc2vr.activation-process.v1' -and
@@ -240,7 +322,7 @@ function Write-FvrJson($Path,$Value){
             }
         }elseif($scenario -eq 'stop_after_attach'){
             $order=Get-Content -LiteralPath (Join-Path $run 'boundary-order.txt')
-            Check ($code -eq 0 -and $state.state -eq 'stopped' -and ($order[-3..-1] -join ',') -eq 'host-stopped,native-exited,resolution-release') 'early stop orders host shutdown then native drain then guard release'
+            Check ($code -eq 0 -and $state.state -eq 'stopped' -and ($order[-4..-1] -join ',') -eq 'host-stopped,native-exited,resolution-release,graphics-cleanup') 'early stop orders host shutdown then native drain then guard release and graphics cleanup'
         }elseif($scenario -eq 'stop_during_resolution'){
             Check ($code -eq 0 -and $state.state -eq 'stopped' -and -not(Test-Path -LiteralPath (Join-Path $run 'host-arguments.json'))) 'stop during helper waits for its restored result and never attaches VR'
         }elseif($scenario -in @('normal_game_close','game_close_exit_unknown')){
