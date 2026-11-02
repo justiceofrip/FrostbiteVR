@@ -327,13 +327,30 @@ struct Bc2PhysicalFeed::State {
             retirementEvent=proof->event;
         }
     }
-    void PublishGate(Equipment& e)noexcept {
-        if(!api.publishGate||!e.lifetime)return;
+    void PublishGate(Equipment& e,const Bc2PhysicalFeedSample& s,const HandInteraction& hands)noexcept {
+        if((!api.publishGate&&!api.publishGateObserved)||!e.lifetime)return;
         const bool debt=e.pending||e.refused||e.cover!=FeedCoverState::Closed||e.container!=FeedContainerState::Attached||
             e.seat!=FeedSeatState::Seated||(e.session&&e.session->State().status!=FeedEquipmentStatus::Complete);
         const FeedEquipmentGate gate{e.original.binding.context.resource,e.lifetime,++e.revision,debt,!debt};
-        if(api.publishGate(api.context,gate)){e.gate=gate;e.gateFailed=false;}
-        else {e.gateFailed=true;diagnostics.gateRefusals.fetch_add(1,std::memory_order_relaxed);} // Contention is not permission to clear old native debt.
+        const auto result=api.publishGateObserved?api.publishGateObserved(api.context,gate):
+            api.publishGate(api.context,gate)?FeedEquipmentGateResult::Published:FeedEquipmentGateResult::Rejected;
+        if(result==FeedEquipmentGateResult::Published){e.gate=gate;e.gateFailed=false;return;}
+        diagnostics.gateRefusals.fetch_add(1,std::memory_order_relaxed);
+        const auto left=hands.Current(InteractionHand::Left),right=hands.Current(InteractionHand::Right);
+        // Contention cannot replace an accepted blocker or create a claim. An
+        // unchanged blocker permits the existing held gesture to reach the
+        // ordinary raw/native/policy checks below; none of its leases are renewed here.
+        const bool retained=result==FeedEquipmentGateResult::Busy&&!e.gateFailed&&e.gate&&
+            e.gate->resource==gate.resource&&e.gate->lifetime==gate.lifetime&&
+            e.gate->blocksFire&&!e.gate->closedVerified&&gate.blocksFire&&!gate.closedVerified&&
+            e.claim&&left&&right&&left->token==*e.claim&&left->token.kind==HandClaimKind::Mechanism&&
+            left->token.owner==s.input.owner&&left->token.item==s.weapon&&left->deadlineNs>s.input.nowNs&&
+            right->token.kind==HandClaimKind::GunHold&&!right->token.prerequisiteClaim&&
+            right->token.owner==s.input.owner&&right->token.item==s.weapon&&right->deadlineNs>s.input.nowNs&&
+            left->token.prerequisiteClaim==right->token.id&&s.grip&&!s.cancel&&!s.input.released[0]&&
+            Window(s.input,s.input.nowNs)&&NativeHand(s)&&s.weapon==e.weapon&&s.owner==e.original.identity.owner&&
+            s.equipment&&CurrentEquipment(e.original,s.owner,*s.equipment,s.binding,e.registration);
+        if(!retained)e.gateFailed=true;
     }
     static bool SameResource(const Equipment& e,const FeedEquipmentNativeView& v)noexcept {
         return e.original.binding.context.resource==v.binding.context.resource&&
@@ -572,7 +589,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             old.pending.reset();old.refused=false;old.motionDirty=true;old.recoveryContact.reset();old.presentationSource.reset();++old.revision;}
         else {old.cover=cover;old.container=container;old.seat=seat;old.refill=refill;old.carriedPartsMask=carried;}
     }
-    for(auto& e:state.equipment)if(e)state.PublishGate(*e);
+    for(auto& e:state.equipment)if(e)state.PublishGate(*e,s,hands);
     out.blocksFire=blocksFire();out.blocksEquipment=blocksEquipment();
     const auto view=state.api.read(state.api.context,s.owner,now);
     if(view)registration=FindBc2FeedRegistration(view->config);
@@ -650,7 +667,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         e->supply={{view->binding.data,generation},{view->identity.owner.weapon,generation}};
         e->mechanism={registration->key,generation};e->motions=BuildBc2FeedInteractionProfile(registration->geometry,
             registration->mechanism.id,registration->mechanism.revision,registration->interactionPolicy);
-        e->lifetime=Lifetime();e->pouchBasis=e->chainBasis=s.raw.weaponWorldMeters;state.PublishGate(*e);
+        e->lifetime=Lifetime();e->pouchBasis=e->chainBasis=s.raw.weaponWorldMeters;state.PublishGate(*e,s,hands);
     }catch(...){return finish(FeedExit::StorageUnavailable);}break;}}
     if(!e){out.blocksFire=true;return finish(FeedExit::StorageUnavailable);}
     const auto& profile=e->registration.mechanism;
@@ -830,7 +847,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             e->lifetime=lifetime;e->refill={FeedRefillState::Required,lifetime,0};e->refused=false;
             try{e->session=std::make_unique<FeedEquipmentSession>(profile,e->motions,FeedEquipmentOwner(s.owner),e->mechanism,e->supply,lifetime,
                 e->original.binding.context.resource);}catch(...){out.blocksFire=true;return finish(FeedExit::SessionUnavailable);}
-            state.PublishGate(*e);
+            state.PublishGate(*e,s,hands);
             auto armed=*neutral;armed.ammunition.lifetime=lifetime;armed.snapshot=state.Snapshot(*e,armed.ammunition,sourceInput);
             armed.snapshot.inputSequence=armed.interaction.contact.inputSequence;
             armed.binding=state.Binding(*e);armed.authority=state.Authority(*e,armed.ammunition,FeedPhysicalOperation::OpenCover);
@@ -1023,7 +1040,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         }else out.status=e->session->State().status;
         out.pending=e->pending.has_value();out.ownsHand=e->claim.has_value()||e->ammunitionSupply.Held().has_value();
     }
-    state.PublishGate(*e);out.blocksFire=e->Blocked();out.blocksEquipment=e->pending.has_value()||e->claim.has_value()||e->ammunitionSupply.Held().has_value();
+    state.PublishGate(*e,s,hands);out.blocksFire=e->Blocked();out.blocksEquipment=e->pending.has_value()||e->claim.has_value()||e->ammunitionSupply.Held().has_value();
     if(!e->ammunitionSupply.Custody()&&!e->pending)if(const auto supply=Bc2FeedBodySource(body,s.input,now)){
         const auto config=Bc2FeedSupplyConfig();AmmoSupplyVisualSample visual{true,false,*supply,s.input,*right,
             {config.pouchCenterMeters,config.pouchRadiusMeters},SupplyAnchorFrame::RecenteredBody};

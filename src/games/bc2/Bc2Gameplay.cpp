@@ -4028,6 +4028,7 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
                 feed.submitObserved=[](void*,const FeedEquipmentSubmission& command,bool noEntryOnly)noexcept{
                     return reloadFlowRuntime::SubmitFeedEquipmentCommandResult(command,noEntryOnly);};
                 feed.publishGate=[](void*,const FeedEquipmentGate& gate)noexcept{return reloadFlowRuntime::PublishFeedEquipmentGate(gate);};
+                feed.publishGateObserved=[](void*,const FeedEquipmentGate& gate)noexcept{return reloadFlowRuntime::PublishFeedEquipmentGateResult(gate);};
                 feed.readGate=[](void*,const interaction::AmmoResourceIdentity& resource)noexcept{return reloadFlowRuntime::ReadFeedEquipmentGate(resource);};
                 feed.retirement=[](void*,std::uint64_t afterEvent)noexcept{return reloadFlowRuntime::ReadFeedEquipmentActorRetirement(afterEvent);};
                 physicalFeed.emplace(feed);

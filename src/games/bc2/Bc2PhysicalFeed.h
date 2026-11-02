@@ -62,6 +62,7 @@ struct Bc2PhysicalFeedApi {
     bool (*publishGate)(void*,const FeedEquipmentGate&)noexcept=nullptr;
     std::optional<FeedEquipmentGate> (*readGate)(void*,const interaction::AmmoResourceIdentity&)noexcept=nullptr;
     std::optional<FeedEquipmentActorRetirement> (*retirement)(void*,std::uint64_t afterEvent)noexcept=nullptr;
+    FeedEquipmentGateResult (*publishGateObserved)(void*,const FeedEquipmentGate&)noexcept=nullptr;
 };
 struct Bc2PhysicalFeedSample {
     ReloadStateOwner owner{};

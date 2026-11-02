@@ -55,6 +55,9 @@ struct FeedEquipmentSubmission {
     FeedEquipmentGeometryProof geometry{};
 };
 enum class FeedEquipmentSubmitResult:std::uint8_t {Submitted,NoEntryRetained,RetentionBusy,Invalid};
+// Busy means the native serialization gate was not entered. It is neither a
+// publication nor rejection of the previously retained conservative blocker.
+enum class FeedEquipmentGateResult:std::uint8_t {Published,Busy,Rejected};
 // Inventory lifetime, deliberately independent of selection/tracking epochs.
 // Enrollment always blocks stock Reload; blocksFire is retained physical debt.
 struct FeedEquipmentGate {

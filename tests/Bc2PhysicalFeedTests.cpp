@@ -44,6 +44,7 @@ struct Fixture {
     Bc2PhysicalFeedResult result{};
     std::optional<FeedEquipmentSubmission> submitted;
     bool refuse=false,occupyLeft=false,refuseGate=false;unsigned submits=0,nativeReads=0,nativeReadAts=0;
+    bool busyGate=false;
     // Native simulation, controller input and render publication have separate
     // clocks. Defaults preserve the original one-publication-per-input fixture.
     std::vector<unsigned> nativeCadence{1};
@@ -66,7 +67,7 @@ struct Fixture {
         if(view&&mutateNativeObserved)++view->observedNs;
         return view;
     }
-    Bc2PhysicalFeedApi Api(){return {this,
+    Bc2PhysicalFeedApi Api(bool observedGate=false){Bc2PhysicalFeedApi api{this,
         [](void* p,const ReloadStateOwner& o,std::int64_t now)noexcept{auto& f=*static_cast<Fixture*>(p);
             ++f.nativeReads;
             return f.missingCurrentView?std::optional<FeedEquipmentNativeView>{}:f.NativeRead(f.backend.Read(o,now));},
@@ -78,10 +79,18 @@ struct Fixture {
         [](void* p,const FeedEquipmentSubmission& s,bool noEntryOnly)noexcept{auto& f=*static_cast<Fixture*>(p);
             if(!noEntryOnly){++f.submits;f.submitted=s;}
             return f.backend.SubmitResult(s,f.now+1,noEntryOnly||f.refuse);},
-        [](void* p,const FeedEquipmentGate& gate)noexcept{auto& f=*static_cast<Fixture*>(p);return !f.refuseGate&&f.backend.PublishGate(gate,f.now+1);},
+        [](void* p,const FeedEquipmentGate& gate)noexcept{auto& f=*static_cast<Fixture*>(p);return !f.refuseGate&&!f.busyGate&&f.backend.PublishGate(gate,f.now+1);},
         [](void* p,const AmmoResourceIdentity& resource)noexcept{return static_cast<Fixture*>(p)->backend.ReadGate(resource);},
-        [](void* p,std::uint64_t after)noexcept{return static_cast<Fixture*>(p)->backend.Retirement(after);}};}
-    explicit Fixture(const Bc2FeedRegistration* row=nullptr):physical(Api()){
+        [](void* p,std::uint64_t after)noexcept{return static_cast<Fixture*>(p)->backend.Retirement(after);}};
+        if(observedGate)api.publishGateObserved=[](void* p,const FeedEquipmentGate& gate)noexcept{
+            auto& f=*static_cast<Fixture*>(p);
+            if(f.refuseGate)return FeedEquipmentGateResult::Rejected;
+            if(f.busyGate)return FeedEquipmentGateResult::Busy;
+            return f.backend.PublishGate(gate,f.now+1)?FeedEquipmentGateResult::Published:FeedEquipmentGateResult::Rejected;
+        };
+        return api;
+    }
+    explicit Fixture(const Bc2FeedRegistration* row=nullptr,bool observedGate=false):physical(Api(observedGate)){
         if(row)registration=row;
         if(!registration)std::abort();
         native.identity={{0x10000,0x20000,0x30000,0x40000,1,2,3},{0x50000,0x60000,0x70000},0x80000,0x90000,0xa0000};
@@ -1295,6 +1304,103 @@ int DelayedDetachWaitsForPairedNativeWithoutRenewingOwnership(){
     }
     return 0;
 }
+int BusyGatePreservesOnlyTheExistingHeldFeedGesture(){
+    // Actual106: an accepted blocking gate was followed by native lock
+    // contention; a live held claim was explicitly released before dispatch.
+    using namespace feed_interaction_detail;
+    const auto* registration=FindBc2FeedRegistration(5358977986686110024ull);CHECK(registration);
+    Fixture f(registration,true);const auto m=f.Open();
+    const auto pose=[&](unsigned step){return feed_interaction_detail::Multiply(
+        Along(m.motionFromContact,m.kind,m.travel*step/12),m.weaponFromMotion);};
+    f.Tick(pose(0),false);f.Tick(pose(0),true);
+    const auto acquired=f.hands.Current(InteractionHand::Left);CHECK(acquired&&f.result.ownsHand);
+    for(unsigned step=1;step<=10;++step)f.Tick(pose(step),true);
+    const auto held=f.hands.Current(InteractionHand::Left);CHECK(held&&held->token==acquired->token);
+    const auto raw=f.sample.raw;
+    const auto gate=f.backend.ReadGate(f.native.binding.context.resource);CHECK(gate&&gate->blocksFire&&!gate->closedVerified);
+    f.busyGate=true;f.PrepareTick(pose(11),true);const auto next=f.sample.raw;
+    f.Consume(&raw);
+    const auto repeated=f.hands.Current(InteractionHand::Left);CHECK(repeated&&repeated->token==held->token);
+    CHECK(repeated->inputSequence==held->inputSequence&&repeated->deadlineNs==held->deadlineNs);
+    CHECK(f.result.interactionStatus==FeedInteractionStatus::Duplicate&&f.result.ownsHand&&f.result.blocksFire);
+    CHECK(f.backend.ReadGate(f.native.binding.context.resource)==gate&&!f.submitted&&f.submits==0);
+    f.Consume(&next);CHECK(f.result.interactionStatus==FeedInteractionStatus::Moving&&f.result.ownsHand);
+    CHECK(f.hands.Current(InteractionHand::Left)->token==held->token);
+    f.Tick(pose(12),true);
+    for(unsigned step=0;step<f.DwellPackets()&&!f.submitted;++step){
+        CHECK(f.hands.Current(InteractionHand::Left)&&f.hands.Current(InteractionHand::Left)->token==held->token);
+        f.Tick(pose(12),true);
+    }
+    CHECK(f.submitted&&f.submits==1&&f.result.pending);
+    CHECK(f.submitted->command.authority.operation==FeedPhysicalOperation::OpenCover);
+    CHECK(f.backend.ReadGate(f.native.binding.context.resource)==gate);
+    CHECK(!f.hands.Current(InteractionHand::Left));
+    f.busyGate=false;CHECK(f.Reconcile());CHECK(f.submits==1&&f.BlocksFire());
+    CHECK(f.backend.Receipt(f.submitted->command.request.lifetime,f.submitted->command.request.id));
+    return 0;
+}
+int GateDenialAndUntypedFailureStillInterruptHeldFeed(){
+    using namespace feed_interaction_detail;
+    for(bool observed:{false,true}){
+        Fixture f(nullptr,observed);const auto m=f.Open();
+        const auto start=feed_interaction_detail::Multiply(m.motionFromContact,m.weaponFromMotion);
+        f.Tick(start,false);f.Tick(start,true);CHECK(f.result.ownsHand);
+        const auto gate=f.backend.ReadGate(f.native.binding.context.resource);CHECK(gate);
+        if(observed)f.refuseGate=true;else f.busyGate=true;
+        f.Tick(start,true);
+        CHECK(!f.result.ownsHand&&!f.hands.Current(InteractionHand::Left)&&!f.submitted&&f.submits==0);
+        CHECK(f.result.blocksFire&&(f.result.diagnostic.flags&(1u<<5)));
+        CHECK(f.backend.ReadGate(f.native.binding.context.resource)==gate);
+        // A later Busy cannot clear a previous real refusal or reacquire a claim.
+        f.refuseGate=false;f.busyGate=true;f.Tick(start,true);
+        CHECK(!f.result.ownsHand&&!f.hands.Current(InteractionHand::Left)&&f.submits==0);
+    }
+    return 0;
+}
+int BusyGateCannotEnrollOrClearACompletedFeedBlocker(){
+    using namespace feed_interaction_detail;
+    for(bool previouslyClosed:{false,true}){
+        Fixture f(nullptr,true);const auto m=f.Open();
+        const auto start=feed_interaction_detail::Multiply(m.motionFromContact,m.weaponFromMotion);
+        if(previouslyClosed)f.Tick(start,false);
+        const auto gate=f.backend.ReadGate(f.native.binding.context.resource);
+        CHECK(bool(gate)==previouslyClosed);
+        if(gate)CHECK(!gate->blocksFire&&gate->closedVerified);
+        f.busyGate=true;f.Tick(start,false);f.Tick(start,true);f.Tick(start,true);
+        CHECK(!f.result.ownsHand&&!f.hands.Current(InteractionHand::Left)&&!f.submitted&&f.submits==0);
+        CHECK(f.result.blocksFire&&(f.result.diagnostic.flags&(1u<<5)));
+        CHECK(f.backend.ReadGate(f.native.binding.context.resource)==gate);
+    }
+    Fixture f(nullptr,true);CHECK(f.OpenCover()&&f.Reconcile());
+    CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&f.Reconcile());
+    CHECK(f.Place(FeedPhysicalOperation::AttachContainer)&&f.Reconcile());
+    CHECK(f.Place(FeedPhysicalOperation::SeatFeed)&&f.Reconcile());
+    CHECK(f.Close());const auto gate=f.backend.ReadGate(f.native.binding.context.resource);CHECK(gate&&gate->blocksFire);
+    f.busyGate=true;CHECK(f.Reconcile());
+    CHECK(f.BlocksFire()&&f.result.blocksFire&&!f.hands.Current(InteractionHand::Left));
+    CHECK(f.backend.ReadGate(f.native.binding.context.resource)==gate&&f.submits==5);
+    f.busyGate=false;f.Tick(f.lastWrist,false);CHECK(!f.BlocksFire()&&f.submits==5);
+    return 0;
+}
+int BusyGateCannotRetainExpiredOrChangedFeedOwnership(){
+    using namespace feed_interaction_detail;
+    for(unsigned fault=0;fault<5;++fault){
+        Fixture f(nullptr,true);const auto m=f.Open();
+        const auto start=feed_interaction_detail::Multiply(m.motionFromContact,m.weaponFromMotion);
+        f.Tick(start,false);f.Tick(start,true);const auto held=f.hands.Current(InteractionHand::Left);CHECK(held);
+        const auto gate=f.backend.ReadGate(f.native.binding.context.resource);CHECK(gate);
+        f.busyGate=true;
+        if(fault==0)f.now=held->deadlineNs-10*Ms; // New input cannot prolong the old claim.
+        f.PrepareTick(start,fault!=1);
+        if(fault==2)++f.sample.equipment->data;
+        if(fault==3)f.sample.raw.valid=false;
+        if(fault==4){f.sample.input.nowNs=f.sample.input.deadlineNs;}
+        f.Consume();
+        CHECK(!f.result.ownsHand&&!f.hands.Current(InteractionHand::Left)&&!f.submitted&&f.submits==0);
+        CHECK(f.result.blocksFire&&f.backend.ReadGate(f.native.binding.context.resource)==gate);
+    }
+    return 0;
+}
 int FailedGatePublicationRetainsOnlyOriginalMissingViewLeases(){
     const auto* registration=FindBc2FeedRegistration(5358977986686110024ull);
     CHECK(registration&&registration->geometry.asset=="QJU88_sp");
@@ -1887,6 +1993,10 @@ int main(){
     CHECK(DelayedDetachWaitsForPairedNativeWithoutRenewingOwnership()==0);
     CHECK(MissingCurrentViewPreservesOnlyLiveDetachClaims()==0);
     CHECK(FailedGatePublicationRetainsOnlyOriginalMissingViewLeases()==0);
+    CHECK(BusyGatePreservesOnlyTheExistingHeldFeedGesture()==0);
+    CHECK(GateDenialAndUntypedFailureStillInterruptHeldFeed()==0);
+    CHECK(BusyGateCannotEnrollOrClearACompletedFeedBlocker()==0);
+    CHECK(BusyGateCannotRetainExpiredOrChangedFeedOwnership()==0);
     CHECK(EveryEnrolledFeedRetainsRepeatedPacketThroughOpenCover()==0);
     CHECK(RepeatedFeedPacketRejectsChangedSourceAndExpiredAuthority()==0);
     CHECK(EveryEnrolledFeedConsumesMissedStartupEdge()==0);
@@ -1902,5 +2012,5 @@ int main(){
     CHECK(AdmissionObservationExplainsMissingViewRetentionBeforeSuspension()==0);
     CHECK(AdmissionObservationIgnoresUnrelatedMechanismClaim()==0);
     CHECK(CompactAdmissionUsesSameImmutableFailureAndPress()==0);
-    std::puts("Bc2PhysicalFeedTests: 38 deterministic owner/arbiter/callback/presentation compositions; no game or headset acceptance");
+    std::puts("Bc2PhysicalFeedTests: 42 deterministic owner/arbiter/callback/presentation compositions; no game or headset acceptance");
 }

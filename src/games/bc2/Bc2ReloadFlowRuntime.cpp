@@ -3857,26 +3857,30 @@ void WriteFeedEquipmentGateObservation(std::ostream& out){
     out<<",\"precedingAccepted\":";row(captured.precedingAccepted);
     out<<",\"latest\":";row(captured.latest);out<<'}';
 }
-bool PublishFeedEquipmentGate(const FeedEquipmentGate& publication)noexcept {
+FeedEquipmentGateResult PublishFeedEquipmentGateResult(const FeedEquipmentGate& publication)noexcept {
 #ifdef FVR_BC2_NATIVE_AMMO_BACKEND
     FeedGateCapture capture(publication,Now());
     if(!capture.Check(FeedGateReloadEnabled,feedEquipmentReloadEnabled)||
-       !capture.Check(FeedGateRuntimeEnabled,enabled.load(std::memory_order_acquire)))return false;
-    Gate gate(ammoMoveProbeGate);if(!capture.Check(FeedGateProbeHeld,gate.held))return false;
+       !capture.Check(FeedGateRuntimeEnabled,enabled.load(std::memory_order_acquire)))return FeedEquipmentGateResult::Rejected;
+    Gate gate(ammoMoveProbeGate);if(!capture.Check(FeedGateProbeHeld,gate.held))return FeedEquipmentGateResult::Busy;
     const bool currentMatches=feedEquipmentCurrent&&feedEquipmentCurrent->binding.context.resource==publication.resource;
     if(capture.Requested())capture.row.currentResourceMatch=currentMatches;
     if(currentMatches){
         const auto current=feedEquipment.Read(feedEquipmentCurrent->identity.owner,Now());
         if(capture.Requested())capture.row.currentReadAvailable=bool(current);
-        if(current&&!capture.Check(FeedGateInputRetained,feedInputScopes.Retain(*current,Now())))return false;
+        if(current&&!capture.Check(FeedGateInputRetained,feedInputScopes.Retain(*current,Now())))return FeedEquipmentGateResult::Rejected;
     }
     const bool faulted=feedInputScopes.Faulted(publication.resource);
     if(capture.Requested())capture.row.scopeFaulted=faulted;
-    if(faulted&&!capture.Check(FeedGateFaultBlocksFire,publication.blocksFire))return false;
-    return capture.Check(FeedGateAdapterPublished,feedEquipment.PublishGate(publication,Now()));
+    if(faulted&&!capture.Check(FeedGateFaultBlocksFire,publication.blocksFire))return FeedEquipmentGateResult::Rejected;
+    return capture.Check(FeedGateAdapterPublished,feedEquipment.PublishGate(publication,Now()))?
+        FeedEquipmentGateResult::Published:FeedEquipmentGateResult::Rejected;
 #else
-    (void)publication;return false;
+    (void)publication;return FeedEquipmentGateResult::Rejected;
 #endif
+}
+bool PublishFeedEquipmentGate(const FeedEquipmentGate& publication)noexcept {
+    return PublishFeedEquipmentGateResult(publication)==FeedEquipmentGateResult::Published;
 }
 std::optional<FeedEquipmentGate> ReadFeedEquipmentGate(const interaction::AmmoResourceIdentity& resource)noexcept {
 #ifdef FVR_BC2_NATIVE_AMMO_BACKEND
@@ -5083,6 +5087,7 @@ FeedEquipmentSubmitResult SubmitFeedEquipmentCommandResult(const FeedEquipmentSu
 bool SubmitFeedEquipmentCommand(const FeedEquipmentSubmission&)noexcept{return false;}
 std::optional<interaction::FeedAmmunitionReceipt> ReadFeedEquipmentReceipt(std::uint64_t,std::uint64_t)noexcept{return {};}
 bool PublishFeedEquipmentGate(const FeedEquipmentGate&)noexcept{return false;}
+FeedEquipmentGateResult PublishFeedEquipmentGateResult(const FeedEquipmentGate&)noexcept{return FeedEquipmentGateResult::Rejected;}
 void WriteFeedEquipmentGateObservation(std::ostream& out){out<<"{\"available\":false,\"reason\":\"unsupported_architecture\"}";}
 std::optional<FeedEquipmentGate> ReadFeedEquipmentGate(const interaction::AmmoResourceIdentity&)noexcept{return {};}
 std::optional<FeedEquipmentActorRetirement> ReadFeedEquipmentActorRetirement(std::uint64_t)noexcept{return {};}

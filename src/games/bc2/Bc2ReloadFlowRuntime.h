@@ -433,6 +433,7 @@ FeedEquipmentSubmitResult SubmitFeedEquipmentCommandResult(const FeedEquipmentSu
 bool SubmitFeedEquipmentCommand(const FeedEquipmentSubmission&)noexcept;
 std::optional<interaction::FeedAmmunitionReceipt> ReadFeedEquipmentReceipt(std::uint64_t lifetime,std::uint64_t request)noexcept;
 bool PublishFeedEquipmentGate(const FeedEquipmentGate&)noexcept;
+FeedEquipmentGateResult PublishFeedEquipmentGateResult(const FeedEquipmentGate&)noexcept;
 // Read the separate Feed gate journal armed by RequestFixedContainerGateObservation.
 void WriteFeedEquipmentGateObservation(std::ostream&);
 std::optional<FeedEquipmentGate> ReadFeedEquipmentGate(const interaction::AmmoResourceIdentity&)noexcept;
