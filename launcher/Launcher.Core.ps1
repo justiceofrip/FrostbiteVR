@@ -73,7 +73,12 @@ function Get-FvrChild([string]$Root, [string]$Relative) {
 function Assert-FvrNoLinks([string]$Path) {
     $next = [IO.Path]::GetFullPath($Path)
     while ($next) {
-        if ((Test-Path -LiteralPath $next) -and ((Get-Item -LiteralPath $next -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw "Linked install path refused: $next" }
+        $item = $null
+        try { $item = Get-Item -LiteralPath $next -Force -ErrorAction Stop }
+        catch [System.Management.Automation.ItemNotFoundException] {
+            # A temporary file may be renamed during inspection; still check its ancestors.
+        }
+        if ($null -ne $item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw "Linked install path refused: $next" }
         $next = Split-Path -Parent $next
     }
 }
