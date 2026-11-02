@@ -13,6 +13,6 @@ clear a blocker, revive denied proof or continue expired/changed/released owners
 Native submission still requires Published; legacy boolean failure stays strict.
 Regressions exercise tracking-to-next-frame contact, all80 underbarrel completions,
 cylinder/clip paths, genuine rejection, expiry, ownership changes and dispatch gates.
-Root focused/normal checks and private44 package are pending;43 stays installed.
+Completed: focused fixed-container and both normal342/342 passed;44 pushed/installed/setup validated with43 fallback. Actual119 stopped before menu/weapon input on the storage scanner race; see128.
 No native ABI/signature/capability expansion. Pump and shell paths already handle
 typed contention/defer and are unchanged. Full native reload/headset remains open.

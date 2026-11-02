@@ -26,9 +26,70 @@ try{
         $direct=[FvrStorage.NativeSize]::Scan(@($fixture,(Join-Path $fixture 'absent')))
         $individual=@(Get-ChildItem -LiteralPath $fixture -File -Recurse | ForEach-Object {Get-FvrFileAllocatedBytes -File $_} | Measure-Object -Sum).Sum
         Check ($direct.allocated_bytes -eq $individual -and $direct.logical_bytes -eq 64 -and $direct.files -eq 2 -and $direct.roots.Count -eq 2) 'compiled traversal agrees with individual allocated-byte queries and preserves absent roots'
+        Check ($direct.vanished_files -eq 0 -and $direct.roots[0].vanished_files -eq 0) 'stable inventory records no vanished-file estimates'
         Refuses {[FvrStorage.NativeSize]::Get((Join-Path $fixture 'missing.bin'),$false)} 'Cannot read allocated storage' 'native allocation errors refuse missing file'
+        Refuses {[FvrStorage.NativeSize]::Get((Join-Path $fixture 'missing.bin'),$true)} 'Cannot inspect storage file' 'standalone missing reparse inspection remains strict'
         Check ([FvrStorage.NativeSize]::AllowedFileTag([uint32]2147483671)) 'WOF compression file tag allowed'
         Check (-not [FvrStorage.NativeSize]::AllowedFileTag([uint32]2684354572) -and -not [FvrStorage.NativeSize]::AllowedFileTag([uint32]2684354563)) 'symlink and junction tags rejected'
+
+        # C# callbacks run on the scanner's parallel workers without a
+        # PowerShell runspace. Only the allocation read is intercepted;
+        # enumeration, cached metadata and aggregation remain production code.
+        if(-not ('FvrStorageRaceFixture' -as [type])){
+            Add-Type -TypeDefinition @'
+using System;
+using System.IO;
+public static class FvrStorageRaceFixture {
+    public static Func<string, bool, long> DeleteBeforeRead(Func<string, bool, long> read, string target, bool removeParent) {
+        return (path, reparse) => {
+            if (String.Equals(path, target, StringComparison.OrdinalIgnoreCase)) {
+                File.Delete(path);
+                if (removeParent) Directory.Delete(Path.GetDirectoryName(path));
+            }
+            return read(path, reparse);
+        };
+    }
+    public static Func<string, bool, long> FailBeforeRead(Func<string, bool, long> read, string target, Exception error) {
+        return (path, reparse) => {
+            if (String.Equals(path, target, StringComparison.OrdinalIgnoreCase)) throw error;
+            return read(path, reparse);
+        };
+    }
+}
+'@
+        }
+        $scanCore=[FvrStorage.NativeSize].GetMethod('ScanCore',[Reflection.BindingFlags]'NonPublic,Static')
+        $nativeRead=[Delegate]::CreateDelegate([Func[string,bool,long]],[FvrStorage.NativeSize].GetMethod('Get'))
+        function Invoke-StorageScanFixture([string[]]$Roots,[Func[string,bool,long]]$Reader){
+            $scanArguments=[object[]]::new(2);$scanArguments[0]=$Roots;$scanArguments[1]=$Reader
+            try{return $scanCore.Invoke($null,$scanArguments)}catch{throw $_.Exception.GetBaseException()}
+        }
+        $raceRoot=Join-Path $fixture 'race'
+        $null=[IO.Directory]::CreateDirectory($raceRoot)
+        $vanishing=Join-Path $raceRoot 'state.json.tmp'
+        $survivor=Join-Path $raceRoot 'stable.bin'
+        [IO.File]::WriteAllBytes($vanishing,[byte[]]::new(193))
+        [IO.File]::WriteAllBytes($survivor,[byte[]]::new(29))
+        $survivorAllocated=[FvrStorage.NativeSize]::Get($survivor,$false)
+        $deleteRead=[FvrStorageRaceFixture]::DeleteBeforeRead($nativeRead,$vanishing,$false)
+        $raced=Invoke-StorageScanFixture @($raceRoot,(Join-Path $fixture 'absent')) $deleteRead
+        Check (-not [IO.File]::Exists($vanishing) -and $raced.files -eq 2 -and $raced.logical_bytes -eq 222 -and $raced.allocated_bytes -eq ($survivorAllocated+193)) 'disappearing enumerated ordinary file retains cached logical charge and file count'
+        Check ($raced.bytes -eq $raced.allocated_bytes -and $raced.vanished_files -eq 1 -and $raced.roots.Count -eq 2 -and $raced.roots[0].path -eq $raceRoot -and $raced.roots[0].files -eq 2 -and $raced.roots[0].vanished_files -eq 1 -and $raced.roots[0].allocated_bytes -eq $raced.allocated_bytes -and $raced.roots[1].files -eq 0 -and $raced.roots[1].vanished_files -eq 0) 'race receipt preserves complete root totals and records the conservative estimate'
+
+        $failureRoot=Join-Path $fixture 'failures'
+        $null=[IO.Directory]::CreateDirectory($failureRoot)
+        $failureFile=Join-Path $failureRoot 'denied.bin'
+        [IO.File]::WriteAllBytes($failureFile,[byte[]]::new(17))
+        foreach($code in @(3,5,32,12345)){
+            $failureRead=[FvrStorageRaceFixture]::FailBeforeRead($nativeRead,$failureFile,[ComponentModel.Win32Exception]::new($code,"fixture error $code"))
+            Refuses {Invoke-StorageScanFixture @($raceRoot,$failureRoot) $failureRead} "fixture error $code" "allocation error $code rejects the complete inventory after a successful root"
+        }
+        foreach($failure in @([UnauthorizedAccessException]::new('fixture denied'),[IO.IOException]::new('fixture IO error'),[IO.FileNotFoundException]::new('fixture managed missing file'))){
+            $failureRead=[FvrStorageRaceFixture]::FailBeforeRead($nativeRead,$failureFile,$failure)
+            Refuses {Invoke-StorageScanFixture @($raceRoot,$failureRoot) $failureRead} ([regex]::Escape($failure.Message)) ($failure.GetType().Name+' is not mistaken for native file-not-found')
+        }
+        $removeParentRead=[FvrStorageRaceFixture]::DeleteBeforeRead($nativeRead,$failureFile,$true)
+        Refuses {Invoke-StorageScanFixture @($raceRoot,$failureRoot) $removeParentRead} 'Cannot read allocated storage' 'actual disappeared parent directory still rejects inventory'
     }
     $roots=@(Get-FvrStorageRoots -RepositoryRoot $fixture -AdditionalRoots @((Join-Path $fixture 'build/nested'),(Join-Path $fixture 'build')))
     Check (@($roots | Where-Object {$_ -eq (Join-Path $fixture 'build')}).Count -eq 1) 'duplicate roots counted once'

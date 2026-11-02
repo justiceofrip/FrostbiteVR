@@ -105,6 +105,7 @@ static_assert(FVR_BC2_PHYSICAL_RELOAD_LIFECYCLE_SCENARIO>=1&&FVR_BC2_PHYSICAL_RE
 #include <mutex>
 #include "fvr/interaction/FiringPoseHistory.h"
 #include "Bc2ProjectileLaunch.h"
+#include "Bc2ProjectileEntry.h"
 #include "Bc2ServerFireObservation.h"
 #include "Bc2FireRouteTelemetry.h"
 namespace fvr::bc2::gameplay {
@@ -133,8 +134,10 @@ std::atomic<unsigned> clientOriginWrites=0,serverOriginWrites=0,originWriteFailu
 std::atomic<unsigned> clientShotCalls=0,clientShotCopies=0,clientShotRejected=0;
 AimCandidates aimingProfile{};InputBindingCandidates profile{};std::uintptr_t image=0;unsigned imageSize=0;
 InputReader readInput=nullptr;std::array<void*,14> hooks{};
-using ProjectileContextFn=std::uintptr_t(__thiscall*)(void*,void*);
-ProjectileContextFn projectileContextOriginal=nullptr;ProjectileLaunchBinding projectileLaunchBinding{};
+projectile_entry::Helper ReceiverEntryOriginal=nullptr;ProjectileLaunchBinding projectileLaunchBinding{};
+// Install-time executable section bounds, immutable while callbacks are active.
+std::array<std::pair<unsigned,unsigned>,16> projectileReceiverCodeRanges{};
+unsigned projectileReceiverCodeRangeCount=0;
 std::atomic<std::uint64_t> shotInvocationSerial=0;
 FeedbackWriter writeFeedback=nullptr;unsigned feedbackSent=0,feedbackDropped=0;
 std::atomic<bool> enabled=false;std::atomic<unsigned> active=0,inputThread=0;
@@ -1259,15 +1262,21 @@ struct ShotScope {Owner owner;unsigned effects=0,serverPlayer=0,serverSoldier=0;
     std::optional<interaction::FiringPoseSample> eventPose;
 };
 thread_local ShotScope* clientShotScope=nullptr;thread_local ShotScope* serverShotScope=nullptr;
+struct ProjectileReceiverIdentity {
+    unsigned receiver=0,vtable=0,target=0,descriptor=0,descriptorVtable=0;
+};
 struct ProjectileLaunchRecord {
     std::uint64_t invocation=0,candidateGeneration=0,ownerGeneration=0,space=0;
     unsigned ordinal=0,effects=0,configuration=0,player=0,soldier=0,thread=0,caller=0,token=0;
+    unsigned entryReturnSlot=0,clientPlayer=0,clientSoldier=0,ownerWeak=0;
     WeaponEquipmentIdentity equipment{};
     std::int64_t beforeQpc=0,afterQpc=0;
     bool helperResultMatches=false,ownerAndConfigCurrent=false,accepted=false,serverShootReturned=false;
     bool compositionWritten=false;std::optional<std::array<float,16>> composedOutput;
     std::optional<interaction::FiringPoseSample> eventPose;
     std::optional<ProjectileLaunchArguments> before,after;
+    bool receiverCaptureAttempted=false;
+    std::optional<ProjectileReceiverIdentity> receiverIdentity;
 };
 std::array<ProjectileLaunchRecord,64> projectileLaunchRecords{};
 std::atomic<unsigned> projectileLaunchCount=0,projectileLaunchCalls=0,projectileLaunchRejected=0,
@@ -1324,24 +1333,58 @@ bool SupportedMuzzleShot(const Owner& owner,unsigned effects,unsigned config,
         (shot->muzzleBinding->support?shot->muzzleBinding->support->equipment:shot->muzzleBinding->authored.equipment)==owner.equipment&&
         Type(observed->projectileData,"BulletEntityData")&&MatchesMuzzleEnrollment(*observed,*shot->muzzleBinding);
 }
-std::uintptr_t __fastcall ProjectileContextHook(void* self,void*,void* output){
-    Callback callback;const auto original=[&]{return projectileContextOriginal(self,output);};
-    const auto caller=reinterpret_cast<unsigned>(_ReturnAddress());auto* current=serverShotScope;
+bool ProjectileReceiverImageRange(unsigned at,unsigned size,bool executable)noexcept {
+    if(!size||!InImage(at,size))return false;
+    if(executable){
+        const auto rva=at-unsigned(image);bool section=false;
+        for(unsigned n=0;n<projectileReceiverCodeRangeCount;++n){const auto [begin,length]=projectileReceiverCodeRanges[n];
+            if(rva>=begin&&rva-begin<length&&size<=length-(rva-begin)){section=true;break;}}
+        if(!section)return false;
+    }
+    MEMORY_BASIC_INFORMATION mbi{};
+    if(!VirtualQuery(reinterpret_cast<void*>(at),&mbi,sizeof(mbi))||mbi.State!=MEM_COMMIT||mbi.Type!=MEM_IMAGE||
+       mbi.AllocationBase!=reinterpret_cast<void*>(image)||(mbi.Protect&PAGE_GUARD)||
+       std::uintptr_t(mbi.BaseAddress)>at||std::uint64_t(at)+size>std::uintptr_t(mbi.BaseAddress)+mbi.RegionSize)return false;
+    const auto protection=mbi.Protect&0xff;
+    const bool executableReadable=protection==PAGE_EXECUTE_READ||protection==PAGE_EXECUTE_READWRITE||protection==PAGE_EXECUTE_WRITECOPY;
+    return executable?executableReadable:executableReadable||protection==PAGE_READONLY||protection==PAGE_READWRITE||protection==PAGE_WRITECOPY;
+}
+std::optional<ProjectileReceiverIdentity> ReadProjectileReceiverIdentity(unsigned receiver,const NativeMuzzleConfig& config)noexcept {
+    // Same-call factory receiver from entry EBX; no virtual calls, retained
+    // handles, refcounts, inferred velocity fields or native writes. Repeated
+    // reads bound this snapshot, but do not establish a lifetime contract.
+    ProjectileReceiverIdentity row;row.receiver=receiver;row.descriptor=config.projectileData;
+    if(!receiver||(receiver&3)||!row.descriptor||(row.descriptor&3)||
+       !Read(receiver,&row.vtable,4)||(row.vtable&3)||!ProjectileReceiverImageRange(row.vtable,0xec,false)||
+       !Read(row.vtable+0xe8,&row.target,4)||!ProjectileReceiverImageRange(row.target,1,true)||
+       !Read(row.descriptor,&row.descriptorVtable,4)||(row.descriptorVtable&3)||!ProjectileReceiverImageRange(row.descriptorVtable,4,false))return {};
+    unsigned char instruction=0;unsigned vtable=0,target=0,descriptor=0,descriptorVtable=0;
+    if(!Read(row.target,&instruction,1)||!Read(receiver,&vtable,4)||vtable!=row.vtable||
+       !Read(row.vtable+0xe8,&target,4)||target!=row.target||
+       !Read(config.config+0x44,&descriptor,4)||descriptor!=row.descriptor||
+       !Read(row.descriptor,&descriptorVtable,4)||descriptorVtable!=row.descriptorVtable)return {};
+    return row;
+}
+void __cdecl ReceiverEntryDispatch(projectile_entry::Invocation* invocation){
+    Callback callback;const auto original=[&]{return ReceiverEntryForward(invocation);};
+    const auto& entry=invocation->entry;
+    const auto caller=entry.returnAddress;auto* current=serverShotScope;
     if(!enabled.load(std::memory_order_acquire)||!projectileLaunchBinding.verified||!current||
-       caller!=projectileLaunchBinding.helperReturn||reinterpret_cast<unsigned>(self)!=current->effects)return original();
+       caller!=projectileLaunchBinding.helperReturn||entry.registers.ecx!=current->effects){original();return;}
     ++projectileLaunchCalls;
     ++current->observedHelperCallbacks;
-    if(projectileLaunchCount.load(std::memory_order_relaxed)>=projectileLaunchRecords.size()||current->launchOrdinal==UINT32_MAX){++projectileLaunchDropped;return original();}
-    const auto returnSlot=reinterpret_cast<unsigned>(_AddressOfReturnAddress());
+    if(projectileLaunchCount.load(std::memory_order_relaxed)>=projectileLaunchRecords.size()||current->launchOrdinal==UINT32_MAX){++projectileLaunchDropped;original();return;}
+    const auto returnSlot=unsigned(entry.ReturnSlot());
     const auto* tib=reinterpret_cast<const NT_TIB*>(NtCurrentTeb());
     const auto low=reinterpret_cast<unsigned>(tib->StackLimit),high=reinterpret_cast<unsigned>(tib->StackBase);
     const MuzzleReadMemory memory{nullptr,[](void*,unsigned at,void* out,std::size_t size){return Read(at,out,size);}};
     ProjectileLaunchRecord row;row.invocation=current->invocation;row.ordinal=++current->launchOrdinal;
     row.effects=current->effects;row.configuration=current->configuration;row.player=current->serverPlayer;
     row.soldier=current->serverSoldier;row.equipment=current->owner.equipment;row.thread=GetCurrentThreadId();row.caller=caller;row.token=current->shotToken;
+    row.entryReturnSlot=returnSlot;row.clientPlayer=current->owner.player;row.clientSoldier=current->owner.soldier;row.ownerWeak=current->owner.weak;
     row.composedOutput=current->composedOutput;row.compositionWritten=current->compositionWritten;row.eventPose=current->eventPose;
     if(current->shot){row.candidateGeneration=current->shot->generation;row.ownerGeneration=current->shot->ownerGeneration;row.space=current->shot->space;}
-    return ObserveProjectileContextHelper(original,[&]()noexcept{
+    ObserveProjectileContextHelper(original,[&]()noexcept{
         LARGE_INTEGER q{};QueryPerformanceCounter(&q);row.beforeQpc=q.QuadPart;
         row.before=ReadProjectileLaunchArguments(memory,projectileLaunchBinding,returnSlot,low,high);
     },[&](std::uintptr_t result)noexcept{
@@ -1349,13 +1392,24 @@ std::uintptr_t __fastcall ProjectileContextHook(void* self,void*,void* output){
         // observation reads. No ownership-bearing helper output is copied.
         row.after=ReadProjectileLaunchArguments(memory,projectileLaunchBinding,returnSlot,low,high);
         LARGE_INTEGER q{};QueryPerformanceCounter(&q);row.afterQpc=q.QuadPart;
-        row.helperResultMatches=result==reinterpret_cast<unsigned>(output)&&row.after&&row.after->contextOutput==result;
+        row.helperResultMatches=result==entry.output&&row.after&&row.after->contextOutput==result;
         Owner now{};const auto config=ReadNativeMuzzleConfig(memory,current->effects,current->configuration);
         row.ownerAndConfigCurrent=serverShotScope==current&&Resolve(now)&&now==current->owner&&
             current->nativeConfig&&config&&*current->nativeConfig==*config;
         row.accepted=row.before&&row.after&&row.helperResultMatches&&row.ownerAndConfigCurrent&&current->tokenValid&&
             row.before->token==current->shotToken&&row.after->token==current->shotToken;
         if(!row.accepted)++projectileLaunchRejected;
+        if(row.accepted){
+            row.receiverCaptureAttempted=true;
+            if(row.invocation&&current->invocation==row.invocation&&invocation->returned.ebx==entry.registers.ebx)
+                row.receiverIdentity=ReadProjectileReceiverIdentity(entry.registers.ebx,*config);
+            if(row.receiverIdentity){
+                Owner still{};const auto stillConfig=ReadNativeMuzzleConfig(memory,row.effects,row.configuration);
+                if(serverShotScope!=current||current->invocation!=row.invocation||current->effects!=row.effects||
+                   current->configuration!=row.configuration||!current->tokenValid||current->shotToken!=row.token||
+                   !Resolve(still)||still!=now||!stillConfig||*stillConfig!=*config)row.receiverIdentity.reset();
+            }
+        }
         if(projectileLaunchGate.test_and_set(std::memory_order_acquire)){++projectileLaunchBusy;return;}
         const auto index=projectileLaunchCount.load(std::memory_order_relaxed);
         if(index<projectileLaunchRecords.size()){projectileLaunchRecords[index]=row;projectileLaunchCount.store(index+1,std::memory_order_release);}
@@ -4098,8 +4152,16 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
 #ifdef FVR_BC2_MUZZLE_ENROLLMENT_HEADER
         projectileLaunchBinding=VerifyProjectileLaunchCode({nullptr,[](void*,unsigned at,void* dst,std::size_t size){return Read(at,dst,size);}},unsigned(base),fireProfile.serverShoot);
         if(!projectileLaunchBinding.verified)return false;
+        projectileReceiverCodeRangeCount=0;
+        for(const auto& section:pe.sections)if(section.flags&IMAGE_SCN_MEM_EXECUTE){
+            const auto length=std::max(section.virtualSize,section.rawSize);
+            if(!length||section.rva>=imageSize||length>imageSize-section.rva||projectileReceiverCodeRangeCount==projectileReceiverCodeRanges.size()){
+                projectileReceiverCodeRangeCount=0;break; // Observation fails closed; original forwarding is unchanged.
+            }
+            projectileReceiverCodeRanges[projectileReceiverCodeRangeCount++]={section.rva,length};
+        }
         const auto launchHelper=reinterpret_cast<void*>(projectileLaunchBinding.helper);
-        if(MH_CreateHook(launchHelper,ProjectileContextHook,reinterpret_cast<void**>(&projectileContextOriginal))!=MH_OK)return false;
+        if(MH_CreateHook(launchHelper,ReceiverEntryThunk,reinterpret_cast<void**>(&ReceiverEntryOriginal))!=MH_OK)return false;
         hooks[13]=launchHelper;
 #endif
         const auto address=reinterpret_cast<void*>(base+fireProfile.builder);
@@ -4663,6 +4725,9 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
         <<",\"qpc_frequency\":"<<handFrequency<<",\"calls\":"<<projectileLaunchCalls.load()<<",\"rejected\":"<<projectileLaunchRejected.load()
         <<",\"dropped\":"<<projectileLaunchDropped.load()<<",\"busy\":"<<projectileLaunchBusy.load()<<",\"server_return_unrecorded\":"<<projectileLaunchReturnUnrecorded.load()
         <<",\"capacity\":"<<projectileLaunchRecords.size()<<",\"dispatch_instruction_verified\":"<<(projectileLaunchBinding.verified?"true":"false")
+        <<",\"receiver_capture\":{\"source\":\"pre_cpp_entry_ebx\",\"scope\":\"same_helper_call_before_virtual_dispatch\",\"image_base\":"<<image
+        <<",\"configuration_descriptor_offset\":68,\"receiver_virtual_slot\":232,\"retention\":\"bounded_record_values_only\""
+        <<",\"accepted_means\":\"helper_arguments_owner_config_token_match\",\"identity_is_native_acceptance\":false,\"target_abi_verified\":false,\"receiver_lifetime_verified\":false}"
         <<",\"launch_return_observed\":false,\"receiver_stored_velocity_verified\":false,\"records\":[";
     const auto launchMatrix=[&](const std::array<float,16>& m){out<<'[';for(unsigned n=0;n<16;++n){if(n)out<<',';out<<(n%4==3?0.f:m[n]);}out<<']';};
     const auto launchArguments=[&](const std::optional<ProjectileLaunchArguments>& value){
@@ -4676,6 +4741,7 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
     for(unsigned n=0;n<projectileLaunchCount.load();++n){if(n)out<<',';const auto& r=projectileLaunchRecords[n];
         out<<"{\"native_invocation\":"<<r.invocation<<",\"ordinal\":"<<r.ordinal<<",\"effects\":"<<r.effects<<",\"configuration\":"<<r.configuration
            <<",\"server_player\":"<<r.player<<",\"server_soldier\":"<<r.soldier<<",\"weapon\":"<<r.equipment.weapon<<",\"weapon_data\":"<<r.equipment.data
+           <<",\"client_player\":"<<r.clientPlayer<<",\"client_soldier\":"<<r.clientSoldier<<",\"owner_weak\":"<<r.ownerWeak
            <<",\"persistence\":"<<r.equipment.persistence<<",\"asset\":";fireText(r.equipment.Asset());
         out<<",\"thread\":"<<r.thread<<",\"caller\":"<<r.caller<<",\"token\":"<<r.token<<",\"before_qpc\":"<<r.beforeQpc<<",\"after_qpc\":"<<r.afterQpc
            <<",\"candidate_generation\":"<<r.candidateGeneration<<",\"owner_generation\":"<<r.ownerGeneration<<",\"space\":"<<r.space
@@ -4683,7 +4749,13 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
            <<",\"accepted\":"<<r.accepted<<",\"server_shoot_returned\":"<<r.serverShootReturned<<",\"composition_origin_written\":"<<r.compositionWritten
            <<",\"composition_output\":";if(r.composedOutput)launchMatrix(*r.composedOutput);else out<<"null";
         out<<",\"event_generation\":"<<(r.eventPose?r.eventPose->generation:0)<<",\"event_deadline_qpc\":"<<(r.eventPose?r.eventPose->deadline:0)
-           <<",\"before_helper\":";launchArguments(r.before);out<<",\"after_helper\":";launchArguments(r.after);out<<'}';
+           <<",\"entry_return_slot\":"<<r.entryReturnSlot<<",\"receiver_capture_attempted\":"<<r.receiverCaptureAttempted
+           <<",\"receiver_identity_captured\":"<<r.receiverIdentity.has_value()<<",\"receiver_identity\":";
+        if(!r.receiverIdentity)out<<"null";else {const auto& identity=*r.receiverIdentity;
+            out<<"{\"receiver\":"<<identity.receiver<<",\"vtable\":"<<identity.vtable<<",\"vtable_rva\":"<<identity.vtable-image
+               <<",\"target\":"<<identity.target<<",\"target_rva\":"<<identity.target-image
+               <<",\"configuration_projectile_data\":"<<identity.descriptor<<",\"descriptor_vtable\":"<<identity.descriptorVtable<<'}';}
+        out<<",\"before_helper\":";launchArguments(r.before);out<<",\"after_helper\":";launchArguments(r.after);out<<'}';
     }
     out<<"],\"server_fire_context\":{\"read_only\":true,\"complete_session_coverage\":false,\"shot_acknowledgement\":false,\"hit_acknowledgement\":false"
        <<",\"scope\":\"already_matched_on_foot_server_scopes_normal_returns_only\""

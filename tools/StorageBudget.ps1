@@ -32,17 +32,19 @@ namespace FvrStorage {
         public long allocated_bytes { get; set; }
         public long logical_bytes { get; set; }
         public long files { get; set; }
+        public long vanished_files { get; set; }
     }
     public sealed class Usage {
         public long bytes { get; set; }
         public long allocated_bytes { get; set; }
         public long logical_bytes { get; set; }
         public long files { get; set; }
+        public long vanished_files { get; set; }
         public string accounting { get { return "GetCompressedFileSizeW"; } }
         public RootUsage[] roots { get; set; }
     }
     public static class NativeSize {
-        struct FileEntry { public FileInfo file; public bool reparse; }
+        struct FileEntry { public string path; public long logical; public bool reparse; }
         [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] struct ProcessEntry {
             public uint Size, Usage, Pid;
             public UIntPtr Heap;
@@ -115,12 +117,19 @@ namespace FvrStorage {
                             child = entries.Current;
                         } catch (Exception error) { throw new IOException("Storage accounting could not completely read '" + directory.FullName + "': " + error.Message, error); }
                         if ((child.Attributes & FileAttributes.Directory) != 0) pending.Push((DirectoryInfo)child);
-                        else yield return new FileEntry { file = (FileInfo)child, reparse = (child.Attributes & FileAttributes.ReparsePoint) != 0 };
+                        // Enumeration supplies cached metadata. Retain its length
+                        // before the native allocation read can find a lost name.
+                        else yield return new FileEntry { path = child.FullName, logical = ((FileInfo)child).Length, reparse = (child.Attributes & FileAttributes.ReparsePoint) != 0 };
                     }
                 }
             }
         }
         public static Usage Scan(string[] roots) {
+            return ScanCore(roots, Get);
+        }
+        // Private seam lets deterministic fixtures remove an enumerated file
+        // immediately before the real native read, without timing sleeps.
+        static Usage ScanCore(string[] roots, Func<string, bool, long> readAllocated) {
             var result = new Usage();
             var details = new List<RootUsage>();
             foreach (string root in roots) {
@@ -134,16 +143,28 @@ namespace FvrStorage {
                     throw new IOException("Storage root is not a directory: " + root);
                 // Bounded parallel allocation reads, not four independent
                 // tree scans. Local sums avoid one lock per file; failed
-                // enumeration/query rejects the whole result, never a subtotal.
+                // enumeration/query rejects the whole result, except the
+                // explicitly counted vanished ordinary file below.
                 Parallel.ForEach(EnumerateFiles(root), new ParallelOptions { MaxDegreeOfParallelism = 4 },
                     () => new RootUsage(),
                     (entry, loop, subtotal) => {
-                        long allocated = Get(entry.file.FullName, entry.reparse);
-                        long logical = entry.file.Length;
+                        long allocated;
+                        bool vanished = false;
+                        try { allocated = readAllocated(entry.path, entry.reparse); }
+                        catch (Win32Exception error) {
+                            // ERROR_FILE_NOT_FOUND only: retain the enumerated
+                            // file and charge its full logical size. Missing
+                            // directories, denied/unknown reads and unverified
+                            // reparse tags still reject the entire inventory.
+                            if (error.NativeErrorCode != 2 || entry.reparse) throw;
+                            allocated = entry.logical;
+                            vanished = true;
+                        }
                         checked {
                             subtotal.allocated_bytes += allocated;
-                            subtotal.logical_bytes += logical;
+                            subtotal.logical_bytes += entry.logical;
                             subtotal.files++;
+                            if (vanished) subtotal.vanished_files++;
                         }
                         return subtotal;
                     },
@@ -151,12 +172,14 @@ namespace FvrStorage {
                         detail.allocated_bytes += subtotal.allocated_bytes;
                         detail.logical_bytes += subtotal.logical_bytes;
                         detail.files += subtotal.files;
+                        detail.vanished_files += subtotal.vanished_files;
                     } } });
                 detail.bytes = detail.allocated_bytes;
                 checked {
                     result.allocated_bytes += detail.allocated_bytes;
                     result.logical_bytes += detail.logical_bytes;
                     result.files += detail.files;
+                    result.vanished_files += detail.vanished_files;
                 }
             }
             result.bytes = result.allocated_bytes;

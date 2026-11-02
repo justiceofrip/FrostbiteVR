@@ -39,7 +39,7 @@ reports both logical bytes and disk bytes through `GetCompressedFileSizeW`; the
 40 GiB ceiling uses disk bytes, so retained losslessly compressed evidence does
 not consume its former uncompressed budget. Non-Windows accounting conservatively
 uses logical bytes. Hard-linked copies can still count more than physical use.
-API errors reject admission rather than pretending a file occupies zero bytes.
+Allocation errors reject admission except when an already enumerated ordinary file disappears before its query. That file retains its captured logical-byte charge and file count, with a visible vanished_files count; it is never counted as zero. Missing directories, reparse inspection and other query errors still reject the complete inventory.
 Directory junctions and file links are rejected; a file with the verified WOF
 compression tag is allowed without following a link. New external output roots
 must be passed with `-AdditionalRoots`. See Microsoft's
