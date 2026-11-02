@@ -1,0 +1,40 @@
+Shared ordinary-XR reload stimulus pipeline
+
+Entry point: tools/drive_bc2_reload_stimulus.py
+Geometry and boundaries: tools/bc2_reload_stimulus_geometry.py
+Portable checks: tests/test_bc2_reload_stimulus.py and
+                 tests/test_bc2_reload_stimulus_geometry.py
+
+This developer tool sends bounded ordinary left-controller gestures into the
+installed mod. Its native input, claim, mechanism and ammunition checks remain
+unchanged. The older diagnostic drivers and their non-authorizing plans remain
+separate. This runner creates its own explicit ordinary-input contract from the
+existing measured feed, pump, fixed-container and sight geometry adapters.
+
+The flow is: review the actual world -> fresh selected mechanism mapping ->
+neutral contact/acquisition -> bounded gesture and dwell -> owned release ->
+fresh mechanism/custody/result observation. Geometry-changing steps require a
+new mapping. Supply pickup and insertion share one invocation so custody is
+observed continuously. Missing snapshots during motion are recorded as incomplete
+evidence; they do not authorize another stage or establish a native reload.
+
+Only left pose/grip and initial left follow-off/zero-aim-trim setup are allowed.
+Head, right hand and other controls stay fixed. A competing owner, changed
+selection/reference, lost focus/tracking, bad acknowledgement or deadline stops
+the experiment. Cleanup only releases an acknowledged grip owned by this runner.
+
+Example, after a root-owned actual-game session and its fresh world review:
+  python -B tools/drive_bc2_reload_stimulus.py --run <session-directory>
+    --profiles <session-directory>/profiles.json --family feed --stage OpenCover
+    --root-authorized-ordinary-input
+
+For feed AttachContainer, pump ShellInsert or fixed Insert, add --pickup-first.
+This performs the matching pickup and fresh custody boundary before insertion.
+Feed reload order is OpenCover, DetachContainer, paired pickup/AttachContainer,
+SeatFeed, CloseCover. Profiles select the weapon geometry; no weapon-name branch
+is needed. SightFlip uses --family sight and --target primary or secondary.
+
+Exit0 means the requested stimulus and required fresh boundaries completed.
+Inspect observationIncomplete separately. Native acceptance still requires the
+actual operation/request/receipt, owner/lifetime, custody and ammunition join;
+headset acceptance requires a player test. No firing is available in this tool.

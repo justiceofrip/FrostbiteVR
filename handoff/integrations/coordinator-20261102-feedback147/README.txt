@@ -16,10 +16,28 @@ Actual142 lost feed presentation during neutral SupplyPickup before the grab;
 153 records the separate154 run's42.25GiB ceiling; original149 freeze/refusal retained.
 Actual154 rendered both eyes, passed the no-AV watch and ordinaryXM8/Empty/QJU draw.
 Its OpenCover released-grip approach issued32 commands, then owner-file atomic
-replacement failed WinError5; no held grip or native cover operation.155 diagnoses
-that private transport failure. New145 neutral Attach evidence was not reached.
-All6owners exited0; native retirement, normal close and exact restoration passed.
-Full official tape checked once; its failures remain retained. No reload acceptance.
-139/140 observation timeouts remain unresolved;144 supported no efficiency fix.
+replacement failed WinError5; no held grip or native cover operation.155 records
+bounded publication evidence;157 fixes the demonstrated open-reader replacement
+contract, without attributing154's unknown competing-reader cause.
+Actual156/159 reached an accepted cover operation but stopped at diagnostic claim
+handoff.164 replaces the narrow handoff with original admitted endpoint/dwell/
+release scheduling;168 joins an already-pending fresh response before final motion.
+105 offline checks pass; no native source, lease or clock change. Actual166 remains
+failed on stale final-motion evidence. Actual169 drew the LMG then refused a gate
+count increase; saved evidence places that increase before grip acquisition in the
+prior lifetime.171 corrects diagnostic attribution offline;121 cases covered, later gates retained.
+Full reload and145's neutral Attach observation have not yet been reached again.
+Actual163 selected40mm and acknowledged aim; no aimed image/shot/reload followed:
+capture preparation consumed the readiness clock.165 separates bounded preparation
+from the original readiness window under unchanged session deadlines;13 checks pass.
+167 reviewed baseline then timed out before weapon action.172 reclaimed14,454,161
+allocated bytes from371 closed text files, all hashes preserved/no deletion.
+170 then launched but SightFlip stopped after220commands on invalid selected/rig
+snapshot evidence; no selection/shot/reload proof. All6owners0/restoration passed.
+All closed156/159/161/163/166/167/169/170 runs retired normally with exact restoration.
+Full official tapes checked once, failures retained;134 archives preserve all hashes.
+173 supports a distinct ordinaryXR stimulus contract using unchanged native guards.
+174/175 shared transport/class geometry passes47 combined offline checks;177 review is clear.176 session prepared. See separate coordinator-20261102-stimulus174 handoff.
+Private diagnostic tools have not changed installed0.1.46 gameplay or proven reload.
 Full reload, muzzle/destruction, performance and headset acceptance remain open.
 Public0.1.15 unchanged. Later status-only commits do not change this built identity.
