@@ -19,6 +19,7 @@ struct FixedContainerGate {
     bool blocksFire=true,closedVerified=false;
     bool operator==(const FixedContainerGate&)const=default;
 };
+enum class FixedContainerGateResult {Published,Busy,Rejected};
 struct FixedContainerInputGuard {
     std::array<std::uint32_t,2> original{},effective{},beforeRestore{};
     bool requested=false,applied=false,restored=false,unexpectedWrite=false;

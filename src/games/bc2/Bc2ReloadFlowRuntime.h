@@ -410,6 +410,7 @@ bool EnableFixedContainerReload()noexcept;
 void RequestFixedContainerGateObservation(std::int64_t observedNs,std::int64_t existingObservationUntilNs)noexcept;
 void WriteFixedContainerGateObservation(std::ostream&);
 bool PublishFixedContainerGate(const FixedContainerGate&)noexcept;
+FixedContainerGateResult PublishFixedContainerGateResult(const FixedContainerGate&)noexcept;
 std::optional<FixedContainerGate> ReadFixedContainerGate(const interaction::AmmoResourceIdentity&)noexcept;
 bool WithAmmoResourceLedger(const AmmoResourceBinding&,const interaction::HandInteractionOwner&,
     void*,bool (*)(void*,interaction::AmmunitionLedger&)noexcept)noexcept;

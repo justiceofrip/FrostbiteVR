@@ -22,17 +22,18 @@ struct Fixture {
     Bc2FixedContainerObservation observation{};bool observe=false;
     std::optional<AmmoResourceRequest> submitted;std::optional<FixedContainerGate> gate;
     std::optional<Bc2FixedContainerRawContact> previousRaw;
-    AmmunitionCounts counts{};bool delayedRaw=false,missingRaw=false;
+    AmmunitionCounts counts{};bool delayedRaw=false,missingRaw=false,rendererFeedback=false;
     const WeaponModeFamilyProfile* linkedFamily=nullptr;
     std::unique_ptr<Bc2PhysicalFixedContainer> physical;HandClaimToken gun{};
-    std::int64_t now=1000000000;bool priorGrip=false,allowGate=true;unsigned calls=0;
+    std::int64_t now=1000000000;bool priorGrip=false,allowGate=true,allowLedger=true;unsigned calls=0,gateCalls=0,busyGateMask=0,rejectedGateMask=0;
     explicit Fixture(unsigned index=0):Fixture(&generated::FixedContainerEquipment[index],2,20){}
-    Fixture(const FixedContainerEquipmentProfile* profile,int loaded,int reserve):equipment(profile){
+    Fixture(const FixedContainerEquipmentProfile* profile,int loaded,int reserve,bool typedGate=true):equipment(profile){
         counts={loaded,reserve,equipment->interaction.capacity};
         Bc2PhysicalFixedContainerApi api;api.context=this;
         api.read=[](void* p,const ReloadStateOwner&,std::int64_t)noexcept{return static_cast<Fixture*>(p)->service.View();};
         api.withLedger=[](void* p,const AmmoResourceBinding& b,const HandInteractionOwner&,void* arg,
             bool (*fn)(void*,AmmunitionLedger&)noexcept)noexcept {auto& f=*static_cast<Fixture*>(p);
+            if(!f.allowLedger)return false;
             return f.service.WithSelectedLedger(b,f.now,[&](AmmunitionLedger& ledger)noexcept{return fn(arg,ledger);});};
         api.submit=[](void* p,const AmmoResourceRequest& request)noexcept {auto& f=*static_cast<Fixture*>(p);++f.calls;
             if(!f.gate||!f.gate->blocksFire)return false;f.submitted=request;return true;};
@@ -41,6 +42,12 @@ struct Fixture {
             return outcome&&outcome->request.intent.id==request&&outcome->request.intent.context==context?outcome:std::nullopt;
         };
         api.publishGate=[](void* p,const FixedContainerGate& g)noexcept {auto& f=*static_cast<Fixture*>(p);if(!f.allowGate)return false;f.gate=g;return true;};
+        if(typedGate)api.publishGateObserved=[](void* p,const FixedContainerGate& g)noexcept {
+            auto& f=*static_cast<Fixture*>(p);const auto mask=1u<<(f.gateCalls++%2);
+            if(!f.allowGate||(f.rejectedGateMask&mask))return FixedContainerGateResult::Rejected;
+            if(f.busyGateMask&mask)return FixedContainerGateResult::Busy;
+            f.gate=g;return FixedContainerGateResult::Published;
+        };
         api.nextRequest=[](void* p)noexcept{return ++static_cast<Fixture*>(p)->intent;};
         physical=std::make_unique<Bc2PhysicalFixedContainer>(true,api);
     }
@@ -68,8 +75,17 @@ struct Fixture {
         sample.raw.equipment=equipment;sample.raw.input=sample.input;sample.raw.weaponFromWrist=wrist;sample.raw.weaponWorldMeters=Identity();
         sample.raw.valid=true;sample.raw.grip=grip;sample.raw.gripPressed=sample.gripPressed;sample.raw.pouchContact=pouch;
         const auto currentRaw=sample.raw;if(delayedRaw&&previousRaw)sample.raw=*previousRaw;previousRaw=currentRaw;
+        if(rendererFeedback){
+            // Same renderer feedback boundary as BuildFixedContainerRawContact:
+            // disabled/expired tracking produces invalid next-frame contact;
+            // valid tracking carries its original input lease, never this Tick's.
+            const auto& t=result.tracking;
+            if(!FixedContainerTrackingFresh(t,now))sample.raw={};
+            else{sample.raw.nativeOwner=t.source.binding.owner;sample.raw.equipment=t.source.equipment;sample.raw.input=t.input;
+                sample.raw.grip=t.grip;sample.raw.gripPressed=t.gripPressed;sample.raw.pouchContact=t.pouchContact;}
+        }
         if(missingRaw)sample.raw={};
-        priorGrip=grip;result=physical->Tick(sample,hands,intent);return result;
+        priorGrip=grip;gateCalls=0;result=physical->Tick(sample,hands,intent);return result;
     }
     void Hinge(unsigned step){const auto& motion=equipment->interaction.geometry[step].motion;
         Send(At(motion,0),false);Send(At(motion,0),true);
@@ -108,6 +124,89 @@ int GateBeforePhysicalAndExactOwner(){
     CHECK(!result.mechanismOwnsHand);CHECK(result.blocksFire);CHECK(!f.submitted);
     return 0;
 }
+int RetainBusyFeedback(Fixture& f,const Matrix& wrist){
+    f.Send(wrist,true); // Finish the insertion's neutral seed before testing a held gesture.
+    CHECK(f.result.tracking.hand&&f.gate&&f.gate->blocksFire);
+    const auto token=f.result.tracking.hand->token;const auto calls=f.calls;
+    f.rendererFeedback=true;
+    for(unsigned mask:{1u,2u,3u,0u}){
+        const auto previous=f.result.tracking;const auto accepted=f.gate;f.busyGateMask=mask;
+        f.Send(wrist,true);
+        CHECK(f.result.tracking.enabled&&FixedContainerTrackingFresh(f.result.tracking,f.now));
+        CHECK(f.result.tracking.hand&&f.result.tracking.hand->token==token);
+        CHECK(f.hands.Current(InteractionHand::Left)&&f.hands.Current(InteractionHand::Left)->token==token);
+        CHECK(f.sample.raw.valid&&f.sample.raw.input.sequence==previous.input.sequence);
+        CHECK(f.sample.raw.input.observedNs==previous.input.observedNs&&f.sample.raw.input.deadlineNs==previous.input.deadlineNs);
+        CHECK(f.result.tracking.hand->deadlineNs<=f.sample.raw.input.deadlineNs);
+        CHECK(f.result.tracking.input.sequence==f.sample.input.sequence&&f.result.tracking.input.deadlineNs==f.sample.input.deadlineNs);
+        CHECK(f.result.blocksFire&&f.calls==calls);
+        if(mask==3)CHECK(f.gate==accepted); // Busy did not publish or extend the accepted gate.
+    }
+    f.rendererFeedback=false;return 0;
+}
+int BusyMechanismFeedbackContinuesOpening(){
+    Fixture f;const auto& motion=f.equipment->interaction.geometry[0].motion;
+    f.Send(At(motion,0),false);f.Send(At(motion,0),true);CHECK(f.result.mechanismOwnsHand);
+    CHECK(!RetainBusyFeedback(f,At(motion,0)));
+    for(unsigned n=1;n<=10;++n)f.Send(At(motion,n/10.),true);
+    for(unsigned n=0;n<8;++n)f.Send(At(motion,1),true);
+    CHECK(f.result.tracking.step==FixedContainerStep::EjectSpent&&f.result.blocksFire&&f.calls==0);
+    return 0;
+}
+int BusyCannotStartReviveOrChangeOwner(){
+    Fixture seed(1);const auto& insertion=seed.equipment->interaction.geometry[2].motion;
+    seed.Send(At(insertion,0),false);seed.Send(At(insertion,0),true,true);
+    CHECK(seed.result.ammoOwnsHand&&seed.gate&&!seed.gate->blocksFire);
+    seed.busyGateMask=3;seed.Send(At(insertion,0),true);
+    CHECK(!seed.result.tracking.enabled&&!seed.submitted); // An accepted open gate cannot become a blocker on Busy.
+    for(unsigned mask:{1u,2u}){
+        Fixture f;const auto& m=f.equipment->interaction.geometry[0].motion;
+        f.Send(At(m,0),false);f.Send(At(m,0),true);CHECK(f.result.mechanismOwnsHand);
+        f.rejectedGateMask=mask;f.Send(At(m,0),true);CHECK(!f.result.tracking.enabled);
+        f.rejectedGateMask=0;f.busyGateMask=3;f.Send(At(m,0),true);
+        CHECK(!f.result.tracking.enabled&&!f.submitted); // Rejection invalidated the previously accepted proof.
+    }
+    for(unsigned fault=0;fault<13;++fault){
+        Fixture f;const auto& m=f.equipment->interaction.geometry[0].motion;
+        if(fault!=0){f.Send(At(m,0),false);f.Send(At(m,0),true);CHECK(f.result.mechanismOwnsHand);}
+        f.busyGateMask=3;
+        switch(fault){
+        case 0:break; // No accepted initial gate or hold.
+        case 1:f.physical->Cancel(f.sample.input,f.hands);break;
+        case 2:f.missingRaw=true;break;
+        case 3:f.now+=100000000;break; // Expired hand/input/native binding cannot be restamped.
+        case 4:++f.binding.inventory;break;
+        case 5:++f.binding.switching;break;
+        case 6:++f.binding.data;break;
+        case 7:++f.binding.persistence;break;
+        case 8:++f.binding.context.resource.weaponGeneration;break;
+        case 9:++f.owner.equipGeneration;f.gun={};break;
+        case 10:++f.native.owner.space;f.binding.owner=f.native.owner;++f.binding.context.space;++f.owner.space;f.gun={};break;
+        case 11:break; // Explicit release below.
+        case 12:f.allowLedger=false;break; // Busy cannot skip the native/ledger admission callback.
+        }
+        f.Send(At(m,0),fault!=11);
+        CHECK(!f.result.tracking.enabled&&!f.result.ammoOwnsHand&&!f.result.mechanismOwnsHand&&!f.submitted);
+        if(fault==0||fault==1||fault==11)CHECK(!f.hands.Current(InteractionHand::Left));
+    }
+    Fixture legacy(&generated::FixedContainerEquipment[0],2,20,false);
+    const auto& m=legacy.equipment->interaction.geometry[0].motion;
+    legacy.Send(At(m,0),false);legacy.Send(At(m,0),true);CHECK(legacy.result.mechanismOwnsHand);
+    legacy.allowGate=false;legacy.Send(At(m,0),true);CHECK(!legacy.result.tracking.enabled);
+    return 0;
+}
+int BusyExpiresWithoutGateLeaseExtension(){
+    Fixture f;const auto& m=f.equipment->interaction.geometry[0].motion;
+    f.Send(At(m,0),false);f.Send(At(m,0),true);CHECK(f.result.mechanismOwnsHand);
+    const auto accepted=f.gate;f.busyGateMask=3;f.rendererFeedback=true;
+    for(unsigned n=1;n<10;++n){f.Send(At(m,0),true);CHECK(f.result.tracking.enabled&&f.gate==accepted);}
+    f.Send(At(m,0),true);
+    CHECK(f.now==accepted->deadlineNs&&f.sample.raw.valid&&!f.result.tracking.enabled&&f.gate==accepted&&f.calls==0);
+    CHECK(f.hands.Current(InteractionHand::Left)&&f.hands.Current(InteractionHand::Left)->deadlineNs>f.now);
+    f.busyGateMask=0;f.Send(At(m,0),true);
+    CHECK(!f.sample.raw.valid&&!f.hands.Current(InteractionHand::Left)&&!f.result.mechanismOwnsHand);
+    return 0;
+}
 int CylinderFlickReturnAndClose(){
     Fixture f;f.Hinge(0);CHECK(f.result.tracking.step==FixedContainerStep::EjectSpent);CHECK(f.result.blocksFire);
     f.Hinge(1);CHECK(f.result.tracking.step==FixedContainerStep::Insert);CHECK(f.result.blocksFire);CHECK(f.calls==0);
@@ -123,6 +222,7 @@ int ClipQueuesOneSharedCommand(){
     for(unsigned index:{1u,2u,3u}){
         Fixture f(index);const auto& motion=f.equipment->interaction.geometry[2].motion;
         f.Send(At(motion,0),false);f.Send(At(motion,0),true,true);CHECK(f.result.ammoOwnsHand);
+        CHECK(!RetainBusyFeedback(f,At(motion,0)));
         f.Send(At(motion,0),true);for(unsigned n=1;n<=30;++n)f.Send(At(motion,n/30.),true);
         for(unsigned n=0;n<8;++n)f.Send(At(motion,1),true);f.Send(At(motion,1),false);
         CHECK(f.calls==1&&f.submitted&&f.submitted->preparedCommand);CHECK(f.result.tracking.pending&&f.result.blocksFire);
@@ -130,6 +230,33 @@ int ClipQueuesOneSharedCommand(){
         CHECK(f.service.View()->snapshot.counts.loaded==2); // Queuing is no receipt.
         f.physical->Cancel(f.sample.input,f.hands);CHECK(f.calls==1);
     }return 0;
+}
+int BusyCannotAuthorizeDispatchOrClosure(){
+    Fixture clip(1);const auto& insertion=clip.equipment->interaction.geometry[2].motion;
+    clip.Send(At(insertion,0),false);clip.Send(At(insertion,0),true,true);
+    clip.Send(At(insertion,0),true);for(unsigned n=1;n<=30;++n)clip.Send(At(insertion,n/30.),true);
+    for(unsigned n=0;n<8;++n)clip.Send(At(insertion,1),true);
+    clip.busyGateMask=2;clip.Send(At(insertion,1),false);
+    CHECK(clip.result.tracking.pending&&!clip.result.tracking.enabled&&clip.result.blocksFire);
+    CHECK(clip.calls==0&&!clip.submitted&&clip.service.View()->snapshot.counts==clip.counts);
+    clip.busyGateMask=0;clip.Send(At(insertion,1),false);
+    CHECK(!clip.result.tracking.pending&&clip.calls==0&&!clip.submitted);
+
+    Fixture cylinder;cylinder.Hinge(0);cylinder.Hinge(1);
+    cylinder.Send(At(cylinder.equipment->interaction.geometry[2].motion,0),false,false,true);
+    CHECK(cylinder.result.tracking.step==FixedContainerStep::Close);
+    cylinder.busyGateMask=2;const auto& closing=cylinder.equipment->interaction.geometry[3].motion;
+    cylinder.Send(At(closing,0),false);cylinder.Send(At(closing,0),true);
+    for(unsigned n=1;n<=10&&cylinder.result.tracking.step!=FixedContainerStep::Complete;++n)cylinder.Send(At(closing,n/10.),true);
+    for(unsigned n=0;n<8&&cylinder.result.tracking.step!=FixedContainerStep::Complete;++n)cylinder.Send(At(closing,1),true);
+    CHECK(cylinder.result.tracking.step==FixedContainerStep::Complete&&!cylinder.result.tracking.enabled);
+    CHECK(cylinder.gate&&cylinder.gate->blocksFire&&!cylinder.gate->closedVerified&&cylinder.calls==0);
+    cylinder.busyGateMask=0;const auto& opening=cylinder.equipment->interaction.geometry[0].motion;
+    cylinder.Send(At(opening,0),false);CHECK(cylinder.gate->closedVerified&&!cylinder.gate->blocksFire);
+    const auto closed=cylinder.gate;cylinder.busyGateMask=3;cylinder.Send(At(opening,0),true);
+    CHECK(!cylinder.result.tracking.enabled&&!cylinder.result.mechanismOwnsHand&&cylinder.gate==closed);
+    CHECK(!cylinder.hands.Current(InteractionHand::Left)); // New lifetime/opening needs a published blocker.
+    return 0;
 }
 int PriorRendererFrameQueuesAndCompletesOnceAfterReequip(){
     Fixture f(1);f.delayedRaw=true;f.observe=true;const auto& motion=f.equipment->interaction.geometry[2].motion;
@@ -281,6 +408,7 @@ int MeasuredUnderbarrelLoadsOneRoundAndCloses(){
         if(breech){f.Hinge(0);CHECK(f.result.blocksFire);}
         CHECK(f.result.tracking.step==FixedContainerStep::Insert&&f.calls==0);
         f.Send(At(insertion,0),false);f.Send(At(insertion,0),true,true);CHECK(f.result.ammoOwnsHand);
+        CHECK(!RetainBusyFeedback(f,At(insertion,0)));
         f.Send(At(insertion,0),true);for(unsigned n=1;n<=30;++n)f.Send(At(insertion,n/30.),true);
         for(unsigned n=0;n<8;++n)f.Send(At(insertion,1),true);f.Send(At(insertion,1),false);
         CHECK(f.calls==1&&f.submitted&&f.submitted->preparedCommand&&f.result.tracking.pending&&f.result.blocksFire);
@@ -363,7 +491,9 @@ int LinkedLoaderRejectsUnverifiedPhysicalAliases(){
     return 0;
 }
 }
-int main(){return ExactSelectorsAndSupply()||GateBeforePhysicalAndExactOwner()||CylinderFlickReturnAndClose()||ClipQueuesOneSharedCommand()||
+int main(){return ExactSelectorsAndSupply()||GateBeforePhysicalAndExactOwner()||BusyMechanismFeedbackContinuesOpening()||
+    BusyCannotStartReviveOrChangeOwner()||BusyExpiresWithoutGateLeaseExtension()||BusyCannotAuthorizeDispatchOrClosure()||
+    CylinderFlickReturnAndClose()||ClipQueuesOneSharedCommand()||
     PriorRendererFrameQueuesAndCompletesOnceAfterReequip()||PartialCylinderMigrationReacquiresAtRetainedContact()||
     ObservationPreservesSourceLeasesAndRejectsWrongIdentity()||LinearPartsFollowTheirOwnMeasuredTravel()||MeasuredUnderbarrelLoadsOneRoundAndCloses()||
     LinkedLoaderRejectsUnverifiedPhysicalAliases();}

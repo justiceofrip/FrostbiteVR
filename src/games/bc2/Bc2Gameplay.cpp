@@ -3701,6 +3701,7 @@ bool EnableOrdinaryManualCycles()noexcept {
     fixedApi.submit=[](void*,const AmmoResourceRequest& request)noexcept{return reloadFlowRuntime::SubmitAmmoResourceRequest(request);};
     fixedApi.outcome=[](void*,std::uint64_t id,const interaction::AmmoResourceContext& context)noexcept{return reloadFlowRuntime::ReadAmmoResourceOutcome(id,context);};
     fixedApi.publishGate=[](void*,const FixedContainerGate& gate)noexcept{return reloadFlowRuntime::PublishFixedContainerGate(gate);};
+    fixedApi.publishGateObserved=[](void*,const FixedContainerGate& gate)noexcept{return reloadFlowRuntime::PublishFixedContainerGateResult(gate);};
     fixedApi.readGate=[](void*,const interaction::AmmoResourceIdentity& identity)noexcept{return reloadFlowRuntime::ReadFixedContainerGate(identity);};
     fixedApi.nextRequest=[](void*)noexcept{return handIntent==UINT64_MAX?0:++handIntent;};
     physicalFixedContainer.emplace(true,fixedApi);

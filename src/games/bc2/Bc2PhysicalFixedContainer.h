@@ -44,6 +44,8 @@ struct Bc2PhysicalFixedContainerApi {
     bool (*publishGate)(void*,const FixedContainerGate&)noexcept=nullptr;
     std::optional<FixedContainerGate> (*readGate)(void*,const interaction::AmmoResourceIdentity&)noexcept=nullptr;
     std::uint64_t (*nextRequest)(void*)noexcept=nullptr;
+    // Optional typed result; a legacy false remains a genuine rejection.
+    FixedContainerGateResult (*publishGateObserved)(void*,const FixedContainerGate&)noexcept=nullptr;
 };
 struct Bc2PhysicalFixedContainerSample {
     ReloadStateOwner nativeOwner{};

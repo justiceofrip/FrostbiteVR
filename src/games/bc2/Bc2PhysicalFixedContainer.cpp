@@ -29,6 +29,7 @@ struct Bc2PhysicalFixedContainer::Slot {
     AmmunitionLedger* ledger=nullptr;
     FeedSupplyKey supply{};std::uint64_t lifetime=0,revision=0,lastRaw=0;
     std::optional<HandClaim> hand;
+    std::optional<FixedContainerGate> acceptedGate;
     bool carried=false,seedNeutral=false,submissionFailed=false,restart=false,geometryBound=false,recoveryPrepared=false;
     std::optional<math::Matrix4> carriedSupply,target;
     FixedContainerStep targetStep=FixedContainerStep::Open;
@@ -44,6 +45,7 @@ void Bc2PhysicalFixedContainer::Cancel(const HandInteractionSample& input,HandIn
     if(active_->hand){(void)hands.Release(input,active_->hand->token);active_->hand.reset();}
     if(active_->policy)active_->policy->Suspend();
     active_->recoveryPrepared=false;
+    active_->acceptedGate.reset();
     active_->target.reset();active_=nullptr;
 }
 Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2PhysicalFixedContainerSample& s,
@@ -64,7 +66,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
             if(slot){observation->supply=slot->supply;observation->pendingRequest=slot->request;observation->lastCompletion=slot->lastCompletion;}
         }
     } capture{s.observation,out,observedSlot,hands};
-    if(!enabled_||!api_.read||!api_.withLedger||!api_.submit||!api_.outcome||!api_.publishGate||!api_.nextRequest||!e||
+    if(!enabled_||!api_.read||!api_.withLedger||!api_.submit||!api_.outcome||(!api_.publishGate&&!api_.publishGateObserved)||!api_.nextRequest||!e||
        e!=FindFixedContainerEquipment(s.configurationPath,s.mesh,s.rigFingerprint)||s.cancel||!Fresh(s.input,s.input.nowNs)){
         Cancel(s.input,hands);return out;
     }
@@ -110,19 +112,49 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
         if(nextLifetime_==UINT64_MAX)return out;
         slot->lifetime=++nextLifetime_;slot->supply=Supply(e->interaction.kind,slot->lifetime);slot->restart=true;
     }
-    // Interlock native fire before any physical state can move. A failed
-    // publication leaves this input unconsumed and the gesture unstarted.
+    // Busy can preserve only a hold that already existed on entry, behind the
+    // same still-fresh accepted blocker. It neither renews that gate's lease
+    // nor supplies missing native, contact or hand evidence.
+    const auto heldAtEntry=slot->hand;
+    const auto publish=[&](const FixedContainerGate& gate)noexcept {
+        const auto result=api_.publishGateObserved?api_.publishGateObserved(api_.context,gate):
+            api_.publishGate(api_.context,gate)?FixedContainerGateResult::Published:FixedContainerGateResult::Rejected;
+        if(result==FixedContainerGateResult::Published)slot->acceptedGate=gate;
+        else if(result==FixedContainerGateResult::Rejected)slot->acceptedGate.reset();
+        return result;
+    };
+    const auto continueHeld=[&](const FixedContainerGate& gate)noexcept {
+        const auto left=hands.Current(InteractionHand::Left);const auto& accepted=slot->acceptedGate;
+        if(!accepted||!heldAtEntry||!slot->hand||!left||left->token!=heldAtEntry->token||slot->hand->token!=heldAtEntry->token||
+           left->deadlineNs<=s.input.nowNs||slot->hand->deadlineNs<=s.input.nowNs||left->token.owner!=s.input.owner||
+           slot->handOwner!=s.input.owner||!s.grip||s.input.released[0]||!rawFresh||!raw.grip||slot->request||slot->restart)return false;
+        if(left->token.kind==HandClaimKind::Mechanism){
+            if(left->token.item!=s.weapon||left->token.prerequisiteClaim!=gun->token.id)return false;
+        }else if(left->token.kind!=HandClaimKind::AmmoObject||
+                 left->token.item!=HandInteractionKey{slot->supply.resource.id,slot->supply.resource.generation})return false;
+        const auto& a=accepted->binding;const auto& b=gate.binding;
+        return accepted->lifetime==gate.lifetime&&accepted->handOwner==gate.handOwner&&
+            accepted->blocksFire&&!accepted->closedVerified&&gate.blocksFire&&!gate.closedVerified&&
+            accepted->observedNs<=s.input.nowNs&&s.input.nowNs<accepted->deadlineNs&&
+            AmmoResourceBindingFresh(a,b.owner,s.input.nowNs)&&a.context==b.context&&a.inventory==b.inventory&&
+            a.switching==b.switching&&a.data==b.data&&a.persistence==b.persistence;
+    };
+    // Establish the native blocker before starting a new physical gesture.
     const bool priorBlocked=!slot->geometryBound||(slot->policy&&slot->policy->BlocksFire());
     const bool touching=rawFresh&&raw.grip&&(raw.gripPressed||slot->hand||slot->carried);
     if(slot->revision>UINT64_MAX-2)return out;
     const FixedContainerGate beforeGate{view->binding,s.input.owner,slot->lifetime,++slot->revision,s.input.sequence,
         s.input.observedNs,s.input.deadlineNs,priorBlocked||touching,!(priorBlocked||touching)};
-    if(!api_.publishGate(api_.context,beforeGate)){out.blocksFire=priorBlocked;return out;}
+    const auto beforePublication=publish(beforeGate);
+    if(beforePublication!=FixedContainerGateResult::Published&&
+       !(beforePublication==FixedContainerGateResult::Busy&&continueHeld(beforeGate))){
+        slot->acceptedGate.reset();out.blocksFire=priorBlocked;return out;
+    }
     FixedContainerResult result;std::optional<AmmoResourceRequest> dispatch;
     struct Work {Bc2PhysicalFixedContainer* self;Slot* slot;const Bc2PhysicalFixedContainerSample* sample;
         const AmmoResourceView* view;const std::optional<AmmoResourceOutcome>* terminal;HandInteraction* hands;
-        std::uint64_t* intent;bool rawFresh;FixedContainerResult* result;std::optional<AmmoResourceRequest>* dispatch;};
-    Work work{this,slot,&s,&*view,&terminal,&hands,&intent,rawFresh,&result,&dispatch};
+        std::uint64_t* intent;bool rawFresh,allowAcquire;FixedContainerResult* result;std::optional<AmmoResourceRequest>* dispatch;};
+    Work work{this,slot,&s,&*view,&terminal,&hands,&intent,rawFresh,beforePublication==FixedContainerGateResult::Published,&result,&dispatch};
     const bool updated=api_.withLedger(api_.context,view->binding,s.input.owner,&work,[](void* opaque,AmmunitionLedger& ledger)noexcept {
         auto& w=*static_cast<Work*>(opaque);auto& self=*w.self;auto& z=*w.slot;const auto& x=*w.sample;const auto& v=*w.view;auto& h=*w.hands;
         const auto& profile=z.equipment->interaction;const auto now=x.input.nowNs;
@@ -191,7 +223,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
             const auto renewed=h.RenewFrom(x.input,original,z.hand->token,{z.hand->token.contact,original.sequence,original.deadlineNs,true});
             if(renewed.claim)z.hand=renewed.claim;else z.hand.reset();
         }
-        if(!z.hand&&pressed&&*w.intent!=UINT64_MAX){
+        if(w.allowAcquire&&!z.hand&&pressed&&*w.intent!=UINT64_MAX){
             const bool insertion=step==FixedContainerStep::Insert;
             const bool eligible=insertion?(z.carried?Near(r.weaponFromWrist,expected,g.contact):r.pouchContact):Near(r.weaponFromWrist,expected,g.contact);
             if(eligible&&(!insertion||(v.snapshot.counts.loaded<v.snapshot.counts.capacity&&v.snapshot.counts.reserve>0))){
@@ -270,17 +302,20 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
             if(step==FixedContainerStep::Insert){z.carried=false;z.carriedSupply.reset();}}
         return true;
     });
-    if(!updated){out.blocksFire=!slot->geometryBound||(slot->policy&&slot->policy->BlocksFire());return out;}
+    if(!updated){slot->acceptedGate.reset();out.blocksFire=!slot->geometryBound||(slot->policy&&slot->policy->BlocksFire());return out;}
     out.blocksFire=!slot->geometryBound||slot->policy->BlocksFire();out.status=result.status;
     const FixedContainerGate gate{view->binding,s.input.owner,slot->lifetime,++slot->revision,s.input.sequence,
         s.input.observedNs,s.input.deadlineNs,out.blocksFire,!out.blocksFire};
-    const bool published=api_.publishGate(api_.context,gate);
+    const auto publication=publish(gate);
+    const bool published=publication==FixedContainerGateResult::Published;
+    const bool trackingPermitted=published||(publication==FixedContainerGateResult::Busy&&continueHeld(gate));
+    if(!trackingPermitted)slot->acceptedGate.reset();
     if(dispatch){
         // The service gate is established before native admission, outside its
         // ledger lock. Neither accepted submission nor final counts are a receipt.
         if(!published||!out.blocksFire||!api_.submit(api_.context,*dispatch))slot->submissionFailed=true;else ++submitted_;
     }
-    auto& t=out.tracking;t.enabled=published;t.source={e,view->binding,view->snapshot,s.family};t.input=s.input;t.gun=*gun;t.hand=slot->hand;
+    auto& t=out.tracking;t.enabled=trackingPermitted;t.source={e,view->binding,view->snapshot,s.family};t.input=s.input;t.gun=*gun;t.hand=slot->hand;
     t.blocksFire=out.blocksFire;t.carried=slot->carried;t.pending=bool(slot->request);t.step=slot->policy->Step();t.targetStep=slot->targetStep;
     t.lifetime=slot->lifetime;t.revision=slot->revision;t.target=slot->target;t.carriedSupply=slot->carriedSupply;t.parts=slot->parts;t.partCount=unsigned(e->parts.size());
     t.grip=s.grip;t.gripPressed=s.gripPressed;

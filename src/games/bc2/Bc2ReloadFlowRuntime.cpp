@@ -736,7 +736,8 @@ public:
         if(Requested()){row.publication=p;row.beginNs=now;}
     }
     bool Requested()const noexcept{return ticket_.epoch!=0;}
-    bool Reject(const char* reason)noexcept{row.refusal=reason;return false;}
+    FixedContainerGateResult Reject(const char* reason)noexcept{row.refusal=reason;return FixedContainerGateResult::Rejected;}
+    FixedContainerGateResult Busy(const char* reason)noexcept{row.refusal=reason;return FixedContainerGateResult::Busy;}
     ~FixedGateCapture(){
         if(!Requested())return;
         row.endNs=Now();
@@ -3626,7 +3627,7 @@ void WriteFixedContainerGateObservation(std::ostream& out){
         first->value.publication.revision>0&&preceding->value.publication.revision==first->value.publication.revision-1;
     out<<",\"precedingAcceptedSameInput\":"<<joined<<",\"latest\":";row(latest,false);out<<'}';
 }
-bool PublishFixedContainerGate(const FixedContainerGate& publication)noexcept {
+FixedContainerGateResult PublishFixedContainerGateResult(const FixedContainerGate& publication)noexcept {
 #ifdef FVR_BC2_AMMO_RESOURCE_HANDS
     const auto now=Now();const auto& binding=publication.binding;const auto& hand=publication.handOwner;
     FixedGateCapture capture(publication,now);auto& diagnostic=capture.row;
@@ -3648,7 +3649,7 @@ bool PublishFixedContainerGate(const FixedContainerGate& publication)noexcept {
     std::optional<Lease> lease;
     {OwnerCopyGate owner;
         if(capture.Requested())diagnostic.ownerLock=owner.lock.Evidence();
-        if(!owner.held)return capture.Reject("owner_lock");
+        if(!owner.held)return capture.Busy("owner_lock");
         if(capture.Requested()){
             diagnostic.nativeCopied=true;diagnostic.nativeOwner=published.snapshot.owner;
             diagnostic.nativeSequence=published.snapshot.sequence;diagnostic.nativeRevision=published.revision;
@@ -3675,8 +3676,8 @@ bool PublishFixedContainerGate(const FixedContainerGate& publication)noexcept {
     if(current->persistence!=binding.persistence)return capture.Reject("binding_persistence");
     Gate resource(ammoMoveProbeGate);Gate gate(fixedContainerGateLock);
     if(capture.Requested()){diagnostic.resourceLock=resource.held;diagnostic.gateLock=gate.held;}
-    if(!resource.held)return capture.Reject("resource_lock");
-    if(!gate.held)return capture.Reject("gate_lock");
+    if(!resource.held)return capture.Busy("resource_lock");
+    if(!gate.held)return capture.Busy("gate_lock");
     if(!publication.blocksFire){
         const auto* ledger=ammoPlayerService.Inventory().Find(binding.context.resource);
         const auto& view=ammoPlayerService.View();
@@ -3714,16 +3715,19 @@ bool PublishFixedContainerGate(const FixedContainerGate& publication)noexcept {
             if(!slot->gate.closedVerified)return capture.Reject("transition_unverified");
         }
         if(publication.lifetime!=slot->gate.lifetime)fixedContainerLastLifetime=publication.lifetime;
-        slot=FixedContainerNativeGate{publication,RoundIdentity(*lease),lease->snapshot.config};return true;
+        slot=FixedContainerNativeGate{publication,RoundIdentity(*lease),lease->snapshot.config};return FixedContainerGateResult::Published;
     }
     if(capture.Requested())diagnostic.lastLifetime=fixedContainerLastLifetime;
     if(!available)return capture.Reject("capacity");
     if(publication.lifetime<=fixedContainerLastLifetime)return capture.Reject("new_lifetime");
     *available=FixedContainerNativeGate{publication,RoundIdentity(*lease),lease->snapshot.config};
-    fixedContainerLastLifetime=publication.lifetime;return true;
+    fixedContainerLastLifetime=publication.lifetime;return FixedContainerGateResult::Published;
 #else
-    (void)publication;return false;
+    (void)publication;return FixedContainerGateResult::Rejected;
 #endif
+}
+bool PublishFixedContainerGate(const FixedContainerGate& publication)noexcept {
+    return PublishFixedContainerGateResult(publication)==FixedContainerGateResult::Published;
 }
 std::optional<FixedContainerGate> ReadFixedContainerGate(const interaction::AmmoResourceIdentity& resource)noexcept {
 #ifdef FVR_BC2_AMMO_RESOURCE_HANDS
@@ -5072,6 +5076,7 @@ bool EnableFixedContainerReload()noexcept{return false;}
 void RequestFixedContainerGateObservation(std::int64_t,std::int64_t)noexcept{}
 void WriteFixedContainerGateObservation(std::ostream& out){out<<"{\"available\":false,\"reason\":\"unsupported_architecture\"}";}
 bool PublishFixedContainerGate(const FixedContainerGate&)noexcept{return false;}
+FixedContainerGateResult PublishFixedContainerGateResult(const FixedContainerGate&)noexcept{return FixedContainerGateResult::Rejected;}
 std::optional<FixedContainerGate> ReadFixedContainerGate(const interaction::AmmoResourceIdentity&)noexcept{return {};}
 bool WithAmmoResourceLedger(const AmmoResourceBinding&,const interaction::HandInteractionOwner&,void*,bool (*)(void*,interaction::AmmunitionLedger&)noexcept)noexcept{return false;}
 std::optional<AmmoResourceOutcome> ReadAmmoResourceOutcome(std::uint64_t,const interaction::AmmoResourceContext&)noexcept{return {};}
