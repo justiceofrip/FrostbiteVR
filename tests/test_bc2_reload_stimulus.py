@@ -284,6 +284,34 @@ class StimulusTests(unittest.TestCase):
             driver.execute(value)
         self.assertNotIn("release", [s[0]["phase"] for s in driver.sent])
 
+    def test_delayed_stimulus_save_cannot_renew_initial_mapping(self):
+        clock = Clock()
+        driver = ScheduleDriver(clock)
+        value = plan(clock)
+        original_deadline = value["source"]["validUntilNs"]
+        driver.artifacts.save = lambda *args: clock.sleep(1)
+        with patch.object(m, "time", clock), self.assertRaisesRegex(m.Refusal, "initial mapping expired"):
+            driver.execute(value)
+        self.assertEqual(value["source"]["validUntilNs"], original_deadline)
+        self.assertEqual(driver.sent, [])
+
+    def test_delayed_prepublication_state_read_cannot_publish_expired_mapping(self):
+        clock = Clock()
+        driver = ScheduleDriver(clock)
+        driver.first_sample_pending = True
+        driver.initial_mapping_deadline = clock.now + 5_000_000
+        driver.pause_until = lambda until: None
+        driver.read_state = lambda *args: clock.sleep(.010)
+        driver.ownership, driver.save_owner = Mock(), Mock()
+        driver.command_path = object()
+        with patch.object(m, "time", clock), patch.object(m.transport, "atomic") as publish, \
+                self.assertRaisesRegex(m.Refusal, "initial mapping expired before first publication"):
+            m.ReloadStimulus.send(driver, plan(clock)["schedule"][0])
+        publish.assert_not_called()
+        driver.save_owner.assert_not_called()
+        self.assertEqual(driver.commands, 0)
+        self.assertEqual(driver.artifacts.events, [])
+
     def test_remaining_command_budget_checked_before_next_stimulus(self):
         clock = Clock()
         driver = ScheduleDriver(clock)
@@ -429,6 +457,42 @@ class StimulusTests(unittest.TestCase):
         event = driver.artifacts.events[0]
         self.assertEqual((event["type"], event["id"]), ("boundary_pending", "stage_admission"))
         self.assertEqual(event["deadlineNs"], 1_000_000_000 + m.RECEIVE_NS)
+
+    def test_run_reuses_plan_from_same_fresh_stage_admission(self):
+        clock = Clock()
+        driver, calls = self.boundary_driver(clock, ["ready"])
+        driver.args.pickup_first, driver.args.step_ms = False, 40
+        driver.held_left = False
+        value = plan(clock)
+        def build(family, profiles, snapshot, now, stage, **kwargs):
+            driver.geometry.admit_boundary(family, profiles, snapshot, now, stage)
+            value["source"] = dict(nonce=snapshot["nonce"], evaluatedAtNs=now,
+                                   validUntilNs=snapshot["deadlineNs"])
+            return value
+        driver.geometry.build_stimulus = Mock(side_effect=build)
+        driver.execute = Mock()
+        with patch.object(m, "time", clock):
+            driver.run_stimulus()
+        self.assertEqual(calls, ["1"])
+        driver.geometry.build_stimulus.assert_called_once()
+        driver.execute.assert_called_once()
+        self.assertIs(driver.execute.call_args.args[0], value)
+        self.assertEqual(driver.mapping["nonce"], value["source"]["nonce"])
+
+    def test_delayed_plan_preparation_keeps_original_boundary_deadline(self):
+        clock = Clock()
+        driver, _ = self.boundary_driver(clock, ["ready"])
+        driver.args.step_ms = 40
+        value = plan(clock)
+        def build(*args, **kwargs):
+            clock.sleep(.1)  # Exactly exhaust the admitted snapshot's original lease.
+            return value
+        driver.geometry.build_stimulus = Mock(side_effect=build)
+        with patch.object(m, "time", clock), \
+                self.assertRaisesRegex(m.Refusal, "initial boundary validation consumed original deadline"):
+            driver.fresh(prepare=True)
+        driver.geometry.build_stimulus.assert_called_once()
+        self.assertEqual(driver.observed[0]["snapshot"]["deadlineNs"], clock.now)
 
     def test_initial_boundary_pending_never_renews_budget_or_retries_refusal(self):
         for verdict, message, expected_calls in (("pending", "deadline", ["1", "2"]),

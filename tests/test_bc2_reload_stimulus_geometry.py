@@ -214,6 +214,18 @@ class FeedRegistryStimulusTests(unittest.TestCase):
     def setUpClass(cls):
         cls.profiles = json.loads(Path(os.environ["BC2_FEED_SIMULATION_PROFILES"]).read_text(encoding="utf-8-sig"))
 
+    def test_build_reuses_admitted_feed_trajectory_at_requested_step(self):
+        snapshot = complete(ff.synthetic_snapshot(self.profiles["profiles"][0]))
+        expected = g.feed.plan(self.profiles, snapshot, "OpenCover", NOW, int(snapshot["nonce"]), 40_000_000)
+        with mock.patch.object(g.feed, "plan", wraps=g.feed.plan) as trajectory:
+            plan = g.build_stimulus("feed", self.profiles, snapshot, NOW, "OpenCover", step_ms=40)
+        trajectory.assert_called_once()
+        self.assertEqual(plan["geometryEvidence"], expected)
+        self.assertEqual(plan["source"]["validUntilNs"],
+                         min(g.source_deadline(snapshot, "feed"), expected["sourceValidUntilNs"]))
+        self.assertFalse(plan["geometryEvidence"]["executionAuthorized"])
+        self.assertTrue(plan["geometryEvidence"]["offlineOnly"])
+
     def test_absent_feed_waits_only_after_valid_generic_admission(self):
         s = complete(ff.synthetic_snapshot(self.profiles["profiles"][0]))
         s["feed"] = None

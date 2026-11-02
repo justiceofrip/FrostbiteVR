@@ -89,8 +89,15 @@ def admit_observation(family, profiles, snapshot, now_ns):
 
 @_guard
 def admit_boundary(family, profiles, snapshot, now_ns, stage, *, pickup=None, target="secondary"):
+    return _prepare_boundary(family, profiles, snapshot, now_ns, stage, pickup=pickup, target=target)[0]
+
+
+def _prepare_boundary(family, profiles, snapshot, now_ns, stage, *, pickup=None, target="secondary", step_ns=20_000_000):
+    # Feed stage admission already computes the trajectory. Return that exact
+    # non-authorizing evidence for this build instead of solving it again.
     require(stage in STAGES[_family(family)], "unsupported stage for stimulus family")
     result = admit_observation(family, profiles, snapshot, now_ns)
+    geometry = None
     if family == "sight":
         result = sight.admit(snapshot, integer(now_ns), integer(snapshot["nonce"]), target)
     if family == "feed":
@@ -100,12 +107,12 @@ def admit_boundary(family, profiles, snapshot, now_ns, stage, *, pickup=None, ta
             _feed_neutral(snapshot)
         # Validate the current typed stage, including closed-cover/hinge and
         # retained free-placement geometry. This does not infer native eligibility.
-        feed.plan(profiles, snapshot, stage, integer(now_ns), integer(snapshot["nonce"]),
-                  pickup_plan=None if pickup is None else pickup["geometryEvidence"])
+        geometry = feed.plan(profiles, snapshot, stage, integer(now_ns), integer(snapshot["nonce"]), step_ns,
+                             pickup_plan=None if pickup is None else pickup["geometryEvidence"])
     if pickup is not None:
         require(pickup.get("schema") == SCHEMA and pickup["family"] == family,
                 "pickup must be this stimulus pipeline's actual preceding stage")
-    return result
+    return result, geometry
 
 
 def _feed_state(snapshot):
@@ -199,19 +206,17 @@ def _boundary(name, index, schedule, timeout=250_000_000, span=0):
 
 @_guard
 def build_stimulus(family, profiles, snapshot, now_ns, stage, *, step_ms=None, pickup=None, target="secondary"):
-    admitted = admit_boundary(family, profiles, snapshot, now_ns, stage, pickup=pickup, target=target)
+    step = integer(20 if family == "sight" and step_ms is None else 40 if step_ms is None else step_ms)*1_000_000
+    _, geometry = _prepare_boundary(family, profiles, snapshot, now_ns, stage, pickup=pickup, target=target, step_ns=step)
     if (family, stage) in (("feed", "AttachContainer"), ("pump", "ShellInsert"), ("fixed", "Insert")):
         require(pickup is not None, "continuation requires this invocation's pickup and fresh actual custody")
-    step = integer(20 if family == "sight" and step_ms is None else 40 if step_ms is None else step_ms)*1_000_000
     prior = None if pickup is None else pickup["geometryEvidence"]
     now, nonce = integer(now_ns), integer(snapshot["nonce"])
-    if family == "feed":
-        geometry = feed.plan(profiles, snapshot, stage, now, nonce, step, pickup_plan=prior)
-    elif family == "pump":
+    if family == "pump":
         geometry = pump.plan(snapshot, stage, now, nonce, step, pickup_plan=prior)
     elif family == "fixed":
         geometry = fixed.plan(snapshot, stage, now, nonce, step, pickup_plan=prior)
-    else:
+    elif family == "sight":
         geometry = sight.plan(snapshot, now, nonce, step, target)
     require(geometry["offlineOnly"] is True and geometry["executionAuthorized"] is False,
             "legacy geometry must remain explicitly non-authorizing")

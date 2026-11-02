@@ -418,7 +418,8 @@ class ReloadStimulus:
             time.sleep(.001)
         self.guard()
 
-    def fresh(self, *, boundary=None, after_ns=0, pickup=None):
+    def fresh(self, *, boundary=None, after_ns=0, pickup=None, prepare=False):
+        require(not prepare or boundary is None, "stimulus preparation requires initial stage admission")
         timeout = integer(boundary["timeoutNs"]) if boundary else RECEIVE_NS
         until = min(self.deadline, self.stage_deadline, time.perf_counter_ns() + timeout)
         used = set()
@@ -440,8 +441,14 @@ class ReloadStimulus:
                     continue  # A newly serialized response can still describe pre-command input.
                 if boundary is None:
                     try:
-                        self.geometry.admit_boundary(self.args.family, self.profiles, snapshot, now, self.args.stage,
-                                                     pickup=pickup, target=self.args.target)
+                        if prepare:
+                            # Building includes typed stage admission. Keep its
+                            # plan local to this fresh snapshot and original lease.
+                            plan = self.geometry.build_stimulus(self.args.family, self.profiles, snapshot, now, self.args.stage,
+                                step_ms=self.args.step_ms, pickup=pickup, target=self.args.target)
+                        else:
+                            self.geometry.admit_boundary(self.args.family, self.profiles, snapshot, now, self.args.stage,
+                                                         pickup=pickup, target=self.args.target)
                     except self.geometry.BoundaryPending as pending:
                         self.observation_incomplete = True
                         self.artifacts.event({"type": "boundary_pending", "id": "stage_admission", "nonce": snapshot["nonce"],
@@ -449,7 +456,7 @@ class ReloadStimulus:
                         continue
                     require(time.perf_counter_ns() < min(until, self.geometry.source_deadline(snapshot, self.args.family)),
                             "initial boundary validation consumed original deadline")
-                    return snapshot, now
+                    return (snapshot, now, plan) if prepare else (snapshot, now)
                 try:
                     summary = self.geometry.check_boundary(self.stimulus, snapshot, boundary["id"], now,
                         command_written_ns=self.last_write, prior=self.boundaries, profiles=self.profiles)
@@ -611,22 +618,18 @@ class ReloadStimulus:
         original_stage = self.args.stage
         if self.args.pickup_first:
             self.args.stage = "SupplyPickup" if self.args.family == "feed" else "ShellPickup" if self.args.family == "pump" else "Pickup"
-        snapshot, now = self.fresh()
+        snapshot, _, plan = self.fresh(prepare=True)
         self.mapping = snapshot
-        plan = self.geometry.build_stimulus(self.args.family, self.profiles, snapshot, now, self.args.stage,
-                                           step_ms=self.args.step_ms, target=self.args.target)
         self.execute(plan)
         if self.args.pickup_first:
             pickup = plan
             require(self.held_left, "fresh pickup must preserve actual held custody")
             self.args.stage = original_stage
-            snapshot, now = self.fresh(pickup=pickup)
+            snapshot, _, plan = self.fresh(pickup=pickup, prepare=True)
             grip, aim = (transport.planner.from_pose(snapshot["input"]["hands"][0][k]) for k in ("grip", "aim"))
             position_error, angle_error = transport.planner.pose_error(grip, aim)
             require(position_error <= .0002 and angle_error <= .001, "held continuation changed established aim trim")
             self.mapping = snapshot
-            plan = self.geometry.build_stimulus(self.args.family, self.profiles, snapshot, now, self.args.stage,
-                step_ms=self.args.step_ms, pickup=pickup, target=self.args.target)
             self.execute(plan)
         require(not self.held_left, "standalone stimulus may not leave held custody; paired workflow required")
 
