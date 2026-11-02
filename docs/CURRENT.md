@@ -5,9 +5,9 @@ Updated November 2, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
-Feedback95 is built/pushed at7faf7be; both normal builds pass341/341. Private0.1.41 is installed and setup/assets validation passes, with0.1.40 fallback and unchanged settings. Read-only bodyInventory now identifies actual body slots without assuming native inventory order. Actual99 obtained exact XM8/QJU mappings, then stopped during stow on a changed diagnostic binding; no full LMG reload acceptance. Native retirement, normal close and profile/settings restoration passed. [Handoff95](../handoff/integrations/coordinator-20261102-feedback95/README.txt).
+Feedback95 added read-only bodyInventory and produced retained fallback0.1.41. Actual99 obtained exact XM8/QJU slot mappings, then stopped on the expected stow display-cohort advance. Private100 corrects that narrow diagnostic transition;19 cases pass. Actual100 stopped before input on an expired observation, so full LMG reload acceptance remains open. Private102 addresses read-only observation timing; no native lease extension or gameplay change. [Handoff95](../handoff/integrations/coordinator-20261102-feedback95/README.txt).
 
-Feedback100 combines the graphics creation correction and bounded compressed sight diagnostics. Fresh launches clear SINGLETHREADED at both creation exports; native admission separately checks the actual renderer device and exact Present owner. Native signatures/operation records remain unchanged. Both normal builds and a new package are pending; installed0.1.41 stays selected. [Handoff](../handoff/integrations/coordinator-20261102-feedback100/README.txt).
+Feedback100 source b6bd507 is pushed; both normal builds pass342/342 and portable-session checks281. Private0.1.42 is installed/setup validated with0.1.41 fallback and unchanged settings. Actual101 joined production creation flags1->0 to the same native renderer device, rendered both menu/world eyes, completed the30s no-AV watch and normal retirement/close/restoration. This qualifies the creation contract in one actual-game episode, not crash causation, performance or headset stability. [Handoff](../handoff/integrations/coordinator-20261102-feedback100/README.txt).
 
 Actual40 rendered both eyes, completed ordinary Empty->QJU88 draw/release and advanced the OpenCover receipt counter. DetachContainer's driver stopped while acknowledging its intentional release and pending result. Feedback90 corrects that diagnostic transition;26 focused tests and14 affected readiness/planning cases pass, native closure/binaries unchanged. [Handoff](../handoff/integrations/coordinator-20261101-feedback90/README.txt). Actual40 native retirement, normal game close, all owned exits and exact profile/settings restoration passed; complete detach/reload/muzzle acceptance remains open.
 
@@ -234,27 +234,12 @@ active work; physical grenade reloads, full body/MP/other Frostbite ports are la
 
 ## Public release and storage
 
-[Public0.1.15](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.15) remains
-unchanged. Its launcher fixes missing image-path identity and exposes the narrow
-experimental Steam option. Actual Steam rendering/equipment support remains
-unverified. It retains the checkpoint434 native binaries; private0.1.38 is installed
-locally for development testing, not published. Public product commit13d7574bd682ae883a935a9adae52a59409b576f.
+[Public0.1.15](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.15) remains unchanged with checkpoint434 binaries and experimental Steam diagnostics. Steam rendering/equipment support remains unverified. Private0.1.42 is installed locally for development, not published; public product commit13d7574bd682ae883a935a9adae52a59409b576f.
 
 Use G: and process-local TEMP/TMP/TMPDIR. Player installs may use their selected
 drive. Keep40GiB allocated/15GiB free,3GiB normal-build reserve and512MiB raw/run.
 Call StorageBudget before builds/captures/sessions; never bypass a failed guard.
-Earlier storage work reclaimed approximately1.217GB, including233,414,656B of
-reviewed superseded raw frames and498,606,875B from67 old JSON reports
-(`storage-r56-old-install-compression01/result02.json`). The latest batch,
-`storage-r56-m95-compression01/run01/compression.json`, losslessly compressed
-eight completed files and reclaimed355,228,926B; all content hashes preserved,
-no deletion in that batch. Earlier receipts remain.
-`storage-shared-normal-review01/root-cleanup-result.json` removes43 reviewed
-redundant/obsolete PDBs, reclaiming651,902,976B; exact canonical or current symbols
-remain. Historical duplicate restoration locations are in its manifest. Protected
-390/407/408, source, logs, screenshots and all user recordings remain preserved.
-Older private wrappers copied stale root PDB names; new normal/M95 recipes use
-actual graph `symbols/` paths. Preserve correct current runtime symbols.
+Retained storage manifests preserve earlier compression and exact redundant-file removal evidence. Feedback100/101 removed only expanded package replicas after checking every file against retained ZIPs; current/fallback runtime symbols, sources, failures, game captures and user recordings remain. Closed sessions and idle fixtures/runtime files were losslessly compressed with all hashes preserved. Recorded42GiB private-session/package and44GiB normal-build exceptions require fresh admission; default policy is unchanged. Use actual graph `symbols/` paths, not old wrapper root-PDB names.
 
 Run relevant regressions and both normal architectures for native changes;
 do not repeat passed suites for docs or unchanged binaries. Read
