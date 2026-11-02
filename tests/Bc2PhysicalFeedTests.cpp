@@ -579,7 +579,9 @@ int AdmissionObservationExplainsMissingViewRetentionBeforeSuspension(){
             f.Consume();const auto after=observe();
             CHECK(field(after,"\"failedRetention\":",",\"retentionEntryPredicates\":")==failed);
             CHECK(field(after,"\"firstPress\":",",\"latestChange\":")==firstPress);
-            f.Tick(wrist,false);CHECK(observe()==after);
+            f.Tick(wrist,false);const auto neutral=observe();
+            CHECK(field(neutral,"\"failedRetention\":",",\"retentionEntryPredicates\":")==failed);
+            CHECK(field(neutral,"\"firstPress\":",",\"latestChange\":")==firstPress);
         }
         if(fault<=2){
             CHECK(latest.find("\"heldInput\":{\"sequence\":"+std::to_string(held->inputSequence))!=std::string::npos);
@@ -589,7 +591,7 @@ int AdmissionObservationExplainsMissingViewRetentionBeforeSuspension(){
         std::ostringstream full,compact;full<<std::boolalpha;compact<<std::boolalpha;
         WriteBc2PhysicalFeedAdmissionObservation(full,&compact);
         CHECK(field(compact.str(),"\"failedRetention\":",",\"retentionEntryPredicates\":")==failed);
-        CHECK(compact.str().find("\"latestChange\":{\"omitted\":\"payload_limit\"}")!=std::string::npos);
+        CHECK((compact.str().find("\"latestChange\":{\"omitted\":\"payload_limit\"}")!=std::string::npos)==f.sample.grip);
         const auto fullPress=field(full.str(),"\"firstPress\":",",\"latestChange\":");
         const auto compactPress=field(compact.str(),"\"firstPress\":",",\"latestChange\":");
         CHECK(field(compactPress,"\"firstPress\":",",\"leftBefore\":")==field(fullPress,"\"firstPress\":",",\"admissionChecked\":"));
@@ -655,6 +657,68 @@ int CompactAdmissionUsesSameImmutableFailureAndPress(){
     CHECK(after.str()!=before.str()&&after.str().find("\"failedRetention\":null")!=std::string::npos);
     CHECK(compact.str().find("\"leftBefore\":{\"id\":"+std::to_string(held->token.id)+",")!=std::string::npos);
     CHECK(compact.str().size()+11702+4096<=32768);
+    return 0;
+}
+int NeutralBlockedAdmissionObservesExistingRefusalsWithoutAuthority(){
+    const auto observe=[](bool compact=false){std::ostringstream full,small;full<<std::boolalpha;small<<std::boolalpha;
+        WriteBc2PhysicalFeedAdmissionObservation(full,&small);return compact?small.str():full.str();};
+    const auto press=[](const std::string& text){return text.substr(0,text.find(",\"latestChange\":"));};
+    const auto latest=[](const std::string& text){const auto at=text.find("\"latestChange\":");
+        return text.substr(at,text.find(",\"failedRetention\":",at)-at);};
+    const auto* registration=FindBc2FeedRegistration(5358977986686110024ull);CHECK(registration);
+    for(unsigned fault=0;fault<5;++fault){
+        Fixture f(registration);f.now=(10+fault)*1000*Ms;
+        CHECK(f.OpenCover()&&f.Reconcile());
+        RequestBc2PhysicalFeedAdmissionObservation(f.now);
+        CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&f.Reconcile());
+        CHECK(f.result.blocksFire&&f.result.presentation&&!f.result.ownsHand&&!f.result.presentation->supplyObject);
+        const auto first=press(observe());CHECK(first.find("\"currentGrip\":true")!=std::string::npos);
+        const auto previous=f.sample.raw;
+        if(fault==1)++f.native.counts.reserve;
+        f.PrepareTick(f.lastWrist,false);
+        if(fault==0)++f.sample.raw.inputEvidence.observedNs; // No exact recorded packet.
+        if(fault==2){auto loss=f.sample.input;loss.tracked[0]=false;(void)f.hands.Update(loss);}
+        if(fault==3){const auto gun=f.hands.Current(InteractionHand::Right);CHECK(gun);
+            CHECK(f.hands.Release(f.sample.input,gun->token).accepted);}
+        if(fault==4)f.sample.input.tracked[0]=false;
+        const auto counts=f.native.counts;const auto reads=f.nativeReads,readAts=f.nativeReadAts,submits=f.submits;
+        f.Consume(fault==1?&previous:nullptr);
+        CHECK(f.nativeReads==reads+1&&f.nativeReadAts==readAts+1&&f.submits==submits&&f.native.counts==counts);
+        CHECK(f.result.blocksFire&&!f.result.blocksEquipment&&!f.result.ownsHand&&!f.result.pending&&!f.result.presentation);
+        CHECK(!f.result.diagnostic.policyEvaluated&&!f.hands.Current(InteractionHand::Left)&&!f.backend.Pending());
+        CHECK(f.result.diagnostic.exit==(fault==4?Bc2PhysicalFeedExit::SelectionOrInput:Bc2PhysicalFeedExit::GunOrRawUnverified));
+        const auto full=observe(),compact=observe(true),row=latest(full),small=latest(compact);
+        CHECK(press(full)==first&&row.find("\"currentGrip\":false")!=std::string::npos);
+        CHECK(row.find("\"sequence\":"+std::to_string(f.sequence)+",")!=std::string::npos);
+        const char* masks=fault==0?"\"rawChecked\":3,\"rawPassed\":1":
+            fault==1?"\"rawChecked\":255,\"rawPassed\":127":
+            fault==2?"\"rawChecked\":511,\"rawPassed\":255":
+            fault==3?"\"rawChecked\":511,\"rawPassed\":510":"\"rawChecked\":0,\"rawPassed\":0";
+        CHECK(row.find(masks)!=std::string::npos&&small.find(masks)!=std::string::npos);
+        const char* gun=fault==3?"\"gun\":{\"checked\":1,\"passed\":0,\"firstFailure\":\"right_claim\"}":
+            fault==4?"\"gun\":{\"checked\":0,\"passed\":0,\"firstFailure\":null}":
+            "\"gun\":{\"checked\":63,\"passed\":63,\"firstFailure\":null}";
+        CHECK(row.find(gun)!=std::string::npos&&small.find(gun)!=std::string::npos);
+        if(fault==4)CHECK(row.find("\"admissionChecked\":63,\"admissionPassed\":31")!=std::string::npos);
+        CHECK(full.size()<8192&&compact.size()+11702+4096<=32768);
+        f.Consume();const auto stable=observe();
+        for(unsigned i=0;i<4;++i){++f.sample.input.nowNs;f.Consume();CHECK(observe()==stable);}
+        if(fault==0){
+            // New timestamps/sequences with the same missing-packet predicate
+            // do not replace the retained change on every neutral frame.
+            for(unsigned i=0;i<4;++i){f.PrepareTick(f.lastWrist,false);++f.sample.raw.inputEvidence.observedNs;
+                f.Consume();CHECK(observe()==stable);}
+        }
+        f.now+=1000*Ms;f.Tick(f.lastWrist,false);CHECK(observe()==stable);
+    }
+    // A request first observed during neutral debt has no synthetic firstPress.
+    Fixture f(registration);f.now=20*1000*Ms;CHECK(f.OpenCover()&&f.Reconcile());
+    CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&f.Reconcile());const auto before=observe();
+    f.PrepareTick(f.lastWrist,false);++f.sample.raw.inputEvidence.observedNs;f.Consume();CHECK(observe()==before);
+    RequestBc2PhysicalFeedAdmissionObservation(f.now);f.Consume();
+    CHECK(observe().find("\"retainedPress\":false")!=std::string::npos);
+    CHECK(observe().find("\"firstPress\":null")!=std::string::npos);
+    CHECK(latest(observe(true)).find("\"rawChecked\":3,\"rawPassed\":1")!=std::string::npos);
     return 0;
 }
 int BackendLifetimesIncreaseAcrossOwners(){
@@ -2018,5 +2082,6 @@ int main(){
     CHECK(AdmissionObservationExplainsMissingViewRetentionBeforeSuspension()==0);
     CHECK(AdmissionObservationIgnoresUnrelatedMechanismClaim()==0);
     CHECK(CompactAdmissionUsesSameImmutableFailureAndPress()==0);
-    std::puts("Bc2PhysicalFeedTests: 42 deterministic owner/arbiter/callback/presentation compositions; no game or headset acceptance");
+    CHECK(NeutralBlockedAdmissionObservesExistingRefusalsWithoutAuthority()==0);
+    std::puts("Bc2PhysicalFeedTests: 43 deterministic owner/arbiter/callback/presentation compositions; no game or headset acceptance");
 }

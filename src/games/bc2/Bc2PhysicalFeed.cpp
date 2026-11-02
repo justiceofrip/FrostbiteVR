@@ -35,6 +35,10 @@ struct FeedRetentionChecks {
 };
 constexpr const char* RetentionEntryPredicates[]={"view_unavailable","not_cancelled","current_grip",
     "not_released","current_input_window","equipment_present"};
+constexpr const char* GunPredicates[]={"right_claim","right_owner","right_item","right_gun_hold",
+    "right_no_prerequisite","right_lease"};
+constexpr const char* RawPredicates[]={"gun_hold","source_packet","source_native","source_input_window",
+    "input_after_native","source_native_fresh","native_same_item","native_same_counts","recorded_left_evidence"};
 constexpr const char* RetentionSlotPredicates[]={"slot_present","claim_present","session_present","session_ready",
     "no_pending","not_refused","motion_clean","no_release_wait","active_operation",
     "weapon_match","current_equipment","right_claim","right_owner","right_item","right_gun_hold",
@@ -70,18 +74,19 @@ struct FeedAdmissionAttempt {
     bool cancel=false,contactGeometryEvaluated=false;
     double distanceMeters=0;float angleRadians=0,radiusMeters=0,maxAngleRadians=0;
     unsigned orientation=0;
-    FeedRetentionChecks retention{};
+    FeedRetentionChecks retention{},gun{};
     std::array<FeedRetentionSlot,8> retentionSlots{};
 };
 struct FeedAdmissionObservation {
-    FeedAdmissionAttempt firstPress{},latestChange{};
+    std::optional<FeedAdmissionAttempt> firstPress;
+    FeedAdmissionAttempt latestChange{};
     std::optional<FeedAdmissionAttempt> failedRetention;
 };
 std::atomic<std::int64_t> admissionObservationUntil=0;
 std::atomic<std::shared_ptr<const FeedAdmissionObservation>> admissionObservation;
 bool SameAdmissionDecision(const FeedAdmissionAttempt& a,const FeedAdmissionAttempt& b)noexcept {
     const auto& x=a.diagnostic;const auto& y=b.diagnostic;
-    if(a.retention!=b.retention)return false;
+    if(a.retention!=b.retention||a.gun!=b.gun)return false;
     for(unsigned i=0;i<a.retentionSlots.size();++i){const auto& p=a.retentionSlots[i];const auto& q=b.retentionSlots[i];
         if(p.checks!=q.checks||p.registrationKey!=q.registrationKey||p.lifetime!=q.lifetime||p.claim!=q.claim||
             p.selectionFailure!=q.selectionFailure)return false;}
@@ -197,10 +202,12 @@ void WriteFeedAdmission(std::ostream& out,const FeedAdmissionObservation* observ
         out<<",\"sourceLookedUp\":"<<v.sourceLookedUp<<",\"originalPacket\":";
         if(a.originalPacket){out<<"{\"grip\":"<<v.sourceGrip<<",\"input\":";input(*a.originalPacket);out<<'}';}else out<<"null";
         out<<",\"sourceNative\":{\"sequence\":"<<d.sourceNativeSequence<<",\"observedNs\":"<<d.sourceNativeObservedNs<<",\"deadlineNs\":"<<d.sourceNativeDeadlineNs
-            <<"},\"exit\":\""<<FeedExitName(d.exit)<<'"';
+            <<"},\"exit\":\""<<FeedExitName(d.exit)<<'"'
+            <<",\"rawChecked\":"<<d.rawChecked<<",\"rawPassed\":"<<d.rawPassed<<",\"gun\":{";
+        checks(a.gun,GunPredicates);out<<'}';
         if(!essential){out<<",\"admissionChecked\":"<<d.admissionChecked<<",\"admissionPassed\":"<<d.admissionPassed
             <<",\"selectionFailure\":";status(d.selectionFailure);
-        out<<",\"rawChecked\":"<<d.rawChecked<<",\"rawPassed\":"<<d.rawPassed<<",\"idleChecked\":"<<d.idleChecked<<",\"idlePassed\":"<<d.idlePassed
+        out<<",\"idleChecked\":"<<d.idleChecked<<",\"idlePassed\":"<<d.idlePassed
             <<",\"neutralAgeNs\":"<<d.neutralAgeNs<<",\"candidate\":{\"status\":";status(v.queryStatus);
         out<<",\"operation\":";status(v.candidateOperation);out<<",\"part\":";status(v.candidatePart);out<<"},\"eligibility\":";
         if(!v.eligibilityEvaluated)out<<"null";else out<<"{\"available\":"<<v.available<<",\"heldBeforeOwnership\":"<<v.heldBeforeOwnership
@@ -234,13 +241,17 @@ void WriteFeedAdmission(std::ostream& out,const FeedAdmissionObservation* observ
                 <<"},\"heldNative\":{\"sequence\":"<<r.nativeSequence<<",\"observedNs\":"<<r.nativeObservedNs<<",\"deadlineNs\":"<<r.nativeDeadlineNs<<"}}";
         }out<<"]}}";
     };
-    out<<"{\"observationOnly\":true,\"retainedPress\":true,\"unreachedFieldsAreDefaultValues\":true,\"ownerFields\":[\"player\",\"soldier\",\"weak\",\"weapon\",\"actorGeneration\",\"equipGeneration\",\"space\"]"
-        <<",\"inputOwnerFields\":[\"actor\",\"actorGeneration\",\"equipGeneration\",\"space\"],\"firstPress\":";attempt(observation->firstPress,compact);
-    out<<",\"latestChange\":";if(compact)out<<"{\"omitted\":\"payload_limit\"}";else attempt(observation->latestChange);
+    out<<"{\"observationOnly\":true,\"retainedPress\":"<<(observation->firstPress?"true":"false")<<",\"unreachedFieldsAreDefaultValues\":true,\"ownerFields\":[\"player\",\"soldier\",\"weak\",\"weapon\",\"actorGeneration\",\"equipGeneration\",\"space\"]"
+        <<",\"inputOwnerFields\":[\"actor\",\"actorGeneration\",\"equipGeneration\",\"space\"],\"firstPress\":";
+    if(observation->firstPress)attempt(*observation->firstPress,compact);else out<<"null";
+    out<<",\"latestChange\":";
+    if(compact&&observation->latestChange.decision.currentGrip)out<<"{\"omitted\":\"payload_limit\"}";
+    else attempt(observation->latestChange,compact);
     out<<",\"failedRetention\":";if(observation->failedRetention)attempt(*observation->failedRetention);else out<<"null";
     const auto names=[&](const auto& values){out<<'[';bool comma=false;for(const auto* name:values){if(comma)out<<',';comma=true;out<<'"'<<name<<'"';}out<<']';};
     out<<",\"retentionEntryPredicates\":";names(RetentionEntryPredicates);
-    out<<",\"retentionSlotPredicates\":";names(RetentionSlotPredicates);out<<'}';
+    out<<",\"retentionSlotPredicates\":";names(RetentionSlotPredicates);
+    out<<",\"rawPredicates\":";names(RawPredicates);out<<",\"gunPredicates\":";names(GunPredicates);out<<'}';
 }
 }
 void WriteBc2PhysicalFeedAdmissionObservation(std::ostream& out,std::ostream* compact){
@@ -503,13 +514,17 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     };
     Bc2PhysicalFeedResult out;out.blocksFire=blocksFire();out.blocksEquipment=blocksEquipment();publication.store({},std::memory_order_release);
     if(!state_){out.diagnostic.exit=FeedExit::StorageUnavailable;return out;}auto& state=*state_;const auto now=s.input.nowNs;
-    const bool observePress=now>0&&now<admissionObservationUntil.load(std::memory_order_relaxed)&&
-        s.grip&&SupportedAsset(s.asset);
-    const bool newPress=!state.admissionPressed||!state.admission||state.admission->latestChange.owner!=s.owner||
-        state.admission->latestChange.weapon!=s.weapon;
+    // Neutral loss of a paired raw/native packet can remove the presentation
+    // while debt still blocks fire. Journal that gate change without inventing
+    // a squeeze or extending any input/native/claim lease.
+    const bool observe=now>0&&now<admissionObservationUntil.load(std::memory_order_relaxed)&&
+        (s.grip||out.blocksFire)&&SupportedAsset(s.asset);
+    const bool observePress=observe&&s.grip;
+    const bool newPress=observePress&&(!state.admissionPressed||!state.admission||state.admission->latestChange.owner!=s.owner||
+        state.admission->latestChange.weapon!=s.weapon);
     state.admissionPressed=observePress;
     std::optional<FeedAdmissionAttempt> observation;
-    if(observePress){observation.emplace();auto& a=*observation;
+    if(observe){observation.emplace();auto& a=*observation;
         a.owner=s.owner;a.weapon=s.weapon;a.current=s.input;a.raw=s.raw.inputEvidence;a.cancel=s.cancel;
         a.decision.currentGrip=s.grip;a.decision.rawPresent=s.raw.valid;
         a.leftBefore=hands.Current(InteractionHand::Left);a.rightBefore=hands.Current(InteractionHand::Right);
@@ -535,10 +550,11 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             a.registrationKey=registration?registration->key:0;a.lifetime=e?e->lifetime:0;
             if(a.leftFeedSlot!=~0u){const auto leftAfter=hands.Current(InteractionHand::Left);
                 a.leftFeedClaimLost=!leftAfter||leftAfter->token!=a.leftBefore->token;}
-            if(newPress||!SameAdmissionDecision(state.admission->latestChange,a))try{
+            if(newPress||!state.admission||!SameAdmissionDecision(state.admission->latestChange,a))try{
                 auto next=std::make_shared<FeedAdmissionObservation>();
-                next->firstPress=newPress?a:state.admission->firstPress;next->latestChange=a;
-                if(!newPress)next->failedRetention=state.admission->failedRetention;
+                if(newPress)next->firstPress=a;
+                else if(state.admission){next->firstPress=state.admission->firstPress;next->failedRetention=state.admission->failedRetention;}
+                next->latestChange=a;
                 if(!next->failedRetention&&(a.retention.passed&1)&&a.leftFeedSlot!=~0u&&
                     a.leftFeedClaimLost&&!out.ownsHand)next->failedRetention=a;
                 state.admission=next;admissionObservation.store(std::move(next),std::memory_order_release);
@@ -692,8 +708,9 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         e->original=*view;e->weapon=s.weapon;e->neutral.reset();e->lastInput=e->rejectedInput=0;e->motionDirty=true;
     }
     const auto right=hands.Current(InteractionHand::Right);
-    const bool gun=right&&right->token.owner==s.input.owner&&right->token.item==s.weapon&&
-        right->token.kind==HandClaimKind::GunHold&&!right->token.prerequisiteClaim&&right->deadlineNs>now;
+    const auto gunCheck=[&](unsigned bit,bool pass){return observation?observation->gun.Check(bit,pass):pass;};
+    const bool gun=gunCheck(0,bool(right))&&gunCheck(1,right->token.owner==s.input.owner)&&gunCheck(2,right->token.item==s.weapon)&&
+        gunCheck(3,right->token.kind==HandClaimKind::GunHold)&&gunCheck(4,!right->token.prerequisiteClaim)&&gunCheck(5,right->deadlineNs>now);
     State::Packet* source=nullptr;
     for(auto& p:state.packets)if(p.owner==s.owner&&p.weapon==s.weapon&&SamePacket(p.input,s.raw.inputEvidence)&&
         (!p.contact||p.contact->rig==s.raw.rig)){source=&p;break;}
