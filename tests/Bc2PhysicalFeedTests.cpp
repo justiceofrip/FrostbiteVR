@@ -1389,6 +1389,7 @@ int BusyGateCannotRetainExpiredOrChangedFeedOwnership(){
         const auto start=feed_interaction_detail::Multiply(m.motionFromContact,m.weaponFromMotion);
         f.Tick(start,false);f.Tick(start,true);const auto held=f.hands.Current(InteractionHand::Left);CHECK(held);
         const auto gate=f.backend.ReadGate(f.native.binding.context.resource);CHECK(gate);
+        const auto originalEquipment=*f.sample.equipment;
         f.busyGate=true;
         if(fault==0)f.now=held->deadlineNs-10*Ms; // New input cannot prolong the old claim.
         f.PrepareTick(start,fault!=1);
@@ -1397,7 +1398,12 @@ int BusyGateCannotRetainExpiredOrChangedFeedOwnership(){
         if(fault==4){f.sample.input.nowNs=f.sample.input.deadlineNs;}
         f.Consume();
         CHECK(!f.result.ownsHand&&!f.hands.Current(InteractionHand::Left)&&!f.submitted&&f.submits==0);
-        CHECK(f.result.blocksFire&&f.backend.ReadGate(f.native.binding.context.resource)==gate);
+        // A mismatched current equipment identity cannot inherit the original
+        // item's blocker. Its rejected interaction still retains that exact
+        // original item's physical debt and native blocking gate.
+        CHECK(f.result.blocksFire==(fault!=2));
+        CHECK(f.physical.BlocksFire(f.sample.owner,originalEquipment,f.sample.binding));
+        CHECK(f.backend.ReadGate(f.native.binding.context.resource)==gate);
     }
     return 0;
 }
