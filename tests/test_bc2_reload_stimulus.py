@@ -1,13 +1,18 @@
 """Portable regressions for ordinary input transport, not native reload proofs."""
+from contextlib import ExitStack
 import copy
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
 import queue
+import shutil
+import tempfile
 import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
+import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("reload_stimulus", ROOT / "tools/drive_bc2_reload_stimulus.py")
@@ -103,6 +108,104 @@ class ScheduleDriver(m.ReloadStimulus):
 
 
 class StimulusTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == "nt", "startup receipts require local Windows drive paths")
+    def test_real_constructor_and_main_reach_fresh_boundary_without_input(self):
+        # Keep construction, dispatch, receipts, ownership and fresh() real.
+        # Only the process/Win32 and observer boundaries are offline substitutes.
+        clock = Clock()
+        with ExitStack() as cleanup:
+            # Inherit scratch ACLs; Python's Windows mode-0700 temp directories
+            # can exclude the restricted token used by the installed runtime.
+            scratch = Path(tempfile.gettempdir()).resolve()
+            run = (scratch / ("bc2-stimulus-startup-" + uuid.uuid4().hex)).resolve()
+            run.mkdir()
+            def remove_fixture():
+                self.assertEqual(run.resolve().parent, scratch)
+                shutil.rmtree(run)
+            cleanup.callback(remove_fixture)
+            folder, sim = run / "session", run / "sim"
+            folder.mkdir()
+            sim.mkdir()
+
+            def save(path, value):
+                path.write_bytes(m.transport.json_bytes(value))
+
+            def pin(name):
+                path = run / name
+                raw = b"offline startup fixture; never executable\n"
+                path.write_bytes(raw)
+                return dict(path=str(path), bytes=len(raw), sha256=m.transport.digest(raw))
+
+            pins = {key: pin(key) for key in ("runtime_manifest", "runtime_library", "host_executable")}
+            host = dict(pid=123, path=pins["host_executable"]["path"], start_utc="2026-11-02T00:00:00Z")
+            supervisor = dict(pid=456)
+            identity = dict(source_sha256="offline-source", version="offline")
+            command = b"note offline settled startup\n"
+            command_path = sim / "command.txt"
+            command_path.write_bytes(command)
+            state = dict(pid=host["pid"], runtime="xr-sim", errors=0, lastCmdError="",
+                sessionRunning=True, actionsAttached=True, sessionState="FOCUSED", paceMode="free",
+                head=dict(valid=True), handL=dict(valid=True), handR=dict(valid=True),
+                captureSeq=0, cmdSeq=1, lastCmd="note offline settled startup", controls=copy.deepcopy(CONTROLS))
+            save(sim / "state.json", state)
+            save(run / "run-manifest.json", dict(schema="fvr.xr-game-run.v1", output_directory=str(run),
+                capture_plan=dict(maximum_compositions=0), **identity, **pins))
+            save(run / "session-link.json", dict(root_commands_ready=True, host=host, supervisor=supervisor,
+                folder=str(folder), sim_state=str(sim / "state.json"), command=str(command_path),
+                session=str(folder / "session.json"), options=str(folder / "options.json"),
+                stop_request=str(folder / "stop.request"), startup_receipt=str(run / "sim-startup.json"),
+                mechanism_snapshots=dict(requested=True)))
+            save(run / "sim-startup.json", dict(root_commands_ready=True, status="ready", host=host,
+                target_sequence=state["cmdSeq"], command_file=dict(sha256=m.transport.digest(command)),
+                settled_state=dict(lastCmd=state["lastCmd"])))
+            save(folder / "session.json", dict(host=host, supervisor=supervisor, state="running", **identity))
+            save(folder / "options.json", dict(activate_window=False,
+                xr_manifest=pins["runtime_manifest"]["path"], **identity))
+            (folder / "mechanism-snapshot.enable").write_bytes(b"1\n")
+            profiles = run / "profiles.json"
+            save(profiles, dict(profiles=[]))
+            owner = Mock()
+            owner.api.CreateFileW.return_value = 1
+            observer = types.SimpleNamespace(fatal=None, inbox=queue.Queue(), close=Mock(return_value=True))
+            stdout = io.StringIO()
+            with patch.object(m, "time", clock), \
+                    patch.object(m.transport, "WindowsOwner", return_value=owner) as owner_factory, \
+                    patch.object(m, "sim_state", side_effect=lambda path, deadline: m.transport.read_json(path)[0]), \
+                    patch.object(m, "ObservationWorker", return_value=observer) as observer_factory, \
+                    patch.object(m.ctypes, "WinDLL", side_effect=AssertionError("unexpected native access")), \
+                    patch("sys.stdout", stdout):
+                code = m.main(["--run", str(run), "--profiles", str(profiles), "--family", "feed",
+                    "--stage", "OpenCover", "--root-authorized-ordinary-input"])
+            result = json.loads(stdout.getvalue())
+            self.assertEqual(code, 2)
+            self.assertEqual(result["error"], "fresh typed stimulus boundary absent within original budget")
+            self.assertEqual(result["status"], "refused")
+            self.assertEqual(result["durationNs"], m.RECEIVE_NS)
+            self.assertEqual(result["commands"], 0)
+            self.assertEqual(result["plans"], [])
+            self.assertEqual(result["boundaries"], {})
+            self.assertTrue(result["observationIncomplete"])
+            self.assertTrue(result["observerStopped"])
+            for key in ("pendingCommand", "leftGripHeld", "stimulusCompleted", "boundaryChecksPassed",
+                        "nativeAcceptance", "headsetAcceptance"):
+                self.assertFalse(result[key], key)
+            self.assertEqual(result["release"], "not attempted: no settled owned held left grip")
+            self.assertEqual(command_path.read_bytes(), command)
+            for path in (sim / "ack.txt", run / "live-driver-owner.json",
+                         folder / "mechanism-snapshot-request.txt"):
+                self.assertFalse(path.exists(), path)
+            owner_factory.assert_called_once_with(host)
+            self.assertEqual(owner.api.CreateFileW.call_args.args[0], str(run / "live-driver.lock"))
+            self.assertGreater(owner.check.call_count, 1)
+            owner.api.CloseHandle.assert_called_once_with(1)
+            owner.close.assert_called_once_with()
+            observer_factory.assert_called_once_with(folder, clock.now - m.RECEIVE_NS + 10*m.NS - 400_000_000)
+            observer.close.assert_called_once_with()
+            artifacts = Path(result["artifactDirectory"])
+            self.assertEqual(json.loads((artifacts / "result.json").read_text()), result)
+            self.assertEqual({path.name for path in artifacts.iterdir()},
+                             {"invocation.json", "profile-source.json", "initial-state.json", "result.json"})
+
     def test_actual170_neutral_control_shape_and_owned_grip(self):
         self.assertTrue(m.neutral_controls(CONTROLS))
         held = copy.deepcopy(CONTROLS)

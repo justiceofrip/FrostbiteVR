@@ -606,7 +606,7 @@ class ReloadStimulus:
         self.plans[-1].update(stimulusCompleted=True, boundaryChecksPassed=len(self.boundaries) == len(stimulus["boundaries"]))
         return stimulus
 
-    def run(self):
+    def run_stimulus(self):
         pickup = None
         original_stage = self.args.stage
         if self.args.pickup_first:
@@ -681,7 +681,7 @@ def main(argv=None):
                 ("pump", "ShellInsert"), ("fixed", "Insert")), "pickup-first needs its matching insertion stage")
         driver = ReloadStimulus.__new__(ReloadStimulus)
         driver.__init__(args)
-        driver.run()
+        driver.run_stimulus()
         result.update(status="ordinary_stimulus_completed", stimulusCompleted=True, boundaryChecksPassed=True)
         code = 0
     except (Exception, KeyboardInterrupt) as error:
