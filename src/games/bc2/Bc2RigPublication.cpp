@@ -2668,7 +2668,8 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
         std::ostringstream header;header.imbue(std::locale::classic());
         header<<"{\"schema\":\"fvr.bc2.live-mechanism-snapshot.v1\",\"nonce\":\""<<nonce
             <<"\",\"valid\":false,\"invalid_reason\":\""<<reason<<"\",\"observed_ns\":"<<observed
-            <<",\"bodyHolster\":{\"available\":false,\"reason\":\"snapshot_unavailable\"}";
+            <<",\"bodyHolster\":{\"available\":false,\"reason\":\"snapshot_unavailable\"}"
+            <<",\"bodyInventory\":{\"observationOnly\":true,\"available\":false,\"reason\":\"snapshot_unavailable\"}";
         const auto prefix=header.str();
         const auto diagnostics=feedDiagnostics.empty()?std::string{}:",\"feedDiagnostics\":"+feedDiagnostics;
         std::ostringstream observation;observation.imbue(std::locale::classic());observation<<std::boolalpha;
@@ -2982,6 +2983,93 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
                 <<",\"suppression\":{\"owner\":";owner(s.owner);json<<",\"inputEvidence\":";evidence(s.input);
             json<<",\"request\":"<<s.request<<",\"nativeTick\":"<<s.nativeTick<<",\"cache\":"<<s.cache
                 <<",\"equipmentDispatched\":"<<s.equipmentDispatched<<"}}";}
+    }json<<'}';
+    // Optional, read-only assignment evidence from one existing immutable packet.
+    // Native inventory indices and body slots are different namespaces. Neither
+    // pointer order nor a prior run may stand in for this current policy mapping.
+    // Loading a later packet does not replace the shot/holster input or renew any
+    // lease; this independent observation exposes its original clock and owner.
+    const auto inventoryTracking=renderTracking.load(std::memory_order_acquire);
+    const auto inventoryNow=ReloadNanos();
+    const auto* inventoryDisplay=inventoryTracking&&inventoryTracking->bodyInventoryDisplay?
+        inventoryTracking->bodyInventoryDisplay.get():nullptr;
+    const char* inventoryReason=nullptr;
+    if(!holsterJoined)inventoryReason="holster_unavailable";
+    else if(!inventoryDisplay)inventoryReason="display_missing";
+    else if(!BodyInventoryDisplayFresh(*inventoryDisplay,inventoryNow))inventoryReason="display_expired_or_invalid";
+    else {const auto& d=*inventoryDisplay;const auto& t=*inventoryTracking;const auto& e=t.controllerEvidence;
+        if(d.selectedOwner!=m.owner||t.controllerOwner!=d.selectedOwner||d.physicalOwner!=holster->hand.owner||
+           e.owner!=d.physicalOwner||d.sequence!=t.input.generation||d.sequence!=e.sequence||d.observedNs!=e.observedNs||
+           d.deadlineNs>e.deadlineNs||d.deadlineNs>ReloadNanos(t.deadline)||!feed_presentation_detail::Window(e,inventoryNow)||
+           e.nowNs<e.observedNs||e.nowNs>inventoryNow||
+           !interaction::ValidInput(t.input)||!t.input.focused||!t.input.headValid||
+           !t.input.hands[0].gripTracked||!t.input.hands[1].gripTracked||
+           !t.input.hands[0].aimTracked||!t.input.hands[1].aimTracked||
+           t.input.spaceGeneration!=d.physicalOwner.space||t.equipmentGeneration!=d.physicalOwner.equipGeneration||
+           t.soldier!=m.owner.soldier||t.weak!=m.owner.weak||t.weapon!=m.owner.weapon||t.ownerGeneration!=m.owner.actorGeneration||
+           t.nativeEquipment!=identity.equipment||d.carried.inventory!=selected->inventory||
+           !holster->selectedSlot||d.physicalSelected!=holster->selectedSlot->item||
+           (d.sequence==holster->hand.sequence&&(d.observedNs!=holster->hand.observedNs||e.deadlineNs!=holster->hand.deadlineNs))||
+           (d.sequence==m.inputEvidence.sequence&&(d.observedNs!=m.inputEvidence.observedNs||e.deadlineNs!=m.inputEvidence.deadlineNs)))
+            inventoryReason="display_owner_or_input_not_joined";
+        else {unsigned matches=0;
+            for(unsigned n=0;n<d.count;++n){const auto& row=d.slots[n];
+                if(row.assignment==*holster->selectedSlot&&row.native.weapon==identity.weapon&&
+                   row.native.data==identity.equipment.data&&row.native.persistence==identity.equipment.persistence&&
+                   row.native.slot==selected->selectedSlot)++matches;}
+            if(matches!=1)inventoryReason="selected_assignment_not_joined";
+        }
+    }
+    json<<",\"bodyInventory\":{\"observationOnly\":true,\"available\":"<<(inventoryReason==nullptr)
+        <<",\"sampledNs\":"<<inventoryNow<<",\"reason\":";
+    if(inventoryReason)text(inventoryReason);else json<<"null";
+    if(!inventoryReason){const auto& d=*inventoryDisplay;
+        json<<",\"selectedOwner\":";owner(d.selectedOwner);json<<",\"physicalOwner\":";handOwner(d.physicalOwner);
+        json<<",\"physicalSelected\":";key(d.physicalSelected);
+        json<<",\"inputEvidence\":";evidence(inventoryTracking->controllerEvidence);
+        json<<",\"revision\":"<<d.revision<<",\"cohort\":"<<d.cohort<<",\"sequence\":"<<d.sequence
+            <<",\"observedNs\":"<<d.observedNs<<",\"deadlineNs\":"<<d.deadlineNs
+            <<",\"inventory\":"<<d.carried.inventory<<",\"switching\":"<<d.carried.switching
+            <<",\"nativeCount\":"<<d.carried.count<<",\"count\":"<<d.count<<",\"slots\":[";
+        // At most the existing eight assigned slots; no new memory scan or
+        // native read occurs here. Unsupported/stale configuration stays absent.
+        for(unsigned n=0;n<d.count;++n){if(n)json<<',';const auto& row=d.slots[n];const auto& v=row.native;
+            json<<"{\"assignment\":{\"slot\":"<<unsigned(row.assignment.slot)<<",\"item\":";key(row.assignment.item);
+            json<<"},\"native\":{\"slot\":"<<v.slot<<",\"weapon\":"<<v.weapon<<",\"data\":"<<v.data
+                <<",\"persistence\":"<<v.persistence<<",\"category\":"<<v.category<<"},\"configuration\":";
+            const auto emitConfiguration=[&](const auto& c,std::string_view asset,std::string_view kind){
+                json<<"{\"available\":true,\"owner\":";owner(c.owner);json<<",\"asset\":";text(asset);
+                json<<",\"kind\":";text(kind);json<<",\"weaponData\":"<<c.weaponData;
+                json<<",\"configurationPath\":";text(feed_presentation_detail::Text(c.configurationPath));
+                json<<",\"configurationPathPointer\":"<<c.configurationPathPointer<<",\"configurationPathVerified\":true"
+                    <<",\"soleConfiguredArray\":"<<c.soleConfiguredArray<<",\"inventory\":"<<c.inventory
+                    <<",\"selectedSlot\":"<<c.selectedSlot<<",\"sequence\":"<<c.sequence
+                    <<",\"observedNs\":"<<c.observedNs<<",\"deadlineNs\":"<<c.deadlineNs<<'}';};
+            if(v.weapon==m.owner.weapon){
+                if(selected->owner==d.selectedOwner&&selected->weaponData==v.data&&selected->inventory==d.carried.inventory&&
+                   selected->selectedSlot==v.slot&&selected->configurationPathVerified&&selected->configurationPathPointer>=0x10000&&
+                   selected->sequence&&selected->observedNs>0&&selected->observedNs<=inventoryNow&&selected->deadlineNs>inventoryNow&&
+                   selected->deadlineNs-selected->observedNs<=200000000&&selected->stateCount==1&&selected->soleConfiguredArray>=0x10000&&
+                   selected->states[0].array==selected->soleConfiguredArray&&selected->states[0].count<=8&&
+                   feed_presentation_detail::Text(selected->weaponName)==identity.equipment.Asset()&&
+                   !feed_presentation_detail::Text(selected->configurationPath).empty())
+                    emitConfiguration(*selected,identity.equipment.Asset(),"selected");
+                else json<<"{\"available\":false,\"reason\":\"selected_configuration_not_joined\"}";
+            }else if(const auto& carried=inventoryTracking->bodyCarriedMeshes[n]){const auto& c=carried->configured;
+                const auto asset=feed_presentation_detail::Text(c.weaponName);
+                if(carried->weapon==v.weapon&&carried->nativeSlot==v.slot&&carried->persistence==v.persistence&&
+                   c.owner==d.selectedOwner&&c.weaponData==v.data&&c.inventory==d.carried.inventory&&c.selectedSlot==selected->selectedSlot&&
+                   c.sequence&&c.sequence<=d.sequence&&c.observedNs>0&&c.observedNs<=d.observedNs&&c.deadlineNs>inventoryNow&&
+                   (c.sequence!=d.sequence||c.observedNs==d.observedNs)&&
+                   c.deadlineNs-c.observedNs<=200000000&&c.configurationPathVerified&&c.configurationPathPointer>=0x10000&&
+                   c.stateCount==1&&c.soleConfiguredArray>=0x10000&&c.states[0].array==c.soleConfiguredArray&&c.states[0].count<=8&&
+                   !asset.empty()&&!feed_presentation_detail::Text(c.configurationPath).empty()&&
+                   (!v.carryAsset[0]||asset==feed_presentation_detail::Text(v.carryAsset)))
+                    emitConfiguration(c,asset,"carried");
+                else json<<"{\"available\":false,\"reason\":\"carried_configuration_not_joined\"}";
+            }else json<<"{\"available\":false,\"reason\":\"carried_configuration_missing\"}";
+            json<<'}';
+        }json<<']';
     }json<<'}';
     json<<",\"input\":{\"generation\":"<<input.generation<<",\"spaceGeneration\":"<<input.spaceGeneration<<",\"predictedNs\":"<<input.predictedNs
         <<",\"focused\":"<<input.focused<<",\"headValid\":"<<input.headValid<<",\"floorRelative\":"<<input.floorRelative

@@ -1,9 +1,11 @@
 # Current state — shared normal integration / public 0.1.15
 
-Updated November 1, 2026. This replaces old next-step instructions; prior evidence remains in
+Updated November 2, 2026. This replaces old next-step instructions; prior evidence remains in
 [history/](history/README.md) (search it by run number; never read a log whole).
 
 ## Active work
+
+Feedback95 adds read-only body-slot/inventory mapping to opt-in mechanism snapshots. Actual92 showed the same scoped XM8 in body slot2 where the diagnostic assumed slot1; native inventory indices cannot predict those assignments. The private resolver now uses exact current source/target identities;23 offline cases cover144 permutations and rejection paths. Normal builds and a new native reload run remain pending; installed0.1.40 is unchanged. [Handoff](../handoff/integrations/coordinator-20261102-feedback95/README.txt).
 
 Feedback88 source e3b2220 is pushed; both normal builds pass341/341. Private0.1.40 is installed and setup/assets validation passes, with0.1.38 fallback and unchanged settings. The diagnostic holster reader now loads before sampling its observer clock and records exact refusals without changing gameplay leases or native operation authority. [Handoff](../handoff/integrations/coordinator-20261101-feedback88/README.txt). No public update or complete reload acceptance.
 

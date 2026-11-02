@@ -1,5 +1,5 @@
 BC2 VR shared integration coordination
-Updated: November 1, 2026
+Updated: November 2, 2026
 Policy for this run: one coordinator worktree; coordinator owns shared integration.
 Canonical repository: G:\Unity\VRMMO\FrostbiteVR
 Integration branch: checkpoint/436-r56-equipment-rendering
@@ -10,6 +10,8 @@ Exclusive integration lease: G:\Unity\VRMMO\bc2vr-task-worktrees\INTEGRATION.loc
 Ownership: prior CHAT25/26 close.json confirms lease release, idle helpers and
 exact profile restoration. Coordinator acquired the lease before shared mutations.
 External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned.
+
+Feedback95 candidate adds opt-in read-only current body-slot/native-item/configuration evidence, addressing actual92's zero-command hardcoded-slot refusal. Private binding checks validate23 cases including144 permutations; normal builds/live reload pending, installed40 unchanged. Handoff95. Private graphics Observe92 reached/rendered menu and joined unchanged device flags1, then failed loading with recorded execute-at-zero AV and a separate process-discovery handle error; all owned processes exited/profiles restored, native retirement not proved. Clear mode remains unrun.
 
 Feedback88 built/pushede3b2220/nativec9776d83; both normal341/341 and two focused suites per architecture pass. Diagnostic holster publication loads before observer clock; leases/native bindings unchanged. Private0.1.40 installed/setup validated,0.1.38 fallback/settings preserved. Initial validation hit launcher evidence cap and restored38; two ended85 sessions archived with every hash preserved before successful normal selection/validation. Reports88/installation02.json.
 Actual40 completed ordinary Empty->QJU draw/release and OpenCover counter advance. Detach driver refused while acknowledging intentional release/pending native result; Feedback90 corrects this diagnostic-only handoff.26 focused+14 affected readiness/planning cases pass; nativec9776d83/builds/installed40 unchanged. Handoff90. Actual40 normal retirement/game close/all6exits/profile/settings restoration passed. No full reload/muzzle/headset acceptance or public release.
