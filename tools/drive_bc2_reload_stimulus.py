@@ -6,6 +6,7 @@ the installed mod independently validates every real input frame and operation.
 This runner starts no process, captures no image and changes no native state.
 """
 import argparse
+from collections import deque
 import ctypes
 from ctypes import wintypes
 import gzip
@@ -42,11 +43,98 @@ MAX_COMMANDS = 512
 MAX_BYTES = 1024 * 1024
 MAX_OBSERVATIONS = 100  # 10s / original100ms request period; not a renewed clock.
 MAX_DIAGNOSTIC_RECORDS = 2048
+MAX_ACK_TRACE_POLLS = 32  # First poll plus a bounded tail; no per-poll archival.
 LEFT_POSE_SETUP = ["hand l follow off", "hand l aimtrim 0 0"]
 
 
 class ReadDeadline(Refusal):
     """A late read is not evidence that command ownership changed."""
+
+
+class AckReadTrace:
+    """Passive timings only: retain failed ACK polls, never extend their clock.
+
+    The first poll survives tail eviction so publication-to-first-read delay is
+    distinguishable from the last stalled read. Counters include evicted polls.
+    Nothing here serializes, touches disk, or contributes to an input decision.
+    """
+    def __init__(self, requested_ns, published_ns, deadline_ns, identity, cleanup=False):
+        self.requested_ns, self.published_ns, self.deadline_ns = requested_ns, published_ns, deadline_ns
+        self.identity, self.cleanup = identity, cleanup
+        self.first, self.current = None, None
+        self.tail = deque(maxlen=MAX_ACK_TRACE_POLLS - 1)
+        self.polls = self.attempts = 0
+        self.winerrors, self.phase_ns = {}, {}
+        self.last_state = self.last_ack = self.failure = None
+
+    def begin_poll(self):
+        self.polls += 1
+        self.current = dict(index=self.polls, startedNs=time.perf_counter_ns(), phaseNs={},
+                            openAttempts=0, winErrors={})
+        if self.first is None:
+            self.first = self.current
+        else:
+            self.tail.append(self.current)
+
+    def phase(self, name):
+        row = self.current
+        if row is None:
+            return
+        now = time.perf_counter_ns()
+        if "phase" in row:
+            previous, elapsed = row["phase"], now - row["phaseStartedNs"]
+            row["phaseNs"][previous] = row["phaseNs"].get(previous, 0) + elapsed
+            self.phase_ns[previous] = self.phase_ns.get(previous, 0) + elapsed
+        row["phase"], row["phaseStartedNs"] = name, now
+
+    def attempted_open(self, error=0):
+        self.attempts += 1
+        self.current["openAttempts"] += 1
+        if error:
+            key = str(error)
+            self.winerrors[key] = self.winerrors.get(key, 0) + 1
+            errors = self.current["winErrors"]
+            errors[key] = errors.get(key, 0) + 1
+
+    def observed_state(self, state):
+        # Record raw observations before validation without coercing malformed
+        # values or retaining arbitrary state payloads in the diagnostic journal.
+        self.last_state = {key: value[:512] if isinstance(value, str) else value
+            for key in ("cmdSeq", "lastCmd", "frame", "endFrames")
+            if isinstance(value := state.get(key), (str, int, float, bool, type(None)))} if isinstance(state, dict) else None
+        if self.current is not None:
+            self.current["state"] = self.last_state
+
+    def observed_ack(self, match, raw):
+        self.last_ack = dict(atNs=time.perf_counter_ns(), parsed=match is not None,
+                             text=raw[:512])
+        if match is not None:
+            self.last_ack.update(sequence=int(match[1]), frame=int(match[2]))
+        if self.current is not None:
+            self.current["ack"] = self.last_ack
+
+    def end_poll(self, error=None):
+        if self.current is None:
+            return
+        if error is not None:
+            self.current["failedPhase"] = self.current.get("phase")
+        self.phase("finished")
+        self.current["finishedNs"] = time.perf_counter_ns()
+        if error is not None:
+            self.current["error"] = str(error)[:512]
+        self.current = None
+
+    def failed(self, error):
+        self.failure = dict(atNs=time.perf_counter_ns(), kind=type(error).__name__, error=str(error)[:512])
+
+    def report(self):
+        rows = ([] if self.first is None else [self.first]) + list(self.tail)
+        return dict(type="ack_read_failure", requestedNs=self.requested_ns, publishedNs=self.published_ns,
+                    originalDeadlineNs=self.deadline_ns, pendingCommand=self.identity, cleanup=self.cleanup,
+                    failure=self.failure, pollCount=self.polls, retainedPolls=len(rows),
+                    droppedPolls=self.polls - len(rows), openAttempts=self.attempts,
+                    winErrors=self.winerrors, phaseNs=self.phase_ns, lastState=self.last_state,
+                    lastAck=self.last_ack, polls=rows)
 
 
 def deadline_bytes(path, maximum, deadline_ns):
@@ -206,9 +294,11 @@ def validate_stimulus(value, continuation=False):
     return value
 
 
-def sim_state(path, deadline_ns):
+def sim_state(path, deadline_ns, trace=None):
     """Immutable share-delete read; only transient2/32/33 inside original clock."""
     if os.name != "nt":
+        if trace is not None:
+            trace.phase("portable_state_read")
         return transport.read_json(path, 16384)[0]
     import msvcrt
     api = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -220,21 +310,36 @@ def sim_state(path, deadline_ns):
     while True:
         if time.perf_counter_ns() >= deadline_ns:
             raise ReadDeadline("original simulator state read deadline exceeded")
+        if trace is not None:
+            trace.phase("state_open")
         handle = api.CreateFileW(str(path), 0x80000000, 7, None, 3, 0x00200000, None)
         if handle == wintypes.HANDLE(-1).value:
             error = ctypes.get_last_error()
+            if trace is not None:
+                trace.attempted_open(error)
             if error not in (2, 32, 33):
                 raise ctypes.WinError(error)
+            if trace is not None:
+                trace.phase("state_retry_wait")
             time.sleep(.001)
             continue
+        if trace is not None:
+            trace.attempted_open()
+            trace.phase("state_handle")
         try:
             fd = msvcrt.open_osfhandle(handle, os.O_RDONLY | os.O_BINARY)
         except BaseException:
             api.CloseHandle(handle)
             raise
         with os.fdopen(fd, "rb") as stream:
+            if trace is not None:
+                trace.phase("state_read")
             require(os.fstat(stream.fileno()).st_size <= 16384, "oversized simulator state")
             raw = stream.read(16385)
+            if trace is not None:
+                trace.phase("state_close")
+        if trace is not None:
+            trace.phase("state_decode")
         require(len(raw) <= 16384, "simulator state grew")
         return json.loads(raw.decode("utf-8-sig"), parse_constant=lambda x: (_ for _ in ()).throw(Refusal(x)))
 
@@ -462,18 +567,30 @@ class ReloadStimulus:
         until = self.hard_deadline if cleanup else min(self.deadline, self.stage_deadline)
         if deadline_ns is not None:
             until = min(until, deadline_ns)
+        trace = getattr(self, "_ack_trace", None)
+        if trace is not None:
+            trace.phase("owner_check")
         self.owner.check()
+        if trace is not None:
+            trace.phase("session_read_decode")
         if deadline_ns is None:
             session, _ = transport.read_json(self.session_path)
         else:
             raw = deadline_bytes(self.session_path, 128 * 1024, until)
             session = json.loads(raw.decode("utf-8-sig"), parse_constant=lambda x: (_ for _ in ()).throw(Refusal(x)))
+        if trace is not None:
+            trace.phase("session_validation")
         require(session["host"] == self.host and session["supervisor"] == self.link["supervisor"]
                 and session["source_sha256"] == self.manifest["source_sha256"]
                 and session["version"] == self.manifest["version"] and session["state"] == "running",
                 "native session/owner/source changed")
         require(not (self.folder / "stop.request").exists(), "normal stop requested")
-        state = sim_state(self.state_path, until)
+        if trace is not None:
+            trace.phase("state_setup")
+        state = sim_state(self.state_path, until, trace) if trace is not None else sim_state(self.state_path, until)
+        if trace is not None:
+            trace.observed_state(state)
+            trace.phase("state_validation")
         if time.perf_counter_ns() >= until:
             raise ReadDeadline("original simulator state read deadline exceeded")
         require(integer(state["pid"]) == integer(self.host["pid"]) and state["runtime"] == "xr-sim"
@@ -761,9 +878,19 @@ class ReloadStimulus:
             self.first_sample_pending = False
         self.last_write = published
         self.commands += len(batch)
+        trace = AckReadTrace(written, published, until, dict(sequence=target, sentinel=sentinel,
+                            commandSha256=self.command_hash, commands=batch), cleanup)
+        self._ack_trace = trace
         try:
             state, committed = self._wait_ack(batch, before, sample, cleanup, until)
         except BaseException as error:
+            trace.failed(error)
+            if not hasattr(self, "_ack_failures"):
+                self._ack_failures = []
+            # At most the failed input and its failed ordinary cleanup release.
+            if len(self._ack_failures) < 2:
+                self._ack_failures.append(trace)
+            self._ack_trace = None
             if not cleanup:
                 # Preserve queued evidence after the ACK decision, without
                 # settling/replaying a late command or masking its refusal.
@@ -772,6 +899,8 @@ class ReloadStimulus:
                 except BaseException as observation_error:
                     raise Refusal(f"{error}; post-refusal observation failure: {observation_error}") from error
             raise
+        finally:
+            self._ack_trace = None
         self.last_commit = committed
         self.pending_command = False
         self.state = state
@@ -792,29 +921,53 @@ class ReloadStimulus:
         # No observation drain/archive anywhere in this polling loop: it
         # must not consume the original budget before a later ready poll.
         while time.perf_counter_ns() < until:
-            state = self.read_state(cleanup, until)
-            if self._acknowledged(state, batch, before, until):
-                if sample is not None:
-                    self.check_target(state, sample)
-                else:
-                    require(state["controls"]["gripL"] == 0, "cleanup grip did not commit")
-                committed = time.perf_counter_ns()
-                require(committed < until, "original command acknowledgement/commit deadline exceeded")
-                return state, committed
+            trace = getattr(self, "_ack_trace", None)
+            if trace is not None:
+                trace.begin_poll()
+            try:
+                state = self.read_state(cleanup, until)
+                if self._acknowledged(state, batch, before, until):
+                    if trace is not None:
+                        trace.phase("target_validation")
+                    if sample is not None:
+                        self.check_target(state, sample)
+                    else:
+                        require(state["controls"]["gripL"] == 0, "cleanup grip did not commit")
+                    committed = time.perf_counter_ns()
+                    require(committed < until, "original command acknowledgement/commit deadline exceeded")
+                    return state, committed
+            except BaseException as error:
+                if trace is not None:
+                    trace.end_poll(error)
+                raise
+            finally:
+                if trace is not None:
+                    trace.end_poll()
             time.sleep(.001)
         raise Refusal("original command acknowledgement/commit deadline exceeded")
 
     def _acknowledged(self, state, batch, before, deadline_ns=None):
+        trace = getattr(self, "_ack_trace", None)
         try:
+            if trace is not None:
+                trace.phase("command_read_validation")
             require(transport.digest(deadline_bytes(self.command_path, 4096, deadline_ns)) == self.command_hash, "competing command writer")
             require(integer(state["cmdSeq"]) in (self.sequence - len(batch), self.sequence), "unexpected command sequence")
             if integer(state["cmdSeq"]) != self.sequence:
                 return False
             require(state["lastCmd"] == self.sentinel, "command sentinel changed")
+            if trace is not None:
+                trace.phase("ack_exists")
             if not self.ack_path.exists():
                 return False
+            if trace is not None:
+                trace.phase("ack_read_decode")
             ack = deadline_bytes(self.ack_path, 4096, deadline_ns).decode("utf-8")
+            if trace is not None:
+                trace.phase("ack_validation")
             match = re.fullmatch(r"seq=(\d+) frame=(\d+) error=-\r?\nlast=([^\r\n]*)\r?\n", ack)
+            if trace is not None:
+                trace.observed_ack(match, ack)
             if not match or int(match[1]) != self.sequence:
                 return False
             require(match[3] == " | ".join(batch), "acknowledgement batch differs")
@@ -952,6 +1105,15 @@ class ReloadStimulus:
         # a subsequent driver cannot overlap its final read/request publication.
         return joined
 
+    def defer_ack_failures(self, observer_stopped):
+        # Called by main only after owned cleanup and observer shutdown. Keep
+        # serialization/budget accounting out of every pending-command poll.
+        for trace in getattr(self, "_ack_failures", ()):
+            value = trace.report()
+            value["observerStopped"] = observer_stopped
+            self.artifacts.event(value, cleanup=trace.cleanup)
+        self._ack_failures = []
+
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
@@ -1013,6 +1175,7 @@ def main(argv=None):
                     code = 2
                 flush_started = time.perf_counter_ns()
                 try:
+                    driver.defer_ack_failures(result.get("observerStopped", False))
                     driver.artifacts.flush()
                 except Exception as error:
                     result["archiveError"] = str(error)

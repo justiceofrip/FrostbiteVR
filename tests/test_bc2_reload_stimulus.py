@@ -797,7 +797,7 @@ class StimulusTests(unittest.TestCase):
                 raw=json.dumps(snapshot).encode(), requestNs=clock.now,
                 receivedNs=clock.now + 35_000_000, deadlineNs=clock.now + m.RECEIVE_NS))
 
-        def read_state(path, until):
+        def read_state(path, until, trace=None):
             self.assertEqual(path, driver.state_path)
             h.state_deadlines.append(until)
             if driver.pending_command and h.state["cmdSeq"] == driver.sequence:
@@ -919,6 +919,132 @@ class StimulusTests(unittest.TestCase):
                 self.assertIn("observation-001.json.gz", driver.artifacts.saved)
                 self.assertEqual(len(driver.observed), 1)
                 self.assertTrue(driver.observer.inbox.empty())
+                self.assertIsNone(driver._ack_trace)
+                self.assertEqual(getattr(driver, "_ack_failures", []), [])
+
+    def test_failed_ack_trace_is_bounded_deferred_and_does_not_replay_input(self):
+        clock = Clock()
+        with self.ack_driver(clock) as h:
+            driver, requested = h.driver, clock.now
+            h.alter_ack = lambda raw: b""
+            with self.assertRaisesRegex(m.Refusal, "original command acknowledgement/commit deadline exceeded"):
+                driver.send(sample(0, "acquire", 1, .1))
+            self.assertEqual(clock.now, requested + m.ACK_NS)
+            self.assertIsNone(driver.last_commit)
+            self.assertFalse(driver.unsafe_owner)
+            self.assertTrue(driver.pending_command)
+            self.assertIsNone(driver._ack_trace)
+            trace = driver._ack_failures[0]
+            report = trace.report()
+            self.assertEqual(report["originalDeadlineNs"], requested + m.ACK_NS)
+            self.assertEqual(report["requestedNs"], requested)
+            self.assertEqual(report["publishedNs"], driver.last_write)
+            self.assertGreater(report["pollCount"], m.MAX_ACK_TRACE_POLLS)
+            self.assertEqual(report["retainedPolls"], m.MAX_ACK_TRACE_POLLS)
+            self.assertEqual(report["droppedPolls"], report["pollCount"] - m.MAX_ACK_TRACE_POLLS)
+            self.assertEqual(report["polls"][0]["index"], 1)
+            self.assertEqual(report["polls"][-1]["index"], report["pollCount"])
+            self.assertEqual(report["lastState"]["cmdSeq"], driver.sequence)
+            self.assertEqual(report["lastAck"]["parsed"], False)
+            self.assertEqual(report["pendingCommand"]["commandSha256"], m.transport.digest(h.published[0]))
+            self.assertNotIn("ack_read_failure", [x["type"] for x in driver.artifacts.events])
+            self.assertEqual(driver.artifacts.persisted, {})
+            self.assertEqual(len(h.published), 1)
+
+            # Original input remains refused. Only its acknowledged held grip
+            # may settle for the existing ordinary release cleanup.
+            h.alter_ack = lambda raw: raw
+            self.assertEqual(driver.cleanup(), "ordinary owned left-grip release acknowledged")
+            self.assertEqual(len(h.published), 2)
+            self.assertEqual(h.published[-1].decode().splitlines()[:-1], ["grip l 0"])
+            self.assertEqual(trace.report(), report)
+            self.assertEqual(len(driver._ack_failures), 1)
+            driver.lock = None
+            driver.observer.close = Mock(return_value=True)
+            self.assertTrue(driver.close())
+            driver.defer_ack_failures(True)
+            self.assertEqual(driver.artifacts.persisted, {})
+            events = [x for x in driver.artifacts.events if x["type"] == "ack_read_failure"]
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0], dict(report, observerStopped=True))
+            self.assertEqual(driver._ack_failures, [])
+            driver.artifacts.flush()
+
+    def test_late_state_read_trace_preserves_original_expiry_and_phase(self):
+        clock = Clock()
+        with self.ack_driver(clock) as h:
+            h.state_read_ns = m.ACK_NS
+            requested = clock.now
+            with self.assertRaisesRegex(m.ReadDeadline, "original simulator state read deadline exceeded"):
+                h.driver.send(sample(0, "acquire", 1, .1))
+            report = h.driver._ack_failures[0].report()
+            self.assertEqual(report["originalDeadlineNs"], requested + m.ACK_NS)
+            self.assertEqual(report["failure"]["atNs"], requested + m.ACK_NS)
+            self.assertEqual(report["pollCount"], 1)
+            self.assertEqual(report["phaseNs"]["state_setup"], m.ACK_NS)
+            self.assertEqual(report["polls"][0]["failedPhase"], "state_validation")
+            self.assertEqual(report["lastState"]["cmdSeq"], h.driver.sequence)
+            self.assertIsNone(report["lastAck"])
+            self.assertIsNone(h.driver.last_commit)
+            self.assertFalse(h.driver.unsafe_owner)
+            self.assertEqual(len(h.published), 1)
+
+    @unittest.skipUnless(os.name == "nt", "Win32 share-delete read diagnostics")
+    def test_windows_state_trace_retains_transient_winerrors_and_exact_bytes_result(self):
+        clock = Clock()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "state.json"
+            expected = dict(cmdSeq=278, lastCmd="note owned", frame=9560, endFrames=9559)
+            path.write_bytes(json.dumps(expected).encode())
+            api = m.ctypes.WinDLL("kernel32", use_last_error=True)
+            api.CreateFileW.argtypes = [m.wintypes.LPCWSTR, m.wintypes.DWORD, m.wintypes.DWORD,
+                m.wintypes.LPVOID, m.wintypes.DWORD, m.wintypes.DWORD, m.wintypes.HANDLE]
+            api.CreateFileW.restype = m.wintypes.HANDLE
+            attempts = []
+            def create(*args):
+                attempts.append(args)
+                clock.now += 2_000_000
+                return m.wintypes.HANDLE(-1).value if len(attempts) <= 3 else api.CreateFileW(*args)
+            fake = types.SimpleNamespace(CreateFileW=Mock(side_effect=create), CloseHandle=api.CloseHandle)
+            trace = m.AckReadTrace(clock.now, clock.now, clock.now + m.ACK_NS, dict(sequence=278))
+            with patch.object(m, "time", clock), patch.object(m.ctypes, "WinDLL", return_value=fake), \
+                    patch.object(m.ctypes, "get_last_error", side_effect=[2, 32, 33]):
+                trace.begin_poll()
+                observed = m.sim_state(path, trace.deadline_ns, trace)
+                trace.end_poll()
+            self.assertEqual(observed, expected)
+            self.assertEqual(clock.now, trace.requested_ns + 11_000_000)
+            report = trace.report()
+            self.assertEqual(report["openAttempts"], 4)
+            self.assertEqual(report["winErrors"], {"2": 1, "32": 1, "33": 1})
+            self.assertEqual(report["phaseNs"]["state_open"], 8_000_000)
+            self.assertEqual(report["phaseNs"]["state_retry_wait"], 3_000_000)
+            self.assertTrue({"state_read", "state_decode", "state_close"}.issubset(report["phaseNs"]))
+            self.assertTrue(all(args[2] == 7 for args in attempts))
+
+    @unittest.skipUnless(os.name == "nt", "Win32 share-delete read diagnostics")
+    def test_windows_missing_state_retries_stop_at_original_deadline(self):
+        clock = Clock()
+        with tempfile.TemporaryDirectory() as directory:
+            missing = Path(directory) / "unpublished-state.json"
+            deadline = clock.now + 5_000_000
+            trace = m.AckReadTrace(clock.now, clock.now, deadline, dict(sequence=278))
+            with patch.object(m, "time", clock):
+                trace.begin_poll()
+                try:
+                    m.sim_state(missing, deadline, trace)
+                except m.ReadDeadline as error:
+                    trace.end_poll(error)
+                    trace.failed(error)
+                else:
+                    self.fail("missing state must not renew the original read deadline")
+            report = trace.report()
+            self.assertEqual(clock.now, deadline)
+            self.assertEqual(report["openAttempts"], 5)
+            self.assertEqual(report["winErrors"], {"2": 5})
+            self.assertEqual(report["phaseNs"]["state_retry_wait"], 5_000_000)
+            self.assertEqual(report["failure"]["kind"], "ReadDeadline")
+            self.assertIsNone(report["lastState"])
 
     def test_original_ack_deadline_rejects_late_session_state_or_ack_read(self):
         for late_read in ("session_read_ns", "state_read_ns", "ack_read_ns"):
