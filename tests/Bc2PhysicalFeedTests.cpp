@@ -745,14 +745,18 @@ int HeldSupplyLossRetainsPreclearReasonAndCustody(){
             CHECK(compact.substr(compactAt,compact.find(",\"firstSupplyLoss\":",compactAt)-compactAt)==mechanismLoss);
             CHECK(observe(true).size()+11702+4096<=32768);
         }
-        const auto heldCompact=observe(true);
-        CHECK(heldCompact.find("\"latestChange\":{\"omitted\":\"payload_limit\"}")!=std::string::npos);
         // Supply-only and all-three-failure payloads retain the same first press
         // and complete first failures through later held/Suspend/neutral changes.
         f.missingCurrentView=false;f.sample.raw.valid=true;
-        f.Tick(f.lastWrist,true);f.physical.Suspend(f.sample.input,f.hands);f.Tick(f.lastWrist,false);
+        f.Tick(f.lastWrist,true);f.physical.Suspend(f.sample.input,f.hands);
+        const auto heldCompact=observe(true); // Suspend may add the first mechanism loss.
+        CHECK(heldCompact.find("\"latestChange\":{\"omitted\":\"payload_limit\"}")!=std::string::npos);
+        f.Tick(f.lastWrist,false);
         const auto neutral=observe(),compactNeutral=observe(true);
         CHECK(loss(neutral)==retained&&loss(compactNeutral)==retained&&first(neutral)==press);
+        if(first(compactNeutral)!=compactPress||compactNeutral!=heldCompact)
+            std::fprintf(stderr,"Neutral feed admission fault %u: firstPressEqual=%d, compactEqual=%d, compact=%zu, held=%zu\n",
+                fault,int(first(compactNeutral)==compactPress),int(compactNeutral==heldCompact),compactNeutral.size(),heldCompact.size());
         CHECK(first(compactNeutral)==compactPress&&compactNeutral==heldCompact);
         const auto neutralLatest=field(neutral,"\"latestChange\":",",\"failedRetention\":");
         CHECK(neutralLatest.find("\"currentGrip\":false")!=std::string::npos);
