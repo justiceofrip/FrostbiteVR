@@ -1,4 +1,4 @@
-Candidate50: shared feed publication-gap recovery and stimulus observation timing.
+Installed private50: shared feed publication-gap recovery and observation timing.
 
 Actual221/run04 completed ordinary Empty/QJU draw and OpenCover. Detach lost
 mechanism claim5 before dispatch: its render packet existed but the original
@@ -19,9 +19,10 @@ First loss was premature; the exact first recovered packet is unrecorded, so
 the evidence does not prove the entire gap fits inside the original leases.
 
 The family fixture preserves the prior264 cycles and adds the missing-native
-axis across all24 profiles: expected528 full cycles/2640 mocked receipts,
+axis across all24 profiles:528 passing full cycles/2640 mocked receipts,
 plus72 independent deadline boundaries. The original192 clock cases remain.
-Native execution is pending; prepared cases are not passing-test claims.
+Both x86/x64 focused runs pass528 and192, followed by342/342 normal checks.
+These are mocked-adapter checks, not native or headset reload acceptance.
 
 235 defers bounded diagnostic serialization/compression/file writes until after
 owned cleanup and observer shutdown. Original ACK/boundary/stage deadlines,
@@ -31,6 +32,12 @@ record the failing phase. The run does not isolate compression as its cause.
 All51 affected Python checks pass with the actual profile export, zero skips;
 all four stimulus families share this path. Prior geometry checks are reused.
 
-Private49/fallback48 remains installed. New native builds, symbols, package,
-installation and actual/headset qualification are pending.238 prepares delivery;
-root alone executes it after final source review. No public release is implied.
+Private50/fallback49 installed and WorkerValidate passed; settings preserved.
+Source7234ff6 pushed/remote-verified coordinator and accepted checkpoint refs.
+238 froze all eight binary/symbol pairs and verified105 package files plus306
+cache records. Source/build/install are separate from gameplay acceptance.
+Actual239/run01 rendered both menu eyes, then refused before Resume because
+the retained crash recorder used41GiB while the parent run had44GiB authority.
+Six owned processes exited0, native retired, game closed and profiles restored.
+No reload input occurred;240 prepares shared exact-run storage authority.
+No public release or successful native/headset reload is claimed.
