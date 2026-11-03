@@ -437,8 +437,14 @@ class ReloadStimulus:
                 now = time.perf_counter_ns()
                 if not item["current"] or now >= self.geometry.source_deadline(snapshot, self.args.family):
                     continue
-                if boundary is not None and integer(snapshot["input_evidence"]["observedNs"]) < self.last_write:
-                    continue  # A newly serialized response can still describe pre-command input.
+                if boundary is not None:
+                    require(self.last_commit is not None, "fresh boundary requires settled command")
+                    # Publishing the command file precedes host application. A
+                    # snapshot after that write can still contain held input
+                    # from before the acknowledged release. Keep the original
+                    # budget and require input observed after the settled ACK.
+                    if integer(snapshot["input_evidence"]["observedNs"]) < max(self.last_write, self.last_commit):
+                        continue
                 if boundary is None:
                     try:
                         if prepare:

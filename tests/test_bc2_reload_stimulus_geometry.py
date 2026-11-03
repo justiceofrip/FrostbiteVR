@@ -272,6 +272,76 @@ class FeedRegistryStimulusTests(unittest.TestCase):
             g.check_boundary(plan, later, "feed_released", NOW+20_000_000, profiles=self.profiles, prior=prior)
         self.assertNotIsInstance(caught.exception, g.BoundaryPending)
 
+    def released_feed(self):
+        row = self.profiles["profiles"][0]
+        before = complete(ff.synthetic_snapshot(row, "DetachContainer"))
+        plan = g.build_stimulus("feed", self.profiles, before, NOW, "DetachContainer")
+        later = complete(ff.synthetic_snapshot(row, "AttachContainer", NOW+20_000_000, sequence=101))
+        later["feedObservation"].update(submit_attempts=1, receipts_accepted=1, gate_refusals=2)
+        prior = {"feed_acquired": {"counters": g._counters(before), "lifetime": before["feed"]["lifetime"]}}
+        return plan, later, prior
+
+    def test_feed_release_records_recovered_historical_gate_delta_without_acceptance(self):
+        plan, later, prior = self.released_feed()
+        original = copy.deepcopy(later)
+        result = g.check_boundary(plan, later, "feed_released", NOW+20_000_000,
+            command_written_ns=NOW+1_000_000, profiles=self.profiles, prior=prior)
+        self.assertEqual(later, original)
+        self.assertEqual(result["unresolvedGateRefusalDelta"], 1)
+        self.assertIn("unresolved", result["evidenceLimitations"][0])
+        self.assertTrue(result["receiptCounterAdvanced"])
+        for field in ("nativeReceiptProof", "nativeAcceptance", "headsetAcceptance"):
+            self.assertFalse(result[field])
+
+    def test_feed_release_historical_gate_delta_with_absent_feed_waits_for_fresh_release(self):
+        plan, later, prior = self.released_feed()
+        absent = copy.deepcopy(later)
+        absent["feed"] = None
+        absent["weapon_actions_blocked"] = False  # Generic frame admission still applies.
+        with self.assertRaises(g.BoundaryPending):
+            g.check_boundary(plan, absent, "feed_released", NOW+20_000_000,
+                profiles=self.profiles, prior=prior)
+        absent["feedObservation"]["gate_refusals"] = 0
+        with self.assertRaisesRegex(g.GeometryRefusal, "gate refusal counter regressed"):
+            g.check_boundary(plan, absent, "feed_released", NOW+20_000_000,
+                profiles=self.profiles, prior=prior)
+        result = g.check_boundary(plan, later, "feed_released", NOW+20_000_000,
+            command_written_ns=NOW+1_000_000, profiles=self.profiles, prior=prior)
+        self.assertEqual(result["unresolvedGateRefusalDelta"], 1)
+        self.assertFalse(result["nativeReceiptProof"])
+
+    def test_feed_release_rejects_historical_gate_counter_regression(self):
+        plan, later, prior = self.released_feed()
+        later["feedObservation"]["gate_refusals"] = 0
+        with self.assertRaisesRegex(g.GeometryRefusal, "gate refusal counter regressed"):
+            g.check_boundary(plan, later, "feed_released", NOW+20_000_000,
+                profiles=self.profiles, prior=prior)
+
+    def test_feed_release_historical_gate_delta_keeps_current_and_submission_refusals(self):
+        for field in ("gate_failed", "submit_refused", "submit_refusals"):
+            with self.subTest(field=field):
+                plan, later, prior = self.released_feed()
+                if field == "submit_refusals":
+                    later["feedObservation"][field] += 1
+                else:
+                    later["feedObservation"]["latest_tick"][field] = True
+                with self.assertRaises(g.GeometryRefusal) as caught:
+                    g.check_boundary(plan, later, "feed_released", NOW+20_000_000,
+                        profiles=self.profiles, prior=prior)
+                self.assertNotIsInstance(caught.exception, g.BoundaryPending)
+
+    def test_feed_release_historical_gate_delta_still_waits_for_transaction_completion(self):
+        for field in ("pending", "receipts_accepted"):
+            with self.subTest(field=field):
+                plan, later, prior = self.released_feed()
+                if field == "pending":
+                    later["feedObservation"]["latest_tick"][field] = True
+                else:
+                    later["feedObservation"][field] = 0
+                with self.assertRaises(g.BoundaryPending):
+                    g.check_boundary(plan, later, "feed_released", NOW+20_000_000,
+                        profiles=self.profiles, prior=prior)
+
     def test_all_24_measured_feed_registrations_use_same_pipeline(self):
         self.assertEqual(len(self.profiles["profiles"]), 24)
         for row in self.profiles["profiles"]:

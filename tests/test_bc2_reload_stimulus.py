@@ -418,6 +418,7 @@ class StimulusTests(unittest.TestCase):
         driver = m.ReloadStimulus.__new__(m.ReloadStimulus)
         driver.deadline = driver.stage_deadline = clock.now + 10*m.NS
         driver.last_write = clock.now
+        driver.last_commit = clock.now
         driver.observed, driver.boundaries = [], {}
         driver.observation_incomplete = False
         driver.stimulus, driver.profiles, driver.artifacts = {}, {}, Artifacts()
@@ -520,6 +521,53 @@ class StimulusTests(unittest.TestCase):
         with patch.object(m, "time", clock), self.assertRaisesRegex(m.Refusal, "owner changed"):
             driver.fresh(boundary=dict(id="feed_acquired", timeoutNs=250_000_000))
         self.assertEqual(calls, ["2"])
+
+    def test_release_boundary_requires_input_after_ack_not_command_write(self):
+        # Actual195: release was written before native held packet7078, but the
+        # host acknowledged it only at frame7081. The later packet7085 released.
+        written, committed = 191321678511200, 191321752470600
+        for case in ("before_ack", "serialized_after_ack", "held_after_ack"):
+            with self.subTest(case=case):
+                clock = Clock()
+                clock.now = committed
+                driver, _ = self.boundary_driver(clock, ["ready"])
+                driver.last_write, driver.last_commit = written, committed
+                driver.args.stage = "DetachContainer"
+                held = dict(valid=True, nonce="19", observed_ns=191321712252500,
+                    deadlineNs=191321787029600,
+                    input_evidence=dict(sequence=7078, observedNs=191321687029600, released=[False, False]))
+                released = dict(valid=True, nonce="20", observed_ns=191321820545600,
+                    deadlineNs=191321909928600,
+                    input_evidence=dict(sequence=7085, observedNs=191321809928600, released=[True, False]))
+                if case != "before_ack":
+                    held["observed_ns"] = committed + 1
+                if case == "held_after_ack":
+                    held["input_evidence"]["observedNs"] = committed + 1
+                pending = iter(((held, 191321760000000), (released, 191321824000000)))
+                def guard():
+                    snapshot, clock.now = next(pending)
+                    driver.observed.append(dict(snapshot=snapshot, current=True))
+                driver.guard = guard
+                checked = []
+                def check(stimulus, snapshot, name, now, **kwargs):
+                    checked.append(snapshot["input_evidence"]["sequence"])
+                    self.assertEqual(kwargs["command_written_ns"], written)
+                    m.require(snapshot["input_evidence"]["released"][0], "feed was not freshly released")
+                    return dict(observed=True, nativeAcceptance=False)
+                driver.geometry.check_boundary = check
+                boundary = dict(id="feed_released", timeoutNs=600_000_000)
+                with patch.object(m, "time", clock):
+                    if case == "held_after_ack":
+                        with self.assertRaisesRegex(m.Refusal, "feed was not freshly released"):
+                            driver.fresh(boundary=boundary, after_ns=written)
+                        self.assertEqual(checked, [7078])
+                        self.assertNotIn("feed_released", driver.boundaries)
+                    else:
+                        snapshot, _ = driver.fresh(boundary=boundary, after_ns=written)
+                        self.assertIs(snapshot, released)
+                        self.assertEqual(checked, [7085])
+                        self.assertFalse(driver.boundaries["feed_released"]["nativeAcceptance"])
+                self.assertLess(clock.now, committed + boundary["timeoutNs"])
 
     def test_boundary_wait_does_not_restart_its_original_deadline(self):
         clock = Clock()

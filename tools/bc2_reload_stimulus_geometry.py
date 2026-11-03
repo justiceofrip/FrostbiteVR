@@ -293,8 +293,14 @@ def _pending_feed(snapshot, baseline=None, *, completing=False):
         return
     counts = _counters(snapshot)
     if baseline is not None:
-        require(all(counts[k] == integer(baseline[k]) for k in ("submit_refusals", "gate_refusals")),
+        require(counts["submit_refusals"] == integer(baseline["submit_refusals"]),
                 "absent feed observation contains a new refusal")
+        if completing:
+            require(counts["gate_refusals"] >= integer(baseline["gate_refusals"]),
+                    "feed gate refusal counter regressed")
+        else:
+            require(counts["gate_refusals"] == integer(baseline["gate_refusals"]),
+                    "absent feed observation contains a new refusal")
         attempts = counts["submit_attempts"] - integer(baseline["submit_attempts"])
         accepted = counts["receipts_accepted"] - integer(baseline["receipts_accepted"])
         require(0 <= accepted <= attempts <= (1 if completing else 0),
@@ -416,8 +422,18 @@ def check_boundary(stimulus, snapshot, boundary_id, now_ns, *, command_written_n
                 baseline = {"counters": stimulus["initialFeedObservation"], "lifetime": plan["sourceFeedLifetime"]}
             require(baseline is not None and f["lifetime"] == baseline["lifetime"], "held reload lifetime changed or absent")
             old = baseline["counters"]
-            require(all(counts[k] == integer(old[k]) for k in ("submit_refusals", "gate_refusals")),
+            require(counts["submit_refusals"] == integer(old["submit_refusals"]),
                     "feed completion observed a new refusal")
+            gate_delta = counts["gate_refusals"] - integer(old["gate_refusals"])
+            require(gate_delta >= 0, "feed gate refusal counter regressed")
+            # Gate publications include Busy and Rejected across equipment;
+            # this historical aggregate is not an operation rejection receipt.
+            # _counters still rejects a current gate/submit failure, and all
+            # release, identity and transaction checks remain mandatory.
+            if gate_delta:
+                result["unresolvedGateRefusalDelta"] = gate_delta
+                result["evidenceLimitations"] = [
+                    "Historical gate-publication refusals increased; cause and operation attribution are unresolved."]
             attempts = counts["submit_attempts"] - integer(old["submit_attempts"])
             accepted = counts["receipts_accepted"] - integer(old["receipts_accepted"])
             require(0 <= accepted <= attempts <= 1, "feed completion counters regressed or repeated")
