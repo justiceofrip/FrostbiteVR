@@ -10,6 +10,9 @@
 #include "Bc2PhysicalFixedContainer.h"
 #include "Bc2EquipmentIdentity.h"
 #include "Bc2MuzzleAdmission.h"
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+#include "Bc2MuzzlePartObservation.h"
+#endif
 #include "Bc2ReloadProducerBinding.h"
 #include "Bc2WeaponProfiles.h"
 #include "Bc2WeaponMode.h"
@@ -256,6 +259,10 @@ struct WeaponShotFrame {
  std::optional<ShotAimEvidence> aimEvidence;
  // Separate explicit write enrollment; observation metadata grants no authority.
  std::optional<MuzzleBinding> muzzleBinding;
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+ // Observation only; copied with this immutable publication, never a live rig pointer.
+ std::optional<muzzle_part_observation::Frame> muzzlePartObservation;
+#endif
 };
 std::optional<WeaponShotFrame> ReadWeaponShotFrame(unsigned soldier,unsigned weak,unsigned weapon)noexcept;
 // Contact-only capability: pending native ammo transfer can block firing while

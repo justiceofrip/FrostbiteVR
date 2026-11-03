@@ -4,6 +4,9 @@
 #include <intrin.h>
 #include <MinHook.h>
 #include "Bc2RigPublication.h"
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+#include "Bc2MuzzlePartProfiles294.h"
+#endif
 #include "Bc2FeedPresentation.h"
 #include "Bc2PhysicalPistolSlide.h"
 #include "Bc2NativeCycleRuntime.h"
@@ -1257,6 +1260,14 @@ std::optional<WeaponShotFrame> ReadWeaponFrame(unsigned soldier,unsigned weak,un
                  guard->generation,ReloadNanos(guard->deadline)},ns))result.muzzleBinding.reset();
             if(shotGuard.load(std::memory_order_acquire)!=guard){++shotFrameRaces;continue;}
         }
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+        if(result.muzzlePartObservation){
+            LARGE_INTEGER now{};QueryPerformanceCounter(&now);
+            muzzle_part_observation::RetainForShot(result,guard->equipment,guard->equipmentGeneration,
+                guard->soldier,guard->weak,now.QuadPart,ReloadNanos(now.QuadPart),!guard->weaponActionsBlocked);
+            if(shotGuard.load(std::memory_order_acquire)!=guard){++shotFrameRaces;continue;}
+        }
+#endif
         if(admittedSource)*admittedSource=pose;
         return result;
     }
@@ -2439,13 +2450,6 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
         }
     }
 #endif
-    std::shared_ptr<const ShotPublication> preparedShot;
-    if(pose->shot){
-        const ShotGuard identity{input.soldier,input.weak,input.weapon,input.ownerGeneration,input.input.spaceGeneration,input.input.generation,input.deadline,true,targets->tracked[0],0,input.weaponActionsBlocked,input.equipmentGeneration,input.nativeEquipment};
-        preparedShot=std::make_shared<const ShotPublication>(ShotPublication{*pose->shot,identity,authored.binding,measuredSupport,authoredAim,sightSelection,
-            input.input,input.selectedMeshes,handRoleReady&&handBinding?std::optional<math::Matrix4>{handBinding->wristToGrip}:std::nullopt,input.feed,
-            input.sightMode,input.sightModeObservedMs,input.shellPumpObservation,input.sightResolution,input.fixedContainerObservation});
-    }
     if(const auto requested=visibilityGuard.load(std::memory_order_acquire);requested&&requested->enabled&&
         requested->input.sequence==input.input.generation&&requested->nativeOwner.soldier==input.soldier&&requested->nativeOwner.weak==input.weak&&
         requested->nativeOwner.weapon==input.weapon&&requested->nativeOwner.actorGeneration==input.ownerGeneration&&
@@ -2488,6 +2492,27 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
             part.finalKnown=true;part.finalSkin=PumpVisualBits(pose->posed[part.index].data());}
         pose->pumpVisual=std::make_shared<const PumpVisualSource>(pv);}
 #endif
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+    if(pose->shot&&pose->shot->aimEvidence){
+        LARGE_INTEGER now{};QueryPerformanceCounter(&now);
+        auto source=muzzle_part_observation::SourceFromShot(*pose->shot,input.equipmentGeneration,
+            now.QuadPart,ReloadNanos(now.QuadPart));
+        source.attachmentReady=!targets->weaponAttachmentPending;
+        // Fixed-container writes are already merged. Exclude every later alternate palette.
+        source.ordinaryPublishedPalette=!input.pistolSlide&&!pose->pistolSlide&&!pose->feed&&!pose->magazine&&
+            !pose->pump&&!pose->bolt&&!pose->reloadPreview&&!pose->previewToken&&!pose->freeRight&&
+            !pose->visibility&&!pose->shellHide&&!pose->belt&&!input.weaponActionsBlocked;
+        pose->shot->muzzlePartObservation=muzzle_part_observation::Capture(muzzle_part_observation::Profiles294,
+            source,*rig,writes,pose->posed,canonicalPlaced);
+    }
+#endif
+    std::shared_ptr<const ShotPublication> preparedShot;
+    if(pose->shot){
+        const ShotGuard identity{input.soldier,input.weak,input.weapon,input.ownerGeneration,input.input.spaceGeneration,input.input.generation,input.deadline,true,targets->tracked[0],0,input.weaponActionsBlocked,input.equipmentGeneration,input.nativeEquipment};
+        preparedShot=std::make_shared<const ShotPublication>(ShotPublication{*pose->shot,identity,authored.binding,measuredSupport,authoredAim,sightSelection,
+            input.input,input.selectedMeshes,handRoleReady&&handBinding?std::optional<math::Matrix4>{handBinding->wristToGrip}:std::nullopt,input.feed,
+            input.sightMode,input.sightModeObservedMs,input.shellPumpObservation,input.sightResolution,input.fixedContainerObservation});
+    }
     // All fallible preparation is complete. PublishTracking deliberately updates
     // shotGuard even while this pose mutex is held, including for calibrated
     // weapons with no optional authored binding. Recheck that guard at the final

@@ -108,6 +108,7 @@ static_assert(FVR_BC2_PHYSICAL_RELOAD_LIFECYCLE_SCENARIO>=1&&FVR_BC2_PHYSICAL_RE
 #include "Bc2ProjectileEntry.h"
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
 #include "Bc2ProjectileTargetHost.h"
+#include "Bc2MuzzlePartReport.h"
 #endif
 #include "Bc2ServerFireObservation.h"
 #include "Bc2FireRouteTelemetry.h"
@@ -1304,6 +1305,7 @@ struct ProjectileLaunchRecord {
     std::optional<ProjectileReceiverIdentity> receiverIdentity;
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
     std::optional<projectile307::Join> targetJoin;
+    std::optional<muzzle_part_observation::Frame> muzzlePartObservation;
 #endif
 };
 std::array<ProjectileLaunchRecord,64> projectileLaunchRecords{};
@@ -1510,6 +1512,10 @@ void __cdecl ReceiverEntryDispatch(projectile_entry::Invocation* invocation){
     row.entryReturnSlot=returnSlot;row.clientPlayer=current->owner.player;row.clientSoldier=current->owner.soldier;row.ownerWeak=current->owner.weak;
     row.composedOutput=current->composedOutput;row.compositionWritten=current->compositionWritten;row.eventPose=current->eventPose;
     if(current->shot){row.candidateGeneration=current->shot->generation;row.ownerGeneration=current->shot->ownerGeneration;row.space=current->shot->space;}
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+    // Use the scope-owned immutable shot, never the latest render publication.
+    if(current->shot)row.muzzlePartObservation=current->shot->muzzlePartObservation;
+#endif
     ObserveProjectileContextHelper(original,[&]()noexcept{
         LARGE_INTEGER q{};QueryPerformanceCounter(&q);row.beforeQpc=q.QuadPart;
         row.before=ReadProjectileLaunchArguments(memory,projectileLaunchBinding,returnSlot,low,high);
@@ -1524,6 +1530,11 @@ void __cdecl ReceiverEntryDispatch(projectile_entry::Invocation* invocation){
             current->nativeConfig&&config&&*current->nativeConfig==*config;
         row.accepted=row.before&&row.after&&row.helperResultMatches&&row.ownerAndConfigCurrent&&current->tokenValid&&
             row.before->token==current->shotToken&&row.after->token==current->shotToken;
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+        if(row.muzzlePartObservation&&!muzzle_part_observation::SameAcceptedHelper(*row.muzzlePartObservation,
+            row.equipment,row.clientSoldier,row.ownerWeak,row.candidateGeneration,row.ownerGeneration,row.space,
+            row.beforeQpc,row.afterQpc,HandNanos(row.afterQpc),row.accepted))row.muzzlePartObservation.reset();
+#endif
         if(!row.accepted)++projectileLaunchRejected;
         if(row.accepted){
             row.receiverCaptureAttempted=true;
@@ -4958,6 +4969,9 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
             out<<"{\"receiver\":"<<identity.receiver<<",\"vtable\":"<<identity.vtable<<",\"vtable_rva\":"<<identity.vtable-image
                <<",\"target\":"<<identity.target<<",\"target_rva\":"<<identity.target-image
                <<",\"configuration_projectile_data\":"<<identity.descriptor<<",\"descriptor_vtable\":"<<identity.descriptorVtable<<'}';}
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+        out<<",\"muzzle_part_observation\":";muzzle_part_observation::Report(out,r.muzzlePartObservation);
+#endif
         out<<",\"before_helper\":";launchArguments(r.before);out<<",\"after_helper\":";launchArguments(r.after);out<<'}';
     }
     out<<"],\"server_fire_context\":{\"read_only\":true,\"complete_session_coverage\":false,\"shot_acknowledgement\":false,\"hit_acknowledgement\":false"
