@@ -46,7 +46,7 @@ class SightArtifacts(transport.Artifacts):
         self.snapshot_sizes = {}
 
     def save(self, name, data, final=False):
-        if transport.re.fullmatch(r"snapshot-\d{3,}(?:-(?:failure|at-timeout))?\.json", name):
+        if transport.re.fullmatch(r"snapshot-\d{3,}(?:-(?:failure|at-timeout|late))?\.json", name):
             if not isinstance(data, bytes):
                 data = transport.json_bytes(data)
             require(len(data) <= sight.frame.SNAPSHOT_LIMIT, "oversized sight snapshot artifact")
@@ -159,7 +159,7 @@ class SightDriver(transport.Driver):
                             plannerSha256=transport.digest(Path(sight.__file__).read_bytes()),
                             transportSha256=transport.digest(Path(transport.__file__).read_bytes()),
                             snapshotArtifactEncoding="gzip-original-bytes",
-                            snapshotArtifactNaming="snapshot-NNN[-failure|-at-timeout].json.gz",
+                            snapshotArtifactNaming="snapshot-NNN[-failure|-at-timeout|-late].json.gz",
                             maximumArtifactBytes=transport.MAX_BYTES,
                             maximumDecodedSnapshotBytes=MAX_SIGHT_SNAPSHOT_BYTES,
                             requestAcknowledgementAvailable=False, nativeAcceptance=False))
@@ -259,7 +259,7 @@ class SightDriver(transport.Driver):
         # As in pump motion, consume the pending publication through the shared
         # polling path. fresh() drains it and requests again for stage starts;
         # repeating that on a motion lease boundary wastes current authority.
-        for _ in range(800):
+        for _ in self.snapshot_polls(800):
             self.pump()
             if (self.latest_snapshot is not None and self.snapshot_refresh_started is None
                     and (self.selection_hold_until is None or self.transition_observation is not None)
@@ -344,6 +344,7 @@ class SightDriver(transport.Driver):
         # Keep the existing global approach bound and 250ms motion command ack
         # limit. No native/input/contact lease is extended by this distinction.
         self.motion_started, self.stage_deadline = start, self.deadline
+        self.neutral_snapshot_approach = True
         gesture_start, gesture_at = None, None
         self.plans[-1].update(approachStartedNs=start, approachDeadlineNs=self.deadline,
                               gestureBudgetStartedNs=None, gestureDeadlineNs=None)
@@ -369,6 +370,9 @@ class SightDriver(transport.Driver):
                         "sight acquisition must be one fresh intentional squeeze")
                 # Anchor before send, including its admission/refresh and ack
                 # latency. Publication retries must never restart this clock.
+                require(getattr(self, "snapshot_readiness", None) is None,
+                        "sight acquisition requires completed neutral snapshot reacquisition")
+                self.neutral_snapshot_approach = False
                 gesture_start, gesture_at = time.perf_counter_ns(), at
                 self.stage_deadline = min(self.deadline, gesture_start + integer(policy["gestureTimeoutNs"]))
                 self.plans[-1].update(approachDurationNs=gesture_start - start,
@@ -405,6 +409,7 @@ class SightDriver(transport.Driver):
                               selectedTransitionObserved=True, requestAcknowledgementAvailable=False,
                               ordinaryLeftReleaseAcknowledged=True)
         self.motion_started, self.stage_deadline = None, self.deadline
+        self.neutral_snapshot_approach = False
 
 
 def main(argv=None):

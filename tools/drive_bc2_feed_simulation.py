@@ -336,6 +336,8 @@ class Driver:
         self.latest_snapshot = None
         self.snapshot_refresh_started = None
         self.snapshot_refresh_requests = 0
+        self.snapshot_readiness = None
+        self.neutral_snapshot_approach = False
         self.gap = NS
         self.stage_deadline = self.deadline
         self.plans = []
@@ -467,6 +469,9 @@ class Driver:
     def bounds(self, now):
         require(now < self.deadline, "ten-second driver deadline reached")
         require(now < self.stage_deadline, "actual stage exceeded maximumGestureNs")
+        readiness = getattr(self, "snapshot_readiness", None)
+        if readiness is not None:
+            require(now < readiness["deadlineNs"], "original neutral snapshot observation deadline reached")
         if self.snapshot_refresh_started is not None:
             require(now - self.snapshot_refresh_started < SNAPSHOT_REFRESH_BUDGET,
                     "expired snapshot refresh budget exhausted")
@@ -524,6 +529,93 @@ class Driver:
         self.artifacts.save(f"snapshot-{self.snapshot_index:03}-failure.json", raw)
         return value["publication"]
 
+    def snapshot_readiness_scope(self):
+        """Only idle observation or an explicitly declared pre-gesture approach."""
+        if self.motion_started is None:
+            return "idle"
+        if getattr(self, "neutral_snapshot_approach", False):
+            return "neutral_approach"
+        return None
+
+    def check_snapshot_readiness_owner(self):
+        readiness = self.snapshot_readiness
+        require(self.snapshot_readiness_scope() == readiness["scope"]
+                and not (self.pending_command or self.unsafe_owner or self.held_left
+                         or self.held_right or self.held_trigger or self.held_buttons),
+                "neutral snapshot observation scope/held/pending authority changed")
+        self.bounds(time.perf_counter_ns())
+        require((self.sequence, self.sentinel, self.command_hash, self.last_write, self.last_commit)
+                == readiness["commandIdentity"], "neutral snapshot command identity changed")
+        require(self.last_write == 0 or (self.last_commit is not None and self.last_commit >= self.last_write),
+                "neutral snapshot observation requires a settled command")
+        state = self.read_state()
+        self.ownership(state)
+        require(integer(state["captureSeq"]) == self.capture_sequence,
+                "unrequested capture during neutral snapshot observation")
+        require(all(state[key] == readiness["state"][key] for key in ("head", "handL", "handR", "controls")),
+                "neutral snapshot simulator input changed")
+        require(state["controls"] and all(
+            all(component == 0 for component in value) if isinstance(value, list) else value == 0
+            for value in state["controls"].values()), "neutral snapshot observation contains active input")
+        self.bounds(time.perf_counter_ns())
+
+    def check_snapshot_readiness_response(self, snapshot, now):
+        readiness = self.snapshot_readiness
+        self.check_snapshot_readiness_owner()
+        require(self.last_request <= integer(snapshot["observed_ns"]) <= now,
+                "neutral snapshot response predates its request or is from the future")
+        # Sight's selected-target adapter permits an intentional configuration
+        # transition. Neutral observation has no such authority: retain the
+        # exact source owner/configuration, then run the adapter's extra gates.
+        stable_snapshot(readiness["reference"], snapshot)
+        self.stable_snapshot(readiness["reference"], snapshot)
+        require(all(hand["squeeze"] == hand["trigger"] == hand["held"]
+                    == hand["stickX"] == hand["stickY"] == 0 for hand in snapshot["input"]["hands"]),
+                "neutral snapshot response contains active input")
+
+    def snapshot_polls(self, ordinary_limit):
+        # The old iteration guard remains outside observation loss. A neutral
+        # wait consumes its captured original stage/driver deadline, including
+        # shorter initial capture-demand windows; it gets no new timeout clock.
+        count = 0
+        while count < ordinary_limit or getattr(self, "snapshot_readiness", None) is not None:
+            self.bounds(time.perf_counter_ns())
+            yield count
+            count += 1
+
+    def receive_late_snapshot(self):
+        self.check_snapshot_readiness_owner()
+        if not self.snapshot_path.exists():
+            return None
+        snapshot, raw = read_json(self.snapshot_path, planner.SNAPSHOT_LIMIT)
+        nonce = integer(snapshot["nonce"])
+        require(nonce <= self.pending_nonce, "snapshot response belongs to a later competing request")
+        if nonce != self.pending_nonce:
+            return None
+        self.artifacts.save(f"snapshot-{self.snapshot_index:03}-late.json", raw)
+        require(snapshot.get("valid") is True, "native snapshot refused: " + str(snapshot.get("invalid_reason")))
+        self.check_snapshot_readiness_response(snapshot, time.perf_counter_ns())
+        # Validate the original observation only to reject identity/lease faults.
+        # A timed-out response NEVER becomes current command authority, even if
+        # it happens to contain an unexpired source when finally read.
+        self.admit_snapshot(snapshot, integer(snapshot["observed_ns"]), nonce)
+        readiness = self.snapshot_readiness
+        require(readiness["freshRequests"] < MAX_SNAPSHOT_REFRESHES,
+                "neutral snapshot reacquisition request budget exhausted")
+        self.check_snapshot_readiness_owner()
+        readiness["freshRequests"] += 1
+        readiness["awaitingLate"] = False
+        readiness["discardedInputGeneration"] = integer(snapshot["shot_input_generation"])
+        self.artifacts.event(dict(type="snapshot_late_response_discarded", nonce=nonce,
+            observedNs=snapshot["observed_ns"], sourceDeadlineNs=self.snapshot_source_deadline(snapshot),
+            evaluatedNs=time.perf_counter_ns(), observationDeadlineNs=readiness["deadlineNs"],
+            freshRequest=readiness["freshRequests"], commandAuthority=False))
+        require(read_bytes(self.request_path, 22) == self.request_bytes,
+                "snapshot request changed by another writer")
+        self.pending_nonce = None
+        self.request_snapshot()
+        return None
+
     def snapshot_timeout(self, now, response=None):
         """Preserve a late/stale response as refused evidence, never as admission."""
         read_error = None
@@ -545,6 +637,24 @@ class Driver:
                  "lastObservedResponseNonce": getattr(self, "last_observed_response_nonce", None),
                  "diagnosticReadError": read_error}
         self.artifacts.event(event)
+        scope = self.snapshot_readiness_scope()
+        reference = self.reference if self.reference is not None else self.latest_snapshot
+        if (scope is not None and reference is not None and self.snapshot_refresh_started is None
+                and not (self.pending_command or self.unsafe_owner or self.held_left
+                         or self.held_right or self.held_trigger or self.held_buttons)):
+            if getattr(self, "snapshot_readiness", None) is None:
+                self.snapshot_readiness = dict(scope=scope, startedNs=now,
+                    deadlineNs=min(self.deadline, self.stage_deadline), reference=reference,
+                    commandIdentity=(self.sequence, self.sentinel, self.command_hash, self.last_write, self.last_commit),
+                    state=self.state, freshRequests=0, awaitingLate=True)
+            self.check_snapshot_readiness_owner()
+            self.snapshot_readiness["awaitingLate"] = True
+            self.latest_snapshot = None
+            self.artifacts.event(dict(type="snapshot_neutral_observation_hold", nonce=self.pending_nonce,
+                evaluatedNs=now, observationDeadlineNs=self.snapshot_readiness["deadlineNs"],
+                originalResponseDeadlineNs=self.last_request + SNAPSHOT_TIMEOUT,
+                scope=scope, commandAuthority=False))
+            return None
         raise REFUSAL("snapshot response not received within request budget: "
                       f"nonce={self.pending_nonce} elapsed_ns={now - self.last_request} "
                       f"budget_ns={SNAPSHOT_TIMEOUT}")
@@ -560,8 +670,6 @@ class Driver:
         require(read_bytes(self.request_path, 22) == self.request_bytes, "snapshot request changed by another writer")
         failure = self.snapshot_failure()
         now = time.perf_counter_ns()
-        if now - self.last_request > SNAPSHOT_TIMEOUT:
-            self.snapshot_timeout(now)
         if failure is not None:
             self.artifacts.event({"type": "snapshot_publication_failure", "nonce": self.pending_nonce,
                                   "receivedNs": now, "requestStartedNs": self.last_request,
@@ -570,6 +678,13 @@ class Driver:
             raise REFUSAL("native snapshot publication failed: "
                           f"nonce={self.pending_nonce} stage={failure['stage']} "
                           f"win32_error={failure['win32_error']} attempts={failure['attempts']}")
+        readiness = getattr(self, "snapshot_readiness", None)
+        if readiness is not None:
+            self.check_snapshot_readiness_owner()
+            if readiness["awaitingLate"]:
+                return self.receive_late_snapshot()
+        if now - self.last_request > SNAPSHOT_TIMEOUT:
+            return self.snapshot_timeout(now)
         if not self.snapshot_path.exists():
             return None
         snapshot, raw = read_json(self.snapshot_path, planner.SNAPSHOT_LIMIT)
@@ -577,7 +692,7 @@ class Driver:
         self.last_observed_response_nonce = nonce
         now = time.perf_counter_ns()
         if now - self.last_request > SNAPSHOT_TIMEOUT:
-            self.snapshot_timeout(now, (snapshot, raw))
+            return self.snapshot_timeout(now, (snapshot, raw))
         require(nonce <= self.pending_nonce, "snapshot response belongs to a later competing request")
         if nonce != self.pending_nonce:
             return None
@@ -589,20 +704,28 @@ class Driver:
             self.stable_snapshot(self.reference, snapshot)
         evaluated = time.perf_counter_ns()
         if evaluated - self.last_request > SNAPSHOT_TIMEOUT:
-            self.snapshot_timeout(evaluated, (snapshot, raw))
+            return self.snapshot_timeout(evaluated, (snapshot, raw))
         source_deadline = self.snapshot_source_deadline(snapshot)
         if evaluated >= source_deadline:
             # Validate the expired diagnostic at its recorded native publication
             # time only to distinguish delayed delivery from invalid admission.
             # It is never accepted as current evidence or used for a command;
             # no source/claim timestamp, owner, or deadline is changed.
+            if readiness is not None:
+                self.check_snapshot_readiness_response(snapshot, evaluated)
             self.admit_snapshot(snapshot, integer(snapshot["observed_ns"]), nonce)
             if self.snapshot_refresh_started is None:
                 self.snapshot_refresh_started = evaluated
                 self.snapshot_refresh_requests = 0
             self.bounds(time.perf_counter_ns())
-            require(self.snapshot_refresh_requests < MAX_SNAPSHOT_REFRESHES,
-                    "expired snapshot refresh request budget exhausted")
+            if readiness is not None:
+                require(readiness["freshRequests"] < MAX_SNAPSHOT_REFRESHES,
+                        "neutral snapshot reacquisition request budget exhausted")
+                self.check_snapshot_readiness_owner()
+                readiness["freshRequests"] += 1
+            else:
+                require(self.snapshot_refresh_requests < MAX_SNAPSHOT_REFRESHES,
+                        "expired snapshot refresh request budget exhausted")
             self.snapshot_refresh_requests += 1
             self.artifacts.event({"type": "snapshot_refresh_hold", "nonce": snapshot["nonce"],
                                   "evaluatedNs": evaluated, "sourceDeadlineNs": source_deadline,
@@ -618,6 +741,22 @@ class Driver:
         self.admit_snapshot(snapshot, now, integer(snapshot["nonce"]))
         if self.reference is not None:
             self.stable_snapshot(self.reference, snapshot)
+        if getattr(self, "snapshot_readiness", None) is not None:
+            readiness = self.snapshot_readiness
+            require(not readiness["awaitingLate"], "late snapshot cannot supply command authority")
+            self.check_snapshot_readiness_response(snapshot, now)
+            require(integer(snapshot["shot_input_generation"]) > readiness["discardedInputGeneration"]
+                    and integer(snapshot["input_evidence"]["observedNs"]) >= self.last_write,
+                    "neutral snapshot reacquisition requires new input after the settled command")
+            evaluated = time.perf_counter_ns()
+            require(evaluated - self.last_request <= SNAPSHOT_TIMEOUT,
+                    "neutral snapshot reacquisition exceeded original response deadline")
+            require(evaluated < self.snapshot_source_deadline(snapshot),
+                    "neutral snapshot reacquisition consumed original source lease")
+            self.artifacts.event(dict(type="snapshot_neutral_observation_resumed", nonce=snapshot["nonce"],
+                evaluatedNs=now, heldNs=now-readiness["startedNs"],
+                observationDeadlineNs=readiness["deadlineNs"], freshRequests=readiness["freshRequests"]))
+            self.snapshot_readiness = None
         self.latest_snapshot = snapshot
         if self.snapshot_refresh_started is not None:
             self.bounds(time.perf_counter_ns())
@@ -644,7 +783,8 @@ class Driver:
             # Holding sends no command: xr-sim keeps the last pose/grip and
             # produces its ordinary XR frames. Do not advance the trajectory
             # until a replacement passes current-time native admission.
-            if time.perf_counter_ns() >= deadline and self.snapshot_refresh_started is None:
+            if (time.perf_counter_ns() >= deadline and self.snapshot_refresh_started is None
+                    and getattr(self, "snapshot_readiness", None) is None):
                 return
             time.sleep(.001)
         raise REFUSAL("bounded polling iteration limit")
@@ -654,7 +794,7 @@ class Driver:
         # Preserve an already pending publication, including any refusal, then
         # request the fresh source used to plan the next stage.
         if self.pending_nonce is not None:
-            for _ in range(800):
+            for _ in self.snapshot_polls(800):
                 self.bounds(time.perf_counter_ns())
                 received = self.receive_snapshot()
                 if received:
@@ -664,7 +804,7 @@ class Driver:
             require(self.pending_nonce is None, "pending snapshot did not complete")
         self.pause_until(self.last_request + SNAPSHOT_PERIOD)
         self.request_snapshot()
-        for _ in range(800):
+        for _ in self.snapshot_polls(800):
             self.bounds(time.perf_counter_ns())
             received = self.receive_snapshot()
             if received:
@@ -696,6 +836,8 @@ class Driver:
         target = self.sequence + len(batch)
         raw = ("\n".join(batch) + "\n").encode("ascii")
         self.validate_publication(lines, expected, cleanup)
+        require(getattr(self, "snapshot_readiness", None) is None,
+                "command publication forbidden during neutral snapshot observation")
         written = time.perf_counter_ns()
         if final_release:
             require(not cleanup and capture is None and expected is not None
