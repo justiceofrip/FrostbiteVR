@@ -46,11 +46,16 @@ std::shared_ptr<const Bc2PhysicalFeedPresentation> ReadBc2PhysicalFeedPresentati
 // hand, ammunition or native authority. No source lease is refreshed.
 // Retains the first observed press, latest gate change and first missing-view
 // claim-loss transition in the request window, including the original ordered
-// retention checks. Neutral supported-feed debt also records gate changes;
+// retention checks. A separate firstSupplyLoss preserves the pre-clear held
+// object/custody, current input, evaluated admission/raw/Gun checks and the
+// Tick or external Suspend call site. Loss alone proves no native transfer.
+// Only an observed neutral followed by a newer held input can start a new
+// supply-loss episode; changing claims/publications while held cannot erase it.
+// Neutral supported-feed debt also records gate changes;
 // it never becomes a press. A request begun while held does not establish the press edge.
 void RequestBc2PhysicalFeedAdmissionObservation(std::int64_t nowNs)noexcept;
 // Both forms use one immutable publication load. Compact keeps the complete
-// first failed retention and first-press identity/input/claim receipts; later
+// first failed retention, first supply loss and first-press identity/input/claim receipts; later
 // held changes and first-press geometry/checks are explicitly omitted. Neutral
 // latest changes retain their input, raw and GunHold checks in both forms.
 void WriteBc2PhysicalFeedAdmissionObservation(std::ostream&,std::ostream* compact=nullptr);

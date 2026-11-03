@@ -659,6 +659,124 @@ int CompactAdmissionUsesSameImmutableFailureAndPress(){
     CHECK(compact.str().size()+11702+4096<=32768);
     return 0;
 }
+int HeldSupplyLossRetainsPreclearReasonAndCustody(){
+    const auto observe=[](bool compact=false){std::ostringstream full,small;full<<std::boolalpha;small<<std::boolalpha;
+        WriteBc2PhysicalFeedAdmissionObservation(full,&small);return compact?small.str():full.str();};
+    const auto loss=[](const std::string& text){const auto at=text.find("\"firstSupplyLoss\":");
+        return at==std::string::npos?std::string{}:text.substr(at);};
+    const auto first=[](const std::string& text){return text.substr(0,text.find(",\"latestChange\":"));};
+    const auto* registration=FindBc2FeedRegistration(5358977986686110024ull);CHECK(registration);
+    for(unsigned fault=0;fault<5;++fault){
+        Fixture f(registration,true);f.now=(30+fault)*1000*Ms;
+        CHECK(f.OpenCover()&&f.Reconcile());CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&f.Reconcile());
+        RequestBc2PhysicalFeedAdmissionObservation(f.now);CHECK(f.PickSupply());
+        CHECK(f.result.presentation&&f.result.presentation->supplyObject);
+        const auto held=*f.result.presentation->supplyObject;
+        CHECK(held.claim.token.kind==HandClaimKind::AmmoObject&&held.units>0);
+        const auto before=observe(),press=first(before);CHECK(loss(before)=="\"firstSupplyLoss\":null}");
+        const auto counts=f.native.counts;const auto submits=f.submits;
+        f.PrepareTick(f.lastWrist,true);
+        if(fault==0)f.missingCurrentView=true;
+        if(fault==1)++f.sample.raw.inputEvidence.observedNs; // No exact source packet.
+        if(fault==2){const auto right=f.hands.Current(InteractionHand::Right);CHECK(right);
+            CHECK(f.hands.Release(f.sample.input,right->token).accepted);}
+        if(fault==3)f.sample.raw.valid=false;
+        const auto reads=f.nativeReads,readAts=f.nativeReadAts;
+        if(fault==4)f.physical.Suspend(f.sample.input,f.hands);else f.Consume();
+        CHECK(f.nativeReads==reads+(fault==4?0:1)&&f.nativeReadAts==readAts+(fault==4?0:1));
+        CHECK(!f.hands.Current(InteractionHand::Left)&&!f.backend.Pending()&&f.submits==submits&&f.native.counts==counts);
+        CHECK(f.BlocksFire());
+        const auto observed=observe(),retained=loss(observed);CHECK(retained!="\"firstSupplyLoss\":null}");
+        CHECK(first(observed)==press&&observed.find("\"failedRetention\":null")!=std::string::npos);
+        const char* site=fault==4?"external_suspend":"tick_suspend";
+        CHECK(retained.find(std::string("\"site\":\"")+site+'"')!=std::string::npos);
+        const char* exit=fault==0?"view_unavailable":fault==3?"selection_or_input_unverified":
+            fault==4?"none":"gun_or_raw_unverified";
+        CHECK(retained.find(std::string("\"exit\":\"")+exit+'"')!=std::string::npos);
+        CHECK(retained.find("\"nowNs\":"+std::to_string(f.sample.input.nowNs))!=std::string::npos);
+        CHECK(retained.find("\"item\":["+std::to_string(held.item.id)+','+std::to_string(held.item.generation)+']')!=std::string::npos);
+        CHECK(retained.find("\"claim\":{\"id\":"+std::to_string(held.claim.token.id)+',')!=std::string::npos);
+        CHECK(retained.find("\"units\":"+std::to_string(held.units))!=std::string::npos);
+        CHECK(retained.find("\"custody\":{\"object\":")!=std::string::npos);
+        CHECK(retained.find("\"counts\":["+std::to_string(counts.loaded)+','+std::to_string(counts.reserve)+','+
+            std::to_string(counts.capacity)+']')!=std::string::npos);
+        CHECK(retained.find("\"nativePending\":false")!=std::string::npos&&retained.find("\"pending\":false")!=std::string::npos);
+        if(fault==0)CHECK(retained.find("\"admissionChecked\":1,\"admissionPassed\":0")!=std::string::npos);
+        if(fault==1)CHECK(retained.find("\"rawChecked\":3,\"rawPassed\":1")!=std::string::npos);
+        if(fault==2)CHECK(retained.find("\"gun\":{\"checked\":1,\"passed\":0,\"firstFailure\":\"right_claim\"}")!=std::string::npos);
+        if(fault==3)CHECK(retained.find("\"selectionFailure\":8")!=std::string::npos);
+        if(fault==4)CHECK(retained.find("\"rawChecked\":0,\"rawPassed\":0")!=std::string::npos);
+        CHECK(loss(observe(true))==retained);
+        CHECK(observe(true).size()+11702+4096<=32768);
+        if(fault==0){
+            // Actual06's claim6 -> claim7 shape: continue the same physical
+            // squeeze after supply loss, recover the retained feed contact,
+            // then acquire a Mechanism claim while recognition needs neutral.
+            f.missingCurrentView=false;
+            std::optional<HandClaim> mechanism;
+            for(unsigned step=0;step<6&&!mechanism;++step){
+                f.Tick(f.lastWrist,true);const auto current=f.hands.Current(InteractionHand::Left);
+                if(current&&current->token.kind==HandClaimKind::Mechanism)mechanism=current;
+                CHECK(loss(observe())==retained&&!f.sample.input.released[0]);
+            }
+            CHECK(mechanism&&mechanism->token.id!=held.claim.token.id);
+            CHECK(f.result.interactionStatus==FeedInteractionStatus::NeedNeutral);
+            CHECK(f.result.presentation&&f.result.presentation->lifetime==f.submitted->command.request.lifetime);
+            f.busyGate=true;f.Tick(f.lastWrist,true);f.busyGate=false;
+            CHECK(loss(observe())==retained&&f.submits==submits&&!f.result.pending);
+            // Retain an independent missing-view Mechanism failure as well.
+            // Later default updates must preserve both original transitions.
+            f.missingCurrentView=true;f.sample.raw.valid=false;f.Consume();
+            const auto both=observe();const auto at=both.find("\"failedRetention\":");
+            const auto failed=both.substr(at,both.find(",\"retentionEntryPredicates\":",at)-at);
+            CHECK(failed!="\"failedRetention\":null"&&loss(both)==retained);
+            f.physical.Suspend(f.sample.input,f.hands);f.Consume();
+            const auto unchanged=observe();const auto after=unchanged.find("\"failedRetention\":");
+            CHECK(unchanged.substr(after,unchanged.find(",\"retentionEntryPredicates\":",after)-after)==failed);
+            CHECK(loss(unchanged)==retained&&loss(observe(true))==retained);
+            CHECK(observe(true).size()+11702+4096<=32768);
+        }
+        // The first loss precedes these ordinary updates and repeated Suspend
+        // calls. They cannot rewrite its reason or turn custody into a receipt.
+        f.missingCurrentView=false;f.sample.raw.valid=true;
+        f.Tick(f.lastWrist,true);f.physical.Suspend(f.sample.input,f.hands);f.Tick(f.lastWrist,false);
+        CHECK(loss(observe())==retained&&loss(observe(true))==retained&&first(observe())==press);
+        CHECK(f.native.counts==counts&&f.submits==submits&&!f.backend.Pending()&&f.BlocksFire());
+        CHECK(f.result.presentation&&!f.result.presentation->supplyObject&&!f.result.bodyVisual);
+    }
+    // With the request expired, the same real held-to-unheld transition leaves
+    // the immutable diagnostic publication untouched.
+    Fixture quiet(registration);quiet.now=100*1000*Ms;
+    CHECK(quiet.OpenCover()&&quiet.Reconcile());CHECK(quiet.Place(FeedPhysicalOperation::DetachContainer)&&quiet.Reconcile());
+    CHECK(quiet.PickSupply());const auto unchanged=observe();const auto counts=quiet.native.counts;const auto submits=quiet.submits;
+    quiet.missingCurrentView=true;quiet.Consume();
+    CHECK(!quiet.hands.Current(InteractionHand::Left)&&observe()==unchanged);
+    CHECK(quiet.native.counts==counts&&quiet.submits==submits&&quiet.BlocksFire());
+    return 0;
+}
+int CompactAdmissionUsesSameImmutableSupplyLoss(){
+    Fixture f;f.now=110*1000*Ms;
+    CHECK(f.OpenCover()&&f.Reconcile());CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&f.Reconcile());
+    RequestBc2PhysicalFeedAdmissionObservation(f.now);CHECK(f.PickSupply());
+    f.missingCurrentView=true;f.Consume();CHECK(!f.hands.Current(InteractionHand::Left));
+    // A publication-side grip change with the same unreleased input packet
+    // may change firstPress under the existing contract, never supply loss.
+    f.sample.grip=false;f.Consume();f.sample.grip=true;f.Consume();CHECK(!f.sample.input.released[0]);
+    std::ostringstream before,beforeCompact;before<<std::boolalpha;beforeCompact<<std::boolalpha;
+    WriteBc2PhysicalFeedAdmissionObservation(before,&beforeCompact);
+    CHECK(before.str().find("\"firstSupplyLoss\":null")==std::string::npos);
+    bool replaced=false;
+    FeedObservationInterleavingBuffer buffer([&]{
+        f.Tick(f.lastWrist,false);f.Tick(f.lastWrist,true);replaced=true;
+    });
+    std::ostream full(&buffer);full<<std::boolalpha;std::ostringstream compact;compact<<std::boolalpha;
+    WriteBc2PhysicalFeedAdmissionObservation(full,&compact);
+    CHECK(replaced&&buffer.str()==before.str()&&compact.str()==beforeCompact.str());
+    std::ostringstream after;after<<std::boolalpha;WriteBc2PhysicalFeedAdmissionObservation(after);
+    CHECK(after.str()!=before.str()&&after.str().find("\"firstSupplyLoss\":null")!=std::string::npos);
+    CHECK(compact.str().size()+11702+4096<=32768);
+    return 0;
+}
 int NeutralBlockedAdmissionObservesExistingRefusalsWithoutAuthority(){
     const auto observe=[](bool compact=false){std::ostringstream full,small;full<<std::boolalpha;small<<std::boolalpha;
         WriteBc2PhysicalFeedAdmissionObservation(full,&small);return compact?small.str():full.str();};
@@ -2083,5 +2201,7 @@ int main(){
     CHECK(AdmissionObservationIgnoresUnrelatedMechanismClaim()==0);
     CHECK(CompactAdmissionUsesSameImmutableFailureAndPress()==0);
     CHECK(NeutralBlockedAdmissionObservesExistingRefusalsWithoutAuthority()==0);
-    std::puts("Bc2PhysicalFeedTests: 43 deterministic owner/arbiter/callback/presentation compositions; no game or headset acceptance");
+    CHECK(HeldSupplyLossRetainsPreclearReasonAndCustody()==0);
+    CHECK(CompactAdmissionUsesSameImmutableSupplyLoss()==0);
+    std::puts("Bc2PhysicalFeedTests: 45 deterministic owner/arbiter/callback/presentation compositions; no game or headset acceptance");
 }

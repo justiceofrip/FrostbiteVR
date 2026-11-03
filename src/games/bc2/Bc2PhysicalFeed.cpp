@@ -77,10 +77,34 @@ struct FeedAdmissionAttempt {
     FeedRetentionChecks retention{},gun{};
     std::array<FeedRetentionSlot,8> retentionSlots{};
 };
+enum class FeedSupplyLossSite {TickSuspend,ExternalSuspend,ReleaseWait,ReleaseContinuationUnavailable,
+    ReleaseContinuationUnverified,SupplyUpdate,SupplyBind,ActorRetirement};
+const char* SupplyLossSiteName(FeedSupplyLossSite site)noexcept {
+    switch(site){
+    case FeedSupplyLossSite::TickSuspend:return "tick_suspend";
+    case FeedSupplyLossSite::ExternalSuspend:return "external_suspend";
+    case FeedSupplyLossSite::ReleaseWait:return "release_wait";
+    case FeedSupplyLossSite::ReleaseContinuationUnavailable:return "release_continuation_unavailable";
+    case FeedSupplyLossSite::ReleaseContinuationUnverified:return "release_continuation_unverified";
+    case FeedSupplyLossSite::SupplyUpdate:return "supply_update";
+    case FeedSupplyLossSite::SupplyBind:return "supply_bind";
+    case FeedSupplyLossSite::ActorRetirement:return "actor_retirement";}
+    return "unknown";
+}
+// Copied before the mutating call. A lost hand is not a lost reserve resource,
+// an insertion request, or evidence that any native transfer completed.
+struct FeedHeldSupplyLoss {
+    FeedAdmissionAttempt before{};
+    AmmoSupplyObject held{};
+    std::optional<Bc2FeedSupplyCustody> custody;
+    FeedSupplyLossSite site=FeedSupplyLossSite::TickSuspend;
+    bool nativePending=false,refused=false,gateFailed=false,motionDirty=false,supplyNeutral=false,releaseWait=false;
+};
 struct FeedAdmissionObservation {
     std::optional<FeedAdmissionAttempt> firstPress;
     FeedAdmissionAttempt latestChange{};
     std::optional<FeedAdmissionAttempt> failedRetention;
+    std::optional<FeedHeldSupplyLoss> firstSupplyLoss;
 };
 std::atomic<std::int64_t> admissionObservationUntil=0;
 std::atomic<std::shared_ptr<const FeedAdmissionObservation>> admissionObservation;
@@ -251,7 +275,39 @@ void WriteFeedAdmission(std::ostream& out,const FeedAdmissionObservation* observ
     const auto names=[&](const auto& values){out<<'[';bool comma=false;for(const auto* name:values){if(comma)out<<',';comma=true;out<<'"'<<name<<'"';}out<<']';};
     out<<",\"retentionEntryPredicates\":";names(RetentionEntryPredicates);
     out<<",\"retentionSlotPredicates\":";names(RetentionSlotPredicates);
-    out<<",\"rawPredicates\":";names(RawPredicates);out<<",\"gunPredicates\":";names(GunPredicates);out<<'}';
+    out<<",\"rawPredicates\":";names(RawPredicates);out<<",\"gunPredicates\":";names(GunPredicates);
+    out<<",\"firstSupplyLoss\":";
+    if(!observation->firstSupplyLoss)out<<"null";
+    else {const auto& loss=*observation->firstSupplyLoss;
+        const auto key=[&](const HandInteractionKey& k){out<<'['<<k.id<<','<<k.generation<<']';};
+        const auto identity=[&](const AmmoSupplyIdentity& i){out<<"{\"owner\":";owner(i.owner);
+            out<<",\"weapon\":";key(i.weapon);out<<",\"profile\":";key(i.profile);out<<",\"pool\":";key(i.pool);
+            out<<",\"trackingEpoch\":"<<i.trackingEpoch<<'}';};
+        const auto object=[&](const AmmoSupplyObject& o){out<<"{\"identity\":";identity(o.identity);out<<",\"item\":";key(o.item);
+            out<<",\"claim\":";claim(o.claim);out<<",\"family\":"<<unsigned(o.family)<<",\"units\":"<<o.units<<'}';};
+        const auto body=[&](const Bc2FeedBodyAmmo& b){const auto& n=b.native;const auto& o=n.identity.owner;
+            const auto& r=n.binding.context.resource;
+            out<<"{\"owner\":["<<o.player<<','<<o.soldier<<','<<o.weak<<','<<o.weapon<<','<<o.actorGeneration<<','<<o.equipGeneration<<','<<o.space
+                <<"],\"resource\":["<<r.actor<<','<<r.actorGeneration<<','<<r.weapon<<','<<r.weaponGeneration
+                <<"],\"context\":["<<n.binding.context.equipGeneration<<','<<n.binding.context.space
+                <<"],\"registrationKey\":"<<b.registrationKey<<",\"lifetime\":"<<b.lifetime
+                <<",\"sequence\":"<<n.sequence<<",\"observedNs\":"<<n.observedNs<<",\"deadlineNs\":"<<n.deadlineNs
+                <<",\"counts\":["<<n.counts.loaded<<','<<n.counts.reserve<<','<<n.counts.capacity<<"]}";};
+        out<<"{\"site\":\""<<SupplyLossSiteName(loss.site)<<"\",\"tickContext\":"<<(loss.site!=FeedSupplyLossSite::ExternalSuspend)
+            <<",\"before\":";attempt(loss.before);
+        out<<",\"held\":";object(loss.held);
+        out<<",\"operationBefore\":";status(loss.before.diagnostic.operation);
+        out<<",\"nativePending\":"<<loss.nativePending<<",\"refused\":"<<loss.refused<<",\"gateFailed\":"<<loss.gateFailed<<",\"motionDirty\":"<<loss.motionDirty
+            <<",\"supplyNeutral\":"<<loss.supplyNeutral<<",\"releaseWait\":"<<loss.releaseWait<<",\"custody\":";
+        if(!loss.custody)out<<"null";
+        else {const auto& c=*loss.custody;out<<"{\"object\":";object(c.object);out<<",\"handOwner\":";owner(c.handOwner);
+            out<<",\"origin\":";body(c.origin);out<<",\"context\":";body(c.context);
+            out<<",\"source\":{\"identity\":";identity(c.source.identity);
+            out<<",\"sequence\":"<<c.source.sequence<<",\"observedNs\":"<<c.source.observedNs<<",\"deadlineNs\":"<<c.source.deadlineNs
+                <<",\"reserveUnits\":"<<c.source.reserveUnits<<",\"objectUnits\":"<<c.source.objectUnits
+                <<",\"verified\":"<<c.source.verified<<"},\"pending\":"<<bool(c.pending)<<'}';}
+        out<<'}';}
+    out<<'}';
 }
 }
 void WriteBc2PhysicalFeedAdmissionObservation(std::ostream& out,std::ostream* compact){
@@ -318,7 +374,37 @@ struct Bc2PhysicalFeed::State {
     std::array<std::unique_ptr<Equipment>,8> equipment{};
     std::uint64_t retirementEvent=0;
     explicit State(Bc2PhysicalFeedApi a):api(a){}
-    void RetireActors(const HandInteractionSample& input,HandInteraction& hands)noexcept {
+    static FeedHeldSupplyLoss SupplyLoss(const Equipment& e,const HandInteractionSample& input,
+        const HandInteraction& hands,FeedSupplyLossSite site,FeedExit reason,
+        const FeedAdmissionAttempt* attempt=nullptr,const Bc2PhysicalFeedDiagnostic* diagnostic=nullptr)noexcept {
+        FeedHeldSupplyLoss loss;loss.site=site;loss.held=*e.ammunitionSupply.Held();loss.custody=e.ammunitionSupply.Custody();
+        auto& a=loss.before;if(attempt)a=*attempt;if(diagnostic)a.diagnostic=*diagnostic;
+        if(!attempt){a.owner=e.original.identity.owner;a.weapon=e.weapon;a.current=input;}
+        a.registrationKey=e.registration.key;a.lifetime=e.lifetime;a.diagnostic.exit=reason;
+        a.leftBefore=hands.Current(InteractionHand::Left);a.rightBefore=hands.Current(InteractionHand::Right);
+        a.diagnostic.operation=unsigned(e.activeOperation);
+        if(e.session){const auto& session=e.session->State();a.diagnostic.reloadPhase=unsigned(session.session.reload.phase);
+            a.diagnostic.status=unsigned(session.status)|(unsigned(session.session.interaction.status)<<8)|
+                (unsigned(session.session.reload.status)<<16);}
+        loss.nativePending=bool(e.pending);loss.refused=e.refused;loss.gateFailed=e.gateFailed;
+        loss.motionDirty=e.motionDirty;loss.supplyNeutral=e.supplyNeutral;loss.releaseWait=bool(e.releaseWait);
+        return loss;
+    }
+    void Suspend(const HandInteractionSample& input,HandInteraction& hands)noexcept {
+        diagnostics.suspends.fetch_add(1,std::memory_order_relaxed);
+        for(auto& e:equipment)if(e){if(e->claim){(void)hands.Release(input,*e->claim);e->claim.reset();}
+            e->handGrip.reset();
+            e->ammunitionSupply.Suspend(input,hands);e->supplyNeutral=false;e->releaseWait.reset();
+            if(e->session)e->motionDirty=true;
+            // A rejected current packet may be newer than the last renderer
+            // source. Its delayed release cannot re-arm this equipment lifetime.
+            const auto& owner=e->original.identity.owner;
+            if(input.owner==HandInteractionOwner{(std::uint64_t(owner.weak)<<32)|owner.soldier,
+                owner.actorGeneration,e->weapon.generation,owner.space})
+                e->rejectedInput=(std::max)(e->rejectedInput,input.sequence);
+            e->neutral.reset();if(e->session){FeedEquipmentSessionSample sample;sample.nowNs=input.nowNs;(void)e->session->Update(sample);}}
+    }
+    template<class Observe>void RetireActors(const HandInteractionSample& input,HandInteraction& hands,Observe&& observe)noexcept {
         if(!api.retirement)return;
         for(unsigned n=0;n<64;++n){
             const auto proof=api.retirement(api.context,retirementEvent);
@@ -328,6 +414,7 @@ struct Bc2PhysicalFeed::State {
             for(auto& slot:equipment)if(slot&&
                 AmmoResourceSameNativeActor(slot->original.identity,proof->previous)&&
                 slot->original.identity.owner.actorGeneration==proof->previous.owner.actorGeneration){
+                observe(*slot,FeedSupplyLossSite::ActorRetirement,FeedExit::None);
                 if(slot->claim)(void)hands.Release(input,*slot->claim);
                 slot->ammunitionSupply.Suspend(input,hands);
                 slot.reset();
@@ -491,18 +578,17 @@ std::optional<FeedEquipmentGate> Bc2PhysicalFeed::RetainedGate(const ReloadState
 }
 void Bc2PhysicalFeed::Suspend(const HandInteractionSample& input,HandInteraction& hands)noexcept {
     publication.store({},std::memory_order_release);if(!state_)return;
-    state_->diagnostics.suspends.fetch_add(1,std::memory_order_relaxed);
-    for(auto& e:state_->equipment)if(e){if(e->claim){(void)hands.Release(input,*e->claim);e->claim.reset();}
-        e->handGrip.reset();
-        e->ammunitionSupply.Suspend(input,hands);e->supplyNeutral=false;e->releaseWait.reset();
-        if(e->session)e->motionDirty=true;
-        // A rejected current packet may be newer than the last renderer
-        // source. Its delayed release cannot re-arm this equipment lifetime.
-        const auto& owner=e->original.identity.owner;
-        if(input.owner==HandInteractionOwner{(std::uint64_t(owner.weak)<<32)|owner.soldier,
-            owner.actorGeneration,e->weapon.generation,owner.space})
-            e->rejectedInput=(std::max)(e->rejectedInput,input.sequence);
-        e->neutral.reset();if(e->session){FeedEquipmentSessionSample sample;sample.nowNs=input.nowNs;(void)e->session->Update(sample);}}
+    std::optional<FeedHeldSupplyLoss> loss;
+    if(input.nowNs>0&&input.nowNs<admissionObservationUntil.load(std::memory_order_relaxed)&&
+       (!state_->admission||!state_->admission->firstSupplyLoss))
+        for(const auto& e:state_->equipment)if(e&&e->ammunitionSupply.Held()){
+            loss=State::SupplyLoss(*e,input,hands,FeedSupplyLossSite::ExternalSuspend,FeedExit::None);break;}
+    state_->Suspend(input,hands);
+    if(loss)try{
+        auto next=state_->admission?std::make_shared<FeedAdmissionObservation>(*state_->admission):std::make_shared<FeedAdmissionObservation>();
+        next->latestChange=loss->before;next->firstSupplyLoss=std::move(loss);
+        state_->admission=next;admissionObservation.store(std::move(next),std::memory_order_release);
+    }catch(...){} // Observation failure cannot affect suspension/custody.
 }
 Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandInteraction& hands,std::uint64_t& intent)noexcept {
     const auto blocksFire=[&](){return s.equipment&&BlocksFire(s.owner,*s.equipment,s.binding);};
@@ -517,14 +603,21 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     // Neutral loss of a paired raw/native packet can remove the presentation
     // while debt still blocks fire. Journal that gate change without inventing
     // a squeeze or extending any input/native/claim lease.
-    const bool observe=now>0&&now<admissionObservationUntil.load(std::memory_order_relaxed)&&
-        (s.grip||out.blocksFire)&&SupportedAsset(s.asset);
+    const bool requested=now>0&&now<admissionObservationUntil.load(std::memory_order_relaxed);
+    const bool observe=requested&&(s.grip||out.blocksFire)&&SupportedAsset(s.asset);
+    bool observeSupply=false;
+    if(requested)for(const auto& slot:state.equipment)if(slot&&slot->ammunitionSupply.Held()){observeSupply=true;break;}
     const bool observePress=observe&&s.grip;
     const bool newPress=observePress&&(!state.admissionPressed||!state.admission||state.admission->latestChange.owner!=s.owner||
         state.admission->latestChange.weapon!=s.weapon);
+    // A changed claim, lifetime, or resumed observation is not a new squeeze.
+    // Keep supply loss until a newer actual held packet follows observed neutral.
+    const bool newSupplyPress=newPress&&state.admission&&!s.input.released[0]&&
+        state.admission->latestChange.current.released[0]&&state.admission->latestChange.current.owner==s.input.owner&&
+        s.input.sequence>state.admission->latestChange.current.sequence;
     state.admissionPressed=observePress;
     std::optional<FeedAdmissionAttempt> observation;
-    if(observe){observation.emplace();auto& a=*observation;
+    if(observe||observeSupply){observation.emplace();auto& a=*observation;
         a.owner=s.owner;a.weapon=s.weapon;a.current=s.input;a.raw=s.raw.inputEvidence;a.cancel=s.cancel;
         a.decision.currentGrip=s.grip;a.decision.rawPresent=s.raw.valid;
         a.leftBefore=hands.Current(InteractionHand::Left);a.rightBefore=hands.Current(InteractionHand::Right);
@@ -535,6 +628,15 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     }
     State::Equipment* e=nullptr;
     const Bc2FeedRegistration* registration=nullptr;
+    std::optional<FeedHeldSupplyLoss> supplyLoss;
+    const auto captureSupplyLoss=[&](const State::Equipment& equipment,FeedSupplyLossSite site,FeedExit reason){
+        if(observation&&!supplyLoss&&(newSupplyPress||!state.admission||!state.admission->firstSupplyLoss)&&equipment.ammunitionSupply.Held())
+            supplyLoss=State::SupplyLoss(equipment,s.input,hands,site,reason,&*observation,&out.diagnostic);
+    };
+    const auto suspend=[&](FeedExit reason,FeedSupplyLossSite site=FeedSupplyLossSite::TickSuspend){
+        for(const auto& slot:state.equipment)if(slot)captureSupplyLoss(*slot,site,reason);
+        state.Suspend(s.input,hands);
+    };
     const auto finish=[&](FeedExit reason){
         auto& d=state.diagnostics;
         const auto session=e&&e->session?e->session->State():FeedEquipmentSessionResult{};
@@ -550,13 +652,15 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             a.registrationKey=registration?registration->key:0;a.lifetime=e?e->lifetime:0;
             if(a.leftFeedSlot!=~0u){const auto leftAfter=hands.Current(InteractionHand::Left);
                 a.leftFeedClaimLost=!leftAfter||leftAfter->token!=a.leftBefore->token;}
-            if(newPress||!state.admission||!SameAdmissionDecision(state.admission->latestChange,a))try{
+            if(newPress||!state.admission||supplyLoss||!SameAdmissionDecision(state.admission->latestChange,a))try{
                 auto next=std::make_shared<FeedAdmissionObservation>();
                 if(newPress)next->firstPress=a;
                 else if(state.admission){next->firstPress=state.admission->firstPress;next->failedRetention=state.admission->failedRetention;}
+                if(state.admission&&!newSupplyPress)next->firstSupplyLoss=state.admission->firstSupplyLoss;
                 next->latestChange=a;
                 if(!next->failedRetention&&(a.retention.passed&1)&&a.leftFeedSlot!=~0u&&
                     a.leftFeedClaimLost&&!out.ownsHand)next->failedRetention=a;
+                if(!next->firstSupplyLoss&&supplyLoss)next->firstSupplyLoss=std::move(supplyLoss);
                 state.admission=next;admissionObservation.store(std::move(next),std::memory_order_release);
             }catch(...){} // Observation allocation cannot alter admission.
         }
@@ -584,8 +688,8 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         if(flags&8)d.claims.fetch_add(1,std::memory_order_relaxed);
         return out;
     };
-    state.RetireActors(s.input,hands);out.blocksFire=blocksFire();
-    if(!state.api.read||!state.api.submit||!state.api.receipt){Suspend(s.input,hands);return finish(FeedExit::ApiUnavailable);}
+    state.RetireActors(s.input,hands,captureSupplyLoss);out.blocksFire=blocksFire();
+    if(!state.api.read||!state.api.submit||!state.api.receipt){suspend(FeedExit::ApiUnavailable);return finish(FeedExit::ApiUnavailable);}
     // Completion belongs to the original equipment, including while another
     // item is selected or tracking is unavailable. Never wait for a pose to
     // commit an already verified native transfer.
@@ -674,7 +778,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     const auto admission=[&](unsigned bit,bool passed){out.diagnostic.admissionChecked|=1u<<bit;
         if(passed)out.diagnostic.admissionPassed|=1u<<bit;return passed;};
     if(!admission(0,bool(view))||!admission(1,bool(registration))||!admission(2,!e||&e->registration==registration)||
-       !admission(3,Selected(s,*view,*registration,out.diagnostic.selectionFailure))||!admission(4,!s.cancel)||!admission(5,Window(s.input,now))){Suspend(s.input,hands);
+       !admission(3,Selected(s,*view,*registration,out.diagnostic.selectionFailure))||!admission(4,!s.cancel)||!admission(5,Window(s.input,now))){suspend(view?FeedExit::SelectionOrInput:FeedExit::ViewUnavailable);
         return finish(view?FeedExit::SelectionOrInput:FeedExit::ViewUnavailable);}
     out.selected=true;
     if(!e){for(auto& slot:state.equipment)if(!slot){try{
@@ -691,7 +795,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     // equip/space lifetime appears. A name/count match cannot migrate it.
     if(e->original.identity!=view->identity||e->weapon!=s.weapon){
         if(e->Blocked()){
-            Suspend(s.input,hands);bool migrated=false;
+            suspend(FeedExit::MigrationUnverified);bool migrated=false;
             if(e->session)if(const auto before=e->session->ContextObservation()){
                 const auto afterAmmo=state.Ammo(*e,*view);auto after=before->snapshot;
                 after.owner=afterAmmo.owner;after.sequence=afterAmmo.sequence;after.observedNs=afterAmmo.observedNs;after.inputSequence=s.input.sequence;
@@ -778,14 +882,15 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
                 // not that stale raw pose or claim, within the original leases.
                 if(!e->releaseWait)e->releaseWait=State::ReleaseWait{s.input,heldInput,
                     (std::min)({held->input.deadlineNs,held->native->deadlineNs,s.input.deadlineNs})};
+                captureSupplyLoss(*e,FeedSupplyLossSite::ReleaseWait,FeedExit::GunOrRawUnverified);
                 if(e->claim){(void)hands.Release(s.input,*e->claim);e->claim.reset();}
                 e->ammunitionSupply.Suspend(s.input,hands);
                 out.blocksFire=e->Blocked();out.blocksEquipment=false;
                 return finish(FeedExit::GunOrRawUnverified);
-            }else {Suspend(s.input,hands);out.blocksFire=e->Blocked();return finish(FeedExit::GunOrRawUnverified);}
-        }else {Suspend(s.input,hands);out.blocksFire=e->Blocked();return finish(FeedExit::GunOrRawUnverified);}
+            }else {suspend(FeedExit::GunOrRawUnverified,FeedSupplyLossSite::ReleaseContinuationUnavailable);out.blocksFire=e->Blocked();return finish(FeedExit::GunOrRawUnverified);}
+        }else {suspend(FeedExit::GunOrRawUnverified,FeedSupplyLossSite::ReleaseContinuationUnverified);out.blocksFire=e->Blocked();return finish(FeedExit::GunOrRawUnverified);}
     }
-    if(!gun||!raw){Suspend(s.input,hands);out.blocksFire=e->Blocked();return finish(FeedExit::GunOrRawUnverified);}
+    if(!gun||!raw){suspend(FeedExit::GunOrRawUnverified);out.blocksFire=e->Blocked();return finish(FeedExit::GunOrRawUnverified);}
     auto sourceInput=source->input;sourceInput.nowNs=now;
     // The renderer solves the placed weapon again on each native publication,
     // even while controllerEvidence still names the same original packet.
@@ -796,8 +901,11 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         feed_interaction_detail::Multiply(s.raw.rawLeftWristWorldMeters,Inverse(s.raw.weaponWorldMeters)),s.raw.weaponWorldMeters};
     const auto& local=source->contact->local;
     const auto body=state.BodyAmmo(*e,*view);
+    const bool hadSupplyLoss=bool(supplyLoss);
+    captureSupplyLoss(*e,FeedSupplyLossSite::SupplyUpdate,FeedExit::Updated);
     const bool acquiredSupply=e->ammunitionSupply.Update(body,s.input,s.bodyFromHand,s.grip,
         e->container==FeedContainerState::Detached&&e->supplyNeutral&&!e->pending,hands,intent);
+    if(!hadSupplyLoss&&e->ammunitionSupply.Held())supplyLoss.reset();
     if(acquiredSupply){
         // Move the acquired reserve representation from the chest grasp into
         // the existing articulated feed presentation. Loaded rounds stay in
@@ -1039,8 +1147,12 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
            (result.session.interaction.status==FeedInteractionStatus::Interrupted||result.session.interaction.status==FeedInteractionStatus::OffPath||
             result.session.interaction.status==FeedInteractionStatus::MotionJump||result.session.interaction.status==FeedInteractionStatus::Expired))e->motionDirty=true;
         if(result.dispatch){FeedEquipmentSubmission submission;submission.command=*result.dispatch;submission.source=*source->native;
+            const bool hadBindLoss=bool(supplyLoss);
+            if(result.dispatch->authority.effect==FeedAmmunitionEffect::RefillLoaded)
+                captureSupplyLoss(*e,FeedSupplyLossSite::SupplyBind,FeedExit::Updated);
             const bool supplyBound=result.dispatch->authority.effect!=FeedAmmunitionEffect::RefillLoaded||
                 e->ammunitionSupply.Bind(*result.dispatch,state.BodyAmmo(*e,*source->native),sourceInput,hands);
+            if(!hadBindLoss&&e->ammunitionSupply.Held())supplyLoss.reset();
             state.diagnostics.submissions.fetch_add(1,std::memory_order_relaxed);
             submission.geometry={profile,e->motions.operations[unsigned(result.dispatch->authority.operation)],s.rigFingerprint,
                 sourceInput.sequence,sourceInput.observedNs,(std::min)(sourceInput.deadlineNs,source->native->deadlineNs),true,e->registration.key};
