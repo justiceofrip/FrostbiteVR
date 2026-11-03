@@ -1552,6 +1552,19 @@ int EveryEnrolledFeedTransfersDelayedSupportAtEachAcquisition(){
         ++profiles;
         for(const auto& cadence:cadences)for(bool sameCurrent:{false,true}){
             Fixture f(&registration);f.nativeCadence=cadence;f.delayedRender=true;f.wristCalibration=Turn(2.29598f);
+            f.captureCadenceTrace=true;
+            const auto stage=[&](bool completed,FeedPhysicalOperation operation){
+                if(!completed)f.PrintCadenceFailure(unsigned(&cadence-&cadences[0])*2+unsigned(sameCurrent),operation);
+                return completed;
+            };
+            // Reuse the scheduled corroboration from the independent-clock
+            // family fixture. Two controller ticks can still render the
+            // pre-refill native observation; no publication is forced here.
+            const auto reconcile=[&]()->bool{
+                if(!f.Callback())return false;
+                for(std::size_t packet=0;packet<f.nativeCadence.size()+3;++packet)f.Tick(f.lastWrist,false);
+                return !f.backend.Pending()&&!f.result.pending;
+            };
             const auto before=f.native.counts;std::optional<HandClaim> support;
             unsigned acquisitions=0,completedTransfers=0;
             const auto transferred=[&](Fixture& f)->int{
@@ -1587,13 +1600,13 @@ int EveryEnrolledFeedTransfersDelayedSupportAtEachAcquisition(){
                 if(sameCurrent){f.Consume(&current);CHECK(transferred(f)==0);}
                 return 0;
             };
-            CHECK(f.OpenCover()&&f.Reconcile());CHECK(f.submits==1&&f.native.counts==before);
-            CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&f.Reconcile());CHECK(f.submits==2&&f.native.counts==before);
+            CHECK(f.OpenCover()&&reconcile());CHECK(f.submits==1&&f.native.counts==before);
+            CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&reconcile());CHECK(f.submits==2&&f.native.counts==before);
             CHECK(f.Place(FeedPhysicalOperation::AttachContainer));CHECK(f.submitted&&f.submits==3);
             const auto after=f.submitted->command.after;const auto life=f.submitted->command.request.lifetime;
-            CHECK(f.Reconcile()&&f.native.counts==after);
-            CHECK(f.Place(FeedPhysicalOperation::SeatFeed)&&f.Reconcile());
-            CHECK(f.Close()&&f.Reconcile());
+            CHECK(reconcile()&&f.native.counts==after);
+            CHECK(stage(f.Place(FeedPhysicalOperation::SeatFeed)&&reconcile(),FeedPhysicalOperation::SeatFeed));
+            CHECK(stage(f.Close()&&reconcile(),FeedPhysicalOperation::CloseCover));
             CHECK(!f.afterDelayedConsumeResult&&!support&&acquisitions==4&&completedTransfers==4);
             CHECK(f.submits==5&&!f.BlocksFire()&&f.native.counts==after);
             for(std::uint64_t id=1;id<=5;++id){const auto receipt=f.backend.Receipt(life,id);CHECK(receipt);
