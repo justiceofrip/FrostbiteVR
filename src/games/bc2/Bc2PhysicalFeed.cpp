@@ -1054,9 +1054,22 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     if(!source->selection)source->selection=s.selected;
     const auto& local=source->contact->local;
     const auto body=state.BodyAmmo(*e,*view);
+    auto pickupBody=body;bool pickupPaired=bool(e->ammunitionSupply.Custody());
+    if(!pickupPaired)for(const auto& packet:state.packets)
+        if(packet.owner==s.owner&&packet.weapon==s.weapon&&SamePacket(packet.input,s.input)){
+            // Custody must start at the pickup packet's original native
+            // observation. A newer current view can corroborate it, but would
+            // put custody ahead of that packet when its rendered hand arrives.
+            if(packet.native&&packet.native->observedNs<=s.input.observedNs){
+                pickupBody=state.BodyAmmo(*e,*packet.native);
+                pickupPaired=Bc2FeedBodyRetained(pickupBody,body);
+            }
+            break;
+        }
     const bool hadSupplyLoss=bool(supplyLoss);
     captureSupplyLoss(*e,FeedSupplyLossSite::SupplyUpdate,FeedExit::Updated);
-    const bool acquiredSupply=e->ammunitionSupply.Update(body,s.input,s.bodyFromHand,s.grip,
+    if(!pickupPaired)e->ammunitionSupply.Suspend(s.input,hands);
+    const bool acquiredSupply=pickupPaired&&e->ammunitionSupply.Update(pickupBody,s.input,s.bodyFromHand,s.grip,
         e->container==FeedContainerState::Detached&&e->supplyNeutral&&!e->pending,hands,intent);
     if(!hadSupplyLoss&&e->ammunitionSupply.Held())supplyLoss.reset();
     if(acquiredSupply){
@@ -1318,7 +1331,8 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
                 (e->ammunitionSupply.Held()&&hand->token==e->ammunitionSupply.Held()->claim.token)))
                 state.GripTarget(*e,hand->token,local,*interaction.target,interaction.targetKind,
                     interaction.status==FeedInteractionStatus::Acquired);
-        }else if(interaction.status!=FeedInteractionStatus::Duplicate&&!acquiredSupply)e->handGrip.reset();
+        }else if(interaction.status!=FeedInteractionStatus::Duplicate&&!acquiredSupply&&
+            !(supplyHand&&pickupAwaitingRaw&&interaction.status==FeedInteractionStatus::Armed))e->handGrip.reset();
         if(!result.session.interaction.target&&!result.session.interaction.completion&&
            (result.session.interaction.status==FeedInteractionStatus::Interrupted||result.session.interaction.status==FeedInteractionStatus::OffPath||
             result.session.interaction.status==FeedInteractionStatus::MotionJump||result.session.interaction.status==FeedInteractionStatus::Expired))e->motionDirty=true;
@@ -1375,7 +1389,10 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             if(Pose(wrist)){p->mechanismWristWorldMeters=wrist;p->targetKind=grip.kind;}
         }else if(!p->mechanismClaim)e->handGrip.reset();
         if(!p->mechanismWristWorldMeters){
-            p->mechanismClaim.reset();p->mechanismInput.reset();p->supplyObject.reset();
+            // Logical supply ownership survives a targetless policy update.
+            // Magnetic hand consumers still require the validated claim,
+            // input and wrist together; custody alone grants no pose.
+            p->mechanismClaim.reset();p->mechanismInput.reset();
         }
         math::Matrix4 identity{};for(unsigned i=0;i<4;++i)identity.values[i][i]=1;
         p->weaponFromCoverHinge=feed_interaction_detail::Multiply(Along(identity,FeedMotionKind::Hinge,e->coverRadians),e->registration.geometry.weaponFromHinge);

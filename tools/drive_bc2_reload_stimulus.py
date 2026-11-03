@@ -389,6 +389,7 @@ class ReloadStimulus:
         self.first_sample_pending = False
         self.pose_setup_established = False
         self.boundaries, self.plans, self.observed = {}, [], []
+        self.pending_boundary = None
         self.observation_incomplete = False
         self.observation_failure = None
         self.diagnostic_failure = None
@@ -605,7 +606,13 @@ class ReloadStimulus:
     def fresh(self, *, boundary=None, after_ns=0, pickup=None, prepare=False):
         require(not prepare or boundary is None, "stimulus preparation requires initial stage admission")
         timeout = integer(boundary["timeoutNs"]) if boundary else RECEIVE_NS
-        until = min(self.deadline, self.stage_deadline, time.perf_counter_ns() + timeout)
+        started = time.perf_counter_ns()
+        until = min(self.deadline, self.stage_deadline, started + timeout)
+        # Retain what was still awaited if a final guard consumes this clock.
+        # This is diagnostic context, never an additional admission condition.
+        self.pending_boundary = {"family": self.args.family, "stage": self.args.stage,
+            "id": boundary["id"] if boundary else "stage_admission", "startedNs": started,
+            "deadlineNs": until, "lastPending": None}
         used = set()
         while time.perf_counter_ns() < until:
             try:
@@ -645,16 +652,19 @@ class ReloadStimulus:
                                                          pickup=pickup, target=self.args.target)
                     except self.geometry.BoundaryPending as pending:
                         self.observation_incomplete = True
+                        self.pending_boundary["lastPending"] = {"nonce": snapshot["nonce"], "reason": str(pending)}
                         self.artifacts.event({"type": "boundary_pending", "id": "stage_admission", "nonce": snapshot["nonce"],
                                               "reason": str(pending), "deadlineNs": until})
                         continue
                     require(time.perf_counter_ns() < min(until, self.geometry.source_deadline(snapshot, self.args.family)),
                             "initial boundary validation consumed original deadline")
+                    self.pending_boundary = None
                     return (snapshot, now, plan) if prepare else (snapshot, now)
                 try:
                     summary = self.geometry.check_boundary(self.stimulus, snapshot, boundary["id"], now,
                         command_written_ns=self.last_write, prior=self.boundaries, profiles=self.profiles)
                 except self.geometry.BoundaryPending as pending:
+                    self.pending_boundary["lastPending"] = {"nonce": snapshot["nonce"], "reason": str(pending)}
                     self.artifacts.event({"type": "boundary_pending", "id": boundary["id"], "nonce": snapshot["nonce"],
                                           "reason": str(pending), "deadlineNs": until})
                     continue
@@ -662,6 +672,7 @@ class ReloadStimulus:
                         "boundary validation consumed original deadline")
                 self.boundaries[boundary["id"]] = summary
                 self.artifacts.event({"type": "fresh_stimulus_boundary", "id": boundary["id"], "summary": summary})
+                self.pending_boundary = None
                 return snapshot, now
             time.sleep(.001)
         self.observation_incomplete = True
@@ -956,6 +967,7 @@ def main(argv=None):
                 result.update(durationNs=time.perf_counter_ns() - driver.started, commands=driver.commands,
                     observationIncomplete=driver.observation_incomplete, leftGripHeld=driver.held_left,
                     pendingCommand=driver.pending_command, plans=driver.plans, boundaries=driver.boundaries,
+                    pendingBoundary=driver.pending_boundary,
                     artifactDirectory=str(driver.artifacts.directory))
             try:
                 result["observerStopped"] = driver.close()

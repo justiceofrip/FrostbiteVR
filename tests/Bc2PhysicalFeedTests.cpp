@@ -1337,6 +1337,136 @@ int EveryEnrolledSupplyPresentsDelayedPickupOffsetAndDropsLostHand(){
     }
     CHECK(configurations==24);return 0;
 }
+int EveryEnrolledSupplyPinsPickupToOriginalNativeObservation(){
+    unsigned configurations=0,cycles=0,receipts=0;
+    for(const auto& registration:RegisteredBc2FeedProfiles()){
+        ++configurations;
+        for(bool delayed:{false,true}){
+            Fixture f(&registration);f.wristCalibration=Identity();const auto before=f.native.counts;
+            CHECK(f.OpenCover()&&f.Reconcile());
+            CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&f.Reconcile());f.submitted.reset();
+            auto chest=Identity();const auto config=Bc2FeedSupplyConfig();
+            for(unsigned axis=0;axis<3;++axis)chest.values[3][axis]=config.pouchCenterMeters[axis];
+            f.sample.bodyFromHand=chest;f.Tick(chest,false);f.Tick(chest,false);const auto neutral=f.sample.raw;
+            CHECK(f.result.interactionStatus==FeedInteractionStatus::Armed);
+            std::array<ReloadRawContact,2> queuedNeutral{};
+            if(delayed)for(auto& packet:queuedNeutral){
+                f.PrepareTick(chest,false);packet=f.sample.raw;f.Consume(&neutral);
+                CHECK(f.result.interactionStatus==FeedInteractionStatus::Duplicate);
+            }
+            auto pickup=feed_interaction_detail::Multiply(Turn(.4f),chest);pickup.values[3][0]+=.008f;
+            f.sample.bodyFromHand=pickup;f.PrepareTick(pickup,true);const auto pressed=f.sample.raw;
+            const auto paired=f.backend.ReadAt(f.sample.owner,pressed.inputEvidence.observedNs,f.sample.input.nowNs);CHECK(paired);
+            // Native simulation publishes after this input, before consumption.
+            // Custody from that newer view would reject the original pickup's
+            // paired native observation and suspend an otherwise valid grasp.
+            f.native.observedNs=f.now+Ms;f.native.deadlineNs=f.native.observedNs+(std::min)(100*Ms,registration.mechanism.maxAgeNs);
+            f.native.binding.observedNs=f.native.observedNs;f.native.binding.deadlineNs=f.native.deadlineNs;
+            f.now=f.native.observedNs+1;f.sample.input.nowNs=f.now;f.sample.binding=f.native.binding;
+            CHECK(f.backend.Publish(f.native,f.now));++f.nativePublications;
+            const auto latest=f.backend.Read(f.sample.owner,f.now);CHECK(latest);
+            CHECK(latest->sequence>paired->sequence&&latest->observedNs>pressed.inputEvidence.observedNs);
+            CHECK(f.backend.ReadAt(f.sample.owner,pressed.inputEvidence.observedNs,f.now)==paired);
+            f.Consume(delayed?&neutral:nullptr);
+            const auto claim=f.hands.Current(InteractionHand::Left);CHECK(claim&&claim->token.kind==HandClaimKind::AmmoObject);
+            CHECK(f.result.ownsHand&&f.result.presentation&&f.result.presentation->supplyObject);
+            CHECK(f.result.presentation->supplyObject->claim.token==claim->token);
+            CHECK(claim->inputSequence==pressed.inputEvidence.sequence&&claim->deadlineNs==pressed.inputEvidence.deadlineNs);
+            CHECK(FeedPresentationReachesArmAndHand(f,delayed?chest:pickup)==0);
+            const auto firstPouch=f.result.presentation->weaponFromPouch;
+            if(delayed){
+                CHECK(f.result.interactionStatus==FeedInteractionStatus::Duplicate);
+                for(const auto& packet:queuedNeutral){
+                    f.PrepareTick(pickup,true);f.Consume(&packet);
+                    // A second real neutral can arrive after acquisition. It
+                    // arms policy without a target; it cannot erase the grasp.
+                    CHECK(f.result.interactionStatus==FeedInteractionStatus::Armed);
+                    CHECK(f.result.presentation&&f.result.presentation->supplyObject&&f.result.ownsHand);
+                    CHECK(f.result.presentation->input.sequence==packet.inputEvidence.sequence);
+                    CHECK(f.result.presentation->input.deadlineNs==packet.inputEvidence.deadlineNs);
+                    CHECK(f.hands.Current(InteractionHand::Left)->token==claim->token);
+                    CHECK(NearPose(f.result.presentation->weaponFromPouch,firstPouch));
+                    CHECK(FeedPresentationReachesArmAndHand(f,chest)==0);
+                    f.Consume(&packet);CHECK(f.result.interactionStatus==FeedInteractionStatus::Duplicate);
+                }
+                f.PrepareTick(pickup,true);f.Consume(&pressed);
+            }
+            CHECK(f.result.interactionStatus==FeedInteractionStatus::Acquired);
+            CHECK(f.result.reloadStatus==FeedReloadStatus::AwaitingPhysicalCompletion);
+            CHECK(f.result.diagnostic.sourceNativeSequence==paired->sequence);
+            CHECK(f.result.diagnostic.sourceNativeObservedNs==paired->observedNs);
+            CHECK(f.result.diagnostic.sourceNativeDeadlineNs==paired->deadlineNs);
+            CHECK(f.result.presentation->input.deadlineNs==pressed.inputEvidence.deadlineNs);
+            CHECK(f.hands.Current(InteractionHand::Left)->token==claim->token);
+            CHECK(FeedPresentationReachesArmAndHand(f,pickup)==0);
+            CHECK(f.native.counts==before&&f.submits==2&&!f.result.pending&&!f.backend.Pending());
+            f.Consume(&pressed);CHECK(f.result.interactionStatus==FeedInteractionStatus::Duplicate);
+            CHECK(FeedPresentationReachesArmAndHand(f,pickup)==0);
+            f.Tick(pickup,true);CHECK(f.result.ownsHand&&f.result.presentation->supplyObject);
+            CHECK(f.Place(FeedPhysicalOperation::AttachContainer,false,true,true));
+            CHECK(f.submitted&&f.submitted->command.authority.operation==FeedPhysicalOperation::AttachContainer);
+            CHECK(f.submitted->command.before.counts==before&&f.native.counts==before&&f.submits==3);
+            const auto after=f.submitted->command.after;
+            CHECK(f.Reconcile()&&f.native.counts==after);
+            CHECK(f.Place(FeedPhysicalOperation::SeatFeed)&&f.Reconcile());
+            CHECK(f.Close()&&f.Reconcile());CHECK(f.submits==5&&!f.BlocksFire());
+            ++cycles;receipts+=f.submits;
+        }
+    }
+    CHECK(configurations==24&&cycles==48&&receipts==240);
+    std::printf("Feed supply paired native: %u profiles, %u immediate/delayed full cycles, %u offline mocked adapter receipts\n",configurations,cycles,receipts);
+    return 0;
+}
+int EveryEnrolledSupplyRejectsPickupWithoutItsOriginalNative(){
+    unsigned cases=0;
+    for(const auto& registration:RegisteredBc2FeedProfiles()){
+        Fixture f(&registration);CHECK(f.OpenCover()&&f.Reconcile());
+        CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&f.Reconcile());f.submitted.reset();
+        auto chest=Identity();const auto config=Bc2FeedSupplyConfig();
+        for(unsigned axis=0;axis<3;++axis)chest.values[3][axis]=config.pouchCenterMeters[axis];
+        f.sample.bodyFromHand=chest;f.Tick(chest,false);f.Tick(chest,false);const auto neutral=f.sample.raw;
+        const auto counts=f.native.counts;
+        f.PrepareTick(chest,true);const auto pressed=f.sample.raw;
+        f.missingPacketNative=true;f.Consume(&neutral);f.missingPacketNative=false;
+        // The delayed neutral and current view remain valid. Neither may
+        // substitute for the pickup packet's missing native observation.
+        CHECK(f.result.selected&&f.result.diagnostic.rawPassed==511&&f.result.diagnostic.policyEvaluated);
+        CHECK(!f.result.ownsHand&&!f.hands.Current(InteractionHand::Left));
+        CHECK(f.result.presentation&&!f.result.presentation->supplyObject&&!f.result.presentation->mechanismWristWorldMeters);
+        f.PrepareTick(chest,true);f.Consume(&pressed);
+        CHECK(!f.result.ownsHand&&!f.result.presentation&&!f.hands.Current(InteractionHand::Left));
+        f.Tick(chest,true);CHECK(!f.result.ownsHand&&!f.hands.Current(InteractionHand::Left));
+        CHECK(f.native.counts==counts&&f.submits==2&&!f.result.pending&&!f.backend.Pending()&&f.BlocksFire());
+        ++cases;
+    }
+    CHECK(cases==24);std::printf("Feed supply unpaired pickup: %u profiles rejected without native or pose substitution\n",cases);
+    return 0;
+}
+int EveryEnrolledSupplyKeepsLogicalOwnershipWithoutMagneticAuthority(){
+    unsigned cases=0;
+    for(const auto& registration:RegisteredBc2FeedProfiles())for(bool trackingLoss:{false,true}){
+        Fixture f(&registration);CHECK(f.OpenCover()&&f.Reconcile());
+        CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&f.Reconcile());f.submitted.reset();
+        CHECK(f.PickSupply());const auto claim=f.hands.Current(InteractionHand::Left);CHECK(claim);
+        const auto counts=f.native.counts;
+        auto jump=f.lastWrist;jump.values[3][0]+=2;f.Tick(jump,true);
+        CHECK(f.result.interactionStatus==FeedInteractionStatus::MotionJump&&f.result.ownsHand);
+        CHECK(f.result.presentation&&f.result.presentation->supplyObject);
+        CHECK(f.result.presentation->supplyObject->claim.token==claim->token);
+        CHECK(!f.result.presentation->mechanismClaim&&!f.result.presentation->mechanismInput);
+        CHECK(!f.result.presentation->mechanismWristWorldMeters&&!Bc2FeedMechanismClaimFresh(*f.result.presentation,f.sample.input.nowNs));
+        CHECK(f.native.counts==counts&&f.submits==2&&!f.result.pending&&!f.backend.Pending()&&f.BlocksFire());
+        if(trackingLoss)f.sample.input.tracked[0]=false;
+        f.Tick(jump,trackingLoss);
+        CHECK(!f.hands.Current(InteractionHand::Left)&&!f.result.ownsHand);
+        CHECK(!f.result.presentation||(!f.result.presentation->supplyObject&&!f.result.presentation->mechanismWristWorldMeters));
+        CHECK(f.native.counts==counts&&f.submits==2&&!f.result.pending&&!f.backend.Pending()&&f.BlocksFire());
+        ++cases;
+    }
+    CHECK(cases==48);
+    std::printf("Feed supply logical publication: 24 profiles, %u targetless-policy/release-or-tracking cases\n",cases);
+    return 0;
+}
 ReloadRawContact RepublishFeedContact(const ReloadRawContact& source,const fvr::math::Matrix4& world,std::int64_t now){
     using namespace feed_interaction_detail;
     InputFrame input;input.generation=source.inputEvidence.sequence;input.spaceGeneration=source.owner.space;
@@ -2681,6 +2811,9 @@ int main(){
     CHECK(EveryEnrolledFeedAcceptsObservedGraspWithDelayedPublication()==0);
     CHECK(EveryEnrolledFeedStartsFromReleasedApproach()==0);
     CHECK(EveryEnrolledSupplyPresentsDelayedPickupOffsetAndDropsLostHand()==0);
+    CHECK(EveryEnrolledSupplyPinsPickupToOriginalNativeObservation()==0);
+    CHECK(EveryEnrolledSupplyRejectsPickupWithoutItsOriginalNative()==0);
+    CHECK(EveryEnrolledSupplyKeepsLogicalOwnershipWithoutMagneticAuthority()==0);
     CHECK(EveryEnrolledFeedCompletesWithIndependentPublicationClocks()==0);
     CHECK(EveryEnrolledFeedCompletesAcrossGameplayPublicationLoss()==0);
     CHECK(ChestPreparationSurvivesNeutralJitterButNotContactLoss()==0);
@@ -2716,5 +2849,5 @@ int main(){
     CHECK(HeldMechanismLossRetainsFirstCauseAcrossSameGripReacquisition()==0);
     CHECK(MechanismReleaseWaitIsDistinctFromSuccessfulExplicitRelease()==0);
     CHECK(CompactAdmissionUsesSameImmutableMechanismLoss()==0);
-    std::puts("Bc2PhysicalFeedTests: 49 deterministic owner/arbiter/callback/presentation compositions; no game or headset acceptance");
+    std::puts("Bc2PhysicalFeedTests: 52 deterministic owner/arbiter/callback/presentation compositions; no game or headset acceptance");
 }

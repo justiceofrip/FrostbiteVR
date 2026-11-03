@@ -197,6 +197,9 @@ class StimulusTests(unittest.TestCase):
             self.assertEqual(result["commands"], 0)
             self.assertEqual(result["plans"], [])
             self.assertEqual(result["boundaries"], {})
+            self.assertEqual(result["pendingBoundary"], dict(family="feed", stage="OpenCover",
+                id="stage_admission", startedNs=1_000_000_000, deadlineNs=1_000_000_000+m.RECEIVE_NS,
+                lastPending=None))
             self.assertTrue(result["observationIncomplete"])
             self.assertTrue(result["observerStopped"])
             for key in ("pendingCommand", "leftGripHeld", "stimulusCompleted", "boundaryChecksPassed",
@@ -435,6 +438,7 @@ class StimulusTests(unittest.TestCase):
                             # The only JSON serialization is the fixture's session read.
                             self.assertTrue(all(call.args[0].get("state") == "running" for call in serialize.call_args_list))
                         self.assertEqual(result[0]["nonce"], "8")
+                        self.assertIsNone(d.pending_boundary)
                         self.assertEqual(clock.now, before+8_000_000)
                         self.assertEqual(d.artifacts.persisted, {})
                         self.assertEqual(len(d.observed), 8)
@@ -497,6 +501,56 @@ class StimulusTests(unittest.TestCase):
                     failure = next(e for e in d.artifacts.events if e["type"] == "guard_failure")
                     self.assertEqual(failure["phase"], phase)
                     self.assertEqual(failure["deadlineNs"], 1_000_000_000+m.RECEIVE_NS)
+
+    def test_pending_boundary_reason_survives_normal_reads_exhausting_original_clock(self):
+        # Actual240 ended a pending pickup wait during a 1.5916ms state guard,
+        # with only 1.5315ms left. Keep that read error AND what was awaited.
+        cases = (("feed", "SupplyPickup", "feed_supply_held"), ("pump", "PumpCycle", "pump_complete"),
+                 ("fixed", "Open", "fixed_complete"), ("sight", "SightFlip", "sight_selected"))
+        for family, stage, boundary_id in cases:
+            for prepare in (False, True):
+                with self.subTest(family=family, prepare=prepare):
+                    clock = Clock()
+                    with self.ack_driver(clock) as h:
+                        d = h.driver
+                        d.args.family, d.args.stage, d.args.step_ms = family, stage, None
+                        d.boundaries, d.stimulus, d.profiles = {}, {}, {}
+                        d.last_commit = clock.now
+                        d.geometry.BoundaryPending = fixtures.g.BoundaryPending
+                        d.geometry.source_deadline = lambda s, f: s["validUntilNs"]
+                        pending = fixtures.g.BoundaryPending("required native evidence not yet observed")
+                        validator = Mock(side_effect=pending)
+                        d.geometry.check_boundary = d.geometry.build_stimulus = validator
+                        self.queue_observations(d, clock, count=1)
+                        read_state = m.sim_state
+                        def measured_read(path, until):
+                            state = read_state(path, until)
+                            clock.now += 1_591_600
+                            return state
+                        with patch.object(m, "sim_state", side_effect=measured_read), \
+                                self.assertRaisesRegex(m.ReadDeadline, "original simulator state read deadline exceeded"):
+                            if prepare:
+                                d.fresh(prepare=True)
+                            else:
+                                d.fresh(boundary=dict(id=boundary_id, timeoutNs=m.RECEIVE_NS))
+                        validator.assert_called_once()
+                        expected = dict(family=family, stage=stage,
+                            id="stage_admission" if prepare else boundary_id,
+                            startedNs=1_000_000_000, deadlineNs=1_000_000_000+m.RECEIVE_NS,
+                            lastPending=dict(nonce="1", reason=str(pending)))
+                        self.assertEqual(d.pending_boundary, expected)
+                        failure = next(e for e in d.artifacts.events if e["type"] == "guard_failure")
+                        self.assertEqual(failure["phase"], "session/simulator state")
+                        self.assertEqual(failure["deadlineNs"], expected["deadlineNs"])
+                        self.assertLess(failure["startedNs"], failure["deadlineNs"])
+                        self.assertGreaterEqual(failure["finishedNs"], failure["deadlineNs"])
+                        self.assertTrue(d.observation_incomplete)
+                        self.assertFalse(d.unsafe_owner)
+                        self.assertEqual(d.boundaries, {})
+                        self.assertEqual(d.cleanup(), "not attempted: no settled owned held left grip")
+                        self.assertEqual(d.pending_boundary, expected)
+                        self.assertEqual(h.published, [])
+                        self.assertIn("observation-000.json.gz", d.artifacts.saved)
 
     def test_observer_fatal_preserves_queued_raw_and_first_failure(self):
         clock = Clock()
@@ -981,6 +1035,7 @@ class StimulusTests(unittest.TestCase):
             snapshot, _ = driver.fresh()
         self.assertEqual(calls, ["1", "2"])
         self.assertEqual(snapshot["nonce"], "2")
+        self.assertIsNone(driver.pending_boundary)
         self.assertTrue(driver.observation_incomplete)
         event = driver.artifacts.events[0]
         self.assertEqual((event["type"], event["id"]), ("boundary_pending", "stage_admission"))
@@ -1041,6 +1096,7 @@ class StimulusTests(unittest.TestCase):
             driver.fresh(boundary=boundary, after_ns=driver.last_write)
         self.assertEqual(calls, ["2", "3"])
         self.assertTrue(driver.boundaries["feed_acquired"]["observed"])
+        self.assertIsNone(driver.pending_boundary)
 
     def test_boundary_refusal_is_not_retried_as_pending(self):
         clock = Clock()
