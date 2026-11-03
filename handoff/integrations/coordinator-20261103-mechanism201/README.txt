@@ -10,6 +10,9 @@ Successful explicit completion is filtered. Supply-loss/retention records and
 full/compact immutable publication remain; gameplay/native guards are unchanged.
 204 independent source review is clear;13 source-only checks passed.
 Three existing-target regressions are prepared, including coexistence/payload bounds.
+203 focused check caught compact payload overflow; its failed receipt is retained.
+207 omits explicitly marked later neutral ownership duplicates in compact output;
+all first failure records and the32KiB limit remain. Corrected210 validation pending.
 Root normal x86/x64/focused checks, freeze/package/setup/install48 are pending.
 Installed47/fallback46 and190 passing checks remain the current delivery.
 Evidence WT reports200/release-timeout and201/mechanism-loss; actual canonical195.

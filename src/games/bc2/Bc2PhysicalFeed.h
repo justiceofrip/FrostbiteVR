@@ -60,7 +60,8 @@ void RequestBc2PhysicalFeedAdmissionObservation(std::int64_t nowNs)noexcept;
 // Both forms use one immutable publication load. Compact keeps the complete
 // first failed retention, both first held losses and first-press identity/input/claim receipts; later
 // held changes and first-press geometry/checks are explicitly omitted. Neutral
-// latest changes retain their input, raw and GunHold checks in both forms.
+// latest changes retain their input, raw and GunHold checks in both forms;
+// compact explicitly omits their later ownership receipts to bound payloads.
 void WriteBc2PhysicalFeedAdmissionObservation(std::ostream&,std::ostream* compact=nullptr);
 struct Bc2PhysicalFeedApi {
     void* context=nullptr;

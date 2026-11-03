@@ -242,7 +242,7 @@ void WriteFeedAdmission(std::ostream& out,const FeedAdmissionObservation* observ
         out<<"\"checked\":"<<c.checked<<",\"passed\":"<<c.passed<<",\"firstFailure\":";
         if(c.firstFailure==~0u)out<<"null";else out<<'"'<<names[c.firstFailure]<<'"';
     };
-    const auto attempt=[&](const FeedAdmissionAttempt& a,bool essential=false){const auto& d=a.diagnostic;const auto& v=a.decision;
+    const auto attempt=[&](const FeedAdmissionAttempt& a,bool essential=false,bool ownershipReceipts=true){const auto& d=a.diagnostic;const auto& v=a.decision;
         out<<"{\"owner\":["<<a.owner.player<<','<<a.owner.soldier<<','<<a.owner.weak<<','<<a.owner.weapon<<','
             <<a.owner.actorGeneration<<','<<a.owner.equipGeneration<<','<<a.owner.space<<"],\"weapon\":["<<a.weapon.id<<','<<a.weapon.generation
             <<"],\"registrationKey\":"<<a.registrationKey<<",\"lifetime\":"<<a.lifetime<<",\"cancel\":"<<a.cancel<<",\"current\":";input(a.current);
@@ -253,6 +253,11 @@ void WriteFeedAdmission(std::ostream& out,const FeedAdmissionObservation* observ
             <<"},\"exit\":\""<<FeedExitName(d.exit)<<'"'
             <<",\"rawChecked\":"<<d.rawChecked<<",\"rawPassed\":"<<d.rawPassed<<",\"gun\":{";
         checks(a.gun,GunPredicates);out<<'}';
+        // Later neutral ownership receipts must not crowd out the retained
+        // first failures. Keep their current/source clocks and gate checks;
+        // the complete ownership receipts remain in the full observation.
+        if(essential&&!ownershipReceipts){
+            out<<",\"omitted\":[\"admissionChecks\",\"candidate\",\"eligibility\",\"contact\",\"policy\",\"retention\",\"leftBefore\",\"rightBefore\",\"ownership\",\"leftFeedClaim\"]}";return;}
         if(!essential){out<<",\"admissionChecked\":"<<d.admissionChecked<<",\"admissionPassed\":"<<d.admissionPassed
             <<",\"selectionFailure\":";status(d.selectionFailure);
         out<<",\"idleChecked\":"<<d.idleChecked<<",\"idlePassed\":"<<d.idlePassed
@@ -294,7 +299,7 @@ void WriteFeedAdmission(std::ostream& out,const FeedAdmissionObservation* observ
     if(observation->firstPress)attempt(*observation->firstPress,compact);else out<<"null";
     out<<",\"latestChange\":";
     if(compact&&observation->latestChange.decision.currentGrip)out<<"{\"omitted\":\"payload_limit\"}";
-    else attempt(observation->latestChange,compact);
+    else attempt(observation->latestChange,compact,!compact);
     out<<",\"failedRetention\":";if(observation->failedRetention)attempt(*observation->failedRetention);else out<<"null";
     const auto names=[&](const auto& values){out<<'[';bool comma=false;for(const auto* name:values){if(comma)out<<',';comma=true;out<<'"'<<name<<'"';}out<<']';};
     out<<",\"retentionEntryPredicates\":";names(RetentionEntryPredicates);
