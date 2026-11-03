@@ -106,6 +106,9 @@ static_assert(FVR_BC2_PHYSICAL_RELOAD_LIFECYCLE_SCENARIO>=1&&FVR_BC2_PHYSICAL_RE
 #include "fvr/interaction/FiringPoseHistory.h"
 #include "Bc2ProjectileLaunch.h"
 #include "Bc2ProjectileEntry.h"
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+#include "Bc2ProjectileTargetHost.h"
+#endif
 #include "Bc2ServerFireObservation.h"
 #include "Bc2FireRouteTelemetry.h"
 namespace fvr::bc2::gameplay {
@@ -133,7 +136,7 @@ std::optional<MuzzleEventSource> muzzleHistorySource;
 std::atomic<unsigned> clientOriginWrites=0,serverOriginWrites=0,originWriteFailures=0,shotSourceChanges=0,originFallbacks=0,originWritesAfterLogFull=0;
 std::atomic<unsigned> clientShotCalls=0,clientShotCopies=0,clientShotRejected=0;
 AimCandidates aimingProfile{};InputBindingCandidates profile{};std::uintptr_t image=0;unsigned imageSize=0;
-InputReader readInput=nullptr;std::array<void*,14> hooks{};
+InputReader readInput=nullptr;std::array<void*,15> hooks{};
 projectile_entry::Helper ReceiverEntryOriginal=nullptr;ProjectileLaunchBinding projectileLaunchBinding{};
 // Install-time executable section bounds, immutable while callbacks are active.
 std::array<std::pair<unsigned,unsigned>,16> projectileReceiverCodeRanges{};
@@ -1277,6 +1280,9 @@ std::uintptr_t __fastcall FireOriginHook(void* self,void*,void* matrix){
 struct ShotScope {Owner owner;unsigned effects=0,serverPlayer=0,serverSoldier=0;bool supported=false;std::optional<rigPublication::WeaponShotFrame> shot;unsigned shotToken=0;bool tokenValid=false;
     unsigned configuration=0;std::optional<NativeMuzzleConfig> nativeConfig;
     std::uint64_t invocation=0,observedHelperCallbacks=0;unsigned launchOrdinal=0;
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+    std::uint64_t targetScopeSerial=0;unsigned targetHelperIndex=UINT32_MAX;
+#endif
     std::optional<std::array<float,16>> composedOutput;bool compositionWritten=false;
     std::optional<interaction::FiringPoseSample> eventPose;
 };
@@ -1296,6 +1302,9 @@ struct ProjectileLaunchRecord {
     std::optional<ProjectileLaunchArguments> before,after;
     bool receiverCaptureAttempted=false;
     std::optional<ProjectileReceiverIdentity> receiverIdentity;
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+    std::optional<projectile307::Join> targetJoin;
+#endif
 };
 std::array<ProjectileLaunchRecord,64> projectileLaunchRecords{};
 std::atomic<unsigned> projectileLaunchCount=0,projectileLaunchCalls=0,projectileLaunchRejected=0,
@@ -1384,10 +1393,108 @@ std::optional<ProjectileReceiverIdentity> ReadProjectileReceiverIdentity(unsigne
        !Read(row.descriptor,&descriptorVtable,4)||descriptorVtable!=row.descriptorVtable)return {};
     return row;
 }
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+projectile307::Lifecycle projectileTargetLife;
+std::atomic<std::uint64_t> projectileTargetScopeSerial{0};
+std::atomic<unsigned> projectileTargetRefused{0},projectileTargetExpired{0};
+projectile307::Owner ProjectileOwner(const Owner& o)noexcept {
+    return {o.manager,o.player,o.weak,o.soldier,o.controlled,o.entry,o.router,o.cache,o.weapon,o.aim,o.equipment,o.foot,unsigned(o.role)};
+}
+projectile307::Receiver ProjectileReceiver(const ProjectileReceiverIdentity& r)noexcept {
+    return {r.receiver,r.vtable,r.target,r.descriptor,r.descriptorVtable};
+}
+std::uint64_t NextProjectileScope()noexcept {
+    if(!projectile302::Observer.enabled.load(std::memory_order_acquire))return 0;
+    auto previous=projectileTargetScopeSerial.load(std::memory_order_relaxed);
+    if(previous!=UINT64_MAX&&projectileTargetScopeSerial.compare_exchange_strong(previous,previous+1,std::memory_order_relaxed))return previous+1;
+    return 0; // Exhaustion/contention misses a scope; no spin or serial reuse.
+}
+bool ProjectileWindow(bool firstAcceptedHelper=false)noexcept {
+    if(!enabled.load(std::memory_order_acquire)||!projectile302::Observer.enabled.load(std::memory_order_acquire))return false;
+    LARGE_INTEGER now{};if(!QueryPerformanceCounter(&now))return false;
+    // Preserve the existing optional diagnostic authority and original expiry.
+    if(bodyHolster&&bodyHolster->DiagnosticDeadline()){
+        const auto ns=HandNanos(now.QuadPart);
+        if(ns<bodyHolster->DiagnosticStart()||ns>=bodyHolster->DiagnosticDeadline()){++projectileTargetExpired;return false;}
+    }
+    const bool okay=projectileTargetLife.Window(now.QuadPart,firstAcceptedHelper);
+    if(!okay)++projectileTargetExpired;return okay;
+}
+bool __cdecl ValidateProjectileTarget(void*,const projectile302::Grant& g,projectile302::Boundary)noexcept {
+    // TLS is resolved afresh; no ShotScope pointer is retained in a grant/record.
+    const auto* current=serverShotScope;
+    if(!current||!ProjectileWindow()||current->targetScopeSerial!=g.scopeSerial||current->invocation!=g.invocation||
+       current->launchOrdinal!=g.ordinal||current->targetHelperIndex!=g.helperIndex||GetCurrentThreadId()!=g.thread||
+       !current->tokenValid||current->shotToken!=g.token||!current->nativeConfig)return false;
+    if(projectileLaunchGate.test_and_set(std::memory_order_acquire))return false;
+    projectile307::Join saved{};bool accepted=false,returned=false;
+    const auto count=projectileLaunchCount.load(std::memory_order_acquire);
+    if(g.helperIndex<count){const auto& row=projectileLaunchRecords[g.helperIndex];
+        if(row.targetJoin&&row.after&&row.receiverIdentity&&row.invocation==g.invocation&&row.ordinal==g.ordinal&&
+           row.thread==g.thread&&row.token==g.token&&row.effects==current->effects&&row.configuration==current->configuration&&
+           std::uint64_t(row.after->composedAddress)+0x30==g.source){
+            saved=*row.targetJoin;accepted=row.accepted&&row.helperResultMatches&&row.ownerAndConfigCurrent;
+            returned=row.serverShootReturned;
+        }
+    }
+    projectileLaunchGate.clear(std::memory_order_release);
+    if(!accepted||returned||!projectile307::SameGrant(saved.grant,g))return false;
+    Owner liveOwner{};
+    const MuzzleReadMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t size){return Read(at,dst,size);}};
+    const auto liveConfig=ReadNativeMuzzleConfig(memory,current->effects,current->configuration);
+    if(!Resolve(liveOwner)||!liveConfig)return false;
+    const projectile307::ServerIdentityMemory serverMemory{
+        {nullptr,[](void*,unsigned at,void* dst,std::size_t size){return Read(at,dst,size);}},
+        [](void*,unsigned object,const char* name)noexcept{return Type(object,name);}};
+    const projectile307::ServerIdentityBinding serverBinding{unsigned(image),unsigned(imageSize),
+        unsigned(image)+fireProfile.serverControlledGetter,unsigned(image)+fireProfile.serverContext,
+        unsigned(image)+fireProfile.serverManagerVtable};
+    // Called for BOTH Entry and Return (and after each bounded sample). These
+    // are live native results, never the pre-call ShotScope player/soldier copy.
+    const auto liveServer=projectile307::ReadServerIdentity(serverMemory,serverBinding,ProjectileOwner(liveOwner),current->effects);
+    if(!liveServer||liveServer->player!=current->serverPlayer||liveServer->soldier!=current->serverSoldier)return false;
+    const auto receiver=ReadProjectileReceiverIdentity(g.receiver,*liveConfig);
+    if(!receiver)return false;
+    projectile307::Current c;
+    c.scopeSerial=current->targetScopeSerial;c.invocation=current->invocation;c.ordinal=current->launchOrdinal;
+    c.helperIndex=current->targetHelperIndex;c.thread=GetCurrentThreadId();c.token=current->shotToken;c.tokenValid=current->tokenValid;
+    c.helperAccepted=accepted;c.helperReturned=returned;c.effects=current->effects;c.configuration=current->configuration;
+    c.serverPlayer=liveServer->player;c.serverSoldier=liveServer->soldier;
+    c.scopeOwner=ProjectileOwner(current->owner);c.resolvedOwner=ProjectileOwner(liveOwner);
+    c.scopeConfig=*current->nativeConfig;c.resolvedConfig=*liveConfig;c.receiver=ProjectileReceiver(*receiver);
+    // Bookend TLS and deadline after the bounded native identity reads as well.
+    return serverShotScope==current&&ProjectileWindow()&&projectile307::Matches(saved,g,c);
+}
+void OfferProjectileTarget(ShotScope& current,ProjectileLaunchRecord& row,unsigned index,unsigned low,unsigned high)noexcept {
+    current.targetHelperIndex=UINT32_MAX;
+    if(!projectile302::Observer.enabled.load(std::memory_order_acquire))return;
+    if(!row.accepted||!row.receiverIdentity||!row.after||!current.nativeConfig||!current.targetScopeSerial||
+       serverShotScope!=&current||row.invocation!=current.invocation||row.ordinal!=current.launchOrdinal||
+       !current.tokenValid||current.shotToken!=row.token||row.thread!=GetCurrentThreadId()||
+       row.receiverIdentity->target!=unsigned(image)+projectile307::TargetRva||
+       std::uint64_t(row.after->composedAddress)+0x3c>UINT32_MAX){++projectileTargetRefused;return;}
+    projectile307::Join join;
+    join.grant={current.targetScopeSerial,row.invocation,row.ordinal,index,row.thread,row.token,
+        row.receiverIdentity->receiver,row.receiverIdentity->vtable,row.receiverIdentity->target,
+        projectileLaunchBinding.virtualReturn,row.after->composedAddress+0x30,low,high};
+    join.owner=ProjectileOwner(current.owner);join.config=*current.nativeConfig;join.receiver=ProjectileReceiver(*row.receiverIdentity);
+    join.effects=current.effects;join.configuration=current.configuration;join.serverPlayer=current.serverPlayer;join.serverSoldier=current.serverSoldier;
+    // Caller holds helper publication gate. Session::Offer is also nonblocking;
+    // target Claim drops Session.gate before Validate acquires helper gate.
+    row.targetJoin=join;
+    if(!ProjectileWindow(true)||!projectile302::Observer.Offer(join.grant)){++projectileTargetRefused;return;}
+    current.targetHelperIndex=index;
+}
+#endif
+
 void __cdecl ReceiverEntryDispatch(projectile_entry::Invocation* invocation){
     Callback callback;const auto original=[&]{return ReceiverEntryForward(invocation);};
     const auto& entry=invocation->entry;
     const auto caller=entry.returnAddress;auto* current=serverShotScope;
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+    // Even an unrecorded/rejected newer helper invalidates the old same-scope grant.
+    if(current)current->targetHelperIndex=UINT32_MAX;
+#endif
     if(!enabled.load(std::memory_order_acquire)||!projectileLaunchBinding.verified||!current||
        caller!=projectileLaunchBinding.helperReturn||entry.registers.ecx!=current->effects){original();return;}
     ++projectileLaunchCalls;
@@ -1431,7 +1538,12 @@ void __cdecl ReceiverEntryDispatch(projectile_entry::Invocation* invocation){
         }
         if(projectileLaunchGate.test_and_set(std::memory_order_acquire)){++projectileLaunchBusy;return;}
         const auto index=projectileLaunchCount.load(std::memory_order_relaxed);
-        if(index<projectileLaunchRecords.size()){projectileLaunchRecords[index]=row;projectileLaunchCount.store(index+1,std::memory_order_release);}
+        if(index<projectileLaunchRecords.size()){
+            projectileLaunchRecords[index]=row;projectileLaunchCount.store(index+1,std::memory_order_release);
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+            OfferProjectileTarget(*current,projectileLaunchRecords[index],index,low,high);
+#endif
+        }
         else ++projectileLaunchDropped;
         projectileLaunchGate.clear(std::memory_order_release);
     });
@@ -1450,6 +1562,9 @@ std::uintptr_t __fastcall ServerShootHook(void* self,void*,void* config,float dt
     if(!MatchServerPlayer(memory,unsigned(image)+fireProfile.serverContext,unsigned(image)+fireProfile.serverManagerVtable,owner.player,player))return passthrough();
     ShotScope local{owner,effects,player,soldier};local.configuration=reinterpret_cast<unsigned>(config);
     local.invocation=shotInvocationSerial.fetch_add(1,std::memory_order_relaxed)+1;
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+    local.targetScopeSerial=NextProjectileScope();
+#endif
     local.shot=rigPublication::ReadWeaponShotFrame(owner.soldier,owner.weak,owner.weapon);
     local.supported=SupportedMuzzleShot(owner,effects,local.configuration,local.shot,local.nativeConfig);
     local.tokenValid=Read(reinterpret_cast<unsigned>(context)+0x1c,&local.shotToken,4);
@@ -4363,6 +4478,42 @@ void ReportVehicleCameraEvidence(std::ostream& out){
         out<<",\"planned_eyes\":[";matrix(r.planned[0]);out<<',';matrix(r.planned[1]);out<<"],\"applied_eyes\":[";matrix(r.applied[0]);out<<',';matrix(r.applied[1]);out<<"]}";
     }out<<']';out.precision(precision);
 }
+bool EnableProjectileTargetObservation(std::span<const std::byte> bytes,const engine::PeImage& pe,
+    std::uintptr_t base,bool explicitRequest,bool processRetainedProbe)noexcept {
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+    using namespace projectile307;
+    if(!explicitRequest)return false;
+    if(projectileTargetLife.attempted||projectileTargetLife.closed.load())return false;
+    const bool prerequisites=processRetainedProbe&&!enabled.load(std::memory_order_acquire)&&hooks[0]&&hooks[1]&&hooks[13]&&
+        !hooks[14]&&!projectile302::Original&&base==image&&image==0x400000&&
+        projectileLaunchBinding.verified&&projectileLaunchBinding.virtualReturn==base+0x17aa0d&&
+        projectile302::FloatingStateSupported()&&handFrequency>0&&handFrequency<=INT64_MAX/15;
+    bool signatures=false;
+    if(prerequisites){
+        const auto target=Offset(pe,TargetRva,TargetSize),setter=Offset(pe,SetterRva,SetterSize);
+        std::array<std::byte,TargetSize> targetLive{};std::array<std::byte,SetterSize> setterLive{};
+        if(target&&setter&&*target<=bytes.size()&&TargetSize<=bytes.size()-*target&&
+           *setter<=bytes.size()&&SetterSize<=bytes.size()-*setter&&
+           ProjectileReceiverImageRange(unsigned(base)+TargetRva,TargetSize,true)&&
+           ProjectileReceiverImageRange(unsigned(base)+SetterRva,SetterSize,true)&&
+           Read(base+TargetRva,targetLive.data(),targetLive.size())&&Read(base+SetterRva,setterLive.data(),setterLive.size()))
+            signatures=VerifySignatures(bytes,bytes.subspan(*target,TargetSize),bytes.subspan(*setter,SetterSize),targetLive,setterLive);
+    }
+    const HookApi hookApi{nullptr,
+        [](void*,void* target,projectile302::MachineEntry replacement,void** original)noexcept{
+            return MH_CreateHook(target,reinterpret_cast<void*>(replacement),original)==MH_OK;},
+        [](void*,void* target)noexcept{
+            const auto result=MH_DisableHook(target);return result==MH_OK||result==MH_ERROR_DISABLED;}};
+    const projectile302::ObserverApi observerApi{nullptr,
+        [](void*,unsigned at,void* dst,std::size_t size)noexcept{return Read(at,dst,size);},ValidateProjectileTarget};
+    // Shared installer publishes immutable dependencies before the one global enable.
+    return projectileTargetLife.Install(true,processRetainedProbe,signatures,prerequisites,prerequisites?handFrequency*15:0,
+        projectile302::Observer,projectile302::Original,hooks[14],reinterpret_cast<void*>(base+TargetRva),observerApi,hookApi);
+#else
+    (void)bytes;(void)pe;(void)base;(void)explicitRequest;(void)processRetainedProbe;return false;
+#endif
+}
+
 bool SetFeedbackWriter(FeedbackWriter writer)noexcept {
     if(!hooks[0]||enabled.load(std::memory_order_acquire)||writeFeedback||!writer)return false;writeFeedback=writer;return true;
 }
@@ -4381,8 +4532,15 @@ void Start()noexcept {
     selectedKnife::Start();
 #endif
     reloadFlowRuntime::Start();rigPublication::Start();enabled.store(true,std::memory_order_release);
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+    projectileTargetLife.Start();
+#endif
 }
 bool PrepareSessionStop()noexcept {
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+    // Close even if existing gameplay retirement refuses. Retain all dependencies.
+    projectileTargetLife.Close();
+#endif
 #ifdef FVR_BC2_PLAYER_KNIFE_NORMAL
     if(chestKnife){
         // Stop new gameplay writes; leave native hooks/Update observer alive.
@@ -4420,8 +4578,26 @@ bool Stop()noexcept {
     // tool interval cannot be reported as drained or silently handed to stock.
     if(chestKnife)okay=chestKnifeNative::Stop()&&okay;
 #endif
-    for(auto entry:hooks)if(entry){const auto r=MH_DisableHook(entry);okay&=r==MH_OK||r==MH_ERROR_DISABLED;}
-    const auto until=GetTickCount64()+2000;while(active.load()&&GetTickCount64()<until)Sleep(1);
+    for(unsigned slot=0;slot<hooks.size();++slot)if(const auto entry=hooks[slot]){
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+        if(slot==14){okay=projectileTargetLife.Disable()&&okay;continue;}
+#endif
+        const auto r=MH_DisableHook(entry);okay&=r==MH_OK||r==MH_ERROR_DISABLED;
+    }
+    const auto targetActive=[]()noexcept {
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+        return projectileTargetLife.Active();
+#else
+        return false;
+#endif
+    };
+    const auto until=GetTickCount64()+2000;while((active.load()||targetActive())&&GetTickCount64()<until)Sleep(1);
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+    projectileTargetLife.PollDrain();
+    // Slot14/Original/API/Session are NEVER removed, reset or reopened. A caller
+    // paused before active registration still needs the immutable trampoline.
+    okay=projectileTargetLife.Retired()&&okay;
+#endif
     // This candidate observer owns no game state. Remove its trampoline only
     // after every gameplay callback has left; a failed drain preserves it.
     if(okay&&!active.load()&&hooks[13]){
@@ -4442,7 +4618,7 @@ bool Stop()noexcept {
     selectedMeshes.Clear();if(bodyInventory&&!active.load())bodyInventory->Cancel();
     if(!active.load()&&weaponVisibilityProbe){LARGE_INTEGER now{};QueryPerformanceCounter(&now);weaponVisibilityProbe->Cancel(9,HandNanos(now.QuadPart));
         rigPublication::PublishWeaponVisibility({});weaponVisibilitySample.store({},std::memory_order_release);}
-    return okay&&!active.load();
+    return okay&&!active.load()&&!targetActive();
 }
 void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true":"false")
     <<",\"native_equipment_epoch\":"<<epoch<<",\"native_input_epoch\":"<<inputEpoch<<",\"native_movement_epoch\":"<<movementEpoch<<",\"native_input_pauses\":"<<nativeInputPauses
@@ -4800,5 +4976,12 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
     const bool fireSnapshotAvailable=!serverFireObservationGate.test_and_set(std::memory_order_acquire);
     if(fireSnapshotAvailable){fireSnapshot=serverFireObservation;serverFireObservationGate.clear(std::memory_order_release);}
     out<<fireSnapshotAvailable<<",\"snapshot\":";if(fireSnapshotAvailable)fireSnapshot.Report(out);else out<<"null";
-    out<<"}},\"rig_publication\":";out.precision(firePrecision);rigPublication::Report(out);ReportAttached(out);out<<'}';}
+    out<<"}},\"projectile_target_observation\":";
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+    projectile307::Report(out,projectileTargetLife,projectile302::Observer);
+    out<<",\"projectile_target_refused\":"<<projectileTargetRefused.load()<<",\"projectile_target_window_refused\":"<<projectileTargetExpired.load();
+#else
+    out<<"{\"compiled\":false,\"requested\":false,\"read_only\":true}";
+#endif
+    out<<",\"rig_publication\":";out.precision(firePrecision);rigPublication::Report(out);ReportAttached(out);out<<'}';}
 }

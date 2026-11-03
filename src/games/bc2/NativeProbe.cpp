@@ -3538,6 +3538,26 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         if(viewAnchorMode){const auto candidate=fvr::bc2::DiscoverViewAnchor(bytes,pe.image);Require(bool(candidate),"Native view anchor unverified");viewAnchor=*candidate;
             Require(same(viewAnchor.getter,4)&&same(viewAnchor.setter,0x56)&&same(viewAnchor.objectPrepare,0x2a4),"Native view anchor modified");}
         if(config.flags&0x800u)Require(fvr::bc2::gameplay::Install(bytes,pe.image,imageBase,[](fvr::interaction::InputFrame& out,std::int64_t& deadline)noexcept{return frameBridge.ReadInput(out,&deadline);},bool(config.flags&0x1000u),bool(config.flags&0x2000u),bool(config.flags&0x4000u),bool(config.flags&0x8000u),bool(config.flags&0x10000u),bool(config.flags&0x20000u),bool(config.flags&0x40000u),bool(config.flags&0x80000u),bool(config.flags&0x100000u),bool(config.flags&0x200000u),bool(config.flags&0x400000u),bool(config.flags&0x800000u),bool(config.flags&0x1000000u),bool(config.flags&0x2000000u),bool(config.flags&0x4000000u),config.magazineReloadSession),"Native gameplay binding unverified");
+        // Explicit report-local request; absence is the default. This retained
+        // NativeProbe loader is the only supported host; no new unload contract.
+        const bool projectileTargetRequest=[&]{
+            const auto marker=output.parent_path()/L"projectile-target.observe";
+            const auto file=CreateFileW(marker.c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_FLAG_OPEN_REPARSE_POINT,nullptr);
+            if(file==INVALID_HANDLE_VALUE){const auto error=GetLastError();
+                Require(error==ERROR_FILE_NOT_FOUND||error==ERROR_PATH_NOT_FOUND,"Projectile observer request unreadable");return false;}
+            constexpr char expected[]="whole-7155b0-v1\n";
+            BY_HANDLE_FILE_INFORMATION info{};std::array<char,sizeof(expected)> data{};DWORD length=0;
+            const bool valid=GetFileType(file)==FILE_TYPE_DISK&&GetFileInformationByHandle(file,&info)&&
+                !(info.dwFileAttributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT))&&
+                !info.nFileSizeHigh&&info.nFileSizeLow==sizeof(expected)-1&&
+                ReadFile(file,data.data(),DWORD(data.size()),&length,nullptr)&&length==sizeof(expected)-1&&
+                std::memcmp(data.data(),expected,sizeof(expected)-1)==0;
+            CloseHandle(file);Require(valid,"Projectile observer request invalid");return true;
+        }();
+        if(projectileTargetRequest)Require((config.flags&0x800u)&&
+            fvr::bc2::gameplay::EnableProjectileTargetObservation(bytes,pe.image,imageBase,true,true),
+            "Optional projectile observer refused: private build, retained host, helper, or exact signatures unavailable");
+
         if(config.flags&0x800u){
             fvr::bc2::mechanismAudio::Config audioConfig{};
             // Default is observation only. The private replacement opt-in may

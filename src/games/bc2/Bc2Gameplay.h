@@ -27,6 +27,10 @@ using FeedbackWriter=bool(*)(const interaction::FeedbackEvent&)noexcept;
 // Optional one-way notification, configured after Install and before Start.
 // A failed nonblocking send is dropped; feedback never changes native reload.
 bool SetFeedbackWriter(FeedbackWriter)noexcept;
+// Optional passive observation only; both explicit arguments default to refusal.
+// Supported solely by the process-retained NativeProbe host, before global enable.
+bool EnableProjectileTargetObservation(std::span<const std::byte>,const engine::PeImage&,
+    std::uintptr_t,bool explicitRequest=false,bool processRetainedProbe=false)noexcept;
 // Existing session writer opt-in, after Install and before Start. The report
 // drains bounded transition records; no native reads or stream work in Gather.
 bool EnableFireRouteTelemetry()noexcept;
