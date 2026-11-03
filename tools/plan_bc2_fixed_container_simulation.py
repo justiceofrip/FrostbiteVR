@@ -114,7 +114,7 @@ def ammo(snapshot, now, idle=False):
     return view
 
 
-def extension(snapshot, now):
+def extension(snapshot, now, *, completion=None):
     x = snapshot.get("fixedContainer")
     require(isinstance(x, dict) and x.get("schema") == OBSERVATION_SCHEMA
             and x.get("available") is True and x.get("observationOnly") is True,
@@ -135,7 +135,7 @@ def extension(snapshot, now):
             "adapter supports measured single-round breech/muzzle profiles only")
     require(t["enabled"] is True and t["current"] is True and integer(t["lifetime"]) > 0 and integer(t["revision"]) > 0
             and integer(t["step"]) in (0, 2, 3, 4), "missing retained fixed-container lifetime/step")
-    require(all(raw[k] is True for k in ("valid", "current", "admittedAtTick", "ownerMatches", "rigMatches", "profileMatches"))
+    require(all(raw[k] is True for k in ("valid", "current", "ownerMatches", "rigMatches", "profileMatches"))
             and integer(raw["rigFingerprint"]) == integer(p["rigFingerprint"]), "missing original raw fixed-container contact")
     frame.evidence(raw["input"], snapshot["owner"], integer(snapshot["physical_equipment_generation"]), now)
     require(integer(raw["input"]["sequence"]) <= integer(source["sequence"])
@@ -149,6 +149,18 @@ def extension(snapshot, now):
     for field in ("target", "carriedSupply"):
         if t[field] is not None:
             frame.rigid(t[field])
+    if raw["admittedAtTick"] is not True:
+        require(raw["admittedAtTick"] is False and completion is not None, "missing original raw fixed-container contact")
+        # PhysicalStep and insertion dispatch release their claim/evidence.
+        # This admits only a terminal check (or exact pending receipt wait),
+        # never another motion.
+        previous, acquired = completion
+        require_reobserved(previous, snapshot)
+        require_acquired(previous, acquired, snapshot)
+        if previous["stage"] == "Insert":
+            require_insertion_observation(previous, snapshot, now, acquired)
+        else:
+            require_physical_completion(previous, snapshot, now)
     return x
 
 
@@ -186,17 +198,18 @@ def pending_request(snapshot):
     require(view["command"] is None or view["command"] == command, "pending shared ledger command changed")
 
 
-def blocked_observation(snapshot, now):
-    x = extension(snapshot, now)
+def blocked_observation(snapshot, now, *, completion=None):
+    x = extension(snapshot, now, completion=completion)
     require(snapshot.get("feed") is None and x["tracking"]["blocksFire"] is True,
             "unrelated weapon interlock cannot authorize fixed-container motion")
     ammo(snapshot, now); pending_request(snapshot)
     return True
 
 
-def admit(snapshot, now, nonce):
-    frame.admit_frame(snapshot, now, nonce, mechanism_admission=blocked_observation)
-    x = extension(snapshot, now)
+def admit(snapshot, now, nonce, *, completion=None):
+    frame.admit_frame(snapshot, now, nonce, mechanism_admission=lambda original, evaluated:
+        blocked_observation(original, evaluated, completion=completion))
+    x = extension(snapshot, now, completion=completion)
     require(snapshot.get("feed") is None and snapshot["weapon_actions_blocked"] == x["tracking"]["blocksFire"],
             "competing weapon mechanism or interlock")
     for h in snapshot["input"]["hands"]:
@@ -238,6 +251,7 @@ def selection(snapshot):
 def held(snapshot, now, kind):
     x = snapshot["fixedContainer"]
     t, raw, p = x["tracking"], x["raw"], x["profile"]
+    require(raw["admittedAtTick"] is True, "missing original raw fixed-container contact")
     token = claim(t["hand"], raw["input"], now, 0, kind)
     require(x["leftClaim"] == t["hand"] and raw["grip"] is True and t["grip"] is True
             and finite(snapshot["input"]["hands"][0]["squeeze"]) >= .7
@@ -254,8 +268,8 @@ def held(snapshot, now, kind):
     return token
 
 
-def reobserve(previous, snapshot, now, nonce):
-    x = admit(snapshot, now, nonce)
+def require_reobserved(previous, snapshot):
+    x = snapshot["fixedContainer"]
     require(previous["schema"] == SCHEMA and previous["selection"] == selection(snapshot), "owner/profile changed; replan")
     require_preserved(previous["preserve"], preserved(snapshot))
     baseline, t = previous["baseline"], x["tracking"]
@@ -267,12 +281,147 @@ def reobserve(previous, snapshot, now, nonce):
             and x["supply"] == baseline["supply"]
             and binding_key(x["view"]["binding"]) == baseline["binding"]
             and x["view"]["identity"] == baseline["nativeIdentity"], "loader/native lifetime or supply changed")
+    require(t["gun"]["token"] == baseline["gun"], "fixed-container GunHold root changed")
+
+
+def completion_context(previous, gate, acquired):
+    if gate == "fixed_inserted":
+        # Existing strict receipt checks remain usable without the optional
+        # read-only context. Released raw input additionally needs alignment.
+        if acquired is None:
+            return None
+        require(previous["stage"] == "Insert" and isinstance(acquired, dict)
+                and acquired.get("gate") == "fixed_aligned" and acquired.get("observed") is True,
+                "insertion completion requires this invocation's fixed alignment")
+        return previous, acquired
+    if gate != "fixed_step_complete":
+        return None
+    require(previous["stage"] in ("Open", "Close") and isinstance(acquired, dict)
+            and acquired.get("gate") == "fixed_acquired" and acquired.get("observed") is True,
+            "physical completion requires this invocation's fixed acquisition")
+    return previous, acquired
+
+
+def require_acquired(previous, acquired, snapshot):
+    insertion = previous["stage"] == "Insert"
+    completion_context(previous, "fixed_inserted" if insertion else "fixed_step_complete", acquired)
+    proof, token = acquired.get("completionPrerequisite"), acquired.get("claimToken")
+    x, baseline = snapshot["fixedContainer"], previous["baseline"]
+    t, profile = x["tracking"], x["profile"]
+    require(isinstance(proof, dict) and isinstance(token, dict)
+            and proof["planSourceNonce"] == previous["snapshotNonce"]
+            and proof["planEvaluatedAtNs"] == previous["evaluatedAtNs"] and proof["stage"] == previous["stage"]
+            and proof["lifetime"] == baseline["lifetime"] == t["lifetime"]
+            and proof["gunToken"] == baseline["gun"] == t["gun"]["token"],
+            "physical completion acquisition belongs to another plan/root/lifetime")
+    gun = proof["gunToken"]
+    require(integer(token["id"]) > 0 and token["owner"] == x["input"]["owner"]
+            and integer(token["hand"]) == 0 and integer(token["kind"]) == (5 if insertion else 4)
+            and token["item"] == (x["supply"]["resource"] if insertion else gun["item"])
+            and token["prerequisiteClaim"] == (0 if insertion else gun["id"])
+            and (not insertion or token == baseline["claim"])
+            and token["contact"] == dict(id=profile["geometry"][STEP[previous["stage"]]]["contact"]["role"],
+                                         generation=profile["revision"]),
+            "physical completion lacks its exact acquired mechanism claim")
+    require(integer(snapshot["nonce"]) != integer(acquired["snapshotNonce"])
+            and integer(previous["evaluatedAtNs"]) < integer(acquired["observedNs"]) < integer(snapshot["observed_ns"])
+            and integer(acquired["inputObservedNs"]) <= integer(acquired["observedNs"]) < integer(acquired["sourceValidUntilNs"])
+            and integer(t["revision"]) > integer(proof["revision"]) > integer(baseline["revision"])
+            and integer(snapshot["input"]["generation"]) > integer(proof["inputSequence"]) > integer(previous["sourceInputSequence"])
+            and integer(x["raw"]["input"]["sequence"]) > integer(proof["rawInputSequence"])
+            and integer(x["raw"]["input"]["observedNs"]) > integer(acquired["inputObservedNs"]),
+            "physical completion needs newer original input/revision after acquisition")
+
+
+def require_physical_completion(previous, snapshot, now):
+    x, stage = snapshot["fixedContainer"], previous["stage"]
+    t, v = x["tracking"], ammo(snapshot, now, idle=True)
+    require(stage in ("Open", "Close") and integer(t["step"]) == (2 if stage == "Open" else 4)
+            and t["hand"] is None and x["leftClaim"] is None and t["target"] is None
+            and t["carried"] is False and t["carriedSupply"] is None and t["pending"] is False and x["pendingRequest"] is None
+            and v["snapshot"]["counts"] == previous["baseline"]["counts"],
+            "physical opening/closure has not completed")
+    require(((x["lastCompletion"] or {}).get("outcome", {}).get("request", {}).get("intent", {}).get("id", 0))
+            == previous["baseline"]["lastCompletedRequest"], "physical completion observed another ammunition transaction")
+    if stage == "Close":
+        require(t["blocksFire"] is False and snapshot["weapon_actions_blocked"] is False, "closure did not clear its exact interlock")
+
+
+def require_inserted(previous, snapshot, now):
+    x, b = snapshot["fixedContainer"], previous["baseline"]
+    t, p, v = x["tracking"], x["profile"], ammo(snapshot, now, idle=True)
+    require(previous["stage"] == "Insert" and integer(t["step"]) == (3 if integer(p["kind"]) == 3 else 4)
+            and t["carried"] is False and t["carriedSupply"] is None and t["hand"] is None and x["leftClaim"] is None
+            and t["target"] is None and t["pending"] is False and x["pendingRequest"] is None,
+            "insertion has not consumed its physical transaction")
+    event = x["lastCompletion"]
+    require(isinstance(event, dict) and event["lifetime"] == b["lifetime"] and event["supply"] == b["supply"],
+            "missing same-lifetime completed native transaction")
+    out = event["outcome"]
+    request, receipt, post = out["request"], out["receipt"], event["postSnapshot"]
+    request_proof(request, v)
+    require(integer(out["state"]) == 3 and out["nativeDispatched"] is True and isinstance(receipt, dict)
+            and out["actorRetirement"] is None and integer(request["intent"]["id"]) > integer(b["lastCompletedRequest"])
+            and binding_key(request["binding"]) == b["binding"]
+            and request["preparedCommand"] == receipt["command"], "no new exact Completed native request/receipt")
+    command = receipt["command"]
+    before = counts(command["before"])
+    after = dict(loaded=before["loaded"]+1, reserve=before["reserve"]-1, capacity=1)
+    require(before == b["counts"] and before["loaded"] == 0 and before["reserve"] > 0
+            and command["after"] == receipt["after"] == post["counts"] == v["snapshot"]["counts"] == after
+            and receipt["before"] == before and integer(command["operation"]) == 4
+            and command["context"] == post["context"] == v["binding"]["context"]
+            and integer(command["sourceSequence"]) >= integer(b["ammoSequence"])
+            and integer(command["requestedNs"]) > integer(previous["evaluatedAtNs"])
+            and receipt["authorityVerified"] is True and receipt["copiesVerified"] is True
+            and integer(receipt["authorityInvocation"]) > 0, "native insertion receipt/copies/counts mismatch")
+    require(integer(command["requestedNs"]) <= integer(receipt["beganNs"]) <= integer(receipt["completedNs"])
+            <= integer(out["resolvedNs"]) <= integer(event["acceptedNs"]) <= now
+            and integer(post["sequence"]) > integer(command["sourceSequence"])
+            and integer(post["observedNs"]) >= integer(receipt["completedNs"])
+            and integer(post["observedNs"]) <= integer(event["acceptedNs"]) < integer(post["deadlineNs"])
+            and integer(v["snapshot"]["sequence"]) >= integer(post["sequence"])
+            and post["coherentIdleVerified"] is True, "completion did not retain a valid original post-snapshot")
+
+
+def require_insertion_observation(previous, snapshot, now, aligned):
+    x, b = snapshot["fixedContainer"], previous["baseline"]
+    t, v = x["tracking"], ammo(snapshot, now)
+    request = x["pendingRequest"]
+    if request is None:
+        require_inserted(previous, snapshot, now)
+        request = x["lastCompletion"]["outcome"]["request"]
+    else:
+        pending_request(snapshot)
+        require(t["pending"] is True and integer(t["step"]) == STEP["Insert"]
+                and t["hand"] is None and x["leftClaim"] is None and t["target"] is None
+                and t["carried"] is True and t["carriedSupply"] is not None
+                and v["snapshot"]["counts"] == b["counts"]
+                and request["preparedCommand"]["before"] == b["counts"]
+                and integer(request["preparedCommand"]["sourceSequence"]) >= integer(b["ammoSequence"])
+                and integer(request["intent"]["id"]) > integer(b["lastCompletedRequest"]),
+                "pending insertion lost its exact aligned transaction")
+    require(integer(aligned["completionPrerequisite"]["rawInputSequence"]) < integer(request["sourceProof"]["inputSequence"])
+            <= integer(x["raw"]["input"]["sequence"])
+            and integer(aligned["inputObservedNs"]) < integer(request["intent"]["observedNs"])
+            <= integer(x["raw"]["input"]["observedNs"])
+            and integer(aligned["observedNs"]) < integer(request["preparedCommand"]["requestedNs"]) <= now,
+            "insertion request predates this invocation's aligned round")
+
+
+def reobserve(previous, snapshot, now, nonce, *, completion=None):
+    x = admit(snapshot, now, nonce, completion=completion)
+    require_reobserved(previous, snapshot)
+    if completion is not None:
+        require(completion[0] is previous, "physical completion plan changed")
+        require_acquired(previous, completion[1], snapshot)
     return x
 
 
-def check_gate(previous, snapshot, gate, now_ns, expected_nonce):
+def check_gate(previous, snapshot, gate, now_ns, expected_nonce, *, acquired=None):
     now = integer(now_ns)
-    x = reobserve(previous, snapshot, now, integer(expected_nonce))
+    completion = completion_context(previous, gate, acquired)
+    x = reobserve(previous, snapshot, now, integer(expected_nonce), completion=completion)
     b, t, v = previous["baseline"], x["tracking"], ammo(snapshot, now, idle=True)
     stage, p = previous["stage"], x["profile"]
     require(gate in {g["id"] for g in previous["receiptGates"]}, "gate was not declared by this plan")
@@ -295,47 +444,20 @@ def check_gate(previous, snapshot, gate, now_ns, expected_nonce):
                         and error[1] <= finite(motion["policy"]["orientationToleranceRadians"])*.8,
                         "actual carried round is outside destination")
     elif gate == "fixed_inserted":
-        require(stage == "Insert" and integer(t["step"]) == (3 if integer(p["kind"]) == 3 else 4)
-                and t["carried"] is False and t["hand"] is None and x["pendingRequest"] is None,
-                "insertion has not consumed its physical transaction")
-        event = x["lastCompletion"]
-        require(isinstance(event, dict) and event["lifetime"] == b["lifetime"] and event["supply"] == b["supply"],
-                "missing same-lifetime completed native transaction")
-        out = event["outcome"]
-        request, receipt, post = out["request"], out["receipt"], event["postSnapshot"]
-        request_proof(request, v)
-        require(integer(out["state"]) == 3 and out["nativeDispatched"] is True and isinstance(receipt, dict)
-                and out["actorRetirement"] is None and integer(request["intent"]["id"]) > integer(b["lastCompletedRequest"])
-                and binding_key(request["binding"]) == b["binding"]
-                and request["preparedCommand"] == receipt["command"], "no new exact Completed native request/receipt")
-        command = receipt["command"]
-        before = counts(command["before"])
-        after = dict(loaded=before["loaded"]+1, reserve=before["reserve"]-1, capacity=1)
-        require(before == b["counts"] and before["loaded"] == 0 and before["reserve"] > 0
-                and command["after"] == receipt["after"] == post["counts"] == v["snapshot"]["counts"] == after
-                and receipt["before"] == before and integer(command["operation"]) == 4
-                and command["context"] == post["context"] == v["binding"]["context"]
-                and integer(command["sourceSequence"]) >= integer(b["ammoSequence"])
-                and integer(command["requestedNs"]) > integer(previous["evaluatedAtNs"])
-                and receipt["authorityVerified"] is True and receipt["copiesVerified"] is True
-                and integer(receipt["authorityInvocation"]) > 0, "native insertion receipt/copies/counts mismatch")
-        require(integer(command["requestedNs"]) <= integer(receipt["beganNs"]) <= integer(receipt["completedNs"])
-                <= integer(out["resolvedNs"]) <= integer(event["acceptedNs"]) <= now
-                and integer(post["sequence"]) > integer(command["sourceSequence"])
-                and integer(post["observedNs"]) >= integer(receipt["completedNs"])
-                and integer(post["observedNs"]) <= integer(event["acceptedNs"]) < integer(post["deadlineNs"])
-                and integer(v["snapshot"]["sequence"]) >= integer(post["sequence"])
-                and post["coherentIdleVerified"] is True, "completion did not retain a valid original post-snapshot")
+        require_inserted(previous, snapshot, now)
+        if completion is not None:
+            require_insertion_observation(previous, snapshot, now, acquired)
     else:
-        require(gate == "fixed_step_complete" and stage in ("Open", "Close")
-                and integer(t["step"]) == (2 if stage == "Open" else 4)
-                and t["hand"] is None and t["carried"] is False
-                and v["snapshot"]["counts"] == b["counts"], "physical opening/closure has not completed")
-        if stage == "Close":
-            require(t["blocksFire"] is False and snapshot["weapon_actions_blocked"] is False, "closure did not clear its exact interlock")
-    return dict(gate=gate, observed=True, snapshotNonce=snapshot["nonce"], observedNs=snapshot["observed_ns"],
+        require(gate == "fixed_step_complete", "not a physical completion gate")
+        require_physical_completion(previous, snapshot, now)
+    result = dict(gate=gate, observed=True, snapshotNonce=snapshot["nonce"], observedNs=snapshot["observed_ns"],
                 inputObservedNs=x["raw"]["input"]["observedNs"], sourceValidUntilNs=snapshot["valid_until_ns"],
-                claimToken=token, nativeAcceptance=False, headsetAcceptance=False)
+                claimToken=token, completionOnly=completion is not None, nativeAcceptance=False, headsetAcceptance=False)
+    if gate in ("fixed_acquired", "fixed_aligned"):
+        result["completionPrerequisite"] = dict(planSourceNonce=previous["snapshotNonce"], planEvaluatedAtNs=previous["evaluatedAtNs"],
+            stage=stage, lifetime=t["lifetime"], revision=t["revision"], inputSequence=snapshot["input"]["generation"],
+            rawInputSequence=x["raw"]["input"]["sequence"], gunToken=t["gun"]["token"])
+    return result
 
 
 def plan(snapshot, stage, now_ns, expected_nonce, step_ns=40_000_000, pickup_plan=None):
@@ -389,6 +511,7 @@ def plan(snapshot, stage, now_ns, expected_nonce, step_ns=40_000_000, pickup_pla
             requiresFreshSnapshot=True, timeoutNs=2_000_000_000, countsTowardGestureBudget=True,
             requireContinuousFreshInput=True, maxInputGapNs=gap, minimumObservationSpanNs=span))
     baseline = dict(lifetime=t["lifetime"], revision=t["revision"], supply=x["supply"], binding=binding_key(v["binding"]), nativeIdentity=v["identity"],
+                    gun=t["gun"]["token"],
                     counts=v["snapshot"]["counts"], ammoSequence=v["snapshot"]["sequence"],
                     lastCompletedRequest=((x["lastCompletion"] or {}).get("outcome", {}).get("request", {}).get("intent", {}).get("id", 0)))
     if stage == "Insert":

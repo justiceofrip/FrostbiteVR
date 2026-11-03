@@ -147,6 +147,44 @@ def held_after_pickup(before, plan, now=NOW+200_000_000):
     return s
 
 
+def physical_acquired(before, now=NOW+200_000_000, sequence=110):
+    s = refresh(before, now, sequence)
+    x, t = s["fixedContainer"], s["fixedContainer"]["tracking"]
+    raw, profile = x["raw"], x["profile"]
+    s["input"]["hands"][0]["squeeze"] = 1.
+    s["weapon_actions_blocked"] = t["blocksFire"] = True
+    t["grip"] = raw["grip"] = True
+    for evidence in (s["input_evidence"], x["input"], raw["input"]):
+        evidence["released"][0] = False
+    t["hand"] = claim(raw["input"], 0, 4, t["gun"]["token"]["item"],
+        dict(id=profile["geometry"][t["step"]]["contact"]["role"], generation=profile["revision"]),
+        201, t["gun"]["token"]["id"])
+    x["leftClaim"] = copy.deepcopy(t["hand"])
+    t["target"] = copy.deepcopy(raw["weaponFromWrist"])
+    return s
+
+
+def physical_completed(acquired, stage, now=NOW+500_000_000, sequence=120):
+    # Actual304 observation015: valid/current raw input survives PhysicalStep,
+    # while Release clears its claim, target and admittedAtTick gesture bit.
+    s = refresh(acquired, now, sequence)
+    x, t = s["fixedContainer"], s["fixedContainer"]["tracking"]
+    t.update(step=2 if stage == "Open" else 4, hand=None, target=None, carried=False, carriedSupply=None, pending=False)
+    t["blocksFire"] = s["weapon_actions_blocked"] = t["step"] != 4
+    x["leftClaim"] = None
+    x["raw"]["admittedAtTick"] = False
+    return s
+
+
+def aligned_for_insert(before, now=NOW+300_000_000, sequence=115):
+    s = refresh(before, now, sequence)
+    x = s["fixedContainer"]
+    destination = x["profile"]["geometry"][2]["motion"]["placement"]["weaponFromDestination"]
+    x["tracking"]["target"] = copy.deepcopy(destination)
+    x["tracking"]["carriedSupply"] = copy.deepcopy(destination)
+    return s
+
+
 def completed(before, plan, now=NOW+500_000_000):
     s = refresh(before, now, 120)
     x, t = s["fixedContainer"], s["fixedContainer"]["tracking"]
@@ -240,6 +278,74 @@ class FixedContainerSimulationPlanTests(unittest.TestCase):
                 expected = f.multiply(local, motion["weaponFromMotion"])
                 self.assertLess(f.pose_error(fixture.emitted_local(s, plan["schedule"][-1]), expected)[0], .00001)
                 self.assertEqual([g["id"] for g in plan["receiptGates"]], ["fixed_acquired", "fixed_step_complete"])
+
+    def physical_pipeline(self, stage="Open", motion="Hinge"):
+        source = snapshot(3, motion)
+        if stage == "Close":
+            source["fixedContainer"]["tracking"].update(step=3, blocksFire=True)
+            source["weapon_actions_blocked"] = True
+            source["fixedContainer"]["view"]["snapshot"]["counts"].update(loaded=1, reserve=6)
+        plan = p.plan(source, stage, NOW, 100)
+        acquired = physical_acquired(source)
+        proof = p.check_gate(plan, acquired, "fixed_acquired", NOW+200_000_000, 110)
+        return plan, acquired, proof, physical_completed(acquired, stage)
+
+    def test_released_physical_step_observation_has_no_gesture_authority(self):
+        for stage in ("Open", "Close"):
+            for motion in ("Hinge", "Linear"):
+                with self.subTest(stage=stage, motion=motion):
+                    plan, acquired, proof, done = self.physical_pipeline(stage, motion)
+                    original = copy.deepcopy((plan, acquired, proof, done))
+                    result = p.check_gate(plan, done, "fixed_step_complete", NOW+500_000_000, 120, acquired=proof)
+                    self.assertTrue(result["observed"] and result["completionOnly"])
+                    self.assertIsNone(result["claimToken"])
+                    self.assertFalse(result["nativeAcceptance"])
+                    self.assertEqual((plan, acquired, proof, done), original)
+                    for action in (lambda: p.admit(done, NOW+500_000_000, 120),
+                                   lambda: p.reobserve(plan, done, NOW+500_000_000, 120),
+                                   lambda: p.plan(done, "Pickup", NOW+500_000_000, 120),
+                                   lambda: p.held(done, NOW+500_000_000, 4)):
+                        with self.assertRaisesRegex(p.Refusal, "original raw"):
+                            action()
+                    unadmitted = copy.deepcopy(acquired)
+                    unadmitted["fixedContainer"]["raw"]["admittedAtTick"] = False
+                    with self.assertRaises(p.Refusal):
+                        p.check_gate(plan, unadmitted, "fixed_acquired", NOW+200_000_000, 110)
+
+    def test_physical_completion_requires_original_current_identity_and_acquisition(self):
+        plan, acquired, proof, done = self.physical_pipeline()
+        faults = {
+            "expired_raw": lambda s: s["fixedContainer"]["raw"]["input"].update(deadlineNs=NOW+500_000_000),
+            "missing_raw": lambda s: s["fixedContainer"]["raw"].update(valid=False),
+            "noncurrent_raw": lambda s: s["fixedContainer"]["raw"].update(current=False),
+            "owner": lambda s: s["fixedContainer"]["raw"].update(ownerMatches=False),
+            "rig": lambda s: s["fixedContainer"]["raw"].update(rigMatches=False),
+            "profile": lambda s: s["fixedContainer"]["raw"].update(profileMatches=False),
+            "root": lambda s: s["fixedContainer"]["tracking"]["gun"]["token"].update(id=999),
+            "native_identity": lambda s: s["fixedContainer"]["view"]["identity"].update(serverItem=999),
+            "lifetime": lambda s: s["fixedContainer"]["tracking"].update(lifetime=999),
+            "revision": lambda s: s["fixedContainer"]["tracking"].update(revision=acquired["fixedContainer"]["tracking"]["revision"]),
+            "old_input": lambda s: s["input"].update(generation=110),
+            "not_completed": lambda s: s["fixedContainer"]["tracking"].update(step=0),
+            "competing_claim": lambda s: s["fixedContainer"].update(leftClaim=acquired["fixedContainer"]["leftClaim"]),
+            "carried": lambda s: s["fixedContainer"]["tracking"].update(carried=True),
+            "target": lambda s: s["fixedContainer"]["tracking"].update(target=f.identity()),
+            "pending": lambda s: s["fixedContainer"]["tracking"].update(pending=True),
+            "ammo": lambda s: s["fixedContainer"]["view"]["snapshot"]["counts"].update(reserve=6),
+            "incoherent": lambda s: s["fixedContainer"]["view"]["snapshot"].update(coherentIdleVerified=False),
+            "mapping": lambda s: s["input"].update(trackingBasisGeneration=999),
+        }
+        for name, fault in faults.items():
+            with self.subTest(fault=name):
+                bad = copy.deepcopy(done)
+                fault(bad)
+                with self.assertRaises(p.Refusal):
+                    p.check_gate(plan, bad, "fixed_step_complete", NOW+500_000_000, 120, acquired=proof)
+        wrong = copy.deepcopy(proof)
+        wrong["completionPrerequisite"]["planSourceNonce"] = 999
+        for prior in (None, {}, wrong):
+            with self.subTest(prior=prior), self.assertRaises(p.Refusal):
+                p.check_gate(plan, done, "fixed_step_complete", NOW+500_000_000, 120, acquired=prior)
 
     def test_actual_body_pickup_original_raw_claim_and_continuous_insert(self):
         s, pickup, held, insertion = self.pipeline()
@@ -394,6 +500,33 @@ class FixedContainerSimulationPlanTests(unittest.TestCase):
         done["fixedContainer"]["lastCompletion"] = None
         with self.assertRaises(p.Refusal):
             p.check_gate(insertion, done, "fixed_inserted", NOW+500_000_000, 120)
+
+    def test_insert_receipt_after_claim_release_requires_same_plan_alignment(self):
+        for kind in (3, 4):
+            with self.subTest(kind=kind):
+                _, _, held, insertion = self.pipeline(kind)
+                aligned = aligned_for_insert(held)
+                proof = p.check_gate(insertion, aligned, "fixed_aligned", NOW+300_000_000, 115)
+                done = completed(aligned, insertion)
+                done["fixedContainer"]["raw"]["admittedAtTick"] = False
+                original = copy.deepcopy((insertion, proof, done))
+                result = p.check_gate(insertion, done, "fixed_inserted", NOW+500_000_000, 120, acquired=proof)
+                self.assertTrue(result["completionOnly"])
+                self.assertIsNone(result["claimToken"])
+                self.assertEqual((insertion, proof, done), original)
+                for fault in ("no_alignment", "receipt", "stale", "identity", "old_request", "not_consumed"):
+                    bad = copy.deepcopy(done)
+                    prior = proof
+                    if fault == "no_alignment": prior = None
+                    elif fault == "receipt": bad["fixedContainer"]["lastCompletion"]["outcome"]["receipt"]["copiesVerified"] = False
+                    elif fault == "stale": bad["fixedContainer"]["raw"]["input"]["deadlineNs"] = NOW+500_000_000
+                    elif fault == "identity": bad["fixedContainer"]["view"]["identity"]["serverItem"] += 1
+                    elif fault == "old_request": bad["fixedContainer"]["lastCompletion"]["outcome"]["request"]["sourceProof"]["inputSequence"] = 115
+                    else: bad["fixedContainer"]["tracking"]["carried"] = True
+                    with self.subTest(fault=fault), self.assertRaises(p.Refusal):
+                        p.check_gate(insertion, bad, "fixed_inserted", NOW+500_000_000, 120, acquired=prior)
+                with self.assertRaises(p.Refusal):
+                    p.admit(done, NOW+500_000_000, 120)
 
     def test_native_transaction_is_observable_but_blocks_new_motion(self):
         _, _, held, insertion = self.pipeline()

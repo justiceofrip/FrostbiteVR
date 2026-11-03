@@ -1381,7 +1381,14 @@ class StimulusTests(unittest.TestCase):
     def fixed_completion_snapshot(self, driver, boundary, now, sequence):
         source, geometry = driver.mapping, driver.stimulus["geometryEvidence"]
         if boundary == "fixed_inserted":
-            return fixtures.xf.completed(source, geometry, now)
+            snapshot = fixtures.xf.completed(source, geometry, now)
+            proof = driver.boundaries["fixed_aligned"]["gate"]
+            aligned = proof["completionPrerequisite"]
+            snapshot["fixedContainer"]["tracking"]["revision"] = aligned["revision"] + 1
+            snapshot["fixedContainer"]["raw"]["admittedAtTick"] = False
+            intent = snapshot["fixedContainer"]["lastCompletion"]["outcome"]["request"]["intent"]
+            intent["observedNs"] = max(intent["observedNs"], proof["observedNs"] + 1)
+            return snapshot
         if boundary == "fixed_held":
             source = fixtures.xf.held_after_pickup(source, geometry, now)
         snapshot = fixtures.xf.refresh(source, now, sequence)
@@ -1399,6 +1406,10 @@ class StimulusTests(unittest.TestCase):
             tracking["target"] = copy.deepcopy(raw["weaponFromWrist"])
         elif boundary == "fixed_step_complete":
             tracking["step"] = 2 if driver.args.stage == "Open" else 4
+            tracking.update(hand=None, target=None, carried=False, carriedSupply=None)
+            tracking["revision"] = driver.boundaries["fixed_acquired"]["gate"]["completionPrerequisite"]["revision"] + 1
+            fixed["leftClaim"] = None
+            raw["admittedAtTick"] = False
             tracking["blocksFire"] = snapshot["weapon_actions_blocked"] = tracking["step"] != 4
         elif boundary == "fixed_aligned":
             destination = fixed["profile"]["geometry"][2]["motion"]["placement"]["weaponFromDestination"]
@@ -1473,12 +1484,16 @@ class StimulusTests(unittest.TestCase):
                 self.assertFalse(driver.held_left or driver.pending_command)
                 self.assertTrue(driver.plans[-1]["stimulusCompleted"])
                 self.assertTrue(driver.plans[-1]["boundaryChecksPassed"])
+                self.assertTrue(driver.boundaries["fixed_step_complete"]["completionOnly"])
+                self.assertTrue(driver.completion_only_observed)
+                with self.assertRaisesRegex(m.Refusal, "completion-only observation"):
+                    driver.send(driver.stimulus["schedule"][-1])
                 self.assertEqual(h.owners[-1]["pending"], False)
                 self.assertEqual(h.owners[-1]["commandSha256"], m.transport.digest(h.published[-1]))
 
     def test_fixed_completion_pending_unverified_or_pre_ack_cannot_release(self):
         for stage in ("Open", "Close"):
-            for fault in ("pending", "ammunition", "pre_ack"):
+            for fault in ("pending", "ammunition", "pre_ack", "identity", "stale_raw", "absent_acquisition"):
                 with self.subTest(stage=stage, fault=fault), self.completion_driver(Clock(), stage) as h:
                     driver = h.driver
                     def change(snapshot, boundary):
@@ -1489,8 +1504,14 @@ class StimulusTests(unittest.TestCase):
                             snapshot["fixedContainer"]["tracking"]["blocksFire"] = snapshot["weapon_actions_blocked"] = True
                         elif fault == "ammunition":
                             snapshot["fixedContainer"]["view"]["snapshot"]["counts"]["reserve"] -= 1
-                        else:
+                        elif fault == "pre_ack":
                             snapshot["input_evidence"]["observedNs"] = driver.last_commit - 1
+                        elif fault == "identity":
+                            snapshot["fixedContainer"]["view"]["identity"]["serverItem"] += 1
+                        elif fault == "stale_raw":
+                            snapshot["fixedContainer"]["raw"]["input"]["deadlineNs"] = snapshot["observed_ns"]
+                        else:
+                            driver.boundaries.pop("fixed_acquired", None)
                     h.boundary_fault = change
                     with self.assertRaises((m.Refusal, fixtures.g.GeometryRefusal)):
                         driver.run_stimulus()
@@ -1535,6 +1556,7 @@ class StimulusTests(unittest.TestCase):
             self.assertTrue(insertion["continuesHeldCustody"])
             self.assertEqual([p["stage"] for p in driver.plans], ["Pickup", "Insert"])
             self.assertTrue(all(p["stimulusCompleted"] and p["boundaryChecksPassed"] for p in driver.plans))
+            self.assertTrue(driver.boundaries["fixed_inserted"]["completionOnly"])
             self.assertFalse(any(raw.startswith(b"grip l 0\n") for raw in h.published))
             grips = [int(line[-1]) for raw in h.published for line in raw.decode().splitlines()
                      if line.startswith("grip l ")]

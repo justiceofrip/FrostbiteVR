@@ -70,9 +70,10 @@ def source_deadline(snapshot, family):
 
 
 @_guard
-def admit_observation(family, profiles, snapshot, now_ns):
+def admit_observation(family, profiles, snapshot, now_ns, *, completion=None):
     """Typed current observation; a selected sight target is allowed here."""
     _family(family)
+    require(completion is None or family == "fixed", "completion observation is fixed-container only")
     now, nonce = integer(now_ns), integer(snapshot["nonce"])
     require(now < source_deadline(snapshot, family), "stimulus boundary source expired")
     if family == "feed":
@@ -80,7 +81,7 @@ def admit_observation(family, profiles, snapshot, now_ns):
     if family == "pump":
         return pump.admit(snapshot, now, nonce)
     if family == "fixed":
-        return fixed.admit(snapshot, now, nonce)
+        return fixed.admit(snapshot, now, nonce, completion=completion)
     feed.admit_frame(snapshot, now, nonce)
     require(all(float(h["trigger"]) == 0 for h in snapshot["input"]["hands"]), "sight trigger is active")
     require(snapshot.get("sight", {}).get("status") == "available", "current sight family observation unavailable")
@@ -312,10 +313,11 @@ def _pending_feed(snapshot, baseline=None, *, completing=False):
     raise BoundaryPending("fresh retained feed presentation not yet observed")
 
 
-def _receipt_gate(module, plan, snapshot, boundary, now, nonce):
+def _receipt_gate(module, plan, snapshot, boundary, now, nonce, *, acquired=None):
     """Only narrowly identified waiting states are retryable observations."""
     try:
-        return module.check_gate(plan, snapshot, boundary, now, nonce)
+        return module.check_gate(plan, snapshot, boundary, now, nonce,
+                                 **({"acquired": acquired} if module is fixed else {}))
     except module.Refusal as error:
         reason = str(error)
         if module is fixed:
@@ -326,7 +328,7 @@ def _receipt_gate(module, plan, snapshot, boundary, now, nonce):
                     and boundary == "fixed_inserted" and x["pendingRequest"] is not None):
                 fixed.pending_request(snapshot)  # Typed original request still must validate.
                 raise BoundaryPending("native fixed insertion pending") from error
-            if (unchanged_ammo and reason == "physical opening/closure has not completed"
+            if (unchanged_ammo and x["raw"]["admittedAtTick"] is True and reason == "physical opening/closure has not completed"
                     and integer(tracking["step"]) == fixed.STEP[plan["stage"]]):
                 raise BoundaryPending("native physical step still in progress") from error
             if (unchanged_ammo and reason == "insertion has not consumed its physical transaction"
@@ -349,6 +351,9 @@ def check_boundary(stimulus, snapshot, boundary_id, now_ns, *, command_written_n
     require(len(declared) == 1, "boundary was not declared by this stimulus")
     family, stage, plan = stimulus["family"], stimulus["stage"], stimulus["geometryEvidence"]
     now, nonce = integer(now_ns), integer(snapshot["nonce"])
+    prerequisite = "fixed_aligned" if boundary_id == "fixed_inserted" else "fixed_acquired"
+    acquired = ((prior or {}).get(prerequisite) or {}).get("gate") if family == "fixed" else None
+    completion = fixed.completion_context(plan, boundary_id, acquired) if family == "fixed" else None
     # A named boundary already has an admitted registration and retained stage.
     # A missing rendered feed does not erase the native reload's Fire block.
     # Inspect the original common frame through that block, then verify the
@@ -362,7 +367,7 @@ def check_boundary(stimulus, snapshot, boundary_id, now_ns, *, command_written_n
             mechanism_admission=lambda original, evaluated: original is snapshot and evaluated == now)
         admitted = None
     else:
-        admitted = admit_observation(family, profiles, snapshot, now)
+        admitted = admit_observation(family, profiles, snapshot, now, completion=completion)
     require(nonce != integer(stimulus["source"]["nonce"])
             and integer(snapshot["observed_ns"]) > integer(stimulus["source"]["evaluatedAtNs"]), "boundary needs a new original snapshot")
     if command_written_ns is not None:
@@ -383,7 +388,10 @@ def check_boundary(stimulus, snapshot, boundary_id, now_ns, *, command_written_n
                         and fixed.ammo(snapshot, now, idle=True)["snapshot"]["counts"] == plan["baseline"]["counts"],
                         "fixed acquisition changed step/ammunition")
                 raise BoundaryPending("native fixed hand claim not yet observed")
-        result["gate"] = _receipt_gate(pump if family == "pump" else fixed, plan, snapshot, boundary_id, now, nonce)
+        result["gate"] = _receipt_gate(pump if family == "pump" else fixed, plan, snapshot, boundary_id, now, nonce,
+                                       acquired=acquired)
+        if completion is not None:
+            result["completionOnly"] = True
     elif family == "sight":
         if boundary_id == "sight_contact":
             x = sight.admit(snapshot, now, nonce, stimulus["target"])

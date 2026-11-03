@@ -791,6 +791,8 @@ class ReloadStimulus:
                     continue
                 require(time.perf_counter_ns() < min(until, self.geometry.source_deadline(snapshot, self.args.family)),
                         "boundary validation consumed original deadline")
+                if summary.get("completionOnly") is True:
+                    self.completion_only_observed = True
                 self.boundaries[boundary["id"]] = summary
                 self.artifacts.event({"type": "fresh_stimulus_boundary", "id": boundary["id"], "summary": summary})
                 self.pending_boundary = None
@@ -801,6 +803,8 @@ class ReloadStimulus:
 
     def send(self, sample=None, *, cleanup=False, release_only=False):
         require(cleanup or getattr(self, "observation_failure", None) is None, "previous native observation failure")
+        require(cleanup or release_only or not getattr(self, "completion_only_observed", False),
+                "completion-only observation cannot authorize another controller pose")
         require(not release_only or self.held_left, "ordinary release requires held left input")
         lines = ["grip l 0"] if cleanup or release_only else ordinary_commands(sample, self.first_sample_pending)
         require(self.commands + len(lines) + 1 <= MAX_COMMANDS, "512-command budget")
@@ -985,6 +989,7 @@ class ReloadStimulus:
         require(self.commands + sum(len(ordinary_commands(s, i == 0)) + 1 for i, s in enumerate(stimulus["schedule"])) + 2 <= MAX_COMMANDS,
                 "complete next stimulus and cleanup exceed remaining command budget")
         self.boundaries = {}
+        self.completion_only_observed = False
         self.plans.append({"family": stimulus["family"], "stage": stimulus["stage"], "source": stimulus["source"],
                            "samples": len(stimulus["schedule"]), "nativeAcceptance": False})
         self.artifacts.save(f"stimulus-{len(self.plans):02}.json", stimulus)

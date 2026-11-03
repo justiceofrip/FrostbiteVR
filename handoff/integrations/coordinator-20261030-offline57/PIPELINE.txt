@@ -1,5 +1,5 @@
 BC2 weapon pipeline: what exists and what it proves
-Updated October 31, 2026. Root coordinates this run; agents own disjoint runtime files.
+Updated November 3, 2026. Root coordinates integration and live sessions; agents own explicit disjoint files.
 
 The targeted firearm roster has reload implementation paths for each family.
 Successful in-game completion across that roster is not yet established.
@@ -23,11 +23,13 @@ It does not automatically establish that every enrolled weapon works in VR.
    Table inclusion proves configuration coverage, not successful live interaction.
 
    Family                Configurations   Current connection/check
-   Detachable magazine   128              Production raw-contact chain checked
-   Shell/pump             25              Independent tube path wired; source checked
-   Feed mechanism         24              Native dispatch/completion checked
-   Clip/cylinder           4              Separate fixed-container route
+   Detachable magazine   128              Shared raw-contact chain; AN94 headset reload confirmed
+   Shell/pump             25              Shared tube path; limited user-confirmed pump improvement
+   Feed mechanism         24              Family checks pass; one complete native QJU88 reload passed
+   Clip/cylinder           4              Shared fixed-container route; broader native checks open
    These are source routes, not a list of headset-confirmed working weapons.
+   Launcher routes also use the fixed-container mechanism. Its current ownership
+   checks cover84 profiles; actual XM320 grab/Open works, full reload remains open.
 
 3. Produce real hand/weapon contact from the running game
    src/games/bc2/Bc2RigPublication.cpp
@@ -39,13 +41,14 @@ It does not automatically establish that every enrolled weapon works in VR.
 4. Run the physical reload and keep its ammunition/mechanical state
    src/games/bc2/Bc2MagazinePhysicalReload.cpp
    src/games/bc2/Bc2PhysicalFeed.cpp
+   src/games/bc2/Bc2PhysicalFixedContainer.cpp
    src/games/bc2/Bc2PhysicalReload.cpp (tube/shell, independent of magazine path)
    src/games/bc2/Bc2ReloadFlowRuntime.cpp
    This is the runtime connection being repaired. It must start from actual
    contact, suppress conflicting stock actions, dispatch the native operation
    once, and accept the matching result without losing rounds or owed cycles.
 
-5. Check the connection, build, install and test in headset
+5. Check complete shared-mechanism cycles, build once, then verify actual game state
    tests/Bc2MagazineRawContactPipelineTests.cpp
    tests/Bc2ReloadFamilyDispatchTests.cpp
    tests/Bc2HeldFireCadenceTests.cpp
@@ -55,8 +58,16 @@ It does not automatically establish that every enrolled weapon works in VR.
    goes through the production palette reader, publication admission, contact
    builder and physical consumer instead. It samples 178 selected asset bindings;
    that count differs from the reload-family roster and is not a success count.
+   tools/drive_bc2_reload_stimulus.py and the family planners supply ordinary
+   controller input from current native contacts. Root schedules whole recipes,
+   not angle sweeps. A completed input script is not native reload proof: join
+   the actual claim, mechanism state, native receipts and conserved ammunition.
+   The completed feed269 recipe is Open/Detach/Pickup+Attach/Seat/Close.
+   The launcher recipe is Open/Pickup+Insert/Close. After a failure, reuse its
+   saved observations to correct the shared cause before another live attempt.
+   Physical-headset reliability remains a separate final player check.
 
-Current source changes
+Retained source changes
 - Magazine: complete verified co-located skeleton descendants for 21 configurations,
   including AN94 variants. Moving/hidden parts retain their rejection checks.
 - Native reload: feed/fixed stock-reload suppression and retained mechanism gates;
@@ -74,8 +85,9 @@ Current source changes
 Evidence limits
 Magazine, rig and held-fire focused checks pass both architectures. The raw-contact
 check accepts all 128 ready magazine configurations, including 21 completed subtrees.
-Feed dispatch passes 24 rows on x86/x64 using normal AttachContainer/CloseCover
-routing. Final normal combined builds pass 341/341 each on x86 and x64.
+Feed dispatch passes24 rows using normal AttachContainer/CloseCover routing.
+Installed54's final normal builds pass342/342 each on x86 and x64; all three
+fixed-container groups pass, including84 profiles and168 complete offline cycles.
 The independent tube route was followed from BuildReloadRawContact through
 publication, physicalReload and SpasTube native dispatch for all 25 enrolled rows.
 No source-visible missing activation was found; that is not an actual reload pass.
@@ -84,11 +96,18 @@ reports/coordinator-20261030-offline57; they are not counted as product defects.
 Native-code emulation confirms the same-Update last-round stock-reload leak and
 scoped Step fix. It uses explicit allocator/listener substitutes, not a live game.
 Native timer emulation groups 2/3 shots after 160/240 ms hitches even with held Fire.
-That is a mechanism, not the established user-session cause; bursty feel is open.
-Private 0.1.22 is installed; setup/assets validation passed, with 0.1.21 as rollback.
-Source is pushed. ../coordinator-20261031-cadence58/receipt.json records current identity;
-this folder's receipt.json retains the preceding 0.1.21 installation evidence.
-User-confirmed progress: multiweapon two-hand grips, reliable swaps, LMG counter.
+That is a mechanism, not the established user-session cause. The user subsequently
+reported smooth firing; measured headset performance remains open.
+Private0.1.54 is installed/setup-validated, settings preserved, fallback0.1.53.
+Native source39d315a is pushed. ../coordinator-20261103-fixed289/README.txt links
+its delivery evidence; this folder's old receipt remains historical.
+Actual269 completed a native QJU88 reload, conserved0/687->200/487 across all
+three native ammo copies, closed the lid and unblocked firing. Both eyes agree.
+Actual304 acquired/opened XM320 and advanced to Insert. Its observer rejected the
+normal release of the completed hand claim;309 corrects completion observation.
+Insert/Close and full launcher reload have not yet been demonstrated.
+User-confirmed progress includes AN94 manual reload, smoother fire, multiweapon
+two-hand grips, reliable swaps, LMG counter and limited pump improvement.
 No weapon is counted as working merely because its profile or unit check exists.
 
 Paths above are relative to this coordinator worktree:

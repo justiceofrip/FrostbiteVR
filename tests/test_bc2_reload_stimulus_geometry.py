@@ -101,6 +101,64 @@ class StimulusGeometryTests(unittest.TestCase):
             self.assertEqual([b["id"] for b in p["boundaries"]], ["fixed_acquired", "fixed_step_complete"])
             self.assertEqual(p["geometryEvidence"]["policy"], s["fixedContainer"]["profile"]["geometry"][0]["motion"]["policy"])
 
+    def test_fixed_completion_only_admission_is_bound_to_this_acquired_stage(self):
+        for stage in ("Open", "Close"):
+            for motion in ("Hinge", "Linear"):
+                with self.subTest(stage=stage, motion=motion):
+                    source = complete(xf.snapshot(3, motion))
+                    if stage == "Close":
+                        source["fixedContainer"]["tracking"].update(step=3, blocksFire=True)
+                        source["weapon_actions_blocked"] = True
+                        source["fixedContainer"]["view"]["snapshot"]["counts"].update(loaded=1, reserve=6)
+                    stimulus = g.build_stimulus("fixed", None, source, NOW, stage)
+                    acquired = xf.physical_acquired(source)
+                    prior = {"fixed_acquired": g.check_boundary(stimulus, acquired, "fixed_acquired", NOW+200_000_000)}
+                    done = xf.physical_completed(acquired, stage)
+                    original = copy.deepcopy((stimulus, done, prior))
+                    result = g.check_boundary(stimulus, done, "fixed_step_complete", NOW+500_000_000, prior=prior)
+                    self.assertTrue(result["completionOnly"])
+                    self.assertIsNone(result["gate"]["claimToken"])
+                    self.assertEqual((stimulus, done, prior), original)
+                    with self.assertRaises(g.GeometryRefusal):
+                        g.check_boundary(stimulus, done, "fixed_step_complete", NOW+500_000_000)
+                    with self.assertRaises(g.GeometryRefusal):
+                        g.admit_boundary("fixed", None, done, NOW+500_000_000, "Pickup")
+                    not_done = copy.deepcopy(done)
+                    not_done["fixedContainer"]["tracking"]["step"] = g.fixed.STEP[stage]
+                    with self.assertRaises(g.GeometryRefusal) as refused:
+                        g.check_boundary(stimulus, not_done, "fixed_step_complete", NOW+500_000_000, prior=prior)
+                    self.assertNotIsInstance(refused.exception, g.BoundaryPending)
+
+    @unittest.skipUnless(os.environ.get("BC2_FIXED_COMPLETION_REPLAY"), "pinned local actual304 observations required")
+    def test_actual304_observation015_accepts_only_previously_acquired_completion(self):
+        root = Path(os.environ["BC2_FIXED_COMPLETION_REPLAY"])
+        def pinned(index, digest):
+            raw = (root / f"observation-{index:03}.json.gz").read_bytes()
+            self.assertEqual(hashlib.sha256(raw).hexdigest(), digest)
+            return json.loads(gzip.decompress(raw))
+        source = pinned(0, "08463fe3cf27207e15e0c5e042e271329b059a3addba0c2a0a2f61348520416d")
+        acquired = pinned(12, "d27bfce8805d858720f4109ea907f87816ceb464a7afa9fe6dad7038da3b5a3f")
+        done = pinned(15, "59d0374758ed9c78f456648ee5b9a43b6bd7921a9a4f1bd890741600fd105472")
+        original = copy.deepcopy((source, acquired, done))
+        stimulus = g.build_stimulus("fixed", None, source, 267942482317600, "Open", step_ms=40)
+        prior = {"fixed_acquired": g.check_boundary(stimulus, acquired, "fixed_acquired", 267943880000000,
+                                                     command_written_ns=267943830083800)}
+        self.assertEqual(prior["fixed_acquired"]["gate"]["claimToken"]["id"], 5)
+        self.assertEqual(prior["fixed_acquired"]["gate"]["claimToken"]["prerequisiteClaim"], 2)
+        self.assertFalse(done["fixedContainer"]["raw"]["admittedAtTick"])
+        self.assertEqual(done["fixedContainer"]["tracking"]["step"], 2)
+        self.assertEqual(done["fixedContainer"]["view"]["snapshot"]["counts"], dict(loaded=0, reserve=7, capacity=1))
+        evaluated = 267944210906300
+        self.assertLess(evaluated, 267946141883300)  # Original completion wait deadline.
+        result = g.check_boundary(stimulus, done, "fixed_step_complete", evaluated,
+                                  command_written_ns=267944137676100, prior=prior)
+        self.assertTrue(result["completionOnly"])
+        self.assertFalse(result["nativeAcceptance"])
+        self.assertEqual((source, acquired, done), original)
+        for prior_value, when in ((None, evaluated), (prior, g.source_deadline(done, "fixed"))):
+            with self.assertRaises(g.GeometryRefusal):
+                g.check_boundary(stimulus, done, "fixed_step_complete", when, prior=prior_value)
+
     def test_fixed_pickup_insert_retains_exact_receipt_gate(self):
         s = complete(xf.snapshot())
         pickup = self.contract("fixed", s, "Pickup")
@@ -114,6 +172,44 @@ class StimulusGeometryTests(unittest.TestCase):
         changed["fixedContainer"]["lastCompletion"]["outcome"]["receipt"]["copiesVerified"] = False
         with self.assertRaises(g.GeometryRefusal):
             g.check_boundary(insertion, changed, "fixed_inserted", NOW+500_000_000)
+
+    def test_fixed_released_insert_waits_only_for_exact_aligned_request_and_receipt(self):
+        for kind in (3, 4):
+            with self.subTest(kind=kind):
+                source = complete(xf.snapshot(kind))
+                source["fixedContainer"]["tracking"]["step"] = 2
+                pickup = g.build_stimulus("fixed", None, source, NOW, "Pickup")
+                held = xf.held_after_pickup(source, pickup["geometryEvidence"])
+                insertion = g.build_stimulus("fixed", None, held, NOW+200_000_000, "Insert", pickup=pickup)
+                aligned = xf.aligned_for_insert(held)
+                prior = {"fixed_aligned": g.check_boundary(insertion, aligned, "fixed_aligned", NOW+300_000_000)}
+                done = xf.completed(aligned, insertion["geometryEvidence"])
+                done["fixedContainer"]["raw"]["admittedAtTick"] = False
+                result = g.check_boundary(insertion, done, "fixed_inserted", NOW+500_000_000, prior=prior)
+                self.assertTrue(result["completionOnly"])
+                pending = copy.deepcopy(done)
+                x = pending["fixedContainer"]
+                request = x["lastCompletion"]["outcome"]["request"]
+                x.update(pendingRequest=request, lastCompletion=None)
+                x["tracking"].update(step=2, pending=True, blocksFire=True, carried=True,
+                    carriedSupply=copy.deepcopy(aligned["fixedContainer"]["tracking"]["carriedSupply"]))
+                pending["weapon_actions_blocked"] = True
+                x["view"].update(phase=3, command=request["preparedCommand"])
+                x["view"]["snapshot"]["counts"] = copy.deepcopy(insertion["geometryEvidence"]["baseline"]["counts"])
+                original = copy.deepcopy(pending)
+                with self.assertRaises(g.BoundaryPending):
+                    g.check_boundary(insertion, pending, "fixed_inserted", NOW+500_000_000, prior=prior)
+                self.assertEqual(pending, original)
+                for proof, now in ((None, NOW+500_000_000), (prior, g.source_deadline(pending, "fixed"))):
+                    with self.assertRaises(g.GeometryRefusal) as refused:
+                        g.check_boundary(insertion, pending, "fixed_inserted", now, prior=proof)
+                    self.assertNotIsInstance(refused.exception, g.BoundaryPending)
+                with self.assertRaises(g.GeometryRefusal):
+                    g.admit_boundary("fixed", None, pending, NOW+500_000_000, "Insert", pickup=pickup)
+                x["pendingRequest"]["sourceProof"]["inputSequence"] = 115
+                with self.assertRaises(g.GeometryRefusal) as refused:
+                    g.check_boundary(insertion, pending, "fixed_inserted", NOW+500_000_000, prior=prior)
+                self.assertNotIsInstance(refused.exception, g.BoundaryPending)
 
     def test_sight_both_assemblies_and_modes_use_observed_family(self):
         for subtree in (False, True):
