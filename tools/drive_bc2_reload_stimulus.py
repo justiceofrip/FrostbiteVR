@@ -44,6 +44,20 @@ MAX_OBSERVATIONS = 100  # 10s / original100ms request period; not a renewed cloc
 LEFT_POSE_SETUP = ["hand l follow off", "hand l aimtrim 0 0"]
 
 
+class ReadDeadline(Refusal):
+    """A late read is not evidence that command ownership changed."""
+
+
+def deadline_bytes(path, maximum, deadline_ns):
+    def check():
+        if deadline_ns is not None and time.perf_counter_ns() >= deadline_ns:
+            raise ReadDeadline("original acknowledgement/read deadline exceeded")
+    check()
+    raw = transport.read_bytes(path, maximum)
+    check()
+    return raw
+
+
 def ordinary_commands(sample, allow_setup=False):
     """Reconstruct an allowlisted request, never execute planner command text."""
     require(isinstance(sample, dict) and not isinstance(sample.get("grip"), bool)
@@ -283,6 +297,7 @@ class ReloadStimulus:
         self.pose_setup_established = False
         self.boundaries, self.plans, self.observed = {}, [], []
         self.observation_incomplete = False
+        self.observation_failure = None
         self.decoded_snapshot_bytes = 0
         self.geometry = module("bc2_reload_stimulus_geometry")
         self.manifest, _ = transport.read_json(self.run / "run-manifest.json")
@@ -346,15 +361,24 @@ class ReloadStimulus:
     def bounds(self):
         require(time.perf_counter_ns() < min(self.deadline, self.stage_deadline), "original stimulus/gesture deadline")
 
-    def read_state(self, cleanup=False):
+    def read_state(self, cleanup=False, deadline_ns=None):
+        until = self.hard_deadline if cleanup else min(self.deadline, self.stage_deadline)
+        if deadline_ns is not None:
+            until = min(until, deadline_ns)
         self.owner.check()
-        session, _ = transport.read_json(self.session_path)
+        if deadline_ns is None:
+            session, _ = transport.read_json(self.session_path)
+        else:
+            raw = deadline_bytes(self.session_path, 128 * 1024, until)
+            session = json.loads(raw.decode("utf-8-sig"), parse_constant=lambda x: (_ for _ in ()).throw(Refusal(x)))
         require(session["host"] == self.host and session["supervisor"] == self.link["supervisor"]
                 and session["source_sha256"] == self.manifest["source_sha256"]
                 and session["version"] == self.manifest["version"] and session["state"] == "running",
                 "native session/owner/source changed")
         require(not (self.folder / "stop.request").exists(), "normal stop requested")
-        state = sim_state(self.state_path, self.hard_deadline if cleanup else min(self.deadline, self.stage_deadline))
+        state = sim_state(self.state_path, until)
+        if time.perf_counter_ns() >= until:
+            raise ReadDeadline("original simulator state read deadline exceeded")
         require(integer(state["pid"]) == integer(self.host["pid"]) and state["runtime"] == "xr-sim"
                 and integer(state["errors"]) == 0 and state["lastCmdError"] == "", "simulator identity/error changed")
         require(state["sessionRunning"] is True and state["actionsAttached"] is True
@@ -371,6 +395,14 @@ class ReloadStimulus:
             "sentinel": self.sentinel, "commandSha256": self.command_hash, "artifactDirectory": str(self.artifacts.directory)}))
 
     def observations(self):
+        require(getattr(self, "observation_failure", None) is None, "previous native observation failure")
+        try:
+            self._observations()
+        except BaseException as error:
+            self.observation_failure = str(error)
+            raise
+
+    def _observations(self):
         if self.observer is None:
             return
         require(self.observer.fatal is None, "native observer ownership/read failure: " + str(self.observer.fatal))
@@ -480,6 +512,7 @@ class ReloadStimulus:
         raise Refusal("fresh typed stimulus boundary absent within original budget")
 
     def send(self, sample=None, *, cleanup=False, release_only=False):
+        require(cleanup or getattr(self, "observation_failure", None) is None, "previous native observation failure")
         require(not release_only or self.held_left, "ordinary release requires held left input")
         lines = ["grip l 0"] if cleanup or release_only else ordinary_commands(sample, self.first_sample_pending)
         require(self.commands + len(lines) + 1 <= MAX_COMMANDS, "512-command budget")
@@ -521,45 +554,66 @@ class ReloadStimulus:
         self.last_write = written
         self.commands += len(batch)
         until = min(self.hard_deadline if cleanup else min(self.deadline, self.stage_deadline), written + ACK_NS)
-        while time.perf_counter_ns() < until:
-            state = self.read_state(cleanup)
+        try:
+            state, committed = self._wait_ack(batch, before, sample, cleanup, until)
+        except BaseException as error:
             if not cleanup:
-                self.observations()
-            if self._acknowledged(state, batch, before):
-                require(time.perf_counter_ns() < until, "original acknowledgement deadline consumed by state read")
+                # Preserve queued evidence after the ACK decision, without
+                # settling/replaying a late command or masking its refusal.
+                try:
+                    self.observations()
+                except BaseException as observation_error:
+                    raise Refusal(f"{error}; post-refusal observation failure: {observation_error}") from error
+            raise
+        self.last_commit = committed
+        self.pending_command = False
+        self.state = state
+        self.held_left = False if cleanup or release_only else sample["grip"] == 1
+        if lines[:2] == LEFT_POSE_SETUP:
+            self.pose_setup_established = True
+        self.save_owner(False)
+        self.artifacts.event({"type": "command_commit", "writtenNs": written, "committedNs": self.last_commit,
+            "sequence": self.sequence, "frame": state["frame"], "endFrames": state["endFrames"],
+            "handL": state["handL"], "gripL": state["controls"]["gripL"], "cleanup": cleanup}, cleanup=cleanup)
+        if not cleanup:
+            # Settled input/owner state survives an observer refusal so
+            # only normal owned grip release remains available.
+            self.observations()
+            self.bounds()
+
+    def _wait_ack(self, batch, before, sample, cleanup, until):
+        # No observation drain/archive anywhere in this polling loop: it
+        # must not consume the original budget before a later ready poll.
+        while time.perf_counter_ns() < until:
+            state = self.read_state(cleanup, until)
+            if self._acknowledged(state, batch, before, until):
                 if sample is not None:
                     self.check_target(state, sample)
                 else:
                     require(state["controls"]["gripL"] == 0, "cleanup grip did not commit")
-                self.last_commit = time.perf_counter_ns()
-                self.pending_command = False
-                self.state = state
-                self.held_left = False if cleanup or release_only else sample["grip"] == 1
-                if lines[:2] == LEFT_POSE_SETUP:
-                    self.pose_setup_established = True
-                self.save_owner(False)
-                self.artifacts.event({"type": "command_commit", "writtenNs": written, "committedNs": self.last_commit,
-                    "sequence": self.sequence, "frame": state["frame"], "endFrames": state["endFrames"],
-                    "handL": state["handL"], "gripL": state["controls"]["gripL"], "cleanup": cleanup}, cleanup=cleanup)
-                return
+                committed = time.perf_counter_ns()
+                require(committed < until, "original command acknowledgement/commit deadline exceeded")
+                return state, committed
             time.sleep(.001)
         raise Refusal("original command acknowledgement/commit deadline exceeded")
 
-    def _acknowledged(self, state, batch, before):
+    def _acknowledged(self, state, batch, before, deadline_ns=None):
         try:
-            require(transport.digest(transport.read_bytes(self.command_path, 4096)) == self.command_hash, "competing command writer")
+            require(transport.digest(deadline_bytes(self.command_path, 4096, deadline_ns)) == self.command_hash, "competing command writer")
             require(integer(state["cmdSeq"]) in (self.sequence - len(batch), self.sequence), "unexpected command sequence")
             if integer(state["cmdSeq"]) != self.sequence:
                 return False
             require(state["lastCmd"] == self.sentinel, "command sentinel changed")
             if not self.ack_path.exists():
                 return False
-            ack = transport.read_bytes(self.ack_path, 4096).decode("utf-8")
+            ack = deadline_bytes(self.ack_path, 4096, deadline_ns).decode("utf-8")
             match = re.fullmatch(r"seq=(\d+) frame=(\d+) error=-\r?\nlast=([^\r\n]*)\r?\n", ack)
             if not match or int(match[1]) != self.sequence:
                 return False
             require(match[3] == " | ".join(batch), "acknowledgement batch differs")
             return integer(state["frame"]) > int(match[2]) and integer(state["endFrames"]) > integer(before["endFrames"])
+        except ReadDeadline:
+            raise
         except BaseException:
             self.unsafe_owner = True
             raise
@@ -643,8 +697,9 @@ class ReloadStimulus:
         if self.pending_command and not self.unsafe_owner:
             until = min(self.hard_deadline - ACK_NS - WRITE_GAP_NS, time.perf_counter_ns() + 100_000_000)
             while time.perf_counter_ns() < until:
-                state = self.read_state(True)
-                if self._acknowledged(state, self.pending_batch, self.pending_before):
+                state = self.read_state(True, until)
+                if self._acknowledged(state, self.pending_batch, self.pending_before, until):
+                    require(time.perf_counter_ns() < until, "original pending cleanup deadline exceeded")
                     self.pending_command = False
                     self.held_left = "grip l 1" in self.pending_batch
                     self.state = state

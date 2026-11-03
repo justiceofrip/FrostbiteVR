@@ -32,7 +32,13 @@ changed by one float32 step; discrete owner/equipment/rig/lifetime stayed equal.
 comparison across feed, pump, fixed-container and sight preservation checks.
 All107 affected Python checks pass, using the actual24-profile export. Real pose
 changes and discrete identities still reject; native49 binaries are unchanged.
-Full actual reload remains incomplete;227 prepares a fresh changed-driver check.
+Run02 with226 completed OpenCover then stopped during DetachContainer ACK handling.
+The host completed the command frame within35.5ms; the runner drained/archived
+observations before checking its250ms ACK deadline. Individual phase costs are
+unmeasured.229 moves archival outside that deadline while preserving timely
+state/ACK validation, observation checks before further input and owned cleanup.
+All39 affected driver tests pass; native49 and prior family checks are unchanged.
+Full actual reload remains incomplete;230 prepares a fresh changed-driver check.
 Six owned processes exited0; native retirement, normal close and exact profile/
 settings restoration passed. Official tape checker ran once (exit1, preserved).
 Closed session archived under217/closed22101 with all hashes and zero deletions.

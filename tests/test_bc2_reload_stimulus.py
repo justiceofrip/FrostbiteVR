@@ -1,5 +1,5 @@
 """Portable regressions for ordinary input transport, not native reload proofs."""
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 import copy
 import importlib.util
 import io
@@ -381,6 +381,229 @@ class StimulusTests(unittest.TestCase):
         driver = self.observation_driver()
         driver.observations()
         self.assertEqual(driver.observed, [])
+
+    @contextmanager
+    def ack_driver(self, clock, *, unready_polls=0, archive_ns=300_000_000, mapping_error=False):
+        # Real send/read_state/ownership/ACK/target/observation paths; substitute
+        # only process identity, files, sim-state publication and archive latency.
+        driver = self.observation_driver(mapping_error)
+        driver.owner = Mock()
+        driver.host = dict(pid=123)
+        driver.link = dict(supervisor=dict(pid=456))
+        driver.manifest = dict(source_sha256="offline", version="offline")
+        driver.folder = Path("offline-stimulus-session")
+        driver.session_path, driver.state_path = driver.folder / "session.json", driver.folder / "state.json"
+        driver.command_path = driver.folder / "command.txt"
+        driver.ack_path = Mock()
+        driver.ack_path.exists.return_value = True
+        driver.deadline = driver.stage_deadline = clock.now + 9_600_000_000
+        driver.hard_deadline = clock.now + 10*m.NS
+        driver.commands = driver.last_write = driver.capture_sequence = 0
+        driver.sequence, driver.sentinel = 1, "note previous"
+        driver.command_hash = m.transport.digest(b"note previous\n")
+        driver.pending_command = driver.unsafe_owner = driver.held_left = False
+        driver.first_sample_pending = driver.pose_setup_established = False
+        driver.last_commit = driver.observation_failure = None
+        driver.geometry.source_deadline = lambda *args: driver.deadline
+        state = dict(pid=123, runtime="xr-sim", errors=0, lastCmdError="", sessionRunning=True,
+                     actionsAttached=True, sessionState="FOCUSED", paceMode="free", captureSeq=0,
+                     cmdSeq=1, lastCmd=driver.sentinel, frame=100, endFrames=100,
+                     head=dict(valid=True), handR=dict(valid=True),
+                     handL=dict(valid=True, followsHead=False, pos=[0., 1.3, -.35], ypr=[0., 0., 0.]),
+                     controls=copy.deepcopy(CONTROLS))
+        driver.initial_sim = copy.deepcopy(state)
+        session = dict(host=driver.host, supervisor=driver.link["supervisor"], state="running", **driver.manifest)
+        h = types.SimpleNamespace(driver=driver, published=[], owners=[], state_deadlines=[],
+                                  command=b"note previous\n", ack=b"", ready_ns=0,
+                                  state_read_ns=40_000_000, ack_read_ns=0, session_read_ns=0,
+                                  unready_polls=unready_polls, state=state, previous=state,
+                                  alter_state=lambda x: x, alter_ack=lambda x: x, alter_command=lambda x: x)
+
+        def publish(path, raw):
+            self.assertEqual(path, driver.command_path)
+            h.published.append(raw)
+            h.command, h.previous = raw, h.state
+            h.state = copy.deepcopy(h.state)
+            lines = raw.decode("ascii").splitlines()
+            h.state.update(cmdSeq=driver.sequence, lastCmd=driver.sentinel,
+                           frame=h.state["frame"] + 2, endFrames=h.state["endFrames"] + 2)
+            for line in lines:
+                if line.startswith("grip l "):
+                    h.state["controls"]["gripL"] = float(line.split()[-1])
+                if line.startswith("hand l grip pose "):
+                    pose = list(map(float, line.split()[4:]))
+                    h.state["handL"].update(pos=pose[:3], ypr=pose[3:])
+            h.ack = (f"seq={driver.sequence} frame={h.state['frame'] - 1} error=-\n"
+                     f"last={' | '.join(lines)}\n").encode()
+            h.ready_ns = clock.now + h.state_read_ns
+            snapshot = dict(valid=True, nonce=str(len(h.published)), observed_ns=clock.now + 30_000_000)
+            driver.observer.inbox.put(dict(kind="snapshot", index=len(h.published), snapshot=snapshot,
+                raw=json.dumps(snapshot).encode(), requestNs=clock.now,
+                receivedNs=clock.now + 35_000_000, deadlineNs=clock.now + m.RECEIVE_NS))
+
+        def read_state(path, until):
+            self.assertEqual(path, driver.state_path)
+            h.state_deadlines.append(until)
+            if driver.pending_command:
+                if h.unready_polls:
+                    h.unready_polls -= 1
+                    return copy.deepcopy(h.previous)
+                clock.now = max(clock.now, h.ready_ns)
+            return h.alter_state(copy.deepcopy(h.state))
+
+        def read(path, maximum):
+            if path == driver.command_path:
+                return h.alter_command(h.command) if driver.pending_command else h.command
+            if path == driver.ack_path:
+                clock.now += h.ack_read_ns
+                return h.alter_ack(h.ack)
+            self.assertEqual(path, driver.session_path)
+            clock.now += h.session_read_ns
+            return m.transport.json_bytes(session)
+
+        def save_owner(pending):
+            h.owners.append(dict(pending=pending, sequence=driver.sequence, sentinel=driver.sentinel,
+                                 commandSha256=driver.command_hash, atNs=clock.now))
+
+        save = driver.artifacts.save
+        def archive(name, value, final=False):
+            clock.now += archive_ns
+            save(name, value, final)
+        driver.save_owner, driver.artifacts.save = save_owner, archive
+        with patch.object(m, "time", clock), patch.object(m, "sim_state", side_effect=read_state), \
+                patch.object(m.transport, "read_bytes", side_effect=read), \
+                patch.object(m.transport, "atomic", side_effect=publish):
+            yield h
+
+    def test_timely_ack_precedes_slow_archive_even_after_unready_poll(self):
+        for unready_polls in (0, 1):
+            with self.subTest(unready_polls=unready_polls):
+                clock = Clock()
+                with self.ack_driver(clock, unready_polls=unready_polls) as h:
+                    h.driver.send(sample(0, "acquire", 1, .1))
+                driver = h.driver
+                self.assertEqual(driver.last_commit, driver.last_write + 40_000_000)
+                self.assertGreater(clock.now, driver.last_write + m.ACK_NS)
+                self.assertFalse(driver.pending_command)
+                self.assertTrue(driver.held_left)
+                self.assertFalse(driver.unsafe_owner)
+                self.assertEqual(len(h.published), 1)
+                self.assertEqual([owner["pending"] for owner in h.owners], [True, False])
+                self.assertEqual(h.owners[-1]["atNs"], driver.last_commit)
+                self.assertEqual(h.owners[-1]["commandSha256"], m.transport.digest(h.published[-1]))
+                self.assertEqual(h.state_deadlines[-1], driver.last_write + m.ACK_NS)
+                events = driver.artifacts.events
+                commit = next(row for row in events if row["type"] == "command_commit")
+                self.assertEqual(commit["committedNs"], driver.last_commit)
+                self.assertLess(events.index(commit), next(i for i, row in enumerate(events) if row["type"] == "native_observation"))
+                self.assertIn("observation-001.json.gz", driver.artifacts.saved)
+                self.assertEqual(len(driver.observed), 1)
+                self.assertTrue(driver.observer.inbox.empty())
+
+    def test_original_ack_deadline_rejects_late_session_state_or_ack_read(self):
+        for late_read in ("session_read_ns", "state_read_ns", "ack_read_ns"):
+            with self.subTest(late_read=late_read):
+                clock = Clock()
+                with self.ack_driver(clock) as h:
+                    setattr(h, late_read, m.ACK_NS)
+                    with self.assertRaisesRegex(m.Refusal, "deadline"):
+                        h.driver.send(sample(0, "acquire", 1, .1))
+                    self.assertIsNone(h.driver.last_commit)
+                    self.assertTrue(h.driver.pending_command)
+                    self.assertFalse(h.driver.unsafe_owner)
+                    self.assertEqual([owner["pending"] for owner in h.owners], [True])
+                    self.assertEqual(len(h.published), 1)
+                    self.assertNotIn("command_commit", [row["type"] for row in h.driver.artifacts.events])
+                    self.assertIn("observation-001.json.gz", h.driver.artifacts.saved)
+                    self.assertTrue(h.driver.observer.inbox.empty())
+
+    def test_unready_ack_timeout_preserves_evidence_without_commit_or_replay(self):
+        clock = Clock()
+        with self.ack_driver(clock) as h:
+            h.alter_ack = lambda raw: b""
+            with self.assertRaisesRegex(m.Refusal, "original command acknowledgement/commit deadline exceeded"):
+                h.driver.send(sample(0, "acquire", 1, .1))
+            self.assertIsNone(h.driver.last_commit)
+            self.assertTrue(h.driver.pending_command)
+            self.assertTrue(h.owners[-1]["pending"])
+            self.assertEqual(len(h.published), 1)
+            self.assertIn("observation-001.json.gz", h.driver.artifacts.saved)
+            self.assertTrue(h.driver.observer.inbox.empty())
+
+    def test_ack_refusal_and_observation_failure_are_both_retained(self):
+        clock = Clock()
+        with self.ack_driver(clock, mapping_error=True) as h:
+            h.state_read_ns = m.ACK_NS
+            with self.assertRaisesRegex(m.Refusal, "deadline.*post-refusal observation failure: native owner changed"):
+                h.driver.send(sample(0, "acquire", 1, .1))
+            self.assertIsNone(h.driver.last_commit)
+            self.assertTrue(h.driver.pending_command)
+            self.assertEqual(h.driver.observation_failure, "native owner changed")
+            self.assertIn("observation-001.json.gz", h.driver.artifacts.saved)
+            self.assertEqual(len(h.published), 1)
+
+    def test_exact_command_ack_frame_and_target_guards_survive_deferred_archive(self):
+        for fault in ("hash", "sentinel", "ack_text", "frame", "target"):
+            with self.subTest(fault=fault):
+                clock = Clock()
+                with self.ack_driver(clock) as h:
+                    if fault == "hash":
+                        h.alter_command = lambda raw: b"foreign command\n"
+                    elif fault == "ack_text":
+                        h.alter_ack = lambda raw: raw.replace(b"last=", b"last=foreign ")
+                    else:
+                        def change(state):
+                            if h.driver.pending_command:
+                                if fault == "sentinel":
+                                    state["lastCmd"] = "note foreign"
+                                elif fault == "frame":
+                                    state["frame"] -= 1
+                                else:
+                                    state["handL"]["pos"][0] += .1
+                            return state
+                        h.alter_state = change
+                    with self.assertRaises(m.Refusal):
+                        h.driver.send(sample(0, "acquire", 1, .1))
+                    self.assertIsNone(h.driver.last_commit)
+                    self.assertTrue(h.driver.pending_command)
+                    self.assertEqual(len(h.published), 1)
+                    self.assertEqual(h.driver.unsafe_owner, fault in ("hash", "sentinel", "ack_text"))
+
+    def test_post_ack_observation_failure_blocks_next_input_but_retains_owned_cleanup(self):
+        clock = Clock()
+        with self.ack_driver(clock, mapping_error=True) as h:
+            driver = h.driver
+            with self.assertRaisesRegex(m.Refusal, "native owner changed"):
+                driver.send(sample(0, "acquire", 1, .1))
+            self.assertEqual(driver.last_commit, driver.last_write + 40_000_000)
+            self.assertFalse(driver.pending_command)
+            self.assertTrue(driver.held_left)
+            self.assertFalse(h.owners[-1]["pending"])
+            self.assertIn("observation-001.json.gz", driver.artifacts.saved)
+            with self.assertRaisesRegex(m.Refusal, "previous native observation failure"):
+                driver.send(sample(1, "move", 1, .2))
+            self.assertEqual(len(h.published), 1)
+            self.assertEqual(driver.cleanup(), "ordinary owned left-grip release acknowledged")
+            self.assertEqual(h.published[-1].decode().splitlines()[:-1], ["grip l 0"])
+            self.assertEqual(len(h.published), 2)
+            self.assertFalse(driver.pending_command)
+            self.assertFalse(driver.held_left)
+            self.assertFalse(h.owners[-1]["pending"])
+            self.assertEqual(h.owners[-1]["sequence"], driver.state["cmdSeq"])
+            self.assertEqual(h.owners[-1]["sentinel"], driver.state["lastCmd"])
+            self.assertEqual(h.owners[-1]["commandSha256"], m.transport.digest(h.published[-1]))
+
+    def test_post_ack_archival_cannot_extend_original_stage_deadline(self):
+        clock = Clock()
+        with self.ack_driver(clock) as h:
+            h.driver.stage_deadline = clock.now + m.ACK_NS
+            with self.assertRaisesRegex(m.Refusal, "original stimulus/gesture deadline"):
+                h.driver.send(sample(0, "acquire", 1, .1))
+            self.assertEqual(h.driver.last_commit, h.driver.last_write + 40_000_000)
+            self.assertFalse(h.driver.pending_command)
+            self.assertTrue(h.driver.held_left)
+            self.assertFalse(h.owners[-1]["pending"])
+            self.assertEqual(len(h.published), 1)
 
     def test_competing_command_writer_blocks_cleanup_authority(self):
         driver = m.ReloadStimulus.__new__(m.ReloadStimulus)
