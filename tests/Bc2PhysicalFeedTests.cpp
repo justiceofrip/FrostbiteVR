@@ -1650,16 +1650,23 @@ int EveryEnrolledFeedRejectsUnarmedOrUnrelatedSupportTransfer(){
             f.sample.cancel=true;f.Consume(&held);f.sample.cancel=false;f.Tick(start,true);
         }else if(fault==4){
             // No expired neutral can authorize acquisition using fresh held
-            // evidence, even if ordinary support was legitimately renewed.
+            // evidence, even after ordinary gun/support claims are reacquired.
             f.now=neutral.inputEvidence.deadlineNs;
             f.PrepareTick(start,true);
+            // The real gap expires the root GunHold too. Its failed renewal
+            // cannot resurrect it: acquire a new root from this current,
+            // recorded held packet before acquiring its dependent support.
+            CHECK(!f.hands.Current(InteractionHand::Right)&&!f.hands.Current(InteractionHand::Left));
+            const auto gunProof=HandContactProof{gun->token.contact,f.sample.input.sequence,f.sample.input.deadlineNs,true};
+            const auto freshGun=f.hands.Acquire(f.sample.input,{f.sample.input.owner,InteractionHand::Right,
+                HandClaimKind::GunHold,f.sample.weapon,gunProof,++f.intent,0});
+            CHECK(freshGun.accepted&&freshGun.claim&&freshGun.claim->token.id!=gun->token.id);
             const auto proof=HandContactProof{old.token.contact,f.sample.input.sequence,f.sample.input.deadlineNs,true};
-            // The expired claim may have retired in PrepareTick. Reacquire
-            // ordinary support from this real held packet, without neutral.
-            const auto currentGun=f.hands.Current(InteractionHand::Right);CHECK(currentGun);
+            // Reacquire ordinary support without creating another neutral.
             const auto renewed=f.hands.AcquireFrom(f.sample.input,f.sample.input,{f.sample.input.owner,InteractionHand::Left,
-                HandClaimKind::WeaponSupport,f.sample.weapon,proof,++f.intent,currentGun->token.id});
-            CHECK(renewed.accepted);f.Consume();
+                HandClaimKind::WeaponSupport,f.sample.weapon,proof,++f.intent,freshGun.claim->token.id});
+            CHECK(renewed.accepted&&renewed.claim&&renewed.claim->inputSequence==f.sample.input.sequence&&
+                renewed.claim->deadlineNs==f.sample.input.deadlineNs);f.Consume();
         }else if(fault==5){
             // Missing original native evidence cannot be substituted by the
             // newer readable native view; it cannot authorize a transfer.
