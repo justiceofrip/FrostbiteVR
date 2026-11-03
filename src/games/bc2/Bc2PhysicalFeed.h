@@ -58,10 +58,11 @@ std::shared_ptr<const Bc2PhysicalFeedPresentation> ReadBc2PhysicalFeedPresentati
 // it never becomes a press. A request begun while held does not establish the press edge.
 void RequestBc2PhysicalFeedAdmissionObservation(std::int64_t nowNs)noexcept;
 // Both forms use one immutable publication load. Compact keeps the complete
-// first failed retention, both first held losses and first-press identity/input/claim receipts; later
-// held changes and first-press geometry/checks are explicitly omitted. Neutral
-// latest changes retain their input, raw and GunHold checks in both forms;
-// compact explicitly omits their later ownership receipts to bound payloads.
+// first failed retention, both first held losses and first-press identity/input/claim
+// receipts. Compact explicitly omits first-press geometry/checks and latestChange
+// while held or whenever a first failure is retained, so neutral updates cannot
+// enlarge a retained-failure payload. Otherwise neutral latest changes keep their
+// input, raw, GunHold and ownership receipts. Full latestChange is always complete.
 void WriteBc2PhysicalFeedAdmissionObservation(std::ostream&,std::ostream* compact=nullptr);
 struct Bc2PhysicalFeedApi {
     void* context=nullptr;

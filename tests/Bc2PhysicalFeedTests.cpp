@@ -591,7 +591,7 @@ int AdmissionObservationExplainsMissingViewRetentionBeforeSuspension(){
         std::ostringstream full,compact;full<<std::boolalpha;compact<<std::boolalpha;
         WriteBc2PhysicalFeedAdmissionObservation(full,&compact);
         CHECK(field(compact.str(),"\"failedRetention\":",",\"retentionEntryPredicates\":")==failed);
-        CHECK((compact.str().find("\"latestChange\":{\"omitted\":\"payload_limit\"}")!=std::string::npos)==f.sample.grip);
+        CHECK(compact.str().find("\"latestChange\":{\"omitted\":\"payload_limit\"}")!=std::string::npos);
         const auto fullPress=field(full.str(),"\"firstPress\":",",\"latestChange\":");
         const auto compactPress=field(compact.str(),"\"firstPress\":",",\"latestChange\":");
         CHECK(field(compactPress,"\"firstPress\":",",\"leftBefore\":")==field(fullPress,"\"firstPress\":",",\"admissionChecked\":"));
@@ -745,13 +745,19 @@ int HeldSupplyLossRetainsPreclearReasonAndCustody(){
             CHECK(compact.substr(compactAt,compact.find(",\"firstSupplyLoss\":",compactAt)-compactAt)==mechanismLoss);
             CHECK(observe(true).size()+11702+4096<=32768);
         }
-        // The first loss precedes these ordinary updates and repeated Suspend
-        // calls. They cannot rewrite its reason or turn custody into a receipt.
+        const auto heldCompact=observe(true);
+        CHECK(heldCompact.find("\"latestChange\":{\"omitted\":\"payload_limit\"}")!=std::string::npos);
+        // Supply-only and all-three-failure payloads retain the same first press
+        // and complete first failures through later held/Suspend/neutral changes.
         f.missingCurrentView=false;f.sample.raw.valid=true;
         f.Tick(f.lastWrist,true);f.physical.Suspend(f.sample.input,f.hands);f.Tick(f.lastWrist,false);
         const auto neutral=observe(),compactNeutral=observe(true);
         CHECK(loss(neutral)==retained&&loss(compactNeutral)==retained&&first(neutral)==press);
-        CHECK(first(compactNeutral)==compactPress);
+        CHECK(first(compactNeutral)==compactPress&&compactNeutral==heldCompact);
+        const auto neutralLatest=field(neutral,"\"latestChange\":",",\"failedRetention\":");
+        CHECK(neutralLatest.find("\"currentGrip\":false")!=std::string::npos);
+        CHECK(neutralLatest.find("\"ownership\":{")!=std::string::npos&&neutralLatest.find("\"retention\":{")!=std::string::npos);
+        CHECK(neutralLatest.find("\"omitted\":")==std::string::npos);
         if(fault==0){
             for(const auto* text:{&neutral,&compactNeutral}){
                 CHECK(field(*text,"\"failedRetention\":",",\"retentionEntryPredicates\":")==failed);
@@ -759,8 +765,9 @@ int HeldSupplyLossRetainsPreclearReasonAndCustody(){
             }
         }
         if(compactNeutral.size()+11702+4096>32768)
-            std::fprintf(stderr,"Neutral feed admission fault %u: compact=%zu, total=%zu, limit=32768\n",
-                fault,compactNeutral.size(),compactNeutral.size()+11702+4096);
+            std::fprintf(stderr,"Neutral feed admission fault %u: compact=%zu, held=%zu, total=%zu, limit=32768; firstPress=%zu, failedRetention=%zu, firstMechanismLoss=%zu, firstSupplyLoss=%zu, fullLatest=%zu\n",
+                fault,compactNeutral.size(),heldCompact.size(),compactNeutral.size()+11702+4096,
+                compactPress.size(),failed.size(),mechanismLoss.size(),retained.size(),neutralLatest.size());
         CHECK(compactNeutral.size()+11702+4096<=32768);
         CHECK(f.native.counts==counts&&f.submits==submits&&!f.backend.Pending()&&f.BlocksFire());
         CHECK(f.result.presentation&&!f.result.presentation->supplyObject&&!f.result.bodyVisual);
@@ -871,7 +878,9 @@ int HeldMechanismLossRetainsFirstCauseAcrossSameGripReacquisition(){
             unsigned(Bc2PhysicalFeedHandResetReason::SessionStop)});
         f.sample.grip=false;f.Consume();f.sample.grip=true;f.Consume();
         CHECK(!f.sample.input.released[0]&&MechanismLoss(observe())==loss);
-        f.Tick(f.lastWrist,false);CHECK(MechanismLoss(observe())==loss);
+        const auto heldCompact=observe(true);
+        CHECK(heldCompact.find("\"latestChange\":{\"omitted\":\"payload_limit\"}")!=std::string::npos);
+        f.Tick(f.lastWrist,false);CHECK(MechanismLoss(observe())==loss&&observe(true)==heldCompact);
         f.Tick(f.lastWrist,true);CHECK(MechanismLoss(observe())=="\"firstMechanismLoss\":null");
         CHECK(f.native.counts==counts&&f.submits==submits&&!f.backend.Pending());
         CHECK(observe(true).size()+11702+4096<=32768);
@@ -952,8 +961,12 @@ int NeutralBlockedAdmissionObservesExistingRefusalsWithoutAuthority(){
         CHECK(f.result.diagnostic.exit==(fault==4?Bc2PhysicalFeedExit::SelectionOrInput:Bc2PhysicalFeedExit::GunOrRawUnverified));
         const auto full=observe(),compact=observe(true),row=latest(full),small=latest(compact);
         CHECK(press(full)==first&&row.find("\"currentGrip\":false")!=std::string::npos);
-        CHECK(small.substr(0,small.find(",\"omitted\":"))==row.substr(0,row.find(",\"admissionChecked\":")));
-        CHECK(small.find("\"leftBefore\",\"rightBefore\",\"ownership\",\"leftFeedClaim\"]}")!=std::string::npos);
+        CHECK(full.find("\"failedRetention\":null")!=std::string::npos&&MechanismLoss(full)=="\"firstMechanismLoss\":null");
+        CHECK(full.find("\"firstSupplyLoss\":null")!=std::string::npos);
+        CHECK(small.substr(0,small.find(",\"leftBefore\":"))==row.substr(0,row.find(",\"admissionChecked\":")));
+        const auto smallClaims=small.find(",\"leftBefore\":"),fullClaims=row.find(",\"leftBefore\":");
+        CHECK(smallClaims!=std::string::npos&&fullClaims!=std::string::npos);
+        CHECK(small.substr(smallClaims,small.find(",\"omitted\":")-smallClaims)==row.substr(fullClaims,row.find(",\"policy\":")-fullClaims));
         CHECK(row.find("\"sequence\":"+std::to_string(f.sequence)+",")!=std::string::npos);
         const char* masks=fault==0?"\"rawChecked\":3,\"rawPassed\":1":
             fault==1?"\"rawChecked\":255,\"rawPassed\":127":
