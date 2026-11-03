@@ -20,6 +20,7 @@ def module(name, path):
 p = module("fixed_planner_test", ROOT / "tools/plan_bc2_fixed_container_simulation.py")
 d = module("fixed_driver_test", ROOT / "tools/drive_bc2_fixed_container_simulation.py")
 fixture = module("fixed_sight_fixture", ROOT / "tests/test_bc2_sight_simulation_plan.py")
+precision = module("fixed_pose_precision_fixture", ROOT / "tests/test_bc2_feed_simulation_plan.py")
 memory = module("fixed_transport_memory", ROOT / "tests/test_bc2_feed_driver_observation.py")
 memory.d = d.transport
 f, NOW = p.frame, 1_000_000_000
@@ -250,6 +251,31 @@ class FixedContainerSimulationPlanTests(unittest.TestCase):
         self.assertEqual(insertion["schedule"][-1]["grip"], 0)
         self.assertEqual(insertion["receiptGates"][0]["minimumObservationSpanNs"], 60_000_000)
         self.assertEqual(insertion["receiptGates"][-1]["id"], "fixed_inserted")
+
+    def test_pickup_continuation_preserves_float32_pose_precision_and_exact_identity(self):
+        source = snapshot()
+        source["fixedContainer"]["tracking"]["step"] = 2
+        precision.observed_right_pose(source)
+        pickup = p.plan(source, "Pickup", NOW, 100)
+        held = held_after_pickup(source, pickup)
+        precision.observed_right_pose(held, changed=True)
+        original = copy.deepcopy((pickup, held))
+        self.assertTrue(p.check_gate(pickup, held, "fixed_held", NOW+200_000_000, 110)["observed"])
+        insertion = p.plan(held, "Insert", NOW+200_000_000, 110, pickup_plan=pickup)
+        self.assertEqual(insertion["stage"], "Insert")
+        self.assertEqual((pickup, held), original)
+        faults = [lambda s: s["input"]["hands"][1]["grip"]["position"].__setitem__(0, .200000004),
+                  lambda s: s["input"]["hands"][1]["aim"]["orientation"].__setitem__(1,
+                      precision.float32_steps(precision.OBSERVED_RIGHT_POSE["orientation"][1], 2)),
+                  lambda s: s["input"]["hands"][1].update(squeeze=0),
+                  lambda s: s["input"].update(trackingBasisGeneration=999),
+                  lambda s: s["owner"].update(weapon=999)]
+        for index, fault in enumerate(faults):
+            with self.subTest(fault=index):
+                bad = copy.deepcopy(held)
+                fault(bad)
+                with self.assertRaises(p.Refusal):
+                    p.check_gate(pickup, bad, "fixed_held", NOW+200_000_000, 110)
 
     def test_common_world_motion_preserves_commands_pickup_and_insertion_receipts(self):
         s, pickup, held, _ = self.pipeline()

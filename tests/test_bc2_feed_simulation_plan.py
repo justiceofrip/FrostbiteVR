@@ -11,6 +11,7 @@ import json
 import math
 import os
 from pathlib import Path
+import struct
 import sys
 import unittest
 from unittest import mock
@@ -22,6 +23,24 @@ p = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(p)
 PROFILE_PATH = None
 NOW = 1_000_000_000
+
+
+# Retained feedback221 SeatFeed samples; the surrounding fixtures remain synthetic.
+OBSERVED_RIGHT_POSE = dict(position=[0.200000003, 1.29999995, -0.349999994],
+    orientation=[0.206157163, -0.239314288, 0.0520769954, 0.947373152])
+
+
+def observed_right_pose(snapshot, changed=False):
+    for key in ("grip", "aim"):
+        pose = copy.deepcopy(OBSERVED_RIGHT_POSE)
+        if changed:
+            pose["orientation"][1:3] = [-0.239314303, 0.0520769916]
+        snapshot["input"]["hands"][1][key] = pose
+
+
+def float32_steps(value, count):
+    bits = struct.unpack("<I", struct.pack("<f", value))[0]
+    return struct.unpack("<f", struct.pack("<I", bits + count))[0]
 
 
 def frame(position, angles):
@@ -151,6 +170,52 @@ def add_synthetic_feed_claim(row, snapshot, stage):
                 mechanismClaim=dict(token=token, inputSequence=feed["input"]["sequence"],
                                     deadlineNs=feed["input"]["deadlineNs"]),
                 mechanismWristWorldMeters=copy.deepcopy(snapshot["mapping"]["rawLeftWristWorldMeters"]))
+
+
+class PreservedPosePrecisionTests(unittest.TestCase):
+    def test_recorded_one_step_and_equivalent_sign_preserve_pose_without_mutation(self):
+        before = copy.deepcopy(OBSERVED_RIGHT_POSE)
+        after = copy.deepcopy(before)
+        after["orientation"][1:3] = [-0.239314303, 0.0520769916]
+        original = copy.deepcopy((before, after))
+        self.assertTrue(p.preserved_pose_equal(before, after))
+        self.assertEqual((before, after), original)
+        after["orientation"] = [-v for v in after["orientation"]]
+        self.assertTrue(p.preserved_pose_equal(before, after))
+
+    def test_component_step_limit_applies_at_axes_signs_and_general_orientation(self):
+        for orientation in ([0., 0., 0., 1.], [.5, -.5, .5, -.5], OBSERVED_RIGHT_POSE["orientation"]):
+            for component in range(4):
+                before = dict(position=[0., 0., 0.], orientation=list(orientation))
+                for steps in (1, 2):
+                    with self.subTest(orientation=orientation, component=component, steps=steps):
+                        after = copy.deepcopy(before)
+                        after["orientation"][component] = float32_steps(orientation[component], steps)
+                        self.assertEqual(p.preserved_pose_equal(before, after), steps == 1)
+
+    def test_translation_rotation_and_metadata_changes_are_not_representation_noise(self):
+        before = copy.deepcopy(OBSERVED_RIGHT_POSE)
+        for field in ("translation", "rotation", "metadata"):
+            with self.subTest(field=field):
+                after = copy.deepcopy(before)
+                if field == "translation":
+                    after["position"][0] = math.nextafter(after["position"][0], math.inf)
+                elif field == "rotation":
+                    after["orientation"] = p.quat_mul(after["orientation"], [0., math.sin(1e-5), 0., math.cos(1e-5)])
+                else:
+                    after["generation"] = 1
+                self.assertFalse(p.preserved_pose_equal(before, after))
+
+    def test_invalid_pose_is_refused_even_when_both_samples_match(self):
+        for field, value in (("orientation", [0., 0., 0., 0.]), ("orientation", [0., 0., 0., 2.]),
+                             ("orientation", [0., 0., 1.]), ("orientation", [math.nan, 0., 0., 1.]),
+                             ("orientation", [math.inf, 0., 0., 1.]), ("orientation", [False, 0., 0., 1.]),
+                             ("position", [0., math.nan, 0.]), ("position", [0., math.inf, 0.])):
+            with self.subTest(field=field, value=value):
+                bad = copy.deepcopy(OBSERVED_RIGHT_POSE)
+                bad[field] = value
+                with self.assertRaises(p.Refusal):
+                    p.preserved_pose_equal(bad, bad)
 
 
 class FeedSimulationPlanTests(unittest.TestCase):
@@ -336,6 +401,40 @@ class FeedSimulationPlanTests(unittest.TestCase):
                 p.held_feed(self.profiles, row, snap, NOW+100_000_000, plan, NOW+80_000_000)
         with self.assertRaisesRegex(p.Refusal, "post-squeeze"):
             p.held_feed(self.profiles, row, base, NOW+100_000_000, plan, NOW+95_000_000)
+
+    def test_recorded_pose_precision_passes_feed_and_supply_custody_with_exact_gates(self):
+        row = self.profiles["profiles"][0]
+        for stage in ("SeatFeed", "SupplyPickup"):
+            before = synthetic_snapshot(row, stage)
+            observed_right_pose(before)
+            plan = p.plan(self.profiles, before, stage, NOW, before["nonce"])
+            after = synthetic_snapshot(row, "AttachContainer" if stage == "SupplyPickup" else stage,
+                                       NOW+100_000_000, sequence=102)
+            observed_right_pose(after, changed=True)
+            after["feed"]["revision"] += 2
+            if stage == "SupplyPickup":
+                add_synthetic_custody(self.profiles, row, after)
+                check = lambda s: p.held_supply(self.profiles, row, s, NOW+100_000_000, plan)
+                expected = after["feed"]["supplyObject"]
+            else:
+                add_synthetic_feed_claim(row, after, stage)
+                check = lambda s: p.held_feed(self.profiles, row, s, NOW+100_000_000, plan, NOW+80_000_000)
+                expected = after["feed"]["mechanismClaim"]
+            original = copy.deepcopy((plan, after))
+            self.assertEqual(check(after), expected)
+            self.assertEqual((plan, after), original)
+            faults = [lambda s: s["input"]["hands"][1]["grip"]["position"].__setitem__(0, .200000004),
+                      lambda s: s["input"]["hands"][1]["grip"]["orientation"].__setitem__(1,
+                          float32_steps(OBSERVED_RIGHT_POSE["orientation"][1], 2)),
+                      lambda s: s["input"].update(trackingBasisGeneration=999),
+                      lambda s: s["owner"].update(weapon=999),
+                      lambda s: s["feed"].update(lifetime=999)]
+            for index, fault in enumerate(faults):
+                with self.subTest(stage=stage, fault=index):
+                    bad = copy.deepcopy(after)
+                    fault(bad)
+                    with self.assertRaises(p.Refusal):
+                        check(bad)
 
     def test_driver_does_not_move_without_reobserved_feed_claim(self):
         spec = importlib.util.spec_from_file_location("feed_driver", ROOT / "tools/drive_bc2_feed_simulation.py")

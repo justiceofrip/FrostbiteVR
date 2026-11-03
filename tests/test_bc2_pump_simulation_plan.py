@@ -19,6 +19,7 @@ p = module("pump_planner", ROOT / "tools/plan_bc2_pump_simulation.py")
 f = p.frame
 # Reuse only the existing explicitly synthetic arbitrary-reference input fixture.
 fixture = module("sight_fixture", ROOT / "tests/test_bc2_sight_simulation_plan.py")
+precision = module("pump_pose_precision_fixture", ROOT / "tests/test_bc2_feed_simulation_plan.py")
 NOW = 1_000_000_000
 
 
@@ -222,6 +223,29 @@ class PumpSimulationPlanTests(unittest.TestCase):
         shell_pose = f.multiply(f.multiply(profile["itemFromInsertion"], shell_pose), f.inverse(profile["weaponFromEntry"]))
         self.assertLess(f.pose_error(shell_pose, expected)[0], .00001)
         self.assertGreaterEqual(sum(r["phase"] == "insert" for r in result["schedule"])*20_000_000, 800_000_000)
+
+    def test_pickup_continuation_preserves_float32_pose_precision_and_exact_identity(self):
+        source = snapshot()
+        precision.observed_right_pose(source)
+        pickup = p.plan(source, "ShellPickup", NOW, 100)
+        held = held_after_pickup(source, pickup)
+        precision.observed_right_pose(held, changed=True)
+        original = copy.deepcopy((pickup, held))
+        insertion = p.plan(held, "ShellInsert", NOW+200_000_000, 110, pickup_plan=pickup)
+        self.assertEqual(insertion["stage"], "ShellInsert")
+        self.assertEqual((pickup, held), original)
+        faults = [lambda s: s["input"]["hands"][1]["grip"]["position"].__setitem__(0, .200000004),
+                  lambda s: s["input"]["hands"][1]["aim"]["orientation"].__setitem__(1,
+                      precision.float32_steps(precision.OBSERVED_RIGHT_POSE["orientation"][1], 2)),
+                  lambda s: s["input"]["hands"][1].update(squeeze=0),
+                  lambda s: s["input"].update(trackingBasisGeneration=999),
+                  lambda s: s["owner"].update(weapon=999)]
+        for index, fault in enumerate(faults):
+            with self.subTest(fault=index):
+                bad = copy.deepcopy(held)
+                fault(bad)
+                with self.assertRaises(p.Refusal):
+                    p.plan(bad, "ShellInsert", NOW+200_000_000, 110, pickup_plan=pickup)
 
     def test_original_frame_callers_are_unchanged(self):
         clear = snapshot()

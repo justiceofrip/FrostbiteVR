@@ -11,6 +11,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import struct
 import sys
 import time
 
@@ -135,6 +136,38 @@ def pose_error(a, b):
     qa, qb = to_pose(a)["orientation"], to_pose(b)["orientation"]
     angle = 2*math.acos(min(1., abs(sum(x*y for x, y in zip(qa, qb)))))
     return distance, angle
+
+
+def preserved_pose_equal(before, after):
+    """Exact translation/metadata, at most one binary32 step per quaternion component.
+
+    XR poses contain float32 components, serialized with nine significant digits.
+    Compare their represented values, allowing the equivalent quaternion sign.
+    The additional angular cap (four float32 epsilons, in radians) is a numeric
+    representation bound, independent of every gameplay/gesture tolerance.
+    """
+    a, b = from_pose(before), from_pose(after)  # Validate shape, finiteness and norm.
+    if ({k: v for k, v in before.items() if k != "orientation"}
+            != {k: v for k, v in after.items() if k != "orientation"}):
+        return False
+    qa, qb = before["orientation"], after["orientation"]
+    sign = -1 if sum(x*y for x, y in zip(qa, qb)) < 0 else 1
+
+    def ordered_float32(value):
+        bits = struct.unpack("<I", struct.pack("<f", value))[0]
+        return -(bits & 0x7fffffff) if bits & 0x80000000 else bits
+
+    return (all(abs(ordered_float32(x) - ordered_float32(sign*y)) <= 1 for x, y in zip(qa, qb))
+            and pose_error(a, b)[1] <= 4 * 2**-23)
+
+
+def preserved_equal(before, after, *, pose_keys=(), hand_keys=()):
+    """Only explicitly named poses use representation precision; all else is exact."""
+    excluded = (*pose_keys, *hand_keys)
+    return ({k: v for k, v in before.items() if k not in excluded}
+            == {k: v for k, v in after.items() if k not in excluded}
+            and all(preserved_pose_equal(before[k], after[k]) for k in pose_keys)
+            and all(preserved_equal(before[k], after[k], pose_keys=("grip", "aim")) for k in hand_keys))
 
 
 def ypr_quaternion(degrees):
@@ -262,8 +295,10 @@ def held_supply(profiles, row, snapshot, now, pickup_plan):
                 "attachment needs fresh post-pickup reobservation")
         require(integer(feed["lifetime"]) == integer(pickup_plan["sourceFeedLifetime"])
                 and all(inp[k] == pickup_plan["preserve"][k] for k in
-                        ("referenceHead", "head", "spaceGeneration", "trackingBasisGeneration", "worldUnitsPerMeter"))
-                and inp["hands"][1]["grip"] == pickup_plan["preserve"]["rightGrip"], "pickup prerequisite basis/lifetime changed")
+                        ("spaceGeneration", "trackingBasisGeneration", "worldUnitsPerMeter"))
+                and all(preserved_pose_equal(inp[k], pickup_plan["preserve"][k]) for k in ("referenceHead", "head"))
+                and preserved_pose_equal(inp["hands"][1]["grip"], pickup_plan["preserve"]["rightGrip"]),
+                "pickup prerequisite basis/lifetime changed")
     return obj
 
 
@@ -314,8 +349,9 @@ def held_feed(profiles, row, snapshot, now, acquisition_plan, command_written_ns
     require(stage == "OpenCover" or integer(feed["lifetime"]) == integer(acquisition_plan["sourceFeedLifetime"]),
             "feed acquisition lifetime changed")
     require(all(inp[k] == acquisition_plan["preserve"][k] for k in
-                ("referenceHead", "head", "spaceGeneration", "trackingBasisGeneration", "worldUnitsPerMeter"))
-            and inp["hands"][1]["grip"] == acquisition_plan["preserve"]["rightGrip"],
+                ("spaceGeneration", "trackingBasisGeneration", "worldUnitsPerMeter"))
+            and all(preserved_pose_equal(inp[k], acquisition_plan["preserve"][k]) for k in ("referenceHead", "head"))
+            and preserved_pose_equal(inp["hands"][1]["grip"], acquisition_plan["preserve"]["rightGrip"]),
             "feed acquisition reference/right-hand basis changed")
     distance, angle = pose_error(rigid(feed["mechanismWristWorldMeters"]),
                                  rigid(snapshot["mapping"]["rawLeftWristWorldMeters"]))

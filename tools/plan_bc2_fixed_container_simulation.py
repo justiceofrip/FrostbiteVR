@@ -218,8 +218,9 @@ def preserved(snapshot):
 
 def require_preserved(before, after):
     relative = "trackingBodyFromWeapon"
-    require({k: v for k, v in before.items() if k != relative}
-            == {k: v for k, v in after.items() if k != relative},
+    require(frame.preserved_equal({k: v for k, v in before.items() if k != relative},
+                                 {k: v for k, v in after.items() if k != relative},
+                                 pose_keys=("head", "referenceHead"), hand_keys=("right",)),
             "fixed-container head/right/controller basis changed; replan")
     # Match the shared transport's W * inverse(B) admission: common world
     # motion cancels without relaxing independent weapon/body drift limits.

@@ -126,7 +126,9 @@ class StimulusGeometryTests(unittest.TestCase):
 
     def test_sight_transition_requires_exact_target_and_inverse_family(self):
         source = complete(sf.snapshot(primary_slot=0))
+        ff.observed_right_pose(source)
         after = copy.deepcopy(source)
+        ff.observed_right_pose(after, changed=True)
         after["sight"]["family"].update(selectedSecondary=True, targetWeapon=14, targetSlot=0, targetAction=25)
         after["owner"]["weapon"] = after["equipment"]["weapon"] = 34
         after["owner"]["equipGeneration"] += 1
@@ -176,6 +178,57 @@ class StimulusGeometryTests(unittest.TestCase):
         changed["input"]["hands"][1]["squeeze"] = 0
         with self.assertRaises(g.GeometryRefusal):
             g.same_mapping(s, changed, "pump", "ShellPickup")
+
+    def test_recorded_pose_precision_is_shared_by_all_family_mapping_guards(self):
+        cases = (("feed", complete(sf.snapshot()), "SeatFeed"),
+                 ("pump", complete(pf.snapshot()), "ShellPickup"),
+                 ("fixed", complete(xf.snapshot()), "Pickup"),
+                 ("sight", complete(sf.snapshot()), "SightFlip"))
+        for family, source, stage in cases:
+            with self.subTest(family=family):
+                ff.observed_right_pose(source)
+                after = copy.deepcopy(source)
+                ff.observed_right_pose(after, changed=True)
+                original = copy.deepcopy((source, after))
+                self.assertEqual(g.same_mapping(source, after, family, stage), "source")
+                self.assertEqual((source, after), original)
+                for pose in ("grip", "aim"):
+                    bad = copy.deepcopy(after)
+                    bad["input"]["hands"][1][pose]["orientation"][1] = ff.float32_steps(
+                        ff.OBSERVED_RIGHT_POSE["orientation"][1], 2)
+                    with self.assertRaises(g.GeometryRefusal):
+                        g.same_mapping(source, bad, family, stage)
+
+    def test_pose_precision_does_not_relax_discrete_mapping_or_right_controls(self):
+        source = complete(pf.snapshot())
+        ff.observed_right_pose(source)
+        after = copy.deepcopy(source)
+        ff.observed_right_pose(after, changed=True)
+        paths = [("owner", "weapon"), ("equipment", "data"), ("rig", "fingerprint"),
+                 ("selected", "configurationPath"), ("physical_equipment_generation",),
+                 *( ("input", key) for key in ("spaceGeneration", "trackingBasisGeneration", "worldUnitsPerMeter", "floorRelative")),
+                 *( ("input", "hands", 1, key) for key in g.RIGHT_FIELDS if key not in ("grip", "aim"))]
+        for path in paths:
+            with self.subTest(path=path):
+                bad = copy.deepcopy(after)
+                target = bad
+                for key in path[:-1]:
+                    target = target[key]
+                value = target[path[-1]]
+                target[path[-1]] = not value if isinstance(value, bool) else value + ("changed" if isinstance(value, str) else 1)
+                with self.assertRaises(g.GeometryRefusal):
+                    g.same_mapping(source, bad, "pump", "ShellPickup")
+
+    def test_sampled_head_orientation_uses_precision_but_translation_stays_exact(self):
+        for key in ("head", "referenceHead"):
+            source = complete(sf.snapshot())
+            source["input"][key] = copy.deepcopy(ff.OBSERVED_RIGHT_POSE)
+            after = copy.deepcopy(source)
+            after["input"][key]["orientation"][1:3] = [-0.239314303, 0.0520769916]
+            self.assertEqual(g.same_mapping(source, after, "sight", "SightFlip"), "source")
+            after["input"][key]["position"][0] += 1e-12
+            with self.assertRaises(g.GeometryRefusal):
+                g.same_mapping(source, after, "sight", "SightFlip")
 
     def test_pending_native_claim_waits_without_weakening_changed_ammo(self):
         s = complete(xf.snapshot())

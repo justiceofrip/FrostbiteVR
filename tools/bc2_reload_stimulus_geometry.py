@@ -150,9 +150,12 @@ def _mapping(snapshot, family):
 
 
 def _same(before, after):
-    require({k: v for k, v in before.items() if k not in ("weaponFromBody", "calibration", "family")}
-            == {k: v for k, v in after.items() if k not in ("weaponFromBody", "calibration", "family")},
+    require({k: v for k, v in before.items() if k not in ("weaponFromBody", "calibration", "family", "preserve")}
+            == {k: v for k, v in after.items() if k not in ("weaponFromBody", "calibration", "family", "preserve")},
             "stimulus owner/selection/profile/reference changed")
+    require(feed.preserved_equal(before["preserve"], after["preserve"],
+                                 pose_keys=("head", "referenceHead"), hand_keys=("rightHand",)),
+            "stimulus preserved pose/control/reference changed")
     require(all(p <= .002 and a <= .005 for p, a in
                 (feed.pose_error(feed.rigid(before[k]), feed.rigid(after[k])) for k in ("weaponFromBody", "calibration"))),
             "stimulus relative weapon/body or anatomical basis changed")
@@ -165,7 +168,8 @@ def _sight_state(before, after, target):
         require(old[k] == new[k], "sight physical family changed: " + k)
     require(integer(old["primaryAction"]) in (25, 36) and integer(new["observedMs"]) >= integer(old["observedMs"])
             and isinstance(new["selectedSecondary"], bool), "sight family publication invalid")
-    require(before["preserve"] == after["preserve"]
+    require(feed.preserved_equal(before["preserve"], after["preserve"],
+                                 pose_keys=("head", "referenceHead"), hand_keys=("rightHand",))
             and before["physical_equipment_generation"] == after["physical_equipment_generation"]
             and all(before["owner"][k] == after["owner"][k] for k in ("player", "soldier", "weak", "actorGeneration", "space")),
             "sight actor/reference changed")

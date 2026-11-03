@@ -234,7 +234,9 @@ def reobserve(previous, snapshot, now, nonce):
             and integer(snapshot["observed_ns"]) > integer(previous["evaluatedAtNs"])
             and integer(snapshot["input"]["generation"]) > integer(previous["sourceInputSequence"]),
             "receipt requires fresh real post-plan evidence")
-    require(previous["preserve"] == preserved(snapshot), "receipt/prior-plan head, right hand or mapping changed; replan")
+    require(frame.preserved_equal(previous["preserve"], preserved(snapshot),
+                                  pose_keys=("head", "referenceHead"), hand_keys=("rightHand",)),
+            "receipt/prior-plan head, right hand or mapping changed; replan")
     return sp
 
 
