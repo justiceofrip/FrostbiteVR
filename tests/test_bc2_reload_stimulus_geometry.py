@@ -1,5 +1,7 @@
 """Synthetic geometry/boundary tests; no native or headset success is implied."""
 import copy
+import gzip
+import hashlib
 import importlib.util
 import json
 import os
@@ -394,6 +396,122 @@ class FeedRegistryStimulusTests(unittest.TestCase):
                 with self.assertRaises(g.BoundaryPending):
                     g.check_boundary(plan, later, "feed_released", NOW+20_000_000,
                         profiles=self.profiles, prior=prior)
+
+    @staticmethod
+    def boundary_snapshot(row, stage, now=NOW, sequence=100):
+        snapshot = complete(ff.synthetic_snapshot(row, stage, now, sequence))
+        if stage == "SupplyPickup":
+            snapshot["mapping"]["trackingBodyWorldMeters"][3][:3] = snapshot["mapping"]["weaponWorldMeters"][3][:3]
+            ff.set_wrist(snapshot, snapshot["mapping"]["rawLeftWristWorldMeters"])
+        return snapshot
+
+    def test_all24_blocked_missing_feed_boundaries_wait_without_admitting_input(self):
+        for row in self.profiles["profiles"]:
+            for stage in ("OpenCover", "DetachContainer", "SupplyPickup", "SeatFeed", "CloseCover"):
+                with self.subTest(asset=row["asset"], stage=stage):
+                    before = self.boundary_snapshot(row, stage)
+                    plan = g.build_stimulus("feed", self.profiles, before, NOW, stage)
+                    missing = self.boundary_snapshot(row, stage, NOW+20_000_000, 101)
+                    missing.update(feed=None, weapon_actions_blocked=True)
+                    original = copy.deepcopy((plan, missing))
+                    for boundary in plan["boundaries"]:
+                        with self.assertRaisesRegex(g.BoundaryPending, "fresh retained feed presentation"):
+                            g.check_boundary(plan, missing, boundary["id"], NOW+20_000_000,
+                                command_written_ns=NOW+1_000_000, profiles=self.profiles)
+                    self.assertEqual((plan, missing), original)
+                    later = self.boundary_snapshot(row, stage, NOW+40_000_000, 102)
+                    observed = g.check_boundary(plan, later, "feed_contact", NOW+40_000_000,
+                        command_written_ns=NOW+1_000_000, profiles=self.profiles)
+                    self.assertTrue(observed["stageRevalidated"])
+                    self.assertFalse(observed["nativeAcceptance"])
+
+    def test_blocked_missing_feed_keeps_source_mapping_and_counter_contradictions(self):
+        row = self.profiles["profiles"][0]
+        before = self.boundary_snapshot(row, "SeatFeed")
+        plan = g.build_stimulus("feed", self.profiles, before, NOW, "SeatFeed")
+        later = self.boundary_snapshot(row, "SeatFeed", NOW+20_000_000, 101)
+        later["feed"] = None
+        mutations = {
+            "owner": lambda s: s["owner"].update(weapon=999),
+            "selection": lambda s: s["selected"].update(configurationPath="changed"),
+            "tracking": lambda s: s["input_evidence"].update(tracked=[False, True]),
+            "expired": lambda s: s.update(valid_until_ns=NOW+20_000_000),
+            "gate": lambda s: s["feedObservation"]["latest_tick"].update(gate_failed=True),
+            "submit": lambda s: s["feedObservation"]["latest_tick"].update(submit_refused=True),
+            "gate_count": lambda s: s["feedObservation"].update(gate_refusals=2),
+            "submit_count": lambda s: s["feedObservation"].update(submit_attempts=1),
+            "receipt_count": lambda s: s["feedObservation"].update(receipts_accepted=1),
+            "malformed": lambda s: s.pop("feed"),
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(fault=name):
+                changed = copy.deepcopy(later)
+                mutate(changed)
+                with self.assertRaises(g.GeometryRefusal) as caught:
+                    g.check_boundary(plan, changed, "feed_contact", NOW+20_000_000, profiles=self.profiles)
+                self.assertNotIsInstance(caught.exception, g.BoundaryPending)
+
+    def test_blocked_missing_feed_uses_existing_driver_boundary_deadline(self):
+        # Exercise the existing fresh loop with real geometry admission. Reuse
+        # its clock/artifact fixture; no transport, input, or timeout is changed.
+        df = load("pending_feed_driver_fixture", ROOT / "tests/test_bc2_reload_stimulus.py")
+        row = self.profiles["profiles"][0]
+        for recovers in (True, False):
+            with self.subTest(recovers=recovers):
+                clock = df.Clock()
+                clock.now = NOW
+                driver, _ = df.StimulusTests().boundary_driver(clock, ["ready"])
+                before = self.boundary_snapshot(row, "OpenCover")
+                plan = g.build_stimulus("feed", self.profiles, before, NOW, "OpenCover")
+                original = copy.deepcopy(plan)
+                driver.geometry, driver.stimulus, driver.profiles = g, plan, self.profiles
+                driver.send = mock.Mock()
+                def guard(deadline_ns=None):
+                    clock.now = min(clock.now + 10_000_000, deadline_ns)
+                    index = len(driver.observed)
+                    frame = self.boundary_snapshot(row, "OpenCover", clock.now, 101+index)
+                    if not recovers or index == 0:
+                        frame.update(feed=None, weapon_actions_blocked=True)
+                    driver.observed.append(dict(snapshot=frame, current=True))
+                driver.guard = guard
+                boundary = plan["boundaries"][0]
+                original_deadline = NOW + boundary["timeoutNs"]
+                with mock.patch.object(df.m, "time", clock):
+                    if recovers:
+                        frame, _ = driver.fresh(boundary=boundary)
+                        self.assertIsNotNone(frame["feed"])
+                        self.assertLess(clock.now, original_deadline)
+                        self.assertIn("feed_contact", driver.boundaries)
+                    else:
+                        with self.assertRaises(df.m.Refusal):
+                            driver.fresh(boundary=boundary)
+                        self.assertEqual(clock.now, original_deadline)
+                        self.assertEqual(driver.pending_boundary["deadlineNs"], original_deadline)
+                        self.assertEqual(driver.boundaries, {})
+                pending = [e for e in driver.artifacts.events if e["type"] == "boundary_pending"]
+                self.assertTrue(pending)
+                self.assertTrue(all(e["deadlineNs"] == original_deadline for e in pending))
+                self.assertEqual(plan, original)
+                driver.send.assert_not_called()
+
+    @unittest.skipUnless(os.environ.get("BC2_FEED_BOUNDARY_REPLAY"), "pinned local actual259 observation required")
+    def test_actual259_blocked_missing_presentation_waits_after_original_guards(self):
+        replay = json.loads(Path(os.environ["BC2_FEED_BOUNDARY_REPLAY"]).read_text(encoding="utf-8-sig"))
+        self.assertEqual(replay["schema"], "bc2vr.feed-boundary-replay263.v1")
+        def pinned(name):
+            row = replay[name]
+            raw = Path(row["path"]).read_bytes()
+            self.assertEqual(hashlib.sha256(raw).hexdigest(), row["sha256"])
+            return json.loads(gzip.decompress(raw) if row["path"].endswith(".gz") else raw)
+        plan, missing = pinned("stimulus"), pinned("snapshot")
+        original = copy.deepcopy((plan, missing))
+        self.assertTrue(missing["weapon_actions_blocked"])
+        self.assertIsNone(missing["feed"])
+        self.assertLess(replay["evaluated_ns"], replay["original_boundary_deadline_ns"])
+        with self.assertRaisesRegex(g.BoundaryPending, "fresh retained feed presentation"):
+            g.check_boundary(plan, missing, replay["boundary"], replay["evaluated_ns"],
+                command_written_ns=replay["command_written_ns"], profiles=self.profiles)
+        self.assertEqual((plan, missing), original)
 
     def test_all_24_measured_feed_registrations_use_same_pipeline(self):
         self.assertEqual(len(self.profiles["profiles"]), 24)

@@ -349,7 +349,20 @@ def check_boundary(stimulus, snapshot, boundary_id, now_ns, *, command_written_n
     require(len(declared) == 1, "boundary was not declared by this stimulus")
     family, stage, plan = stimulus["family"], stimulus["stage"], stimulus["geometryEvidence"]
     now, nonce = integer(now_ns), integer(snapshot["nonce"])
-    admitted = admit_observation(family, profiles, snapshot, now)
+    # A named boundary already has an admitted registration and retained stage.
+    # A missing rendered feed does not erase the native reload's Fire block.
+    # Inspect the original common frame through that block, then verify the
+    # original mapping/counters below and wait. This path can never return a
+    # boundary or authorize another controller sample while feed is absent.
+    missing_feed = family == "feed" and "feed" in snapshot and snapshot["feed"] is None
+    if missing_feed:
+        require(stimulus.get("initialFeedState") is not None, "retained feed stage absent from stimulus")
+        require(now < source_deadline(snapshot, family), "stimulus boundary source expired")
+        feed.admit_frame(snapshot, now, nonce,
+            mechanism_admission=lambda original, evaluated: original is snapshot and evaluated == now)
+        admitted = None
+    else:
+        admitted = admit_observation(family, profiles, snapshot, now)
     require(nonce != integer(stimulus["source"]["nonce"])
             and integer(snapshot["observed_ns"]) > integer(stimulus["source"]["evaluatedAtNs"]), "boundary needs a new original snapshot")
     if command_written_ns is not None:
