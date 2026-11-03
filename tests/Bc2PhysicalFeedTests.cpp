@@ -67,6 +67,9 @@ struct Fixture {
     bool captureCadenceTrace=false;
     std::array<std::string,64> cadenceTrace{};
     unsigned cadenceTraceCount=0;
+    // Replay a publication interruption at a named point of the same complete
+    // physical trajectory; no separate policy or synthetic completion path.
+    std::function<bool(Fixture&,FeedPhysicalOperation,unsigned)> placementStep;
     Bc2PhysicalFeed physical;
     void SelectWeaponData(std::uint32_t weaponData){
         selected=std::make_shared<SelectedMeshesSnapshot>(*selected);selected->weaponData=weaponData;sample.selected=selected;
@@ -316,8 +319,11 @@ struct Fixture {
         const auto contact=[&](const fvr::math::Matrix4& object){return feed_interaction_detail::Multiply(sourceFromWrist,object);};
         const auto start=contact(motion->placement.weaponFromSource);
         if(!picked){Tick(start,false);Tick(start,false);}Tick(start,true);
-        for(unsigned step=1;step<=30;++step)Tick(contact(reload_insertion_detail::BlendRigid(
-            motion->placement.weaponFromSource,motion->placement.weaponFromDestination,double(step)/30)),true);
+        for(unsigned step=1;step<=30;++step){
+            if(placementStep&&!placementStep(*this,op,step))return false;
+            Tick(contact(reload_insertion_detail::BlendRigid(
+                motion->placement.weaponFromSource,motion->placement.weaponFromDestination,double(step)/30)),true);
+        }
         const auto end=contact(motion->placement.weaponFromDestination);
         for(unsigned step=0;step<DwellPackets();++step)Tick(end,true);
         if(!release)return result.interactionStatus==FeedInteractionStatus::Endpoint&&result.ownsHand&&!submitted;
@@ -1415,6 +1421,116 @@ int EveryEnrolledSupplyPinsPickupToOriginalNativeObservation(){
     }
     CHECK(configurations==24&&cycles==48&&receipts==240);
     std::printf("Feed supply paired native: %u profiles, %u immediate/delayed full cycles, %u offline mocked adapter receipts\n",configurations,cycles,receipts);
+    return 0;
+}
+int EveryEnrolledSupplyCompletesAcrossSplitClockRenewalGaps(){
+    // Actual245: current input7074 had no readAt native publication while the
+    // renderer still delivered valid7073. Renewing supply onto7074 erased the
+    // last valid hand proof before raw7074 arrived. The old current==raw gap
+    // fixture returned early and never exercised that ordering.
+    const std::array<std::vector<unsigned>,2> cadences{{{1,0},{2}}};
+    unsigned profiles=0,cycles=0,receipts=0;
+    for(const auto& registration:RegisteredBc2FeedProfiles()){
+        ++profiles;
+        for(const auto& cadence:cadences)for(unsigned gapStep:{4u,24u})for(unsigned gapPackets:{1u,2u}){
+            Fixture f(&registration);f.nativeCadence=cadence;f.wristCalibration=Turn(2.29598f);
+            const auto before=f.native.counts;bool injected=false;int injectionResult=0;
+            const auto gap=[&](Fixture& f)->int{
+                const auto held=f.hands.Current(InteractionHand::Left);CHECK(held&&held->token.kind==HandClaimKind::AmmoObject);
+                const auto admitted=f.sample.raw;const auto selection=f.sample.selected;CHECK(selection);
+                const auto originalSelectionSequence=selection->sequence;
+                const auto originalSelectionObserved=selection->observedNs,originalSelectionDeadline=selection->deadlineNs;
+                const auto counts=f.native.counts;const auto submits=f.submits;
+                const auto unchangedHand=[&](){const auto current=f.hands.Current(InteractionHand::Left);
+                    return current&&current->token==held->token&&current->inputSequence==held->inputSequence&&current->deadlineNs==held->deadlineNs;};
+                CHECK(!f.result.pending&&!f.backend.Pending());
+                ReloadRawContact missing;
+                f.publishSelected=false;
+                for(unsigned packet=0;packet<gapPackets;++packet){
+                    f.PrepareTick(f.lastWrist,true);missing=f.sample.raw;f.missingPacketNative=true;
+                    // Current N is missing, rendered N-1 still has exact native
+                    // proof. This must not renew the carried object onto N.
+                    f.Consume(&admitted);
+                    CHECK(unchangedHand());
+                    CHECK(f.result.ownsHand&&!f.result.presentation&&!f.result.diagnostic.policyEvaluated);
+                    CHECK(f.submits==submits&&f.native.counts==counts);
+                    f.Consume(&missing);
+                    CHECK(unchangedHand());
+                    CHECK(f.result.ownsHand&&!f.result.presentation&&!f.result.pending&&!f.backend.Pending());
+                    // Repeated geometry and later availability cannot backfill
+                    // N's absent native or change any original expiry time.
+                    const auto readAts=f.nativeReadAts;f.missingPacketNative=false;f.Consume(&missing);
+                    CHECK(f.nativeReadAts==readAts&&unchangedHand());
+                    CHECK(f.sample.selected==selection&&selection->sequence==originalSelectionSequence&&
+                        selection->observedNs==originalSelectionObserved&&selection->deadlineNs==originalSelectionDeadline);
+                    CHECK(f.submits==submits&&f.native.counts==counts);
+                }
+                f.publishSelected=true;f.PrepareTick(f.lastWrist,true);const auto fresh=f.sample.raw;
+                f.Consume(&missing);CHECK(unchangedHand());
+                CHECK(!f.result.presentation&&!f.result.pending);
+                // Only a fresh independently paired packet resumes movement.
+                f.Consume(&fresh);const auto resumed=f.hands.Current(InteractionHand::Left);
+                CHECK(resumed&&resumed->token==held->token&&resumed->inputSequence==fresh.inputEvidence.sequence);
+                CHECK(f.result.ownsHand&&f.result.presentation&&f.result.presentation->supplyObject);
+                CHECK(f.submits==submits&&f.native.counts==counts&&!f.result.pending);
+                return 0;
+            };
+            f.placementStep=[&](Fixture& fixture,FeedPhysicalOperation operation,unsigned step){
+                if(operation==FeedPhysicalOperation::AttachContainer&&step==gapStep&&!injected){
+                    injected=true;injectionResult=gap(fixture);return injectionResult==0;}
+                return true;
+            };
+            CHECK(f.OpenCover()&&f.Reconcile());CHECK(f.submits==1&&f.native.counts==before);
+            CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&f.Reconcile());CHECK(f.submits==2&&f.native.counts==before);
+            CHECK(f.Place(FeedPhysicalOperation::AttachContainer));CHECK(injected&&injectionResult==0);
+            CHECK(f.submitted&&f.submits==3&&f.submitted->command.before.counts==before);
+            const auto after=f.submitted->command.after;
+            const auto life=f.submitted->command.request.lifetime;
+            CHECK(f.Reconcile()&&f.native.counts==after);
+            CHECK(f.Place(FeedPhysicalOperation::SeatFeed)&&f.Reconcile());
+            CHECK(f.Close()&&f.Reconcile());CHECK(f.submits==5&&!f.BlocksFire()&&f.native.counts==after);
+            for(std::uint64_t id=1;id<=5;++id){
+                const auto receipt=f.backend.Receipt(life,id);CHECK(receipt);
+                CHECK(receipt->acknowledgement.status==FeedReloadAcknowledgement::Applied);
+                CHECK(receipt->command.authority.effect==FeedAmmunitionEffect::RefillLoaded? id==3:id!=3);
+                ++receipts;
+            }
+            ++cycles;
+        }
+    }
+    CHECK(profiles==24&&cycles==192&&receipts==960);
+    std::printf("Feed supply split clocks: %u profiles, %u full cycles, %u offline mocked adapter receipts\n",profiles,cycles,receipts);
+    return 0;
+}
+int EveryEnrolledSupplySplitClockRetentionRejectsContradictions(){
+    unsigned cases=0;
+    for(const auto& registration:RegisteredBc2FeedProfiles())for(unsigned fault=0;fault<8;++fault){
+        Fixture f(&registration);CHECK(f.OpenCover()&&f.Reconcile());
+        CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&f.Reconcile());f.submitted.reset();
+        CHECK(f.PickSupply());const auto held=f.hands.Current(InteractionHand::Left);CHECK(held);
+        const auto admitted=f.sample.raw;
+        const auto native=f.backend.ReadAt(f.sample.owner,admitted.inputEvidence.observedNs,f.sample.input.nowNs);CHECK(native);
+        auto counts=f.native.counts;
+        // Each contradiction is introduced during the same split-clock join,
+        // while the renderer still supplies the previous genuine held packet.
+        if(fault==1)f.sample.input.tracked[0]=false;
+        if(fault==2)f.native.identity.firing[0]+=4;
+        if(fault==3){++f.native.counts.reserve;++counts.reserve;}
+        if(fault==4)f.now=(std::min)(held->deadlineNs,native->deadlineNs)-10*Ms;
+        f.PrepareTick(f.lastWrist,fault!=0,fault==6);
+        if(fault==5)f.SelectWeaponData(f.selected->weaponData+1);
+        if(fault==7)CHECK(f.hands.Release(f.sample.input,held->token).accepted);
+        const auto missing=f.sample.raw;f.missingPacketNative=true;f.Consume(&admitted);
+        CHECK(!f.hands.Current(InteractionHand::Left)&&!f.result.ownsHand);
+        CHECK(!f.result.pending&&!f.backend.Pending()&&f.submits==2&&f.native.counts==counts);
+        CHECK(!f.result.presentation||!f.result.presentation->mechanismWristWorldMeters);
+        f.missingPacketNative=false;const auto reads=f.nativeReadAts;f.Consume(&missing);
+        CHECK(f.nativeReadAts==reads&&!f.hands.Current(InteractionHand::Left));
+        CHECK(!f.result.pending&&!f.backend.Pending()&&f.submits==2&&f.native.counts==counts);
+        ++cases;
+    }
+    CHECK(cases==192);
+    std::printf("Feed supply split-clock contradictions: 24 profiles, %u release/tracking/identity/count/expiry/selection/cancel/claim cases\n",cases);
     return 0;
 }
 int EveryEnrolledSupplyRejectsPickupWithoutItsOriginalNative(){
@@ -2812,6 +2928,8 @@ int main(){
     CHECK(EveryEnrolledFeedStartsFromReleasedApproach()==0);
     CHECK(EveryEnrolledSupplyPresentsDelayedPickupOffsetAndDropsLostHand()==0);
     CHECK(EveryEnrolledSupplyPinsPickupToOriginalNativeObservation()==0);
+    CHECK(EveryEnrolledSupplyCompletesAcrossSplitClockRenewalGaps()==0);
+    CHECK(EveryEnrolledSupplySplitClockRetentionRejectsContradictions()==0);
     CHECK(EveryEnrolledSupplyRejectsPickupWithoutItsOriginalNative()==0);
     CHECK(EveryEnrolledSupplyKeepsLogicalOwnershipWithoutMagneticAuthority()==0);
     CHECK(EveryEnrolledFeedCompletesWithIndependentPublicationClocks()==0);

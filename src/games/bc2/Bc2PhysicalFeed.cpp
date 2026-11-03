@@ -846,10 +846,20 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     const bool missingSourceNative=source&&!source->native&&source->grip&&!source->input.released[0]&&
         source->input.owner==s.input.owner&&source->input.sequence<=s.input.sequence&&
         Window(source->input,now)&&hands.HasRecordedEvidence(source->input,InteractionHand::Left);
+    State::Packet* currentPacket=nullptr;
+    for(auto& packet:state.packets)if(packet.owner==s.owner&&packet.weapon==s.weapon&&SamePacket(packet.input,s.input)){
+        currentPacket=&packet;break;}
+    // Supply ownership follows current controller safety, while mechanism
+    // geometry may still be N-1. Do not renew the carried object's claim onto
+    // N when N has no original native observation: its later render would
+    // otherwise replace the last admitted hand proof with an unpaired packet.
+    const bool missingCurrentSupplyNative=e&&e->ammunitionSupply.Held()&&currentPacket&&!currentPacket->native&&
+        currentPacket->grip&&!currentPacket->input.released[0]&&currentPacket->input.owner==s.input.owner&&
+        Window(currentPacket->input,now)&&hands.HasRecordedEvidence(currentPacket->input,InteractionHand::Left);
     // Observe the original short-circuit results only. Slot checks are separate
     // so a later empty/unrelated slot cannot erase the held slot's rejection.
     const auto retainEntry=[&](unsigned bit,bool pass){return observation?observation->retention.Check(bit,pass):pass;};
-    if(retainEntry(0,!view||!s.raw.valid||!s.selected||missingSourceNative)&&retainEntry(1,!s.cancel)&&retainEntry(2,s.grip)&&retainEntry(3,!s.input.released[0])&&
+    if(retainEntry(0,!view||!s.raw.valid||!s.selected||missingSourceNative||missingCurrentSupplyNative)&&retainEntry(1,!s.cancel)&&retainEntry(2,s.grip)&&retainEntry(3,!s.input.released[0])&&
         retainEntry(4,Window(s.input,now))&&retainEntry(5,bool(s.equipment))){
         const auto right=hands.Current(InteractionHand::Right);
         const auto left=hands.Current(InteractionHand::Left);
@@ -1054,22 +1064,18 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     if(!source->selection)source->selection=s.selected;
     const auto& local=source->contact->local;
     const auto body=state.BodyAmmo(*e,*view);
-    auto pickupBody=body;bool pickupPaired=bool(e->ammunitionSupply.Custody());
-    if(!pickupPaired)for(const auto& packet:state.packets)
-        if(packet.owner==s.owner&&packet.weapon==s.weapon&&SamePacket(packet.input,s.input)){
-            // Custody must start at the pickup packet's original native
-            // observation. A newer current view can corroborate it, but would
-            // put custody ahead of that packet when its rendered hand arrives.
-            if(packet.native&&packet.native->observedNs<=s.input.observedNs){
-                pickupBody=state.BodyAmmo(*e,*packet.native);
-                pickupPaired=Bc2FeedBodyRetained(pickupBody,body);
-            }
-            break;
-        }
+    auto supplyBody=body;bool supplyPaired=false;
+    if(currentPacket&&currentPacket->native&&currentPacket->native->observedNs<=s.input.observedNs){
+        // Both acquisition and renewal keep the packet's original native and
+        // selected-item proof. A newer current view corroborates that proof;
+        // it cannot become the source of a claim on older controller input.
+        supplyBody=state.BodyAmmo(*e,*currentPacket->native);
+        supplyPaired=Bc2FeedBodyRetained(supplyBody,body);
+    }
     const bool hadSupplyLoss=bool(supplyLoss);
     captureSupplyLoss(*e,FeedSupplyLossSite::SupplyUpdate,FeedExit::Updated);
-    if(!pickupPaired)e->ammunitionSupply.Suspend(s.input,hands);
-    const bool acquiredSupply=pickupPaired&&e->ammunitionSupply.Update(pickupBody,s.input,s.bodyFromHand,s.grip,
+    if(!supplyPaired)e->ammunitionSupply.Suspend(s.input,hands);
+    const bool acquiredSupply=supplyPaired&&e->ammunitionSupply.Update(supplyBody,s.input,s.bodyFromHand,s.grip,
         e->container==FeedContainerState::Detached&&e->supplyNeutral&&!e->pending,hands,intent);
     if(!hadSupplyLoss&&e->ammunitionSupply.Held())supplyLoss.reset();
     if(acquiredSupply){
