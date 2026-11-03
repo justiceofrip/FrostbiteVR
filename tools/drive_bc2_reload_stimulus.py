@@ -41,6 +41,7 @@ WRITE_GAP_NS = 25_000_000
 MAX_COMMANDS = 512
 MAX_BYTES = 1024 * 1024
 MAX_OBSERVATIONS = 100  # 10s / original100ms request period; not a renewed clock.
+MAX_DIAGNOSTIC_RECORDS = 2048
 LEFT_POSE_SETUP = ["hand l follow off", "hand l aimtrim 0 0"]
 
 
@@ -56,6 +57,77 @@ def deadline_bytes(path, maximum, deadline_ns):
     raw = transport.read_bytes(path, maximum)
     check()
     return raw
+
+
+class DeferredArtifacts:
+    """Bounded diagnostics retained in memory until all input decisions end.
+
+    Only the driver thread owns this journal. No serializer, compressor or
+    artifact writer runs inside an acquired source, boundary, stage or ACK lease.
+    The existing disk writer still enforces its 1 MiB cap, including final reserve.
+    """
+    def __init__(self, sink):
+        self.sink, self.directory = sink, sink.directory
+        self.records = []
+        self.metadata_bytes = self.raw_bytes = 0
+        self.finished = False
+
+    @staticmethod
+    def bound(value, depth=0):
+        # Conservative JSON byte reservation, without rendering the diagnostic.
+        require(depth < 64, "diagnostic nesting budget")
+        if isinstance(value, (bytes, str)):
+            return len(value) * (1 if isinstance(value, bytes) else 6) + 2
+        if value is None or isinstance(value, bool):
+            return 5
+        if isinstance(value, (int, float)):
+            return 64
+        if isinstance(value, dict):
+            return 2 + sum(DeferredArtifacts.bound(k, depth+1) + DeferredArtifacts.bound(v, depth+1) + 2
+                           for k, v in value.items())
+        require(isinstance(value, (list, tuple)), "unsupported diagnostic value")
+        return 2 + sum(DeferredArtifacts.bound(v, depth+1) + 1 for v in value)
+
+    def append(self, kind, name, value, flag=False):
+        require(not self.finished, "diagnostic journal already finalized")
+        require(len(self.records) < MAX_DIAGNOSTIC_RECORDS, "bounded diagnostic journal exhausted")
+        size = len(value) if kind == "snapshot" else self.bound(value)
+        if kind == "snapshot":
+            require(self.raw_bytes + size <= 4 * MAX_BYTES, "decoded observation budget")
+            self.raw_bytes += size
+        else:
+            require(self.metadata_bytes + size <= MAX_BYTES, "diagnostic metadata budget")
+            self.metadata_bytes += size
+        self.records.append((kind, name, value, flag))
+
+    def save(self, name, value, final=False):
+        if final:
+            require(self.finished, "final result requires completed diagnostic flush")
+            return self.sink.save(name, value, final=True)
+        self.append("save", name, value)
+
+    def snapshot(self, name, raw):
+        self.append("snapshot", name, raw)
+
+    def event(self, value, cleanup=False):
+        self.append("event", None, value, cleanup)
+
+    def flush(self):
+        require(not self.finished, "diagnostic journal already finalized")
+        self.finished = True
+        failure = None
+        for kind, name, value, flag in self.records:
+            try:
+                if kind == "event":
+                    self.sink.event(value, cleanup=flag)
+                else:
+                    self.sink.save(name, gzip.compress(value, mtime=0) if kind == "snapshot" else value)
+            except BaseException as error:
+                if failure is None:
+                    failure = f"{kind} {name or 'events.jsonl'}: {error}"
+        self.records.clear()
+        if failure is not None:
+            raise Refusal("diagnostic flush failed: " + failure)
 
 
 def ordinary_commands(sample, allow_setup=False):
@@ -146,7 +218,8 @@ def sim_state(path, deadline_ns):
     api.CloseHandle.argtypes = (wintypes.HANDLE,)
     transport.local_path(path)
     while True:
-        require(time.perf_counter_ns() < deadline_ns, "simulator state read deadline")
+        if time.perf_counter_ns() >= deadline_ns:
+            raise ReadDeadline("original simulator state read deadline exceeded")
         handle = api.CreateFileW(str(path), 0x80000000, 7, None, 3, 0x00200000, None)
         if handle == wintypes.HANDLE(-1).value:
             error = ctypes.get_last_error()
@@ -217,6 +290,7 @@ class ObservationWorker:
         self.inbox = queue.Queue(maxsize=8)
         self.stop_event = threading.Event()
         self.fatal = None
+        self.terminal = None
         self.thread = threading.Thread(target=self._run, name="bc2-stimulus-observer", daemon=True)
         self.thread.start()
 
@@ -224,11 +298,15 @@ class ObservationWorker:
         try:
             self.inbox.put_nowait(value)
         except queue.Full:
+            self.terminal = {"kind": "gap", "reason": "bounded observation inbox exhausted",
+                "index": value.get("index"), "nonce": value.get("snapshot", {}).get("nonce", value.get("nonce")),
+                "unadmittedRawBytes": len(value.get("raw", b"")), "atNs": time.perf_counter_ns()}
             raise Refusal("bounded observation inbox exhausted")
 
     def _run(self):
         try:
             previous = 0
+            last_request = None
             if self.request.exists():
                 raw = transport.read_bytes(self.request, 22)
                 require(re.fullmatch(rb"[1-9][0-9]{0,19}\r?\n?", raw) is not None, "invalid existing snapshot request")
@@ -242,7 +320,12 @@ class ObservationWorker:
                 nonce = max(time.time_ns(), previous + 1)
                 require(nonce < 2**64, "snapshot nonce overflow")
                 request = (str(nonce) + "\n").encode("ascii")
+                if last_request is not None:
+                    require(transport.read_bytes(self.request, 22) == last_request, "competing snapshot request writer")
+                if self.stop_event.is_set() or time.perf_counter_ns() >= self.hard_deadline:
+                    return
                 transport.atomic(self.request, request)
+                last_request = request
                 deadline = min(self.hard_deadline, started + RECEIVE_NS)
                 delivered = False
                 while not self.stop_event.is_set() and time.perf_counter_ns() < deadline:
@@ -250,11 +333,19 @@ class ObservationWorker:
                     if self.snapshot.exists():
                         snapshot, raw = transport.read_json(self.snapshot, transport.planner.SNAPSHOT_LIMIT)
                         actual = integer(snapshot["nonce"])
-                        require(actual <= nonce, "competing snapshot response")
-                        if actual == nonce:
+                        if actual >= nonce:
+                            # The read can return after its lease or after a
+                            # foreign writer replaced our request. Retain the
+                            # bytes either way, but never grant late authority.
+                            received = time.perf_counter_ns()
+                            owned = transport.read_bytes(self.request, 22) == request
                             self.emit({"kind": "snapshot", "index": index, "requestNs": started,
-                                       "deadlineNs": deadline, "receivedNs": time.perf_counter_ns(),
+                                       "deadlineNs": deadline, "receivedNs": received,
+                                       "ownershipCheckedNs": time.perf_counter_ns(), "requestOwned": owned,
+                                       "requestNonce": nonce, "responseOwned": actual == nonce,
                                        "snapshot": snapshot, "raw": raw})
+                            require(owned, "competing snapshot request writer after response read")
+                            require(actual == nonce, "competing snapshot response")
                             delivered = True
                             break
                     self.stop_event.wait(.001)
@@ -268,6 +359,9 @@ class ObservationWorker:
             self.emit({"kind": "gap", "reason": "bounded observer request cap"})
         except BaseException as error:
             self.fatal = str(error)
+            if self.terminal is None:
+                self.terminal = {"kind": "gap", "reason": "native observer ownership/read failure",
+                                 "error": self.fatal, "atNs": time.perf_counter_ns()}
 
     def close(self):
         self.stop_event.set()
@@ -277,7 +371,6 @@ class ObservationWorker:
 
 class ReloadStimulus:
     acquire_lock = transport.Driver.acquire_lock
-    ownership = transport.Driver.ownership
     check_target = staticmethod(transport.Driver.check_target)
 
     def __init__(self, args):
@@ -298,6 +391,7 @@ class ReloadStimulus:
         self.boundaries, self.plans, self.observed = {}, [], []
         self.observation_incomplete = False
         self.observation_failure = None
+        self.diagnostic_failure = None
         self.decoded_snapshot_bytes = 0
         self.geometry = module("bc2_reload_stimulus_geometry")
         self.manifest, _ = transport.read_json(self.run / "run-manifest.json")
@@ -318,11 +412,13 @@ class ReloadStimulus:
             require(transport.same_path(transport.local_path(self.link[key]), expected), "linked path differs: " + key)
         self.owner = transport.WindowsOwner(self.host)
         self.acquire_lock()
-        self.artifacts = transport.Artifacts(self.run)
+        self.artifacts = DeferredArtifacts(transport.Artifacts(self.run))
         self.artifacts.save("invocation.json", {"schema": "bc2vr.reload-stimulus-invocation.v1", "host": self.host,
             "family": args.family, "stage": args.stage, "rootAuthorizedOrdinaryInput": True,
             "maximumDurationNs": 10 * NS, "maximumCommands": MAX_COMMANDS, "maximumArtifactBytes": MAX_BYTES,
             "maximumObservationRequests": MAX_OBSERVATIONS, "maximumDecodedObservationBytes": 4 * MAX_BYTES,
+            "maximumDiagnosticMetadataBytes": MAX_BYTES, "maximumDiagnosticRecords": MAX_DIAGNOSTIC_RECORDS,
+            "diagnosticFlush": "after owned cleanup and observer stop; no live decisions afterward",
             "driverSha256": transport.digest(Path(__file__).read_bytes()),
             "geometrySha256": transport.digest(Path(self.geometry.__file__).read_bytes())})
         options, _ = transport.read_json(self.folder / "options.json")
@@ -394,18 +490,31 @@ class ReloadStimulus:
         publish_owner(self, transport.json_bytes({"host": self.host, "pending": pending, "sequence": self.sequence,
             "sentinel": self.sentinel, "commandSha256": self.command_hash, "artifactDirectory": str(self.artifacts.directory)}))
 
-    def observations(self):
-        require(getattr(self, "observation_failure", None) is None, "previous native observation failure")
+    def ownership(self, state, deadline_ns=None):
         try:
-            self._observations()
-        except BaseException as error:
-            self.observation_failure = str(error)
+            require(transport.digest(deadline_bytes(self.command_path, 4096, deadline_ns)) == self.command_hash,
+                    "command file replaced by another writer")
+            require(integer(state["cmdSeq"]) == self.sequence and state["lastCmd"] == self.sentinel,
+                    "command sequence/sentinel belongs to another writer")
+        except ReadDeadline:
+            raise
+        except BaseException:
+            self.unsafe_owner = True
             raise
 
-    def _observations(self):
+    def observations(self, deadline_ns=None):
+        require(getattr(self, "observation_failure", None) is None, "previous native observation failure")
+        try:
+            self._observations(deadline_ns=deadline_ns)
+        except BaseException as error:
+            self.observation_failure = str(error)
+            self.observation_incomplete = True
+            raise
+
+    def _observations(self, *, deadline_ns=None, diagnostic_only=False):
         if self.observer is None:
             return
-        require(self.observer.fatal is None, "native observer ownership/read failure: " + str(self.observer.fatal))
+        batch = []
         for _ in range(8):
             try:
                 item = self.observer.inbox.get_nowait()
@@ -415,12 +524,44 @@ class ReloadStimulus:
                 self.observation_incomplete = True
                 self.artifacts.event({"type": "observation_gap", **item})
                 continue
-            raw, snapshot = item.pop("raw"), item["snapshot"]
+            raw, snapshot = item["raw"], item["snapshot"]
             self.decoded_snapshot_bytes += len(raw)
             require(self.decoded_snapshot_bytes <= 4 * MAX_BYTES, "decoded observation budget")
-            self.artifacts.save(f"observation-{item['index']:03}.json.gz", gzip.compress(raw, mtime=0))
+            self.artifacts.snapshot(f"observation-{item['index']:03}.json.gz", raw)
+            item = {k: v for k, v in item.items() if k != "raw"}
+            batch.append(item)
+        # Preserve the complete bounded batch before identity/clock decisions.
+        # A refusal in one item cannot discard later queued failure evidence.
+        events = []
+        for item in batch:
+            snapshot = item["snapshot"]
+            event = {"type": "native_observation", "index": item["index"], "nonce": snapshot.get("nonce"),
+                "requestNs": item["requestNs"], "deadlineNs": item["deadlineNs"], "receivedNs": item["receivedNs"],
+                "ownershipCheckedNs": item.get("ownershipCheckedNs", item["receivedNs"]),
+                "requestOwned": item.get("requestOwned", True), "requestNonce": item.get("requestNonce"),
+                "responseOwned": item.get("responseOwned", True), "drainedNs": time.perf_counter_ns(),
+                "diagnosticOnly": diagnostic_only, "currentAtReceive": None, "valid": snapshot.get("valid"),
+                "invalidReason": snapshot.get("invalid_reason"), "nativeAcceptance": False}
+            self.artifacts.event(event)
+            events.append(event)
+        terminal = getattr(self.observer, "terminal", None)
+        if terminal is not None:
+            self.artifacts.event({"type": "observation_gap", **terminal})
+            self.observer.terminal = None
+        if diagnostic_only:
+            return
+        require(self.observer.fatal is None, "native observer ownership/read failure: " + str(self.observer.fatal))
+        for item, event in zip(batch, events):
+            snapshot = item["snapshot"]
+            require(item.get("requestOwned", True), "competing snapshot request writer after response read")
+            require(item.get("responseOwned", True), "competing snapshot response")
+            if deadline_ns is not None and time.perf_counter_ns() >= deadline_ns:
+                raise ReadDeadline("original observation validation deadline exceeded")
             item["current"] = (snapshot.get("valid") is True and item["receivedNs"] < item["deadlineNs"]
+                               and item.get("requestOwned", True)
+                               and item.get("ownershipCheckedNs", item["receivedNs"]) < item["deadlineNs"]
                                and item["receivedNs"] < self.geometry.source_deadline(snapshot, self.args.family))
+            event["currentAtReceive"] = item["current"]
             if not item["current"]:
                 self.observation_incomplete = True
             # Expiry never renews this record. A valid later mapping still makes
@@ -432,16 +573,27 @@ class ReloadStimulus:
                     self.target_observed = True
             self.observed.append(item)
             self.observed = self.observed[-8:]
-            self.artifacts.event({"type": "native_observation", "index": item["index"], "nonce": snapshot.get("nonce"),
-                "requestNs": item["requestNs"], "receivedNs": item["receivedNs"], "currentAtReceive": item["current"],
-                "valid": snapshot.get("valid"), "invalidReason": snapshot.get("invalid_reason"), "nativeAcceptance": False})
+            if deadline_ns is not None and time.perf_counter_ns() >= deadline_ns:
+                raise ReadDeadline("original observation validation deadline exceeded")
 
-    def guard(self):
+    def guard(self, deadline_ns=None):
         self.bounds()
-        state = self.read_state()
-        if not self.pending_command:
-            self.ownership(state)
-        self.observations()
+        until = min(self.deadline, self.stage_deadline, deadline_ns if deadline_ns is not None else self.deadline)
+        started, phase = time.perf_counter_ns(), "session/simulator state"
+        try:
+            state = self.read_state(deadline_ns=until)
+            phase = "command ownership"
+            if not self.pending_command:
+                self.ownership(state, until)
+            phase = "observation validation"
+            self.observations(until)
+        except BaseException as error:
+            try:
+                self.artifacts.event({"type": "guard_failure", "phase": phase, "startedNs": started,
+                    "finishedNs": time.perf_counter_ns(), "deadlineNs": until, "error": str(error)})
+            except BaseException as diagnostic_error:
+                self.diagnostic_failure = str(diagnostic_error)
+            raise
         return state
 
     def pause_until(self, until):
@@ -456,10 +608,14 @@ class ReloadStimulus:
         until = min(self.deadline, self.stage_deadline, time.perf_counter_ns() + timeout)
         used = set()
         while time.perf_counter_ns() < until:
-            self.guard()
+            try:
+                self.guard(deadline_ns=until)
+            except ReadDeadline:
+                self.observation_incomplete = True
+                raise
             if time.perf_counter_ns() >= until:
                 self.observation_incomplete = True
-                raise Refusal("original fresh boundary deadline consumed by observation")
+                raise Refusal("original fresh boundary deadline consumed by guard")
             for item in reversed(self.observed):
                 snapshot = item["snapshot"]
                 key = integer(snapshot["nonce"])
@@ -502,10 +658,10 @@ class ReloadStimulus:
                     self.artifacts.event({"type": "boundary_pending", "id": boundary["id"], "nonce": snapshot["nonce"],
                                           "reason": str(pending), "deadlineNs": until})
                     continue
-                self.boundaries[boundary["id"]] = summary
-                self.artifacts.event({"type": "fresh_stimulus_boundary", "id": boundary["id"], "summary": summary})
                 require(time.perf_counter_ns() < min(until, self.geometry.source_deadline(snapshot, self.args.family)),
                         "boundary validation consumed original deadline")
+                self.boundaries[boundary["id"]] = summary
+                self.artifacts.event({"type": "fresh_stimulus_boundary", "id": boundary["id"], "summary": summary})
                 return snapshot, now
             time.sleep(.001)
         self.observation_incomplete = True
@@ -522,8 +678,9 @@ class ReloadStimulus:
                 time.sleep(.001)
         else:
             self.pause_until(max(self.last_write + WRITE_GAP_NS, time.perf_counter_ns()))
-        before = self.read_state(cleanup)
-        self.ownership(before)
+        action_deadline = self.hard_deadline if cleanup else min(self.deadline, self.stage_deadline)
+        before = self.read_state(cleanup, action_deadline)
+        self.ownership(before, action_deadline)
         sentinel = "note root-stimulus-" + uuid.uuid4().hex
         batch = lines + [sentinel]
         require(len(" | ".join(batch).encode("ascii")) < 508, "acknowledgement text overflow")
@@ -547,6 +704,21 @@ class ReloadStimulus:
             # preserve the owner-file failure, never retry the failed action.
             self.sequence, self.sentinel, self.command_hash = previous_owner
             self.pending_command = False
+            raise
+        # Owner publication is required control I/O, unlike deferred diagnostics.
+        # It must not silently consume the source lease before command publication.
+        try:
+            require(time.perf_counter_ns() < action_deadline, "original prepublication deadline exceeded")
+            if not cleanup and self.first_sample_pending:
+                require(time.perf_counter_ns() < self.initial_mapping_deadline,
+                        "initial mapping expired during owner publication")
+        except BaseException as error:
+            self.sequence, self.sentinel, self.command_hash = previous_owner
+            self.pending_command = False
+            try:
+                self.save_owner(False)
+            except BaseException as owner_error:
+                raise Refusal(f"{error}; owner restoration failure: {owner_error}") from error
             raise
         transport.atomic(self.command_path, raw)
         if not cleanup:
@@ -713,11 +885,34 @@ class ReloadStimulus:
 
     def close(self):
         joined = self.observer is None or self.observer.close()
-        if joined and self.owner is not None:
-            if self.lock not in (None, wintypes.HANDLE(-1).value):
-                self.owner.api.CloseHandle(self.lock)
-                self.lock = None
-            self.owner.close()
+        try:
+            if getattr(self, "artifacts", None) is not None:
+                # No further action is permitted. Preserve queued evidence even
+                # after a prior refusal; otherwise retain final identity failures.
+                prior_failure = self.observation_failure
+                if not joined:
+                    self.observation_incomplete = True
+                try:
+                    if self.observation_failure is None:
+                        self.observations()
+                    else:
+                        self._observations(diagnostic_only=True)
+                    if not joined:
+                        self.artifacts.event({"type": "observation_gap", "reason": "observer shutdown incomplete",
+                                              "atNs": time.perf_counter_ns()})
+                except Exception as error:
+                    if prior_failure is not None or self.observation_failure is None:
+                        self.diagnostic_failure = str(error)
+                if self.observer is not None and self.observer.fatal is not None:
+                    self.observation_incomplete = True
+                    if self.observation_failure is None:
+                        self.observation_failure = "native observer ownership/read failure: " + self.observer.fatal
+        finally:
+            if joined and self.owner is not None:
+                if self.lock not in (None, wintypes.HANDLE(-1).value):
+                    self.owner.api.CloseHandle(self.lock)
+                    self.lock = None
+                self.owner.close()
         # A still-returning observer retains the OS lock until process exit;
         # a subsequent driver cannot overlap its final read/request publication.
         return joined
@@ -767,11 +962,33 @@ def main(argv=None):
                 if not result["observerStopped"]:
                     code = 2
                     result["status"] = "observer_shutdown_incomplete"
-                if getattr(driver, "artifacts", None):
-                    driver.artifacts.save("result.json", result, final=True)
             except Exception as error:
                 result["closeError"] = str(error)
                 code = 2
+            if getattr(driver, "artifacts", None):
+                result.update(observationIncomplete=driver.observation_incomplete,
+                              observationFailure=driver.observation_failure,
+                              diagnosticFailure=driver.diagnostic_failure)
+                if driver.observation_failure is not None:
+                    result.setdefault("error", driver.observation_failure)
+                    code = 2
+                if driver.diagnostic_failure is not None:
+                    result.setdefault("error", driver.diagnostic_failure)
+                    code = 2
+                flush_started = time.perf_counter_ns()
+                try:
+                    driver.artifacts.flush()
+                except Exception as error:
+                    result["archiveError"] = str(error)
+                    code = 2
+                result["archiveDurationNs"] = time.perf_counter_ns() - flush_started
+                if code != 0 and result["status"] == "ordinary_stimulus_completed":
+                    result["status"] = "refused"
+                try:
+                    driver.artifacts.save("result.json", result, final=True)
+                except Exception as error:
+                    result["resultWriteError"] = str(error)
+                    code = 2
     print(json.dumps(result, separators=(",", ":"), allow_nan=False))
     return code
 

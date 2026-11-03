@@ -52,7 +52,7 @@ struct Fixture {
     std::size_t nativeTick=0;
     unsigned nativePublications=0,delayedRenders=0,repeatedRenders=0;
     std::uint64_t firstRepeatedSource=0;
-    bool delayedRender=false,repeatRender=false,mutateNativeObserved=false,missingCurrentView=false;
+    bool delayedRender=false,repeatRender=false,mutateNativeObserved=false,missingCurrentView=false,missingPacketNative=false;
     // Selected-mesh observation can stop while controller/native clocks run.
     // A retained publication keeps its original sequence and deadline.
     bool publishSelected=true;
@@ -85,7 +85,8 @@ struct Fixture {
             return !f.refuse&&f.backend.Submit(s,f.now+1);},
         [](void* p,std::uint64_t life,std::uint64_t id)noexcept{return static_cast<Fixture*>(p)->backend.Receipt(life,id);},
         [](void* p,const ReloadStateOwner& o,std::int64_t observed,std::int64_t now)noexcept{
-            auto& f=*static_cast<Fixture*>(p);++f.nativeReadAts;return f.NativeRead(f.backend.ReadAt(o,observed,now));},
+            auto& f=*static_cast<Fixture*>(p);++f.nativeReadAts;
+            return f.missingPacketNative?std::optional<FeedEquipmentNativeView>{}:f.NativeRead(f.backend.ReadAt(o,observed,now));},
         [](void* p,const FeedEquipmentSubmission& s,bool noEntryOnly)noexcept{auto& f=*static_cast<Fixture*>(p);
             if(!noEntryOnly){++f.submits;f.submitted=s;}
             return f.backend.SubmitResult(s,f.now+1,noEntryOnly||f.refuse);},
@@ -1425,12 +1426,12 @@ int EveryEnrolledFeedCompletesAcrossGameplayPublicationLoss(){
         FeedPhysicalOperation::AttachContainer,FeedPhysicalOperation::SeatFeed,FeedPhysicalOperation::CloseCover};
     constexpr std::array interruptionNames{"observer","render","selected","tracking","focus","release","deadline",
         "selected-contradiction","native-contradiction","ownership","weapon"};
-    std::array<bool,interruptions.size()> tracedFailure{};
+    std::array<bool,2*interruptions.size()> tracedFailure{};
     unsigned configurations=0,completed=0,cycles=0,failed=0,receipts=0;
     for(const auto& registration:RegisteredBc2FeedProfiles()){
         ++configurations;
-        for(const auto interruption:interruptions){
-            const auto shape=unsigned(interruption);
+        for(bool missingPacketNative:{false,true})for(const auto interruption:interruptions){
+            const auto shape=unsigned(interruption)+unsigned(missingPacketNative)*unsigned(interruptions.size());
             Fixture f(&registration);f.captureCadenceTrace=!tracedFailure[shape];
             const char* failureStage="open cover";
             auto failureOperation=FeedPhysicalOperation::OpenCover;
@@ -1474,7 +1475,7 @@ int EveryEnrolledFeedCompletesAcrossGameplayPublicationLoss(){
                 const auto selectedSequence=f.selected->sequence;
                 const auto selectedObserved=f.selected->observedNs,selectedDeadline=f.selected->deadlineNs;
                 CHECK(f.result.presentation&&f.result.presentation->lifetime==lifetime&&f.submits==1);
-                f.publishSelected=false;f.nativeCadence={0};
+                f.publishSelected=false;f.nativeCadence={0};f.missingPacketNative=missingPacketNative;
                 f.reloadOwnerLoss=ReloadOwnerLoss::PresentationUnavailable;
                 f.reloadOwnerLossOrigin=ReloadOwnerLossOrigin::Observation;
                 const bool continuous=interruption==Interruption::Observer||interruption==Interruption::Render||
@@ -1536,9 +1537,23 @@ int EveryEnrolledFeedCompletesAcrossGameplayPublicationLoss(){
                         // any recovery or mocked receipt can hide the failure.
                         CHECK(reached(claim&&claim->token==held->token&&f.result.ownsHand,"bounded publication retains actual claim"));
                         CHECK(f.backend.Read(f.sample.owner,f.sample.input.nowNs)==admittedNative);
-                        if(interruption!=Interruption::Observer){
+                        if(interruption!=Interruption::Observer||missingPacketNative){
                             CHECK(claim->inputSequence==held->inputSequence&&claim->deadlineNs==held->deadlineNs);
                             CHECK(!f.result.presentation&&!f.result.diagnostic.policyEvaluated);
+                            CHECK(!ReadBc2PhysicalFeedPresentation(f.sample.owner,f.sample.input.nowNs));
+                        }
+                        if(missingPacketNative){
+                            // Actual221/run04 had a valid selected/render packet
+                            // with no nested native view, despite a current gun
+                            // and independently fresh feed view. Replaying it
+                            // after readAt recovers must not backfill its proof.
+                            const auto readAts=f.nativeReadAts;
+                            f.missingPacketNative=false;f.Consume();f.missingPacketNative=true;
+                            const auto repeated=f.hands.Current(InteractionHand::Left);
+                            CHECK(f.nativeReadAts==readAts&&repeated&&repeated->token==held->token);
+                            CHECK(repeated->inputSequence==held->inputSequence&&repeated->deadlineNs==held->deadlineNs);
+                            CHECK(f.result.ownsHand&&!f.result.presentation&&!f.result.diagnostic.policyEvaluated);
+                            CHECK(f.submits==1&&!f.backend.Pending()&&f.native.counts==before);
                         }
                     }else CHECK(reached(!claim||claim->token!=held->token,"interruption cannot retain old authority"));
                 }
@@ -1551,7 +1566,7 @@ int EveryEnrolledFeedCompletesAcrossGameplayPublicationLoss(){
                     selectNative();
                 }
                 failureStage="recover fresh publication";
-                f.reloadOwnerLoss.reset();f.resetHandsOnOwnerLoss=false;f.publishSelected=true;f.nativeCadence={1};
+                f.reloadOwnerLoss.reset();f.resetHandsOnOwnerLoss=false;f.publishSelected=true;f.nativeCadence={1};f.missingPacketNative=false;
                 f.mutateNativeObserved=false;f.sample.input.focused=true;f.sample.input.tracked={true,true};
                 f.selected->weaponData=originalNative.config.weaponData;f.selected->owner=f.sample.owner;
                 f.sample.raw=heldRaw;f.sample.raw.owner=f.sample.owner;f.sample.raw.valid=true;f.sample.selectedRigVerified=true;
@@ -1575,7 +1590,7 @@ int EveryEnrolledFeedCompletesAcrossGameplayPublicationLoss(){
                 }
                 failureStage="detach after recovery";
                 CHECK(reached(reconcile(1)==0,"detach after recovery"));CHECK(f.native.counts==before);
-                const bool carriedGap=interruption==Interruption::Render;
+                const bool carriedGap=interruption==Interruption::Render||(missingPacketNative&&interruption==Interruption::Observer);
                 if(carriedGap){
                     failureStage="acquire carried supply";failureOperation=FeedPhysicalOperation::AttachContainer;
                     CHECK(f.PickSupply());const auto carry=f.hands.Current(InteractionHand::Left);
@@ -1583,11 +1598,14 @@ int EveryEnrolledFeedCompletesAcrossGameplayPublicationLoss(){
                     const auto carriedRaw=f.sample.raw;
                     const auto carriedSelection=f.sample.selected;CHECK(carriedSelection);
                     const auto carriedSelectedDeadline=carriedSelection->deadlineNs;
-                    f.publishSelected=false;f.nativeCadence={0};f.reloadOwnerLoss=ReloadOwnerLoss::PresentationUnavailable;
+                    f.publishSelected=false;f.nativeCadence={0};f.missingPacketNative=missingPacketNative;
+                    f.reloadOwnerLoss=ReloadOwnerLoss::PresentationUnavailable;
                     f.reloadOwnerLossOrigin=ReloadOwnerLossOrigin::Observation;
                     failureStage="carried supply retains original evidence and leases";
                     for(unsigned packet=0;packet<2;++packet){
-                        f.PrepareTick(f.lastWrist,true);f.sample.raw.valid=false;f.sample.selectedRigVerified=false;f.Consume();
+                        f.PrepareTick(f.lastWrist,true);
+                        if(interruption==Interruption::Render){f.sample.raw.valid=false;f.sample.selectedRigVerified=false;}
+                        f.Consume();
                         const auto retained=f.hands.Current(InteractionHand::Left);
                         CHECK(reached(retained&&retained->token==carry->token&&f.result.ownsHand,"carried supply survives bounded render gap"));
                         CHECK(retained->inputSequence==carry->inputSequence&&retained->deadlineNs==carry->deadlineNs);
@@ -1595,7 +1613,7 @@ int EveryEnrolledFeedCompletesAcrossGameplayPublicationLoss(){
                         CHECK(!f.result.presentation&&!f.result.pending&&!f.backend.Pending()&&f.submits==2&&f.native.counts==before);
                     }
                     failureStage="recover carried supply";
-                    f.reloadOwnerLoss.reset();f.publishSelected=true;f.nativeCadence={1};
+                    f.reloadOwnerLoss.reset();f.publishSelected=true;f.nativeCadence={1};f.missingPacketNative=false;
                     f.sample.raw=carriedRaw;f.sample.raw.valid=true;f.sample.selectedRigVerified=true;f.Tick(f.lastWrist,true);
                     const auto resumed=f.hands.Current(InteractionHand::Left);CHECK(resumed&&resumed->token==carry->token);
                     CHECK(f.sample.selected!=carriedSelection&&carriedSelection->deadlineNs==carriedSelectedDeadline);
@@ -1630,8 +1648,8 @@ int EveryEnrolledFeedCompletesAcrossGameplayPublicationLoss(){
             if(result==0)++cycles;
             else{
                 ++failed;
-                std::fprintf(stderr,"Gameplay feed recovery: profile=%llu interruption=%u(%s) stage=%s result=FAIL offline_mocked_receipts=%u\n",
-                    static_cast<unsigned long long>(registration.key),shape,interruptionNames[shape],failureStage,caseReceipts);
+                std::fprintf(stderr,"Gameplay feed recovery: profile=%llu interruption=%u(%s) missingPacketNative=%d stage=%s result=FAIL offline_mocked_receipts=%u\n",
+                    static_cast<unsigned long long>(registration.key),shape,interruptionNames[unsigned(interruption)],missingPacketNative,failureStage,caseReceipts);
                 if(!tracedFailure[shape]){
                     f.PrintCadenceFailure(shape,failureOperation);tracedFailure[shape]=true;
                 }
@@ -1639,9 +1657,9 @@ int EveryEnrolledFeedCompletesAcrossGameplayPublicationLoss(){
         }
     }
     std::printf("Gameplay feed boundary: %u profiles, cases complete=%u/%u pass=%u fail=%u, %u recovered full cycles, %u offline mocked adapter receipts\n",
-        configurations,completed,configurations*unsigned(interruptions.size()),cycles,failed,cycles,receipts);
-    CHECK(completed==configurations*interruptions.size()&&completed==cycles+failed&&failed==0);
-    CHECK(configurations==24&&cycles==configurations*interruptions.size()&&receipts==cycles*5);return 0;
+        configurations,completed,configurations*2*unsigned(interruptions.size()),cycles,failed,cycles,receipts);
+    CHECK(completed==configurations*2*interruptions.size()&&completed==cycles+failed&&failed==0);
+    CHECK(configurations==24&&cycles==configurations*2*interruptions.size()&&receipts==cycles*5);return 0;
 }
 int ChestPreparationSurvivesNeutralJitterButNotContactLoss(){
     for(bool loseContact:{false,true}){
@@ -2082,6 +2100,52 @@ int FailedGatePublicationRetainsOnlyOriginalMissingViewLeases(){
         CHECK(f.submits==1&&!f.submitted&&f.native.counts==counts);
         f.Tick(wrist,true);
         CHECK(!f.result.ownsHand&&!f.hands.Current(InteractionHand::Left)&&!f.result.presentation&&f.submits==1);
+    }
+    return 0;
+}
+int MissingPacketNativeRetainsOnlyOriginalEvidenceLeases(){
+    // Input, native and selection proofs keep independent original deadlines.
+    // A newer current feed view cannot substitute for any of those proofs.
+    for(const auto& registration:RegisteredBc2FeedProfiles())for(unsigned expiresFirst=0;expiresFirst<3;++expiresFirst){
+        Fixture f(&registration);CHECK(f.OpenCover()&&f.Reconcile());f.submitted.reset();
+        const auto motion=BuildBc2FeedMotionFromRetainedPose(registration.geometry,FeedPhysicalOperation::DetachContainer,
+            registration.interactionPolicy,registration.geometry.poses[unsigned(Bc2FeedPoseId::Resting)]);
+        CHECK(motion);const auto wrist=feed_interaction_detail::Multiply(motion->placement.sourceFromGrip,motion->placement.weaponFromSource);
+        f.Tick(wrist,false);f.Tick(wrist,false);
+        f.PrepareTick(wrist,true,false,expiresFirst==0?30*Ms:100*Ms);
+        if(expiresFirst==2){
+            f.selected=std::make_shared<SelectedMeshesSnapshot>(*f.selected);
+            f.selected->deadlineNs=f.now+30*Ms;f.sample.selected=f.selected;
+        }
+        f.Consume();CHECK(f.result.ownsHand&&f.result.interactionStatus==FeedInteractionStatus::Acquired);
+        const auto held=f.hands.Current(InteractionHand::Left);CHECK(held);
+        const auto admitted=f.backend.ReadAt(f.sample.owner,f.sample.input.observedNs,f.sample.input.nowNs);CHECK(admitted);
+        const auto selection=f.sample.selected;CHECK(selection);
+        const auto expires=(std::min)({held->deadlineNs,admitted->deadlineNs,selection->deadlineNs});
+        CHECK(expires==(expiresFirst==0?held->deadlineNs:expiresFirst==1?admitted->deadlineNs:selection->deadlineNs));
+        const auto counts=f.native.counts;
+        f.publishSelected=false;f.missingPacketNative=true;f.now=expires-10*Ms-2;
+        f.PrepareTick(wrist,true);f.Consume();
+        CHECK(f.sample.input.nowNs==expires-1&&f.sample.raw.valid&&f.sample.selected==selection);
+        const auto current=f.backend.Read(f.sample.owner,f.sample.input.nowNs);CHECK(current&&current->sequence>admitted->sequence);
+        CHECK(FeedEquipmentSameItem(*admitted,*current)&&current->counts==counts);
+        const auto retained=f.hands.Current(InteractionHand::Left);CHECK(retained&&retained->token==held->token);
+        CHECK(retained->inputSequence==held->inputSequence&&retained->deadlineNs==held->deadlineNs);
+        CHECK(f.result.ownsHand&&!f.result.presentation&&!f.result.diagnostic.policyEvaluated);
+        CHECK(f.submits==1&&!f.submitted&&!f.result.pending&&!f.backend.Pending()&&f.native.counts==counts);
+        CHECK(!ReadBc2PhysicalFeedPresentation(f.sample.owner,f.sample.input.nowNs));
+        // Recovery of the readAt API cannot rewrite this already cached packet.
+        const auto readAts=f.nativeReadAts;f.missingPacketNative=false;f.Consume();
+        CHECK(f.nativeReadAts==readAts&&f.result.ownsHand&&!f.result.diagnostic.policyEvaluated&&!f.result.presentation);
+        CHECK(f.hands.Current(InteractionHand::Left)->token==held->token);
+        f.sample.input.nowNs=expires;f.Consume();
+        CHECK(f.nativeReadAts==readAts&&!f.result.ownsHand&&!f.hands.Current(InteractionHand::Left));
+        CHECK(!f.result.presentation&&!f.result.diagnostic.policyEvaluated&&!f.result.pending&&!f.backend.Pending());
+        CHECK(f.submits==1&&!f.submitted&&f.native.counts==counts);
+        CHECK(f.backend.Read(f.sample.owner,expires)==current&&FeedEquipmentViewFresh(*current,expires));
+        CHECK(selection->deadlineNs==(expiresFirst==2?expires:admitted->deadlineNs));
+        f.publishSelected=true;f.Tick(wrist,true);
+        CHECK(f.submits==1&&!f.submitted&&!f.result.pending&&!f.backend.Pending()&&f.native.counts==counts);
     }
     return 0;
 }
@@ -2626,6 +2690,7 @@ int main(){
     CHECK(DelayedDetachWaitsForPairedNativeWithoutRenewingOwnership()==0);
     CHECK(MissingCurrentViewPreservesOnlyLiveDetachClaims()==0);
     CHECK(FailedGatePublicationRetainsOnlyOriginalMissingViewLeases()==0);
+    CHECK(MissingPacketNativeRetainsOnlyOriginalEvidenceLeases()==0);
     CHECK(BusyGatePreservesOnlyTheExistingHeldFeedGesture()==0);
     CHECK(GateDenialAndUntypedFailureStillInterruptHeldFeed()==0);
     CHECK(BusyGateCannotEnrollOrClearACompletedFeedBlocker()==0);

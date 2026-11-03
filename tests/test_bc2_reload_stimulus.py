@@ -34,19 +34,32 @@ class Clock:
     def perf_counter_ns(self):
         return self.now
 
+    def time_ns(self):
+        return 1_793_720_000_000_000_000 + self.now
+
     def sleep(self, seconds):
         self.now += int(seconds * m.NS)
 
 
-class Artifacts:
+class Artifacts(m.DeferredArtifacts):
     def __init__(self):
-        self.events, self.saved = [], {}
+        self.events, self.saved, self.persisted = [], {}, {}
+        sink = types.SimpleNamespace(directory=Path("offline-artifacts"),
+            save=lambda name, value, final=False: self.persisted.update({name: value}),
+            event=lambda value, cleanup=False: None)
+        super().__init__(sink)
 
     def event(self, event, cleanup=False):
+        super().event(event, cleanup)
         self.events.append(event)
 
     def save(self, name, value, final=False):
+        super().save(name, value, final)
         self.saved[name] = value
+
+    def snapshot(self, name, raw):
+        super().snapshot(name, raw)
+        self.saved[name] = raw
 
 
 def sample(at, phase, grip, x):
@@ -284,16 +297,19 @@ class StimulusTests(unittest.TestCase):
             driver.execute(value)
         self.assertNotIn("release", [s[0]["phase"] for s in driver.sent])
 
-    def test_delayed_stimulus_save_cannot_renew_initial_mapping(self):
+    def test_stimulus_serialization_waits_until_all_input_decisions_end(self):
         clock = Clock()
         driver = ScheduleDriver(clock)
         value = plan(clock)
         original_deadline = value["source"]["validUntilNs"]
-        driver.artifacts.save = lambda *args: clock.sleep(1)
-        with patch.object(m, "time", clock), self.assertRaisesRegex(m.Refusal, "initial mapping expired"):
+        driver.artifacts.sink.save = lambda *args: clock.sleep(1)
+        with patch.object(m, "time", clock):
             driver.execute(value)
+            self.assertLess(clock.now, original_deadline)
+            self.assertTrue(driver.sent)
+            driver.artifacts.flush()
+            self.assertGreater(clock.now, original_deadline)
         self.assertEqual(value["source"]["validUntilNs"], original_deadline)
-        self.assertEqual(driver.sent, [])
 
     def test_delayed_prepublication_state_read_cannot_publish_expired_mapping(self):
         clock = Clock()
@@ -301,7 +317,7 @@ class StimulusTests(unittest.TestCase):
         driver.first_sample_pending = True
         driver.initial_mapping_deadline = clock.now + 5_000_000
         driver.pause_until = lambda until: None
-        driver.read_state = lambda *args: clock.sleep(.010)
+        driver.read_state = lambda *args, **kwargs: clock.sleep(.010)
         driver.ownership, driver.save_owner = Mock(), Mock()
         driver.command_path = object()
         with patch.object(m, "time", clock), patch.object(m.transport, "atomic") as publish, \
@@ -381,6 +397,286 @@ class StimulusTests(unittest.TestCase):
         driver = self.observation_driver()
         driver.observations()
         self.assertEqual(driver.observed, [])
+
+    def queue_observations(self, driver, clock, count=8, lease_ns=100_000_000):
+        for index in range(count):
+            snapshot = dict(valid=True, nonce=str(index+1), observed_ns=clock.now,
+                validUntilNs=clock.now+lease_ns, input_evidence=dict(observedNs=clock.now))
+            driver.observer.inbox.put(dict(kind="snapshot", index=index, snapshot=snapshot,
+                raw=json.dumps(snapshot).encode(), requestNs=clock.now-10_000_000,
+                receivedNs=clock.now, ownershipCheckedNs=clock.now, requestOwned=True,
+                deadlineNs=clock.now+m.RECEIVE_NS))
+
+    def test_all_families_admit_fresh_queued_boundary_without_debug_serialization(self):
+        cases = (("feed", "DetachContainer", "feed_released"), ("pump", "PumpCycle", "pump_complete"),
+                 ("fixed", "Open", "fixed_complete"), ("sight", "SightFlip", "sight_selected"))
+        for family, stage, boundary_id in cases:
+            for prepare in (False, True):
+                with self.subTest(family=family, prepare=prepare):
+                    clock = Clock()
+                    with self.ack_driver(clock, archive_ns=m.NS) as h:
+                        d = h.driver
+                        d.args.family, d.args.stage, d.args.step_ms = family, stage, None
+                        d.boundaries, d.stimulus, d.profiles = {}, {}, {}
+                        d.last_commit = clock.now
+                        d.geometry.BoundaryPending = fixtures.g.BoundaryPending
+                        d.geometry.source_deadline = lambda s, f: s["validUntilNs"]
+                        d.geometry.same_mapping = lambda *a, **k: clock.sleep(.001)
+                        d.geometry.check_boundary = lambda *a, **k: dict(observed=True, nativeAcceptance=False)
+                        d.geometry.build_stimulus = lambda *a, **k: plan(clock)
+                        self.queue_observations(d, clock, lease_ns=20_000_000)
+                        before = clock.now
+                        with patch.object(m.gzip, "compress", side_effect=AssertionError("live compression")), \
+                                patch.object(m.transport, "json_bytes", wraps=m.transport.json_bytes) as serialize:
+                            if prepare:
+                                result = d.fresh(prepare=True)
+                            else:
+                                result = d.fresh(boundary=dict(id=boundary_id, timeoutNs=m.RECEIVE_NS))
+                            # The only JSON serialization is the fixture's session read.
+                            self.assertTrue(all(call.args[0].get("state") == "running" for call in serialize.call_args_list))
+                        self.assertEqual(result[0]["nonce"], "8")
+                        self.assertEqual(clock.now, before+8_000_000)
+                        self.assertEqual(d.artifacts.persisted, {})
+                        self.assertEqual(len(d.observed), 8)
+                        self.assertEqual(len(h.published), 0)
+                        d.artifacts.flush()
+                        self.assertGreater(clock.now, result[0]["validUntilNs"])
+                        self.assertEqual(len(d.artifacts.persisted), 8)
+
+    def test_slow_queued_validation_retains_all_raw_without_late_boundary_or_retry(self):
+        clock = Clock()
+        with self.ack_driver(clock) as h:
+            d = h.driver
+            d.boundaries, d.stimulus, d.profiles = {}, {}, {}
+            d.last_commit = clock.now
+            d.geometry.source_deadline = lambda s, f: s["validUntilNs"]
+            d.geometry.same_mapping = lambda *a, **k: clock.sleep(.3)
+            d.geometry.check_boundary = Mock()
+            self.queue_observations(d, clock)
+            with self.assertRaisesRegex(m.ReadDeadline, "original observation validation deadline"):
+                d.fresh(boundary=dict(id="feed_released", timeoutNs=m.RECEIVE_NS))
+            self.assertEqual(d.boundaries, {})
+            d.geometry.check_boundary.assert_not_called()
+            self.assertEqual(len(d.artifacts.saved), 8)
+            self.assertTrue(d.observation_incomplete)
+            self.assertTrue(d.observer.inbox.empty())
+            failure = next(e for e in d.artifacts.events if e["type"] == "guard_failure")
+            self.assertEqual(failure["phase"], "observation validation")
+            self.assertEqual(failure["deadlineNs"], 1_000_000_000+m.RECEIVE_NS)
+            with self.assertRaisesRegex(m.Refusal, "previous native observation failure"):
+                d.send(sample(0, "move", 1, .1))
+            self.assertEqual(h.published, [])
+            d.artifacts.flush()
+            self.assertEqual(len(d.artifacts.persisted), 8)
+
+    def test_boundary_deadline_reaches_state_and_ownership_reads_with_phase(self):
+        for phase in ("session/simulator state", "command ownership"):
+            with self.subTest(phase=phase):
+                clock = Clock()
+                with self.ack_driver(clock) as h:
+                    d = h.driver
+                    d.boundaries = {}
+                    if phase == "session/simulator state":
+                        h.session_read_ns = m.RECEIVE_NS
+                    else:
+                        def slow_hash(path, maximum, deadline):
+                            clock.now += m.RECEIVE_NS
+                            raise m.ReadDeadline("original acknowledgement/read deadline exceeded")
+                        original = m.deadline_bytes
+                        def read(path, maximum, deadline):
+                            return slow_hash(path, maximum, deadline) if path == d.command_path else original(path, maximum, deadline)
+                    with ExitStack() as patches:
+                        if phase == "command ownership":
+                            patches.enter_context(patch.object(m, "deadline_bytes", side_effect=read))
+                        with self.assertRaises(m.ReadDeadline):
+                            d.fresh(boundary=dict(id="feed_released", timeoutNs=m.RECEIVE_NS))
+                    self.assertTrue(d.observation_incomplete)
+                    self.assertFalse(d.unsafe_owner)
+                    self.assertEqual(d.boundaries, {})
+                    self.assertEqual(h.published, [])
+                    failure = next(e for e in d.artifacts.events if e["type"] == "guard_failure")
+                    self.assertEqual(failure["phase"], phase)
+                    self.assertEqual(failure["deadlineNs"], 1_000_000_000+m.RECEIVE_NS)
+
+    def test_observer_fatal_preserves_queued_raw_and_first_failure(self):
+        clock = Clock()
+        driver = self.observation_driver()
+        self.queue_observations(driver, clock)
+        driver.observer.fatal = "competing snapshot request writer"
+        driver.observer.terminal = dict(kind="gap", reason=driver.observer.fatal)
+        with self.assertRaisesRegex(m.Refusal, "competing snapshot request writer"):
+            driver.observations()
+        self.assertEqual(len(driver.artifacts.saved), 8)
+        self.assertEqual(driver.observed, [])
+        self.assertTrue(driver.observation_incomplete)
+        first = driver.observation_failure
+        with self.assertRaisesRegex(m.Refusal, "previous native observation failure"):
+            driver.observations()
+        self.assertEqual(driver.observation_failure, first)
+        self.assertEqual(sum(e["type"] == "observation_gap" for e in driver.artifacts.events), 1)
+
+    def test_journal_raw_metadata_and_record_limits_survive_deferred_flush(self):
+        for limit in ("raw", "metadata", "records"):
+            with self.subTest(limit=limit):
+                artifacts = Artifacts()
+                artifacts.event(dict(type="original_gap"))
+                if limit == "raw":
+                    artifacts.raw_bytes = 4*m.MAX_BYTES
+                    append = lambda: artifacts.snapshot("oversize.gz", b"x")
+                elif limit == "metadata":
+                    artifacts.metadata_bytes = m.MAX_BYTES
+                    append = lambda: artifacts.event(dict(type="overflow"))
+                else:
+                    artifacts.records += [("event", None, {}, False)] * (m.MAX_DIAGNOSTIC_RECORDS-1)
+                    append = lambda: artifacts.event(dict(type="overflow"))
+                with self.assertRaises(m.Refusal):
+                    append()
+                self.assertEqual(artifacts.events, [dict(type="original_gap")])
+                self.assertEqual(artifacts.persisted, {})
+
+    def test_flush_failure_keeps_first_error_and_continues_preserving_later_raw(self):
+        artifacts = Artifacts()
+        artifacts.snapshot("one.gz", b"first")
+        artifacts.snapshot("two.gz", b"second")
+        calls = []
+        def write(name, value, final=False):
+            calls.append(name)
+            if name == "one.gz":
+                raise OSError("original disk failure")
+            artifacts.persisted[name] = value
+        artifacts.sink.save = write
+        with self.assertRaisesRegex(m.Refusal, "original disk failure"):
+            artifacts.flush()
+        self.assertEqual(calls, ["one.gz", "two.gz"])
+        self.assertEqual(m.gzip.decompress(artifacts.persisted["two.gz"]), b"second")
+        artifacts.save("result.json", dict(error="original refusal"), final=True)
+        self.assertEqual(artifacts.persisted["result.json"]["error"], "original refusal")
+
+    def test_worker_late_or_foreign_request_read_retains_original_raw_and_clock(self):
+        for failure in ("late_read", "foreign_during_read", "foreign_between_requests", "foreign_response"):
+            with self.subTest(failure=failure):
+                clock = Clock()
+                worker = m.ObservationWorker.__new__(m.ObservationWorker)
+                worker.request = Mock()
+                worker.request.exists.return_value = False
+                worker.snapshot = Mock()
+                worker.snapshot.exists.side_effect = [False, True]
+                worker.inbox = queue.Queue(maxsize=8)
+                worker.fatal = worker.terminal = None
+                worker.hard_deadline = clock.now+10*m.NS
+                h = types.SimpleNamespace(stopped=False, raw=b"", publishes=[])
+                def wait(seconds):
+                    clock.sleep(seconds)
+                    h.raw = b"foreign request\n"
+                worker.stop_event = types.SimpleNamespace(is_set=lambda: h.stopped, wait=wait)
+                def publish(path, raw):
+                    self.assertIs(path, worker.request)
+                    h.raw = raw
+                    h.publishes.append(raw)
+                def read_json(path, maximum):
+                    snapshot = dict(valid=True, nonce=h.raw.decode().strip(), observed_ns=clock.now)
+                    if failure == "foreign_response":
+                        snapshot["nonce"] = str(int(snapshot["nonce"])+1)
+                    if failure == "late_read":
+                        clock.now += m.RECEIVE_NS
+                    if failure == "foreign_during_read":
+                        h.raw = b"foreign request\n"
+                    h.stopped = failure != "foreign_between_requests"
+                    return snapshot, json.dumps(snapshot).encode()
+                with patch.object(m, "time", clock), patch.object(m.transport, "atomic", side_effect=publish), \
+                        patch.object(m.transport, "read_bytes", side_effect=lambda *a: h.raw), \
+                        patch.object(m.transport, "read_json", side_effect=read_json):
+                    worker._run()
+                self.assertEqual(len(h.publishes), 1)
+                item = worker.inbox.get_nowait()
+                self.assertEqual(item["requestNs"], 1_000_000_000)
+                self.assertEqual(item["deadlineNs"], 1_000_000_000+m.RECEIVE_NS)
+                self.assertEqual(json.loads(item["raw"])["nonce"], item["snapshot"]["nonce"])
+                if failure == "late_read":
+                    self.assertGreaterEqual(item["receivedNs"], item["deadlineNs"])
+                    self.assertIsNone(worker.fatal)
+                else:
+                    self.assertIn("competing snapshot", worker.fatal)
+                    self.assertIsNotNone(worker.terminal)
+                    self.assertEqual(item["requestOwned"], failure != "foreign_during_read")
+                    self.assertEqual(item["responseOwned"], failure != "foreign_response")
+
+    def test_queued_or_receive_expiry_never_supplies_fresh_boundary(self):
+        for expiry in ("queued", "received"):
+            with self.subTest(expiry=expiry):
+                clock = Clock()
+                with self.ack_driver(clock) as h:
+                    d = h.driver
+                    d.boundaries, d.stimulus, d.profiles = {}, {}, {}
+                    d.last_commit = clock.now
+                    d.geometry.source_deadline = lambda s, f: s["validUntilNs"]
+                    d.geometry.check_boundary = Mock()
+                    self.queue_observations(d, clock, count=1, lease_ns=1_000_000)
+                    if expiry == "queued":
+                        clock.now += 2_000_000
+                    else:
+                        item = d.observer.inbox.get_nowait()
+                        item["receivedNs"] = item["deadlineNs"]
+                        d.observer.inbox.put_nowait(item)
+                    with self.assertRaisesRegex(m.Refusal, "fresh typed stimulus boundary absent"):
+                        d.fresh(boundary=dict(id="feed_released", timeoutNs=m.RECEIVE_NS))
+                    d.geometry.check_boundary.assert_not_called()
+                    self.assertEqual(d.boundaries, {})
+                    self.assertEqual(h.published, [])
+                    self.assertEqual(d.observed[0]["snapshot"]["observed_ns"], 1_000_000_000)
+                    self.assertEqual(len(d.artifacts.saved), 1)
+
+    def test_worker_inbox_limit_retains_explicit_unadmitted_record_diagnostic(self):
+        worker = m.ObservationWorker.__new__(m.ObservationWorker)
+        worker.inbox, worker.terminal = queue.Queue(maxsize=8), None
+        for index in range(8):
+            worker.emit(dict(kind="gap", nonce=index+1))
+        with self.assertRaisesRegex(m.Refusal, "bounded observation inbox exhausted"):
+            worker.emit(dict(kind="snapshot", index=8, snapshot=dict(nonce="9"), raw=b"raw"))
+        self.assertEqual(worker.inbox.qsize(), 8)
+        self.assertEqual(worker.terminal["nonce"], "9")
+        self.assertEqual(worker.terminal["unadmittedRawBytes"], 3)
+
+    def test_shutdown_drains_failed_queue_and_keeps_lock_if_worker_not_joined(self):
+        for joined in (False, True):
+            with self.subTest(joined=joined):
+                clock = Clock()
+                driver = self.observation_driver()
+                self.queue_observations(driver, clock)
+                driver.observer.close = Mock(return_value=joined)
+                driver.owner, driver.lock = Mock(), 7
+                driver.observation_failure = "original owner failure"
+                driver.geometry.same_mapping = Mock(side_effect=AssertionError("validation replay"))
+                self.assertEqual(driver.close(), joined)
+                self.assertEqual(driver.observation_failure, "original owner failure")
+                self.assertEqual(len(driver.artifacts.saved), 8)
+                self.assertTrue(driver.observer.inbox.empty())
+                driver.geometry.same_mapping.assert_not_called()
+                self.assertEqual(driver.owner.api.CloseHandle.call_count, int(joined))
+                self.assertEqual(driver.owner.close.call_count, int(joined))
+                self.assertEqual(driver.lock, None if joined else 7)
+
+    def test_source_lease_is_rechecked_after_required_owner_publication(self):
+        clock = Clock()
+        with self.ack_driver(clock) as h:
+            d = h.driver
+            d.first_sample_pending = True
+            d.initial_mapping_deadline = clock.now+10_000_000
+            original = d.sequence, d.sentinel, d.command_hash
+            save_owner = d.save_owner
+            def slow_owner(pending):
+                save_owner(pending)
+                if pending:
+                    clock.now += 20_000_000
+            d.save_owner = slow_owner
+            with self.assertRaisesRegex(m.Refusal, "initial mapping expired during owner publication"):
+                d.send(sample(0, "neutral", 0, .1))
+            self.assertEqual(h.published, [])
+            self.assertEqual((d.sequence, d.sentinel, d.command_hash), original)
+            self.assertEqual([row["pending"] for row in h.owners], [True, False])
+            self.assertFalse(d.pending_command)
+            self.assertIsNone(d.last_commit)
+            self.assertEqual(d.commands, 0)
 
     @contextmanager
     def ack_driver(self, clock, *, unready_polls=0, archive_ns=300_000_000, mapping_error=False):
@@ -465,11 +761,11 @@ class StimulusTests(unittest.TestCase):
             h.owners.append(dict(pending=pending, sequence=driver.sequence, sentinel=driver.sentinel,
                                  commandSha256=driver.command_hash, atNs=clock.now))
 
-        save = driver.artifacts.save
+        save = driver.artifacts.sink.save
         def archive(name, value, final=False):
             clock.now += archive_ns
             save(name, value, final)
-        driver.save_owner, driver.artifacts.save = save_owner, archive
+        driver.save_owner, driver.artifacts.sink.save = save_owner, archive
         with patch.object(m, "time", clock), patch.object(m, "sim_state", side_effect=read_state), \
                 patch.object(m.transport, "read_bytes", side_effect=read), \
                 patch.object(m.transport, "atomic", side_effect=publish):
@@ -481,6 +777,9 @@ class StimulusTests(unittest.TestCase):
                 clock = Clock()
                 with self.ack_driver(clock, unready_polls=unready_polls) as h:
                     h.driver.send(sample(0, "acquire", 1, .1))
+                    self.assertLess(clock.now, h.driver.last_write + m.ACK_NS)
+                    self.assertEqual(h.driver.artifacts.persisted, {})
+                    h.driver.artifacts.flush()
                 driver = h.driver
                 self.assertEqual(driver.last_commit, driver.last_write + 40_000_000)
                 self.assertGreater(clock.now, driver.last_write + m.ACK_NS)
@@ -593,12 +892,17 @@ class StimulusTests(unittest.TestCase):
             self.assertEqual(h.owners[-1]["sentinel"], driver.state["lastCmd"])
             self.assertEqual(h.owners[-1]["commandSha256"], m.transport.digest(h.published[-1]))
 
-    def test_post_ack_archival_cannot_extend_original_stage_deadline(self):
+    def test_deferred_archival_cannot_consume_or_extend_original_stage_deadline(self):
         clock = Clock()
         with self.ack_driver(clock) as h:
             h.driver.stage_deadline = clock.now + m.ACK_NS
+            h.driver.send(sample(0, "acquire", 1, .1))
+            self.assertLess(clock.now, h.driver.stage_deadline)
+            original = h.driver.stage_deadline
+            h.driver.artifacts.flush()
             with self.assertRaisesRegex(m.Refusal, "original stimulus/gesture deadline"):
-                h.driver.send(sample(0, "acquire", 1, .1))
+                h.driver.bounds()
+            self.assertEqual(h.driver.stage_deadline, original)
             self.assertEqual(h.driver.last_commit, h.driver.last_write + 40_000_000)
             self.assertFalse(h.driver.pending_command)
             self.assertTrue(h.driver.held_left)
@@ -660,7 +964,7 @@ class StimulusTests(unittest.TestCase):
         driver.geometry = types.SimpleNamespace(BoundaryPending=Pending, check_boundary=check,
             admit_boundary=lambda family, profiles, snapshot, now, stage, **kwargs: check(None, snapshot, stage, now),
             source_deadline=lambda snapshot, family: snapshot["deadlineNs"])
-        def guard():
+        def guard(deadline_ns=None):
             clock.now += advance
             index = len(driver.observed)
             snapshot = dict(valid=True, nonce=str(index+1), observed_ns=clock.now,
@@ -745,6 +1049,18 @@ class StimulusTests(unittest.TestCase):
             driver.fresh(boundary=dict(id="feed_acquired", timeoutNs=250_000_000))
         self.assertEqual(calls, ["2"])
 
+    def test_late_successful_validation_cannot_record_a_passed_boundary(self):
+        clock = Clock()
+        driver, _ = self.boundary_driver(clock, ["ready"])
+        def delayed_check(*args, **kwargs):
+            clock.sleep(.3)
+            return dict(observed=True, nativeAcceptance=False)
+        driver.geometry.check_boundary = delayed_check
+        with patch.object(m, "time", clock), self.assertRaisesRegex(m.Refusal, "boundary validation consumed original deadline"):
+            driver.fresh(boundary=dict(id="feed_acquired", timeoutNs=m.RECEIVE_NS))
+        self.assertEqual(driver.boundaries, {})
+        self.assertNotIn("fresh_stimulus_boundary", [event["type"] for event in driver.artifacts.events])
+
     def test_release_boundary_requires_input_after_ack_not_command_write(self):
         # Actual195: release was written before native held packet7078, but the
         # host acknowledged it only at frame7081. The later packet7085 released.
@@ -767,7 +1083,7 @@ class StimulusTests(unittest.TestCase):
                 if case == "held_after_ack":
                     held["input_evidence"]["observedNs"] = committed + 1
                 pending = iter(((held, 191321760000000), (released, 191321824000000)))
-                def guard():
+                def guard(deadline_ns=None):
                     snapshot, clock.now = next(pending)
                     driver.observed.append(dict(snapshot=snapshot, current=True))
                 driver.guard = guard

@@ -837,10 +837,19 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         const bool grip=s.grip||(!s.input.released[0]&&previous&&previous->grip);
         state.packets[state.nextPacket]={s.owner,s.input,s.weapon,source,grip,s.reloadPressed,s.bodyFromHand};state.nextPacket=(state.nextPacket+1)%state.packets.size();}
     if(view)for(auto& p:state.equipment)if(p&&State::SameResource(*p,*view)){e=p.get();break;}
+    State::Packet* source=nullptr;
+    for(auto& p:state.packets)if(p.owner==s.owner&&p.weapon==s.weapon&&SamePacket(p.input,s.raw.inputEvidence)&&
+        (!p.contact||p.contact->rig==s.raw.rig)){source=&p;break;}
+    // A renderer packet can exist while its original readAt publication was
+    // absent. Keep that absence immutable; a later current view cannot pair
+    // itself with older geometry or grant motion from this packet.
+    const bool missingSourceNative=source&&!source->native&&source->grip&&!source->input.released[0]&&
+        source->input.owner==s.input.owner&&source->input.sequence<=s.input.sequence&&
+        Window(source->input,now)&&hands.HasRecordedEvidence(source->input,InteractionHand::Left);
     // Observe the original short-circuit results only. Slot checks are separate
     // so a later empty/unrelated slot cannot erase the held slot's rejection.
     const auto retainEntry=[&](unsigned bit,bool pass){return observation?observation->retention.Check(bit,pass):pass;};
-    if(retainEntry(0,!view||!s.raw.valid||!s.selected)&&retainEntry(1,!s.cancel)&&retainEntry(2,s.grip)&&retainEntry(3,!s.input.released[0])&&
+    if(retainEntry(0,!view||!s.raw.valid||!s.selected||missingSourceNative)&&retainEntry(1,!s.cancel)&&retainEntry(2,s.grip)&&retainEntry(3,!s.input.released[0])&&
         retainEntry(4,Window(s.input,now))&&retainEntry(5,bool(s.equipment))){
         const auto right=hands.Current(InteractionHand::Right);
         const auto left=hands.Current(InteractionHand::Left);
@@ -889,7 +898,8 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
                 retain(17,bool(left))&&retain(18,left->token==*heldClaim)&&
                 retain(19,left->token.prerequisiteClaim==(heldSupply?0:right->token.id))&&
                 retain(20,bool(held))&&retain(21,bool(held->native))&&retain(22,heldSupply?bool(held->bodyFromHand):bool(held->contact))&&retain(23,held->grip)&&retain(24,held->input.owner==s.input.owner)&&
-                retain(25,held->input.sequence<=s.input.sequence)&&retain(26,left->inputSequence==held->input.sequence)&&
+                retain(25,held->input.sequence<=s.input.sequence&&(!missingSourceNative||held->input.sequence<=source->input.sequence))&&
+                retain(26,left->inputSequence==held->input.sequence)&&
                 retain(27,heldSupply?(left->deadlineNs==heldSupply->claim.deadlineNs&&left->deadlineNs<=held->input.deadlineNs&&left->deadlineNs>now):
                     left->deadlineNs==held->input.deadlineNs)&&retain(28,Window(held->input,now))&&
                 retain(29,hands.HasRecordedEvidence(held->input,InteractionHand::Left))&&
@@ -959,9 +969,6 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     const auto gunCheck=[&](unsigned bit,bool pass){return observation?observation->gun.Check(bit,pass):pass;};
     const bool gun=gunCheck(0,bool(right))&&gunCheck(1,right->token.owner==s.input.owner)&&gunCheck(2,right->token.item==s.weapon)&&
         gunCheck(3,right->token.kind==HandClaimKind::GunHold)&&gunCheck(4,!right->token.prerequisiteClaim)&&gunCheck(5,right->deadlineNs>now);
-    State::Packet* source=nullptr;
-    for(auto& p:state.packets)if(p.owner==s.owner&&p.weapon==s.weapon&&SamePacket(p.input,s.raw.inputEvidence)&&
-        (!p.contact||p.contact->rig==s.raw.rig)){source=&p;break;}
     if(observation){auto& a=*observation;a.decision.sourceLookedUp=true;a.decision.sourcePresent=bool(source);
         if(source){a.originalPacket=source->input;a.decision.sourceGrip=source->grip;}}
     if(source&&source->native){out.diagnostic.sourceNativeSequence=source->native->sequence;
