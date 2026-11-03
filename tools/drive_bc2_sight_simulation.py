@@ -180,57 +180,47 @@ class SightDriver(transport.Driver):
         if self.selection_hold_until is not None and self.transition_observation is None:
             require(now < self.selection_hold_until, "sight selection publication hold deadline exceeded")
 
-    def receive_snapshot(self):
-        # Only an acknowledged held detent pose can enter this observation-only
-        # recovery. A missing publication contains no owner/pose authority.
-        if (self.selection_wait_armed and self.held_left and self.sight_plan is not None
+    def defer_invalid_snapshot(self, snapshot, now):
+        # Consume the same matching response that the base transport validated
+        # and retained. A preliminary read followed by super().receive_snapshot
+        # can miss a publication replaced between those two reads.
+        # Eligibility is unchanged: only an acknowledged held detent pose may
+        # enter this observation-only hold. Invalid bytes grant no pose authority.
+        if not (self.selection_wait_armed and self.held_left and self.sight_plan is not None
                 and self.transition_observation is None and self.pending_nonce is not None
-                and self.snapshot_path.exists()):
-            require(transport.read_bytes(self.request_path, 22) == self.request_bytes,
-                    "snapshot request changed by another writer")
-            failure = self.snapshot_failure()
-            now = time.perf_counter_ns()
-            if now - self.last_request > transport.SNAPSHOT_TIMEOUT:
-                self.snapshot_timeout(now)
-            snapshot, raw = transport.read_json(self.snapshot_path, sight.frame.SNAPSHOT_LIMIT)
-            now = time.perf_counter_ns()
-            if now - self.last_request > transport.SNAPSHOT_TIMEOUT:
-                self.snapshot_timeout(now, (snapshot, raw))
-            if (failure is None and integer(snapshot["nonce"]) == self.pending_nonce
-                    and snapshot.get("valid") is False
-                    and snapshot.get("invalid_reason") == SELECTION_UNAVAILABLE):
-                self.artifacts.save(f"snapshot-{self.snapshot_index:03}.json", raw)
-                require(snapshot.get("schema") == "fvr.bc2.live-mechanism-snapshot.v1"
-                        and self.last_request <= integer(snapshot["observed_ns"]) <= now,
-                        "invalid sight selection publication identity/time")
-                state = self.read_state()
-                if not self.pending_command:
-                    self.ownership(state)
-                else:
-                    # The original send retains its acknowledgement deadline
-                    # and settles this already-published command after pump().
-                    require(transport.digest(transport.read_bytes(self.command_path, 4096)) == self.command_hash,
-                            "concurrent command writer")
-                    require((integer(state["cmdSeq"]), state["lastCmd"]) in (
-                        (self.sequence, self.sentinel),
-                        (integer(self.pending_before["cmdSeq"]), self.pending_before["lastCmd"])),
-                        "unexpected command sequence advancement")
-                require(integer(state["captureSeq"]) == self.capture_sequence, "unrequested capture occurred")
-                if self.selection_hold_until is None:
-                    self.selection_hold_until = min(self.stage_deadline, self.deadline,
-                        self.last_request + integer(self.sight_plan["policy"]["ackTimeoutNs"]),
-                        now + transport.SNAPSHOT_REFRESH_BUDGET)
-                self.bounds(time.perf_counter_ns())
-                require(self.selection_hold_requests < transport.MAX_SNAPSHOT_REFRESHES,
-                        "sight selection publication refresh request budget exhausted")
-                self.selection_hold_requests += 1
-                self.artifacts.event(dict(type="sight_selection_publication_hold", nonce=snapshot["nonce"],
-                    evaluatedNs=now, deadlineNs=self.selection_hold_until,
-                    refreshRequest=self.selection_hold_requests, lastCommandWrittenNs=self.last_write))
-                self.pending_nonce = None
-                self.request_snapshot()
-                return None
-        return super().receive_snapshot()
+                and snapshot.get("valid") is False
+                and snapshot.get("invalid_reason") == SELECTION_UNAVAILABLE):
+            return False
+        require(snapshot.get("schema") == "fvr.bc2.live-mechanism-snapshot.v1"
+                and self.last_request <= integer(snapshot["observed_ns"]) <= now,
+                "invalid sight selection publication identity/time")
+        state = self.read_state()
+        if not self.pending_command:
+            self.ownership(state)
+        else:
+            # The original send retains its acknowledgement deadline and settles
+            # this already-published command after pump(); no new pose is sent.
+            require(transport.digest(transport.read_bytes(self.command_path, 4096)) == self.command_hash,
+                    "concurrent command writer")
+            require((integer(state["cmdSeq"]), state["lastCmd"]) in (
+                (self.sequence, self.sentinel),
+                (integer(self.pending_before["cmdSeq"]), self.pending_before["lastCmd"])),
+                "unexpected command sequence advancement")
+        require(integer(state["captureSeq"]) == self.capture_sequence, "unrequested capture occurred")
+        if self.selection_hold_until is None:
+            self.selection_hold_until = min(self.stage_deadline, self.deadline,
+                self.last_request + integer(self.sight_plan["policy"]["ackTimeoutNs"]),
+                now + transport.SNAPSHOT_REFRESH_BUDGET)
+        self.bounds(time.perf_counter_ns())
+        require(self.selection_hold_requests < transport.MAX_SNAPSHOT_REFRESHES,
+                "sight selection publication refresh request budget exhausted")
+        self.selection_hold_requests += 1
+        self.artifacts.event(dict(type="sight_selection_publication_hold", nonce=snapshot["nonce"],
+            evaluatedNs=now, deadlineNs=self.selection_hold_until,
+            refreshRequest=self.selection_hold_requests, lastCommandWrittenNs=self.last_write))
+        self.pending_nonce = None
+        self.request_snapshot()
+        return True
 
     def accept_snapshot(self, snapshot, raw, now):
         if (self.selection_hold_until is not None

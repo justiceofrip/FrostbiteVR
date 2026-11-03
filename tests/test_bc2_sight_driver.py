@@ -6,6 +6,8 @@ The existing feed harness supplies in-memory files, simulator and QPC clock.
 import copy
 import gzip
 import importlib.util
+import json
+import os
 from pathlib import Path
 import random
 import tempfile
@@ -208,6 +210,140 @@ def first_detent_gap(testcase, recovery="target", different_endpoint=False, ack_
 
 
 class SightDriverTests(unittest.TestCase):
+    def test_selection_response_replaced_after_read_is_consumed_once_before_hold(self):
+        h = harness(self)
+        v = h.driver
+        admit_current(h)
+        v.selection_wait_armed = True
+        v.request_snapshot()
+        pending = v.pending_nonce
+        missing = dict(schema="fvr.bc2.live-mechanism-snapshot.v1", nonce=pending,
+                       valid=False, invalid_reason=s.SELECTION_UNAVAILABLE, observed_ns=h.now)
+        read, replaced, reads = h.read_json, False, 0
+
+        def replace_after_read(path, maximum):
+            nonlocal replaced, reads
+            value = read(path, maximum)
+            if path == v.snapshot_path:
+                reads += 1
+                if not replaced:
+                    replaced = True
+                    h.publish(missing)
+            return value
+
+        with patch.object(s.transport, "read_json", replace_after_read):
+            # First poll consumed the previous nonce. The old override reread
+            # here and the base rejected the newly published response without
+            # giving the sight hold a chance to examine those exact bytes.
+            self.assertIsNone(v.receive_snapshot())
+            self.assertEqual(reads, 1)
+            self.assertEqual(v.pending_nonce, pending)
+            self.assertEqual(v.selection_hold_requests, 0)
+            self.assertIsNone(v.receive_snapshot())
+        self.assertEqual(v.selection_hold_requests, 1)
+        self.assertEqual(v.artifacts.saved["snapshot-002.json"], s.transport.json_bytes(missing))
+        self.assertIsNone(v.transition_observation)
+        self.assertEqual(h.command_writes, [])
+        with patch.object(memory, "fixture", lambda now, nonce=1: (fixture(now, nonce)[0], transition(fixture(now, nonce)[1]))):
+            with self.assertRaises(s.SelectionObserved):
+                v.send(["hand l grip pose 0 0 0 0 0 0", "grip l 1"])
+        self.assertEqual(h.command_writes, [])
+        v.release_authorized = True
+        v.send(["grip l 0"])
+        self.assertEqual(len(h.command_writes), 1)
+        self.assertFalse(v.held_left)
+
+    def test_selection_recovery_rejects_wrong_item_configuration_physical_root_and_rig(self):
+        for section, key, value in (("equipment", "persistence", 999),
+                                    ("selected", "configurationPath", "unrelated"),
+                                    (None, "physical_equipment_generation", 999),
+                                    ("rig", "soldier", 999), ("rig", "pose", 0)):
+            with self.subTest(section=section, key=key):
+                h = harness(self)
+                v = h.driver
+                selection_unavailable(h)
+
+                def wrong_target(now, nonce=1):
+                    profiles, snapshot = fixture(now, nonce)
+                    snapshot = transition(snapshot)
+                    (snapshot if section is None else snapshot[section])[key] = value
+                    return profiles, snapshot
+
+                with patch.object(memory, "fixture", wrong_target), self.assertRaises((s.REFUSAL, s.sight.Refusal)):
+                    v.send(["grip l 1"])
+                self.assertEqual(h.command_writes, [])
+                self.assertIsNone(v.transition_observation)
+                self.assertEqual(v.release_after_failure(), "ordinary owned controller release acknowledged")
+                self.assertEqual(len(h.command_writes), 1)
+                self.assertFalse(v.held_left)
+
+    @unittest.skipUnless(os.environ.get("BC2_SIGHT_TRANSITION_REPLAY"), "optional retained actual312 response replay")
+    def test_actual312_069_to_070_interleaving_enters_existing_hold_without_motion(self):
+        # Exact retained bytes/clocks. This demonstrates response handling, not
+        # a uniquely recorded live interleaving or a future native target frame.
+        folder = Path(os.environ["BC2_SIGHT_TRANSITION_REPLAY"])
+        pins = {
+            "snapshot-069.json.gz": "6ef50d90092c0ee58f6667bde10a82be36b294a8dd4e597724a0941da2069e9c",
+            "snapshot-070.json.gz": "2f3aa7741999828e2ec53b7feb449cee3a5bdd3cc4b7d212b77b3743c398353a",
+            "sight-plan.json": "3b12c04abcc5c19e0c503c152832845aef85b877fc58dbc9072c67d9e98d5d95",
+            "events.jsonl": "2d9816474c20ac829136c7b20183acd29d4cff9b146655a615d696a6291f76d3",
+            "result.json": "f87f0ccb98fa25165b292fe64dd97aa83b5ff4ab3e6ed2ea560b055c3414a0da",
+            "request-070-timing.json": "f9fbc6d3e71599c7e1384ac1bdefb6387658266839531a801a1fe5139675a04f",
+        }
+        blobs = {name: (folder / name).read_bytes() for name in pins}
+        self.assertEqual({name: s.transport.digest(blob) for name, blob in blobs.items()}, pins)
+        old_raw, missing_raw = [gzip.decompress(blobs[name]) for name in ("snapshot-069.json.gz", "snapshot-070.json.gz")]
+        old, missing = json.loads(old_raw), json.loads(missing_raw)
+        plan, result, timing = [json.loads(blobs[name]) for name in ("sight-plan.json", "result.json", "request-070-timing.json")]
+        events = [json.loads(line) for line in blobs["events.jsonl"].splitlines()]
+        requests = [e for e in events if e["type"] == "command_request" and e["commands"][:-1] != ["grip l 0"]]
+        commits = [e for e in events if e["type"] == "command_commit" and not e["cleanup"]]
+        self.assertEqual(len(requests), len(commits))
+        self.assertEqual(len(commits), 72)
+        self.assertEqual([e["commands"][:-1] for e in requests], [r["commands"] for r in plan["schedule"][:72]])
+        self.assertEqual(plan["schedule"][70]["phase"], "move")
+        self.assertEqual(plan["schedule"][71]["phase"], "detent_dwell")
+        self.assertEqual(plan["schedule"][70]["commands"], plan["schedule"][71]["commands"])
+        self.assertLess(commits[70]["committedNs"], timing["requestStartedNs"])
+        self.assertLess(commits[71]["committedNs"], missing["observed_ns"])
+        h = harness(self)
+        v = h.driver
+        h.now = 270019557403300  # retained native publication completed, inside original250ms
+        h.state = copy.deepcopy(commits[-1]["state"])
+        v.initial_sim = copy.deepcopy(h.state)
+        v.reference = v.latest_snapshot = old
+        v.sight_plan, v.selection_wait_armed, v.held_left = plan, True, True
+        v.stage_deadline = result["plans"][0]["gestureDeadlineNs"]
+        v.deadline = result["plans"][0]["approachDeadlineNs"]
+        v.last_request, v.pending_nonce, v.snapshot_index = timing["requestStartedNs"], int(missing["nonce"]), 70
+        v.last_write, v.last_commit = commits[-1]["writtenNs"], commits[-1]["committedNs"]
+        v.sequence, v.sentinel, v.capture_sequence = h.state["cmdSeq"], h.state["lastCmd"], h.state["captureSeq"]
+        v.request_bytes = (str(v.pending_nonce) + "\n").encode()
+        h.files[v.request_path] = v.request_bytes
+        h.files[v.command_path] = ("\n".join(requests[-1]["commands"]) + "\n").encode()
+        v.command_hash = s.transport.digest(h.files[v.command_path])
+        h.json_files[v.snapshot_path], h.files[v.snapshot_path] = old, old_raw
+        read, replaced = h.read_json, False
+
+        def replace_after_read(path, maximum):
+            nonlocal replaced
+            value = read(path, maximum)
+            if path == v.snapshot_path and not replaced:
+                replaced = True
+                h.json_files[v.snapshot_path], h.files[v.snapshot_path] = missing, missing_raw
+            return value
+
+        with patch.object(s.transport, "read_json", replace_after_read):
+            self.assertIsNone(v.receive_snapshot())
+            self.assertEqual(v.selection_hold_requests, 0)
+            self.assertIsNone(v.receive_snapshot())
+        self.assertEqual(v.selection_hold_requests, 1)
+        self.assertEqual(v.artifacts.saved["snapshot-070.json"], missing_raw)
+        self.assertEqual(v.selection_hold_until, min(v.stage_deadline, v.deadline,
+            timing["requestStartedNs"] + plan["policy"]["ackTimeoutNs"], h.now + s.transport.SNAPSHOT_REFRESH_BUDGET))
+        self.assertEqual(h.command_writes, [])
+        self.assertIsNone(v.transition_observation)
+
     def test_slow_neutral_approach_does_not_consume_acquisition_budget_or_skip_commands(self):
         h, plan = stage_harness(self)
         v = h.driver

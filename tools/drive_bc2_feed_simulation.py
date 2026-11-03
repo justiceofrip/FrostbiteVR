@@ -664,6 +664,15 @@ class Driver:
         return min(integer(snapshot["valid_until_ns"]),
                    integer(snapshot["input_evidence"]["observedNs"]) + SNAPSHOT_PERIOD)
 
+    def defer_invalid_snapshot(self, snapshot, now):
+        """Optional observation-only hold of this exact consumed response.
+
+        The caller has checked writer, failure, nonce and original response
+        deadline, and retained its original bytes. Returning True cannot admit
+        the invalid frame; an adapter must explicitly request a fresh response.
+        """
+        return False
+
     def receive_snapshot(self):
         if self.pending_nonce is None:
             return None
@@ -699,6 +708,8 @@ class Driver:
         # Preserve every matching response, including expired and invalid ones.
         self.artifacts.save(f"snapshot-{self.snapshot_index:03}.json", raw)
         if snapshot.get("valid") is not True:
+            if self.defer_invalid_snapshot(snapshot, now):
+                return None
             raise REFUSAL("native snapshot refused: " + str(snapshot.get("invalid_reason")))
         if self.reference is not None:
             self.stable_snapshot(self.reference, snapshot)
