@@ -9,7 +9,7 @@ Private0.1.53/fallback52 is installed and setup-validated with settings preserve
 
 Actual269 demonstrates one complete QJU88 belt-fed reload in BC2 with emulated controllers: all five operations accepted, native ammunition conserved0/687->200/487, lid closed and firing unblocked. Both final rendered views agree; normal closure and exact restoration passed. Source/tool1917923 adds passive tracing; installed53/native binaries are unchanged. Other native variants, headset reliability, post-reload firing and the remaining weapon families are not established. [Complete-cycle evidence](../handoff/integrations/coordinator-20261103-feed269/README.txt).
 
-273 completes the shared test driver's acknowledged grip release after verified fixed Open/Close and PumpCycle boundaries, retaining pickup-to-insertion custody and original deadlines. All65 driver checks pass; no native change/build/install.274 prepares the complete underbarrel-family sequence; current native acceptance is still pending.
+273 completes the shared test driver's fixed/pump terminal grip release;65 checks pass. Actual274 selected the launcher natively, then its observer refused a temporary rig/selection publication gap before firing or reloading.276 arms the existing bounded hold at the already-acknowledged identical endpoint;42 sight checks pass. Normal closure/restoration passed.277 prepares the full fixed-family successor; installed53/native binaries are unchanged. [Sight correction](../handoff/integrations/coordinator-20261103-sight276/README.txt).
 
 Actual253 on52 completed Open/Detach/SupplyPickup/Attach; ammunition moved0/687->200/487. Seat acquisition failed when ordinary support took the hand before the delayed feed press.255 corrects that shared handoff; actual269 now completes Seat/Close on QJU88.
 
@@ -17,7 +17,7 @@ Actual259 on53 completed Open/Detach, then stopped before supply grip input: a f
 
 Actual264 completed OpenCover and acquired DetachContainer, then exhausted its250ms acknowledgement read deadline; the cause remains unresolved. All six owned processes closed normally and exact profiles/settings restored; evidence is archived with hashes preserved.267 adds deferred failure-only timing, with59 driver checks passing and no native change. Offline Windows32/32 sequences became visible but six state replacements failed with WinError5; an injected read denial preserved the original deadline. This is transport evidence, not full reload acceptance. [267 evidence](../handoff/integrations/coordinator-20261103-ack267/README.txt).
 
-Feedback100 graphics creation correction and compressed sight diagnostics remain in installed0.1.46. Actual101 joined production creation flags1->0 to the same native renderer device, rendered both menu/world eyes, completed the30s no-AV watch and normal retirement/close/restoration. This qualifies the creation contract in one actual-game episode, not crash causation, performance or headset stability. [Handoff100](../handoff/integrations/coordinator-20261102-feedback100/README.txt).
+Feedback100 graphics creation correction and compressed sight diagnostics remain in installed0.1.53. Actual101 joined production creation flags1->0 to the same native renderer device, rendered both menu/world eyes, completed the30s no-AV watch and normal retirement/close/restoration. This qualifies the creation contract in one actual-game episode, not crash causation, performance or headset stability. [Handoff100](../handoff/integrations/coordinator-20261102-feedback100/README.txt).
 
 Actual38 ordinary holstering reached Empty, drew QJU88 and opened its cover; container removal then lost its claim without an accepted operation. Actual37 XM8 launcher fired1/7->0/7 and visibly damaged a wall, but reload admission remains unresolved. Actual104 physical sight selection committed and a native shot joined HUD1/5->0/5; no new facade damage or projectile impact was established. Both104/106 closed normally with native retirement and exact profile/settings restoration. Underbarrel reloads, broader LMG coverage, destruction rendering, performance and headset acceptance remain open.
 
@@ -236,7 +236,7 @@ active work; physical grenade reloads, full body/MP/other Frostbite ports are la
 
 ## Public release and storage
 
-[Public0.1.15](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.15) remains unchanged with checkpoint434 binaries and experimental Steam diagnostics. Steam rendering/equipment support remains unverified. Private0.1.42 is installed locally for development, not published; public product commit13d7574bd682ae883a935a9adae52a59409b576f.
+[Public0.1.15](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.15) remains unchanged with checkpoint434 binaries and experimental Steam diagnostics. Steam rendering/equipment support remains unverified. Private0.1.53 is installed locally for development, not published; public product commit13d7574bd682ae883a935a9adae52a59409b576f.
 
 Use G: and process-local TEMP/TMP/TMPDIR. Player installs may use their selected
 drive. Keep40GiB allocated/15GiB free,3GiB normal-build reserve and512MiB raw/run.

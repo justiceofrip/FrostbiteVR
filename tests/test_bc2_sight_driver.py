@@ -167,6 +167,46 @@ def stage_harness(testcase, approach_samples=32, move_samples=4, ack_ms=80, sele
     return h, plan
 
 
+def first_detent_gap(testcase, recovery="target", different_endpoint=False, ack_ms=80, during_endpoint=False):
+    """Publish the actual274-shaped missing frame during the first dwell ack."""
+    h, plan = stage_harness(testcase, approach_samples=1, select_target=False)
+    v = h.driver
+    detent = next(i for i, row in enumerate(plan["schedule"]) if row["phase"] == "detent_dwell")
+    if different_endpoint:
+        plan["schedule"][detent]["commands"][0] = "hand l grip pose .01 0 0 0 0 0"
+    h.gap = None
+    gap_command = detent if not during_endpoint else detent - 1
+    observed = memory.fixture
+
+    def publish_during_dwell(path, raw, **options):
+        h.write(path, raw, **options)
+        if path == v.command_path and len(h.command_writes) == gap_command + 1:
+            h.command_due = h.now + ack_ms * MS
+            if v.pending_nonce is None:
+                v.request_snapshot()
+            h.response_due = h.now + MS
+
+    def response(now, nonce=1):
+        profiles, snapshot = observed(now, nonce)
+        if len(h.command_writes) == gap_command + 1 and h.gap is None:
+            h.gap = dict(now=now, pending=v.pending_command, armed=v.selection_wait_armed,
+                         writes=len(h.command_writes), stage_deadline=v.stage_deadline,
+                         driver_deadline=v.deadline, request=v.last_request)
+            return profiles, dict(schema=snapshot["schema"], nonce=nonce, observed_ns=now,
+                                  valid=False, invalid_reason=s.SELECTION_UNAVAILABLE)
+        if h.gap is not None and recovery != "source":
+            snapshot = transition(snapshot)
+            if recovery == "wrong_target":
+                snapshot["owner"]["weapon"] = 99
+            elif recovery == "wrong_actor":
+                snapshot["owner"]["actorGeneration"] = 99
+        return profiles, snapshot
+
+    testcase.enterContext(patch.object(s.transport, "atomic", publish_during_dwell))
+    testcase.enterContext(patch.object(memory, "fixture", response))
+    return h, plan
+
+
 class SightDriverTests(unittest.TestCase):
     def test_slow_neutral_approach_does_not_consume_acquisition_budget_or_skip_commands(self):
         h, plan = stage_harness(self)
@@ -210,6 +250,93 @@ class SightDriverTests(unittest.TestCase):
         self.assertTrue(v.plans[-1]["selectedTransitionObserved"])
         self.assertTrue(v.plans[-1]["ordinaryLeftReleaseAcknowledged"])
         self.assertFalse(v.held_left)
+
+    def test_acknowledged_endpoint_recovers_gap_during_first_dwell_ack(self):
+        h, plan = first_detent_gap(self)
+        v = h.driver
+        v.stage()
+        self.assertTrue(h.gap["pending"])
+        self.assertTrue(h.gap["armed"])
+        self.assertEqual(v.selection_hold_requests, 1)
+        self.assertEqual(len(h.command_writes), h.gap["writes"] + 1)
+        self.assertEqual(h.command_writes[-1][1].decode().splitlines()[:-1], ["grip l 0"])
+        commits = [e for e in v.artifacts.events if e["type"] == "command_commit"]
+        endpoint, dwell = commits[-3:-1]
+        self.assertLess(endpoint["committedNs"], h.gap["now"])
+        self.assertLess(h.gap["now"], dwell["committedNs"])
+        self.assertEqual(v.plans[-1]["gestureDeadlineNs"], h.gap["stage_deadline"])
+        self.assertEqual(v.deadline, h.gap["driver_deadline"])
+        self.assertEqual(v.selection_hold_until, min(h.gap["stage_deadline"], h.gap["driver_deadline"],
+            h.gap["request"] + plan["policy"]["ackTimeoutNs"],
+            h.gap["now"] + s.transport.SNAPSHOT_REFRESH_BUDGET))
+        self.assertTrue(v.plans[-1]["selectedTransitionObserved"])
+        self.assertFalse(v.held_left)
+
+    def test_different_endpoint_does_not_arm_before_first_dwell_ack(self):
+        h, _ = first_detent_gap(self, different_endpoint=True)
+        with self.assertRaisesRegex(s.REFUSAL, "native snapshot refused"):
+            h.driver.stage()
+        self.assertTrue(h.gap["pending"])
+        self.assertFalse(h.gap["armed"])
+        self.assertEqual(h.driver.selection_hold_requests, 0)
+        self.assertIsNone(h.driver.transition_observation)
+
+    def test_unacknowledged_endpoint_does_not_arm_selection_hold(self):
+        h, _ = first_detent_gap(self, during_endpoint=True)
+        with self.assertRaisesRegex(s.REFUSAL, "native snapshot refused"):
+            h.driver.stage()
+        self.assertTrue(h.gap["pending"])
+        self.assertFalse(h.gap["armed"])
+        self.assertEqual(h.driver.selection_hold_requests, 0)
+        self.assertIsNone(h.driver.transition_observation)
+
+    def assert_first_dwell_gap_rejects(self, recovery):
+        h, _ = first_detent_gap(self, recovery=recovery)
+        with self.assertRaises(s.REFUSAL):
+            h.driver.stage()
+        self.assertEqual(h.driver.selection_hold_requests, 1)
+        self.assertEqual(len(h.command_writes), h.gap["writes"])
+        self.assertIsNone(h.driver.transition_observation)
+
+    def test_first_dwell_gap_rejects_contradictory_target(self):
+        self.assert_first_dwell_gap_rejects("wrong_target")
+
+    def test_first_dwell_gap_rejects_contradictory_actor(self):
+        self.assert_first_dwell_gap_rejects("wrong_actor")
+
+    def test_first_dwell_gap_keeps_original_command_ack_deadline(self):
+        h, _ = first_detent_gap(self, ack_ms=250)
+        with self.assertRaisesRegex(s.REFUSAL, "acknowledgement/commit deadline"):
+            h.driver.stage()
+        self.assertEqual(h.driver.selection_hold_requests, 1)
+        self.assertEqual(len(h.command_writes), h.gap["writes"])
+        self.assertEqual(h.driver.stage_deadline, h.gap["stage_deadline"])
+
+    def test_first_dwell_gap_preserves_exclusive_command_ownership(self):
+        h, _ = first_detent_gap(self)
+
+        def interfere():
+            if h.gap is not None:
+                h.files[h.driver.command_path] = b"unowned replacement\n"
+
+        h.on_sleep = interfere
+        with self.assertRaisesRegex(s.REFUSAL, "concurrent command writer"):
+            h.driver.stage()
+        self.assertEqual(len(h.command_writes), h.gap["writes"])
+        self.assertIsNone(h.driver.transition_observation)
+        with self.assertRaisesRegex(s.REFUSAL, "pending command replaced; ordinary release ownership lost"):
+            h.driver.release_after_failure()
+        self.assertEqual(len(h.command_writes), h.gap["writes"])
+
+    def test_first_dwell_gap_never_resumes_motion_from_source_only_recovery(self):
+        h, _ = first_detent_gap(self, recovery="source")
+        with self.assertRaisesRegex(s.REFUSAL, "selection publication hold deadline"):
+            h.driver.stage()
+        self.assertEqual(len(h.command_writes), h.gap["writes"])
+        self.assertIsNone(h.driver.transition_observation)
+        self.assertEqual(h.driver.stage_deadline, h.gap["stage_deadline"])
+        self.assertEqual(h.driver.release_after_failure(), "ordinary owned controller release acknowledged")
+        self.assertFalse(h.driver.held_left)
 
     def test_neutral_approach_retains_global_watchdog(self):
         h, _ = stage_harness(self)

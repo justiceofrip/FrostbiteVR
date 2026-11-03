@@ -181,7 +181,7 @@ class SightDriver(transport.Driver):
             require(now < self.selection_hold_until, "sight selection publication hold deadline exceeded")
 
     def receive_snapshot(self):
-        # Only an acknowledged held detent can enter this observation-only
+        # Only an acknowledged held detent pose can enter this observation-only
         # recovery. A missing publication contains no owner/pose authority.
         if (self.selection_wait_armed and self.held_left and self.sight_plan is not None
                 and self.transition_observation is None and self.pending_nonce is not None
@@ -349,7 +349,7 @@ class SightDriver(transport.Driver):
                               gestureBudgetStartedNs=None, gestureDeadlineNs=None)
         self.monitor = True
         last_at = -1
-        for target in schedule:
+        for index, target in enumerate(schedule):
             at = integer(target["atNs"])
             require(last_at < at <= integer(plan["durationNs"]), "nonmonotonic sight trajectory")
             last_at = at
@@ -382,7 +382,16 @@ class SightDriver(transport.Driver):
                           source_deadline=source_deadline(snapshot) if target is schedule[0] else None)
             except SelectionObserved:
                 break
-            if target["phase"] in ("detent_dwell", "await_acknowledgement"):
+            following = schedule[index + 1] if index + 1 < len(schedule) else {}
+            # The final move already acknowledges the held endpoint that the
+            # first dwell repeats. Native selection can retire its source rig
+            # while that repeated command is awaiting acknowledgement. Arm the
+            # existing observation-only hold now; never arm an unacknowledged
+            # move or a different upcoming detent pose.
+            endpoint_held = (target["phase"] == "move" and following.get("phase") == "detent_dwell"
+                             and target["grip"] == following.get("grip") == 1
+                             and target["commands"] == following.get("commands"))
+            if target["phase"] in ("detent_dwell", "await_acknowledgement") or endpoint_held:
                 self.selection_wait_armed = True
             if target["phase"] == "await_acknowledgement":
                 self.await_transition(target["maximumWaitNs"])
