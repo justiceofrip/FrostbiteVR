@@ -487,15 +487,19 @@ class ReloadStimulus:
             require(integer(state["captureSeq"]) == self.capture_sequence, "unrequested capture")
         return state
 
-    def save_owner(self, pending):
-        publish_owner(self, transport.json_bytes({"host": self.host, "pending": pending, "sequence": self.sequence,
-            "sentinel": self.sentinel, "commandSha256": self.command_hash, "artifactDirectory": str(self.artifacts.directory)}))
+    def owner_bytes(self, pending):
+        return transport.json_bytes({"host": self.host, "pending": pending, "sequence": self.sequence,
+            "sentinel": self.sentinel, "commandSha256": self.command_hash, "artifactDirectory": str(self.artifacts.directory)})
 
-    def ownership(self, state, deadline_ns=None):
+    def save_owner(self, pending):
+        publish_owner(self, self.owner_bytes(pending))
+
+    def ownership(self, state, deadline_ns=None, expected=None):
+        sequence, sentinel, command_hash = expected or (self.sequence, self.sentinel, self.command_hash)
         try:
-            require(transport.digest(deadline_bytes(self.command_path, 4096, deadline_ns)) == self.command_hash,
+            require(transport.digest(deadline_bytes(self.command_path, 4096, deadline_ns)) == command_hash,
                     "command file replaced by another writer")
-            require(integer(state["cmdSeq"]) == self.sequence and state["lastCmd"] == self.sentinel,
+            require(integer(state["cmdSeq"]) == sequence and state["lastCmd"] == sentinel,
                     "command sequence/sentinel belongs to another writer")
         except ReadDeadline:
             raise
@@ -707,6 +711,9 @@ class ReloadStimulus:
         self.sequence, self.sentinel, self.command_hash = target, sentinel, transport.digest(raw)
         self.pending_command = True
         self.pending_batch, self.pending_before = batch, before
+        pending_owner = self.owner_bytes(True)
+        until = min(action_deadline, written + ACK_NS)
+        publication_deadline = min(until, self.initial_mapping_deadline) if not cleanup and self.first_sample_pending else until
         try:
             self.save_owner(True)
         except BaseException:
@@ -716,27 +723,44 @@ class ReloadStimulus:
             self.sequence, self.sentinel, self.command_hash = previous_owner
             self.pending_command = False
             raise
-        # Owner publication is required control I/O, unlike deferred diagnostics.
-        # It must not silently consume the source lease before command publication.
+        def validate_publication_owner():
+            if not cleanup:
+                self.bounds()
+            try:
+                require(deadline_bytes(self.run / "live-driver-owner.json", 8192, publication_deadline) == pending_owner,
+                        "command owner record replaced before publication")
+                self.ownership(self.read_state(cleanup, publication_deadline), publication_deadline, expected=previous_owner)
+            except ReadDeadline:
+                raise
+            except BaseException:
+                self.unsafe_owner = True
+                raise
         try:
+            # Required owner I/O and transient sharing consume the same
+            # original source/ACK budget as the eventual command publication.
             require(time.perf_counter_ns() < action_deadline, "original prepublication deadline exceeded")
             if not cleanup and self.first_sample_pending:
                 require(time.perf_counter_ns() < self.initial_mapping_deadline,
                         "initial mapping expired during owner publication")
+            transport.publish_command(self.command_path, raw, publication_deadline, validate_publication_owner)
         except BaseException as error:
             self.sequence, self.sentinel, self.command_hash = previous_owner
             self.pending_command = False
-            try:
-                self.save_owner(False)
-            except BaseException as owner_error:
-                raise Refusal(f"{error}; owner restoration failure: {owner_error}") from error
+            if not self.unsafe_owner:
+                try:
+                    require(deadline_bytes(self.run / "live-driver-owner.json", 8192, self.hard_deadline) == pending_owner,
+                            "unpublished owner record replaced")
+                    self.ownership(self.read_state(True, self.hard_deadline), self.hard_deadline)
+                    self.save_owner(False)
+                except BaseException as owner_error:
+                    self.unsafe_owner = True
+                    raise Refusal(f"{error}; unpublished owner restoration refused: {owner_error}") from error
             raise
-        transport.atomic(self.command_path, raw)
+        published = time.perf_counter_ns()
         if not cleanup:
             self.first_sample_pending = False
-        self.last_write = written
+        self.last_write = published
         self.commands += len(batch)
-        until = min(self.hard_deadline if cleanup else min(self.deadline, self.stage_deadline), written + ACK_NS)
         try:
             state, committed = self._wait_ack(batch, before, sample, cleanup, until)
         except BaseException as error:
@@ -755,7 +779,7 @@ class ReloadStimulus:
         if lines[:2] == LEFT_POSE_SETUP:
             self.pose_setup_established = True
         self.save_owner(False)
-        self.artifacts.event({"type": "command_commit", "writtenNs": written, "committedNs": self.last_commit,
+        self.artifacts.event({"type": "command_commit", "requestedNs": written, "writtenNs": published, "committedNs": self.last_commit,
             "sequence": self.sequence, "frame": state["frame"], "endFrames": state["endFrames"],
             "handL": state["handL"], "gripL": state["controls"]["gripL"], "cleanup": cleanup}, cleanup=cleanup)
         if not cleanup:

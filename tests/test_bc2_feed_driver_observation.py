@@ -1,11 +1,14 @@
 """Synthetic driver transport tests; no process, native, or headset evidence.
 
 Run: python -B -m unittest discover -s tests -p test_bc2_feed_driver_observation.py
-All filesystem, simulator, and clock effects are held in memory.
+Driver sessions, simulator and clocks are held in memory. Atomic replacement
+tests use temporary files with deterministic replace failures.
 """
 import copy
 import importlib.util
+import os
 from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -107,7 +110,11 @@ class Harness:
         self.json_files[self.driver.snapshot_path] = copy.deepcopy(snapshot)
         self.files[self.driver.snapshot_path] = d.json_bytes(snapshot)
 
-    def write(self, path, raw):
+    def write(self, path, raw, *, deadline_ns=None, validate=None):
+        if validate is not None:
+            self.driver_publication_deadline = deadline_ns
+            validate()
+            d.require(self.now < deadline_ns, "original command publication deadline exceeded")
         self.files[path] = raw
         if path == self.driver.request_path:
             self.response_due = None if self.response_after is None else self.now + self.response_after
@@ -139,6 +146,64 @@ class Harness:
 
 
 class FeedDriverObservationTests(unittest.TestCase):
+    def test_unpublished_failure_restores_previous_command_without_false_pending(self):
+        h = Harness(self)
+        v = h.driver
+        v.monitor = False
+        original = v.sequence, v.sentinel, v.command_hash
+        original_write, original_commands = v.last_write, v.commands
+        def fail_command(path, raw, **options):
+            if path == v.command_path:
+                options["validate"]()
+                raise OSError("unpublished transport failure")
+            h.write(path, raw, **options)
+        with patch.object(d, "atomic", side_effect=fail_command), self.assertRaisesRegex(OSError, "unpublished"):
+            v.send(["grip l 1"])
+        self.assertEqual((v.sequence, v.sentinel, v.command_hash), original)
+        self.assertEqual((v.last_write, v.commands), (original_write, original_commands))
+        self.assertFalse(v.pending_command)
+        self.assertFalse(v.unsafe_owner)
+        self.assertEqual(h.command_writes, [])
+        self.assertEqual(h.files[v.run / "live-driver-owner.json"], v.owner_bytes(False))
+        self.assertEqual(v.release_after_failure(), "ordinary owned controller release acknowledged")
+        self.assertEqual(len(h.command_writes), 1)
+        self.assertTrue(h.command_writes[0][1].startswith(b"grip l 0\n"))
+        self.assertFalse(v.held_left)
+
+    def test_prepublication_interference_does_not_restore_over_another_owner(self):
+        h = Harness(self)
+        v = h.driver
+        v.monitor = False
+        owner_path = v.run / "live-driver-owner.json"
+        def interfere(path, raw, **options):
+            if path == v.command_path:
+                h.files[owner_path] = b"different owner"
+                options["validate"]()
+                self.fail("changed owner must stop before replacement")
+            h.write(path, raw, **options)
+        with patch.object(d, "atomic", side_effect=interfere), self.assertRaisesRegex(d.REFUSAL, "owner record replaced"):
+            v.send(["grip l 1"])
+        self.assertEqual(h.files[owner_path], b"different owner")
+        self.assertTrue(v.unsafe_owner)
+        self.assertFalse(v.pending_command)
+        self.assertEqual(h.command_writes, [])
+
+    def test_publication_delay_consumes_original_ack_budget_and_updates_write_spacing(self):
+        h = Harness(self, ack_ms=220)
+        v = h.driver
+        v.monitor = False
+        requested = h.now
+        def delayed(path, raw, **options):
+            if path == v.command_path:
+                h.now += 40 * MS
+            h.write(path, raw, **options)
+        with patch.object(d, "atomic", side_effect=delayed), self.assertRaisesRegex(d.REFUSAL, "acknowledgement/commit deadline"):
+            v.send(["grip l 1"])
+        self.assertEqual(h.driver_publication_deadline, requested + 250 * MS)
+        self.assertEqual(v.last_write, requested + 40 * MS)
+        self.assertTrue(v.pending_command)
+        self.assertEqual(len(h.command_writes), 1)
+
     def test_expired_response_holds_pose_without_commands_then_fresh_resumes(self):
         h = Harness(self)
         v, original = h.driver, copy.deepcopy(h.driver.reference)
@@ -276,6 +341,117 @@ class FeedDriverObservationTests(unittest.TestCase):
                 else:
                     with self.assertRaisesRegex(d.REFUSAL, "acknowledgement/commit deadline"):
                         v.send(["grip l 1"])
+
+
+class AtomicCommandPublicationTests(unittest.TestCase):
+    @staticmethod
+    def denied(code):
+        error = PermissionError("controlled Windows replacement refusal")
+        error.winerror = code
+        return error
+
+    def test_transient_windows_refusal_reuses_one_temp_and_identical_batch(self):
+        for code in (5, 32, 33):
+            with self.subTest(code=code), tempfile.TemporaryDirectory() as folder:
+                target = Path(folder) / "command.txt"
+                target.write_bytes(b"previous\n")
+                raw = b"grip l 1\nnote same-command-id\n"
+                now, attempts, guards = [NS], [], []
+                replace = os.replace
+                def attempt(source, destination):
+                    attempts.append((source, source.read_bytes(), destination.read_bytes()))
+                    if len(attempts) < 3:
+                        raise self.denied(code)
+                    replace(source, destination)
+                def sleep(seconds):
+                    now[0] += round(seconds * NS)
+                with patch.object(d.time, "perf_counter_ns", side_effect=lambda: now[0]), \
+                        patch.object(d.time, "sleep", side_effect=sleep), patch.object(d.os, "replace", side_effect=attempt):
+                    d.publish_command(target, raw, NS + 5 * MS, lambda: guards.append(now[0]))
+                self.assertEqual(target.read_bytes(), raw)
+                self.assertEqual(len(attempts), 3)
+                self.assertEqual(len({row[0] for row in attempts}), 1)
+                self.assertTrue(all(row[1:] == (raw, b"previous\n") for row in attempts))
+                self.assertEqual(guards, [NS, NS + MS, NS + 2 * MS])
+                self.assertEqual(list(Path(folder).iterdir()), [target])
+
+    def test_persistent_refusal_stops_at_original_deadline_without_publication(self):
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "command.txt"
+            target.write_bytes(b"previous")
+            now = [NS]
+            def sleep(seconds):
+                now[0] += round(seconds * NS)
+            with patch.object(d.time, "perf_counter_ns", side_effect=lambda: now[0]), \
+                    patch.object(d.time, "sleep", side_effect=sleep), \
+                    patch.object(d.os, "replace", side_effect=self.denied(5)) as replace, \
+                    self.assertRaisesRegex(d.REFUSAL, "original command publication deadline"):
+                d.publish_command(target, b"new", NS + 3 * MS, lambda: None)
+            self.assertEqual(now[0], NS + 3 * MS)
+            self.assertEqual(replace.call_count, 3)
+            self.assertEqual(target.read_bytes(), b"previous")
+            self.assertEqual(list(Path(folder).iterdir()), [target])
+
+    def test_nonsharing_error_is_not_retried(self):
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "command.txt"
+            target.write_bytes(b"previous")
+            with patch.object(d.time, "perf_counter_ns", return_value=NS), \
+                    patch.object(d.time, "sleep") as sleep, \
+                    patch.object(d.os, "replace", side_effect=self.denied(87)) as replace, \
+                    self.assertRaises(OSError):
+                d.publish_command(target, b"new", NS + MS, lambda: None)
+            replace.assert_called_once()
+            sleep.assert_not_called()
+            self.assertEqual(target.read_bytes(), b"previous")
+
+    def test_changed_predecessor_between_attempts_stops_before_replace(self):
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "command.txt"
+            target.write_bytes(b"previous")
+            now, checks = [NS], []
+            def validate():
+                checks.append(now[0])
+                if len(checks) == 2:
+                    target.write_bytes(b"another writer")
+                d.require(target.read_bytes() == b"previous", "predecessor changed")
+            def sleep(seconds):
+                now[0] += round(seconds * NS)
+            with patch.object(d.time, "perf_counter_ns", side_effect=lambda: now[0]), \
+                    patch.object(d.time, "sleep", side_effect=sleep), \
+                    patch.object(d.os, "replace", side_effect=self.denied(5)) as replace, \
+                    self.assertRaisesRegex(d.REFUSAL, "predecessor changed"):
+                d.publish_command(target, b"new", NS + 5 * MS, validate)
+            replace.assert_called_once()
+            self.assertEqual(target.read_bytes(), b"another writer")
+
+    def test_guard_time_cannot_move_publication_past_its_original_deadline(self):
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "command.txt"
+            target.write_bytes(b"previous")
+            now = [NS]
+            def validate():
+                now[0] += 3 * MS
+            with patch.object(d.time, "perf_counter_ns", side_effect=lambda: now[0]), \
+                    patch.object(d.os, "replace") as replace, \
+                    self.assertRaisesRegex(d.REFUSAL, "original command publication deadline"):
+                d.publish_command(target, b"new", NS + 3 * MS, validate)
+            replace.assert_not_called()
+            self.assertEqual(target.read_bytes(), b"previous")
+
+    def test_successful_replace_is_never_retried_or_reclassified_unpublished(self):
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "command.txt"
+            target.write_bytes(b"previous")
+            now, replace = [NS], os.replace
+            def slow_success(source, destination):
+                replace(source, destination)
+                now[0] += 5 * MS
+            with patch.object(d.time, "perf_counter_ns", side_effect=lambda: now[0]), \
+                    patch.object(d.os, "replace", side_effect=slow_success) as call:
+                d.publish_command(target, b"new", NS + MS, lambda: None)
+            call.assert_called_once()
+            self.assertEqual(target.read_bytes(), b"new")
 
 
 if __name__ == "__main__":

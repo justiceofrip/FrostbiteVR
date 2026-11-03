@@ -17,6 +17,7 @@ d, NS = r.transport, r.NS
 class Artifacts:
     def __init__(self):
         self.events = []
+        self.directory = Path("memory-artifacts")
 
     def event(self, row, cleanup=False):
         self.events.append(copy.deepcopy(row))
@@ -40,6 +41,7 @@ class Harness:
         v.clicks, v.last_click_sample = 0, -1
         v.neutral_sample, v.next_click = None, 0
         v.run = Path("memory")
+        v.host = dict(pid=1, start_time="synthetic")
         v.command_path, v.ack_path = v.run / "command", v.run / "ack"
         v.command_hash = d.digest(b"initial\n")
         v.sequence, v.sentinel, v.capture_sequence = 0, "initial", 0
@@ -57,7 +59,6 @@ class Harness:
                           head={}, handL={}, handR={}, controls=controls)
         v.state = self.state
         v.read_state = lambda: copy.deepcopy(self.state)
-        v.save_owner = lambda pending: None
         v.tail = SimpleNamespace(read=self.native)
         self.files = {v.command_path: b"initial\n"}
         for name, fn in (("perf_counter_ns", lambda: self.now), ("sleep", self.sleep)):
@@ -73,7 +74,13 @@ class Harness:
                     world_calls=world, menu_connection=dict(ready=ready, input_samples=100 + elapsed * 30,
                     published=100 + elapsed * 20, graphics_failures=0))
 
-    def write(self, path, raw):
+    def write(self, path, raw, *, deadline_ns=None, validate=None):
+        # Keep real owner serialization and the real pre-publication guard;
+        # only replace the filesystem write and simulator acknowledgement.
+        if validate is not None:
+            d.require(self.now < deadline_ns, "original command publication deadline exceeded")
+            validate()
+            d.require(self.now < deadline_ns, "original command publication deadline exceeded")
         self.files[path] = raw
         if path == self.v.command_path:
             self.writes.append((self.now, raw.decode("ascii").splitlines()))

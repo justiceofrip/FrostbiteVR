@@ -130,19 +130,52 @@ def read_json(path, maximum=128 * 1024):
     return json.loads(data.decode("utf-8-sig"), parse_constant=invalid), data
 
 
-def atomic(path, data):
+def atomic(path, data, *, deadline_ns=None, validate=None):
     local_path(path)
     require(len(data) <= MAX_BYTES, "oversized atomic write")
     temporary = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
+    published = False
     try:
         with temporary.open("xb") as stream:
             stream.write(data)
             stream.flush()
         local_path(path)
-        os.replace(temporary, path)
+        if deadline_ns is None:
+            require(validate is None, "unbounded publication guard")
+            os.replace(temporary, path)
+        else:
+            require(callable(validate), "command publication requires its ownership guard")
+            for _ in range(1200):
+                require(time.perf_counter_ns() < deadline_ns, "original command publication deadline exceeded")
+                validate()
+                require(time.perf_counter_ns() < deadline_ns, "original command publication deadline exceeded")
+                try:
+                    os.replace(temporary, path)
+                    break
+                except OSError as error:
+                    if getattr(error, "winerror", None) not in (5, 32, 33):
+                        raise
+                    remaining = deadline_ns - time.perf_counter_ns()
+                    if remaining <= 0:
+                        raise REFUSAL("original command publication deadline exceeded") from error
+                    time.sleep(min(.001, remaining / NS))
+            else:
+                raise REFUSAL("bounded command publication iteration limit")
+        published = True
     finally:
-        if temporary.exists():
+        if not published and temporary.exists():
             temporary.unlink()
+
+
+def publish_command(path, data, deadline_ns, validate):
+    """Publish one unchanged batch; a refused replace has not sent input.
+
+    A Windows reader can temporarily deny replacement despite the simulator's
+    delete-sharing handle. Retry only that uncommitted filesystem operation,
+    within the caller's original budget and with ownership checked each time.
+    Never retry a successful replace or create a new command identity.
+    """
+    atomic(path, data, deadline_ns=deadline_ns, validate=validate)
 
 
 def check_pin(pin, maximum=128 * 1024 * 1024):
@@ -412,20 +445,24 @@ class Driver:
                 "simulator exceeded runner capture budget")
         return state
 
-    def ownership(self, state):
+    def ownership(self, state, expected=None):
+        sequence, sentinel, command_hash = expected or (self.sequence, self.sentinel, self.command_hash)
         try:
-            require(digest(read_bytes(self.command_path, 4096)) == self.command_hash,
+            require(digest(read_bytes(self.command_path, 4096)) == command_hash,
                     "command file replaced by another writer")
-            require(integer(state["cmdSeq"]) == self.sequence and state["lastCmd"] == self.sentinel,
+            require(integer(state["cmdSeq"]) == sequence and state["lastCmd"] == sentinel,
                     "command sequence/sentinel belongs to another writer")
         except BaseException:
             self.unsafe_owner = True
             raise
 
-    def save_owner(self, pending):
-        atomic(self.run / "live-driver-owner.json", json_bytes({"host": self.host,
+    def owner_bytes(self, pending):
+        return json_bytes({"host": self.host,
                "pending": pending, "sequence": self.sequence, "sentinel": self.sentinel,
-               "commandSha256": self.command_hash, "artifactDirectory": str(self.artifacts.directory)}))
+               "commandSha256": self.command_hash, "artifactDirectory": str(self.artifacts.directory)})
+
+    def save_owner(self, pending):
+        atomic(self.run / "live-driver-owner.json", self.owner_bytes(pending))
 
     def bounds(self, now):
         require(now < self.deadline, "ten-second driver deadline reached")
@@ -679,23 +716,63 @@ class Driver:
             self.bounds(written)
         self.artifacts.event({"type": "command_request", "atNs": written, "beforeSequence": self.sequence,
                               "targetSequence": target, "commands": batch}, cleanup=cleanup)
+        until = min(self.deadline, self.stage_deadline,
+                    written + (250_000_000 if self.motion_started is not None else NS))
+        if cleanup:
+            until = min(self.hard_deadline, written + 250_000_000)
+        publication_deadline = min(until, source_deadline) if source_deadline is not None else until
+        previous_owner = self.sequence, self.sentinel, self.command_hash
         self.sequence, self.sentinel, self.command_hash = target, sentinel, digest(raw)
         self.pending_command = True
         self.pending_batch, self.pending_before = batch, before
-        self.save_owner(True)
-        atomic(self.command_path, raw)
+        pending_owner = self.owner_bytes(True)
+        try:
+            self.save_owner(True)
+        except BaseException:
+            self.sequence, self.sentinel, self.command_hash = previous_owner
+            self.pending_command = False
+            raise
+        def validate_publication_owner():
+            if self.last_commit is not None and not cleanup:
+                self.bounds(time.perf_counter_ns())
+            try:
+                require(read_bytes(self.run / "live-driver-owner.json", 8192) == pending_owner,
+                        "command owner record replaced before publication")
+                current = self.read_state()
+                self.ownership(current, expected=previous_owner)
+                require(integer(current["captureSeq"]) == self.capture_sequence, "unrequested capture before publication")
+                if self.reference is not None and not cleanup:
+                    require(all(current[key] == self.initial_sim[key] for key in ("head", "handR")),
+                            "simulator head/right-hand basis changed before publication")
+            except BaseException:
+                self.unsafe_owner = True
+                raise
+        try:
+            publish_command(self.command_path, raw, publication_deadline, validate_publication_owner)
+        except BaseException as error:
+            # Atomic replacement never committed. No target sequence or held
+            # input is ours to settle; cleanup retains the prior exact command.
+            self.sequence, self.sentinel, self.command_hash = previous_owner
+            self.pending_command = False
+            if not self.unsafe_owner:
+                try:
+                    require(read_bytes(self.run / "live-driver-owner.json", 8192) == pending_owner,
+                            "unpublished owner record replaced")
+                    self.ownership(self.read_state())
+                    self.save_owner(False)
+                except BaseException as owner_error:
+                    self.unsafe_owner = True
+                    raise REFUSAL(f"{error}; unpublished owner restoration refused: {owner_error}") from error
+            raise
+        published = time.perf_counter_ns()
         if final_release:
             # Release may retire the feed presentation before xr-sim's commit
             # is observed. Only this successfully published final plan batch
             # stops command admission. Keep its pending snapshot/leases intact
             # for the read-only observer after the exact bounded acknowledgement.
             self.monitor = False
-        self.last_write = written
+        self.last_write = published
         self.commands += len(batch)
-        until = min(self.deadline, self.stage_deadline,
-                    written + (250_000_000 if self.motion_started is not None else NS))
-        if cleanup:
-            until = min(self.hard_deadline, written + 250_000_000)
         ack, settled = None, None
         for _ in range(1200):
             if not cleanup:
@@ -735,7 +812,7 @@ class Driver:
         self.capture_sequence = integer(settled["captureSeq"])
         self.state = settled
         self.save_owner(False)
-        self.artifacts.event({"type": "command_commit", "writtenNs": written, "committedNs": committed,
+        self.artifacts.event({"type": "command_commit", "requestedNs": written, "writtenNs": published, "committedNs": committed,
                               "ack": ack[1], "state": sim_summary(settled), "cleanup": cleanup}, cleanup=cleanup)
         self.remember_controls(lines)
         return settled

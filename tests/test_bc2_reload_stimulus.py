@@ -741,6 +741,7 @@ class StimulusTests(unittest.TestCase):
         driver.host = dict(pid=123)
         driver.link = dict(supervisor=dict(pid=456))
         driver.manifest = dict(source_sha256="offline", version="offline")
+        driver.run = Path("offline-stimulus-run")
         driver.folder = Path("offline-stimulus-session")
         driver.session_path, driver.state_path = driver.folder / "session.json", driver.folder / "state.json"
         driver.command_path = driver.folder / "command.txt"
@@ -766,11 +767,16 @@ class StimulusTests(unittest.TestCase):
         h = types.SimpleNamespace(driver=driver, published=[], owners=[], state_deadlines=[],
                                   command=b"note previous\n", ack=b"", ready_ns=0,
                                   state_read_ns=40_000_000, ack_read_ns=0, session_read_ns=0,
+                                  session_read_after_publication=False,
                                   unready_polls=unready_polls, state=state, previous=state,
                                   alter_state=lambda x: x, alter_ack=lambda x: x, alter_command=lambda x: x)
 
-        def publish(path, raw):
+        def publish(path, raw, *, deadline_ns=None, validate=None):
             self.assertEqual(path, driver.command_path)
+            if validate is not None:
+                h.publication_deadline = deadline_ns
+                validate()
+                m.require(clock.now < deadline_ns, "original command publication deadline exceeded")
             h.published.append(raw)
             h.command, h.previous = raw, h.state
             h.state = copy.deepcopy(h.state)
@@ -794,7 +800,7 @@ class StimulusTests(unittest.TestCase):
         def read_state(path, until):
             self.assertEqual(path, driver.state_path)
             h.state_deadlines.append(until)
-            if driver.pending_command:
+            if driver.pending_command and h.state["cmdSeq"] == driver.sequence:
                 if h.unready_polls:
                     h.unready_polls -= 1
                     return copy.deepcopy(h.previous)
@@ -803,15 +809,19 @@ class StimulusTests(unittest.TestCase):
 
         def read(path, maximum):
             if path == driver.command_path:
-                return h.alter_command(h.command) if driver.pending_command else h.command
+                return h.alter_command(h.command) if driver.pending_command and h.state["cmdSeq"] == driver.sequence else h.command
+            if path == driver.run / "live-driver-owner.json":
+                return h.owner_record
             if path == driver.ack_path:
                 clock.now += h.ack_read_ns
                 return h.alter_ack(h.ack)
             self.assertEqual(path, driver.session_path)
-            clock.now += h.session_read_ns
+            if not h.session_read_after_publication or h.published:
+                clock.now += h.session_read_ns
             return m.transport.json_bytes(session)
 
         def save_owner(pending):
+            h.owner_record = driver.owner_bytes(pending)
             h.owners.append(dict(pending=pending, sequence=driver.sequence, sentinel=driver.sentinel,
                                  commandSha256=driver.command_hash, atNs=clock.now))
 
@@ -824,6 +834,63 @@ class StimulusTests(unittest.TestCase):
                 patch.object(m.transport, "read_bytes", side_effect=read), \
                 patch.object(m.transport, "atomic", side_effect=publish):
             yield h
+
+    def test_unpublished_command_failure_restores_prior_owner_without_pending_ack(self):
+        clock = Clock()
+        with self.ack_driver(clock) as h:
+            driver = h.driver
+            previous = driver.sequence, driver.sentinel, driver.command_hash
+            def fail(path, raw, **options):
+                options["validate"]()
+                raise OSError("unpublished replacement failure")
+            with patch.object(m.transport, "atomic", side_effect=fail), self.assertRaisesRegex(OSError, "unpublished"):
+                driver.send(sample(0, "acquire", 1, .1))
+            self.assertEqual((driver.sequence, driver.sentinel, driver.command_hash), previous)
+            self.assertFalse(driver.pending_command)
+            self.assertFalse(driver.unsafe_owner)
+            self.assertFalse(driver.held_left)
+            self.assertEqual(driver.commands, 0)
+            self.assertEqual(driver.last_write, 0)
+            self.assertEqual(h.published, [])
+            self.assertEqual([x["pending"] for x in h.owners], [True, False])
+            self.assertEqual(driver.cleanup(), "not attempted: no settled owned held left grip")
+
+    def test_unpublished_owner_interference_is_not_overwritten_by_rollback(self):
+        clock = Clock()
+        with self.ack_driver(clock) as h:
+            def fail(path, raw, **options):
+                h.owner_record = b"different pending owner"
+                options["validate"]()
+                self.fail("changed owner must refuse before replacement")
+            with patch.object(m.transport, "atomic", side_effect=fail), \
+                    self.assertRaisesRegex(m.Refusal, "owner record replaced"):
+                h.driver.send(sample(0, "acquire", 1, .1))
+            self.assertTrue(h.driver.unsafe_owner)
+            self.assertFalse(h.driver.pending_command)
+            self.assertEqual(h.owner_record, b"different pending owner")
+            self.assertEqual([x["pending"] for x in h.owners], [True])
+            self.assertEqual(h.published, [])
+
+    def test_owner_and_publication_delay_do_not_restart_original_ack_deadline(self):
+        clock = Clock()
+        with self.ack_driver(clock) as h:
+            requested = clock.now
+            save, publish = h.driver.save_owner, m.transport.atomic.side_effect
+            def delayed_owner(pending):
+                save(pending)
+                if pending:
+                    clock.now += 30_000_000
+            def delayed_publish(path, raw, **options):
+                clock.now += 30_000_000
+                publish(path, raw, **options)
+            h.driver.save_owner = delayed_owner
+            h.ack_read_ns = 180_000_000
+            with patch.object(m.transport, "atomic", side_effect=delayed_publish), self.assertRaises(m.Refusal):
+                h.driver.send(sample(0, "acquire", 1, .1))
+            self.assertEqual(h.publication_deadline, requested + m.ACK_NS)
+            self.assertEqual(h.driver.last_write, requested + 60_000_000)
+            self.assertTrue(h.driver.pending_command)
+            self.assertEqual(len(h.published), 1)
 
     def test_timely_ack_precedes_slow_archive_even_after_unready_poll(self):
         for unready_polls in (0, 1):
@@ -859,6 +926,9 @@ class StimulusTests(unittest.TestCase):
                 clock = Clock()
                 with self.ack_driver(clock) as h:
                     setattr(h, late_read, m.ACK_NS)
+                    # Exercise the ACK read after publication, not the new
+                    # ownership check before the command has reached disk.
+                    h.session_read_after_publication = True
                     with self.assertRaisesRegex(m.Refusal, "deadline"):
                         h.driver.send(sample(0, "acquire", 1, .1))
                     self.assertIsNone(h.driver.last_commit)
@@ -906,7 +976,7 @@ class StimulusTests(unittest.TestCase):
                         h.alter_ack = lambda raw: raw.replace(b"last=", b"last=foreign ")
                     else:
                         def change(state):
-                            if h.driver.pending_command:
+                            if h.driver.pending_command and h.published:
                                 if fault == "sentinel":
                                     state["lastCmd"] = "note foreign"
                                 elif fault == "frame":
