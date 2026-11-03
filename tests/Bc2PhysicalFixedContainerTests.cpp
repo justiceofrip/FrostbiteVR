@@ -51,7 +51,7 @@ struct Fixture {
         api.nextRequest=[](void* p)noexcept{return ++static_cast<Fixture*>(p)->intent;};
         physical=std::make_unique<Bc2PhysicalFixedContainer>(true,api);
     }
-    Bc2PhysicalFixedContainerResult Send(const Matrix& wrist,bool grip,bool pouch=false,bool finish=false){
+    void Prepare(const Matrix& wrist,bool grip,bool pouch=false,bool finish=false){
         now+=10000000;++sequence;binding.observedNs=now;binding.deadlineNs=now+100000000;
         AmmunitionSnapshot ammunition{binding.context,sequence,now,now+100000000,counts,true};
         service.Select(binding,native,ammunition,now);
@@ -85,7 +85,14 @@ struct Fixture {
                 sample.raw.grip=t.grip;sample.raw.gripPressed=t.gripPressed;sample.raw.pouchContact=t.pouchContact;}
         }
         if(missingRaw)sample.raw={};
-        priorGrip=grip;gateCalls=0;result=physical->Tick(sample,hands,intent);return result;
+        priorGrip=grip;
+    }
+    Bc2PhysicalFixedContainerResult Consume(const Bc2FixedContainerRawContact* raw=nullptr){
+        if(raw)sample.raw=*raw;
+        gateCalls=0;result=physical->Tick(sample,hands,intent);return result;
+    }
+    Bc2PhysicalFixedContainerResult Send(const Matrix& wrist,bool grip,bool pouch=false,bool finish=false){
+        Prepare(wrist,grip,pouch,finish);return Consume();
     }
     void Hinge(unsigned step){const auto& motion=equipment->interaction.geometry[step].motion;
         Send(At(motion,0),false);Send(At(motion,0),true);
@@ -490,10 +497,249 @@ int LinkedLoaderRejectsUnverifiedPhysicalAliases(){
     CHECK(!FixedContainerHandItem(wrong,f.owner,f.now));
     return 0;
 }
+void SelectFixedFamily(Fixture& f){
+    for(const auto& family:WeaponModeFamilies)if(WeaponModeFamilyEligible(family)&&
+        family.secondaryConfiguration==f.equipment->configurationPath&&family.secondaryAsset==f.equipment->asset){
+        f.linkedFamily=&family;break;
+    }
+}
+int ArmFixedSupport(Fixture& f,unsigned step,Bc2FixedContainerRawContact& pressed,HandClaim& support,
+    HandClaimKind kind=HandClaimKind::WeaponSupport){
+    const auto start=At(f.equipment->interaction.geometry[step].motion,0);
+    // A real controller release is recorded and consumed by policy. The held
+    // packet preceding it need not have reached the renderer/recognizer.
+    if(!f.priorGrip)f.Prepare(start,true);
+    f.Send(start,false);const auto neutral=f.sample.raw;
+    CHECK(neutral.input.released[0]&&!neutral.grip&&!neutral.gripPressed);
+    CHECK(f.result.tracking.step==FixedContainerStep(step)&&!f.hands.Current(InteractionHand::Left));
+    f.Prepare(start,true,step==2);pressed=f.sample.raw;
+    f.Consume(&neutral); // Current press N+1 still sees released raw N.
+    const auto gun=f.hands.Current(InteractionHand::Right);CHECK(gun&&!f.result.mechanismOwnsHand&&!f.result.ammoOwnsHand);
+    const bool body=kind==HandClaimKind::BodyInventory;
+    const auto acquired=f.hands.AcquireFrom(f.sample.input,neutral.input,{f.owner,InteractionHand::Left,kind,
+        body?HandInteractionKey{999,1}:f.sample.weapon,{{301,1},neutral.input.sequence,neutral.input.deadlineNs,true},
+        ++f.intent,body?0:gun->token.id});
+    CHECK(acquired.accepted&&acquired.claim);support=*acquired.claim;
+    const auto counts=f.counts;const auto calls=f.calls;
+    for(unsigned repeat=0;repeat<2;++repeat){
+        f.Consume(&neutral);const auto waiting=f.hands.Current(InteractionHand::Left);
+        CHECK(waiting&&waiting->token==support.token&&waiting->inputSequence==support.inputSequence&&waiting->deadlineNs==support.deadlineNs);
+        CHECK(!f.result.mechanismOwnsHand&&!f.result.ammoOwnsHand&&!f.result.tracking.target&&!f.result.tracking.hand);
+        CHECK(f.service.View()->snapshot.counts==counts&&f.calls==calls&&!f.result.tracking.pending);
+    }
+    return 0;
+}
+int FinishFixedStroke(Fixture& f,unsigned step){
+    const auto& motion=f.equipment->interaction.geometry[step].motion;
+    for(unsigned n=1;n<=30;++n)f.Send(At(motion,n/30.),true);
+    for(unsigned n=0;n<8;++n)f.Send(At(motion,1),true);
+    if(motion.returnToStart){
+        for(unsigned n=1;n<=30;++n)f.Send(At(motion,1-n/30.),true);
+        for(unsigned n=0;n<8;++n)f.Send(At(motion,0),true);
+    }
+    CHECK(f.result.tracking.step!=FixedContainerStep(step)&&!f.result.mechanismOwnsHand);
+    return 0;
+}
+int TransferFixedSupportStroke(Fixture& f,unsigned step,bool sameCurrent){
+    Bc2FixedContainerRawContact pressed;HandClaim support;
+    CHECK(!ArmFixedSupport(f,step,pressed,support));
+    if(!sameCurrent)f.Prepare(pressed.weaponFromWrist,true);
+    f.Consume(&pressed);
+    const auto hand=f.hands.Current(InteractionHand::Left),gun=f.hands.Current(InteractionHand::Right);
+    CHECK(hand&&gun&&hand->token.kind==HandClaimKind::Mechanism&&hand->token.id!=support.token.id);
+    CHECK(hand->token.owner==support.token.owner&&hand->token.item==support.token.item&&
+        hand->token.prerequisiteClaim==support.token.prerequisiteClaim&&hand->token.prerequisiteClaim==gun->token.id);
+    CHECK(hand->inputSequence==pressed.input.sequence&&hand->deadlineNs==pressed.input.deadlineNs);
+    CHECK(f.result.mechanismOwnsHand&&f.result.tracking.hand&&f.result.tracking.hand->token==hand->token&&f.result.tracking.target);
+    CHECK(f.result.blocksFire&&f.gate&&f.gate->blocksFire);
+    f.Consume(&pressed);const auto duplicate=f.hands.Current(InteractionHand::Left);
+    CHECK(duplicate&&duplicate->token==hand->token&&duplicate->inputSequence==hand->inputSequence&&duplicate->deadlineNs==hand->deadlineNs);
+    CHECK(!FinishFixedStroke(f,step));return 0;
+}
+int InsertFixedWithOfflineReceipt(Fixture& f){
+    const auto& motion=f.equipment->interaction.geometry[2].motion;
+    const auto before=f.counts;const auto calls=f.calls;
+    f.Send(At(motion,0),false);f.Send(At(motion,0),true,true);CHECK(f.result.ammoOwnsHand);
+    const auto held=f.result.tracking.hand;CHECK(held&&held->token.kind==HandClaimKind::AmmoObject);
+    CHECK((held->token.item==HandInteractionKey{f.observation.supply.resource.id,f.observation.supply.resource.generation}));
+    f.Send(At(motion,0),true);
+    for(unsigned n=1;n<=30;++n)f.Send(At(motion,n/30.),true);
+    for(unsigned n=0;n<8;++n)f.Send(At(motion,1),true);
+    f.Send(At(motion,1),false);
+    CHECK(f.calls==calls+1&&f.submitted&&f.submitted->preparedCommand&&f.result.tracking.pending);
+    const auto request=*f.submitted;const auto command=*request.preparedCommand;
+    CHECK(command.before==before&&command.before.loaded+command.before.reserve==command.after.loaded+command.after.reserve);
+    CHECK(f.service.View()->snapshot.counts==before&&f.service.Accept(request,f.now)==command);
+    AmmoResourceNativeCall actual;unsigned mockCalls=0;
+    CHECK(f.service.InvokeNative(f.service.View()->snapshot,[&]()noexcept{return f.now;},[&](std::int64_t began)noexcept{
+        ++mockCalls;actual={f.native,command.id,900,began,began+1,command.before,command.after,true,true,true};return actual;
+    }));
+    for(unsigned branch=0;branch<3;++branch){
+        AmmoResourceOwnUpdate row;row.beforeOwner=row.afterOwner=f.native.owner;row.firing=f.native.firing[branch];
+        row.serverPlayer=f.native.serverPlayer;row.serverSoldier=f.native.serverSoldier;row.serverItem=f.native.serverItem;
+        row.invocation=actual.invocation+(branch==2?0:branch+1);row.beginNs=actual.beginNs-1;row.endNs=actual.endNs+10+branch;
+        row.branch=branch;row.depth=1;row.loadedBefore=command.before.loaded;row.reserveBefore=command.before.reserve;
+        row.loadedAfter=command.after.loaded;row.reserveAfter=command.after.reserve;row.current=row.next=2;
+        row.finished=row.identityRetained=row.neutralContext=true;
+        CHECK(f.service.Observe(row,actual.endNs+100)==(branch==2));
+    }
+    f.counts=command.after;f.Send(At(motion,1),false);f.Send(At(motion,1),false);
+    CHECK(!f.result.tracking.pending&&!f.result.ammoOwnsHand&&f.calls==calls+1&&mockCalls==1);
+    CHECK(f.observation.lastCompletion&&f.observation.lastCompletion->outcome.request==request&&
+        f.observation.lastCompletion->outcome.receipt&&f.observation.lastCompletion->outcome.receipt->command==command);
+    CHECK(f.service.View()->snapshot.counts==command.after);return 0;
+}
+int EveryFixedFamilyTransfersDelayedSupportThroughFullCycle(){
+    unsigned profiles=0,cycles=0,transfers=0,receipts=0,linked=0,nativeItem=0;
+    for(const auto registry:{std::span<const FixedContainerEquipmentProfile>(generated::FixedContainerEquipment),
+                            std::span<const FixedContainerEquipmentProfile>(generated::UnderbarrelFixedContainerEquipment)})
+        for(const auto& e:registry){
+            ++profiles;
+            for(bool sameCurrent:{false,true}){
+                Fixture f(&e,0,e.interaction.roundsPerInsertion);f.observe=true;SelectFixedFamily(f);
+                if(f.linkedFamily)++linked;else ++nativeItem;
+                const auto kind=e.interaction.kind;const bool mechanism=kind==FixedContainerKind::Cylinder||kind==FixedContainerKind::SingleRoundBreech;
+                if(mechanism){CHECK(!TransferFixedSupportStroke(f,0,sameCurrent));++transfers;}
+                if(kind==FixedContainerKind::Cylinder){CHECK(!TransferFixedSupportStroke(f,1,sameCurrent));++transfers;}
+                CHECK(!InsertFixedWithOfflineReceipt(f));++receipts;
+                const auto committed=f.counts;
+                if(mechanism){CHECK(f.result.tracking.step==FixedContainerStep::Close);CHECK(!TransferFixedSupportStroke(f,3,sameCurrent));++transfers;}
+                CHECK(f.result.tracking.step==FixedContainerStep::Complete&&!f.result.blocksFire&&f.gate&&f.gate->closedVerified);
+                CHECK(f.calls==1&&f.counts==committed&&f.service.View()->snapshot.counts==committed);
+                CHECK(!f.result.mechanismOwnsHand&&!f.result.ammoOwnsHand&&!f.hands.Current(InteractionHand::Left));++cycles;
+            }
+        }
+    CHECK(profiles==84&&cycles==168&&receipts==168&&linked==154&&nativeItem==14&&transfers==238);
+    std::printf("Fixed support arbitration: %u profiles, %u full cycles, %u guarded transfers, %u offline mocked adapter receipts\n",
+        profiles,cycles,transfers,receipts);return 0;
+}
+int EveryFixedFamilyRejectsSupportTransferContradictions(){
+    unsigned profiles=0,cases=0,committedPrefixes=0;
+    for(const auto registry:{std::span<const FixedContainerEquipmentProfile>(generated::FixedContainerEquipment),
+                            std::span<const FixedContainerEquipmentProfile>(generated::UnderbarrelFixedContainerEquipment)})
+        for(const auto& e:registry){
+            if(e.interaction.kind!=FixedContainerKind::Cylinder&&e.interaction.kind!=FixedContainerKind::SingleRoundBreech)continue;
+            ++profiles;
+            for(unsigned step:{0u,3u})for(unsigned fault=0;fault<18;++fault){
+                Fixture f(&e,0,1);f.observe=true;SelectFixedFamily(f);
+                if(step==3){
+                    f.Hinge(0);if(e.interaction.kind==FixedContainerKind::Cylinder)f.Hinge(1);
+                    CHECK(!InsertFixedWithOfflineReceipt(f));++committedPrefixes;
+                }
+                const auto counts=f.counts;const auto calls=f.calls;
+                const auto completion=f.observation.lastCompletion;
+                Bc2FixedContainerRawContact pressed;HandClaim support;
+                const auto kind=fault==0?HandClaimKind::Sight:fault==1?HandClaimKind::BodyInventory:HandClaimKind::WeaponSupport;
+                CHECK(!ArmFixedSupport(f,step,pressed,support,kind));
+                const auto start=pressed.weaponFromWrist;auto rejected=pressed;
+                std::optional<HandClaim> expected=support;
+                switch(fault){
+                case 0:case 1:break; // Unrelated dependent and body-owned claims cannot be stolen.
+                case 2:rejected.weaponFromWrist.values[3][0]+=.5f;break; // Held contact miss consumes the edge.
+                case 3:f.sample.cancel=true;break;
+                case 4:{
+                    // Ordinary support may renew from the actual pressed raw,
+                    // but that does not renew the recognizer's neutral lease.
+                    f.Prepare(start,true);
+                    const auto renewed=f.hands.RenewFrom(f.sample.input,pressed.input,support.token,
+                        {support.token.contact,pressed.input.sequence,pressed.input.deadlineNs,true});
+                    CHECK(renewed.claim);expected=renewed.claim;
+                    while(f.now<support.deadlineNs)f.Prepare(start,true);
+                    CHECK(f.now==support.deadlineNs&&f.now<pressed.input.deadlineNs);break;
+                }
+                case 5:rejected.valid=false;break;
+                case 6:++rejected.nativeOwner.weapon;break;
+                case 7:++rejected.input.owner.equipGeneration;break;
+                case 8:--rejected.input.deadlineNs;break; // Restamped raw is absent from arbiter history.
+                case 9:f.Prepare(start,false);expected.reset();break; // Current release wins over older pressed raw.
+                case 10:rejected.gripPressed=false;break; // Held entry is not the recorded press edge.
+                case 11:f.allowGate=false;break;
+                case 12:f.allowLedger=false;break;
+                case 13:{
+                    CHECK(f.hands.Release(f.sample.input,support.token).accepted);f.Prepare(start,true);
+                    const auto gun=f.hands.Current(InteractionHand::Right);CHECK(gun);
+                    const auto newer=f.hands.Acquire(f.sample.input,{f.owner,InteractionHand::Left,HandClaimKind::WeaponSupport,
+                        f.sample.weapon,{support.token.contact,f.sequence,f.sample.input.deadlineNs,true},++f.intent,gun->token.id});
+                    CHECK(newer.claim);expected=newer.claim;break; // Raw press cannot take a newer claim.
+                }
+                case 14:++f.sample.weapon.id;break;
+                case 15:CHECK(f.hands.Release(f.sample.input,f.gun).accepted);expected.reset();break;
+                case 16:{
+                    // A different GunHold root cannot borrow a neutral armed
+                    // under its predecessor, even on the same physical item.
+                    CHECK(f.hands.Release(f.sample.input,f.gun).accepted);
+                    const auto gun=f.hands.Acquire(f.sample.input,{f.owner,InteractionHand::Right,HandClaimKind::GunHold,f.sample.weapon,
+                        {{300,1},f.sequence,f.sample.input.deadlineNs,true},++f.intent,0});
+                    CHECK(gun.claim);f.gun=gun.claim->token;
+                    const auto replacement=f.hands.AcquireFrom(f.sample.input,pressed.input,{f.owner,InteractionHand::Left,
+                        HandClaimKind::WeaponSupport,f.sample.weapon,{support.token.contact,pressed.input.sequence,pressed.input.deadlineNs,true},
+                        ++f.intent,f.gun.id});
+                    CHECK(replacement.claim);expected=replacement.claim;break;
+                }
+                case 17:f.busyGateMask=3;break; // A new transfer still needs a freshly published blocker.
+                }
+                f.Consume(&rejected);
+                CHECK(!f.result.mechanismOwnsHand&&!f.result.ammoOwnsHand&&!f.result.tracking.target&&!f.result.tracking.pending);
+                auto remaining=f.hands.Current(InteractionHand::Left);
+                CHECK(remaining.has_value()==expected.has_value());
+                if(expected)CHECK(remaining->token==expected->token&&remaining->inputSequence==expected->inputSequence&&remaining->deadlineNs==expected->deadlineNs);
+                // Restore only the injected fault. Replaying the missed source
+                // press cannot refresh support or manufacture a new gesture.
+                f.sample.cancel=false;f.allowGate=f.allowLedger=true;f.busyGateMask=0;
+                if(fault==14)--f.sample.weapon.id;
+                f.Consume(&pressed);
+                CHECK(!f.result.mechanismOwnsHand&&!f.result.ammoOwnsHand&&!f.result.tracking.target&&!f.result.tracking.pending);
+                remaining=f.hands.Current(InteractionHand::Left);CHECK(remaining.has_value()==expected.has_value());
+                if(expected)CHECK(remaining->token==expected->token&&remaining->inputSequence==expected->inputSequence&&remaining->deadlineNs==expected->deadlineNs);
+                if(fault==2||fault==10){
+                    f.Send(start,true);CHECK(!f.result.mechanismOwnsHand&&!f.result.tracking.target);
+                    const auto held=f.hands.Current(InteractionHand::Left);
+                    CHECK(held&&held->token==support.token&&held->inputSequence==support.inputSequence&&held->deadlineNs==support.deadlineNs);
+                }
+                CHECK(f.calls==calls&&f.counts==counts&&f.service.View()->snapshot.counts==counts);
+                if(completion){
+                    // Invalid-owner/root paths intentionally publish no slot
+                    // diagnostics. Fresh ordinary selection exposes the same
+                    // retained receipt after those contradictions are removed.
+                    if(!f.hands.Current(InteractionHand::Right))f.gun={};
+                    f.Send(start,false);
+                    CHECK(f.observation.lastCompletion&&f.observation.lastCompletion->outcome.receipt==completion->outcome.receipt&&
+                        f.observation.lastCompletion->outcome.request==completion->outcome.request);
+                    CHECK(f.calls==calls&&f.service.View()->snapshot.counts==counts);
+                }
+                ++cases;
+            }
+        }
+    CHECK(profiles==59&&cases==2124&&committedPrefixes==1062);
+    std::printf("Fixed support arbitration contradictions: %u mechanism profiles, %u cases, %u retained offline receipt prefixes\n",
+        profiles,cases,committedPrefixes);return 0;
+}
+int EveryFixedFamilyKeepsSupportOutOfAmmoCustody(){
+    unsigned profiles=0;
+    for(const auto registry:{std::span<const FixedContainerEquipmentProfile>(generated::FixedContainerEquipment),
+                            std::span<const FixedContainerEquipmentProfile>(generated::UnderbarrelFixedContainerEquipment)})
+        for(const auto& e:registry){
+            Fixture f(&e,0,e.interaction.roundsPerInsertion);f.observe=true;SelectFixedFamily(f);
+            if(e.interaction.kind==FixedContainerKind::Cylinder||e.interaction.kind==FixedContainerKind::SingleRoundBreech)f.Hinge(0);
+            if(e.interaction.kind==FixedContainerKind::Cylinder)f.Hinge(1);
+            Bc2FixedContainerRawContact pressed;HandClaim support;CHECK(!ArmFixedSupport(f,2,pressed,support));
+            f.Consume(&pressed);const auto hand=f.hands.Current(InteractionHand::Left);
+            CHECK(hand&&hand->token==support.token&&hand->inputSequence==support.inputSequence&&hand->deadlineNs==support.deadlineNs);
+            CHECK(!f.result.ammoOwnsHand&&!f.result.mechanismOwnsHand&&!f.result.tracking.carried&&!f.result.tracking.pending);
+            CHECK(f.calls==0&&f.service.View()->snapshot.counts==f.counts);
+            // A fresh ordinary release/regrasp can still pick up the exact body
+            // resource and complete its one existing ledger transaction.
+            CHECK(!InsertFixedWithOfflineReceipt(f));CHECK(f.calls==1);++profiles;
+        }
+    CHECK(profiles==84);
+    std::printf("Fixed support ammo custody: %u profiles reject support-to-ammo theft and retain ordinary receipt-backed insertion\n",profiles);
+    return 0;
+}
 }
 int main(){return ExactSelectorsAndSupply()||GateBeforePhysicalAndExactOwner()||BusyMechanismFeedbackContinuesOpening()||
     BusyCannotStartReviveOrChangeOwner()||BusyExpiresWithoutGateLeaseExtension()||BusyCannotAuthorizeDispatchOrClosure()||
     CylinderFlickReturnAndClose()||ClipQueuesOneSharedCommand()||
     PriorRendererFrameQueuesAndCompletesOnceAfterReequip()||PartialCylinderMigrationReacquiresAtRetainedContact()||
     ObservationPreservesSourceLeasesAndRejectsWrongIdentity()||LinearPartsFollowTheirOwnMeasuredTravel()||MeasuredUnderbarrelLoadsOneRoundAndCloses()||
-    LinkedLoaderRejectsUnverifiedPhysicalAliases();}
+    LinkedLoaderRejectsUnverifiedPhysicalAliases()||EveryFixedFamilyTransfersDelayedSupportThroughFullCycle()||
+    EveryFixedFamilyRejectsSupportTransferContradictions()||EveryFixedFamilyKeepsSupportOutOfAmmoCustody();}
