@@ -1378,6 +1378,208 @@ class StimulusTests(unittest.TestCase):
                 stimulus = fixtures.g.build_stimulus(family, None, source, fixtures.NOW, stage)
                 m.validate_stimulus(stimulus)
 
+    def fixed_completion_snapshot(self, driver, boundary, now, sequence):
+        source, geometry = driver.mapping, driver.stimulus["geometryEvidence"]
+        if boundary == "fixed_inserted":
+            return fixtures.xf.completed(source, geometry, now)
+        if boundary == "fixed_held":
+            source = fixtures.xf.held_after_pickup(source, geometry, now)
+        snapshot = fixtures.xf.refresh(source, now, sequence)
+        fixed = snapshot["fixedContainer"]
+        tracking, raw = fixed["tracking"], fixed["raw"]
+        snapshot["input"]["hands"][0]["squeeze"] = 1.
+        for evidence in (snapshot["input_evidence"], fixed["input"], raw["input"]):
+            evidence["released"][0] = False
+        tracking["grip"] = raw["grip"] = True
+        if boundary == "fixed_acquired":
+            contact = fixed["profile"]["geometry"][tracking["step"]]["contact"]["role"]
+            tracking["hand"] = fixtures.xf.claim(raw["input"], 0, 4, tracking["gun"]["token"]["item"],
+                dict(id=contact, generation=fixed["profile"]["revision"]), 201, tracking["gun"]["token"]["id"])
+            fixed["leftClaim"] = copy.deepcopy(tracking["hand"])
+            tracking["target"] = copy.deepcopy(raw["weaponFromWrist"])
+        elif boundary == "fixed_step_complete":
+            tracking["step"] = 2 if driver.args.stage == "Open" else 4
+            tracking["blocksFire"] = snapshot["weapon_actions_blocked"] = tracking["step"] != 4
+        elif boundary == "fixed_aligned":
+            destination = fixed["profile"]["geometry"][2]["motion"]["placement"]["weaponFromDestination"]
+            tracking["target"] = copy.deepcopy(destination)
+            tracking["carriedSupply"] = copy.deepcopy(destination)
+        return snapshot
+
+    @contextmanager
+    def completion_driver(self, clock, stage, *, pickup_first=False, maximum_gesture_ns=None):
+        # Full declared fixed plans, real fresh-boundary validation and ordinary
+        # send/ownership/ACK paths; only native observations are synthetic.
+        clock.now = fixtures.NOW
+        source = fixtures.complete(fixtures.xf.snapshot(kind=3))
+        if maximum_gesture_ns is not None:
+            for geometry in source["fixedContainer"]["profile"]["geometry"]:
+                if geometry is not None:
+                    geometry["motion"]["policy"]["maximumGestureNs"] = maximum_gesture_ns
+        if stage in ("Pickup", "Insert", "Close"):
+            source["fixedContainer"]["tracking"]["step"] = 3 if stage == "Close" else 2
+            source["fixedContainer"]["tracking"]["blocksFire"] = source["weapon_actions_blocked"] = True
+        if stage == "Close":
+            source["fixedContainer"]["view"]["snapshot"]["counts"].update(loaded=1, reserve=6)
+        with self.ack_driver(clock, archive_ns=0) as h:
+            driver = h.driver
+            driver.args = types.SimpleNamespace(family="fixed", stage=stage, target="secondary",
+                                               pickup_first=pickup_first, step_ms=40)
+            driver.geometry, driver.profiles = fixtures.g, None
+            driver.plans, driver.boundaries = [], {}
+            driver.target_observed = False
+            driver.observations = Mock()  # Replace the ACK fixture's untyped observations below.
+            h.boundary_fault = lambda snapshot, boundary: None
+            h.observation_sequence = 100
+            guard = driver.guard
+
+            def fresh(*, boundary=None, after_ns=0, pickup=None, prepare=False):
+                def observe(deadline_ns=None):
+                    guard(deadline_ns=deadline_ns)
+                    clock.now += 2_000_000
+                    h.observation_sequence += 1
+                    if boundary is None:
+                        current = source if pickup is None else fixtures.xf.held_after_pickup(
+                            driver.mapping, pickup["geometryEvidence"], clock.now)
+                        current = fixtures.xf.refresh(current, clock.now, h.observation_sequence)
+                    else:
+                        current = self.fixed_completion_snapshot(driver, boundary["id"], clock.now, h.observation_sequence)
+                        h.boundary_fault(current, boundary["id"])
+                    driver.observed = [dict(snapshot=current, current=True)]
+                with patch.object(driver, "guard", side_effect=observe):
+                    return m.ReloadStimulus.fresh(driver, boundary=boundary, after_ns=after_ns,
+                                                 pickup=pickup, prepare=prepare)
+
+            driver.fresh = fresh
+            yield h
+
+    def test_full_fixed_open_and_close_release_only_after_verified_completion(self):
+        for stage in ("Open", "Close"):
+            with self.subTest(stage=stage), self.completion_driver(Clock(), stage) as h:
+                driver = h.driver
+                driver.run_stimulus()
+                declared = driver.artifacts.saved["stimulus-01.json"]
+                self.assertEqual(declared["finishGrip"], 1)
+                self.assertEqual([b["id"] for b in declared["boundaries"]], ["fixed_acquired", "fixed_step_complete"])
+                self.assertEqual(h.published[-1].decode().splitlines(), ["grip l 0", driver.sentinel])
+                self.assertEqual(sum(raw.startswith(b"grip l 0\n") for raw in h.published), 1)
+                events = driver.artifacts.events
+                completed = next(i for i, e in enumerate(events) if e["type"] == "fresh_stimulus_boundary"
+                                 and e["id"] == "fixed_step_complete")
+                released = next(i for i, e in enumerate(events) if e["type"] == "command_request"
+                                and e["commands"][0] == "grip l 0")
+                self.assertLess(completed, released)
+                self.assertFalse(events[-1]["cleanup"])
+                self.assertFalse(driver.held_left or driver.pending_command)
+                self.assertTrue(driver.plans[-1]["stimulusCompleted"])
+                self.assertTrue(driver.plans[-1]["boundaryChecksPassed"])
+                self.assertEqual(h.owners[-1]["pending"], False)
+                self.assertEqual(h.owners[-1]["commandSha256"], m.transport.digest(h.published[-1]))
+
+    def test_fixed_completion_pending_unverified_or_pre_ack_cannot_release(self):
+        for stage in ("Open", "Close"):
+            for fault in ("pending", "ammunition", "pre_ack"):
+                with self.subTest(stage=stage, fault=fault), self.completion_driver(Clock(), stage) as h:
+                    driver = h.driver
+                    def change(snapshot, boundary):
+                        if boundary != "fixed_step_complete":
+                            return
+                        if fault == "pending":
+                            snapshot["fixedContainer"]["tracking"]["step"] = 0 if stage == "Open" else 3
+                            snapshot["fixedContainer"]["tracking"]["blocksFire"] = snapshot["weapon_actions_blocked"] = True
+                        elif fault == "ammunition":
+                            snapshot["fixedContainer"]["view"]["snapshot"]["counts"]["reserve"] -= 1
+                        else:
+                            snapshot["input_evidence"]["observedNs"] = driver.last_commit - 1
+                    h.boundary_fault = change
+                    with self.assertRaises((m.Refusal, fixtures.g.GeometryRefusal)):
+                        driver.run_stimulus()
+                    self.assertTrue(driver.held_left)
+                    self.assertFalse(any(raw.startswith(b"grip l 0\n") for raw in h.published))
+                    self.assertNotIn("fixed_step_complete", driver.boundaries)
+                    self.assertNotIn("stimulusCompleted", driver.plans[-1])
+                    self.assertEqual(driver.pending_boundary["id"], "fixed_step_complete")
+
+    def test_fixed_completion_release_ack_failure_cannot_pass_or_renew_deadline(self):
+        for fault in ("ack", "deadline"):
+            clock = Clock()
+            with self.subTest(fault=fault), self.completion_driver(clock, "Open", maximum_gesture_ns=6*m.NS) as h:
+                driver = h.driver
+                def change(snapshot, boundary):
+                    if boundary == "fixed_step_complete":
+                        h.completion_deadline = driver.stage_deadline
+                def ack(raw):
+                    if not h.command.startswith(b"grip l 0\n"):
+                        return raw
+                    if fault == "deadline":
+                        clock.now = h.completion_deadline
+                        return raw
+                    return b"unacknowledged\n"
+                h.boundary_fault, h.alter_ack = change, ack
+                with self.assertRaisesRegex(m.Refusal, "deadline"):
+                    driver.run_stimulus()
+                self.assertIn("fixed_step_complete", driver.boundaries)
+                self.assertTrue(driver.held_left and driver.pending_command)
+                self.assertNotIn("stimulusCompleted", driver.plans[-1])
+                self.assertEqual(driver.stage_deadline, h.completion_deadline)
+                self.assertLess(driver.stage_deadline, driver.deadline)
+                self.assertEqual(sum(raw.startswith(b"grip l 0\n") for raw in h.published), 1)
+                self.assertFalse(driver._ack_failures[-1].report()["cleanup"])
+
+    def test_fixed_pickup_insert_keeps_custody_until_declared_destination_release(self):
+        with self.completion_driver(Clock(), "Insert", pickup_first=True) as h:
+            driver = h.driver
+            driver.run_stimulus()
+            pickup, insertion = (driver.artifacts.saved[f"stimulus-{index:02}.json"] for index in (1, 2))
+            self.assertEqual((pickup["finishGrip"], insertion["finishGrip"]), (1, 0))
+            self.assertTrue(insertion["continuesHeldCustody"])
+            self.assertEqual([p["stage"] for p in driver.plans], ["Pickup", "Insert"])
+            self.assertTrue(all(p["stimulusCompleted"] and p["boundaryChecksPassed"] for p in driver.plans))
+            self.assertFalse(any(raw.startswith(b"grip l 0\n") for raw in h.published))
+            grips = [int(line[-1]) for raw in h.published for line in raw.decode().splitlines()
+                     if line.startswith("grip l ")]
+            self.assertTrue(all(grips[grips.index(1):-1]))
+            self.assertEqual(grips[-1], 0)
+            self.assertFalse(driver.held_left or driver.pending_command)
+
+    def test_standalone_pickup_still_requires_pair_and_released_feed_is_unchanged(self):
+        for family, stage in (("feed", "SupplyPickup"), ("pump", "ShellPickup"), ("fixed", "Pickup"),
+                              ("feed", "OpenCover")):
+            clock = Clock()
+            driver = ScheduleDriver(clock)
+            driver.args.family, driver.args.stage, driver.args.pickup_first = family, stage, False
+            value = plan(clock)
+            value.update(family=family, stage=stage)
+            if stage != "OpenCover":
+                value["schedule"].pop()
+                value.update(finishGrip=1, durationNs=value["schedule"][-1]["atNs"])
+            driver.fresh = Mock(return_value=({}, clock.now, value))
+            with self.subTest(stage=stage), patch.object(m, "time", clock):
+                if stage == "OpenCover":
+                    driver.run_stimulus()
+                    self.assertEqual(driver.sent[-1][0]["phase"], "release")
+                    self.assertFalse(driver.held_left)
+                else:
+                    with self.assertRaisesRegex(m.Refusal, "paired workflow required"):
+                        driver.run_stimulus()
+                    self.assertTrue(driver.held_left)
+                self.assertFalse(any(sent[2] or sent[3] for sent in driver.sent))
+
+    def test_declared_pump_cycle_uses_same_completion_release(self):
+        clock = Clock()
+        clock.now = fixtures.NOW
+        driver = ScheduleDriver(clock)
+        driver.args.family, driver.args.stage = "pump", "PumpCycle"
+        source = fixtures.complete(fixtures.pf.snapshot(pumping=True))
+        value = fixtures.g.build_stimulus("pump", None, source, clock.now, "PumpCycle")
+        self.assertEqual(value["finishGrip"], 1)
+        self.assertEqual(value["boundaries"][-1]["id"], "pump_ready")
+        with patch.object(m, "time", clock):
+            driver.execute(value)
+        self.assertEqual(set(driver.boundaries), {"pump_acquired", "pump_rear", "pump_ready"})
+        self.assertTrue(driver.sent[-1][3])
+        self.assertFalse(driver.sent[-1][2] or driver.held_left)
+
     def test_held_continuation_reuses_pose_configuration(self):
         source = fixtures.complete(fixtures.pf.snapshot())
         pickup = fixtures.g.build_stimulus("pump", None, source, fixtures.NOW, "ShellPickup")

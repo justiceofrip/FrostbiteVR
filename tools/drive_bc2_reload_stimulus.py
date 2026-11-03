@@ -1029,6 +1029,10 @@ class ReloadStimulus:
                     self.fresh(boundary=boundary, after_ns=self.last_write)
             previous, previous_at = sample, at
         require(self.held_left is bool(stimulus["finishGrip"]), "unexpected final grip")
+        # Complete every fresh boundary before releasing a held mechanism grip.
+        # Reserve pickups keep their custody for the paired insertion instead.
+        if stimulus["finishGrip"] == 1 and stimulus["stage"] not in ("SupplyPickup", "ShellPickup", "Pickup"):
+            self.send(release_only=True)
         self.stage_deadline = self.deadline
         self.plans[-1].update(stimulusCompleted=True, boundaryChecksPassed=len(self.boundaries) == len(stimulus["boundaries"]))
         return stimulus
