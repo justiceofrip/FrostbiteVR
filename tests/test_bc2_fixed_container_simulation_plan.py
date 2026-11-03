@@ -88,6 +88,7 @@ def snapshot(kind=4, motion_kind="Hinge"):
         rigFingerprint=profile["rigFingerprint"], input=copy.deepcopy(source), weaponFromWrist=f.identity(),
         weaponWorldMeters=copy.deepcopy(s["mapping"]["weaponWorldMeters"]), grip=False, pouchContact=False)
     s["fixedContainer"] = dict(schema=p.OBSERVATION_SCHEMA, available=True, observationOnly=True, retainedEventsAreHistorical=True,
+        owner=copy.deepcopy(owner),
         input=copy.deepcopy(source), profile=profile, tracking=t, raw=raw, leftClaim=None,
         pouch=dict(frame=1, centerMeters=[-.19, -.31, .13], radiusMeters=.14),
         supply=dict(resource=dict(id=300, generation=400), container=dict(id=0, generation=0)),
@@ -633,6 +634,193 @@ class FixedContainerDeadlineTests(unittest.TestCase):
         self.assertEqual(v.snapshot_source_deadline(s), NOW+4*self.MS)
         s["fixedContainer"] = dict(available=False, reason="capture_pending_or_not_requested")
         self.assertEqual(v.snapshot_source_deadline(s), d.shared.source_deadline(s))
+
+
+class SelectedAmmoDriverTests(unittest.TestCase):
+    """Fresh selected identity can precede its idle three-path ammo publication."""
+    MS = 1_000_000
+
+    class Driver(d.SelectedAmmoDriver):
+        def assert_selected_family(self, s):
+            family = s['sight']['family']
+            d.require(family['selectedSecondary'] is True
+                      and family['physicalItem'] == s['equipment']['persistence']
+                      and family['inventory'] == s['selected']['inventory']
+                      and family['secondaryConfiguration'] == s['selected']['configurationPath']
+                      and family['secondaryAsset'] == s['equipment']['asset']
+                      and s['selected']['selectedSlot'] == 2, 'synthetic selected family mismatch')
+
+    def response(self, now, nonce=1):
+        _, s = FixedContainerDeadlineTests().response(now, nonce)
+        s['sight'] = fixture.snapshot(secondary=True, primary_slot=0)['sight']
+        s['fixedContainer']['view']['snapshot']['counts']['loaded'] = 1
+        # The prefire observation does not require active empty-loader tracking.
+        s['fixedContainer']['tracking'].update(enabled=False, current=False)
+        s['fixedContainer']['raw'].update(valid=False, current=False, admittedAtTick=False)
+        s['fixedContainer']['physicalFamily'] = None
+        return None, s
+
+    @staticmethod
+    def missing(s):
+        s['fixedContainer'].update(view=None, viewFresh=False)
+        return s
+
+    def harness(self, missing=True):
+        future = {'missing': False, 'mutate': None}
+
+        def response(now, nonce=1):
+            _, s = self.response(now, nonce)
+            if future['missing']:
+                self.missing(s)
+            if future['mutate'] is not None:
+                future['mutate'](s)
+            return None, s
+
+        self.enterContext(patch.object(memory, 'fixture', response))
+        h = memory.Harness(self)
+        v = h.driver
+        v.__class__ = self.Driver
+        v.active_plan, v.demand_reference, v.demand_started = None, None, None
+        v.demand_finished, v.reference, v.latest_snapshot = False, None, None
+        v.held_left, v.monitor, v.motion_started = False, False, None
+        v.last_request = h.now
+        h.state['controls']['gripL'] = 0.
+        _, initial = self.response(h.now)
+        if missing:
+            self.missing(initial)
+        h.publish(initial)
+        return h, future, initial
+
+    def test_first_available_missing_view_waits_then_uses_new_exact_ammo_without_input(self):
+        h, _, initial = self.harness()
+        v, raw = h.driver, d.transport.json_bytes(initial)
+        deadlines = v.deadline, v.hard_deadline, v.stage_deadline
+        start = h.now
+        result, _, _ = v.fresh_available()
+        self.assertEqual(v.demand_started, start)
+        self.assertTrue(v.demand_finished)
+        self.assertIs(v.latest_snapshot, result)
+        self.assertEqual(result['fixedContainer']['view']['snapshot']['counts'],
+                         dict(loaded=1, reserve=7, capacity=1))
+        self.assertEqual(v.artifacts.saved['snapshot-001.json'], raw)
+        self.assertEqual(d.transport.json_bytes(v.demand_reference), raw)
+        self.assertGreater(result['observed_ns'], initial['observed_ns'])
+        self.assertEqual((v.deadline, v.hard_deadline, v.stage_deadline), deadlines)
+        self.assertEqual([e['type'] for e in v.artifacts.events], ['pump_capture_pending'])
+        self.assertEqual(h.command_writes, [])
+        self.assertEqual(v.commands, 0)
+
+    def test_absent_view_never_renews_original_one_second_demand(self):
+        h, future, _ = self.harness()
+        future['missing'] = True
+        v, start = h.driver, h.now
+        deadline = v.stage_deadline
+        with self.assertRaisesRegex(d.transport.REFUSAL, 'maximumGestureNs|capture demand exceeded one second'):
+            v.fresh_available()
+        self.assertEqual(v.demand_started, start)
+        self.assertEqual(v.stage_deadline, deadline)
+        self.assertLessEqual(h.now-start, d.NS+self.MS)
+        self.assertIsNone(v.latest_snapshot)
+        self.assertFalse(v.demand_finished)
+        self.assertGreater(len(v.artifacts.saved), 1)
+        self.assertEqual(h.command_writes, [])
+
+    def test_present_invalid_ammo_and_missing_view_contradictions_are_not_pending(self):
+        mutations = (
+            lambda s: s['fixedContainer'].update(viewFresh=False),
+            lambda s: s['fixedContainer']['view']['binding']['owner'].update(weapon=999),
+            lambda s: s['fixedContainer']['view']['binding'].update(deadlineNs=s['observed_ns']),
+            lambda s: s['fixedContainer'].update(view=None, viewFresh=True),
+            lambda s: (self.missing(s), s['fixedContainer']['tracking'].update(pending=True)),
+            lambda s: (self.missing(s), s['fixedContainer'].update(pendingRequest={})),
+            lambda s: (self.missing(s), s['fixedContainer']['owner'].update(weapon=999)),
+            lambda s: (self.missing(s), s['fixedContainer']['input'].update(sequence=999)),
+            lambda s: (self.missing(s), s['input']['hands'][0].update(squeeze=1.)),
+        )
+        for mutation in mutations:
+            with self.subTest(mutation=mutation):
+                h, _, initial = self.harness(missing=False)
+                mutation(initial)
+                h.publish(initial)
+                with self.assertRaises((d.transport.REFUSAL, d.planner.Refusal)):
+                    h.driver.fresh_available()
+                self.assertFalse(h.driver.artifacts.events)
+                self.assertIsNone(h.driver.latest_snapshot)
+                self.assertEqual(h.command_writes, [])
+
+    def test_pending_wait_refuses_changed_selection_family_or_owner(self):
+        mutations = (
+            lambda s: s['sight']['family'].update(persistentId='different-family'),
+            lambda s: s['equipment'].update(persistence=999),
+            lambda s: s['selected'].update(selectedSlot=0),
+            lambda s: s['rig'].update(pose=999),
+            lambda s: s['owner'].update(weapon=999),
+        )
+        for mutation in mutations:
+            with self.subTest(mutation=mutation):
+                h, future, _ = self.harness()
+                future['mutate'] = mutation
+                with self.assertRaises((d.transport.REFUSAL, d.planner.Refusal)):
+                    h.driver.fresh_available()
+                self.assertEqual(len(h.driver.artifacts.events), 1)
+                self.assertIsNone(h.driver.latest_snapshot)
+                self.assertEqual(h.command_writes, [])
+
+    def test_request_timeout_and_shorter_outer_deadline_remain_binding(self):
+        for limit in ('response', 'outer'):
+            with self.subTest(limit=limit):
+                h, future, _ = self.harness()
+                v, start = h.driver, h.now
+                if limit == 'response':
+                    h.response_after = None
+                    message = 'within request budget'
+                else:
+                    future['missing'] = True
+                    v.deadline = h.now+150*self.MS
+                    message = 'driver deadline'
+                with self.assertRaisesRegex(d.transport.REFUSAL, message):
+                    v.fresh_available()
+                self.assertEqual(v.demand_started, start)
+                self.assertLess(h.now-start, d.NS)
+                self.assertEqual(h.command_writes, [])
+
+    def test_after_first_ammo_binding_change_or_loss_is_not_a_new_capture_demand(self):
+        for missing in (False, True):
+            with self.subTest(missing=missing):
+                h, future, _ = self.harness()
+                v = h.driver
+                ready, _, _ = v.fresh_available()
+                v.reference = ready
+                future['missing'] = missing
+                if not missing:
+                    future['mutate'] = lambda s: s['fixedContainer']['view']['binding'].update(switching=999)
+                with self.assertRaisesRegex(d.transport.REFUSAL, 'owner/binding changed'):
+                    v.fresh_available()
+                self.assertTrue(v.demand_finished)
+                self.assertEqual(len(v.artifacts.events), 1)
+                self.assertEqual(h.command_writes, [])
+
+    def test_trigger_publication_still_requires_current_loaded_one(self):
+        for state in ('ready', 'empty', 'missing', 'expired'):
+            with self.subTest(state=state):
+                h, _, _ = self.harness()
+                v = h.driver
+                ready, _, _ = v.fresh_available()
+                v.reference = ready
+                # Native JSON serializes the 64-bit request nonce as a string.
+                ready['nonce'] = str(ready['nonce'])
+                if state == 'empty':
+                    ready['fixedContainer']['view']['snapshot']['counts']['loaded'] = 0
+                elif state == 'missing':
+                    self.missing(ready)
+                elif state == 'expired':
+                    h.now = v.snapshot_source_deadline(ready)+self.MS
+                if state == 'ready':
+                    v.validate_publication(['trigger r 1'], None, False)
+                else:
+                    with self.assertRaises((d.transport.REFUSAL, d.planner.Refusal)):
+                        v.validate_publication(['trigger r 1'], None, False)
+                self.assertEqual(h.command_writes, [])
 
 
 if __name__ == "__main__":

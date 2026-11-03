@@ -253,6 +253,93 @@ class FixedContainerDriver(shared.PumpDriver):
             self.stage("Close")
 
 
+class SelectedAmmoDriver(FixedContainerDriver):
+    """Observe selected ammunition before the optional single ordinary shot.
+
+    The caller supplies its exact, fresh-run primary/secondary family assertion.
+    Full loader tracking is admitted by the caller only after observing empty.
+    """
+    def assert_selected_family(self, snapshot):
+        raise transport.REFUSAL("selected ammunition requires an exact family assertion")
+
+    def admit_snapshot(self, snapshot, now, nonce):
+        planner.frame.admit_frame(snapshot, now, nonce, mechanism_admission=planner.blocked_observation)
+        self.assert_selected_family(snapshot)
+        require(all(h['trigger'] == h['stickX'] == h['stickY'] == h['held'] == 0
+                    for h in snapshot['input']['hands'])
+                and snapshot['input']['hands'][0]['squeeze'] <= .35,
+                "Selected ammunition decision needs neutral controls/free left hand")
+        x = snapshot.get('fixedContainer')
+        if isinstance(x, dict) and x.get('available') is False:
+            return super().admit_snapshot(snapshot, now, nonce)
+        require(isinstance(x, dict) and x.get('schema') == planner.OBSERVATION_SCHEMA
+                and x.get('available') is True and x.get('observationOnly') is True,
+                "Selected fixed ammunition observation unavailable")
+        require(x['owner'] == snapshot['owner']
+                and all(x['input'][k] == snapshot['input_evidence'][k] for k in
+                        ('owner', 'sequence', 'observedNs', 'deadlineNs', 'focused', 'tracked', 'released')),
+                "Selected ammunition observation owner/input changed")
+        if self.demand_reference is not None:
+            self.stable_snapshot(self.demand_reference, snapshot)
+        if x['view'] is None:
+            # This is absence, not permission to use another resource or to
+            # repair an invalid view. Keep the original capture-demand clock;
+            # PumpDriver saves/requests each response with the same transport.
+            require(x['viewFresh'] is False and x['tracking']['pending'] is False
+                    and x['pendingRequest'] is None and x['tracking']['blocksFire'] is False
+                    and snapshot['weapon_actions_blocked'] is False and snapshot.get('feed') is None,
+                    "Missing selected ammunition contradicts published state")
+            require(self.active_plan is None and self.commands == 0 and not self.demand_finished
+                    and not self.pending_command and not self.held_trigger and not self.held_left
+                    and self.demand_started is not None
+                    and time.perf_counter_ns()-self.demand_started < NS,
+                    "selected ammunition unavailable outside initial bounded capture demand")
+            if self.demand_reference is None:
+                self.demand_reference = snapshot
+            raise shared.CapturePending("initial selected ammunition publication pending")
+        planner.ammo(snapshot, now, idle=True)
+        return x
+
+    def stable_snapshot(self, before, after):
+        transport.stable_snapshot(before, after)
+        a, b = before['sight']['family'], after['sight']['family']
+        require({k: v for k, v in a.items() if k != 'observedMs'}
+                == {k: v for k, v in b.items() if k != 'observedMs'}
+                and b['observedMs'] >= a['observedMs'], "Selected ammunition physical family changed")
+        a, b = before.get('fixedContainer', {}).get('view'), after.get('fixedContainer', {}).get('view')
+        if a is not None:
+            require(isinstance(b, dict) and planner.binding_key(a['binding']) == planner.binding_key(b['binding'])
+                    and a['identity'] == b['identity'], "Selected ammunition owner/binding changed")
+
+    def snapshot_source_deadline(self, snapshot):
+        deadline = min(transport.Driver.snapshot_source_deadline(self, snapshot), snapshot['native_deadline_ns'])
+        x = snapshot.get('fixedContainer', {})
+        if x.get('available') is True:
+            deadline = min(deadline, x['input']['deadlineNs'])
+        if x.get('view') is not None:
+            deadline = min(deadline, x['view']['binding']['deadlineNs'], x['view']['snapshot']['deadlineNs'])
+        return deadline
+
+    def validate_publication(self, lines, expected, cleanup):
+        if lines == ['trigger r 0']:
+            require(self.held_trigger, "Ordinary release requires this owned trigger hold")
+            return
+        require(not cleanup and lines == ['trigger r 1'] and not self.commands
+                and not self.held_trigger and not self.pending_command,
+                "Exactly one ordinary trigger press is permitted")
+        now = time.perf_counter_ns()
+        self.admit_snapshot(self.latest_snapshot, now, integer(self.latest_snapshot['nonce']))
+        counts = planner.ammo(self.latest_snapshot, now, idle=True)['snapshot']['counts']
+        require(counts['loaded'] == 1 and counts['reserve'] > 0 and counts['capacity'] == 1
+                and self.latest_snapshot['weapon_actions_blocked'] is False,
+                "One shot requires the fresh selected loaded chamber")
+
+    def send(self, lines, **kwargs):
+        if lines == ['trigger r 1']:
+            kwargs['source_deadline'] = self.snapshot_source_deadline(self.latest_snapshot)
+        return transport.Driver.send(self, lines, **kwargs)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=Path, required=True)
