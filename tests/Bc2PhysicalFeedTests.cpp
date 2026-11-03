@@ -730,10 +730,15 @@ int HeldSupplyLossRetainsPreclearReasonAndCustody(){
             const auto both=observe();const auto at=both.find("\"failedRetention\":");
             const auto failed=both.substr(at,both.find(",\"retentionEntryPredicates\":",at)-at);
             CHECK(failed!="\"failedRetention\":null"&&loss(both)==retained);
+            const auto mechanismAt=both.find("\"firstMechanismLoss\":");CHECK(mechanismAt!=std::string::npos);
+            const auto mechanismLoss=both.substr(mechanismAt,both.find(",\"firstSupplyLoss\":",mechanismAt)-mechanismAt);
+            CHECK(mechanismLoss!="\"firstMechanismLoss\":null");
             f.physical.Suspend(f.sample.input,f.hands);f.Consume();
             const auto unchanged=observe();const auto after=unchanged.find("\"failedRetention\":");
             CHECK(unchanged.substr(after,unchanged.find(",\"retentionEntryPredicates\":",after)-after)==failed);
             CHECK(loss(unchanged)==retained&&loss(observe(true))==retained);
+            const auto compact=observe(true);const auto compactAt=compact.find("\"firstMechanismLoss\":");
+            CHECK(compact.substr(compactAt,compact.find(",\"firstSupplyLoss\":",compactAt)-compactAt)==mechanismLoss);
             CHECK(observe(true).size()+11702+4096<=32768);
         }
         // The first loss precedes these ordinary updates and repeated Suspend
@@ -741,6 +746,7 @@ int HeldSupplyLossRetainsPreclearReasonAndCustody(){
         f.missingCurrentView=false;f.sample.raw.valid=true;
         f.Tick(f.lastWrist,true);f.physical.Suspend(f.sample.input,f.hands);f.Tick(f.lastWrist,false);
         CHECK(loss(observe())==retained&&loss(observe(true))==retained&&first(observe())==press);
+        CHECK(observe(true).size()+11702+4096<=32768);
         CHECK(f.native.counts==counts&&f.submits==submits&&!f.backend.Pending()&&f.BlocksFire());
         CHECK(f.result.presentation&&!f.result.presentation->supplyObject&&!f.result.bodyVisual);
     }
@@ -774,6 +780,130 @@ int CompactAdmissionUsesSameImmutableSupplyLoss(){
     CHECK(replaced&&buffer.str()==before.str()&&compact.str()==beforeCompact.str());
     std::ostringstream after;after<<std::boolalpha;WriteBc2PhysicalFeedAdmissionObservation(after);
     CHECK(after.str()!=before.str()&&after.str().find("\"firstSupplyLoss\":null")!=std::string::npos);
+    CHECK(compact.str().size()+11702+4096<=32768);
+    return 0;
+}
+std::string MechanismLoss(const std::string& text){
+    const auto at=text.find("\"firstMechanismLoss\":");
+    return at==std::string::npos?std::string{}:text.substr(at,text.find(",\"firstSupplyLoss\":",at)-at);
+}
+int HeldMechanismLossRetainsFirstCauseAcrossSameGripReacquisition(){
+    const auto observe=[](bool compact=false){std::ostringstream full,small;full<<std::boolalpha;small<<std::boolalpha;
+        WriteBc2PhysicalFeedAdmissionObservation(full,&small);return compact?small.str():full.str();};
+    for(unsigned fault=0;fault<5;++fault){
+        Fixture f;f.now=(120+fault)*1000*Ms;CHECK(f.OpenCover()&&f.Reconcile());
+        RequestBc2PhysicalFeedAdmissionObservation(f.now);
+        CHECK(f.Place(FeedPhysicalOperation::DetachContainer,true,false));
+        const auto held=f.hands.Current(InteractionHand::Left);CHECK(held&&held->token.kind==HandClaimKind::Mechanism);
+        const auto heldInput=f.sample.input;const auto native=f.backend.Read(f.sample.owner,heldInput.nowNs);CHECK(native);
+        const auto before=observe(),press=before.substr(0,before.find(",\"latestChange\":"));
+        CHECK(MechanismLoss(before)=="\"firstMechanismLoss\":null");
+        const auto counts=f.native.counts;const auto submits=f.submits;
+        f.PrepareTick(f.lastWrist,true);
+        if(fault==0)f.refuseGate=true;
+        if(fault==2)CHECK(f.hands.Release(f.sample.input,held->token).accepted);
+        if(fault==3)f.sample.raw.valid=false;
+        if(fault==4){f.missingCurrentView=true;f.sample.raw.valid=false;}
+        const auto reads=f.nativeReads,readAts=f.nativeReadAts;
+        const Bc2PhysicalFeedSuspendContext external{Bc2PhysicalFeedSuspendSource::InputApplyRejected,5,37,true};
+        if(fault==1)f.physical.Suspend(f.sample.input,f.hands,external);else f.Consume();
+        CHECK(f.nativeReads==reads+(fault==1?0:1)&&f.nativeReadAts==readAts+(fault==1?0:1));
+        const auto observed=observe(),loss=MechanismLoss(observed);
+        CHECK(loss!="\"firstMechanismLoss\":null"&&loss==MechanismLoss(observe(true)));
+        CHECK(observed.substr(0,observed.find(",\"latestChange\":"))==press);
+        const char* site=fault==0?"policy_clear":fault==1?"external_suspend":fault==2?"claim_unavailable":"tick_suspend";
+        CHECK(loss.find(std::string("\"site\":\"")+site+'"')!=std::string::npos);
+        CHECK(loss.find("\"heldToken\":{\"id\":"+std::to_string(held->token.id)+',')!=std::string::npos);
+        CHECK(loss.find("\"heldClaim\":{\"id\":"+std::to_string(held->token.id)+',')!=std::string::npos);
+        CHECK(loss.find("\"inputSequence\":"+std::to_string(held->inputSequence)+",\"deadlineNs\":"+
+            std::to_string(held->deadlineNs))!=std::string::npos);
+        CHECK(loss.find("\"heldNative\":{\"sequence\":"+std::to_string(native->sequence)+",\"observedNs\":"+
+            std::to_string(native->observedNs)+",\"deadlineNs\":"+std::to_string(native->deadlineNs))!=std::string::npos);
+        CHECK(loss.find("\"nowNs\":"+std::to_string(f.sample.input.nowNs))!=std::string::npos);
+        CHECK(loss.find("\"operationBefore\":"+std::to_string(unsigned(FeedPhysicalOperation::DetachContainer)))!=std::string::npos);
+        if(fault==0){CHECK(loss.find("\"gateFailed\":true")!=std::string::npos);
+            CHECK(loss.find("\"rawChecked\":511,\"rawPassed\":511")!=std::string::npos);
+            CHECK(loss.find("\"outcome\":{\"evaluated\":true,\"completion\":false,\"dispatch\":false")!=std::string::npos);}
+        if(fault==1)CHECK(loss.find("\"external\":{\"source\":\"input_apply_rejected\",\"detail\":5,\"sourceFlags\":37,\"preserveMagazine\":true}")!=std::string::npos);
+        if(fault==3)CHECK(loss.find("\"selectionFailure\":8")!=std::string::npos);
+        if(fault==4)CHECK(loss.find("\"admissionChecked\":1,\"admissionPassed\":0")!=std::string::npos);
+        CHECK(f.native.counts==counts&&f.submits==submits&&!f.backend.Pending());
+        f.refuseGate=f.missingCurrentView=false;f.sample.raw.valid=true;
+        if(fault==0){
+            // Same continuously held input, new mechanism token. Recovery and
+            // NeedNeutral must not replace the reason the original token died.
+            std::optional<HandClaim> reacquired;
+            for(unsigned step=0;step<8&&!reacquired;++step){f.Tick(f.lastWrist,true);
+                const auto left=f.hands.Current(InteractionHand::Left);
+                if(left&&left->token.id!=held->token.id)reacquired=left;
+                CHECK(!f.sample.input.released[0]&&MechanismLoss(observe())==loss);}
+            CHECK(reacquired&&reacquired->token.id==held->token.id+1);
+            CHECK(f.result.interactionStatus==FeedInteractionStatus::NeedNeutral);
+            f.PrepareTick(f.lastWrist,true);++f.sample.raw.inputEvidence.observedNs;f.Consume();
+            CHECK(f.result.diagnostic.rawChecked==3&&f.result.diagnostic.rawPassed==1);
+            CHECK(MechanismLoss(observe())==loss); // The later raw failure is not first cause.
+            // Changing the selected owner/space while this squeeze continues
+            // can start a new firstPress, but cannot erase the earlier loss.
+            ++f.native.identity.owner.equipGeneration;++f.native.identity.owner.space;
+            f.native.binding.owner=f.native.identity.owner;f.native.binding.context.equipGeneration=f.native.identity.owner.equipGeneration;
+            f.native.binding.context.space=f.native.identity.owner.space;
+            f.sample.owner=f.native.identity.owner;f.selected->owner=f.sample.owner;f.sample.raw.owner=f.sample.owner;
+            ++f.sample.weapon.generation;++f.sample.input.owner.equipGeneration;++f.sample.input.owner.space;
+            (void)f.hands.Reset();f.Tick(f.lastWrist,true);
+            CHECK(MechanismLoss(observe())==loss);
+        }
+        f.physical.Suspend(f.sample.input,f.hands,{Bc2PhysicalFeedSuspendSource::HandOwnershipReset,
+            unsigned(Bc2PhysicalFeedHandResetReason::SessionStop)});
+        f.sample.grip=false;f.Consume();f.sample.grip=true;f.Consume();
+        CHECK(!f.sample.input.released[0]&&MechanismLoss(observe())==loss);
+        f.Tick(f.lastWrist,false);CHECK(MechanismLoss(observe())==loss);
+        f.Tick(f.lastWrist,true);CHECK(MechanismLoss(observe())=="\"firstMechanismLoss\":null");
+        CHECK(f.native.counts==counts&&f.submits==submits&&!f.backend.Pending());
+        CHECK(observe(true).size()+11702+4096<=32768);
+    }
+    // The expired request cannot publish a diagnostic on an actual claim loss.
+    Fixture quiet;quiet.now=140*1000*Ms;const auto motion=quiet.Open();
+    const auto wrist=feed_interaction_detail::Multiply(motion.motionFromContact,motion.weaponFromMotion);
+    quiet.Tick(wrist,false);quiet.Tick(wrist,true);CHECK(quiet.result.ownsHand);
+    const auto unchanged=observe();quiet.physical.Suspend(quiet.sample.input,quiet.hands);
+    CHECK(!quiet.hands.Current(InteractionHand::Left)&&observe()==unchanged);
+    return 0;
+}
+int MechanismReleaseWaitIsDistinctFromSuccessfulExplicitRelease(){
+    const auto observe=[](){std::ostringstream out;out<<std::boolalpha;WriteBc2PhysicalFeedAdmissionObservation(out);return out.str();};
+    for(bool delayed:{false,true}){
+        Fixture f;f.now=(150+unsigned(delayed))*1000*Ms;CHECK(f.OpenCover()&&f.Reconcile());
+        RequestBc2PhysicalFeedAdmissionObservation(f.now);CHECK(f.Place(FeedPhysicalOperation::DetachContainer,true,false));
+        const auto held=f.sample.raw;const auto counts=f.native.counts;
+        const auto native=f.backend.Read(f.sample.owner,f.sample.input.nowNs);CHECK(native);
+        f.PrepareTick(f.lastWrist,false);const auto released=f.sample.raw;
+        if(!delayed){f.Consume();CHECK(f.result.pending&&f.submits==2);
+            CHECK(MechanismLoss(observe())=="\"firstMechanismLoss\":null");}
+        else {f.Consume(&held);CHECK(!f.result.ownsHand&&!f.result.pending&&f.submits==1);
+            const auto loss=MechanismLoss(observe());CHECK(loss.find("\"site\":\"release_wait\"")!=std::string::npos);
+            CHECK(loss.find("\"released\":[true,false]")!=std::string::npos);
+            f.now=native->deadlineNs-10*Ms;f.PrepareTick(f.lastWrist,false);f.Consume(&released);
+            CHECK(!f.result.pending&&f.submits==1&&f.native.counts==counts);
+            CHECK(MechanismLoss(observe())==loss);}
+    }
+    return 0;
+}
+int CompactAdmissionUsesSameImmutableMechanismLoss(){
+    Fixture f;f.now=160*1000*Ms;const auto motion=f.Open();
+    const auto wrist=feed_interaction_detail::Multiply(motion.motionFromContact,motion.weaponFromMotion);
+    f.Tick(wrist,false);RequestBc2PhysicalFeedAdmissionObservation(f.now);f.Tick(wrist,true);CHECK(f.result.ownsHand);
+    f.physical.Suspend(f.sample.input,f.hands,{Bc2PhysicalFeedSuspendSource::HandOwnershipReset,
+        unsigned(Bc2PhysicalFeedHandResetReason::InputUnavailable),11,true});
+    std::ostringstream before,beforeCompact;before<<std::boolalpha;beforeCompact<<std::boolalpha;
+    WriteBc2PhysicalFeedAdmissionObservation(before,&beforeCompact);
+    CHECK(MechanismLoss(before.str())!="\"firstMechanismLoss\":null");
+    CHECK(MechanismLoss(before.str())==MechanismLoss(beforeCompact.str()));
+    bool replaced=false;FeedObservationInterleavingBuffer buffer([&]{f.Tick(wrist,false);f.Tick(wrist,true);replaced=true;});
+    std::ostream full(&buffer);full<<std::boolalpha;std::ostringstream compact;compact<<std::boolalpha;
+    WriteBc2PhysicalFeedAdmissionObservation(full,&compact);
+    CHECK(replaced&&buffer.str()==before.str()&&compact.str()==beforeCompact.str());
+    std::ostringstream after;after<<std::boolalpha;WriteBc2PhysicalFeedAdmissionObservation(after);
+    CHECK(MechanismLoss(after.str())=="\"firstMechanismLoss\":null");
     CHECK(compact.str().size()+11702+4096<=32768);
     return 0;
 }
@@ -2203,5 +2333,8 @@ int main(){
     CHECK(NeutralBlockedAdmissionObservesExistingRefusalsWithoutAuthority()==0);
     CHECK(HeldSupplyLossRetainsPreclearReasonAndCustody()==0);
     CHECK(CompactAdmissionUsesSameImmutableSupplyLoss()==0);
-    std::puts("Bc2PhysicalFeedTests: 45 deterministic owner/arbiter/callback/presentation compositions; no game or headset acceptance");
+    CHECK(HeldMechanismLossRetainsFirstCauseAcrossSameGripReacquisition()==0);
+    CHECK(MechanismReleaseWaitIsDistinctFromSuccessfulExplicitRelease()==0);
+    CHECK(CompactAdmissionUsesSameImmutableMechanismLoss()==0);
+    std::puts("Bc2PhysicalFeedTests: 48 deterministic owner/arbiter/callback/presentation compositions; no game or headset acceptance");
 }

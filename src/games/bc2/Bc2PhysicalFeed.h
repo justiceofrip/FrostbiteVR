@@ -49,13 +49,16 @@ std::shared_ptr<const Bc2PhysicalFeedPresentation> ReadBc2PhysicalFeedPresentati
 // retention checks. A separate firstSupplyLoss preserves the pre-clear held
 // object/custody, current input, evaluated admission/raw/Gun checks and the
 // Tick or external Suspend call site. Loss alone proves no native transfer.
+// firstMechanismLoss similarly preserves the old mechanism token, original
+// held input/native leases and pre-clear policy state, including the external
+// caller's diagnostic reason. Successful explicit completion is not a loss.
 // Only an observed neutral followed by a newer held input can start a new
-// supply-loss episode; changing claims/publications while held cannot erase it.
+// held-loss episode; changing claims/publications while held cannot erase it.
 // Neutral supported-feed debt also records gate changes;
 // it never becomes a press. A request begun while held does not establish the press edge.
 void RequestBc2PhysicalFeedAdmissionObservation(std::int64_t nowNs)noexcept;
 // Both forms use one immutable publication load. Compact keeps the complete
-// first failed retention, first supply loss and first-press identity/input/claim receipts; later
+// first failed retention, both first held losses and first-press identity/input/claim receipts; later
 // held changes and first-press geometry/checks are explicitly omitted. Neutral
 // latest changes retain their input, raw and GunHold checks in both forms.
 void WriteBc2PhysicalFeedAdmissionObservation(std::ostream&,std::ostream* compact=nullptr);
@@ -118,6 +121,18 @@ struct Bc2PhysicalFeedResult {
     std::optional<Bc2FeedBodyAmmo> bodyAmmo;
     std::optional<interaction::AmmoSupplyVisualSample> bodyVisual;
 };
+// Diagnostic values only; never participate in cancellation/admission policy.
+enum class Bc2PhysicalFeedSuspendSource:unsigned {Unknown,ReloadOwnerLoss,HandOwnershipReset,
+    ArmingFixture,ReloadFixture,InputApplyRejected};
+enum class Bc2PhysicalFeedHandResetReason:unsigned {Unknown,InputUnavailable,OwnerUnavailable,
+    NotOnFoot,SessionStop,Identity};
+struct Bc2PhysicalFeedSuspendContext {
+    Bc2PhysicalFeedSuspendSource source=Bc2PhysicalFeedSuspendSource::Unknown;
+    // ReloadOwnerLoss ordinal, HandResetReason ordinal, or InputApplyRejected
+    // bits: body rearm=1, magazine rearm=2, selection rearm=4. Otherwise zero.
+    unsigned detail=0,sourceFlags=0;
+    bool preserveMagazine=false;
+};
 class Bc2PhysicalFeed {
 public:
     explicit Bc2PhysicalFeed(Bc2PhysicalFeedApi api={})noexcept;
@@ -125,7 +140,8 @@ public:
     Bc2PhysicalFeed(const Bc2PhysicalFeed&)=delete;
     Bc2PhysicalFeed& operator=(const Bc2PhysicalFeed&)=delete;
     Bc2PhysicalFeedResult Tick(const Bc2PhysicalFeedSample&,interaction::HandInteraction&,std::uint64_t& intent)noexcept;
-    void Suspend(const interaction::HandInteractionSample&,interaction::HandInteraction&)noexcept;
+    void Suspend(const interaction::HandInteractionSample&,interaction::HandInteraction&,
+        Bc2PhysicalFeedSuspendContext={})noexcept;
     void Report(std::ostream&)const;
     // Suppression only: caller must independently revalidate live native
     // equipment/actor. An expired pose grants no rendering or ammo authority.

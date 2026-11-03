@@ -227,7 +227,8 @@ void PublishMechanismAudio(const ReloadStateOwner& native,const interaction::Han
     mechanismAudio::Publish(source);
     if(event)mechanismAudio::Emit(*event);
 }
-void CancelPhysicalReload(PhysicalReloadResult* unpublished=nullptr,unsigned sourceFlags=0,bool preserveMagazine=false)noexcept;
+void CancelPhysicalReload(PhysicalReloadResult* unpublished=nullptr,unsigned sourceFlags=0,bool preserveMagazine=false,
+    Bc2PhysicalFeedSuspendContext feedContext={})noexcept;
 void CancelWeaponVisibilityProbe()noexcept;
 std::optional<Bc2EmptyFireProbe> emptyFireFixture;
 #ifdef FVR_BC2_ARMING_EMPTY_PROBE
@@ -248,7 +249,8 @@ void ClearReloadOwner(ReloadOwnerLoss loss=ReloadOwnerLoss::LifetimeEnded)noexce
 #ifdef FVR_BC2_ARMING_EMPTY_PROBE
 if(armingEmptyFixture)armingEmptyFixture->Cancel();
 #endif
-if(emptyFireFixture)emptyFireFixture->Cancel();CancelWeaponVisibilityProbe();CancelPhysicalReload(nullptr,0,loss==ReloadOwnerLoss::PresentationUnavailable);selectedMeshes.Clear();reloadFlowRuntime::ClearOwner(loss);}
+if(emptyFireFixture)emptyFireFixture->Cancel();CancelWeaponVisibilityProbe();CancelPhysicalReload(nullptr,0,loss==ReloadOwnerLoss::PresentationUnavailable,
+    {Bc2PhysicalFeedSuspendSource::ReloadOwnerLoss,unsigned(loss)});selectedMeshes.Clear();reloadFlowRuntime::ClearOwner(loss);}
 std::array<ReloadStateSnapshot,128> reloadSnapshots{};
 unsigned reloadSnapshotCount=0;std::array<unsigned,7> reloadStatuses{};
 std::array<unsigned,4> reloadPublicationStatuses{};std::array<unsigned,10> reloadPublicationReasons{};
@@ -726,13 +728,14 @@ void CancelWeaponVisibilityProbe()noexcept {
     rigPublication::PublishWeaponVisibility({});weaponVisibilitySample.store({},std::memory_order_release);
 }
 void SuppressMagazineRecovery()noexcept;
-void CancelPhysicalReload(PhysicalReloadResult* unpublished,unsigned sourceFlags,bool preserveMagazine)noexcept {
+void CancelPhysicalReload(PhysicalReloadResult* unpublished,unsigned sourceFlags,bool preserveMagazine,Bc2PhysicalFeedSuspendContext feedContext)noexcept {
     if(physicalFixedContainer){auto safety=handSample;LARGE_INTEGER now{};
         if(QueryPerformanceCounter(&now))safety.nowNs=HandNanos(now.QuadPart);
         physicalFixedContainer->Cancel(safety,handOwnership);fixedContainerGripHeld=false;}
     if(physicalFeed){auto safety=handSample;LARGE_INTEGER now{};
         if(QueryPerformanceCounter(&now))safety.nowNs=HandNanos(now.QuadPart);
-        physicalFeed->Suspend(safety,handOwnership);
+        feedContext.sourceFlags=sourceFlags;feedContext.preserveMagazine=preserveMagazine;
+        physicalFeed->Suspend(safety,handOwnership,feedContext);
         if(interactionTrace){auto& r=interactionTrace->interactions.feed;r={};r.observed=r.suspended=true;}}
     if(physicalPistolSlide){auto safety=handSample;LARGE_INTEGER now{};
         if(QueryPerformanceCounter(&now))safety.nowNs=HandNanos(now.QuadPart);
@@ -812,7 +815,13 @@ void ResetHandOwnership(const char* reason,bool preserveMagazine=false)noexcept 
 #endif
     // Invalidating pose leases must not discard an original magazine merely
     // because tracking vanished. This can follow ClearReloadOwner in one tick.
-    CancelPhysicalReload(nullptr,0,preserveMagazine||!std::strcmp(reason,"input_unavailable"));
+    const auto feedResetReason=!std::strcmp(reason,"input_unavailable")?Bc2PhysicalFeedHandResetReason::InputUnavailable:
+        !std::strcmp(reason,"owner_unavailable")?Bc2PhysicalFeedHandResetReason::OwnerUnavailable:
+        !std::strcmp(reason,"not_on_foot")?Bc2PhysicalFeedHandResetReason::NotOnFoot:
+        !std::strcmp(reason,"session_stop")?Bc2PhysicalFeedHandResetReason::SessionStop:
+        !std::strcmp(reason,"identity")?Bc2PhysicalFeedHandResetReason::Identity:Bc2PhysicalFeedHandResetReason::Unknown;
+    CancelPhysicalReload(nullptr,0,preserveMagazine||!std::strcmp(reason,"input_unavailable"),
+        {Bc2PhysicalFeedSuspendSource::HandOwnershipReset,unsigned(feedResetReason)});
     if(bodyInventory&&std::strcmp(reason,"identity")){
         const auto cause=!std::strcmp(reason,"input_unavailable")?BodyHolsterLifecycleReason::InputUnavailable:
             !std::strcmp(reason,"owner_unavailable")?BodyHolsterLifecycleReason::OwnerUnavailable:
@@ -2359,10 +2368,10 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         if(armingEmptyFixture){const auto policy=reloadFlowRuntime::ReadRequestProbeSnapshot();LARGE_INTEGER stamp{};QueryPerformanceCounter(&stamp);
             const auto now=HandNanos(stamp.QuadPart);physicalResult.reloadHeld=armingEmptyFixture->After(physicalReload->ProbeState(now),
                 physicalResult.reloadHeld,policy?policy->phase:~0u,policy?policy->cycle:0,input.generation,now);
-            if(armingEmptyFixture->CancelConsumer())CancelPhysicalReload(&physicalResult,ReloadCancelFixture);}
+            if(armingEmptyFixture->CancelConsumer())CancelPhysicalReload(&physicalResult,ReloadCancelFixture,false,{Bc2PhysicalFeedSuspendSource::ArmingFixture});}
 #endif
         if(physicalReloadFixture){LARGE_INTEGER observed{};QueryPerformanceCounter(&observed);const auto now=HandNanos(observed.QuadPart);
-            physicalReloadFixture->Observe(physicalReload->ProbeState(now),now);if(physicalReloadFixture->CancelConsumer())CancelPhysicalReload(&physicalResult,ReloadCancelFixture);}
+            physicalReloadFixture->Observe(physicalReload->ProbeState(now),now);if(physicalReloadFixture->CancelConsumer())CancelPhysicalReload(&physicalResult,ReloadCancelFixture,false,{Bc2PhysicalFeedSuspendSource::ReloadFixture});}
         for(unsigned n=0;n<physicalResult.feedbackCount;++n){
             if(writeFeedback&&writeFeedback(physicalResult.feedback[n]))++feedbackSent;else ++feedbackDropped;}
         // Native Reload is only the explicit 100ms cycle-start pulse in this mode.
@@ -3412,7 +3421,8 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         }
         const bool magazineRearm=!out.active&&out.owner==owner.soldier&&
             !grenade.value_or(false)&&!cycle.value_or(false)&&!weaponMode&&!pendingMode&&!bodyDraw.command&&!holsterEquipment;
-        CancelPhysicalReload(nullptr,0,magazineRearm);InvalidateBodyHolster(rearm,rearm?BodyHolsterLifecycleReason::InputRearm:BodyHolsterLifecycleReason::InputApplyRejected);
+        CancelPhysicalReload(nullptr,0,magazineRearm,{Bc2PhysicalFeedSuspendSource::InputApplyRejected,
+            unsigned(rearm)|(unsigned(magazineRearm)<<1)|(unsigned(selectionRearm)<<2)});InvalidateBodyHolster(rearm,rearm?BodyHolsterLifecycleReason::InputRearm:BodyHolsterLifecycleReason::InputApplyRejected);
         if(bodyInventory&&!selectionRearm)bodyInventory->SuspendInteraction();if(weaponMode&&pendingMode){modeRecords[*pendingMode].cancelled=true;pendingMode.reset();--modeRequests;++modeRejections;}
     }
 }

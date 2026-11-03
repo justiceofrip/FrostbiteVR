@@ -78,7 +78,8 @@ struct FeedAdmissionAttempt {
     std::array<FeedRetentionSlot,8> retentionSlots{};
 };
 enum class FeedSupplyLossSite {TickSuspend,ExternalSuspend,ReleaseWait,ReleaseContinuationUnavailable,
-    ReleaseContinuationUnverified,SupplyUpdate,SupplyBind,ActorRetirement};
+    ReleaseContinuationUnverified,SupplyUpdate,SupplyBind,ActorRetirement,ClaimUnavailable,
+    ClaimRenewalRejected,PolicyClear,ContextReset,LifetimeReset};
 const char* SupplyLossSiteName(FeedSupplyLossSite site)noexcept {
     switch(site){
     case FeedSupplyLossSite::TickSuspend:return "tick_suspend";
@@ -88,7 +89,12 @@ const char* SupplyLossSiteName(FeedSupplyLossSite site)noexcept {
     case FeedSupplyLossSite::ReleaseContinuationUnverified:return "release_continuation_unverified";
     case FeedSupplyLossSite::SupplyUpdate:return "supply_update";
     case FeedSupplyLossSite::SupplyBind:return "supply_bind";
-    case FeedSupplyLossSite::ActorRetirement:return "actor_retirement";}
+    case FeedSupplyLossSite::ActorRetirement:return "actor_retirement";
+    case FeedSupplyLossSite::ClaimUnavailable:return "claim_unavailable";
+    case FeedSupplyLossSite::ClaimRenewalRejected:return "claim_renewal_rejected";
+    case FeedSupplyLossSite::PolicyClear:return "policy_clear";
+    case FeedSupplyLossSite::ContextReset:return "context_reset";
+    case FeedSupplyLossSite::LifetimeReset:return "lifetime_reset";}
     return "unknown";
 }
 // Copied before the mutating call. A lost hand is not a lost reserve resource,
@@ -100,11 +106,27 @@ struct FeedHeldSupplyLoss {
     FeedSupplyLossSite site=FeedSupplyLossSite::TickSuspend;
     bool nativePending=false,refused=false,gateFailed=false,motionDirty=false,supplyNeutral=false,releaseWait=false;
 };
+// The arbiter may already have revoked the claim before Tick. Keep the exact
+// last observed receipt separately from the current hand; never renew it.
+struct FeedHeldMechanismLoss {
+    FeedAdmissionAttempt before{};
+    HandClaimToken token{};
+    std::optional<HandClaim> heldClaim;
+    std::optional<HandInteractionSample> heldInput,releaseInput;
+    std::uint64_t nativeSequence=0;
+    std::int64_t nativeObservedNs=0,nativeDeadlineNs=0,releaseDeadlineNs=0;
+    FeedSupplyLossSite site=FeedSupplyLossSite::TickSuspend;
+    bool nativePending=false,refused=false,gateFailed=false,motionDirty=false,releaseWait=false;
+    bool outcomeEvaluated=false,completion=false,dispatch=false;
+    unsigned outcomeStatus=0;
+    Bc2PhysicalFeedSuspendContext external{};
+};
 struct FeedAdmissionObservation {
     std::optional<FeedAdmissionAttempt> firstPress;
     FeedAdmissionAttempt latestChange{};
     std::optional<FeedAdmissionAttempt> failedRetention;
     std::optional<FeedHeldSupplyLoss> firstSupplyLoss;
+    std::optional<FeedHeldMechanismLoss> firstMechanismLoss;
 };
 std::atomic<std::int64_t> admissionObservationUntil=0;
 std::atomic<std::shared_ptr<const FeedAdmissionObservation>> admissionObservation;
@@ -208,10 +230,12 @@ void WriteFeedAdmission(std::ostream& out,const FeedAdmissionObservation* observ
     const auto input=[&](const HandInteractionSample& s){out<<"{\"owner\":";owner(s.owner);
         out<<",\"sequence\":"<<s.sequence<<",\"observedNs\":"<<s.observedNs<<",\"deadlineNs\":"<<s.deadlineNs<<",\"nowNs\":"<<s.nowNs
             <<",\"focused\":"<<s.focused<<",\"tracked\":["<<s.tracked[0]<<','<<s.tracked[1]<<"],\"released\":["<<s.released[0]<<','<<s.released[1]<<"]}";};
-    const auto claim=[&](const std::optional<HandClaim>& c){if(!c){out<<"null";return;}const auto& t=c->token;
+    const auto token=[&](const HandClaimToken& t){
         out<<"{\"id\":"<<t.id<<",\"kind\":"<<unsigned(t.kind)<<",\"hand\":"<<unsigned(t.hand)<<",\"owner\":";owner(t.owner);
         out<<",\"item\":["<<t.item.id<<','<<t.item.generation<<"],\"contact\":["<<t.contact.id<<','<<t.contact.generation
-            <<"],\"prerequisiteClaim\":"<<t.prerequisiteClaim<<",\"inputSequence\":"<<c->inputSequence<<",\"deadlineNs\":"<<c->deadlineNs<<'}';};
+            <<"],\"prerequisiteClaim\":"<<t.prerequisiteClaim;};
+    const auto claim=[&](const std::optional<HandClaim>& c){if(!c){out<<"null";return;}token(c->token);
+        out<<",\"inputSequence\":"<<c->inputSequence<<",\"deadlineNs\":"<<c->deadlineNs<<'}';};
     const auto scalar=[&](double x){if(std::isfinite(x))out<<x;else out<<"null";};
     const auto status=[&](unsigned x){if(x==~0u)out<<"null";else out<<x;};
     const auto checks=[&](const FeedRetentionChecks& c,const auto& names){
@@ -276,6 +300,32 @@ void WriteFeedAdmission(std::ostream& out,const FeedAdmissionObservation* observ
     out<<",\"retentionEntryPredicates\":";names(RetentionEntryPredicates);
     out<<",\"retentionSlotPredicates\":";names(RetentionSlotPredicates);
     out<<",\"rawPredicates\":";names(RawPredicates);out<<",\"gunPredicates\":";names(GunPredicates);
+    out<<",\"firstMechanismLoss\":";
+    if(!observation->firstMechanismLoss)out<<"null";
+    else {const auto& loss=*observation->firstMechanismLoss;
+        out<<"{\"site\":\""<<SupplyLossSiteName(loss.site)<<"\",\"tickContext\":"<<(loss.site!=FeedSupplyLossSite::ExternalSuspend)
+            <<",\"before\":";attempt(loss.before);
+        out<<",\"heldToken\":";token(loss.token);out<<'}';
+        out<<",\"heldClaim\":";claim(loss.heldClaim);
+        out<<",\"heldInput\":";if(loss.heldInput)input(*loss.heldInput);else out<<"null";
+        out<<",\"heldNative\":{\"sequence\":"<<loss.nativeSequence<<",\"observedNs\":"<<loss.nativeObservedNs
+            <<",\"deadlineNs\":"<<loss.nativeDeadlineNs<<"},\"operationBefore\":";status(loss.before.diagnostic.operation);
+        out<<",\"nativePending\":"<<loss.nativePending<<",\"refused\":"<<loss.refused<<",\"gateFailed\":"<<loss.gateFailed
+            <<",\"motionDirty\":"<<loss.motionDirty<<",\"releaseWait\":"<<loss.releaseWait<<",\"releaseInput\":";
+        if(loss.releaseInput)input(*loss.releaseInput);else out<<"null";
+        out<<",\"releaseDeadlineNs\":"<<loss.releaseDeadlineNs<<",\"outcome\":{\"evaluated\":"<<loss.outcomeEvaluated
+            <<",\"completion\":"<<loss.completion<<",\"dispatch\":"<<loss.dispatch<<",\"status\":"<<loss.outcomeStatus<<"},\"external\":{";
+        const char* source="unknown";
+        switch(loss.external.source){
+        case Bc2PhysicalFeedSuspendSource::ReloadOwnerLoss:source="reload_owner_loss";break;
+        case Bc2PhysicalFeedSuspendSource::HandOwnershipReset:source="hand_ownership_reset";break;
+        case Bc2PhysicalFeedSuspendSource::ArmingFixture:source="arming_fixture";break;
+        case Bc2PhysicalFeedSuspendSource::ReloadFixture:source="reload_fixture";break;
+        case Bc2PhysicalFeedSuspendSource::InputApplyRejected:source="input_apply_rejected";break;
+        default:break;}
+        out<<"\"source\":\""<<source<<"\",\"detail\":"<<loss.external.detail<<",\"sourceFlags\":"<<loss.external.sourceFlags
+            <<",\"preserveMagazine\":"<<loss.external.preserveMagazine<<"}}";
+    }
     out<<",\"firstSupplyLoss\":";
     if(!observation->firstSupplyLoss)out<<"null";
     else {const auto& loss=*observation->firstSupplyLoss;
@@ -352,6 +402,7 @@ struct Bc2PhysicalFeed::State {
         bool supplyNeutral=false;
         std::optional<FeedEquipmentSubmission> pending;
         std::optional<HandClaimToken> claim;
+        std::optional<HandClaim> observedMechanismClaim;
         std::optional<HandGrip> handGrip;
         std::optional<FeedObservedContact> recoveryContact;
         std::optional<math::Matrix4> presentationSource;
@@ -374,11 +425,10 @@ struct Bc2PhysicalFeed::State {
     std::array<std::unique_ptr<Equipment>,8> equipment{};
     std::uint64_t retirementEvent=0;
     explicit State(Bc2PhysicalFeedApi a):api(a){}
-    static FeedHeldSupplyLoss SupplyLoss(const Equipment& e,const HandInteractionSample& input,
-        const HandInteraction& hands,FeedSupplyLossSite site,FeedExit reason,
-        const FeedAdmissionAttempt* attempt=nullptr,const Bc2PhysicalFeedDiagnostic* diagnostic=nullptr)noexcept {
-        FeedHeldSupplyLoss loss;loss.site=site;loss.held=*e.ammunitionSupply.Held();loss.custody=e.ammunitionSupply.Custody();
-        auto& a=loss.before;if(attempt)a=*attempt;if(diagnostic)a.diagnostic=*diagnostic;
+    static FeedAdmissionAttempt LossAttempt(const Equipment& e,const HandInteractionSample& input,
+        const HandInteraction& hands,FeedExit reason,const FeedAdmissionAttempt* attempt,
+        const Bc2PhysicalFeedDiagnostic* diagnostic)noexcept {
+        FeedAdmissionAttempt a;if(attempt)a=*attempt;if(diagnostic)a.diagnostic=*diagnostic;
         if(!attempt){a.owner=e.original.identity.owner;a.weapon=e.weapon;a.current=input;}
         a.registrationKey=e.registration.key;a.lifetime=e.lifetime;a.diagnostic.exit=reason;
         a.leftBefore=hands.Current(InteractionHand::Left);a.rightBefore=hands.Current(InteractionHand::Right);
@@ -386,8 +436,33 @@ struct Bc2PhysicalFeed::State {
         if(e.session){const auto& session=e.session->State();a.diagnostic.reloadPhase=unsigned(session.session.reload.phase);
             a.diagnostic.status=unsigned(session.status)|(unsigned(session.session.interaction.status)<<8)|
                 (unsigned(session.session.reload.status)<<16);}
+        return a;
+    }
+    static FeedHeldSupplyLoss SupplyLoss(const Equipment& e,const HandInteractionSample& input,
+        const HandInteraction& hands,FeedSupplyLossSite site,FeedExit reason,
+        const FeedAdmissionAttempt* attempt=nullptr,const Bc2PhysicalFeedDiagnostic* diagnostic=nullptr)noexcept {
+        FeedHeldSupplyLoss loss;loss.site=site;loss.held=*e.ammunitionSupply.Held();loss.custody=e.ammunitionSupply.Custody();
+        loss.before=LossAttempt(e,input,hands,reason,attempt,diagnostic);
         loss.nativePending=bool(e.pending);loss.refused=e.refused;loss.gateFailed=e.gateFailed;
         loss.motionDirty=e.motionDirty;loss.supplyNeutral=e.supplyNeutral;loss.releaseWait=bool(e.releaseWait);
+        return loss;
+    }
+    FeedHeldMechanismLoss MechanismLoss(const Equipment& e,const HandInteractionSample& input,
+        const HandInteraction& hands,FeedSupplyLossSite site,FeedExit reason,
+        const FeedAdmissionAttempt* attempt=nullptr,const Bc2PhysicalFeedDiagnostic* diagnostic=nullptr)const noexcept {
+        FeedHeldMechanismLoss loss;loss.site=site;loss.token=*e.claim;
+        loss.before=LossAttempt(e,input,hands,reason,attempt,diagnostic);
+        const auto left=hands.Current(InteractionHand::Left);
+        if(left&&left->token==loss.token)loss.heldClaim=left;
+        else if(e.observedMechanismClaim&&e.observedMechanismClaim->token==loss.token)loss.heldClaim=e.observedMechanismClaim;
+        for(const auto& packet:packets)if(packet.owner==e.original.identity.owner&&packet.weapon==e.weapon&&
+            packet.input.sequence==(loss.heldClaim?loss.heldClaim->inputSequence:e.lastInput)){
+            loss.heldInput=packet.input;
+            if(packet.native){loss.nativeSequence=packet.native->sequence;loss.nativeObservedNs=packet.native->observedNs;
+                loss.nativeDeadlineNs=packet.native->deadlineNs;}break;}
+        loss.nativePending=bool(e.pending);loss.refused=e.refused;loss.gateFailed=e.gateFailed;loss.motionDirty=e.motionDirty;
+        loss.releaseWait=bool(e.releaseWait);
+        if(e.releaseWait){loss.releaseInput=e.releaseWait->input;loss.releaseDeadlineNs=e.releaseWait->deadlineNs;}
         return loss;
     }
     void Suspend(const HandInteractionSample& input,HandInteraction& hands)noexcept {
@@ -576,17 +651,23 @@ std::optional<FeedEquipmentGate> Bc2PhysicalFeed::RetainedGate(const ReloadState
         if(retained){retained->blocksFire=retained->blocksFire||e->Blocked();return retained;}
     }return {};
 }
-void Bc2PhysicalFeed::Suspend(const HandInteractionSample& input,HandInteraction& hands)noexcept {
+void Bc2PhysicalFeed::Suspend(const HandInteractionSample& input,HandInteraction& hands,Bc2PhysicalFeedSuspendContext context)noexcept {
     publication.store({},std::memory_order_release);if(!state_)return;
     std::optional<FeedHeldSupplyLoss> loss;
-    if(input.nowNs>0&&input.nowNs<admissionObservationUntil.load(std::memory_order_relaxed)&&
-       (!state_->admission||!state_->admission->firstSupplyLoss))
-        for(const auto& e:state_->equipment)if(e&&e->ammunitionSupply.Held()){
-            loss=State::SupplyLoss(*e,input,hands,FeedSupplyLossSite::ExternalSuspend,FeedExit::None);break;}
+    std::optional<FeedHeldMechanismLoss> mechanismLoss;
+    if(input.nowNs>0&&input.nowNs<admissionObservationUntil.load(std::memory_order_relaxed))
+        for(const auto& e:state_->equipment)if(e){
+            if(!loss&&(!state_->admission||!state_->admission->firstSupplyLoss)&&e->ammunitionSupply.Held())
+                loss=State::SupplyLoss(*e,input,hands,FeedSupplyLossSite::ExternalSuspend,FeedExit::None);
+            if(!mechanismLoss&&(!state_->admission||!state_->admission->firstMechanismLoss)&&e->claim){
+                mechanismLoss=state_->MechanismLoss(*e,input,hands,FeedSupplyLossSite::ExternalSuspend,FeedExit::None);
+                mechanismLoss->external=context;}
+        }
     state_->Suspend(input,hands);
-    if(loss)try{
+    if(loss||mechanismLoss)try{
         auto next=state_->admission?std::make_shared<FeedAdmissionObservation>(*state_->admission):std::make_shared<FeedAdmissionObservation>();
-        next->latestChange=loss->before;next->firstSupplyLoss=std::move(loss);
+        if(loss){next->latestChange=loss->before;next->firstSupplyLoss=std::move(loss);}
+        if(mechanismLoss){next->latestChange=mechanismLoss->before;next->firstMechanismLoss=std::move(mechanismLoss);}
         state_->admission=next;admissionObservation.store(std::move(next),std::memory_order_release);
     }catch(...){} // Observation failure cannot affect suspension/custody.
 }
@@ -606,7 +687,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     const bool requested=now>0&&now<admissionObservationUntil.load(std::memory_order_relaxed);
     const bool observe=requested&&(s.grip||out.blocksFire)&&SupportedAsset(s.asset);
     bool observeSupply=false;
-    if(requested)for(const auto& slot:state.equipment)if(slot&&slot->ammunitionSupply.Held()){observeSupply=true;break;}
+    if(requested)for(const auto& slot:state.equipment)if(slot&&(slot->ammunitionSupply.Held()||slot->claim)){observeSupply=true;break;}
     const bool observePress=observe&&s.grip;
     const bool newPress=observePress&&(!state.admissionPressed||!state.admission||state.admission->latestChange.owner!=s.owner||
         state.admission->latestChange.weapon!=s.weapon);
@@ -629,12 +710,20 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     State::Equipment* e=nullptr;
     const Bc2FeedRegistration* registration=nullptr;
     std::optional<FeedHeldSupplyLoss> supplyLoss;
+    std::optional<FeedHeldMechanismLoss> mechanismLoss;
     const auto captureSupplyLoss=[&](const State::Equipment& equipment,FeedSupplyLossSite site,FeedExit reason){
         if(observation&&!supplyLoss&&(newSupplyPress||!state.admission||!state.admission->firstSupplyLoss)&&equipment.ammunitionSupply.Held())
             supplyLoss=State::SupplyLoss(equipment,s.input,hands,site,reason,&*observation,&out.diagnostic);
     };
+    const auto captureMechanismLoss=[&](const State::Equipment& equipment,FeedSupplyLossSite site,FeedExit reason){
+        if(observation&&!mechanismLoss&&(newSupplyPress||!state.admission||!state.admission->firstMechanismLoss)&&equipment.claim)
+            mechanismLoss=state.MechanismLoss(equipment,s.input,hands,site,reason,&*observation,&out.diagnostic);
+    };
+    const auto captureHeldLoss=[&](const State::Equipment& equipment,FeedSupplyLossSite site,FeedExit reason){
+        captureSupplyLoss(equipment,site,reason);captureMechanismLoss(equipment,site,reason);
+    };
     const auto suspend=[&](FeedExit reason,FeedSupplyLossSite site=FeedSupplyLossSite::TickSuspend){
-        for(const auto& slot:state.equipment)if(slot)captureSupplyLoss(*slot,site,reason);
+        for(const auto& slot:state.equipment)if(slot)captureHeldLoss(*slot,site,reason);
         state.Suspend(s.input,hands);
     };
     const auto finish=[&](FeedExit reason){
@@ -652,15 +741,21 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             a.registrationKey=registration?registration->key:0;a.lifetime=e?e->lifetime:0;
             if(a.leftFeedSlot!=~0u){const auto leftAfter=hands.Current(InteractionHand::Left);
                 a.leftFeedClaimLost=!leftAfter||leftAfter->token!=a.leftBefore->token;}
-            if(newPress||!state.admission||supplyLoss||!SameAdmissionDecision(state.admission->latestChange,a))try{
+            // Bounded observation only. This preserves a claim receipt when a
+            // subsequent arbiter Update revokes it before the next feed Tick.
+            for(auto& slot:state.equipment)if(slot&&slot->claim){const auto left=hands.Current(InteractionHand::Left);
+                if(left&&left->token==*slot->claim)slot->observedMechanismClaim=left;}
+            if(newPress||!state.admission||supplyLoss||mechanismLoss||!SameAdmissionDecision(state.admission->latestChange,a))try{
                 auto next=std::make_shared<FeedAdmissionObservation>();
                 if(newPress)next->firstPress=a;
                 else if(state.admission){next->firstPress=state.admission->firstPress;next->failedRetention=state.admission->failedRetention;}
                 if(state.admission&&!newSupplyPress)next->firstSupplyLoss=state.admission->firstSupplyLoss;
+                if(state.admission&&!newSupplyPress)next->firstMechanismLoss=state.admission->firstMechanismLoss;
                 next->latestChange=a;
                 if(!next->failedRetention&&(a.retention.passed&1)&&a.leftFeedSlot!=~0u&&
                     a.leftFeedClaimLost&&!out.ownsHand)next->failedRetention=a;
                 if(!next->firstSupplyLoss&&supplyLoss)next->firstSupplyLoss=std::move(supplyLoss);
+                if(!next->firstMechanismLoss&&mechanismLoss)next->firstMechanismLoss=std::move(mechanismLoss);
                 state.admission=next;admissionObservation.store(std::move(next),std::memory_order_release);
             }catch(...){} // Observation allocation cannot alter admission.
         }
@@ -688,7 +783,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         if(flags&8)d.claims.fetch_add(1,std::memory_order_relaxed);
         return out;
     };
-    state.RetireActors(s.input,hands,captureSupplyLoss);out.blocksFire=blocksFire();
+    state.RetireActors(s.input,hands,captureHeldLoss);out.blocksFire=blocksFire();
     if(!state.api.read||!state.api.submit||!state.api.receipt){suspend(FeedExit::ApiUnavailable);return finish(FeedExit::ApiUnavailable);}
     // Completion belongs to the original equipment, including while another
     // item is selected or tracking is unavailable. Never wait for a pose to
@@ -808,7 +903,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
                 if(migrated)migrated=e->ammunitionSupply.Migrate(migration,state.BodyAmmo(*e,*view),s.input);
             }
             if(!migrated){out.blocksFire=true;return finish(FeedExit::MigrationUnverified);}
-        }else e->session.reset();
+        }else {captureMechanismLoss(*e,FeedSupplyLossSite::ContextReset,FeedExit::MigrationUnverified);e->session.reset();}
         e->original=*view;e->weapon=s.weapon;e->neutral.reset();e->lastInput=e->rejectedInput=0;e->motionDirty=true;
     }
     const auto right=hands.Current(InteractionHand::Right);
@@ -880,6 +975,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
                 // Current release revokes older held hand authority before its
                 // rendered raw packet arrives. Preserve the admitted gesture,
                 // not that stale raw pose or claim, within the original leases.
+                captureMechanismLoss(*e,FeedSupplyLossSite::ReleaseWait,FeedExit::GunOrRawUnverified);
                 if(!e->releaseWait)e->releaseWait=State::ReleaseWait{s.input,heldInput,
                     (std::min)({held->input.deadlineNs,held->native->deadlineNs,s.input.deadlineNs})};
                 captureSupplyLoss(*e,FeedSupplyLossSite::ReleaseWait,FeedExit::GunOrRawUnverified);
@@ -927,7 +1023,12 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         state.GripTarget(*e,left->token,local,e->pose.weaponFromPouch,FeedInteractionTargetKind::Object,true);
     }
     bool available=!left||(e->claim&&left->token==*e->claim)||supplyHand;
-    if(e->claim&&(!left||left->token!=*e->claim))e->claim.reset();
+    bool ordinaryReleaseCandidate=false;
+    if(e->claim&&(!left||left->token!=*e->claim)){
+        const bool alreadyCaptured=bool(mechanismLoss);
+        captureMechanismLoss(*e,FeedSupplyLossSite::ClaimUnavailable,FeedExit::PolicyStatus);
+        ordinaryReleaseCandidate=!alreadyCaptured&&mechanismLoss&&!source->grip&&sourceInput.released[0];
+        e->claim.reset();}
     // Neutral arms the input edge, not contact. Like FeedInteraction, accept a
     // released hand away from the cover, then consume that neutral on the next
     // grip packet. Only that edge may acquire the exact cover contact.
@@ -969,6 +1070,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         if(source->grip&&afterNeutral&&freshNeutral&&touch&&available&&
            view->counts.loaded<view->counts.capacity&&view->counts.reserve>0){
             const auto lifetime=Lifetime();if(!lifetime){out.blocksFire=true;return finish(FeedExit::LifetimeExhausted);}
+            captureMechanismLoss(*e,FeedSupplyLossSite::LifetimeReset,FeedExit::PolicyStatus);
             e->lifetime=lifetime;e->refill={FeedRefillState::Required,lifetime,0};e->refused=false;
             try{e->session=std::make_unique<FeedEquipmentSession>(profile,e->motions,FeedEquipmentOwner(s.owner),e->mechanism,e->supply,lifetime,
                 e->original.binding.context.resource);}catch(...){out.blocksFire=true;return finish(FeedExit::SessionUnavailable);}
@@ -1113,10 +1215,16 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
                 // a Mechanism claim for a carried reserve object.
                 if(!hands.HasRecordedEvidence(sourceInput,InteractionHand::Left))sample.held=false;
                 if(observation){auto& v=observation->decision;v.ownershipAction=3;v.ownershipAccepted=sample.held;}
-            }else if(e->claim){const auto renewed=hands.RenewFrom(s.input,sourceInput,*e->claim,proof);out.handReason=renewed.reason;
+            }else if(e->claim){const bool alreadyCaptured=bool(mechanismLoss);
+                captureMechanismLoss(*e,FeedSupplyLossSite::ClaimRenewalRejected,FeedExit::PolicyStatus);
+                const auto renewed=hands.RenewFrom(s.input,sourceInput,*e->claim,proof);out.handReason=renewed.reason;
                 if(observation){auto& a=*observation;a.decision.ownershipAction=2;a.decision.ownershipInputValid=renewed.inputValid;
                     a.decision.ownershipAccepted=renewed.accepted;a.decision.ownershipReason=unsigned(renewed.reason);
                     a.ownershipClaim=renewed.claim;a.decision.resultClaim=renewed.claim?renewed.claim->token.id:0;}
+                if(!alreadyCaptured&&mechanismLoss){
+                    if(renewed.accepted)mechanismLoss.reset();
+                    else {mechanismLoss->before.decision=observation->decision;
+                        mechanismLoss->before.ownershipClaim=observation->ownershipClaim;}}
                 if(!renewed.accepted){e->claim.reset();sample.held=false;}}
             else if(contact.status==FeedMechanismStatus::ContactMatch&&intent!=UINT64_MAX){
                 const HandClaimRequest request{s.input.owner,InteractionHand::Left,HandClaimKind::Mechanism,
@@ -1129,7 +1237,18 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
                 if(acquired.claim)e->claim=acquired.claim->token;else sample.held=false;
             }else sample.held=false;
         }
+        const bool alreadyCaptured=bool(mechanismLoss);
+        captureMechanismLoss(*e,FeedSupplyLossSite::PolicyClear,FeedExit::PolicyStatus);
         const auto result=e->session->Update(sample);out.status=result.status;
+        const bool successfulCompletion=bool(result.session.interaction.completion)||bool(result.dispatch);
+        if(mechanismLoss&&mechanismLoss->before.lifetime==e->lifetime&&mechanismLoss->before.weapon==e->weapon&&
+           (mechanismLoss->site==FeedSupplyLossSite::ClaimUnavailable||
+            mechanismLoss->site==FeedSupplyLossSite::ClaimRenewalRejected||mechanismLoss->site==FeedSupplyLossSite::PolicyClear)){
+            if((ordinaryReleaseCandidate&&successfulCompletion)||(!alreadyCaptured&&
+                (successfulCompletion||(source->grip&&sample.held))))mechanismLoss.reset();
+            else {mechanismLoss->outcomeEvaluated=true;mechanismLoss->completion=bool(result.session.interaction.completion);
+                mechanismLoss->dispatch=bool(result.dispatch);mechanismLoss->outcomeStatus=unsigned(result.status)|
+                    (unsigned(result.session.interaction.status)<<8)|(unsigned(result.session.reload.status)<<16);}}
         if(observation){auto& v=observation->decision;v.heldAtUpdate=sample.held;v.recognitionEnabled=result.session.recognitionEnabled;
             v.interactionEvidence=unsigned(result.session.interaction.evidence);}
         out.interactionStatus=result.session.interaction.status;out.reloadStatus=result.session.reload.status;
