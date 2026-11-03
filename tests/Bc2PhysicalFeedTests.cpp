@@ -70,6 +70,10 @@ struct Fixture {
     // Replay a publication interruption at a named point of the same complete
     // physical trajectory; no separate policy or synthetic completion path.
     std::function<bool(Fixture&,FeedPhysicalOperation,unsigned)> placementStep;
+    // Gameplay runs support after feed. Replay that real arbiter interleaving
+    // while current input and the delivered raw pose are different packets.
+    std::function<int(Fixture&,const ReloadRawContact&)> afterDelayedConsume;
+    int afterDelayedConsumeResult=0;
     Bc2PhysicalFeed physical;
     void SelectWeaponData(std::uint32_t weaponData){
         selected=std::make_shared<SelectedMeshesSnapshot>(*selected);selected->weaponData=weaponData;sample.selected=selected;
@@ -231,6 +235,7 @@ struct Fixture {
         }
         if(awaitingRender){Consume(&*awaitingRender);++delayedRenders;lastRendered=awaitingRender;}
         else {Consume(&next);lastRendered=next;}
+        if(afterDelayedConsume&&!afterDelayedConsumeResult)afterDelayedConsumeResult=afterDelayedConsume(*this,next);
         awaitingRender=next;return result;
     }
     FeedMotionProfile Open()const {return *BuildBc2FeedMotion(registration->geometry,
@@ -293,17 +298,20 @@ struct Fixture {
         const auto hand=hands.Current(InteractionHand::Left);
         return hand&&hand->token.kind==HandClaimKind::AmmoObject&&result.ownsHand;
     }
-    bool Place(FeedPhysicalOperation op,bool acquireSupply=true,bool release=true,bool supplyAlreadyHeld=false){
-        const bool picked=op==FeedPhysicalOperation::AttachContainer&&(acquireSupply||supplyAlreadyHeld);
-        if(picked&&!supplyAlreadyHeld&&!PickSupply())return false;
-        if(!result.presentation)return false;
+    std::optional<FeedMotionProfile> PlacementMotion(FeedPhysicalOperation op)const {
+        if(!result.presentation)return {};
         const auto retained=result.presentation;auto pose=registration->geometry.poses[unsigned(Bc2FeedPoseId::Resting)];
         pose.chainCount=retained->chainCount;
-        if(retained->registrationKey!=registration->key||pose.chainCount!=registration->geometry.chainCount)return false;
+        if(retained->registrationKey!=registration->key||pose.chainCount!=registration->geometry.chainCount)return {};
         pose.weaponFromPouch=retained->weaponFromPouch;pose.weaponFromFeedRoot=retained->weaponFromChain[0];
         for(unsigned i=0;i+1<pose.chainCount;++i)pose.parentFromChainChild[i]=feed_interaction_detail::Multiply(
             retained->weaponFromChain[i+1],feed_interaction_detail::Inverse(retained->weaponFromChain[i]));
-        const auto motion=BuildBc2FeedMotionFromRetainedPose(registration->geometry,op,registration->interactionPolicy,pose);
+        return BuildBc2FeedMotionFromRetainedPose(registration->geometry,op,registration->interactionPolicy,pose);
+    }
+    bool Place(FeedPhysicalOperation op,bool acquireSupply=true,bool release=true,bool supplyAlreadyHeld=false){
+        const bool picked=op==FeedPhysicalOperation::AttachContainer&&(acquireSupply||supplyAlreadyHeld);
+        if(picked&&!supplyAlreadyHeld&&!PickSupply())return false;
+        const auto motion=PlacementMotion(op);
         if(!motion)return false;submitted.reset();
         auto sourceFromWrist=motion->placement.sourceFromGrip;
         if(picked){
@@ -1531,6 +1539,131 @@ int EveryEnrolledSupplySplitClockRetentionRejectsContradictions(){
     }
     CHECK(cases==192);
     std::printf("Feed supply split-clock contradictions: 24 profiles, %u release/tracking/identity/count/expiry/selection/cancel/claim cases\n",cases);
+    return 0;
+}
+int EveryEnrolledFeedTransfersDelayedSupportAtEachAcquisition(){
+    // Actual253 completed Open/Detach/Attach, then current held10984 consumed
+    // neutral raw10983. Ordinary support claimed10983 before held raw10984
+    // arrived. Replay that arbitration at every mechanism acquisition in the
+    // same complete cycle, including CloseCover beyond the observed failure.
+    const std::array<std::vector<unsigned>,2> cadences{{{1,0},{2}}};
+    unsigned profiles=0,cycles=0,receipts=0,transfers=0;
+    for(const auto& registration:RegisteredBc2FeedProfiles()){
+        ++profiles;
+        for(const auto& cadence:cadences)for(bool sameCurrent:{false,true}){
+            Fixture f(&registration);f.nativeCadence=cadence;f.delayedRender=true;f.wristCalibration=Turn(2.29598f);
+            const auto before=f.native.counts;std::optional<HandClaim> support;
+            unsigned acquisitions=0,completedTransfers=0;
+            const auto transferred=[&](Fixture& f)->int{
+                CHECK(support);const auto hand=f.hands.Current(InteractionHand::Left),gun=f.hands.Current(InteractionHand::Right);
+                CHECK(hand&&gun&&hand->token.kind==HandClaimKind::Mechanism&&hand->token.id!=support->token.id);
+                CHECK(hand->token.owner==support->token.owner&&hand->token.item==support->token.item&&
+                    hand->token.prerequisiteClaim==support->token.prerequisiteClaim&&hand->token.prerequisiteClaim==gun->token.id);
+                CHECK(hand->inputSequence==f.sample.raw.inputEvidence.sequence&&hand->deadlineNs==f.sample.raw.inputEvidence.deadlineNs);
+                CHECK(f.result.ownsHand&&f.result.interactionStatus==FeedInteractionStatus::Acquired&&f.result.presentation);
+                CHECK(f.result.presentation->mechanismClaim&&f.result.presentation->mechanismClaim->token==hand->token&&
+                    f.result.presentation->mechanismWristWorldMeters);
+                support.reset();++completedTransfers;return 0;
+            };
+            f.afterDelayedConsume=[&](Fixture& f,const ReloadRawContact& current)->int{
+                if(support&&!f.sample.raw.inputEvidence.released[0])CHECK(transferred(f)==0);
+                if(!f.sample.grip||!f.sample.raw.inputEvidence.released[0]||f.result.ownsHand||f.result.pending||
+                    f.hands.Current(InteractionHand::Left))return 0;
+                const auto gun=f.hands.Current(InteractionHand::Right);CHECK(gun);
+                const auto original=f.sample.raw.inputEvidence;
+                const auto acquired=f.hands.AcquireFrom(f.sample.input,original,{f.sample.input.owner,InteractionHand::Left,
+                    HandClaimKind::WeaponSupport,f.sample.weapon,{{2,f.sample.weapon.id},original.sequence,original.deadlineNs,true},
+                    ++f.intent,gun->token.id});
+                CHECK(acquired.accepted&&acquired.claim);support=acquired.claim;++acquisitions;
+                CHECK(support->inputSequence==original.sequence&&support->deadlineNs==original.deadlineNs);
+                const auto neutral=f.sample.raw;const auto counts=f.native.counts;const auto submits=f.submits;
+                for(unsigned repeat=0;repeat<2;++repeat){
+                    f.Consume(&neutral);const auto waiting=f.hands.Current(InteractionHand::Left);
+                    CHECK(waiting&&waiting->token==support->token&&waiting->inputSequence==support->inputSequence&&
+                        waiting->deadlineNs==support->deadlineNs&&!f.result.ownsHand);
+                    CHECK(f.native.counts==counts&&f.submits==submits&&!f.result.pending);
+                    CHECK(!f.result.presentation||!f.result.presentation->mechanismWristWorldMeters);
+                }
+                if(sameCurrent){f.Consume(&current);CHECK(transferred(f)==0);}
+                return 0;
+            };
+            CHECK(f.OpenCover()&&f.Reconcile());CHECK(f.submits==1&&f.native.counts==before);
+            CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&f.Reconcile());CHECK(f.submits==2&&f.native.counts==before);
+            CHECK(f.Place(FeedPhysicalOperation::AttachContainer));CHECK(f.submitted&&f.submits==3);
+            const auto after=f.submitted->command.after;const auto life=f.submitted->command.request.lifetime;
+            CHECK(f.Reconcile()&&f.native.counts==after);
+            CHECK(f.Place(FeedPhysicalOperation::SeatFeed)&&f.Reconcile());
+            CHECK(f.Close()&&f.Reconcile());
+            CHECK(!f.afterDelayedConsumeResult&&!support&&acquisitions==4&&completedTransfers==4);
+            CHECK(f.submits==5&&!f.BlocksFire()&&f.native.counts==after);
+            for(std::uint64_t id=1;id<=5;++id){const auto receipt=f.backend.Receipt(life,id);CHECK(receipt);
+                CHECK(receipt->acknowledgement.status==FeedReloadAcknowledgement::Applied);
+                CHECK(receipt->command.authority.effect==FeedAmmunitionEffect::RefillLoaded?id==3:id!=3);++receipts;}
+            ++cycles;transfers+=completedTransfers;
+        }
+    }
+    CHECK(profiles==24&&cycles==96&&receipts==480&&transfers==384);
+    std::printf("Feed support arbitration: %u profiles, %u full cycles, %u guarded transfers, %u offline mocked adapter receipts\n",
+        profiles,cycles,transfers,receipts);
+    return 0;
+}
+int EveryEnrolledFeedRejectsUnarmedOrUnrelatedSupportTransfer(){
+    unsigned cases=0;
+    // Keep the full native-receipt prefix for each contradiction; rejection
+    // must not undo the already completed refill or consume another claim.
+    for(const auto& registration:RegisteredBc2FeedProfiles())for(unsigned fault=0;fault<6;++fault){
+        Fixture f(&registration);CHECK(f.OpenCover()&&f.Reconcile());
+        CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&f.Reconcile());
+        CHECK(f.Place(FeedPhysicalOperation::AttachContainer)&&f.Reconcile());f.submitted.reset();
+        const auto counts=f.native.counts;const auto motion=f.PlacementMotion(FeedPhysicalOperation::SeatFeed);CHECK(motion);
+        const auto start=feed_interaction_detail::Multiply(motion->placement.sourceFromGrip,motion->placement.weaponFromSource);
+        f.Tick(start,false);f.Tick(start,false);const auto neutral=f.sample.raw;
+        f.PrepareTick(start,true);const auto held=f.sample.raw;f.Consume(&neutral);
+        const auto gun=f.hands.Current(InteractionHand::Right);CHECK(gun&&!f.hands.Current(InteractionHand::Left));
+        const auto kind=fault==0?HandClaimKind::Sight:fault==1?HandClaimKind::BodyInventory:HandClaimKind::WeaponSupport;
+        const auto item=fault==1?HandInteractionKey{999,1}:f.sample.weapon;
+        const auto acquired=f.hands.AcquireFrom(f.sample.input,neutral.inputEvidence,{f.sample.input.owner,InteractionHand::Left,
+            kind,item,{{2,f.sample.weapon.id},neutral.inputEvidence.sequence,neutral.inputEvidence.deadlineNs,true},
+            ++f.intent,fault==1?0:gun->token.id});
+        CHECK(acquired.accepted&&acquired.claim);const auto old=*acquired.claim;
+        if(fault==2){
+            // A true held miss consumes the edge. Entering valid belt contact
+            // on a later held packet must not steal the still-live support.
+            auto miss=held;miss.rawLeftWristWorldMeters.values[3][0]+=.5f;f.Consume(&miss);
+            f.Tick(start,true);
+        }else if(fault==3){
+            // Cancellation explicitly invalidates the earlier neutral even
+            // though the unrelated support claim remains within its lease.
+            f.sample.cancel=true;f.Consume(&held);f.sample.cancel=false;f.Tick(start,true);
+        }else if(fault==4){
+            // No expired neutral can authorize acquisition using fresh held
+            // evidence, even if ordinary support was legitimately renewed.
+            f.now=neutral.inputEvidence.deadlineNs;
+            f.PrepareTick(start,true);
+            const auto proof=HandContactProof{old.token.contact,f.sample.input.sequence,f.sample.input.deadlineNs,true};
+            // The expired claim may have retired in PrepareTick. Reacquire
+            // ordinary support from this real held packet, without neutral.
+            const auto currentGun=f.hands.Current(InteractionHand::Right);CHECK(currentGun);
+            const auto renewed=f.hands.AcquireFrom(f.sample.input,f.sample.input,{f.sample.input.owner,InteractionHand::Left,
+                HandClaimKind::WeaponSupport,f.sample.weapon,proof,++f.intent,currentGun->token.id});
+            CHECK(renewed.accepted);f.Consume();
+        }else if(fault==5){
+            // Missing original native evidence cannot be substituted by the
+            // newer readable native view; it cannot authorize a transfer.
+            f.missingPacketNative=true;
+            // Held was already recorded by the delayed neutral consume, so
+            // use a distinct, genuinely unpaired held packet.
+            f.PrepareTick(start,true);f.Consume();
+        }else f.Consume(&held);
+        const auto hand=f.hands.Current(InteractionHand::Left);
+        CHECK(hand&&hand->token.kind==kind&&!f.result.ownsHand);
+        if(fault!=4)CHECK(hand->token==old.token&&hand->inputSequence==old.inputSequence&&hand->deadlineNs==old.deadlineNs);
+        CHECK(f.submits==3&&!f.submitted&&!f.result.pending&&!f.backend.Pending()&&f.native.counts==counts);
+        CHECK(!f.result.presentation||!f.result.presentation->mechanismWristWorldMeters);
+        ++cases;
+    }
+    CHECK(cases==144);
+    std::printf("Feed support arbitration contradictions: 24 profiles, %u unrelated/held-entry/cancel/expiry/native cases\n",cases);
     return 0;
 }
 int EveryEnrolledSupplyRejectsPickupWithoutItsOriginalNative(){
@@ -2930,6 +3063,8 @@ int main(){
     CHECK(EveryEnrolledSupplyPinsPickupToOriginalNativeObservation()==0);
     CHECK(EveryEnrolledSupplyCompletesAcrossSplitClockRenewalGaps()==0);
     CHECK(EveryEnrolledSupplySplitClockRetentionRejectsContradictions()==0);
+    CHECK(EveryEnrolledFeedTransfersDelayedSupportAtEachAcquisition()==0);
+    CHECK(EveryEnrolledFeedRejectsUnarmedOrUnrelatedSupportTransfer()==0);
     CHECK(EveryEnrolledSupplyRejectsPickupWithoutItsOriginalNative()==0);
     CHECK(EveryEnrolledSupplyKeepsLogicalOwnershipWithoutMagneticAuthority()==0);
     CHECK(EveryEnrolledFeedCompletesWithIndependentPublicationClocks()==0);

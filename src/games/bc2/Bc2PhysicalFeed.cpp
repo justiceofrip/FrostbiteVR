@@ -390,6 +390,7 @@ struct Bc2PhysicalFeed::State {
         std::optional<FeedEquipmentNativeView> native;bool grip=false,reload=false;std::optional<math::Matrix4> bodyFromHand;
         std::optional<PolicyContact> contact;std::shared_ptr<const SelectedMeshesSnapshot> selection;};
     struct ReleaseWait {HandInteractionSample input{};std::uint64_t heldInput=0;std::int64_t deadlineNs=0;};
+    struct SupportNeutral {HandInteractionSample input{};FeedPhysicalOperation operation=FeedPhysicalOperation::None;};
     struct HandGrip {
         HandClaimToken claim{};
         FeedInteractionTargetKind kind=FeedInteractionTargetKind::None;
@@ -422,6 +423,7 @@ struct Bc2PhysicalFeed::State {
         bool refused=false,motionDirty=false;
         FeedPhysicalOperation activeOperation=FeedPhysicalOperation::None;
         std::optional<FeedEquipmentSessionSample> neutral;
+        std::optional<SupportNeutral> supportNeutral;
         std::optional<ReleaseWait> releaseWait;
         bool Blocked()const noexcept {return pending||refused||gateFailed||cover!=FeedCoverState::Closed||
             container!=FeedContainerState::Attached||seat!=FeedSeatState::Seated||
@@ -486,7 +488,7 @@ struct Bc2PhysicalFeed::State {
             if(input.owner==HandInteractionOwner{(std::uint64_t(owner.weak)<<32)|owner.soldier,
                 owner.actorGeneration,e->weapon.generation,owner.space})
                 e->rejectedInput=(std::max)(e->rejectedInput,input.sequence);
-            e->neutral.reset();if(e->session){FeedEquipmentSessionSample sample;sample.nowNs=input.nowNs;(void)e->session->Update(sample);}}
+            e->neutral.reset();e->supportNeutral.reset();if(e->session){FeedEquipmentSessionSample sample;sample.nowNs=input.nowNs;(void)e->session->Update(sample);}}
     }
     template<class Observe>void RetireActors(const HandInteractionSample& input,HandInteraction& hands,Observe&& observe)noexcept {
         if(!api.retirement)return;
@@ -819,7 +821,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         if(accepted.receiptAccepted){state.diagnostics.receipts.fetch_add(1,std::memory_order_relaxed);
             if(receipt->command.authority.effect==FeedAmmunitionEffect::RefillLoaded)
                 (void)old.ammunitionSupply.Complete(*receipt);
-            old.pending.reset();old.refused=false;old.motionDirty=true;old.recoveryContact.reset();old.presentationSource.reset();++old.revision;}
+            old.pending.reset();old.refused=false;old.motionDirty=true;old.recoveryContact.reset();old.presentationSource.reset();old.supportNeutral.reset();++old.revision;}
         else {old.cover=cover;old.container=container;old.seat=seat;old.refill=refill;old.carriedPartsMask=carried;}
     }
     for(auto& e:state.equipment)if(e)state.PublishGate(*e,s,hands);
@@ -973,7 +975,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             }
             if(!migrated){out.blocksFire=true;return finish(FeedExit::MigrationUnverified);}
         }else {captureMechanismLoss(*e,FeedSupplyLossSite::ContextReset,FeedExit::MigrationUnverified);e->session.reset();}
-        e->original=*view;e->weapon=s.weapon;e->neutral.reset();e->lastInput=e->rejectedInput=0;e->motionDirty=true;
+        e->original=*view;e->weapon=s.weapon;e->neutral.reset();e->supportNeutral.reset();e->lastInput=e->rejectedInput=0;e->motionDirty=true;
     }
     const auto right=hands.Current(InteractionHand::Right);
     const auto gunCheck=[&](unsigned bit,bool pass){return observation?observation->gun.Check(bit,pass):pass;};
@@ -1098,7 +1100,27 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         // and the acquired object's exact pose; the newer claim is independent.
         state.GripTarget(*e,left->token,local,e->pose.weaponFromPouch,FeedInteractionTargetKind::Object,true);
     }
-    bool available=!left||(e->claim&&left->token==*e->claim)||supplyHand;
+    const bool idle=!e->session||e->session->State().status==FeedEquipmentStatus::Complete;
+    const auto supportNeutral=e->supportNeutral;
+    // Current grip can reach ordinary support while the feed recognizer still
+    // sees the preceding released render packet. Transfer only that same-gun
+    // support claim when the actual, armed feed press arrives. Neither a held
+    // approach nor a repeated packet can create another acquisition edge.
+    const bool supportPair=left&&left->token.kind==HandClaimKind::WeaponSupport&&
+        left->token.owner==sourceInput.owner&&left->token.item==s.weapon&&left->token.prerequisiteClaim==right->token.id&&
+        left->inputSequence&&left->inputSequence<=sourceInput.sequence&&left->deadlineNs>now&&left->deadlineNs<=sourceInput.deadlineNs&&
+        supportNeutral&&supportNeutral->operation==(idle?FeedPhysicalOperation::OpenCover:e->activeOperation)&&
+        supportNeutral->input.owner==sourceInput.owner&&Window(supportNeutral->input,now)&&
+        hands.HasRecordedEvidence(supportNeutral->input,InteractionHand::Left)&&
+        left->inputSequence>=supportNeutral->input.sequence&&s.grip&&!s.input.released[0];
+    const bool supportTransfer=supportPair&&sourceInput.sequence>supportNeutral->input.sequence&&
+        sourceInput.observedNs>supportNeutral->input.observedNs&&source->grip;
+    // A duplicate of that original neutral can wait for its press, without
+    // renewing the support claim or issuing a feed hand/pose authority.
+    const bool supportWaiting=supportPair&&!source->grip&&sourceInput.released[0]&&
+        SamePacket(sourceInput,supportNeutral->input)&&s.input.sequence>sourceInput.sequence;
+    if(source->grip)e->supportNeutral.reset();
+    bool available=!left||(e->claim&&left->token==*e->claim)||supplyHand||supportTransfer||supportWaiting;
     bool ordinaryReleaseCandidate=false;
     if(e->claim&&(!left||left->token!=*e->claim)){
         const bool alreadyCaptured=bool(mechanismLoss);
@@ -1108,7 +1130,6 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     // Neutral arms the input edge, not contact. Like FeedInteraction, accept a
     // released hand away from the cover, then consume that neutral on the next
     // grip packet. Only that edge may acquire the exact cover contact.
-    const bool idle=!e->session||e->session->State().status==FeedEquipmentStatus::Complete;
     if(idle){
         const auto& m=e->motions.operations[unsigned(FeedPhysicalOperation::OpenCover)];
         const auto contact=feed_interaction_detail::Multiply(m.motionFromContact,m.weaponFromMotion);
@@ -1127,6 +1148,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             neutral.interaction.contact.observedNs=sourceInput.observedNs;neutral.interaction.contact.inputSequence=sourceInput.sequence;
             neutral.nowNs=now;neutral.ammunition=state.Ammo(*e,*source->native);neutral.interaction.focused=true;neutral.interaction.contact.tracked=true;
             e->neutral=neutral;
+            e->supportNeutral=State::SupportNeutral{sourceInput,FeedPhysicalOperation::OpenCover};
         }
         const auto neutral=e->neutral;
         auto& diagnostic=out.diagnostic;diagnostic.coverDistanceMeters=float(distance);diagnostic.coverAngleRadians=float(angle);
@@ -1219,6 +1241,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         const auto prior=e->session->State();
         bool recoveryEstablished=false;
         const auto query=EvaluateFeedMechanism(profile,sample.snapshot,e->supply,now);
+        if((supportTransfer||supportWaiting)&&(!query.candidate||query.candidate->operation!=supportNeutral->operation))available=false;
         if(observation){auto& v=observation->decision;v.queryStatus=unsigned(query.status);
             if(query.candidate){v.candidateOperation=unsigned(query.candidate->operation);v.candidatePart=unsigned(query.candidate->part);}}
         if(query.candidate){const auto op=query.candidate->operation;
@@ -1305,7 +1328,8 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             else if(contact.status==FeedMechanismStatus::ContactMatch&&intent!=UINT64_MAX){
                 const HandClaimRequest request{s.input.owner,InteractionHand::Left,HandClaimKind::Mechanism,
                     s.weapon,proof,++intent,right->token.id};
-                const auto acquired=hands.AcquireFrom(s.input,sourceInput,request);
+                const auto acquired=supportTransfer?hands.TransferFrom(s.input,sourceInput,left->token,request):
+                    hands.AcquireFrom(s.input,sourceInput,request);
                 if(observation){auto& a=*observation;a.decision.ownershipAction=1;a.decision.ownershipInputValid=acquired.inputValid;
                     a.decision.ownershipAccepted=acquired.accepted;a.decision.ownershipReason=unsigned(acquired.reason);
                     a.ownershipClaim=acquired.claim;a.decision.resultClaim=acquired.claim?acquired.claim->token.id:0;}
@@ -1316,6 +1340,11 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         const bool alreadyCaptured=bool(mechanismLoss);
         captureMechanismLoss(*e,FeedSupplyLossSite::PolicyClear,FeedExit::PolicyStatus);
         const auto result=e->session->Update(sample);out.status=result.status;
+        if(!source->grip&&sourceInput.released[0]&&result.session.recognitionEnabled&&query.candidate&&
+           result.session.interaction.status==FeedInteractionStatus::Armed)
+            e->supportNeutral=State::SupportNeutral{sourceInput,query.candidate->operation};
+        else if(!result.session.recognitionEnabled||result.session.interaction.status!=FeedInteractionStatus::Duplicate)
+            e->supportNeutral.reset();
         const bool successfulCompletion=bool(result.session.interaction.completion)||bool(result.dispatch);
         if(mechanismLoss&&mechanismLoss->before.lifetime==e->lifetime&&mechanismLoss->before.weapon==e->weapon&&
            (mechanismLoss->site==FeedSupplyLossSite::ClaimUnavailable||

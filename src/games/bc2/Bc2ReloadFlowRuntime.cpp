@@ -575,6 +575,8 @@ std::atomic<std::int64_t> cleanupObservationDeadline=0;
 std::int64_t frequency=0,startNs=0;bool installed=false,started=false,drained=false;
 OriginalFiringObserver independentFiringObserver{};
 ReloadRecordWindow recordWindowClock;
+// Set only by the existing startup diagnostic opt-in, before Start publishes enabled.
+bool feedRecordsDeferred=false;
 std::atomic<unsigned> ownerDrops=0,recordBusy=0,recordBeginBusy=0,recordEndBusy=0,ownerMisses=0,readMisses=0,contextMisses=0,nestingMisses=0,windowExpired=0;
 std::atomic<unsigned> ownerPublicationsAfterEntry=0;
 std::array<std::atomic<unsigned>,4> calls{},matches{},serverMatches{};
@@ -3830,7 +3832,14 @@ bool SubmitFeedEquipmentCommand(const FeedEquipmentSubmission& request)noexcept 
 FeedEquipmentSubmitResult SubmitFeedEquipmentCommandResult(const FeedEquipmentSubmission& request,bool noEntryOnly)noexcept {
 #ifdef FVR_BC2_NATIVE_AMMO_BACKEND
     if(!enabled.load(std::memory_order_acquire)||!requestMode||!feedEquipmentReloadEnabled)return FeedEquipmentSubmitResult::RetentionBusy;
-    Gate gate(ammoMoveProbeGate);return gate.held?feedEquipment.SubmitResult(request,Now(),noEntryOnly):FeedEquipmentSubmitResult::RetentionBusy;
+    Gate gate(ammoMoveProbeGate);if(!gate.held)return FeedEquipmentSubmitResult::RetentionBusy;
+    const auto result=feedEquipment.SubmitResult(request,Now(),noEntryOnly);
+    // A real accepted feed command arms diagnostic recording before the native
+    // dispatch can take this gate. Never reset the original one-shot window;
+    // recording success grants no command/receipt authority and never blocks it.
+    if(result==FeedEquipmentSubmitResult::Submitted&&feedRecordsDeferred&&!recordWindowClock.StartNs())
+        (void)recordWindowClock.OpenDeferred(Now());
+    return result;
 #else
     (void)request;(void)noEntryOnly;return FeedEquipmentSubmitResult::Invalid;
 #endif
@@ -4446,7 +4455,12 @@ bool EnableFeedGuardTrace()noexcept {
 #ifdef FVR_BC2_NATIVE_AMMO_BACKEND
     if(!installed||started||enabled.load())return false;
     feedGuardJournal.reset(new(std::nothrow) FeedGuardJournal);
-    feedGuardTraceEnableStatus=feedGuardJournal?3u:2u;return bool(feedGuardJournal);
+    feedGuardTraceEnableStatus=feedGuardJournal?3u:2u;
+    // Reuse the normal 20-second/20480-record recorder, deferred only for this
+    // explicitly admitted feed diagnostic. Unsupported fixture modes keep
+    // their existing recording configuration; no duration/capacity increase.
+    if(feedGuardJournal&&feedEquipmentReloadEnabled)feedRecordsDeferred=DeferInventoryReloadRecords();
+    return bool(feedGuardJournal);
 #else
     return false;
 #endif
@@ -4595,6 +4609,7 @@ void Report(std::ostream& out){
        <<",\"server_binding_verified\":"<<(serverBinding?"true":"false")<<",\"server_publish_attempts\":"<<serverPublishAttempts.load()
        <<",\"server_publish_misses\":"<<serverPublishMisses.load()<<",\"server_read_misses\":"<<serverReadMisses.load()
        <<",\"server_matched\":["<<serverMatches[0].load()<<','<<serverMatches[1].load()<<','<<serverMatches[2].load()<<','<<serverMatches[3].load()<<']'
+       <<",\"feed_recording_deferred\":"<<(feedRecordsDeferred?"true":"false")
        <<",\"capacity\":"<<records.Limit()<<",\"window_seconds\":"<<recordWindowClock.DurationNs()/1000000000<<",\"start_ns\":"<<recordWindowClock.StartNs()<<",\"runtime_start_ns\":"<<startNs<<",\"in_flight\":"<<active.load()
        <<",\"owner_lock_drops\":"<<ownerDrops.load()<<",\"owner_publications_after_entry\":"<<ownerPublicationsAfterEntry.load()
        <<",\"record_lock_drops\":"<<recordBusy.load()
