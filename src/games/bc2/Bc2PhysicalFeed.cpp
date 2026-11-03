@@ -33,7 +33,7 @@ struct FeedRetentionChecks {
     }
     bool operator==(const FeedRetentionChecks&)const=default;
 };
-constexpr const char* RetentionEntryPredicates[]={"view_unavailable","not_cancelled","current_grip",
+constexpr const char* RetentionEntryPredicates[]={"publication_unavailable","not_cancelled","current_grip",
     "not_released","current_input_window","equipment_present"};
 constexpr const char* GunPredicates[]={"right_claim","right_owner","right_item","right_gun_hold",
     "right_no_prerequisite","right_lease"};
@@ -44,7 +44,7 @@ constexpr const char* RetentionSlotPredicates[]={"slot_present","claim_present",
     "weapon_match","current_equipment","right_claim","right_owner","right_item","right_gun_hold",
     "right_no_prerequisite","right_lease","left_claim","left_token","left_prerequisite","held_packet",
     "held_native","held_contact","held_grip","held_owner","held_sequence","left_input_sequence",
-    "left_deadline","held_input_window","recorded_left_evidence","held_native_fresh","native_identity","selected"};
+    "left_deadline","held_input_window","recorded_left_evidence","held_native_fresh","native_identity","selected","current_native_matches"};
 struct FeedRetentionSlot {
     FeedRetentionChecks checks{};
     std::uint64_t registrationKey=0,lifetime=0,claim=0,heldInputSequence=0,nativeSequence=0;
@@ -188,6 +188,20 @@ bool CurrentEquipment(const FeedEquipmentNativeView& original,const ReloadStateO
             binding->data==equipment.data&&binding->persistence==equipment.persistence&&
             binding->inventory==original.binding.inventory&&binding->switching==original.binding.switching));
 }
+bool SelectedMeshesCurrent(const SelectedMeshesSnapshot& m,const ReloadStateOwner& owner,const FeedEquipmentNativeView& v,
+    const Bc2FeedRegistration& row,std::int64_t now,unsigned& failure)noexcept {
+    const auto& g=row.geometry;
+    const auto reject=[&](unsigned reason,bool rejected){if(rejected)failure=reason;return rejected;};
+    if(reject(18,m.owner!=owner)||reject(19,!m.sequence)||reject(20,!m.configurationPathVerified)||reject(21,!m.configurationPathPointer)||
+       reject(22,!ReloadDescriptorText(m.configurationPath,g.configurationPath))||reject(23,!ReloadDescriptorText(m.weaponName,g.asset))||
+       reject(24,m.weaponData!=v.binding.data)||reject(25,m.inventory!=v.binding.inventory)||
+       reject(26,m.observedNs<=0)||reject(27,now<m.observedNs)||reject(28,now>=m.deadlineNs)||
+       reject(29,m.stateCount!=1)||reject(30,!m.soleConfiguredArray))return false;
+    unsigned matches=0;const auto& state=m.states[0];
+    if(reject(31,state.array!=m.soleConfiguredArray)||reject(32,!state.count)||reject(33,state.count>state.meshes.size()))return false;
+    for(unsigned i=0;i<state.count;++i)if(ReloadDescriptorText(state.meshes[i].assetPath,g.meshPath)&&state.meshes[i].address>=0x10000)++matches;
+    failure=matches==1?0:34;return matches==1;
+}
 bool Selected(const Bc2PhysicalFeedSample& s,const FeedEquipmentNativeView& v,const Bc2FeedRegistration& row,unsigned& failure)noexcept {
     const auto& g=row.geometry;
     const auto reject=[&](unsigned reason,bool rejected){if(rejected)failure=reason;return rejected;};
@@ -199,16 +213,7 @@ bool Selected(const Bc2PhysicalFeedSample& s,const FeedEquipmentNativeView& v,co
        reject(12,s.raw.rigFingerprint!=g.rigFingerprint)||reject(13,s.frameSequence!=s.raw.inputEvidence.sequence)||
        reject(14,!Pose(s.raw.rawLeftWristWorldMeters))||reject(15,!Pose(s.raw.weaponWorldMeters))||
        reject(16,!FeedEquipmentViewFresh(v,s.input.nowNs))||reject(17,v.identity.owner!=s.owner))return false;
-    const auto& m=*s.selected;
-    if(reject(18,m.owner!=s.owner)||reject(19,!m.sequence)||reject(20,!m.configurationPathVerified)||reject(21,!m.configurationPathPointer)||
-       reject(22,!ReloadDescriptorText(m.configurationPath,g.configurationPath))||reject(23,!ReloadDescriptorText(m.weaponName,g.asset))||
-       reject(24,m.weaponData!=v.binding.data)||reject(25,m.inventory!=v.binding.inventory)||
-       reject(26,m.observedNs<=0)||reject(27,s.input.nowNs<m.observedNs)||reject(28,s.input.nowNs>=m.deadlineNs)||
-       reject(29,m.stateCount!=1)||reject(30,!m.soleConfiguredArray))return false;
-    unsigned matches=0;const auto& state=m.states[0];
-    if(reject(31,state.array!=m.soleConfiguredArray)||reject(32,!state.count)||reject(33,state.count>state.meshes.size()))return false;
-    for(unsigned i=0;i<state.count;++i)if(ReloadDescriptorText(state.meshes[i].assetPath,g.meshPath)&&state.meshes[i].address>=0x10000)++matches;
-    failure=matches==1?0:34;return matches==1;
+    return SelectedMeshesCurrent(*s.selected,s.owner,v,row,s.input.nowNs,failure);
 }
 math::Matrix4 BlendRigid(const math::Matrix4& a,const math::Matrix4& b,float t)noexcept {
     if(t<=0)return a;if(t>=1)return b;
@@ -383,7 +388,7 @@ struct Bc2PhysicalFeed::State {
     struct PolicyContact {RigIdentity rig{};math::Matrix4 local{},weaponWorld{};};
     struct Packet {ReloadStateOwner owner{};HandInteractionSample input{};HandInteractionKey weapon{};
         std::optional<FeedEquipmentNativeView> native;bool grip=false,reload=false;std::optional<math::Matrix4> bodyFromHand;
-        std::optional<PolicyContact> contact;};
+        std::optional<PolicyContact> contact;std::shared_ptr<const SelectedMeshesSnapshot> selection;};
     struct ReleaseWait {HandInteractionSample input{};std::uint64_t heldInput=0;std::int64_t deadlineNs=0;};
     struct HandGrip {
         HandClaimToken claim{};
@@ -655,6 +660,15 @@ std::optional<FeedEquipmentGate> Bc2PhysicalFeed::RetainedGate(const ReloadState
         if(retained){retained->blocksFire=retained->blocksFire||e->Blocked();return retained;}
     }return {};
 }
+bool Bc2PhysicalFeed::HasCurrentOwnerEvidence(const ReloadStateOwner& owner,std::int64_t now)const noexcept {
+    if(!state_||!state_->api.read)return false;
+    const auto view=state_->api.read(state_->api.context,owner,now);
+    if(!view||view->identity.owner!=owner||!FeedEquipmentViewFresh(*view,now))return false;
+    const auto* registration=FindBc2FeedRegistration(view->config);if(!registration)return false;
+    for(const auto& e:state_->equipment)if(e&&e->session&&e->original.identity==view->identity&&
+        &e->registration==registration&&State::SameResource(*e,*view))return true;
+    return false;
+}
 void Bc2PhysicalFeed::Suspend(const HandInteractionSample& input,HandInteraction& hands,Bc2PhysicalFeedSuspendContext context)noexcept {
     publication.store({},std::memory_order_release);if(!state_)return;
     std::optional<FeedHeldSupplyLoss> loss;
@@ -826,48 +840,75 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     // Observe the original short-circuit results only. Slot checks are separate
     // so a later empty/unrelated slot cannot erase the held slot's rejection.
     const auto retainEntry=[&](unsigned bit,bool pass){return observation?observation->retention.Check(bit,pass):pass;};
-    if(retainEntry(0,!view)&&retainEntry(1,!s.cancel)&&retainEntry(2,s.grip)&&retainEntry(3,!s.input.released[0])&&
+    if(retainEntry(0,!view||!s.raw.valid||!s.selected)&&retainEntry(1,!s.cancel)&&retainEntry(2,s.grip)&&retainEntry(3,!s.input.released[0])&&
         retainEntry(4,Window(s.input,now))&&retainEntry(5,bool(s.equipment))){
         const auto right=hands.Current(InteractionHand::Right);
         const auto left=hands.Current(InteractionHand::Left);
         unsigned slotIndex=0;
         for(auto& slot:state.equipment){auto* observed=observation?&observation->retentionSlots[slotIndex]:nullptr;++slotIndex;
+            const auto* heldSupply=slot&&slot->ammunitionSupply.Held()?&*slot->ammunitionSupply.Held():nullptr;
+            const auto* heldClaim=slot&&slot->claim?&*slot->claim:heldSupply?&heldSupply->claim.token:nullptr;
             if(observed&&slot){observed->registrationKey=slot->registration.key;observed->lifetime=slot->lifetime;
-                observed->claim=slot->claim?slot->claim->id:0;}
+                observed->claim=heldClaim?heldClaim->id:0;}
             const auto retain=[&](unsigned bit,bool pass){return observed?observed->checks.Check(bit,pass):pass;};
-            if(retain(0,bool(slot))&&retain(1,bool(slot->claim))&&retain(2,bool(slot->session))&&
+            if(retain(0,bool(slot))&&retain(1,bool(heldClaim))&&retain(2,bool(slot->session))&&
             retain(3,slot->session->State().status==FeedEquipmentStatus::Ready)&&retain(4,!slot->pending)&&retain(5,!slot->refused)&&
             retain(6,!slot->motionDirty)&&retain(7,!slot->releaseWait)&&retain(8,slot->activeOperation!=FeedPhysicalOperation::None)&&
             retain(9,slot->weapon==s.weapon)&&retain(10,CurrentEquipment(slot->original,s.owner,*s.equipment,s.binding,slot->registration))){
             const State::Packet* held=nullptr;
             for(const auto& packet:state.packets)if(packet.owner==s.owner&&packet.weapon==s.weapon&&
-                packet.input.sequence==slot->lastInput){held=&packet;break;}
+                packet.input.sequence==(heldSupply?heldSupply->claim.inputSequence:slot->lastInput)){held=&packet;break;}
             if(observed&&held){observed->heldInputSequence=held->input.sequence;observed->heldObservedNs=held->input.observedNs;
                 observed->heldDeadlineNs=held->input.deadlineNs;
                 if(held->native){observed->nativeSequence=held->native->sequence;observed->nativeObservedNs=held->native->observedNs;
                     observed->nativeDeadlineNs=held->native->deadlineNs;}}
             unsigned selectionFailure=0;
-            const auto selected=[&](){const bool pass=Selected(s,*held->native,slot->registration,selectionFailure);
+            const auto selected=[&](){
+                // Retain only a selection already admitted with this packet.
+                // Its immutable deadline is never replaced by this gap.
+                bool pass=held->selection&&SelectedMeshesCurrent(*held->selection,s.owner,*held->native,
+                    slot->registration,now,selectionFailure);
+                if(pass&&s.raw.valid){auto bounded=s;if(!bounded.selected)bounded.selected=held->selection;
+                    pass=Selected(bounded,*held->native,slot->registration,selectionFailure);}
+                else if(pass){
+                    const auto& g=slot->registration.geometry;
+                    // An absent renderer frame grants no pose. Any identity or
+                    // selected-mesh evidence that IS present must still agree.
+                    pass=NativeHand(s)&&s.asset==g.asset&&
+                        (!s.binding||AmmoResourceBindingFresh(*s.binding,s.owner,now))&&
+                        (s.configurationPath.empty()||s.configurationPath==g.configurationPath)&&
+                        (s.meshPath.empty()||s.meshPath==g.meshPath)&&(!s.rigFingerprint||s.rigFingerprint==g.rigFingerprint)&&
+                        (s.raw.owner==ReloadStateOwner{}||s.raw.owner==s.owner)&&
+                        (!s.raw.rig.soldier||s.raw.rig.soldier==s.owner.soldier)&&(!s.raw.rig.weak||s.raw.rig.weak==s.owner.weak)&&
+                        (!s.raw.rigFingerprint||s.raw.rigFingerprint==g.rigFingerprint)&&
+                        (!s.selected||SelectedMeshesCurrent(*s.selected,s.owner,*held->native,slot->registration,now,selectionFailure));
+                }
                 if(observed)observed->selectionFailure=selectionFailure;return pass;};
             if(retain(11,bool(right))&&retain(12,right->token.owner==s.input.owner)&&retain(13,right->token.item==s.weapon)&&
                 retain(14,right->token.kind==HandClaimKind::GunHold)&&retain(15,!right->token.prerequisiteClaim)&&retain(16,right->deadlineNs>now)&&
-                retain(17,bool(left))&&retain(18,left->token==*slot->claim)&&retain(19,left->token.prerequisiteClaim==right->token.id)&&
-                retain(20,bool(held))&&retain(21,bool(held->native))&&retain(22,bool(held->contact))&&retain(23,held->grip)&&retain(24,held->input.owner==s.input.owner)&&
+                retain(17,bool(left))&&retain(18,left->token==*heldClaim)&&
+                retain(19,left->token.prerequisiteClaim==(heldSupply?0:right->token.id))&&
+                retain(20,bool(held))&&retain(21,bool(held->native))&&retain(22,heldSupply?bool(held->bodyFromHand):bool(held->contact))&&retain(23,held->grip)&&retain(24,held->input.owner==s.input.owner)&&
                 retain(25,held->input.sequence<=s.input.sequence)&&retain(26,left->inputSequence==held->input.sequence)&&
-                retain(27,left->deadlineNs==held->input.deadlineNs)&&retain(28,Window(held->input,now))&&
+                retain(27,heldSupply?(left->deadlineNs==heldSupply->claim.deadlineNs&&left->deadlineNs<=held->input.deadlineNs&&left->deadlineNs>now):
+                    left->deadlineNs==held->input.deadlineNs)&&retain(28,Window(held->input,now))&&
                 retain(29,hands.HasRecordedEvidence(held->input,InteractionHand::Left))&&
                 retain(30,FeedEquipmentViewFresh(*held->native,now))&&retain(31,slot->original.identity==held->native->identity)&&
-                retain(32,selected())){
-                // Missing current view or failed gate publication is not a
-                // lifetime-revocation receipt for this passive hand claim.
-                // Retain only this already admitted gesture within its original
-                // input, native and claim leases. Cached counts cannot advance
-                // policy, renew custody, publish a pose or submit native work.
+                retain(32,selected())&&retain(33,!view||(FeedEquipmentViewFresh(*view,now)&&
+                    view->identity==held->native->identity&&FeedEquipmentSameItem(*held->native,*view)&&
+                    FindBc2FeedRegistration(view->config)==&slot->registration&&view->counts==held->native->counts&&
+                    view->sequence>=held->native->sequence&&view->observedNs>=held->native->observedNs&&
+                    (view->sequence!=held->native->sequence||(view->observedNs==held->native->observedNs&&
+                        view->deadlineNs==held->native->deadlineNs))))){
+                // Missing publication is not a lifetime-revocation receipt.
+                // Retain the admitted mechanism or supply claim within its
+                // original input, native, selection and hand leases only.
+                // No pose, motion, renewal or native submission comes from it.
                 e=slot.get();registration=&e->registration;
                 out.diagnostic.admissionChecked=1;
                 out.ownsHand=true;out.blocksEquipment=true;out.blocksFire=e->Blocked();
                 out.status=e->session->State().status;
-                return finish(FeedExit::ViewUnavailable);
+                return finish(view?FeedExit::GunOrRawUnverified:FeedExit::ViewUnavailable);
             }
         }
         }
@@ -880,6 +921,10 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
        !admission(3,Selected(s,*view,*registration,out.diagnostic.selectionFailure))||!admission(4,!s.cancel)||!admission(5,Window(s.input,now))){suspend(view?FeedExit::SelectionOrInput:FeedExit::ViewUnavailable);
         return finish(view?FeedExit::SelectionOrInput:FeedExit::ViewUnavailable);}
     out.selected=true;
+    // The packet's admitted selected publication can justify passive custody
+    // through a later missing frame; retaining it never extends its lease.
+    for(auto& packet:state.packets)if(packet.owner==s.owner&&packet.weapon==s.weapon&&
+        packet.input.sequence==s.input.sequence&&!packet.selection){packet.selection=s.selected;break;}
     if(!e){for(auto& slot:state.equipment)if(!slot){try{
         slot=std::make_unique<State::Equipment>(*registration);e=slot.get();e->original=*view;e->weapon=s.weapon;
         const auto generation=view->binding.context.resource.weaponGeneration;
@@ -999,6 +1044,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     // they are neither a new motion sample nor permission to extend a lease.
     if(!source->contact)source->contact=State::PolicyContact{s.raw.rig,
         feed_interaction_detail::Multiply(s.raw.rawLeftWristWorldMeters,Inverse(s.raw.weaponWorldMeters)),s.raw.weaponWorldMeters};
+    if(!source->selection)source->selection=s.selected;
     const auto& local=source->contact->local;
     const auto body=state.BodyAmmo(*e,*view);
     const bool hadSupplyLoss=bool(supplyLoss);

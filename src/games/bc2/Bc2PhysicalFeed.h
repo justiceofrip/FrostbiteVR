@@ -145,6 +145,9 @@ public:
     void Suspend(const interaction::HandInteractionSample&,interaction::HandInteraction&,
         Bc2PhysicalFeedSuspendContext={})noexcept;
     void Report(std::ostream&)const;
+    // Independent native evidence only. This cannot grant a hand claim,
+    // refresh a pose/input lease, advance a gesture or authorize a transfer.
+    bool HasCurrentOwnerEvidence(const ReloadStateOwner&,std::int64_t now)const noexcept;
     // Suppression only: caller must independently revalidate live native
     // equipment/actor. An expired pose grants no rendering or ammo authority.
     bool BlocksFire(const ReloadStateOwner&,const WeaponEquipmentIdentity&,

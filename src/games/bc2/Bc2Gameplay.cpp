@@ -228,13 +228,14 @@ void PublishMechanismAudio(const ReloadStateOwner& native,const interaction::Han
     if(event)mechanismAudio::Emit(*event);
 }
 void CancelPhysicalReload(PhysicalReloadResult* unpublished=nullptr,unsigned sourceFlags=0,bool preserveMagazine=false,
-    Bc2PhysicalFeedSuspendContext feedContext={})noexcept;
+    Bc2PhysicalFeedSuspendContext feedContext={},bool cancelFeed=true)noexcept;
 void CancelWeaponVisibilityProbe()noexcept;
 std::optional<Bc2EmptyFireProbe> emptyFireFixture;
 #ifdef FVR_BC2_ARMING_EMPTY_PROBE
 std::optional<Bc2ArmingEmptyProbe> armingEmptyFixture;
 #endif
-void ClearReloadOwner(ReloadOwnerLoss loss=ReloadOwnerLoss::LifetimeEnded)noexcept {
+void ClearReloadOwner(ReloadOwnerLoss loss=ReloadOwnerLoss::LifetimeEnded,
+    ReloadOwnerLossOrigin origin=ReloadOwnerLossOrigin::Lifecycle,bool independentFeedCurrent=false)noexcept {
     ammoCounterOwner.store({},std::memory_order_release);
     mechanismAudio::Publish({});
     shellReloadAudio::Publish({});
@@ -249,8 +250,13 @@ void ClearReloadOwner(ReloadOwnerLoss loss=ReloadOwnerLoss::LifetimeEnded)noexce
 #ifdef FVR_BC2_ARMING_EMPTY_PROBE
 if(armingEmptyFixture)armingEmptyFixture->Cancel();
 #endif
-if(emptyFireFixture)emptyFireFixture->Cancel();CancelWeaponVisibilityProbe();CancelPhysicalReload(nullptr,0,loss==ReloadOwnerLoss::PresentationUnavailable,
-    {Bc2PhysicalFeedSuspendSource::ReloadOwnerLoss,unsigned(loss)});selectedMeshes.Clear();reloadFlowRuntime::ClearOwner(loss);}
+if(emptyFireFixture)emptyFireFixture->Cancel();CancelWeaponVisibilityProbe();
+const Bc2PhysicalFeedSuspendContext feedContext{Bc2PhysicalFeedSuspendSource::ReloadOwnerLoss,unsigned(loss),0,
+    loss==ReloadOwnerLoss::PresentationUnavailable};
+const bool retained=ApplyReloadOwnerFeedLoss(loss,origin,independentFeedCurrent,
+    [&]{CancelPhysicalReload(nullptr,0,loss==ReloadOwnerLoss::PresentationUnavailable,feedContext);},[&]{selectedMeshes.Clear();});
+if(retained)CancelPhysicalReload(nullptr,0,loss==ReloadOwnerLoss::PresentationUnavailable,feedContext,false);
+reloadFlowRuntime::ClearOwner(loss);}
 std::array<ReloadStateSnapshot,128> reloadSnapshots{};
 unsigned reloadSnapshotCount=0;std::array<unsigned,7> reloadStatuses{};
 std::array<unsigned,4> reloadPublicationStatuses{};std::array<unsigned,10> reloadPublicationReasons{};
@@ -728,15 +734,19 @@ void CancelWeaponVisibilityProbe()noexcept {
     rigPublication::PublishWeaponVisibility({});weaponVisibilitySample.store({},std::memory_order_release);
 }
 void SuppressMagazineRecovery()noexcept;
-void CancelPhysicalReload(PhysicalReloadResult* unpublished,unsigned sourceFlags,bool preserveMagazine,Bc2PhysicalFeedSuspendContext feedContext)noexcept {
+void SuspendPhysicalFeed(Bc2PhysicalFeedSuspendContext feedContext)noexcept {
+    if(physicalFeed){auto safety=handSample;LARGE_INTEGER now{};
+        if(QueryPerformanceCounter(&now))safety.nowNs=HandNanos(now.QuadPart);
+        physicalFeed->Suspend(safety,handOwnership,feedContext);
+        if(interactionTrace){auto& r=interactionTrace->interactions.feed;r={};r.observed=r.suspended=true;}}
+}
+void CancelPhysicalReload(PhysicalReloadResult* unpublished,unsigned sourceFlags,bool preserveMagazine,
+    Bc2PhysicalFeedSuspendContext feedContext,bool cancelFeed)noexcept {
     if(physicalFixedContainer){auto safety=handSample;LARGE_INTEGER now{};
         if(QueryPerformanceCounter(&now))safety.nowNs=HandNanos(now.QuadPart);
         physicalFixedContainer->Cancel(safety,handOwnership);fixedContainerGripHeld=false;}
-    if(physicalFeed){auto safety=handSample;LARGE_INTEGER now{};
-        if(QueryPerformanceCounter(&now))safety.nowNs=HandNanos(now.QuadPart);
-        feedContext.sourceFlags=sourceFlags;feedContext.preserveMagazine=preserveMagazine;
-        physicalFeed->Suspend(safety,handOwnership,feedContext);
-        if(interactionTrace){auto& r=interactionTrace->interactions.feed;r={};r.observed=r.suspended=true;}}
+    feedContext.sourceFlags=sourceFlags;feedContext.preserveMagazine=preserveMagazine;
+    if(cancelFeed)SuspendPhysicalFeed(feedContext);
     if(physicalPistolSlide){auto safety=handSample;LARGE_INTEGER now{};
         if(QueryPerformanceCounter(&now))safety.nowNs=HandNanos(now.QuadPart);
         physicalPistolSlide->Suspend(safety,handOwnership);}
@@ -1942,8 +1952,15 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             LARGE_INTEGER selectedNow{};if(QueryPerformanceCounter(&selectedNow))
                 selectedMeshes.Observe(*observed.snapshot,HandNanos(selectedNow.QuadPart));
             if(reloadSnapshotCount<reloadSnapshots.size())reloadSnapshots[reloadSnapshotCount++]=*observed.snapshot;
-        }else ClearReloadOwner(observed.status==ReloadStateStatus::ReadFailure||observed.status==ReloadStateStatus::ChangedDuringRead?
-            ReloadOwnerLoss::PresentationUnavailable:ReloadOwnerLoss::LifetimeEnded);
+        }else {
+            const auto loss=observed.status==ReloadStateStatus::ReadFailure||observed.status==ReloadStateStatus::ChangedDuringRead?
+                ReloadOwnerLoss::PresentationUnavailable:ReloadOwnerLoss::LifetimeEnded;
+            const ReloadStateOwner current{owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
+            LARGE_INTEGER unavailableNow{};
+            const bool feedCurrent=loss==ReloadOwnerLoss::PresentationUnavailable&&physicalFeed&&
+                QueryPerformanceCounter(&unavailableNow)&&physicalFeed->HasCurrentOwnerEvidence(current,HandNanos(unavailableNow.QuadPart));
+            ClearReloadOwner(loss,ReloadOwnerLossOrigin::Observation,feedCurrent);
+        }
     }
     const auto weaponAsset=owner.equipment.asset;const auto asset=owner.equipment.Asset();
     const auto itemProfileCandidate=FindWeaponProfile(asset);
