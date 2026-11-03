@@ -671,8 +671,10 @@ int EveryFixedFamilyRejectsSupportTransferContradictions(){
                     const auto gun=f.hands.Acquire(f.sample.input,{f.owner,InteractionHand::Right,HandClaimKind::GunHold,f.sample.weapon,
                         {{300,1},f.sequence,f.sample.input.deadlineNs,true},++f.intent,0});
                     CHECK(gun.claim);f.gun=gun.claim->token;
-                    const auto replacement=f.hands.AcquireFrom(f.sample.input,pressed.input,{f.owner,InteractionHand::Left,
-                        HandClaimKind::WeaponSupport,f.sample.weapon,{support.token.contact,pressed.input.sequence,pressed.input.deadlineNs,true},
+                    // Dependency loss invalidates historical evidence through
+                    // this packet; a new current-authorized intent can acquire.
+                    const auto replacement=f.hands.Acquire(f.sample.input,{f.owner,InteractionHand::Left,
+                        HandClaimKind::WeaponSupport,f.sample.weapon,{support.token.contact,f.sample.input.sequence,f.sample.input.deadlineNs,true},
                         ++f.intent,f.gun.id});
                     CHECK(replacement.claim);expected=replacement.claim;break;
                 }
