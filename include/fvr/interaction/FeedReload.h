@@ -205,7 +205,10 @@ inline FeedReloadResult FeedReload::Result(FeedReloadStatus status,FeedMechanism
     auto r=State();r.status=status;r.mechanismStatus=mechanism;return r;
 }
 inline bool FeedReload::CanRebaseMotion(const FeedMechanismSnapshot& s,std::int64_t nowNs)const noexcept {
+    // Consume an old input gap through Update before admitting a recovery
+    // origin that the next neutral would otherwise immediately interrupt.
     if(!Valid()||!Identity(s)||armed_||pending_||acknowledgement_||completed_||retired_||nowNs<lastCallNs_||
+       (lastInputNs_&&nowNs-lastInputNs_>profile_.maxAgeNs)||
        !feed_mechanism_detail::Fresh(s.observedNs,nowNs,profile_.maxAgeNs))return false;
     if(lastSnapshot_&&(s.sequence<lastSnapshot_->sequence||s.inputSequence<lastInput_||s.observedNs<lastSnapshot_->observedNs||
        (s.sequence==lastSnapshot_->sequence&&!feed_reload_detail::SameNativeSnapshot(s,*lastSnapshot_))))return false;

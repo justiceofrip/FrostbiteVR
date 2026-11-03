@@ -324,6 +324,32 @@ struct Fixture {
         if(delayedRender)Tick(end,false); // Deliver the actual delayed release packet.
         return submitted&&submitted->command.authority.operation==op;
     }
+    bool ResumePlacementEndpoint(FeedPhysicalOperation op,const fvr::math::Matrix4& endpoint,const HandClaimToken& lostClaim){
+        // The caller supplies fresh neutral packets first. Recover the actual
+        // retained endpoint through the recognizer's proof; constructing a new
+        // full motion here would incorrectly require a second source-to-end path.
+        if(!result.presentation||result.interactionStatus!=FeedInteractionStatus::Armed||
+           hands.Current(InteractionHand::Left))return false;
+        const auto retained=*result.presentation;const auto counts=native.counts;const auto priorSubmits=submits;
+        const auto unchanged=[&]{return !submitted&&!backend.Pending()&&!result.pending&&submits==priorSubmits&&
+            native.counts==counts&&result.presentation&&result.presentation->lifetime==retained.lifetime&&
+            result.presentation->supply==retained.supply&&result.presentation->registrationKey==retained.registrationKey;};
+        if(!unchanged())return false;
+        Tick(endpoint,true);if(!unchanged())return false;
+        if(delayedRender){Tick(endpoint,true);if(!unchanged())return false;}
+        const auto claim=hands.Current(InteractionHand::Left);
+        if(!claim||claim->token==lostClaim||claim->token.kind!=lostClaim.kind||!result.ownsHand||
+           result.interactionStatus!=FeedInteractionStatus::Acquired)return false;
+        for(unsigned packet=0;packet<DwellPackets();++packet){
+            Tick(endpoint,true);const auto current=hands.Current(InteractionHand::Left);
+            if(!unchanged()||!result.ownsHand||!current||current->token!=claim->token)return false;
+        }
+        if(result.interactionStatus!=FeedInteractionStatus::Endpoint)return false;
+        Tick(endpoint,false);
+        if(delayedRender)Tick(endpoint,false);
+        return submitted&&submits==priorSubmits+1&&native.counts==counts&&
+            submitted->command.request.lifetime==retained.lifetime&&submitted->command.authority.operation==op;
+    }
     bool Close(){
         const auto motion=BuildBc2FeedMotion(registration->geometry,FeedPhysicalOperation::CloseCover,registration->interactionPolicy);
         if(!motion)return false;submitted.reset();using namespace feed_interaction_detail;
@@ -1397,187 +1423,225 @@ int EveryEnrolledFeedCompletesAcrossGameplayPublicationLoss(){
         Interruption::SelectedContradiction,Interruption::NativeContradiction,Interruption::Ownership,Interruption::Weapon};
     constexpr std::array operations{FeedPhysicalOperation::OpenCover,FeedPhysicalOperation::DetachContainer,
         FeedPhysicalOperation::AttachContainer,FeedPhysicalOperation::SeatFeed,FeedPhysicalOperation::CloseCover};
-    unsigned configurations=0,cycles=0,receipts=0;
+    constexpr std::array interruptionNames{"observer","render","selected","tracking","focus","release","deadline",
+        "selected-contradiction","native-contradiction","ownership","weapon"};
+    std::array<bool,interruptions.size()> tracedFailure{};
+    unsigned configurations=0,completed=0,cycles=0,failed=0,receipts=0;
     for(const auto& registration:RegisteredBc2FeedProfiles()){
         ++configurations;
         for(const auto interruption:interruptions){
-            Fixture f(&registration);f.captureCadenceTrace=true;
-            const auto before=f.native.counts;const auto originalNative=f.native;
-            const auto originalEquipment=*f.sample.equipment;
-            const auto units=(std::min)(before.capacity-before.loaded,before.reserve);
-            std::uint64_t lifetime=0;FeedSupplyKey supply{};
-            const auto reached=[&](bool condition,const char* stage){
-                if(!condition){std::fprintf(stderr,"Gameplay feed recovery: profile=%llu interruption=%u stage=%s\n",
-                    static_cast<unsigned long long>(registration.key),unsigned(interruption),stage);
-                    f.PrintCadenceFailure(unsigned(interruption),FeedPhysicalOperation::DetachContainer);}
-                return condition;
-            };
-            const auto reconcile=[&](unsigned stage)->int{
-                CHECK(f.submitted&&f.submits==stage+1&&f.backend.Pending());
-                const auto command=f.submitted->command;
-                CHECK(command.authority.operation==operations[stage]&&command.request.id==stage+1);
-                CHECK(f.submitted->geometry.registrationKey==registration.key);
-                if(!lifetime){lifetime=command.request.lifetime;supply=command.before.loadedSupply;}
-                CHECK(command.request.lifetime==lifetime&&command.loadedSupplyAfter==supply);
-                CHECK(command.mutationRequired==(stage==2)&&command.authority.rounds==(stage==2?units:0));
-                // Reuse the real adapter with the existing explicitly mocked
-                // three-firing-copy callback; this is never native acceptance.
-                CHECK(f.Reconcile());
-                const auto receipt=f.backend.Receipt(lifetime,command.request.id);CHECK(receipt);
-                CHECK(receipt->command==command&&receipt->acknowledgement.status==FeedReloadAcknowledgement::Applied);
-                CHECK(receipt->post.counts==command.after&&f.native.counts==command.after);
-                CHECK(!f.backend.Pending()&&!f.result.pending&&f.BlocksFire()==(stage!=4));
-                ++receipts;return 0;
-            };
-            CHECK(f.OpenCover());CHECK(reconcile(0)==0);
-            CHECK(f.Place(FeedPhysicalOperation::DetachContainer,true,false));
-            const auto held=f.hands.Current(InteractionHand::Left);CHECK(held&&held->token.kind==HandClaimKind::Mechanism);
-            const auto heldRaw=f.sample.raw;const auto end=f.lastWrist;
-            const auto admittedSelected=f.sample.selected;CHECK(admittedSelected);
-            const auto admittedNative=f.backend.Read(f.sample.owner,f.sample.input.nowNs);CHECK(admittedNative);
-            const auto selectedSequence=f.selected->sequence;
-            const auto selectedObserved=f.selected->observedNs,selectedDeadline=f.selected->deadlineNs;
-            CHECK(f.result.presentation&&f.result.presentation->lifetime==lifetime&&f.submits==1);
-            f.publishSelected=false;f.nativeCadence={0};
-            f.reloadOwnerLoss=ReloadOwnerLoss::PresentationUnavailable;
-            f.reloadOwnerLossOrigin=ReloadOwnerLossOrigin::Observation;
-            const bool continuous=interruption==Interruption::Observer||interruption==Interruption::Render||
-                interruption==Interruption::Selected;
-            if(interruption==Interruption::Tracking||interruption==Interruption::Focus){
-                f.reloadOwnerLossOrigin=ReloadOwnerLossOrigin::Lifecycle;
-                f.resetHandsOnOwnerLoss=true;
-                if(interruption==Interruption::Tracking)f.sample.input.tracked[0]=false;
-                else f.sample.input.focused=false;
-            }
-            if(interruption==Interruption::Deadline)f.now=held->deadlineNs-10*Ms;
-            if(interruption==Interruption::SelectedContradiction){
-                f.SelectWeaponData(f.selected->weaponData+1);
-            }
-            if(interruption==Interruption::NativeContradiction)f.mutateNativeObserved=true;
-            const auto selectNative=[&]{
-                f.selected=std::make_shared<SelectedMeshesSnapshot>(*f.selected);
-                f.sample.owner=f.native.identity.owner;f.sample.raw.owner=f.sample.owner;f.selected->owner=f.sample.owner;
-                f.sample.equipment=WeaponEquipmentIdentity{f.sample.owner.weapon,f.native.binding.data,
-                    f.native.binding.persistence,f.native.config.assetName};
-                f.sample.asset=f.sample.equipment->Asset();
-                f.sample.input.owner.equipGeneration=f.sample.owner.equipGeneration;
-                f.sample.input.owner.space=f.sample.owner.space;++f.sample.weapon.generation;
-            };
-            if(interruption==Interruption::Ownership||interruption==Interruption::Weapon){
-                f.reloadOwnerLoss=ReloadOwnerLoss::LifetimeEnded;f.reloadOwnerLossOrigin=ReloadOwnerLossOrigin::Lifecycle;
-                f.resetHandsOnOwnerLoss=true;f.nativeCadence={1};
-                ++f.native.identity.owner.equipGeneration;++f.native.identity.owner.space;
-                f.native.binding.owner=f.native.identity.owner;
-                f.native.binding.context.equipGeneration=f.native.identity.owner.equipGeneration;
-                f.native.binding.context.space=f.native.identity.owner.space;
-                if(interruption==Interruption::Weapon){
-                    ++f.native.binding.data;++f.native.binding.persistence;++f.native.binding.context.resource.weaponGeneration;
-                    f.native.config.weaponData=f.native.binding.data;Text(f.native.config.assetName,"MP443_sp");
-                }
-                selectNative();
-            }
-            for(unsigned packet=0;packet<2;++packet){
-                f.PrepareTick(end,interruption!=Interruption::Release);
-                // No renderer/animation publication is represented by missing
-                // evidence, not a synthesized pose with a renewed source time.
-                if(interruption==Interruption::Render||interruption==Interruption::Selected||interruption==Interruption::Release){
-                    f.sample.raw.valid=false;f.sample.selectedRigVerified=false;
-                    if(interruption==Interruption::Selected)f.sample.selected.reset();
-                }
-                f.Consume();
-                CHECK(reached(f.submits==1&&!f.submitted&&!f.result.pending&&!f.backend.Pending(),"gap cannot dispatch"));
-                CHECK(f.native.counts==before);
-                CHECK(f.selected->sequence==selectedSequence&&f.selected->observedNs==selectedObserved&&
-                    f.selected->deadlineNs==selectedDeadline);
-                CHECK(admittedSelected->sequence==selectedSequence&&admittedSelected->observedNs==selectedObserved&&
-                    admittedSelected->deadlineNs==selectedDeadline);
-                const auto claim=f.hands.Current(InteractionHand::Left);
-                if(continuous){
-                    // Legacy ClearReloadOwner unconditionally suspends here;
-                    // its lost token fails this behavioral regression before
-                    // any recovery or mocked receipt can hide the failure.
-                    CHECK(reached(claim&&claim->token==held->token&&f.result.ownsHand,"bounded publication retains actual claim"));
-                    CHECK(f.backend.Read(f.sample.owner,f.sample.input.nowNs)==admittedNative);
-                    if(interruption!=Interruption::Observer){
-                        CHECK(claim->inputSequence==held->inputSequence&&claim->deadlineNs==held->deadlineNs);
-                        CHECK(!f.result.presentation&&!f.result.diagnostic.policyEvaluated);
-                    }
-                }else CHECK(reached(!claim||claim->token!=held->token,"interruption cannot retain old authority"));
-            }
-            if(interruption==Interruption::Weapon){
-                CHECK(!f.physical.RetainedGate(f.sample.owner,*f.sample.equipment,f.sample.binding));
-                const auto generation=f.native.identity.owner.equipGeneration+1;
-                f.native=originalNative;f.native.identity.owner.equipGeneration=generation;
-                f.native.binding.owner=f.native.identity.owner;f.native.binding.context.equipGeneration=generation;
-                selectNative();
-            }
-            f.reloadOwnerLoss.reset();f.resetHandsOnOwnerLoss=false;f.publishSelected=true;f.nativeCadence={1};
-            f.mutateNativeObserved=false;f.sample.input.focused=true;f.sample.input.tracked={true,true};
-            f.selected->weaponData=originalNative.config.weaponData;f.selected->owner=f.sample.owner;
-            f.sample.raw=heldRaw;f.sample.raw.owner=f.sample.owner;f.sample.raw.valid=true;f.sample.selectedRigVerified=true;
-            f.Tick(end,true);
-            CHECK(f.sample.selected!=admittedSelected&&admittedSelected->sequence==selectedSequence&&
-                admittedSelected->observedNs==selectedObserved&&admittedSelected->deadlineNs==selectedDeadline);
-            CHECK(reached(f.submits==1&&!f.backend.Pending()&&f.native.counts==before,"recovery cannot invent detach"));
-            if(continuous){
-                const auto resumed=f.hands.Current(InteractionHand::Left);
-                CHECK(resumed&&resumed->token==held->token);
-                f.Tick(end,false);
-            }else{
-                // A fresh native observation alone cannot complete the lost
-                // gesture. A new neutral, grasp and explicit release are needed.
-                f.Tick(end,false);f.Tick(end,false);
-                CHECK(reached(f.submits==1&&!f.backend.Pending(),"lost gesture stays cancelled"));
-                CHECK(f.result.presentation&&f.result.presentation->lifetime==lifetime&&f.BlocksFire());
-                CHECK(f.Place(FeedPhysicalOperation::DetachContainer));
-            }
-            CHECK(reached(reconcile(1)==0,"detach after recovery"));CHECK(f.native.counts==before);
-            const bool carriedGap=interruption==Interruption::Render;
-            if(carriedGap){
-                CHECK(f.PickSupply());const auto carry=f.hands.Current(InteractionHand::Left);
-                CHECK(carry&&carry->token.kind==HandClaimKind::AmmoObject);
-                const auto carriedRaw=f.sample.raw;
-                const auto carriedSelection=f.sample.selected;CHECK(carriedSelection);
-                const auto carriedSelectedDeadline=carriedSelection->deadlineNs;
-                f.publishSelected=false;f.nativeCadence={0};f.reloadOwnerLoss=ReloadOwnerLoss::PresentationUnavailable;
+            const auto shape=unsigned(interruption);
+            Fixture f(&registration);f.captureCadenceTrace=!tracedFailure[shape];
+            const char* failureStage="open cover";
+            auto failureOperation=FeedPhysicalOperation::OpenCover;
+            unsigned caseReceipts=0;
+            const auto runCase=[&]()->int{
+                const auto before=f.native.counts;const auto originalNative=f.native;
+                const auto originalEquipment=*f.sample.equipment;
+                const auto units=(std::min)(before.capacity-before.loaded,before.reserve);
+                std::uint64_t lifetime=0;FeedSupplyKey supply{};
+                const auto reached=[&](bool condition,const char* stage){
+                    if(!condition)failureStage=stage;
+                    return condition;
+                };
+                const auto reconcile=[&](unsigned stage)->int{
+                    CHECK(f.submitted&&f.submits==stage+1&&f.backend.Pending());
+                    const auto command=f.submitted->command;
+                    CHECK(command.authority.operation==operations[stage]&&command.request.id==stage+1);
+                    CHECK(f.submitted->geometry.registrationKey==registration.key);
+                    if(!lifetime){lifetime=command.request.lifetime;supply=command.before.loadedSupply;}
+                    CHECK(command.request.lifetime==lifetime&&command.loadedSupplyAfter==supply);
+                    CHECK(command.mutationRequired==(stage==2)&&command.authority.rounds==(stage==2?units:0));
+                    // Reuse the real adapter with the existing explicitly mocked
+                    // three-firing-copy callback; this is never native acceptance.
+                    const bool reconciled=f.Reconcile();
+                    const auto receipt=f.backend.Receipt(lifetime,command.request.id);
+                    // Count the actual mocked receipt even if a later check fails.
+                    if(receipt)++caseReceipts;
+                    CHECK(reconciled);CHECK(receipt);
+                    CHECK(receipt->command==command&&receipt->acknowledgement.status==FeedReloadAcknowledgement::Applied);
+                    CHECK(receipt->post.counts==command.after&&f.native.counts==command.after);
+                    CHECK(!f.backend.Pending()&&!f.result.pending&&f.BlocksFire()==(stage!=4));
+                    return 0;
+                };
+                CHECK(f.OpenCover());CHECK(reconcile(0)==0);
+                failureStage="admit detach claim";failureOperation=FeedPhysicalOperation::DetachContainer;
+                CHECK(f.Place(FeedPhysicalOperation::DetachContainer,true,false));
+                const auto held=f.hands.Current(InteractionHand::Left);CHECK(held&&held->token.kind==HandClaimKind::Mechanism);
+                const auto heldRaw=f.sample.raw;const auto end=f.lastWrist;
+                const auto admittedSelected=f.sample.selected;CHECK(admittedSelected);
+                const auto admittedNative=f.backend.Read(f.sample.owner,f.sample.input.nowNs);CHECK(admittedNative);
+                const auto selectedSequence=f.selected->sequence;
+                const auto selectedObserved=f.selected->observedNs,selectedDeadline=f.selected->deadlineNs;
+                CHECK(f.result.presentation&&f.result.presentation->lifetime==lifetime&&f.submits==1);
+                f.publishSelected=false;f.nativeCadence={0};
+                f.reloadOwnerLoss=ReloadOwnerLoss::PresentationUnavailable;
                 f.reloadOwnerLossOrigin=ReloadOwnerLossOrigin::Observation;
-                for(unsigned packet=0;packet<2;++packet){
-                    f.PrepareTick(f.lastWrist,true);f.sample.raw.valid=false;f.sample.selectedRigVerified=false;f.Consume();
-                    const auto retained=f.hands.Current(InteractionHand::Left);
-                    CHECK(reached(retained&&retained->token==carry->token&&f.result.ownsHand,"carried supply survives bounded render gap"));
-                    CHECK(retained->inputSequence==carry->inputSequence&&retained->deadlineNs==carry->deadlineNs);
-                    CHECK(f.sample.selected==carriedSelection&&carriedSelection->deadlineNs==carriedSelectedDeadline);
-                    CHECK(!f.result.presentation&&!f.result.pending&&!f.backend.Pending()&&f.submits==2&&f.native.counts==before);
+                const bool continuous=interruption==Interruption::Observer||interruption==Interruption::Render||
+                    interruption==Interruption::Selected;
+                if(interruption==Interruption::Tracking||interruption==Interruption::Focus){
+                    f.reloadOwnerLossOrigin=ReloadOwnerLossOrigin::Lifecycle;
+                    f.resetHandsOnOwnerLoss=true;
+                    if(interruption==Interruption::Tracking)f.sample.input.tracked[0]=false;
+                    else f.sample.input.focused=false;
                 }
-                f.reloadOwnerLoss.reset();f.publishSelected=true;f.nativeCadence={1};
-                f.sample.raw=carriedRaw;f.sample.raw.valid=true;f.sample.selectedRigVerified=true;f.Tick(f.lastWrist,true);
-                const auto resumed=f.hands.Current(InteractionHand::Left);CHECK(resumed&&resumed->token==carry->token);
-                CHECK(f.sample.selected!=carriedSelection&&carriedSelection->deadlineNs==carriedSelectedDeadline);
+                if(interruption==Interruption::Deadline)f.now=held->deadlineNs-10*Ms;
+                if(interruption==Interruption::SelectedContradiction){
+                    f.SelectWeaponData(f.selected->weaponData+1);
+                }
+                if(interruption==Interruption::NativeContradiction)f.mutateNativeObserved=true;
+                const auto selectNative=[&]{
+                    f.selected=std::make_shared<SelectedMeshesSnapshot>(*f.selected);
+                    f.sample.owner=f.native.identity.owner;f.sample.raw.owner=f.sample.owner;f.selected->owner=f.sample.owner;
+                    f.sample.equipment=WeaponEquipmentIdentity{f.sample.owner.weapon,f.native.binding.data,
+                        f.native.binding.persistence,f.native.config.assetName};
+                    f.sample.asset=f.sample.equipment->Asset();
+                    ++f.sample.weapon.generation;f.sample.input.owner.equipGeneration=f.sample.weapon.generation;
+                    f.sample.input.owner.space=f.sample.owner.space;
+                };
+                if(interruption==Interruption::Ownership||interruption==Interruption::Weapon){
+                    f.reloadOwnerLoss=ReloadOwnerLoss::LifetimeEnded;f.reloadOwnerLossOrigin=ReloadOwnerLossOrigin::Lifecycle;
+                    f.resetHandsOnOwnerLoss=true;f.nativeCadence={1};
+                    ++f.native.identity.owner.equipGeneration;++f.native.identity.owner.space;
+                    f.native.binding.owner=f.native.identity.owner;
+                    f.native.binding.context.equipGeneration=f.native.identity.owner.equipGeneration;
+                    f.native.binding.context.space=f.native.identity.owner.space;
+                    if(interruption==Interruption::Weapon){
+                        ++f.native.binding.data;++f.native.binding.persistence;++f.native.binding.context.resource.weaponGeneration;
+                        f.native.config.weaponData=f.native.binding.data;Text(f.native.config.assetName,"MP443_sp");
+                    }
+                    selectNative();
+                }
+                failureStage="interruption retains original evidence and leases";
+                for(unsigned packet=0;packet<2;++packet){
+                    f.PrepareTick(end,interruption!=Interruption::Release);
+                    // No renderer/animation publication is represented by missing
+                    // evidence, not a synthesized pose with a renewed source time.
+                    if(interruption==Interruption::Render||interruption==Interruption::Selected||interruption==Interruption::Release||
+                       interruption==Interruption::NativeContradiction){
+                        f.sample.raw.valid=false;f.sample.selectedRigVerified=false;
+                        if(interruption==Interruption::Selected)f.sample.selected.reset();
+                    }
+                    f.Consume();
+                    CHECK(reached(f.submits==1&&!f.submitted&&!f.result.pending&&!f.backend.Pending(),"gap cannot dispatch"));
+                    CHECK(f.native.counts==before);
+                    CHECK(f.selected->sequence==selectedSequence&&f.selected->observedNs==selectedObserved&&
+                        f.selected->deadlineNs==selectedDeadline);
+                    CHECK(admittedSelected->sequence==selectedSequence&&admittedSelected->observedNs==selectedObserved&&
+                        admittedSelected->deadlineNs==selectedDeadline);
+                    const auto claim=f.hands.Current(InteractionHand::Left);
+                    if(continuous){
+                        // Legacy ClearReloadOwner unconditionally suspends here;
+                        // its lost token fails this behavioral regression before
+                        // any recovery or mocked receipt can hide the failure.
+                        CHECK(reached(claim&&claim->token==held->token&&f.result.ownsHand,"bounded publication retains actual claim"));
+                        CHECK(f.backend.Read(f.sample.owner,f.sample.input.nowNs)==admittedNative);
+                        if(interruption!=Interruption::Observer){
+                            CHECK(claim->inputSequence==held->inputSequence&&claim->deadlineNs==held->deadlineNs);
+                            CHECK(!f.result.presentation&&!f.result.diagnostic.policyEvaluated);
+                        }
+                    }else CHECK(reached(!claim||claim->token!=held->token,"interruption cannot retain old authority"));
+                }
+                if(interruption==Interruption::Weapon){
+                    failureStage="weapon replacement clears old gate";
+                    CHECK(!f.physical.RetainedGate(f.sample.owner,*f.sample.equipment,f.sample.binding));
+                    const auto generation=f.native.identity.owner.equipGeneration+1;
+                    f.native=originalNative;f.native.identity.owner.equipGeneration=generation;
+                    f.native.binding.owner=f.native.identity.owner;f.native.binding.context.equipGeneration=generation;
+                    selectNative();
+                }
+                failureStage="recover fresh publication";
+                f.reloadOwnerLoss.reset();f.resetHandsOnOwnerLoss=false;f.publishSelected=true;f.nativeCadence={1};
+                f.mutateNativeObserved=false;f.sample.input.focused=true;f.sample.input.tracked={true,true};
+                f.selected->weaponData=originalNative.config.weaponData;f.selected->owner=f.sample.owner;
+                f.sample.raw=heldRaw;f.sample.raw.owner=f.sample.owner;f.sample.raw.valid=true;f.sample.selectedRigVerified=true;
+                f.Tick(end,true);
+                CHECK(f.sample.selected!=admittedSelected&&admittedSelected->sequence==selectedSequence&&
+                    admittedSelected->observedNs==selectedObserved&&admittedSelected->deadlineNs==selectedDeadline);
+                CHECK(reached(f.submits==1&&!f.backend.Pending()&&f.native.counts==before,"recovery cannot invent detach"));
+                if(continuous){
+                    failureStage="resume retained detach claim";
+                    const auto resumed=f.hands.Current(InteractionHand::Left);
+                    CHECK(resumed&&resumed->token==held->token);
+                    f.Tick(end,false);
+                }else{
+                    failureStage="cancel lost detach gesture";
+                    // A fresh native observation alone cannot complete the lost
+                    // gesture. A new neutral, grasp and explicit release are needed.
+                    f.Tick(end,false);f.Tick(end,false);
+                    CHECK(reached(f.submits==1&&!f.backend.Pending(),"lost gesture stays cancelled"));
+                    CHECK(f.result.presentation&&f.result.presentation->lifetime==lifetime&&f.BlocksFire());
+                    CHECK(reached(f.ResumePlacementEndpoint(FeedPhysicalOperation::DetachContainer,end,held->token),"detach after interruption"));
+                }
+                failureStage="detach after recovery";
+                CHECK(reached(reconcile(1)==0,"detach after recovery"));CHECK(f.native.counts==before);
+                const bool carriedGap=interruption==Interruption::Render;
+                if(carriedGap){
+                    failureStage="acquire carried supply";failureOperation=FeedPhysicalOperation::AttachContainer;
+                    CHECK(f.PickSupply());const auto carry=f.hands.Current(InteractionHand::Left);
+                    CHECK(carry&&carry->token.kind==HandClaimKind::AmmoObject);
+                    const auto carriedRaw=f.sample.raw;
+                    const auto carriedSelection=f.sample.selected;CHECK(carriedSelection);
+                    const auto carriedSelectedDeadline=carriedSelection->deadlineNs;
+                    f.publishSelected=false;f.nativeCadence={0};f.reloadOwnerLoss=ReloadOwnerLoss::PresentationUnavailable;
+                    f.reloadOwnerLossOrigin=ReloadOwnerLossOrigin::Observation;
+                    failureStage="carried supply retains original evidence and leases";
+                    for(unsigned packet=0;packet<2;++packet){
+                        f.PrepareTick(f.lastWrist,true);f.sample.raw.valid=false;f.sample.selectedRigVerified=false;f.Consume();
+                        const auto retained=f.hands.Current(InteractionHand::Left);
+                        CHECK(reached(retained&&retained->token==carry->token&&f.result.ownsHand,"carried supply survives bounded render gap"));
+                        CHECK(retained->inputSequence==carry->inputSequence&&retained->deadlineNs==carry->deadlineNs);
+                        CHECK(f.sample.selected==carriedSelection&&carriedSelection->deadlineNs==carriedSelectedDeadline);
+                        CHECK(!f.result.presentation&&!f.result.pending&&!f.backend.Pending()&&f.submits==2&&f.native.counts==before);
+                    }
+                    failureStage="recover carried supply";
+                    f.reloadOwnerLoss.reset();f.publishSelected=true;f.nativeCadence={1};
+                    f.sample.raw=carriedRaw;f.sample.raw.valid=true;f.sample.selectedRigVerified=true;f.Tick(f.lastWrist,true);
+                    const auto resumed=f.hands.Current(InteractionHand::Left);CHECK(resumed&&resumed->token==carry->token);
+                    CHECK(f.sample.selected!=carriedSelection&&carriedSelection->deadlineNs==carriedSelectedDeadline);
+                }
+                failureStage="attach container";failureOperation=FeedPhysicalOperation::AttachContainer;
+                CHECK(f.Place(FeedPhysicalOperation::AttachContainer,!carriedGap,true,carriedGap));CHECK(reconcile(2)==0);
+                const FeedAmmunitionCounts filled{before.loaded+units,before.reserve-units,before.capacity};
+                CHECK(f.native.counts==filled);
+                if(interruption==Interruption::Tracking){
+                    failureStage="tracking loss preserves completed transfer";
+                    // A real loss after the only ammunition transfer cannot undo
+                    // that receipt while the unfinished feed still blocks firing.
+                    f.reloadOwnerLoss=ReloadOwnerLoss::PresentationUnavailable;f.reloadOwnerLossOrigin=ReloadOwnerLossOrigin::Lifecycle;
+                    f.resetHandsOnOwnerLoss=true;f.sample.input.tracked[0]=false;f.Tick(f.lastWrist,false);
+                    CHECK(f.native.counts==filled&&f.submits==3&&!f.backend.Pending()&&f.BlocksFire());
+                    f.reloadOwnerLoss.reset();f.resetHandsOnOwnerLoss=false;f.sample.input.tracked[0]=true;
+                    f.Tick(f.lastWrist,false);f.Tick(f.lastWrist,false);
+                    CHECK(f.native.counts==filled&&f.result.presentation&&f.result.presentation->lifetime==lifetime);
+                }
+                failureStage="seat feed";failureOperation=FeedPhysicalOperation::SeatFeed;
+                CHECK(f.Place(FeedPhysicalOperation::SeatFeed));CHECK(reconcile(3)==0);
+                failureStage="close cover";failureOperation=FeedPhysicalOperation::CloseCover;
+                CHECK(f.Close());CHECK(reconcile(4)==0);
+                failureStage="completed cycle remains closed";
+                CHECK(f.submits==5&&f.native.counts==filled&&!f.BlocksFire());
+                CHECK(f.sample.equipment&&*f.sample.equipment==originalEquipment);
+                for(unsigned packet=0;packet<3;++packet)f.Tick(f.lastWrist,false);
+                CHECK(f.submits==5&&f.native.counts==filled&&!f.backend.Pending());return 0;
+            };
+            const auto result=runCase();++completed;
+            receipts+=caseReceipts;
+            if(result==0)++cycles;
+            else{
+                ++failed;
+                std::fprintf(stderr,"Gameplay feed recovery: profile=%llu interruption=%u(%s) stage=%s result=FAIL offline_mocked_receipts=%u\n",
+                    static_cast<unsigned long long>(registration.key),shape,interruptionNames[shape],failureStage,caseReceipts);
+                if(!tracedFailure[shape]){
+                    f.PrintCadenceFailure(shape,failureOperation);tracedFailure[shape]=true;
+                }
             }
-            CHECK(f.Place(FeedPhysicalOperation::AttachContainer,!carriedGap,true,carriedGap));CHECK(reconcile(2)==0);
-            const FeedAmmunitionCounts filled{before.loaded+units,before.reserve-units,before.capacity};
-            CHECK(f.native.counts==filled);
-            if(interruption==Interruption::Tracking){
-                // A real loss after the only ammunition transfer cannot undo
-                // that receipt while the unfinished feed still blocks firing.
-                f.reloadOwnerLoss=ReloadOwnerLoss::PresentationUnavailable;f.reloadOwnerLossOrigin=ReloadOwnerLossOrigin::Lifecycle;
-                f.resetHandsOnOwnerLoss=true;f.sample.input.tracked[0]=false;f.Tick(f.lastWrist,false);
-                CHECK(f.native.counts==filled&&f.submits==3&&!f.backend.Pending()&&f.BlocksFire());
-                f.reloadOwnerLoss.reset();f.resetHandsOnOwnerLoss=false;f.sample.input.tracked[0]=true;
-                f.Tick(f.lastWrist,false);f.Tick(f.lastWrist,false);
-                CHECK(f.native.counts==filled&&f.result.presentation&&f.result.presentation->lifetime==lifetime);
-            }
-            CHECK(f.Place(FeedPhysicalOperation::SeatFeed));CHECK(reconcile(3)==0);
-            CHECK(f.Close());CHECK(reconcile(4)==0);
-            CHECK(f.submits==5&&f.native.counts==filled&&!f.BlocksFire());
-            CHECK(f.sample.equipment&&*f.sample.equipment==originalEquipment);
-            for(unsigned packet=0;packet<3;++packet)f.Tick(f.lastWrist,false);
-            CHECK(f.submits==5&&f.native.counts==filled&&!f.backend.Pending());++cycles;
         }
     }
-    CHECK(configurations==24&&cycles==configurations*interruptions.size()&&receipts==cycles*5);
-    std::printf("Gameplay feed boundary: %u profiles, %u recovered full cycles, %u offline mocked adapter receipts\n",
-        configurations,cycles,receipts);return 0;
+    std::printf("Gameplay feed boundary: %u profiles, cases complete=%u/%u pass=%u fail=%u, %u recovered full cycles, %u offline mocked adapter receipts\n",
+        configurations,completed,configurations*unsigned(interruptions.size()),cycles,failed,cycles,receipts);
+    CHECK(completed==configurations*interruptions.size()&&completed==cycles+failed&&failed==0);
+    CHECK(configurations==24&&cycles==configurations*interruptions.size()&&receipts==cycles*5);return 0;
 }
 int ChestPreparationSurvivesNeutralJitterButNotContactLoss(){
     for(bool loseContact:{false,true}){
