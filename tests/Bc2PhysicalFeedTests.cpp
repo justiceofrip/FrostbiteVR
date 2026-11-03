@@ -837,7 +837,10 @@ int HeldMechanismLossRetainsFirstCauseAcrossSameGripReacquisition(){
         const auto observed=observe(),loss=MechanismLoss(observed);
         CHECK(loss!="\"firstMechanismLoss\":null"&&loss==MechanismLoss(observe(true)));
         CHECK(observed.substr(0,observed.find(",\"latestChange\":"))==press);
-        const char* site=fault==0?"policy_clear":fault==1?"external_suspend":fault==2?"claim_unavailable":"tick_suspend";
+        // Explicit claim release fails raw continuation before the later claim-unavailable branch.
+        const char* site=fault==0?"policy_clear":fault==1?"external_suspend":fault==2?"release_continuation_unverified":"tick_suspend";
+        if(loss.find(std::string("\"site\":\"")+site+'"')==std::string::npos)
+            std::fprintf(stderr,"Mechanism loss fault %u: expected=%s, actualPrefix=%.100s\n",fault,site,loss.c_str());
         CHECK(loss.find(std::string("\"site\":\"")+site+'"')!=std::string::npos);
         CHECK(loss.find("\"heldToken\":{\"id\":"+std::to_string(held->token.id)+',')!=std::string::npos);
         CHECK(loss.find("\"heldClaim\":{\"id\":"+std::to_string(held->token.id)+',')!=std::string::npos);
