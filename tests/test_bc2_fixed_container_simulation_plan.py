@@ -1,5 +1,8 @@
 """Synthetic transformed geometry/receipt refusal cases; no native acceptance."""
 import copy
+import hashlib
+import json
+import os
 import importlib.util
 import math
 from pathlib import Path
@@ -798,11 +801,12 @@ class SelectedAmmoDriverTests(unittest.TestCase):
         s['fixedContainer'].update(view=None, viewFresh=False)
         return s
 
-    def harness(self, missing=True):
+    def harness(self, missing=True, right_squeeze=1.):
         future = {'missing': False, 'mutate': None}
 
         def response(now, nonce=1):
             _, s = self.response(now, nonce)
+            s['input']['hands'][1]['squeeze'] = right_squeeze
             if future['missing']:
                 self.missing(s)
             if future['mutate'] is not None:
@@ -819,6 +823,7 @@ class SelectedAmmoDriverTests(unittest.TestCase):
         v.last_request = h.now
         h.state['controls']['gripL'] = 0.
         _, initial = self.response(h.now)
+        initial['input']['hands'][1]['squeeze'] = right_squeeze
         if missing:
             self.missing(initial)
         h.publish(initial)
@@ -932,6 +937,210 @@ class SelectedAmmoDriverTests(unittest.TestCase):
                 self.assertTrue(v.demand_finished)
                 self.assertEqual(len(v.artifacts.events), 1)
                 self.assertEqual(h.command_writes, [])
+
+    def shot_harness(self):
+        # Recorded319 starts with neutral controllers and retains its GunHold.
+        h, future, _ = self.harness(right_squeeze=0.)
+        v = h.driver
+        # The shared single-command harness publishes fixed frame numbers.
+        # Model successive simulator commits for this press/release pair, so
+        # the real transport can require a later completed frame for each ACK.
+        advance = h.sleep
+        h.state['controls']['trigR'] = 0.
+
+        def advance_commands(seconds):
+            previous_sequence = h.state['cmdSeq']
+            previous_frame, previous_end = h.state['frame'], h.state['endFrames']
+            advance(seconds)
+            if h.state['cmdSeq'] != previous_sequence:
+                batch = h.files[v.command_path].decode('ascii').splitlines()
+                acknowledged_frame = previous_frame+1
+                h.state.update(frame=acknowledged_frame+2, endFrames=previous_end+3)
+                for command in batch:
+                    if command.startswith('trigger r '):
+                        h.state['controls']['trigR'] = float(command.split()[-1])
+                h.files[v.ack_path] = (
+                    f"seq={h.state['cmdSeq']} frame={acknowledged_frame} error=-\n"
+                    f"last={' | '.join(batch)}\n").encode('ascii')
+
+        self.enterContext(patch.object(d.transport.time, 'sleep', advance_commands))
+        ready, _, _ = v.fresh_available()
+        v.reference = ready
+        v.send(['trigger r 1'])
+        v.pause_until(h.now+180*self.MS)
+        v.send(['trigger r 0'])
+        v.pause_until(h.now+500*self.MS)
+        # This post-shot observation may start after the initial diagnostic
+        # capture expired; it must not reset that original demand clock.
+        h.now = max(h.now, v.demand_started+d.NS+self.MS)
+        self.assertEqual(v.commands, 4)
+        self.assertFalse(v.held_trigger)
+        return h, future, ready
+
+    @staticmethod
+    def capture_missing(s):
+        s['fixedContainer'] = dict(schema=p.OBSERVATION_SCHEMA, available=False,
+                                   reason='capture_pending_or_not_requested')
+
+    def test_owned_post_shot_capture_absence_waits_for_same_native_empty_ammo_without_input(self):
+        for missing in (self.capture_missing, self.missing):
+            with self.subTest(missing=missing):
+                h, future, ready = self.shot_harness()
+                v = h.driver
+                original = copy.deepcopy(ready)
+                clocks = v.deadline, v.hard_deadline, v.stage_deadline, v.demand_started
+                requests = 0
+
+                def transition(s):
+                    nonlocal requests
+                    requests += 1
+                    if requests == 1:
+                        missing(s)
+                    else:
+                        s['fixedContainer']['view']['snapshot']['counts']['loaded'] = 0
+
+                future['mutate'] = transition
+                before_commands = list(h.command_writes)
+                result, _, _ = v.fresh_available()
+                self.assertEqual(result['fixedContainer']['view']['snapshot']['counts'],
+                                 dict(loaded=0, reserve=7, capacity=1))
+                self.assertEqual(v.reference, original)
+                self.assertEqual((v.deadline, v.hard_deadline, v.stage_deadline, v.demand_started), clocks)
+                self.assertEqual(h.command_writes, before_commands)
+                self.assertEqual(requests, 2)
+                self.assertEqual(len([e for e in v.artifacts.events
+                    if e['type'] == 'selected_ammo_post_shot_unpublished']), 1)
+                self.assertFalse(v.post_shot_observing)
+                with self.assertRaisesRegex(d.transport.REFUSAL, 'already attempted'):
+                    v.fresh_available()
+
+    def test_post_shot_capture_wait_rejects_changed_owner_config_root_and_native_identity(self):
+        mutations = (
+            lambda s: s['owner'].update(weapon=999),
+            lambda s: s['equipment'].update(persistence=999),
+            lambda s: s.update(physical_equipment_generation=999),
+            lambda s: s['selected'].update(configurationPath='unrelated'),
+            lambda s: s['rig'].update(pose=999),
+            lambda s: s['fixedContainer']['tracking']['gun']['token'].update(id=999),
+            lambda s: s['fixedContainer']['tracking']['gun'].update(deadlineNs=s['observed_ns']),
+            lambda s: s['fixedContainer']['view']['binding'].update(switching=999),
+            lambda s: s['fixedContainer']['view']['identity'].update(serverItem=999),
+            lambda s: s['fixedContainer']['view'].update(command={}),
+            lambda s: s['fixedContainer']['view']['binding'].update(deadlineNs=s['observed_ns']),
+        )
+        for mutation in mutations:
+            with self.subTest(mutation=mutation):
+                h, future, ready = self.shot_harness()
+                calls = 0
+
+                def response(s):
+                    nonlocal calls
+                    calls += 1
+                    if calls == 1:
+                        self.capture_missing(s)
+                    else:
+                        s['fixedContainer']['view']['snapshot']['counts']['loaded'] = 0
+                        mutation(s)
+
+                future['mutate'] = response
+                before_commands = list(h.command_writes)
+                with self.assertRaises((d.transport.REFUSAL, d.planner.Refusal)):
+                    h.driver.fresh_available()
+                self.assertIsNone(h.driver.latest_snapshot)
+                self.assertIs(h.driver.reference, ready)
+                self.assertEqual(h.command_writes, before_commands)
+
+    def test_post_shot_absence_does_not_hide_unrelated_capture_or_transaction(self):
+        mutations = (
+            lambda s: s['fixedContainer'].update(reason='source_mismatched_or_expired'),
+            lambda s: s['fixedContainer'].update(schema='unrelated'),
+            lambda s: s.update(weapon_actions_blocked=True),
+            lambda s: s.update(feed={}),
+            lambda s: s['input']['hands'][0].update(squeeze=1.),
+            lambda s: s['input_evidence'].update(observedNs=0),
+        )
+        for mutation in mutations:
+            with self.subTest(mutation=mutation):
+                h, future, _ = self.shot_harness()
+                future['mutate'] = lambda s: (self.capture_missing(s), mutation(s))
+                before_commands = list(h.command_writes)
+                with self.assertRaises((d.transport.REFUSAL, d.planner.Refusal)):
+                    h.driver.fresh_available()
+                self.assertIsNone(h.driver.latest_snapshot)
+                self.assertEqual(h.command_writes, before_commands)
+                self.assertFalse(any(e['type'] == 'selected_ammo_post_shot_unpublished'
+                                     for e in h.driver.artifacts.events))
+
+    def test_post_shot_wait_preserves_request_cap_original_deadline_and_exclusive_input(self):
+        for fault in ('requests', 'deadline', 'writer', 'capture', 'pending'):
+            with self.subTest(fault=fault):
+                h, future, _ = self.shot_harness()
+                v = h.driver
+                future['mutate'] = self.capture_missing
+                if fault == 'deadline':
+                    v.stage_deadline = h.now+25*self.MS
+                elif fault == 'writer':
+                    h.files[v.command_path] = b'unrelated writer\n'
+                elif fault == 'capture':
+                    h.state['captureSeq'] += 1
+                elif fault == 'pending':
+                    v.pending_command = True
+                clocks = v.deadline, v.stage_deadline, v.demand_started
+                start_index = v.snapshot_index
+                before_commands = list(h.command_writes)
+                with self.assertRaises(d.transport.REFUSAL):
+                    v.fresh_available()
+                self.assertEqual((v.deadline, v.stage_deadline, v.demand_started), clocks)
+                self.assertLessEqual(v.snapshot_index-start_index, 1+d.transport.MAX_SNAPSHOT_REFRESHES)
+                self.assertEqual(h.command_writes, before_commands)
+
+    @unittest.skipUnless(os.environ.get('BC2_SELECTED_AMMO_REPLAY'), 'optional retained actual319 post-shot replay')
+    def test_actual319_missing_post_shot_frame_stays_observation_only_until_original_deadline(self):
+        folder = Path(os.environ['BC2_SELECTED_AMMO_REPLAY'])
+        pins = {'snapshot-003.json': '65ac6676239c92836b4a54e86daeb81765657c8995904a41bd6886b6d29340fc', 'snapshot-004.json': '2ae48332ecfda48b53f1d0b6be1fa541de55a87171f19d4207abdbb9f06de263', 'events.jsonl': '80fa8b5c1eb2fa2bd7eecfdf42b49c4ee20d1b69eeb71e94ea88823c97712916', 'request-004-timing.json': 'cff5cc38146d01fd8231ed26ffe447a82a5236226ca197e3f37b1a56adde1e9c'}
+        blobs = {name:(folder/name).read_bytes() for name in pins}
+        self.assertEqual({name:hashlib.sha256(blob).hexdigest() for name,blob in blobs.items()}, pins)
+        before, absent = [json.loads(blobs[name]) for name in ('snapshot-003.json','snapshot-004.json')]
+        events = [json.loads(line) for line in blobs['events.jsonl'].splitlines()]
+        commits = [row for row in events if row['type'] == 'command_commit']
+        requests = [row for row in events if row['type'] == 'command_request']
+        self.assertEqual([row['commands'][0] for row in requests], ['trigger r 1','trigger r 0'])
+        self.assertEqual(len(commits), 2)
+        h, _, _ = self.harness(missing=False)
+        v = h.driver
+        h.now = absent['observed_ns']+self.MS
+        h.state = copy.deepcopy(commits[-1]['state'])
+        v.state = copy.deepcopy(h.state)
+        v.initial_sim = copy.deepcopy(h.state)
+        v.reference = v.latest_snapshot = before
+        v.demand_finished, v.commands = True, 4
+        v.demand_started = before['observed_ns']
+        v.deadline, v.hard_deadline = h.now+d.NS, h.now+2*d.NS
+        v.stage_deadline = h.now+100*self.MS
+        original_deadline = v.stage_deadline
+        v.last_write, v.last_commit = commits[-1]['writtenNs'], commits[-1]['committedNs']
+        v.sequence, v.sentinel, v.capture_sequence = h.state['cmdSeq'],h.state['lastCmd'],h.state['captureSeq']
+        v.pending_batch = requests[-1]['commands']
+        h.files[v.command_path] = ('\n'.join(v.pending_batch)+'\n').encode()
+        v.command_hash = d.transport.digest(h.files[v.command_path])
+        timing = json.loads(blobs['request-004-timing.json'])
+        v.last_request, v.pending_nonce, v.snapshot_index = timing['requestStartedNs'],int(absent['nonce']),4
+        v.request_bytes = (str(v.pending_nonce)+'\n').encode()
+        h.files[v.request_path] = v.request_bytes
+        h.publish(absent)
+        h.files[v.snapshot_path] = blobs['snapshot-004.json']
+        h.response_after = None
+        with self.assertRaisesRegex(d.transport.REFUSAL, 'maximumGestureNs|post-stage receipt observation timed out'):
+            v.fresh_available()
+        self.assertEqual(v.stage_deadline, original_deadline)
+        self.assertIsNone(v.latest_snapshot)
+        self.assertIs(v.reference, before)
+        self.assertEqual(v.artifacts.saved['snapshot-004.json'], blobs['snapshot-004.json'])
+        held = [e for e in v.artifacts.events if e['type'] == 'selected_ammo_post_shot_unpublished']
+        self.assertEqual(len(held), 1)
+        self.assertFalse(held[0]['commandAuthority'])
+        self.assertEqual(h.command_writes, [])
+
 
     def test_trigger_publication_still_requires_current_loaded_one(self):
         for state in ('ready', 'empty', 'missing', 'expired'):

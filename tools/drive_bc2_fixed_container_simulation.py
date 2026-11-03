@@ -262,16 +262,16 @@ class SelectedAmmoDriver(FixedContainerDriver):
     def assert_selected_family(self, snapshot):
         raise transport.REFUSAL("selected ammunition requires an exact family assertion")
 
-    def admit_snapshot(self, snapshot, now, nonce):
+    def admit_selected_frame(self, snapshot, now, nonce):
         planner.frame.admit_frame(snapshot, now, nonce, mechanism_admission=planner.blocked_observation)
         self.assert_selected_family(snapshot)
         require(all(h['trigger'] == h['stickX'] == h['stickY'] == h['held'] == 0
                     for h in snapshot['input']['hands'])
                 and snapshot['input']['hands'][0]['squeeze'] <= .35,
                 "Selected ammunition decision needs neutral controls/free left hand")
-        x = snapshot.get('fixedContainer')
-        if isinstance(x, dict) and x.get('available') is False:
-            return super().admit_snapshot(snapshot, now, nonce)
+
+    def admit_selected_observation_identity(self, snapshot):
+        x = snapshot['fixedContainer']
         require(isinstance(x, dict) and x.get('schema') == planner.OBSERVATION_SCHEMA
                 and x.get('available') is True and x.get('observationOnly') is True,
                 "Selected fixed ammunition observation unavailable")
@@ -279,6 +279,106 @@ class SelectedAmmoDriver(FixedContainerDriver):
                 and all(x['input'][k] == snapshot['input_evidence'][k] for k in
                         ('owner', 'sequence', 'observedNs', 'deadlineNs', 'focused', 'tracked', 'released')),
                 "Selected ammunition observation owner/input changed")
+        return x
+
+    @staticmethod
+    def selected_ammo_unpublished(snapshot):
+        x = snapshot.get('fixedContainer')
+        return (isinstance(x, dict) and x.get('schema') == planner.OBSERVATION_SCHEMA
+                and ((x.get('available') is False
+                      and x.get('reason') == 'capture_pending_or_not_requested'
+                      and x.get('view') is None)
+                     or (x.get('available') is True and 'view' in x and x['view'] is None)))
+
+    def check_post_shot_observation_owner(self):
+        require(self.active_plan is None and self.demand_finished and self.commands == 4
+                and self.motion_started is None and not self.pending_command and not self.unsafe_owner
+                and not (self.held_left or self.held_right or self.held_trigger or self.held_buttons)
+                and self.last_commit is not None and self.last_commit >= self.last_write
+                and self.pending_batch == ['trigger r 0', self.sentinel],
+                'Selected ammunition observation requires one acknowledged ordinary shot/release')
+        self.bounds(time.perf_counter_ns())
+        state = self.read_state()
+        self.ownership(state)
+        require(integer(state['captureSeq']) == self.capture_sequence
+                and all(state[k] == self.state[k] for k in ('head', 'handL', 'handR', 'controls')),
+                'Selected ammunition observation input/capture changed')
+        require(state['controls'] and all(
+            all(part == 0 for part in value) if isinstance(value, list) else value == 0
+            for value in state['controls'].values()), 'Selected ammunition observation requires neutral input')
+
+    def request_snapshot(self):
+        if getattr(self, 'post_shot_observing', False):
+            self.check_post_shot_observation_owner()
+            require(self.snapshot_index - self.post_shot_request_start < 1 + transport.MAX_SNAPSHOT_REFRESHES,
+                    'Selected ammunition observation refresh request budget exhausted')
+        return super().request_snapshot()
+
+    def fresh_available(self):
+        if self.commands != 4 or not self.demand_finished:
+            return super().fresh_available()
+        require(not getattr(self, 'post_shot_observation_started', False),
+                'Selected ammunition post-shot observation already attempted')
+        self.check_post_shot_observation_owner()
+        require(self.reference is not None and self.reference['fixedContainer']['view'] is not None
+                and self.reference['fixedContainer']['view']['snapshot']['counts']['loaded'] == 1,
+                'Selected ammunition observation lacks its retained loaded chamber')
+        self.post_shot_observation_started = self.post_shot_observing = True
+        self.post_shot_request_start = self.snapshot_index
+        deadline = min(self.deadline, self.stage_deadline)
+        # Retain the exact pre-shot binding; an absent publication is not a new
+        # identity and never becomes a source for input. No capture clock resets.
+        self.latest_snapshot = None
+        try:
+            for _ in range(1 + transport.MAX_SNAPSHOT_REFRESHES):
+                self.check_post_shot_observation_owner()
+                snapshot, raw, now = self.fresh_postrelease_observation(deadline)
+                self.check_post_shot_observation_owner()
+                self.stable_snapshot(self.reference, snapshot)
+                require(snapshot['weapon_actions_blocked'] is False and snapshot.get('feed') is None,
+                        'Selected ammunition observation has a competing weapon interlock')
+                now = time.perf_counter_ns()
+                require(now < deadline and now-self.last_request <= transport.SNAPSHOT_TIMEOUT
+                        and now < self.snapshot_source_deadline(snapshot),
+                        'Selected ammunition observation consumed original response/source deadline')
+                self.admit_selected_frame(snapshot, now, integer(snapshot['nonce']))
+                require(integer(snapshot['input_evidence']['observedNs']) >= self.last_write
+                        and integer(snapshot['shot_input_generation']) > integer(self.reference['shot_input_generation'])
+                        and all(h['squeeze'] == h['trigger'] == h['held'] == h['stickX'] == h['stickY'] == 0
+                                for h in snapshot['input']['hands']),
+                        'Selected ammunition observation contains preceding or active input')
+                x = snapshot['fixedContainer']
+                if x.get('available') is True:
+                    self.admit_selected_observation_identity(snapshot)
+                    root = planner.claim(x['tracking']['gun'], x['input'], now, 1, 1)
+                    retained = self.reference['fixedContainer']['tracking']['gun']
+                    require(isinstance(retained, dict) and root == retained['token'],
+                            'Selected ammunition observation GunHold root changed')
+                if self.selected_ammo_unpublished(snapshot):
+                    if x['available'] is True:
+                        require(x['viewFresh'] is False and x['tracking']['pending'] is False
+                                and x['pendingRequest'] is None and x['tracking']['blocksFire'] is False,
+                                'Missing selected ammunition contradicts published state')
+                    self.artifacts.event(dict(type='selected_ammo_post_shot_unpublished', nonce=snapshot['nonce'],
+                        evaluatedNs=now, observationDeadlineNs=deadline,
+                        refreshRequests=self.snapshot_index-self.post_shot_request_start,
+                        lastCommandWrittenNs=self.last_write, commandAuthority=False))
+                    continue
+                # Every original current frame/ammo/native identity gate runs
+                # before the replacement is accepted; absence grants no waiver.
+                self.accept_snapshot(snapshot, raw, now)
+                return snapshot, raw, now
+            raise transport.REFUSAL('Selected ammunition observation refresh request budget exhausted')
+        finally:
+            self.post_shot_observing = False
+
+
+    def admit_snapshot(self, snapshot, now, nonce):
+        self.admit_selected_frame(snapshot, now, nonce)
+        x = snapshot.get('fixedContainer')
+        if isinstance(x, dict) and x.get('available') is False:
+            return super().admit_snapshot(snapshot, now, nonce)
+        x = self.admit_selected_observation_identity(snapshot)
         if self.demand_reference is not None:
             self.stable_snapshot(self.demand_reference, snapshot)
         if x['view'] is None:
@@ -308,6 +408,11 @@ class SelectedAmmoDriver(FixedContainerDriver):
                 and b['observedMs'] >= a['observedMs'], "Selected ammunition physical family changed")
         a, b = before.get('fixedContainer', {}).get('view'), after.get('fixedContainer', {}).get('view')
         if a is not None:
+            if (getattr(self, 'post_shot_observing', False)
+                    and self.selected_ammo_unpublished(after)):
+                # Stable frame/family above remains mandatory. This response is
+                # diagnostic only; the post-shot reader never accepts absence.
+                return
             require(isinstance(b, dict) and planner.binding_key(a['binding']) == planner.binding_key(b['binding'])
                     and a['identity'] == b['identity'], "Selected ammunition owner/binding changed")
 
