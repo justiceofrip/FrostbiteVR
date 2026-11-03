@@ -38,7 +38,18 @@ observations before checking its250ms ACK deadline. Individual phase costs are
 unmeasured.229 moves archival outside that deadline while preserving timely
 state/ACK validation, observation checks before further input and owned cleanup.
 All39 affected driver tests pass; native49 and prior family checks are unchanged.
-Full actual reload remains incomplete;230 prepares a fresh changed-driver check.
-Six owned processes exited0; native retirement, normal close and exact profile/
-settings restoration passed. Official tape checker ran once (exit1, preserved).
-Closed session archived under217/closed22101 with all hashes and zero deletions.
+Run03 stopped before feed during the neutral approach to the source holster.
+The exact Held/GunHold token remained fresh and actions unblocked, but the body
+sample was NotEvaluated/auto=false.231 traced an idle resource-read suspension;
+the snapshot itself does not publish that cause, so it cannot grant action.
+Full actual reload remains incomplete. All three runs closed normally with six
+owned exits0, native retirement and exact profile/settings restoration. Each
+official tape check ran once (exit1, preserved). Closed sessions are archived
+under217/closed22101,02,03 with all hashes preserved and zero deletions.
+232/233 add a reusable pure Ready/ObserveOnly/Refuse gate and draw adapter.
+The exact missing-display/unevaluated sample grants only bounded observation;
+fresh complete mapping and unchanged current ownership are required to resume.
+Prime and replacement observations share the original budgets. Native49 is unchanged.
+All29 affected tests pass with zero skips, including exact retained005->006 replay
+and the actual baseline-to-first-reach ordering. Portable tests need no reports.
+234 prepares one fresh changed-runner check; no live result is implied.

@@ -11,6 +11,14 @@ unchanged. The older diagnostic drivers and their non-authorizing plans remain
 separate. This runner creates its own explicit ordinary-input contract from the
 existing measured feed, pump, fixed-container and sight geometry adapters.
 
+Ordinary weapon selection uses tools/bc2_draw_admission.py and the injectable
+tools/bc2_draw_readiness_driver.py adapter. A brief unevaluated Held sample may
+permit bounded observation with zero input; it cannot authorize a command.
+Continuing requires fresh complete mapping and the same owner/item/hand claim.
+The caller supplies the existing full admission/transport checks and carries
+one readiness budget from Prime through draw. Portable policy/adapter tests
+also support optional replay of retained actual-game evidence.
+
 The flow is: review the actual world -> fresh selected mechanism mapping ->
 neutral contact/acquisition -> bounded gesture and dwell -> owned release ->
 fresh mechanism/custody/result observation. Geometry-changing steps require a
