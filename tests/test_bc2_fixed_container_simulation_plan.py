@@ -1165,5 +1165,390 @@ class SelectedAmmoDriverTests(unittest.TestCase):
                 self.assertEqual(h.command_writes, [])
 
 
+class SelectedAmmoInitialBasisTests(unittest.TestCase):
+    """Passive diagnosis cannot freeze geometry or replace an active source."""
+    MS = SelectedAmmoDriverTests.MS
+    Driver = SelectedAmmoDriverTests.Driver
+    response = SelectedAmmoDriverTests.response
+    missing = staticmethod(SelectedAmmoDriverTests.missing)
+    harness = SelectedAmmoDriverTests.harness
+    shot_harness = SelectedAmmoDriverTests.shot_harness
+
+    @unittest.skipUnless(os.environ.get('BC2_SELECTED_BASIS_REPLAY'), 'optional pinned actual329 replay')
+    def test_actual329_packets_stay_passive_with_original_bytes_and_no_action_source(self):
+        folder = Path(os.environ['BC2_SELECTED_BASIS_REPLAY'])
+        pins = {'snapshot-001.json': 'c6e9ad61b56e9c106e251fe503132f8937af36b8511ac7eed749bfd249f1b821', 'snapshot-002.json': '9cb718abe9ac783a265decbbd0557169038e322ee6b34e54a1b8b983f574769b', 'request-001-timing.json': '12e52b511b0e09f9e104ac82acbf9774cbf3dcc1d6d3cfac79f63b7eb1b086ea', 'request-002-timing.json': '47f4731fff971b8ca2900856574c572a690282b0485123fea1130653ac379d1d'}
+        blobs = {name: (folder / name).read_bytes() for name in pins}
+        self.assertEqual({name: hashlib.sha256(raw).hexdigest() for name, raw in blobs.items()}, pins)
+        snapshots = [json.loads(blobs[name]) for name in ('snapshot-001.json', 'snapshot-002.json')]
+        h, _, _ = self.harness()
+        v = h.driver
+        v.demand_started = snapshots[0]['observed_ns']-100*self.MS
+        for index, snapshot in enumerate(snapshots, 1):
+            h.now = snapshot['observed_ns']
+            timing = json.loads(blobs[f'request-{index:03}-timing.json'])
+            v.last_request = timing['requestStartedNs']
+            v.pending_nonce, v.snapshot_index = int(snapshot['nonce']), index
+            v.request_bytes = (str(v.pending_nonce)+'\n').encode()
+            h.files[v.request_path] = v.request_bytes
+            h.publish(snapshot)
+            raw = blobs[f'snapshot-{index:03}.json']
+            h.files[v.snapshot_path] = raw
+            received = v.receive_snapshot()
+            self.assertEqual(received[1], raw)
+            with self.assertRaisesRegex(d.shared.CapturePending, 'initial selected ammunition publication pending'):
+                v.accept_snapshot(*received)
+            self.assertEqual(v.artifacts.saved[f'snapshot-{index:03}.json'], raw)
+            self.assertIsNone(v.reference)
+            self.assertIsNone(v.latest_snapshot)
+            self.assertFalse(v.demand_finished)
+        self.assertEqual(v.demand_reference, snapshots[0])
+        with self.assertRaisesRegex(d.transport.REFUSAL, 'basis changed'):
+            d.transport.stable_snapshot(*snapshots)
+        self.assertEqual(v.commands, 0)
+        self.assertEqual(h.command_writes, [])
+
+    def test_first_complete_current_ammo_activates_its_own_basis_then_freezes_it(self):
+        h, future, diagnostic = self.harness()
+        v = h.driver
+        deadlines = v.deadline, v.stage_deadline, v.hard_deadline
+        future['mutate'] = lambda s: s['mapping']['weaponWorldMeters'][3].__setitem__(0, s['mapping']['weaponWorldMeters'][3][0]+.01)
+        source, _, _ = v.fresh_available()
+        self.assertEqual(v.demand_reference, diagnostic)
+        self.assertIs(v.reference, source)
+        self.assertIs(v.latest_snapshot, source)
+        self.assertTrue(v.demand_finished)
+        self.assertEqual((v.deadline, v.stage_deadline, v.hard_deadline), deadlines)
+        activations = [e for e in v.artifacts.events if e['type'] == 'selected_ammo_action_reference_activated']
+        self.assertEqual(len(activations), 1)
+        self.assertEqual(activations[0]['commands'], 0)
+        self.assertEqual(activations[0]['diagnosticNonce'], diagnostic['nonce'])
+        self.assertEqual(activations[0]['sourceNonce'], source['nonce'])
+        self.assertAlmostEqual(activations[0]['diagnosticDistanceMeters'], .01)
+        changed = copy.deepcopy(source)
+        changed['mapping']['weaponWorldMeters'][3][0] += .003
+        with self.assertRaisesRegex(d.transport.REFUSAL, 'basis changed'):
+            v.admit_snapshot(changed, h.now, int(changed['nonce']))
+        self.assertIs(v.reference, source)
+        self.assertEqual(h.command_writes, [])
+
+    def test_passive_basis_motion_never_hides_identity_input_family_or_calibration_changes(self):
+        mutations = (
+            ('owner', lambda s: s['owner'].update(weapon=999)),
+            ('equipment', lambda s: s['equipment'].update(persistence=999)),
+            ('rig', lambda s: s['rig'].update(pose=999)),
+            ('configuration', lambda s: s['selected'].update(configurationPath='changed')),
+            ('sight', lambda s: s['sight']['family'].update(persistentId='changed')),
+            ('head', lambda s: s['input']['head']['position'].__setitem__(0, .003)),
+            ('right', lambda s: s['input']['hands'][1]['grip']['position'].__setitem__(0, .003)),
+            ('left', lambda s: s['input']['hands'][0]['grip']['position'].__setitem__(0, .003)),
+            ('calibration', lambda s: s['mapping']['anatomicalWristToGrip'][3].__setitem__(0, .01)),
+            ('wrist_mapping', lambda s: s['mapping']['rawLeftWristWorldMeters'][3].__setitem__(0, 99.)),
+            ('nonrigid_weapon', lambda s: s['mapping']['weaponWorldMeters'][0].__setitem__(0, 2.)),
+            ('pending_ammo', lambda s: s['fixedContainer'].update(pendingRequest={})),
+            ('expired_ammo', lambda s: s['fixedContainer']['view']['binding'].update(deadlineNs=s['observed_ns'])),
+        )
+        for label, mutate in mutations:
+            with self.subTest(label=label):
+                h, future, _ = self.harness()
+                def update(s):
+                    s['mapping']['weaponWorldMeters'][3][0] += .01
+                    mutate(s)
+                future['mutate'] = update
+                with self.assertRaises((d.transport.REFUSAL, d.planner.Refusal)):
+                    h.driver.fresh_available()
+                self.assertIsNone(h.driver.reference)
+                self.assertIsNone(h.driver.latest_snapshot)
+                self.assertEqual(h.command_writes, [])
+
+    def test_passive_movement_keeps_initial_response_outer_and_source_deadlines(self):
+        for mode in ('initial', 'response', 'outer', 'source'):
+            with self.subTest(mode=mode):
+                h, future, _ = self.harness()
+                v, started = h.driver, h.now
+                future['missing'] = True
+                future['mutate'] = lambda s: s['mapping']['weaponWorldMeters'][3].__setitem__(0, s['mapping']['weaponWorldMeters'][3][0]+.01)
+                if mode == 'response':
+                    h.response_after = None
+                if mode == 'outer':
+                    v.deadline = h.now+150*self.MS
+                if mode == 'source':
+                    future['missing'] = False
+                    future['mutate'] = lambda s: s.update(native_deadline_ns=s['observed_ns'])
+                original_stage = v.stage_deadline
+                with self.assertRaises((d.transport.REFUSAL, d.planner.Refusal)):
+                    v.fresh_available()
+                self.assertEqual(v.demand_started, started)
+                self.assertEqual(v.stage_deadline, original_stage)
+                self.assertLessEqual(h.now-started, d.NS+self.MS)
+                self.assertIsNone(v.reference)
+                self.assertIsNone(v.latest_snapshot)
+                self.assertEqual(h.command_writes, [])
+
+    def test_activation_refuses_owned_input_and_unsettled_writer_states(self):
+        changes = (
+            ('commands', 1), ('pending_command', True), ('unsafe_owner', True),
+            ('held_left', True), ('held_right', True), ('held_trigger', True),
+            ('held_buttons', {'a'}), ('motion_started', 1), ('active_plan', {}),
+        )
+        for field, value in changes:
+            with self.subTest(field=field):
+                h, _, _ = self.harness()
+                v = h.driver
+                v.demand_started = h.now
+                setattr(v, field, value)
+                _, complete = self.response(h.now)
+                with self.assertRaises(d.transport.REFUSAL):
+                    v.accept_snapshot(complete, d.transport.json_bytes(complete), h.now)
+                self.assertIsNone(v.reference)
+                self.assertIsNone(v.latest_snapshot)
+                self.assertEqual(h.command_writes, [])
+
+    def test_active_post_shot_missing_view_keeps_original_basis_refusal(self):
+        h, future, reference = self.shot_harness()
+        v = h.driver
+        future['missing'] = True
+        future['mutate'] = lambda s: s['mapping']['weaponWorldMeters'][3].__setitem__(0, s['mapping']['weaponWorldMeters'][3][0]+.003)
+        before = list(h.command_writes)
+        with self.assertRaisesRegex(d.transport.REFUSAL, 'basis changed'):
+            v.fresh_available()
+        self.assertIs(v.reference, reference)
+        self.assertEqual(h.command_writes, before)
+        self.assertEqual(v.commands, 4)
+
+
+
+class SelectedAmmoCapturePendingBasisTests(unittest.TestCase):
+    """Both unpublished shapes retain diagnostic identity without action authority."""
+    MS = SelectedAmmoDriverTests.MS
+    Driver = SelectedAmmoDriverTests.Driver
+    response = SelectedAmmoDriverTests.response
+    missing = staticmethod(SelectedAmmoDriverTests.missing)
+    capture_missing = staticmethod(SelectedAmmoDriverTests.capture_missing)
+    harness = SelectedAmmoDriverTests.harness
+    shot_harness = SelectedAmmoDriverTests.shot_harness
+
+    @staticmethod
+    def move_weapon(s, distance=.006):
+        s['mapping']['weaponWorldMeters'][3][0] += distance
+
+    def test_both_initial_absences_preserve_bytes_until_full_current_source_activates(self):
+        for initial_shape in ('view', 'capture'):
+            with self.subTest(initial_shape=initial_shape):
+                h, future, initial = self.harness()
+                v = h.driver
+                if initial_shape == 'capture':
+                    self.capture_missing(initial)
+                    h.publish(initial)
+                initial_raw = d.transport.json_bytes(initial)
+                pending_raw = []
+                requests = 0
+                deadlines = v.deadline, v.hard_deadline, v.stage_deadline
+                started = h.now
+
+                def transition(s):
+                    nonlocal requests
+                    requests += 1
+                    self.assertIsNone(v.reference)
+                    self.assertIsNone(v.latest_snapshot)
+                    self.assertEqual(v.commands, 0)
+                    self.assertFalse(v.demand_finished)
+                    self.assertEqual(v.demand_reference, initial)
+                    self.move_weapon(s, .006 if requests == 1 else .008)
+                    if requests == 1:
+                        self.capture_missing(s)
+                        pending_raw.append(d.transport.json_bytes(s))
+
+                future['mutate'] = transition
+                source, _, _ = v.fresh_available()
+                self.assertEqual(requests, 2)
+                self.assertEqual(v.artifacts.saved['snapshot-001.json'], initial_raw)
+                self.assertEqual(v.artifacts.saved['snapshot-002.json'], pending_raw[0])
+                self.assertEqual(d.transport.json_bytes(v.demand_reference), initial_raw)
+                self.assertIs(v.reference, source)
+                self.assertIs(v.latest_snapshot, source)
+                self.assertTrue(v.demand_finished)
+                self.assertEqual(source['fixedContainer']['view']['snapshot']['counts']['loaded'], 1)
+                self.assertEqual(v.demand_started, started)
+                self.assertEqual((v.deadline, v.hard_deadline, v.stage_deadline), deadlines)
+                self.assertEqual(len([e for e in v.artifacts.events if e['type'] == 'pump_capture_pending']), 2)
+                self.assertEqual(h.command_writes, [])
+
+    def test_capture_pending_drift_never_hides_invalid_identity_input_mapping_or_absence(self):
+        mutations = (
+            ('owner', lambda s: s['owner'].update(weapon=999)),
+            ('equipment', lambda s: s['equipment'].update(persistence=999)),
+            ('rig', lambda s: s['rig'].update(pose=999)),
+            ('configuration', lambda s: s['selected'].update(configurationPath='changed')),
+            ('sight', lambda s: s['sight']['family'].update(persistentId='changed')),
+            ('head', lambda s: s['input']['head']['position'].__setitem__(0, .003)),
+            ('right', lambda s: s['input']['hands'][1]['grip']['position'].__setitem__(0, .003)),
+            ('left', lambda s: s['input']['hands'][0]['grip']['position'].__setitem__(0, .003)),
+            ('calibration', lambda s: s['mapping']['anatomicalWristToGrip'][3].__setitem__(0, .01)),
+            ('wrist_mapping', lambda s: s['mapping']['rawLeftWristWorldMeters'][3].__setitem__(0, 99.)),
+            ('nonrigid_weapon', lambda s: s['mapping']['weaponWorldMeters'][0].__setitem__(0, 2.)),
+            ('generation', lambda s: s['input'].update(generation=999)),
+            ('active_trigger', lambda s: s['input']['hands'][1].update(trigger=1.)),
+            ('held_input', lambda s: s['input']['hands'][0].update(held=1)),
+            ('interlock', lambda s: s.update(weapon_actions_blocked=True)),
+            ('feed', lambda s: s.update(feed={'blocksFire': False})),
+            ('reason', lambda s: s['fixedContainer'].update(reason='unrecognized')),
+            ('schema', lambda s: s['fixedContainer'].update(schema='unknown')),
+            ('view', lambda s: s['fixedContainer'].update(
+                view=self.response(s['observed_ns'], int(s['nonce']))[1]['fixedContainer']['view'])),
+        )
+        for label, mutate in mutations:
+            with self.subTest(label=label):
+                h, future, initial = self.harness()
+                v = h.driver
+                refused_raw = []
+
+                def update(s):
+                    self.move_weapon(s)
+                    self.capture_missing(s)
+                    mutate(s)
+                    refused_raw.append(d.transport.json_bytes(s))
+
+                future['mutate'] = update
+                with self.assertRaises((d.transport.REFUSAL, d.planner.Refusal)):
+                    v.fresh_available()
+                self.assertEqual(v.artifacts.saved['snapshot-002.json'], refused_raw[0])
+                self.assertEqual(v.demand_reference, initial)
+                self.assertEqual(len(v.artifacts.events), 1)
+                self.assertIsNone(v.reference)
+                self.assertIsNone(v.latest_snapshot)
+                self.assertEqual(h.command_writes, [])
+
+    def test_first_capture_pending_refuses_action_authority_and_unknown_or_blocked_states(self):
+        fields = (
+            ('commands', 1), ('pending_command', True), ('unsafe_owner', True),
+            ('held_left', True), ('held_right', True), ('held_trigger', True),
+            ('held_buttons', {'a'}), ('motion_started', 1), ('active_plan', {}),
+            ('demand_finished', True), ('reference', {}), ('latest_snapshot', {}),
+        )
+        for field, value in fields:
+            with self.subTest(field=field):
+                h, _, initial = self.harness()
+                v = h.driver
+                self.capture_missing(initial)
+                v.demand_started = h.now
+                setattr(v, field, value)
+                with self.assertRaises(d.transport.REFUSAL):
+                    v.admit_snapshot(initial, h.now, int(initial['nonce']))
+                self.assertIsNone(v.demand_reference)
+                self.assertEqual(h.command_writes, [])
+        for label, mutation in (
+            ('reason', lambda s: s['fixedContainer'].update(reason='unrecognized')),
+            ('interlock', lambda s: s.update(weapon_actions_blocked=True)),
+            ('invalid', lambda s: s.update(valid=False, invalid_reason='unrelated native block')),
+        ):
+            with self.subTest(label=label):
+                h, _, initial = self.harness()
+                self.capture_missing(initial)
+                mutation(initial)
+                h.publish(initial)
+                with self.assertRaises((d.transport.REFUSAL, d.planner.Refusal)):
+                    h.driver.fresh_available()
+                self.assertEqual(h.driver.artifacts.saved['snapshot-001.json'], d.transport.json_bytes(initial))
+                self.assertFalse(h.driver.artifacts.events)
+                self.assertIsNone(h.driver.demand_reference)
+                self.assertIsNone(h.driver.reference)
+                self.assertIsNone(h.driver.latest_snapshot)
+                self.assertEqual(h.command_writes, [])
+
+    def test_capture_pending_movement_retains_original_demand_request_outer_and_source_deadlines(self):
+        for mode in ('initial', 'response', 'outer', 'source'):
+            with self.subTest(mode=mode):
+                h, future, initial = self.harness()
+                v, started = h.driver, h.now
+                self.capture_missing(initial)
+                h.publish(initial)
+
+                def pending(s):
+                    self.move_weapon(s)
+                    self.capture_missing(s)
+                    if mode == 'source':
+                        s['native_deadline_ns'] = s['observed_ns']
+
+                future['mutate'] = pending
+                if mode == 'response':
+                    h.response_after = None
+                if mode == 'outer':
+                    v.deadline = h.now+150*self.MS
+                deadlines = v.deadline, v.hard_deadline, v.stage_deadline
+                with self.assertRaises((d.transport.REFUSAL, d.planner.Refusal)):
+                    v.fresh_available()
+                self.assertEqual(v.demand_started, started)
+                self.assertEqual((v.deadline, v.hard_deadline, v.stage_deadline), deadlines)
+                self.assertLessEqual(h.now-started, d.NS+self.MS)
+                self.assertIsNone(v.reference)
+                self.assertIsNone(v.latest_snapshot)
+                self.assertEqual(h.command_writes, [])
+
+    def test_parent_pending_dispatch_keeps_original_block_admission_and_full_basis_gate(self):
+        h, future, initial = self.harness()
+        v = h.driver
+        v.__class__ = d.FixedContainerDriver
+        self.capture_missing(initial)
+        initial['weapon_actions_blocked'] = True
+        h.publish(initial)
+
+        def pending(s):
+            self.move_weapon(s)
+            self.capture_missing(s)
+            s['weapon_actions_blocked'] = True
+
+        future['mutate'] = pending
+        with self.assertRaisesRegex(d.transport.REFUSAL, 'basis changed'):
+            v.fresh_available()
+        self.assertEqual(v.demand_reference, initial)
+        self.assertEqual(len(v.artifacts.events), 1)
+        self.assertIsNone(v.reference)
+        self.assertIsNone(v.latest_snapshot)
+        self.assertEqual(h.command_writes, [])
+
+    def test_activated_basis_is_retained_for_post_shot_capture_absence_and_drift_refusal(self):
+        for drift in (0., .003):
+            with self.subTest(drift=drift):
+                original_harness = self.harness
+
+                def shifted_harness(*args, **kwargs):
+                    h, future, initial = original_harness(*args, **kwargs)
+                    future['mutate'] = lambda s: self.move_weapon(s, .01)
+                    return h, future, initial
+
+                with patch.object(self, 'harness', side_effect=shifted_harness):
+                    h, future, reference = self.shot_harness()
+                v = h.driver
+                self.assertNotEqual(v.demand_reference['mapping'], reference['mapping'])
+                clocks = v.deadline, v.stage_deadline, v.hard_deadline, v.demand_started
+                before_commands = list(h.command_writes)
+                requests = 0
+
+                def transition(s):
+                    nonlocal requests
+                    requests += 1
+                    self.move_weapon(s, .01+drift)
+                    if requests == 1:
+                        self.capture_missing(s)
+                    else:
+                        s['fixedContainer']['view']['snapshot']['counts']['loaded'] = 0
+
+                future['mutate'] = transition
+                if drift:
+                    with self.assertRaisesRegex(d.transport.REFUSAL, 'basis changed'):
+                        v.fresh_available()
+                    self.assertEqual(requests, 1)
+                else:
+                    result, _, _ = v.fresh_available()
+                    self.assertEqual(result['fixedContainer']['view']['snapshot']['counts']['loaded'], 0)
+                    self.assertEqual(requests, 2)
+                self.assertIs(v.reference, reference)
+                self.assertEqual((v.deadline, v.stage_deadline, v.hard_deadline, v.demand_started), clocks)
+                self.assertEqual(h.command_writes, before_commands)
+                self.assertEqual(v.commands, 4)
+
+
+
 if __name__ == "__main__":
     unittest.main()

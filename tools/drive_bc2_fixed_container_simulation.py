@@ -61,9 +61,12 @@ class FixedContainerDriver(shared.PumpDriver):
             if self.demand_reference is None:
                 self.demand_reference = snapshot
             else:
-                self.stable_snapshot(self.demand_reference, snapshot)
+                self.stable_initial_observation(self.demand_reference, snapshot)
             raise shared.CapturePending("initial fixed-container capture pending")
         return planner.admit(snapshot, now, nonce)
+
+    def stable_initial_observation(self, before, after):
+        self.stable_snapshot(before, after)
 
     def stable_snapshot(self, before, after):
         transport.stable_snapshot(before, after)
@@ -373,14 +376,76 @@ class SelectedAmmoDriver(FixedContainerDriver):
             self.post_shot_observing = False
 
 
+    def require_initial_observation(self):
+        require(self.reference is None and self.latest_snapshot is None
+                and self.active_plan is None and not self.demand_finished and self.commands == 0
+                and not self.pending_command and not self.unsafe_owner
+                and not (self.held_left or self.held_right or self.held_trigger or self.held_buttons)
+                and self.motion_started is None and self.demand_started is not None
+                and time.perf_counter_ns()-self.demand_started < NS,
+                'Selected ammunition initial observation already has action authority or expired')
+
+    def stable_initial_observation(self, before, after):
+        self.require_initial_observation()
+        require(self.selected_ammo_unpublished(before),
+                'Selected ammunition diagnostic reference already contains ammunition')
+        transport.stable_snapshot_identity(before, after)
+        require(all(before['input']['hands'][0][k] == after['input']['hands'][0][k]
+                    for k in ('grip', 'aim')),
+                'Selected ammunition passive left-controller input changed')
+        self.stable_selected_identity(before, after)
+        require(all(e <= cap for e, cap in zip(planner.frame.pose_error(
+                    planner.frame.rigid(before['mapping']['anatomicalWristToGrip']),
+                    planner.frame.rigid(after['mapping']['anatomicalWristToGrip'])), (.002, .005))),
+                'Selected ammunition anatomical calibration changed')
+        # No action-space inverse has been activated while ammo is absent.
+        # Validate THIS original packet's map; never splice an old W/B/F into it.
+        frame, mapping, inp = planner.frame, after['mapping'], after['input']
+        world, body, wrist, calibration = [frame.rigid(mapping[k]) for k in
+            ('weaponWorldMeters', 'trackingBodyWorldMeters', 'rawLeftWristWorldMeters', 'anatomicalWristToGrip')]
+        grip = frame.multiply(frame.from_pose(inp['hands'][0]['grip']),
+                              frame.inverse(frame.from_pose(inp['referenceHead'])))
+        forward = frame.multiply(frame.multiply(calibration, grip), body)
+        require(all(e <= cap for e, cap in zip(frame.pose_error(forward, wrist), (.002, .005))),
+                'Selected ammunition original anatomical mapping does not round trip')
+
+    def accept_snapshot(self, snapshot, raw, now):
+        require(self.active_plan is None, 'Selected ammunition observer cannot own a loader action plan')
+        initial = self.reference is None
+        if initial:
+            self.require_initial_observation()
+        # FixedContainerDriver compares every packet with its initial action
+        # geometry. This observer has only diagnostic identity until a complete,
+        # current ammunition view passes the shared transport and ammo guards.
+        transport.Driver.accept_snapshot(self, snapshot, raw, now)
+        if initial:
+            self.reference = snapshot
+            if self.demand_reference is not None:
+                frame = planner.frame
+                relative = [frame.multiply(s['mapping']['weaponWorldMeters'],
+                            frame.inverse(s['mapping']['trackingBodyWorldMeters']))
+                            for s in (self.demand_reference, snapshot)]
+                distance, angle = frame.pose_error(*relative)
+                if distance > .002 or angle > .005:
+                    self.artifacts.event(dict(type='selected_ammo_action_reference_activated',
+                        diagnosticNonce=self.demand_reference['nonce'], sourceNonce=snapshot['nonce'],
+                        evaluatedNs=now, sourceDeadlineNs=self.snapshot_source_deadline(snapshot),
+                        diagnosticDistanceMeters=distance, diagnosticAngleRadians=angle, commands=self.commands))
+
+
     def admit_snapshot(self, snapshot, now, nonce):
         self.admit_selected_frame(snapshot, now, nonce)
         x = snapshot.get('fixedContainer')
         if isinstance(x, dict) and x.get('available') is False:
+            self.require_initial_observation()
+            require(self.selected_ammo_unpublished(snapshot),
+                    "Selected ammunition capture absence is not a pending publication")
             return super().admit_snapshot(snapshot, now, nonce)
         x = self.admit_selected_observation_identity(snapshot)
-        if self.demand_reference is not None:
-            self.stable_snapshot(self.demand_reference, snapshot)
+        if self.reference is not None:
+            self.stable_snapshot(self.reference, snapshot)
+        elif self.demand_reference is not None:
+            self.stable_initial_observation(self.demand_reference, snapshot)
         if x['view'] is None:
             # This is absence, not permission to use another resource or to
             # repair an invalid view. Keep the original capture-demand clock;
@@ -402,6 +467,9 @@ class SelectedAmmoDriver(FixedContainerDriver):
 
     def stable_snapshot(self, before, after):
         transport.stable_snapshot(before, after)
+        self.stable_selected_identity(before, after)
+
+    def stable_selected_identity(self, before, after):
         a, b = before['sight']['family'], after['sight']['family']
         require({k: v for k, v in a.items() if k != 'observedMs'}
                 == {k: v for k, v in b.items() if k != 'observedMs'}

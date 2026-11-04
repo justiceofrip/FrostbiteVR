@@ -275,7 +275,7 @@ def sim_summary(state):
             "errors", "frame", "endFrames", "captureSeq", "sessionState", "head", "handL", "handR", "controls")}
 
 
-def stable_snapshot(before, after):
+def stable_snapshot_identity(before, after):
     for key in ("owner", "equipment", "physical_equipment_generation", "rig"):
         require(before[key] == after[key], "native owner/equipment/rig changed: " + key)
     for key in ("configurationPath", "configurationPathPointer", "inventory", "selectedSlot",
@@ -286,6 +286,10 @@ def stable_snapshot(before, after):
     poses = [(before["input"][key], after["input"][key]) for key in ("referenceHead", "head")]
     poses += [(before["input"]["hands"][1][key], after["input"]["hands"][1][key]) for key in ("grip", "aim")]
     require(all(a == b for a, b in poses), "reference/head/right-controller input changed")
+
+
+def stable_snapshot(before, after):
+    stable_snapshot_identity(before, after)
     # The accepted inverse uses W * inverse(B). Common actor/world movement
     # cancels; separately freezing absolute W and B would reject that invariant.
     relative = [planner.multiply(s["mapping"]["weaponWorldMeters"],
