@@ -20,16 +20,29 @@ struct OriginalFiringObserver {
 class OriginalFiringScope {
 public:
     OriginalFiringScope(const OriginalFiringObserver& observer,OriginalFiringUpdate call)noexcept:observer_(observer),call_(call){
+        previous_=current_;current_=this;
         if(observer_.enter&&observer_.leave)token_=observer_.enter(observer_.context,call_);
     }
-    ~OriginalFiringScope(){if(observer_.enter&&observer_.leave)observer_.leave(observer_.context,call_,token_);}
+    ~OriginalFiringScope(){if(observer_.enter&&observer_.leave)observer_.leave(observer_.context,call_,token_);current_=previous_;}
     std::optional<std::array<std::byte,0x30>> InputCopy()noexcept {
         if(copyRequested_)return {};copyRequested_=true;
-        return observer_.copyInput?observer_.copyInput(observer_.context,call_,token_):std::nullopt;
+        auto result=observer_.copyInput?observer_.copyInput(observer_.context,call_,token_):std::nullopt;
+        copied_=bool(result);return result;
     }
+    // Exact same-thread original invocation only. A copied input is exposed
+    // after copyInput returns; nested calls shadow and restore this scope.
+    static const OriginalFiringScope* Current()noexcept{return current_;}
+    const OriginalFiringUpdate& Call()const noexcept{return call_;}
+    const OriginalFiringToken& Token()const noexcept{return token_;}
+    void* ObserverContext()const noexcept{return observer_.context;}
+    bool Copied()const noexcept{return copied_;}
+    void BindCopiedContext(std::uintptr_t context)noexcept {if(copied_)nativeContext_=context;}
+    std::uintptr_t NativeContext()const noexcept{return copied_?nativeContext_:call_.context;}
     OriginalFiringScope(const OriginalFiringScope&)=delete;
     OriginalFiringScope& operator=(const OriginalFiringScope&)=delete;
 private:
+    inline static thread_local const OriginalFiringScope* current_=nullptr;
+    const OriginalFiringScope* previous_=nullptr;std::uintptr_t nativeContext_=0;bool copied_=false;
     OriginalFiringObserver observer_{};OriginalFiringUpdate call_{};OriginalFiringToken token_{};bool copyRequested_=false;
 };
 namespace reloadFlowRuntime {

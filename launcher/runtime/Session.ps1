@@ -200,6 +200,10 @@ try {
     Assert-Bc2GraphicsArmed
     $token=(Get-Content -LiteralPath $channel -Raw).Trim();if(-not $token){throw 'Missing VR channel.'}
     $nativeArguments=@('--game',$options.game_path,'--dll',(Join-Path $folder 'BC2NativeProbe.dll'),'--report',(Join-Path $folder 'native-trace.json'),'--stream',$token,'--controllers','--motion-aim','--body-follow','--pose-observe','--hand-poses','--muzzle-fire','--two-hand-grip','--sight-flip','--physical-reload','--magazine-reload','--body-inventory','--boat-head-aim','--boat-head-fire','--uncap-mirror','--until-host-exit',[string]$hostProcess.Id)
+    # The normal chest holster can draw and return. A tracked strike is a separate session request.
+    if($options.ContainsKey('qualify_chest_knife') -and $options.qualify_chest_knife -is [bool] -and $options.qualify_chest_knife){
+        $nativeArguments+='--qualify-chest-knife'
+    }else{$nativeArguments+='--chest-holster-if-supported'}
     $trace=Start-Bc2Child (Join-Path $PSScriptRoot 'bin/BC2NativeTrace.exe') $nativeArguments $folder 'native'
     $state.trace=Get-Bc2ProcessIdentity $trace;$state.phase='Attaching VR and waiting for the native connection. Keep the headset connected…';Save-State
     $attachDeadline=[DateTime]::UtcNow.AddSeconds(35);$attached=$false

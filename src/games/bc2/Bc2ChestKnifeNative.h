@@ -6,13 +6,15 @@
 #include <ostream>
 namespace fvr::bc2::chestKnifeNative {
 // PRIVATE only. Existing draw/hold/return default; motion requires a separate
-// explicit pre-start opt-in. Requires the existing firing dispatcher installed.
+// explicit pre-start opt-in. attackBridgeEnabled is a separate default-off
+// qualification request; no existing normal caller enables it. Requires the existing firing dispatcher installed.
 bool Install(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t imageBase,
-    const ReloadStateMemory&,bool motionEnabled=false)noexcept;
+    const ReloadStateMemory&,bool motionEnabled=false,bool attackBridgeEnabled=false)noexcept;
 void Start()noexcept;
+bool TrackedAttackRequested()noexcept;
 struct View {
     private_knife::Anchor anchor{};private_knife::Snapshot snapshot{};
-    bool owned=false,healthy=false,observationComplete=false,motionEnabled=false;
+    bool owned=false,healthy=false,observationComplete=false,motionEnabled=false,attackBridgeEnabled=false;
 };
 // Current coherent observation only; it creates no staged native action.
 std::optional<View> Inspect(const ReloadStateOwner&,unsigned knifeWeapon,std::uint64_t sequence,std::int64_t nowNs)noexcept;
@@ -31,7 +33,8 @@ bool BeforePrepare(const interaction::KnifeSample&,interaction::ChestKnifeCustod
 bool Stage(const interaction::KnifeCommand&,const interaction::KnifeSample&,
     const interaction::HandInteraction&,interaction::ChestKnifeCustody&,
     const private_knife::Anchor&,const ReloadStateOwner& actualSelectedOwner,
-    std::uint64_t bodyOperation)noexcept;
+    std::uint64_t bodyOperation,const std::optional<math::Matrix4>& attackGeometry=std::nullopt,
+    float worldUnitsPerMeter=1,std::int64_t geometryDeadlineNs=0)noexcept;
 // Read-only native outcome. Return is delivered only after the coordinator's
 // exact operation has a NEW current paired hide + empty-hand receipt.
 std::optional<interaction::KnifeReceipt> Observe(const ReloadStateOwner& actualSelectedOwner,

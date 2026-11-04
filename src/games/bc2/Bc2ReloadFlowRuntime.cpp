@@ -2410,7 +2410,8 @@ void __fastcall Update(void* self,void*,void* context,unsigned extra){
     // tools retain their existing caller-local input-copy route.
     if(!observation.lease||!PistolAfterFeedConfigMatches(observation.lease->snapshot.config)){
         if(auto toolInput=independentObservation.InputCopy()){
-            alignas(16) auto nativeInput=*toolInput;originalUpdate(self,nativeInput.data(),extra);return;
+            alignas(16) auto nativeInput=*toolInput;independentObservation.BindCopiedContext(reinterpret_cast<std::uintptr_t>(nativeInput.data()));
+            originalUpdate(self,nativeInput.data(),extra);return;
         }
     }
     const auto cycleInvocation=observation.frame.invocation.Record().id;cycleCallback.scope.BindInvocation(cycleInvocation);

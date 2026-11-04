@@ -12,7 +12,8 @@ public:
     void Tick(const WeaponModeMemory&,const BodyDrawSample&,BodyHolsterSample,
         const BodyHolsterResult&,const std::optional<ChestKnifeRenderReceipt>&,
         bool otherMechanicsSettled,Bc2BodyInventory&,Bc2BodyHolster&,
-        interaction::HandInteraction&,std::uint64_t& sharedIntent)noexcept;
+        interaction::HandInteraction&,std::uint64_t& sharedIntent,
+        const std::optional<math::Matrix4>& currentBody=std::nullopt)noexcept;
     // Input absence revokes unconsumed stages; accepted native custody remains.
     void Missing(std::int64_t nowNs,interaction::HandInteraction&)noexcept;
     bool ClaimsHand()const noexcept{return policy_.Hold().has_value()||nativeOwned_;}

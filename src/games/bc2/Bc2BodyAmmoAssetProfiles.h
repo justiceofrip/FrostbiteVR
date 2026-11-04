@@ -1065,7 +1065,11 @@ inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections304{{
 inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections305{{
 {"40mmsmk","Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Mesh","jntWpnwpnJnt_14","jntWpn_6_Ammo",{1266,64,3,2,graphics::RigidPropPosition::Float3,0x287643774b29a124ull,0x82590e39fe1b1f20ull,220}},
 }};
-inline constexpr std::array<BodyAmmoAssetProfile,306> BodyAmmoAssetProfiles{{
+inline constexpr std::array<BeltPropSectionProfile,2> BodyAmmoAssetSections306{{
+{"KNV-1","Objects/Weapons/Handheld/Knife/Knife_Mesh","jntWpn_1","jntWpn_1_Plastic",{3354,48,1,0,graphics::RigidPropPosition::Half4,0xb9269e7fa12eaa4aull,0xd59bb70b62034d36ull,1118}},
+{"KNV-1","Objects/Weapons/Handheld/Knife/Knife_Mesh","jntWpn_1","jntWpn_1_Metal",{2850,48,1,0,graphics::RigidPropPosition::Half4,0x612df80adfd99d8dull,0xc9b897ec10bd53fdull,950}},
+}};
+inline constexpr std::array<BodyAmmoAssetProfile,307> BodyAmmoAssetProfiles{{
 {"XM8_sp_s","Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh","jntWpn_6",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections0},
 {"SPAS12_sp","Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh","jntWpn_7",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections1},
 {"AEK971_sp","Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh","jntWpn_6",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections2},
@@ -1372,5 +1376,6 @@ inline constexpr std::array<BodyAmmoAssetProfile,306> BodyAmmoAssetProfiles{{
 {"40mmsg","Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Mesh","jntWpnwpnJnt_14",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections303},
 {"40mmsmk","Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Mesh","jntWpn_13",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections304},
 {"40mmsmk","Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Mesh","jntWpnwpnJnt_14",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections305},
+{"KNV-1","Objects/Weapons/Handheld/Knife/Knife_Mesh","jntWpn_1",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections306},
 }};
 }

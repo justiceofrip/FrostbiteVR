@@ -1,5 +1,6 @@
 #include "Bc2ChestKnifeCoordinator.h"
 #include "Bc2KnifeMotionGeometry.h"
+#include "Bc2SelectedKnifeMotion.h"
 #include "Bc2ChestKnifeMissing.h"
 #include "Bc2ChestKnifeInput.h"
 #include <cmath>
@@ -25,7 +26,7 @@ void Bc2ChestKnifeCoordinator::Missing(std::int64_t now,HandInteraction& hands)n
 }
 void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDrawSample& s,BodyHolsterSample post,
     const BodyHolsterResult& bodyResult,const std::optional<ChestKnifeRenderReceipt>& rendered,bool mechanics,
-    Bc2BodyInventory& inventory,Bc2BodyHolster& body,HandInteraction& hands,std::uint64_t& intent)noexcept {
+    Bc2BodyInventory& inventory,Bc2BodyHolster& body,HandInteraction& hands,std::uint64_t& intent,const std::optional<math::Matrix4>& currentBody)noexcept {
     rendering_.reset();chestKnifeNative::ObserveLifetime(s.owner);chestKnifeNative::AcknowledgeNoEffectRehide(body);
     if(anchor_&&(anchor_->original.client.owner.player!=s.owner.player||anchor_->original.client.owner.soldier!=s.owner.soldier||
        anchor_->original.client.owner.weak!=s.owner.weak||anchor_->original.client.owner.actorGeneration!=s.owner.actorGeneration)){
@@ -37,6 +38,7 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
         if(knife){knife=0;break;}knife=display->carried.items[n].weapon;}
     const auto key=knife?inventory.ItemKey(knife):std::nullopt;
     const auto native=key?chestKnifeNative::Inspect(s.owner,knife,s.hand.sequence,s.hand.nowNs):std::nullopt;
+    std::optional<selectedKnife::Geometry> attackGeometry;
     KnifeSample sample;sample.source=s.hand;sample.menu=s.input.menu;
     if(key)sample.knife={key->id,key->generation};
     sample.holdInputCurrent=ChestKnifeControlInputCurrent(s.input)&&
@@ -70,7 +72,10 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
         if(sample.trackedKnifeOwned&&s.input.hands[1].gripTracked)
         if(const auto motion=private_knife::KnifeMotionFromTrackedGrip(s.input,rendered->wristInGrip)){
             sample.tip=motion->tip;sample.direction=motion->direction;
-            sample.nativeAttackReady=native->motionEnabled&&sample.trackedKnifeOwned&&sample.mechanicsSettled;
+            if(native->attackBridgeEnabled&&currentBody)
+                attackGeometry=selectedKnife::MapTrackedGeometry(s.input,rendered->wristInGrip,*currentBody);
+            sample.nativeAttackReady=native->motionEnabled&&sample.trackedKnifeOwned&&sample.mechanicsSettled&&
+                (!native->attackBridgeEnabled||attackGeometry.has_value());
         }
     }else ++readGaps_;
     if(!chestKnifeNative::BeforePrepare(sample,policy_)){recognition_.NativeGate(sample.source,unsigned(policy_.Phase()));return;}
@@ -91,7 +96,9 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
                 inventory.BeginTemporaryTool(memory,s,post,body,*key,operation,*bodyResult.freeRight,*policy_.Hold(),hands);
             if(bodyOkay){anchor_=native->anchor;bodyOperation_=operation;}
         }
-        if(!bodyOkay||!anchor_||!chestKnifeNative::Stage(*command,sample,hands,policy_,*anchor_,s.owner,bodyOperation_)){
+        if(!bodyOkay||!anchor_||!chestKnifeNative::Stage(*command,sample,hands,policy_,*anchor_,s.owner,bodyOperation_,
+            attackGeometry?std::optional(attackGeometry->nativeAcquisition):std::nullopt,s.input.worldUnitsPerMeter,
+            rendered?(std::min)(command->source.deadlineNs,rendered->source.input.deadlineNs):0)){
             policy_.Committed(*command,KnifeCommit::RejectedNoEffect);++rejected_;
             // Stage(false) proves no first native chooser can execute. A body
             // interval already acquired still requires a NEW paired hide.

@@ -1,5 +1,6 @@
 #include "Bc2SelectedKnifeNative.h"
 #include "Bc2SelectedKnifeCode.h"
+#include "Bc2ChestKnifeAttackBridge.h"
 #include "Bc2ReloadFlow.h"
 #include "Bc2KnifeSoundObservation.h"
 #include "Bc2KnifeTimingObservation.h"
@@ -120,7 +121,9 @@ bool ShotOffsets(unsigned shot)noexcept {
         NeutralShotOffsets(direction,position);
 }
 unsigned Search(SearchFn original,void* self,unsigned soldier,const void* transform,unsigned shot,float scalar,unsigned caller,bool retry)noexcept {
-    Active active;const auto passthrough=[&]{return original(self,soldier,transform,shot,scalar);};
+    Active active;
+    if(const auto chest=chestKnifeNative::BridgeSearch(self,soldier,transform,shot,scalar,caller,retry,original))return *chest;
+    const auto passthrough=[&]{return original(self,soldier,transform,shot,scalar);};
     auto* scope=acquiring;
     // Retry's internal searches deliberately keep the native movement-adjusted
     // copy. They are not a second opportunity to substitute the original blade.
@@ -157,6 +160,8 @@ unsigned __fastcall RetryHook(void* self,void*,unsigned soldier,const void* tran
 std::uintptr_t __fastcall AcquireHook(void* self,void*) {
     Active active;Scope local;bool admitted=false;const auto caller=reinterpret_cast<unsigned>(_ReturnAddress());
     KnifeSoundDispatchScope soundScope(knifeSoundDispatch,service.soundObservation.load(std::memory_order_relaxed));
+    chestKnifeNative::ChestHookIsolation chestBoundary;
+    if(const auto chest=chestKnifeNative::BridgeAcquire(self,caller,originalAcquire))return *chest;
     RawEntry(service.acquire,reinterpret_cast<unsigned>(self),caller);
     HookOutcome outcome=HookOutcome::Disabled;
     if(service.enabled.load(std::memory_order_acquire)&&IsAcquireCaller(caller)){
@@ -219,6 +224,7 @@ bool Health(const Target& target,float& health)noexcept {
 }
 std::uintptr_t __fastcall DamageHook(void* self,void*,void* damage,void* player) {
     Active active;auto* scope=attacking;const auto caller=reinterpret_cast<unsigned>(_ReturnAddress());
+    if(const auto chest=chestKnifeNative::BridgeDamage(self,damage,player,caller,originalDamage))return *chest;
     const bool matched=scope&&caller==0x57af15&&scope->action.target&&scope->action.target->soldier==reinterpret_cast<unsigned>(self)&&
         ReadTarget(service.memory,scope->action.native.links.effects)==scope->action.target&&Retained(scope->action);
     float before=0,after=0;const bool known=matched&&Health(*scope->action.target,before);
@@ -233,6 +239,8 @@ std::uintptr_t __fastcall DamageHook(void* self,void*,void* damage,void* player)
 std::uintptr_t __fastcall AttackHook(void* self,void*,float dt,unsigned primary,void* context) {
     Active active;Scope local;bool admitted=false;const auto caller=reinterpret_cast<unsigned>(_ReturnAddress());
     KnifeSoundDispatchScope soundScope(knifeSoundDispatch,service.soundObservation.load(std::memory_order_relaxed));
+    chestKnifeNative::ChestHookIsolation chestBoundary;
+    if(const auto chest=chestKnifeNative::BridgeAttack(self,dt,primary,context,caller,originalAttack))return *chest;
     RawEntry(service.attack,reinterpret_cast<unsigned>(self),caller);
     HookOutcome outcome=HookOutcome::Disabled;
     if(service.enabled.load(std::memory_order_acquire)&&caller==0x6dd9e5){
@@ -319,10 +327,10 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
     service.timingObservation.store(TimingObservationRequested()&&service.updateVerified,std::memory_order_release);
     if(service.timingObservation.load()){for(auto& row:service.timingRows)row={};service.timingUsed=0;
         service.timingContention=0;service.timingRejected=0;service.timingFull=0;service.timingEndLost=0;}
-    service.verified=true;service.installed.store(true,std::memory_order_release);service.installFailure=0;return true;
+    service.verified=true;service.installed.store(true,std::memory_order_release);service.installFailure=0;chestKnifeNative::AttackHooksAvailable(true);return true;
 }
 void Start()noexcept {if(service.installed.load(std::memory_order_acquire))service.enabled.store(true,std::memory_order_release);}
-bool Stop()noexcept {service.enabled.store(false,std::memory_order_release);service.cleanupFailed=!Remove();
+bool Stop()noexcept {chestKnifeNative::AttackHooksAvailable(false);service.enabled.store(false,std::memory_order_release);service.cleanupFailed=!Remove();
     if(service.cleanupFailed)return false;service.installed.store(false,std::memory_order_release);return true;}
 Request Prepare(const SelectedKnifeRenderSource& source,const InputFrame& input,const HandInteraction& hands,
     const SelectedMeshesSnapshot* meshes,const std::optional<SelectedKnifeRenderReceipt>& rendered,

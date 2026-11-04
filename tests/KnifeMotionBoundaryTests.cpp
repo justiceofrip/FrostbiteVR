@@ -6,6 +6,9 @@
 #include "Bc2ChestKnifeRendering.h"
 #include "Bc2ChestKnifeMissing.h"
 #include "Bc2KnifeSoundObservation.h"
+#include "Bc2ChestKnifeAttackTransaction.h"
+#include "Bc2SelectedKnifeMotion.h"
+#include <thread>
 #include <cstdio>
 #include <map>
 #include <memory>
@@ -248,10 +251,13 @@ int KnifeAudioObservationCases(){
     row.ownerVerified=true;row.kind=KnifeSoundKind::Unknown;CHECK(!journal.Observe(row));
     return 0;
 }
+#include "ChestKnifeAttackTransactionCases.inc"
 int main(int argc,char** argv){
+    if(argc==2&&std::string_view(argv[1])=="--chest-attack-transaction")return ChestAttackTransactionCases();
     if(argc==2&&std::string_view(argv[1])=="--recognition-observation")return RecognitionObservationCases();
     if(argc==2&&std::string_view(argv[1])=="--prediction")return PredictionRoleCases();
     if(argc==2&&std::string_view(argv[1])=="--missing")return MissingCases();
+    CHECK(!ChestAttackTransactionCases());
     CHECK(!PredictionRoleCases());
     CHECK(!MissingCases());
     {pk::KnifeAttackGate gate;auto c=Attack();CHECK(gate.Stage(c,c.source.nowNs));

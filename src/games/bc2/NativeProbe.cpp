@@ -1788,6 +1788,29 @@ ID3D11Device* GraphicsBootstrapConnectionDevice(unsigned renderer)noexcept {
     return reinterpret_cast<ID3D11Device*>(graphicsBootstrapEvidence.device);
 }
 unsigned graphicsBootstrapWorkerThread=0;
+// Startup only: distinguish a silent swap chain from an actual capture rejection.
+// Borrowed graphics objects never escape Present; these are classification bits only.
+enum BootstrapPresent : unsigned { SawPresent=1,SawExpectedChain=2,SawNonTest=4,SawRenderer=8 };
+std::atomic<unsigned> bootstrapPresents=0;
+enum class CaptureReject {None,Device,Context,Entry,Identity};
+std::atomic<CaptureReject> bootstrapReject=CaptureReject::None;
+bool RejectBootstrap(CaptureReject reason)noexcept {bootstrapReject.store(reason,std::memory_order_relaxed);return false;}
+const char* BootstrapFailure()noexcept {
+    using Phase=decltype(graphicsBootstrap)::Phase;
+    if(graphicsBootstrap.State()==Phase::Failed)switch(bootstrapReject.load(std::memory_order_relaxed)){
+        case CaptureReject::Device:return "Native Present graphics bootstrap unavailable: swap-chain device query or identity failed";
+        case CaptureReject::Context:return "Native Present graphics bootstrap unavailable: no immediate context";
+        case CaptureReject::Entry:return "Native Present graphics bootstrap unavailable: missing context method";
+        case CaptureReject::Identity:return "Native Present graphics bootstrap unavailable: renderer changed during capture";
+        default:break;
+    }
+    const auto saw=bootstrapPresents.load(std::memory_order_relaxed);
+    if(!(saw&SawPresent))return "Native Present graphics bootstrap unavailable: no Present callback before deadline";
+    if(!(saw&SawExpectedChain))return "Native Present graphics bootstrap unavailable: only foreign swap chains presented";
+    if(!(saw&SawNonTest))return "Native Present graphics bootstrap unavailable: only test presents on the expected chain";
+    if(!(saw&SawRenderer))return "Native Present graphics bootstrap unavailable: expected chain no longer matches the renderer";
+    return "Native Present graphics bootstrap unavailable: capture did not publish before deadline";
+}
 void ClosePrivatePresentationExperiment()noexcept {
     if(!privatePresentationExperiment.Enabled())return;
     const auto renderer=U32(imageBase+profile.rendererGlobal);
@@ -1800,11 +1823,11 @@ bool CaptureGraphicsBootstrap(IDXGISwapChain* chain,GraphicsBootstrapSnapshot& o
     // references to the setup worker, including on mismatch or cancellation.
     ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;
     if(FAILED(chain->GetDevice(IID_PPV_ARGS(&device)))||
-       reinterpret_cast<unsigned>(device.Get())!=U32(observedRenderer+0x7c))return false;
-    device->GetImmediateContext(&context);if(!context)return false;
+       reinterpret_cast<unsigned>(device.Get())!=U32(observedRenderer+0x7c))return RejectBootstrap(CaptureReject::Device);
+    device->GetImmediateContext(&context);if(!context)return RejectBootstrap(CaptureReject::Context);
     const unsigned slots[]={12,13,20,21,53,38,39,40};
     const auto table=*reinterpret_cast<void***>(context.Get());
-    for(unsigned n=0;n<(destructionWitnessEnabled?out.entries.size():5);++n){out.entries[n]=reinterpret_cast<std::uintptr_t>(table[slots[n]]);if(!out.entries[n])return false;}
+    for(unsigned n=0;n<(destructionWitnessEnabled?out.entries.size():5);++n){out.entries[n]=reinterpret_cast<std::uintptr_t>(table[slots[n]]);if(!out.entries[n])return RejectBootstrap(CaptureReject::Entry);}
     out.device=reinterpret_cast<std::uintptr_t>(device.Get());out.context=reinterpret_cast<std::uintptr_t>(context.Get());
     out.thread=GetCurrentThreadId();out.deviceFlags=device->GetCreationFlags();
     if(graphicsProvenanceEnabled){
@@ -1815,9 +1838,10 @@ bool CaptureGraphicsBootstrap(IDXGISwapChain* chain,GraphicsBootstrapSnapshot& o
             if(SUCCEEDED(out.multithreadQuery)&&protection){out.multithreadKnown=true;out.multithreadProtected=protection->GetMultithreadProtected()!=FALSE;}}
         SetLastError(error); // Query temporary was released on this owner too.
     }
-    return U32(imageBase+profile.rendererGlobal)==observedRenderer&&
+    const bool stable=U32(imageBase+profile.rendererGlobal)==observedRenderer&&
         U32(observedRenderer)==imageBase+profile.rendererVtable&&
         U32(observedRenderer+0x88)==reinterpret_cast<unsigned>(chain)&&U32(observedRenderer+0x7c)==out.device;
+    return stable||RejectBootstrap(CaptureReject::Identity);
 }
 std::atomic<unsigned> desktopPresentCalls=0,desktopSyncBypassed=0,desktopSyncOne=0;
 std::atomic<unsigned> desktopPresentOkay=0,desktopPresentOccluded=0,desktopPresentStatus=0,desktopPresentFailed=0,desktopPresentTests=0;
@@ -1913,9 +1937,12 @@ HRESULT STDMETHODCALLTYPE DesktopPresentHook(IDXGISwapChain* chain,UINT interval
     fvr::graphics::callProvenance::Scope provenance(fvr::graphics::callProvenance::Kind::Present,
         nullptr,nullptr,chain,reinterpret_cast<std::uintptr_t>(_ReturnAddress()));
     if(!graphicsRuntimeReady.load(std::memory_order_acquire)){
-        if(chain==observedSwapChain&&!(flags&DXGI_PRESENT_TEST)&&
+        const bool sameChain=chain==observedSwapChain,nonTest=sameChain&&!(flags&DXGI_PRESENT_TEST);
+        const bool matches=nonTest&&
            U32(imageBase+profile.rendererGlobal)==observedRenderer&&
-           U32(observedRenderer)==imageBase+profile.rendererVtable&&U32(observedRenderer+0x88)==reinterpret_cast<unsigned>(chain))
+           U32(observedRenderer)==imageBase+profile.rendererVtable&&U32(observedRenderer+0x88)==reinterpret_cast<unsigned>(chain);
+        bootstrapPresents.fetch_or(SawPresent|(sameChain?SawExpectedChain:0u)|(nonTest?SawNonTest:0u)|(matches?SawRenderer:0u),std::memory_order_relaxed);
+        if(matches)
             graphicsBootstrap.Observe([&](GraphicsBootstrapSnapshot& out)noexcept{return CaptureGraphicsBootstrap(chain,out);});
         return desktopPresentOriginal(chain,interval,flags);
     }
@@ -3741,7 +3768,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             using Phase=decltype(graphicsBootstrap)::Phase;
             while((graphicsBootstrap.State()==Phase::Waiting||graphicsBootstrap.State()==Phase::Capturing)&&GetTickCount64()<deadline)Sleep(1);
             const auto captured=graphicsBootstrap.Read();
-            Require(captured.has_value(),"Native Present graphics bootstrap unavailable");
+            if(!captured)throw std::runtime_error(BootstrapFailure());
             Require(captured->thread!=graphicsBootstrapWorkerThread&&captured->device==U32(renderer+0x7c)&&
                 U32(imageBase+profile.rendererGlobal)==renderer&&U32(renderer)==imageBase+profile.rendererVtable&&
                 U32(renderer+0x88)==reinterpret_cast<unsigned>(observedSwapChain),"Graphics bootstrap identity changed");
@@ -3822,7 +3849,8 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             // Ordinary setup and actual menu binding must succeed first. This
             // enables the unchanged player policy, never the finite stock probe.
             if(config.chestKnifeProbe||config.normalPlayerKnife)Require(fvr::bc2::gameplay::EnableChestKnifeDrawReturn(
-                bytes,pe.image,imageBase,config.normalPlayerKnife||config.chestKnifeProbe==2),"Chest knife setup rejected");
+                bytes,pe.image,imageBase,fvr::bc2::NormalKnifeMotion(config.normalPlayerKnife)||config.chestKnifeProbe==2,
+                config.normalPlayerKnife==fvr::bc2::KnifeTrackedQualification),"Chest knife setup rejected");
             if(config.normalPlayerGrenades)Require(fvr::bc2::gameplay::EnablePlayerGrenades(),"Normal player grenade setup rejected");
 #ifdef FVR_BC2_CONTEXTUAL_TOOLS
             if(config.normalContextualTools||contextualFixtureCompiled){
@@ -4397,6 +4425,7 @@ Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4
 #endif
         report<<",\"normal_player_grenades\":"<<(config.normalPlayerGrenades?"true":"false")
             <<",\"normal_player_knife\":"<<(config.normalPlayerKnife?"true":"false")
+            <<",\"normal_player_knife_mode\":"<<config.normalPlayerKnife
             <<",\"normal_contextual_tools\":"<<(config.normalContextualTools?"true":"false");
         report<<",\"private_cpu_attribution\":";fvr::diagnostics::privateCpu::recorder.Report(report,disabled&&diagnosticImageLifetime.Quiescent());
         report<<",\"private_gpu_attribution\":";fvr::diagnostics::privateGpu::recorder.WriteJson(report,disabled&&diagnosticImageLifetime.Quiescent());

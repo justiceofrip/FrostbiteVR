@@ -2,7 +2,8 @@
 [CmdletBinding()]
 param([ValidateSet('Validate','Launch','Stop')][string]$Action,
       [Parameter(Mandatory)][string]$SettingsPath,[Parameter(Mandatory)][string]$StateRoot,
-      [switch]$Fresh,[ValidateSet('MainMenu','Campaign')][string]$StartAt='MainMenu',[switch]$ActivateGameWindow)
+      [switch]$Fresh,[ValidateSet('MainMenu','Campaign')][string]$StartAt='MainMenu',[switch]$ActivateGameWindow,
+      [switch]$QualifyChestKnife)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot '../app/Launcher.Core.ps1')
 . (Join-Path $PSScriptRoot 'Runtime.Core.ps1')
@@ -80,6 +81,7 @@ if(-not $cached){
 $relative='sessions/'+[DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss-fff')+'-'+[guid]::NewGuid().ToString('N').Substring(0,8)
 $folder=Get-FvrChild $StateRoot $relative;$null=New-Item -ItemType Directory -Path $folder
 $options=@{schema='bc2vr.session-options.v1';state_root=$StateRoot;relative_folder=$relative;game_path=$settings.game_path;game_sha256=$gameHash;steam_compatibility=($installation.ContainsKey('experimental_steam') -and $installation.experimental_steam);cache=$cache;python=$python;activate_window=[bool]$ActivateGameWindow;version=$config.version;source_sha256=$config.source_sha256;xr_manifest=$xr.manifest;xr_label=$xr.label;render_plan=$renderPlan}
+if($QualifyChestKnife){$options.qualify_chest_knife=$true}
 $optionsFile=Join-Path $folder 'options.json';Write-FvrJson $optionsFile $options
 $supervisor=Start-Bc2Child (Join-Path $PSHOME 'pwsh.exe') @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot 'Session.ps1'),'-OptionsPath',$optionsFile) $folder 'supervisor'
 Write-FvrJson (Join-Path $StateRoot 'active-session.json') @{schema='bc2vr.active-session.v1';relative_folder=$relative;supervisor=(Get-Bc2ProcessIdentity $supervisor);version=$config.version}

@@ -1167,7 +1167,7 @@ void PublishTracking(const Tracking& source)noexcept {
             !next.input.focused||!next.input.headValid||!next.input.hands[0].gripTracked||!next.input.hands[1].gripTracked)next.freeRight.reset();
     }
     if(!next.freeRight)next.bodyHolsterSlot.reset();
-    if(next.bodyInventoryDisplay&&(!BodyInventoryDisplayFresh(*next.bodyInventoryDisplay,ReloadNanos())||
+    if(next.bodyInventoryDisplay&&(!BodyInventoryRenderDisplayFresh(*next.bodyInventoryDisplay,ReloadNanos())||
        next.bodyInventoryDisplay->sequence!=next.input.generation||next.bodyInventoryDisplay->physicalOwner.space!=next.input.spaceGeneration||
        next.bodyInventoryDisplay->deadlineNs>ReloadNanos(next.deadline)||!next.input.focused||!next.input.headValid)){
         next.bodyInventoryDisplay.reset();next.bodyCarriedMeshes={};

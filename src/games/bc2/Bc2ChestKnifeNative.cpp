@@ -5,6 +5,11 @@
 #include "Bc2KnifeAcceptedOwnership.h"
 #include "Bc2KnifeSessionClose.h"
 #include "Bc2KnifeSessionCloseProof.h"
+#include "Bc2ChestKnifeAttackTransaction.h"
+#include "Bc2ChestKnifeAttackBridge.h"
+#include "Bc2SelectedKnifeMotion.h"
+#include "Bc2SelectedKnifeNativeReader.h"
+#include "Bc2SelectedKnifeCode.h"
 #include <atomic>
 #include <mutex>
 #include <cmath>
@@ -19,6 +24,10 @@ namespace fvr::bc2::chestKnifeNative { namespace {
 using namespace interaction;namespace pk=private_knife;
 #include "KnifeNativeBooleanFields.inc"
 struct Service {
+    struct AttackNative {pk::Anchor anchor{};pk::ChestAttackIdentity key{};std::uint64_t poseRevocation=0;float units=1;};
+    bool attackBridgeEnabled=false;std::atomic<bool> attackHooksAvailable=false;std::atomic<std::uint64_t> poseRevocation=1;
+    pk::ChestAttackTransaction bridge;std::optional<AttackNative> attackNative;
+    std::optional<pk::ChestAttackReceipt> lastBridgeReceipt;
     std::mutex gate;std::atomic<bool> enabled=false;std::atomic<unsigned> active=0,gaps=0;std::atomic<bool> ownedObservationGap=false;
     std::atomic<std::uint64_t> sourceEpoch=1;
     // Session lifecycle only: no input sequence/lease and no attack capability.
@@ -210,6 +219,7 @@ OriginalFiringToken Enter(void*,const OriginalFiringUpdate& call)noexcept {
     const auto input=DecodeReloadUpdateContext(context);if(!input){++service.gaps;service.ownedObservationGap=true;return token;}
     token.words[0]=service.nativeLifetime;token.words[1]=branch;token.words[2]=Word<unsigned>(state.data(),0x3c);
     token.words[3]=input->fireRequested?1:0;
+    if(service.attackNative&&branch==3&&input->inputFlags)service.bridge.Fail(service.attackNative->key);
     if(service.attacks.Pending())token.words[6]=service.attacks.Pending()->serial;
     token.words[4]=std::uint32_t(Word<int>(state.data(),0x7c));token.words[5]=std::uint32_t(Word<int>(state.data(),0x80));return token;
 }
@@ -330,7 +340,9 @@ std::optional<std::array<std::byte,0x30>> AttackInput(void*,const OriginalFiring
        Word<unsigned>(state.data(),0x44)!=2||!std::isfinite(timer)||timer<0||timer>1000000||
        (Word<std::uint8_t>(state.data(),0xa8)&8)||Word<int>(state.data(),0x7c)!=-1||Word<int>(state.data(),0x80)!=-1)return {};
     const auto now=Now();
+    if(service.attackBridgeEnabled&&(!service.attackNative||!service.bridge.Same(service.attackNative->key)))return {};
     if(!service.attacks.Consume(branch-1,now,SourceCurrent(*service.attacks.Pending(),now)))return {};
+    if(service.attackBridgeEnabled&&!service.bridge.Consume(service.attackNative->key,branch-1))service.bridge.Fail(service.attackNative->key);
     token.words[0]=service.nativeLifetime;token.words[1]=branch;token.words[2]=2;token.words[3]=2;
     token.words[4]=token.words[5]=UINT32_MAX;token.words[6]=service.attacks.Pending()->serial;
     const auto beforeHash=pk::KnifeContextHash(copy);
@@ -354,14 +366,16 @@ bool __fastcall DeployReady(void* self,void*){
     ++service.deploy[branch-1];return false;
 }
 }
-bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uintptr_t base,const ReloadStateMemory& memory,bool motionEnabled)noexcept {
+#include "Bc2ChestKnifeAttackBridge.inc"
+bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uintptr_t base,const ReloadStateMemory& memory,bool motionEnabled,bool attackBridgeEnabled)noexcept {
     if(service.installed||base>UINT32_MAX||!memory.read||!memory.type)return false;
     const auto mode=DiscoverWeaponMode(bytes,pe);const auto state=DiscoverReloadState(bytes,pe);const auto server=DiscoverReloadServer(bytes,pe);const auto flow=DiscoverReloadFlow(bytes,pe);
     if(!mode||!state||!server||!flow||!ValidateReloadFlowLive(memory,*flow,unsigned(base))||!pk::VerifyAttackCode(memory,unsigned(base),state->imageSize)||!pk::VerifyDrawReturnCode(memory,unsigned(base),state->imageSize,*mode)||
        !ValidateReloadStateLive(memory,*state,unsigned(base))||!ValidateReloadServerLive(memory,*server,unsigned(base)))return false;
     LARGE_INTEGER f{};if(!QueryPerformanceFrequency(&f)||f.QuadPart<=0||f.QuadPart>1000000000)return false;
     service.memory=memory;service.state=*state;service.server=*server;service.flow=*flow;service.base=unsigned(base);service.frequency=f.QuadPart;
-    service.motionEnabled=motionEnabled;
+    if(attackBridgeEnabled&&(!motionEnabled||!selectedKnife::VerifyCode(memory,unsigned(base),state->imageSize)))return false;
+    service.motionEnabled=motionEnabled;service.attackBridgeEnabled=attackBridgeEnabled;
     hooks={reinterpret_cast<void*>(base+pk::DrawReturnCode[0].rva),reinterpret_cast<void*>(base+pk::DrawReturnCode[2].rva),reinterpret_cast<void*>(base+0x2d7c80)};
     if(MH_CreateHook(hooks[0],Choose,reinterpret_cast<void**>(&originalChoose))!=MH_OK){hooks={};return false;}
     if(MH_CreateHook(hooks[1],DeployReady,reinterpret_cast<void**>(&originalReady))!=MH_OK){MH_RemoveHook(hooks[0]);hooks={};return false;}
@@ -371,6 +385,7 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
         MH_RemoveHook(hooks[2]);MH_RemoveHook(hooks[1]);MH_RemoveHook(hooks[0]);hooks={};return false;}
     service.installed=true;return true;
 }
+bool TrackedAttackRequested()noexcept{return service.enabled.load(std::memory_order_acquire)&&service.attackBridgeEnabled&&service.attackHooksAvailable.load();}
 void Start()noexcept{if(service.installed)service.enabled.store(true,std::memory_order_release);}
 std::optional<View> Inspect(const ReloadStateOwner& current,unsigned knifeWeapon,std::uint64_t sequence,std::int64_t now)noexcept {
     std::unique_lock lock(service.gate,std::try_to_lock);if(!lock.owns_lock()||!service.enabled.load())return {};
@@ -378,7 +393,7 @@ std::optional<View> Inspect(const ReloadStateOwner& current,unsigned knifeWeapon
     if(!anchor||anchor->knifeWeapon!=knifeWeapon)return {};
     const auto snapshot=pk::Read(service.memory,service.state,service.server,service.base,*anchor,current,sequence,now);
     if(!snapshot||!Flags(*anchor))return {};
-    return View{*anchor,*snapshot,service.owned,!service.bad.load(),!service.ownedObservationGap.load(),service.motionEnabled};
+    return View{*anchor,*snapshot,service.owned,!service.bad.load(),!service.ownedObservationGap.load(),service.motionEnabled&&(!service.attackBridgeEnabled||service.attackHooksAvailable.load()),service.attackBridgeEnabled};
 }
 void AcknowledgeNoEffectRehide(const Bc2BodyHolster& body)noexcept {
     std::unique_lock lock(service.gate,std::try_to_lock);
@@ -394,15 +409,22 @@ bool BeforePrepare(const KnifeSample& source,ChestKnifeCustody& policy)noexcept 
     // Gather is the sole caller. Revoke first-boundary input authority before
     // waiting for the native gate; accepted native work is drained separately.
     SourceAdvanced(source.source);
+    // A repeated input can lose its rendered grip/handout. Revoke the blade
+    // before taking the service lock; this is not the draw/return source epoch.
+    if(service.enabled.load(std::memory_order_acquire)&&service.attackBridgeEnabled&&
+       (!source.trackedKnifeOwned||!source.knifeSelected||!source.onFoot||!source.fireSuppressed||
+        !source.holdInputCurrent||!KnifeActionInputCurrent(source)||!source.gripHeld[1]||
+        !GameplayOwnsInput(source.menu,source.source.nowNs)))service.poseRevocation.fetch_add(1,std::memory_order_acq_rel);
     std::unique_lock lock(service.gate,std::try_to_lock);if(!lock.owns_lock()||service.closing.load(std::memory_order_acquire))return false;
     if(service.outstanding){const auto result=service.outstanding->kind==KnifeCommandKind::Attack?
         service.attacks.ResolveBeforeSource(source.source.sequence,source.source.observedNs,source.source.nowNs):
         service.commands.ResolveBeforeSource(source.source.sequence,source.source.observedNs,source.source.nowNs);
-        if(result){policy.Committed(*service.outstanding,*result);if(*result==KnifeCommit::RejectedNoEffect){service.returnReady=service.outstanding->kind==KnifeCommandKind::Draw;service.outstanding.reset();}}}
+        if(result){policy.Committed(*service.outstanding,*result);if(*result==KnifeCommit::RejectedNoEffect){service.returnReady=service.outstanding->kind==KnifeCommandKind::Draw;service.outstanding.reset();service.bridge.LifetimeEnded();service.attackNative.reset();}}}
     service.source=source;return true;
 }
 bool Stage(const KnifeCommand& command,const KnifeSample& source,const HandInteraction& hands,ChestKnifeCustody& policy,
-    const pk::Anchor& anchor,const ReloadStateOwner& current,std::uint64_t bodyOperation)noexcept {
+    const pk::Anchor& anchor,const ReloadStateOwner& current,std::uint64_t bodyOperation,
+    const std::optional<math::Matrix4>& attackGeometry,float units,std::int64_t geometryDeadlineNs)noexcept {
     std::unique_lock lock(service.gate,std::try_to_lock);
     const auto reject=[&](){policy.Committed(command,KnifeCommit::RejectedNoEffect);return false;};
     if(!lock.owns_lock()||service.closing.load(std::memory_order_acquire)||!service.enabled.load()||service.bad||!bodyOperation||
@@ -419,6 +441,23 @@ bool Stage(const KnifeCommand& command,const KnifeSample& source,const HandInter
     else if(!Ammo(*native))return reject();
     try{service.stagedGuard=std::make_shared<const pk::Anchor>(anchor);}catch(...){return reject();}
     if(command.kind==KnifeCommandKind::Attack? !service.attacks.Stage(command,now):!service.commands.Stage(command,now))return reject();
+    if(command.kind==KnifeCommandKind::Attack&&service.attackBridgeEnabled){
+        Service::AttackNative a;a.anchor=anchor;a.units=units;a.poseRevocation=service.poseRevocation.load(std::memory_order_acquire);auto& k=a.key;
+        k.serial=command.serial;k.lifetime=service.nativeLifetime;k.operation=bodyOperation;
+        k.strokeSerial=command.stroke->serial;k.holdId=command.stroke->hold.id;
+        k.sourceEpoch=service.sourceEpoch.load(std::memory_order_acquire);k.input=command.source.sequence;
+        k.originalOwner=anchor.original.client.owner;k.selectedOwner=current;k.inputOwner=command.source.owner;k.knife=command.knife;
+        k.observedNs=command.source.observedNs;k.deadlineNs=command.source.deadlineNs;k.geometryDeadlineNs=geometryDeadlineNs;
+        k.serverPlayer=anchor.original.links.player;k.serverActor=anchor.original.links.soldier;
+        k.serverItem=native->knife.serverItem;k.effects=anchor.knifeServerEffects;k.clientEffects=anchor.knifeClientEffects;
+        k.firing=anchor.knifeFiring;k.config=native->knife.client.config;
+        if(!service.attackHooksAvailable.load()||anchor.knifeSlot!=7||!attackGeometry||command.stroke->end!=source.tip||!std::isfinite(units)||units<=0||
+           std::strcmp(k.config.assetPath.data(),"Objects/Weapons/Handheld/Knife/Knife")||!BridgeOwner(a)||
+           !service.bridge.Stage(k,*attackGeometry,now)){
+            service.attacks.LifetimeEnded();return reject();
+        }
+        service.attackNative=a;
+    }
     if(command.kind==KnifeCommandKind::Attack){service.lastAttackSequence=command.source.sequence;
         service.lastAttackObservedNs=command.source.observedNs;service.lastAttackSerial=command.serial;}
     service.source=source;service.stagedEpoch=service.sourceEpoch.load(std::memory_order_acquire);
@@ -447,7 +486,14 @@ std::optional<KnifeReceipt> Observe(const ReloadStateOwner& current,const Bc2Bod
         for(unsigned branch=1;branch<3;++branch)
             if(service.returnedCopySerial[branch].load(std::memory_order_acquire)!=command.serial)return {};
         attackUnobserved=service.attacks.AttackMask()!=pk::KnifeAttackGate::ObservationMask;
+        if(service.attackBridgeEnabled){
+            if(!service.attackNative||!service.bridge.Pending()||
+               service.bridge.Phase()==pk::ChestAttackPhase::Acquiring||service.bridge.Phase()==pk::ChestAttackPhase::Attacking)return {};
+            const auto outcome=service.bridge.Pending()->outcome;
+            attackUnobserved|=outcome!=pk::ChestAttackOutcome::Hit&&outcome!=pk::ChestAttackOutcome::Miss;
+        }
         if(!service.attacks.Complete(command.serial,true,true,attackUnobserved))return {};
+        if(service.attackBridgeEnabled){service.lastBridgeReceipt=service.bridge.Settle(service.attackNative->key);service.attackNative.reset();}
         service.completedInputMask=service.attacks.ConsumedMask();service.completedObservationMask=service.attacks.AttackMask();
         if(attackUnobserved){++service.attackUnknown;service.ownedObservationGap=true;}
     }else if(!service.commands.Complete(command.serial))return {};
@@ -467,7 +513,7 @@ std::optional<std::uint64_t> ReturnNeedsRehide()noexcept {
 void ObserveLifetime(const ReloadStateOwner& current)noexcept {
     if(!current.player||!current.soldier||!current.weak||!current.actorGeneration)return;
     std::unique_lock lock(service.gate,std::try_to_lock);if(!lock.owns_lock()||!service.anchor||SameActor(current,service.anchor->original.client.owner))return;
-    service.sourceEpoch.fetch_add(1);service.commands.LifetimeEnded();service.attacks.LifetimeEnded();service.outstanding.reset();service.anchor.reset();
+    service.sourceEpoch.fetch_add(1);service.commands.LifetimeEnded();service.attacks.LifetimeEnded();service.bridge.LifetimeEnded();service.attackNative.reset();service.outstanding.reset();service.anchor.reset();
     service.owned=service.returnReady=false;service.bad.store(false);service.deployGuard.store({},std::memory_order_release);++service.nativeLifetime;
 }
 void RequestSessionClose()noexcept {
@@ -539,7 +585,24 @@ bool Stop()noexcept {
 }
 void Report(std::ostream& out){std::unique_lock lock(service.gate,std::try_to_lock);
     if(!lock.owns_lock()){out<<"{\"available\":false}";return;}
-    out<<"{\"private_motion_attack\":"<<service.motionEnabled<<",\"installed\":"<<service.installed<<",\"drained\":"<<service.drained
+    const auto bridgeReceipt=service.bridge.Pending()?service.bridge.Pending():service.lastBridgeReceipt;
+    out<<"{\"attack_bridge_requested\":"<<service.attackBridgeEnabled<<",\"attack_bridge_hooks\":"<<service.attackHooksAvailable.load();
+    if(bridgeReceipt){const auto& b=*bridgeReceipt;out<<",\"attack_bridge_serial\":"<<b.identity.serial
+        <<",\"attack_bridge_input\":"<<b.identity.input<<",\"attack_bridge_lifetime\":"<<b.identity.lifetime
+        <<",\"attack_bridge_stroke\":"<<b.identity.strokeSerial<<",\"attack_bridge_operation\":"<<b.identity.operation
+        <<",\"attack_bridge_knife\":"<<b.identity.knife.id<<",\"attack_bridge_knife_generation\":"<<b.identity.knife.generation
+        <<",\"attack_bridge_primary\":"<<b.identity.config.primaryFire<<",\"attack_bridge_actor_generation\":"<<b.identity.inputOwner.actorGeneration
+        <<",\"attack_bridge_effects\":"<<b.identity.effects<<",\"attack_bridge_server_actor\":"<<b.identity.serverActor
+        <<",\"attack_bridge_observed_ns\":"<<b.identity.observedNs<<",\"attack_bridge_deadline_ns\":"<<b.identity.deadlineNs
+        <<",\"attack_bridge_outcome\":"<<unsigned(b.outcome)<<",\"attack_bridge_geometry_claims\":"<<b.geometryClaims
+        <<",\"attack_bridge_geometry_forward_mask\":"<<b.geometryForwardMask<<",\"attack_bridge_geometry_deadline_ns\":"<<b.identity.geometryDeadlineNs
+        <<",\"attack_bridge_acquisition_returned\":"<<b.acquisitionReturned<<",\"attack_bridge_attack_returned\":"<<b.attackReturned
+        <<",\"attack_bridge_target\":"<<b.target.soldier<<",\"attack_bridge_damage_calls\":"<<b.damageCalls
+        <<",\"attack_bridge_failed\":"<<b.failed<<",\"attack_bridge_health_known\":"<<b.healthKnown
+        <<",\"attack_bridge_health_before\":"<<b.healthBefore<<",\"attack_bridge_health_after\":"<<b.healthAfter
+        <<",\"attack_bridge_geometry\":[";
+        for(unsigned r=0;r<4;++r)for(unsigned c=0;c<4;++c){if(r||c)out<<',';out<<b.geometry.values[r][c];}out<<']';}
+    out<<",\"private_motion_attack\":"<<service.motionEnabled<<",\"installed\":"<<service.installed<<",\"drained\":"<<service.drained
        <<",\"session_close_requested\":"<<service.closing.load()<<",\"session_close_phase\":"<<unsigned(service.close.Phase())
        <<",\"session_close_mask\":"<<service.close.Mask()<<",\"session_close_started_ns\":"<<service.close.StartedNs()
        <<",\"session_close_deadline_ns\":"<<service.close.DeadlineNs()<<",\"session_close_completed_ns\":"<<service.close.CompletedNs()
@@ -602,15 +665,16 @@ void Report(std::ostream& out){std::unique_lock lock(service.gate,std::try_to_lo
 }
 #else
 namespace fvr::bc2::chestKnifeNative {
-bool Install(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t,const ReloadStateMemory&,bool)noexcept{return false;}
+bool Install(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t,const ReloadStateMemory&,bool,bool)noexcept{return false;}
 void Start()noexcept{}
+bool TrackedAttackRequested()noexcept{return false;}
 std::optional<View> Inspect(const ReloadStateOwner&,unsigned,std::uint64_t,std::int64_t)noexcept{return {};}
 void AcknowledgeNoEffectRehide(const Bc2BodyHolster&)noexcept{}
 
 void SourceAdvanced(const interaction::HandInteractionSample&)noexcept{}
 bool BeforePrepare(const interaction::KnifeSample&,interaction::ChestKnifeCustody&)noexcept{return false;}
 bool Stage(const interaction::KnifeCommand&,const interaction::KnifeSample&,const interaction::HandInteraction&,interaction::ChestKnifeCustody&,
- const private_knife::Anchor&,const ReloadStateOwner&,std::uint64_t)noexcept{return false;}
+ const private_knife::Anchor&,const ReloadStateOwner&,std::uint64_t,const std::optional<math::Matrix4>&,float,std::int64_t)noexcept{return false;}
 std::optional<interaction::KnifeReceipt> Observe(const ReloadStateOwner&,const Bc2BodyHolster&,const std::optional<BodyFreeRightEvidence>&,std::int64_t)noexcept{return {};}
 std::optional<std::uint64_t> ReturnNeedsRehide()noexcept{return {};}
 void ObserveLifetime(const ReloadStateOwner&)noexcept{}

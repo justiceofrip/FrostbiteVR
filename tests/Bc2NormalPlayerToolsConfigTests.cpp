@@ -19,7 +19,15 @@ int IndependentCompileAndRuntimeKnobs(){
  CHECK(ValidNormalPlayerGrenades(1,flags,123,3,false,true));
  CHECK(!ValidNormalPlayerTools(1,0,flags,123,3,false,false,true));
  CHECK(!ValidNormalPlayerTools(0,1,flags,123,3,false,true,false));
- CHECK(!ValidNormalPlayerTools(2,0,flags,123,3,false,true,true));
+ for(unsigned mode:{unsigned(KnifeHolsterOnly),unsigned(KnifeTrackedQualification)}){
+   CHECK(ValidNormalPlayerTools(mode,0,flags,123,3,false,true,false));
+   CHECK(!ValidNormalPlayerTools(mode,0,flags,0,3,false,true,false));
+   CHECK(!ValidNormalPlayerTools(mode,0,flags,123,3,true,true,false));
+   CHECK(!ValidNormalPlayerTools(mode,0,flags,123,3,false,false,false));
+ }
+ CHECK(!NormalKnifeMotion(KnifeOff)&&!NormalKnifeMotion(KnifeHolsterOnly));
+ CHECK(NormalKnifeMotion(KnifeStockMotion)&&NormalKnifeMotion(KnifeTrackedQualification));
+ CHECK(!ValidNormalPlayerTools(4,0,flags,123,3,false,true,true));
  CHECK(!ValidNormalPlayerTools(0,2,flags,123,3,false,true,true));return 0;
 }
 int AllThreeNormalCapabilitiesShareOneConfig(){

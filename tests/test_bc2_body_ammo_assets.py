@@ -16,8 +16,12 @@ class Format(unittest.TestCase):
     def test_reviewed_catalog_reproduces_compiled_header(self):
         root=TOOLS.parent;rows=json.loads((root/'config/body-ammo-assets.json').read_text())['profiles']
         self.assertEqual(assets.catalog_header(rows),(root/'src/games/bc2/Bc2BodyAmmoAssetProfiles.h').read_text())
-        self.assertEqual(len(rows),306)
-        supplies=[r for r in rows if not r.get('display_only')]
+        self.assertEqual(len(rows),307)
+        knife,=[r for r in rows if r['asset']=='KNV-1']
+        self.assertEqual((knife['mesh'],knife['part']),('Objects/Weapons/Handheld/Knife/Knife_Mesh','jntWpn_1'))
+        self.assertEqual([(s['section'],s['part_triangles']) for s in knife['sections']],
+                         [('jntWpn_1_Plastic',1118),('jntWpn_1_Metal',950)])
+        supplies=[r for r in rows if not r.get('display_only') and r is not knife]
         supply_names={r['asset'] for r in supplies}
         self.assertEqual(len(supplies),123)
         self.assertEqual(len(supply_names),80)
@@ -57,7 +61,7 @@ class Format(unittest.TestCase):
         self.assertEqual(hashlib.sha256(retained).hexdigest(),'027dc8579ffc715878da0cdb97916ffa002b84b60b6d402ca606210e189cdcdc')
         models=json.loads((root/'profiles/weapons71-underbarrel-reload/geometry.json').read_text())['models']
         self.assertEqual(len(models),7)
-        additions={underbarrel.cache_key(r):r for r in rows[264:]}
+        additions={underbarrel.cache_key(r):r for r in rows[264:306]}
         expected=set();configurations=set()
         for model in models:
             for selector in model['selectors']:
@@ -91,7 +95,7 @@ class Format(unittest.TestCase):
         pending=underbarrel.pending_jobs(rows[:282],jobs)
         self.assertEqual(len(pending),24)
         self.assertEqual({underbarrel.cache_key(j['profile']) for j in pending},
-                         {underbarrel.cache_key(r) for r in rows[282:]})
+                         {underbarrel.cache_key(r) for r in rows[282:306]})
         with self.assertRaisesRegex(ValueError,'remaining measured keys'):
             underbarrel.pending_jobs(rows[:282],jobs[:-1])
         corrupt=list(rows[:282]);corrupt[-1]=dict(corrupt[-1],mesh_sha256='0'*64)

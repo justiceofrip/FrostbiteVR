@@ -26,8 +26,11 @@ class ResourceIdentityTests(unittest.TestCase):
 
     def test_complete_current_catalog_has_consistent_exact_resource_pins(self):
         pins = identity.catalog_resource_pins(self.rows, ammo.SKELETON_ARCHIVE, ammo.SKELETON_RESOURCE, ammo.SKELETON_SHA)
-        self.assertEqual(len(self.rows), 252)
-        self.assertEqual(len(pins), 409)
+        self.assertEqual(len(self.rows), 307)
+        self.assertEqual(len(pins), 447)
+        base = (ammo.SKELETON_ARCHIVE.casefold(), 'Objects/Weapons/Handheld/Knife/Knife_Mesh')
+        self.assertEqual(pins[(base[0], base[1]+'.res')], 'c4b4065822ad8d07c166b7ba844df38396b4200e719d474dad000a747fe247d8')
+        self.assertEqual(pins[(base[0], base[1]+'_lod0_data.res')], 'd993036439953469fcf01c9f4ec61e724cd388ce349c0e38d89c21917d2a9b0e')
         self.assertEqual(pins[(ammo.SKELETON_ARCHIVE.casefold(), ammo.SKELETON_RESOURCE)], ammo.SKELETON_SHA)
         broken = copy.deepcopy(self.rows[0])
         broken['mesh_sha256'] = '0' * 64

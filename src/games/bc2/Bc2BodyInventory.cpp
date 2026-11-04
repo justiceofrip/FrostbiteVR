@@ -144,7 +144,11 @@ std::optional<WeaponModeCommand> ResolveBodyDraw(const BodyNativeInventory& inve
     }return {};
 }
 bool BodyInventoryDisplayFresh(const BodyInventoryDisplay& s,std::int64_t now)noexcept {
-    if(!s.revision||!s.cohort||!s.sequence||!s.count||s.count>s.slots.size()||
+    return s.count&&BodyInventoryRenderDisplayFresh(s,now);
+}
+bool BodyInventoryRenderDisplayFresh(const BodyInventoryDisplay& s,std::int64_t now)noexcept {
+    if(!s.revision||!s.cohort||!s.sequence||(!s.count&&!BodyKnifeCandidateCurrent(s))||s.count>s.slots.size()||
+       ((s.knifeCandidate.id||s.knifeCandidate.generation)&&!BodyKnifeCandidateCurrent(s))||
        s.observedNs<=0||s.observedNs>now||s.deadlineNs<=now||s.deadlineNs-s.observedNs>100000000||
        !s.selectedOwner.player||!s.selectedOwner.soldier||!s.selectedOwner.weak||!s.selectedOwner.actorGeneration||
        !s.selectedOwner.equipGeneration||!s.selectedOwner.weapon||!s.physicalSelected.id||!s.physicalSelected.generation||
@@ -160,11 +164,17 @@ bool BodyInventoryDisplayFresh(const BodyInventoryDisplay& s,std::int64_t now)no
 }
 bool SameBodyInventoryDisplayCohort(const BodyInventoryDisplay& a,const BodyInventoryDisplay& b)noexcept {
     return a.selectedOwner==b.selectedOwner&&a.physicalOwner==b.physicalOwner&&a.carried==b.carried&&
-        a.physicalSelected==b.physicalSelected&&a.revision==b.revision&&a.count==b.count&&a.slots==b.slots;
+        a.physicalSelected==b.physicalSelected&&a.revision==b.revision&&a.count==b.count&&a.slots==b.slots&&
+        a.knifeCandidate==b.knifeCandidate;
 }
 void Bc2BodyInventory::PublishDisplay(const BodyNativeInventory& n,const BodyDrawSample& s,BodyItemKey selected)noexcept {
     BodyInventoryDisplay out;out.selectedOwner=s.owner;out.physicalOwner=s.hand.owner;
     out.carried={n.inventory,n.switching,n.count,n.items};out.physicalSelected=selected;
+    if(n.count>BodyKnifeNativeSlot){
+        const auto& item=n.items[BodyKnifeNativeSlot];
+        if(item.weapon&&item.weapon!=s.owner.weapon&&item.category==11&&item.persistence)
+            if(const auto key=ItemKey(item.weapon)){out.knifeCandidate=*key;if(!BodyKnifeCandidateCurrent(out))out.knifeCandidate={};}
+    }
     out.revision=revision_;out.sequence=s.hand.sequence;out.observedNs=s.hand.observedNs;
     out.deadlineNs=std::min(s.hand.deadlineNs,s.hand.observedNs+100000000);
     if(slots_.size()>out.slots.size()||s.cancel||s.reloadBusy||!s.hand.focused||!s.input.focused||!s.input.headValid){display_.reset();return;}
@@ -184,7 +194,7 @@ void Bc2BodyInventory::PublishDisplay(const BodyNativeInventory& n,const BodyDra
         if(displayCohort_==UINT64_MAX){display_.reset();return;}++displayCohort_;
     }
     out.cohort=displayCohort_;
-    if(BodyInventoryDisplayFresh(out,s.hand.nowNs))display_=out;else display_.reset();
+    if(BodyInventoryRenderDisplayFresh(out,s.hand.nowNs))display_=out;else display_.reset();
 }
 bool Bc2BodyInventory::Visible(const BodyDrawSample& s)const noexcept {
     if(!s.visible)return false;const auto& v=*s.visible;

@@ -74,9 +74,13 @@ constexpr bool ValidNormalPlayerGrenades(unsigned enabled,unsigned flags,unsigne
         (flags&0xffu)==9&&(flags&required)==required&&!(flags&~allowed);
 }
 // Independent normal capabilities; compile support alone enables no item.
+enum NormalKnifeMode : unsigned { KnifeOff=0, KnifeStockMotion=1, KnifeHolsterOnly=2, KnifeTrackedQualification=3 };
+constexpr bool NormalKnifeMotion(unsigned mode)noexcept {
+    return mode==KnifeStockMotion||mode==KnifeTrackedQualification;
+}
 constexpr bool ValidNormalPlayerTools(unsigned knife,unsigned contextual,unsigned flags,unsigned hostPid,
     unsigned magazineSession,bool otherDiagnostic,bool knifeCompiled,bool contextualCompiled)noexcept {
-    return ValidNormalPlayerGrenades(knife,flags,hostPid,magazineSession,otherDiagnostic,knifeCompiled)&&
+    return knife<=KnifeTrackedQualification&&ValidNormalPlayerGrenades(knife!=KnifeOff,flags,hostPid,magazineSession,otherDiagnostic,knifeCompiled)&&
         ValidNormalPlayerGrenades(contextual,flags,hostPid,magazineSession,otherDiagnostic,contextualCompiled);
 }
 struct NativeProbeConfig {
@@ -96,7 +100,7 @@ struct NativeProbeConfig {
     PumpHoldDiagnostic pumpHoldDiagnostic=PumpHoldDiagnostic::Disabled; // Isolated one-shot350ms trial, never ordinary activation.
     std::uint32_t chestKnifeProbe=0; // Private finite1 draw/hold/return,2 one physical stroke. Default OFF.
     std::uint32_t normalPlayerGrenades=0; // Explicit continuous real-host option; never a finite recipe.
-    std::uint32_t normalPlayerKnife=0; // Normal chest draw, motion-triggered stock melee, explicit release-return.
+    std::uint32_t normalPlayerKnife=KnifeOff; // NormalKnifeMode; normal Play only requests draw and release-return.
     std::uint32_t normalContextualTools=0; // Normal authored slot4 tool custody/controls; real menu required.
 };
 static_assert(sizeof(NativeProbeConfig)==1220);

@@ -79,7 +79,15 @@ int wmain(int argc,wchar_t** argv){try {
             Require(!chestKnifeProbe&&!magazineSession,"Select one finite knife mode");chestKnifeProbe=option==L"--chest-knife-motion-probe"?2:1;
             magazineSession=3;controllers=motionAim=bodyFollow=poseObserve=handPoses=muzzleFire=twoHandGrip=physicalReload=bodyInventory=true;continue;}
         if(option==L"--player-grenades"){Require(!normalPlayerGrenades,"Specify player grenades once");normalPlayerGrenades=1;continue;}
-        if(option==L"--player-knife"){Require(!normalPlayerKnife,"Specify player knife once");normalPlayerKnife=1;continue;}
+        if(option==L"--player-knife"||option==L"--chest-holster-if-supported"||option==L"--qualify-chest-knife"){
+            Require(!normalPlayerKnife,"Specify player knife once");
+            if(option==L"--chest-holster-if-supported"){
+#ifdef FVR_BC2_PLAYER_KNIFE_NORMAL
+                normalPlayerKnife=fvr::bc2::KnifeHolsterOnly;
+#endif
+            }else normalPlayerKnife=option==L"--player-knife"?fvr::bc2::KnifeStockMotion:fvr::bc2::KnifeTrackedQualification;
+            continue;
+        }
         if(option==L"--contextual-tools"){Require(!normalContextualTools,"Specify contextual tools once");normalContextualTools=1;continue;}
         if(option==L"--ordinary-grenade-probe"||option==L"--ordinary-grenade-fade-probe"||option==L"--player-grenade-probe"||option==L"--two-grenade-fade-probe"){Require(!ordinaryGrenadeInput&&!magazineSession,"Select one ordinary action diagnostic");ordinaryGrenadeInput=option==L"--two-grenade-fade-probe"?4:option==L"--player-grenade-probe"?3:option==L"--ordinary-grenade-fade-probe"?2:1;magazineSession=3;controllers=motionAim=bodyFollow=poseObserve=handPoses=muzzleFire=twoHandGrip=physicalReload=bodyInventory=true;continue;}
         if(option==L"--ordinary-resource-input-probe"){Require(!magazineSession,"Select one ordinary input diagnostic");ordinaryResourceInput=1;magazineSession=3;controllers=motionAim=bodyFollow=poseObserve=handPoses=muzzleFire=twoHandGrip=physicalReload=bodyInventory=true;continue;}

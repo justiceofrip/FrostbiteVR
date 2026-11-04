@@ -79933,6 +79933,58 @@
           "part_triangles": 220
         }
       ]
+    },
+    {
+      "asset": "KNV-1",
+      "archive": "Dist/win32/levels/sp_common/level-00.fbrb",
+      "archive_index_sha256": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842",
+      "mesh": "Objects/Weapons/Handheld/Knife/Knife_Mesh",
+      "mesh_sha256": "c4b4065822ad8d07c166b7ba844df38396b4200e719d474dad000a747fe247d8",
+      "lod_sha256": "d993036439953469fcf01c9f4ec61e724cd388ce349c0e38d89c21917d2a9b0e",
+      "part": "jntWpn_1",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        -6.8550685588316274e-15,
+        1.7333697479205053e-14,
+        0.0,
+        6.8550685588316274e-15,
+        1.0,
+        -1.387778886660564e-15,
+        0.0,
+        -1.7333697479205053e-14,
+        1.387778886660564e-15,
+        1.0,
+        -0.0,
+        -2.1072609328602783e-14,
+        -1.096832513809204,
+        -0.0956423282623291,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "jntWpn_1_Plastic",
+          "count": 3354,
+          "stride": 48,
+          "palette_size": 1,
+          "part_palette_index": 0,
+          "position": "Half4",
+          "vertex_skin_hash": "b9269e7fa12eaa4a",
+          "position_hash": "d59bb70b62034d36",
+          "part_triangles": 1118
+        },
+        {
+          "section": "jntWpn_1_Metal",
+          "count": 2850,
+          "stride": 48,
+          "palette_size": 1,
+          "part_palette_index": 0,
+          "position": "Half4",
+          "vertex_skin_hash": "612df80adfd99d8d",
+          "position_hash": "c9b897ec10bd53fd",
+          "part_triangles": 950
+        }
+      ]
     }
   ]
 }

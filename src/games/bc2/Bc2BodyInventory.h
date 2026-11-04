@@ -54,8 +54,21 @@ struct BodyInventoryDisplay {
     std::uint64_t revision=0,cohort=0,sequence=0;
     std::int64_t observedNs=0,deadlineNs=0;
     std::array<BodyInventoryDisplaySlot,8> slots{};unsigned count=0;
+    // Physical item key from the coherent inventory, never a policy assignment.
+    // The carried renderer separately verifies the exact configuration and custody.
+    interaction::BodyItemKey knifeCandidate{};
 };
+inline constexpr unsigned BodyKnifeNativeSlot=7;
+inline bool BodyKnifeCandidateCurrent(const BodyInventoryDisplay& d)noexcept {
+    if(d.carried.count<=BodyKnifeNativeSlot||d.carried.count>d.carried.items.size()||
+       !d.knifeCandidate.id||!d.knifeCandidate.generation)return false;
+    const auto& item=d.carried.items[BodyKnifeNativeSlot];
+    return item.slot==BodyKnifeNativeSlot&&item.category==11&&item.weapon>=0x10000&&item.data>=0x10000&&
+        item.persistence&&d.knifeCandidate.id==item.weapon&&item.weapon!=d.selectedOwner.weapon&&
+        item.weapon!=d.physicalSelected.id;
+}
 bool BodyInventoryDisplayFresh(const BodyInventoryDisplay&,std::int64_t now)noexcept;
+bool BodyInventoryRenderDisplayFresh(const BodyInventoryDisplay&,std::int64_t now)noexcept;
 bool SameBodyInventoryDisplayCohort(const BodyInventoryDisplay&,const BodyInventoryDisplay&)noexcept;
 
 enum class BodyReadStatus:std::uint8_t {Okay,Disabled,InvalidOwner,ReadFailure,Layout,Bounds,Changed};
@@ -134,6 +147,9 @@ public:
     }
     std::optional<BodyInventoryDisplay> Display(std::int64_t now)const noexcept {
         return display_&&BodyInventoryDisplayFresh(*display_,now)?display_:std::nullopt;
+    }
+    std::optional<BodyInventoryDisplay> RenderDisplay(std::int64_t now)const noexcept {
+        return display_&&BodyInventoryRenderDisplayFresh(*display_,now)?display_:std::nullopt;
     }
     std::optional<interaction::BodyItemKey> ItemKey(std::uint32_t weapon)const noexcept {
         const auto found=std::find_if(life_.begin(),life_.end(),[&](const auto& item){return item.native.weapon==weapon;});

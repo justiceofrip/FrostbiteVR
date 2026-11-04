@@ -3851,7 +3851,11 @@ void __fastcall GatherHook(void* self,void*,void* cache){
                     (!magazinePhysical||!magazinePhysical->BlocksEquipment())&&!magazineResult.blocksWeaponActions&&!magazineResult.ownsLeftHand&&
                     !fixedResult.blocksFire&&!fixedResult.ammoOwnsHand&&!fixedResult.mechanismOwnsHand&&!pistolSlideResult.blocksFire&&!pistolSlideResult.ownsHand&&!feedResult.blocksFire&&!feedResult.ownsHand&&(!magazineDetached||!magazineDetached->BlocksActions())&&sightPhase==interaction::SightFlipPhase::Idle&&!sightGrasp&&!physicalMode&&!pendingMode;
                 chestKnife->Tick(memory,*holsterBodySample,holsterSample,holsterOutcome,frame?frame->chestKnife:std::nullopt,
-                    settled,*bodyInventory,*bodyHolster,handOwnership,handIntent);
+                    settled,*bodyInventory,*bodyHolster,handOwnership,handIntent,
+                    holsterTracking&&chestKnifeNative::TrackedAttackRequested()&&holsterTracking->soldier==owner.soldier&&
+                    holsterTracking->weak==owner.weak&&holsterTracking->weapon==owner.weapon&&holsterTracking->ownerGeneration==rigEpoch&&
+                    holsterTracking->input.generation==holsterBodySample->input.generation&&holsterTracking->input.spaceGeneration==holsterBodySample->input.spaceGeneration?
+                    rigPublication::BuildCurrentEyeBase(*holsterTracking):std::nullopt);
                 if(bodyHolster->TemporaryToolActive()){
                     // TickHolster's earlier free-hand receipt predates the
                     // deliberate tool claim acquired above. Keep an exact
@@ -3925,7 +3929,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
                     else if((ordinaryShotgunEquipment||(!ordinaryManualCycles&&asset==SpasReloadAsset))&&physicalReload)holsterTracking->stowedAmmoContact=physicalReload->BodyAmmoContact();
                 }catch(...){InvalidateBodyHolsterState(BodyHolsterLifecycleReason::FreePoseAllocationFailed);}}
                 holsterTracking->bodyAnchors=bodyAnchors;
-                if(const auto display=bodyInventory->Display(holsterBodySample->hand.nowNs)){
+                if(const auto display=bodyInventory->RenderDisplay(holsterBodySample->hand.nowNs)){
                     try {holsterTracking->bodyInventoryDisplay=std::make_shared<const BodyInventoryDisplay>(*display);
                         for(unsigned n=0;n<display->count;++n){const auto& slot=display->slots[n];
                             if(slot.assignment.item==display->physicalSelected||slot.native.weapon==display->selectedOwner.weapon)continue;
@@ -3937,6 +3941,16 @@ void __fastcall GatherHook(void* self,void*,void* cache){
                             holsterTracking->bodyCarriedMeshes[n]=selectedMeshes.ReadCarried(display->selectedOwner,display->carried.inventory,
                                 slot.native.slot,slot.native.weapon,slot.native.data,slot.native.persistence,display->sequence,
                                 display->observedNs,holsterBodySample->hand.nowNs);
+                        }
+                        // Only the render copy has this extra ordinal. Native selection,
+                        // hand claims and temporary-tool assignments never see it.
+                        if(const auto slot=body_carried_detail::StowedKnifeSlot(*display,holsterTracking->nativeEquipment,
+                                bodyHolster->TemporaryToolActive())){
+                            const auto& item=slot->native;
+                            const auto mesh=selectedMeshes.ReadCarried(display->selectedOwner,display->carried.inventory,
+                                item.slot,item.weapon,item.data,item.persistence,display->sequence,display->observedNs,holsterBodySample->hand.nowNs);
+                            if(mesh&&body_carried_detail::Profile(*display,*slot,*mesh,holsterBodySample->hand.nowNs))
+                                holsterTracking->bodyCarriedMeshes[display->count]=mesh;
                         }
                     }catch(...){holsterTracking->bodyInventoryDisplay.reset();holsterTracking->bodyCarriedMeshes={};}
                 }
@@ -4178,7 +4192,7 @@ std::optional<ChestKnifeProbeWitness> ReadChestKnifeProbeWitness(std::int64_t no
 #endif
     return {};
 }
-bool EnableChestKnifeDrawReturn(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uintptr_t base,bool motionEnabled)noexcept {
+bool EnableChestKnifeDrawReturn(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uintptr_t base,bool motionEnabled,bool trackedAttackRequested)noexcept {
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
 #if defined(FVR_BC2_ORDINARY_GRENADE_PROBE) || defined(FVR_BC2_PLAYER_GRENADE)
     // Normal player grenades use the cache/body policy, not this independent
@@ -4194,11 +4208,11 @@ bool EnableChestKnifeDrawReturn(std::span<const std::byte> bytes,const engine::P
         auto candidate=std::make_unique<Bc2ChestKnifeCoordinator>();
         const ReloadStateMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t count){return Read(at,dst,count);},
             [](void*,unsigned at,const char* expected){return Type(at,expected);}};
-        if(!chestKnifeNative::Install(bytes,pe,base,memory,motionEnabled))return false;
+        if(!chestKnifeNative::Install(bytes,pe,base,memory,motionEnabled,trackedAttackRequested))return false;
         chestKnife=std::move(candidate);return true;
     }catch(...){return false;}
 #else
-    (void)bytes;(void)pe;(void)base;(void)motionEnabled;return false;
+    (void)bytes;(void)pe;(void)base;(void)motionEnabled;(void)trackedAttackRequested;return false;
 #endif
 }
 std::optional<ContextualToolProbeWitness> ReadContextualToolProbeWitness(std::int64_t now)noexcept {

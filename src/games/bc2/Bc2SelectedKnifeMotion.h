@@ -54,11 +54,12 @@ struct InputDelivery {
 // The local stroke and native aim intentionally use separate frames: a fixed
 // tracking frame recognizes motion, while current body mapping positions it.
 struct Geometry {private_knife::KnifeMotionGeometry motion{};math::Matrix4 nativeAcquisition{};};
-inline std::optional<Geometry> MapGeometry(const interaction::InputFrame& input,
-    const SelectedKnifeRenderReceipt& rendered,const math::Matrix4& currentBody)noexcept {
+// Shared physical mapping only; each native route proves its own render source.
+inline std::optional<Geometry> MapTrackedGeometry(const interaction::InputFrame& input,
+    const math::Matrix4& wristInGrip,const math::Matrix4& currentBody)noexcept {
     if(!interaction::ValidInput(input)||!input.focused||!input.headValid||!input.hands[1].gripTracked||
-       !interaction::InverseRigid(currentBody)||rendered.binding.grip.profile!=&SelectedKnifeGripProfiles()[0])return {};
-    const auto motion=private_knife::KnifeMotionFromTrackedGrip(input,rendered.wristInGrip);
+       !interaction::InverseRigid(currentBody))return {};
+    const auto motion=private_knife::KnifeMotionFromTrackedGrip(input,wristInGrip);
     auto relative=math::MakeRelativePose(input.referenceHead,input.hands[1].grip);
     if(!motion||!relative)return {};
     relative->position.x*=input.worldUnitsPerMeter;relative->position.y*=input.worldUnitsPerMeter;
@@ -69,7 +70,7 @@ inline std::optional<Geometry> MapGeometry(const interaction::InputFrame& input,
     for(unsigned a=0;a<3;++a)wristInKnife.values[3][a]*=input.worldUnitsPerMeter;
     const auto inverseWrist=interaction::InverseRigid(wristInKnife);if(!inverseWrist)return {};
     const auto knife=interaction::Multiply(*inverseWrist,
-        interaction::Multiply(rendered.wristInGrip,interaction::Multiply(*grip,currentBody)));
+        interaction::Multiply(wristInGrip,interaction::Multiply(*grip,currentBody)));
     if(!interaction::InverseRigid(knife))return {};
     // Native search577790 uses its composed third basis row as the forward
     // cone. Convert physical vectors into native coordinates directly; applying
@@ -87,6 +88,11 @@ inline std::optional<Geometry> MapGeometry(const interaction::InputFrame& input,
     out.nativeAcquisition.values[3][3]=1;
     if(!interaction::InverseRigid(out.nativeAcquisition))return {};
     return out;
+}
+inline std::optional<Geometry> MapGeometry(const interaction::InputFrame& input,
+    const SelectedKnifeRenderReceipt& rendered,const math::Matrix4& currentBody)noexcept {
+    if(rendered.binding.grip.profile!=&SelectedKnifeGripProfiles()[0])return {};
+    return MapTrackedGeometry(input,rendered.wristInGrip,currentBody);
 }
 // Native Shot.InitialDirection/Position remain authoritative. Search577790
 // builds a basis from InitialDirection (4182e0), not Euler-angle offsets.
