@@ -3842,7 +3842,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
 #endif
             );
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
-            if(chestKnife){
+            if(chestKnife&&!chestKnife->TickIdleHeldGun(*holsterBodySample,*bodyHolster,handOwnership,handIntent)){
                 const auto frame=rigPublication::ReadBodyWeaponFrame(owner.soldier,owner.weak,owner.weapon);
                 const bool settled=!bodyInventory->Pending()&&!bodyInventory->AutomaticStowPending()&&!holsterQueuedDraw&&!holsterEquipment&&!weaponMode&&
                     !pumpDebt&&!pumpResult.blocksFire&&!pumpResult.ownsHand&&(!physicalPump||!physicalPump->BlocksFire())&&
@@ -3863,8 +3863,8 @@ void __fastcall GatherHook(void* self,void*,void* cache){
                     holsterOutcome.freeRight.reset();holsterOutcome.phase=bodyHolster->Phase();
                     holsterOutcome.blockWeaponActions=true;holsterOutcome.allowAutomaticGunHold=false;
                 }
-                if(holsterTracking)holsterTracking->chestKnife=chestKnife->Rendering();
             }
+            if(chestKnife&&holsterTracking)holsterTracking->chestKnife=chestKnife->Rendering();
 #endif
 #ifdef FVR_BC2_CONTEXTUAL_TOOLS
             if(contextualTool&&evaluatedHolster){

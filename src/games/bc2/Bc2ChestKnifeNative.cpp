@@ -405,6 +405,15 @@ void AcknowledgeNoEffectRehide(const Bc2BodyHolster& body)noexcept {
 void SourceAdvanced(const HandInteractionSample& source)noexcept {
     if(service.sourceIdentity.Advance(source))service.sourceEpoch.fetch_add(1,std::memory_order_acq_rel);
 }
+bool TryIdleHeldGun(const KnifeSample& source)noexcept {
+    std::unique_lock lock(service.gate,std::try_to_lock);
+    if(!lock.owns_lock()||!service.enabled.load()||service.closing.load()||service.motionEnabled||
+       service.attackBridgeEnabled||service.bad||service.anchor||service.owned||service.outstanding||
+       service.commands.Pending()||service.returnReady)return false;
+    SourceAdvanced(source.source);
+    service.source=source;
+    return true;
+}
 bool BeforePrepare(const KnifeSample& source,ChestKnifeCustody& policy)noexcept {
     // Gather is the sole caller. Revoke first-boundary input authority before
     // waiting for the native gate; accepted native work is drained separately.
@@ -672,6 +681,7 @@ std::optional<View> Inspect(const ReloadStateOwner&,unsigned,std::uint64_t,std::
 void AcknowledgeNoEffectRehide(const Bc2BodyHolster&)noexcept{}
 
 void SourceAdvanced(const interaction::HandInteractionSample&)noexcept{}
+bool TryIdleHeldGun(const interaction::KnifeSample&)noexcept{return false;}
 bool BeforePrepare(const interaction::KnifeSample&,interaction::ChestKnifeCustody&)noexcept{return false;}
 bool Stage(const interaction::KnifeCommand&,const interaction::KnifeSample&,const interaction::HandInteraction&,interaction::ChestKnifeCustody&,
  const private_knife::Anchor&,const ReloadStateOwner&,std::uint64_t,const std::optional<math::Matrix4>&,float,std::int64_t)noexcept{return false;}

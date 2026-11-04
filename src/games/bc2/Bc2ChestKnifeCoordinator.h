@@ -9,6 +9,8 @@ namespace fvr::bc2 {
 class Bc2ChestKnifeCoordinator {
 public:
     Bc2ChestKnifeCoordinator()noexcept;
+    bool TickIdleHeldGun(const BodyDrawSample&,const Bc2BodyHolster&,
+        interaction::HandInteraction&,std::uint64_t& sharedIntent)noexcept;
     void Tick(const WeaponModeMemory&,const BodyDrawSample&,BodyHolsterSample,
         const BodyHolsterResult&,const std::optional<ChestKnifeRenderReceipt>&,
         bool otherMechanicsSettled,Bc2BodyInventory&,Bc2BodyHolster&,

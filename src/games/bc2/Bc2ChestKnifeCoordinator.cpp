@@ -19,6 +19,25 @@ Bc2ChestKnifeCoordinator::Bc2ChestKnifeCoordinator()noexcept {
     recognition_.Enable();policy_.ObserveRecognition(&recognition_);
 #endif
 }
+bool Bc2ChestKnifeCoordinator::TickIdleHeldGun(const BodyDrawSample& s,const Bc2BodyHolster& body,
+    HandInteraction& hands,std::uint64_t& intent)noexcept {
+#ifdef FVR_BC2_CHEST_KNIFE_PROBE
+    return false; // The probe publishes a full witness for each gather.
+#else
+    if(body.Phase()!=BodyHolsterPhase::Held||body.TemporaryToolActive()||bodyOperation_||anchor_||
+       nativeOwned_||policy_.Hold()||policy_.Phase()!=KnifePhase::NeedNeutral||intent==UINT64_MAX)return false;
+    // Held has no suppression demand or free hand. Keep the actual source so
+    // actor changes and recenters still reach policy before the next chest draw.
+    KnifeSample idle;
+    idle.source=s.hand;
+    idle.menu=s.input.menu;
+    if(!chestKnifeNative::TryIdleHeldGun(idle))return false;
+    rendering_.reset();
+    idle.claimIntent=++intent;
+    policy_.Prepare(idle,hands);
+    return true;
+#endif
+}
 void Bc2ChestKnifeCoordinator::Missing(std::int64_t now,HandInteraction& hands)noexcept {
     rendering_.reset();PrepareChestKnifeMissing(now,hands,policy_,[&](const KnifeSample& sample,ChestKnifeCustody& policy)noexcept{
         const bool okay=chestKnifeNative::BeforePrepare(sample,policy);

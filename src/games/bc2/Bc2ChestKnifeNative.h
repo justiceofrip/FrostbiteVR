@@ -27,6 +27,9 @@ void AcknowledgeNoEffectRehide(const Bc2BodyHolster&)noexcept;
 // Call as soon as the gather sees actual new hand metadata, before other
 // consumers. This revokes only an unconsumed first native boundary.
 void SourceAdvanced(const interaction::HandInteractionSample&)noexcept;
+// Publish an ineligible source only when the draw-only service is idle.
+// A busy lock or any outstanding work requires the full gather.
+bool TryIdleHeldGun(const interaction::KnifeSample&)noexcept;
 bool BeforePrepare(const interaction::KnifeSample&,interaction::ChestKnifeCustody&)noexcept;
 // Proves real shared claims through policy.CanCommit and repeats actual native
 // identity/config/count admission. Chest draw body interval must already exist.

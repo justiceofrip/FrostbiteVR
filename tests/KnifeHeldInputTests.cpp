@@ -148,7 +148,34 @@ int WalkingStrokeUsesSameNativeBoundaryPredicate(){
     CHECK(returned&&returned->kind==KnifeCommandKind::Return&&f.knife.CanCommit(*returned,f.s,f.hands));
     CHECK(KnifeCommandInputCurrent(*returned,f.s));return 0;
 }
-int main(){CHECK(!WalkingStrokeUsesSameNativeBoundaryPredicate());CHECK(!MovingHoldAndQuietRearm());CHECK(!DrawStillNeedsNeutral());
+int IdleGunNeedsANewEmptyHandNeutral(){
+    Fixture f;
+    CHECK(!f.Step()&&f.knife.Phase()==KnifePhase::Stowed);
+    // The first Held tick still takes the full path and loses suppression.
+    f.s.fireSuppressed=false;f.s.emptyHands=false;
+    CHECK(!f.Step()&&f.knife.Phase()==KnifePhase::NeedNeutral);
+    // Subsequent Held ticks publish only the original source/menu.
+    KnifeSample heldGun;heldGun.source=f.s.source;heldGun.menu=f.s.menu;
+    for(unsigned tick=0;tick<60;++tick){
+        ++heldGun.source.sequence;heldGun.source.observedNs+=10*ms;
+        heldGun.source.nowNs=heldGun.source.observedNs;
+        heldGun.menu.deadlineNs=heldGun.source.deadlineNs=heldGun.source.nowNs+100*ms;
+        ++heldGun.menu.sequence;
+        if(tick==20)++heldGun.source.owner.actorGeneration;
+        if(tick==40)++heldGun.source.owner.space;
+        f.hands.Update(heldGun.source);
+        CHECK(!f.knife.Prepare(heldGun,f.hands));
+        CHECK(f.knife.Phase()==KnifePhase::NeedNeutral&&!f.knife.Hold());
+    }
+    f.s.source=heldGun.source;f.s.menu=heldGun.menu;
+    f.s.emptyHands=f.s.fireSuppressed=true;
+    f.Grip(true);CHECK(!f.Step()&&f.knife.Phase()==KnifePhase::NeedNeutral);
+    f.Grip(false);CHECK(!f.Step()&&f.knife.Phase()==KnifePhase::Stowed);
+    f.Grip(true);const auto draw=f.Step();
+    CHECK(draw&&draw->kind==KnifeCommandKind::Draw&&f.knife.CanCommit(*draw,f.s,f.hands));
+    return 0;
+}
+int main(){CHECK(!IdleGunNeedsANewEmptyHandNeutral());CHECK(!WalkingStrokeUsesSameNativeBoundaryPredicate());CHECK(!MovingHoldAndQuietRearm());CHECK(!DrawStillNeedsNeutral());
     CHECK(!MissingAuthorityNeverBecomesHeldInput());CHECK(!RealRawInputSeparatesHoldAndIntent());
     CHECK(!FocusGapReturnsBeforeFreshChestDraw());CHECK(!DuplicateCannotWidenOrReacquire());
-    std::puts("Seven knife held-input groups PASS: real custody/quiet intent, input negatives, focus-gap return then deliberate redraw, immutable duplicate lease.");}
+    std::puts("Eight knife held-input groups PASS: idle gun rearm, real custody/quiet intent, input negatives, focus-gap return then deliberate redraw, immutable duplicate lease.");}
