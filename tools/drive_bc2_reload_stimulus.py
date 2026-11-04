@@ -739,6 +739,7 @@ class ReloadStimulus:
             "id": boundary["id"] if boundary else "stage_admission", "startedNs": started,
             "deadlineNs": until, "lastPending": None}
         used = set()
+        capture_reference = None
         while time.perf_counter_ns() < until:
             try:
                 self.guard(deadline_ns=until)
@@ -767,6 +768,35 @@ class ReloadStimulus:
                         continue
                 if boundary is None:
                     try:
+                        if capture_reference is not None:
+                            transport.stable_snapshot(capture_reference, snapshot)
+                            self.geometry.fixed.require_preserved(
+                                self.geometry.fixed.preserved(capture_reference),
+                                self.geometry.fixed.preserved(snapshot))
+                        x = snapshot.get("fixedContainer")
+                        if (self.args.family == "fixed" and isinstance(x, dict)
+                                and x.get("available") is False
+                                and x.get("reason") == "capture_pending_or_not_requested"):
+                            # A request arms subsequent Gameplay diagnostic copies.
+                            # An absent first copy is never a plan or an ammo view;
+                            # retain only identity inside this existing admission clock.
+                            require(self.commands == 0 and self.mapping is None and pickup is None
+                                    and not self.held_left and not self.pending_command and not self.unsafe_owner,
+                                    "fixed capture pending outside initial unheld observation")
+                            frame = self.geometry.fixed.frame
+                            frame.admit_frame(snapshot, now, key)
+                            require(x.get("schema") == self.geometry.fixed.OBSERVATION_SCHEMA
+                                    and x.get("view") is None and snapshot.get("feed") is None
+                                    and snapshot["weapon_actions_blocked"] is False
+                                    and snapshot["input_evidence"]["released"] == [True, False]
+                                    and snapshot["input"]["hands"][0]["squeeze"] == 0
+                                    and all(frame.finite(h["trigger"]) == frame.finite(h["stickX"])
+                                            == frame.finite(h["stickY"]) == 0 and integer(h["held"]) == 0
+                                            for h in snapshot["input"]["hands"]),
+                                    "fixed capture absence contradicts neutral initial state")
+                            if capture_reference is None:
+                                capture_reference = snapshot
+                            raise self.geometry.BoundaryPending("initial fixed-container capture pending")
                         if prepare:
                             # Building includes typed stage admission. Keep its
                             # plan local to this fresh snapshot and original lease.
