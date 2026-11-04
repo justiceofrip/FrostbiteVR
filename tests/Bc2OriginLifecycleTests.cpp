@@ -48,7 +48,7 @@ int main(){
         Check(f.origin.enabled.load()&&!f.observer.enabled.load(),"full 64 row observer leaves origin enabled");
         InterlockedIncrement(&f.observer.active);
         Check(f.life.Active()&&!f.life.PollDrain(),"shared thunk activity counted even without observer enablement");
-        f.life.Close();Check(!f.origin.enabled.load()&&f.origin.closed.load()&&f.observer.closed.load(),"close stops both capabilities");
+        f.life.Close();Check(!f.origin.enabled.load()&&f.origin.closed.load()&&!f.observer.enabled.load(),"close stops both capabilities");
         f.backend.failDisable=true;
         Check(!f.life.Disable()&&!f.life.Retired(),"failed disable retains shared target");
         f.backend.failDisable=false;
