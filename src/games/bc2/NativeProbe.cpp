@@ -3581,6 +3581,24 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
 #endif
         }
 
+        const bool smokeOriginRequest=[&]{
+            const auto marker=output.parent_path()/L"smoke-origin.candidate";
+            const auto file=CreateFileW(marker.c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_FLAG_OPEN_REPARSE_POINT,nullptr);
+            if(file==INVALID_HANDLE_VALUE){const auto error=GetLastError();
+                Require(error==ERROR_FILE_NOT_FOUND||error==ERROR_PATH_NOT_FOUND,"Smoke origin candidate request unreadable");return false;}
+            constexpr char expected[]="smoke-57a106-57a176-7155b0-v1\n";
+            BY_HANDLE_FILE_INFORMATION info{};std::array<char,sizeof(expected)> data{};DWORD length=0;
+            const bool valid=GetFileType(file)==FILE_TYPE_DISK&&GetFileInformationByHandle(file,&info)&&
+                !(info.dwFileAttributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT))&&
+                !info.nFileSizeHigh&&info.nFileSizeLow==sizeof(expected)-1&&
+                ReadFile(file,data.data(),DWORD(data.size()),&length,nullptr)&&length==sizeof(expected)-1&&
+                std::memcmp(data.data(),expected,sizeof(expected)-1)==0;
+            CloseHandle(file);Require(valid,"Smoke origin candidate request invalid");return true;
+        }();
+        if(smokeOriginRequest)Require((config.flags&0x800u)&&
+            fvr::bc2::gameplay::EnableSmokeOriginCandidate(bytes,pe.image,imageBase,true,true),
+            "Smoke origin refused: separate compiled capability or exact tuple/caller proof unavailable");
+
         if(projectileTargetRequest)Require((config.flags&0x800u)&&
             fvr::bc2::gameplay::EnableProjectileTargetObservation(bytes,pe.image,imageBase,true,true),
             "Optional projectile observer refused: private build, retained host, helper, or exact signatures unavailable");

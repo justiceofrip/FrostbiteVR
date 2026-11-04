@@ -14,6 +14,11 @@
 #include <intrin.h>
 #include <MinHook.h>
 #include "Bc2Gameplay.h"
+#ifdef FVR_BC2_SMOKE_ORIGIN_CANDIDATE
+#include "Bc2SmokeOrigin402.h"
+#include "CandidateSmokeOrigin402.h"
+#include "Bc2SmokeSeams402.generated.h"
+#endif
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
 #include "Bc2ChestKnifeCoordinator.h"
 #include "Bc2SelectedKnifeNative.h"
@@ -137,7 +142,7 @@ std::optional<MuzzleEventSource> muzzleHistorySource;
 std::atomic<unsigned> clientOriginWrites=0,serverOriginWrites=0,originWriteFailures=0,shotSourceChanges=0,originFallbacks=0,originWritesAfterLogFull=0;
 std::atomic<unsigned> clientShotCalls=0,clientShotCopies=0,clientShotRejected=0;
 AimCandidates aimingProfile{};InputBindingCandidates profile{};std::uintptr_t image=0;unsigned imageSize=0;
-InputReader readInput=nullptr;std::array<void*,15> hooks{};
+InputReader readInput=nullptr;std::array<void*,17> hooks{};
 projectile_entry::Helper ReceiverEntryOriginal=nullptr;ProjectileLaunchBinding projectileLaunchBinding{};
 // Install-time executable section bounds, immutable while callbacks are active.
 std::array<std::pair<unsigned,unsigned>,16> projectileReceiverCodeRanges{};
@@ -1284,6 +1289,15 @@ struct ShotScope {Owner owner;unsigned effects=0,serverPlayer=0,serverSoldier=0;
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
     std::uint64_t targetScopeSerial=0;unsigned targetHelperIndex=UINT32_MAX;
     projectile302::OriginScope* originScope=nullptr;
+#ifdef FVR_BC2_SMOKE_ORIGIN_CANDIDATE
+    smoke402::Scope* smokeScope=nullptr;
+    const smoke402::Enrollment* smokeEnrollment=nullptr;
+    std::array<origin388::Request,2> smokeRequests{};
+    std::array<std::optional<origin388::Result>,2> smokeResults{};
+    std::array<bool,2> smokeAttempted{};
+    std::array<unsigned,5> smokeEarlyArguments{};
+    std::array<unsigned,4> smokeEarlyReceiver{};
+#endif
     unsigned originContext=0;
     std::optional<rigPublication::OriginWeaponFrame> originFrame;
     std::optional<projectile307::Join> originHelper;
@@ -1417,7 +1431,11 @@ projectile307::Receiver ProjectileReceiver(const ProjectileReceiverIdentity& r)n
     return {r.receiver,r.vtable,r.target,r.descriptor,r.descriptorVtable};
 }
 std::uint64_t NextProjectileScope()noexcept {
-    if(!projectile302::Observer.enabled.load(std::memory_order_acquire)&&!projectile302::Origin.enabled.load(std::memory_order_acquire))return 0;
+    if(!projectile302::Observer.enabled.load(std::memory_order_acquire)&&!projectile302::Origin.enabled.load(std::memory_order_acquire)
+#ifdef FVR_BC2_SMOKE_ORIGIN_CANDIDATE
+       &&!smoke402::Runtime.enabled.load(std::memory_order_acquire)
+#endif
+       )return 0;
     auto previous=projectileTargetScopeSerial.load(std::memory_order_relaxed);
     if(previous!=UINT64_MAX&&projectileTargetScopeSerial.compare_exchange_strong(previous,previous+1,std::memory_order_relaxed))return previous+1;
     return 0; // Exhaustion/contention misses a scope; no spin or serial reuse.
@@ -1465,9 +1483,14 @@ void CaptureOriginHelper(ShotScope& current,const ProjectileLaunchRecord& row,un
     current.originHelper=join;
 }
 bool OriginNativeCurrent(ShotScope& scope,const projectile302::OriginKey& key,const projectile302::Entry& entry,
-    origin388::ProofKey& proof,NativeMuzzleConfig& config)noexcept {
-    if(!enabled.load(std::memory_order_acquire)||!projectile302::Origin.enabled.load(std::memory_order_acquire)||
-       projectile302::Origin.closed.load(std::memory_order_acquire)||serverShotScope!=&scope||
+    origin388::ProofKey& proof,NativeMuzzleConfig& config,bool smoke=false)noexcept {
+    bool originEnabled=projectile302::Origin.enabled.load(std::memory_order_acquire)&&!projectile302::Origin.closed.load(std::memory_order_acquire);
+#ifdef FVR_BC2_SMOKE_ORIGIN_CANDIDATE
+    if(smoke)originEnabled=smoke402::Runtime.enabled.load(std::memory_order_acquire)&&!smoke402::Runtime.closed.load(std::memory_order_acquire);
+#else
+    (void)smoke;
+#endif
+    if(!enabled.load(std::memory_order_acquire)||!originEnabled||serverShotScope!=&scope||
        !scope.originScope||scope.originScope->Key()!=key||key.invocation!=scope.invocation||
        key.scopeSerial!=scope.targetScopeSerial||key.primaryLifetime!=scope.invocation||key.thread!=GetCurrentThreadId()||
        !scope.originHelper||!scope.nativeConfig||!scope.originFrame||!scope.shot||
@@ -1626,6 +1649,163 @@ bool __cdecl ValidateNativeOrigin(void*,const projectile302::OriginKey& key,cons
         HandNanos(end.QuadPart)<current.inputDeadlineNs&&HandNanos(end.QuadPart)<current.configurationDeadlineNs;
 }
 
+#ifdef FVR_BC2_SMOKE_ORIGIN_CANDIDATE
+bool smokeRequested=false,smokeInstallAttempted=false;
+std::array<projectile302::MachineEntry,2> smokeTrampolines{}; // retained even on failed install/stop
+const smoke402::Enrollment* FindSmokeEnrollment(const rigPublication::WeaponShotFrame& shot)noexcept {
+    if(!shot.muzzlePartObservation)return nullptr;
+    const smoke402::Enrollment* found=nullptr;
+    for(const auto& e:smoke402::Enrollments)if(e.geometry.observedPart==shot.muzzlePartObservation->profile){
+        if(found||!smoke402::ExactEnrollment(e))return nullptr;found=&e;
+    }
+    return found;
+}
+bool SmokeSamePublication(origin388::ProofKey a,origin388::ProofKey b)noexcept {
+    // The two reviewed caller boundaries naturally have different call targets
+    // and return addresses. Every owner/config/P/token/publication/deadline field
+    // remains exactly the original early-effect value.
+    b.callerReturn=a.callerReturn;b.target=a.target;return a==b;
+}
+bool SmokeNativeCurrent(ShotScope& scope,const smoke402::Key& key,const smoke402::Entry& entry,
+    origin388::ProofKey& proof,NativeMuzzleConfig& config)noexcept {
+    if(!enabled.load(std::memory_order_acquire)||!smoke402::Runtime.enabled.load(std::memory_order_acquire)||
+       smoke402::Runtime.closed.load(std::memory_order_acquire)||serverShotScope!=&scope||
+       !scope.smokeScope||scope.smokeScope->Identity()!=key||!scope.originScope||scope.originScope->Key()!=key||
+       key.scopeSerial!=scope.targetScopeSerial||key.invocation!=scope.invocation||key.primaryLifetime!=scope.invocation||
+       key.thread!=GetCurrentThreadId()||!scope.originFrame||!scope.shot||!scope.nativeConfig||!scope.tokenValid||
+       entry.primary!=scope.smokeScope->Primary()||!smoke402::StackExtent(entry.primary))return false;
+    if(entry.boundary==smoke402::Boundary::Physical){
+        return entry.physical&&entry.physical->returnAddress==unsigned(image)+0x17aa0d&&
+            entry.physical->args[1]==entry.primary&&OriginNativeCurrent(scope,key,*entry.physical,proof,config,true);
+    }
+    if(entry.registers.edi!=scope.effects||entry.registers.esi!=scope.configuration)return false;
+    unsigned token=0;
+    if(!scope.originContext||std::uint64_t(scope.originContext)+0x20>UINT32_MAX||
+       !Read(scope.originContext+0x1c,&token,4)||token!=scope.shotToken)return false;
+    Owner owner{};
+    const auto current=ReadNativeMuzzleConfig({nullptr,[](void*,unsigned at,void* out,std::size_t n){return Read(at,out,n);}},scope.effects,scope.configuration);
+    if(!Resolve(owner)||OriginOwner(owner)!=OriginOwner(scope.owner)||!current||*current!=*scope.nativeConfig)return false;
+    const projectile307::ServerIdentityMemory memory{
+        {nullptr,[](void*,unsigned at,void* out,std::size_t n){return Read(at,out,n);}},
+        [](void*,unsigned object,const char* name)noexcept{return Type(object,name);}};
+    const projectile307::ServerIdentityBinding binding{unsigned(image),unsigned(imageSize),
+        unsigned(image)+fireProfile.serverControlledGetter,unsigned(image)+fireProfile.serverContext,
+        unsigned(image)+fireProfile.serverManagerVtable};
+    const auto server=projectile307::ReadServerIdentity(memory,binding,ProjectileOwner(owner),scope.effects);
+    if(!server||server->player!=scope.serverPlayer||server->soldier!=scope.serverSoldier||
+       !rigPublication::OriginWeaponFrameCurrent(*scope.originFrame))return false;
+    unsigned callTarget=unsigned(image)+0x134460,callerReturn=unsigned(image)+0x17a17b;
+    if(entry.boundary==smoke402::Boundary::EarlyEffect){
+        // Verified caller instruction flow selected config+40, created its
+        // interface and loaded this virtual+4. Never call or name its class.
+        const auto receiver=entry.registers.ecx;unsigned vt=0,target=0,descriptorVt=0;
+        if(!receiver||(receiver&3)||!Read(receiver,&vt,4)||!ProjectileReceiverImageRange(vt,8,false)||
+           !Read(vt+4,&target,4)||target!=entry.registers.eax||!ProjectileReceiverImageRange(target,1,true)||
+           !Read(current->muzzleExplosion,&descriptorVt,4)||!ProjectileReceiverImageRange(descriptorVt,4,false))return false;
+        const std::array<unsigned,4> identity{receiver,vt,target,descriptorVt};
+        std::array<unsigned,5> arguments{};std::array<unsigned,3> zero{};unsigned scalar=0;
+        if(!Read(entry.primary-0x74,arguments.data(),sizeof(arguments))||arguments[0]!=entry.primary+0x20||
+           arguments[3]!=entry.primary-0x10||arguments[4]!=0x3f800000||
+           !Read(arguments[3],zero.data(),sizeof(zero))||zero!=std::array<unsigned,3>{}||
+           !Read(scope.effects+0x120,&scalar,4)||arguments[2]!=scalar)return false;
+        if(scope.smokeEarlyReceiver[0]){
+            if(identity!=scope.smokeEarlyReceiver||arguments!=scope.smokeEarlyArguments)return false;
+        }else{scope.smokeEarlyReceiver=identity;scope.smokeEarlyArguments=arguments;}
+        callTarget=target;callerReturn=unsigned(image)+0x17a10d;
+    }else if(entry.boundary!=smoke402::Boundary::CameraReset||entry.registers.ecx!=scope.effects)return false;
+    const auto& frame=*scope.originFrame;const auto& shot=frame.shot;
+    if(!shot.aimEvidence)return false;const auto& aim=*shot.aimEvidence;
+    proof.owner=OriginOwner(owner);proof.scopeSerial=key.scopeSerial;proof.invocation=key.invocation;proof.callerLifetime=key.primaryLifetime;
+    proof.publicationSerial=reinterpret_cast<std::uintptr_t>(frame.publication.get());
+    proof.generation=shot.generation;proof.ownerGeneration=shot.ownerGeneration;proof.equipmentGeneration=frame.equipmentGeneration;
+    proof.space=shot.space;proof.configurationSequence=aim.configurationSequence;proof.thread=key.thread;proof.token=scope.shotToken;
+    proof.sourceP=entry.primary;proof.callerReturn=callerReturn;proof.target=callTarget;
+    proof.effects=scope.effects;proof.configuration=scope.configuration;proof.firingData=current->firingData;
+    proof.deadlineQpc=shot.deadline;proof.inputDeadlineNs=HandNanos(shot.deadline);proof.configurationDeadlineNs=aim.configurationDeadlineNs;
+    proof.tokenValid=true;config=*current;
+    LARGE_INTEGER now{};
+    return serverShotScope==&scope&&QueryPerformanceCounter(&now)&&now.QuadPart>0&&now.QuadPart<proof.deadlineQpc&&
+        HandNanos(now.QuadPart)<proof.inputDeadlineNs&&HandNanos(now.QuadPart)<proof.configurationDeadlineNs;
+}
+bool __cdecl PrepareSmokeOrigin(void*,const smoke402::Key& key,const smoke402::Entry& entry,
+    smoke402::Admission& admission)noexcept {
+    auto* scope=serverShotScope;
+    if(!scope||!scope->originFrame||entry.boundary==smoke402::Boundary::CameraReset)return false;
+    const unsigned epoch=entry.boundary==smoke402::Boundary::EarlyEffect?0:1;
+    if(scope->smokeAttempted[epoch])return false;scope->smokeAttempted[epoch]=true;
+    auto& request=scope->smokeRequests[epoch];
+    if(!SmokeNativeCurrent(*scope,key,entry,request.captured,request.currentConfig))return false;
+    const auto& frame=*scope->originFrame;const auto& shot=frame.shot;
+    const auto enrollment=FindSmokeEnrollment(shot);if(!enrollment)return false;
+    if(epoch==0)scope->smokeEnrollment=enrollment;
+    else if(scope->smokeEnrollment!=enrollment||!scope->smokeResults[0]||
+            !SmokeSamePublication(scope->smokeRequests[0].captured,request.captured)||
+            scope->smokeRequests[0].capturedConfig!=request.currentConfig)return false;
+    request.current=request.captured;request.capturedConfig=*scope->nativeConfig;request.enrollment=&enrollment->geometry;
+    LARGE_INTEGER now{};if(!QueryPerformanceCounter(&now)||!OriginSelectedCurrent(*scope,enrollment->geometry,HandNanos(now.QuadPart)))return false;
+    // This exact selected configuration is joined to the reviewed static
+    // resource hashes/GUIDs in enrollment.provenance. ReadNativeMuzzleConfig
+    // and ReadServerIdentity tie its current owner/client-effects firingData to
+    // function+a0 and BOTH live descriptor slots, copied/rechecked in full.
+    // We do not claim to have read a runtime GUID from an unknown native offset.
+    if(!scope->originSelected||authored_grip_detail::Text(scope->originSelected->configurationPath)!=enrollment->provenance->configuration)return false;
+    request.capabilityEnabled=true;request.firstTargetEntry=true;request.nestedOrAmbiguous=false;
+    auto& evidence=request.evidence;evidence.proof=request.captured;
+    evidence.publication=muzzle_part_observation::SourceFromShot(shot,frame.equipmentGeneration,now.QuadPart,HandNanos(now.QuadPart));
+    evidence.publication.attachmentReady=frame.attachmentReady;evidence.publication.ordinaryPublishedPalette=frame.ordinaryPalette;
+    evidence.rig=frame.rig;evidence.currentSelected=scope->originSelected.get();evidence.trackedWeapon=shot.trackedWeapon;evidence.trackedFlash=shot.trackedFlash;
+    evidence.observedPart=shot.muzzlePartObservation?&*shot.muzzlePartObservation:nullptr;
+    evidence.activeState=enrollment->geometry.activeState;evidence.firingAllowed=rigPublication::OriginWeaponFrameCurrent(frame);
+    evidence.exitVisible=frame.ordinaryPalette&&evidence.observedPart;
+    request.coordinate.proof=request.captured;request.coordinate.boundary=enrollment->geometry.boundary;request.coordinate.unitsPerMetre=shot.unitsPerMetre;
+    if(!Read(entry.primary+0x30,request.coordinate.nativeInputXYZ.data(),12))return false;
+    scope->smokeResults[epoch]=smoke402::PrepareSmoke(request,*enrollment);
+    if(!scope->smokeResults[epoch])return false;
+    const auto& result=*scope->smokeResults[epoch];
+    if(epoch&&result.nativeXYZ!=scope->smokeResults[0]->nativeXYZ)return false;
+    admission.key=key;admission.primary=entry.primary;
+    for(unsigned i=0;i<3;++i)admission.absoluteNativeXyz[i]=std::bit_cast<unsigned>(result.nativeXYZ[i]);
+    admission.positiveNativeBoundBits=std::bit_cast<unsigned>(enrollment->geometry.maximumAbsoluteWorldUnits);
+    admission.proof={request.captured.publicationSerial,reinterpret_cast<std::uintptr_t>(enrollment),shot.space,shot.deadline};return true;
+}
+bool __cdecl ValidateSmokeOrigin(void*,const smoke402::Key& key,const smoke402::Entry& entry,
+    const smoke402::Admission& admission)noexcept {
+    auto* scope=serverShotScope;if(!scope||!scope->smokeEnrollment||entry.boundary==smoke402::Boundary::CameraReset)return false;
+    const unsigned epoch=entry.boundary==smoke402::Boundary::EarlyEffect?0:1;
+    if(!scope->smokeAttempted[epoch]||!scope->smokeResults[epoch])return false;
+    const auto& saved=scope->smokeRequests[epoch];const auto& result=*scope->smokeResults[epoch];
+    origin388::ProofKey current{};NativeMuzzleConfig config{};
+    if(!SmokeNativeCurrent(*scope,key,entry,current,config)||current!=saved.captured||config!=saved.capturedConfig||
+       !smoke402::ExactEnrollment(*scope->smokeEnrollment)||admission.key!=key||admission.primary!=current.sourceP||
+       result.proof!=current||result.enrollment!=saved.enrollment||
+       admission.proof.evidence!=current.publicationSerial||admission.proof.activeExit!=reinterpret_cast<std::uintptr_t>(scope->smokeEnrollment)||
+       admission.proof.referenceSpace!=current.space||admission.proof.originalDeadline!=current.deadlineQpc||
+       admission.positiveNativeBoundBits!=std::bit_cast<unsigned>(saved.enrollment->maximumAbsoluteWorldUnits))return false;
+    std::array<unsigned,3> before{};if(!Read(entry.primary+0x30,before.data(),sizeof(before)))return false;
+    for(unsigned i=0;i<3;++i)if(admission.absoluteNativeXyz[i]!=std::bit_cast<unsigned>(result.nativeXYZ[i])||
+        before[i]!=std::bit_cast<unsigned>(saved.coordinate.nativeInputXYZ[i]))return false;
+    LARGE_INTEGER now{};if(!QueryPerformanceCounter(&now)||!OriginSelectedCurrent(*scope,*saved.enrollment,HandNanos(now.QuadPart)))return false;
+    auto repeated=saved;repeated.evidence.currentSelected=scope->originSelected.get();
+    repeated.evidence.publication.nowQpc=now.QuadPart;repeated.evidence.publication.nowNs=HandNanos(now.QuadPart);
+    const auto checked=smoke402::PrepareSmoke(repeated,*scope->smokeEnrollment);
+    LARGE_INTEGER end{};
+    return checked&&checked->nativeXYZ==result.nativeXYZ&&rigPublication::OriginWeaponFrameCurrent(*scope->originFrame)&&
+        serverShotScope==scope&&QueryPerformanceCounter(&end)&&end.QuadPart<current.deadlineQpc&&
+        HandNanos(end.QuadPart)<current.inputDeadlineNs&&HandNanos(end.QuadPart)<current.configurationDeadlineNs;
+}
+bool __cdecl ValidateSmokeReset(void*,const smoke402::Key& key,const smoke402::Entry& entry)noexcept {
+    auto* scope=serverShotScope;
+    if(!scope||!scope->smokeEnrollment||!scope->smokeResults[0]||entry.boundary!=smoke402::Boundary::CameraReset)return false;
+    origin388::ProofKey current{};NativeMuzzleConfig config{};
+    if(!SmokeNativeCurrent(*scope,key,entry,current,config)||
+       !SmokeSamePublication(scope->smokeRequests[0].captured,current)||config!=scope->smokeRequests[0].capturedConfig)return false;
+    LARGE_INTEGER now{};
+    return QueryPerformanceCounter(&now)&&OriginSelectedCurrent(*scope,scope->smokeEnrollment->geometry,HandNanos(now.QuadPart))&&
+        rigPublication::OriginWeaponFrameCurrent(*scope->originFrame);
+}
+#endif
+
+
 bool ProjectileWindow(bool firstAcceptedHelper=false)noexcept {
     if(!enabled.load(std::memory_order_acquire)||!projectile302::Observer.enabled.load(std::memory_order_acquire))return false;
     LARGE_INTEGER now{};if(!QueryPerformanceCounter(&now))return false;
@@ -1719,7 +1899,11 @@ void __cdecl ReceiverEntryDispatch(projectile_entry::Invocation* invocation){
     const bool recordDiagnostic=projectileLaunchCount.load(std::memory_order_relaxed)<projectileLaunchRecords.size();
     bool captureOrigin=false;
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
-    captureOrigin=projectile302::Origin.enabled.load(std::memory_order_acquire)&&current->originScope&&
+    captureOrigin=(projectile302::Origin.enabled.load(std::memory_order_acquire)
+#ifdef FVR_BC2_SMOKE_ORIGIN_CANDIDATE
+        ||smoke402::Runtime.enabled.load(std::memory_order_acquire)
+#endif
+        )&&current->originScope&&
         !current->originScope->Attempted()&&current->observedHelperCallbacks==1;
 #endif
     if((!recordDiagnostic&&!captureOrigin)||current->launchOrdinal==UINT32_MAX){++projectileLaunchDropped;original();return;}
@@ -1807,7 +1991,11 @@ std::uintptr_t ServerShootBody(void* self,void* config,float dt,unsigned primary
 #endif
     local.shot=rigPublication::ReadWeaponShotFrame(owner.soldier,owner.weak,owner.weapon);
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
-    if(projectile302::Origin.enabled.load(std::memory_order_acquire)){
+    if(projectile302::Origin.enabled.load(std::memory_order_acquire)
+#ifdef FVR_BC2_SMOKE_ORIGIN_CANDIDATE
+       ||smoke402::Runtime.enabled.load(std::memory_order_acquire)
+#endif
+       ){
         local.originFrame=rigPublication::ReadOriginWeaponFrame(owner.soldier,owner.weak,owner.weapon);
         if(local.originFrame)local.shot=local.originFrame->shot;
     }
@@ -1834,6 +2022,9 @@ std::uintptr_t ServerShootFinally(void* self,void* config,float dt,unsigned prim
             }
             local->originScope->Close(); // Lifecycle only; never restore committed native P.
         }
+#ifdef FVR_BC2_SMOKE_ORIGIN_CANDIDATE
+        if(local->smokeScope)local->smokeScope->Close();
+#endif
         local->originSelected.reset();local->originFrame.reset();
 #endif
         local->shot.reset();serverShotScope=previous;--active;
@@ -1845,6 +2036,9 @@ std::uintptr_t __fastcall ServerShootHook(void* self,void*,void* config,float dt
     // Before ANY original call, including disabled/refused/nested passthroughs.
     const projectile302::OriginKey key{NextProjectileScope(),local.invocation,local.invocation,GetCurrentThreadId()};
     projectile302::OriginScope origin(key);local.originScope=&origin;
+#ifdef FVR_BC2_SMOKE_ORIGIN_CANDIDATE
+    smoke402::Scope smoke(key);local.smokeScope=&smoke;
+#endif
 #endif
     return ServerShootFinally(self,config,dt,primary,context,&local,serverShotScope);
 }
@@ -4753,10 +4947,10 @@ void ReportVehicleCameraEvidence(std::ostream& out){
     }out<<']';out.precision(precision);
 }
 bool InstallProjectileTarget(std::span<const std::byte> bytes,const engine::PeImage& pe,
-    std::uintptr_t base,bool observe,bool originRequest,bool processRetainedProbe)noexcept {
+    std::uintptr_t base,bool observe,bool originRequest,bool processRetainedProbe,bool smokeRequest=false)noexcept {
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
     using namespace projectile307;
-    if(!observe&&!originRequest)return false;
+    if(!observe&&!originRequest&&!smokeRequest)return false;
     if(projectileTargetLife.created&&!projectileTargetLife.started.load()&&!projectileTargetLife.closed.load()){
         if(base!=image||!processRetainedProbe)return false;
         if(observe)projectileTargetLife.observerRequested=true;
@@ -4821,6 +5015,49 @@ bool EnableProjectileOriginCandidate(std::span<const std::byte> bytes,const engi
 #endif
 }
 
+bool EnableSmokeOriginCandidate(std::span<const std::byte> bytes,const engine::PeImage& pe,
+    std::uintptr_t base,bool explicitRequest,bool processRetainedProbe)noexcept {
+#ifdef FVR_BC2_SMOKE_ORIGIN_CANDIDATE
+    if(!explicitRequest||!processRetainedProbe||smokeInstallAttempted||smoke402::Runtime.closed.load()||enabled.load()||
+       !hooks[11]||!hooks[13]||base!=image||base!=0x400000||!projectile302::FloatingStateSupported())return false;
+    smokeInstallAttempted=true;
+    for(const auto& e:smoke402::Enrollments)if(!smoke402::ExactEnrollment(e))return false;
+    // This reuses the original whole-executable SHA/7155b0/setter validation.
+    // It creates a passive-disabled target if no other capability requested it.
+    if(!InstallProjectileTarget(bytes,pe,base,false,false,processRetainedProbe,true))return false;
+    const auto caller=Offset(pe,smoke402::CallerRva,unsigned(smoke402::CallerBytes.size()));
+    std::array<unsigned char,smoke402::CallerBytes.size()> callerLive{};
+    if(!caller||*caller>bytes.size()||callerLive.size()>bytes.size()-*caller||
+       !ProjectileReceiverImageRange(unsigned(base)+smoke402::CallerRva,unsigned(callerLive.size()),true)||
+       std::memcmp(bytes.data()+*caller,smoke402::CallerBytes.data(),callerLive.size())||
+       !Read(base+smoke402::CallerRva,callerLive.data(),callerLive.size())||callerLive!=smoke402::CallerBytes)return false;
+    const auto early=Offset(pe,smoke402::EarlyRva,5),reset=Offset(pe,smoke402::ResetRva,5);
+    std::array<std::byte,5> earlyLive{},resetLive{};
+    if(!early||!reset||*early>bytes.size()||5>bytes.size()-*early||*reset>bytes.size()||5>bytes.size()-*reset||
+       !ProjectileReceiverImageRange(unsigned(base)+smoke402::EarlyRva,5,true)||
+       !ProjectileReceiverImageRange(unsigned(base)+smoke402::ResetRva,5,true)||
+       !ProjectileReceiverImageRange(unsigned(base)+0x134460,1,true)||
+       !Read(base+smoke402::EarlyRva,earlyLive.data(),5)||!Read(base+smoke402::ResetRva,resetLive.data(),5)||
+       !smoke402::VerifySeams(bytes.subspan(*early,5),bytes.subspan(*reset,5),earlyLive,resetLive))return false;
+    smoke402::EarlyResume=unsigned(base)+0x17a10b;smoke402::ResetResume=unsigned(base)+0x17a17b;
+    smoke402::ResetTarget=unsigned(base)+0x134460;
+    smoke402::Runtime.api={nullptr,PrepareSmokeOrigin,ValidateSmokeOrigin,ValidateSmokeReset};
+    const std::array<unsigned,2> rvas{smoke402::EarlyRva,smoke402::ResetRva};
+    const std::array<projectile302::MachineEntry,2> thunks{smoke402::EarlyThunk,smoke402::ResetThunk};
+    for(unsigned i=0;i<2;++i){
+        const auto target=reinterpret_cast<void*>(base+rvas[i]);
+        if(MH_CreateHook(target,reinterpret_cast<void*>(thunks[i]),reinterpret_cast<void**>(&smokeTrampolines[i]))!=MH_OK){
+            smoke402::Runtime.Close();return false;
+        }
+        hooks[15+i]=target; // even a partial install stays tracked and retained
+        if(!smokeTrampolines[i]){smoke402::Runtime.Close();return false;}
+    }
+    smokeRequested=true;return true;
+#else
+    (void)bytes;(void)pe;(void)base;(void)explicitRequest;(void)processRetainedProbe;return false;
+#endif
+}
+
 bool SetFeedbackWriter(FeedbackWriter writer)noexcept {
     if(!hooks[0]||enabled.load(std::memory_order_acquire)||writeFeedback||!writer)return false;writeFeedback=writer;return true;
 }
@@ -4841,11 +5078,18 @@ void Start()noexcept {
     reloadFlowRuntime::Start();rigPublication::Start();enabled.store(true,std::memory_order_release);
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
     projectileTargetLife.Start();
+#ifdef FVR_BC2_SMOKE_ORIGIN_CANDIDATE
+    if(smokeRequested&&!smoke402::Runtime.closed.load(std::memory_order_acquire))
+        smoke402::Runtime.enabled.store(true,std::memory_order_release);
+#endif
 #endif
 }
 bool PrepareSessionStop()noexcept {
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
     // Close even if existing gameplay retirement refuses. Retain all dependencies.
+#ifdef FVR_BC2_SMOKE_ORIGIN_CANDIDATE
+    smoke402::Runtime.Close();
+#endif
     projectile302::Origin.Close();
     projectileTargetLife.Close();
 #endif
@@ -4894,7 +5138,11 @@ bool Stop()noexcept {
     }
     const auto targetActive=[]()noexcept {
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
-        return projectileTargetLife.Active();
+        return projectileTargetLife.Active()
+#ifdef FVR_BC2_SMOKE_ORIGIN_CANDIDATE
+            ||InterlockedCompareExchange(&smoke402::Runtime.active,0,0)!=0
+#endif
+            ;
 #else
         return false;
 #endif
@@ -5294,6 +5542,14 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
     out<<"}},\"projectile_target_observation\":";
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
     projectile307::Report(out,projectileTargetLife,projectile302::Observer);
+#ifdef FVR_BC2_SMOKE_ORIGIN_CANDIDATE
+    out<<",\"smoke_origin402\":{\"requested\":"<<smokeRequested
+       <<",\"early_committed\":"<<smoke402::Runtime.earlyCommitted.load()
+       <<",\"physical_committed\":"<<smoke402::Runtime.physicalCommitted.load()
+       <<",\"partial\":"<<smoke402::Runtime.partial.load()
+       <<",\"refused\":"<<smoke402::Runtime.refused.load()
+       <<",\"poisoned\":"<<smoke402::Runtime.poisoned.load()<<'}';
+#endif
     out<<",\"committed_origin390\":{\"requested\":"<<projectileTargetLife.originRequested
        <<",\"enrollments\":"<<originEnrollments.size()<<",\"prepared\":"<<originPrepared.load()
        <<",\"committed_scopes\":"<<originCommitted.load()<<",\"refused_scopes\":"<<originRefused.load()

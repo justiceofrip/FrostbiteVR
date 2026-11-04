@@ -1,4 +1,7 @@
 #include "Bc2ProjectileTarget302.h"
+#ifdef FVR_BC2_SMOKE_ORIGIN_CANDIDATE
+#include "Bc2SmokeOrigin402.h"
+#endif
 #include <intrin.h>
 
 namespace fvr::bc2::projectile302 {
@@ -446,10 +449,16 @@ void __cdecl Dispatch(Frame* frame) {
     InterlockedIncrement(&Observer.active);
     ++Depth;
     __try {
-        origin = OriginAccess::Enter(*frame->entry);
+#ifdef FVR_BC2_SMOKE_ORIGIN_CANDIDATE
+        if(!smoke402::SuppressOrdinaryEntry())
+#endif
+            origin = OriginAccess::Enter(*frame->entry);
         row = Claim(*frame->entry);
         Observe(row, Boundary::Entry);
-        OriginAccess::Commit(origin, *frame->entry);
+#ifdef FVR_BC2_SMOKE_ORIGIN_CANDIDATE
+        if(!smoke402::BeforePhysical(*frame->entry))
+#endif
+            OriginAccess::Commit(origin, *frame->entry);
         OriginAccess::Starting(origin);
         originalStarted = true;
         Forward(frame); // Exactly once after refusal/recovered rollback/commit; never unresolved rollback.

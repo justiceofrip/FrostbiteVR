@@ -37,6 +37,10 @@ bool EnableProjectileTargetObservation(std::span<const std::byte>,const engine::
 bool EnableProjectileOriginCandidate(std::span<const std::byte>,const engine::PeImage&,
     std::uintptr_t,std::span<const origin388::CandidateOriginEnrollment>,
     bool explicitRequest=false,bool processRetainedProbe=false)noexcept;
+// Independent smoke402 candidate: all24 compiled tuples, two verified caller
+// seams and the existing physical target. Never enabled by ordinary origin.
+bool EnableSmokeOriginCandidate(std::span<const std::byte>,const engine::PeImage&,
+    std::uintptr_t,bool explicitRequest=false,bool processRetainedProbe=false)noexcept;
 // Existing session writer opt-in, after Install and before Start. The report
 // drains bounded transition records; no native reads or stream work in Gather.
 bool EnableFireRouteTelemetry()noexcept;
