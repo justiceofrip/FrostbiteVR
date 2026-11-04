@@ -5,6 +5,8 @@ Updated November 4, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
+Destruction update, November4: the user reports that the previously repeatable building-rendering bug appeared fixed on the same level in their latest headset test. They remain uncertain; the exact tested build and level were not identified. Treat this as positive headset feedback and an apparently resolved scene-specific issue; preserve the existing correction and watch for recurrence. Broader scene coverage remains unconfirmed.
+
 Private0.1.61/fallback60 is installed and setup-validated with settings/cache preserved; source11b1349 is pushed. Both normal builds passed (350 x86,347 x64). The shared committed-origin candidate and238 exact weapon/part entries are compiled; its separate runtime request remains default-off. Earlier held-ammunition custody repairs remain included, with actual-game validation pending. Native ammunition transaction records are unchanged. [Installed60 and origin scope](../handoff/integrations/coordinator-20261104-origin399/README.txt), [shared custody repair](../handoff/integrations/coordinator-20261103-custody370/README.txt).
 
 Actual391 on59 was interrupted by an unexpected Windows restart after both menu/world views were reviewed. Final shot/reload reports were damaged and the actual host tape has no footer; no reload or normal-close pass is claimed. ROOT restored the three saved profiles and verified launcher settings/active unchanged. The changed383 timing diagnostics remain tested offline; no valid timing-failure report survived this run. [391 recovery and origin work](../handoff/integrations/coordinator-20261104-origin399/README.txt).
