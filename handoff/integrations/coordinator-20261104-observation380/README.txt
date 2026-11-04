@@ -1,0 +1,10 @@
+Actual380 on private0.1.59: failed sight approach; closed normally.
+Native source06daf6f and installed59/fallback58 remain unchanged; source/tool375c2ed2ca was used. No native build or installation followed this run.
+Both menu and stationary world eyes were reviewed; one Resume. SightFlip stopped after164 neutral approach commands: request048 took289.1919ms, beyond its250ms request budget. No held grip, selected transition, ordinary shot, Open, pickup, Insert or Close occurred.
+The361/367 shared ammunition-custody repair and375 initial-Open pending handling were not exercised; no reload acceptance follows.
+Saved publication for the exact048nonce completed102.5127ms after request,78.5609ms before its source expiry. At refusal the source was108.1183ms expired. Accepting it then would be wrong; missing receive-phase timestamps do not identify a filesystem stall versus scheduling delay. No timeout extension or unchanged rerun.
+Offline382 confirms unchanged admission at publication time and refusal at the saved late time; five focused replay tests pass. No behavior correction was justified. The worker is retired; next distinct evidence is failure-only reader/pump/ack phase timing.
+Wrapper exit0; six main processes exit0; watcher child exit0/detached. Watcher supervisor exit code was not persisted; all eight recorded process IDs were absent. Native hooks retired, ordinary game close, exact three profiles and launcher settings/active restoration verified.
+Official checker ran once on exacthost114116/7044completeframes:18PASS,1FAIL298zero-layerframes(first1),1SKIPdepth; exit1. No overall XR/headset pass.
+381 independently verified the retained caller: its mutable64-byte stack transform can survive between projectile iterations. Substitution/restoration cannot assume native writes are irrelevant. This is an input-contract finding, not an enabled muzzle fix.
+Evidence: reports/coordinator-20261103-feedback380/{fixed59/xr-game01,closed38001}; offline timing diagnosis in coordinator worktree reports/coordinator-20261104-feedback382/snapshot-response; caller proof in reports/coordinator-20261104-feedback381/primary-contract.
