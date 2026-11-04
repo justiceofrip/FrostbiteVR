@@ -5,6 +5,7 @@
 #include "Bc2TwoGrenadeDeathWitness.h"
 #include "Bc2ShellFocusLossProbe.h"
 #include "Bc2Profile.h"
+#include "CandidateOriginAdmission388.h"
 #include "Bc2PhysicalPump.h"
 #include "Bc2AmmoCounterHost.h"
 #include "Bc2Camera.h"
@@ -31,6 +32,11 @@ bool SetFeedbackWriter(FeedbackWriter)noexcept;
 // Supported solely by the process-retained NativeProbe host, before global enable.
 bool EnableProjectileTargetObservation(std::span<const std::byte>,const engine::PeImage&,
     std::uintptr_t,bool explicitRequest=false,bool processRetainedProbe=false)noexcept;
+// Independent committed-origin capability. The caller supplies a reviewed,
+// immutable process-lifetime table; no row is inferred from passive profiles.
+bool EnableProjectileOriginCandidate(std::span<const std::byte>,const engine::PeImage&,
+    std::uintptr_t,std::span<const origin388::CandidateOriginEnrollment>,
+    bool explicitRequest=false,bool processRetainedProbe=false)noexcept;
 // Existing session writer opt-in, after Install and before Start. The report
 // drains bounded transition records; no native reads or stream work in Gather.
 bool EnableFireRouteTelemetry()noexcept;

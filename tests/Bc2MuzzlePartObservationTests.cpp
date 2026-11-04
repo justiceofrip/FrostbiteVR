@@ -82,7 +82,7 @@ int A_ScopeValue(){
     CHECK(MuzzlePartProfilePeer()==&Profiles294[0]);CHECK(MuzzlePartLayoutPeer()==sizeof(Shot));return 0;
 }
 int B_ExactFamilies(){
-    CHECK(Profiles294.size()==71);unsigned roots=0,hinged=0,sliding=0;
+    CHECK(Profiles294.size()==80);unsigned roots=0,hinged=0,sliding=0;
     for(const auto& p:Profiles294){Fixture f(p);auto value=f.Get();CHECK(value&&value->profile==&p&&value->bone==p.expectedIndex);
         if(p.expectedIndex==10)++roots;else if(p.mesh.find("XM8")!=std::string_view::npos)++hinged;else ++sliding;
         const auto reject=[&](auto change){Fixture x(p);change(x);return !x.Get();};
@@ -96,7 +96,7 @@ int B_ExactFamilies(){
         auto wrong=p;wrong.state=1;CHECK(!f.Get({&wrong,1}));wrong=p;++wrong.expectedIndex;CHECK(!f.Get({&wrong,1}));
         const std::array duplicate{p,p};CHECK(!f.Get(duplicate));
     }
-    CHECK(roots&&hinged&&sliding);Fixture excluded;excluded.s.configuration="Objects/Weapons/Handheld/US_rgl_HK416/US_rgl_HK416";CHECK(!excluded.Get());return 0;
+    CHECK(roots&&hinged&&sliding);Fixture wrongFamily;wrongFamily.s.configuration="Objects/Weapons/Handheld/US_rgl_HK416/US_rgl_HK416";CHECK(!wrongFamily.Get());return 0;
 }
 int C_Animation(){
     // Every moving family must use its part; a repeated weapon/root alone fails.
@@ -291,7 +291,7 @@ int H_DiagnosticOutcomes(){
 }
 int main(int argc,char** argv){
     if(argc==2&&std::string_view(argv[1])=="--diagnostics-only"){const int result=H_DiagnosticOutcomes();if(!result)std::cout<<"H diagnostic outcomes passed\n";return result;}
-    const std::array<std::pair<const char*,int(*)()>,8> groups{{{"A scope value",A_ScopeValue},{"B 71 tuples",B_ExactFamilies},
+    const std::array<std::pair<const char*,int(*)()>,8> groups{{{"A scope value",A_ScopeValue},{"B 80 tuples",B_ExactFamilies},
         {"C animation",C_Animation},{"D guards",D_Guards},{"E helper",E_Helper},{"F allocation",F_Allocation},{"G serialization/coordinates",G_SerializationCoordinates},{"H diagnostic outcomes",H_DiagnosticOutcomes}}};
     for(const auto& [name,run]:groups){if(run())return 1;std::cout<<name<<" passed\n";}
     std::cout<<"frame_bytes="<<sizeof(Frame)<<" optional_bytes="<<sizeof(std::optional<Frame>)<<" capacity64_bytes="<<64*sizeof(std::optional<Frame>)<<'\n';

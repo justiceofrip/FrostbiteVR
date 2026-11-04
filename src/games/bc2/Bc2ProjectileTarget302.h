@@ -4,6 +4,7 @@
 #error This candidate requires Windows/MSVC x86 and /arch:SSE2 (no AVX).
 #endif
 #include <Windows.h>
+#include "Bc2CommittedOrigin386.h"
 #include <array>
 #include <atomic>
 #include <cstddef>
@@ -37,6 +38,81 @@ using MachineEntry = void(__cdecl*)();
 extern MachineEntry Original; // Set before MH enable; never replaced/freed.
 void __cdecl Thunk();
 void __cdecl Forward(Frame* frame);
+
+// Independent, disabled committed-origin capability. ObserverApi/Grant remain
+// read-only. The host separately supplies an explicit origin enrollment/request.
+struct OriginKey {
+    // Host values name ONE whole-shot invocation and ONE caller-P lifetime.
+    // They cannot be the observer's per-projectile/helper ordinal/invocation.
+    // (scopeSerial, invocation) must increase lexicographically on this thread.
+    std::uint64_t scopeSerial = 0, invocation = 0, primaryLifetime = 0;
+    Word thread = 0;
+    bool operator==(const OriginKey&) const = default;
+};
+struct OriginProof {
+    std::uint64_t evidence = 0, activeExit = 0, referenceSpace = 0;
+    std::int64_t originalDeadline = 0;
+};
+struct OriginAdmission {
+    OriginKey key{};
+    Word primary = 0;
+    origin386::Bits absoluteNativeXyz{};
+    Word positiveNativeBoundBits = 0; // Reviewed positive finite IEEE binary32.
+    OriginProof proof{};
+};
+// Context owns complete immutable host evidence for this scope; numeric proof
+// IDs are joins, never substitutes for full Owner/equipment/config comparison.
+// Prepare/validate must pin same live thread/whole-shot/P lifetime, first target
+// ordering, original caller/target ABI, receiver, all native identity/config/
+// token/reference-space and original deadlines, plus separately enrolled active
+// rendered exit and conversion proof. Validate repeats immediately before stores.
+// Both are bounded, no-allocation/no-wait/read-only; no game calls or retention.
+// Prepare returns ALREADY AUTHORIZED absolute native XYZ; no guessed conversion.
+// Validation must also rule out concurrent writers during synchronous stack edit.
+using PrepareOrigin = bool(__cdecl*)(void*, const OriginKey&, const Entry&, OriginAdmission&) noexcept;
+using ValidateOrigin = bool(__cdecl*)(void*, const OriginKey&, const Entry&, const OriginAdmission&) noexcept;
+struct OriginApi { void* context = nullptr; PrepareOrigin prepare = nullptr; ValidateOrigin validate = nullptr; };
+struct OriginSession {
+    OriginApi api{}; // Immutable before hook enable; retained until process exit.
+    std::atomic<bool> enabled{false}; // Explicit host enrollment/request required.
+    std::atomic<bool> closed{false};
+    void Close() noexcept { closed.store(true, std::memory_order_release); enabled.store(false, std::memory_order_release); }
+};
+extern OriginSession Origin;
+enum class OriginStatus : Word {
+    AwaitingEntry, Disabled, Refused, Nested, StaleScope, ReadFailure,
+    Committed, WriteRestored, WriteUnresolved, AdmissionFault
+};
+// Construct at whole-shot entry even if no authorized exit exists. Keep alive
+// through ALL its projectiles. Host must call Close from its native __finally;
+// a C++ destructor under /EHsc alone does NOT establish SEH cleanup. No helper-row
+// condition, diagnostic window, or 64-row budget may control this lifetime.
+// The host must preserve this lifecycle: constructing only when an exit
+// becomes available would miss earlier entries and is explicitly unsupported.
+// The first target latches P; attempts consume eligibility before any callback.
+// This object cannot reset/copy/move/reopen. A repeated host invocation is stale.
+class OriginScope final {
+public:
+    explicit OriginScope(const OriginKey&) noexcept;
+    ~OriginScope() noexcept;
+    void Close() noexcept; // Idempotent lifecycle only, no native restoration.
+    OriginScope(const OriginScope&) = delete;
+    OriginScope& operator=(const OriginScope&) = delete;
+    OriginScope(OriginScope&&) = delete;
+    OriginScope& operator=(OriginScope&&) = delete;
+    const OriginKey& Key() const noexcept { return key_; }
+    OriginStatus Status() const noexcept { return status_; }
+    bool Attempted() const noexcept { return attempted_; }
+    bool NativeStarted() const noexcept { return nativeStarted_; }
+    Word Primary() const noexcept { return primary_; }
+private:
+    friend struct OriginAccess;
+    const OriginKey key_;
+    OriginScope* previous_ = nullptr;
+    OriginStatus status_ = OriginStatus::AwaitingEntry;
+    Word primary_ = 0, ownerThread_ = 0;
+    bool attempted_ = false, ambiguous_ = false, nativeStarted_ = false, closed_ = false;
+};
 
 enum class Boundary : Word { Entry, Return };
 enum class SampleStatus : Word {
@@ -93,7 +169,7 @@ ProducerSample CopyProducerBoundary(const ObserverApi&, const Grant&, Boundary,
     const ProducerSample* before = nullptr) noexcept;
 enum class Outcome : Word {
     Offered, RejectedIdentity, ObserverFault, EntryReadFailure, ReturnReadFailure,
-    StorageIdentityChanged, Torn, NativeException, ReturnedChanged, ReturnedUnchanged
+    StorageIdentityChanged, Torn, NativeException, ReturnedChanged, ReturnedUnchanged, OriginCommitFailure
 };
 struct Record {
     Grant grant{};

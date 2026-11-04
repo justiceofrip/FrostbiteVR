@@ -410,7 +410,292 @@ static void Signatures(const char* image) {
     Check(!VerifySignatures(bytes,target,setter,target,badSetter),"Interior setter mismatch refused");
     chars.back()^=1;Check(!VerifySignatures(bytes,target,setter,target,setter),"Whole executable identity mismatch refused");
 }
+// Disabled origin adapter: synthetic native storage only, never a game or hook.
+namespace origin_fixture386 {
+using origin386::Bits;
+static Word nativeCalls = 0, seenError = 0;
+static Entry seen{};
+static FxState seenFx{}, outputFx{};
+static Registers outputRegs{};
+static constexpr Word originReturnError = 0x38660001, defaultMxcsr = 0x1f80;
+static std::uint64_t nextScope = 1000000;
+static Bits atNativeEntry{};
+struct Fixture {
+    alignas(16) unsigned char primary[64]{};
+    OriginKey key{++nextScope, 1, nextScope, GetCurrentThreadId()};
+    Entry entry{};
+    Frame frame{};
+    Bits wanted{0x41200000,0xc1a00000,0x41f00000}; // +10,-20,+30 native units.
+    Bits mutation{0x42800000,0x42a00000,0x42c00000};
+    unsigned prepares=0,validations=0;
+    bool accept=true,valid=true,fault=false,mutate=false,raise=false;
+    Fixture() {
+        for (unsigned i=0;i<64;++i) primary[i]=static_cast<unsigned char>(i^0xa6);
+        const Bits original{0x80000000,0x7fc01234,0x40400000};
+        std::memcpy(primary+0x30,original.data(),12);
+        entry.registers={0x17171717,0x16161616,0x15151515,0,0x1b1b1b1b,
+            0x1d1d1d1d,0x1c1c1c1c,0x1a1a1a1a,0xed7};
+        entry.returnAddress=0x38603860; // Synthetic caller marker, never a hook.
+        for (unsigned i=0;i<11;++i) entry.args[i]=0x38600000+i;
+        entry.args[1]=reinterpret_cast<Word>(primary);
+        frame.entry=&entry;frame.incomingLastError=0x38661234;
+    }
+    Bits Xyz()const {Bits out{};std::memcpy(out.data(),primary+0x30,12);return out;}
+};
+static Fixture* current=nullptr;
+static void ResetFloating() {
+    __asm {fninit}
+    __asm {ldmxcsr defaultMxcsr}
+    __asm {cld}
+}
+static void MakeFx(FxState& f,unsigned seed) {
+    ResetFloating();FxState* at=&f;
+    __asm {fld1}
+    __asm {fldpi}
+    __asm {mov eax,at}
+    __asm {fxsave [eax]}
+    ResetFloating();
+    const std::uint16_t control=seed?0x0b7f:0x077f;
+    const Word mxcsr=seed?0x5fa0:0x3f81;
+    std::memcpy(f.bytes,&control,2);std::memcpy(f.bytes+24,&mxcsr,4);
+    for(unsigned i=0;i<128;++i) f.bytes[160+i]=static_cast<unsigned char>(i^seed);
+}
+static bool SameFx(const FxState& a,const FxState& b) {
+    if(std::memcmp(a.bytes,b.bytes,5)||std::memcmp(a.bytes+6,b.bytes+6,22))return false;
+    for(unsigned i=0;i<8;++i)if(std::memcmp(a.bytes+32+i*16,b.bytes+32+i*16,10))return false;
+    return !std::memcmp(a.bytes+160,b.bytes+160,128);
+}
+static bool SameRegs(const Registers& a,const Registers& b) {
+    return a.edi==b.edi&&a.esi==b.esi&&a.ebp==b.ebp&&a.ebx==b.ebx&&a.edx==b.edx&&
+        a.ecx==b.ecx&&a.eax==b.eax&&((a.flags^b.flags)&0xed5)==0;
+}
+static void DirtyAdmissionState() {
+    __asm {fninit}
+    __asm {fldz}
+    __asm {pxor xmm0,xmm0}
+    __asm {pxor xmm7,xmm7}
+    SetLastError(0xbadc0386);
+}
+static bool __cdecl Prepare(void*,const OriginKey& key,const Entry& entry,OriginAdmission& out)noexcept {
+    auto& f=*current;++f.prepares;DirtyAdmissionState();
+    if(f.fault)RaiseException(0xe0386002,0,0,nullptr);
+    out.key=f.key;out.primary=reinterpret_cast<Word>(f.primary);out.absoluteNativeXyz=f.wanted;
+    out.positiveNativeBoundBits=0x447a0000;out.proof={1,2,3,100}; // Synthetic authorization only.
+    return f.accept&&key==f.key&&entry.args[1]==out.primary;
+}
+static bool __cdecl Validate(void*,const OriginKey& key,const Entry& entry,const OriginAdmission& a)noexcept {
+    auto& f=*current;++f.validations;DirtyAdmissionState();
+    return f.valid&&key==f.key&&a.key==f.key&&a.proof.evidence==1&&a.proof.activeExit==2&&
+        a.proof.referenceSpace==3&&a.proof.originalDeadline==100&&entry.args[1]==a.primary;
+}
+static void __cdecl NativeBehavior386() {
+    auto& f=*current;atNativeEntry=f.Xyz();
+    if(f.mutate)std::memcpy(f.primary+0x30,f.mutation.data(),12);
+    if(f.raise){const ULONG_PTR payload[]={0x386,reinterpret_cast<Word>(f.primary)};
+        RaiseException(0xe0386010,0,2,payload);}
+}
+__declspec(naked) static void __cdecl Native386() {
+    __asm {
+        pushfd
+        pushad
+        fxsave seenFx
+        mov eax,fs:[34h]
+        mov seenError,eax
+        mov esi,esp
+        mov edi,offset seen
+        mov ecx,21
+        cld
+        rep movsd
+        inc nativeCalls
+        fninit
+        ldmxcsr defaultMxcsr
+        call NativeBehavior386
+        lea esp,[esp+36]
+        fxrstor outputFx
+        mov eax,originReturnError
+        mov fs:[34h],eax
+        push dword ptr [outputRegs+32]
+        popfd
+        mov edi,[outputRegs]
+        mov esi,[outputRegs+4]
+        mov ebp,[outputRegs+8]
+        mov ebx,[outputRegs+16]
+        mov edx,[outputRegs+20]
+        mov ecx,[outputRegs+24]
+        mov eax,[outputRegs+28]
+        ret 2ch
+    }
+}
+static void Arm(Fixture& f) {
+    current=&f;MakeFx(f.frame.incoming,0);MakeFx(outputFx,0x59);
+    outputRegs={0x77777777,0x66666666,0x55555555,0,0xbbbbbbbb,0xdddddddd,
+        0xcccccccc,0xaaaaaaaa,0xe93};
+}
+static int ExceptionFilter(EXCEPTION_POINTERS* exception)noexcept {
+    const auto& r=*exception->ExceptionRecord;
+    if(r.ExceptionCode!=0xe0386010)return EXCEPTION_CONTINUE_SEARCH;
+    Check(r.ExceptionFlags==0&&r.NumberParameters==2&&r.ExceptionInformation[0]==0x386&&
+        r.ExceptionInformation[1]==reinterpret_cast<Word>(current->primary),"Native SEH code flags and payload preserved");
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+static bool DispatchCaught(Frame* f) {
+    __try {Dispatch(f);}
+    __except(ExceptionFilter(GetExceptionInformation())) {return true;}
+    return false;
+}
+static void DispatchAndClose(Frame* f,OriginScope* scope) {
+    __try {Dispatch(f);}
+    __finally {scope->Close();}
+}
+static bool CatchAndClose(Frame* f,OriginScope* scope) {
+    __try {DispatchAndClose(f,scope);}
+    __except(ExceptionFilter(GetExceptionInformation())) {return true;}
+    return false;
+}
+static void Invoke(Fixture& f,bool exception=false) {
+    const auto before=f.entry;const auto calls=nativeCalls;
+    const bool caught=DispatchCaught(&f.frame);ResetFloating();
+    Check(caught==exception&&nativeCalls==calls+1,"Origin commit/refusal/SEH forwards exactly once");
+    Check(!std::memcmp(&before,&f.entry,sizeof(Entry)),"Origin preserves caller entry and all eleven argument words");
+    Check(!std::memcmp(seen.args,f.entry.args,sizeof(seen.args))&&seen.args[1]==f.entry.args[1],
+        "Native receives identical P address and eleven words; earlier aliases retain same object");
+    Check(SameRegs(seen.registers,f.entry.registers)&&SameFx(seenFx,f.frame.incoming)&&seenError==f.frame.incomingLastError,
+        "Origin callbacks cannot alter native incoming registers flags x87 XMM MXCSR or LastError");
+    if(!exception)Check(SameRegs(f.frame.result,outputRegs)&&SameFx(f.frame.returned,outputFx)&&
+        f.frame.returnedLastError==originReturnError,"Origin preserves normal native outgoing machine state");
+    Check(Depth==0&&Observer.active==0,"Origin native return or SEH drains adapter depth/activity");
+}
+static void Transactions() {
+    const Bits before{0x7fc01234,0x80000000,0x40400000},desired{1,2,3};
+    for(unsigned failed=1;failed<=3;++failed){
+        Bits memory=before;unsigned writes=0,reads=0;
+        const auto result=origin386::Commit(before,desired,[&](unsigned i,Word v)noexcept {
+            ++writes;if(writes==failed){memory[i]=(memory[i]&0xffffff00)|(v&0xff);return false;}
+            memory[i]=v;return true;
+        },[&](unsigned i,Word& v)noexcept {++reads;v=memory[i];return true;});
+        Check(result==origin386::WriteResult::Restored&&memory==before&&writes==failed+3&&reads==3,
+            "Partial pre-native write at each lane restores exact NaN/signed-zero bytes before forwarding");
+    }
+    for(bool unread:{false,true}){
+        Bits memory=before;unsigned writes=0;
+        const auto result=origin386::Commit(before,desired,[&](unsigned i,Word v)noexcept {
+            ++writes;if(writes==2){memory[i]=v;return false;}
+            if(!unread&&writes>2)return false;memory[i]=v;return true;
+        },[&](unsigned i,Word& v)noexcept {v=memory[i];return !unread;});
+        Check(result==origin386::WriteResult::Unresolved,"Failed or unread rollback is never an untouched fallback");
+    }
+    Check(origin386::BoundedAbsolute({0,0x80000000,0x3f800000},0x3f800000),"Finite bound includes signed zero and endpoints");
+    for(const auto bad:{0x7f800000u,0xff800000u,0x7fc01234u,0x40000000u})
+        Check(!origin386::BoundedAbsolute({bad,0,0},0x3f800000),"Nonfinite or out-of-bound authorized XYZ refused");
+    Check(!origin386::BoundedAbsolute({0,0,0},0)&&!origin386::BoundedAbsolute({0,0,0},0x7f800000),"Reviewed finite positive native bound required");
+}
+static void Run() {
+    Transactions();
+    // TEST ONLY: prior offline observer fixture is fully drained. Production
+    // never replaces Original or resets/reopens a process-lifetime capability.
+    const auto original=Original;Original=Native386;
+    Origin.api={nullptr,Prepare,Validate};
+    {
+        Fixture f;Arm(f);const auto initial=f.Xyz();OriginScope shot(f.key);
+        Invoke(f);Check(shot.Attempted()&&shot.Status()==OriginStatus::Disabled&&f.prepares==0,"Disabled first entry records attempt without admission callback");
+        Origin.enabled.store(true);Invoke(f);
+        Check(f.Xyz()==initial&&f.prepares==0,"Later enabling cannot arm an already attempted whole shot");
+    }
+    {
+        Fixture f;Arm(f);const auto initial=f.Xyz();OriginScope shot(f.key);f.accept=false;Invoke(f);
+        f.accept=true;Invoke(f);Check(f.Xyz()==initial&&f.prepares==1&&shot.Status()==OriginStatus::Refused,
+            "Missing active exit on first entry forbids late admission on later projectile");
+    }
+    {
+        Fixture f;Arm(f);std::array<unsigned char,64> before{};std::memcpy(before.data(),f.primary,64);
+        const auto* alias=f.primary;OriginScope shot(f.key);Invoke(f);
+        Check(shot.Status()==OriginStatus::Committed&&shot.NativeStarted()&&shot.Primary()==reinterpret_cast<Word>(alias)&&
+            atNativeEntry==f.wanted&&f.Xyz()==f.wanted,"One committed absolute origin is visible through original P aliases");
+        Check(!std::memcmp(before.data(),f.primary,0x30)&&!std::memcmp(before.data()+0x3c,f.primary+0x3c,4),
+            "All basis and padding bytes remain exact");
+        f.mutate=true;Invoke(f);f.mutate=false;Invoke(f);
+        Check(atNativeEntry==f.mutation&&f.Xyz()==f.mutation&&f.prepares==1&&f.validations==1,
+            "Native XYZ mutation survives all subsequent projectiles; no absolute reapply or copyback");
+    }
+    for(unsigned refusal=0;refusal<5;++refusal){
+        Fixture f;Arm(f);const auto initial=f.Xyz();OriginScope shot(f.key);
+        if(refusal==0)f.valid=false;
+        if(refusal==1)++f.key.primaryLifetime;
+        if(refusal==2)f.wanted[1]=0x7fc01234;
+        if(refusal==3)f.wanted[2]=0x7f000000;
+        if(refusal==4)f.fault=true;
+        Invoke(f);Check(f.Xyz()==initial&&shot.Status()!=OriginStatus::Committed,
+            "Changed live scope, invalid proof/value, or admission SEH refuses before any native write");
+    }
+    {
+        Fixture f;Arm(f);const auto initial=f.Xyz();++f.key.thread;
+        {OriginScope shot(f.key);Invoke(f);
+            Check(shot.Status()==OriginStatus::StaleScope&&f.prepares==0&&f.Xyz()==initial,"Foreign-thread shot identity never reaches admission");}
+        --f.key.thread;
+        {OriginScope retry(f.key);Invoke(f);
+            Check(retry.Status()==OriginStatus::StaleScope&&f.prepares==0,"Correcting a refused scope cannot reconstruct eligibility for that invocation");}
+    }
+    for(unsigned bad=0;bad<3;++bad){
+        Fixture f;Arm(f);const auto initial=f.Xyz();OriginScope shot(f.key);
+        f.entry.args[1]=bad==0?reinterpret_cast<Word>(f.primary)+4:bad==1?0x10000u:UINT32_MAX-31;
+        Invoke(f);Check(f.Xyz()==initial&&f.prepares==0&&shot.Status()==OriginStatus::Refused,
+            "Unaligned, nonstack or overflowing P extent refused without admission or borrowed read");
+    }
+    {
+        Fixture f;Arm(f);const auto initial=f.Xyz();const auto oldKey=f.key;
+        {OriginScope first(f.key);Invoke(f);}
+        std::memcpy(f.primary+0x30,initial.data(),12);
+        ++f.key.primaryLifetime; // Same native address/new claimed lifetime cannot reopen same whole shot.
+        {OriginScope stale(f.key);Invoke(f);Check(stale.Status()==OriginStatus::StaleScope&&f.Xyz()==initial,"Recycled scope/address cannot reset first-entry eligibility");}
+        f.key={++nextScope,1,nextScope,GetCurrentThreadId()};
+        {OriginScope fresh(f.key);const auto live=f.key;f.key=oldKey;Invoke(f);f.key=live;
+            Check(f.Xyz()==initial&&fresh.Status()==OriginStatus::Refused,"Old proof rejected at same P address under a fresh whole-shot identity");}
+        f.key={++nextScope,1,nextScope,GetCurrentThreadId()};
+        {OriginScope fresh(f.key);Invoke(f);Check(fresh.Status()==OriginStatus::Committed,"Fresh authorized P lifetime can reuse stack address");}
+    }
+    {
+        Fixture f;Arm(f);const auto initial=f.Xyz();OriginScope outer(f.key);
+        const OriginKey nested{++nextScope,1,nextScope,GetCurrentThreadId()};
+        {OriginScope inner(nested);Invoke(f);Check(inner.Status()==OriginStatus::Nested,"Nested shot scope never borrows outer authorization");}
+        Invoke(f);Check(f.Xyz()==initial&&outer.Status()==OriginStatus::Nested,"Ambiguous nested ownership cannot later reopen outer commit");
+    }
+    {
+        Fixture f;Arm(f);OriginScope shot(f.key);f.mutate=f.raise=true;Invoke(f,true);
+        Check(shot.Status()==OriginStatus::Committed&&shot.NativeStarted()&&f.Xyz()==f.mutation,
+            "Native SEH preserves committed edit and intervening native XYZ effects");
+        f.mutate=f.raise=false;Invoke(f);Check(atNativeEntry==f.mutation&&f.prepares==1,"Exception cannot renew or reset origin attempt");
+    }
+    {
+        Fixture f;Arm(f);f.mutate=true;
+        {OriginScope shot(f.key);Invoke(f);}
+        Check(f.Xyz()==f.mutation,"Whole-shot scope exit performs no restoration of native effects");
+    }
+    {
+        Fixture f;Arm(f);f.mutate=f.raise=true;OriginScope shot(f.key);
+        const auto calls=nativeCalls;
+        Check(CatchAndClose(&f.frame,&shot),"Host explicit finally closes scope during propagated native SEH");
+        ResetFloating();shot.Close();
+        Check(f.Xyz()==f.mutation&&nativeCalls==calls+1&&shot.Status()==OriginStatus::Committed&&Depth==0,
+            "SEH finally cleanup is idempotent and never rolls back native effects");
+        f.key={++nextScope,1,nextScope,GetCurrentThreadId()};f.mutate=f.raise=false;
+        OriginScope next(f.key);Invoke(f);
+        Check(next.Status()==OriginStatus::Committed,"Explicit SEH closure leaves no dangling prior scope");
+    }
+    const auto diagnosticOffers=Observer.offered;const auto diagnosticReads=host.reads;
+    for(unsigned i=0;i<96;++i){Fixture f;Arm(f);OriginScope shot(f.key);Invoke(f);
+        Check(shot.Status()==OriginStatus::Committed,"Origin eligibility is per shot with no 64-record diagnostic budget");}
+    Check(!Observer.enabled.load()&&Observer.offered==diagnosticOffers&&host.reads==diagnosticReads,
+        "Origin remains independent of closed optional observer window and diagnostic storage");
+    {
+        Fixture f;Arm(f);f.mutate=true;OriginScope shot(f.key);Invoke(f);Origin.Close();
+        f.mutate=false;Invoke(f);Check(f.Xyz()==f.mutation,"VR/capability stop never restores committed or native XYZ writes");
+    }
+    Original=original;current=nullptr;ResetFloating();
+}
+} // namespace origin_fixture386
+static void OriginCandidateFixtures(){origin_fixture386::Run();}
+
 int main(int argc,char** argv){
     if(!FloatingStateSupported()){std::cerr<<"Required x86 floating state unavailable\n";return EXIT_FAILURE;}
-    Identity();ServerRelationships();ProducerDiagnostics();InstallLifecycle();BoundaryMutations();StopLifecycle();Serialization();Signatures(argc>1?argv[1]:nullptr);
+    Identity();ServerRelationships();ProducerDiagnostics();InstallLifecycle();BoundaryMutations();StopLifecycle();Serialization();Signatures(argc>1?argv[1]:nullptr);OriginCandidateFixtures();
     std::cout<<checks<<" checks, "<<failures<<" failures\n";return failures?EXIT_FAILURE:EXIT_SUCCESS;}

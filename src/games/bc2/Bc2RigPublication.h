@@ -266,6 +266,23 @@ struct WeaponShotFrame {
 #endif
 };
 std::optional<WeaponShotFrame> ReadWeaponShotFrame(unsigned soldier,unsigned weak,unsigned weapon)noexcept;
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+// Owns the original immutable publication, independent of subsequent render
+// frames. Its retained address is a lifetime identity, never native memory.
+struct OriginWeaponFrame {
+    WeaponShotFrame shot{};
+    std::shared_ptr<const void> publication;
+    std::shared_ptr<const SelectedMeshesSnapshot> selected;
+    RigIdentity rig{};WeaponEquipmentIdentity equipment{};
+    std::uint64_t equipmentGeneration=0;
+    bool attachmentReady=false,ordinaryPalette=false,exitVisible=false;
+};
+std::optional<OriginWeaponFrame> ReadOriginWeaponFrame(unsigned soldier,unsigned weak,unsigned weapon)noexcept;
+// Rechecks live firing guards/ownership/selected configuration against the
+// ORIGINAL source and deadlines. Does not require the newest pose to equal it.
+bool OriginWeaponFrameCurrent(const OriginWeaponFrame&)noexcept;
+#endif
+
 // Contact-only capability: pending native ammo transfer can block firing while
 // a free hand regrips the fore-end. Contains no muzzle or native sight data.
 struct WeaponSupportFrame {

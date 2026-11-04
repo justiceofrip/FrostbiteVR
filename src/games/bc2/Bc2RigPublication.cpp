@@ -6,6 +6,7 @@
 #include "Bc2RigPublication.h"
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
 #include "Bc2MuzzlePartProfiles294.h"
+#include "Bc2OriginPalette395.h"
 #endif
 #include "Bc2FeedPresentation.h"
 #include "Bc2PhysicalPistolSlide.h"
@@ -140,7 +141,12 @@ struct ShotPublication {WeaponShotFrame frame;ShotGuard identity;std::optional<A
     std::optional<WeaponModeCommand> sightMode;std::uint64_t sightModeObservedMs=0;
     std::shared_ptr<const ShellPumpObservation> shellPumpObservation;
     std::shared_ptr<const WeaponModeObservation> sightResolution;
-    std::shared_ptr<const Bc2FixedContainerObservation> fixedContainerObservation;};
+    std::shared_ptr<const Bc2FixedContainerObservation> fixedContainerObservation;
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+    RigIdentity originRig{};bool originAttachmentReady=false,originOrdinaryPalette=false,originExitVisible=false;
+    std::shared_ptr<const PublishedPose> originPalette; // Same immutable final palette, no copy or new deadline.
+#endif
+};
 std::atomic<std::int64_t> shellPumpObservationUntil=0;
 std::atomic<std::shared_ptr<const ShotGuard>> shotGuard;
 std::atomic<std::shared_ptr<const ShotPublication>> shotPublication;
@@ -1293,6 +1299,50 @@ std::optional<ContextualToolAttachment> ReadContextualToolAttachment(const Reloa
 #endif
 std::optional<WeaponShotFrame> ReadWeaponShotFrame(unsigned soldier,unsigned weak,unsigned weapon)noexcept {return ReadWeaponFrame(soldier,weak,weapon,WeaponFrameUse::Firing);}
 std::optional<WeaponShotFrame> ReadBodyWeaponFrame(unsigned soldier,unsigned weak,unsigned weapon)noexcept {return ReadWeaponFrame(soldier,weak,weapon,WeaponFrameUse::BodyObservation);}
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+bool OriginWeaponFrameCurrent(const OriginWeaponFrame& source)noexcept {
+    if(!source.publication||!source.selected||!hands||!enabled.load(std::memory_order_acquire))return false;
+    const auto pose=std::static_pointer_cast<const ShotPublication>(source.publication);
+    const auto guard=shotGuard.load(std::memory_order_acquire);
+    const auto current=shotPublication.load(std::memory_order_acquire);
+    const auto palette=published.load(std::memory_order_acquire);
+    if(!pose->originPalette||(pose->originPalette->fixedContainer&&
+        !FixedContainerCurrent(*pose->originPalette,source.equipment)))return false;
+    if(!guard||!WeaponFrameAdmitted(*guard,pose->identity,source.rig.soldier,source.rig.weak,
+        source.equipment.weapon,WeaponFrameUse::Firing)||guard->equipment!=source.equipment||
+        source.equipment!=pose->identity.equipment||source.equipmentGeneration!=pose->identity.equipmentGeneration||
+        source.selected!=pose->selected||!authored_grip_detail::Fresh(*source.selected,ReloadNanos())||
+        source.rig!=pose->originRig||!source.attachmentReady||!source.ordinaryPalette||
+        !pose->originAttachmentReady||!pose->originOrdinaryPalette||
+        !Fresh(guard->deadline)||!Fresh(pose->frame.deadline)||!EquipmentStillCurrent(guard->equipment)||
+        !AuthoredCurrent(pose->authoredGrip)||!SupportCurrent(pose->authoredSupport)||
+        !AimCurrent(pose->authoredAim)||!SightCurrent(pose->sightSelection))return false;
+    // New frames may advance. Their palette must remain ordinary and belong to
+    // the same source lineage; their deadlines never replace the captured ones.
+    if(!current||!palette||current->originPalette!=palette||
+        (palette->fixedContainer&&!FixedContainerCurrent(*palette,source.equipment))||
+        !WeaponFrameAdmitted(*guard,current->identity,source.rig.soldier,source.rig.weak,
+        source.equipment.weapon,WeaponFrameUse::Firing)||current->identity.equipment!=source.equipment||
+        current->originRig!=source.rig||!current->originAttachmentReady||!current->originOrdinaryPalette||
+        (!current->originExitVisible&&!current->frame.muzzlePartObservation)||!Fresh(current->frame.deadline)||guard->previewToken||
+        visibilityGuard.load(std::memory_order_acquire)||freeRightGuard.load(std::memory_order_acquire))return false;
+    // Current live native rig identity, using the already verified reader.
+    const RigMemory memory{nullptr,[](void*,unsigned at,void* out,std::size_t n){return Read(at,out,n);}};
+    const auto rig=ReadFirstPersonRigIdentity(memory,source.rig.soldier,source.rig.weak);
+    return rig&&*rig==source.rig&&shotGuard.load(std::memory_order_acquire)==guard&&
+        shotPublication.load(std::memory_order_acquire)==current&&published.load(std::memory_order_acquire)==palette&&
+        Fresh(pose->frame.deadline)&&!guard->weaponActionsBlocked;
+}
+std::optional<OriginWeaponFrame> ReadOriginWeaponFrame(unsigned soldier,unsigned weak,unsigned weapon)noexcept {
+    std::shared_ptr<const ShotPublication> source;
+    const auto shot=ReadWeaponFrame(soldier,weak,weapon,WeaponFrameUse::Firing,&source);
+    if(!shot||!source)return {};
+    OriginWeaponFrame out{*shot,source,source->selected,source->originRig,source->identity.equipment,source->identity.equipmentGeneration,
+        source->originAttachmentReady,source->originOrdinaryPalette,source->originExitVisible};
+    return OriginWeaponFrameCurrent(out)?std::optional<OriginWeaponFrame>{out}:std::nullopt;
+}
+#endif
+
 
 std::optional<WeaponSupportFrame> ReadWeaponSupportFrame(unsigned soldier,unsigned weak,unsigned weapon)noexcept {
     const auto pose=ReadWeaponFrame(soldier,weak,weapon,WeaponFrameUse::Support);
@@ -2494,18 +2544,45 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
         pose->pumpVisual=std::make_shared<const PumpVisualSource>(pv);}
 #endif
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+    // A pump, feed cover/box/belt, slide or idle shell is an ordinary mechanical
+    // presentation, not inherently a different muzzle. Prove the two relevant
+    // final bone values rather than reject every gun with one of those features.
+    const bool originStateReady=!targets->weaponAttachmentPending&&!pose->reloadPreview&&!pose->previewToken&&
+        !pose->freeRight&&!pose->visibility&&!input.weaponActionsBlocked;
+    const auto originExitCompatible=[&](unsigned exit,const math::Matrix4& world)noexcept {
+        if(!originStateReady||!origin_palette395::PackedExitMatches(*rig,pose->posed,rig->weaponBone,canonicalPlaced)||
+           !origin_palette395::PackedExitMatches(*rig,pose->posed,exit,world))return false;
+        const std::array<unsigned,2> bones{rig->weaponBone,exit};
+        const auto same=[&](const auto& alternative)noexcept {
+            return origin_palette395::SameExitBones(pose->posed,alternative,bones);
+        };
+        // These are all local palette alternatives selected by Pack. Equality
+        // is only required for weapon + exit; hands, covers and ammo may differ.
+        if((pose->feed&&!same(pose->feedBase))||(pose->pump&&!same(pose->pumpBase))||
+           (pose->pistolSlide&&!same(pose->pistolSlideBase))||(pose->bolt&&!same(pose->boltBase))||
+           (pose->magazine&&!same(pose->magazineBase)))return false;
+        if(pose->shellHide&&(!same(pose->shellHide->ordinary)||!same(pose->shellHide->hidden)))return false;
+        if(pose->belt&&(!same(pose->belt->ordinary)||!same(pose->belt->posed)))return false;
+        // Fixed-container loss drops the whole private pose, so its original
+        // lease is rechecked at consumption through originPalette below.
+        return true;
+    };
+    const bool originAuthoredExit=pose->shot&&pose->shot->muzzleBinding&&
+        originExitCompatible(pose->shot->flashBone,pose->shot->trackedFlash);
     if(pose->shot)pose->shot->muzzlePartDiagnostic.capture=muzzle_part_observation::Gate::AimEvidence;
     if(pose->shot&&pose->shot->aimEvidence){
         LARGE_INTEGER now{};QueryPerformanceCounter(&now);
         auto source=muzzle_part_observation::SourceFromShot(*pose->shot,input.equipmentGeneration,
             now.QuadPart,ReloadNanos(now.QuadPart));
         source.attachmentReady=!targets->weaponAttachmentPending;
-        // Fixed-container writes are already merged. Exclude every later alternate palette.
-        source.ordinaryPublishedPalette=!input.pistolSlide&&!pose->pistolSlide&&!pose->feed&&!pose->magazine&&
-            !pose->pump&&!pose->bolt&&!pose->reloadPreview&&!pose->previewToken&&!pose->freeRight&&
-            !pose->visibility&&!pose->shellHide&&!pose->belt&&!input.weaponActionsBlocked;
+        // Capture first proves exact final packed bytes against this same
+        // write/rig. The per-exit check also proves every later local choice.
+        source.ordinaryPublishedPalette=originStateReady;
         pose->shot->muzzlePartObservation=muzzle_part_observation::Capture(muzzle_part_observation::Profiles294,
             source,*rig,writes,pose->posed,canonicalPlaced,&pose->shot->muzzlePartDiagnostic.capture);
+        if(const auto& part=pose->shot->muzzlePartObservation;part&&!originExitCompatible(part->bone,part->trackedPart)){
+            pose->shot->muzzlePartObservation.reset();pose->shot->muzzlePartDiagnostic.capture=muzzle_part_observation::Gate::Palette;
+        }
     }
 #endif
     std::shared_ptr<const ShotPublication> preparedShot;
@@ -2513,7 +2590,12 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
         const ShotGuard identity{input.soldier,input.weak,input.weapon,input.ownerGeneration,input.input.spaceGeneration,input.input.generation,input.deadline,true,targets->tracked[0],0,input.weaponActionsBlocked,input.equipmentGeneration,input.nativeEquipment};
         preparedShot=std::make_shared<const ShotPublication>(ShotPublication{*pose->shot,identity,authored.binding,measuredSupport,authoredAim,sightSelection,
             input.input,input.selectedMeshes,handRoleReady&&handBinding?std::optional<math::Matrix4>{handBinding->wristToGrip}:std::nullopt,input.feed,
-            input.sightMode,input.sightModeObservedMs,input.shellPumpObservation,input.sightResolution,input.fixedContainerObservation});
+            input.sightMode,input.sightModeObservedMs,input.shellPumpObservation,input.sightResolution,input.fixedContainerObservation
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+            ,rig->identity,!targets->weaponAttachmentPending,
+            originAuthoredExit||bool(pose->shot->muzzlePartObservation),originAuthoredExit,pose
+#endif
+        });
     }
     // All fallible preparation is complete. PublishTracking deliberately updates
     // shotGuard even while this pose mutex is held, including for calibrated

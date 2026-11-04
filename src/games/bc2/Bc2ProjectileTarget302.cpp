@@ -110,6 +110,145 @@ __declspec(naked) void __cdecl Forward(Frame*) {
     }
 }
 
+OriginSession Origin;
+struct OriginAccess {
+    static thread_local OriginScope* current;
+    static thread_local std::uint64_t lastScope, lastInvocation;
+    static thread_local bool poisoned;
+    static OriginScope* Enter(const Entry& entry) noexcept {
+        auto* s = current;
+        if (!s) return nullptr;
+        if (Depth != 1) {
+            // Nested execution before commit invalidates outstanding admission;
+            // after native starts it must not undo the already committed result.
+            s->ambiguous_ = true;
+            if (!s->nativeStarted_) s->status_ = OriginStatus::Nested;
+            s->attempted_ = true;
+            return nullptr;
+        }
+        if (s->attempted_) return nullptr;
+        s->attempted_ = true; // Even disabled/refused/faulted first entry is final.
+        s->primary_ = entry.args[1];
+        return s;
+    }
+    static bool Live(const OriginScope& s) noexcept {
+        return !poisoned && current == &s && !s.ambiguous_ && Depth == 1 &&
+            s.key_.thread == GetCurrentThreadId() && !s.nativeStarted_;
+    }
+    static bool MemoryExtent(Word primary) noexcept {
+        const auto* tib = reinterpret_cast<const NT_TIB*>(NtCurrentTeb());
+        const auto low = reinterpret_cast<Word>(tib->StackLimit), high = reinterpret_cast<Word>(tib->StackBase);
+        if (primary < 0x10000 || (primary & 15) || primary < low ||
+            std::uint64_t(primary) + 64 > high) return false;
+        MEMORY_BASIC_INFORMATION region{};
+        if (!VirtualQuery(reinterpret_cast<const void*>(primary), &region, sizeof(region)) ||
+            region.State != MEM_COMMIT || (region.Protect & PAGE_GUARD)) return false;
+        const auto protection = region.Protect & 0xff;
+        return (protection == PAGE_READWRITE || protection == PAGE_WRITECOPY ||
+                protection == PAGE_EXECUTE_READWRITE || protection == PAGE_EXECUTE_WRITECOPY) &&
+            reinterpret_cast<std::uintptr_t>(region.BaseAddress) <= primary &&
+            std::uint64_t(primary) + 64 <= reinterpret_cast<std::uintptr_t>(region.BaseAddress) + region.RegionSize;
+    }
+    static bool ReadWord(Word at, Word& value) noexcept {
+        __try { value = *reinterpret_cast<const volatile Word*>(at); return true; }
+        __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+    }
+    static bool WriteWord(Word at, Word value) noexcept {
+        __try { *reinterpret_cast<volatile Word*>(at) = value; return true; }
+        __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+    }
+    static bool Prepare(OriginScope& s, const Entry& entry, OriginAdmission& admission,
+                        origin386::Bits& before) noexcept {
+        __try {
+            if (!Live(s) || s.status_ != OriginStatus::AwaitingEntry) return false;
+            if (Origin.closed.load(std::memory_order_acquire) || !Origin.enabled.load(std::memory_order_acquire)) {
+                s.status_ = OriginStatus::Disabled; return false;
+            }
+            s.status_ = OriginStatus::Refused;
+            const auto& api = Origin.api;
+            if (!api.prepare || !api.validate || !MemoryExtent(s.primary_) ||
+                !api.prepare(api.context, s.key_, entry, admission) || !Live(s) ||
+                admission.key != s.key_ || admission.primary != s.primary_ ||
+                !admission.proof.evidence || !admission.proof.activeExit || !admission.proof.referenceSpace ||
+                admission.proof.originalDeadline <= 0 ||
+                !origin386::BoundedAbsolute(admission.absoluteNativeXyz, admission.positiveNativeBoundBits)) return false;
+            for (unsigned i = 0; i != 3; ++i) {
+                if (!ReadWord(s.primary_ + 0x30 + 4 * i, before[i])) {
+                    s.status_ = OriginStatus::ReadFailure; return false;
+                }
+            }
+            // The retained complete proof and original deadlines remain the
+            // host's job. Recheck session, scope and exact stack extent after it.
+            return api.validate(api.context, s.key_, entry, admission) && Live(s) &&
+                !Origin.closed.load(std::memory_order_acquire) && Origin.enabled.load(std::memory_order_acquire) &&
+                MemoryExtent(s.primary_);
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            s.status_ = OriginStatus::AdmissionFault; return false;
+        }
+    }
+    static void Commit(OriginScope* s, const Entry& entry) {
+        if (!s) return;
+        OriginAdmission admission{};
+        origin386::Bits before{};
+        if (!Prepare(*s, entry, admission, before)) return;
+        // From here until commit/rollback completes: direct same-thread native
+        // stack reads/stores only, no host callback, observer, wait, or allocation.
+        const Word xyz = s->primary_ + 0x30;
+        const auto result = origin386::Commit(before, admission.absoluteNativeXyz,
+            [xyz](unsigned i, Word value) noexcept { return WriteWord(xyz + i * 4, value); },
+            [xyz](unsigned i, Word& value) noexcept { return ReadWord(xyz + i * 4, value); });
+        if (result == origin386::WriteResult::Committed) s->status_ = OriginStatus::Committed;
+        else if (result == origin386::WriteResult::Restored) s->status_ = OriginStatus::WriteRestored;
+        else {
+            s->status_ = OriginStatus::WriteUnresolved;
+            // Cannot forward partially corrupted input or pretend no change.
+            // This distinct NONCONTINUABLE adapter failure occurs BEFORE native
+            // execution; native exceptions after Forward are never caught here.
+            RaiseException(0xe0386001u, EXCEPTION_NONCONTINUABLE, 0, nullptr);
+            __fastfail(FAST_FAIL_INVALID_ARG); // Invalid handler tried to resume.
+        }
+    }
+    static void Starting(OriginScope* s) noexcept {
+        if (s) { s->nativeStarted_ = true; _ReadWriteBarrier(); }
+    }
+};
+thread_local OriginScope* OriginAccess::current = nullptr;
+thread_local std::uint64_t OriginAccess::lastScope = 0, OriginAccess::lastInvocation = 0;
+thread_local bool OriginAccess::poisoned = false;
+
+OriginScope::OriginScope(const OriginKey& key) noexcept : key_(key), previous_(OriginAccess::current), ownerThread_(GetCurrentThreadId()) {
+    const bool fresh = key.scopeSerial > OriginAccess::lastScope ||
+        (key.scopeSerial == OriginAccess::lastScope && key.invocation > OriginAccess::lastInvocation);
+    // Reserve even a refused invocation: correcting missing/thread/lifetime
+    // evidence later cannot reconstruct a fresh scope for that same whole shot.
+    if (fresh && key.scopeSerial && key.invocation) {
+        OriginAccess::lastScope = key.scopeSerial; OriginAccess::lastInvocation = key.invocation;
+    }
+    if (OriginAccess::poisoned || !key.scopeSerial || !key.invocation || !key.primaryLifetime ||
+        key.thread != ownerThread_ || !fresh) {
+        ambiguous_ = true; status_ = OriginStatus::StaleScope;
+    }
+    if (previous_ || Depth) {
+        ambiguous_ = true; status_ = OriginStatus::Nested;
+        if (previous_) {
+            previous_->ambiguous_ = true;
+            if (!previous_->nativeStarted_) previous_->status_ = OriginStatus::Nested;
+        }
+    }
+    OriginAccess::current = this; // Invalid/nested scopes block fallback to outer.
+}
+OriginScope::~OriginScope() noexcept { Close(); }
+void OriginScope::Close() noexcept {
+    // Lifecycle only: never restore P, even after exception, Close, or native
+    // mutation. Bad scope ordering permanently refuses this thread's writes.
+    if (closed_) return;
+    closed_ = true;
+    if (ownerThread_ != GetCurrentThreadId() || OriginAccess::current != this) {
+        OriginAccess::poisoned = true; OriginAccess::current = nullptr; return;
+    }
+    OriginAccess::current = previous_;
+}
+
 Sample CopyBoundary(const ObserverApi& api, const Grant& grant, const Sample* before) noexcept {
     Sample out; out.source = grant.source; out.identity.receiver = grant.receiver;
     out.status = SampleStatus::InvalidArguments;
@@ -302,19 +441,24 @@ static void Observe(Record* row, Boundary boundary) noexcept {
 
 void __cdecl Dispatch(Frame* frame) {
     Record* row = nullptr;
-    bool originalReturned = false;
+    bool originalReturned = false, originalStarted = false;
+    OriginScope* origin = nullptr;
     InterlockedIncrement(&Observer.active);
     ++Depth;
     __try {
+        origin = OriginAccess::Enter(*frame->entry);
         row = Claim(*frame->entry);
         Observe(row, Boundary::Entry);
-        Forward(frame); // Exactly one call, including every refusal/full/busy path.
+        OriginAccess::Commit(origin, *frame->entry);
+        OriginAccess::Starting(origin);
+        originalStarted = true;
+        Forward(frame); // Exactly once after refusal/recovered rollback/commit; never unresolved rollback.
         originalReturned = true;
         if (row) row->originalReturned = true;
         Observe(row, Boundary::Return);
     } __finally {
         if (row) {
-            if (!originalReturned) row->outcome = Outcome::NativeException;
+            if (!originalReturned) row->outcome = originalStarted ? Outcome::NativeException : Outcome::OriginCommitFailure;
             row->complete.store(true, std::memory_order_release);
         }
         --Depth;

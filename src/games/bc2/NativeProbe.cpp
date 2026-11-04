@@ -12,6 +12,9 @@
 #include "Bc2StereoRecovery.h"
 #include "fvr/runtime/RenderOwnerRecovery.h"
 #include "Bc2Gameplay.h"
+#ifdef FVR_BC2_ORIGIN_ENROLLMENT_HEADER
+#include "CandidateOriginEnrollment392.generated.h"
+#endif
 #include "Bc2SelectedKnifeNative.h"
 #include "Bc2ProbeFailure.h"
 #include "Bc2MechanismAudio.h"
@@ -3554,6 +3557,30 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
                 std::memcmp(data.data(),expected,sizeof(expected)-1)==0;
             CloseHandle(file);Require(valid,"Projectile observer request invalid");return true;
         }();
+        const bool projectileOriginRequest=[&]{
+            const auto marker=output.parent_path()/L"projectile-origin.candidate";
+            const auto file=CreateFileW(marker.c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_FLAG_OPEN_REPARSE_POINT,nullptr);
+            if(file==INVALID_HANDLE_VALUE){const auto error=GetLastError();
+                Require(error==ERROR_FILE_NOT_FOUND||error==ERROR_PATH_NOT_FOUND,"Origin candidate request unreadable");return false;}
+            constexpr char expected[]="committed-7155b0-v1\n";
+            BY_HANDLE_FILE_INFORMATION info{};std::array<char,sizeof(expected)> data{};DWORD length=0;
+            const bool valid=GetFileType(file)==FILE_TYPE_DISK&&GetFileInformationByHandle(file,&info)&&
+                !(info.dwFileAttributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT))&&
+                !info.nFileSizeHigh&&info.nFileSizeLow==sizeof(expected)-1&&
+                ReadFile(file,data.data(),DWORD(data.size()),&length,nullptr)&&length==sizeof(expected)-1&&
+                std::memcmp(data.data(),expected,sizeof(expected)-1)==0;
+            CloseHandle(file);Require(valid,"Origin candidate request invalid");return true;
+        }();
+        if(projectileOriginRequest){
+#ifdef FVR_BC2_ORIGIN_ENROLLMENT_HEADER
+            Require((config.flags&0x800u)&&fvr::bc2::gameplay::EnableProjectileOriginCandidate(bytes,pe.image,imageBase,
+                fvr::bc2::origin390_enrollment::Enrollments,true,true),
+                "Origin candidate refused: explicit enrollment, retained host, helper or exact signatures unavailable");
+#else
+            Require(false,"Origin candidate requires a ROOT-reviewed compiled enrollment table");
+#endif
+        }
+
         if(projectileTargetRequest)Require((config.flags&0x800u)&&
             fvr::bc2::gameplay::EnableProjectileTargetObservation(bytes,pe.image,imageBase,true,true),
             "Optional projectile observer refused: private build, retained host, helper, or exact signatures unavailable");

@@ -1283,6 +1283,16 @@ struct ShotScope {Owner owner;unsigned effects=0,serverPlayer=0,serverSoldier=0;
     std::uint64_t invocation=0,observedHelperCallbacks=0;unsigned launchOrdinal=0;
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
     std::uint64_t targetScopeSerial=0;unsigned targetHelperIndex=UINT32_MAX;
+    projectile302::OriginScope* originScope=nullptr;
+    unsigned originContext=0;
+    std::optional<rigPublication::OriginWeaponFrame> originFrame;
+    std::optional<projectile307::Join> originHelper;
+    std::array<unsigned,11> originArguments{};
+    origin388::Once originOnce{};
+    origin388::Request originRequest{};
+    std::optional<origin388::Result> originResult;
+    std::shared_ptr<const SelectedMeshesSnapshot> originSelected;
+    origin388::Gate originGate=origin388::Gate::Disabled;
 #endif
     std::optional<std::array<float,16>> composedOutput;bool compositionWritten=false;
     std::optional<interaction::FiringPoseSample> eventPose;
@@ -1407,11 +1417,215 @@ projectile307::Receiver ProjectileReceiver(const ProjectileReceiverIdentity& r)n
     return {r.receiver,r.vtable,r.target,r.descriptor,r.descriptorVtable};
 }
 std::uint64_t NextProjectileScope()noexcept {
-    if(!projectile302::Observer.enabled.load(std::memory_order_acquire))return 0;
+    if(!projectile302::Observer.enabled.load(std::memory_order_acquire)&&!projectile302::Origin.enabled.load(std::memory_order_acquire))return 0;
     auto previous=projectileTargetScopeSerial.load(std::memory_order_relaxed);
     if(previous!=UINT64_MAX&&projectileTargetScopeSerial.compare_exchange_strong(previous,previous+1,std::memory_order_relaxed))return previous+1;
     return 0; // Exhaustion/contention misses a scope; no spin or serial reuse.
 }
+std::span<const origin388::CandidateOriginEnrollment> originEnrollments;
+std::atomic<std::uint64_t> originPrepared=0,originCommitted=0,originRefused=0;
+std::atomic<unsigned> originLastGate=unsigned(origin388::Gate::Disabled);
+origin388::Owner OriginOwner(const Owner& o)noexcept {
+    return {o.manager,o.player,o.weak,o.soldier,o.controlled,o.entry,o.router,o.cache,o.weapon,o.aim,
+        unsigned(o.role),o.equipment,o.foot};
+}
+const origin388::CandidateOriginEnrollment* FindOriginEnrollment(const rigPublication::WeaponShotFrame& shot)noexcept {
+    const origin388::CandidateOriginEnrollment* found=nullptr;
+    for(const auto& e:originEnrollments){
+        const bool matches=(e.authoredFirearm&&shot.muzzleBinding&&e.authoredFirearm==shot.muzzleBinding->profile)||
+            (e.observedPart&&shot.muzzlePartObservation&&e.observedPart==shot.muzzlePartObservation->profile);
+        if(matches){if(found)return nullptr;found=&e;}
+    }
+    return found;
+}
+void CaptureOriginHelper(ShotScope& current,const ProjectileLaunchRecord& row,unsigned low,unsigned high)noexcept {
+    // This ONE copied helper is scope-owned. No Observer grant, record index,
+    // log lock, diagnostic window or body-observation clock grants authority.
+    if(!current.originScope||current.originScope->Attempted()||current.observedHelperCallbacks!=1||row.ordinal!=1||
+       !row.accepted||!row.before||!row.after||!row.receiverIdentity||!current.nativeConfig||
+       !current.originFrame||serverShotScope!=&current||row.invocation!=current.invocation||
+       row.thread!=GetCurrentThreadId()||row.receiverIdentity->target!=unsigned(image)+projectile307::TargetRva||
+       row.before->composedAddress!=row.after->composedAddress||
+       row.before->secondaryAddress!=row.after->secondaryAddress||row.before->velocityAddress!=row.after->velocityAddress||
+       row.before->contextOutput!=row.after->contextOutput||!current.tokenValid||row.token!=current.shotToken||
+       row.after->composedAddress<low||std::uint64_t(row.after->composedAddress)+64>high||
+       (row.after->composedAddress&15)||!Read(row.entryReturnSlot+4,current.originArguments.data(),sizeof(current.originArguments)))return;
+    const auto words=[](const ProjectileLaunchArguments& a)noexcept {
+        return std::array<unsigned,11>{a.contextOutput,a.composedAddress,a.secondaryAddress,a.velocityAddress,
+            std::bit_cast<unsigned>(a.effectsScalar),a.token,a.primary,a.projectilesPerShell,a.context,a.derivedContext,
+            std::bit_cast<unsigned>(a.multiplier)};
+    };
+    if(current.originArguments!=words(*row.before)||current.originArguments!=words(*row.after))return;
+    projectile307::Join join;
+    join.grant={current.targetScopeSerial,current.invocation,row.ordinal,UINT32_MAX,row.thread,row.token,
+        row.receiverIdentity->receiver,row.receiverIdentity->vtable,row.receiverIdentity->target,
+        projectileLaunchBinding.virtualReturn,row.after->composedAddress+0x30,low,high};
+    join.owner=ProjectileOwner(current.owner);join.config=*current.nativeConfig;join.receiver=ProjectileReceiver(*row.receiverIdentity);
+    join.effects=current.effects;join.configuration=current.configuration;join.serverPlayer=current.serverPlayer;join.serverSoldier=current.serverSoldier;
+    current.originHelper=join;
+}
+bool OriginNativeCurrent(ShotScope& scope,const projectile302::OriginKey& key,const projectile302::Entry& entry,
+    origin388::ProofKey& proof,NativeMuzzleConfig& config)noexcept {
+    if(!enabled.load(std::memory_order_acquire)||!projectile302::Origin.enabled.load(std::memory_order_acquire)||
+       projectile302::Origin.closed.load(std::memory_order_acquire)||serverShotScope!=&scope||
+       !scope.originScope||scope.originScope->Key()!=key||key.invocation!=scope.invocation||
+       key.scopeSerial!=scope.targetScopeSerial||key.primaryLifetime!=scope.invocation||key.thread!=GetCurrentThreadId()||
+       !scope.originHelper||!scope.nativeConfig||!scope.originFrame||!scope.shot||
+       scope.observedHelperCallbacks!=1||scope.launchOrdinal!=1||!scope.tokenValid)return false;
+    const auto& saved=*scope.originHelper;const auto& grant=saved.grant;
+    if(entry.returnAddress!=projectileLaunchBinding.virtualReturn||entry.returnAddress!=grant.returnAddress||
+       entry.registers.ecx!=grant.receiver||entry.args[1]+std::uint64_t(0x30)!=grant.source||
+       std::memcmp(entry.args,scope.originArguments.data(),sizeof(entry.args))||entry.args[5]!=scope.shotToken)return false;
+    unsigned currentToken=0;
+    if(!scope.originContext||std::uint64_t(scope.originContext)+0x20>UINT32_MAX||
+       !Read(scope.originContext+0x1c,&currentToken,4)||currentToken!=scope.shotToken)return false;
+    const auto* tib=reinterpret_cast<const NT_TIB*>(NtCurrentTeb());
+    if(grant.stackLow!=reinterpret_cast<unsigned>(tib->StackLimit)||grant.stackHigh!=reinterpret_cast<unsigned>(tib->StackBase))return false;
+    Owner owner{};
+    const MuzzleReadMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t size){return Read(at,dst,size);}};
+    const auto liveConfig=ReadNativeMuzzleConfig(memory,scope.effects,scope.configuration);
+    if(!Resolve(owner)||!liveConfig)return false;
+    const projectile307::ServerIdentityMemory serverMemory{
+        {nullptr,[](void*,unsigned at,void* dst,std::size_t size){return Read(at,dst,size);}},
+        [](void*,unsigned object,const char* name)noexcept{return Type(object,name);}};
+    const projectile307::ServerIdentityBinding serverBinding{unsigned(image),unsigned(imageSize),
+        unsigned(image)+fireProfile.serverControlledGetter,unsigned(image)+fireProfile.serverContext,
+        unsigned(image)+fireProfile.serverManagerVtable};
+    const auto server=projectile307::ReadServerIdentity(serverMemory,serverBinding,ProjectileOwner(owner),scope.effects);
+    const auto receiver=ReadProjectileReceiverIdentity(entry.registers.ecx,*liveConfig);
+    if(!server||!receiver)return false;
+    projectile307::Current c;
+    c.scopeSerial=key.scopeSerial;c.invocation=key.invocation;c.ordinal=scope.launchOrdinal;c.helperIndex=UINT32_MAX;
+    c.thread=GetCurrentThreadId();c.token=scope.shotToken;c.tokenValid=scope.tokenValid;
+    c.helperAccepted=true; // Only CaptureOriginHelper's accepted branch publishes this saved proof.
+    c.helperReturned=false;c.effects=scope.effects;c.configuration=scope.configuration;
+    c.serverPlayer=server->player;c.serverSoldier=server->soldier;
+    c.scopeOwner=ProjectileOwner(scope.owner);c.resolvedOwner=ProjectileOwner(owner);
+    c.scopeConfig=*scope.nativeConfig;c.resolvedConfig=*liveConfig;c.receiver=ProjectileReceiver(*receiver);
+    if(!projectile307::Matches(saved,grant,c)||!rigPublication::OriginWeaponFrameCurrent(*scope.originFrame))return false;
+    const auto& shot=scope.originFrame->shot;
+    if(!shot.aimEvidence)return false;
+    const auto& aim=*shot.aimEvidence;
+    proof.owner=OriginOwner(owner);proof.scopeSerial=key.scopeSerial;proof.invocation=key.invocation;
+    proof.callerLifetime=key.primaryLifetime;
+    proof.publicationSerial=reinterpret_cast<std::uintptr_t>(scope.originFrame->publication.get());
+    proof.generation=shot.generation;proof.ownerGeneration=shot.ownerGeneration;
+    proof.equipmentGeneration=scope.originFrame->equipmentGeneration;proof.space=shot.space;
+    proof.configurationSequence=aim.configurationSequence;proof.thread=key.thread;proof.token=scope.shotToken;
+    proof.sourceP=entry.args[1];proof.callerReturn=entry.returnAddress;proof.target=receiver->target;
+    proof.effects=scope.effects;proof.configuration=scope.configuration;proof.firingData=liveConfig->firingData;
+    proof.deadlineQpc=shot.deadline;proof.inputDeadlineNs=HandNanos(shot.deadline);
+    proof.configurationDeadlineNs=aim.configurationDeadlineNs;proof.tokenValid=scope.tokenValid;
+    config=*liveConfig;
+    LARGE_INTEGER now{};
+    return serverShotScope==&scope&&QueryPerformanceCounter(&now)&&now.QuadPart<proof.deadlineQpc&&
+        HandNanos(now.QuadPart)<proof.inputDeadlineNs&&HandNanos(now.QuadPart)<proof.configurationDeadlineNs;
+}
+bool OriginSelectedCurrent(ShotScope& scope,const origin388::CandidateOriginEnrollment& enrollment,std::int64_t now)noexcept {
+    const auto& source=*scope.originFrame;const auto& shot=source.shot;
+    if(!shot.aimEvidence||!source.selected)return false;
+    const auto& aim=*shot.aimEvidence;
+    const auto& original=*source.selected;
+    const ReloadStateOwner owner{scope.owner.player,scope.owner.soldier,scope.owner.weak,scope.owner.weapon,
+        shot.ownerGeneration,source.equipmentGeneration,shot.space};
+    const auto selected=ReadSelectedMeshes(owner,now);
+    if(!selected||!selected->configurationPathVerified||!selected->configurationPathPointer||
+       selected->configurationPath!=aim.configurationPath||selected->weaponData!=scope.owner.equipment.data||
+       !selected->stateCount||selected->stateCount>selected->states.size())return false;
+    if(original.sequence!=aim.configurationSequence||original.deadlineNs!=aim.configurationDeadlineNs||
+       !authored_grip_detail::Fresh(original,now)||original.owner!=selected->owner||selected->sequence<original.sequence||
+       selected->observedNs<original.observedNs||selected->weaponData!=original.weaponData||
+       selected->inventory!=original.inventory||selected->selectedSlot!=original.selectedSlot||
+       selected->stateTypeInfo!=original.stateTypeInfo||selected->meshTypeInfo!=original.meshTypeInfo||
+       selected->weaponName!=original.weaponName||selected->stateCount!=original.stateCount||
+       selected->soleConfiguredArray!=original.soleConfiguredArray||selected->states!=original.states||
+       selected->configurationPathPointer!=original.configurationPathPointer||selected->configurationPath!=original.configurationPath)return false;
+    // Active-exit meaning comes from the reviewed enrollment. Current native
+    // selection/configuration + firing admission establishes its ordinary state;
+    // configured arrays alone never claim an active-state/GPU observation.
+    const auto mesh=enrollment.authoredFirearm?enrollment.authoredFirearm->meshPath:enrollment.observedPart->mesh;
+    unsigned matches=0;
+    for(unsigned s=0;s<selected->stateCount;++s){const auto& state=selected->states[s];
+        if(state.state!=enrollment.activeState||state.count>state.meshes.size())continue;
+        for(unsigned i=0;i<state.count;++i)
+            if(authored_grip_detail::Text(state.meshes[i].assetPath)==mesh)++matches;
+    }
+    if(matches!=1)return false;
+    scope.originSelected=selected;return true;
+}
+bool __cdecl PrepareNativeOrigin(void*,const projectile302::OriginKey& key,const projectile302::Entry& entry,
+    projectile302::OriginAdmission& admission)noexcept {
+    auto* scope=serverShotScope;
+    if(!scope||scope->originOnce.attempted||!scope->originFrame)return false;
+    auto& request=scope->originRequest;
+    if(!OriginNativeCurrent(*scope,key,entry,request.captured,request.currentConfig))return false;
+    request.current=request.captured;request.capturedConfig=*scope->nativeConfig;
+    const auto& frame=*scope->originFrame;const auto& shot=frame.shot;
+    request.enrollment=FindOriginEnrollment(shot);
+    if(!request.enrollment)return false;
+    LARGE_INTEGER now{};if(!QueryPerformanceCounter(&now))return false;
+    if(!OriginSelectedCurrent(*scope,*request.enrollment,HandNanos(now.QuadPart)))return false;
+    request.capabilityEnabled=projectile302::Origin.enabled.load(std::memory_order_acquire);
+    // 386 calls Prepare only on its first entry and suppresses nested ambiguity.
+    request.firstTargetEntry=scope->originScope->Attempted()&&scope->originScope->Primary()==entry.args[1];
+    request.nestedOrAmbiguous=scope->originScope->Status()==projectile302::OriginStatus::Nested;
+    auto& evidence=request.evidence;evidence.proof=request.captured;
+    evidence.publication=muzzle_part_observation::SourceFromShot(shot,frame.equipmentGeneration,now.QuadPart,HandNanos(now.QuadPart));
+    evidence.publication.attachmentReady=frame.attachmentReady;
+    evidence.publication.ordinaryPublishedPalette=frame.ordinaryPalette;
+    evidence.rig=frame.rig;evidence.currentSelected=scope->originSelected.get();
+    evidence.trackedWeapon=shot.trackedWeapon;evidence.trackedFlash=shot.trackedFlash;
+    if(request.enrollment->authoredFirearm)evidence.authoredFirearm=shot.muzzleBinding?&*shot.muzzleBinding:nullptr;
+    else evidence.observedPart=shot.muzzlePartObservation?&*shot.muzzlePartObservation:nullptr;
+    evidence.activeState=request.enrollment->activeState;
+    evidence.firingAllowed=rigPublication::OriginWeaponFrameCurrent(frame);
+    evidence.exitVisible=frame.ordinaryPalette&&(request.enrollment->observedPart?bool(evidence.observedPart):frame.exitVisible);
+    request.coordinate.proof=request.captured;request.coordinate.boundary=request.enrollment->boundary;
+    request.coordinate.unitsPerMetre=shot.unitsPerMetre;
+    if(!Read(entry.args[1]+0x30,request.coordinate.nativeInputXYZ.data(),12))return false;
+    scope->originResult=origin388::PrepareOriginOnce(scope->originOnce,request,&scope->originGate);
+    originLastGate.store(unsigned(scope->originGate),std::memory_order_relaxed);
+    if(!scope->originResult)return false;
+    admission.key=key;admission.primary=entry.args[1];
+    for(unsigned i=0;i<3;++i)admission.absoluteNativeXyz[i]=std::bit_cast<unsigned>(scope->originResult->nativeXYZ[i]);
+    admission.positiveNativeBoundBits=std::bit_cast<unsigned>(request.enrollment->maximumAbsoluteWorldUnits);
+    admission.proof={request.captured.publicationSerial,reinterpret_cast<std::uintptr_t>(request.enrollment),shot.space,shot.deadline};
+    ++originPrepared;return true;
+}
+bool __cdecl ValidateNativeOrigin(void*,const projectile302::OriginKey& key,const projectile302::Entry& entry,
+    const projectile302::OriginAdmission& admission)noexcept {
+    auto* scope=serverShotScope;
+    if(!scope||!scope->originOnce.attempted||!scope->originResult||!scope->originFrame)return false;
+    const auto& saved=scope->originRequest;const auto& result=*scope->originResult;
+    origin388::ProofKey current{};NativeMuzzleConfig config{};
+    if(!OriginNativeCurrent(*scope,key,entry,current,config)||current!=saved.captured||config!=saved.capturedConfig||
+       admission.key!=key||admission.primary!=current.sourceP||result.proof!=current||result.enrollment!=saved.enrollment||
+       admission.proof.evidence!=current.publicationSerial||admission.proof.activeExit!=reinterpret_cast<std::uintptr_t>(saved.enrollment)||
+       admission.proof.referenceSpace!=current.space||admission.proof.originalDeadline!=current.deadlineQpc||
+       admission.positiveNativeBoundBits!=std::bit_cast<unsigned>(saved.enrollment->maximumAbsoluteWorldUnits))return false;
+    for(unsigned i=0;i<3;++i)if(admission.absoluteNativeXyz[i]!=std::bit_cast<unsigned>(result.nativeXYZ[i]))return false;
+    std::array<unsigned,3> before{};
+    if(!Read(entry.args[1]+0x30,before.data(),sizeof(before)))return false;
+    for(unsigned i=0;i<3;++i)if(before[i]!=std::bit_cast<unsigned>(saved.coordinate.nativeInputXYZ[i]))return false;
+    LARGE_INTEGER now{};if(!QueryPerformanceCounter(&now))return false;
+    if(!OriginSelectedCurrent(*scope,*saved.enrollment,HandNanos(now.QuadPart)))return false;
+    // Recheck complete current state without calling PrepareOriginOnce again or
+    // resetting Once. Geometry is retained immutable, never recomputed from a
+    // newer render frame; every clock still uses the captured original deadline.
+    auto publication=saved.evidence.publication;publication.nowQpc=now.QuadPart;publication.nowNs=HandNanos(now.QuadPart);
+    const bool source=origin388::detail::Publication(publication,saved.captured)&&
+        rigPublication::OriginWeaponFrameCurrent(*scope->originFrame);
+    const auto& shot=scope->originFrame->shot;
+    const bool binding=saved.enrollment->authoredFirearm?
+        (shot.muzzleBinding&&MuzzleBindingCurrent(*shot.muzzleBinding,scope->originSelected.get(),scope->owner.equipment,
+            {scope->owner.soldier,scope->owner.weak,shot.ownerGeneration,scope->originFrame->equipmentGeneration,
+             shot.space,shot.generation,current.inputDeadlineNs},publication.nowNs)):
+        (shot.muzzlePartObservation&&muzzle_part_observation::Current(*shot.muzzlePartObservation,publication));
+    LARGE_INTEGER end{};
+    return source&&binding&&serverShotScope==scope&&QueryPerformanceCounter(&end)&&end.QuadPart<current.deadlineQpc&&
+        HandNanos(end.QuadPart)<current.inputDeadlineNs&&HandNanos(end.QuadPart)<current.configurationDeadlineNs;
+}
+
 bool ProjectileWindow(bool firstAcceptedHelper=false)noexcept {
     if(!enabled.load(std::memory_order_acquire)||!projectile302::Observer.enabled.load(std::memory_order_acquire))return false;
     LARGE_INTEGER now{};if(!QueryPerformanceCounter(&now))return false;
@@ -1496,13 +1710,19 @@ void __cdecl ReceiverEntryDispatch(projectile_entry::Invocation* invocation){
     const auto caller=entry.returnAddress;auto* current=serverShotScope;
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
     // Even an unrecorded/rejected newer helper invalidates the old same-scope grant.
-    if(current)current->targetHelperIndex=UINT32_MAX;
+    if(current){current->targetHelperIndex=UINT32_MAX;current->originHelper.reset();}
 #endif
     if(!enabled.load(std::memory_order_acquire)||!projectileLaunchBinding.verified||!current||
        caller!=projectileLaunchBinding.helperReturn||entry.registers.ecx!=current->effects){original();return;}
     ++projectileLaunchCalls;
     ++current->observedHelperCallbacks;
-    if(projectileLaunchCount.load(std::memory_order_relaxed)>=projectileLaunchRecords.size()||current->launchOrdinal==UINT32_MAX){++projectileLaunchDropped;original();return;}
+    const bool recordDiagnostic=projectileLaunchCount.load(std::memory_order_relaxed)<projectileLaunchRecords.size();
+    bool captureOrigin=false;
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+    captureOrigin=projectile302::Origin.enabled.load(std::memory_order_acquire)&&current->originScope&&
+        !current->originScope->Attempted()&&current->observedHelperCallbacks==1;
+#endif
+    if((!recordDiagnostic&&!captureOrigin)||current->launchOrdinal==UINT32_MAX){++projectileLaunchDropped;original();return;}
     const auto returnSlot=unsigned(entry.ReturnSlot());
     const auto* tib=reinterpret_cast<const NT_TIB*>(NtCurrentTeb());
     const auto low=reinterpret_cast<unsigned>(tib->StackLimit),high=reinterpret_cast<unsigned>(tib->StackBase);
@@ -1551,6 +1771,11 @@ void __cdecl ReceiverEntryDispatch(projectile_entry::Invocation* invocation){
                    !Resolve(still)||still!=now||!stillConfig||*stillConfig!=*config)row.receiverIdentity.reset();
             }
         }
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+        // Functional proof is copied before any diagnostic lock/budget decision.
+        if(captureOrigin)CaptureOriginHelper(*current,row,low,high);
+#endif
+        if(!recordDiagnostic){++projectileLaunchDropped;return;}
         if(projectileLaunchGate.test_and_set(std::memory_order_acquire)){++projectileLaunchBusy;return;}
         const auto index=projectileLaunchCount.load(std::memory_order_relaxed);
         if(index<projectileLaunchRecords.size()){
@@ -1563,8 +1788,8 @@ void __cdecl ReceiverEntryDispatch(projectile_entry::Invocation* invocation){
         projectileLaunchGate.clear(std::memory_order_release);
     });
 }
-std::uintptr_t __fastcall ServerShootHook(void* self,void*,void* config,float dt,unsigned primary,void* context){
-    Callback callback;Owner owner{};const auto effects=reinterpret_cast<unsigned>(self);
+std::uintptr_t ServerShootBody(void* self,void* config,float dt,unsigned primary,void* context,ShotScope& local){
+    Owner owner{};const auto effects=reinterpret_cast<unsigned>(self);
     const auto passthrough=[&]{return serverShootOriginal(self,config,dt,primary,context);};
     if(!enabled.load(std::memory_order_acquire)||!Resolve(owner))return passthrough();
     ObserveAttached(owner,AttachedPhase::ServerFire,effects,reinterpret_cast<unsigned>(config),reinterpret_cast<unsigned>(_ReturnAddress()));
@@ -1575,21 +1800,55 @@ std::uintptr_t __fastcall ServerShootHook(void* self,void*,void* config,float dt
     if(!Type(soldier,"ServerSoldierEntity")||U32(soldier+0xc)!=U32(owner.soldier+0xc)||U32(callbackObject+4)!=data||U32(player+0xc6c)!=soldier)return passthrough();
     const PlayerPairMemory memory{nullptr,[](void*,unsigned at,void* out,std::size_t n){return Read(at,out,n);}};
     if(!MatchServerPlayer(memory,unsigned(image)+fireProfile.serverContext,unsigned(image)+fireProfile.serverManagerVtable,owner.player,player))return passthrough();
-    ShotScope local{owner,effects,player,soldier};local.configuration=reinterpret_cast<unsigned>(config);
-    local.invocation=shotInvocationSerial.fetch_add(1,std::memory_order_relaxed)+1;
+    local.owner=owner;local.effects=effects;local.serverPlayer=player;local.serverSoldier=soldier;
+    local.configuration=reinterpret_cast<unsigned>(config);
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
-    local.targetScopeSerial=NextProjectileScope();
+    local.targetScopeSerial=local.originScope->Key().scopeSerial;local.originContext=reinterpret_cast<unsigned>(context);
 #endif
     local.shot=rigPublication::ReadWeaponShotFrame(owner.soldier,owner.weak,owner.weapon);
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+    if(projectile302::Origin.enabled.load(std::memory_order_acquire)){
+        local.originFrame=rigPublication::ReadOriginWeaponFrame(owner.soldier,owner.weak,owner.weapon);
+        if(local.originFrame)local.shot=local.originFrame->shot;
+    }
+#endif
     local.supported=SupportedMuzzleShot(owner,effects,local.configuration,local.shot,local.nativeConfig);
     local.tokenValid=Read(reinterpret_cast<unsigned>(context)+0x1c,&local.shotToken,4);
-    auto* previous=serverShotScope;serverShotScope=&local;struct Restore {ShotScope* previous;~Restore(){serverShotScope=previous;}} restore{previous};
+    serverShotScope=&local;
     ++serverFireScopeStarts;
     LARGE_INTEGER begin{},end{};if(!QueryPerformanceCounter(&begin))begin.QuadPart=0;
     const auto result=passthrough();if(!QueryPerformanceCounter(&end))end.QuadPart=0;
     const auto returnedOrdinal=serverFireScopeReturns.fetch_add(1,std::memory_order_relaxed)+1;
     MarkServerShootReturned(local.invocation);ObserveServerFireReturned(local,begin.QuadPart,end.QuadPart,returnedOrdinal);return result;
 }
+std::uintptr_t ServerShootFinally(void* self,void* config,float dt,unsigned primary,void* context,ShotScope* local,
+    ShotScope* previous){
+    ++active;serverShotScope=nullptr;
+    __try {return ServerShootBody(self,config,dt,primary,context,*local);}
+    __finally {
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+        if(local->originScope){
+            if(projectileTargetLife.originRequested){
+                if(local->originScope->Status()==projectile302::OriginStatus::Committed)++originCommitted;
+                else if(local->originScope->Attempted())++originRefused;
+            }
+            local->originScope->Close(); // Lifecycle only; never restore committed native P.
+        }
+        local->originSelected.reset();local->originFrame.reset();
+#endif
+        local->shot.reset();serverShotScope=previous;--active;
+    }
+}
+std::uintptr_t __fastcall ServerShootHook(void* self,void*,void* config,float dt,unsigned primary,void* context){
+    ShotScope local{};local.invocation=shotInvocationSerial.fetch_add(1,std::memory_order_relaxed)+1;
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+    // Before ANY original call, including disabled/refused/nested passthroughs.
+    const projectile302::OriginKey key{NextProjectileScope(),local.invocation,local.invocation,GetCurrentThreadId()};
+    projectile302::OriginScope origin(key);local.originScope=&origin;
+#endif
+    return ServerShootFinally(self,config,dt,primary,context,&local,serverShotScope);
+}
+
 std::uintptr_t __fastcall ClientShootHook(void* self,void*,void* config,float dt,unsigned primary,void* context){
     Callback callback;Owner owner{};const auto effects=reinterpret_cast<unsigned>(self);
     const bool resolved=enabled.load(std::memory_order_acquire)&&Resolve(owner);
@@ -4493,11 +4752,16 @@ void ReportVehicleCameraEvidence(std::ostream& out){
         out<<",\"planned_eyes\":[";matrix(r.planned[0]);out<<',';matrix(r.planned[1]);out<<"],\"applied_eyes\":[";matrix(r.applied[0]);out<<',';matrix(r.applied[1]);out<<"]}";
     }out<<']';out.precision(precision);
 }
-bool EnableProjectileTargetObservation(std::span<const std::byte> bytes,const engine::PeImage& pe,
-    std::uintptr_t base,bool explicitRequest,bool processRetainedProbe)noexcept {
+bool InstallProjectileTarget(std::span<const std::byte> bytes,const engine::PeImage& pe,
+    std::uintptr_t base,bool observe,bool originRequest,bool processRetainedProbe)noexcept {
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
     using namespace projectile307;
-    if(!explicitRequest)return false;
+    if(!observe&&!originRequest)return false;
+    if(projectileTargetLife.created&&!projectileTargetLife.started.load()&&!projectileTargetLife.closed.load()){
+        if(base!=image||!processRetainedProbe)return false;
+        if(observe)projectileTargetLife.observerRequested=true;
+        return !originRequest||projectileTargetLife.AttachOrigin(projectile302::Origin,{nullptr,PrepareNativeOrigin,ValidateNativeOrigin});
+    }
     if(projectileTargetLife.attempted||projectileTargetLife.closed.load())return false;
     const bool prerequisites=processRetainedProbe&&!enabled.load(std::memory_order_acquire)&&hooks[0]&&hooks[1]&&hooks[13]&&
         !hooks[14]&&!projectile302::Original&&base==image&&image==0x400000&&
@@ -4522,10 +4786,38 @@ bool EnableProjectileTargetObservation(std::span<const std::byte> bytes,const en
     const projectile302::ObserverApi observerApi{nullptr,
         [](void*,unsigned at,void* dst,std::size_t size)noexcept{return Read(at,dst,size);},ValidateProjectileTarget,true};
     // Shared installer publishes immutable dependencies before the one global enable.
-    return projectileTargetLife.Install(true,processRetainedProbe,signatures,prerequisites,prerequisites?handFrequency*15:0,
-        projectile302::Observer,projectile302::Original,hooks[14],reinterpret_cast<void*>(base+TargetRva),observerApi,hookApi);
+    if(!projectileTargetLife.Install(true,processRetainedProbe,signatures,prerequisites,prerequisites?handFrequency*15:0,
+        projectile302::Observer,projectile302::Original,hooks[14],reinterpret_cast<void*>(base+TargetRva),observerApi,hookApi))return false;
+    projectileTargetLife.observerRequested=observe;
+    return !originRequest||projectileTargetLife.AttachOrigin(projectile302::Origin,{nullptr,PrepareNativeOrigin,ValidateNativeOrigin});
 #else
-    (void)bytes;(void)pe;(void)base;(void)explicitRequest;(void)processRetainedProbe;return false;
+    (void)bytes;(void)pe;(void)base;(void)observe;(void)originRequest;(void)processRetainedProbe;return false;
+#endif
+}
+
+bool EnableProjectileTargetObservation(std::span<const std::byte> bytes,const engine::PeImage& pe,
+    std::uintptr_t base,bool explicitRequest,bool processRetainedProbe)noexcept {
+    return explicitRequest&&InstallProjectileTarget(bytes,pe,base,true,false,processRetainedProbe);
+}
+bool EnableProjectileOriginCandidate(std::span<const std::byte> bytes,const engine::PeImage& pe,
+    std::uintptr_t base,std::span<const origin388::CandidateOriginEnrollment> enrollments,
+    bool explicitRequest,bool processRetainedProbe)noexcept {
+#ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+    if(!explicitRequest||!processRetainedProbe||enabled.load()||!hooks[11]||enrollments.empty()||
+       !originEnrollments.empty()||projectile302::Origin.closed.load()||projectileTargetLife.started.load())return false;
+    for(const auto& e:enrollments){
+        if(e.admission!=origin388::Admission::Candidate||bool(e.observedPart)==bool(e.authoredFirearm)||
+           e.activeStateEvidence.empty()||e.coordinateBoundaryEvidence.empty()||e.activeState==UINT32_MAX||
+           e.boundary!=origin388::Boundary::AbsoluteNativeWorldRh||!std::isfinite(e.maximumDisplacementMetres)||
+           e.maximumDisplacementMetres<=0||e.maximumDisplacementMetres>2||!std::isfinite(e.maximumAbsoluteWorldUnits)||
+           e.maximumAbsoluteWorldUnits<=0)return false;
+    }
+    // Process-retained, compiled data only; the constant request marker carries
+    // no address, transform, enrollment tuple, or runtime-native write value.
+    originEnrollments=enrollments;
+    return InstallProjectileTarget(bytes,pe,base,false,true,processRetainedProbe);
+#else
+    (void)bytes;(void)pe;(void)base;(void)enrollments;(void)explicitRequest;(void)processRetainedProbe;return false;
 #endif
 }
 
@@ -4554,6 +4846,7 @@ void Start()noexcept {
 bool PrepareSessionStop()noexcept {
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
     // Close even if existing gameplay retirement refuses. Retain all dependencies.
+    projectile302::Origin.Close();
     projectileTargetLife.Close();
 #endif
 #ifdef FVR_BC2_PLAYER_KNIFE_NORMAL
@@ -5001,6 +5294,10 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
     out<<"}},\"projectile_target_observation\":";
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
     projectile307::Report(out,projectileTargetLife,projectile302::Observer);
+    out<<",\"committed_origin390\":{\"requested\":"<<projectileTargetLife.originRequested
+       <<",\"enrollments\":"<<originEnrollments.size()<<",\"prepared\":"<<originPrepared.load()
+       <<",\"committed_scopes\":"<<originCommitted.load()<<",\"refused_scopes\":"<<originRefused.load()
+       <<",\"last_gate\":"<<originLastGate.load()<<",\"native_result_qualified\":false}";
     out<<",\"projectile_target_refused\":"<<projectileTargetRefused.load()<<",\"projectile_target_window_refused\":"<<projectileTargetExpired.load();
 #else
     out<<"{\"compiled\":false,\"requested\":false,\"read_only\":true}";

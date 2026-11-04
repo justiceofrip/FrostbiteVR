@@ -40,7 +40,7 @@ bool Lifecycle::Install(bool explicitRequest,bool retainedHost,bool signatures,b
     // Retain successful creation even if an invalid backend omits that pointer:
     // never enable/reinstall it or claim an uncreated hook safe to reclaim.
     hooks=hookApi;session=&observer;entry=target;created=true;
-    original=reinterpret_cast<projectile302::MachineEntry>(trampoline);observer.api=api;slot=target;
+    original=reinterpret_cast<projectile302::MachineEntry>(trampoline);observer.api=api;slot=target;observerRequested=true;
     if(!original){Close();return false;}return true;
 }
 static bool Digest(std::span<const std::byte> bytes,std::string_view expected)noexcept {
@@ -77,7 +77,7 @@ void Report(std::ostream& out,const Lifecycle& life,projectile302::Session& sess
         }
         ReleaseSRWLockExclusive(&session.gate);
     }
-    out<<"{\"schema\":1,\"compiled\":true,\"read_only\":true,\"requested\":"<<life.requested
+    out<<"{\"schema\":2,\"compiled\":true,\"read_only\":"<<!life.originRequested<<",\"observer_requested\":"<<life.observerRequested<<",\"origin_requested\":"<<life.originRequested<<",\"requested\":"<<life.requested
        <<",\"attempted\":"<<life.attempted<<",\"created\":"<<life.created<<",\"closed\":"<<life.closed.load()
        <<",\"disabled\":"<<life.disabled<<",\"registered_callbacks_drained\":"<<life.drained
        <<",\"trampoline_retained_until_process_exit\":true,\"hook_removed\":false,\"snapshot_available\":"<<snapshot
@@ -91,7 +91,7 @@ void Report(std::ostream& out,const Lifecycle& life,projectile302::Session& sess
        <<",\"producer_diagnostics\":"<<session.api.producerDiagnostics
        <<",\"factory_return_observed\":false,\"primary_nonretention_proven\":false"
        <<",\"sample_status_order\":[\"Unattempted\",\"Complete\",\"InvalidArguments\",\"ReadFailure\",\"IdentityChanged\",\"Torn\"]"
-       <<",\"outcome_order\":[\"Offered\",\"RejectedIdentity\",\"ObserverFault\",\"EntryReadFailure\",\"ReturnReadFailure\",\"StorageIdentityChanged\",\"Torn\",\"NativeException\",\"ReturnedChanged\",\"ReturnedUnchanged\"],\"records\":[";
+       <<",\"outcome_order\":[\"Offered\",\"RejectedIdentity\",\"ObserverFault\",\"EntryReadFailure\",\"ReturnReadFailure\",\"StorageIdentityChanged\",\"Torn\",\"NativeException\",\"ReturnedChanged\",\"ReturnedUnchanged\",\"OriginCommitFailure\"],\"records\":[";
     const auto xyz=[&](const std::array<Word,3>& bits,bool read){
         out<<"{\"read\":"<<read<<",\"bits\":["<<bits[0]<<','<<bits[1]<<','<<bits[2]<<"],\"finite_xyz\":";
         const std::array<float,3> values{std::bit_cast<float>(bits[0]),std::bit_cast<float>(bits[1]),std::bit_cast<float>(bits[2])};

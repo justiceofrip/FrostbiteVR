@@ -71,6 +71,12 @@ struct HookApi {
 };
 struct Lifecycle {
     bool requested=false,attempted=false,created=false,disabled=false,drained=false;
+    bool observerRequested=false,originRequested=false;
+    projectile302::OriginSession* origin=nullptr;
+    bool AttachOrigin(projectile302::OriginSession& value,const projectile302::OriginApi& api)noexcept {
+        if(!created||started.load()||closed.load()||origin||value.closed.load()||value.enabled.load()||!api.prepare||!api.validate)return false;
+        value.api=api;origin=&value;originRequested=true;return true;
+    }
     std::atomic<bool> closed{false},started{false};
     std::atomic<std::int64_t> deadline{0};
     std::int64_t duration=0; // Immutable before global hook enable; QPC ticks.
@@ -90,7 +96,8 @@ struct Lifecycle {
     bool Start()noexcept {
         bool expected=false;
         if(!created||!session||closed.load(std::memory_order_acquire)||!started.compare_exchange_strong(expected,true))return false;
-        session->enabled.store(true,std::memory_order_release);return true;
+        session->enabled.store(observerRequested,std::memory_order_release);
+        if(origin)origin->enabled.store(originRequested,std::memory_order_release);return true;
     }
     // Anchor once to the first eligible accepted helper; never renew per row/frame.
     bool Window(std::int64_t now,bool firstAcceptedHelper=false)noexcept {
@@ -103,7 +110,7 @@ struct Lifecycle {
         return end>0&&now>=end-duration&&now<end;
     }
     void Close()noexcept {
-        closed.store(true,std::memory_order_release);if(session)session->Close();
+        closed.store(true,std::memory_order_release);if(origin)origin->Close();if(session)session->Close();
     }
     bool Disable()noexcept {
         Close();if(!created)return true;
