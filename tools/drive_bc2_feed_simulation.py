@@ -11,6 +11,10 @@ Plans and simulator acknowledgements never establish native reload acceptance.
 """
 
 import argparse
+from collections import deque
+from contextlib import contextmanager
+from contextvars import ContextVar
+from functools import wraps
 import ctypes
 from ctypes import wintypes
 import datetime
@@ -39,6 +43,8 @@ SNAPSHOT_PERIOD = 100_000_000
 SNAPSHOT_TIMEOUT = 250_000_000
 SNAPSHOT_REFRESH_BUDGET = 500_000_000
 MAX_SNAPSHOT_REFRESHES = 2
+MAX_RECEIVE_TIMING_SPANS = 24
+_snapshot_json_timing = ContextVar('snapshot_json_timing', default=None)
 REFUSAL = planner.Refusal
 require = planner.require
 integer = planner.integer
@@ -125,6 +131,9 @@ def read_bytes(path, maximum):
 
 def read_json(path, maximum=128 * 1024):
     data = read_bytes(path, maximum)
+    trace = _snapshot_json_timing.get()
+    if trace is not None:
+        trace.phase("snapshot_parse")
     def invalid(value):
         raise REFUSAL("invalid JSON constant: " + value)
     return json.loads(data.decode("utf-8-sig"), parse_constant=invalid), data
@@ -301,7 +310,128 @@ def stable_snapshot(before, after):
             "reference/head/right-hand/weapon/body basis changed")
 
 
+class ReceiveTiming:
+    """Passive receive spans, using diagnostic267's first-plus-bounded-tail design.
+
+    Detailed AckReadTrace remains in drive_bc2_reload_stimulus.py unchanged.
+    These spans locate shared Driver receive/ACK gaps; they grant no authority.
+    Counters/maxima include evicted spans. No JSON or disk I/O occurs here.
+    """
+    def __init__(self, requested_ns, published_ns, nonce, now):
+        self.name, self.at = "before_first_poll", requested_ns
+        self.frozen = False
+        self.reset(requested_ns, published_ns, nonce, now, initial=True)
+
+    def reset(self, requested_ns, published_ns, nonce, now, initial=False):
+        self.requested_ns, self.published_ns, self.nonce = requested_ns, published_ns, nonce
+        self.first, self.tail = None, deque(maxlen=MAX_RECEIVE_TIMING_SPANS - 1)
+        self.count, self.phase_ns, self.last_error = 0, {}, None
+        self.last_nonce = None
+        self.timeout_evaluated_ns = None
+        if not initial:
+            self.at = now
+
+    def phase(self, name, now=None):
+        previous = self.name
+        if self.frozen:
+            return previous
+        now = time.perf_counter_ns() if now is None else now
+        elapsed = now - self.at
+        row = dict(phase=previous, startedNs=self.at, finishedNs=now)
+        self.count += 1
+        if self.first is None:
+            self.first = row
+        else:
+            self.tail.append(row)
+        summary = self.phase_ns.setdefault(previous, dict(count=0, totalNs=0, maxNs=-1))
+        summary["count"] += 1
+        summary["totalNs"] += elapsed
+        if elapsed > summary["maxNs"]:
+            summary.update(maxNs=elapsed, maxStartedNs=self.at, maxFinishedNs=now)
+        self.name, self.at = name, now
+        return previous
+
+    def error(self, error):
+        if not self.frozen and self.last_error is None:
+            # First phase error since this request; it may be a tolerated partial
+            # sidecar. The existing result keeps the terminal refusal separately.
+            self.last_error = dict(phase=self.name, atNs=time.perf_counter_ns(), kind=type(error).__name__,
+                                   error=str(error)[:256], winerror=getattr(error, "winerror", None))
+
+    def freeze(self, pending_command, sequence):
+        if not self.frozen:
+            self.phase("failed")
+            self.pending_command, self.sequence = pending_command, sequence
+            self.frozen = True
+
+    def report(self):
+        rows = ([] if self.first is None else [self.first]) + list(self.tail)
+        return dict(schema="bc2vr.receive-timing-failure.v1", clock="perf_counter_ns",
+                    nonce=self.nonce, requestStartedNs=self.requested_ns,
+                    requestPublishedNs=self.published_ns,
+                    originalResponseDeadlineNs=self.requested_ns + SNAPSHOT_TIMEOUT,
+                    timeoutEvaluatedNs=self.timeout_evaluated_ns,
+                    frozenNs=self.at, pendingCommand=self.pending_command, sequence=self.sequence,
+                    lastObservedResponseNonce=self.last_nonce, firstPhaseError=self.last_error,
+                    spanCount=self.count, droppedSpans=self.count-len(rows),
+                    phaseNs=self.phase_ns, spans=rows)
+
+
+def receive_timed(name):
+    def decorate(function):
+        @wraps(function)
+        def call(self, *args, **kwargs):
+            with self.receive_timing_scope(name):
+                return function(self, *args, **kwargs)
+        return call
+    return decorate
+
+
 class Driver:
+    @contextmanager
+    def receive_timing_scope(self, name):
+        trace = getattr(self, "_receive_timing", None)
+        if trace is None:
+            now = time.perf_counter_ns()
+            trace = self._receive_timing = ReceiveTiming(
+                getattr(self, "last_request", now) or now,
+                getattr(self, "last_request_published", None),
+                getattr(self, "pending_nonce", None), now)
+        previous = trace.phase(name)
+        try:
+            yield trace
+        except BaseException as error:
+            trace.error(error)
+            raise
+        finally:
+            trace.phase("between_calls" if previous == "before_first_poll" else previous)
+
+    def receive_timing_call(self, name, function, *args):
+        with self.receive_timing_scope(name):
+            return function(*args)
+
+    def receive_snapshot_json(self):
+        with self.receive_timing_scope("snapshot_read") as trace:
+            token = _snapshot_json_timing.set(trace)
+            try:
+                result = read_json(self.snapshot_path, planner.SNAPSHOT_LIMIT)
+                value = result[0].get("nonce") if isinstance(result[0], dict) else None
+                trace.last_nonce = str(value)[:20] if isinstance(value, (int, str)) else None
+                return result
+            finally:
+                _snapshot_json_timing.reset(token)
+
+    def save_receive_timing_failure(self):
+        trace = getattr(self, "_receive_timing", None)
+        if trace is not None and trace.frozen:
+            # Called after failure cleanup/owner closure; preserve the original
+            # refusal even if the existing artifact bound or filesystem refuses.
+            self._receive_timing = None
+            try:
+                self.artifacts.save("receive-timing-failure.json", trace.report(), final=True)
+            except Exception:
+                pass
+
     def admit_snapshot(self, snapshot, now, nonce):
         """Mechanism-specific admission; transport and original leases stay shared."""
         return planner.admit(self.profiles, snapshot, now, nonce)
@@ -430,6 +560,7 @@ class Driver:
                 self.owner.api.CloseHandle(self.lock)
                 self.lock = None
             self.owner.close()
+        self.save_receive_timing_failure()
 
     def read_state(self):
         self.owner.check()
@@ -502,6 +633,11 @@ class Driver:
         self.snapshot_index += 1
         self.pending_nonce, self.last_request, self.request_bytes = nonce, now, raw
         self.last_request_published = published
+        trace = getattr(self, "_receive_timing", None)
+        if trace is None:
+            self._receive_timing = ReceiveTiming(now, published, nonce, published)
+        elif not trace.frozen:
+            trace.reset(now, published, nonce, published)
         self.artifacts.save(f"request-{self.snapshot_index:03}.txt", raw)
         self.artifacts.save(f"request-{self.snapshot_index:03}-timing.json", {
             "nonce": nonce, "clock": "perf_counter_ns", "requestStartedNs": now,
@@ -510,15 +646,15 @@ class Driver:
 
     def snapshot_failure(self):
         path = self.snapshot_path.with_name("mechanism-snapshot-failure.json")
-        if not path.exists():
+        if not self.receive_timing_call("failure_exists", path.exists):
             return None
-        raw = read_bytes(path, 1024)
+        raw = self.receive_timing_call("failure_read", read_bytes, path, 1024)
         # The native worker retains this CREATE_NEW handle and only rewrites it
         # on terminal failure. A partial in-place update is never an outcome.
         if not raw.endswith(b"\n"):
             return None
         try:
-            value = json.loads(raw)
+            value = self.receive_timing_call("failure_parse", json.loads, raw)
         except (UnicodeError, json.JSONDecodeError):
             return None
         require(isinstance(value, dict) and value.get("schema") == "fvr.bc2.mechanism-snapshot-failure.v1",
@@ -589,9 +725,9 @@ class Driver:
 
     def receive_late_snapshot(self):
         self.check_snapshot_readiness_owner()
-        if not self.snapshot_path.exists():
+        if not self.receive_timing_call("snapshot_exists", self.snapshot_path.exists):
             return None
-        snapshot, raw = read_json(self.snapshot_path, planner.SNAPSHOT_LIMIT)
+        snapshot, raw = self.receive_snapshot_json()
         nonce = integer(snapshot["nonce"])
         require(nonce <= self.pending_nonce, "snapshot response belongs to a later competing request")
         if nonce != self.pending_nonce:
@@ -614,7 +750,7 @@ class Driver:
             observedNs=snapshot["observed_ns"], sourceDeadlineNs=self.snapshot_source_deadline(snapshot),
             evaluatedNs=time.perf_counter_ns(), observationDeadlineNs=readiness["deadlineNs"],
             freshRequest=readiness["freshRequests"], commandAuthority=False))
-        require(read_bytes(self.request_path, 22) == self.request_bytes,
+        require(self.receive_timing_call("request_read", read_bytes, self.request_path, 22) == self.request_bytes,
                 "snapshot request changed by another writer")
         self.pending_nonce = None
         self.request_snapshot()
@@ -622,10 +758,15 @@ class Driver:
 
     def snapshot_timeout(self, now, response=None):
         """Preserve a late/stale response as refused evidence, never as admission."""
+        trace = getattr(self, "_receive_timing", None)
+        if trace is not None and not trace.frozen:
+            # Reuse the original decision sample to distinguish subsequent
+            # diagnostic-only reads from work that consumed the response lease.
+            trace.timeout_evaluated_ns = now
         read_error = None
-        if response is None and self.snapshot_path.exists():
+        if response is None and self.receive_timing_call("snapshot_exists", self.snapshot_path.exists):
             try:
-                response = read_json(self.snapshot_path, planner.SNAPSHOT_LIMIT)
+                response = self.receive_snapshot_json()
             except (OSError, ValueError, REFUSAL) as exc:
                 read_error = str(exc)
         if response is not None:
@@ -677,10 +818,12 @@ class Driver:
         """
         return False
 
+    @receive_timed("receive")
     def receive_snapshot(self):
         if self.pending_nonce is None:
             return None
-        require(read_bytes(self.request_path, 22) == self.request_bytes, "snapshot request changed by another writer")
+        require(self.receive_timing_call("request_read", read_bytes, self.request_path, 22)
+                == self.request_bytes, "snapshot request changed by another writer")
         failure = self.snapshot_failure()
         now = time.perf_counter_ns()
         if failure is not None:
@@ -698,9 +841,9 @@ class Driver:
                 return self.receive_late_snapshot()
         if now - self.last_request > SNAPSHOT_TIMEOUT:
             return self.snapshot_timeout(now)
-        if not self.snapshot_path.exists():
+        if not self.receive_timing_call("snapshot_exists", self.snapshot_path.exists):
             return None
-        snapshot, raw = read_json(self.snapshot_path, planner.SNAPSHOT_LIMIT)
+        snapshot, raw = self.receive_snapshot_json()
         nonce = integer(snapshot["nonce"])
         self.last_observed_response_nonce = nonce
         now = time.perf_counter_ns()
@@ -782,6 +925,7 @@ class Driver:
             self.snapshot_refresh_started = None
             self.snapshot_refresh_requests = 0
 
+    @receive_timed("pump")
     def pump(self):
         now = time.perf_counter_ns()
         self.bounds(now)
@@ -828,6 +972,7 @@ class Driver:
             time.sleep(.001)
         raise REFUSAL("fresh snapshot request iteration bound")
 
+    @receive_timed("command")
     def send(self, lines, expected=None, capture=None, cleanup=False, source_deadline=None,
              final_release=False):
         require(0 < len(lines) <= 8 and all(isinstance(x, str) and "\n" not in x and "\r" not in x for x in lines),
@@ -930,19 +1075,23 @@ class Driver:
             self.monitor = False
         self.last_write = published
         self.commands += len(batch)
+        trace = getattr(self, "_receive_timing", None)
+        if trace is not None:
+            trace.phase("ack_gap", published)
         ack, settled = None, None
         for _ in range(1200):
             if not cleanup:
                 self.pump()
             require(time.perf_counter_ns() < until, "command acknowledgement/commit deadline exceeded")
-            state = self.read_state()
-            require(digest(read_bytes(self.command_path, 4096)) == self.command_hash, "concurrent command writer")
+            state = self.receive_timing_call("ack_state_read", self.read_state)
+            require(digest(self.receive_timing_call("ack_command_read", read_bytes, self.command_path, 4096))
+                    == self.command_hash, "concurrent command writer")
             seq = integer(state["cmdSeq"])
             require(seq in (target - len(batch), target), "unexpected command sequence advancement")
             if seq == target:
                 require(state["lastCmd"] == sentinel, "unique command sentinel mismatch")
-                if self.ack_path.exists():
-                    ack_raw = read_bytes(self.ack_path, 4096).decode("utf-8")
+                if self.receive_timing_call("ack_exists", self.ack_path.exists):
+                    ack_raw = self.receive_timing_call("ack_read", read_bytes, self.ack_path, 4096).decode("utf-8")
                     match = re.fullmatch(r"seq=(\d+) frame=(\d+) error=-\r?\nlast=([^\r\n]*)\r?\n", ack_raw)
                     if match and int(match[1]) == target:
                         require(match[3] == " | ".join(batch), "acknowledgement batch text mismatch")
@@ -962,6 +1111,8 @@ class Driver:
             time.sleep(.001)
         require(settled is not None, "bounded acknowledgement iteration limit")
         committed = time.perf_counter_ns()
+        if trace is not None:
+            trace.phase("command", committed)
         if not cleanup:
             self.bounds(committed)
         self.last_commit = committed
@@ -1299,6 +1450,9 @@ class Driver:
             time.sleep(.001)
 
     def release_after_failure(self):
+        trace = getattr(self, "_receive_timing", None)
+        if trace is not None:
+            trace.freeze(self.pending_command, self.sequence)
         self.monitor = False
         if self.pending_command and not self.unsafe_owner:
             self.settle_pending_for_release()
