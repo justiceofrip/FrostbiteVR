@@ -40,6 +40,7 @@ struct VehicleInputPlan {
     VehicleInputPlanStatus status=VehicleInputPlanStatus::UnverifiedBinding;
     std::array<VehicleInputEdit,VehicleAxisCount+1> edits{};
     unsigned count=0;
+    std::uint32_t ownedFlags=1u<<16; // Exact button bits this plan may change and restore.
     std::uint32_t deniedAxes=0; // Semantic axes suppressed by THIS gather's allowed bits.
 };
 // Pure byte-plan builder: no hooks, process calls, input dispatch or memory

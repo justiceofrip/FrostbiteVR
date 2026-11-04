@@ -143,6 +143,7 @@ bool VehicleMountedSame(const VehicleMountedSample& a,const VehicleMountedSample
 bool VehicleMountedObserver::Configure(VehicleMountedBinding binding,VehicleMountedApi api)noexcept {
     if(configured_||!binding.verified||!binding.image||!api.context||!api.memory.read||!api.memory.type||
        !api.source||!api.current||!api.seat||!api.clock||!api.stack)return false;
+    if((api.lost||api.prefire||api.returned)&&!(api.lost&&api.prefire&&api.returned))return false;
     binding_=binding;api_=api;configured_=true;return true;
 }
 OriginalFiringObserver VehicleMountedObserver::Callbacks()noexcept {
@@ -176,15 +177,16 @@ OriginalFiringToken VehicleMountedObserver::Enter(const OriginalFiringUpdate& ca
     for(;index<slots_.size();++index){unsigned expected=0;
         if(slots_[index].state.compare_exchange_strong(expected,1,std::memory_order_acquire))break;
     }
-    if(index==slots_.size()){slotDrops_.fetch_add(1,std::memory_order_relaxed);return {};}
+    if(index==slots_.size()){if(api_.lost)api_.lost();slotDrops_.fetch_add(1,std::memory_order_relaxed);return {};}
     auto& slot=slots_[index];
     const auto release=[&]{slot.state.store(0,std::memory_order_release);return OriginalFiringToken{};};
     if(!api_.source(api_.context,slot.source)){noSource_.fetch_add(1,std::memory_order_relaxed);return release();}
     if(slot.source.profile.profile.role!=VehicleSeatRole::Gunner){notPrivateSeat_.fetch_add(1,std::memory_order_relaxed);return release();}
     const unsigned bucket=slot.source.fire>0?1u:0u;
     const auto seen=sourceCalls_[bucket].fetch_add(1,std::memory_order_relaxed);
-    // Strict callback read budgets, independent of record retention and Fire.
-    if(seen>=(bucket?512u:4096u)){budgetDrops_[bucket].fetch_add(1,std::memory_order_relaxed);return release();}
+    // The old journal has its own quota. Private qualification samples its own lifetime.
+    slot.journal=seen<(bucket?512u:4096u);
+    if(!slot.journal){budgetDrops_[bucket].fetch_add(1,std::memory_order_relaxed);if(!api_.prefire)return release();}
     const auto serial=serial_.fetch_add(1,std::memory_order_relaxed);
     if(serial==UINT64_MAX){exhausted_.store(true,std::memory_order_release);return release();}
     const auto& source=slot.source;slot.row={};slot.row.serial=serial+1;
@@ -192,35 +194,39 @@ OriginalFiringToken VehicleMountedObserver::Enter(const OriginalFiringUpdate& ca
     slot.row.sourceOwner=source.owner;slot.row.sourceSeat=source.profile.owner;slot.row.routeFingerprint=source.profile.profile.routeFingerprint;
     slot.row.sourceNs=source.observedNs;slot.row.deadlineNs=source.deadlineNs;slot.row.sourceFire=source.fire;slot.row.call=call;
     slot.row.before=Sample(source,call);slot.uncaught=std::uncaught_exceptions();
+    if(api_.prefire)api_.prefire(slot.row.serial,source,call,slot.row.before);
     // Keep rejected entries through leave as well; the original still runs.
     inFlight_.fetch_add(1,std::memory_order_relaxed);slot.state.store(2,std::memory_order_release);
     OriginalFiringToken token;token.words[0]=index+1;token.words[1]=serial+1;return token;
 }
 void VehicleMountedObserver::Leave(const OriginalFiringUpdate& call,const OriginalFiringToken& token)noexcept {
     if(!token.words[0])return;
-    if(token.words[0]>slots_.size()){badTokens_.fetch_add(1,std::memory_order_relaxed);return;}
+    if(token.words[0]>slots_.size()){if(api_.lost)api_.lost();badTokens_.fetch_add(1,std::memory_order_relaxed);return;}
     auto& slot=slots_[std::size_t(token.words[0]-1)];
     unsigned expected=2;
     if(!slot.state.compare_exchange_strong(expected,3,std::memory_order_acquire)){
-        badTokens_.fetch_add(1,std::memory_order_relaxed);return;
+        if(api_.lost)api_.lost();badTokens_.fetch_add(1,std::memory_order_relaxed);return;
     }
     if(slot.row.serial!=token.words[1]||!SameCall(slot.row.call,call)){
         // Restore the active slot for its actual matching leave; never borrow it.
-        badTokens_.fetch_add(1,std::memory_order_relaxed);slot.state.store(2,std::memory_order_release);return;
+        if(api_.lost)api_.lost();badTokens_.fetch_add(1,std::memory_order_relaxed);slot.state.store(2,std::memory_order_release);return;
     }
-    slot.row.scopeReturned=std::uncaught_exceptions()==slot.uncaught;
+    slot.row.scopeReturned=!token.words[7]&&std::uncaught_exceptions()==slot.uncaught;
     if(!slot.row.scopeReturned)unwound_.fetch_add(1,std::memory_order_relaxed);
-    slot.row.after=Sample(slot.source,call);
+    if(token.words[7])slot.row.after.reason=VehicleMountedReason::Changed;
+    else slot.row.after=Sample(slot.source,call);
     slot.row.same=slot.row.scopeReturned&&VehicleMountedSame(slot.row.before,slot.row.after);
-    if(slot.row.same)matched_.fetch_add(1,std::memory_order_relaxed);
-    if(slot.row.before.reason==VehicleMountedReason::Okay){
+    if(api_.returned)api_.returned(slot.row.serial,slot.source,call,slot.row.after,slot.row.same);
+    if(slot.journal&&slot.row.same)matched_.fetch_add(1,std::memory_order_relaxed);
+    if(slot.journal&&slot.row.before.reason==VehicleMountedReason::Okay){
         ((slot.row.before.flags&1)?contextFireOne_:contextFireZero_).fetch_add(1,std::memory_order_relaxed);
         (slot.row.before.contextBytes[0]?byte24Nonzero_:byte24Zero_).fetch_add(1,std::memory_order_relaxed);
         const unsigned sourceBucket=slot.row.sourceFire>0?1u:0u;
         nativeFireBySource_[sourceBucket][slot.row.before.flags&1].fetch_add(1,std::memory_order_relaxed);
         flag24BySource_[sourceBucket][slot.row.before.contextBytes[0]?1u:0u].fetch_add(1,std::memory_order_relaxed);
     }
-    Record(slot.row);leaves_.fetch_add(1,std::memory_order_relaxed);
+    if(slot.journal)Record(slot.row);
+    leaves_.fetch_add(1,std::memory_order_relaxed);
     inFlight_.fetch_sub(1,std::memory_order_relaxed);slot.state.store(0,std::memory_order_release);
 }
 void VehicleMountedObserver::Record(const Row& row)noexcept {

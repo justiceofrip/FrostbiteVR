@@ -5,8 +5,13 @@
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
 #include "Bc2SelectedKnifeNative.h"
 #include "Bc2KnifeTimingObservation.h"
+#include "Bc2OriginalFiringUnwind.h"
 #endif
 #include "Bc2OriginalFiringObserver.h"
+#ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
+#include "Bc2PrivateMountedUpdate419.h"
+#include <new>
+#endif
 #include "Bc2DiagnosticObservationWindow.h"
 #include "Bc2NativeCycleRuntime.h"
 #include "Bc2NativeCycleRecovery.h"
@@ -813,13 +818,17 @@ std::array<RequestCancellation,16> requestCancellations{};std::atomic<unsigned> 
 std::int64_t Now()noexcept;
 void RequestCancelAsync(unsigned reason=0)noexcept;
 struct Active {
-    bool requestEntryAllowed=true;
+    bool requestEntryAllowed=true,open=true;
     Active(){
         if(!requestMode){if(diagnosticRound||pumpDiagnostic)callbackRevision.fetch_add(1,std::memory_order_acq_rel);active.fetch_add(1,std::memory_order_acq_rel);return;}
         requestEntryAllowed=EnterReloadInvocation(active,callbackRevision,requestEntryGate);
         if(!requestEntryAllowed)RequestCancelAsync(1);
     }
-    ~Active(){if(requestMode)ExitReloadInvocation(active,callbackRevision);
+    ~Active(){Abort();}
+    void Abort()noexcept {
+        if(!open)return;
+        open=false;
+        if(requestMode)ExitReloadInvocation(active,callbackRevision);
         else {if(diagnosticRound||pumpDiagnostic)callbackRevision.fetch_add(1,std::memory_order_acq_rel);active.fetch_sub(1,std::memory_order_acq_rel);}}
 };
 struct Gate {std::atomic_flag& flag;bool held;explicit Gate(std::atomic_flag& f):flag(f),held(!f.test_and_set(std::memory_order_acquire)){}~Gate(){if(held)flag.clear(std::memory_order_release);}};
@@ -902,6 +911,7 @@ struct NativeCycleCallback {
         currentCycleCallback=this;
     }
     ~NativeCycleCallback(){currentCycleCallback=previous;}
+    void Abort()noexcept {currentCycleCallback=previous;scope.Release();}
     bool Isolated()const noexcept {return branch<3&&nativeCycleTargets[branch].load(std::memory_order_acquire)==firing&&scope.Isolated();}
 };
 void RequestCancelAsync(unsigned reason)noexcept{const auto epoch=requestCancelEpoch.fetch_add(1,std::memory_order_acq_rel)+1;const auto n=requestCancellationCount.fetch_add(1);if(n<requestCancellations.size())requestCancellations[n]={Now(),reason,epoch};}
@@ -1195,6 +1205,11 @@ struct Observation {
             const bool retained=out.boundary&&SameIdentity(entry.boundary,*out.boundary);
             return ReloadFlowRecord{frame.id,entry,out,true,retained};
         }return {};
+    }
+    void Abort()noexcept {
+        // Leave a begun record incomplete. Finish samples post-call state and
+        // is reserved for a dispatcher that actually returned.
+        finished=true;currentFrame=frame.previous;
     }
     ~Observation(){if(!finished){const auto ended=Finish();if(requestMode&&frame.invocation.Record().id&&!ended)RequestMissing(frame.firing,2,unsigned(frame.invocation.Record().entry.kind),&evidence);}currentFrame=frame.previous;}
 };
@@ -2233,15 +2248,26 @@ thread_local NativeGuardFrame* nativeGuardFrame=nullptr;
 NativeGuardFrame::NativeGuardFrame(Observation& source,unsigned f,unsigned c,const Bc2NativeCycleDecision* h)noexcept:
     previous(nativeGuardFrame),observation(&source),firing(f),context(c),invocation(source.entry.nativeInvocation),held(h){nativeGuardFrame=this;}
 NativeGuardFrame::~NativeGuardFrame(){nativeGuardFrame=previous;}
+template<class Body,class... Scopes>
+void RunChestFiringBody(Body&& body,Scopes&... scopes) {
+#if defined(FVR_BC2_CHEST_KNIFE_DRAW_RETURN) && !defined(FVR_BC2_VEHICLE_MOUNTED_PROBE)
+    if(independentFiringObserver.abort){
+        auto* const previousGuard=nativeGuardFrame;
+        auto abort=[&]()noexcept{
+            nativeGuardFrame=previousGuard;
+            (scopes.Abort(),...);
+        };
+        RunOriginalFiringUnwind(body,abort);
+        return;
+    }
+#endif
+    body();
+}
 bool NativeInputCompare(void* context,unsigned index,unsigned expected,unsigned replacement,unsigned& observed)noexcept {
     if(index>1)return false;
     return DeltaCompare(reinterpret_cast<void*>(unsigned(context)+0x28+4*index),expected,replacement,observed);
 }
-void __fastcall Step(void* self,void*,void* context,float delta){
-    Active activeScope;const auto firing=unsigned(self),caller=unsigned(_ReturnAddress());
-#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
-    selectedKnife::KnifeTimingObservationScope knifeTiming(selectedKnife::KnifeTimingCall::Step,firing,unsigned(context),caller,0,delta);
-#endif
+void StepBody(void* self,void* context,float delta,unsigned firing,unsigned caller,Active& activeScope){
     if(currentFrame&&currentFrame->cleanupOnly){originalStep(self,context,delta);return;}
     const auto stepRoute=SelectNativeCycleStepRoute(nativeGuardFrame!=nullptr,
         nativeGuardFrame&&nativeGuardFrame->held,nativeGuardFrame&&nativeGuardFrame->held&&nativeGuardFrame->held->hold);
@@ -2427,27 +2453,37 @@ void __fastcall Step(void* self,void*,void* context,float delta){
         diagnostic.nowNs=Now();RecordMagazineEmptyDiagnostic(diagnostic);
     }
 }
-void __fastcall Update(void* self,void*,void* context,unsigned extra){
+void __fastcall Step(void* self,void*,void* context,float delta){
     Active activeScope;const auto firing=unsigned(self),caller=unsigned(_ReturnAddress());
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
-    selectedKnife::KnifeTimingObservationScope knifeTiming(selectedKnife::KnifeTimingCall::Update,firing,unsigned(context),caller,extra);
-    // Selected-melee observation shares this original dispatcher. Exact server
-    // Fire can retire its retained Gather level, never complete an attack.
-    // It never claims the observer/input-copy slot or invokes/writes native code.
-    selectedKnife::ObserveUpdate({firing,unsigned(context),caller,extra});
+    selectedKnife::KnifeTimingObservationScope knifeTiming(selectedKnife::KnifeTimingCall::Step,firing,unsigned(context),caller,0,delta);
 #endif
-    OriginalFiringScope independentObservation(independentFiringObserver,{firing,unsigned(context),caller,extra});
-    NativeCycleCallback cycleCallback(NativeCycleCallbackKind::Update,firing,unsigned(context));
-    Observation observation(ReloadFlowEvent::Update,firing,caller,unsigned(context),extra);
+    auto body=[&]{StepBody(self,context,delta,firing,caller,activeScope);};
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    RunChestFiringBody(body,knifeTiming,activeScope);
+#else
+    body();
+#endif
+}
+void UpdateAfterObservation(void* self,void* context,unsigned extra,unsigned firing,unsigned caller,Active& activeScope,
+    NativeCycleCallback& cycleCallback,Observation& observation
+#ifndef FVR_BC2_VEHICLE_MOUNTED_PROBE
+    ,OriginalFiringScope& independentObservation
+#endif
+){
     // The exact pistol route composes inside the ordinary dispatcher so its
     // ammo observers and original invocation remain intact. Other independent
     // tools retain their existing caller-local input-copy route.
+#ifndef FVR_BC2_VEHICLE_MOUNTED_PROBE
     if(!observation.lease||!PistolAfterFeedConfigMatches(observation.lease->snapshot.config)){
         if(auto toolInput=independentObservation.InputCopy()){
             alignas(16) auto nativeInput=*toolInput;independentObservation.BindCopiedContext(reinterpret_cast<std::uintptr_t>(nativeInput.data()));
-            originalUpdate(self,nativeInput.data(),extra);return;
+            originalUpdate(self,nativeInput.data(),extra);
+            independentObservation.BindCopiedContext(0);
+            return;
         }
     }
+#endif
     const auto cycleInvocation=observation.frame.invocation.Record().id;cycleCallback.scope.BindInvocation(cycleInvocation);
     const bool cycleTarget=NativeCycleTarget(firing);
     bool target=RequestTarget(firing)||cycleTarget;
@@ -2749,11 +2785,61 @@ void __fastcall Update(void* self,void*,void* context,unsigned extra){
         if(requestDecision.tracked)WithRequest([&]{requestCycle.Finish(requestDecision,RoundState(*completed->exit.boundary),completed->exit.nowNs,completed->identityRetained,observation.hold,Now());},true);
     }
 }
+#ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
+void MountedUpdateBody419(void* self,void* context,unsigned extra,unsigned caller,Active& activeScope){
+    const auto firing=unsigned(self);
+#else
+void __fastcall Update(void* self,void*,void* context,unsigned extra){
+    Active activeScope;const auto firing=unsigned(self),caller=unsigned(_ReturnAddress());
+#endif
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    selectedKnife::KnifeTimingObservationScope knifeTiming(selectedKnife::KnifeTimingCall::Update,firing,unsigned(context),caller,extra);
+    // Selected-melee observation shares this original dispatcher. Exact server
+    // Fire can retire its retained Gather level, never complete an attack.
+    // It never claims the observer/input-copy slot or invokes/writes native code.
+    selectedKnife::ObserveUpdate({firing,unsigned(context),caller,extra});
+#endif
+#ifndef FVR_BC2_VEHICLE_MOUNTED_PROBE
+    OriginalFiringScope independentObservation(independentFiringObserver,{firing,unsigned(context),caller,extra});
+#endif
+    NativeCycleCallback cycleCallback(NativeCycleCallbackKind::Update,firing,unsigned(context));
+    Observation observation(ReloadFlowEvent::Update,firing,caller,unsigned(context),extra);
+    auto body=[&]{
+        UpdateAfterObservation(self,context,extra,firing,caller,activeScope,cycleCallback,observation
+#ifndef FVR_BC2_VEHICLE_MOUNTED_PROBE
+            ,independentObservation
+#endif
+        );
+    };
+#if defined(FVR_BC2_CHEST_KNIFE_DRAW_RETURN) && !defined(FVR_BC2_VEHICLE_MOUNTED_PROBE)
+    RunChestFiringBody(body,observation,cycleCallback,independentObservation,knifeTiming,activeScope);
+#else
+    body();
+#endif
+}
+#ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
+void __fastcall Update(void* self,void*,void* context,unsigned extra){
+    // Explicit storage lets the POD SEH bridge drain this callback on both
+    // unwind models. Native execution remains solely in MountedUpdateBody419.
+    alignas(Active) std::byte storage[sizeof(Active)];
+    auto* activeScope=::new(static_cast<void*>(storage)) Active();
+    struct Args {void* self;void* context;unsigned extra,caller;Active* active;
+        Frame* frame;NativeCycleCallback* cycle;NativeGuardFrame* guard;};
+    Args args{self,context,extra,unsigned(_ReturnAddress()),activeScope,currentFrame,currentCycleCallback,nativeGuardFrame};
+    mounted419::RunUpdate(independentFiringObserver,{unsigned(self),unsigned(context),args.caller,extra},&args,
+        [](void* p){auto& a=*static_cast<Args*>(p);MountedUpdateBody419(a.self,a.context,a.extra,a.caller,*a.active);},
+        [](void* p,bool returned)noexcept{
+            auto& a=*static_cast<Args*>(p);
+            if(!returned){currentFrame=a.frame;currentCycleCallback=a.cycle;nativeGuardFrame=a.guard;}
+            a.active->~Active();
+        });
+}
+#endif
 void __fastcall Commit(void* self,void*,void* context){
     Active activeScope;NativeCycleCallback cycleCallback(NativeCycleCallbackKind::Commit,unsigned(self),unsigned(context));
     Observation observation(ReloadFlowEvent::Commit,unsigned(self),unsigned(_ReturnAddress()),unsigned(context),0);
     const auto cycleInvocation=observation.frame.invocation.Record().id;cycleCallback.scope.BindInvocation(cycleInvocation);
-    originalCommit(self,context);
+    RunChestFiringBody([&]{originalCommit(self,context);},observation,cycleCallback,activeScope);
     if(observation.frame.cleanupOnly)return;
     if(requestMode){const auto completed=observation.Finish();
         if(NativeCycleTarget(unsigned(self)))WithNativeCycle(NativeCycleAccess::NativeCommit,[&]{
@@ -2768,7 +2854,8 @@ void __fastcall Transfer(void* self,void*,unsigned rawArgument){
     const auto caller=unsigned(_ReturnAddress());
     Observation observation(ReloadFlowEvent::Transfer,unsigned(self),caller,0,rawArgument);
     const auto cycleInvocation=observation.frame.invocation.Record().id;cycleCallback.scope.BindInvocation(cycleInvocation);
-    if(observation.frame.cleanupOnly){originalTransfer(self,rawArgument);return;}
+    auto forward=[&]{RunChestFiringBody([&]{originalTransfer(self,rawArgument);},observation,cycleCallback,activeScope);};
+    if(observation.frame.cleanupOnly){forward();return;}
 #ifdef FVR_BC2_NATIVE_AMMO_BACKEND
     if(requestMode&&feedEquipmentReloadEnabled&&holdCodeVerified&&observation.lease&&observation.entry.transferPath){
         const auto& lease=*observation.lease;const auto* profile=FindBc2FeedRegistration(lease.snapshot.config);
@@ -2794,7 +2881,7 @@ void __fastcall Transfer(void* self,void*,unsigned rawArgument){
 #endif
     // Ammo transfer is outside the admitted positive-ammunition pump cycle.
     if(NativeCycleTarget(unsigned(self)))NativeCycleMissing(unsigned(self),cycleInvocation);
-    originalTransfer(self,rawArgument);
+    forward();
     if(diagnosticRound)RoundTransfer(observation,observation.Finish());
     if(requestMode)RequestTransfer(observation,observation.Finish());
 }
@@ -2805,9 +2892,12 @@ void* __fastcall KnifeSnapshotExport(void* self,void*,void* snapshot){
 #endif
     // Verified code[7]: thiscall(firing, snapshot), ret4, returns snapshot.
     // Keep the actual native return value; this hook never supplies a payload.
-    const auto result=originalKnifeExport(self,snapshot);
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    void* result=nullptr;
+    RunChestFiringBody([&]{result=originalKnifeExport(self,snapshot);},knifeTiming,activeScope);
     knifeTiming.ReturnedPointer(unsigned(result));
+#else
+    const auto result=originalKnifeExport(self,snapshot);
 #endif
     return result;
 }
@@ -2818,7 +2908,11 @@ void __fastcall Restore(void* self,void*,void* snapshot){
 #endif
     Observation observation(ReloadFlowEvent::Restore,unsigned(self),unsigned(_ReturnAddress()),unsigned(snapshot),0);
     const auto cycleInvocation=observation.frame.invocation.Record().id;cycleCallback.scope.BindInvocation(cycleInvocation);
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    RunChestFiringBody([&]{originalRestore(self,snapshot);},observation,knifeTiming,cycleCallback,activeScope);
+#else
     originalRestore(self,snapshot);
+#endif
     if(observation.frame.cleanupOnly)return;
     if(NativeCycleTarget(unsigned(self))){const auto complete=observation.Finish();
         WithNativeCycle(NativeCycleAccess::NativeRestore,[&]{
@@ -3440,6 +3534,9 @@ std::optional<ReloadCycleRetirement> RetireRequestCycle(const ReloadHoldIdentity
     ++retireSuccesses;return receipt;
 }
 bool RegisterOriginalFiringObserver(const OriginalFiringObserver& observer)noexcept {
+#ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
+    if(observer.copyInput)return false; // This isolated dispatcher observes only.
+#endif
     if(!installed||started||enabled.load()||active.load()||independentFiringObserver.enter||
        !observer.context||!observer.enter||!observer.leave)return false;
     independentFiringObserver=observer;return true;

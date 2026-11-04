@@ -173,6 +173,8 @@ int wmain(int argc,wchar_t** argv){try {
 #else
     constexpr bool normalContextualCompiled=false;
 #endif
+    Require(normalPlayerKnife!=fvr::bc2::KnifeTrackedQualification||fvr::bc2::ChestKnifeTrackedStrikeAvailable,
+        "Tracked chest knife strikes are disabled while native exception cleanup is unresolved");
     Require(fvr::bc2::ValidNormalPlayerTools(normalPlayerKnife,normalContextualTools,configFlags,hostPid,magazineSession,
         chestKnifeProbe||ordinaryGrenadeInput||ordinaryResourceInput||ordinaryBoltInputCycles||physicalBoltCycles||m95StockShot||
         unsigned(pumpMode)||unsigned(bodyDiagnostic),normalKnifeCompiled,normalContextualCompiled),

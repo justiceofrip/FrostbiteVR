@@ -10,7 +10,12 @@ struct BridgeScope {
 };
 thread_local BridgeScope* bridgeAcquiring=nullptr;
 thread_local BridgeScope* bridgeAttacking=nullptr;
-struct BridgeRestore {BridgeScope*& slot;BridgeScope* previous;~BridgeRestore(){slot=previous;}};
+#include "Bc2ChestKnifeCallbackScopes.inc"
+template<class Body> auto ActiveBridgeCall(const Body& body) {
+    decltype(body()) result;
+    CountChestKnifeCallback(service.active,[&]{result=body();});
+    return result;
+}
 bool BridgeOwner(const BridgeNative& a)noexcept {
     const auto& k=a.key;const pk::detail::Reader r{service.memory};
     if(pk::ReadAcceptedKnifeOwnership(service.memory,a.anchor,service.base+service.state.firingVtableRva)!=pk::AcceptedKnifeOwnership::Same)return false;
@@ -60,13 +65,17 @@ bool BridgeHealth(const pk::ChestAttackTarget& target,float& value)noexcept {
         r.Get(target.handle,after)&&after==before;
 }
 void BridgeFail(const pk::ChestAttackIdentity& key)noexcept {std::lock_guard lock(service.gate);service.bridge.Fail(key);}
+void BridgeAbort(const pk::ChestAttackIdentity& key,pk::ChestAttackPhase phase)noexcept {
+    std::lock_guard lock(service.gate);
+    service.bridge.AbortCallback(key,phase);
+}
 }
 void AttackHooksAvailable(bool available)noexcept {service.attackHooksAvailable.store(available,std::memory_order_release);}
 ChestHookIsolation::ChestHookIsolation()noexcept:acquiring_(bridgeAcquiring),attacking_(bridgeAttacking){bridgeAcquiring=bridgeAttacking=nullptr;}
 ChestHookIsolation::~ChestHookIsolation(){bridgeAcquiring=static_cast<BridgeScope*>(acquiring_);bridgeAttacking=static_cast<BridgeScope*>(attacking_);}
-std::optional<std::uintptr_t> BridgeAcquire(void* self,unsigned caller,ChestAcquireOriginal original)noexcept {
-    if(!service.enabled.load(std::memory_order_acquire)||!service.attackBridgeEnabled)return {};
-    Active active;BridgeScope local;
+namespace {
+std::optional<std::uintptr_t> AcquireActive(void* self,unsigned caller,ChestAcquireOriginal original) {
+    BridgeScope local;
     {
         std::lock_guard lock(service.gate);
         if(!service.enabled.load()||!service.attackBridgeEnabled||!service.attackHooksAvailable.load()||
@@ -76,8 +85,8 @@ std::optional<std::uintptr_t> BridgeAcquire(void* self,unsigned caller,ChestAcqu
             service.bridge.Fail(local.native.key);return {};
         }
     }
-    auto* previous=bridgeAcquiring;bridgeAcquiring=&local;BridgeRestore restore{bridgeAcquiring,previous};
-    const auto result=original(self); // Always forward, including absent/revoked geometry.
+    const auto result=ForwardChestKnifeOriginal(&bridgeAcquiring,&local,[&]{return original(self);},
+        [&]{BridgeAbort(local.native.key,pk::ChestAttackPhase::Acquiring);});
     const auto target=BridgeTarget(local.native.key.effects);const bool owner=BridgeOwner(local.native);
     {
         std::lock_guard lock(service.gate);
@@ -86,11 +95,8 @@ std::optional<std::uintptr_t> BridgeAcquire(void* self,unsigned caller,ChestAcqu
     }
     return result;
 }
-std::optional<unsigned> BridgeSearch(void* self,unsigned soldier,const void* transform,unsigned shot,float scalar,
-    unsigned caller,bool retry,ChestSearchOriginal original)noexcept {
-    auto* scope=bridgeAcquiring;
-    if(!scope||caller!=(retry?0x578573u:0x578552u))return {};
-    Active active;
+std::optional<unsigned> SearchActive(BridgeScope* scope,void* self,unsigned soldier,const void* transform,
+    unsigned shot,float scalar,bool retry,ChestSearchOriginal original) {
     const auto& a=scope->native;const auto& k=a.key;const unsigned bit=retry?2u:1u;
     const auto fail=[&]()->std::optional<unsigned>{BridgeFail(k);return {};};
     if((scope->searches&bit)||(!retry&&scope->searches)||(retry&&scope->searches!=1)||
@@ -117,16 +123,16 @@ std::optional<unsigned> BridgeSearch(void* self,unsigned soldier,const void* tra
     alignas(16) auto copy=*scope->geometryCopy;
     if(k.sourceEpoch!=service.sourceEpoch.load(std::memory_order_acquire)||a.poseRevocation!=service.poseRevocation.load(std::memory_order_acquire)||
        !pk::ChestAttackTransaction::Fresh(k,Now()))return fail();
-    const auto result=original(self,soldier,copy.data(),shot,scalar);
+    const auto result=ForwardChestKnifeOriginal<BridgeScope>(nullptr,nullptr,
+        [&]{return original(self,soldier,copy.data(),shot,scalar);},[&]{BridgeFail(k);});
     std::array<std::byte,64> after{};
     const bool unchanged=reader.Read(unsigned(transform),after.data(),64)&&after==before;
     {std::lock_guard lock(service.gate);service.bridge.GeometryReturned(k,retry,unchanged);}
     return result;
 }
-std::optional<std::uintptr_t> BridgeAttack(void* self,float dt,unsigned primary,void* context,
-    unsigned caller,ChestAttackOriginal original)noexcept {
-    if(!service.enabled.load(std::memory_order_acquire)||!service.attackBridgeEnabled)return {};
-    Active active;BridgeScope local;
+std::optional<std::uintptr_t> AttackActive(void* self,float dt,unsigned primary,void* context,
+    unsigned caller,ChestAttackOriginal original) {
+    BridgeScope local;
     {
         std::lock_guard lock(service.gate);
         if(!service.enabled.load()||!service.attackBridgeEnabled||!service.attackNative||
@@ -136,8 +142,8 @@ std::optional<std::uintptr_t> BridgeAttack(void* self,float dt,unsigned primary,
         if(!update||unsigned(context)!=update->NativeContext()||!service.bridge.BeginAttack(local.native.key,BridgeTarget(local.native.key.effects),
             BridgeUpdate(local.native,false),BridgeOwner(local.native))){service.bridge.Fail(local.native.key);return {};}
     }
-    auto* previous=bridgeAttacking;bridgeAttacking=&local;BridgeRestore restore{bridgeAttacking,previous};
-    const auto result=original(self,dt,primary,context);
+    const auto result=ForwardChestKnifeOriginal(&bridgeAttacking,&local,[&]{return original(self,dt,primary,context);},
+        [&]{BridgeAbort(local.native.key,pk::ChestAttackPhase::Attacking);});
     {
         std::lock_guard lock(service.gate);
         if(!BridgeOwner(local.native)||(service.bridge.Same(local.native.key)&&!service.bridge.Pending()->target.handle&&
@@ -146,9 +152,8 @@ std::optional<std::uintptr_t> BridgeAttack(void* self,float dt,unsigned primary,
     }
     return result;
 }
-std::optional<std::uintptr_t> BridgeDamage(void* self,void* damage,void* player,
-    unsigned caller,ChestDamageOriginal original)noexcept {
-    auto* scope=bridgeAttacking;if(!scope||caller!=0x57af15)return {};Active active;
+std::optional<std::uintptr_t> DamageActive(BridgeScope* scope,void* self,void* damage,void* player,
+    ChestDamageOriginal original) {
     const auto& a=scope->native;std::optional<pk::ChestAttackTarget> target;
     {
         std::lock_guard lock(service.gate);
@@ -159,8 +164,31 @@ std::optional<std::uintptr_t> BridgeDamage(void* self,void* damage,void* player,
         }
     }
     float before=0,after=0;const bool known=BridgeHealth(*target,before);
-    const auto result=original(self,damage,player);
+    const auto result=ForwardChestKnifeOriginal<BridgeScope>(nullptr,nullptr,
+        [&]{return original(self,damage,player);},[&]{BridgeFail(a.key);});
     const bool complete=known&&BridgeHealth(*target,after)&&BridgeTarget(a.key.effects)==target&&BridgeOwner(a);
     {std::lock_guard lock(service.gate);service.bridge.Damage(a.key,complete,before,after);}
     return result;
+}
+}
+std::optional<std::uintptr_t> BridgeAcquire(void* self,unsigned caller,ChestAcquireOriginal original) {
+    if(!service.enabled.load(std::memory_order_acquire)||!service.attackBridgeEnabled)return {};
+    return ActiveBridgeCall([&]{return AcquireActive(self,caller,original);});
+}
+std::optional<unsigned> BridgeSearch(void* self,unsigned soldier,const void* transform,unsigned shot,float scalar,
+    unsigned caller,bool retry,ChestSearchOriginal original) {
+    auto* scope=bridgeAcquiring;
+    if(!scope||caller!=(retry?0x578573u:0x578552u))return {};
+    return ActiveBridgeCall([&]{return SearchActive(scope,self,soldier,transform,shot,scalar,retry,original);});
+}
+std::optional<std::uintptr_t> BridgeAttack(void* self,float dt,unsigned primary,void* context,
+    unsigned caller,ChestAttackOriginal original) {
+    if(!service.enabled.load(std::memory_order_acquire)||!service.attackBridgeEnabled)return {};
+    return ActiveBridgeCall([&]{return AttackActive(self,dt,primary,context,caller,original);});
+}
+std::optional<std::uintptr_t> BridgeDamage(void* self,void* damage,void* player,
+    unsigned caller,ChestDamageOriginal original) {
+    auto* scope=bridgeAttacking;
+    if(!scope||caller!=0x57af15)return {};
+    return ActiveBridgeCall([&]{return DamageActive(scope,self,damage,player,original);});
 }

@@ -38,7 +38,10 @@ public:
         }
         if(prior==std::numeric_limits<unsigned>::max())state_->exhausted.store(true,std::memory_order_release);
     }
-    ~NativeCycleCallbackScope(){if(counted_)state_->active.fetch_sub(1,std::memory_order_acq_rel);}
+    ~NativeCycleCallbackScope(){Release();}
+    void Release()noexcept {
+        if(counted_){counted_=false;state_->active.fetch_sub(1,std::memory_order_acq_rel);}
+    }
     NativeCycleCallbackScope(const NativeCycleCallbackScope&)=delete;
     NativeCycleCallbackScope& operator=(const NativeCycleCallbackScope&)=delete;
     void BindInvocation(std::uint64_t invocation)noexcept {if(!invocation_)invocation_=invocation;}

@@ -19,14 +19,12 @@ int IndependentCompileAndRuntimeKnobs(){
  CHECK(ValidNormalPlayerGrenades(1,flags,123,3,false,true));
  CHECK(!ValidNormalPlayerTools(1,0,flags,123,3,false,false,true));
  CHECK(!ValidNormalPlayerTools(0,1,flags,123,3,false,true,false));
- for(unsigned mode:{unsigned(KnifeHolsterOnly),unsigned(KnifeTrackedQualification)}){
-   CHECK(ValidNormalPlayerTools(mode,0,flags,123,3,false,true,false));
-   CHECK(!ValidNormalPlayerTools(mode,0,flags,0,3,false,true,false));
-   CHECK(!ValidNormalPlayerTools(mode,0,flags,123,3,true,true,false));
-   CHECK(!ValidNormalPlayerTools(mode,0,flags,123,3,false,false,false));
- }
+ CHECK(ValidNormalPlayerTools(KnifeHolsterOnly,0,flags,123,3,false,true,false));
+ CHECK(!ValidNormalPlayerTools(KnifeHolsterOnly,0,flags,0,3,false,true,false));
+ CHECK(!ValidNormalPlayerTools(KnifeHolsterOnly,0,flags,123,3,true,true,false));
+ CHECK(!ValidNormalPlayerTools(KnifeHolsterOnly,0,flags,123,3,false,false,false));
  CHECK(!NormalKnifeMotion(KnifeOff)&&!NormalKnifeMotion(KnifeHolsterOnly));
- CHECK(NormalKnifeMotion(KnifeStockMotion)&&NormalKnifeMotion(KnifeTrackedQualification));
+ CHECK(NormalKnifeMotion(KnifeStockMotion));
  CHECK(!ValidNormalPlayerTools(4,0,flags,123,3,false,true,true));
  CHECK(!ValidNormalPlayerTools(0,2,flags,123,3,false,true,true));return 0;
 }
@@ -36,6 +34,13 @@ int AllThreeNormalCapabilitiesShareOneConfig(){
  CHECK(ValidNormalPlayerGrenades(c.normalPlayerGrenades,c.flags,c.hostPid,c.magazineReloadSession,false,true)&&
        ValidNormalPlayerTools(c.normalPlayerKnife,c.normalContextualTools,c.flags,c.hostPid,c.magazineReloadSession,false,true,true));
  CHECK(c.ordinaryGrenadeInput==0&&c.chestKnifeProbe==0&&c.ordinaryResourceInput==0);
+ return 0;
+}
+int TrackedStrikeRefusedEvenWithCompleteHostAndBuild(){
+ CHECK(!ChestKnifeTrackedStrikeAvailable);
+ CHECK(!NormalKnifeMotion(KnifeTrackedQualification));
+ CHECK(!ValidNormalPlayerTools(KnifeTrackedQualification,0,flags,123,3,false,true,false));
+ CHECK(!ValidNormalPlayerTools(KnifeTrackedQualification,1,flags,123,3,false,true,true));
  return 0;
 }
 int StrictRealHostAndNoFixture(){
@@ -48,5 +53,5 @@ int StrictRealHostAndNoFixture(){
  CHECK(ValidNormalPlayerTools(1,1,flags|0x200u|0x200000u,123,3,false,true,true));return 0;
 }
 }
-int main(){CHECK(!DefaultsAndMatchedAbi());CHECK(!IndependentCompileAndRuntimeKnobs());CHECK(!AllThreeNormalCapabilitiesShareOneConfig());CHECK(!StrictRealHostAndNoFixture());
- std::puts("Four normal player tool configuration groups PASS.");}
+int main(){CHECK(!DefaultsAndMatchedAbi());CHECK(!IndependentCompileAndRuntimeKnobs());CHECK(!AllThreeNormalCapabilitiesShareOneConfig());CHECK(!StrictRealHostAndNoFixture());CHECK(!TrackedStrikeRefusedEvenWithCompleteHostAndBuild());
+ std::puts("Five normal player tool configuration groups PASS.");}

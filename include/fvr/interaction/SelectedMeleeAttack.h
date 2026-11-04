@@ -31,7 +31,7 @@ struct SelectedMeleeIntent {
 enum class SelectedMeleePending:std::uint8_t {None,Staged,Submitted,Unknown};
 // These are exact adapter outcomes, not deductions from idle animation, input
 // publication, elapsed time, lost tracking or a changed selection.
-enum class SelectedMeleeOutcome:std::uint8_t {RejectedNoEffect,Submitted,Completed,Unknown,OwnerRetired};
+enum class SelectedMeleeOutcome:std::uint8_t {RejectedNoEffect,Submitted,Completed,Unknown,OwnerRetired,CallbackAborted};
 enum class SelectedMeleeReason:std::uint8_t {Invalid,IdentityChanged,Duplicate,Order,
     Pending,NativeUnavailable,NeutralRequired,Ready,Intent,SerialLimit};
 struct SelectedMeleeResult {
@@ -121,6 +121,7 @@ public:
             if(pendingState_!=SelectedMeleePending::Staged)return false;
             break;
         case SelectedMeleeOutcome::Completed:
+        case SelectedMeleeOutcome::CallbackAborted: // Exact callback fault; native effects are unknown.
             if(pendingState_!=SelectedMeleePending::Submitted&&pendingState_!=SelectedMeleePending::Unknown)return false;
             break;
         case SelectedMeleeOutcome::Unknown:

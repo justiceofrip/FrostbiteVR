@@ -22,7 +22,7 @@ struct ChestAttackTarget {
     unsigned handle=0,soldier=0;
     bool operator==(const ChestAttackTarget&)const=default;
 };
-enum class ChestAttackPhase {Staged,Consumed,Acquiring,Acquired,Attacking,Returned};
+enum class ChestAttackPhase {Staged,Consumed,Acquiring,Acquired,Attacking,Returned,Aborted};
 enum class ChestAttackOutcome {Pending,Hit,Miss,Unknown};
 struct ChestAttackReceipt {
     ChestAttackIdentity identity{};
@@ -103,6 +103,14 @@ public:
     }
     void Fail(const ChestAttackIdentity& key)noexcept {if(Same(key)){pending_->failed=true;geometryRevoked_=true;
         if(pending_->outcome!=ChestAttackOutcome::Pending)pending_->outcome=ChestAttackOutcome::Unknown;}}
+    // The accepting native frame unwound. Existing idle/copy-return proof can
+    // still settle an Unknown receipt; neither native return flag is fabricated.
+    void AbortCallback(const ChestAttackIdentity& key,ChestAttackPhase executing)noexcept {
+        if(!Same(key)||phase_!=executing||
+           (executing!=ChestAttackPhase::Acquiring&&executing!=ChestAttackPhase::Attacking))return;
+        Fail(key);
+        phase_=ChestAttackPhase::Aborted;
+    }
     void RevokeGeometry()noexcept {geometryRevoked_=true;}
     // Existing three-copy idle/return proof may retire an unobserved callback;
     // it yields Unknown, never Hit/Miss. No timeout completes native work.

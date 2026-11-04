@@ -32,6 +32,7 @@ struct Bc2PhysicalFixedContainer::Slot {
     std::optional<HandClaim> hand;
     std::optional<SupportNeutral> supportNeutral;
     std::optional<FixedContainerGate> acceptedGate;
+    bool closedGatePublished=false;
     bool carried=false,seedNeutral=false,submissionFailed=false,restart=false,geometryBound=false,recoveryPrepared=false;
     std::optional<math::Matrix4> carriedSupply,target;
     FixedContainerStep targetStep=FixedContainerStep::Open;
@@ -112,8 +113,6 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
         for(auto& item:slots_)if(!item){
             try{item=std::make_unique<Slot>();}catch(...){return out;}
             slot=item.get();slot->equipment=e;slot->binding=view->binding;slot->handOwner=s.input.owner;
-            if(nextLifetime_==UINT64_MAX){item.reset();return out;}
-            slot->lifetime=++nextLifetime_;slot->supply=Supply(e->interaction.kind,slot->lifetime);
             for(unsigned n=0;n<e->parts.size()&&n<slot->parts.size();++n)slot->parts[n]=e->parts[n].weaponFromClosed;
             break;
         }
@@ -141,11 +140,15 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
         !rejected(!(feed_mechanism_detail::Pose(raw.weaponWorldMeters)),FixedContainerReleaseRejection::RawWorld)&&
         !rejected(!((hands.HasRecordedEvidence(raw.input,InteractionHand::Left)||releasedRaw)),FixedContainerReleaseRejection::RawEvidence);
     if(s.observation)s.observation->rawAdmitted=rawFresh;
-    if(slot->policy&&slot->policy->Step()==FixedContainerStep::Complete&&!slot->request&&!slot->restart&&rawFresh&&raw.gripPressed&&
+    if(slot->policy&&slot->policy->Step()==FixedContainerStep::Complete&&slot->closedGatePublished&&
+       !slot->request&&!slot->restart&&rawFresh&&raw.gripPressed&&
        view->snapshot.counts.loaded<view->snapshot.counts.capacity&&view->snapshot.counts.reserve>0){
-        if(nextLifetime_==UINT64_MAX)return out;
-        slot->lifetime=++nextLifetime_;slot->supply=Supply(e->interaction.kind,slot->lifetime);slot->restart=true;
+        slot->lifetime=0;slot->supply={};slot->restart=true;
     }
+    // The native gate orders new lifetimes by successful publication. A busy
+    // first attempt can span a weapon switch, so leave its number provisional.
+    const auto lifetime=slot->lifetime?slot->lifetime:nextLifetime_+1;
+    if(!lifetime)return out;
     // Busy can preserve only a hold that already existed on entry, behind the
     // same still-fresh accepted blocker. It neither renews that gate's lease
     // nor supplies missing native, contact or hand evidence.
@@ -153,7 +156,13 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
     const auto publish=[&](const FixedContainerGate& gate)noexcept {
         const auto result=api_.publishGateObserved?api_.publishGateObserved(api_.context,gate):
             api_.publishGate(api_.context,gate)?FixedContainerGateResult::Published:FixedContainerGateResult::Rejected;
-        if(result==FixedContainerGateResult::Published)slot->acceptedGate=gate;
+        if(result==FixedContainerGateResult::Published){
+            slot->acceptedGate=gate;slot->closedGatePublished=gate.closedVerified;
+            if(!slot->lifetime){
+                nextLifetime_=slot->lifetime=gate.lifetime;
+                slot->supply=Supply(e->interaction.kind,gate.lifetime);
+            }
+        }
         else if(result==FixedContainerGateResult::Rejected)slot->acceptedGate.reset();
         return result;
     };
@@ -177,7 +186,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
     const bool priorBlocked=!slot->geometryBound||(slot->policy&&slot->policy->BlocksFire());
     const bool touching=rawFresh&&raw.grip&&(raw.gripPressed||slot->hand||slot->carried);
     if(slot->revision>UINT64_MAX-2)return out;
-    const FixedContainerGate beforeGate{view->binding,s.input.owner,slot->lifetime,++slot->revision,s.input.sequence,
+    const FixedContainerGate beforeGate{view->binding,s.input.owner,lifetime,++slot->revision,s.input.sequence,
         s.input.observedNs,s.input.deadlineNs,priorBlocked||touching,!(priorBlocked||touching)};
     const auto beforePublication=publish(beforeGate);
     if(beforePublication!=FixedContainerGateResult::Published&&

@@ -1,5 +1,7 @@
 #include "Test.h"
 #include "Bc2VehicleMountedObserver.h"
+#include "Bc2MountedQualification419.h"
+#include <Windows.h>
 #include <cstring>
 #include <cstdlib>
 #include <map>
@@ -120,6 +122,8 @@ int UnwindIsNotReturnAndOccupiedRejected(){auto f=std::make_unique<Fixture>();
     CHECK(report.find("\"registration_rejected\":true")!=std::string::npos);CHECK(report.find("\"scope_leaves\":0")!=std::string::npos);return 0;
 }
 }
-int main(){return OriginalContextAndReturn()||FireDoesNotInventByte24()||NativeJoinAndRawReadFailure()||
+
+#include "Bc2MountedQualification419Cases.inc"
+int main(){return PrivatePrefire419Tests()||OriginalContextAndReturn()||FireDoesNotInventByte24()||NativeJoinAndRawReadFailure()||
     RetainedSourceDoesNotRenew()||BoundedSlotsAndExactReturn()||NeutralDoesNotFillHeldBudget()||
     NonblockingDropAndNoSource()||UnwindIsNotReturnAndOccupiedRejected();}

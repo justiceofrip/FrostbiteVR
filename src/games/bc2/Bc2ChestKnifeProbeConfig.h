@@ -1,5 +1,8 @@
 #pragma once
 namespace fvr::bc2 {
+// x86 /EHsc can skip the chest bridge's stack-scope cleanup when the game
+// handles an SEH exception outside an original Update, Acquire, or Attack.
+inline constexpr bool ChestKnifeTrackedStrikeAvailable=false;
 constexpr bool ValidChestKnifeProbe(unsigned mode,unsigned flags,unsigned duration,
     unsigned magazineSession,bool other,bool compiled)noexcept {
     constexpr unsigned required=9u|0x197800u|0x2000000u|0x10000000u;

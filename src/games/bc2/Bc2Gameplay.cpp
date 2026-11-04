@@ -49,10 +49,12 @@
 #include "Bc2BoatReticle.h"
 #ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
 #include "Bc2VehicleMountedObserver.h"
+#include "Bc2MountedQualification419.h"
 #endif
 #include "Bc2AttachedSoldierProfile.h"
 #include "Bc2BoatAim.h"
 #include "Bc2VehicleCommit.h"
+#include "Bc2VehicleSeatCycle.h"
 #include "Bc2ContextInteractEvidence.h"
 #include "fvr/interaction/VehicleTracking.h"
 #include "Bc2Rig.h"
@@ -549,6 +551,8 @@ void PublishAnchor(unsigned soldier,unsigned weak,std::uint64_t space,float yaw,
 }
 interaction::ControllerActions actions;
 interaction::VehicleControllerActions vehicleActions;
+seatCycle::Button vehicleSeatButton;
+bool vehicleSeatCycleVerified=false;
 ContextInteractEvidence contextInteractEvidence;
 std::atomic<unsigned> vehicleRouteRejects=0,vehicleUnsupported=0,vehicleDriveCommits=0,vehicleCameraViews=0;
 std::atomic<unsigned> vehicleCameraWaits=0,vehicleCameraUnsupportedFrames=0;
@@ -598,6 +602,7 @@ VehicleShotBinding vehicleShotBinding{};VehicleShotObserver vehicleShotObserver;
 VehicleReticleSourceBinding boatReticleBinding{};BoatReticleRuntime boatReticle;
 #ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
 VehicleMountedObserver vehicleMountedObserver;
+mounted419::Qualification mountedPrefire;
 bool vehicleMountedRegistered=false; // Install/Stop lane only.
 #endif
 std::uint64_t vehicleShotSpace=0; // Only the verified input thread reads/writes this.
@@ -2189,7 +2194,13 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     Callback callback;gatherOriginal(self,cache);
     if(!enabled.load(std::memory_order_acquire)||!scope||scope->used)return;
     if(reinterpret_cast<unsigned>(self)!=scope->owner.router||reinterpret_cast<unsigned>(cache)!=scope->owner.cache){++mismatches;return;}
-    scope->used=true;++gathers;if((bodyHolster||magazineDetached||physicalFeed||physicalPistolSlide)&&holsterNativeTick<UINT64_MAX)scope->nativeTick=++holsterNativeTick;
+#ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
+    // Each accepted local Gather gets a unique immutable source, even on a
+    // repeated XR packet. Failed readback and all early returns retire it.
+    vehicleShotObserver.Invalidate();
+    mountedPrefire.Invalidate();
+#endif
+    scope->used=true;const unsigned gatherSequence=++gathers;if((bodyHolster||magazineDetached||physicalFeed||physicalPistolSlide)&&holsterNativeTick<UINT64_MAX)scope->nativeTick=++holsterNativeTick;
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
     struct SelectedKnifeGatherOutcome {
         selectedKnife::Request request{};bool observed=false,published=false;
@@ -2385,9 +2396,28 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             command.axes[unsigned(VehicleAxis::LookYaw)]=headAim.yaw;command.axes[unsigned(VehicleAxis::LookPitch)]=headAim.pitch;
             command.axes[unsigned(VehicleAxis::Fire)]=boatHeadFire&&controls.armedRight?controls.axes.fire:0;
         }
-        const auto plan=BuildVehicleInputPlan(inputProfile,{seat.identity,seat.fingerprint,true,nativePlaying},command,{reinterpret_cast<const std::byte*>(owner.cache),InputBytes});
+        auto plan=BuildVehicleInputPlan(inputProfile,{seat.identity,seat.fingerprint,true,nativePlaying},command,{reinterpret_cast<const std::byte*>(owner.cache),InputBytes});
+        // Add only a held ChangeEntry request before the original player's restriction pass.
+        // A missing gather, input owner, seat, permission or device binding requires a release.
+        if(vehicleSeatCycleVerified) {
+            const bool canUse=nativePlaying && controls.armedRight && !controls.axes.exit &&
+                interaction::ValidInput(input) && interaction::GameplayOwnsInput(input.menu,HandNanos(clock.QuadPart)) &&
+                !(allowed&(seatCycle::InputBit|seatCycle::ConflictingBits)) && plan.status==VehicleInputPlanStatus::Ready;
+            const auto currentBinding=vehicleSeatButton.CheckBinding(input,canUse,[&]() -> seatCycle::Binding {
+                const auto current=seatCycle::ReadBinding(memory,seat,true);
+                if(current && seatCycle::ReadBinding(memory,seat,true)==current && Resolve(check) && check==owner)
+                    return *current;
+                return {};
+            });
+            QueryPerformanceCounter(&clock);
+            const bool usable=canUse && clock.QuadPart<inputDeadline &&
+                interaction::GameplayOwnsInput(input.menu,HandNanos(clock.QuadPart));
+            vehicleSeatButton.Update(seat.identity,currentBinding,input,gatherSequence,HandNanos(clock.QuadPart),
+                                     HandNanos(inputDeadline),usable);
+            if(clock.QuadPart>=inputDeadline)return;
+        }
         VehicleInputOverride patch;
-        if(!patch.Apply({reinterpret_cast<std::byte*>(owner.cache),InputBytes},plan)){++vehicleRouteRejects;return;}
+        if(!vehicleSeatButton.Apply(patch,{reinterpret_cast<std::byte*>(owner.cache),InputBytes},plan,allowed)){++vehicleRouteRejects;return;}
         patch.Commit();interact.committed=true;
         if(headAim.ready&&nativeBoatAim){
             ++boatAimCommits;if(command.axes[unsigned(VehicleAxis::Fire)]>0&&!(plan.deniedAxes&(1u<<unsigned(VehicleAxis::Fire))))++boatAimFireCommits;
@@ -2426,9 +2456,23 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         const bool held=std::any_of(record.written.begin(),record.written.end(),[](float v){return v!=0;})&&record.ms-vehicleGatherRecordedAt>=100;
         const auto count=vehicleGatherCount.load();
         if(count<vehicleGatherRecords.size()&&(changed||held)){vehicleGatherRecords[count]=record;vehicleGatherRecordedAt=record.ms;vehicleGatherCount.store(count+1,std::memory_order_release);}
-        if(vehicleShotBinding.verified&&cachedCampaignVehicle&&record.verified&&record.flagsVerified)
+        if(vehicleShotBinding.verified&&cachedCampaignVehicle&&record.verified&&record.flagsVerified){
             vehicleShotObserver.Publish({*cachedCampaignVehicle,{owner.manager,owner.player,owner.soldier,owner.weak,rigEpoch,epoch},
                 input.generation,input.spaceGeneration,HandNanos(inputDeadline-handFrequency/10),HandNanos(inputDeadline),record.observed[4]});
+#ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
+            // This is the one local Gather publisher. Invalidate at its
+            // entry makes a dropped Publish/Source fail closed on this epoch.
+            const auto published=viewValid?vehicleShotObserver.Source():std::nullopt;
+            if(published&&published->profile.owner==seat.identity&&published->input==input.generation&&
+               published->space==input.spaceGeneration&&vehicleShotObserver.Current(*published)){
+                VehicleReticleProducerContext reticleContext;
+                reticleContext.input={seatOwner,published->space,true,viewValid,published->observedNs,published->deadlineNs};
+                reticleContext.inputSequence=published->input;reticleContext.scene=rigEpoch;reticleContext.weaponGeneration=epoch;
+                reticleContext.focused=input.focused;reticleContext.playing=nativePlaying;
+                mountedPrefire.Gather(published->observationEpoch,reticleContext);
+            }
+#endif
+        }
         if(boatReticleBinding.verified&&nativeBoatAim&&record.verified&&record.flagsVerified){
             VehicleReticleProducerContext reticleContext;
             reticleContext.input={seatOwner,input.spaceGeneration,true,viewValid,HandNanos(inputDeadline-handFrequency/10),HandNanos(inputDeadline)};
@@ -2440,7 +2484,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         previousVehicleGather=record;havePreviousVehicleGather=true;
         return;
     }
-    vehicleActions.Reset();PublishVehicleView({});boatReticle.Invalidate();
+    vehicleSeatButton.Reset();vehicleActions.Reset();PublishVehicleView({});boatReticle.Invalidate();
     {std::lock_guard lock(vehicleViewMutex);boatAimReady=false;boatHeadPolicy.Reset();}
     auto actionInput=input;if(reloadRequestMode)actionInput.hands[0].trigger=0;
     if(inventoryReloadFixture)inventoryReloadFixture->ActionInput(actionInput);
@@ -4594,13 +4638,20 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
     motionAim=enableMotionAim;bodyFollow=enableBodyFollow;observePoses=enablePoseObservation;handPoses=enableHandPoses;if((bodyFollow||observePoses)&&!motionAim)return false;profile=*found;const auto aim=DiscoverAiming(bytes,pe);if(!aim)return false;aimingProfile=*aim;image=base;imageSize=pe.imageSize;readInput=reader;
     const VehicleRouteMemory vehicleMemory{nullptr,[](void*,unsigned at,void* dst,std::size_t n){return Read(at,dst,n);},[](void*,unsigned at,const char* name){return Type(at,name);}};
     campaignVehicleBinding=VerifyCampaignVehicleCode(vehicleMemory,unsigned(image));
+    vehicleSeatButton.Reset();
+    vehicleSeatCycleVerified=seatCycle::Verify(vehicleMemory,unsigned(image),[&](unsigned rva,unsigned size){
+        return std::any_of(pe.sections.begin(),pe.sections.end(),[&](const auto& s){
+            return (s.flags&IMAGE_SCN_MEM_EXECUTE) && rva>=s.rva && rva-s.rva<s.virtualSize &&
+                   size<=s.virtualSize-(rva-s.rva);
+        });
+    });
     vehicleShotBinding=VerifyVehicleShotCode(vehicleMemory,unsigned(image));
     boatReticleBinding=VerifyVehicleReticleSourceCode(vehicleMemory,unsigned(image));
 #ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
     // All original code fingerprints must be read before the shared Update
     // detour is installed. No fallback to an unverified or occupied observer.
-    const auto mountedBinding=VerifyVehicleMountedCode(vehicleMemory,unsigned(image));
-    if(!mountedBinding.verified||(!handPoses&&!observePoses))return false;
+    const auto mountedBinding=mounted413::Verify(vehicleMemory,unsigned(image));
+    if(!mountedBinding.mounted.verified||(!handPoses&&!observePoses))return false;
     VehicleMountedApi mountedApi;mountedApi.context=&vehicleShotObserver;mountedApi.memory=vehicleMemory;
     mountedApi.source=[](void* p,VehicleShotSource& out)noexcept{
         const auto source=static_cast<VehicleShotObserver*>(p)->Source();
@@ -4627,7 +4678,15 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
         const auto low=reinterpret_cast<std::uintptr_t>(tib->StackLimit),high=reinterpret_cast<std::uintptr_t>(tib->StackBase);
         return low<high&&at>=low&&at<high&&bytes<=high-at;
     };
-    if(!vehicleMountedObserver.Configure(mountedBinding,mountedApi))return false;
+    mountedPrefire.Configure(mountedBinding,mountedApi);
+    mountedApi.lost=[]()noexcept{mountedPrefire.Lost();};
+    mountedApi.prefire=[](std::uint64_t serial,const VehicleShotSource& s,const OriginalFiringUpdate& c,const VehicleMountedSample& b)noexcept{
+        mountedPrefire.Enter(serial,s,c,b);
+    };
+    mountedApi.returned=[](std::uint64_t serial,const VehicleShotSource& s,const OriginalFiringUpdate& c,const VehicleMountedSample& a,bool same)noexcept{
+        mountedPrefire.Leave(serial,s,c,a,same);
+    };
+    if(!vehicleMountedObserver.Configure(mountedBinding.mounted,mountedApi))return false;
 #endif
     if(unsigned(reloadHoldProbe)+unsigned(reloadRoundProbe)+unsigned(reloadRequestProbe)>1||((reloadHoldProbe||reloadRoundProbe||reloadRequestProbe)&&!handPoses)||
         (reloadRequestProbe&&!twoHandGrip))return false;
@@ -5099,6 +5158,9 @@ void Start()noexcept {
 #endif
 }
 bool PrepareSessionStop()noexcept {
+#ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
+    mountedPrefire.Close();
+#endif
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
     // Close even if existing gameplay retirement refuses. Retain all dependencies.
 #ifdef FVR_BC2_SMOKE_ORIGIN_CANDIDATE
@@ -5225,6 +5287,7 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
         <<",\"camera_owner\":"<<reticle.source.cameraOwner<<",\"camera_flags\":"<<reticle.source.cameraFlags<<",\"projectile_count\":"<<reticle.source.count<<",\"inherit_speed\":"<<reticle.source.inheritSpeed<<'}';}
 #ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
     out<<",\"vehicle_mounted_update_observation\":";vehicleMountedObserver.Report(out);
+    out<<",\"private_mounted_prefire\":";mountedPrefire.Report(out);
 #endif
 #ifdef FVR_BC2_ORDINARY_RESOURCE_PAUSE_PROBE
     out<<",\"native_input_pause_probe\":{\"ran\":"<<(nativeInputPauseProbe.ran?"true":"false")

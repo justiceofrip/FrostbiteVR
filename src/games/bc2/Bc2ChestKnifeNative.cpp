@@ -1,7 +1,9 @@
 #include "Bc2ChestKnifeNative.h"
+#include "Bc2ChestKnifeProbeConfig.h"
 #include "KnifeNativeCode.h"
 #include "Bc2KnifeAttackGate.h"
 #include "Bc2KnifeCopyReceipt.h"
+#include "Bc2OriginalFiringUnwind.h"
 #include "Bc2KnifeAcceptedOwnership.h"
 #include "Bc2KnifeSessionClose.h"
 #include "Bc2KnifeSessionCloseProof.h"
@@ -55,7 +57,7 @@ struct Service {
     std::uint64_t stagedEpoch=0,bodyOperation=0,nativeLifetime=0,observationSequence=0;
     std::optional<KnifeCommand> outstanding;
     std::uint64_t lastAttackSequence=0,lastAttackSerial=0;std::int64_t lastAttackObservedNs=0,lastAttackReceiptNs=0;
-    std::array<std::atomic<std::uint64_t>,3> returnedCopySerial{};unsigned attackUnknown=0;
+    std::array<std::atomic<std::uint64_t>,3> returnedCopySerial{},abortedCopySerial{};unsigned attackUnknown=0;
     std::array<unsigned,3> updates{},states{};std::array<std::atomic<unsigned>,3> deploy{};unsigned chooserOverrides=0;std::atomic<unsigned> deployMisses=0,foreignGuards=0,returnSuppressed=0;unsigned attackCopies=0,attackReceipts=0;
     bool fireSeen=false,attackSeen=false,sentinelChanged=false;
     unsigned completedInputMask=0,completedObservationMask=0;
@@ -74,7 +76,18 @@ struct Service {
 using ChooseFn=int(__thiscall*)(void*,void*);using ReadyFn=bool(__thiscall*)(void*);
 using SetterFn=void(__thiscall*)(void*,unsigned,bool);
 ChooseFn originalChoose=nullptr;ReadyFn originalReady=nullptr;SetterFn originalSetter=nullptr;std::array<void*,3> hooks{};
-struct Active {Active(){service.active.fetch_add(1,std::memory_order_acq_rel);}~Active(){service.active.fetch_sub(1,std::memory_order_acq_rel);}};
+struct Active {
+    bool open=true;
+    Active(){service.active.fetch_add(1,std::memory_order_acq_rel);}
+    ~Active(){Release();}
+    void Release()noexcept {
+        if(open){open=false;service.active.fetch_sub(1,std::memory_order_acq_rel);}
+    }
+    template<class Body> void Forward(Body&& body){
+        auto abort=[&]()noexcept{Release();};
+        RunOriginalFiringUnwind(body,abort);
+    }
+};
 std::int64_t Now()noexcept {LARGE_INTEGER q{};if(!service.frequency||!QueryPerformanceCounter(&q))return 0;
     return q.QuadPart/service.frequency*1000000000ll+(q.QuadPart%service.frequency)*1000000000ll/service.frequency;}
 template<class T>T Word(const std::byte* b,unsigned at)noexcept{T value{};std::memcpy(&value,b+at,sizeof(value));return value;}
@@ -223,6 +236,27 @@ OriginalFiringToken Enter(void*,const OriginalFiringUpdate& call)noexcept {
     if(service.attacks.Pending())token.words[6]=service.attacks.Pending()->serial;
     token.words[4]=std::uint32_t(Word<int>(state.data(),0x7c));token.words[5]=std::uint32_t(Word<int>(state.data(),0x80));return token;
 }
+void AbortUpdate(void*,const OriginalFiringUpdate&,const OriginalFiringToken& token)noexcept {
+    if(token.words[1]&&token.words[1]<=3){
+        // Enter and AttackInput release this gate before invoking the game.
+        // A delayed unwind may belong to an actor already retired on another thread.
+        std::lock_guard lock(service.gate);
+        if(service.owned&&token.words[0]==service.nativeLifetime){
+            ++service.gaps;service.ownedObservationGap=true;
+            if(token.words[6]&&service.attacks.Pending()&&service.attacks.Pending()->serial==token.words[6]){
+                const auto branch=unsigned(token.words[1]-1);
+                if((token.words[3]&2)&&service.copySerial[branch].load()==token.words[6])
+                    service.abortedCopySerial[branch].store(token.words[6],std::memory_order_release);
+                if(service.attackNative&&service.attackNative->key.serial==token.words[6])
+                    service.bridge.Fail(service.attackNative->key);
+                // The abandoned invocation may have changed native state.
+                // Keep custody and the outstanding transaction unresolved.
+                service.bad=true;
+            }
+        }
+    }
+    if(token.words[7])service.active.fetch_sub(1,std::memory_order_acq_rel);
+}
 void Leave(void*,const OriginalFiringUpdate& call,const OriginalFiringToken& token)noexcept {
     // Published only after this exact copied original Update has returned.
     // Observation lock/read loss cannot mistake an in-flight copy for idle.
@@ -262,7 +296,8 @@ void Leave(void*,const OriginalFiringUpdate& call,const OriginalFiringToken& tok
     if(token.words[7])service.active.fetch_sub(1,std::memory_order_acq_rel);
 }
 int __fastcall Choose(void* self,void*,void* input){
-    Active active;const auto caller=unsigned(_ReturnAddress());const int original=originalChoose(self,input);
+    Active active;const auto caller=unsigned(_ReturnAddress());int original=-1;
+    active.Forward([&]{original=originalChoose(self,input);});
     if(original!=-1||caller!=service.base+pk::ChooseCallerRva||!service.enabled.load(std::memory_order_acquire))return original;
     std::unique_lock lock(service.gate,std::try_to_lock);if(!lock.owns_lock()||service.bad)return original;
     if(service.closing.load(std::memory_order_acquire)){
@@ -319,7 +354,7 @@ void __fastcall AutomaticReturn(void* self,void*,unsigned slot,bool eligibility)
             }
         }
     }
-    originalSetter(self,slot,eligibility);
+    active.Forward([&]{originalSetter(self,slot,eligibility);});
 }
 std::optional<std::array<std::byte,0x30>> AttackInput(void*,const OriginalFiringUpdate& call,OriginalFiringToken& token)noexcept {
     if(!service.enabled.load(std::memory_order_acquire)||!service.motionEnabled)return {};
@@ -351,11 +386,13 @@ std::optional<std::array<std::byte,0x30>> AttackInput(void*,const OriginalFiring
     service.copyInput[branch-1]=command.source.sequence;service.copyObservedNs[branch-1]=std::uint64_t(command.source.observedNs);
     service.copyContext[branch-1]=call.context;service.copyCaller[branch-1]=call.caller;
     service.copyReturnedNs[branch-1]=0;service.copyOriginalUnchanged[branch-1]=0;service.copyPostReadKnown[branch-1]=0;
+    service.returnedCopySerial[branch-1]=0;
     service.copySerial[branch-1].store(command.serial,std::memory_order_release);
     ++service.attackCopies;return nativeInput;
 }
 bool __fastcall DeployReady(void* self,void*){
-    Active active;const auto caller=unsigned(_ReturnAddress());const bool ready=originalReady(self);
+    Active active;const auto caller=unsigned(_ReturnAddress());bool ready=false;
+    active.Forward([&]{ready=originalReady(self);});
     if(!ready||caller!=service.base+pk::DeployReadyCallerRva||!service.enabled.load(std::memory_order_acquire))return ready;
     // No policy/gather lock: a busy observer must never turn a deliberately
     // selected knife's automatic deployment attack back on.
@@ -368,6 +405,7 @@ bool __fastcall DeployReady(void* self,void*){
 }
 #include "Bc2ChestKnifeAttackBridge.inc"
 bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uintptr_t base,const ReloadStateMemory& memory,bool motionEnabled,bool attackBridgeEnabled)noexcept {
+    if(attackBridgeEnabled&&!ChestKnifeTrackedStrikeAvailable)return false;
     if(service.installed||base>UINT32_MAX||!memory.read||!memory.type)return false;
     const auto mode=DiscoverWeaponMode(bytes,pe);const auto state=DiscoverReloadState(bytes,pe);const auto server=DiscoverReloadServer(bytes,pe);const auto flow=DiscoverReloadFlow(bytes,pe);
     if(!mode||!state||!server||!flow||!ValidateReloadFlowLive(memory,*flow,unsigned(base))||!pk::VerifyAttackCode(memory,unsigned(base),state->imageSize)||!pk::VerifyDrawReturnCode(memory,unsigned(base),state->imageSize,*mode)||
@@ -381,7 +419,7 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
     if(MH_CreateHook(hooks[1],DeployReady,reinterpret_cast<void**>(&originalReady))!=MH_OK){MH_RemoveHook(hooks[0]);hooks={};return false;}
     if(MH_CreateHook(hooks[2],AutomaticReturn,reinterpret_cast<void**>(&originalSetter))!=MH_OK){
         MH_RemoveHook(hooks[1]);MH_RemoveHook(hooks[0]);hooks={};return false;}
-    if(!reloadFlowRuntime::RegisterOriginalFiringObserver({&service,Enter,Leave,AttackInput})){
+    if(!reloadFlowRuntime::RegisterOriginalFiringObserver({&service,Enter,Leave,AttackInput,AbortUpdate})){
         MH_RemoveHook(hooks[2]);MH_RemoveHook(hooks[1]);MH_RemoveHook(hooks[0]);hooks={};return false;}
     service.installed=true;return true;
 }
@@ -634,7 +672,7 @@ void Report(std::ostream& out){std::unique_lock lock(service.gate,std::try_to_lo
     for(unsigned n=0;n<3;++n){if(n)out<<',';
         out<<"{\"branch\":"<<n<<",\"serial\":"<<service.copySerial[n].load()<<",\"input\":"<<service.copyInput[n].load()
            <<",\"observed_ns\":"<<service.copyObservedNs[n].load()<<",\"context\":"<<service.copyContext[n].load()<<",\"caller\":"<<service.copyCaller[n].load()
-           <<",\"returned_serial\":"<<service.returnedCopySerial[n].load()<<",\"returned_ns\":"<<service.copyReturnedNs[n].load()
+           <<",\"aborted_serial\":"<<service.abortedCopySerial[n].load()<<",\"returned_serial\":"<<service.returnedCopySerial[n].load()<<",\"returned_ns\":"<<service.copyReturnedNs[n].load()
            <<",\"original_read_known\":"<<service.copyPostReadKnown[n].load()<<",\"original_hash_match\":"<<service.copyOriginalUnchanged[n].load()<<",\"before_fnv64\":"<<service.copyHashBefore[n].load()<<",\"after_fnv64\":"<<service.copyHashAfter[n].load()<<'}';}
     out<<"]";
     const auto closeProof=[&](const Service::CloseProof& r){

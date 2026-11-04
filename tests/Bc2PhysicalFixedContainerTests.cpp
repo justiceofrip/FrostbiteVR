@@ -1,4 +1,5 @@
 #include "Test.h"
+#include <algorithm>
 #include <iostream>
 #include <sstream>
 #include "Bc2PhysicalFixedContainer.h"
@@ -263,7 +264,12 @@ int BusyCannotAuthorizeDispatchOrClosure(){
     CHECK(cylinder.result.tracking.step==FixedContainerStep::Complete&&!cylinder.result.tracking.enabled);
     CHECK(cylinder.gate&&cylinder.gate->blocksFire&&!cylinder.gate->closedVerified&&cylinder.calls==0);
     cylinder.busyGateMask=0;const auto& opening=cylinder.equipment->interaction.geometry[0].motion;
-    cylinder.Send(At(opening,0),false);CHECK(cylinder.gate->closedVerified&&!cylinder.gate->blocksFire);
+    // A released grip while both publications are busy leaves the old native
+    // gate open. Its next press must publish that close before a new lifetime.
+    const auto lifetime=cylinder.gate->lifetime;cylinder.busyGateMask=3;
+    cylinder.Send(At(opening,0),false);cylinder.busyGateMask=0;cylinder.Send(At(opening,0),true);
+    CHECK(cylinder.gate->lifetime==lifetime&&cylinder.gate->closedVerified&&!cylinder.gate->blocksFire);
+    cylinder.Send(At(opening,0),false);
     const auto closed=cylinder.gate;cylinder.busyGateMask=3;cylinder.Send(At(opening,0),true);
     CHECK(!cylinder.result.tracking.enabled&&!cylinder.result.mechanismOwnsHand&&cylinder.gate==closed);
     CHECK(!cylinder.hands.Current(InteractionHand::Left)); // New lifetime/opening needs a published blocker.
@@ -627,6 +633,66 @@ int InsertFixedWithOfflineReceipt(Fixture& f,bool freshPickupGap=false){
         f.observation.lastCompletion->outcome.receipt&&f.observation.lastCompletion->outcome.receipt->command==command);
     CHECK(f.service.View()->snapshot.counts==command.after);return 0;
 }
+int InterruptedGateEnrollmentKeepsBothWeaponsUsable(){
+    const auto& profiles=generated::UnderbarrelFixedContainerEquipment;
+    const auto breech=std::find_if(profiles.begin(),profiles.end(),[](const auto& e){
+        return e.interaction.kind==FixedContainerKind::SingleRoundBreech;
+    });
+    CHECK(breech!=profiles.end());
+    for(bool restarting:{false,true}){
+        Fixture f;f.observe=true;
+        const auto* cylinder=f.equipment;const auto cylinderAmmo=f.counts;
+        const auto cylinderResource=f.binding.context.resource;
+        auto launcherResource=cylinderResource;launcherResource.weapon+=0x1000;++launcherResource.weaponGeneration;
+        const auto select=[&](const FixedContainerEquipmentProfile& equipment,AmmoResourceIdentity resource,AmmunitionCounts counts){
+            const auto offset=std::uint32_t(resource.weapon-cylinderResource.weapon);
+            f.equipment=&equipment;f.linkedFamily=nullptr;SelectFixedFamily(f);f.counts=counts;
+            f.native.owner.weapon=std::uint32_t(resource.weapon);++f.native.owner.equipGeneration;
+            f.native.serverItem=0xa0000+offset;f.native.firing={0x50000+offset,0x60000+offset,0x70000+offset};
+            f.binding.owner=f.native.owner;f.binding.context.resource=resource;
+            f.binding.context.equipGeneration=f.native.owner.equipGeneration;
+            f.binding.data=0xd0000+offset;f.binding.persistence=0xe0000+offset;
+            ++f.owner.equipGeneration;f.gun={};
+        };
+        const auto cylinderStart=At(cylinder->interaction.geometry[0].motion,0);
+        if(restarting){
+            f.Hinge(0);f.Hinge(1);f.Send(At(cylinder->interaction.geometry[2].motion,0),false,false,true);
+            f.Hinge(3);f.Send(cylinderStart,false);
+            CHECK(f.gate&&f.gate->closedVerified&&f.result.tracking.step==FixedContainerStep::Complete);
+        }
+        f.busyGateMask=1;f.Send(cylinderStart,true);
+        CHECK(!f.result.tracking.enabled&&!f.result.mechanismOwnsHand);
+        f.busyGateMask=0;select(*breech,launcherResource,{0,1,1});
+        f.Hinge(0);CHECK(f.result.tracking.step==FixedContainerStep::Insert);
+        CHECK(!InsertFixedWithOfflineReceipt(f));CHECK(f.result.tracking.step==FixedContainerStep::Close&&f.result.blocksFire);
+        const auto launcherGate=*f.gate;const auto launcherAmmo=f.counts;const auto launcherSupply=f.observation.supply;
+
+        select(*cylinder,cylinderResource,cylinderAmmo);f.missingView=true;f.Send(cylinderStart,false);
+        CHECK(!f.result.tracking.enabled&&f.gate==launcherGate);
+        f.missingView=false;f.Send(cylinderStart,false);
+        // The native gate rejects every new enrollment or cycle at/below its
+        // latest accepted lifetime, including this launcher's enrollment.
+        CHECK(f.result.tracking.enabled&&f.gate&&f.gate->binding.context.resource==cylinderResource);
+        CHECK(f.gate->lifetime>launcherGate.lifetime&&f.observation.supply!=launcherSupply);
+        f.Hinge(0);CHECK(f.result.tracking.step==FixedContainerStep::EjectSpent&&f.result.blocksFire);
+        const auto openCylinderLifetime=f.gate->lifetime;
+
+        select(*breech,launcherResource,launcherAmmo);const auto closing=At(breech->interaction.geometry[3].motion,0);
+        f.missingView=true;f.Send(closing,false);CHECK(!f.result.tracking.enabled);
+        f.missingView=false;f.Send(closing,false);
+        CHECK(f.result.tracking.enabled&&f.result.blocksFire&&f.result.tracking.step==FixedContainerStep::Close);
+        CHECK(f.gate->lifetime==launcherGate.lifetime&&f.observation.supply==launcherSupply);
+        f.Hinge(3);CHECK(f.result.tracking.step==FixedContainerStep::Complete&&f.gate->closedVerified);
+        CHECK(f.service.View()->snapshot.counts==launcherAmmo&&f.calls==1);
+
+        // A replacement at the same native receiver address starts closed.
+        auto replacement=cylinderResource;replacement.weaponGeneration=launcherResource.weaponGeneration+1;
+        select(*cylinder,replacement,cylinderAmmo);f.Send(cylinderStart,false);
+        CHECK(f.result.tracking.enabled&&f.result.tracking.step==FixedContainerStep::Open&&!f.result.blocksFire);
+        CHECK(f.gate->lifetime>openCylinderLifetime&&f.service.View()->snapshot.counts==cylinderAmmo&&f.calls==1);
+    }
+    return 0;
+}
 int EveryFixedFamilyFreshPickupGapCompletesOnce(){
     unsigned profiles=0,linked=0;std::array<bool,5> kinds{};
     for(const auto registry:{std::span<const FixedContainerEquipmentProfile>(generated::FixedContainerEquipment),
@@ -971,6 +1037,7 @@ int RecurringRawGapsConsumeDelayedGeometry(){
 }
 
 int main(){if(FixedReleaseCauseDiagnostics())return 1;
+    if(InterruptedGateEnrollmentKeepsBothWeaponsUsable())return 1;
     if(ReplacementRawGapRetainsCustodyAndResumes()||ReplacementRawGapStillHonorsInvalidation())return 1;
     if(RecurringRawGapsConsumeDelayedGeometry()||EveryFixedFamilyFreshPickupGapCompletesOnce())return 1;
     return ExactSelectorsAndSupply()||GateBeforePhysicalAndExactOwner()||BusyMechanismFeedbackContinuesOpening()||

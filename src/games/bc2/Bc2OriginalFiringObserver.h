@@ -16,6 +16,8 @@ struct OriginalFiringObserver {
     OriginalFiringToken (*enter)(void*,const OriginalFiringUpdate&)noexcept=nullptr;
     void (*leave)(void*,const OriginalFiringUpdate&,const OriginalFiringToken&)noexcept=nullptr;
     std::optional<std::array<std::byte,0x30>> (*copyInput)(void*,const OriginalFiringUpdate&,OriginalFiringToken&)noexcept=nullptr;
+    // A consumer with native-call state supplies a distinct abnormal exit.
+    void (*abort)(void*,const OriginalFiringUpdate&,const OriginalFiringToken&)noexcept=nullptr;
 };
 class OriginalFiringScope {
 public:
@@ -23,7 +25,18 @@ public:
         previous_=current_;current_=this;
         if(observer_.enter&&observer_.leave)token_=observer_.enter(observer_.context,call_);
     }
-    ~OriginalFiringScope(){if(observer_.enter&&observer_.leave)observer_.leave(observer_.context,call_,token_);current_=previous_;}
+    ~OriginalFiringScope(){
+        if(closed_)return;
+        if(observer_.enter&&observer_.leave)observer_.leave(observer_.context,call_,token_);
+        current_=previous_;
+    }
+    // The native unwind leaf calls this while the owning hook frame is live.
+    // A subsequent C++ destructor must neither publish a return nor pop twice.
+    void Abort()noexcept {
+        if(closed_)return;
+        closed_=true;copied_=false;nativeContext_=0;current_=previous_;
+        if(observer_.enter&&observer_.leave&&observer_.abort)observer_.abort(observer_.context,call_,token_);
+    }
     std::optional<std::array<std::byte,0x30>> InputCopy()noexcept {
         if(copyRequested_)return {};copyRequested_=true;
         auto result=observer_.copyInput?observer_.copyInput(observer_.context,call_,token_):std::nullopt;
@@ -43,7 +56,7 @@ public:
 private:
     inline static thread_local const OriginalFiringScope* current_=nullptr;
     const OriginalFiringScope* previous_=nullptr;std::uintptr_t nativeContext_=0;bool copied_=false;
-    OriginalFiringObserver observer_{};OriginalFiringUpdate call_{};OriginalFiringToken token_{};bool copyRequested_=false;
+    OriginalFiringObserver observer_{};OriginalFiringUpdate call_{};OriginalFiringToken token_{};bool copyRequested_=false,closed_=false;
 };
 namespace reloadFlowRuntime {
 // Must follow Install and precede Start. One independent observer; no replacement.

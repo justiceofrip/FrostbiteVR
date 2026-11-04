@@ -2,6 +2,7 @@
 #include "fvr/interaction/VehicleTracking.h"
 #include "Bc2VehicleRoutes.h"
 #include "Bc2VehicleCommit.h"
+#include "Bc2VehicleSeatCycle.h"
 #include "Bc2BoatProfile.h"
 #include "Bc2VehicleCameraPolicy.h"
 #include <vector>
@@ -11,6 +12,7 @@
 #include <string>
 using namespace fvr;using namespace fvr::bc2;using namespace fvr::interaction;
 namespace {
+#include "Bc2SeatCycle431Cases.inc"
 math::Matrix4 Identity(){math::Matrix4 m{};for(unsigned n=0;n<4;++n)m.values[n][n]=1;return m;}
 bool Same(const math::Matrix4& a,const math::Matrix4& b){for(unsigned r=0;r<4;++r)for(unsigned c=0;c<4;++c)if(!Near(a.values[r][c],b.values[r][c],.0003f))return false;return true;}
 int SeatReferenceAndMotion(){
@@ -246,4 +248,4 @@ int ExactBoatProfile(){
     return 0;
 }
 }
-int main(){if(KnownSeatNeverFallsThroughOnInputGap()||TemporaryInputGapPreservesSeatedLean()||VehicleCameraDeadlineAndOwnerChanges()||CampaignSeatDoesNotRequirePblAim()||SeatReferenceAndMotion()||ContinuousAxesAndRecovery()||DuplicateActionValidityLoss()||ExactNativeRouteReader()||ExactOnFootSharedConcept()||CommitExactPermissions()||ExactBoatProfile())return 1;std::cout<<"11 vehicle runtime cases passed\n";}
+int main(){if(SeatCycleRequestPreservesNativeControls()||SeatCycleRequiresFreshNeutralAndDistinctButton()||SeatCycleRequiresCurrentMappedKeyboardAndPermission()||KnownSeatNeverFallsThroughOnInputGap()||TemporaryInputGapPreservesSeatedLean()||VehicleCameraDeadlineAndOwnerChanges()||CampaignSeatDoesNotRequirePblAim()||SeatReferenceAndMotion()||ContinuousAxesAndRecovery()||DuplicateActionValidityLoss()||ExactNativeRouteReader()||ExactOnFootSharedConcept()||CommitExactPermissions()||ExactBoatProfile())return 1;std::cout<<"Vehicle runtime and seat-cycle cases passed: native controls, fresh button and current permission\n";}

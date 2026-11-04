@@ -1,0 +1,9 @@
+Campaign integration: shared reloads, vehicle input and chest knife
+
+Fixed-chamber reloads: the first successful native gate publication now assigns a weapon its reload lifetime. Switching between a launcher that owes a close and a cylinder still waiting to enroll no longer leaves the second item with an older, unusable lifetime. A new cycle must also wait for the previous close to be published. The shared test covers interleaved weapons, a temporarily missing binding and a reused receiver. Full launcher Insert/Close in BC2 remains open.
+
+Vehicle input: Quest right A requests the next seat on the supported executable when the current vehicle, permission, device mapping and controller agree. It adds only the cycle bit before BC2 processes input. BC2 still chooses and permits the destination; left X retains exit. Losing permission or missing a commit requires a fresh release before another request. The private AH60 observer records only a current gunner's pre-fire direction. It neither supplies a player reticle nor establishes the trajectory of an actual shot. Campaign driving, seat changes and the jeep ride still need play evidence.
+
+Chest knife: draw and return are enabled in normal Play. Selected-knife callbacks, the chest attack transaction and the shared firing dispatcher now distinguish a returned original call from one interrupted by the engine. Cleanup restores outer callback state and does not infer damage or undo native side effects. Tracked strike qualification is disabled; a successful synthetic interruption or a working chest draw does not establish melee damage in BC2.
+
+The ammunition transaction registrations, installed asset recipe and user's game settings are unchanged by this batch. See docs/WEAPON-COVERAGE-CURRENT.md for family coverage, docs/BC2-VEHICLES-CAMPAIGN.md for controls and docs/CURRENT.md for the installed version.

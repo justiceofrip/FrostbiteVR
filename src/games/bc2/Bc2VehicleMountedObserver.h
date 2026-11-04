@@ -36,6 +36,10 @@ struct VehicleMountedApi {
     bool (*seat)(void*,const VehicleShotSource&,VehicleRouteSnapshot&)noexcept=nullptr;
     std::int64_t (*clock)(void*)noexcept=nullptr;
     bool (*stack)(void*,unsigned,std::size_t)noexcept=nullptr;
+    // Optional private consumer. No native callback or original invocation belongs to it.
+    void (*lost)()noexcept=nullptr;
+    void (*prefire)(std::uint64_t,const VehicleShotSource&,const OriginalFiringUpdate&,const VehicleMountedSample&)noexcept=nullptr;
+    void (*returned)(std::uint64_t,const VehicleShotSource&,const OriginalFiringUpdate&,const VehicleMountedSample&,bool)noexcept=nullptr;
 };
 class VehicleMountedObserver {
 public:
@@ -56,7 +60,7 @@ private:
     };
     struct Slot {
         std::atomic<unsigned> state{0}; // 0 free,1 constructing,2 active,3 leaving
-        VehicleShotSource source{};Row row{};int uncaught=0;
+        VehicleShotSource source{};Row row{};int uncaught=0;bool journal=false;
     };
     struct Journal {
         // Separate budgets: neutral traffic cannot consume held/rejected rows.

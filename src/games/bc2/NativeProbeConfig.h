@@ -76,10 +76,11 @@ constexpr bool ValidNormalPlayerGrenades(unsigned enabled,unsigned flags,unsigne
 // Independent normal capabilities; compile support alone enables no item.
 enum NormalKnifeMode : unsigned { KnifeOff=0, KnifeStockMotion=1, KnifeHolsterOnly=2, KnifeTrackedQualification=3 };
 constexpr bool NormalKnifeMotion(unsigned mode)noexcept {
-    return mode==KnifeStockMotion||mode==KnifeTrackedQualification;
+    return mode==KnifeStockMotion||(mode==KnifeTrackedQualification&&ChestKnifeTrackedStrikeAvailable);
 }
 constexpr bool ValidNormalPlayerTools(unsigned knife,unsigned contextual,unsigned flags,unsigned hostPid,
     unsigned magazineSession,bool otherDiagnostic,bool knifeCompiled,bool contextualCompiled)noexcept {
+    if(knife==KnifeTrackedQualification&&!ChestKnifeTrackedStrikeAvailable)return false;
     return knife<=KnifeTrackedQualification&&ValidNormalPlayerGrenades(knife!=KnifeOff,flags,hostPid,magazineSession,otherDiagnostic,knifeCompiled)&&
         ValidNormalPlayerGrenades(contextual,flags,hostPid,magazineSession,otherDiagnostic,contextualCompiled);
 }

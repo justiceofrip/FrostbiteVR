@@ -3,6 +3,7 @@
 #include "Bc2ChestKnifeAttackBridge.h"
 #include "Bc2ReloadFlow.h"
 #include "Bc2KnifeSoundObservation.h"
+#include "Bc2SelectedKnifeHookUnwind.h"
 #include "Bc2KnifeTimingObservation.h"
 #include <atomic>
 #include <mutex>
@@ -111,23 +112,32 @@ void RevokeAdmission()noexcept {
         if(service.action->published&&!service.action->acquired)Unknown(10);
     }
 }
-struct Scope {Action action;Scope* previous=nullptr;};
+struct Scope {Action action;bool childFault=false;};
 thread_local Scope* acquiring=nullptr;thread_local Scope* attacking=nullptr;
 thread_local KnifeSoundDispatchContext knifeSoundDispatch;
-struct ScopeRestore {Scope*& slot;Scope* previous;~ScopeRestore(){slot=previous;}};
+void AbortSelectedCallback(Action& action)noexcept {
+    std::lock_guard lock(service.gate);
+    if(!Same(action))return;
+    const bool alreadyUnknown=service.policy.PendingState()==SelectedMeleePending::Unknown;
+    if(!service.policy.Resolve(action.intent.serial,action.intent.identity,SelectedMeleeOutcome::CallbackAborted))return;
+    if(!alreadyUnknown)++service.unknown;
+    action.row.failure=12; // An original unwound; its native effects are unknown.
+    action.row.healthKnown=false;
+    Save(action.row);
+    service.action.reset();
+}
 bool ShotOffsets(unsigned shot)noexcept {
     std::array<float,3> direction{},position{};detail::Reader r{service.memory};
     return r.Read(std::uint64_t(shot)+0x10,direction.data(),12)&&r.Read(std::uint64_t(shot)+0x20,position.data(),12)&&
         NeutralShotOffsets(direction,position);
 }
-unsigned Search(SearchFn original,void* self,unsigned soldier,const void* transform,unsigned shot,float scalar,unsigned caller,bool retry)noexcept {
-    Active active;
+unsigned Search(SearchFn original,void* self,unsigned soldier,const void* transform,unsigned shot,float scalar,unsigned caller,bool retry) {
     if(const auto chest=chestKnifeNative::BridgeSearch(self,soldier,transform,shot,scalar,caller,retry,original))return *chest;
     const auto passthrough=[&]{return original(self,soldier,transform,shot,scalar);};
     auto* scope=acquiring;
     // Retry's internal searches deliberately keep the native movement-adjusted
     // copy. They are not a second opportunity to substitute the original blade.
-    if(!service.enabled.load(std::memory_order_acquire)||!scope||caller!=(retry?0x578573u:0x578552u))return passthrough();
+    if(!service.enabled.load(std::memory_order_acquire)||!scope||scope->childFault||caller!=(retry?0x578573u:0x578552u))return passthrough();
     auto& a=scope->action;++a.row.searches;
     if(!a.geometry)return passthrough(); // Explicit trigger fallback uses stock aiming.
     const auto& v=a.native.links;const auto input=reinterpret_cast<unsigned>(transform);
@@ -152,15 +162,15 @@ unsigned Search(SearchFn original,void* self,unsigned soldier,const void* transf
     return result;
 }
 unsigned __fastcall SearchHook(void* self,void*,unsigned soldier,const void* transform,unsigned shot,float scalar) {
-    return Search(originalSearch,self,soldier,transform,shot,scalar,reinterpret_cast<unsigned>(_ReturnAddress()),false);
+    const auto caller=reinterpret_cast<unsigned>(_ReturnAddress());
+    return RunSelectedKnifeChild(service.active,acquiring,[&]{return Search(originalSearch,self,soldier,transform,shot,scalar,caller,false);});
 }
 unsigned __fastcall RetryHook(void* self,void*,unsigned soldier,const void* transform,unsigned shot,float scalar) {
-    return Search(originalRetry,self,soldier,transform,shot,scalar,reinterpret_cast<unsigned>(_ReturnAddress()),true);
+    const auto caller=reinterpret_cast<unsigned>(_ReturnAddress());
+    return RunSelectedKnifeChild(service.active,acquiring,[&]{return Search(originalRetry,self,soldier,transform,shot,scalar,caller,true);});
 }
-std::uintptr_t __fastcall AcquireHook(void* self,void*) {
-    Active active;Scope local;bool admitted=false;const auto caller=reinterpret_cast<unsigned>(_ReturnAddress());
-    KnifeSoundDispatchScope soundScope(knifeSoundDispatch,service.soundObservation.load(std::memory_order_relaxed));
-    chestKnifeNative::ChestHookIsolation chestBoundary;
+std::uintptr_t Acquire(void* self,unsigned caller,KnifeSoundDispatchScope& soundScope) {
+    Scope local;bool admitted=false;
     if(const auto chest=chestKnifeNative::BridgeAcquire(self,caller,originalAcquire))return *chest;
     RawEntry(service.acquire,reinterpret_cast<unsigned>(self),caller);
     HookOutcome outcome=HookOutcome::Disabled;
@@ -193,13 +203,15 @@ std::uintptr_t __fastcall AcquireHook(void* self,void*) {
     }else if(service.enabled.load(std::memory_order_acquire))outcome=HookOutcome::Caller;
     Count(service.acquire,outcome);
     if(!admitted)return originalAcquire(self);
-    local.previous=acquiring;acquiring=&local;ScopeRestore restore{acquiring,local.previous};
+    acquiring=&local;
     soundScope.Bind({KnifeSoundDispatchPhase::Acquisition,local.action.intent.serial,local.action.row.input,
         local.action.native.client.owner.actorGeneration,local.action.native.client.owner.equipGeneration,
         local.action.native.client.owner.soldier,local.action.native.client.owner.weapon,local.action.native.links.effects});
-    const auto result=originalAcquire(self);
+    const auto result=ForwardAdmittedSelectedKnife(local.action.row.acquisitionReturned,local.childFault,
+        [&]{return originalAcquire(self);},[&]{AbortSelectedCallback(local.action);});
     soundScope.Clear();
-    local.action.target=ReadTarget(service.memory,local.action.native.links.effects);local.action.row.acquisitionReturned=true;
+    if(local.childFault)return result;
+    local.action.target=ReadTarget(service.memory,local.action.native.links.effects);
     if(local.action.target){local.action.row.handle=local.action.target->handle;local.action.row.target=local.action.target->soldier;}
     std::lock_guard lock(service.gate);
     if(Same(local.action)){
@@ -215,6 +227,11 @@ std::uintptr_t __fastcall AcquireHook(void* self,void*) {
     }
     return result;
 }
+std::uintptr_t __fastcall AcquireHook(void* self,void*) {
+    const auto caller=reinterpret_cast<unsigned>(_ReturnAddress());
+    return RunSelectedKnifeParent<chestKnifeNative::ChestHookIsolation>(service.active,acquiring,attacking,
+        knifeSoundDispatch,service.soundObservation,[&](auto& sound){return Acquire(self,caller,sound);});
+}
 bool Health(const Target& target,float& health)noexcept {
     detail::Reader r{service.memory};unsigned pointee=0,again=0;
     return target.handle&&target.soldier&&r.Get(target.handle,pointee)&&pointee==target.soldier+4&&
@@ -222,10 +239,10 @@ bool Health(const Target& target,float& health)noexcept {
         r.Get(std::uint64_t(target.soldier)+0x34,health)&&std::isfinite(health)&&
         r.Get(target.handle,again)&&again==pointee;
 }
-std::uintptr_t __fastcall DamageHook(void* self,void*,void* damage,void* player) {
-    Active active;auto* scope=attacking;const auto caller=reinterpret_cast<unsigned>(_ReturnAddress());
+std::uintptr_t Damage(void* self,void* damage,void* player,unsigned caller) {
+    auto* scope=attacking;
     if(const auto chest=chestKnifeNative::BridgeDamage(self,damage,player,caller,originalDamage))return *chest;
-    const bool matched=scope&&caller==0x57af15&&scope->action.target&&scope->action.target->soldier==reinterpret_cast<unsigned>(self)&&
+    const bool matched=scope&&!scope->childFault&&caller==0x57af15&&scope->action.target&&scope->action.target->soldier==reinterpret_cast<unsigned>(self)&&
         ReadTarget(service.memory,scope->action.native.links.effects)==scope->action.target&&Retained(scope->action);
     float before=0,after=0;const bool known=matched&&Health(*scope->action.target,before);
     const auto result=originalDamage(self,damage,player);
@@ -236,10 +253,12 @@ std::uintptr_t __fastcall DamageHook(void* self,void*,void* damage,void* player)
         }else row.healthKnown=false;}
     return result;
 }
-std::uintptr_t __fastcall AttackHook(void* self,void*,float dt,unsigned primary,void* context) {
-    Active active;Scope local;bool admitted=false;const auto caller=reinterpret_cast<unsigned>(_ReturnAddress());
-    KnifeSoundDispatchScope soundScope(knifeSoundDispatch,service.soundObservation.load(std::memory_order_relaxed));
-    chestKnifeNative::ChestHookIsolation chestBoundary;
+std::uintptr_t __fastcall DamageHook(void* self,void*,void* damage,void* player) {
+    const auto caller=reinterpret_cast<unsigned>(_ReturnAddress());
+    return RunSelectedKnifeChild(service.active,attacking,[&]{return Damage(self,damage,player,caller);});
+}
+std::uintptr_t Attack(void* self,float dt,unsigned primary,void* context,unsigned caller,KnifeSoundDispatchScope& soundScope) {
+    Scope local;bool admitted=false;
     if(const auto chest=chestKnifeNative::BridgeAttack(self,dt,primary,context,caller,originalAttack))return *chest;
     RawEntry(service.attack,reinterpret_cast<unsigned>(self),caller);
     HookOutcome outcome=HookOutcome::Disabled;
@@ -262,12 +281,14 @@ std::uintptr_t __fastcall AttackHook(void* self,void*,float dt,unsigned primary,
     }else if(service.enabled.load(std::memory_order_acquire))outcome=HookOutcome::Caller;
     Count(service.attack,outcome);
     if(!admitted)return originalAttack(self,dt,primary,context);
-    local.action.row.attackedNs=Now();local.previous=attacking;attacking=&local;ScopeRestore restore{attacking,local.previous};
+    local.action.row.attackedNs=Now();attacking=&local;
     soundScope.Bind({KnifeSoundDispatchPhase::Attack,local.action.intent.serial,local.action.row.input,
         local.action.native.client.owner.actorGeneration,local.action.native.client.owner.equipGeneration,
         local.action.native.client.owner.soldier,local.action.native.client.owner.weapon,local.action.native.links.effects});
-    const auto result=originalAttack(self,dt,primary,context);local.action.row.attackReturned=true;
+    const auto result=ForwardAdmittedSelectedKnife(local.action.row.attackReturned,local.childFault,
+        [&]{return originalAttack(self,dt,primary,context);},[&]{AbortSelectedCallback(local.action);});
     soundScope.Clear();
+    if(local.childFault)return result;
     std::lock_guard lock(service.gate);
     if(Same(local.action)){
         service.action->attackInFlight=false;
@@ -282,6 +303,11 @@ std::uintptr_t __fastcall AttackHook(void* self,void*,float dt,unsigned primary,
         }else Unknown(9);
     }
     return result;
+}
+std::uintptr_t __fastcall AttackHook(void* self,void*,float dt,unsigned primary,void* context) {
+    const auto caller=reinterpret_cast<unsigned>(_ReturnAddress());
+    return RunSelectedKnifeParent<chestKnifeNative::ChestHookIsolation>(service.active,acquiring,attacking,
+        knifeSoundDispatch,service.soundObservation,[&](auto& sound){return Attack(self,dt,primary,context,caller,sound);});
 }
 bool Remove()noexcept {
     bool okay=true;
@@ -654,6 +680,10 @@ std::uint64_t BeginTimingObservation(KnifeTimingCall kind,unsigned firing,unsign
     }
     service.timingRows[service.timingUsed++]=row;service.active.fetch_add(1,std::memory_order_acq_rel);return row.invocation;
 }
+void AbandonTimingObservation()noexcept {
+    // Keep the bounded entry row unreturned. No post-call memory read is valid.
+    ++service.timingEndLost;service.active.fetch_sub(1,std::memory_order_acq_rel);
+}
 void EndTimingObservation(std::uint64_t token,unsigned returnPointer,bool returnPointerKnown)noexcept {
     if(!token)return;
     struct Exit{~Exit(){service.active.fetch_sub(1,std::memory_order_acq_rel);}} exit;
@@ -801,6 +831,7 @@ void ObserveSound(bool,unsigned,const std::array<unsigned char,16>&,unsigned)noe
 bool TimingObservationRequested()noexcept{return false;}
 bool TimingObservationEnabled()noexcept{return false;}
 std::uint64_t BeginTimingObservation(KnifeTimingCall,unsigned,unsigned,unsigned,unsigned,float,std::uint64_t)noexcept{return 0;}
+void AbandonTimingObservation()noexcept{}
 void EndTimingObservation(std::uint64_t,unsigned,bool)noexcept{}
 void Report(std::ostream& out){out<<"{\"available\":false}";}
 }

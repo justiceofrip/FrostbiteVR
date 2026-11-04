@@ -1,4 +1,18 @@
-# Current 436 R56: representative shared-mechanic validation
+# Manual reload coverage
+
+The [weapon pipeline](../handoff/integrations/coordinator-20261030-offline57/PIPELINE.txt) enrolls **77 weapon names and 181 configurations**. Weapons share reload implementations by mechanism. A registered configuration is not a completed reload in the game. Here is the strongest result for each mechanism, so that a passing representative is not mistaken for the whole family.
+
+| Mechanism | What has worked | What remains open |
+| --- | --- | --- |
+| Detachable magazines | The player reloaded the AN94 in the headset. Earlier BC2 controller runs also covered the F2000, SCAR and MP443. | Reliability on the other registered configurations, including state retained when switching guns. |
+| Pump and tube | The player inserted shells on the other pump and later reported its feel was close to the SPAS in limited testing. | Repeatability through firing, the full stroke and the next shell across pump configurations. |
+| Belt-fed LMGs | [One QJU88 cycle in BC2](../handoff/integrations/coordinator-20261103-feed269/README.txt) completed all five operations. The native count changed from 0 loaded / 687 reserve to 200 / 487, and the closed cover no longer blocked firing. | This used emulated hands and an earlier build. It does not establish a post-reload shot, headset reliability, or that all 24 feed profiles work. |
+| Detachable bolt rifles | Five M95 bolt cycles ran in BC2. The magazine route now handles a settled bolt as well as one with an owed stroke, across 17 M95, M24, GOL and SV98 configurations. | A full hand-operated magazine reload in BC2 on the repaired route. Cycling the bolt alone did not establish that. |
+| Underbarrels and other fixed chambers | An XM8 launcher shot consumed one real round; [the launcher opened and advanced to Insert](../handoff/integrations/coordinator-20261103-completion309/README.txt). | A full Insert/Close reload and subsequent shot. This result does not qualify every launcher, sight, revolver or clip. |
+
+The [current integration record](CURRENT.md) identifies the installed build. The checkpoints below are earlier evidence.
+
+# Historical October 28 checkpoint: representative shared-mechanic validation
 
 The October 28, 2026 developer checkpoint includes actual-game emulated checks
 for F2000/SPAS combined magazine/pump/shell/holster handling, SCAR magazine

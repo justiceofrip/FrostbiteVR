@@ -27,6 +27,10 @@ Private source/hash audit: `bc2vr-recovery/vehicle-reticle-120602-requirements.j
 
 Historical vehicle checkpoints follow.
 
+## Request the next seat
+
+On a Quest Touch controller, use right **A** in a supported occupied seat to request the next permitted position. Left **X** remains the separate exit control. This source path is restricted to BC2's verified next-position mapping; it does not press a keyboard key, choose a destination index or override a mission restriction. BC2 chooses the destination and can refuse it. Changed or unreadable bindings, control conflicts and unsupported controllers do not generate a request. A successful seat change in a running campaign still needs confirmation.
+
 # BC2 campaign vehicle controls — October 1, 2026
 
 The next vehicle increment is ordinary thumbstick and button control through the

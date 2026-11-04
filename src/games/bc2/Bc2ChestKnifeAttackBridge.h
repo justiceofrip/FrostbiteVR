@@ -17,9 +17,9 @@ struct ChestHookIsolation {
     ChestHookIsolation(const ChestHookIsolation&)=delete;
 private:void* acquiring_;void* attacking_;
 };
-std::optional<std::uintptr_t> BridgeAcquire(void*,unsigned,ChestAcquireOriginal)noexcept;
-std::optional<unsigned> BridgeSearch(void*,unsigned,const void*,unsigned,float,unsigned,bool,ChestSearchOriginal)noexcept;
-std::optional<std::uintptr_t> BridgeAttack(void*,float,unsigned,void*,unsigned,ChestAttackOriginal)noexcept;
-std::optional<std::uintptr_t> BridgeDamage(void*,void*,void*,unsigned,ChestDamageOriginal)noexcept;
+std::optional<std::uintptr_t> BridgeAcquire(void*,unsigned,ChestAcquireOriginal);
+std::optional<unsigned> BridgeSearch(void*,unsigned,const void*,unsigned,float,unsigned,bool,ChestSearchOriginal);
+std::optional<std::uintptr_t> BridgeAttack(void*,float,unsigned,void*,unsigned,ChestAttackOriginal);
+std::optional<std::uintptr_t> BridgeDamage(void*,void*,void*,unsigned,ChestDamageOriginal);
 }
 #endif

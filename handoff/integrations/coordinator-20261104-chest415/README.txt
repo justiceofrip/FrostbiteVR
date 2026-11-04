@@ -2,7 +2,7 @@ Chest knife: body display, draw and return
 
 Normal Play requests the slot-7 chest holster when the packaged native build supports it. With your right hand empty and controls settled, grip the handle on your chest to draw. Release the grip to return it. The original game's knife is displayed blade-down at that same grab point; selection and temporary custody remove the stowed copy. This adds no empty-hand holster support for ordinary guns.
 
-Normal Play does not request a physical knife strike. For private qualification, run the installed app/Worker.ps1 with -InstallRoot <launcher> -Action Launch -QualifyChestKnife. This goes through the same launcher lock, owned session and native startup, also when attaching to an existing eligible game. Stop through the normal launcher. In native-trace.json, normal_player_knife_mode is 2 for draw/return and 3 for tracked-strike qualification. Mode 1 remains the explicit older stock-motion path.
+Use normal draw/return (mode 2) in the headset. Do not enable tracked-strike qualification: native acquisition or attack can be interrupted before returning, and a draw or a visual swing does not establish damage. The explicit older stock-motion path is mode 1.
 
 The strike candidate binds one accepted native Fire input to the knife's acquisition, then to BC2's later attack callback. A health delta must belong to the acquired target. A complete miss, unknown result and confirmed hit are separate. No range, health or timing values are overwritten. A chest draw or a flick of the wrist alone does not establish damage.
 

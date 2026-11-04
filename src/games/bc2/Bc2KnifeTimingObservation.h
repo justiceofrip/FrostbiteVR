@@ -25,6 +25,7 @@ bool TimingObservationRequested()noexcept;
 bool TimingObservationEnabled()noexcept;
 std::uint64_t BeginTimingObservation(KnifeTimingCall,unsigned firing,unsigned pointer,unsigned caller,
     unsigned argument,float delta,std::uint64_t parentUpdate)noexcept;
+void AbandonTimingObservation()noexcept;
 void EndTimingObservation(std::uint64_t token,unsigned returnPointer,bool returnPointerKnown)noexcept;
 // One scope around an existing original native call. No observer slot is claimed
 // and no input, timer, payload or native return value is modified.
@@ -40,6 +41,10 @@ public:
         if(kind==KnifeTimingCall::Update){previous_=knifeTimingUpdate;knifeTimingUpdate=token_;updateScope_=true;}
     }
     void ReturnedPointer(unsigned value)noexcept{returnPointer_=value;returnPointerKnown_=true;}
+    void Abort()noexcept {
+        if(token_){token_=0;AbandonTimingObservation();}
+        if(updateScope_){updateScope_=false;knifeTimingUpdate=previous_;}
+    }
     ~KnifeTimingObservationScope(){if(token_)EndTimingObservation(token_,returnPointer_,returnPointerKnown_);
         if(updateScope_)knifeTimingUpdate=previous_;}
     KnifeTimingObservationScope(const KnifeTimingObservationScope&)=delete;

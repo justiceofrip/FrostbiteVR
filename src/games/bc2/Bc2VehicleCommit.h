@@ -16,7 +16,12 @@ public:
         if(active_||cache.size()<InputBytes||plan.status!=VehicleInputPlanStatus::Ready||plan.count>plan.edits.size())return false;
         std::uint32_t seen=0;
         for(unsigned n=0;n<plan.count;++n){const auto& e=plan.edits[n];unsigned key=0;
-            if(e.offset==0x98){key=11;if((e.before^e.after)&~(1u<<16))return false;}
+            if(e.offset==0x98){key=11;
+                constexpr unsigned nextSeat=1u<<17;
+                if(!plan.ownedFlags || (plan.ownedFlags&~((1u<<16)|nextSeat)) ||
+                   ((e.before^e.after)&~plan.ownedFlags) ||
+                   ((plan.ownedFlags&nextSeat) && ((e.before&nextSeat) || !(e.after&nextSeat) ||
+                       ((e.before|e.after)&((1u<<16)|(0xffu<<18))))))return false;}
             else {if(e.offset<8||e.offset>48||(e.offset-8)%4)return false;key=unsigned(e.offset-8)/4;
                 if(!(0x773u&(1u<<key))||!std::isfinite(std::bit_cast<float>(e.before))||!std::isfinite(std::bit_cast<float>(e.after))||
                     std::abs(std::bit_cast<float>(e.after))>1||(key==8&&std::bit_cast<float>(e.after)<0))return false;
@@ -29,7 +34,7 @@ public:
     bool Restore()noexcept {
         if(!active_)return true;bool exact=true;
         for(unsigned n=0;n<plan_.count;++n){const auto& e=plan_.edits[n];const auto current=Word(cache_,e.offset);
-            if(e.offset==0x98){const auto unchanged=~(current^e.after)&(1u<<16);if(!unchanged)exact=false;Put(cache_,e.offset,(current&~unchanged)|(e.before&unchanged));}
+            if(e.offset==0x98){const auto unchanged=~(current^e.after)&plan_.ownedFlags;if(unchanged!=plan_.ownedFlags)exact=false;Put(cache_,e.offset,(current&~unchanged)|(e.before&unchanged));}
             else if(current==e.after)Put(cache_,e.offset,e.before);else exact=false;}
         active_=false;cache_={};return exact;
     }

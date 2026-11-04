@@ -2,11 +2,26 @@
 #include "Bc2KnifeDrawReturnGate.h"
 #include "Bc2OriginalFiringObserver.h"
 #include <cstdio>
+#if defined(_WIN32) && defined(_MSC_VER)
+#include "OriginalFiringUnwindCases.inc"
+#if defined(_M_IX86)
+#include "ChestKnifeCallbackFaultCases.inc"
+#include "SelectedKnifeCallbackFaultCases.inc"
+#endif
+#endif
 using namespace fvr::interaction;using namespace fvr::bc2;
 KnifeCommand Command(std::uint64_t serial=1){KnifeCommand c;c.serial=serial;c.knife={0x52000,3};
     c.source={{1,2,3,4},8,1000000000,1100000000,1000000000,true,{true,true}};
     c.hand=InteractionHand::Right;return c;}
 int main(){
+#if defined(_WIN32) && defined(_MSC_VER)
+    CHECK(!OriginalFiringUnwindCases());
+#if defined(_M_IX86)
+    CHECK(!chest429::Run());
+    CHECK(!outer433::Run());
+    std::puts("Win32 selected and chest callback fault recovery passed");
+#endif
+#endif
     using Gate=private_knife::DrawReturnGate;
     {Gate gate;auto c=Command();CHECK(gate.Stage(c,c.source.nowNs));
         CHECK(!gate.Choose(0,c.source.nowNs,false));CHECK(!gate.Choose(2,c.source.nowNs,true));
