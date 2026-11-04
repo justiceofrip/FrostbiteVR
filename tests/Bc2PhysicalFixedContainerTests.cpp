@@ -22,7 +22,7 @@ struct Fixture {
     Bc2FixedContainerObservation observation{};bool observe=false;
     std::optional<AmmoResourceRequest> submitted;std::optional<FixedContainerGate> gate;
     std::optional<Bc2FixedContainerRawContact> previousRaw;
-    AmmunitionCounts counts{};bool delayedRaw=false,missingRaw=false,rendererFeedback=false;
+    AmmunitionCounts counts{};bool delayedRaw=false,missingRaw=false,rendererFeedback=false,missingView=false,staleView=false;
     const WeaponModeFamilyProfile* linkedFamily=nullptr;
     std::unique_ptr<Bc2PhysicalFixedContainer> physical;HandClaimToken gun{};
     std::int64_t now=1000000000;bool priorGrip=false,allowGate=true,allowLedger=true;unsigned calls=0,gateCalls=0,busyGateMask=0,rejectedGateMask=0;
@@ -30,7 +30,11 @@ struct Fixture {
     Fixture(const FixedContainerEquipmentProfile* profile,int loaded,int reserve,bool typedGate=true):equipment(profile){
         counts={loaded,reserve,equipment->interaction.capacity};
         Bc2PhysicalFixedContainerApi api;api.context=this;
-        api.read=[](void* p,const ReloadStateOwner&,std::int64_t)noexcept{return static_cast<Fixture*>(p)->service.View();};
+        api.read=[](void* p,const ReloadStateOwner&,std::int64_t)noexcept{
+            auto& f=*static_cast<Fixture*>(p);auto view=f.service.View();
+            if(f.missingView)view.reset();else if(f.staleView&&view)view->binding.deadlineNs=f.now;
+            return view;
+        };
         api.withLedger=[](void* p,const AmmoResourceBinding& b,const HandInteractionOwner&,void* arg,
             bool (*fn)(void*,AmmunitionLedger&)noexcept)noexcept {auto& f=*static_cast<Fixture*>(p);
             if(!f.allowLedger)return false;
@@ -739,8 +743,8 @@ int EveryFixedFamilyKeepsSupportOutOfAmmoCustody(){
 }
 }
 int FixedReleaseCauseDiagnostics(){
-    // Every enrolled fixed loader takes the same raw-loss diagnostic path while
-    // preserving its carried resource. This adds no per-profile recorder.
+    // Actual348 showed that raw.valid=false is not an AmmoObject release.
+    // Keep the diagnostic entry point, but correct its former drop contract.
     unsigned profiles=0;
     for(const auto registry:{std::span<const FixedContainerEquipmentProfile>(generated::FixedContainerEquipment),
                             std::span<const FixedContainerEquipmentProfile>(generated::UnderbarrelFixedContainerEquipment)})
@@ -753,19 +757,16 @@ int FixedReleaseCauseDiagnostics(){
             const auto held=*f.result.tracking.hand;const auto counts=f.counts;const auto gun=f.gun;
             HandClaimDropJournal<4> journal;f.hands.ObserveDrops(journal.Observer());
             f.sample.raw.valid=false;f.Consume();
-            CHECK(journal.count==1&&journal.entries[0].claim.token==held.token);
-            const auto& d=journal.entries[0];CHECK(d.reason==HandInteractionReason::Released);
-            CHECK(d.cause.site==HandReleaseSite::FixedRaw&&d.cause.rejection==static_cast<std::uint8_t>(FixedContainerReleaseRejection::RawInvalid));
-            CHECK(d.claim.deadlineNs==held.deadlineNs&&d.attempted.sequence==f.sample.input.sequence);
-            CHECK(d.claim.deadlineNs>d.attempted.nowNs&&d.cause.fixedStatus==HandReleaseCause::Unknown);
-            CHECK(f.result.tracking.carried&&!f.result.tracking.hand&&!f.result.tracking.target);
+            CHECK(journal.count==0&&f.result.tracking.hand&&f.result.ammoOwnsHand);
+            CHECK(f.result.tracking.hand->token==held.token&&f.result.tracking.hand->deadlineNs==held.deadlineNs);
+            CHECK(f.result.tracking.carried&&!f.result.tracking.target&&!f.result.tracking.pending);
             CHECK(f.hands.Current(InteractionHand::Right)->token==gun&&f.service.View()->snapshot.counts==counts&&!f.submitted);
-            f.Consume();CHECK(journal.count==1);++profiles;
+            f.Consume();CHECK(journal.count==0&&f.result.tracking.hand->deadlineNs==held.deadlineNs);++profiles;
         }
     CHECK(profiles==84);
     // Multiple simultaneous failures keep the first existing short-circuit
     // rejection; later cleanup cannot rewrite that original drop record.
-    for(unsigned branch=0;branch<5;++branch){
+    for(unsigned branch=0;branch<6;++branch){
         Fixture f;const auto start=At(f.equipment->interaction.geometry[0].motion,0);
         f.Send(start,false);f.Send(start,true);CHECK(f.result.mechanismOwnsHand);
         HandClaimDropJournal<4> journal;f.hands.ObserveDrops(journal.Observer());
@@ -774,6 +775,7 @@ int FixedReleaseCauseDiagnostics(){
         if(branch==1){++f.sample.weapon.id;f.sample.raw.valid=false;site=HandReleaseSite::FixedNativeView;rejection=FixedContainerReleaseRejection::WeaponMismatch;}
         if(branch==2){++f.sample.raw.nativeOwner.weapon;f.sample.raw.input.owner.actor++;site=HandReleaseSite::FixedRaw;rejection=FixedContainerReleaseRejection::RawNativeOwner;}
         if(branch==4){f.Prepare(start,true);f.sample.raw.weaponFromWrist.values[3][0]+=10;site=HandReleaseSite::FixedPolicy;}
+        if(branch==5){f.sample.raw.valid=false;site=HandReleaseSite::FixedRaw;rejection=FixedContainerReleaseRejection::RawInvalid;}
         if(branch==3)f.physical->Cancel(f.sample.input,f.hands);else f.Consume();
         CHECK(journal.count==1&&journal.entries[0].cause.site==site);
         const auto& cause=journal.entries[0].cause;
@@ -787,7 +789,135 @@ int FixedReleaseCauseDiagnostics(){
     return 0;
 }
 
-int main(){if(FixedReleaseCauseDiagnostics())return 1;return ExactSelectorsAndSupply()||GateBeforePhysicalAndExactOwner()||BusyMechanismFeedbackContinuesOpening()||
+int ReplacementRawGapRetainsCustodyAndResumes(){
+    std::array<bool,5> checked{};unsigned kinds=0;
+    for(const auto registry:{std::span<const FixedContainerEquipmentProfile>(generated::FixedContainerEquipment),
+                            std::span<const FixedContainerEquipmentProfile>(generated::UnderbarrelFixedContainerEquipment)})
+        for(const auto& e:registry){
+            const auto kind=static_cast<unsigned>(e.interaction.kind);if(checked[kind])continue;checked[kind]=true;++kinds;
+            Fixture f(&e,0,e.interaction.roundsPerInsertion);f.observe=true;SelectFixedFamily(f);
+            if(e.interaction.kind==FixedContainerKind::Cylinder||e.interaction.kind==FixedContainerKind::SingleRoundBreech)f.Hinge(0);
+            if(e.interaction.kind==FixedContainerKind::Cylinder)f.Hinge(1);
+            const auto& motion=e.interaction.geometry[2].motion;const auto start=At(motion,0);
+            f.Send(start,false);f.Send(start,true,true);f.Send(start,true);
+            for(unsigned n=1;n<=10;++n)f.Send(At(motion,n/30.),true);
+            CHECK(f.result.ammoOwnsHand&&f.result.tracking.hand&&f.result.tracking.target);
+            const auto held=*f.result.tracking.hand;const auto before=f.counts;const auto raw=f.sample.raw;
+            const auto carried=f.result.tracking.carriedSupply;const auto lifetime=f.result.tracking.lifetime;
+            HandClaimDropJournal<4> journal;f.hands.ObserveDrops(journal.Observer());
+            f.Prepare(At(motion,10/30.),true);f.sample.raw.valid=false;f.Consume();
+            CHECK(!f.observation.rawAdmitted&&!f.observation.raw.valid&&journal.count==0);
+            CHECK(f.result.ammoOwnsHand&&f.result.tracking.hand->token==held.token&&!f.result.tracking.target);
+            CHECK(f.result.tracking.hand->inputSequence==f.sample.input.sequence&&f.result.tracking.hand->deadlineNs==f.sample.input.deadlineNs);
+            CHECK(f.result.tracking.carriedSupply->values==carried->values&&f.result.tracking.lifetime==lifetime);
+            CHECK(f.calls==0&&!f.submitted&&f.service.View()->snapshot.counts==before);
+            const auto retained=*f.result.tracking.hand;
+            f.Consume();CHECK(f.result.tracking.hand->deadlineNs==retained.deadlineNs&&journal.count==0);
+            // A still-fresh renderer packet older than the safety renewal may
+            // neither rewind custody nor restamp its contact lease.
+            f.Prepare(At(motion,10/30.),true);f.Consume(&raw);
+            CHECK(f.observation.rawAdmitted&&f.observation.raw.input.deadlineNs==raw.input.deadlineNs);
+            CHECK(f.result.tracking.hand->inputSequence==retained.inputSequence&&f.result.tracking.hand->deadlineNs==retained.deadlineNs);
+            CHECK(!f.result.tracking.target&&journal.count==0&&f.calls==0);
+            f.Send(At(motion,10/30.),true);
+            CHECK(f.result.ammoOwnsHand&&f.result.tracking.hand->token==held.token&&f.result.tracking.target);
+            for(unsigned n=11;n<=30;++n)f.Send(At(motion,n/30.),true);
+            for(unsigned n=0;n<8;++n)f.Send(At(motion,1),true);
+            CHECK(f.calls==0&&f.result.ammoOwnsHand);
+            f.Send(At(motion,1),false);
+            CHECK(f.calls==1&&f.submitted&&f.submitted->preparedCommand&&f.result.tracking.pending);
+            CHECK(f.submitted->preparedCommand->before==before&&f.service.View()->snapshot.counts==before);
+            CHECK(!f.result.ammoOwnsHand); // Dispatch is not a native receipt.
+        }
+    CHECK(kinds==4);return 0;
+}
+int ReplacementRawGapStillHonorsInvalidation(){
+    for(unsigned branch=0;branch<13;++branch){
+        Fixture f(1);const auto start=At(f.equipment->interaction.geometry[2].motion,0);
+        f.Send(start,false);f.Send(start,true,true);f.Send(start,true);CHECK(f.result.ammoOwnsHand);
+        const auto held=*f.result.tracking.hand;const auto counts=f.counts;
+        if(branch==4)f.now=held.deadlineNs-10000000;
+        if(branch==5){++f.owner.equipGeneration;f.gun={};}
+        if(branch==12)++f.binding.context.resource.weaponGeneration;
+        f.Prepare(start,branch!=0);f.sample.raw.valid=false;
+        if(branch==1)f.sample.grip=false;
+        if(branch==2)f.sample.input.tracked[0]=false;
+        if(branch==3)f.sample.input.focused=false;
+        if(branch==6)f.missingView=true;
+        if(branch==7)f.staleView=true;
+        if(branch==8){f.sample.raw.valid=true;++f.sample.raw.nativeOwner.weapon;}
+        if(branch==9)f.sample.cancel=true;
+        if(branch==10)(void)f.hands.Release(f.sample.input,f.gun);
+        if(branch==11){f.sample.raw.valid=true;f.sample.raw.input.deadlineNs=f.now;}
+        f.Consume();
+        CHECK(!f.result.ammoOwnsHand&&!f.hands.Current(InteractionHand::Left));
+        CHECK(f.calls==0&&!f.submitted&&f.service.View()->snapshot.counts==counts);
+    }
+    return 0;
+}
+
+int RecurringRawGapsConsumeDelayedGeometry(){
+    for(bool expireGesture:{false,true}){
+        Fixture f(1);f.observe=true;const auto& motion=f.equipment->interaction.geometry[2].motion;
+        const auto start=At(motion,0);f.Send(start,false);f.Send(start,true,true);f.Send(start,true);
+        CHECK(f.result.ammoOwnsHand&&f.result.tracking.hand&&f.result.tracking.target);
+        const auto token=f.result.tracking.hand->token;const auto acquiredNs=f.now;
+        const auto counts=f.counts;const auto supply=f.observation.supply;const auto lifetime=f.result.tracking.lifetime;
+        HandClaimDropJournal<4> journal;f.hands.ObserveDrops(journal.Observer());
+        f.Send(At(motion,.1),true);
+        f.Prepare(At(motion,.1),true);auto delayed=f.sample.raw;f.sample.raw.valid=false;f.Consume();
+        const auto cycles=expireGesture?motion.maximumGestureNs/20000000+3:40;
+        bool expired=false;
+        for(std::int64_t n=0;n<cycles;++n){
+            const double progress=std::min(expireGesture?.4:1.,.1+(n+1)/30.);
+            f.Prepare(At(motion,progress),true);f.sample.raw.valid=false;f.Consume();
+            CHECK(f.result.ammoOwnsHand&&f.result.tracking.hand->token==token&&!f.result.tracking.target);
+            CHECK(!f.observation.rawAdmitted&&!f.submitted&&f.calls==0);
+            const auto retained=*f.result.tracking.hand;
+            const bool release=!expireGesture&&n+1==cycles;
+            f.Prepare(At(motion,progress),!release);const auto next=f.sample.raw;f.Consume(&delayed);
+            CHECK(f.observation.rawAdmitted&&f.sample.input.sequence==delayed.input.sequence+2);
+            CHECK(f.observation.raw.input.observedNs==delayed.input.observedNs&&
+                  f.observation.raw.input.deadlineNs==delayed.input.deadlineNs);
+            CHECK(f.observation.supply==supply&&f.result.tracking.lifetime==lifetime&&f.service.View()->snapshot.counts==counts);
+            if(release){
+                CHECK(f.calls==1&&f.submitted&&f.submitted->preparedCommand&&f.result.tracking.pending);
+                CHECK(f.submitted->sourceProof&&f.submitted->sourceProof->inputSequence==delayed.input.sequence);
+                CHECK(f.submitted->intent.observedNs==delayed.input.observedNs&&f.submitted->intent.deadlineNs==delayed.input.deadlineNs);
+                CHECK(f.submitted->preparedCommand->before==counts&&!f.result.ammoOwnsHand);
+            }else if(f.result.status==FixedContainerStatus::Suspended){
+                CHECK(expireGesture&&f.now-acquiredNs>motion.maximumGestureNs);
+                CHECK(journal.count==1&&journal.entries[0].cause.site==HandReleaseSite::FixedPolicy&&
+                      journal.entries[0].cause.feedStatus==static_cast<std::uint8_t>(FeedInteractionStatus::Expired));
+                CHECK(!f.result.ammoOwnsHand&&f.result.tracking.carried&&f.result.tracking.carriedSupply);
+                CHECK(f.calls==0&&!f.submitted&&!f.result.tracking.pending);expired=true;break;
+            }else{
+                CHECK(f.calls==0&&!f.submitted&&journal.count==0&&f.result.tracking.target);
+                CHECK(f.result.tracking.hand->token==token&&f.result.tracking.hand->inputSequence==retained.inputSequence&&
+                      f.result.tracking.hand->deadlineNs==retained.deadlineNs);
+                const auto expected=Multiply(feed_interaction_detail::Inverse(motion.placement.sourceFromGrip),delayed.weaponFromWrist);
+                CHECK(feed_interaction_detail::Distance(*f.result.tracking.target,expected)<.00001);
+            }
+            delayed=next;
+        }
+        if(!expireGesture){CHECK(f.calls==1);continue;}
+        CHECK(expired);const auto carried=*f.result.tracking.carriedSupply;
+        const auto contact=Multiply(motion.placement.sourceFromGrip,carried);
+        f.Send(contact,true);CHECK(!f.result.ammoOwnsHand&&f.calls==0); // Held input cannot reacquire the expired gesture.
+        f.Send(contact,false);f.Send(contact,false);f.Send(contact,true);
+        CHECK(f.result.ammoOwnsHand&&f.result.tracking.hand->token.id!=token.id&&f.observation.supply==supply);
+        for(unsigned n=1;n<=30;++n)f.Send(At(motion,.4+.6*n/30.),true);
+        for(unsigned n=0;n<8;++n)f.Send(At(motion,1),true);
+        f.Send(At(motion,1),false);CHECK(f.calls==1&&f.submitted&&f.submitted->preparedCommand->before==counts);
+        CHECK(f.service.View()->snapshot.counts==counts); // Dispatch still is not a native receipt.
+    }
+    return 0;
+}
+
+int main(){if(FixedReleaseCauseDiagnostics())return 1;
+    if(ReplacementRawGapRetainsCustodyAndResumes()||ReplacementRawGapStillHonorsInvalidation())return 1;
+    if(RecurringRawGapsConsumeDelayedGeometry())return 1;
+    return ExactSelectorsAndSupply()||GateBeforePhysicalAndExactOwner()||BusyMechanismFeedbackContinuesOpening()||
     BusyCannotStartReviveOrChangeOwner()||BusyExpiresWithoutGateLeaseExtension()||BusyCannotAuthorizeDispatchOrClosure()||
     CylinderFlickReturnAndClose()||ClipQueuesOneSharedCommand()||
     PriorRendererFrameQueuesAndCompletesOnceAfterReequip()||PartialCylinderMigrationReacquiresAtRetainedContact()||

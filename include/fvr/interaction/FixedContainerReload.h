@@ -130,6 +130,36 @@ public:
             mechanismTouched_&&step_!=FixedContainerStep::Complete);
     }
     void Suspend()noexcept {gesture_.Interrupt();gestureClaim_.reset();}
+    // Missing rendered contact is not a release of carried ammunition. Renew
+    // only the exact live resource claim from actual controller safety. This
+    // neither acquires nor updates motion, source clocks or native admission.
+    [[nodiscard]] std::optional<HandClaim> RetainHeld(const HandInteractionSample& input,
+        const HandClaimToken& token,bool grip,HandInteraction& hands)noexcept {
+        const auto update=hands.Update(input);
+        if(token.hand!=InteractionHand::Left&&token.hand!=InteractionHand::Right)return std::nullopt;
+        const auto side=static_cast<unsigned>(token.hand);
+        if(!bound_||!Valid()||pending_||step_!=FixedContainerStep::Insert||!update.inputValid||
+           !grip||!input.focused||!input.tracked[0]||!input.tracked[1]||input.owner!=HandOwner()||
+           input.nowNs<lastNow_||input.sequence<lastInput_||token.owner!=HandOwner()||
+           input.released[side]||token.kind!=HandClaimKind::AmmoObject||
+           token.item!=HandInteractionKey{supply_.resource.id,supply_.resource.generation}||
+           token.contact!=HandInteractionKey{profile_.geometry[2].contact.role,profile_.revision}||
+           (gestureClaim_&&token!=*gestureClaim_))return std::nullopt;
+        const auto held=hands.Current(token.hand),gun=hands.Current(side?InteractionHand::Left:InteractionHand::Right);
+        const auto item=handItem_.value_or(HandInteractionKey{context_.resource.weapon,
+            handOwner_?HandOwner().equipGeneration:context_.resource.weaponGeneration});
+        if(!held||held->token!=token||held->deadlineNs<=input.nowNs||!gun||
+           gun->token.kind!=HandClaimKind::GunHold||gun->token.owner!=HandOwner()||gun->token.item!=item||
+           gun->inputSequence!=input.sequence||gun->deadlineNs<=input.nowNs)return std::nullopt;
+        const auto deadline=input.sequence>held->inputSequence?input.deadlineNs:std::min(input.deadlineNs,held->deadlineNs);
+        const auto renewed=hands.Renew(input,token,{token.contact,input.sequence,deadline,true});
+        if(!renewed.claim)return std::nullopt;
+        // Missing publication earns no motion/dwell, but does not erase fresh
+        // established contact. Expiry clears dwell; the next actual geometry
+        // still checks its original source lease, gap, travel and lifetime.
+        if(input.nowNs>=lastInputDeadline_){gesture_.endpoint_=0;gesture_.placementDwelled_=false;}
+        return renewed.claim;
+    }
     [[nodiscard]] bool RebindContext(const AmmunitionSnapshot& snapshot,const HandInteractionOwner& hand,std::int64_t now,
         std::optional<HandInteractionKey> item={})noexcept {
         if(!bound_||pending_||snapshot.context.resource!=context_.resource||hand.actor!=HandOwner().actor||
@@ -145,7 +175,7 @@ public:
         // Migrate retained mechanical geometry, never the prior hand claim or
         // armed grip. Recovery still needs a fresh neutral/current contact.
         gesture_.MigrateContext(before,Owner());gestureClaim_.reset();
-        handOwner_=hand;if(handItem_)handItem_=item;lastSnapshot_=snapshot.sequence;lastNow_=now;lastInput_=0;return true;
+        handOwner_=hand;if(handItem_)handItem_=item;lastSnapshot_=snapshot.sequence;lastNow_=now;lastInput_=0;lastInputDeadline_=0;return true;
     }
     // Rebase a newly picked-up object's source between grips. Destination,
     // anatomical grip and motion policy stay pinned; no held object teleports.
@@ -181,12 +211,16 @@ public:
             releasing=hands.Current(x.claim->hand);
         const auto& safety=x.currentSafety?*x.currentSafety:x.input;
         const auto handUpdate=hands.Update(safety);(void)handUpdate;
+        // Custody renewals may be newer than this geometry. An exact active
+        // insertion has its own consumed-source floor, independent of custody.
+        const bool continuedInsertion=step_==FixedContainerStep::Insert&&x.claim&&gestureClaim_&&
+            *x.claim==*gestureClaim_&&x.input.sequence>=lastInput_;
         if(!releasing&&x.claim&&x.releaseEvidence){
             const auto& e=*x.releaseEvidence;const auto h=static_cast<unsigned>(x.claim->hand);
             if(h<2&&e.before.token==*x.claim&&e.released.token==*x.claim&&e.released.reason==HandInteractionReason::Released&&
                e.input.owner==safety.owner&&e.input.released[h]&&safety.released[h]&&
                e.input.sequence<=safety.sequence&&e.input.sequence>e.before.inputSequence&&
-               e.before.inputSequence<=x.input.sequence&&x.input.sequence<=e.input.sequence&&
+               (e.before.inputSequence<=x.input.sequence||continuedInsertion)&&x.input.sequence<=e.input.sequence&&
                e.before.deadlineNs>safety.nowNs&&
                hands.HasRecordedEvidence(e.input,x.claim->hand)&&
                hands.HasRecordedEvidence(x.input,h?InteractionHand::Left:InteractionHand::Right))releasing=e.before;
@@ -203,7 +237,10 @@ public:
            safety.observedNs<x.input.observedNs||safety.nowNs!=x.input.nowNs||
            x.input.nowNs<x.input.observedNs||x.input.nowNs>=x.input.deadlineNs||
            !feed_mechanism_detail::Pose(x.weaponFromContact))return stop(FixedContainerStatus::Invalid,FixedContainerRejection::Admission);
-        lastSnapshot_=a.sequence;lastInput_=x.input.sequence;lastNow_=x.input.nowNs;
+        // Resumed geometry cannot inherit dwell after its prior source lease
+        // expired, even if no missing-publication tick observed that expiry.
+        if(continuedInsertion&&x.input.nowNs>=lastInputDeadline_){gesture_.endpoint_=0;gesture_.placementDwelled_=false;}
+        lastSnapshot_=a.sequence;lastInput_=x.input.sequence;lastInputDeadline_=x.input.deadlineNs;lastNow_=x.input.nowNs;
         if(!handUpdate.inputValid||!x.held||!x.input.focused||!safety.focused||!safety.tracked[0]||!safety.tracked[1]||
            !x.interaction.focused||!c.tracked||!x.input.tracked[0]||!x.input.tracked[1])
             return stop(FixedContainerStatus::Suspended,FixedContainerRejection::Safety);
@@ -216,7 +253,7 @@ public:
         }
         if(step_==FixedContainerStep::Insert&&(a.counts.loaded==a.counts.capacity||a.counts.reserve==0))
             return stop(FixedContainerStatus::NoAmmunition);
-        if(!Hand(x,hands,releasing))return stop(FixedContainerStatus::Suspended,FixedContainerRejection::Hand);
+        if(!Hand(x,hands,releasing,continuedInsertion))return stop(FixedContainerStatus::Suspended,FixedContainerRejection::Hand);
         auto raw=x.interaction;raw.contact.handAvailable=true;raw.operationPermitted=true;
         out.interaction=gesture_.Update(ProjectionProfile(),ProjectionMotion(),Projection(x),ProjectionSupply(),raw,x.input.nowNs);
         // A rejected gesture has already dropped its acquisition state. Drop
@@ -333,7 +370,8 @@ private:
             a.counts.capacity==profile_.capacity&&a.counts.loaded>=0&&a.counts.loaded<=a.counts.capacity&&
             a.counts.reserve>=0&&a.counts.reserve<=1000000;
     }
-    bool Hand(const FixedContainerSample& x,const HandInteraction& hands,const std::optional<HandClaim>& releasing)const noexcept {
+    bool Hand(const FixedContainerSample& x,const HandInteraction& hands,const std::optional<HandClaim>& releasing,
+        bool continuedInsertion)const noexcept {
         if(!x.claim){
             return !x.interaction.grip&&!gestureClaim_&&
                 ((!hands.Current(InteractionHand::Left)&&hands.Current(InteractionHand::Right))||
@@ -355,8 +393,21 @@ private:
         const auto current=hands.Current(t.hand);
         if(current&&current->token==t&&current->deadlineNs>x.input.nowNs&&current->inputSequence==x.input.sequence)return true;
         const auto& safety=x.currentSafety?*x.currentSafety:x.input;
+        // A current safety renewal may outrun still-fresh recorded geometry.
+        // Only the exact active insertion may consume that older motion; keep
+        // custody untouched and retain every source clock and history barrier.
+        if(continuedInsertion&&x.interaction.grip&&
+           current&&current->token==t&&current->deadlineNs>safety.nowNs&&
+           current->inputSequence>x.input.sequence&&current->inputSequence<=safety.sequence&&
+           other->inputSequence==safety.sequence&&!safety.released[h]&&!x.input.released[h]&&
+           hands.HasRecordedEvidence(x.input,t.hand))return true;
+        // A real recorded release still owns completion. A newer safety-only
+        // claim does not revoke the active gesture's earlier fresh geometry;
+        // right-hand history validates that source across the left release.
         return !x.interaction.grip&&safety.released[h]&&gestureClaim_&&releasing&&releasing->token==t&&
-            releasing->deadlineNs>safety.nowNs&&releasing->inputSequence<=x.input.sequence&&
+            releasing->deadlineNs>safety.nowNs&&(releasing->inputSequence<=x.input.sequence||
+                (continuedInsertion&&other->inputSequence==safety.sequence&&
+                 hands.HasRecordedEvidence(x.input,h?InteractionHand::Left:InteractionHand::Right)))&&
             releasing->inputSequence<safety.sequence;
     }
     FeedMechanismProfile ProjectionProfile()const noexcept {
@@ -407,7 +458,7 @@ private:
     FixedContainerStep step_;
     bool bound_=false,mechanismTouched_=false;
     std::uint64_t lastSnapshot_=0,lastInput_=0;
-    std::int64_t lastNow_=0;
+    std::int64_t lastNow_=0,lastInputDeadline_=0;
     std::optional<HandClaimToken> gestureClaim_;
     std::optional<FixedContainerRequest> pending_,lastRequest_;
     std::optional<AmmunitionReceipt> lastReceipt_;

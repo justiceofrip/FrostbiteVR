@@ -220,6 +220,9 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
                 }
             }
         }
+        const bool sameResource=z.binding.owner==v.binding.owner&&z.binding.context==v.binding.context&&
+            z.binding.inventory==v.binding.inventory&&z.binding.switching==v.binding.switching&&
+            z.binding.data==v.binding.data&&z.binding.persistence==v.binding.persistence&&z.handOwner==x.input.owner;
         if(z.binding.context!=v.binding.context||z.handOwner!=x.input.owner){
             if(!z.policy->RebindContext(v.snapshot,x.input.owner,now,x.weapon))return false;
             z.hand.reset();z.target.reset();z.handOwner=x.input.owner;z.recoveryPrepared=false;z.supportNeutral.reset();
@@ -233,7 +236,17 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
             if(!z.policy->Bind(v.snapshot,now))return false;z.lastRaw=0;z.restart=false;z.seedNeutral=true;z.supportNeutral.reset();
         }
         if(!w.rawFresh||x.raw.input.sequence<=z.lastRaw){
-            if(!w.rawFresh){z.policy->Suspend();z.target.reset();z.recoveryPrepared=false;z.supportNeutral.reset();if(z.hand){(void)h.Release(x.input,z.hand->token,w.rawCause);z.hand.reset();}}
+            if(!w.rawFresh){
+                z.target.reset();z.recoveryPrepared=false;z.supportNeutral.reset();
+                // The current native view, owner and GunHold were admitted
+                // above. A missing renderer contact cannot discard ammunition
+                // that is still genuinely held; contradictory raw evidence
+                // and every explicit safety/lifetime invalidation still stop.
+                const auto retained=w.rawCause.rejection==static_cast<std::uint8_t>(FixedContainerReleaseRejection::RawInvalid)&&
+                    sameResource&&z.carried&&z.hand&&!z.request?z.policy->RetainHeld(x.input,z.hand->token,x.grip,h):std::nullopt;
+                if(retained)z.hand=retained;
+                else {z.policy->Suspend();if(z.hand){(void)h.Release(x.input,z.hand->token,w.rawCause);z.hand.reset();}}
+            }
             return true;
         }
         const auto& r=x.raw;auto original=r.input;original.nowNs=now;
@@ -259,8 +272,16 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
             x.releaseEvidence->released.reason==HandInteractionReason::Released&&x.releaseEvidence->released.token==z.hand->token&&
             x.releaseEvidence->before.token==z.hand->token&&x.input.released[0];
         if(z.hand&&r.grip&&!releasing){
-            const auto renewed=h.RenewFrom(x.input,original,z.hand->token,{z.hand->token.contact,original.sequence,original.deadlineNs,true});
-            if(renewed.claim)z.hand=renewed.claim;else z.hand.reset();
+            const auto held=h.Current(InteractionHand::Left);
+            // Current custody and recorded geometry have independent clocks.
+            // Keep a newer exact AmmoObject claim unchanged; policy checks the
+            // original pose's evidence/lease and advances its motion stream.
+            if(z.carried&&z.hand->token.kind==HandClaimKind::AmmoObject&&held&&held->token==z.hand->token&&
+               held->deadlineNs>now&&held->inputSequence>original.sequence)z.hand=held;
+            else {
+                const auto renewed=h.RenewFrom(x.input,original,z.hand->token,{z.hand->token.contact,original.sequence,original.deadlineNs,true});
+                if(renewed.claim)z.hand=renewed.claim;else z.hand.reset();
+            }
         }
         if(w.allowAcquire&&!z.hand&&pressed&&*w.intent!=UINT64_MAX){
             const bool insertion=step==FixedContainerStep::Insert;

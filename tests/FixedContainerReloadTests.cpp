@@ -346,7 +346,141 @@ int FixedPolicyRejectionDiagnostics(){
     return 0;
 }
 
+int HeldContactGapRetainsOnlyCustody(){
+    for(bool establishedDwell:{false,true}){
+        Fixture f(FixedContainerKind::SingleRoundMuzzle,0,1);CHECK(f.Acquire());
+        for(float p:{.2f,.4f,.6f,.8f,1.f})CHECK(!f.Run(p).dispatch);
+        if(establishedDwell)for(unsigned n=0;n<2;++n)CHECK(!f.Run(1).dispatch);
+        const auto before=f.ledger.Snapshot();const auto token=f.claim;
+        const auto held=*f.hands.Current(InteractionHand::Left);
+        const auto recovery=f.reload->RecoveryMotion();CHECK(recovery);
+        f.Tick(1);f.hands.Update(f.x.input);
+        CHECK(f.hands.Renew(f.x.input,f.gun,{{300,1},f.x.input.sequence,f.x.input.deadlineNs,true}).claim);
+        const auto retained=f.reload->RetainHeld(f.x.input,token,true,f.hands);
+        CHECK(retained&&retained->token==token&&retained->inputSequence==f.x.input.sequence&&retained->deadlineNs==f.x.input.deadlineNs);
+        CHECK(retained->deadlineNs>held.deadlineNs&&!f.reload->Pending()&&f.reload->Step()==Step::Insert);
+        CHECK(f.ledger.Snapshot().sequence==before.sequence&&f.ledger.Snapshot().deadlineNs==before.deadlineNs&&f.ledger.Snapshot().counts==before.counts);
+        CHECK(f.reload->RecoveryMotion()->WeaponFromHeld().values==recovery->WeaponFromHeld().values);
+        const auto duplicate=f.reload->RetainHeld(f.x.input,token,true,f.hands);
+        CHECK(duplicate&&duplicate->deadlineNs==retained->deadlineNs&&duplicate->inputSequence==retained->inputSequence);
+        // Missing publication cannot establish dwell, and cannot erase dwell
+        // already proved by fresh geometry. Release needs actual contact.
+        f.Tick(1,false);f.x.input.released[0]=true;
+        const auto released=f.reload->Update(f.x,f.hands);
+        if(!establishedDwell)CHECK(released.status==Status::Suspended&&!released.dispatch&&!f.reload->Pending());
+        else CHECK(released.dispatch&&f.reload->Pending()&&released.dispatch->supply==f.supply);
+        CHECK(f.ledger.Snapshot().counts==before.counts);
+    }
+    // A short original geometry lease expires while genuine newer safety
+    // packets retain custody. That expired endpoint cannot supply dwell.
+    // One missing tick leaves the prior lease fresh at T+10; the fresh release
+    // at T+20 must expire it. Two missing ticks also cover RetainHeld expiry.
+    for(unsigned missingTicks:{1u,2u}){
+        Fixture expired(FixedContainerKind::SingleRoundMuzzle,0,1);CHECK(expired.Acquire());
+        for(float p:{.2f,.4f,.6f,.8f,1.f,1.f,1.f})CHECK(!expired.Run(p).dispatch);
+        expired.Tick(1);expired.x.input.deadlineNs=expired.x.input.observedNs+15;expired.Renew();
+        const auto sourceDeadline=expired.x.input.deadlineNs;
+        CHECK(!expired.reload->Update(expired.x,expired.hands).dispatch);
+        for(unsigned n=0;n<missingTicks;++n){
+            expired.Tick(1);expired.hands.Update(expired.x.input);
+            CHECK(expired.hands.Renew(expired.x.input,expired.gun,{{300,1},expired.x.input.sequence,expired.x.input.deadlineNs,true}).claim);
+            CHECK(expired.reload->RetainHeld(expired.x.input,expired.claim,true,expired.hands));
+            if(n==0)CHECK(expired.x.input.nowNs<sourceDeadline);
+        }
+        expired.Tick(1,false);expired.x.input.released[0]=true;
+        CHECK(expired.x.input.nowNs>=sourceDeadline&&expired.x.input.nowNs<expired.x.input.deadlineNs);
+        const auto noDwell=expired.reload->Update(expired.x,expired.hands);
+        CHECK(noDwell.status==Status::Suspended&&noDwell.interaction.status==FeedInteractionStatus::Interrupted&&!noDwell.dispatch);
+        CHECK(!expired.reload->Pending()&&expired.ledger.Snapshot().counts.loaded==0&&expired.ledger.Snapshot().counts.reserve==1);
+    }
+    // Real input can retain the object across a longer contact gap, but cannot
+    // extend the original gesture's input-gap allowance.
+    Fixture f(FixedContainerKind::SingleRoundMuzzle,0,1);CHECK(f.Acquire());CHECK(!f.Run(.2f).dispatch);
+    for(unsigned n=0;n<5;++n){
+        f.Tick(.2f);f.hands.Update(f.x.input);
+        CHECK(f.hands.Renew(f.x.input,f.gun,{{300,1},f.x.input.sequence,f.x.input.deadlineNs,true}).claim);
+        CHECK(f.reload->RetainHeld(f.x.input,f.claim,true,f.hands));
+    }
+    const auto resumed=f.Run(.2f);
+    CHECK(resumed.status==Status::Suspended&&resumed.interaction.status==FeedInteractionStatus::Interrupted&&!resumed.dispatch);
+    CHECK(!f.reload->Pending()&&f.ledger.Snapshot().counts.loaded==0);return 0;
+}
+int HeldContactGapRejectsExpiredOrForeignClaims(){
+    for(unsigned branch=0;branch<10;++branch){
+        Fixture f(FixedContainerKind::SingleRoundMuzzle,0,1);CHECK(f.Acquire());
+        const auto held=*f.hands.Current(InteractionHand::Left);auto token=held.token;
+        f.Tick();
+        if(branch==0)f.x.input.released[0]=true;
+        if(branch==1)f.x.input.tracked[0]=false;
+        if(branch==2)f.x.input.focused=false;
+        if(branch==3){f.x.input.observedNs=f.x.input.nowNs=held.deadlineNs;f.x.input.deadlineNs=held.deadlineNs+1000;}
+        if(branch==4)++f.x.input.owner.equipGeneration;
+        if(branch==5)++token.id;
+        if(branch==6)++token.item.generation;
+        f.hands.Update(f.x.input);
+        (void)f.hands.Renew(f.x.input,f.gun,{{300,1},f.x.input.sequence,f.x.input.deadlineNs,true});
+        if(branch==7)(void)f.hands.Release(f.x.input,f.gun);
+        if(branch==8)(void)f.hands.Release(f.x.input,f.claim);
+        CHECK(!f.reload->RetainHeld(f.x.input,token,branch!=9,f.hands));
+        CHECK(!f.reload->Pending()&&f.ledger.Snapshot().counts.loaded==0&&f.ledger.Snapshot().counts.reserve==1);
+        if(branch==3||branch==8)CHECK(!f.reload->RetainHeld(f.x.input,f.claim,true,f.hands)&&!f.hands.Current(InteractionHand::Left));
+    }
+    Fixture mechanism;CHECK(mechanism.Acquire());
+    CHECK(!mechanism.reload->RetainHeld(mechanism.x.input,mechanism.claim,true,mechanism.hands));
+    Fixture pending(FixedContainerKind::SingleRoundMuzzle,0,1);CHECK(pending.Acquire());
+    CHECK(pending.Finish().dispatch&&pending.reload->Pending());
+    CHECK(!pending.reload->RetainHeld(pending.x.input,pending.claim,true,pending.hands));
+    return 0;
+}
+
+int DelayedHeldGeometryKeepsItsOwnLease(){
+    for(unsigned branch=0;branch<4;++branch){
+        Fixture f(FixedContainerKind::SingleRoundMuzzle,0,1);CHECK(f.Acquire());CHECK(!f.Run(.2f).dispatch);
+        f.Tick(.4f);f.hands.Update(f.x.input);
+        CHECK(f.hands.Renew(f.x.input,f.gun,{{300,1},f.x.input.sequence,f.x.input.deadlineNs,true}).claim);
+        auto geometry=f.x;const auto source=geometry.input;const auto counts=f.ledger.Snapshot().counts;
+        f.Tick(.4f);f.hands.Update(f.x.input);
+        CHECK(f.hands.Renew(f.x.input,f.gun,{{300,1},f.x.input.sequence,f.x.input.deadlineNs,true}).claim);
+        auto retained=f.reload->RetainHeld(f.x.input,f.claim,true,f.hands);CHECK(retained);
+        CHECK(retained->inputSequence>source.sequence&&retained->deadlineNs>source.deadlineNs);
+        if(branch==1){
+            // Keep current custody live while the original renderer lease
+            // expires. Its deadline must never inherit the safety renewal.
+            f.x.input.nowNs=source.deadlineNs-10;f.Tick(.4f);f.hands.Update(f.x.input);
+            CHECK(f.hands.Renew(f.x.input,f.gun,{{300,1},f.x.input.sequence,f.x.input.deadlineNs,true}).claim);
+            retained=f.reload->RetainHeld(f.x.input,f.claim,true,f.hands);CHECK(retained);
+        }
+        if(branch==2){++geometry.input.observedNs;++geometry.interaction.contact.observedNs;}
+        if(branch==3){
+            // Real release with only an intermediate pose cannot complete,
+            // even though the current release and delayed pose are recorded.
+            const auto before=*f.hands.Current(InteractionHand::Left);
+            f.Tick(.4f,false);f.x.input.released[0]=true;const auto released=f.hands.Update(f.x.input);
+            CHECK(released.released[0]);
+            geometry.releaseEvidence=FixedContainerReleaseEvidence{before,*released.released[0],f.x.input};
+            CHECK(f.hands.Renew(f.x.input,f.gun,{{300,1},f.x.input.sequence,f.x.input.deadlineNs,true}).claim);
+            geometry.interaction.grip=false;
+        }
+        geometry.ammunition=f.x.ammunition;geometry.interaction.contact.snapshotSequence=geometry.ammunition.sequence;
+        geometry.currentSafety=f.x.input;geometry.input.nowNs=f.x.input.nowNs;
+        const auto result=f.reload->Update(geometry,f.hands);
+        CHECK(!result.dispatch&&!f.reload->Pending()&&f.ledger.Snapshot().counts==counts);
+        if(branch==0){
+            CHECK(result.interaction.status==FeedInteractionStatus::Moving&&result.interaction.target);
+            CHECK(result.interaction.target->values==geometry.interaction.contact.weaponFromHandContact.values);
+            const auto held=f.hands.Current(InteractionHand::Left);CHECK(held&&held->token==retained->token);
+            CHECK(held->inputSequence==retained->inputSequence&&held->deadlineNs==retained->deadlineNs);
+        }else if(branch==1)CHECK(result.rejection==FixedContainerRejection::Admission&&retained->deadlineNs>geometry.input.nowNs);
+        else if(branch==2)CHECK(result.rejection==FixedContainerRejection::Hand);
+        else CHECK(result.rejection==FixedContainerRejection::Gesture&&!f.hands.Current(InteractionHand::Left));
+    }
+    return 0;
+}
+
 int main(){if(FixedPolicyRejectionDiagnostics())return 1;
+    CHECK(HeldContactGapRetainsOnlyCustody()==0);
+    CHECK(HeldContactGapRejectsExpiredOrForeignClaims()==0);
+    CHECK(DelayedHeldGeometryKeepsItsOwnLease()==0);
     CHECK(CylinderPreservesLiveRoundsAndClosesPartiallyLoaded()==0);
     CHECK(ClipOneAtomicBoundedTransferAndNoExtraChamber()==0);
     CHECK(SingleRoundProfileAndOpeningPreserveLiveAmmunition()==0);
