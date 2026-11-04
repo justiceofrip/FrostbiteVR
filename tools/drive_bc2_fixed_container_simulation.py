@@ -261,7 +261,11 @@ class SelectedAmmoDriver(FixedContainerDriver):
 
     The caller supplies its exact, fresh-run primary/secondary family assertion.
     Full loader tracking is admitted by the caller only after observing empty.
+    Attachment-dependent measurements explicitly opt in before the single shot;
+    ordinary selected-ammo observers and other fixed launchers do not need sights.
     """
+    require_shot_attachment_ready = False
+
     def assert_selected_family(self, snapshot):
         raise transport.REFUSAL("selected ammunition requires an exact family assertion")
 
@@ -493,6 +497,79 @@ class SelectedAmmoDriver(FixedContainerDriver):
             deadline = min(deadline, x['view']['binding']['deadlineNs'], x['view']['snapshot']['deadlineNs'])
         return deadline
 
+    def selected_shot_ready(self, snapshot, now):
+        """Existing current contact proves attachment readiness, not shot capture."""
+        self.admit_snapshot(snapshot, now, integer(snapshot['nonce']))
+        require(now < self.snapshot_source_deadline(snapshot),
+                "Original selected shot source expired")
+        counts = planner.ammo(snapshot, now, idle=True)['snapshot']['counts']
+        require(counts['loaded'] == 1 and counts['reserve'] > 0 and counts['capacity'] == 1
+                and snapshot['weapon_actions_blocked'] is False,
+                "One shot requires the fresh selected loaded chamber")
+        sight = snapshot['sight']
+        require(integer(sight['generation']) == integer(snapshot['input']['generation'])
+                == integer(snapshot['shot_input_generation']),
+                "Selected shot sight/input generation mismatch")
+        require(integer(sight['deadlineQpc']) == integer(snapshot['native_deadline_qpc'])
+                and integer(sight['deadlineNs']) == integer(snapshot['native_deadline_ns'])
+                and integer(snapshot['valid_until_ns']) <= integer(sight['deadlineNs'])
+                and now < integer(sight['deadlineNs']),
+                "Selected shot original sight lease expired or mismatched")
+        require(sight['status'] in ('available', 'geometry_unavailable'),
+                "Selected shot sight family/adapter unavailable")
+        native = sight.get('native')
+        if native is not None:
+            require(native['valid'] is True
+                    and integer(native['physicalItem']) == integer(sight['family']['physicalItem']),
+                    "Selected shot native sight physical identity mismatch")
+        contact = sight['contact']
+        if contact is None:
+            return False
+        require(integer(contact['generation']) == integer(sight['generation'])
+                and integer(contact['deadlineQpc']) == integer(sight['deadlineQpc'])
+                and integer(contact['deadlineNs']) == integer(sight['deadlineNs']),
+                "Selected shot contact generation/original lease mismatch")
+        # Native leaf matrices may exist while attachment is still pending.
+        # Distance preference and hand acquisition are unrelated to this gate.
+        return (sight['status'] == 'available' and contact['valid'] is True
+                and contact['previewValid'] is True)
+
+    def wait_pre_shot_ready(self):
+        require(self.demand_finished and self.reference is not None and self.latest_snapshot is not None
+                and self.active_plan is None and self.commands == 0 and self.motion_started is None
+                and not self.pending_command and not self.unsafe_owner
+                and not (self.held_left or self.held_right or self.held_trigger or self.held_buttons),
+                "Selected shot readiness requires the unused ordinary trigger and admitted ammunition")
+        deadline = min(self.deadline, self.stage_deadline)
+        for _ in range(800):
+            now = time.perf_counter_ns()
+            self.bounds(now)
+            require(now < deadline, "Original selected shot observation deadline reached")
+            state = self.read_state()
+            self.ownership(state)
+            require(integer(state['captureSeq']) == self.capture_sequence
+                    and all(state[k] == self.initial_sim[k] for k in ('head', 'handL', 'handR', 'controls')),
+                    "Selected shot readiness input/capture changed")
+            snapshot, now = self.latest_snapshot, time.perf_counter_ns()
+            source_deadline = self.snapshot_source_deadline(snapshot)
+            current = now < source_deadline
+            # As in transport expiry handling, validate an expired diagnostic
+            # at its publication time. It never supplies command authority.
+            ready = self.selected_shot_ready(snapshot, now if current else integer(snapshot['observed_ns']))
+            if current and ready:
+                self.artifacts.event(dict(type='selected_shot_ready', nonce=snapshot['nonce'],
+                    inputGeneration=snapshot['shot_input_generation'], evaluatedNs=now,
+                    sourceDeadlineNs=source_deadline, observationDeadlineNs=deadline))
+                return
+            self.artifacts.event(dict(type='selected_shot_readiness_pending', nonce=snapshot['nonce'],
+                reason='attachment_geometry_unavailable' if current else 'original_source_expired',
+                evaluatedNs=now, sourceDeadlineNs=source_deadline,
+                observationDeadlineNs=deadline, commandAuthority=False))
+            # The same owner requests a new immutable publication; no input,
+            # capture-demand start, stage bound or original source is rewritten.
+            self.fresh_available()
+        raise transport.REFUSAL("Selected shot readiness observation iteration bound")
+
     def validate_publication(self, lines, expected, cleanup):
         if lines == ['trigger r 0']:
             require(self.held_trigger, "Ordinary release requires this owned trigger hold")
@@ -501,6 +578,10 @@ class SelectedAmmoDriver(FixedContainerDriver):
                 and not self.held_trigger and not self.pending_command,
                 "Exactly one ordinary trigger press is permitted")
         now = time.perf_counter_ns()
+        if self.require_shot_attachment_ready:
+            require(self.selected_shot_ready(self.latest_snapshot, now),
+                    "Selected shot attachment readiness unavailable at publication")
+            return
         self.admit_snapshot(self.latest_snapshot, now, integer(self.latest_snapshot['nonce']))
         counts = planner.ammo(self.latest_snapshot, now, idle=True)['snapshot']['counts']
         require(counts['loaded'] == 1 and counts['reserve'] > 0 and counts['capacity'] == 1
@@ -509,6 +590,8 @@ class SelectedAmmoDriver(FixedContainerDriver):
 
     def send(self, lines, **kwargs):
         if lines == ['trigger r 1']:
+            if self.require_shot_attachment_ready:
+                self.wait_pre_shot_ready()
             kwargs['source_deadline'] = self.snapshot_source_deadline(self.latest_snapshot)
         return transport.Driver.send(self, lines, **kwargs)
 
