@@ -5,6 +5,10 @@ Updated November 4, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
+The November 4 chest holster uses the original KNV-1 mesh and the normal draw/return path. Tracked strikes are a separate explicit qualification; damage is unconfirmed. The x86 display test loaded the new 307-part cache and checked stow/draw transitions. [Controls and qualification](../handoff/integrations/coordinator-20261104-chest415/README.txt).
+
+The shared detachable-magazine path now gives a settled bolt-action rifle's native Update to the magazine handler when a hand reload needs it. The 17 existing configurations span M95, M24, GOL and SV98. An outstanding bolt cycle still uses its existing pause/resume path. This is a source change; a complete hand reload on these rifles has not yet been demonstrated in BC2.
+
 Destruction update, November4: the user reports that the previously repeatable building-rendering bug appeared fixed on the same level in their latest headset test. They remain uncertain; the exact tested build and level were not identified. Treat this as positive headset feedback and an apparently resolved scene-specific issue; preserve the existing correction and watch for recurrence. Broader scene coverage remains unconfirmed.
 
 Private0.1.61/fallback60 is installed and setup-validated with settings/cache preserved; source11b1349 is pushed. Both normal builds passed (350 x86,347 x64). The shared committed-origin candidate and238 exact weapon/part entries are compiled; its separate runtime request remains default-off. Earlier held-ammunition custody repairs remain included, with actual-game validation pending. Native ammunition transaction records are unchanged. [Installed60 and origin scope](../handoff/integrations/coordinator-20261104-origin399/README.txt), [shared custody repair](../handoff/integrations/coordinator-20261103-custody370/README.txt).
@@ -240,7 +244,7 @@ active work; physical grenade reloads, full body/MP/other Frostbite ports are la
 
 ## Public release and storage
 
-[Public0.1.15](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.15) remains unchanged with checkpoint434 binaries and experimental Steam diagnostics. Steam rendering/equipment support remains unverified. Private0.1.59 is installed locally for development, not published; public product commit13d7574bd682ae883a935a9adae52a59409b576f.
+[Public0.1.15](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.15) remains unchanged with checkpoint434 binaries and experimental Steam diagnostics. Steam rendering/equipment support remains unverified. See Active work above for the private development installation; public product commit13d7574bd682ae883a935a9adae52a59409b576f.
 
 Use G: and process-local TEMP/TMP/TMPDIR. Player installs may use their selected
 drive. Keep40GiB allocated/15GiB free,3GiB normal-build reserve and512MiB raw/run.

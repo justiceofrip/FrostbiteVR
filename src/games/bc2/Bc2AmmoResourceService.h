@@ -165,8 +165,13 @@ public:
         Guard g(requestGate_);if(!g.held||request_||!r.intent.id||r.intent.id<=lastRequest_)return false;
         lastRequest_=r.intent.id;request_=r;return true;
     }
+    template<class Ready> std::optional<AmmoResourceRequest> TakeIf(Ready&& ready)noexcept {
+        Guard g(requestGate_);
+        if(!g.held||!request_||!ready(*request_))return {};
+        auto r=request_;request_.reset();return r;
+    }
     std::optional<AmmoResourceRequest> Take()noexcept {
-        Guard g(requestGate_);if(!g.held)return {};auto r=request_;request_.reset();return r;
+        return TakeIf([](const auto&)noexcept{return true;});
     }
     bool Publish(const std::optional<AmmoResourceView>& view,const std::optional<AmmoResourceOutcome>& outcome={})noexcept {
         const auto revision=revision_.fetch_add(1,std::memory_order_acq_rel)+1;

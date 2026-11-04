@@ -1227,6 +1227,25 @@ int ReplacementActorArchivesPendingAndCompletedOutcomes(){
         }
     }return 0;
 }
+int IdleMagazineRequiresExactSelectedDebtFreeBolt(){
+    Fixture f(true);
+    const auto selected=Selection(f,Bc2NativeCycleMode::M95,1);
+    const NativeCycleRecoveryScope scope{selected.reserve.identity,selected.config};
+    CHECK(!f.service.IdleBoltMagazine(scope));
+    CHECK(f.service.Select(selected)&&f.Advance());
+    CHECK(f.service.IdleBoltMagazine(scope));
+    auto foreign=scope;++foreign.identity.firing[1];
+    CHECK(!f.service.IdleBoltMagazine(foreign));
+    foreign=scope;++foreign.config.baseCapacity;CHECK(!f.service.IdleBoltMagazine(foreign));
+    auto idle=f.service;
+    CHECK(idle.YieldForReload()&&!idle.IdleBoltMagazine(scope));
+    CHECK(!idle.Control(f.control));
+    CHECK(M95Hold(f)&&!f.service.IdleBoltMagazine(scope)&&!f.service.YieldForReload());
+    CHECK(f.service.View(f.clock).blocksFire);
+    Fixture pump;const auto p=Selection(pump,Bc2NativeCycleMode::Spas,1);
+    CHECK(pump.service.Select(p)&&!pump.service.IdleBoltMagazine({p.reserve.identity,p.config}));
+    return 0;
+}
 int SelectedModeRequiresExactOriginalIdleProof(){
     for(unsigned mutation=0;mutation<15;++mutation){Fixture f;auto selected=Selection(f,Bc2NativeCycleMode::Spas,1);
         switch(mutation){case 0: selected.reserve.verified=false;break;case 1:selected.reserve.allThreeIdle=false;break;
@@ -1803,7 +1822,7 @@ int CompletedCyclePreservesIssuedReadAcrossOtherBranchFinish(){
     return 0;
 }
 
-int main(){if(SameActorSeatEpochCannotRetireCancelledCycleDebt()||AcknowledgedClientTailReplayRetainsPaidStroke()||ActualPumpAdapterPaidReplayDoesNotRepeatGestureOrAudio()||PaidTailReplayStillRejectsUnprovenOrIncompleteNativeWork()||PaidReplayCannotForgiveTheNextRealShot()||ServerForwardCompletionStillRequiresClientIdle()||CompletedCyclePreservesIssuedReadAcrossOtherBranchFinish()||CompletedCycleDrainsExactMissingObservation()||MissingCompletedObservationCannotHideContradictions()||ReplacementActorRequiresExactFreshDrainedProof()||ReplacementActorArchivesPendingAndCompletedOutcomes()||ConfirmedReplacementActorDoesNotInheritOldPhysicalPumpDebt()||SelectionReadGapRetainsIdentityOnly()||ReleasedClientTailReplayRetainsOnePhysicalTransaction()||ReleasedClientTailReplayRejectsUnprovenHistory()||PredictedShotReplayPreservesOneDebt()||SpasSnapshotProgressionUsesSharedCyclePolicy()||Actual241SnapshotProgressionEvidence()||SnapshotProgressionRetainsMeasuredPreviousUntilOwnHold()||SnapshotProgressionCannotEraseStartedInterception()||SelectedModePrereadRequiresOriginalQuietRevision()||SelectedModeRequiresExactOriginalIdleProof()||SelectedModeCannotErasePendingDebt()||SelectedModeRoundTripPreservesCycleAuthority()||Actual239ForwardCallbackEvidence()||M95ForwardRestoreRequiresOwnClientAndServerCompletion()||M95ForwardRestoreDoesNotBorrowOrForgeReadiness()||QueuedReleaseDoesNotReclassifyAnAlreadyHeldUpdate()||OriginalSpasRegression()||ExactM95ThreeBranchHoldAndTail()||M95CannotBorrowSpasBoundaryOrWrongConfig()||
+int main(){if(SameActorSeatEpochCannotRetireCancelledCycleDebt()||AcknowledgedClientTailReplayRetainsPaidStroke()||ActualPumpAdapterPaidReplayDoesNotRepeatGestureOrAudio()||PaidTailReplayStillRejectsUnprovenOrIncompleteNativeWork()||PaidReplayCannotForgiveTheNextRealShot()||ServerForwardCompletionStillRequiresClientIdle()||CompletedCyclePreservesIssuedReadAcrossOtherBranchFinish()||CompletedCycleDrainsExactMissingObservation()||MissingCompletedObservationCannotHideContradictions()||ReplacementActorRequiresExactFreshDrainedProof()||ReplacementActorArchivesPendingAndCompletedOutcomes()||ConfirmedReplacementActorDoesNotInheritOldPhysicalPumpDebt()||SelectionReadGapRetainsIdentityOnly()||ReleasedClientTailReplayRetainsOnePhysicalTransaction()||ReleasedClientTailReplayRejectsUnprovenHistory()||PredictedShotReplayPreservesOneDebt()||SpasSnapshotProgressionUsesSharedCyclePolicy()||Actual241SnapshotProgressionEvidence()||SnapshotProgressionRetainsMeasuredPreviousUntilOwnHold()||SnapshotProgressionCannotEraseStartedInterception()||SelectedModePrereadRequiresOriginalQuietRevision()||IdleMagazineRequiresExactSelectedDebtFreeBolt()||SelectedModeRequiresExactOriginalIdleProof()||SelectedModeCannotErasePendingDebt()||SelectedModeRoundTripPreservesCycleAuthority()||Actual239ForwardCallbackEvidence()||M95ForwardRestoreRequiresOwnClientAndServerCompletion()||M95ForwardRestoreDoesNotBorrowOrForgeReadiness()||QueuedReleaseDoesNotReclassifyAnAlreadyHeldUpdate()||OriginalSpasRegression()||ExactM95ThreeBranchHoldAndTail()||M95CannotBorrowSpasBoundaryOrWrongConfig()||
     M95LastRoundRequiresSameEmptyDebtAndTail()||M95CompletionCoversOriginalBoltTimer()||ExactOriginalPredictionRewindOnlyBeforeHold()||
     PredictionRewindRequiresExactOriginalSnapshot()||M95TwoChildTailRejectsSpasExtraCommit()||M95SuspensionRequiresRightMechanismNeutral()||PhysicalBoltDiagnosticWireBounds())return 1;
     std::puts("15 M95 operating-class +1 shared queued-release groups passed; exact8/7/1 hold,2-child tail, pre-hold original rewind, right-mechanism neutral and bounded30s wire mode.");return 0;}

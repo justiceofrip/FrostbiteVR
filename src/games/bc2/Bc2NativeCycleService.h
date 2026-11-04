@@ -169,6 +169,9 @@ public:
     // Called only at a drained runtime operation handoff. Pending outcomes and
     // unresolved manual debt cannot yield to shell/resource mutations.
     bool YieldForReload()noexcept;
+    // An idle selected bolt may publish magazine input. A real command must
+    // still drain active callbacks and yield the watcher before any mutation.
+    bool IdleBoltMagazine(const NativeCycleRecoveryScope&)const noexcept;
     // Typed magazine handoff: exact native scope and original physical debt
     // survive every command. Caller excludes/drains callbacks at each drain.
     bool PrepareReload(const NativeCycleRecoveryScope&,const interaction::WeaponCycleReloadPause&,

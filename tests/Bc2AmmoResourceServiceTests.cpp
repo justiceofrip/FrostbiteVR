@@ -238,6 +238,20 @@ int CancelAndNoAutomaticRetry(){for(bool dispatched:{false,true}){
     if(dispatched){CHECK(!f.Select());CHECK(!f.service.Accept(f.Request(AmmunitionOperation::RemoveMagazine),f.now));}
     else CHECK(f.Select());
 }return 0;}
+int DeferredMagazineRequestKeepsOriginalDeadline(){
+    Fixture f;CHECK(f.Select());
+    const auto request=f.Request(AmmunitionOperation::RemoveMagazine);
+    CHECK(f.channel.Submit(request));
+    CHECK(!f.channel.TakeIf([](const auto&)noexcept{return false;}));
+    CHECK(!f.channel.Submit(request));
+    const auto take=f.channel.TakeIf([](const auto&)noexcept{return true;});
+    CHECK(take&&*take==request&&!f.channel.Take());
+    f.now=request.intent.deadlineNs;
+    CHECK(!f.service.Accept(*take,f.now)&&!f.service.Active());
+    CHECK(f.service.Outcome()&&!f.service.Outcome()->nativeDispatched);
+    CHECK(f.service.Inventory().Find(f.binding.context.resource)->Snapshot().counts==f.sample.counts);
+    return 0;
+}
 int ChannelConcurrency(){AmmoResourceChannel channel;std::atomic<bool> failed=false,done=false;constexpr unsigned Count=10000;
     const auto until=std::chrono::steady_clock::now()+std::chrono::seconds(10);
     std::thread producer([&]{for(unsigned n=1;n<=Count&&!failed;++n){AmmoResourceRequest r;r.intent.id=n;r.binding.data=n*3;r.binding.persistence=n*5;
@@ -556,5 +570,5 @@ int ConstructionProofCannotRenewInputOrBorrowCurrentAuthority(){
     return 0;
 }
 }
-int main(){if(SameActorTransitionCannotRetireAmmunition()||ActorRetirementKeepsPersistentServiceSafe())return 1;if(NativeEntryDeadlineKeepsUncalledOperationRejectable()||ActualNativeEntryFailureRemainsUncertain()||ConstructionProofCannotRenewInputOrBorrowCurrentAuthority()||RejectedAdmissionCapturesExactCause()||CapturedSeatDeadlineSeparatesNativeViewAndSubmittedSource()||DispatchAndExpiryDiagnosticsDoNotChangeOutcomes()||Transactions()||Rejections()||CancelAndNoAutomaticRetry()||ChannelConcurrency()||TerminalOutcomesSurviveSelection()||SamePointerReplacementKeepsOriginalResourceIsolated()||ReadReasonsPreserveAdmission()||ReadJournalBoundAndDrain()||ConcurrentViewReadStillCoherent()||FailedOperationEvidenceSurvivesShutdownTail())return 1;
+int main(){if(DeferredMagazineRequestKeepsOriginalDeadline()||SameActorTransitionCannotRetireAmmunition()||ActorRetirementKeepsPersistentServiceSafe())return 1;if(NativeEntryDeadlineKeepsUncalledOperationRejectable()||ActualNativeEntryFailureRemainsUncertain()||ConstructionProofCannotRenewInputOrBorrowCurrentAuthority()||RejectedAdmissionCapturesExactCause()||CapturedSeatDeadlineSeparatesNativeViewAndSubmittedSource()||DispatchAndExpiryDiagnosticsDoNotChangeOutcomes()||Transactions()||Rejections()||CancelAndNoAutomaticRetry()||ChannelConcurrency()||TerminalOutcomesSurviveSelection()||SamePointerReplacementKeepsOriginalResourceIsolated()||ReadReasonsPreserveAdmission()||ReadJournalBoundAndDrain()||ConcurrentViewReadStillCoherent()||FailedOperationEvidenceSurvivesShutdownTail())return 1;
     std::puts("BC2 ammunition service: native-observer handoff, no-op/original/refill, identity, cancellation and 10000 command handoffs passed (mock Updates).");return 0;}

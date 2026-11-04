@@ -465,6 +465,9 @@ ReloadFeedInputScopes feedInputScopes;
 std::optional<FeedEquipmentNativeView> feedEquipmentCurrent;
 #ifdef FVR_BC2_AMMO_RESOURCE_HANDS
 AmmoResourceService ammoPlayerService;
+// Guarded by ammoMoveProbeGate. Keep the ordinary ammo route through receipt
+// and seating, even if tracking drops and the display view temporarily expires.
+std::optional<interaction::AmmoResourceIdentity> idleBoltMagazineItem;
 AmmoResourceChannel ammoPlayerChannel;
 PistolAfterFeedEvidence pistolAfterFeed;
 std::atomic<bool> pistolAfterFeedEnabled=false;
@@ -1793,7 +1796,12 @@ void ObserveFeedEquipment(const ReloadFlowRecord& completed)noexcept {
     if(!retained)(void)feedEquipment.Observe(row,Now());
 }
 #ifdef FVR_BC2_AMMO_RESOURCE_HANDS
-void TryAmmoResourceHands(const Observation& observation,const ReloadHoldInput& in,void* self,void* context,bool pausedCycle=false)noexcept {
+enum class MagazineUpdateRoute {Ordinary,PausedBolt,IdleBolt};
+void TryAmmoResourceHands(const Observation& observation,const ReloadHoldInput& in,void* self,void* context,
+    MagazineUpdateRoute route=MagazineUpdateRoute::Ordinary,bool* yielded=nullptr)noexcept {
+    const bool pausedCycle=route==MagazineUpdateRoute::PausedBolt;
+    const bool idleBolt=route==MagazineUpdateRoute::IdleBolt;
+    if(idleBolt&&!yielded)return;
     if(!requestMode||!observation.lease||!in.verified||in.branch>=3||in.config.reloadType!=1)return;
     Gate lock(ammoMoveProbeGate);if(!lock.held)return;
     ammoPlayerService.Expire(Now());
@@ -1815,7 +1823,9 @@ void TryAmmoResourceHands(const Observation& observation,const ReloadHoldInput& 
     Reader reader{memory};
     const auto profile=FindMagazineEquipment(in.config);
     const bool fixed=fixedContainerReloadEnabled&&ReadFixedContainerNativeConfig(memory,in.config);
-    const bool bolt=pausedCycle&&ReadManualBoltConfig(memory,in.config);
+    const bool bolt=(pausedCycle||idleBolt)&&ReadManualBoltConfig(memory,in.config);
+    if(idleBolt&&(!bolt||!profile||!profile->Ready()||
+       profile->native->cycleAdmission!=MagazineCycleAdmission::ReviewedBoltActionReload11Transfer12))return;
     if((!fixed&&!bolt&&(!profile||!profile->Ready()))||!reader.Equals(std::uint64_t(in.identity.owner.weapon)+4,resource->data)||
        !reader.Equals(std::uint64_t(resource->data)+0x64,resource->persistence)||ammoPlayerSequence==UINT64_MAX)return;
     bool idle=false;std::uint64_t inputFloor=0;
@@ -1828,13 +1838,40 @@ void TryAmmoResourceHands(const Observation& observation,const ReloadHoldInput& 
         idle=(phase==ReloadRequestCyclePhase::Idle||phase==ReloadRequestCyclePhase::Finished||phase==ReloadRequestCyclePhase::Cancelled)&&
             (fixed||requestCycle.MatchesSelectedConfig(in.config));
     },false);
+    if(idle&&idleBolt){
+        idle=false;
+        WithNativeCycle(NativeCycleAccess::Observation,[&]{
+            idle=!nativeCycleReload.Active()&&nativeCycle.IdleBoltMagazine({in.identity,in.config});
+        });
+    }
     if(!idle)return;
     ammoPlayerSequence=std::max(ammoPlayerSequence+1,inputFloor);
     const auto snapshot=AmmoResourceSample(in,*resource,ammoPlayerSequence);
     if(!ammoPlayerService.Select(*resource,in.identity,snapshot,now)){ammoPlayerChannel.Publish(ammoPlayerService.View(),ammoPlayerService.Outcome());return;}
     ammoPlayerChannel.Publish(ammoPlayerService.View(),ammoPlayerService.Outcome());
     if(ammoPlayerService.Active())return;
-    const auto request=ammoPlayerChannel.Take();if(!request)return;
+    const auto request=ammoPlayerChannel.TakeIf([&](const AmmoResourceRequest& queued)noexcept {
+        if(!idleBolt)return true;
+        // Stale requests still get their normal terminal rejection. When the
+        // exclusion is busy, retain a current request with its original deadline.
+        const auto at=Now();
+        if(queued.binding.owner!=in.identity.owner||queued.intent.context!=resource->context||
+           at>=queued.intent.deadlineNs)return true;
+        ReloadInvocationExclusion entry(requestEntryGate,active,callbackRevision);
+        Gate routing(nativeCycleRoutingGate);
+        if(entry.Quiet()&&routing.held)WithNativeCycle(NativeCycleAccess::Selection,[&]{
+            if(!entry.Quiet()||!IsCurrent(*observation.lease,Now())||nativeCycleReload.Active()||
+               !nativeCycle.IdleBoltMagazine({in.identity,in.config}))return;
+            auto candidate=nativeCycle;
+            if(!candidate.YieldForReload()||!entry.Quiet())return;
+            nativeCycle=std::move(candidate);
+            for(auto& target:nativeCycleTargets)target.store(0,std::memory_order_release);
+            idleBoltMagazineItem=resource->context.resource;
+            *yielded=true;
+        });
+        return *yielded;
+    });
+    if(!request)return;
     const auto command=ammoPlayerService.Accept(*request,Now());
     if(!command){ammoPlayerChannel.Publish(ammoPlayerService.View(),ammoPlayerService.Outcome());return;}
     const auto reject=[&]{++ammoPlayerRejected;ammoPlayerService.Cancel(Now());RecordPistolOutcome();ammoPlayerChannel.Publish(ammoPlayerService.View(),ammoPlayerService.Outcome());};
@@ -1900,6 +1937,7 @@ void TryAmmoResourceHands(const Observation& observation,const ReloadHoldInput& 
         return AmmoResourceNativeCall{in.identity,command->id,invocation,began,Now(),command->before,command->after,true,exact,contextExact};
     };
     bool called=false;
+    if(idleBolt&&!*yielded){reject();return;}
     if(pausedCycle){
         // This own server Update has not entered its original or reserved a
         // recovery decision. Drain every predecessor before publishing the
@@ -2481,10 +2519,24 @@ void __fastcall Update(void* self,void*,void* context,unsigned extra){
             if(source){recoveryScope=NativeCycleRecoveryScope{RoundIdentity(*observation.lease),observation.lease->snapshot.config};
                 recoveryCapacity=*capacity;recoveryDeadline=std::min(observation.lease->deadline,observation.entry.nowNs+100000000);}
         }
-        bool reloadPaused=false;
-        WithNativeCycle(NativeCycleAccess::Observation,[&]{reloadPaused=nativeCycle.ReloadPause().has_value();});
+        bool reloadPaused=false,idleMagazine=false;
+        WithNativeCycle(NativeCycleAccess::Observation,[&]{
+            reloadPaused=nativeCycle.ReloadPause().has_value();
 #ifdef FVR_BC2_AMMO_RESOURCE_HANDS
-        if(ready&&reloadPaused)TryAmmoResourceHands(observation,input,self,context,true);
+            idleMagazine=ready&&nativeBoltCandidate&&cycleCallback.Isolated()&&nativeCycle.IdleBoltMagazine({input.identity,input.config});
+#endif
+        });
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+        if(ready&&reloadPaused)TryAmmoResourceHands(observation,input,self,context,MagazineUpdateRoute::PausedBolt);
+        else if(idleMagazine){
+            bool yielded=false;
+            TryAmmoResourceHands(observation,input,self,context,MagazineUpdateRoute::IdleBolt,&yielded);
+            if(yielded){
+                OriginalUpdateWithPistol(observation,self,context,extra);
+                if(const auto completed=observation.Finish())ObserveCycleAmmoResource(*completed);
+                return;
+            }
+        }
 #endif
         Bc2NativeCycleUpdateRoute route;bool resourceRoute=false;
         WithNativeCycle(NativeCycleAccess::NativeUpdate,[&]{
@@ -4110,6 +4162,26 @@ bool SelectNativeCycleMode(Bc2NativeCycleMode mode,const ReloadStateOwner& owner
     Active activeScope;ReloadInvocationExclusion entry(requestEntryGate,active,callbackRevision);
     if(!activeScope.requestEntryAllowed||!entry.Quiet()||!NativeCycleSelectionReadCurrent(proofRevision,callbackRevision.load(std::memory_order_acquire)))return false;
     Gate route(nativeCycleRoutingGate);if(!route.held||!NativeCycleRequestRetired()||!entry.Quiet())return false;
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+    if(mode==Bc2NativeCycleMode::Bolt){
+        Gate resource(ammoMoveProbeGate);
+        if(!resource.held)return false;
+        const auto binding=ammoResourceBindings.Read(owner,Now());
+        const bool handed=idleBoltMagazineItem&&idleBoltMagazineItem->actor==owner.soldier&&
+            idleBoltMagazineItem->actorGeneration==owner.actorGeneration&&idleBoltMagazineItem->weapon==owner.weapon;
+        if(handed&&!binding)return false;
+        if(binding){
+            const auto* ledger=ammoPlayerService.Inventory().Find(binding->context.resource);
+            if(ammoPlayerService.Active()||(ledger&&(ledger->Pending()||ledger->WellEmpty()||
+               ledger->Phase()!=interaction::AmmunitionLedgerPhase::Ready||
+               ledger->ResourceState()==interaction::MagazineResourceState::Held)))return false;
+            if(handed){
+                if(binding->context.resource==*idleBoltMagazineItem&&!ledger)return false;
+                idleBoltMagazineItem.reset();
+            }
+        }
+    }
+#endif
     bool accepted=false;
     WithNativeCycle(NativeCycleAccess::Selection,[&]{
         if(!entry.Quiet())return;

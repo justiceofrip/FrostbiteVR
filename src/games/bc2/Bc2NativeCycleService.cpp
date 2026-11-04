@@ -320,6 +320,11 @@ bool Bc2NativeCycleService::RebaseTracking(const Bc2NativeCycleControl& c,const 
     if(next.selection_)next.selection_->reserve.identity.owner=c.nativeOwner;
     *this=std::move(next);return true;
 }
+bool Bc2NativeCycleService::IdleBoltMagazine(const NativeCycleRecoveryScope& scope)const noexcept {
+    return selection_&&mode_==Bc2NativeCycleMode::Bolt&&selection_->reserve.identity==scope.identity&&
+        selection_->config==scope.config&&!Active(phase_)&&!ready_&&!recovery_.ReloadPause()&&
+        std::none_of(openUpdate_.begin(),openUpdate_.end(),[](auto id){return id!=0;});
+}
 bool Bc2NativeCycleService::YieldForReload()noexcept {
     if(Active(phase_)||ready_||std::any_of(openUpdate_.begin(),openUpdate_.end(),[](auto id){return id!=0;}))return false;
     Cancel(Bc2NativeCycleFailure::None);
