@@ -1,0 +1,8 @@
+Combined370: held-ammunition reliability and passive projectile-producer diagnostics.
+361 repairs loss of exact held ammunition on missing rendered contact and separates current hand safety from still-fresh recorded geometry; expired dwell cannot complete insertion.
+367 repairs the first-pickup boundary before gesture acquisition. Separate neutral-armed identity permits the same exact claim's delayed contact without granting release-completion or firing authority. Prepared cases reuse84 profiles, plus11 policy and13 fresh-boundary refusals.
+369 adds optional producer values to the existing whole7155b0 observer: embedded receiver+2c words and vtable slot4 target, independently validated and repeated. Failures affect only these diagnostic fields; native forwarding, origin/ammunition writes and existing outcomes remain unchanged.
+368's bounded machine decode proves the embedded address. These values do not prove the actual factory return, pointer nonretention or a muzzle correction.
+Independent371/372 reviews are clear; writers retired. Nine combined source/test files are bound to accepted a1e9866; exact manifests/reviews live in reports/coordinator-20261103-feedback370.
+Prior354 normal checks passed345x86/344x64 on7c9899c, but delivery was held when the first-pickup gap was found. Those passes are retained for that earlier source; the changed combined370 batch requires new normal checks once per architecture.
+Private0.1.58/fallback57 remains installed until actual370 build/package/push/setup validation permits0.1.59/fallback58. No game session or headset acceptance is inferred.

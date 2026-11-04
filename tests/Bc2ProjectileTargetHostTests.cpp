@@ -132,13 +132,76 @@ static void ServerRelationships(){
 }
 
 using namespace fvr::bc2::projectile302;
+// Value-only producer seam: exact embedded address and slot+4 are the only
+// readable regions. Treating *(outer+2c) as the receiver cannot pass this fixture.
+struct ProducerFixture {
+    static constexpr Word Outer=0x10000,Table=0x20000,Target=0x30000;
+    std::array<Word,4> words{Table,11,22,33};Word target=Target;
+    std::array<Word,4> addresses{};unsigned reads=0,validations=0,failRead=0,denyValidation=0,tornRead=0,tornWord=0;
+    bool ordered=true,returnBoundary=false;
+    static bool __cdecl Read(void* p,Word at,void* dst,std::size_t size)noexcept {
+        auto& f=*static_cast<ProducerFixture*>(p);++f.reads;
+        f.ordered&=f.validations==f.reads;
+        if(f.reads<=f.addresses.size())f.addresses[f.reads-1]=at;
+        if(f.reads==f.failRead)return false;
+        if(at==Outer+0x2c&&size==16){std::memcpy(dst,f.words.data(),size);
+            if(f.reads==f.tornRead)static_cast<Word*>(dst)[f.tornWord]^=4;return true;}
+        if(at==f.words[0]+4&&size==4){std::memcpy(dst,&f.target,4);
+            if(f.reads==f.tornRead)*static_cast<Word*>(dst)^=4;return true;}
+        return false;
+    }
+    static bool __cdecl Validate(void* p,const Grant& g,Boundary b)noexcept {
+        auto& f=*static_cast<ProducerFixture*>(p);++f.validations;
+        f.ordered&=(b==Boundary::Return)==f.returnBoundary;
+        return g.receiver==Outer&&f.validations!=f.denyValidation;
+    }
+    ObserverApi Api(){return {this,Read,Validate,true};}
+    Grant Offered(){auto g=Saved().grant;g.receiver=Outer;return g;}
+};
+static void ProducerDiagnostics(){
+    ProducerFixture good;const auto sample=CopyProducerBoundary(good.Api(),good.Offered(),Boundary::Entry);
+    Check(sample.status==SampleStatus::Complete&&sample.embedded==ProducerFixture::Outer+0x2c&&
+        sample.words==good.words&&sample.slot4Target==ProducerFixture::Target&&sample.wordsRead&&sample.targetRead,
+        "Producer copies embedded receiver words and its vtable slot four");
+    Check(good.addresses==std::array<Word,4>{0x1002c,0x20004,0x1002c,0x20004}&&good.ordered&&good.validations==5,
+        "Each bounded producer read revalidates full grant and both pointers repeat");
+    ProducerFixture off;auto disabled=off.Api();disabled.producerDiagnostics=false;
+    Check(CopyProducerBoundary(disabled,off.Offered(),Boundary::Entry).status==SampleStatus::Unattempted&&
+        off.reads==0&&off.validations==0,"Disabled producer diagnostics perform no validation or read");
+    for(unsigned n=1;n<=4;++n){ProducerFixture failed;failed.failRead=n;
+        const auto s=CopyProducerBoundary(failed.Api(),failed.Offered(),Boundary::Entry);
+        Check(s.status==SampleStatus::ReadFailure&&failed.reads==n&&failed.ordered&&
+            s.wordsRead==(n>1)&&s.targetRead==(n>2),"Producer read failure keeps independent partial-read status");}
+    for(unsigned n=1;n<=5;++n){ProducerFixture refused;refused.denyValidation=n;
+        const auto s=CopyProducerBoundary(refused.Api(),refused.Offered(),Boundary::Entry);
+        Check(s.status==SampleStatus::IdentityChanged&&refused.reads==n-1&&refused.ordered,
+            "Changed owner/helper/thread/primary or deadline refuses next diagnostic read");}
+    for(unsigned n:{3u,4u}){ProducerFixture torn;torn.tornRead=n;
+        const auto s=CopyProducerBoundary(torn.Api(),torn.Offered(),Boundary::Entry);
+        Check(s.status==SampleStatus::Torn&&torn.reads==n&&torn.ordered&&s.wordsRead&&s.targetRead,
+            "Changed embedded vtable or slot target is torn without following changed pointer");}
+    for(unsigned n=1;n<4;++n){ProducerFixture torn;torn.tornRead=3;torn.tornWord=n;
+        Check(CopyProducerBoundary(torn.Api(),torn.Offered(),Boundary::Entry).status==SampleStatus::Torn&&torn.reads==3,
+            "All four embedded words must be stable within a diagnostic sample");}
+    ProducerFixture returned;returned.returnBoundary=true;
+    Check(CopyProducerBoundary(returned.Api(),returned.Offered(),Boundary::Return,&sample).status==SampleStatus::Complete&&returned.ordered,
+        "Return independently validates and retains same producer identity");
+    for(bool vtable:{false,true}){ProducerFixture changed;changed.returnBoundary=true;
+        if(vtable)changed.words[0]+=0x1000;else ++changed.target;
+        Check(CopyProducerBoundary(changed.Api(),changed.Offered(),Boundary::Return,&sample).status==SampleStatus::IdentityChanged,
+            "Stable changed producer identity is diagnostic only");}
+    ProducerFixture overflow;auto bad=overflow.Offered();bad.receiver=UINT32_MAX-0x30;
+    Check(CopyProducerBoundary(overflow.Api(),bad,Boundary::Entry).status==SampleStatus::InvalidArguments&&overflow.reads==0,
+        "Overflowing embedded object range is never read");
+}
 static Lifecycle life; // Retained, like Observer/Original, for the entire process.
 struct HostFixture {
     ServerFixture native{};Join saved{};
-    alignas(16) unsigned char receiver[256]{},vtable[256]{},backing[128]{};
+    alignas(16) unsigned char receiver[256]{},vtable[256]{},backing[128]{},producerTable[16]{};
     const unsigned char* primary=nullptr;
     unsigned mutationAt=0,mutationValue=0,secondAt=0,secondValue=0,failOnReturn=0;
     unsigned entryValidations=0,returnValidations=0,reads=0,completed=0;
+    unsigned producerFault=0,embeddedReads=0;
     std::atomic<unsigned> nativeCalls{0};std::atomic<bool> block{false};
     HANDLE entered=CreateEventW(nullptr,TRUE,FALSE,nullptr),release=CreateEventW(nullptr,TRUE,FALSE,nullptr);
 } host;
@@ -172,21 +235,28 @@ struct HookFixture {
 static void* hookSlot=nullptr;
 static bool __cdecl ReadHost(void*,Word at,void* dst,std::size_t size)noexcept {
     ++host.reads;
+    const bool embedded=at==reinterpret_cast<Word>(host.receiver)+0x2c;
+    if(embedded){++host.embeddedReads;
+        if(host.producerFault==1)return false;
+        if(host.producerFault==3)RaiseException(EXCEPTION_ACCESS_VIOLATION,0,0,nullptr);}
+    if(at==reinterpret_cast<Word>(host.producerTable)+4&&host.producerFault==2)return false;
     struct Region {const unsigned char* begin;std::size_t size;};
     for(const auto r:{Region{host.receiver,sizeof(host.receiver)},Region{host.vtable,sizeof(host.vtable)},
-        Region{host.backing,sizeof(host.backing)},Region{host.primary,64}}){
+        Region{host.backing,sizeof(host.backing)},Region{host.primary,64},Region{host.producerTable,sizeof(host.producerTable)}}){
         const auto begin=reinterpret_cast<Word>(r.begin);
-        if(r.begin&&at>=begin&&std::uint64_t(at)+size<=std::uint64_t(begin)+r.size){std::memcpy(dst,reinterpret_cast<void*>(at),size);return true;}
+        if(r.begin&&at>=begin&&std::uint64_t(at)+size<=std::uint64_t(begin)+r.size){std::memcpy(dst,reinterpret_cast<void*>(at),size);
+            if(embedded&&host.producerFault==4&&host.embeddedReads%2==0)static_cast<Word*>(dst)[0]^=4;return true;}
     }return false;
 }
 static bool __cdecl ValidateHost(void*,const Grant& grant,Boundary boundary)noexcept {
     if(boundary==Boundary::Entry)++host.entryValidations;else ++host.returnValidations;
+    if(host.producerFault==5&&(boundary==Boundary::Entry?host.entryValidations:host.returnValidations)==3)return false;
     const auto native=ReadServerIdentity(host.native.Api(),host.native.binding,host.native.owner,ServerFixture::Effects);
     if(!native)return false;
     auto current=Live(host.saved);current.serverPlayer=native->player;current.serverSoldier=native->soldier;
     return life.Window(2000001)&&Matches(host.saved,grant,current);
 }
-static ObserverApi HostApi(){return {&host,ReadHost,ValidateHost};}
+static ObserverApi HostApi(){return {&host,ReadHost,ValidateHost,true};}
 static bool Install(Lifecycle& l,Session& s,MachineEntry& original,void*& slot,HookFixture& hook,
     bool request=true,bool retained=true,bool signatures=true,bool helper=true){
     return l.Install(request,retained,signatures,helper,150,s,original,slot,reinterpret_cast<void*>(0x7155b0),HostApi(),hook.Api());
@@ -212,13 +282,16 @@ static void InstallLifecycle(){
     Check(life.Window(2000149,true)&&life.deadline.load()==2000150,"Later helper cannot renew window");
     Check(!life.Window(2000150,true)&&!life.Window(1999999),"Expiry and pre-window time refused");
 }
-static void BoundaryMutation(unsigned at=0,unsigned value=0,unsigned second=0,unsigned secondValue=0,unsigned fail=0){
+static void BoundaryMutation(unsigned at=0,unsigned value=0,unsigned second=0,unsigned secondValue=0,unsigned fail=0,unsigned producerFault=0){
     host.native=ServerFixture{};host.mutationAt=at;host.mutationValue=value;host.secondAt=second;host.secondValue=secondValue;host.failOnReturn=fail;
     host.entryValidations=host.returnValidations=0;
+    host.producerFault=producerFault;host.embeddedReads=0;
     alignas(16) unsigned char primary[64]{};host.primary=primary;
     const auto put=[](unsigned char* p,Word v){std::memcpy(p,&v,4);};
     put(primary+0x30,0x7fc00000);put(host.receiver,reinterpret_cast<Word>(host.vtable));
     put(host.vtable+0xe8,reinterpret_cast<Word>(SyntheticOriginal));put(host.receiver+0x28,reinterpret_cast<Word>(host.backing));
+    put(host.receiver+0x2c,reinterpret_cast<Word>(host.producerTable));put(host.receiver+0x30,11);
+    put(host.receiver+0x34,22);put(host.receiver+0x38,33);put(host.producerTable+4,ProducerFixture::Target);
     host.saved=Saved();host.saved.owner=host.native.owner;host.saved.effects=host.saved.config.effects=ServerFixture::Effects;
     host.saved.serverPlayer=ServerFixture::Player;host.saved.serverSoldier=ServerFixture::Soldier;
     const auto* tib=reinterpret_cast<const NT_TIB*>(NtCurrentTeb());auto& g=host.saved.grant;
@@ -233,14 +306,27 @@ static void BoundaryMutation(unsigned at=0,unsigned value=0,unsigned second=0,un
     const auto index=Observer.offered;const auto calls=host.nativeCalls.load();
     Check(Observer.Offer(g),"Accepted helper publishes adapter grant");Dispatch(&frame);
     const auto& row=Observer.rows[index];const bool changed=at||fail;
+    const unsigned expectedValidations=(producerFault==1||producerFault==3||producerFault==5)?3:
+        producerFault==2?4:producerFault==4?5:7;
     Check(host.nativeCalls.load()==calls+1&&frame.result.eax==ReturnMarker&&row.originalReturned,"Real adapter forwards retained original exactly once");
-    Check(row.complete.load(std::memory_order_acquire)&&row.before.status==SampleStatus::Complete&&host.entryValidations==2,
+    Check(row.complete.load(std::memory_order_acquire)&&row.before.status==SampleStatus::Complete&&host.entryValidations==expectedValidations,
         "Entry reads both fresh native identity bookends");
-    Check(row.outcome==(changed?Outcome::RejectedIdentity:Outcome::ReturnedUnchanged)&&host.returnValidations>=1,
+    Check(row.outcome==(changed?Outcome::RejectedIdentity:Outcome::ReturnedUnchanged)&&host.returnValidations==(changed?1:expectedValidations),
         "Fresh return identity refuses native mutation while preserving original call");
     Check(!changed||row.after.status==SampleStatus::Unattempted,"Changed server identity refuses return payload read");
+    const auto diagnostic=producerFault==5?SampleStatus::IdentityChanged:producerFault==4?SampleStatus::Torn:
+        producerFault?SampleStatus::ReadFailure:SampleStatus::Complete;
+    Check(row.before.producer.status==diagnostic&&
+        row.after.producer.status==(changed?SampleStatus::Unattempted:diagnostic),"Producer faults have independent entry/return status");
+    if(!changed){for(const auto* s:{&row.before,&row.after}){
+        Check(s->status==SampleStatus::Complete&&s->identity.receiver==g.receiver&&s->identity.vtable==g.vtable&&
+            s->identity.target==g.target&&s->identity.backing==reinterpret_cast<Word>(host.backing)&&s->identity.selected==s->identity.backing&&
+            !s->identity.indexed&&s->identity.index==0&&s->flags==0&&s->source==g.source&&
+            s->flagsRead&&s->sourceRead&&s->selectedRead&&s->velocityRead&&
+            s->sourceBits==std::array<Word,3>{0x7fc00000,0,0}&&s->selectedBits==std::array<Word,3>{}&&s->velocityCacheBits==std::array<Word,3>{},
+            "Producer diagnostics preserve every existing position sample field");}}
     Check(!life.Active()&&Depth==0,"Real adapter unregisters after return");++host.completed;
-    host.primary=nullptr;host.mutationAt=host.secondAt=host.failOnReturn=0;
+    host.primary=nullptr;host.mutationAt=host.secondAt=host.failOnReturn=host.producerFault=0;
 }
 static void BoundaryMutations(){
     BoundaryMutation();
@@ -254,6 +340,7 @@ static void BoundaryMutations(){
     BoundaryMutation(0x14154,1);
     BoundaryMutation(0x12000,0x15000);
     BoundaryMutation(0,0,0,0,0x18128);
+    for(unsigned fault=1;fault<=5;++fault)BoundaryMutation(0,0,0,0,0,fault);
 }
 // Synthetic typed caller merely drives the tested ECX + eleven words / RET 2c
 // gateway. The marker is fixture-only, not an inferred native return type.
@@ -290,6 +377,7 @@ static void StopLifecycle(){
     Check(delayedResult==ReturnMarker&&host.nativeCalls.load()==calls+2&&!life.Active(),"Delayed pre-registration caller still forwards retained trampoline after retirement");
     Check(host.reads==reads&&host.entryValidations+host.returnValidations==validations,"Closed delayed entry performs no borrowed native reads");
     Check(Original==original&&hookSlot==slot&&Observer.api.context==api.context&&Observer.api.read==api.read&&Observer.api.validate==api.validate&&
+        Observer.api.producerDiagnostics==api.producerDiagnostics&&
         Observer.offered==offers+1&&life.session==&Observer&&life.entry==slot,"Original API session rows and hook entry retained without reset");
     Check(!life.Start()&&!Observer.Offer(host.saved.grant)&&!Install(life,Observer,Original,hookSlot,hookFixture)&&hookFixture.creates==1,"No post-retirement enable offer or reinstall");
     CloseHandle(delayedReady);CloseHandle(delayedRelease);CloseHandle(host.entered);CloseHandle(host.release);
@@ -298,6 +386,14 @@ static void Serialization(){
     std::ostringstream out;Report(out,life,Observer);const auto value=out.str();
     Check(value.find("\"complete_rows\":"+std::to_string(host.completed))!=std::string::npos&&value.find("\"incomplete_rows_omitted\":1")!=std::string::npos,"Only real acquire-completed adapter rows serialized");
     Check(value.find("\"bits\":[2143289344,0,0],\"finite_xyz\":null")!=std::string::npos,"Nonfinite numeric XYZ suppressed, raw bits retained");
+    Check(value.find("\"producer_diagnostics\":1")!=std::string::npos&&
+        value.find("\"factory_return_observed\":false,\"primary_nonretention_proven\":false")!=std::string::npos,
+        "Report does not promote passive producer values to factory return or nonretention proof");
+    Check(value.find("\"producer\":{\"status\":1,\"embedded_address\":"+std::to_string(reinterpret_cast<Word>(host.receiver)+0x2c))!=std::string::npos&&
+        value.find("\"slot4_target_read\":1,\"slot4_target\":196608")!=std::string::npos&&
+        value.find("\"producer\":{\"status\":3")!=std::string::npos&&value.find("\"producer\":{\"status\":4")!=std::string::npos&&
+        value.find("\"producer\":{\"status\":5")!=std::string::npos,
+        "Report preserves complete unread identity-changed and torn producer diagnostics separately");
 }
 static void Signatures(const char* image) {
     Check(!VerifySignatures({}, {}, {}, {}, {}),"Missing signatures refused");
@@ -316,5 +412,5 @@ static void Signatures(const char* image) {
 }
 int main(int argc,char** argv){
     if(!FloatingStateSupported()){std::cerr<<"Required x86 floating state unavailable\n";return EXIT_FAILURE;}
-    Identity();ServerRelationships();InstallLifecycle();BoundaryMutations();StopLifecycle();Serialization();Signatures(argc>1?argv[1]:nullptr);
+    Identity();ServerRelationships();ProducerDiagnostics();InstallLifecycle();BoundaryMutations();StopLifecycle();Serialization();Signatures(argc>1?argv[1]:nullptr);
     std::cout<<checks<<" checks, "<<failures<<" failures\n";return failures?EXIT_FAILURE:EXIT_SUCCESS;}

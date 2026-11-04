@@ -560,16 +560,50 @@ int TransferFixedSupportStroke(Fixture& f,unsigned step,bool sameCurrent){
     CHECK(duplicate&&duplicate->token==hand->token&&duplicate->inputSequence==hand->inputSequence&&duplicate->deadlineNs==hand->deadlineNs);
     CHECK(!FinishFixedStroke(f,step));return 0;
 }
-int InsertFixedWithOfflineReceipt(Fixture& f){
+int InsertFixedWithOfflineReceipt(Fixture& f,bool freshPickupGap=false){
     const auto& motion=f.equipment->interaction.geometry[2].motion;
     const auto before=f.counts;const auto calls=f.calls;
     f.Send(At(motion,0),false);f.Send(At(motion,0),true,true);CHECK(f.result.ammoOwnsHand);
     const auto held=f.result.tracking.hand;CHECK(held&&held->token.kind==HandClaimKind::AmmoObject);
     CHECK((held->token.item==HandInteractionKey{f.observation.supply.resource.id,f.observation.supply.resource.generation}));
-    f.Send(At(motion,0),true);
-    for(unsigned n=1;n<=30;++n)f.Send(At(motion,n/30.),true);
-    for(unsigned n=0;n<8;++n)f.Send(At(motion,1),true);
-    f.Send(At(motion,1),false);
+    if(freshPickupGap){
+        // No held policy pose has been sent after pouch pickup: the recognizer
+        // is armed, with no acquired gesture or insertion target yet.
+        CHECK(!f.result.tracking.target);
+        const auto supply=f.observation.supply;const auto lifetime=f.result.tracking.lifetime;
+        HandClaimDropJournal<4> journal;f.hands.ObserveDrops(journal.Observer());
+        f.Prepare(At(motion,0),true);auto delayed=f.sample.raw;f.sample.raw.valid=false;f.Consume();
+        for(unsigned n=0;n<40;++n){
+            const auto progress=std::min(1.,n/30.);
+            f.Prepare(At(motion,progress),true);f.sample.raw.valid=false;f.Consume();
+            CHECK(f.result.ammoOwnsHand&&f.result.tracking.hand&&f.result.tracking.hand->token==held->token);
+            CHECK(!f.result.tracking.target&&!f.observation.rawAdmitted&&f.calls==calls);
+            const auto retained=*f.result.tracking.hand;const bool release=n==39;
+            f.Prepare(At(motion,progress),!release);const auto next=f.sample.raw;f.Consume(&delayed);
+            CHECK(f.observation.rawAdmitted&&f.sample.input.sequence==delayed.input.sequence+2);
+            CHECK(f.observation.raw.input.observedNs==delayed.input.observedNs&&
+                  f.observation.raw.input.deadlineNs==delayed.input.deadlineNs);
+            CHECK(f.observation.supply==supply&&f.result.tracking.lifetime==lifetime&&f.service.View()->snapshot.counts==before);
+            if(!release){
+                CHECK(f.result.status==FixedContainerStatus::Gesture&&f.result.tracking.target&&journal.count==0);
+                CHECK(f.result.ammoOwnsHand&&f.result.tracking.hand->token==held->token&&f.calls==calls);
+                CHECK(f.result.tracking.hand->inputSequence==retained.inputSequence&&f.result.tracking.hand->deadlineNs==retained.deadlineNs);
+                const auto expected=Multiply(feed_interaction_detail::Inverse(motion.placement.sourceFromGrip),delayed.weaponFromWrist);
+                CHECK(feed_interaction_detail::Distance(*f.result.tracking.target,expected)<.00001);
+            }else{
+                CHECK(f.submitted&&f.submitted->sourceProof&&f.submitted->sourceProof->inputSequence==delayed.input.sequence);
+                CHECK(f.submitted->intent.observedNs==delayed.input.observedNs&&f.submitted->intent.deadlineNs==delayed.input.deadlineNs);
+                CHECK(!f.result.ammoOwnsHand);
+            }
+            delayed=next;
+        }
+        f.hands.ObserveDrops({});
+    }else{
+        f.Send(At(motion,0),true);
+        for(unsigned n=1;n<=30;++n)f.Send(At(motion,n/30.),true);
+        for(unsigned n=0;n<8;++n)f.Send(At(motion,1),true);
+        f.Send(At(motion,1),false);
+    }
     CHECK(f.calls==calls+1&&f.submitted&&f.submitted->preparedCommand&&f.result.tracking.pending);
     const auto request=*f.submitted;const auto command=*request.preparedCommand;
     CHECK(command.before==before&&command.before.loaded+command.before.reserve==command.after.loaded+command.after.reserve);
@@ -593,6 +627,28 @@ int InsertFixedWithOfflineReceipt(Fixture& f){
         f.observation.lastCompletion->outcome.receipt&&f.observation.lastCompletion->outcome.receipt->command==command);
     CHECK(f.service.View()->snapshot.counts==command.after);return 0;
 }
+int EveryFixedFamilyFreshPickupGapCompletesOnce(){
+    unsigned profiles=0,linked=0;std::array<bool,5> kinds{};
+    for(const auto registry:{std::span<const FixedContainerEquipmentProfile>(generated::FixedContainerEquipment),
+                            std::span<const FixedContainerEquipmentProfile>(generated::UnderbarrelFixedContainerEquipment)})
+        for(const auto& e:registry){
+            Fixture f(&e,0,e.interaction.roundsPerInsertion);f.observe=true;SelectFixedFamily(f);
+            const auto kind=e.interaction.kind;const bool mechanism=kind==FixedContainerKind::Cylinder||kind==FixedContainerKind::SingleRoundBreech;
+            if(mechanism)f.Hinge(0);
+            if(kind==FixedContainerKind::Cylinder)f.Hinge(1);
+            CHECK(!InsertFixedWithOfflineReceipt(f,true));
+            const auto committed=f.counts;if(mechanism)f.Hinge(3);
+            CHECK(f.result.tracking.step==FixedContainerStep::Complete&&!f.result.blocksFire&&f.gate&&f.gate->closedVerified);
+            CHECK(f.calls==1&&f.service.View()->snapshot.counts==committed&&!f.hands.Current(InteractionHand::Left));
+            CHECK(committed.loaded+committed.reserve==e.interaction.roundsPerInsertion);
+            ++profiles;if(f.linkedFamily)++linked;kinds[static_cast<unsigned>(kind)]=true;
+        }
+    unsigned kindCount=0;for(bool checked:kinds)if(checked)++kindCount;
+    CHECK(profiles==84&&linked==77&&kindCount==4);
+    std::printf("Fixed fresh pickup gap: %u profiles, %u linked loaders, %u kinds, one mocked receipt each\n",profiles,linked,kindCount);
+    return 0;
+}
+
 int EveryFixedFamilyTransfersDelayedSupportThroughFullCycle(){
     unsigned profiles=0,cycles=0,transfers=0,receipts=0,linked=0,nativeItem=0;
     for(const auto registry:{std::span<const FixedContainerEquipmentProfile>(generated::FixedContainerEquipment),
@@ -832,9 +888,9 @@ int ReplacementRawGapRetainsCustodyAndResumes(){
     CHECK(kinds==4);return 0;
 }
 int ReplacementRawGapStillHonorsInvalidation(){
-    for(unsigned branch=0;branch<13;++branch){
+    for(bool acquireBeforeGap:{false,true})for(unsigned branch=0;branch<13;++branch){
         Fixture f(1);const auto start=At(f.equipment->interaction.geometry[2].motion,0);
-        f.Send(start,false);f.Send(start,true,true);f.Send(start,true);CHECK(f.result.ammoOwnsHand);
+        f.Send(start,false);f.Send(start,true,true);if(acquireBeforeGap)f.Send(start,true);CHECK(f.result.ammoOwnsHand);
         const auto held=*f.result.tracking.hand;const auto counts=f.counts;
         if(branch==4)f.now=held.deadlineNs-10000000;
         if(branch==5){++f.owner.equipGeneration;f.gun={};}
@@ -916,7 +972,7 @@ int RecurringRawGapsConsumeDelayedGeometry(){
 
 int main(){if(FixedReleaseCauseDiagnostics())return 1;
     if(ReplacementRawGapRetainsCustodyAndResumes()||ReplacementRawGapStillHonorsInvalidation())return 1;
-    if(RecurringRawGapsConsumeDelayedGeometry())return 1;
+    if(RecurringRawGapsConsumeDelayedGeometry()||EveryFixedFamilyFreshPickupGapCompletesOnce())return 1;
     return ExactSelectorsAndSupply()||GateBeforePhysicalAndExactOwner()||BusyMechanismFeedbackContinuesOpening()||
     BusyCannotStartReviveOrChangeOwner()||BusyExpiresWithoutGateLeaseExtension()||BusyCannotAuthorizeDispatchOrClosure()||
     CylinderFlickReturnAndClose()||ClipQueuesOneSharedCommand()||

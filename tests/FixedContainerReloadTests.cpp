@@ -477,7 +477,79 @@ int DelayedHeldGeometryKeepsItsOwnLease(){
     return 0;
 }
 
+int FreshArmedInsertionKeepsExactSourceAndNeutral(){
+    // Arm with an already held object, as the pouch adapter does, but do not
+    // acquire the policy gesture until after two custody-only safety renewals.
+    for(unsigned branch=0;branch<11;++branch){
+        Fixture f(FixedContainerKind::SingleRoundMuzzle,0,1);
+        f.Tick(0,branch==4);f.Renew();
+        const auto acquire=[&](){
+            const auto got=f.hands.Acquire(f.x.input,{f.x.input.owner,InteractionHand::Left,HandClaimKind::AmmoObject,{11,12},
+                {{f.profile.geometry[2].contact.role,f.profile.revision},f.x.input.sequence,f.x.input.deadlineNs,true},++f.intent,0});
+            if(!got.claim)return false;f.claim=got.claim->token;f.heldClaim=true;f.x.claim=f.claim;return true;
+        };
+        CHECK(acquire());const auto token=f.claim;const auto counts=f.ledger.Snapshot().counts;
+        if(branch==10){f.x.currentSafety=f.x.input;--f.x.input.observedNs;--f.x.interaction.contact.observedNs;}
+        const auto neutral=f.reload->Update(f.x,f.hands);
+        CHECK(neutral.interaction.status==(branch==4?FeedInteractionStatus::NeedNeutral:FeedInteractionStatus::Armed));
+        f.x.currentSafety.reset();
+        CHECK(!f.reload->BlocksFire()); // Arming has not acquired motion.
+        if(branch==5)f.reload->Suspend();
+        if(branch==6)CHECK(f.Run(.5f).interaction.status==FeedInteractionStatus::ContactMiss);
+        if(branch==8)f.x.input.nowNs+=40; // Original neutral-to-grip gap must still reject.
+        const auto safety=[&](){
+            f.hands.Update(f.x.input);
+            return bool(f.hands.Renew(f.x.input,f.gun,{{300,1},f.x.input.sequence,f.x.input.deadlineNs,true}).claim);
+        };
+        if(branch==9){
+            // A genuine released neutral without a claim clears the old arming
+            // identity; an ordinary new grasp must still be possible.
+            f.Tick(0,false);f.x.input.released[0]=true;f.heldClaim=false;f.x.claim.reset();CHECK(safety());
+            CHECK(!f.hands.Current(InteractionHand::Left));
+            CHECK(f.reload->Update(f.x,f.hands).interaction.status==FeedInteractionStatus::Armed);
+            CHECK(f.Acquire()&&f.claim!=token&&!f.reload->Pending()&&f.ledger.Snapshot().counts==counts);continue;
+        }
+        f.Tick();CHECK(safety());auto geometry=f.x;const auto source=geometry.input;
+        std::optional<HandClaim> retained;
+        for(unsigned n=0;n<2;++n){f.Tick();CHECK(safety());retained=f.reload->RetainHeld(f.x.input,token,true,f.hands);CHECK(retained);}
+        CHECK(f.x.input.sequence==source.sequence+2&&retained->inputSequence>source.sequence);
+        if(branch==1){++geometry.input.observedNs;++geometry.interaction.contact.observedNs;}
+        if(branch==2){
+            f.x.input.nowNs=source.deadlineNs-10;f.Tick();CHECK(safety());
+            retained=f.reload->RetainHeld(f.x.input,token,true,f.hands);CHECK(retained&&retained->deadlineNs>source.deadlineNs);
+        }
+        if(branch==3){
+            const auto before=*f.hands.Current(InteractionHand::Left);
+            f.Tick(0,false);f.x.input.released[0]=true;const auto released=f.hands.Update(f.x.input);CHECK(released.released[0]);
+            geometry.releaseEvidence=FixedContainerReleaseEvidence{before,*released.released[0],f.x.input};
+            CHECK(safety());geometry.interaction.grip=false;
+        }
+        if(branch==7){
+            CHECK(f.hands.Release(f.x.input,token).accepted);f.Tick();CHECK(safety());CHECK(acquire());
+            CHECK(f.claim!=token&&!f.reload->RetainHeld(f.x.input,f.claim,true,f.hands));geometry.claim=f.claim;
+        }
+        geometry.ammunition=f.x.ammunition;geometry.interaction.contact.snapshotSequence=geometry.ammunition.sequence;
+        geometry.currentSafety=f.x.input;geometry.input.nowNs=f.x.input.nowNs;
+        const auto result=f.reload->Update(geometry,f.hands);
+        CHECK(!result.dispatch&&!f.reload->Pending()&&f.ledger.Snapshot().counts==counts);
+        if(branch==0){
+            CHECK(result.interaction.status==FeedInteractionStatus::Acquired&&result.interaction.target);
+            const auto held=f.hands.Current(InteractionHand::Left);CHECK(held&&held->token==token);
+            CHECK(held->inputSequence==retained->inputSequence&&held->deadlineNs==retained->deadlineNs);
+        }else{
+            CHECK(!result.interaction.target);
+            if(branch==2)CHECK(result.rejection==FixedContainerRejection::Admission);
+            else if(branch==8)CHECK(result.rejection==FixedContainerRejection::Gesture&&result.interaction.status==FeedInteractionStatus::Interrupted);
+            else CHECK(result.rejection==FixedContainerRejection::Hand);
+            if(branch==3)CHECK(!f.hands.Current(InteractionHand::Left));
+            if(branch>=4&&branch<=6)CHECK(f.Run().interaction.status==FeedInteractionStatus::NeedNeutral);
+        }
+    }
+    return 0;
+}
+
 int main(){if(FixedPolicyRejectionDiagnostics())return 1;
+    CHECK(FreshArmedInsertionKeepsExactSourceAndNeutral()==0);
     CHECK(HeldContactGapRetainsOnlyCustody()==0);
     CHECK(HeldContactGapRejectsExpiredOrForeignClaims()==0);
     CHECK(DelayedHeldGeometryKeepsItsOwnLease()==0);

@@ -129,7 +129,7 @@ public:
             profile_.kind==FixedContainerKind::SingleRoundBreech||profile_.kind==FixedContainerKind::SingleRoundMuzzle)&&
             mechanismTouched_&&step_!=FixedContainerStep::Complete);
     }
-    void Suspend()noexcept {gesture_.Interrupt();gestureClaim_.reset();}
+    void Suspend()noexcept {gesture_.Interrupt();gestureClaim_.reset();armedInsertionClaim_.reset();}
     // Missing rendered contact is not a release of carried ammunition. Renew
     // only the exact live resource claim from actual controller safety. This
     // neither acquires nor updates motion, source clocks or native admission.
@@ -144,7 +144,7 @@ public:
            input.released[side]||token.kind!=HandClaimKind::AmmoObject||
            token.item!=HandInteractionKey{supply_.resource.id,supply_.resource.generation}||
            token.contact!=HandInteractionKey{profile_.geometry[2].contact.role,profile_.revision}||
-           (gestureClaim_&&token!=*gestureClaim_))return std::nullopt;
+           (gestureClaim_&&token!=*gestureClaim_)||(armedInsertionClaim_&&token!=*armedInsertionClaim_))return std::nullopt;
         const auto held=hands.Current(token.hand),gun=hands.Current(side?InteractionHand::Left:InteractionHand::Right);
         const auto item=handItem_.value_or(HandInteractionKey{context_.resource.weapon,
             handOwner_?HandOwner().equipGeneration:context_.resource.weaponGeneration});
@@ -174,14 +174,14 @@ public:
         if(!Snapshot(snapshot,now)){context_=previous;return false;}
         // Migrate retained mechanical geometry, never the prior hand claim or
         // armed grip. Recovery still needs a fresh neutral/current contact.
-        gesture_.MigrateContext(before,Owner());gestureClaim_.reset();
+        gesture_.MigrateContext(before,Owner());gestureClaim_.reset();armedInsertionClaim_.reset();
         handOwner_=hand;if(handItem_)handItem_=item;lastSnapshot_=snapshot.sequence;lastNow_=now;lastInput_=0;lastInputDeadline_=0;return true;
     }
     // Rebase a newly picked-up object's source between grips. Destination,
     // anatomical grip and motion policy stay pinned; no held object teleports.
     [[nodiscard]] bool RebaseInsertionSource(const AmmunitionSnapshot& snapshot,const FeedMotionProfile& motion,
         std::int64_t now)noexcept {
-        if(!bound_||pending_||gestureClaim_||step_!=FixedContainerStep::Insert||!Snapshot(snapshot,now)||
+        if(!bound_||pending_||gestureClaim_||armedInsertionClaim_||step_!=FixedContainerStep::Insert||!Snapshot(snapshot,now)||
            now<lastNow_||snapshot.sequence<lastSnapshot_||ledger_.Phase()!=AmmunitionLedgerPhase::Ready||
            snapshot.counts!=ledger_.Snapshot().counts||motion.kind!=FeedMotionKind::FreePlacement||
            !feed_interaction_detail::Motion(motion))return false;
@@ -211,10 +211,11 @@ public:
             releasing=hands.Current(x.claim->hand);
         const auto& safety=x.currentSafety?*x.currentSafety:x.input;
         const auto handUpdate=hands.Update(safety);(void)handUpdate;
-        // Custody renewals may be newer than this geometry. An exact active
-        // insertion has its own consumed-source floor, independent of custody.
-        const bool continuedInsertion=step_==FixedContainerStep::Insert&&x.claim&&gestureClaim_&&
-            *x.claim==*gestureClaim_&&x.input.sequence>=lastInput_;
+        // Custody renewals may be newer than this geometry. An exact active or
+        // neutrally armed insertion has its own source floor, independent of custody.
+        const auto& insertionClaim=gestureClaim_?gestureClaim_:armedInsertionClaim_;
+        const bool continuedInsertion=step_==FixedContainerStep::Insert&&x.claim&&insertionClaim&&
+            *x.claim==*insertionClaim&&x.input.sequence>=lastInput_;
         if(!releasing&&x.claim&&x.releaseEvidence){
             const auto& e=*x.releaseEvidence;const auto h=static_cast<unsigned>(x.claim->hand);
             if(h<2&&e.before.token==*x.claim&&e.released.token==*x.claim&&e.released.reason==HandInteractionReason::Released&&
@@ -261,7 +262,14 @@ public:
         // borrowing the rejected claim. Retained mechanical recovery is kept.
         if(out.interaction.status>=FeedInteractionStatus::InvalidProfile)
             return stop(FixedContainerStatus::Suspended,FixedContainerRejection::Gesture);
-        if(out.interaction.status==FeedInteractionStatus::Acquired){gestureClaim_=x.claim;mechanismTouched_=true;}
+        // A pouch pickup can arm before its first held pose reaches this policy.
+        // Bind only the exact claim that passed Hand and real neutral recognition;
+        // safety-only renewal cannot arm, acquire motion or authorize release.
+        if(step_==FixedContainerStep::Insert&&out.interaction.status==FeedInteractionStatus::Armed)
+            armedInsertionClaim_=x.claim&&hands.HasRecordedEvidence(x.input,x.claim->hand)?x.claim:std::nullopt;
+        if(out.interaction.status==FeedInteractionStatus::Acquired){
+            gestureClaim_=x.claim;armedInsertionClaim_.reset();mechanismTouched_=true;
+        }
         out.status=FixedContainerStatus::Gesture;
         if(!out.interaction.completion)return out;
         gestureClaim_.reset();
@@ -389,12 +397,12 @@ private:
         if(step_==FixedContainerStep::Insert){
             if(t.kind!=HandClaimKind::AmmoObject||t.item!=HandInteractionKey{supply_.resource.id,supply_.resource.generation})return false;
         }else if(t.kind!=HandClaimKind::Mechanism||t.item!=gun||t.prerequisiteClaim!=other->token.id)return false;
-        if(gestureClaim_&&t!=*gestureClaim_)return false;
+        if((gestureClaim_&&t!=*gestureClaim_)||(armedInsertionClaim_&&t!=*armedInsertionClaim_))return false;
         const auto current=hands.Current(t.hand);
         if(current&&current->token==t&&current->deadlineNs>x.input.nowNs&&current->inputSequence==x.input.sequence)return true;
         const auto& safety=x.currentSafety?*x.currentSafety:x.input;
         // A current safety renewal may outrun still-fresh recorded geometry.
-        // Only the exact active insertion may consume that older motion; keep
+        // Only the exact active or neutrally armed insertion may consume it; keep
         // custody untouched and retain every source clock and history barrier.
         if(continuedInsertion&&x.interaction.grip&&
            current&&current->token==t&&current->deadlineNs>safety.nowNs&&
@@ -459,7 +467,7 @@ private:
     bool bound_=false,mechanismTouched_=false;
     std::uint64_t lastSnapshot_=0,lastInput_=0;
     std::int64_t lastNow_=0,lastInputDeadline_=0;
-    std::optional<HandClaimToken> gestureClaim_;
+    std::optional<HandClaimToken> gestureClaim_,armedInsertionClaim_;
     std::optional<FixedContainerRequest> pending_,lastRequest_;
     std::optional<AmmunitionReceipt> lastReceipt_;
 };

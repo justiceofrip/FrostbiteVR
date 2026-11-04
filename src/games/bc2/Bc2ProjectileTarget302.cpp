@@ -162,6 +162,55 @@ Sample CopyBoundary(const ObserverApi& api, const Grant& grant, const Sample* be
     return out;
 }
 
+static void CopyProducerValues(const ObserverApi& api, const Grant& grant, Boundary boundary,
+    const ProducerSample* before, ProducerSample& out) noexcept {
+    if (!api.producerDiagnostics) return;
+    out.status = SampleStatus::InvalidArguments;
+    const auto embedded = std::uint64_t(grant.receiver) + 0x2c;
+    if (!api.read || !api.validate || grant.receiver < 0x10000 || embedded + 16 > UINT32_MAX ||
+        grant.stackLow >= grant.stackHigh || grant.source < grant.stackLow ||
+        std::uint64_t(grant.source) + 12 > grant.stackHigh) return;
+    out.embedded = Word(embedded);
+    const auto bytes = [&](std::uint64_t at, void* dst, std::size_t size) noexcept {
+        out.status = SampleStatus::ReadFailure;
+        if (at < 0x10000 || at > UINT32_MAX || size > UINT32_MAX - at) return false;
+        // Full live owner/helper/thread/primary identity and the original deadline
+        // must pass again immediately before EACH borrowed read, including repeats.
+        if (!api.validate(api.context, grant, boundary)) {
+            out.status = SampleStatus::IdentityChanged; return false;
+        }
+        return api.read(api.context, Word(at), dst, size);
+    };
+    if (!bytes(embedded, out.words.data(), sizeof(out.words))) return;
+    out.wordsRead = true;
+    if (!bytes(std::uint64_t(out.words[0]) + 4, &out.slot4Target, 4)) return;
+    out.targetRead = true;
+    std::array<Word, 4> repeated{}; Word repeatedTarget = 0;
+    if (!bytes(embedded, repeated.data(), sizeof(repeated))) return;
+    if (repeated != out.words) { out.status = SampleStatus::Torn; return; }
+    if (!bytes(std::uint64_t(repeated[0]) + 4, &repeatedTarget, 4)) return;
+    if (!api.validate(api.context, grant, boundary)) {
+        out.status = SampleStatus::IdentityChanged; return;
+    }
+    if (repeatedTarget != out.slot4Target) {
+        out.status = SampleStatus::Torn; return;
+    }
+    if (before && before->status == SampleStatus::Complete &&
+        (before->embedded != out.embedded || before->words[0] != out.words[0] || before->slot4Target != out.slot4Target)) {
+        out.status = SampleStatus::IdentityChanged; return;
+    }
+    out.status = SampleStatus::Complete;
+}
+
+ProducerSample CopyProducerBoundary(const ObserverApi& api, const Grant& grant, Boundary boundary,
+    const ProducerSample* before) noexcept {
+    ProducerSample out;
+    // Diagnostic faults cannot escape into Observe's existing outcome handling.
+    __try { CopyProducerValues(api, grant, boundary, before, out); }
+    __except (EXCEPTION_EXECUTE_HANDLER) { out.status = SampleStatus::ReadFailure; }
+    return out;
+}
+
 bool Session::Offer(const Grant& grant) noexcept {
     if (!enabled.load(std::memory_order_acquire)) return false;
     if (!TryAcquireSRWLockExclusive(&gate)) { ++busy; return false; }
@@ -240,6 +289,12 @@ static void Observe(Record* row, Boundary boundary) noexcept {
         // Even a copied complete sample is not admitted if full owner/config
         // identity or the optional window changed during its bounded reads.
         if (!api.validate(api.context, row->grant, boundary)) row->outcome = Outcome::RejectedIdentity;
+        else if (api.producerDiagnostics) {
+            auto& sample = boundary == Boundary::Entry ? row->before : row->after;
+            if (sample.status == SampleStatus::Complete)
+                sample.producer = CopyProducerBoundary(api, row->grant, boundary,
+                    boundary == Boundary::Return ? &row->before.producer : nullptr);
+        }
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         row->outcome = Outcome::ObserverFault;
     }

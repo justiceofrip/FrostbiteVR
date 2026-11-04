@@ -48,6 +48,15 @@ struct Selection {
     bool indexed = false;
     bool operator==(const Selection&) const = default;
 };
+// Passive whole-7155b0 boundary values, not a factory call/return observation.
+// 699120 uses ECX = outer receiver + 0x2c (embedded object), not *(receiver+0x2c).
+// Numeric addresses are diagnostic values only; none authorize a later read.
+struct ProducerSample {
+    SampleStatus status = SampleStatus::Unattempted;
+    Word embedded = 0, slot4Target = 0;
+    std::array<Word, 4> words{}; // [outer+0x2c, outer+0x3c); words[0] is its vtable.
+    bool wordsRead = false, targetRead = false;
+};
 struct Sample {
     SampleStatus status = SampleStatus::Unattempted;
     Selection identity{};
@@ -55,6 +64,7 @@ struct Sample {
     std::uint16_t flags = 0;
     std::array<Word, 3> sourceBits{}, selectedBits{}, velocityCacheBits{};
     bool flagsRead = false, sourceRead = false, selectedRead = false, velocityRead = false;
+    ProducerSample producer{}; // Independent status; never changes Sample::status/outcome.
 };
 
 // Grant is a COPY from the latest accepted helper row in one live server scope.
@@ -73,9 +83,14 @@ using Read = bool(__cdecl*)(void*, Word, void*, std::size_t) noexcept;
 // Must not call native game functions, allocate, wait, write, or retain pointers.
 // Return false on any missing/changed evidence. This is the integration seam.
 using Validate = bool(__cdecl*)(void*, const Grant&, Boundary) noexcept;
-struct ObserverApi { void* context = nullptr; Read read = nullptr; Validate validate = nullptr; };
+struct ObserverApi {
+    void* context = nullptr; Read read = nullptr; Validate validate = nullptr;
+    bool producerDiagnostics = false; // Immutable at install; existing optional window only.
+};
 
 Sample CopyBoundary(const ObserverApi&, const Grant&, const Sample* before = nullptr) noexcept;
+ProducerSample CopyProducerBoundary(const ObserverApi&, const Grant&, Boundary,
+    const ProducerSample* before = nullptr) noexcept;
 enum class Outcome : Word {
     Offered, RejectedIdentity, ObserverFault, EntryReadFailure, ReturnReadFailure,
     StorageIdentityChanged, Torn, NativeException, ReturnedChanged, ReturnedUnchanged

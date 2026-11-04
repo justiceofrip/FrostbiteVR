@@ -4520,7 +4520,7 @@ bool EnableProjectileTargetObservation(std::span<const std::byte> bytes,const en
         [](void*,void* target)noexcept{
             const auto result=MH_DisableHook(target);return result==MH_OK||result==MH_ERROR_DISABLED;}};
     const projectile302::ObserverApi observerApi{nullptr,
-        [](void*,unsigned at,void* dst,std::size_t size)noexcept{return Read(at,dst,size);},ValidateProjectileTarget};
+        [](void*,unsigned at,void* dst,std::size_t size)noexcept{return Read(at,dst,size);},ValidateProjectileTarget,true};
     // Shared installer publishes immutable dependencies before the one global enable.
     return projectileTargetLife.Install(true,processRetainedProbe,signatures,prerequisites,prerequisites?handFrequency*15:0,
         projectile302::Observer,projectile302::Original,hooks[14],reinterpret_cast<void*>(base+TargetRva),observerApi,hookApi);

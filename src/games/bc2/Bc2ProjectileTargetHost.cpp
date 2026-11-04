@@ -88,6 +88,8 @@ void Report(std::ostream& out,const Lifecycle& life,projectile302::Session& sess
        <<",\"nested\":"<<session.nested.load()<<",\"disabled_calls\":"<<session.disabled.load()
        <<",\"scope\":\"whole_7155b0_including_nested_native_calls\",\"unchanged_means\":\"selected_raw_xyz_bits_equal\""
        <<",\"setter_skip_observed\":false,\"native_launch_acceptance\":false,\"impact_observed\":false"
+       <<",\"producer_diagnostics\":"<<session.api.producerDiagnostics
+       <<",\"factory_return_observed\":false,\"primary_nonretention_proven\":false"
        <<",\"sample_status_order\":[\"Unattempted\",\"Complete\",\"InvalidArguments\",\"ReadFailure\",\"IdentityChanged\",\"Torn\"]"
        <<",\"outcome_order\":[\"Offered\",\"RejectedIdentity\",\"ObserverFault\",\"EntryReadFailure\",\"ReturnReadFailure\",\"StorageIdentityChanged\",\"Torn\",\"NativeException\",\"ReturnedChanged\",\"ReturnedUnchanged\"],\"records\":[";
     const auto xyz=[&](const std::array<Word,3>& bits,bool read){
@@ -101,7 +103,11 @@ void Report(std::ostream& out,const Lifecycle& life,projectile302::Session& sess
         <<",\"selected\":"<<s.identity.selected<<",\"index\":"<<unsigned(s.identity.index)<<",\"indexed\":"<<s.identity.indexed
         <<",\"flags_read\":"<<s.flagsRead<<",\"flags\":"<<s.flags<<",\"source_address\":"<<s.source<<",\"source\":";
         xyz(s.sourceBits,s.sourceRead);out<<",\"selected_xyz\":";xyz(s.selectedBits,s.selectedRead);
-        out<<",\"receiver_40_44_48\":";xyz(s.velocityCacheBits,s.velocityRead);out<<'}';};
+        out<<",\"receiver_40_44_48\":";xyz(s.velocityCacheBits,s.velocityRead);
+        const auto& p=s.producer;
+        out<<",\"producer\":{\"status\":"<<unsigned(p.status)<<",\"embedded_address\":"<<p.embedded
+           <<",\"words_read\":"<<p.wordsRead<<",\"words\":["<<p.words[0]<<','<<p.words[1]<<','<<p.words[2]<<','<<p.words[3]
+           <<"],\"slot4_target_read\":"<<p.targetRead<<",\"slot4_target\":"<<p.slot4Target<<"}}";};
     for(unsigned n=0;n<completed;++n){if(n)out<<',';const auto& r=rows[n];const auto& g=r.grant;
         out<<"{\"scope_serial\":"<<g.scopeSerial<<",\"invocation\":"<<g.invocation<<",\"ordinal\":"<<g.ordinal
            <<",\"helper_index\":"<<g.helperIndex<<",\"thread\":"<<g.thread<<",\"token\":"<<g.token
