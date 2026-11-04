@@ -691,6 +691,10 @@ class ReloadStimulus:
             if self.mapping is not None and snapshot.get("valid") is True:
                 require(integer(snapshot["observed_ns"]) >= integer(self.mapping["observed_ns"]), "observation time regressed")
                 transition = self.geometry.same_mapping(self.mapping, snapshot, self.args.family, self.args.stage, target=self.args.target)
+                if transition == "incomplete":
+                    item["current"] = event["currentAtReceive"] = False
+                    event["mappingReferenceMissing"] = True
+                    self.observation_incomplete = True
                 if transition == "target":
                     self.target_observed = True
             self.observed.append(item)

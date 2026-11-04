@@ -1,0 +1,7 @@
+335 same-shot barrel capture diagnostics
+Actual332 has a valid scoped-XM320 profile and accepted projectile, but its same-shot barrel value is null. Capture versus later retention rejection cannot be distinguished from that trace.
+Three bounded gate outcomes now follow the existing immutable shot and accepted helper row, including when its optional barrel value is absent. No extra native read, hook, clock, row, origin write, enrollment or deadline is introduced. Worker-only reporting preserves the existing null value.
+Selected-rig verification remains revocable; sightSelectedRig records provenance and cannot revive expired verification.
+338 independent review and root found no actionable issue.49 static/replay checks passed. Root isolated H_DiagnosticOutcomes and disabled-layout checks pass in isolated-check02. Initial isolated compile mixed old/new headers and is retained; an unchanged dependency overlay fixed setup without source changes.
+Evidence: reports/coordinator-20261103-feedback335/same-shot/{manifest.json,diagnostic.patch,saved-evidence.json,isolated-check02/receipt.json}; root-application.json preserves exact normalized semantics and baseline line endings; review338/diagnostic-review/REVIEW.txt.
+Normal combined builds/delivery pending. Installed56 remains unchanged. No actual332 rejection cause, barrel alignment, full launcher reload, performance or headset acceptance is claimed.

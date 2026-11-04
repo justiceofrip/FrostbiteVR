@@ -1306,6 +1306,7 @@ struct ProjectileLaunchRecord {
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
     std::optional<projectile307::Join> targetJoin;
     std::optional<muzzle_part_observation::Frame> muzzlePartObservation;
+    muzzle_part_observation::Diagnostic muzzlePartDiagnostic;
 #endif
 };
 std::array<ProjectileLaunchRecord,64> projectileLaunchRecords{};
@@ -1514,7 +1515,10 @@ void __cdecl ReceiverEntryDispatch(projectile_entry::Invocation* invocation){
     if(current->shot){row.candidateGeneration=current->shot->generation;row.ownerGeneration=current->shot->ownerGeneration;row.space=current->shot->space;}
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
     // Use the scope-owned immutable shot, never the latest render publication.
-    if(current->shot)row.muzzlePartObservation=current->shot->muzzlePartObservation;
+    if(current->shot){row.muzzlePartObservation=current->shot->muzzlePartObservation;
+        row.muzzlePartDiagnostic=current->shot->muzzlePartDiagnostic;
+        row.muzzlePartDiagnostic.helper=row.muzzlePartObservation?muzzle_part_observation::Gate::NotAttempted:muzzle_part_observation::Gate::Absent;
+    }else row.muzzlePartDiagnostic.helper=muzzle_part_observation::Gate::NoShot;
 #endif
     ObserveProjectileContextHelper(original,[&]()noexcept{
         LARGE_INTEGER q{};QueryPerformanceCounter(&q);row.beforeQpc=q.QuadPart;
@@ -1533,7 +1537,7 @@ void __cdecl ReceiverEntryDispatch(projectile_entry::Invocation* invocation){
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
         if(row.muzzlePartObservation&&!muzzle_part_observation::SameAcceptedHelper(*row.muzzlePartObservation,
             row.equipment,row.clientSoldier,row.ownerWeak,row.candidateGeneration,row.ownerGeneration,row.space,
-            row.beforeQpc,row.afterQpc,HandNanos(row.afterQpc),row.accepted))row.muzzlePartObservation.reset();
+            row.beforeQpc,row.afterQpc,HandNanos(row.afterQpc),row.accepted,&row.muzzlePartDiagnostic.helper))row.muzzlePartObservation.reset();
 #endif
         if(!row.accepted)++projectileLaunchRejected;
         if(row.accepted){
@@ -4971,6 +4975,7 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
                <<",\"configuration_projectile_data\":"<<identity.descriptor<<",\"descriptor_vtable\":"<<identity.descriptorVtable<<'}';}
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
         out<<",\"muzzle_part_observation\":";muzzle_part_observation::Report(out,r.muzzlePartObservation);
+        out<<",\"muzzle_part_diagnostic\":";muzzle_part_observation::ReportDiagnostic(out,r.muzzlePartDiagnostic,r.muzzlePartObservation);
 #endif
         out<<",\"before_helper\":";launchArguments(r.before);out<<",\"after_helper\":";launchArguments(r.after);out<<'}';
     }

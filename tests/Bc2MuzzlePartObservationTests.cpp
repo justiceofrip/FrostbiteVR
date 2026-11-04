@@ -52,14 +52,14 @@ struct Fixture {
             for(unsigned i=0;i<4;++i){skin.values[2][i]=-skin.values[2][i];skin.values[i][2]=-skin.values[i][2];}
             for(unsigned r=0;r<4;++r)std::memcpy(packed[w.index].data()+r*16,skin.values[r].data(),12);}
     }
-    std::optional<Frame> Get(std::span<const Profile> profiles=Profiles294){return Capture(profiles,s,rig,writes,packed,tracked);}
+    std::optional<Frame> Get(std::span<const Profile> profiles=Profiles294,Gate* outcome=nullptr){return Capture(profiles,s,rig,writes,packed,tracked,outcome);}
     Shot MakeShot(){Shot shot;shot.generation=s.generation;shot.ownerGeneration=s.ownerGeneration;shot.space=s.space;
         shot.deadline=s.deadlineQpc;shot.unitsPerMetre=s.unitsPerMetre;shot.nativeWeapon=rig.evaluatedWorld[rig.weaponBone];shot.trackedWeapon=tracked;
         rigPublication::ShotAimEvidence a;a.equipment=s.equipment;Text(a.configurationPath,s.configuration);
         a.meshPath=s.mesh;a.rigFingerprint=s.rigFingerprint;a.configurationSequence=s.configurationSequence;
         a.configurationDeadlineNs=s.configurationDeadlineNs;a.selectedRigVerified=s.selectedRigVerified;a.configurationPathVerified=s.configurationVerified;
-        shot.aimEvidence=a;shot.muzzlePartObservation=Get();return shot;}
-    void Retain(Shot& shot,bool allowed=true){RetainForShot(shot,s.equipment,s.equipmentGeneration,rig.identity.soldier,rig.identity.weak,s.nowQpc,s.nowNs,allowed);}
+        shot.aimEvidence=a;shot.muzzlePartObservation=Get(Profiles294,&shot.muzzlePartDiagnostic.capture);return shot;}
+    void Retain(Shot& shot,bool allowed=true){RetainForShot(shot,s.equipment,s.equipmentGeneration,rig.identity.soldier,rig.identity.weak,s.nowQpc,s.nowNs,allowed,&shot.muzzlePartDiagnostic.retention);}
 };
 // Row-vector transformation. Reflect the resulting WORLD Z exactly once.
 math::Vec3 NativeExit(const Frame& f){const auto p=f.profile->localExitMeters;const auto& m=f.trackedPart.values;
@@ -193,10 +193,106 @@ int G_SerializationCoordinates(){
         if(mode==3)bad.rig.evaluatedWorld[bad.bone].values[3][1]=std::numeric_limits<float>::infinity();bad.Pack();CHECK(!bad.Get());}
     return 0;
 }
+// 335: only this group runs with --diagnostics-only; retained seven groups are not rerun by that command.
+int H_DiagnosticOutcomes(){
+    const auto reject=[&](auto change,Gate expected){Fixture f;change(f);Gate actual=Gate::NotAttempted;
+        const auto value=f.Get(Profiles294,&actual);return !value&&actual==expected;};
+    CHECK(reject([](auto& f){f.s.selectedRigVerified=false;f.s.configurationVerified=false;},Gate::SelectedRig));
+    CHECK(reject([](auto& f){f.s.configurationVerified=false;},Gate::Configuration));
+    CHECK(reject([](auto& f){f.s.attachmentReady=false;},Gate::Attachment));
+    CHECK(reject([](auto& f){f.s.ordinaryPublishedPalette=false;},Gate::Palette));
+    CHECK(reject([](auto& f){f.s.equipment.weapon=0;},Gate::Equipment));
+    CHECK(reject([](auto& f){f.s.generation=0;},Gate::Generation));
+    CHECK(reject([](auto& f){f.s.ownerGeneration=0;},Gate::Owner));
+    CHECK(reject([](auto& f){f.s.equipmentGeneration=0;},Gate::EquipmentGeneration));
+    CHECK(reject([](auto& f){f.s.space=0;},Gate::Space));
+    CHECK(reject([](auto& f){f.s.configurationSequence=f.s.generation+1;},Gate::Sequence));
+    CHECK(reject([](auto& f){f.s.nowQpc=f.s.deadlineQpc;},Gate::InputTime));
+    CHECK(reject([](auto& f){f.s.nowNs=f.s.configurationDeadlineNs;},Gate::ConfigurationTime));
+    CHECK(reject([](auto& f){f.s.unitsPerMetre=0;},Gate::Units));
+    CHECK(reject([](auto& f){f.rig.identity.count=0;},Gate::RigCount));
+    CHECK(reject([](auto& f){f.packed.pop_back();},Gate::RigLayout));
+    CHECK(reject([](auto& f){f.rig.weaponBone=f.rig.identity.count;},Gate::WeaponBone));
+    CHECK(reject([](auto& f){f.writes.clear();},Gate::Writes));
+    CHECK(reject([](auto& f){f.s.configuration="unsupported";},Gate::ProfileMissing));
+    CHECK(reject([](auto& f){f.rig.names[100]=f.rig.names[f.bone];},Gate::PartNameAmbiguous));
+    CHECK(reject([](auto& f){f.rig.parents[f.bone]=-1;},Gate::PartHierarchy));
+    CHECK(reject([](auto& f){f.rig.nativeHiddenLeaves.push_back(f.bone);},Gate::PartHidden));
+    CHECK(reject([](auto& f){f.writes[0].index=0;},Gate::WriteMissing));
+    CHECK(reject([](auto& f){f.writes.push_back(f.writes[0]);},Gate::WriteAmbiguous));
+    CHECK(reject([](auto& f){f.writes[0].transform.values[0][0]=2;},Gate::TrackedPartMatrix));
+    CHECK(reject([](auto& f){f.rig.evaluatedWorld[f.bone].values[0][0]=2;},Gate::NativePartMatrix));
+    CHECK(reject([](auto& f){f.rig.evaluatedWorld[f.rig.weaponBone].values[0][0]=2;},Gate::NativeWeaponMatrix));
+    CHECK(reject([](auto& f){f.tracked.values[0][0]=2;},Gate::TrackedWeaponMatrix));
+    CHECK(reject([](auto& f){f.rig.inverseBind[f.bone].values[0][0]=2;},Gate::InverseBindMatrix));
+    CHECK(reject([](auto& f){f.packed[f.bone][12]^=std::byte{1};},Gate::PackedPalette));
+    Fixture profile;Gate gate=Gate::NotAttempted;
+    const std::array duplicate{Profiles294[0],Profiles294[0]};CHECK(!profile.Get(duplicate,&gate)&&gate==Gate::ProfileAmbiguous);
+    auto p=Profiles294[0];p.state=1;CHECK(!profile.Get({&p,1},&gate)&&gate==Gate::ProfileState);
+    p=Profiles294[0];p.expectedIndex=147;CHECK(!profile.Get({&p,1},&gate)&&gate==Gate::PartIndex);
+    const auto revoke=[&](auto change,Gate expected){Fixture f;auto shot=f.MakeShot();change(f,shot);f.Retain(shot);
+        return !shot.muzzlePartObservation&&shot.muzzlePartDiagnostic.capture==Gate::Passed&&shot.muzzlePartDiagnostic.retention==expected;};
+    CHECK(revoke([](auto&,auto& s){s.aimEvidence->sightSelectedRig=true;s.aimEvidence->selectedRigVerified=false;},Gate::SelectedRig));
+    CHECK(revoke([](auto&,auto& s){s.aimEvidence->configurationPathVerified=false;},Gate::Configuration));
+    CHECK(revoke([](auto& f,auto&){++f.s.equipment.data;},Gate::Equipment));
+    CHECK(revoke([](auto& f,auto&){++f.rig.identity.soldier;},Gate::Soldier));
+    CHECK(revoke([](auto& f,auto&){++f.rig.identity.weak;},Gate::Weak));
+    CHECK(revoke([](auto&,auto& s){s.aimEvidence->meshPath="different";},Gate::ProfileTuple));
+    CHECK(revoke([](auto&,auto& s){++s.generation;},Gate::Generation));
+    CHECK(revoke([](auto&,auto& s){++s.ownerGeneration;},Gate::Owner));
+    CHECK(revoke([](auto& f,auto&){++f.s.equipmentGeneration;},Gate::EquipmentGeneration));
+    CHECK(revoke([](auto&,auto& s){++s.space;},Gate::Space));
+    CHECK(revoke([](auto&,auto& s){++s.deadline;},Gate::Deadline));
+    CHECK(revoke([](auto&,auto& s){++s.aimEvidence->configurationSequence;},Gate::Sequence));
+    CHECK(revoke([](auto&,auto& s){++s.aimEvidence->configurationDeadlineNs;},Gate::ConfigurationDeadline));
+    CHECK(revoke([](auto&,auto& s){s.unitsPerMetre=2;},Gate::Units));
+    CHECK(revoke([](auto& f,auto&){f.s.nowQpc=f.s.deadlineQpc;},Gate::InputTime));
+    CHECK(revoke([](auto& f,auto&){f.s.nowNs=f.s.configurationDeadlineNs;},Gate::ConfigurationTime));
+    Fixture blocked;auto blockedShot=blocked.MakeShot();blocked.Retain(blockedShot,false);
+    CHECK(!blockedShot.muzzlePartObservation&&blockedShot.muzzlePartDiagnostic.retention==Gate::FiringBlocked);
+    // Capture failure and later retention revocation both remain distinguishable after an owned copy and null serialization.
+    Fixture absent;absent.s.ordinaryPublishedPalette=false;auto noValue=absent.MakeShot();absent.Retain(noValue);
+    noValue.muzzlePartDiagnostic.helper=Gate::Absent;const auto retainedNull=noValue;
+    CHECK(!retainedNull.muzzlePartObservation&&retainedNull.muzzlePartDiagnostic.capture==Gate::Palette);
+    CHECK(retainedNull.muzzlePartDiagnostic.retention==Gate::Absent);
+    std::ostringstream nullOut;Report(nullOut,retainedNull.muzzlePartObservation);CHECK(nullOut.str()=="null");
+    std::ostringstream reasonOut;ReportDiagnostic(reasonOut,retainedNull.muzzlePartDiagnostic,retainedNull.muzzlePartObservation);
+    CHECK(reasonOut.str()=="{\"version\":1,\"capture\":\"alternate_palette\",\"retention\":\"observation_absent\",\"helper\":\"observation_absent\",\"value_present\":false,\"profile_present\":false}");
+    // Exact332 clocks and immutable scope identity are a synthetic diagnostic case, not reconstructed geometry.
+    Fixture f(Profiles294[10]);f.s.generation=9366;f.s.configurationSequence=9360;
+    f.s.nowQpc=2773301788345;f.s.deadlineQpc=2773302586083;
+    f.s.nowNs=277330178834500;f.s.configurationDeadlineNs=277330273153700;
+    auto publication=f.MakeShot();f.Retain(publication);const auto scope=publication;
+    publication.muzzlePartDiagnostic.capture=Gate::PackedPalette;publication.muzzlePartObservation.reset();
+    auto value=scope.muzzlePartObservation;auto diagnostic=scope.muzzlePartDiagnostic;
+    CHECK(value&&diagnostic.capture==Gate::Passed&&diagnostic.retention==Gate::Passed);
+    CHECK(SameAcceptedHelper(*value,f.s.equipment,11,12,9366,1,2,2773301790644,2773301790841,277330179084100,true,&diagnostic.helper));
+    CHECK(diagnostic.helper==Gate::Passed&&value->deadlineQpc==2773302586083&&value->configurationDeadlineNs==277330273153700);
+    const auto helperReject=[&](auto change,Gate expected){auto v=*value;change(v);Gate outcome=Gate::NotAttempted;
+        return !SameAcceptedHelper(v,f.s.equipment,11,12,9366,1,2,2773301790644,2773301790841,277330179084100,true,&outcome)&&outcome==expected;};
+    CHECK(helperReject([](auto& v){v.profile=nullptr;},Gate::ProfileMissing));
+    CHECK(helperReject([](auto& v){++v.equipment.weapon;},Gate::Equipment));
+    CHECK(helperReject([](auto& v){++v.rig.soldier;},Gate::Soldier));
+    CHECK(helperReject([](auto& v){++v.rig.weak;},Gate::Weak));
+    CHECK(helperReject([](auto& v){++v.generation;},Gate::Generation));
+    CHECK(helperReject([](auto& v){++v.ownerGeneration;},Gate::Owner));
+    CHECK(helperReject([](auto& v){++v.space;},Gate::Space));
+    CHECK(helperReject([](auto& v){v.deadlineQpc=2773301790841;},Gate::InputTime));
+    CHECK(helperReject([](auto& v){v.configurationDeadlineNs=277330179084100;},Gate::ConfigurationTime));
+    CHECK(!SameAcceptedHelper(*value,f.s.equipment,11,12,9366,1,2,0,1,1,true,&gate)&&gate==Gate::HelperTiming);
+    CHECK(!SameAcceptedHelper(*value,f.s.equipment,11,12,9366,1,2,1,2,1,false,&gate)&&gate==Gate::HelperRejected);
+    // New callback diagnostics and by-value copying add no allocation; streams are worker-only.
+    allocation_watch::calls=0;allocation_watch::active=true;
+    const auto captured=f.Get(Profiles294,&gate);auto copied=scope;f.Retain(copied);
+    const bool helper=captured&&SameAcceptedHelper(*captured,f.s.equipment,11,12,9366,1,2,2773301790644,2773301790841,277330179084100,true,&gate);
+    allocation_watch::active=false;CHECK(helper&&allocation_watch::calls==0);
+    CHECK(sizeof(Diagnostic)==3);return 0;
 }
-int main(){
-    const std::array<std::pair<const char*,int(*)()>,7> groups{{{"A scope value",A_ScopeValue},{"B 71 tuples",B_ExactFamilies},
-        {"C animation",C_Animation},{"D guards",D_Guards},{"E helper",E_Helper},{"F allocation",F_Allocation},{"G serialization/coordinates",G_SerializationCoordinates}}};
+}
+int main(int argc,char** argv){
+    if(argc==2&&std::string_view(argv[1])=="--diagnostics-only"){const int result=H_DiagnosticOutcomes();if(!result)std::cout<<"H diagnostic outcomes passed\n";return result;}
+    const std::array<std::pair<const char*,int(*)()>,8> groups{{{"A scope value",A_ScopeValue},{"B 71 tuples",B_ExactFamilies},
+        {"C animation",C_Animation},{"D guards",D_Guards},{"E helper",E_Helper},{"F allocation",F_Allocation},{"G serialization/coordinates",G_SerializationCoordinates},{"H diagnostic outcomes",H_DiagnosticOutcomes}}};
     for(const auto& [name,run]:groups){if(run())return 1;std::cout<<name<<" passed\n";}
     std::cout<<"frame_bytes="<<sizeof(Frame)<<" optional_bytes="<<sizeof(std::optional<Frame>)<<" capacity64_bytes="<<64*sizeof(std::optional<Frame>)<<'\n';
 }

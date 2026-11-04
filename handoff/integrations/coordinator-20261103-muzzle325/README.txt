@@ -43,5 +43,8 @@ SHA2562db9567efc4271cfaf095353497508970e260e54c64b3c8664b70886e7951f62.
 Official tape checker ran once:18PASS,1FAIL for291 startup zero-layer frames,
 1SKIP depth. No overall XR, same-shot geometry, reload or headset pass claimed.
 328's offline analyzer passed73 synthetic checks and rejects actual319's missing
-frame; actual329 has no projectile row to compare.330 investigates its saved
-initial-observation mismatch; no unchanged game retry is authorized by this note.
+frame; actual329 has no projectile row to compare.333 corrected its initial
+observation mismatch. Actual332 now captures an accepted projectile, but the
+same-shot barrel value is null;328 accepts1projectile/0geometry.335 investigates
+capture/retention gates offline. See coordinator-20261103-combined332; no alignment
+or full reload claim and no unchanged retry.

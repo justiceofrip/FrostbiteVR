@@ -1264,9 +1264,10 @@ std::optional<WeaponShotFrame> ReadWeaponFrame(unsigned soldier,unsigned weak,un
         if(result.muzzlePartObservation){
             LARGE_INTEGER now{};QueryPerformanceCounter(&now);
             muzzle_part_observation::RetainForShot(result,guard->equipment,guard->equipmentGeneration,
-                guard->soldier,guard->weak,now.QuadPart,ReloadNanos(now.QuadPart),!guard->weaponActionsBlocked);
+                guard->soldier,guard->weak,now.QuadPart,ReloadNanos(now.QuadPart),!guard->weaponActionsBlocked,
+                &result.muzzlePartDiagnostic.retention);
             if(shotGuard.load(std::memory_order_acquire)!=guard){++shotFrameRaces;continue;}
-        }
+        }else result.muzzlePartDiagnostic.retention=muzzle_part_observation::Gate::Absent;
 #endif
         if(admittedSource)*admittedSource=pose;
         return result;
@@ -2493,6 +2494,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
         pose->pumpVisual=std::make_shared<const PumpVisualSource>(pv);}
 #endif
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
+    if(pose->shot)pose->shot->muzzlePartDiagnostic.capture=muzzle_part_observation::Gate::AimEvidence;
     if(pose->shot&&pose->shot->aimEvidence){
         LARGE_INTEGER now{};QueryPerformanceCounter(&now);
         auto source=muzzle_part_observation::SourceFromShot(*pose->shot,input.equipmentGeneration,
@@ -2503,7 +2505,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
             !pose->pump&&!pose->bolt&&!pose->reloadPreview&&!pose->previewToken&&!pose->freeRight&&
             !pose->visibility&&!pose->shellHide&&!pose->belt&&!input.weaponActionsBlocked;
         pose->shot->muzzlePartObservation=muzzle_part_observation::Capture(muzzle_part_observation::Profiles294,
-            source,*rig,writes,pose->posed,canonicalPlaced);
+            source,*rig,writes,pose->posed,canonicalPlaced,&pose->shot->muzzlePartDiagnostic.capture);
     }
 #endif
     std::shared_ptr<const ShotPublication> preparedShot;

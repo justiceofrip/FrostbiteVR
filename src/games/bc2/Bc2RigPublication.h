@@ -262,6 +262,7 @@ struct WeaponShotFrame {
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
  // Observation only; copied with this immutable publication, never a live rig pointer.
  std::optional<muzzle_part_observation::Frame> muzzlePartObservation;
+ muzzle_part_observation::Diagnostic muzzlePartDiagnostic;
 #endif
 };
 std::optional<WeaponShotFrame> ReadWeaponShotFrame(unsigned soldier,unsigned weak,unsigned weapon)noexcept;

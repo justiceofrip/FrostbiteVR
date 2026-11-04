@@ -6,6 +6,12 @@
 namespace fvr::bc2::muzzle_part_observation {
 // Worker/post-drain only. No callbacks invoke this serializer. Numeric addresses
 // identify source snapshots; they are never dereferenced by this report.
+inline void ReportDiagnostic(std::ostream& out,const Diagnostic& diagnostic,const std::optional<Frame>& value) {
+    out<<"{\"version\":1,\"capture\":\""<<GateName(diagnostic.capture)
+       <<"\",\"retention\":\""<<GateName(diagnostic.retention)<<"\",\"helper\":\""<<GateName(diagnostic.helper)
+       <<"\",\"value_present\":"<<(value?"true":"false")
+       <<",\"profile_present\":"<<(value&&value->profile?"true":"false")<<'}';
+}
 inline void Report(std::ostream& out,const std::optional<Frame>& value) {
     if(!value||!value->profile){out<<"null";return;}
     const auto& f=*value;const auto& p=*f.profile;const auto& r=f.rig;

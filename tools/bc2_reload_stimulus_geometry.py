@@ -150,9 +150,21 @@ def _mapping(snapshot, family):
     return result
 
 
-def _same(before, after):
-    require({k: v for k, v in before.items() if k not in ("weaponFromBody", "calibration", "family", "preserve")}
-            == {k: v for k, v in after.items() if k not in ("weaponFromBody", "calibration", "family", "preserve")},
+def _same(before, after, *, observation_only=False):
+    identity = [{k: v for k, v in mapping.items() if k not in ("weaponFromBody", "calibration", "family", "preserve")}
+                for mapping in (before, after)]
+    old, new = (value.get("mechanismSelection", {}) for value in identity)
+    missing_reference = (observation_only and old.get("physicalFamily") is not None
+                         and new.get("physicalFamily") is None)
+    if missing_reference:
+        # The fixed observation serializes this reference from runtime tracking.
+        # Absent tracking is missing evidence, not a contradictory selection.
+        # Compare every independently observed identity field; do not borrow the
+        # old reference into the snapshot or use this result at a fresh boundary.
+        for value in identity:
+            value["mechanismSelection"] = {k: v for k, v in value["mechanismSelection"].items()
+                                           if k != "physicalFamily"}
+    require(identity[0] == identity[1],
             "stimulus owner/selection/profile/reference changed")
     require(feed.preserved_equal(before["preserve"], after["preserve"],
                                  pose_keys=("head", "referenceHead"), hand_keys=("rightHand",)),
@@ -160,6 +172,7 @@ def _same(before, after):
     require(all(p <= .002 and a <= .005 for p, a in
                 (feed.pose_error(feed.rigid(before[k]), feed.rigid(after[k])) for k in ("weaponFromBody", "calibration"))),
             "stimulus relative weapon/body or anatomical basis changed")
+    return "incomplete" if missing_reference else "source"
 
 
 def _sight_state(before, after, target):
@@ -200,8 +213,7 @@ def same_mapping(before, after, family, stage, target="secondary"):
     a, b = _mapping(before, family), _mapping(after, family)
     if family == "sight":
         return _sight_state(a, b, target)
-    _same(a, b)
-    return "source"
+    return _same(a, b, observation_only=True)
 
 
 def _boundary(name, index, schedule, timeout=250_000_000, span=0):
