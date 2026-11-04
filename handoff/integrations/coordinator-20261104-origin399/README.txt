@@ -1,7 +1,8 @@
 BC2 committed muzzle-origin candidate, November 4, 2026
 
-Status: source7d7d5ab pushed; private0.1.60 installed and setup-validated.
-Fallback0.1.59 and settings/cache preserved; public release unchanged.
+Delivery398: source7d7d5ab pushed; private0.1.60 installed and setup-validated.
+That delivery preserved fallback0.1.59 and settings/cache. Current installation
+is0.1.61/fallback60; see ../coordinator-20261104-smoke405/README.txt.
 Normal builds passed349x86/347x64. Runtime correction remains default-off;
 no native firing-accuracy or headset acceptance is claimed.
 
