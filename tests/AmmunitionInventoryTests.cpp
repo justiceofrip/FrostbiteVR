@@ -32,11 +32,17 @@ int AllItemsKeepTheirOwnMagazine(){
     CHECK(f.inventory.Size()==50);
     for(unsigned n=50;n-->0;){
         const auto& original=originals[n];auto s=f.Sample(n+1,0,200,original.capacity,100+n,4);
+        const auto& item=s.context.resource;
+        CHECK(f.inventory.NeedsMagazineRoute(item.actor,item.actorGeneration,item.weapon));
+        CHECK(f.inventory.NeedsMagazineRoute(item.actor,item.actorGeneration,item.weapon,&item));
+        auto replacement=item;++replacement.weaponGeneration;
+        CHECK(!f.inventory.NeedsMagazineRoute(item.actor,item.actorGeneration,item.weapon,&replacement));
         CHECK(f.inventory.Select(s,f.now));
         CHECK(!f.Queue(s,AmmunitionOperation::ReturnMagazine,originals[(n+1)%50]));
         if(n%2){
             CHECK(f.Finish(s,AmmunitionOperation::ReturnMagazine,original)==0);
             CHECK(f.inventory.Find(s.context.resource)->Snapshot().counts.loaded==original.rounds);
+            CHECK(!f.inventory.NeedsMagazineRoute(item.actor,item.actorGeneration,item.weapon));
         }else{
             CHECK(f.inventory.Discard(original));CHECK(!f.inventory.Discard(original));
             CHECK(f.Finish(s,AmmunitionOperation::RefillMagazine)==0);

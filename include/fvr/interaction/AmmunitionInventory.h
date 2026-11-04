@@ -127,6 +127,21 @@ public:
         for(const auto& ledger:slots_)if(ledger.Phase()!=AmmunitionLedgerPhase::Unbound&&ledger.Snapshot().context.resource==resource)return &ledger;
         return nullptr;
     }
+    // Before the native inventory publishes a fresh resource generation, any
+    // unsettled magazine on this actor and weapon must retain its reload route.
+    // Once bound, a new item at a reused address is independent of its predecessor.
+    bool NeedsMagazineRoute(std::uint64_t actor,std::uint64_t generation,std::uint64_t weapon,
+        const AmmoResourceIdentity* bound=nullptr)const noexcept {
+        if(bound&&(bound->actor!=actor||bound->actorGeneration!=generation||bound->weapon!=weapon))return true;
+        for(const auto& ledger:slots_){
+            if(ledger.Phase()==AmmunitionLedgerPhase::Unbound)continue;
+            const auto& id=ledger.Snapshot().context.resource;
+            if(id.actor==actor&&id.actorGeneration==generation&&id.weapon==weapon&&(!bound||id==*bound)&&
+               (ledger.Phase()!=AmmunitionLedgerPhase::Ready||ledger.Pending()||ledger.WellEmpty()||
+                ledger.ResourceState()==MagazineResourceState::Held))return true;
+        }
+        return false;
+    }
     const auto& Selected()const noexcept{return selected_;}
     std::size_t Size()const noexcept {
         std::size_t n=0;for(const auto& ledger:slots_)n+=ledger.Phase()!=AmmunitionLedgerPhase::Unbound;return n;

@@ -465,9 +465,6 @@ ReloadFeedInputScopes feedInputScopes;
 std::optional<FeedEquipmentNativeView> feedEquipmentCurrent;
 #ifdef FVR_BC2_AMMO_RESOURCE_HANDS
 AmmoResourceService ammoPlayerService;
-// Guarded by ammoMoveProbeGate. Keep the ordinary ammo route through receipt
-// and seating, even if tracking drops and the display view temporarily expires.
-std::optional<interaction::AmmoResourceIdentity> idleBoltMagazineItem;
 AmmoResourceChannel ammoPlayerChannel;
 PistolAfterFeedEvidence pistolAfterFeed;
 std::atomic<bool> pistolAfterFeedEnabled=false;
@@ -1866,7 +1863,6 @@ void TryAmmoResourceHands(const Observation& observation,const ReloadHoldInput& 
             if(!candidate.YieldForReload()||!entry.Quiet())return;
             nativeCycle=std::move(candidate);
             for(auto& target:nativeCycleTargets)target.store(0,std::memory_order_release);
-            idleBoltMagazineItem=resource->context.resource;
             *yielded=true;
         });
         return *yielded;
@@ -4167,19 +4163,8 @@ bool SelectNativeCycleMode(Bc2NativeCycleMode mode,const ReloadStateOwner& owner
         Gate resource(ammoMoveProbeGate);
         if(!resource.held)return false;
         const auto binding=ammoResourceBindings.Read(owner,Now());
-        const bool handed=idleBoltMagazineItem&&idleBoltMagazineItem->actor==owner.soldier&&
-            idleBoltMagazineItem->actorGeneration==owner.actorGeneration&&idleBoltMagazineItem->weapon==owner.weapon;
-        if(handed&&!binding)return false;
-        if(binding){
-            const auto* ledger=ammoPlayerService.Inventory().Find(binding->context.resource);
-            if(ammoPlayerService.Active()||(ledger&&(ledger->Pending()||ledger->WellEmpty()||
-               ledger->Phase()!=interaction::AmmunitionLedgerPhase::Ready||
-               ledger->ResourceState()==interaction::MagazineResourceState::Held)))return false;
-            if(handed){
-                if(binding->context.resource==*idleBoltMagazineItem&&!ledger)return false;
-                idleBoltMagazineItem.reset();
-            }
-        }
+        if(ammoPlayerService.Active()||ammoPlayerService.Inventory().NeedsMagazineRoute(owner.soldier,
+           owner.actorGeneration,owner.weapon,binding?&binding->context.resource:nullptr))return false;
     }
 #endif
     bool accepted=false;
