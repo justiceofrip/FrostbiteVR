@@ -163,7 +163,7 @@ public:
     // Drops presentation; pending native work stays quarantined indefinitely.
     // Explicit confirmed receipt or verified post-drain baseline is required to
     // clear it. IDs are not reset.
-    AmmoSupplyResult Cancel(const HandInteractionSample&,HandInteraction&)noexcept;
+    AmmoSupplyResult Cancel(const HandInteractionSample&,HandInteraction&,HandReleaseCause cause={})noexcept;
     const std::optional<AmmoSupplyObject>& Held()const noexcept{return held_;}
     const std::optional<AmmoSupplyReservation>& Pending()const noexcept{return pending_;}
 private:
@@ -174,7 +174,7 @@ private:
     AmmoSupplyResult UpdateWithSource(const AmmoSupplySample&,HandInteraction&,bool allowAcquire,bool sourceDeferred)noexcept;
     std::optional<AmmoSupplyReservation> ReserveCurrent(const HandInteractionSample&,HandInteraction&,
         const ReloadInsertionSeat&,const ManualReloadRequest&,std::uint64_t cycle)noexcept;
-    AmmoSupplyResult Drop(const HandInteractionSample&,HandInteraction&,AmmoSupplyReason)noexcept;
+    AmmoSupplyResult Drop(const HandInteractionSample&,HandInteraction&,AmmoSupplyReason,HandReleaseCause)noexcept;
     AmmoSupplyResult Snapshot(AmmoSupplyReason reason=AmmoSupplyReason::None)const noexcept{return {reason,held_,{}, {}};}
     AmmoSupplyConfig config_{};
     std::optional<AmmoSupplyObject> held_{};

@@ -48,11 +48,16 @@ enum class FixedContainerStatus:std::uint8_t {
     Invalid,NeedNeutral,Gesture,PhysicalStep,NativeDispatched,AwaitingReceipt,
     Suspended,NoAmmunition,Complete,NativeQueued
 };
+// First policy branch that suspended this update; distinct from gesture status.
+enum class FixedContainerRejection:std::uint8_t {
+    Unknown,Configuration,Admission,Safety,Hand,Gesture,Queue,Dispatch
+};
 struct FixedContainerResult {
     FixedContainerStatus status=FixedContainerStatus::Invalid;
     FixedContainerStep step=FixedContainerStep::Open;
     FeedInteractionResult interaction{};
     std::optional<FixedContainerRequest> dispatch{};
+    FixedContainerRejection rejection=FixedContainerRejection::Unknown;
 };
 namespace fixed_container_detail {
 inline FeedPhysicalOperation Operation(FixedContainerStep s)noexcept {
@@ -165,8 +170,9 @@ public:
     }
     [[nodiscard]] FixedContainerResult Update(const FixedContainerSample& x,HandInteraction& hands)noexcept {
         FixedContainerResult out;out.step=step_;
-        const auto stop=[&](FixedContainerStatus status){Suspend();out.status=status;return out;};
-        if(!bound_||!Valid())return stop(FixedContainerStatus::Invalid);
+        const auto stop=[&](FixedContainerStatus status,FixedContainerRejection rejection=FixedContainerRejection::Unknown){
+            Suspend();out.status=status;out.rejection=rejection;return out;};
+        if(!bound_||!Valid())return stop(FixedContainerStatus::Invalid,FixedContainerRejection::Configuration);
         // Always expire hand authority on the current safety packet, including
         // pending native work and suspended input. A release may finish a
         // placement only from the exact still-fresh claim held before Update.
@@ -196,11 +202,11 @@ public:
            x.input.owner!=HandOwner()||safety.owner!=x.input.owner||safety.sequence<x.input.sequence||
            safety.observedNs<x.input.observedNs||safety.nowNs!=x.input.nowNs||
            x.input.nowNs<x.input.observedNs||x.input.nowNs>=x.input.deadlineNs||
-           !feed_mechanism_detail::Pose(x.weaponFromContact))return stop(FixedContainerStatus::Invalid);
+           !feed_mechanism_detail::Pose(x.weaponFromContact))return stop(FixedContainerStatus::Invalid,FixedContainerRejection::Admission);
         lastSnapshot_=a.sequence;lastInput_=x.input.sequence;lastNow_=x.input.nowNs;
         if(!handUpdate.inputValid||!x.held||!x.input.focused||!safety.focused||!safety.tracked[0]||!safety.tracked[1]||
            !x.interaction.focused||!c.tracked||!x.input.tracked[0]||!x.input.tracked[1])
-            return stop(FixedContainerStatus::Suspended);
+            return stop(FixedContainerStatus::Suspended,FixedContainerRejection::Safety);
         // Closing early is an explicit player choice and retains all rounds
         // already committed. A button alone never closes the mechanism.
         if(step_==FixedContainerStep::Insert&&(profile_.kind==FixedContainerKind::Cylinder||
@@ -210,14 +216,14 @@ public:
         }
         if(step_==FixedContainerStep::Insert&&(a.counts.loaded==a.counts.capacity||a.counts.reserve==0))
             return stop(FixedContainerStatus::NoAmmunition);
-        if(!Hand(x,hands,releasing))return stop(FixedContainerStatus::Suspended);
+        if(!Hand(x,hands,releasing))return stop(FixedContainerStatus::Suspended,FixedContainerRejection::Hand);
         auto raw=x.interaction;raw.contact.handAvailable=true;raw.operationPermitted=true;
         out.interaction=gesture_.Update(ProjectionProfile(),ProjectionMotion(),Projection(x),ProjectionSupply(),raw,x.input.nowNs);
         // A rejected gesture has already dropped its acquisition state. Drop
         // the matching hand binding too, so a fresh neutral can rearm without
         // borrowing the rejected claim. Retained mechanical recovery is kept.
         if(out.interaction.status>=FeedInteractionStatus::InvalidProfile)
-            return stop(FixedContainerStatus::Suspended);
+            return stop(FixedContainerStatus::Suspended,FixedContainerRejection::Gesture);
         if(out.interaction.status==FeedInteractionStatus::Acquired){gestureClaim_=x.claim;mechanismTouched_=true;}
         out.status=FixedContainerStatus::Gesture;
         if(!out.interaction.completion)return out;
@@ -228,9 +234,9 @@ public:
             // rounds or invent capacity+1. A cylinder can use one round per grip.
             auto admission=a;admission.deadlineNs=std::min(admission.deadlineNs,x.input.deadlineNs);
             const auto queued=ledger_.Queue(AmmunitionOperation::InsertRounds,admission,x.input.nowNs,{},profile_.roundsPerInsertion);
-            if(!queued)return stop(FixedContainerStatus::Invalid);
+            if(!queued)return stop(FixedContainerStatus::Invalid,FixedContainerRejection::Queue);
             const auto command=externalAdmission_?queued:ledger_.Dispatch(a,x.input.nowNs);
-            if(!command)return stop(FixedContainerStatus::Invalid);
+            if(!command)return stop(FixedContainerStatus::Invalid,FixedContainerRejection::Dispatch);
             const auto& completion=*out.interaction.completion;
             pending_=FixedContainerRequest{FeedReloadRequest{completion.id,lifetime_,binding_,completion,x.input.nowNs},supply_,*command};
             out.dispatch=pending_;out.status=externalAdmission_?FixedContainerStatus::NativeQueued:FixedContainerStatus::NativeDispatched;return out;

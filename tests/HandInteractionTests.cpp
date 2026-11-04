@@ -665,7 +665,39 @@ int FailedIntentCannotLaterWin(){
 }
 static_assert(!std::is_copy_constructible_v<HandInteraction>);
 static_assert(sizeof(HandInteraction)<8192,"Diagnostic history must stay outside the shared controller");
-int main(){
+int HandReleaseCauseDiagnostics(){
+    static_assert(std::is_trivially_copyable_v<HandReleaseCause>);
+    Fixture f;HandClaimDropJournal<2> journal;f.arbiter.ObserveDrops(journal.Observer());
+    const auto acquired=f.arbiter.Acquire(f.sample,f.Request(left,HandClaimKind::AmmoObject,shell));CHECK(acquired.claim);
+    const auto original=*acquired.claim;f.Next();
+    const HandReleaseCause cause{HandReleaseSite::FixedRaw,24};
+    const auto released=f.arbiter.Release(f.sample,original.token,cause);
+    CHECK(released.accepted&&journal.count==1&&!f.arbiter.Current(left));
+    CHECK(journal.entries[0].cause==cause&&journal.entries[0].reason==HandInteractionReason::Released);
+    CHECK(journal.entries[0].claim.token==original.token&&journal.entries[0].claim.inputSequence==original.inputSequence);
+    CHECK(journal.entries[0].claim.deadlineNs==original.deadlineNs&&original.deadlineNs>f.sample.nowNs);
+    CHECK(journal.entries[0].attempted.sequence==f.sample.sequence&&journal.entries[0].attempted.deadlineNs==f.sample.deadlineNs);
+    const auto first=journal.entries[0];
+    CHECK(!f.arbiter.Release(f.sample,original.token,{HandReleaseSite::FixedDispatch}).accepted&&journal.count==1);
+    f.Next();const auto next=f.arbiter.Acquire(f.sample,f.Request(left,HandClaimKind::AmmoObject,shell));CHECK(next.claim);
+    CHECK(f.arbiter.Release(f.sample,next.claim->token).accepted);
+    CHECK(journal.entries[1].cause==HandReleaseCause{}); // Unannotated callers remain explicitly unknown.
+    f.Next();const auto overflow=f.arbiter.Acquire(f.sample,f.Request(left,HandClaimKind::AmmoObject,shell));CHECK(overflow.claim);
+    CHECK(f.arbiter.Release(f.sample,overflow.claim->token,{HandReleaseSite::AmmoSupplySubmitted}).accepted);
+    CHECK(journal.count==2&&journal.omitted==1&&journal.entries[0].cause==first.cause);
+    CHECK(journal.entries[0].attempted.sequence==first.attempted.sequence&&journal.entries[0].claim.deadlineNs==first.claim.deadlineNs);
+    // Release's Prepare can be the first failure. Do not replace that arbiter
+    // safety drop with a later caller's requested explicit-release provenance.
+    Fixture expired;HandClaimDropJournal<2> safety;expired.arbiter.ObserveDrops(safety.Observer());
+    const auto held=expired.arbiter.Acquire(expired.sample,expired.Request(left,HandClaimKind::AmmoObject,shell));CHECK(held.claim);
+    expired.sample.nowNs=expired.sample.deadlineNs;
+    CHECK(!expired.arbiter.Release(expired.sample,held.claim->token,cause).accepted);
+    CHECK(safety.count==1&&safety.entries[0].reason==HandInteractionReason::StaleInput);
+    CHECK(safety.entries[0].cause==HandReleaseCause{}&&safety.entries[0].claim.token==held.claim->token);
+    return 0;
+}
+
+int main(){if(HandReleaseCauseDiagnostics())return 1;
     if(OverlappingGunInputRenewsBeforeExpiry()||GunRenewalNeverExtendsDependentEvidence()||GunRenewalRejectsInvalidContinuity()||GunRenewalCannotResurrect()||ClaimDropPreservesInnerFailureEvidence()||QueuedOwnershipAfterConsumerAdoption()||FailedAndSuccessfulTransfers()||ExplicitSharingAndCrossHandTransfer()||DependencyAndPerHandTracking()||
        IdentityFocusResetAndFreshIntent()||LeasesRenewalAndContactIdentity()||MalformedAndImmutableInput()||
         UnavailableIntentCannotReplay()||HistoricalTransferAndExactSource()||HistoricalReleaseAndTrackingBarriers()||

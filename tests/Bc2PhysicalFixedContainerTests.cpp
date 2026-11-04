@@ -738,7 +738,56 @@ int EveryFixedFamilyKeepsSupportOutOfAmmoCustody(){
     return 0;
 }
 }
-int main(){return ExactSelectorsAndSupply()||GateBeforePhysicalAndExactOwner()||BusyMechanismFeedbackContinuesOpening()||
+int FixedReleaseCauseDiagnostics(){
+    // Every enrolled fixed loader takes the same raw-loss diagnostic path while
+    // preserving its carried resource. This adds no per-profile recorder.
+    unsigned profiles=0;
+    for(const auto registry:{std::span<const FixedContainerEquipmentProfile>(generated::FixedContainerEquipment),
+                            std::span<const FixedContainerEquipmentProfile>(generated::UnderbarrelFixedContainerEquipment)})
+        for(const auto& e:registry){
+            Fixture f(&e,0,e.interaction.roundsPerInsertion);SelectFixedFamily(f);
+            if(e.interaction.kind==FixedContainerKind::Cylinder||e.interaction.kind==FixedContainerKind::SingleRoundBreech)f.Hinge(0);
+            if(e.interaction.kind==FixedContainerKind::Cylinder)f.Hinge(1);
+            const auto start=At(e.interaction.geometry[2].motion,0);
+            f.Send(start,false);f.Send(start,true,true);CHECK(f.result.ammoOwnsHand&&f.result.tracking.hand);
+            const auto held=*f.result.tracking.hand;const auto counts=f.counts;const auto gun=f.gun;
+            HandClaimDropJournal<4> journal;f.hands.ObserveDrops(journal.Observer());
+            f.sample.raw.valid=false;f.Consume();
+            CHECK(journal.count==1&&journal.entries[0].claim.token==held.token);
+            const auto& d=journal.entries[0];CHECK(d.reason==HandInteractionReason::Released);
+            CHECK(d.cause.site==HandReleaseSite::FixedRaw&&d.cause.rejection==static_cast<std::uint8_t>(FixedContainerReleaseRejection::RawInvalid));
+            CHECK(d.claim.deadlineNs==held.deadlineNs&&d.attempted.sequence==f.sample.input.sequence);
+            CHECK(d.claim.deadlineNs>d.attempted.nowNs&&d.cause.fixedStatus==HandReleaseCause::Unknown);
+            CHECK(f.result.tracking.carried&&!f.result.tracking.hand&&!f.result.tracking.target);
+            CHECK(f.hands.Current(InteractionHand::Right)->token==gun&&f.service.View()->snapshot.counts==counts&&!f.submitted);
+            f.Consume();CHECK(journal.count==1);++profiles;
+        }
+    CHECK(profiles==84);
+    // Multiple simultaneous failures keep the first existing short-circuit
+    // rejection; later cleanup cannot rewrite that original drop record.
+    for(unsigned branch=0;branch<5;++branch){
+        Fixture f;const auto start=At(f.equipment->interaction.geometry[0].motion,0);
+        f.Send(start,false);f.Send(start,true);CHECK(f.result.mechanismOwnsHand);
+        HandClaimDropJournal<4> journal;f.hands.ObserveDrops(journal.Observer());
+        HandReleaseSite site=HandReleaseSite::Unknown;auto rejection=FixedContainerReleaseRejection::Unknown;
+        if(branch==0){f.sample.cancel=true;f.sample.raw.valid=false;site=HandReleaseSite::FixedAdmission;rejection=FixedContainerReleaseRejection::CancelRequested;}
+        if(branch==1){++f.sample.weapon.id;f.sample.raw.valid=false;site=HandReleaseSite::FixedNativeView;rejection=FixedContainerReleaseRejection::WeaponMismatch;}
+        if(branch==2){++f.sample.raw.nativeOwner.weapon;f.sample.raw.input.owner.actor++;site=HandReleaseSite::FixedRaw;rejection=FixedContainerReleaseRejection::RawNativeOwner;}
+        if(branch==4){f.Prepare(start,true);f.sample.raw.weaponFromWrist.values[3][0]+=10;site=HandReleaseSite::FixedPolicy;}
+        if(branch==3)f.physical->Cancel(f.sample.input,f.hands);else f.Consume();
+        CHECK(journal.count==1&&journal.entries[0].cause.site==site);
+        const auto& cause=journal.entries[0].cause;
+        if(branch==4){
+            CHECK(cause.rejection==static_cast<std::uint8_t>(FixedContainerRejection::Gesture));
+            CHECK(cause.fixedStatus==static_cast<std::uint8_t>(FixedContainerStatus::Suspended));
+            CHECK(cause.feedStatus>=static_cast<std::uint8_t>(FeedInteractionStatus::InvalidProfile)&&cause.feedStatus!=HandReleaseCause::Unknown);
+        }else CHECK(cause.rejection==(branch==3?HandReleaseCause::Unknown:static_cast<std::uint8_t>(rejection)));
+        CHECK(!f.hands.Current(InteractionHand::Left)&&f.calls==0);
+    }
+    return 0;
+}
+
+int main(){if(FixedReleaseCauseDiagnostics())return 1;return ExactSelectorsAndSupply()||GateBeforePhysicalAndExactOwner()||BusyMechanismFeedbackContinuesOpening()||
     BusyCannotStartReviveOrChangeOwner()||BusyExpiresWithoutGateLeaseExtension()||BusyCannotAuthorizeDispatchOrClosure()||
     CylinderFlickReturnAndClose()||ClipQueuesOneSharedCommand()||
     PriorRendererFrameQueuesAndCompletesOnceAfterReequip()||PartialCylinderMigrationReacquiresAtRetainedContact()||

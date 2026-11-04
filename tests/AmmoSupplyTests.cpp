@@ -400,7 +400,38 @@ int RetainedCustodyHasNoReserveAuthority(){
  }
  return 0;
 }
-int main(){CHECK(RetainedCustodyHasNoReserveAuthority()==0);CHECK(TerminalOutcomeDoesNotRenewResource()==0);CHECK(ReleaseSubmittedPreservesPendingResourceAndOtherClaims()==0);if(PhysicalCarrySurvivesFreshShortSourceObservations()||FreshSourceNeverRevivesExpiredPhysicalClaim())return 1;
+int AmmoReleaseCauseDiagnostics(){
+    for(unsigned branch=0;branch<4;++branch){
+        Fixture f;CHECK(f.Grab().held);const auto original=*f.supply.Held();
+        const auto gun=f.hands.Current(InteractionHand::Right);CHECK(gun);
+        HandClaimDropJournal<4> journal;f.hands.ObserveDrops(journal.Observer());
+        HandReleaseSite expected=HandReleaseSite::Unknown;AmmoSupplyReason why=AmmoSupplyReason::Explicit;
+        if(branch==0)f.supply.Cancel(f.s.input,f.hands);
+        if(branch==1){
+            f.s.source.verified=false;f.supply.Update(f.s,f.hands);
+            expected=HandReleaseSite::AmmoSupplyUpdate;why=AmmoSupplyReason::InvalidSource;
+        }
+        if(branch==2){
+            const HandReleaseCause cause{HandReleaseSite::FeedSupplyAdmission,1};
+            f.supply.Cancel(f.s.input,f.hands,cause);expected=cause.site;
+        }
+        if(branch==3){
+            const auto reservation=f.Reserve();CHECK(reservation);
+            CHECK(f.supply.ReleaseSubmitted(f.s.input,f.hands,*reservation));
+            CHECK(f.supply.Pending()==reservation);expected=HandReleaseSite::AmmoSupplySubmitted;why=AmmoSupplyReason::Released;
+        }
+        CHECK(!f.supply.Held()&&!f.hands.Current(InteractionHand::Left));
+        CHECK(f.hands.Current(InteractionHand::Right)->token==gun->token&&f.s.source.reserveUnits==4);
+        CHECK(journal.count==1&&journal.entries[0].claim.token==original.claim.token);
+        const auto& d=journal.entries[0];CHECK(d.reason==HandInteractionReason::Released&&d.cause.site==expected);
+        CHECK(d.cause.ammoReason==static_cast<std::uint8_t>(why));
+        CHECK(d.cause.rejection==(branch==2?1:HandReleaseCause::Unknown));
+        CHECK(d.claim.deadlineNs==original.claim.deadlineNs&&d.attempted.sequence==f.s.input.sequence);
+    }
+    return 0;
+}
+
+int main(){if(AmmoReleaseCauseDiagnostics())return 1;CHECK(RetainedCustodyHasNoReserveAuthority()==0);CHECK(TerminalOutcomeDoesNotRenewResource()==0);CHECK(ReleaseSubmittedPreservesPendingResourceAndOtherClaims()==0);if(PhysicalCarrySurvivesFreshShortSourceObservations()||FreshSourceNeverRevivesExpiredPhysicalClaim())return 1;
     if(AlternateContactSharesProvider()||AlternateContactCannotBypassReservation()||AlternateContactsKeepExactGeometryAndEdge()||RealEdgeBodyPouchAndReserve()||ContactFailureNeedsNewEdge()||NoStealingSupportOrSight()||IdentityAndSafetyInvalidation()||
         DuplicateAndStalePackets()||ReservationReplacementAndExactConsumption()||ExhaustionAndUnresolvedCannotMint()||
         PendingEquipChangeAndWrongReceipts()||MagazineExplicitUnitsAndNoEffect()||ActualInsertionConsumesSuppliedClaim()||

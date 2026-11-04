@@ -72,16 +72,35 @@ enum class HandInteractionReason:std::uint8_t {
     TokenExhausted,Released,Transferred,DependencyLost,Reset
 };
 struct HandClaimRelease {HandClaimToken token{};HandInteractionReason reason=HandInteractionReason::None;};
+// Diagnostic provenance only; never admission, ownership, or a new clock.
+// Values are serialized in the existing bounded journal. Zero means unknown.
+enum class HandReleaseSite:std::uint8_t {
+    Unknown,FixedAdmission,FixedNativeView,FixedGunHold,FixedProfileChanged,
+    FixedSlotChanged,FixedRaw,FixedPolicy,FixedReceipt,FixedPhysicalStep,
+    FixedDispatch,FixedGrip,AmmoSupplyUpdate,AmmoSupplyRetain,
+    AmmoSupplySubmitted,AmmoSupplyReceipt,AmmoSupplyTerminal,
+    AmmoSupplyRetired,AmmoSupplyRebaseline,FeedSupplyAdmission,FeedSupplyBound
+};
+struct HandReleaseCause {
+    static constexpr std::uint8_t Unknown=255;
+    HandReleaseSite site=HandReleaseSite::Unknown;
+    // rejection is site-specific: fixed admission/raw, fixed policy, or feed
+    // supply admission. Optional status values are absent (255) unless observed.
+    std::uint8_t rejection=Unknown,fixedStatus=Unknown,feedStatus=Unknown,ammoReason=Unknown;
+    bool operator==(const HandReleaseCause&)const=default;
+};
+static_assert(sizeof(HandReleaseCause)==5);
 // Bounded observation only. Records the input that caused custody to disappear,
 // including failures inside a consumer before the next outer adapter Update.
 struct HandClaimDropObservation {
     HandClaim claim{};HandInteractionReason reason=HandInteractionReason::None;
     HandInteractionSample attempted{};std::int64_t previousNowNs=0;
+    HandReleaseCause cause{};
 };
 struct HandDropObserver {
     void* context=nullptr;
     void(*input)(void*,const HandInteractionSample&,std::int64_t)noexcept=nullptr;
-    void(*drop)(void*,const HandClaim&,HandInteractionReason)noexcept=nullptr;
+    void(*drop)(void*,const HandClaim&,HandInteractionReason,HandReleaseCause)noexcept=nullptr;
 };
 // Allocate once in the owning diagnostic, not in every interaction consumer.
 template<std::size_t Capacity> struct HandClaimDropJournal {
@@ -91,9 +110,9 @@ template<std::size_t Capacity> struct HandClaimDropJournal {
     HandDropObserver Observer()noexcept {
         return {this,[](void* p,const HandInteractionSample& s,std::int64_t previous)noexcept {
             auto& j=*static_cast<HandClaimDropJournal*>(p);j.attempted=s;j.previousNowNs=previous;
-        },[](void* p,const HandClaim& claim,HandInteractionReason reason)noexcept {
+        },[](void* p,const HandClaim& claim,HandInteractionReason reason,HandReleaseCause cause)noexcept {
             auto& j=*static_cast<HandClaimDropJournal*>(p);
-            if(j.count<j.entries.size())j.entries[j.count++]={claim,reason,j.attempted,j.previousNowNs};
+            if(j.count<j.entries.size())j.entries[j.count++]={claim,reason,j.attempted,j.previousNowNs,cause};
             else ++j.omitted;
         }};
     }
@@ -171,7 +190,7 @@ public:
     // Supports Gun+Support -> other Gun+empty, Gun+Support -> other Gun+Mechanism,
     // and Gun+(Mechanism or empty) -> other Gun+Support, in either handedness.
     HandGunCustodyResult TransferGunCustody(const HandInteractionSample& currentSafety,const HandGunCustodyTransfer&)noexcept;
-    HandInteractionResult Release(const HandInteractionSample&,const HandClaimToken&)noexcept;
+    HandInteractionResult Release(const HandInteractionSample&,const HandClaimToken&,HandReleaseCause cause={})noexcept;
     HandInteractionResult Reset()noexcept;
     void ObserveDrops(HandDropObserver observer)noexcept{dropObserver_=observer;}
     // Inspect only after Update with the current clock/input. This is not a
@@ -212,7 +231,7 @@ private:
     static bool DependentKind(HandClaimKind k)noexcept {
         return k==HandClaimKind::WeaponSupport||k==HandClaimKind::Sight||k==HandClaimKind::Mechanism;
     }
-    void Drop(std::size_t,HandInteractionReason,HandInteractionResult&)noexcept;
+    void Drop(std::size_t,HandInteractionReason,HandInteractionResult&,HandReleaseCause cause={})noexcept;
     void DropAll(HandInteractionReason,HandInteractionResult&)noexcept;
     void DropDependents(HandInteractionResult&)noexcept;
     bool Available(InteractionHand,HandInteractionResult&)const noexcept;
@@ -235,9 +254,9 @@ private:
     bool initialized_=false,blocked_=false;
     HandDropObserver dropObserver_{};
 };
-inline void HandInteraction::Drop(std::size_t hand,HandInteractionReason reason,HandInteractionResult& out)noexcept {
+inline void HandInteraction::Drop(std::size_t hand,HandInteractionReason reason,HandInteractionResult& out,HandReleaseCause cause)noexcept {
     if(!claims_[hand])return;
-    if(dropObserver_.drop)dropObserver_.drop(dropObserver_.context,*claims_[hand],reason);
+    if(dropObserver_.drop)dropObserver_.drop(dropObserver_.context,*claims_[hand],reason,cause);
     for(auto& event:out.released)if(!event){event=HandClaimRelease{claims_[hand]->token,reason};break;}
     claims_[hand].reset();
 }
@@ -536,12 +555,14 @@ inline HandGunCustodyResult HandInteraction::TransferGunCustody(const HandIntera
     }
     return result;
 }
-inline HandInteractionResult HandInteraction::Release(const HandInteractionSample& s,const HandClaimToken& token)noexcept {
+inline HandInteractionResult HandInteraction::Release(const HandInteractionSample& s,const HandClaimToken& token,HandReleaseCause cause)noexcept {
     if(!Exact(token)){HandInteractionResult out;out.reason=HandInteractionReason::StaleToken;return out;}
     auto out=Prepare(s);if(!out.inputValid)return out;
     if(!Exact(token)){out.reason=HandInteractionReason::StaleToken;return out;}
     invalidationBarrier_[Index(token.hand)]=sample_.sequence;
-    Drop(Index(token.hand),HandInteractionReason::Released,out);DropDependents(out);
+    // Prepare may already have dropped this token for an earlier safety reason.
+    // Attach caller provenance only to the explicit drop that actually occurs.
+    Drop(Index(token.hand),HandInteractionReason::Released,out,cause);DropDependents(out);
     out.accepted=true;out.reason=HandInteractionReason::None;return out;
 }
 }

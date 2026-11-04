@@ -68,6 +68,16 @@ struct Bc2PhysicalFixedContainerResult {
     bool blocksFire=false,ammoOwnsHand=false,mechanismOwnsHand=false;
     interaction::FixedContainerStatus status=interaction::FixedContainerStatus::Invalid;
 };
+// Exact first failed predicate in the existing short-circuit admission order.
+enum class FixedContainerReleaseRejection:std::uint8_t {
+    Unknown,Disabled,ReadUnavailable,LedgerUnavailable,SubmitUnavailable,
+    OutcomeUnavailable,GateUnavailable,RequestUnavailable,EquipmentUnknown,
+    EquipmentMismatch,CancelRequested,InputNotFresh,ViewMissing,ViewOwner,
+    ViewStale,PhysicalItemUnavailable,WeaponMismatch,CapacityMismatch,
+    GunMissing,GunKind,GunItem,GunOwner,GunInput,GunExpired,
+    RawInvalid,RawEquipment,RawNativeOwner,RawHandOwner,RawSequence,
+    RawObserved,RawInputNotFresh,RawSoldier,RawWeak,RawWrist,RawWorld,RawEvidence
+};
 class Bc2PhysicalFixedContainer {
 public:
     explicit Bc2PhysicalFixedContainer(bool enabled=false,Bc2PhysicalFixedContainerApi api={})noexcept;
@@ -75,7 +85,7 @@ public:
     Bc2PhysicalFixedContainer(const Bc2PhysicalFixedContainer&)=delete;
     Bc2PhysicalFixedContainer& operator=(const Bc2PhysicalFixedContainer&)=delete;
     Bc2PhysicalFixedContainerResult Tick(const Bc2PhysicalFixedContainerSample&,interaction::HandInteraction&,std::uint64_t& sharedIntent)noexcept;
-    void Cancel(const interaction::HandInteractionSample&,interaction::HandInteraction&)noexcept;
+    void Cancel(const interaction::HandInteractionSample&,interaction::HandInteraction&,interaction::HandReleaseCause cause={})noexcept;
     void Report(std::ostream&)const;
     static interaction::AmmoSupplyContact BodyAmmoContact()noexcept {const auto p=interaction::ChestAmmoSupply();return {p.pouchCenterMeters,p.pouchRadiusMeters};}
     void SetBodyContact(interaction::AmmoSupplyContact contact)noexcept {if(interaction::ValidBodyAnchor({1,

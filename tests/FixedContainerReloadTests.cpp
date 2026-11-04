@@ -330,7 +330,23 @@ int PlacementRebasePinsDestinationAndRejectsHeldMutation(){
     CHECK(!f.reload->Pending()&&f.ledger.Snapshot().counts.loaded==0);return 0;
 }
 }
-int main(){
+int FixedPolicyRejectionDiagnostics(){
+    for(unsigned branch=0;branch<4;++branch){
+        Fixture f(FixedContainerKind::SingleRoundMuzzle,0,1);CHECK(f.Acquire());
+        FixedContainerResult result;FixedContainerRejection expected=FixedContainerRejection::Unknown;
+        if(branch==0){f.x.weaponFromContact.values[3][3]=0;expected=FixedContainerRejection::Admission;result=f.reload->Update(f.x,f.hands);}
+        if(branch==1){f.x.held=false;expected=FixedContainerRejection::Safety;result=f.reload->Update(f.x,f.hands);}
+        if(branch==2){++f.x.claim->id;expected=FixedContainerRejection::Hand;result=f.reload->Update(f.x,f.hands);}
+        if(branch==3){expected=FixedContainerRejection::Gesture;result=f.Run(1);}
+        CHECK(result.rejection==expected&&!result.dispatch&&!f.reload->Pending());
+        CHECK(result.status==(branch==0?Status::Invalid:Status::Suspended));
+        if(branch==3)CHECK(result.interaction.status==FeedInteractionStatus::MotionJump);
+        CHECK(f.ledger.Snapshot().counts.loaded==0&&f.ledger.Snapshot().counts.reserve==1);
+    }
+    return 0;
+}
+
+int main(){if(FixedPolicyRejectionDiagnostics())return 1;
     CHECK(CylinderPreservesLiveRoundsAndClosesPartiallyLoaded()==0);
     CHECK(ClipOneAtomicBoundedTransferAndNoExtraChamber()==0);
     CHECK(SingleRoundProfileAndOpeningPreserveLiveAmmunition()==0);

@@ -42,9 +42,9 @@ struct Bc2PhysicalFixedContainer::Slot {
 };
 Bc2PhysicalFixedContainer::Bc2PhysicalFixedContainer(bool enabled,Bc2PhysicalFixedContainerApi api)noexcept:enabled_(enabled),api_(api){}
 Bc2PhysicalFixedContainer::~Bc2PhysicalFixedContainer()=default;
-void Bc2PhysicalFixedContainer::Cancel(const HandInteractionSample& input,HandInteraction& hands)noexcept {
+void Bc2PhysicalFixedContainer::Cancel(const HandInteractionSample& input,HandInteraction& hands,HandReleaseCause cause)noexcept {
     if(!active_)return;
-    if(active_->hand){(void)hands.Release(input,active_->hand->token);active_->hand.reset();}
+    if(active_->hand){(void)hands.Release(input,active_->hand->token,cause);active_->hand.reset();}
     if(active_->policy)active_->policy->Suspend();
     active_->recoveryPrepared=false;
     active_->supportNeutral.reset();
@@ -69,21 +69,45 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
             if(slot){observation->supply=slot->supply;observation->pendingRequest=slot->request;observation->lastCompletion=slot->lastCompletion;}
         }
     } capture{s.observation,out,observedSlot,hands};
-    if(!enabled_||!api_.read||!api_.withLedger||!api_.submit||!api_.outcome||(!api_.publishGate&&!api_.publishGateObserved)||!api_.nextRequest||!e||
-       e!=FindFixedContainerEquipment(s.configurationPath,s.mesh,s.rigFingerprint)||s.cancel||!Fresh(s.input,s.input.nowNs)){
-        Cancel(s.input,hands);return out;
+    auto rejection=FixedContainerReleaseRejection::Unknown;
+    const auto rejected=[&](bool failed,FixedContainerReleaseRejection why)noexcept {
+        if(failed)rejection=why;return failed;
+    };
+    const auto cause=[&](HandReleaseSite site)noexcept {
+        return HandReleaseCause{site,static_cast<std::uint8_t>(rejection)};
+    };
+    if(rejected(!enabled_,FixedContainerReleaseRejection::Disabled)||
+       rejected(!api_.read,FixedContainerReleaseRejection::ReadUnavailable)||
+       rejected(!api_.withLedger,FixedContainerReleaseRejection::LedgerUnavailable)||
+       rejected(!api_.submit,FixedContainerReleaseRejection::SubmitUnavailable)||
+       rejected(!api_.outcome,FixedContainerReleaseRejection::OutcomeUnavailable)||
+       rejected((!api_.publishGate&&!api_.publishGateObserved),FixedContainerReleaseRejection::GateUnavailable)||
+       rejected(!api_.nextRequest,FixedContainerReleaseRejection::RequestUnavailable)||
+       rejected(!e,FixedContainerReleaseRejection::EquipmentUnknown)||
+       rejected(e!=FindFixedContainerEquipment(s.configurationPath,s.mesh,s.rigFingerprint),FixedContainerReleaseRejection::EquipmentMismatch)||
+       rejected(s.cancel,FixedContainerReleaseRejection::CancelRequested)||
+       rejected(!Fresh(s.input,s.input.nowNs),FixedContainerReleaseRejection::InputNotFresh)){
+        Cancel(s.input,hands,cause(HandReleaseSite::FixedAdmission));return out;
     }
     const auto view=api_.read(api_.context,s.nativeOwner,s.input.nowNs);
     if(s.observation)s.observation->view=view;
     const auto physical=view?FixedContainerHandItem({e,view->binding,view->snapshot,s.family},s.input.owner,s.input.nowNs):std::nullopt;
-    if(!view||view->binding.owner!=s.nativeOwner||!AmmoResourceViewFresh(*view,s.input.nowNs)||!physical||s.weapon!=*physical||
-       view->snapshot.counts.capacity!=e->interaction.capacity){Cancel(s.input,hands);return out;}
+    if(rejected(!view,FixedContainerReleaseRejection::ViewMissing)||
+       rejected(view->binding.owner!=s.nativeOwner,FixedContainerReleaseRejection::ViewOwner)||
+       rejected(!AmmoResourceViewFresh(*view,s.input.nowNs),FixedContainerReleaseRejection::ViewStale)||
+       rejected(!physical,FixedContainerReleaseRejection::PhysicalItemUnavailable)||
+       rejected(s.weapon!=*physical,FixedContainerReleaseRejection::WeaponMismatch)||
+       rejected(view->snapshot.counts.capacity!=e->interaction.capacity,FixedContainerReleaseRejection::CapacityMismatch)){Cancel(s.input,hands,cause(HandReleaseSite::FixedNativeView));return out;}
     const auto gun=hands.Current(InteractionHand::Right);
-    if(!gun||gun->token.kind!=HandClaimKind::GunHold||gun->token.item!=s.weapon||gun->token.owner!=s.input.owner||
-       gun->inputSequence!=s.input.sequence||gun->deadlineNs<=s.input.nowNs){Cancel(s.input,hands);return out;}
+    if(rejected(!gun,FixedContainerReleaseRejection::GunMissing)||
+       rejected(gun->token.kind!=HandClaimKind::GunHold,FixedContainerReleaseRejection::GunKind)||
+       rejected(gun->token.item!=s.weapon,FixedContainerReleaseRejection::GunItem)||
+       rejected(gun->token.owner!=s.input.owner,FixedContainerReleaseRejection::GunOwner)||
+       rejected(gun->inputSequence!=s.input.sequence,FixedContainerReleaseRejection::GunInput)||
+       rejected(gun->deadlineNs<=s.input.nowNs,FixedContainerReleaseRejection::GunExpired)){Cancel(s.input,hands,cause(HandReleaseSite::FixedGunHold));return out;}
     Slot* slot=nullptr;
     for(auto& item:slots_)if(item&&item->binding.context.resource==view->binding.context.resource){slot=item.get();break;}
-    if(slot&&slot->equipment!=e){Cancel(s.input,hands);return out;}
+    if(slot&&slot->equipment!=e){Cancel(s.input,hands,{HandReleaseSite::FixedProfileChanged});return out;}
     if(!slot){
         for(auto& item:slots_)if(!item){
             try{item=std::make_unique<Slot>();}catch(...){return out;}
@@ -95,7 +119,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
         }
     }
     if(!slot||e->parts.size()>slot->parts.size())return out;
-    if(active_&&active_!=slot)Cancel(s.input,hands);active_=slot;
+    if(active_&&active_!=slot)Cancel(s.input,hands,{HandReleaseSite::FixedSlotChanged});active_=slot;
     observedSlot=slot;
     const auto terminal=slot->request&&api_.outcome?api_.outcome(api_.context,slot->request->intent.id,slot->request->intent.context):std::nullopt;
     const auto& raw=s.raw;
@@ -104,11 +128,18 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
         s.releaseEvidence->released.reason==HandInteractionReason::Released&&s.releaseEvidence->before.deadlineNs>s.input.nowNs&&
         s.releaseEvidence->input.sequence==s.input.sequence&&s.releaseEvidence->input.owner==s.input.owner&&
         hands.HasRecordedEvidence(s.releaseEvidence->input,InteractionHand::Left)&&hands.HasRecordedEvidence(raw.input,InteractionHand::Right);
-    const bool rawFresh=raw.valid&&raw.equipment==e&&raw.nativeOwner==s.nativeOwner&&raw.input.owner==s.input.owner&&
-        raw.input.sequence<=s.input.sequence&&raw.input.observedNs<=s.input.observedNs&&Fresh(raw.input,s.input.nowNs)&&
-        raw.rig.soldier==s.nativeOwner.soldier&&raw.rig.weak==s.nativeOwner.weak&&
-        feed_mechanism_detail::Pose(raw.weaponFromWrist)&&feed_mechanism_detail::Pose(raw.weaponWorldMeters)&&
-        (hands.HasRecordedEvidence(raw.input,InteractionHand::Left)||releasedRaw);
+    const bool rawFresh=!rejected(!(raw.valid),FixedContainerReleaseRejection::RawInvalid)&&
+        !rejected(!(raw.equipment==e),FixedContainerReleaseRejection::RawEquipment)&&
+        !rejected(!(raw.nativeOwner==s.nativeOwner),FixedContainerReleaseRejection::RawNativeOwner)&&
+        !rejected(!(raw.input.owner==s.input.owner),FixedContainerReleaseRejection::RawHandOwner)&&
+        !rejected(!(raw.input.sequence<=s.input.sequence),FixedContainerReleaseRejection::RawSequence)&&
+        !rejected(!(raw.input.observedNs<=s.input.observedNs),FixedContainerReleaseRejection::RawObserved)&&
+        !rejected(!(Fresh(raw.input,s.input.nowNs)),FixedContainerReleaseRejection::RawInputNotFresh)&&
+        !rejected(!(raw.rig.soldier==s.nativeOwner.soldier),FixedContainerReleaseRejection::RawSoldier)&&
+        !rejected(!(raw.rig.weak==s.nativeOwner.weak),FixedContainerReleaseRejection::RawWeak)&&
+        !rejected(!(feed_mechanism_detail::Pose(raw.weaponFromWrist)),FixedContainerReleaseRejection::RawWrist)&&
+        !rejected(!(feed_mechanism_detail::Pose(raw.weaponWorldMeters)),FixedContainerReleaseRejection::RawWorld)&&
+        !rejected(!((hands.HasRecordedEvidence(raw.input,InteractionHand::Left)||releasedRaw)),FixedContainerReleaseRejection::RawEvidence);
     if(s.observation)s.observation->rawAdmitted=rawFresh;
     if(slot->policy&&slot->policy->Step()==FixedContainerStep::Complete&&!slot->request&&!slot->restart&&rawFresh&&raw.gripPressed&&
        view->snapshot.counts.loaded<view->snapshot.counts.capacity&&view->snapshot.counts.reserve>0){
@@ -156,8 +187,8 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
     FixedContainerResult result;std::optional<AmmoResourceRequest> dispatch;
     struct Work {Bc2PhysicalFixedContainer* self;Slot* slot;const Bc2PhysicalFixedContainerSample* sample;
         const AmmoResourceView* view;const std::optional<AmmoResourceOutcome>* terminal;HandInteraction* hands;
-        std::uint64_t* intent;bool rawFresh,allowAcquire;FixedContainerResult* result;std::optional<AmmoResourceRequest>* dispatch;};
-    Work work{this,slot,&s,&*view,&terminal,&hands,&intent,rawFresh,beforePublication==FixedContainerGateResult::Published,&result,&dispatch};
+        std::uint64_t* intent;bool rawFresh,allowAcquire;HandReleaseCause rawCause;FixedContainerResult* result;std::optional<AmmoResourceRequest>* dispatch;};
+    Work work{this,slot,&s,&*view,&terminal,&hands,&intent,rawFresh,beforePublication==FixedContainerGateResult::Published,cause(HandReleaseSite::FixedRaw),&result,&dispatch};
     const bool updated=api_.withLedger(api_.context,view->binding,s.input.owner,&work,[](void* opaque,AmmunitionLedger& ledger)noexcept {
         auto& w=*static_cast<Work*>(opaque);auto& self=*w.self;auto& z=*w.slot;const auto& x=*w.sample;const auto& v=*w.view;auto& h=*w.hands;
         const auto& profile=z.equipment->interaction;const auto now=x.input.nowNs;
@@ -175,7 +206,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
                 z.policy->CompleteAfterContextChange(*z.physicalRequest,*terminal->receipt,v.snapshot,now))){
                 z.lastCompletion=Bc2FixedContainerCompletionObservation{z.lifetime,z.supply,*terminal,v.snapshot,now};
                 ++self.completed_;z.request.reset();z.physicalRequest.reset();z.carried=false;z.carriedSupply.reset();z.target.reset();z.recoveryPrepared=false;
-                if(z.hand){(void)h.Release(x.input,z.hand->token);z.hand.reset();}
+                if(z.hand){(void)h.Release(x.input,z.hand->token,{HandReleaseSite::FixedReceipt});z.hand.reset();}
             }else if(terminal&&terminal->request==*z.request&&!terminal->nativeDispatched&&
                      terminal->state==AmmoResourceRequestState::Rejected&&z.policy->RejectUndispatched(*z.physicalRequest)){
                 ++self.rejected_;z.request.reset();z.physicalRequest.reset();z.seedNeutral=true;
@@ -202,7 +233,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
             if(!z.policy->Bind(v.snapshot,now))return false;z.lastRaw=0;z.restart=false;z.seedNeutral=true;z.supportNeutral.reset();
         }
         if(!w.rawFresh||x.raw.input.sequence<=z.lastRaw){
-            if(!w.rawFresh){z.policy->Suspend();z.target.reset();z.recoveryPrepared=false;z.supportNeutral.reset();if(z.hand){(void)h.Release(x.input,z.hand->token);z.hand.reset();}}
+            if(!w.rawFresh){z.policy->Suspend();z.target.reset();z.recoveryPrepared=false;z.supportNeutral.reset();if(z.hand){(void)h.Release(x.input,z.hand->token,w.rawCause);z.hand.reset();}}
             return true;
         }
         const auto& r=x.raw;auto original=r.input;original.nowNs=now;
@@ -285,7 +316,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
         if(result.status==FixedContainerStatus::Suspended||result.status==FixedContainerStatus::Invalid){
             // The recognizer has revoked this grip. Keep its mechanical state
             // and recovery contact, but release the matching arbiter claim.
-            if(z.hand){(void)h.Release(x.input,z.hand->token);z.hand.reset();}
+            if(z.hand){(void)h.Release(x.input,z.hand->token,{HandReleaseSite::FixedPolicy,static_cast<std::uint8_t>(result.rejection),static_cast<std::uint8_t>(result.status),result.rejection>=FixedContainerRejection::Gesture?static_cast<std::uint8_t>(result.interaction.status):HandReleaseCause::Unknown});z.hand.reset();}
             z.target.reset();
         }
         if(result.status!=FixedContainerStatus::Gesture||result.interaction.status>=FeedInteractionStatus::InvalidProfile)
@@ -306,7 +337,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
             z.recoveryPrepared=false;
             for(unsigned n=0;n<z.equipment->parts.size();++n)if(z.equipment->parts[n].coupledOpening)
                 z.parts[n]=g.motion.returnToStart?z.equipment->parts[n].weaponFromStepStart[index]:z.equipment->parts[n].weaponFromStepEnd[index];
-            z.target.reset();if(z.hand){(void)h.Release(x.input,z.hand->token);z.hand.reset();}
+            z.target.reset();if(z.hand){(void)h.Release(x.input,z.hand->token,{HandReleaseSite::FixedPhysicalStep});z.hand.reset();}
         }
         if(result.dispatch){
             const auto requestId=self.api_.nextRequest(self.api_.context);
@@ -319,9 +350,9 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
             request.preparedCommand=result.dispatch->ammunition;
             request.sourceProof=AmmoResourceSourceProof{now,original.sequence,v.snapshot.sequence,v.snapshot.observedNs,v.snapshot.deadlineNs};
             z.request=request;z.physicalRequest=result.dispatch;*w.dispatch=request;
-            if(z.hand){(void)h.Release(x.input,z.hand->token);z.hand.reset();}z.target.reset();
+            if(z.hand){(void)h.Release(x.input,z.hand->token,{HandReleaseSite::FixedDispatch});z.hand.reset();}z.target.reset();
         }
-        if((!r.grip||releasing)&&!result.dispatch&&z.hand){(void)h.Release(x.input,z.hand->token);z.hand.reset();z.target.reset();
+        if((!r.grip||releasing)&&!result.dispatch&&z.hand){(void)h.Release(x.input,z.hand->token,{HandReleaseSite::FixedGrip});z.hand.reset();z.target.reset();
             if(step==FixedContainerStep::Insert){z.carried=false;z.carriedSupply.reset();}}
         return true;
     });

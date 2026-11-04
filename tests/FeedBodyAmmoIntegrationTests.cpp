@@ -147,7 +147,29 @@ int NoEntryAndVerifiedContextMigrationKeepTheExactPickup(){
     CHECK(f.supply.Custody()->object.item==item&&f.supply.Custody()->origin.native.identity==previous.identity);return 0;
 }
 }
-int main(){
+int FeedSupplyReleaseCauseDiagnostics(){
+    for(unsigned branch=0;branch<3;++branch){
+        Fixture f(RegisteredBc2FeedProfiles().front());f.Step(false);CHECK(f.Step(true));
+        const auto original=*f.supply.Held();const auto counts=f.body.native.counts;
+        HandClaimDropJournal<4> journal;f.hands.ObserveDrops(journal.Observer());
+        HandReleaseSite site=HandReleaseSite::Unknown;
+        if(branch==0)f.supply.Suspend(f.input,f.hands);
+        if(branch==1){
+            f.body.registrationKey=0; // Source fails before unrelated later gun tests.
+            CHECK(!f.supply.Update(f.body,f.input,f.chest,true,true,f.hands,f.intent));
+            site=HandReleaseSite::FeedSupplyAdmission;
+        }
+        if(branch==2){const auto command=f.Command();CHECK(f.supply.Bind(command,f.body,f.input,f.hands));site=HandReleaseSite::FeedSupplyBound;}
+        CHECK(!f.supply.Held()&&f.supply.Custody()&&f.supply.Custody()->object.item==original.item);
+        CHECK(journal.count==1&&journal.entries[0].claim.token==original.claim.token);
+        CHECK(journal.entries[0].cause.site==site&&journal.entries[0].cause.ammoReason==static_cast<std::uint8_t>(AmmoSupplyReason::Explicit));
+        CHECK(journal.entries[0].cause.rejection==(branch==1?static_cast<std::uint8_t>(FeedSupplyReleaseRejection::SourceUnavailable):HandReleaseCause::Unknown));
+        CHECK(journal.entries[0].claim.deadlineNs==original.claim.deadlineNs&&f.body.native.counts==counts);
+    }
+    return 0;
+}
+
+int main(){if(FeedSupplyReleaseCauseDiagnostics())return 1;
     CHECK(EveryEnrolledPouchUsesExactSourceAndAuthoredGrasp()==0);
     CHECK(PickupClaimsCustodyAndOnlyExactReceiptConsumes()==0);
     CHECK(ExhaustionMissingGeometryAndForeignHandsCannotAcquire()==0);

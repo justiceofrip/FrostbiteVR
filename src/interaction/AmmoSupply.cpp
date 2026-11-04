@@ -41,13 +41,13 @@ bool AmmoSupply::Budget(const AmmoSupplySource& s,std::uint32_t units,HandIntera
     const std::uint64_t pendingCost=pending_&&pending_->item!=item?pending_->units:0;
     return std::uint64_t(s.reserveUnits)>=pendingCost+units;
 }
-AmmoSupplyResult AmmoSupply::Drop(const HandInteractionSample& s,HandInteraction& hands,AmmoSupplyReason why)noexcept {
-    auto out=Snapshot(why);
-    if(held_){out.released=held_->item;hands.Release(s,held_->claim.token);held_.reset();}
+AmmoSupplyResult AmmoSupply::Drop(const HandInteractionSample& s,HandInteraction& hands,AmmoSupplyReason why,HandReleaseCause cause)noexcept {
+    auto out=Snapshot(why);cause.ammoReason=static_cast<std::uint8_t>(why);
+    if(held_){out.released=held_->item;hands.Release(s,held_->claim.token,cause);held_.reset();}
     out.held.reset();armed_=false;return out;
 }
-AmmoSupplyResult AmmoSupply::Cancel(const HandInteractionSample& s,HandInteraction& hands)noexcept {
-    blocked_=true;return Drop(s,hands,AmmoSupplyReason::Explicit);
+AmmoSupplyResult AmmoSupply::Cancel(const HandInteractionSample& s,HandInteraction& hands,HandReleaseCause cause)noexcept {
+    blocked_=true;return Drop(s,hands,AmmoSupplyReason::Explicit,cause);
 }
 AmmoSupplyResult AmmoSupply::Update(const AmmoSupplySample& s,HandInteraction& hands)noexcept {
     auto out=UpdateCurrent(s,hands);
@@ -67,7 +67,7 @@ AmmoSupplyResult AmmoSupply::Update(const AmmoSupplySample& s,HandInteraction& h
 AmmoSupplyResult AmmoSupply::RetainHeld(const HandInteractionSample& in,const AmmoSupplyIdentity& identity,
     bool gripPressed,HandInteraction& hands)noexcept {
     if(!held_||pending_||held_->identity!=identity||source_.identity!=identity){
-        blocked_=true;return Drop(in,hands,AmmoSupplyReason::SourceChanged);
+        blocked_=true;return Drop(in,hands,AmmoSupplyReason::SourceChanged,{HandReleaseSite::AmmoSupplyRetain});
     }
     AmmoSupplySample safety;safety.input=in;safety.source=source_;
     safety.trackingEpoch=identity.trackingEpoch;safety.gripPressed=gripPressed;
@@ -78,7 +78,7 @@ AmmoSupplyResult AmmoSupply::UpdateCurrent(const AmmoSupplySample& s,HandInterac
 }
 AmmoSupplyResult AmmoSupply::UpdateWithSource(const AmmoSupplySample& s,HandInteraction& hands,bool allowAcquire,bool sourceDeferred)noexcept {
     const auto& in=s.input;
-    const auto fail=[&](AmmoSupplyReason why){blocked_=true;return Drop(in,hands,why);};
+    const auto fail=[&](AmmoSupplyReason why){blocked_=true;return Drop(in,hands,why,{HandReleaseSite::AmmoSupplyUpdate});};
     if(!ConfigValid())return fail(AmmoSupplyReason::InvalidConfig);
     const auto h=static_cast<std::size_t>(config_.hand);
     if(!Owner(in.owner)||!in.sequence||in.observedNs<=0||in.observedNs>in.nowNs||
@@ -106,10 +106,10 @@ AmmoSupplyResult AmmoSupply::UpdateWithSource(const AmmoSupplySample& s,HandInte
     if(settled_.identity==s.source.identity&&(s.source.sequence<settled_.sequence||s.source.observedNs<settled_.observedNs||
         (s.source.sequence==settled_.sequence&&s.source!=settled_)))return fail(AmmoSupplyReason::InvalidSource);
     auto out=Snapshot();
-    if(changed||gap)out=Drop(in,hands,changed?AmmoSupplyReason::SourceChanged:AmmoSupplyReason::TrackingLost);
+    if(changed||gap)out=Drop(in,hands,changed?AmmoSupplyReason::SourceChanged:AmmoSupplyReason::TrackingLost,{HandReleaseSite::AmmoSupplyUpdate});
     if(!sourceDeferred)source_=s.source;
     if(!s.gripPressed||input_.released[h]){
-        if(held_)out=Drop(in,hands,AmmoSupplyReason::Released);
+        if(held_)out=Drop(in,hands,AmmoSupplyReason::Released,{HandReleaseSite::AmmoSupplyUpdate});
         if(sourceDeferred)armed_=false;
         else if(fresh&&!s.gripPressed)armed_=true;
         else if(!fresh&&packetGripPressed_)armed_=false; // Cannot invent neutral proof.
@@ -192,7 +192,7 @@ bool AmmoSupply::ReleaseSubmitted(const HandInteractionSample& safety,HandIntera
     if(!pending_||*pending_!=reservation||!held_||held_->item!=reservation.item||
         held_->claim.token!=reservation.claim||safety.owner!=reservation.identity.owner||
         safety.nowNs<lastNow_)return false;
-    Drop(safety,hands,AmmoSupplyReason::Released);
+    Drop(safety,hands,AmmoSupplyReason::Released,{HandReleaseSite::AmmoSupplySubmitted});
     return true;
 }
 AmmoSupplyResolution AmmoSupply::Resolve(const HandInteractionSample& safety,HandInteraction& hands,
@@ -213,7 +213,7 @@ AmmoSupplyResolution AmmoSupply::Resolve(const HandInteractionSample& safety,Han
     if(ack.status==ReloadAcknowledgement::Applied){
         out.consumed=pending_;
         // The original claim may already have ended. Never release a replacement.
-        hands.Release(safety,pending_->claim);
+        hands.Release(safety,pending_->claim,{HandReleaseSite::AmmoSupplyReceipt});
         if(held_&&held_->item==pending_->item&&held_->claim.token==pending_->claim)held_.reset();
         armed_=false;
     }
@@ -232,7 +232,7 @@ AmmoSupplyResolution AmmoSupply::SettleTerminal(const HandInteractionSample& saf
         out.consumed=pending_;
     }else if(status!=ReloadAcknowledgement::Rejected||r.reserveAfter!=r.reserveBefore)return out;
     out.accepted=true;out.releasedReservation=pending_;
-    hands.Release(safety,pending_->claim);
+    hands.Release(safety,pending_->claim,{HandReleaseSite::AmmoSupplyTerminal});
     if(held_&&held_->item==pending_->item&&held_->claim.token==pending_->claim)held_.reset();
     pending_.reset();armed_=false;blocked_=true;lastRetirement_=r.event;lastNow_=safety.nowNs;
     terminalCutoffNs_=std::max(terminalCutoffNs_,r.completedNs);
@@ -247,7 +247,7 @@ AmmoSupplyResolution AmmoSupply::RetireActor(const HandInteractionSample& safety
     out.accepted=true;out.releasedReservation=pending_; // no consumed/reserve event
     const auto old=pending_->identity;
     pending_.reset();lastNow_=safety.nowNs;terminalCutoffNs_=std::max(terminalCutoffNs_,r.observedNs);
-    if(held_&&held_->identity==old)Drop(safety,hands,AmmoSupplyReason::SourceChanged);
+    if(held_&&held_->identity==old)Drop(safety,hands,AmmoSupplyReason::SourceChanged,{HandReleaseSite::AmmoSupplyRetired});
     if(source_.identity==old)source_={};
     if(settled_.identity==old)settled_={};
     for(auto& entry:history_)if(entry&&entry->item.identity==old)entry.reset();
@@ -272,7 +272,7 @@ AmmoSupplyResolution AmmoSupply::Rebaseline(const HandInteractionSample& safety,
     // Original ambiguous resource retires; replacement can survive only against
     // the freshly reconciled exact source and its remaining authoritative count.
     if(held_&&(originalHeld||held_->identity!=fresh.identity||held_->family!=fresh.family||
-        held_->units!=fresh.objectUnits||held_->units>fresh.reserveUnits))Drop(safety,hands,AmmoSupplyReason::SourceChanged);
+        held_->units!=fresh.objectUnits||held_->units>fresh.reserveUnits))Drop(safety,hands,AmmoSupplyReason::SourceChanged,{HandReleaseSite::AmmoSupplyRebaseline});
     armed_=false;return out;
 }
 } // namespace fvr::interaction

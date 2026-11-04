@@ -42,9 +42,21 @@ bool Bc2FeedAmmoSupply::Update(const Bc2FeedBodyAmmo& body,const HandInteraction
     const std::optional<math::Matrix4>& pose,bool grip,bool acquire,HandInteraction& hands,std::uint64_t& intent)noexcept {
     const auto source=Bc2FeedBodySource(body,input,input.nowNs);
     const auto gun=hands.Current(InteractionHand::Right);
-    if(!source||!gun||gun->token.kind!=HandClaimKind::GunHold||gun->token.owner!=input.owner||
-       gun->token.item!=source->identity.weapon||gun->inputSequence!=input.sequence||gun->deadlineNs<=input.nowNs||
-       !input.focused||!input.tracked[0]||!input.tracked[1]||input.released[1]){Suspend(input,hands);return false;}
+    auto rejection=FeedSupplyReleaseRejection::Unknown;
+    const auto rejected=[&](bool failed,FeedSupplyReleaseRejection why)noexcept {
+        if(failed)rejection=why;return failed;
+    };
+    if(rejected(!source,FeedSupplyReleaseRejection::SourceUnavailable)||
+       rejected(!gun,FeedSupplyReleaseRejection::GunMissing)||
+       rejected(gun->token.kind!=HandClaimKind::GunHold,FeedSupplyReleaseRejection::GunKind)||
+       rejected(gun->token.owner!=input.owner,FeedSupplyReleaseRejection::GunOwner)||
+       rejected(gun->token.item!=source->identity.weapon,FeedSupplyReleaseRejection::GunItem)||
+       rejected(gun->inputSequence!=input.sequence,FeedSupplyReleaseRejection::GunInput)||
+       rejected(gun->deadlineNs<=input.nowNs,FeedSupplyReleaseRejection::GunExpired)||
+       rejected(!input.focused,FeedSupplyReleaseRejection::FocusLost)||
+       rejected(!input.tracked[0],FeedSupplyReleaseRejection::LeftUntracked)||
+       rejected(!input.tracked[1],FeedSupplyReleaseRejection::RightUntracked)||
+       rejected(input.released[1],FeedSupplyReleaseRejection::RightReleased)){Suspend(input,hands,{HandReleaseSite::FeedSupplyAdmission,static_cast<std::uint8_t>(rejection)});return false;}
     AmmoSupplySample sample;sample.input=input;sample.source=*source;sample.trackingEpoch=input.owner.space;
     sample.gripPressed=grip;if(pose){sample.bodyFromHand=*pose;sample.geometrySequence=input.sequence;}
     if(acquire&&!custody_&&intent!=UINT64_MAX)sample.intent=++intent;
@@ -52,8 +64,8 @@ bool Bc2FeedAmmoSupply::Update(const Bc2FeedBodyAmmo& body,const HandInteraction
     if(result.acquired&&result.held){custody_=Bc2FeedSupplyCustody{body,*source,*result.held,body,input.owner,{}};return true;}
     return false;
 }
-void Bc2FeedAmmoSupply::Suspend(const HandInteractionSample& input,HandInteraction& hands)noexcept {
-    (void)pickup_.Cancel(input,hands); // Typed reserve custody survives loss of pose/hand.
+void Bc2FeedAmmoSupply::Suspend(const HandInteractionSample& input,HandInteraction& hands,HandReleaseCause cause)noexcept {
+    (void)pickup_.Cancel(input,hands,cause); // Typed reserve custody survives loss of pose/hand.
 }
 bool Bc2FeedAmmoSupply::Ready(const Bc2FeedBodyAmmo& body,const HandInteractionSample& input)const noexcept {
     if(!custody_||custody_->pending)return false;const auto source=Bc2FeedBodySource(body,input,input.nowNs);
@@ -84,7 +96,7 @@ bool Bc2FeedAmmoSupply::Bind(const FeedAmmunitionCommand& command,const Bc2FeedB
        command.authority.supply!=body.supply||command.authority.rounds!=int(custody_->object.units)||
        command.after.reserve!=command.before.counts.reserve-command.authority.rounds||
        command.after.loaded!=command.before.counts.loaded+command.authority.rounds)return false;
-    custody_->pending=command;Suspend(input,hands);return true;
+    custody_->pending=command;Suspend(input,hands,{HandReleaseSite::FeedSupplyBound});return true;
 }
 bool Bc2FeedAmmoSupply::Complete(const FeedAmmunitionReceipt& receipt)noexcept {
     if(!custody_||!custody_->pending||receipt.command!=*custody_->pending||!receipt.authorityVerified||

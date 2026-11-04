@@ -4729,6 +4729,9 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
     for(std::size_t n=0;n<handDropJournal.count;++n){
         if(n)out<<',';const auto& d=handDropJournal.entries[n];const auto& s=d.attempted;
         out<<"{\"reason\":"<<unsigned(d.reason)<<",\"claim\":";claimJson(d.claim);
+        out<<",\"release_cause\":{\"site\":"<<unsigned(d.cause.site)<<",\"rejection\":"<<unsigned(d.cause.rejection)
+           <<",\"fixed_status\":"<<unsigned(d.cause.fixedStatus)<<",\"feed_status\":"<<unsigned(d.cause.feedStatus)
+           <<",\"ammo_reason\":"<<unsigned(d.cause.ammoReason)<<'}';
         out<<",\"input\":"<<s.sequence<<",\"observed_ns\":"<<s.observedNs<<",\"deadline_ns\":"<<s.deadlineNs
            <<",\"now_ns\":"<<s.nowNs<<",\"previous_now_ns\":"<<d.previousNowNs
            <<",\"focused\":"<<(s.focused?"true":"false")

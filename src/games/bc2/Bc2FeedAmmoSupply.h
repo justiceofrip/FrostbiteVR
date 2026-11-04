@@ -26,13 +26,17 @@ struct Bc2FeedSupplyCustody {
     // relinquishes its hand only. An exact feed command then owns settlement.
     std::optional<interaction::FeedAmmunitionCommand> pending;
 };
+enum class FeedSupplyReleaseRejection:std::uint8_t {
+    Unknown,SourceUnavailable,GunMissing,GunKind,GunOwner,GunItem,GunInput,
+    GunExpired,FocusLost,LeftUntracked,RightUntracked,RightReleased
+};
 class Bc2FeedAmmoSupply {
 public:
     Bc2FeedAmmoSupply()noexcept:pickup_(Bc2FeedSupplyConfig()){}
     bool Update(const Bc2FeedBodyAmmo&,const interaction::HandInteractionSample&,
         const std::optional<math::Matrix4>& bodyFromHand,bool grip,bool acquire,
         interaction::HandInteraction&,std::uint64_t& intent)noexcept;
-    void Suspend(const interaction::HandInteractionSample&,interaction::HandInteraction&)noexcept;
+    void Suspend(const interaction::HandInteractionSample&,interaction::HandInteraction&,interaction::HandReleaseCause cause={})noexcept;
     bool Ready(const Bc2FeedBodyAmmo&,const interaction::HandInteractionSample&)const noexcept;
     bool Bind(const interaction::FeedAmmunitionCommand&,const Bc2FeedBodyAmmo&,
         const interaction::HandInteractionSample&,interaction::HandInteraction&)noexcept;
