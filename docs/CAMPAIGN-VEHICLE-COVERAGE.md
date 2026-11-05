@@ -10,7 +10,7 @@ complete current-build campaign pass.
 | Map | Required seat | Existing path | Remaining distinction |
 | --- | --- | --- | --- |
 | SP_01 | Kurogane gunner1 | Generic native seat | Capture the actual jeepRideStart/full ride, not an unidentified gunner |
-| SP_02 | Truck_Chase passenger3 | Read-only attached-soldier reader | Personal weapon callback/constraint ownership; production adapter absent |
+| SP_02 | Truck_Chase passenger3 | Read-only attached-soldier reader; stock aim clamp located | Confirm an actual seat update; personal-weapon adapter absent |
 | SP_03 | rowing_boat0 | Unclassified | Not the armed PBL |
 | SP_03 | PBL_weapon0 | Exact PBL | Current seat transitions and actual sight-line reticle |
 | SP_04 | AH60_Adv_Sp04 gunner1 | Generic mounted gunner | Human is not the pilot; actual seat response still needs acceptance |
@@ -121,6 +121,15 @@ its positive result grants no control. Follow it with the existing passive
 gameplay hook observation of selected aim/fire/rig callback owners and mission
 permissions before enabling a shared personal-weapon actor path. Preserve
 mission movement, seat camera and aim limits; do not mark the actor on-foot.
+
+For the SP_02 truck, the stock soldier update passes the selected weapon's
+aimer to the seat clamp. The authored seat limits yaw to -40/+40 and pitch to
+-15/+55 degrees. The stock update applies additional offsets afterward: the
+final camera angle cannot establish that those limits governed the player. For
+a passive observation, establish the actual map, attached player and seat
+first, then join the yaw input (0x62a383), pitch input (0x62a396) and
+immediate stored results (0x62a39e) in one update. No movement, camera or fire
+control is enabled by this finding.
 
 After structural admission, use the existing ControlsVehicle lean/return recipe,
 then a separate native Shoot witness. An 80 ms fire pulse cannot cover a mounted

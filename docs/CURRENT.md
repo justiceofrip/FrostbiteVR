@@ -5,7 +5,7 @@ Updated November 4, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
-Private 0.1.62 is installed with 0.1.61 as fallback. Source 42ee886 is pushed; normal builds passed 350 x86 / 347 x64, both parsed the 307-part body cache, and installed setup validated with settings unchanged. No new gameplay or headset session is claimed. Normal Play draws and returns the original KNV-1 knife from the chest; damage from a tracked strike remains unqualified. The private strike switch must remain off. [Chest controls](../handoff/integrations/coordinator-20261104-chest415/README.txt).
+Private 0.1.63 is installed with 0.1.62 as fallback. Both development refs contain a6aa2b8; the normal builds passed 350 x86 and 347 x64 tests. Installed setup verified the 307-part cache and preserved settings. Right A now requests a seat change when the mission permits it, and fixed-chamber weapons no longer inherit a stale reload when swapped. Normal Play can draw and return the original KNV-1 at the chest. Tracked knife damage and headset performance remain unverified. [Chest controls](../handoff/integrations/coordinator-20261104-chest415/README.txt) and [reload and vehicle changes](../handoff/integrations/coordinator-20261104-seat-reload/README.txt).
 
 The installed magazine handler now accepts a settled bolt-action rifle when its magazine needs work. It preserves each rifle’s empty well across switches, including before a new native binding arrives; an owed bolt stroke stays with its owner. This covers 17 M95, M24, GOL and SV98 configurations. A complete manual bolt-rifle magazine reload has not yet been demonstrated in BC2. [Weapon-family coverage](WEAPON-COVERAGE-CURRENT.md).
 

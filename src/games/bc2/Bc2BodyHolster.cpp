@@ -113,8 +113,23 @@ bool Bc2BodyHolster::Replacement(const BodyHolsterSample& s)const noexcept {
         for(unsigned k=0;k<n;++k)if(s.carried->items[k].weapon==item.weapon)return false;
         if(item.weapon==s.nativeOwner.weapon)current=&item;
     }
-    if(!current||!BodyLongGunCategory(current->category)||current->data!=s.equipment.data||
-       current->persistence!=s.equipment.persistence||current->weapon!=s.equipment.weapon)return false;
+    if(!current||current->data!=s.equipment.data||current->persistence!=s.equipment.persistence||
+       current->weapon!=s.equipment.weapon)return false;
+    if(!BodyLongGunCategory(current->category)){
+        // SP_01 can select its charge while the prior long gun is stowed.
+        // Retire that gun's suppression only through the existing ordinary
+        // stereo/neutral/hand checks. The charge has no body carry slot.
+        constexpr char chargePath[]="Objects/Weapons/Handheld/Beach/Expack/Expack";
+        const auto& selected=s.selected;
+        if(temporaryTool_||current->category!=10||s.equipment.Asset()!="Expack_US"||
+           current->weapon==old->weapon||renderCarried_->inventory!=s.carried->inventory||
+           renderCarried_->switching!=s.carried->switching||old->slot>=s.carried->count||
+           s.carried->items[old->slot]!=*old||!selected||selected->owner!=s.nativeOwner||
+           selected->inventory!=s.carried->inventory||selected->selectedSlot!=current->slot||
+           selected->weaponData!=current->data||!selected->configurationPathVerified||
+           selected->configurationPathPointer<0x10000||
+           !std::equal(std::begin(chargePath),std::end(chargePath),selected->configurationPath.begin()))return false;
+    }
     // Native ground exchange can replace the configuration on the same object,
     // swap its object pointer, or rebuild related attachment/container entries.
     // Those changes revoke old slot/presentation authority; they must not make

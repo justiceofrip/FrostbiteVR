@@ -90,7 +90,73 @@ void ContinueUnsupported(Fixture& f,bool pair=true,bool neutral=true){
         f.s.ordinaryPair=OrdinaryEquipmentPair{*request,rig,100+request->input.sequence,f.s.hand.nowNs,request->input.deadlineNs,3};}
     f.Suppress();f.Tick();
 }
+int StowedGunAllowsOnlyVerifiedOpeningChargeSelection(){
+    // Start with the original long gun and an unassigned C4 already carried.
+    // BC2 selects the existing second item without a VR draw command.
+    for(unsigned fault=0;fault<9;++fault){
+        Fixture f;f.s.carried->items[1].category=10;
+        f.items[1].preferredSlots={};f.items[1].preferenceCount=0;
+        ++f.s.body.inventory.revision;f.Advance();f.Tick();
+        CHECK(f.Empty());
+        const auto stored=f.out.inventory.slots;
+        CHECK(stored.size()==1&&stored[0].item==f.items[0].key);
+        f.Advance();
+        f.s.nativeOwner.weapon=B;++f.s.nativeOwner.equipGeneration;++f.s.hand.owner.equipGeneration;
+        f.s.gun={B,f.s.hand.owner.equipGeneration};f.s.body.inventory.selected=f.items[1].key;
+        const auto charge=f.s.carried->items[1];
+        f.s.equipment={charge.weapon,charge.data,charge.persistence,{}};
+        strcpy_s(f.s.equipment.asset.data(),f.s.equipment.asset.size(),"Expack_US");
+        f.Metadata();
+        auto mesh=std::make_shared<SelectedMeshesSnapshot>(*f.s.selected);
+        strcpy_s(mesh->weaponName.data(),mesh->weaponName.size(),"Expack_US");
+        strcpy_s(mesh->configurationPath.data(),mesh->configurationPath.size(),"Objects/Weapons/Handheld/Beach/Expack/Expack");
+        mesh->selectedSlot=charge.slot;mesh->weaponData=charge.data;mesh->inventory=f.s.carried->inventory;
+        mesh->stateCount=2;mesh->soleConfiguredArray=0;
+        mesh->states[1]=mesh->states[0];mesh->states[1].array=0x71000;
+        const char* meshes[]={"Objects/Weapons/Handheld/Beach/Expack/expack_detonator_Mesh",
+                              "Objects/Weapons/Handheld/Beach/Expack/expack_explosive_Mesh"};
+        for(unsigned n=0;n<2;++n){
+            auto& part=mesh->states[n].meshes[0];part.kind=SelectedMeshKind::Unknown;
+            part.address+=n*0x1000;part.namePointer+=n*0x1000;
+            strcpy_s(part.assetPath.data(),part.assetPath.size(),meshes[n]);
+        }
+        if(fault==1)mesh->configurationPathVerified=false;
+        if(fault==2)mesh->configurationPath[0]='X';
+        if(fault==3)mesh->selectedSlot=0;
+        if(fault==4)++mesh->weaponData;
+        if(fault==5)++mesh->inventory;
+        if(fault==6)f.s.carried->items[1].category=12;
+        if(fault==7)++f.s.carried->items[0].data;
+        if(fault==8)f.s.equipment.asset[0]='X';
+        f.s.selected=mesh;f.s.triggerNeutral=false;f.hands.Update(f.s.hand);f.Tick();
+        CHECK(f.adapter.BlocksActions()&&!f.adapter.TemporaryToolActive()&&!f.out.visibility.enabled&&!f.out.select);
+        CHECK(!f.hands.Current(InteractionHand::Right));
+        if(fault){
+            ContinueUnsupported(f);CHECK(f.adapter.BlocksActions()&&!f.out.ordinaryRecovery&&!f.out.ordinaryRetired);
+            continue;
+        }
+        CHECK(f.out.ordinaryRecovery&&!f.adapter.AcceptsProfile(f.s.nativeOwner,mesh,f.s.hand.nowNs));
+        // Ordinary non-Held suppression clears BOTH the charge bit and the plunger axis.
+        Word(f.cache,0x98,(1u<<14)|(1u<<29));Word(f.cache,40,std::bit_cast<unsigned>(1.f));
+        CHECK(f.Suppress()&&Word(f.cache,0x98)==0&&Word(f.cache,40)==0);
+        ContinueUnsupported(f,false);CHECK(f.adapter.BlocksActions());
+        ContinueUnsupported(f,true,false);CHECK(f.adapter.BlocksActions());
+        ContinueUnsupported(f);CHECK(f.out.ordinaryRetired&&!f.adapter.BlocksActions()&&!f.adapter.Demand(f.s));
+        const auto held=f.hands.Current(InteractionHand::Right);
+        CHECK(held&&held->token.kind==HandClaimKind::GunHold&&held->token.item==f.s.gun);
+        CHECK(f.out.inventory.held==f.items[1].key&&f.out.inventory.slots==stored);
+        CHECK(!f.out.select&&!f.out.visibility.enabled&&!f.out.freeRight&&!f.out.inventory.committedRequest);
+        ActionOutput action;action.owner=f.s.nativeOwner.soldier;action.active=true;
+        action.held=Reload;ApplySelectedReloadRoute(action,EntryAction::Zoom);
+        InputOverride input;CHECK(input.Apply(f.cache,action));input.Commit();
+        CHECK(Word(f.cache,0x98)==(1u<<14)&&Word(f.cache,40)==0);
+        action.held=Fire;CHECK(input.Apply(f.cache,action));input.Commit();
+        CHECK(Word(f.cache,0x98)==0&&Word(f.cache,40)==std::bit_cast<unsigned>(1.f));
+    }
+    return 0;
+}
 int UnsupportedExchangeRequiresNewOrdinaryPair(){
+    if(StowedGunAllowsOnlyVerifiedOpeningChargeSelection())return 1;
     Fixture f;CHECK(f.Empty());const auto old=*f.out.freeRight;ExchangeUnsupported(f);
     CHECK(f.out.phase==BodyHolsterPhase::Recovering&&f.out.ordinaryRecovery&&!f.out.visibility.enabled);
     CHECK(f.out.blockWeaponActions&&!f.hands.Current(InteractionHand::Right)&&!f.out.select);

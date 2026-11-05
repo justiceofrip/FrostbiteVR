@@ -119,6 +119,7 @@ static_assert(FVR_BC2_PHYSICAL_RELOAD_LIFECYCLE_SCENARIO>=1&&FVR_BC2_PHYSICAL_RE
 #endif
 #include "Bc2ServerFireObservation.h"
 #include "Bc2FireRouteTelemetry.h"
+#include "Bc2ExpackAttemptTrace.h"
 namespace fvr::bc2::gameplay {
 namespace {
 using UpdateFn=void(__thiscall*)(void*,float);using GatherFn=void(__thiscall*)(void*,void*);
@@ -539,6 +540,7 @@ struct Anchor {std::atomic<unsigned> sequence=0,soldier=0,weak=0;std::atomic<std
 interaction::TrackedBodyAnchor bodyAnchor;float baseYaw=0,lastHandYaw=0,lastHeadYaw=0;
 std::atomic<unsigned> aimSamples=0,baseViews=0;
 // Request samples and snapshot outcomes, not native charge/throw acknowledgements.
+ExpackAttemptTrace expackAttempts;
 std::atomic<unsigned> expackReloadRequests=0,expackReloadZoomRoutes=0,expackReloadUnresolved=0;
 std::array<std::atomic<unsigned>,unsigned(ReloadStateStatus::ChangedDuringRead)+1> expackReloadReads{};
 struct BaseRecord {float nativeYaw=0,nativePitch=0,sourceYaw=0,viewYaw=0,bodyYaw=0;bool sharedEye=false,inputMaskRead=false;math::Vec3 sourcePosition{},eyePosition{};unsigned weapon=0,player=0,soldier=0,weak=0,controlled=0,inputMask=0;ULONGLONG ms=0;std::uint64_t space=0;RenderedViewEvidence rendered{};};
@@ -2225,6 +2227,17 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     if(!fresh||!input.focused||vehicleShotSpace!=input.spaceGeneration){vehicleShotObserver.Invalidate();boatReticle.Invalidate();}
     vehicleShotSpace=input.spaceGeneration;
     const auto& owner=scope->owner;
+    const auto asset=owner.equipment.Asset();
+    const bool expackSelected=owner.foot&&asset=="Expack_US";
+    std::optional<ExpackAttempt> charge;
+    if(expackSelected){
+        charge=expackAttempts.Observe(epoch,inputEpoch,input,clock.QuadPart,inputDeadline);
+        if(charge){charge->gather=gatherSequence;charge->weapon=owner.weapon;charge->data=owner.equipment.data;}
+    }
+    struct SaveAttempt {
+        const std::optional<ExpackAttempt>& row;
+        ~SaveAttempt(){if(row)expackAttempts.Publish(*row);}
+    } saveAttempt{charge};
     struct FireRouteGatherScope {
         FireRouteRecord record{};bool observing=false;
         FireRouteRecord* previous=interactionTrace;
@@ -2320,11 +2333,12 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     // Duplicate samples preserve holds, never duplicate action/snap edges.
     // Native gather encodes allowed float actions in low bits of +98.
     // Require movement and fire eligibility; menus/cutscenes must keep control.
-    const auto allowed=U32(owner.cache+0x98);
+    unsigned allowed=0;const bool allowedRead=Read(owner.cache+0x98,&allowed,sizeof(allowed));
     const bool vehicleInteraction=!owner.foot&&Type(owner.controlled,"ClientVehicleEntity")&&(allowed&0x11u)==0x11u;
     bool nativePlaying=owner.foot?(allowed&0x103u)==0x103u:vehicleInteraction;
     if(!nativePlaying)fireTrace.record.reasons|=FireRouteNativeInactive;
     interact.playing=nativePlaying;
+    if(charge&&allowedRead)charge->nativePlaying=nativePlaying;
     if(owner.foot&&!nativePlaying)++nativeInactive;
     if(!owner.foot){
         // Vehicle controls have their own neutral recovery, continuous axes and
@@ -2533,8 +2547,11 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         interaction::ValidInput(input)&&input.focused&&input.headValid;
     auto out=deferActions?interaction::ActionOutput{}:actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying,true,rigEpoch,movementEpoch},input.predictedNs,HandNanos(clock.QuadPart));
     fireTrace.record.mapped=(out.held&interaction::Fire)!=0;
+    if(charge&&!deferActions)charge->semanticReload=ExpackAttempt::ReloadLevels(out);
     if(m95StockShotFixture&&actionInput.hands[1].trigger<.75f){out.held&=~interaction::Fire;out.pressed&=~interaction::Fire;}
-    if(!fresh||!nativePlaying||!interaction::ValidInput(input)||!input.focused||!input.headValid){ClearReloadOwner(ReloadOwnerLoss::PresentationUnavailable);CancelSight();weaponModeHeld=true;ResetSupportGrip(!fresh?"stale_input":!nativePlaying?"native_inactive":!interaction::ValidInput(input)?"invalid_input":!input.focused?"focus_loss":"head_untracked");ResetHandOwnership("input_unavailable"); {std::lock_guard lock(shotPoseMutex);shotHistory.Reset();} rigPublication::PublishTracking({});roomscale.Suspend();
+    if(!fresh||!nativePlaying||!interaction::ValidInput(input)||!input.focused||!input.headValid){
+        if(charge)charge->write="input_or_play_gate_refused";
+        ClearReloadOwner(ReloadOwnerLoss::PresentationUnavailable);CancelSight();weaponModeHeld=true;ResetSupportGrip(!fresh?"stale_input":!nativePlaying?"native_inactive":!interaction::ValidInput(input)?"invalid_input":!input.focused?"focus_loss":"head_untracked");ResetHandOwnership("input_unavailable"); {std::lock_guard lock(shotPoseMutex);shotHistory.Reset();} rigPublication::PublishTracking({});roomscale.Suspend();
 #ifdef FVR_BC2_SHELL_FOCUS_LOSS_PROBE
         if(fresh&&!input.focused&&resourceInventoryFixture){
             const ReloadStateOwner current{owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
@@ -2551,12 +2568,14 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     if(!out.active||out.owner!=owner.soldier){out={};out.owner=owner.soldier;}
     Owner check{};const bool ownerResolved=Resolve(check);
     if(!ownerResolved||check!=owner||!Writable(owner.cache,InputBytes)){
+        if(charge)charge->write="owner_or_cache_refused";
         fireTrace.record.reasons|=FireRouteOwnerUnavailable;
         ClearReloadOwner(ownerResolved&&check!=owner?ReloadOwnerLoss::LifetimeEnded:ReloadOwnerLoss::PresentationUnavailable);
         CancelSight();ResetSupportGrip("owner_unavailable");ResetHandOwnership("owner_unavailable",!ownerResolved||check==owner);rigPublication::PublishTracking({});return;}
     const auto aimer=U32(owner.aim+8);
     float nativeYaw=0;const bool aimValid=owner.aim&&U32(U32(owner.aim)+0x28)==0&&Type(U32(aimer),"HaloAimerData")&&
         Read(aimer+12,&nativeYaw,4)&&std::isfinite(nativeYaw)&&std::abs(nativeYaw)<100&&Writable(aimer+12,8)&&Writable(owner.aim+12,8);
+    if(charge)charge->nativeAim=aimValid;
     if(handPoses&&!aimValid)rigPublication::PublishTracking({});
 
     // On-demand bounded observer. No native calls/writes and no reload policy
@@ -2589,7 +2608,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             ClearReloadOwner(loss,ReloadOwnerLossOrigin::Observation,feedCurrent);
         }
     }
-    const auto weaponAsset=owner.equipment.asset;const auto asset=owner.equipment.Asset();
+    const auto weaponAsset=owner.equipment.asset;
     const auto itemProfileCandidate=FindWeaponProfile(asset);
     // 40mmgl is a generic name reused by other rifles. The measured profile is
     // only the exact shared scoped-XM8 mesh/persistence/mode-map family.
@@ -2743,6 +2762,13 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     if(twoHandGrip){
         ObserveHandOwnership(owner,input,clock.QuadPart,aimValid,
             ((out.pressed|out.held)&(interaction::Use|interaction::NextWeapon|interaction::PreviousWeapon))!=0,familyBinding);
+        if(charge){
+            for(const auto& lost:handLifecycle.released){
+                if(lost&&lost->token.hand==interaction::InteractionHand::Right){
+                    charge->releasedRightKind=int(lost->token.kind);charge->releasedRightReason=int(lost->reason);
+                }
+            }
+        }
         const auto left=handOwnership.Current(interaction::InteractionHand::Left);
         if(sightPhase!=interaction::SightFlipPhase::Idle&&(!left||left->token.kind!=interaction::HandClaimKind::Sight)&&
             !(sightLeaseContinuation&&sightPhase==interaction::SightFlipPhase::AwaitingAcknowledgement&&sightAcknowledged))CancelSight();
@@ -2770,6 +2796,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     // Deferred diagnostic mappings are now complete; this precedes all ordinary
     // magazine/feed/pump/sight filters and never changes the ActionOutput.
     fireTrace.record.mapped=(out.held&interaction::Fire)!=0;
+    if(charge&&deferActions)charge->semanticReload=ExpackAttempt::ReloadLevels(out);
     Bc2PhysicalPistolSlideResult pistolSlideResult;
     Bc2PhysicalFixedContainerResult fixedResult;
     std::optional<Bc2FixedContainerObservation> fixedContainerObservation;
@@ -3585,6 +3612,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         // Reading the router must not extend the input deadline or carry a
         // command across pickup/seat/actor replacement while resolving it.
         Owner current{};if(!QueryPerformanceCounter(&clock)||clock.QuadPart>=inputDeadline||!Resolve(current)||current!=owner||!Writable(owner.cache,InputBytes)){
+            if(charge)charge->write="context_recheck_refused";
             fireTrace.record.reasons|=FireRouteContextRecheck;return;}
     }
 #if defined(FVR_BC2_ORDINARY_GRENADE_PROBE) || defined(FVR_BC2_PLAYER_GRENADE)
@@ -3641,7 +3669,26 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     // Route the existing right-secondary Reload request only after all attack
     // gates: some magazine/cycle gates intentionally leave Reload available.
     // Fire8 remains the plunger; this creates no trigger or selection request.
-    if(asset=="Expack_US"&&((out.held|out.pressed|out.released)&interaction::Reload)){
+    std::optional<EntryAction> heldChargeRoute;
+    const auto expackGunHeld=[&](const auto& hold,std::int64_t now){
+        return hold&&hold->token.kind==interaction::HandClaimKind::GunHold&&hold->token.owner==handSample.owner&&
+            hold->token.item==handItem&&hold->inputSequence==input.generation&&hold->deadlineNs>now;
+    };
+    if(charge){
+        charge->routeReload=ExpackAttempt::ReloadLevels(out);charge->route="no_reload";
+        charge->bodyBlocked=bodyDraw.blockFire;
+        charge->holsterPhase=bodyHolster?int(bodyHolster->Phase()):int(BodyHolsterPhase::Disabled);
+        charge->tool=bodyHolster&&bodyHolster->TemporaryToolActive();
+        LARGE_INTEGER stamp{};
+        if(twoHandGrip&&handSample.sequence==input.generation&&handSample.owner.space==input.spaceGeneration&&
+           QueryPerformanceCounter(&stamp)&&stamp.QuadPart>=charge->receivedQpc&&stamp.QuadPart<charge->deadlineQpc){
+            const auto left=handOwnership.Current(interaction::InteractionHand::Left);
+            const auto right=handOwnership.Current(interaction::InteractionHand::Right);
+            charge->leftKind=left?int(left->token.kind):0;charge->rightKind=right?int(right->token.kind):0;
+            charge->rightHold=expackGunHeld(right,HandNanos(stamp.QuadPart));
+        }
+    }
+    if(expackSelected&&((out.held|out.pressed|out.released)&interaction::Reload)){
         ++expackReloadRequests;
         std::optional<EntryAction> route;
         const bool settled=out.active&&aimValid&&nativePlaying&&!weaponVisibilityProbe&&!deathProbe&&!equipProbe&&
@@ -3656,22 +3703,33 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             (!magazineDetached||!magazineDetached->BlocksActions());
         const ReloadStateOwner expected{owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
         LARGE_INTEGER before{},after{};
+        if(charge){charge->settled=settled;charge->route=settled?"binding_or_clock_unavailable":"unsettled";}
         if(settled&&reloadStateBinding&&QueryPerformanceCounter(&before)){
             const ReloadStateMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t n){return Read(at,dst,n);},
                 [](void*,unsigned at,const char* name){return Type(at,name);}};
             const auto selected=ReadReloadState(memory,*reloadStateBinding,unsigned(image),expected,input.generation,HandNanos(before.QuadPart));
             ++expackReloadReads[unsigned(selected.status)];
+            if(charge){
+                charge->snapshot=int(selected.status);
+                charge->route=!selected.snapshot?"snapshot_unavailable":selected.snapshot->config.weaponData!=owner.equipment.data?
+                    "selected_data_mismatch":"owner_or_lease_unverified";
+            }
             Owner current{};
             if(selected.snapshot&&selected.snapshot->config.weaponData==owner.equipment.data&&
                Resolve(current)&&current==owner&&QueryPerformanceCounter(&after)&&after.QuadPart<inputDeadline){
                 const auto hold=handOwnership.Current(interaction::InteractionHand::Right);
-                if(hold&&hold->token.kind==interaction::HandClaimKind::GunHold&&hold->token.owner==handSample.owner&&
-                   hold->token.item==handItem&&hold->inputSequence==input.generation&&hold->deadlineNs>HandNanos(after.QuadPart))
-                    route=VerifiedSelectedReloadAction(*selected.snapshot,expected,input.generation,HandNanos(after.QuadPart));
+                const bool held=expackGunHeld(hold,HandNanos(after.QuadPart));
+                if(held)route=VerifiedSelectedReloadAction(*selected.snapshot,expected,input.generation,HandNanos(after.QuadPart));
+                if(charge){
+                    charge->rightHold=held;
+                    charge->route=!held?"right_hold_denied":!route?"unverified_action":
+                        *route==EntryAction::Zoom?"zoom14":"reload29";
+                }
             }
         }
         if(route==EntryAction::Zoom)++expackReloadZoomRoutes;
         else if(!route)++expackReloadUnresolved;
+        if(out.held&interaction::Reload)heldChargeRoute=route;
         ApplySelectedReloadRoute(out,route);
     }
     // Opening SP_01 equips a distinct KNV-1 whose authored attack is melee37.
@@ -3776,12 +3834,17 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     // Native reads and interaction processing above can outlast the packet.
     // Recheck the original lease and exact owner for ordinary firearms too;
     // Use/selected-knife checks alone leave the common held-Fire path exposed.
+    if(charge){
+        charge->dispatchZoom=bool(out.held&interaction::AlternateFire);charge->dispatchReload=bool(out.held&interaction::Reload);
+        charge->dispatchFire=bool(out.held&interaction::Fire);
+    }
     LARGE_INTEGER dispatchClock{};Owner dispatchOwner{};
     const bool dispatchOwnerCurrent=Resolve(dispatchOwner)&&dispatchOwner==owner;
     const bool dispatchCacheWritable=dispatchOwnerCurrent&&Writable(owner.cache,InputBytes);
     const bool dispatchClockOkay=QueryPerformanceCounter(&dispatchClock)!=FALSE;
     if(!GameplayInputDispatchCurrent(gameplayInputLease,dispatchClockOkay?dispatchClock.QuadPart:0,
         dispatchOwnerCurrent,dispatchCacheWritable)){
+        if(charge)charge->write="dispatch_refused";
         fireTrace.record.reasons|=(!dispatchClockOkay||!gameplayInputLease.Fresh(dispatchClock.QuadPart))?
             FireRouteStaleInput:FireRouteOwnerUnavailable;
         // Match a stale reception's semantic invalidation. A processing stall
@@ -3942,6 +4005,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             }else if(contextualTool)contextualTool->Missing(holsterBodySample->hand,handOwnership);
 #endif
             reloadFlowRuntime::PublishAmmoResourceBinding(bodyInventory->ResourceBinding(holsterBodySample->owner,holsterBodySample->hand.nowNs));
+            if(charge)charge->postHolsterBlocked=holsterOutcome.blockWeaponActions;
             if(holsterOutcome.blockWeaponActions){std::lock_guard lock(shotPoseMutex);shotHistory.Reset();}
             if(holsterOutcome.select){
                 // A holstered item remains native-selected. Drawing that exact
@@ -4051,8 +4115,32 @@ void __fastcall GatherHook(void* self,void*,void* cache){
 #if defined(FVR_BC2_ORDINARY_GRENADE_PROBE) || defined(FVR_BC2_PLAYER_GRENADE)
         if(ordinaryGrenade||playerGrenade)GrenadeObserveCurrent(owner,input,out,ordinaryGrenadeFacts.visible);
 #endif
+        if(!charge&&heldChargeRoute&&!holsterReceipt&&!detachedSuppression&&
+           (out.held&(*heldChargeRoute==EntryAction::Zoom?interaction::AlternateFire:interaction::Reload))){
+            charge=expackAttempts.TakeHeld(epoch,inputEpoch,cachedInput);
+            if(charge){
+                charge->gather=gatherSequence;charge->weapon=owner.weapon;charge->data=owner.equipment.data;
+                charge->nativePlaying=allowedRead?int(nativePlaying):-1;charge->nativeAim=aimValid;
+                charge->rightHold=1;charge->settled=1;charge->snapshot=int(ReloadStateStatus::Observed);
+                charge->route=*heldChargeRoute==EntryAction::Zoom?"zoom14":"reload29";
+                charge->dispatchZoom=bool(out.held&interaction::AlternateFire);charge->dispatchReload=bool(out.held&interaction::Reload);
+                charge->dispatchFire=bool(out.held&interaction::Fire);
+            }
+        }
+        if(charge){
+            charge->holsterSuppression=holsterReceipt.has_value();charge->detachedSuppression=detachedSuppression.has_value();
+            const auto freshSource=[&]{
+                LARGE_INTEGER now{};
+                return epoch==charge->equipmentEpoch&&inputEpoch==charge->inputEpoch&&cachedInput.generation==charge->sequence&&
+                    cachedInput.spaceGeneration==charge->space&&inputDeadline==charge->deadlineQpc&&QueryPerformanceCounter(&now)&&
+                    now.QuadPart>=charge->receivedQpc&&now.QuadPart<charge->deadlineQpc;
+            };
+            charge->ReadCommitted(freshSource,[&]{Owner current{};return Resolve(current)&&current==owner;},
+                [&](unsigned offset,void* bytes,std::size_t size){return Read(owner.cache+offset,bytes,size);});
+        }
     }
     else{
+        if(charge)charge->write="apply_refused";
         if(fireTrace.observing){fireTrace.record.reasons|=FireRouteApplyRefused;
             LARGE_INTEGER stamp{};if(QueryPerformanceCounter(&stamp))fireTrace.record.writeNs=HandNanos(stamp.QuadPart);}
 #if defined(FVR_BC2_ORDINARY_GRENADE_PROBE) || defined(FVR_BC2_PLAYER_GRENADE)
@@ -5306,7 +5394,7 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
        <<",\"zoom_routes\":"<<expackReloadZoomRoutes.load()<<",\"unresolved_routes\":"<<expackReloadUnresolved.load()
        <<",\"native_throw_acknowledged\":false,\"snapshot_status_order\":[\"Observed\",\"InvalidArguments\",\"ReadFailure\",\"OwnerMismatch\",\"MalformedConfiguration\",\"MalformedState\",\"ChangedDuringRead\"],\"snapshot_status_counts\":[";
     for(unsigned i=0;i<expackReloadReads.size();++i){if(i)out<<',';out<<expackReloadReads[i].load();}
-    out<<"]}";
+    out<<"],\"attempts\":";expackAttempts.Report(out);out<<'}';
     const auto bases=[] {std::lock_guard lock(baseRecordMutex);return baseRecords;}();
     out<<",\"view_basis_retention\":{\"policy\":\"bounded_decimation_with_latest\",\"capacity\":"<<bases.MaxRecords
        <<",\"minimum_interval_ms\":"<<bases.MinimumIntervalMs<<",\"eligible_samples\":"<<bases.Samples()

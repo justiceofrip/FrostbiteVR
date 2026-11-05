@@ -1,4 +1,6 @@
 #include "Test.h"
+#include "Bc2ExpackAttemptTrace.h"
+#include <string_view>
 #include "Bc2InputBinding.h"
 #include "fvr/interaction/ControllerInput.h"
 #include <bit>
@@ -6,6 +8,65 @@
 #include <limits>
 using namespace fvr;
 int main(){
+ { // A fresh B transition with tracked aim can reach three distinct Gather outcomes.
+    bc2::ExpackAttemptTrace trace;
+    interaction::InputFrame input;input.spaceGeneration=7;input.generation=1;
+    auto& right=input.hands[1];right.active=interaction::Secondary|interaction::Trigger;
+    right.aimTracked=right.gripTracked=true;
+    const auto sample=[&]{return trace.Observe(6,8,input,10+input.generation,100);};
+    CHECK(!sample());
+    right.held=interaction::Secondary;++input.generation;
+    auto routed=sample();CHECK(routed&&routed->changed==1&&routed->held==1&&!sample());
+    const auto write=[&](bc2::ExpackAttempt& attempt,std::optional<bc2::EntryAction> route){
+        interaction::ActionOutput out;out.owner=1;out.active=true;
+        if(right.held&interaction::Secondary)out.held|=interaction::Reload;
+        if(right.trigger>=.75f)out.held|=interaction::Fire;
+        bc2::ApplySelectedReloadRoute(out,route);
+        std::array<std::byte,bc2::InputBytes> cache{};
+        bc2::InputOverride writer;
+        if(!writer.Apply(cache,out))return false;
+        writer.Commit();
+        attempt.ReadCommitted([]{return true;},[]{return true;},
+            [&](unsigned at,void* dst,std::size_t n){std::memcpy(dst,cache.data()+at,n);return true;});
+        return true;
+    };
+    CHECK(write(*routed,bc2::EntryAction::Zoom));
+    CHECK(routed->final&&routed->final->zoom14&&!routed->final->reload29&&!routed->final->fire8Bits);
+    routed->route="zoom14";routed->routeReload=3;trace.Publish(*routed);
+    CHECK(!trace.TakeHeld(6,8,input));
+    right.held=0;++input.generation;
+    auto released=sample();CHECK(released&&released->changed==1&&!released->held);
+    right.gripTracked=false;right.held=interaction::Secondary;right.trigger=1;++input.generation;
+    auto denied=sample();CHECK(denied&&denied->changed==3&&!denied->grip&&denied->aim);
+    CHECK(write(*denied,std::nullopt));
+    CHECK(denied->final&&!denied->final->zoom14&&!denied->final->reload29&&denied->final->fire8Bits==std::bit_cast<unsigned>(1.f));
+    trace.Publish(*denied);++input.generation;right.gripTracked=true;CHECK(!sample());
+    auto recovered=trace.TakeHeld(6,8,input);
+    CHECK(recovered&&recovered->heldFollowup&&recovered->bSource==denied->sequence&&!trace.TakeHeld(6,8,input));
+    CHECK(write(*recovered,bc2::EntryAction::Zoom)&&recovered->final->zoom14);
+    // No matching owner, or expiry during the owner recheck, permits no native read.
+    bool read=false;const auto unexpected=[&](unsigned,void*,std::size_t){read=true;return true;};
+    CHECK(!released->final&&std::string_view(released->write)=="no_ordinary_commit");
+    released->ReadCommitted([]{return true;},[]{return false;},unexpected);
+    CHECK(!read&&!released->final&&std::string_view(released->write)=="committed_unverified");
+    int freshCalls=0;
+    released->ReadCommitted([&]{return ++freshCalls==1;},[]{return true;},unexpected);
+    CHECK(!read&&!released->final);
+    int ownerChecks=0;
+    released->ReadCommitted([]{return true;},[&]{return ++ownerChecks==1;},unexpected);
+    CHECK(read&&ownerChecks==2&&!released->final);
+    released->ReadCommitted([]{return true;},[]{return true;},[](unsigned,void*,std::size_t){return false;});
+    CHECK(!released->final);
+    freshCalls=0;
+    released->ReadCommitted([&]{return ++freshCalls<4;},[]{return true;},unexpected);
+    CHECK(!released->final&&freshCalls==4);
+    const auto reselected=trace.Observe(7,8,input,19,100);
+    CHECK(reselected&&reselected->firstHeld==3&&!reselected->changed);
+    const auto newEpoch=trace.Observe(7,9,input,20,100);
+    CHECK(newEpoch&&newEpoch->firstHeld==3&&!newEpoch->changed);
+    CHECK(!trace.Observe(7,9,{},100,100)&&!trace.TakeHeld(7,9,input));
+    ++input.generation;CHECK(trace.Observe(7,9,input,110,200)->firstHeld==3);
+ }
  { // Exact selected-item metadata; the two KNV-1 definitions are distinct.
     bc2::ReloadStateSnapshot s;s.owner={1,2,3,4,5,6,7};s.sequence=8;s.observedNs=1000000000;
     s.inventory=9;s.selectedSlot=0;s.config.weaponData=10;s.config.firingData=11;s.config.primaryFire=12;
