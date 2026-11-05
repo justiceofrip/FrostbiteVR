@@ -3850,7 +3850,8 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             // enables the unchanged player policy, never the finite stock probe.
             if(config.chestKnifeProbe||config.normalPlayerKnife)Require(fvr::bc2::gameplay::EnableChestKnifeDrawReturn(
                 bytes,pe.image,imageBase,fvr::bc2::NormalKnifeMotion(config.normalPlayerKnife)||config.chestKnifeProbe==2,
-                config.normalPlayerKnife==fvr::bc2::KnifeTrackedQualification),"Chest knife setup rejected");
+                config.normalPlayerKnife==fvr::bc2::KnifeTrackedQualification,
+                fvr::bc2::NormalKnifeStockTrigger(config.normalPlayerKnife)),"Chest knife setup rejected");
             if(config.normalPlayerGrenades)Require(fvr::bc2::gameplay::EnablePlayerGrenades(),"Normal player grenade setup rejected");
 #ifdef FVR_BC2_CONTEXTUAL_TOOLS
             if(config.normalContextualTools||contextualFixtureCompiled){

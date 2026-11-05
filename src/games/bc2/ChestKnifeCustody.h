@@ -31,6 +31,9 @@ struct KnifeSample {
     bool actionInputCurrent=false;
     bool knifeSelected=false,trackedKnifeOwned=false,nativeAttackReady=false;
     MeleePoint tip{},direction{0,0,1};
+    // Separate default-off stock request; never supplies tracked geometry.
+    bool stockTriggerReady=false,stockTriggerInputCurrent=false;
+    float stockTrigger=0;
 };
 struct KnifeCommand {
     KnifeCommandKind kind=KnifeCommandKind::Draw;
@@ -42,6 +45,8 @@ struct KnifeCommand {
     // Chest draw begins from stowed firearm custody. Return must acknowledge
     // hidden original selection + suppression, never expose/claim a firearm.
     bool returnToEmptyHands=true;
+    // Explicit trigger cause; mutually exclusive with a physical stroke.
+    std::optional<HandClaimToken> stockTriggerHold;
 };
 struct KnifeReceipt {
     KnifeCommandKind kind=KnifeCommandKind::Draw;
@@ -58,6 +63,8 @@ inline bool KnifeActionInputCurrent(const KnifeSample& s)noexcept {
     return s.controlsNeutral||s.actionInputCurrent;
 }
 inline bool KnifeCommandInputCurrent(const KnifeCommand& c,const KnifeSample& s)noexcept {
+    if(c.kind==KnifeCommandKind::Attack&&c.stockTriggerHold)
+        return !c.stroke&&s.stockTriggerReady&&s.stockTriggerInputCurrent&&std::isfinite(s.stockTrigger)&&s.stockTrigger>=.75f&&s.stockTrigger<=1;
     return c.kind==KnifeCommandKind::Draw?s.controlsNeutral:KnifeActionInputCurrent(s);
 }
 class ChestKnifeCustody {
@@ -86,13 +93,61 @@ public:
                 unsigned(Contact(s.heldContact,s.source))<<10|unsigned(held&&claim_&&held->token==*claim_)<<11|
                 unsigned(returnWanted_)<<12|unsigned(mayAcquireHold_)<<13|unsigned(HoldInputCurrent(s))<<14;
         }
-        const auto result=PrepareCore(s,hands,observation);
+        const bool stockTriggerRequest=PrepareStockTrigger(s,hands);
+        const auto result=PrepareCore(s,hands,observation,stockTriggerRequest);
         if(observation){record.phaseAfter=unsigned(phase_);record.motion.after=motion_.Phase();
             record.command=result?unsigned(result->kind)+1:0;record.recognizerReady=RecognitionReady(s.source);recognition_->Record(record);}
         return result;
     }
 private:
-    std::optional<KnifeCommand> PrepareCore(const KnifeSample& s,HandInteraction& hands,KnifeRecognitionRecord* observation)noexcept {
+    struct StockTriggerSource {HandInteractionSample source;HandClaimToken hold;float trigger;};
+    // Observe only the current drawn owner. A missing/changed source, conflict,
+    // busy attack or held trigger at admission requires another neutral packet.
+    bool PrepareStockTrigger(const KnifeSample& s,const HandInteraction& hands)noexcept {
+        const auto& f=s.source;const auto held=hands.Current(hand_);
+        // A staged trigger still belongs to its exact scalar and custody. Do
+        // this before the ordinary duplicate exit; accepted native work has
+        // already left staged_ and retains its existing completion path.
+        if(staged_&&staged_->stockTriggerHold){
+            if(!CanCommit(*staged_,s,hands)||!stockTriggerSource_||returnWanted_||
+               !HoldInputCurrent(s)||!Contact(s.heldContact,f)||
+               s.stockTrigger!=stockTriggerSource_->trigger||f.nowNs<stockTriggerSource_->source.nowNs){
+                const auto rejected=*staged_;Committed(rejected,KnifeCommit::RejectedNoEffect);
+                stockTriggerSource_.reset();stockTriggerArmed_=false;
+            }else stockTriggerSource_->source.nowNs=f.nowNs;
+            return false;
+        }
+        const bool valid=phase_==KnifePhase::Held&&!returnWanted_&&Fresh(s)&&
+            f.owner.actor==actor_&&f.owner.actorGeneration==actorGeneration_&&f.owner.space==space_&&
+            GameplayOwnsInput(s.menu,f.nowNs)&&s.menu.epoch==menuEpoch_&&
+            s.stockTriggerReady&&s.stockTriggerInputCurrent&&HoldInputCurrent(s)&&
+            s.onFoot&&s.fireSuppressed&&s.mechanicsSettled&&s.knifeSelected&&s.trackedKnifeOwned&&
+            s.knife==knife_&&s.gripHeld[unsigned(hand_)]&&!f.released[unsigned(hand_)]&&Contact(s.heldContact,f)&&
+            claim_&&claim_->kind==HandClaimKind::GunHold&&claim_->owner==f.owner&&claim_->item==s.knife&&
+            held&&held->token==*claim_&&held->deadlineNs>f.nowNs&&hands.HasRecordedEvidence(f,hand_)&&
+            std::isfinite(s.stockTrigger)&&s.stockTrigger>=0&&s.stockTrigger<=1;
+        const auto invalidate=[&](){stockTriggerSource_.reset();stockTriggerArmed_=false;return false;};
+        if(!valid)return invalidate();
+        if(stockTriggerSource_){
+            const auto& old=*stockTriggerSource_;const auto& p=old.source;
+            if(p.owner!=f.owner||old.hold!=*claim_)return invalidate();
+            if(f.sequence<p.sequence||f.observedNs<p.observedNs||f.nowNs<p.nowNs||
+               (f.sequence>p.sequence&&f.observedNs==p.observedNs))return invalidate();
+            if(f.sequence==p.sequence){
+                if(f.observedNs!=p.observedNs||f.deadlineNs!=p.deadlineNs||f.focused!=p.focused||
+                   f.tracked!=p.tracked||f.released!=p.released||s.stockTrigger!=old.trigger)return invalidate();
+                stockTriggerSource_->source.nowNs=f.nowNs;return false;
+            }
+        }else{
+            stockTriggerSource_=StockTriggerSource{f,*claim_,s.stockTrigger};
+            stockTriggerArmed_=false;return false;
+        }
+        stockTriggerSource_=StockTriggerSource{f,*claim_,s.stockTrigger};
+        if(s.stockTrigger<=.1f)stockTriggerArmed_=true;
+        if(s.stockTrigger<.75f)return false;
+        const bool requested=stockTriggerArmed_;stockTriggerArmed_=false;return requested;
+    }
+    std::optional<KnifeCommand> PrepareCore(const KnifeSample& s,HandInteraction& hands,KnifeRecognitionRecord* observation,bool stockTriggerRequest)noexcept {
         const auto gate=[&](KnifeRecognitionGate value){if(observation)observation->gate=value;};
         const auto& f=s.source;
         if(Fresh(s)&&f.observedNs>observed_&&actor_&&(actor_!=f.owner.actor||actorGeneration_!=f.owner.actorGeneration)){
@@ -206,6 +261,10 @@ private:
         }else if(!claim_||held->token!=*claim_){returnWanted_=true;motion_.Invalidate();gate(KnifeRecognitionGate::ClaimForeign);return {};}
         const auto renewed=hands.Renew(f,*claim_,s.heldContact);
         if(!renewed.claim){returnWanted_=true;motion_.Invalidate();gate(KnifeRecognitionGate::ClaimRenew);return {};}
+        if(stockTriggerRequest){
+            auto command=Stage(KnifeCommandKind::Attack,s);
+            if(command){command->stockTriggerHold=*claim_;staged_=command;}return command;
+        }
         if(!KnifeActionInputCurrent(s)){gate(KnifeRecognitionGate::Admission);return {};}
         MeleeStrokeSample stroke{f,*claim_,s.tip,s.direction,s.nativeAttackReady&&s.mechanicsSettled};
         gate(KnifeRecognitionGate::Motion);
@@ -223,7 +282,9 @@ public:
         if(!s.gripHeld[unsigned(hand_)]||s.source.released[unsigned(hand_)])return false;
         const auto held=hands.Current(hand_);if(!held||!claim_||held->token!=*claim_||held->inputSequence!=s.source.sequence||held->deadlineNs<=s.source.nowNs)return false;
         if(c.kind==KnifeCommandKind::Draw)return s.emptyHands&&s.fireSuppressed&&held->token.kind==HandClaimKind::BodyInventory;
-        return s.knifeSelected&&s.trackedKnifeOwned&&s.nativeAttackReady&&held->token.kind==HandClaimKind::GunHold&&c.stroke.has_value();
+        if(!s.knifeSelected||!s.trackedKnifeOwned||held->token.kind!=HandClaimKind::GunHold)return false;
+        if(c.stockTriggerHold)return !c.stroke&&s.stockTriggerReady&&*c.stockTriggerHold==held->token;
+        return s.nativeAttackReady&&c.stroke.has_value();
     }
     // Adapter calls CanCommit immediately before its verified native boundary;
     // this method records that boundary's result, never issues or retries it.
@@ -258,7 +319,7 @@ private:
         if(a.kind!=b.kind||a.serial!=b.serial||a.knife!=b.knife||a.hand!=b.hand||a.returnToEmptyHands!=b.returnToEmptyHands||
            a.source.owner!=b.source.owner||a.source.sequence!=b.source.sequence||a.source.observedNs!=b.source.observedNs||
            a.source.deadlineNs!=b.source.deadlineNs||a.source.nowNs!=b.source.nowNs||a.source.focused!=b.source.focused||
-           a.source.tracked!=b.source.tracked||a.source.released!=b.source.released||a.stroke.has_value()!=b.stroke.has_value())return false;
+           a.source.tracked!=b.source.tracked||a.source.released!=b.source.released||a.stroke.has_value()!=b.stroke.has_value()||a.stockTriggerHold!=b.stockTriggerHold)return false;
         if(!a.stroke)return true;const auto& x=*a.stroke;const auto& y=*b.stroke;
         return x.serial==y.serial&&x.hold==y.hold&&x.sourceSequence==y.sourceSequence&&x.observedNs==y.observedNs&&
             x.deadlineNs==y.deadlineNs&&x.start==y.start&&x.end==y.end&&x.direction==y.direction;
@@ -286,7 +347,9 @@ private:
     void Clear()noexcept {
         phase_=KnifePhase::NeedNeutral;actor_=actorGeneration_=space_=sequence_=menuEpoch_=0;observed_=0;knife_={};claim_.reset();
         staged_.reset();pending_.reset();motion_.Invalidate();nativeOwned_=returnWanted_=mayAcquireHold_=armed_=false;
+        stockTriggerSource_.reset();stockTriggerArmed_=false;
     }
+    std::optional<StockTriggerSource> stockTriggerSource_;bool stockTriggerArmed_=false;
     KnifeRecognitionDiagnostic* recognition_=nullptr;
     KnifePhase phase_=KnifePhase::NeedNeutral;InteractionHand hand_=InteractionHand::Right;HandInteractionKey knife_{};
     std::optional<HandClaimToken> claim_;std::optional<KnifeCommand> staged_,pending_;MeleeStroke motion_;

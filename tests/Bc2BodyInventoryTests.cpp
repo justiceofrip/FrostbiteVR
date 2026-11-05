@@ -709,6 +709,40 @@ int SchedulingPausePreservesResourceIdentity(){
  }
  std::puts("Scheduling pause retains verified physical resources, expires leases and retires commands");return 0;
 }
+int RepeatedInventoryObservationEdges(){
+ // Warm identical metadata (including empty native slots), then change one
+ // boundary. Every observation must still call the native reader.
+ for(unsigned change=0;change<7;++change){Run r;r.Tick();
+  const auto a=r.adapter.ItemKey(Fixture::a),b=r.adapter.ItemKey(Fixture::b);CHECK(a&&b);
+  const auto first=r.adapter.Display(r.s.hand.nowNs);CHECK(first);
+  for(unsigned repeat=0;repeat<8;++repeat){bool read=false;r.f.onRead=[&]{read=true;};r.Advance();
+   CHECK(!r.Tick().command&&read&&r.adapter.ItemKey(Fixture::a)==a&&r.adapter.ItemKey(Fixture::b)==b);
+   const auto display=r.adapter.Display(r.s.hand.nowNs);CHECK(display&&display->revision==first->revision);
+   const auto binding=r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs);CHECK(binding&&binding->observedNs==r.s.hand.nowNs);
+  }
+  if(change==0){r.f.Word(Fixture::array+4,0);r.f.Word(Fixture::array+8,Fixture::b);}
+  if(change==1)r.f.Word(Fixture::ad+0x84,1);
+  if(change==2)r.f.Word(Fixture::a+4,Fixture::bd);
+  if(change==3){++r.s.owner.actorGeneration;++r.s.hand.owner.actorGeneration;}
+  if(change==4){++r.s.owner.space;++r.s.hand.owner.space;++r.s.input.spaceGeneration;}
+  if(change==5)r.f.denyMap=true;
+  if(change==6){r.f.Select(1);r.s.owner=r.f.owner;++r.s.hand.owner.equipGeneration;r.s.gun={Fixture::b,r.s.hand.owner.equipGeneration};}
+  bool read=false;r.f.onRead=[&]{read=true;};r.Advance();r.Gun();CHECK(!r.Tick().command&&read);
+  if(change==5){
+   CHECK(!r.adapter.ItemKey(Fixture::a)&&!r.adapter.ItemKey(Fixture::b)&&!r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs));
+   r.f.denyMap=false;r.Advance();r.Tick();
+   CHECK(r.adapter.ItemKey(Fixture::a)!=a&&r.adapter.ItemKey(Fixture::b)!=b);continue;
+  }
+  const auto display=r.adapter.Display(r.s.hand.nowNs);CHECK(display&&display->selectedOwner==r.s.owner);
+  const auto binding=r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs);CHECK(binding&&binding->owner==r.s.owner);
+  CHECK((r.adapter.ItemKey(Fixture::a)==a)==(change==0||change==4||change==6));
+  CHECK((r.adapter.ItemKey(Fixture::b)==b)==(change!=3));
+  CHECK(display->revision==first->revision+((change>=1&&change<=4)?1:0));
+  if(change==0)CHECK(display->carried.items[1].weapon==0&&display->carried.items[2].weapon==Fixture::b&&display->carried.items[2].slot==2);
+  if(change==4)CHECK(display->physicalOwner.space==r.s.owner.space&&binding->context.space==r.s.owner.space);
+ }
+ std::puts("Repeated inventory: fresh reads, native slot/category/data/owner changes, recenter, read failure and selection passed");return 0;
+}
 int ResourceLifetimeBinding(){
  Run r;r.Tick();const auto a=r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs);CHECK(a);
  const auto other=r.adapter.AssignedSlot(Fixture::b);CHECK(other);
@@ -736,6 +770,7 @@ int ResourceLifetimeBinding(){
 int SharedLifecycleBoundary(){
  CHECK(SchedulingPausePreservesResourceIdentity()==0);
  CHECK(ResourceLifetimeBinding()==0);
+ CHECK(RepeatedInventoryObservationEdges()==0);
  for(unsigned reason=0;reason<5;++reason){Run r;r.Tick();const auto slot=r.adapter.AssignedSlot(Fixture::a);CHECK(slot);
   r.Advance();if(reason==0)r.s.reloadBusy=true;else if(reason==1)r.s.cancel=true;else if(reason==2)r.s.hand.tracked[1]=false;
   else if(reason==3)r.s.interaction=bc2::BodyInteractionState::Suspended;else r.s.input.focused=false;

@@ -2,6 +2,7 @@
 #include "Bc2ChestKnifeProbeConfig.h"
 #include "KnifeNativeCode.h"
 #include "Bc2KnifeAttackGate.h"
+#include "Bc2KnifeStockTriggerSource.h"
 #include "Bc2KnifeCopyReceipt.h"
 #include "Bc2OriginalFiringUnwind.h"
 #include "Bc2KnifeAcceptedOwnership.h"
@@ -50,10 +51,11 @@ struct Service {
     std::array<bool,2> closeOfferRecorded{};
     CloseProof closeLast{};unsigned closeProofCount=0,closeProofDropped=0;bool closeLastKnown=false;
     ReloadStateMemory memory{};ReloadStateBinding state{};ReloadServerBinding server{};ReloadFlowBinding flow{};unsigned base=0;
-    std::int64_t frequency=0;bool installed=false,drained=false,owned=false,returnReady=false,motionEnabled=false;std::atomic<bool> bad=false;
+    std::int64_t frequency=0;bool installed=false,drained=false,owned=false,returnReady=false,motionEnabled=false,stockTriggerEnabled=false;std::atomic<bool> bad=false;
     std::optional<pk::Anchor> anchor;std::shared_ptr<const pk::Anchor> stagedGuard;
     std::atomic<std::shared_ptr<const pk::Anchor>> deployGuard;pk::DrawReturnGate commands;pk::KnifeAttackGate attacks;KnifeSample source{};
     pk::OriginalKnifeSource sourceIdentity;
+    pk::StockKnifeSourceRevocation stockTriggerSource;std::uint64_t stagedStockTriggerRevocation=0;
     std::uint64_t stagedEpoch=0,bodyOperation=0,nativeLifetime=0,observationSequence=0;
     std::optional<KnifeCommand> outstanding;
     std::uint64_t lastAttackSequence=0,lastAttackSerial=0;std::int64_t lastAttackObservedNs=0,lastAttackReceiptNs=0;
@@ -99,6 +101,8 @@ bool SameCommandSource(const KnifeCommand& c,const KnifeSample& s)noexcept {
         GameplayOwnsInput(s.menu,b.nowNs)&&s.menu.deadlineNs>b.nowNs;
 }
 bool SourceCurrent(const KnifeCommand& c,std::int64_t now)noexcept {
+    if(c.stockTriggerHold&&!service.attacks.Accepted()&&
+       !service.stockTriggerSource.Current(service.stagedStockTriggerRevocation))return false;
     if(service.closing.load(std::memory_order_acquire)||service.stagedEpoch!=service.sourceEpoch.load(std::memory_order_acquire)||
        !pk::DrawReturnGate::Fresh(c,now)||!SameCommandSource(c,service.source)||
        !GameplayOwnsInput(service.source.menu,now))return false;
@@ -357,7 +361,7 @@ void __fastcall AutomaticReturn(void* self,void*,unsigned slot,bool eligibility)
     active.Forward([&]{originalSetter(self,slot,eligibility);});
 }
 std::optional<std::array<std::byte,0x30>> AttackInput(void*,const OriginalFiringUpdate& call,OriginalFiringToken& token)noexcept {
-    if(!service.enabled.load(std::memory_order_acquire)||!service.motionEnabled)return {};
+    if(!service.enabled.load(std::memory_order_acquire)||(!service.motionEnabled&&!service.stockTriggerEnabled))return {};
     std::unique_lock lock(service.gate,std::try_to_lock);
     if(!lock.owns_lock()||service.closing.load(std::memory_order_acquire)||!service.owned||service.bad||!service.attacks.Pending())return {};
     const auto branch=Branch(call.firing);if(!branch||!pk::KnifeAttackGate::InputBranch(branch-1))return {};
@@ -404,8 +408,8 @@ bool __fastcall DeployReady(void* self,void*){
 }
 }
 #include "Bc2ChestKnifeAttackBridge.inc"
-bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uintptr_t base,const ReloadStateMemory& memory,bool motionEnabled,bool attackBridgeEnabled)noexcept {
-    if(attackBridgeEnabled&&!ChestKnifeTrackedStrikeAvailable)return false;
+bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uintptr_t base,const ReloadStateMemory& memory,bool motionEnabled,bool attackBridgeEnabled,bool stockTriggerEnabled)noexcept {
+    if((attackBridgeEnabled&&!ChestKnifeTrackedStrikeAvailable)||(stockTriggerEnabled&&(motionEnabled||attackBridgeEnabled)))return false;
     if(service.installed||base>UINT32_MAX||!memory.read||!memory.type)return false;
     const auto mode=DiscoverWeaponMode(bytes,pe);const auto state=DiscoverReloadState(bytes,pe);const auto server=DiscoverReloadServer(bytes,pe);const auto flow=DiscoverReloadFlow(bytes,pe);
     if(!mode||!state||!server||!flow||!ValidateReloadFlowLive(memory,*flow,unsigned(base))||!pk::VerifyAttackCode(memory,unsigned(base),state->imageSize)||!pk::VerifyDrawReturnCode(memory,unsigned(base),state->imageSize,*mode)||
@@ -413,7 +417,7 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
     LARGE_INTEGER f{};if(!QueryPerformanceFrequency(&f)||f.QuadPart<=0||f.QuadPart>1000000000)return false;
     service.memory=memory;service.state=*state;service.server=*server;service.flow=*flow;service.base=unsigned(base);service.frequency=f.QuadPart;
     if(attackBridgeEnabled&&(!motionEnabled||!selectedKnife::VerifyCode(memory,unsigned(base),state->imageSize)))return false;
-    service.motionEnabled=motionEnabled;service.attackBridgeEnabled=attackBridgeEnabled;
+    service.motionEnabled=motionEnabled;service.attackBridgeEnabled=attackBridgeEnabled;service.stockTriggerEnabled=stockTriggerEnabled;
     hooks={reinterpret_cast<void*>(base+pk::DrawReturnCode[0].rva),reinterpret_cast<void*>(base+pk::DrawReturnCode[2].rva),reinterpret_cast<void*>(base+0x2d7c80)};
     if(MH_CreateHook(hooks[0],Choose,reinterpret_cast<void**>(&originalChoose))!=MH_OK){hooks={};return false;}
     if(MH_CreateHook(hooks[1],DeployReady,reinterpret_cast<void**>(&originalReady))!=MH_OK){MH_RemoveHook(hooks[0]);hooks={};return false;}
@@ -431,7 +435,7 @@ std::optional<View> Inspect(const ReloadStateOwner& current,unsigned knifeWeapon
     if(!anchor||anchor->knifeWeapon!=knifeWeapon)return {};
     const auto snapshot=pk::Read(service.memory,service.state,service.server,service.base,*anchor,current,sequence,now);
     if(!snapshot||!Flags(*anchor))return {};
-    return View{*anchor,*snapshot,service.owned,!service.bad.load(),!service.ownedObservationGap.load(),service.motionEnabled&&(!service.attackBridgeEnabled||service.attackHooksAvailable.load()),service.attackBridgeEnabled};
+    return View{*anchor,*snapshot,service.owned,!service.bad.load(),!service.ownedObservationGap.load(),service.motionEnabled&&(!service.attackBridgeEnabled||service.attackHooksAvailable.load()),service.attackBridgeEnabled,service.stockTriggerEnabled};
 }
 void AcknowledgeNoEffectRehide(const Bc2BodyHolster& body)noexcept {
     std::unique_lock lock(service.gate,std::try_to_lock);
@@ -456,6 +460,9 @@ bool BeforePrepare(const KnifeSample& source,ChestKnifeCustody& policy)noexcept 
     // Gather is the sole caller. Revoke first-boundary input authority before
     // waiting for the native gate; accepted native work is drained separately.
     SourceAdvanced(source.source);
+    // Stock authority may disappear on an identical controller packet, even
+    // when the service lock is busy. Restoration cannot revive its old stage.
+    if(service.stockTriggerEnabled)service.stockTriggerSource.Advance(source,policy.NeedsNativeCleanup());
     // A repeated input can lose its rendered grip/handout. Revoke the blade
     // before taking the service lock; this is not the draw/return source epoch.
     if(service.enabled.load(std::memory_order_acquire)&&service.attackBridgeEnabled&&
@@ -475,7 +482,8 @@ bool Stage(const KnifeCommand& command,const KnifeSample& source,const HandInter
     std::unique_lock lock(service.gate,std::try_to_lock);
     const auto reject=[&](){policy.Committed(command,KnifeCommit::RejectedNoEffect);return false;};
     if(!lock.owns_lock()||service.closing.load(std::memory_order_acquire)||!service.enabled.load()||service.bad||!bodyOperation||
-       (command.kind==KnifeCommandKind::Attack&&!service.motionEnabled)||
+       (command.kind==KnifeCommandKind::Attack&&(command.stockTriggerHold?
+           (!service.stockTriggerEnabled||service.attackBridgeEnabled||command.stroke.has_value()):!service.motionEnabled))||
        !policy.CanCommit(command,source,hands)||!SameCommandSource(command,source)||!SameCommandSource(command,service.source)||command.hand!=InteractionHand::Right)return reject();
     const bool drawing=command.kind==KnifeCommandKind::Draw;
     if((drawing&&(service.owned||current.weapon!=anchor.original.client.owner.weapon))||
@@ -508,6 +516,7 @@ bool Stage(const KnifeCommand& command,const KnifeSample& source,const HandInter
     if(command.kind==KnifeCommandKind::Attack){service.lastAttackSequence=command.source.sequence;
         service.lastAttackObservedNs=command.source.observedNs;service.lastAttackSerial=command.serial;}
     service.source=source;service.stagedEpoch=service.sourceEpoch.load(std::memory_order_acquire);
+    service.stagedStockTriggerRevocation=command.stockTriggerHold?service.stockTriggerSource.Stamp():0;
     service.outstanding=command;service.returnReady=false;return true;
 }
 std::optional<KnifeReceipt> Observe(const ReloadStateOwner& current,const Bc2BodyHolster& body,
@@ -649,7 +658,7 @@ void Report(std::ostream& out){std::unique_lock lock(service.gate,std::try_to_lo
         <<",\"attack_bridge_health_before\":"<<b.healthBefore<<",\"attack_bridge_health_after\":"<<b.healthAfter
         <<",\"attack_bridge_geometry\":[";
         for(unsigned r=0;r<4;++r)for(unsigned c=0;c<4;++c){if(r||c)out<<',';out<<b.geometry.values[r][c];}out<<']';}
-    out<<",\"private_motion_attack\":"<<service.motionEnabled<<",\"installed\":"<<service.installed<<",\"drained\":"<<service.drained
+    out<<",\"private_stock_trigger\":"<<service.stockTriggerEnabled<<",\"private_motion_attack\":"<<service.motionEnabled<<",\"installed\":"<<service.installed<<",\"drained\":"<<service.drained
        <<",\"session_close_requested\":"<<service.closing.load()<<",\"session_close_phase\":"<<unsigned(service.close.Phase())
        <<",\"session_close_mask\":"<<service.close.Mask()<<",\"session_close_started_ns\":"<<service.close.StartedNs()
        <<",\"session_close_deadline_ns\":"<<service.close.DeadlineNs()<<",\"session_close_completed_ns\":"<<service.close.CompletedNs()
@@ -712,7 +721,7 @@ void Report(std::ostream& out){std::unique_lock lock(service.gate,std::try_to_lo
 }
 #else
 namespace fvr::bc2::chestKnifeNative {
-bool Install(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t,const ReloadStateMemory&,bool,bool)noexcept{return false;}
+bool Install(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t,const ReloadStateMemory&,bool,bool,bool)noexcept{return false;}
 void Start()noexcept{}
 bool TrackedAttackRequested()noexcept{return false;}
 std::optional<View> Inspect(const ReloadStateOwner&,unsigned,std::uint64_t,std::int64_t)noexcept{return {};}

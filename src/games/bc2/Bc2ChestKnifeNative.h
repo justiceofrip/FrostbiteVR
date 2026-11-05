@@ -7,14 +7,15 @@
 namespace fvr::bc2::chestKnifeNative {
 // PRIVATE only. Existing draw/hold/return default; motion requires a separate
 // explicit pre-start opt-in. attackBridgeEnabled is a separate default-off
-// qualification request; no existing normal caller enables it. Requires the existing firing dispatcher installed.
+// qualification request; no existing normal caller enables it. stockTriggerEnabled
+// is a mutually exclusive default-off stock Fire8 request. Requires the existing firing dispatcher installed.
 bool Install(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t imageBase,
-    const ReloadStateMemory&,bool motionEnabled=false,bool attackBridgeEnabled=false)noexcept;
+    const ReloadStateMemory&,bool motionEnabled=false,bool attackBridgeEnabled=false,bool stockTriggerEnabled=false)noexcept;
 void Start()noexcept;
 bool TrackedAttackRequested()noexcept;
 struct View {
     private_knife::Anchor anchor{};private_knife::Snapshot snapshot{};
-    bool owned=false,healthy=false,observationComplete=false,motionEnabled=false,attackBridgeEnabled=false;
+    bool owned=false,healthy=false,observationComplete=false,motionEnabled=false,attackBridgeEnabled=false,stockTriggerEnabled=false;
 };
 // Current coherent observation only; it creates no staged native action.
 std::optional<View> Inspect(const ReloadStateOwner&,unsigned knifeWeapon,std::uint64_t sequence,std::int64_t nowNs)noexcept;

@@ -4324,7 +4324,7 @@ std::optional<ChestKnifeProbeWitness> ReadChestKnifeProbeWitness(std::int64_t no
 #endif
     return {};
 }
-bool EnableChestKnifeDrawReturn(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uintptr_t base,bool motionEnabled,bool trackedAttackRequested)noexcept {
+bool EnableChestKnifeDrawReturn(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uintptr_t base,bool motionEnabled,bool trackedAttackRequested,bool stockTriggerEnabled)noexcept {
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
 #if defined(FVR_BC2_ORDINARY_GRENADE_PROBE) || defined(FVR_BC2_PLAYER_GRENADE)
     // Normal player grenades use the cache/body policy, not this independent
@@ -4340,11 +4340,11 @@ bool EnableChestKnifeDrawReturn(std::span<const std::byte> bytes,const engine::P
         auto candidate=std::make_unique<Bc2ChestKnifeCoordinator>();
         const ReloadStateMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t count){return Read(at,dst,count);},
             [](void*,unsigned at,const char* expected){return Type(at,expected);}};
-        if(!chestKnifeNative::Install(bytes,pe,base,memory,motionEnabled,trackedAttackRequested))return false;
+        if(!chestKnifeNative::Install(bytes,pe,base,memory,motionEnabled,trackedAttackRequested,stockTriggerEnabled))return false;
         chestKnife=std::move(candidate);return true;
     }catch(...){return false;}
 #else
-    (void)bytes;(void)pe;(void)base;(void)motionEnabled;(void)trackedAttackRequested;return false;
+    (void)bytes;(void)pe;(void)base;(void)motionEnabled;(void)trackedAttackRequested;(void)stockTriggerEnabled;return false;
 #endif
 }
 std::optional<ContextualToolProbeWitness> ReadContextualToolProbeWitness(std::int64_t now)noexcept {

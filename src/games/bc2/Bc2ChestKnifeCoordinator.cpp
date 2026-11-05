@@ -66,6 +66,9 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
         s.input.hands[0].squeeze<=.35f&&!hands.Current(InteractionHand::Left);
     sample.actionInputCurrent=sample.holdInputCurrent&&ChestKnifeActionInputCurrent(s.input)&&
         !hands.Current(InteractionHand::Left);
+    sample.stockTriggerInputCurrent=sample.holdInputCurrent&&ChestKnifeStockTriggerInputCurrent(s.input)&&
+        !hands.Current(InteractionHand::Left);
+    sample.stockTrigger=s.input.hands[1].trigger;
     sample.onFoot=bool(native);sample.emptyHands=body.Phase()==BodyHolsterPhase::Empty&&bodyResult.freeRight.has_value();
     post.nativeOwner=s.owner;post.hand=s.hand;
     const auto demand=body.Demand(post);
@@ -84,6 +87,8 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
             rendered->source.bodyOperation==bodyOperation_&&rendered->source.knife==*key&&
             rendered->rigFingerprint==ChestKnifeGripProfiles()[0].rigFingerprint&&
             ChestKnifeRenderCurrent(rendered->source,s.owner,s.hand,s.hand.nowNs);
+        sample.stockTriggerReady=native->stockTriggerEnabled&&!native->attackBridgeEnabled&&
+            sample.trackedKnifeOwned&&sample.mechanicsSettled;
         if(sample.trackedKnifeOwned)sample.heldContact={{0x4243324b47524950ull,key->generation},s.hand.sequence,
             (std::min)(s.hand.deadlineNs,rendered->source.input.deadlineNs),true};
         // Raw original grip in one fixed tracking epoch, never rendered/head

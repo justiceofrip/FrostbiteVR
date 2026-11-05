@@ -31,5 +31,14 @@ inline bool ChestKnifeActionInputCurrent(const interaction::InputFrame& input)no
         !(input.hands[1].held&~unsigned(Primary))&&
         input.hands[0].trigger<=.1f&&input.hands[1].trigger<=.1f&&input.hands[0].squeeze<=.35f;
 }
+// Stock trigger has its own conflict check; tracked strokes and returns keep
+// the existing trigger-neutral predicate above.
+inline bool ChestKnifeStockTriggerInputCurrent(const interaction::InputFrame& input)noexcept {
+    using namespace interaction;
+    if(!ChestKnifeControlInputCurrent(input))return false;
+    return !(input.hands[0].held&~unsigned(Secondary|StickClick))&&
+        !(input.hands[1].held&~unsigned(Primary))&&
+        input.hands[0].trigger<=.1f&&input.hands[0].squeeze<=.35f;
+}
 
 }

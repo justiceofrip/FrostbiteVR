@@ -2,8 +2,8 @@
 
 Durable contracts and invariants only. The per-candidate design log (R33-R56 and the
 September-October entries) moved verbatim to [history/2026-10-28-architecture-log.md](history/2026-10-28-architecture-log.md)
-on 2026-10-28; search it by candidate number. Some status sentences below date from late
-September; [CURRENT.md](CURRENT.md) is authoritative for what works now.
+on 2026-10-28; search it by candidate number. [CURRENT.md](CURRENT.md) records
+the installed build and its evidence limits.
 
 ## Contract versus engine implementation
 
@@ -29,7 +29,10 @@ separation where necessary, but define a distinct Frostbite protocol and named
 objects rather than silently reusing BF2142 IPC names or layout. The presenter
 and frame producer must agree on protocol, GPU adapter, resource generation,
 texture format, synchronization, reference-space generation and timing.
-FvrD3D11 now implements independent-process GPU texture transfer. FvrFrameChannel supplies versioned tracking/ticket IPC with deadlines, GPU feedback and peer-exit handling. Its native game producer remains pending. FvrOpenXR implements the host and projection submission path; headset acceptance is pending. See D3D11_BRIDGE.md and OPENXR_HOST.md.
+FvrD3D11 provides GPU texture transfer between processes. FvrFrameChannel
+supplies versioned tracking/ticket IPC with deadlines, GPU feedback and peer-exit
+handling. FvrOpenXR owns the host and projection submission path. A transport
+check does not establish native gameplay or physical-headset acceptance.
 
 ## Required invariants
 
@@ -67,9 +70,10 @@ Frostbite engine integration and BC2 game rules remain separate so another
 Frostbite game can provide its own bindings without duplicating the VR policies.
 Frostbite versions are not assumed binary-compatible.
 
-The BC2 native observer has now established RH/padded camera conventions and
-a D3D11 renderer for the installed profile. FrostbiteCamera explicitly converts
-those conventions; see BC2_NATIVE_DISCOVERY.md. An opt-in visibility-stage pose pulse established visual camera control and exact scoped restoration. Production camera/stereo capabilities remain disabled. The independent D3D11 bridge is hardware-tested but is not connected to native rendering.
+The supported BC2 profile uses RH/padded camera conventions and a D3D11
+renderer. FrostbiteCamera explicitly converts those conventions; see
+BC2_NATIVE_DISCOVERY.md. Camera and stereo activation must use their verified
+native bindings; transport capability alone cannot grant either.
 
 
 ## Portability and visibility
@@ -96,6 +100,6 @@ production have no dependency on the OpenXR host header or SDK. RemoteFrameProdu
 now acquires an immutable request before visibility and accepts a complete pair
 after native restoration on the graphics thread. Its local owner/frame/device
 key and connection generation reject stale completion and native-frame replay.
-The staged transport passed separate-thread x86-to-x64 GPU tests; the BC2 native
-provider remains unconnected. Native view factory lifecycle callbacks and the
-11:35:09 game exit must be resolved before enabling per-eye native views.
+Native view construction and scheduling must preserve these ownership and
+restoration rules. Historical test failures belong in their dated evidence;
+they do not describe the capability state of a later installed build.

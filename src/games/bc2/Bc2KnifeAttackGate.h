@@ -27,7 +27,12 @@ public:
     }
     bool Stage(const Command& c,std::int64_t now)noexcept {
         if(pending_||c.kind!=interaction::KnifeCommandKind::Attack||!c.serial||c.serial<=lastSerial_||
-           !DrawReturnGate::Fresh(c,now)||!c.stroke||c.stroke->hold.kind!=interaction::HandClaimKind::GunHold||
+           !DrawReturnGate::Fresh(c,now)||c.stroke.has_value()==c.stockTriggerHold.has_value())return false;
+        if(c.stockTriggerHold){
+            const auto& hold=*c.stockTriggerHold;
+            if(!hold.id||hold.kind!=interaction::HandClaimKind::GunHold||hold.owner!=c.source.owner||
+               hold.hand!=c.hand||hold.item!=c.knife||hold.prerequisiteClaim)return false;
+        }else if(c.stroke->hold.kind!=interaction::HandClaimKind::GunHold||
            c.stroke->hold.owner!=c.source.owner||c.stroke->hold.hand!=c.hand||
            c.stroke->sourceSequence!=c.source.sequence||c.stroke->observedNs!=c.source.observedNs||
            c.stroke->deadlineNs!=c.source.deadlineNs)return false;

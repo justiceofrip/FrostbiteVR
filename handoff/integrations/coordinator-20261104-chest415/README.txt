@@ -1,8 +1,8 @@
 Chest knife: body display, draw and return
 
-Normal Play requests the slot-7 chest holster when the packaged native build supports it. With your right hand empty and controls settled, grip the handle on your chest to draw. Release the grip to return it. The original game's knife is displayed blade-down at that same grab point; selection and temporary custody remove the stowed copy. This adds no empty-hand holster support for ordinary guns.
+Normal Play requests the slot-7 chest holster when the packaged native build supports it. With your right hand empty and controls settled, grip the handle on your chest to draw. Release trigger and grip to return it. The original game's knife is displayed blade-down at that same grab point; selection and temporary custody remove the stowed copy. This adds no empty-hand holster support for ordinary guns.
 
-Use normal draw/return (mode 2) in the headset. Do not enable tracked-strike qualification: native acquisition or attack can be interrupted before returning, and a draw or a visual swing does not establish damage. The explicit older stock-motion path is mode 1.
+The new normal stock-trigger mode4 adds an explicit trigger attack while the knife is drawn; release trigger and grip to return. Mode2 remains draw-only, and the older stock-motion path is mode1. Tracked-strike mode3 remains disabled. Native target acquisition and damage are game-owned; a draw or visual swing alone establishes neither. See docs/CURRENT.md for the installed version and the November5 stock-knife handoff for scope.
 
 The strike candidate binds one accepted native Fire input to the knife's acquisition, then to BC2's later attack callback. A health delta must belong to the acquired target. A complete miss, unknown result and confirmed hit are separate. No range, health or timing values are overwritten. A chest draw or a flick of the wrist alone does not establish damage.
 

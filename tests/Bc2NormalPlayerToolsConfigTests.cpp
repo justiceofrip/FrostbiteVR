@@ -25,7 +25,10 @@ int IndependentCompileAndRuntimeKnobs(){
  CHECK(!ValidNormalPlayerTools(KnifeHolsterOnly,0,flags,123,3,false,false,false));
  CHECK(!NormalKnifeMotion(KnifeOff)&&!NormalKnifeMotion(KnifeHolsterOnly));
  CHECK(NormalKnifeMotion(KnifeStockMotion));
- CHECK(!ValidNormalPlayerTools(4,0,flags,123,3,false,true,true));
+ CHECK(ValidNormalPlayerTools(KnifeStockTrigger,0,flags,123,3,false,true,false));
+ CHECK(!NormalKnifeMotion(KnifeStockTrigger)&&NormalKnifeStockTrigger(KnifeStockTrigger));
+ for(unsigned mode:{KnifeOff,KnifeStockMotion,KnifeHolsterOnly,KnifeTrackedQualification})CHECK(!NormalKnifeStockTrigger(mode));
+ CHECK(!ValidNormalPlayerTools(5,0,flags,123,3,false,true,true));
  CHECK(!ValidNormalPlayerTools(0,2,flags,123,3,false,true,true));return 0;
 }
 int AllThreeNormalCapabilitiesShareOneConfig(){
@@ -44,6 +47,14 @@ int TrackedStrikeRefusedEvenWithCompleteHostAndBuild(){
  return 0;
 }
 int StrictRealHostAndNoFixture(){
+ for(unsigned mode:{KnifeHolsterOnly,KnifeStockTrigger}){
+  CHECK(!ValidNormalPlayerTools(mode,0,flags,0,3,false,true,true));
+  CHECK(!ValidNormalPlayerTools(mode,0,flags,123,0,false,true,true));
+  CHECK(!ValidNormalPlayerTools(mode,0,flags,123,3,true,true,true));
+  CHECK(!ValidNormalPlayerTools(mode,0,flags,123,3,false,false,true));
+  for(unsigned mask:{0x400u,0x800u,0x1000u,0x2000u,0x4000u,0x10000u,0x80000u,0x100000u,0x2000000u,0x10000000u})
+   CHECK(!ValidNormalPlayerTools(mode,0,flags&~mask,123,3,false,true,true));
+ }
  for(unsigned mask:{0x400u,0x800u,0x1000u,0x2000u,0x4000u,0x10000u,0x80000u,0x100000u,0x2000000u,0x10000000u})
   CHECK(!ValidNormalPlayerTools(1,1,flags&~mask,123,3,false,true,true));
  CHECK(!ValidNormalPlayerTools(1,1,flags,0,3,false,true,true));

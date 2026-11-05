@@ -83,7 +83,7 @@ int wmain(int argc,wchar_t** argv){try {
             Require(!normalPlayerKnife,"Specify player knife once");
             if(option==L"--chest-holster-if-supported"){
 #ifdef FVR_BC2_PLAYER_KNIFE_NORMAL
-                normalPlayerKnife=fvr::bc2::KnifeHolsterOnly;
+                normalPlayerKnife=fvr::bc2::KnifeStockTrigger;
 #endif
             }else normalPlayerKnife=option==L"--player-knife"?fvr::bc2::KnifeStockMotion:fvr::bc2::KnifeTrackedQualification;
             continue;
@@ -174,7 +174,7 @@ int wmain(int argc,wchar_t** argv){try {
     constexpr bool normalContextualCompiled=false;
 #endif
     Require(normalPlayerKnife!=fvr::bc2::KnifeTrackedQualification||fvr::bc2::ChestKnifeTrackedStrikeAvailable,
-        "Tracked chest knife strikes are disabled while native exception cleanup is unresolved");
+        "Tracked chest knife strikes require separate native qualification; normal chest mode uses stock trigger input");
     Require(fvr::bc2::ValidNormalPlayerTools(normalPlayerKnife,normalContextualTools,configFlags,hostPid,magazineSession,
         chestKnifeProbe||ordinaryGrenadeInput||ordinaryResourceInput||ordinaryBoltInputCycles||physicalBoltCycles||m95StockShot||
         unsigned(pumpMode)||unsigned(bodyDiagnostic),normalKnifeCompiled,normalContextualCompiled),

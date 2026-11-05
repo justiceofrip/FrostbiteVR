@@ -114,7 +114,7 @@ bool Stop()noexcept;
 // Private draw/hold/return; the explicit finite mode separately admits motion.
 // Real menu and normal body custody must be installed first.
 std::optional<ChestKnifeProbeWitness> ReadChestKnifeProbeWitness(std::int64_t nowNs)noexcept;
-bool EnableChestKnifeDrawReturn(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t,bool motionEnabled=false,bool trackedAttackRequested=false)noexcept;
+bool EnableChestKnifeDrawReturn(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t,bool motionEnabled=false,bool trackedAttackRequested=false,bool stockTriggerEnabled=false)noexcept;
 // Default-OFF contextual tool binding; private finite fixture only.
 std::optional<ContextualToolProbeWitness> ReadContextualToolProbeWitness(std::int64_t nowNs)noexcept;
 bool EnableContextualTools()noexcept;

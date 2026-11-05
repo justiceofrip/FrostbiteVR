@@ -319,6 +319,24 @@ bool Bc2BodyInventory::Observe(const BodyNativeInventory& native,const BodyDrawS
     else if(nativeProofNs_&&s.hand.nowNs-nativeProofNs_>=150000000){SuspendInteraction();++metadataPauses_;}
     nativeProofNs_=s.hand.nowNs;
     const auto owner=Owner(s.owner);bool changed=owner.actor!=owner_.actor||owner.generation!=owner_.generation||nativeOwner_.player!=native.owner.player||inventory_!=native.inventory||switching_!=native.switching;
+    const auto pruneSlots=[&](const std::vector<BodyInventoryItem>& items){
+        // Retained metadata names only the same proven native lifetime. Never
+        // transfer an old shoulder to a replacement owner/container/item key.
+        std::erase_if(slots_,[&](const BodySlotAssignment& slot){
+            const auto item=std::find_if(items.begin(),items.end(),[&](const auto& current){return current.key==slot.item;});
+            return item==items.end()||std::find(item->preferredSlots.begin(),item->preferredSlots.begin()+item->preferenceCount,slot.slot)==item->preferredSlots.begin()+item->preferenceCount;
+        });
+    };
+    // The coherent native read and lifetime-gap handling above still run.
+    // With constructor-only preferences, identical carried metadata has the
+    // same keys/policy items; retain their storage instead of rebuilding it.
+    if(!changed&&owner.space==owner_.space){
+        std::size_t carried=0;bool identical=true;
+        for(unsigned n=0;n<native.count;++n){const auto& item=native.items[n];if(!item.weapon)continue;
+            if(carried==life_.size()||life_[carried].native!=item){identical=false;break;}++carried;
+        }
+        if(identical&&carried==life_.size()){pruneSlots(items_);nativeOwner_=native.owner;return true;}
+    }
     std::vector<Life> next;std::vector<BodyInventoryItem> items;
     for(unsigned n=0;n<native.count;++n){const auto& item=native.items[n];if(!item.weapon)continue;
         auto found=changed?life_.end():std::find_if(life_.begin(),life_.end(),[&](const Life& l){auto prior=l.native;prior.slot=item.slot;return prior==item;});
@@ -331,12 +349,7 @@ bool Bc2BodyInventory::Observe(const BodyNativeInventory& native,const BodyDrawS
     }
     changed=changed||items!=items_;
     if(changed||owner.space!=owner_.space){if(revision_==UINT64_MAX)return false;++revision_;armed_=false;heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();}
-    // Retained metadata names only the same proven native lifetime. Never
-    // transfer an old shoulder to a replacement owner/container/item key.
-    std::erase_if(slots_,[&](const BodySlotAssignment& slot){
-        const auto item=std::find_if(items.begin(),items.end(),[&](const auto& current){return current.key==slot.item;});
-        return item==items.end()||std::find(item->preferredSlots.begin(),item->preferredSlots.begin()+item->preferenceCount,slot.slot)==item->preferredSlots.begin()+item->preferenceCount;
-    });
+    pruneSlots(items);
     owner_=owner;nativeOwner_=native.owner;inventory_=native.inventory;switching_=native.switching;life_=std::move(next);items_=std::move(items);return true;
 }
 std::optional<AmmoResourceBinding> Bc2BodyInventory::ResourceBinding(const ReloadStateOwner& owner,std::int64_t now)const noexcept {
