@@ -1,5 +1,5 @@
 BC2 VR shared integration coordination
-Updated: November 4, 2026
+Updated: November 5, 2026
 Policy for this run: one coordinator worktree; coordinator owns shared integration.
 Canonical repository: G:\Unity\VRMMO\FrostbiteVR
 Integration branch: checkpoint/436-r56-equipment-rendering
@@ -11,7 +11,7 @@ Ownership: prior CHAT25/26 close.json confirms lease release, idle helpers and
 exact profile restoration. Coordinator acquired the lease before shared mutations.
 External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned.
 
-Private 0.1.64 with fallback 0.1.63 is locally installed and setup-validated. Built source 4cc635a is on both verified development branches. Normal tests: 350 x86, 347 x64. All 105 package files and the 307-part cache verified; settings preserved. No new game/headset session or public release. See docs/CURRENT.md for the C4 repair and remaining gameplay limits.
+Private 0.1.65 with fallback 0.1.64 is locally installed and setup-validated. Built source 002da42 is on both verified development branches. Normal tests: 350 x86, 347 x64. All 105 package files and the 307-part cache verified; settings preserved. The chest knife now requests its stock attack on a fresh held trigger press; unchanged inventory updates avoid list allocations. Actual attack damage and FPS improvement are not established. No new game/headset session or public release. See docs/CURRENT.md for retained reload/C4/vehicle work and remaining gameplay limits.
 
 Retained milestones: actual269 complete QJU88 native belt reload;304 launcher Open;319 accepted native launcher projectile helper/target;348/353 qualified same-shot diagnostic geometry.320 post-shot observation fix pushed and12 methods pass. Broader family/headset reliability, full launcher reload, muzzle correction/destruction and performance remain open. Compact COORDINATOR-STATE.txt tracks live ownership; below is historical.
 Historical Feedback100 builtb6bd507/nativeb2919811 introduced retained normal graphics creation correction and compressed sight diagnostics. Actual101 joined creation1->0 to nativeflag0 device/context, bothmenu/worldeyes/noAV30/liveDetach/normalclosure. Actual104 physical SightFlip/native shot/HUD1/5->0/5 passed, but no impact/newdamage established; no crashcause/performance/destruction/headset claim.

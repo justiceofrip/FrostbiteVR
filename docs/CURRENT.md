@@ -1,13 +1,15 @@
 # Current state — shared normal integration / public 0.1.15
 
-Updated November 4, 2026. This replaces old next-step instructions; prior evidence remains in
+Updated November 5, 2026. This replaces old next-step instructions; prior evidence remains in
 [history/](history/README.md) (search it by run number; never read a log whole).
 
 ## Active work
 
-Private 0.1.64 is installed with 0.1.63 as fallback. Source 4cc635a is pushed to both development branches. The normal builds passed 350 x86 and 347 x64 tests; installed setup validated the 307-part cache and preserved settings. When mission 1 selects its C4 with a rifle stowed, the rifle can now release its input block while staying in its slot. The local report distinguishes B placement input from trigger detonation. Neither the setup check nor a cache write establishes an actual charge placement. [Opening C4](../handoff/integrations/coordinator-20261104-opening-charge/README.txt). The chest knife draw/return, right-A seat request and shared fixed-chamber reload fixes remain included. [Chest controls](../handoff/integrations/coordinator-20261104-chest415/README.txt) and [reload and vehicle changes](../handoff/integrations/coordinator-20261104-seat-reload/README.txt).
+Private 0.1.65 is installed with 0.1.64 as fallback. Built source 002da42 is pushed to both development branches. Both normal builds passed (350 x86, 347 x64); installed setup validated all 105 package files and the retained 307-part cache, with settings preserved. The local test shortcut selects this exact installation. No new game/headset session or public release occurred.
 
-Candidate source adds a separate stock trigger attack for the drawn chest knife and removes repeated inventory-list allocations after identical fresh native reads. Focused checks passed; installation is still the version above until combined validation and deployment finish. [Stock knife and allocation scope](../handoff/integrations/coordinator-20261105-stock-knife/README.txt).
+The chest knife now has a stock trigger attack: with an empty right hand, grip the chest handle to draw, release then press the trigger to request BC2's original attack, and release the trigger before gripping to return. Physical tracked stabbing remains disabled. Unchanged native inventory reads also reuse their existing policy lists, eliminating repeated allocations in the measured helper. Actual knife damage and FPS gains have not been demonstrated. [Stock knife and allocation scope](../handoff/integrations/coordinator-20261105-stock-knife/README.txt).
+
+The mission-1 C4 stowed-rifle input repair, chest handle, right-A seat request and shared fixed-chamber reload fixes remain included. Charge placement and mission-permitted vehicle behavior still need actual-game evidence. [Opening C4](../handoff/integrations/coordinator-20261104-opening-charge/README.txt), [chest controls](../handoff/integrations/coordinator-20261104-chest415/README.txt), [reload and vehicle changes](../handoff/integrations/coordinator-20261104-seat-reload/README.txt).
 
 The installed magazine handler now accepts a settled bolt-action rifle when its magazine needs work. It preserves each rifle’s empty well across switches, including before a new native binding arrives; an owed bolt stroke stays with its owner. This covers 17 M95, M24, GOL and SV98 configurations. A complete manual bolt-rifle magazine reload has not yet been demonstrated in BC2. [Weapon-family coverage](WEAPON-COVERAGE-CURRENT.md).
 
@@ -22,10 +24,6 @@ Installed61 includes the separate smoke-launcher candidate for all24 reviewed co
 Actual269 demonstrates one complete QJU88 belt-fed reload in BC2 with emulated controllers: all five operations accepted, native ammunition conserved0/687->200/487, lid closed and firing unblocked. Both final rendered views agree; normal closure and exact restoration passed. That episode used private53 with passive tracing in source/tool1917923. Other native variants, headset reliability, post-reload firing and the remaining weapon families are not established. [Complete-cycle evidence](../handoff/integrations/coordinator-20261103-feed269/README.txt).
 
 Actual304 on installed54 acquired the launcher mechanism and completed physical Open, advancing to Insert after289's shared same-gun ownership correction. Selection and one shot produced native1/7->0/7.309 corrects the observer's rejection of normal claim release, including receipt-backed insertion;131 affected checks pass, including the saved actual304 failure.313 review found no actionable issue. Normal closure and restoration passed; Insert/Close, full launcher reload and muzzle/impact qualification remain open. [Completion observer](../handoff/integrations/coordinator-20261103-completion309/README.txt), [ownership correction and delivery](../handoff/integrations/coordinator-20261103-fixed289/README.txt).
-
-Actual259 on53 completed Open/Detach, then stopped before supply grip input: a fresh same-owner frame lacked the feed presentation because its original native observation was missing. The observer rejected the blocked frame before its existing pending-presentation handling, despite133.8ms remaining in the boundary. All104 supply-approach commands acknowledged; no refill was attempted.4258 native records now confirm unchanged0/687 ammunition. The session closed normally with all six owned exits, native retirement and exact profiles/settings restored.263 corrects this observer-only path;34 geometry and55 affected driver checks pass, including the exact saved frame, recovery and original-deadline expiry. No native rebuild is needed. Broader reload/headset acceptance, muzzle/destruction and performance remain open.
-
-Actual264 completed OpenCover and acquired DetachContainer, then exhausted its250ms acknowledgement read deadline; the cause remains unresolved. All six owned processes closed normally and exact profiles/settings restored; evidence is archived with hashes preserved.267 adds deferred failure-only timing, with59 driver checks passing and no native change. Offline Windows32/32 sequences became visible but six state replacements failed with WinError5; an injected read denial preserved the original deadline. This is transport evidence, not full reload acceptance. [267 evidence](../handoff/integrations/coordinator-20261103-ack267/README.txt).
 
 Feedback100 graphics creation correction and compressed sight diagnostics remain included in the current runtime. Actual101 joined production creation flags1->0 to the same native renderer device, rendered both menu/world eyes, completed the30s no-AV watch and normal retirement/close/restoration. This qualifies the creation contract in one actual-game episode, not crash causation, performance or headset stability. [Handoff100](../handoff/integrations/coordinator-20261102-feedback100/README.txt).
 
@@ -120,17 +118,8 @@ and four existing regression files, with other gameplay/launcher code preserved.
 Normal feature flags and the reviewed native operation table are unchanged.
 Private fixture, phase and payload instrumentation is excluded.
 
-The preceding integration is retained under `normal-shared-integration-prep`:
-source preparation `7c027183f6926d276da9e160c1ce6cd634f98f137f2e0b3ddde43d83cb2bb765`,
-native closure `bba525ecb1db39774f245efcf52d0148edba5ef5141b5bbbb999a9484b37abb5`.
-Its six-binary fallback is `build01/normal-runtime/build-receipt.json`,
-SHA `fe86157e3905af017a3be52acf69507e862acb59dbfc1a30817ec0160bbb674b`,
-version `unreleased-checkpoint436-shared-production01`.
-Independent artifact audit `build01/independent-runtime-audit01.json`, SHA
-`498b16bf37761822babdd8a3b993957eabec9aa300fdd6f7a0e24453995180e1`,
-joins all17 source changes, both305/305 validations, five focused checks and all
-six binary/PDB identities. The Probe PDB is retained with its DLL.
-This qualifies the build pair, not additional native/headset behavior.
+The preceding shared integration's build identities and independent artifact audit remain in
+`normal-shared-integration-prep/build01`. Its normal builds qualify the build pair, not additional native/headset behavior.
 
 Root owns builds, game launch/input and native sessions. Scenes120 through124
 are closed; native/provision helpers retired and all three original profiles
