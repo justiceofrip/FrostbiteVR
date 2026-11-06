@@ -321,6 +321,27 @@ class SelectedAmmoDriver(FixedContainerDriver):
                     'Selected ammunition observation refresh request budget exhausted')
         return super().request_snapshot()
 
+    def defer_invalid_snapshot(self, snapshot, now):
+        if not (getattr(self, 'post_shot_observing', False)
+                and snapshot.get('valid') is False and snapshot.get('invalid_reason') == 'shot_expired'):
+            return False
+        # Transport has retained this exact matching response and checked its
+        # writer/failure/response deadline. Its expired native publication has
+        # no frame or ammunition authority; only a new full admission can resume.
+        self.check_post_shot_observation_owner()
+        require(snapshot.get('schema') == 'fvr.bc2.live-mechanism-snapshot.v1'
+                and self.pending_nonce is not None and integer(snapshot['nonce']) == self.pending_nonce
+                and self.last_request <= integer(snapshot['observed_ns']) <= now
+                and time.perf_counter_ns() - self.last_request <= transport.SNAPSHOT_TIMEOUT,
+                'Invalid selected ammunition publication identity/time')
+        self.artifacts.event(dict(type='selected_ammo_post_shot_expired', nonce=snapshot['nonce'],
+            evaluatedNs=now, observationDeadlineNs=min(self.deadline, self.stage_deadline),
+            refreshRequests=self.snapshot_index-self.post_shot_request_start,
+            lastCommandWrittenNs=self.last_write, commandAuthority=False))
+        self.pending_nonce = None
+        self.request_snapshot()
+        return True
+
     def fresh_available(self):
         if self.commands != 4 or not self.demand_finished:
             return super().fresh_available()
