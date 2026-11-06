@@ -25,13 +25,14 @@ class Artifacts:
 
 class Harness:
     """Use the real inherited send/ack/ownership/cleanup protocol in memory."""
-    def __init__(self, test, schedule=None):
+    def __init__(self, test, schedule=None, driver_type=None):
         self.now = 10 * NS
         self.writes = []
         self.pending = None
         self.schedule = schedule or (lambda elapsed: (0, True))
         self.on_sleep = None
-        self.v = v = r.ResumeDriver.__new__(r.ResumeDriver)
+        driver_type = driver_type or r.ResumeDriver
+        self.v = v = driver_type.__new__(driver_type)
         v.args = SimpleNamespace(max_clicks=3)
         v.started, v.hard_deadline = self.now, self.now + 35 * NS
         v.deadline = v.hard_deadline - r.RELEASE_RESERVE_NS
@@ -275,6 +276,144 @@ class ResumeDriverTests(unittest.TestCase):
              patch.object(r.os, "fstat", return_value=SimpleNamespace(st_dev=1, st_ino=3, st_size=len(raw))):
             with self.assertRaisesRegex(r.REFUSAL, "identity changed"):
                 tail.read()
+
+
+class SinglePlayerSelectionTests(unittest.TestCase):
+    @staticmethod
+    def capture():
+        # Schema/geometry from actual452; clocks and frame IDs below are synthetic.
+        return dict(name="menu", sessionState="FOCUSED", displayTimeNs=90 * NS,
+                    frameIndex=120, width=640, height=480,
+                    head=dict(pos=[0, 1.6, 0], quat=[0, 0, 0, 1]),
+                    layers=[dict(i=0, type="quad", space="stage", pose=[0, 1.6, -1.5],
+                                 sizeM=[2.2, 1.65])],
+                    views=[dict(eye="left", pos=[-.0315, 1.6, 0],
+                                fovDeg=dict(l=-54.431, r=42.972, u=48.701, d=-48.701))])
+
+    def harness(self, schedule=None, hover=False):
+        h = Harness(self, schedule, r.SinglePlayerDriver)
+        h.v.menu_capture = self.capture()
+        h.v.pose = r.single_player_geometry(h.v.menu_capture)["pose"]
+        h.v.args.max_clicks = 1
+        h.v.args.single_player_hover_only = hover
+        h.v.hard_deadline = h.v.started + 10 * NS
+        h.v.deadline = h.v.hard_deadline - r.RELEASE_RESERVE_NS
+        h.v.stage_deadline = h.v.deadline
+        h.state["head"] = dict(pos=[0, 1.6, 0], ypr=[0, 0, 0])
+        h.state["handR"] = dict(pos=[.2, 1.3, -.35], followsHead=False)
+        return h
+
+    def test_captured_full_quad_derives_the_reviewed_tab_ray(self):
+        g = r.single_player_geometry(self.capture())
+        self.assertEqual(g["pose"], "hand r grip pose 0.2 1.3 -0.35 18.875549054 32.221822099 0")
+        self.assertAlmostEqual(g["rasterUv"][0], .412188729651)
+        self.assertAlmostEqual(g["rasterUv"][1], .217576856526)
+        self.assertFalse(g["nativeWidgetAcceptance"])
+        for mutate in (
+            lambda c: c["head"].update(pos=[0, 1.7, 0]),
+            lambda c: c["head"].update(quat=[0, .1, 0, 1]),
+            lambda c: c["layers"][0].update(sizeM=[2.2, 1.2]),
+            lambda c: c["layers"][0].update(pose=[0, 1.6, -1.6]),
+            lambda c: c["views"][0]["fovDeg"].update(l=-50),
+            lambda c: c.update(width=641),
+        ):
+            c = self.capture()
+            mutate(c)
+            with self.assertRaises(r.REFUSAL):
+                r.single_player_geometry(c)
+
+    def test_one_click_follows_fresh_neutral_and_finishes_released(self):
+        h = self.harness()
+        self.assertTrue(h.v.resume())
+        self.assertEqual(len(h.downs()), 1)
+        self.assertEqual(h.v.clicks, 1)
+        self.assertIn("trigger r 0", h.writes[0][1])
+        self.assertGreater(h.downs()[0], h.writes[0][0])
+        self.assertEqual(h.writes[-1][1][0], "trigger r 0")
+        self.assertFalse(h.v.pending_command or h.v.held_trigger or h.v.world_progressed)
+        self.assertLess(h.now - h.v.started, 10 * NS)
+        before = [e for e in h.v.artifacts.events if e["type"] == "resume_event_before"]
+        self.assertEqual([e["event"] for e in before],
+                         ["single-player-neutral-ray", "single-player-trigger-down", "single-player-trigger-up"])
+        self.assertGreater(before[1]["native"]["sampleNs"], before[0]["native"]["sampleNs"])
+
+    def test_hover_has_no_trigger_down(self):
+        h = self.harness(hover=True)
+        self.assertTrue(h.v.resume())
+        self.assertEqual(h.downs(), [])
+        self.assertEqual(len(h.writes), 1)
+        self.assertFalse(h.v.pending_command or h.v.held_trigger)
+
+    def test_menu_loss_before_press_never_clicks(self):
+        h = self.harness(lambda elapsed: (0, elapsed == 0))
+        with self.assertRaisesRegex(r.REFUSAL, "menu changed before tab"):
+            h.v.resume()
+        self.assertEqual(h.downs(), [])
+        self.assertFalse(h.v.held_trigger)
+
+    def test_tab_transition_after_down_releases_for_image_review(self):
+        h = self.harness()
+        original = h.native
+        def native():
+            row = original()
+            if h.downs():
+                row["selected_knife"]["sample_ns"] = h.now
+                row["menu_connection"]["ready"] = False
+            return row
+        h.v.tail.read = native
+        self.assertTrue(h.v.resume())
+        self.assertEqual(len(h.downs()), 1)
+        self.assertEqual(h.writes[-1][1][0], "trigger r 0")
+        self.assertFalse(h.v.held_trigger or h.v.pending_command)
+        self.assertIsNotNone(h.v.input_stopped)
+
+    def test_head_change_after_neutral_blocks_press(self):
+        h = self.harness()
+        h.on_sleep = lambda: h.state["head"].update(pos=[.1, 1.6, 0])
+        with self.assertRaisesRegex(r.REFUSAL, "pointing frame changed"):
+            h.v.resume()
+        self.assertEqual(h.downs(), [])
+
+    def test_competing_command_writer_blocks_press(self):
+        h = self.harness()
+        def interfere():
+            if h.writes and h.pending is None:
+                h.files[h.v.command_path] = b"competing writer\n"
+        h.on_sleep = interfere
+        with self.assertRaises(r.REFUSAL):
+            h.v.resume()
+        self.assertEqual(h.downs(), [])
+
+    def test_capture_admission_rejects_stale_foreign_or_out_of_run_frames(self):
+        run = Path("G:/fixture/run")
+        def initialize(v, args):
+            v.startup = dict(settled_state=dict(frame=100))
+            v.state = dict(frame=150)
+            v.capture_plan = dict(width=640, height=480)
+            v.artifacts = SimpleNamespace(save=lambda *a, **k: None)
+        cases = (
+            ("sim/capture/menu.json", lambda c: None, True),
+            ("outside/menu.json", lambda c: None, False),
+            ("sim/capture/menu.json", lambda c: c.update(displayTimeNs=39 * NS), False),
+            ("sim/capture/menu.json", lambda c: c.update(displayTimeNs=101 * NS), False),
+            ("sim/capture/menu.json", lambda c: c.update(frameIndex=99), False),
+            ("sim/capture/menu.json", lambda c: c.update(frameIndex=151), False),
+            ("sim/capture/menu.json", lambda c: c.update(name="different"), False),
+        )
+        for relative, mutate, allowed in cases:
+            c = self.capture()
+            mutate(c)
+            args = SimpleNamespace(run=run, single_player_capture=Path(relative), single_player_hover_only=False)
+            with self.subTest(relative=relative, capture=c), \
+                 patch.object(d, "local_path", side_effect=lambda p: Path(p)), \
+                 patch.object(d, "read_json", return_value=(c, b"synthetic capture")), \
+                 patch.object(r.ResumeDriver, "__init__", initialize), \
+                 patch.object(r.time, "perf_counter_ns", return_value=100 * NS):
+                if allowed:
+                    r.SinglePlayerDriver(args)
+                else:
+                    with self.assertRaises(r.REFUSAL):
+                        r.SinglePlayerDriver(args)
 
 
 if __name__ == "__main__":
