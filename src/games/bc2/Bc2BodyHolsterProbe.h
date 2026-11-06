@@ -4,6 +4,8 @@
 #include "Bc2BodyHolsterProbeSession.h"
 #include "Bc2DiagnosticFireAmmo.h"
 #include <atomic>
+#include <cstdint>
+#include <utility>
 #include <ostream>
 #include <string_view>
 namespace fvr::bc2 {
@@ -37,6 +39,43 @@ BodyHolsterProbeObservation ObserveBodyHolsterProbe(const std::atomic<std::share
     result.rejectionReason=BodyHolsterProbeReadRejection(result.sample.get(),result.enabled,result.observedNs);
     return result;
 }
+// Explicit snapshot worker only. A cold diagnostic window may still hold an
+// expired copy from its previous window. Wait for a subsequent original copy,
+// never make the retained copy current by reopening the observation window.
+// This grants no action/claim authority and never changes a source timestamp.
+template<class Read,class Clock,class Pause>
+BodyHolsterProbeObservation PrepareBodyHolsterObservation(BodyHolsterProbeObservation current,
+    bool cold,std::int64_t requestedNs,Read read,Clock clock,Pause pause)noexcept {
+    const auto pending=[](const BodyHolsterProbeObservation& value)noexcept {
+        return value.enabled&&(value.rejectionReason=="sample_missing"||
+            value.rejectionReason=="sample_age_expired"||value.rejectionReason=="input_lease_expired");
+    };
+    // Warm, already-fresh, disabled and other refused sources never sleep.
+    if(!cold||!pending(current))return current;
+    constexpr std::int64_t budgetNs=50000000;
+    if(requestedNs<=0||requestedNs>INT64_MAX-budgetNs)return current;
+    const auto deadline=requestedNs+budgetNs;
+    for(unsigned attempt=0;attempt<50;++attempt){
+        const auto before=clock();
+        if(before<requestedNs||before>=deadline)return current;
+        pause();
+        auto next=read(); // One immutable load and its own observer clock.
+        const auto after=clock();
+        if(after<before||after>=deadline||next.observedNs<requestedNs||next.observedNs>after){
+            // Scheduling can overrun a sleep. Such a late copy is not admitted.
+            next.rejectionReason="observation_prepare_deadline";return next;
+        }
+        if(next.Available()){
+            if(!next.sample||next.sample->sampledNs<=requestedNs)
+                next.rejectionReason="sample_predates_request";
+            return next;
+        }
+        current=std::move(next);
+        if(!pending(current))return current;
+    }
+    return current; // Bounded exhaustion remains explicitly unavailable.
+}
+
 enum class BodyHolsterFixturePhase:unsigned {Warmup,Baseline,ReachHolster,PressHolster,WaitEmpty,
     FreeA,FreeB,ReachDraw,PressDraw,WaitDraw,Restored,Done,Failed,FirePulse,FireReleased};
 struct BodyHolsterFixtureSample {

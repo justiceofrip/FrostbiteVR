@@ -9,7 +9,9 @@
 // Opt-in diagnostic only. No game writes, new hooks, callback allocation,
 // waits or file IO. Configure before admission; report after existing drains.
 namespace fvr::diagnostics::privateCpu {
-enum class Stage:unsigned {MainOrdinary,MainTracked,ExtraEye,RigTotal,RigRead,ProfileCapture,GraphicsPump,ProducerPublish,Count};
+enum class Stage:unsigned {MainOrdinary,MainTracked,ExtraEye,RigTotal,RigRead,ProfileCapture,GraphicsPump,ProducerPublish,
+    PublishFirstSubmit,PublishRetry,PublishValidateFirstSubmit,PublishValidateRetry,
+    PublishCopy,PublishEnd,PublishFlush,PublishGetDataFirstSubmit,PublishGetDataRetry,Count};
 constexpr unsigned Count=unsigned(Stage::Count),MaxSamples=8192,RigRecords=8;
 constexpr std::array<unsigned,7> HistogramUpperMicroseconds{10,100,1000,5000,10000,20000,50000};
 struct Identity {
@@ -203,7 +205,10 @@ public:
            <<",\"window_closed\":"<<(phase==Stopped?"true":"false")<<",\"start_errors\":"<<startErrors_.load()
            <<",\"rig_record_capacity\":"<<RigRecords<<",\"rig_admission_overflow_calls\":"<<overflow_.load()
            <<",\"late_admission_calls\":"<<lateAdmission_.load()<<",\"per_stage_sample_cap\":"<<MaxSamples;
-        const char* names[]={"native_main_ordinary","native_main_tracked","native_extra_eye","rig_total","rig_fresh_read","profile_capture","graphics_pump","producer_publish"};
+        constexpr std::array names={"native_main_ordinary","native_main_tracked","native_extra_eye","rig_total","rig_fresh_read","profile_capture","graphics_pump","producer_publish",
+            "producer_publish_first_submit","producer_publish_retry","producer_publish_validate_first_submit","producer_publish_validate_retry",
+            "producer_publish_copy","producer_publish_end","producer_publish_flush","producer_publish_getdata_first_submit","producer_publish_getdata_retry"};
+        static_assert(names.size()==Count);
         out<<",\"routing\":[";
         for(unsigned i=0;i<Count;++i){if(i)out<<',';out<<"{\"name\":\""<<names[i]<<"\",\"foreign_thread\":"<<foreign_[i].load()
             <<",\"unregistered_thread\":"<<unregistered_[i].load()<<'}';}
@@ -240,6 +245,7 @@ class Scope {
 public:
     explicit Scope(Stage stage,bool eligible=true)noexcept:token_(recorder.Begin(stage,eligible)){}
     ~Scope(){recorder.End(token_);}
+    bool Active()const noexcept{return token_.active;}
     Scope(const Scope&)=delete;Scope& operator=(const Scope&)=delete;
 };
 }

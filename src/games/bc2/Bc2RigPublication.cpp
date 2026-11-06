@@ -2753,13 +2753,18 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     // publications plus bounded ReadProcessMemory equipment bookends. It never
     // calls an actor resolver/native method or accesses poseMutex scratch.
     constexpr std::size_t snapshotLimit=LiveMechanismSnapshotLimit;
+    const auto requested=ReloadNanos();
+    const bool cold=!ShellPumpObservationRequested(requested);
+    gameplay::RequestChestKnifeLiveObservation(requested);
+    // Begin passive copies before serializing. Only this explicit worker may
+    // briefly wait for cold publication; no game/render callback waits here.
+    shellPumpObservationUntil.store(requested+1000000000ll,std::memory_order_relaxed);
+    RequestBc2PhysicalFeedAdmissionObservation(requested);
+    reloadFlowRuntime::RequestFixedContainerGateObservation(requested,shellPumpObservationUntil.load(std::memory_order_relaxed));
+    const auto holsterObservation=PrepareBodyHolsterObservation(gameplay::ReadBodyHolsterProbeObservation(),cold,requested,
+        []()noexcept{return gameplay::ReadBodyHolsterProbeObservation();},
+        []()noexcept{return ReloadNanos();},[]()noexcept{Sleep(1);});
     auto observed=ReloadNanos();std::string feedDiagnostics;
-    gameplay::RequestChestKnifeLiveObservation(observed);
-    // Explicit snapshot request opts in subsequent serialized Gameplay copies.
-    // No source deadline is changed; an initial request may report pending.
-    shellPumpObservationUntil.store(observed+1000000000ll,std::memory_order_relaxed);
-    RequestBc2PhysicalFeedAdmissionObservation(observed);
-    reloadFlowRuntime::RequestFixedContainerGateObservation(observed,shellPumpObservationUntil.load(std::memory_order_relaxed));
     // One immutable retained attempt is independent of pose admission. Capture
     // it once so an invalid snapshot cannot replace the first failed squeeze
     // with unrelated later atomics, or omit it when there is no Feed pose.
@@ -2979,9 +2984,8 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
         invalid("sight_native_source_mismatched_or_invalid");return;
     }
     auto until=std::min({ReloadNanos(frame->deadline),m.inputEvidence.deadlineNs,selected->deadlineNs});
-    // Gameplay and render publish independently. Clock after loading one probe;
-    // disclose that observer time, never substitute/restamp the render input.
-    const auto holsterObservation=gameplay::ReadBodyHolsterProbeObservation();
+    // Retain the exact worker-prepared immutable load and its observer time;
+    // ordinary ownership/input joins and every original lease remain required.
     const auto& holster=holsterObservation.sample;
     const bool holsterInputMatches=holsterObservation.Available()&&holster->hand.sequence==m.inputEvidence.sequence&&
         holster->hand.observedNs==m.inputEvidence.observedNs&&holster->hand.deadlineNs==m.inputEvidence.deadlineNs;

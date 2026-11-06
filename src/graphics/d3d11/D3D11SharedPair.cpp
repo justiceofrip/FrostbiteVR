@@ -9,6 +9,7 @@
 #include <cstring>
 #include <new>
 #include <string>
+#include <type_traits>
 
 namespace fvr::graphics {
 using Microsoft::WRL::ComPtr;
@@ -141,14 +142,29 @@ TransferResult D3D11PairProducer::Create(ID3D11Device* device,UINT width,UINT he
 }
 TransferResult D3D11PairProducer::Publish(const std::array<TextureSlice,2>& sources,const FrameMetadata& frame,PairTicket& ticket) noexcept {
     fvr::diagnostics::privateCpu::Scope cpuPublish(fvr::diagnostics::privateCpu::Stage::ProducerPublish);
+    // Only the existing finite parent sample admits subscopes. The false
+    // specialization has no additional recorder/clock calls (also after cap).
+    struct NoCpuScope {explicit NoCpuScope(fvr::diagnostics::privateCpu::Stage,bool=true)noexcept{}};
+    const auto publish=[&]<bool Profile>()noexcept -> TransferResult {
+    using CpuStage=fvr::diagnostics::privateCpu::Stage;
+    using CpuScope=std::conditional_t<Profile,fvr::diagnostics::privateCpu::Scope,NoCpuScope>;
     ticket={};
     if(!state_){error_=E_UNEXPECTED;return TransferResult::Unavailable;}
-    auto& s=*state_;if(s.faulted)return TransferResult::Faulted;
+    auto& s=*state_;
+    const bool retry=s.publishing;
+    const bool measure=s.descriptor.sharing==TextureSharing::LegacyFenced&&!s.awaitingAck;
+    // These are inclusive call classes. Validation refusals are retained;
+    // missing-state and awaiting-ack calls remain in the parent scope only.
+    CpuScope cpuAttempt(retry?CpuStage::PublishRetry:CpuStage::PublishFirstSubmit,measure);
+    {
+    CpuScope cpuValidate(retry?CpuStage::PublishValidateRetry:CpuStage::PublishValidateFirstSubmit,measure);
+    if(s.faulted)return TransferResult::Faulted;
     if(!frame.frameId||frame.frameId<=s.frameId||!frame.spaceGeneration||!frame.trackingGeneration||
         frame.predictedNs<=0||s.sequence>=0x7fffffffffffffffULL||!SlicesValid(s,sources)){
         error_=E_INVALIDARG;return TransferResult::Invalid;
     }
     if(DeviceStatus(s,error_)!=TransferResult::Ok)return TransferResult::Faulted;
+    }
     if(s.descriptor.sharing==TextureSharing::LegacyFenced){
         if(s.awaitingAck)return TransferResult::Busy;
         if(!s.publishing){
@@ -156,11 +172,16 @@ TransferResult D3D11PairProducer::Publish(const std::array<TextureSlice,2>& sour
                 frame.trackingGeneration,frame.spaceGeneration,frame.predictedNs,s.descriptor.resourceEpoch};
             const auto gpuCopy=fvr::diagnostics::privateGpu::recorder.Begin(
                 fvr::diagnostics::privateGpu::Kind::ExportCopy,gpuKey,0,0,s.context.Get());
-            for(unsigned eye=0;eye<2;++eye)s.context->CopySubresourceRegion(s.eyes[eye].texture.Get(),0,0,0,0,sources[eye].texture,sources[eye].subresource,nullptr);
+            {CpuScope cpuCopy(CpuStage::PublishCopy);
+            for(unsigned eye=0;eye<2;++eye)s.context->CopySubresourceRegion(s.eyes[eye].texture.Get(),0,0,0,0,sources[eye].texture,sources[eye].subresource,nullptr);}
             fvr::diagnostics::privateGpu::recorder.End(gpuCopy);
-            s.context->End(s.completion.Get());s.context->Flush();s.pending=frame;s.publishing=true;}
+            {CpuScope cpuEnd(CpuStage::PublishEnd);s.context->End(s.completion.Get());}
+            {CpuScope cpuFlush(CpuStage::PublishFlush);s.context->Flush();}
+            s.pending=frame;s.publishing=true;}
         if(frame.frameId!=s.pending.frameId||frame.trackingGeneration!=s.pending.trackingGeneration||frame.spaceGeneration!=s.pending.spaceGeneration||frame.predictedNs!=s.pending.predictedNs){error_=E_INVALIDARG;return TransferResult::Invalid;}
-        BOOL done=FALSE;error_=s.context->GetData(s.completion.Get(),&done,sizeof(done),D3D11_ASYNC_GETDATA_DONOTFLUSH);
+        BOOL done=FALSE;
+        {CpuScope cpuGetData(retry?CpuStage::PublishGetDataRetry:CpuStage::PublishGetDataFirstSubmit);
+        error_=s.context->GetData(s.completion.Get(),&done,sizeof(done),D3D11_ASYNC_GETDATA_DONOTFLUSH);}
         if(error_==S_FALSE||(error_==S_OK&&!done))return TransferResult::Busy;
         if(FAILED(error_)){s.faulted=true;return TransferResult::Faulted;}
         s.publishing=false;s.awaitingAck=true;++s.sequence;s.frameId=frame.frameId;
@@ -179,6 +200,8 @@ TransferResult D3D11PairProducer::Publish(const std::array<TextureSlice,2>& sour
     ticket.spaceGeneration=frame.spaceGeneration;ticket.trackingGeneration=frame.trackingGeneration;
     ticket.predictedNs=frame.predictedNs;ticket.session=s.descriptor.session;
     return TransferResult::Ok;
+    };
+    return cpuPublish.Active()?publish.operator()<true>():publish.operator()<false>();
 }
 bool D3D11PairProducer::ExportReadsQueued(ID3D11Device* device,ID3D11DeviceContext* context,const FrameMetadata& frame)const noexcept {
     if(!state_)return false;const auto& s=*state_;

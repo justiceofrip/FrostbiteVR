@@ -279,7 +279,77 @@ int GpuSmoke(){
     return 0;
 }
 }
+namespace {
+namespace cpu=fvr::diagnostics::privateCpu;
+struct CpuPublishClock {
+    inline static cpu::Identity owner{41,700};
+    inline static cpu::Stamp stamp{1000,2000};
+    inline static unsigned samples=0,identities=0;
+    static cpu::Identity Current()noexcept{++identities;return owner;}
+    static bool Sample(cpu::Stamp& out)noexcept{++samples;out=stamp;return true;}
+    static bool Configure(unsigned,const wchar_t*,cpu::Identity& out,std::uint64_t& frequency)noexcept {
+        out=owner;frequency=1000000;return true;
+    }
+};
+std::string CpuPublishReport(const cpu::BasicRecorder<CpuPublishClock>& recorder){
+    std::ostringstream out;recorder.Report(out,true);return out.str();
+}
+std::string CpuPublishRow(const std::string& report,const char* name){
+    const auto stages=report.find("\"stages\":[");
+    const auto begin=report.find(std::string("{\"name\":\"")+name+'"',stages);
+    return begin==std::string::npos?std::string{}:report.substr(begin,report.find('}',begin)-begin+1);
+}
+int CpuPublishSubscopes(){
+    constexpr std::array stages={cpu::Stage::PublishFirstSubmit,cpu::Stage::PublishRetry,
+        cpu::Stage::PublishValidateFirstSubmit,cpu::Stage::PublishValidateRetry,
+        cpu::Stage::PublishCopy,cpu::Stage::PublishEnd,cpu::Stage::PublishFlush,
+        cpu::Stage::PublishGetDataFirstSubmit,cpu::Stage::PublishGetDataRetry};
+    constexpr std::array names={"producer_publish_first_submit","producer_publish_retry",
+        "producer_publish_validate_first_submit","producer_publish_validate_retry",
+        "producer_publish_copy","producer_publish_end","producer_publish_flush",
+        "producer_publish_getdata_first_submit","producer_publish_getdata_retry"};
+    cpu::BasicRecorder<CpuPublishClock> off;
+    for(const auto stage:stages)CHECK(!off.Begin(stage).active);
+    CHECK(CpuPublishClock::samples==0&&CpuPublishClock::identities==0);
+    cpu::BasicRecorder<CpuPublishClock> recorder;
+    recorder.ConfigureFromEnvironment(41,L"unused");recorder.StartFromVerifiedNativeOwner();
+    for(const auto stage:stages){
+        const auto token=recorder.Begin(stage);CHECK(token.active&&token.record==0);
+        CpuPublishClock::stamp.qpc+=100;CpuPublishClock::stamp.cycles+=10;recorder.End(token);
+    }
+    const auto report=CpuPublishReport(recorder);
+    const auto rig=report.substr(report.find("\"role\":\"rig\""));
+    for(const auto name:names){
+        const auto row=CpuPublishRow(report,name);
+        CHECK(row.find("\"calls\":1,\"samples\":1,\"qpc_sum\":100,\"qpc_max\":100,\"thread_cycles_sum\":10")!=std::string::npos);
+        CHECK(row.find("\"elapsed_histogram\":[0,0,1,0,0,0,0,0]")!=std::string::npos);
+        CHECK(rig.find(name)==std::string::npos);
+    }
+    // Independent first-submit/retry rows cannot consume one another's cap.
+    for(unsigned i=1;i<cpu::MaxSamples;++i){
+        const auto token=recorder.Begin(cpu::Stage::PublishGetDataRetry);CHECK(token.active);
+        ++CpuPublishClock::stamp.qpc;++CpuPublishClock::stamp.cycles;recorder.End(token);
+    }
+    CHECK(!recorder.Begin(cpu::Stage::PublishGetDataRetry).active);
+    const auto first=recorder.Begin(cpu::Stage::PublishGetDataFirstSubmit);CHECK(first.active);recorder.End(first);
+    const auto capped=CpuPublishRow(CpuPublishReport(recorder),"producer_publish_getdata_retry");
+    CHECK(capped.find("\"samples\":8192,")!=std::string::npos&&capped.find("\"capped\":1,")!=std::string::npos);
+    // Same numeric TID, different lifetime: no new graphics sample.
+    CpuPublishClock::owner.creation=701;CHECK(!recorder.Begin(cpu::Stage::PublishFlush).active);
+    CpuPublishClock::owner.creation=700;
+    CHECK(CpuPublishReport(recorder).find("\"name\":\"producer_publish_flush\",\"foreign_thread\":1,")!=std::string::npos);
+    const auto crossing=recorder.Begin(cpu::Stage::PublishFlush);CHECK(crossing.active);
+    CpuPublishClock::stamp.qpc=1000+12000000;recorder.End(crossing);
+    CHECK(!recorder.Begin(cpu::Stage::PublishEnd).active);
+    const auto closed=CpuPublishReport(recorder);
+    CHECK(closed.find("\"window_closed\":true")!=std::string::npos);
+    const auto flush=CpuPublishRow(closed,"producer_publish_flush");
+    CHECK(flush.find("\"calls\":2,\"samples\":1,")!=std::string::npos&&flush.find("\"crossed_deadline\":1,")!=std::string::npos);
+    return 0;
+}
+}
 int main(int argc,char** argv){if(argc==2&&std::string(argv[1])=="--gpu")return GpuSmoke();CHECK(argc==1);
+    CHECK(CpuPublishSubscopes()==0);
     CHECK(OptInAndActivation()==0);CHECK(DelayedActivation()==0);CHECK(DelayedActivationFailures()==0);
     CHECK(ExactOwnersAndKeys()==0);CHECK(CompleteNestedEpisode()==0);
     CHECK(BusyTimeoutAndStop()==0);CHECK(RejectedResults()==0);CHECK(FixedBudget()==0);return 0;}

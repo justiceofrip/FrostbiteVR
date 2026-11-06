@@ -61,6 +61,88 @@ int DiagnosticReadRetainsExactRefusals(){
     CHECK(BodyHolsterProbeReadRejection(boundary.get(),true,now+1)=="sample_age_expired");
     return 0;
 }
+int ColdObservationPreparation501And504(){
+    // Exact504 clocks: old window ended before the next process requested data.
+    constexpr std::int64_t requested=118531643187900,oldSample=118527298672000;
+    for(unsigned missing=0;missing<2;++missing){
+        auto old=std::make_shared<BodyHolsterProbeSample>();old->sampledNs=oldSample;
+        old->hand.observedNs=118527290110900;old->hand.deadlineNs=118527390110900;
+        old->hand.nowNs=118527292098700;old->hand.sequence=5993;
+        old->nativeOwner={1,2,3,4,5,6,7};
+        BodyHolsterProbeObservation initial{missing?nullptr:old,requested,true,
+            missing?"sample_missing":"sample_age_expired"};
+        auto fresh=std::make_shared<BodyHolsterProbeSample>(*old);
+        fresh->sampledNs=fresh->hand.observedNs=fresh->hand.nowNs=requested+2000000;
+        fresh->hand.deadlineNs=requested+102000000;fresh->hand.sequence=6254;
+        std::int64_t now=requested;unsigned pauses=0,reads=0;
+        const auto result=PrepareBodyHolsterObservation(initial,true,requested,[&]()noexcept {
+            ++reads;return reads==1?BodyHolsterProbeObservation{initial.sample,now,true,initial.rejectionReason}:
+                BodyHolsterProbeObservation{fresh,now,true,{}};
+        },[&]()noexcept{return now;},[&]()noexcept {++pauses;now+=1000000;});
+        CHECK(result.Available()&&result.sample==fresh&&result.observedNs==now&&reads==2&&pauses==2);
+        CHECK(result.sample->nativeOwner==old->nativeOwner&&result.sample->hand.sequence==6254);
+        CHECK(result.sample->sampledNs==requested+2000000&&result.sample->hand.deadlineNs==requested+102000000);
+        CHECK(old->sampledNs==oldSample&&old->hand.observedNs==118527290110900&&old->hand.deadlineNs==118527390110900);
+        CHECK(initial.sample==(missing?nullptr:old)&&!initial.Available());
+    }
+    return 0;
+}
+int ColdObservationPreparationBounds(){
+    constexpr std::int64_t requested=1000000000;
+    BodyHolsterProbeObservation missing{nullptr,requested,true,"sample_missing"};
+    for(unsigned mode=0;mode<3;++mode){
+        std::int64_t now=requested;unsigned reads=0,pauses=0;
+        const auto result=PrepareBodyHolsterObservation(missing,true,requested,[&]()noexcept {
+            ++reads;return BodyHolsterProbeObservation{nullptr,now,true,"sample_missing"};
+        },[&]()noexcept{return now;},[&]()noexcept {++pauses;if(mode!=1)now+=mode==2?50000000:1000000;});
+        CHECK(!result.Available()&&pauses<=50&&reads<=50);
+        CHECK(mode==2?pauses==1:pauses==50); // Clock and independent count bounds.
+    }
+    auto late=std::make_shared<BodyHolsterProbeSample>();late->sampledNs=requested+50000000;
+    late->hand.observedNs=late->sampledNs;late->hand.deadlineNs=late->sampledNs+100000000;
+    auto now=requested;
+    auto result=PrepareBodyHolsterObservation(missing,true,requested,[&]()noexcept {
+        return BodyHolsterProbeObservation{late,now,true,{}};
+    },[&]()noexcept{return now;},[&]()noexcept {now+=50000000;});
+    CHECK(!result.Available()&&result.sample==late&&result.rejectionReason=="observation_prepare_deadline");
+    CHECK(late->sampledNs==requested+50000000&&late->hand.deadlineNs==requested+150000000);
+    // Reopening a window cannot admit an old copy with a claimed fresh read.
+    late->sampledNs=requested-1;late->hand.observedNs=requested-1;late->hand.deadlineNs=requested+99999999;now=requested;
+    result=PrepareBodyHolsterObservation(missing,true,requested,[&]()noexcept {
+        return BodyHolsterProbeObservation{late,now,true,{}};
+    },[&]()noexcept{return now;},[&]()noexcept {++now;});
+    CHECK(!result.Available()&&result.rejectionReason=="sample_predates_request"&&late->sampledNs==requested-1);
+    return 0;
+}
+int WarmFreshAndChangedOwnerObservation(){
+    constexpr std::int64_t requested=1000000000;
+    auto sample=std::make_shared<BodyHolsterProbeSample>();sample->sampledNs=requested-1000000;
+    sample->hand.observedNs=sample->sampledNs;sample->hand.deadlineNs=requested+99000000;
+    sample->nativeOwner={1,2,3,4,5,6,7};
+    unsigned reads=0,clocks=0,pauses=0;
+    for(unsigned mode=0;mode<4;++mode){
+        BodyHolsterProbeObservation initial{sample,requested,mode!=2,
+            mode==0?std::string_view{}:mode==2?"gameplay_disabled":mode==3?"sample_time_future":"sample_missing"};
+        const auto result=PrepareBodyHolsterObservation(initial,mode!=1,requested,[&]()noexcept {++reads;return initial;},
+            [&]()noexcept {++clocks;return requested;},[&]()noexcept {++pauses;});
+        CHECK(result.sample==initial.sample&&result.observedNs==initial.observedNs&&result.rejectionReason==initial.rejectionReason);
+    }
+    CHECK(!reads&&!clocks&&!pauses); // No work/sleep for normal warm/fresh/disabled paths.
+    const auto originalOwner=sample->nativeOwner;
+    auto changed=std::make_shared<BodyHolsterProbeSample>(*sample);++changed->nativeOwner.weapon;
+    changed->sampledNs=changed->hand.observedNs=requested+1;changed->hand.deadlineNs=requested+100000001;
+    auto now=requested;BodyHolsterProbeObservation missing{nullptr,requested,true,"sample_missing"};
+    const auto result=PrepareBodyHolsterObservation(missing,true,requested,[&]()noexcept {
+        return BodyHolsterProbeObservation{changed,now,true,{}};
+    },[&]()noexcept{return now;},[&]()noexcept {++now;});
+    // Preparation is not ownership admission: the original serializer join
+    // against the current render owner still rejects this changed owner.
+    CHECK(result.sample==changed&&result.sample->nativeOwner!=originalOwner);
+    CHECK(!(result.Available()&&result.sample->nativeOwner==originalOwner));
+    CHECK(sample->nativeOwner==originalOwner&&changed->hand.deadlineNs==requested+100000001);
+    return 0;
+}
+
 int Flags(){constexpr auto flags=BodyHolsterProbeFlag|0x12197809u;
     CHECK(ValidBodyHolsterProbeConfig(0,0));CHECK(ValidBodyHolsterProbeConfig(flags,15000));CHECK(ValidBodyHolsterProbeConfig(flags|0x200u,15000));
     CHECK(!ValidBodyHolsterProbeConfig(flags,14999));CHECK(!ValidBodyHolsterProbeConfig(flags&~0x2000000u,15000));
@@ -338,8 +420,8 @@ int ExactFireAmmoInterruptions(){
     DiagnosticFireAmmo nonidle;first.allThreeIdle=false;CHECK(!nonidle.Tick(first,owner,now,false));return 0;
 }
 }
-int main(){if(DiagnosticLoadThenClockKeepsOnePublication()||DiagnosticReadRetainsExactRefusals()||MissingAmmoDuplicateCannotKeepCachedFire()||FirePresentationDefersNeutralWithoutReissuing()||FirePresentationGapBoundAndUnsafeOwners()||ExactFireAmmoInterruptions()||ConfiguredFireUsesActualAmmoGate()||DuplicateProofLossDoesNotReissueFire()||DuplicateBeforePulseStaysNeutral()||OnePostDrawOrdinaryPulse()||OriginalEarlyActionOrderCannotFire()||NeutralProfilesNeverPulse()||LostRestoredProofNeverPulses()||MissingCacheReceiptFails()||DuplicateDuringPulseDoesNotAddEdge()||DistinctPhysicalIdentityBaseline()||PhysicalIdentityMustStayExact()||RestoredActionBlockCannotPass()||WholeScopedXm8DiagnosticSequence()||ExplicitDiagnosticConfig()||Flags()||ActualCacheSuppression()||ChallengeFailuresRetire()||MissingAuthority()||WholeDiagnosticSequence()||NoChallengeNoSuccess()||ImmutableInputAndIdentity()||WrongWeaponAndWarmup())return 1;
-    std::puts("28 body holster diagnostic groups passed; synthetic tests, no native acceptance");}
+int main(){if(ColdObservationPreparation501And504()||ColdObservationPreparationBounds()||WarmFreshAndChangedOwnerObservation()||DiagnosticLoadThenClockKeepsOnePublication()||DiagnosticReadRetainsExactRefusals()||MissingAmmoDuplicateCannotKeepCachedFire()||FirePresentationDefersNeutralWithoutReissuing()||FirePresentationGapBoundAndUnsafeOwners()||ExactFireAmmoInterruptions()||ConfiguredFireUsesActualAmmoGate()||DuplicateProofLossDoesNotReissueFire()||DuplicateBeforePulseStaysNeutral()||OnePostDrawOrdinaryPulse()||OriginalEarlyActionOrderCannotFire()||NeutralProfilesNeverPulse()||LostRestoredProofNeverPulses()||MissingCacheReceiptFails()||DuplicateDuringPulseDoesNotAddEdge()||DistinctPhysicalIdentityBaseline()||PhysicalIdentityMustStayExact()||RestoredActionBlockCannotPass()||WholeScopedXm8DiagnosticSequence()||ExplicitDiagnosticConfig()||Flags()||ActualCacheSuppression()||ChallengeFailuresRetire()||MissingAuthority()||WholeDiagnosticSequence()||NoChallengeNoSuccess()||ImmutableInputAndIdentity()||WrongWeaponAndWarmup())return 1;
+    std::puts("31 body holster diagnostic groups passed; synthetic tests, no native acceptance");}
 
 
 
