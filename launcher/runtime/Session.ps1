@@ -15,6 +15,75 @@ $state=@{schema='bc2vr.session.v1';state='starting';phase='Starting BC2 and wait
 $stateFile=Join-Path $folder 'session.json';$stopFile=Join-Path $folder 'stop.request'
 $hostProcess=$null;$game=$null;$trace=$null;$resolutionProcess=$null
 $resolutionLease=$null;$resolutionAttempted=$false;$resolutionReleaseProcess=$null
+$setupProcess=$null;$setupAttempted=$false;$setupCompleted=$false;$preAttachSpecification=$null
+function Read-PreAttachSpecification {
+    if(-not $options.ContainsKey('pre_attach_setup')){return $null}
+    $request=$options.pre_attach_setup
+    Assert-FvrNoLinks $request.path
+    if(-not [IO.Path]::IsPathFullyQualified($request.path) -or $request.sha256 -cnotmatch '^[a-f0-9]{64}$' -or
+       (Get-FileHash -LiteralPath $request.path -Algorithm SHA256).Hash.ToLowerInvariant() -cne $request.sha256){throw 'Pre-launch setup specification changed.'}
+    $spec=Read-FvrJson $request.path
+    if($spec.schema -cne 'bc2vr.pre-attach-m95-spec.v1' -or ($spec.maximum_seconds -isnot [int] -and $spec.maximum_seconds -isnot [long]) -or
+       $spec.maximum_seconds -lt 15 -or $spec.maximum_seconds -gt 90 -or
+       -not [IO.Path]::IsPathFullyQualified($spec.output_directory) -or (Test-Path -LiteralPath $spec.output_directory)){
+        throw 'Invalid bounded pre-attach setup specification.'
+    }
+    Assert-FvrNoLinks $spec.output_directory;Assert-FvrNoLinks $spec.runner.path
+    if(-not [IO.Path]::IsPathFullyQualified($spec.runner.path) -or
+       (Get-FileHash -LiteralPath $spec.runner.path -Algorithm SHA256).Hash.ToLowerInvariant() -cne $spec.runner.sha256 -or
+       (Get-Item -LiteralPath $spec.runner.path).Length -ne $spec.runner.bytes){throw 'Reviewed setup runner changed.'}
+    return $spec
+}
+function Invoke-PreAttachSetup {
+    if(-not $preAttachSpecification){return}
+    # Preserve the mandatory graphics birth policy and completed native resize.
+    # No host, NativeTrace or NativeProbe has been started at this boundary.
+    $checked=Read-PreAttachSpecification
+    if(Test-Path -LiteralPath $stopFile){throw 'Session stopped before setup.'}
+    if(-not(Find-Bc2OwnedProcess $state.game)){throw 'Original game changed before setup.'}
+    if(Get-Process BC2XrHost,BC2NativeTrace,BC2NativeIpcProbe,ProvisionRunner -ErrorAction SilentlyContinue){throw 'A native/VR helper is already active before setup.'}
+    $script:setupAttempted=$true
+    $state.pre_attach_setup=@{attempted=$true;complete=$false;normal_close_required=$true;specification=$options.pre_attach_setup;output_directory=$checked.output_directory}
+    $state.phase='Waiting for the ROOT-owned, bounded campaign equipment setup before VR attaches.';Save-State
+    $setupStop=Join-Path $folder 'pre-attach-stop.request'
+    $contextPath=Join-Path $folder 'pre-attach-context.json'
+    $context=@{schema='bc2vr.pre-attach-context.v1';game=$state.game;creation_filetime=$creation;game_sha256=$options.game_sha256;
+        output_directory=$checked.output_directory;specification_sha256=$options.pre_attach_setup.sha256;
+        started_utc=[DateTime]::UtcNow.ToString('o');deadline_utc=[DateTime]::UtcNow.AddSeconds($checked.maximum_seconds).ToString('o');
+        stop_request=$setupStop;session_stop_request=$stopFile;supervisor=$state.supervisor;version=$options.version;source_sha256=$options.source_sha256}
+    Write-FvrJson $contextPath $context
+    $contextHash=(Get-FileHash -LiteralPath $contextPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $setupArgs=@('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$checked.runner.path,
+        '-SpecificationPath',$options.pre_attach_setup.path,'-SpecificationSha256',$options.pre_attach_setup.sha256,'-ContextPath',$contextPath)
+    $script:setupProcess=Start-Bc2Child (Join-Path $PSHOME 'pwsh.exe') $setupArgs $folder 'pre-attach'
+    $state.setup_helper=Get-Bc2ProcessIdentity $setupProcess;Save-State
+    $wait=[Diagnostics.Stopwatch]::StartNew()
+    while(-not $setupProcess.HasExited){
+        if((Test-Path -LiteralPath $stopFile) -or $wait.Elapsed.TotalSeconds -ge $checked.maximum_seconds){
+            if(-not(Test-Path -LiteralPath $setupStop)){[IO.File]::WriteAllText($setupStop,'No further setup operation admitted',[Text.UTF8Encoding]::new($false))}
+        }
+        # ProvisionRunner's unchanged native-call wait is 180s, plus at most
+        # 30s loader wait. Never kill an attached helper. The outer wrapper's
+        # original deadline remains authoritative and preserves live ownership.
+        if($wait.Elapsed.TotalSeconds -gt $checked.maximum_seconds+225){throw 'Setup helper cleanup is pending; preserve ownership and profiles.'}
+        Start-Sleep -Milliseconds 100
+    }
+    if($setupProcess.ExitCode -ne 0){throw 'Pre-attach setup failed; close the exact original game normally.'}
+    $result=Read-FvrJson (Join-Path $checked.output_directory 'result.json')
+    if($result.schema -cne 'bc2vr.pre-attach-m95-result.v1' -or $result.complete -isnot [bool] -or -not $result.complete -or
+       $result.specification_sha256 -cne $options.pre_attach_setup.sha256 -or $result.context.sha256 -cne $contextHash -or
+       $result.game.pid -ne $state.game.pid -or $result.game.start_utc -cne $state.game.start_utc -or $result.game.path -ine $state.game.path -or
+       [string]$result.creation_filetime -cne $creation -or [DateTime]::UtcNow -ge [DateTimeOffset]::Parse($context.deadline_utc).UtcDateTime -or
+       (Test-Path -LiteralPath $setupStop) -or (Test-Path -LiteralPath $stopFile)){
+        throw 'Setup completion identity/deadline differs; no VR attachment.'
+    }
+    if(-not(Find-Bc2OwnedProcess $state.game) -or (Get-Process BC2XrHost,BC2NativeTrace,BC2NativeIpcProbe,ProvisionRunner -ErrorAction SilentlyContinue)){
+        throw 'Setup ownership or helper retirement changed before attachment.'
+    }
+    $script:setupCompleted=$true;$state.pre_attach_setup.complete=$true;$state.pre_attach_setup.normal_close_required=$false
+    $state.phase='Equipment setup completed; connecting the normal VR session.';Save-State
+}
+
 function Save-State {Write-FvrJson $stateFile $state -RetrySessionPublication}
 function Save-NativeOutcome {
     if(-not $trace -or -not $trace.HasExited -or -not $state.game){return $null}
@@ -44,6 +113,15 @@ function Stop-OwnedHost {
 }
 function Complete-ResolutionSession {
     if(-not $resolutionAttempted){return}
+    if($setupAttempted -and -not $setupCompleted){
+        $state.resolution_cleanup='pre_attach_failed_normal_close_required';$state.resolution_cleanup_pending=$true
+        # This is an intentional deferral, not an unclassified release error.
+        # Preserve its marker through finally; the wrapper still requires every
+        # retained helper and ProvisionRunner to exit before normal game close.
+        $state.state='failed'
+        $state.error+=' Pre-attach setup did not complete; resolution cleanup defers to exact normal game exit.'
+        return
+    }
     # The saved lease exists before configure starts. A missing/malformed setup
     # report must not orphan a guard that the native worker already armed.
     if($game.HasExited){$state.resolution_cleanup='game_exited';$state.resolution_guard_active=$false;return}
@@ -83,6 +161,7 @@ function Complete-ResolutionSession {
 }
 try {
     Save-State
+    $preAttachSpecification=Read-PreAttachSpecification
     $config=Get-Bc2RuntimeConfig
     if($options.source_sha256 -ne $config.source_sha256 -or $options.version -ne $config.version){throw 'Runtime changed between launch and session.'}
     if(-not $options.ContainsKey('render_plan') -or $options.render_plan -isnot [hashtable]){throw 'The headset render plan is missing. BC2 has not been started.'}
@@ -155,6 +234,7 @@ try {
         throw 'The live BC2 renderer does not match the headset render plan. No VR adapter was attached.'
     }
     $state.width=$menuReady.width;$state.height=$menuReady.height;$state.native_resolution_verified=$true;Save-State
+    Invoke-PreAttachSetup
     if(Test-Path -LiteralPath $stopFile){$state.state='stopped';return}
     if($options.activate_window){
         $game.Refresh()

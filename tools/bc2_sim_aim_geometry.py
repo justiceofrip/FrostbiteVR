@@ -59,6 +59,61 @@ def identity(s):
             "units": s["input"]["worldUnitsPerMeter"]}
 
 
+def held_evidence(s, now_ns):
+    """Join independently sampled Held to its own original input and GunHold.
+
+    The placed weapon and controller pose still come from the outer snapshot's
+    exact shot/input generation. Held may consume a different current packet;
+    neither packet's generation, pose, owner, or deadline is rewritten.
+    """
+    h, outer = s["bodyHolster"], s["input_evidence"]
+    ev, consumed = h["inputEvidence"], h["input"]
+    # Reuse the same owner/physical-generation and original 100ms evidence
+    # validator as the ordinary frame and knife paths.
+    for sample in (outer, ev):
+        frame.evidence(sample, s["owner"], s["physical_equipment_generation"], now_ns)
+    require(h["nativeOwner"] == s["owner"] and ev["owner"] == outer["owner"],
+            "Held native/physical owner mismatch")
+    require(0 < h["sampledNs"] <= now_ns < h["validUntilNs"]
+            <= min(ev["deadlineNs"], h["sampledNs"] + 150_000_000),
+            "stale or extended Held lease")
+    sequence, outer_sequence = ev["sequence"], outer["sequence"]
+    relation = "older" if sequence < outer_sequence else "newer" if sequence > outer_sequence else "same"
+    require(h["inputSequenceRelation"] == relation
+            and h["inputMatchesSnapshot"] is (sequence == outer_sequence),
+            "Held independent input ordering mismatch")
+    if sequence == outer_sequence:
+        require(all(ev[k] == outer[k] for k in ("observedNs", "deadlineNs", "focused", "tracked")),
+                "same-sequence Held original evidence differs")
+    else:
+        require((sequence < outer_sequence) == (ev["observedNs"] < outer["observedNs"])
+                and ev["observedNs"] != outer["observedNs"],
+                "Held input sequence/time ordering conflicts")
+    require(consumed["generation"] == sequence
+            and consumed["spaceGeneration"] == s["input"]["spaceGeneration"]
+            and consumed["focused"] is True and consumed["headValid"] is True
+            and h["neutralTrackedInput"] is True and len(consumed["hands"]) == 2,
+            "Held consumed input/space mismatch")
+    for hand in consumed["hands"]:
+        require(hand["gripTracked"] is True and hand["aimTracked"] is True
+                and all(hand[k] == 0 for k in ("held", "squeeze", "trigger", "stickX", "stickY")),
+                "nonneutral/untracked Held input")
+    gun, slot = h["physicalGun"], h["selectedSlot"]
+    require(h["nativeTick"] > 0 and gun["id"] > 0
+            and gun["generation"] == s["physical_equipment_generation"]
+            and slot["item"]["id"] == s["owner"]["weapon"] and slot["item"]["generation"] > 0,
+            "Held selected/physical gun mismatch")
+    claim = h["rightClaim"]
+    require(h["leftClaim"] is None and claim is not None and h["allowAutomaticGunHold"] is True,
+            "support/mechanism or missing GunHold")
+    token = claim["token"]
+    require(token["id"] > 0 and token["kind"] == 1 and token["hand"] == 1
+            and token["owner"] == ev["owner"] and token["item"] == gun
+            and token["prerequisiteClaim"] == 0 and claim["inputSequence"] == sequence
+            and now_ns < claim["deadlineNs"] <= ev["deadlineNs"],
+            "stale/mismatched Held claim")
+
+
 def calibrate(s, now_ns):
     require(s["valid"] is True and s["invalid_reason"] is None, "invalid snapshot")
     require(s["observed_ns"] <= now_ns < min(s["valid_until_ns"], s["native_deadline_ns"],
@@ -72,13 +127,7 @@ def calibrate(s, now_ns):
     require(s["equipment"]["weapon"] == s["owner"]["weapon"], "selected owner mismatch")
     require(not s["weapon_actions_blocked"] and holster["available"] and holster["phase"] == 1
             and not holster["actualEmpty"] and not holster["blockWeaponActions"], "not stable Held")
-    require(holster["sampledNs"] <= now_ns < holster["validUntilNs"]
-            and holster["nativeOwner"] == s["owner"] and holster["inputMatchesSnapshot"], "stale/mismatched Held")
-    require(holster["leftClaim"] is None and holster["rightClaim"]["token"]["kind"] == 1,
-            "support/mechanism or missing GunHold")
-    claim = holster["rightClaim"]
-    require(claim["inputSequence"] == inp["generation"] and now_ns < claim["deadlineNs"]
-            and claim["token"]["owner"] == s["input_evidence"]["owner"], "stale/mismatched claim")
+    held_evidence(s, now_ns)
     for hand in inp["hands"]:
         require(hand["gripTracked"] and hand["aimTracked"] and hand["held"] == 0
                 and hand["squeeze"] == hand["trigger"] == hand["stickX"] == hand["stickY"] == 0,

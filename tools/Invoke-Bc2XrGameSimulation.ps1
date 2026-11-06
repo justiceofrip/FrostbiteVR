@@ -17,6 +17,8 @@ param(
     [switch]$MechanismSnapshots,
     [switch]$PrivateGpuOrderedPresent,
     [switch]$ProfileAttribution,
+    [string]$PreAttachSetupSpec,
+    [string]$PreAttachSetupSpecSha256,
     [switch]$ExtendedObservation
 )
 Set-StrictMode -Version Latest
@@ -29,7 +31,7 @@ $owned=@{};$profiles=@();$launcherFiles=@();$entry=$null;$folder=$null;$session=
 $outputReady=$false;$runningObserved=$false;$simObserved=$false;$restored=$false;$launcherPreserved=$false
 $stopReason=$null;$stopWritten=$false;$nativeRetired=$false;$gameClosed=$false;$lastScan=-1000L
 $clock=[Diagnostics.Stopwatch]::new();$hostStartedAt=$null;$launchUtc=$null
-$startup=$null
+$startup=$null;$preAttachSpec=$null;$preAttachProvisionRunner=$null;$preparedProfileHashes=@{}
 $mechanismMarker=@{requested=[bool]$MechanismSnapshots;status=$(if($MechanismSnapshots){'awaiting_session'}else{'not_requested'});native_enabled_claimed=$false}
 $privatePresentation=@{requested=[bool]$PrivateGpuOrderedPresent;environment_variable='FVR_PRIVATE_GPU_ORDERED_PRESENT';environment_value=$(if($PrivateGpuOrderedPresent){'1'}else{'0'});child_environment_verified=$false;other_fvr_bc2_environment_absent=$false;actual_host_enablement_claimed=$false}
 # Finite native attribution starts automatically at first verified infantry, including warmup.
@@ -133,7 +135,7 @@ function Bind([string]$Name,$Identity,[string]$ExpectedPath,[int]$ParentId){
     }finally{if(-not $retained){$process.Dispose()}}
 }
 function NoOtherProcesses([switch]$BeforeLaunch){
-    foreach($process in @(Get-Process BFBC2Game,BC2XrHost,BC2NativeTrace,BC2NativeIpcProbe,BC2NativeResolution -ErrorAction SilentlyContinue)){
+    foreach($process in @(Get-Process BFBC2Game,BC2XrHost,BC2NativeTrace,BC2NativeIpcProbe,BC2NativeResolution,ProvisionRunner -ErrorAction SilentlyContinue)){
         try{
             if($process.HasExited){continue}
             $identity=Get-Bc2ProcessIdentity $process -RequireLive $true
@@ -143,8 +145,10 @@ function NoOtherProcesses([switch]$BeforeLaunch){
                 $parentId=[FvrStorage.NativeSize]::ParentPid($process.Id)
                 $fromSupervisor=$owned.ContainsKey('supervisor') -and $parentId -eq $owned.supervisor.identity.pid
                 $preflight=$entry -and $parentId -eq $entry.Id -and $identity.path -ieq (Join-Path $runtimeRoot 'bin/BC2XrHost.exe')
+                $setupChild=$owned.ContainsKey('setup_helper') -and $parentId -eq $owned.setup_helper.identity.pid -and $preAttachProvisionRunner -and $identity.path -ieq $preAttachProvisionRunner
                 $expected=@($gameExe)+@($pePaths.Keys)
-                $known=($fromSupervisor -or $preflight) -and $identity.path -iin $expected -and [DateTimeOffset]::Parse($identity.start_utc).UtcDateTime -ge $launchUtc
+                if($setupChild){$expected+=,$preAttachProvisionRunner}
+                $known=($fromSupervisor -or $preflight -or $setupChild) -and $identity.path -iin $expected -and [DateTimeOffset]::Parse($identity.start_utc).UtcDateTime -ge $launchUtc
             }
             Require $known "Unowned BC2 process detected: $($identity.pid) $($identity.path)."
         }catch{
@@ -223,6 +227,9 @@ function ObserveSession {
         $candidate=Get-FvrChild $stateRoot $active.relative_folder;Assert-FvrNoLinks $candidate
         $options=Json (Join-Path $candidate 'options.json')
         Require ($options.version -ceq $Version -and $options.source_sha256 -ceq $ExpectedSourceSha256 -and $options.xr_manifest -ieq $runtimeManifest -and $options.game_sha256 -ceq $gamePin.sha256 -and -not $options.activate_window) 'Session options do not match the admitted launch.'
+        if($preAttachSpec){
+            Require ($options.ContainsKey('pre_attach_setup') -and $options.pre_attach_setup.path -ieq $PreAttachSetupSpec -and $options.pre_attach_setup.sha256 -ceq $PreAttachSetupSpecSha256) 'Pre-attach setup option differs.'
+        }else{Require (-not $options.ContainsKey('pre_attach_setup')) 'Unrequested pre-attach setup.'}
         $script:folder=$candidate;$receipt.session_folder=$candidate
         PrepareMechanismMarker
         Save 'session-link.json' @{folder=$candidate;options=(Join-Path $candidate 'options.json');session=(Join-Path $candidate 'session.json');sim_state=(Join-Path $simDir 'state.json');command=(Join-Path $simDir 'command.txt');startup_receipt=(Join-Path $OutputDir 'sim-startup.json');root_commands_ready=$false;capture_plan=$capturePlan;mechanism_snapshots=$mechanismMarker;stop_request=(Join-Path $candidate 'stop.request');supervisor=$owned.supervisor.identity}
@@ -233,9 +240,9 @@ function ObserveSession {
     $script:session=Json $record
     Require ($session.schema -ceq 'bc2vr.session.v1' -and $session.source_sha256 -ceq $ExpectedSourceSha256 -and $session.version -ceq $Version) 'Session source identity differs.'
     SameIdentity $session.supervisor $owned.supervisor.identity
-    foreach($kind in 'game','host','trace','resolution_helper','resolution_release_helper'){
+    foreach($kind in 'game','host','trace','resolution_helper','resolution_release_helper','setup_helper'){
         if(-not $session.ContainsKey($kind) -or -not $session[$kind]){continue}
-        $path=switch($kind){game {$gameExe} host {Join-Path $runtimeRoot 'bin/BC2XrHost.exe'} trace {Join-Path $runtimeRoot 'bin/BC2NativeTrace.exe'} default {Join-Path $runtimeRoot 'bin/BC2NativeResolution.exe'}}
+        $path=switch($kind){setup_helper {$pwsh} game {$gameExe} host {Join-Path $runtimeRoot 'bin/BC2XrHost.exe'} trace {Join-Path $runtimeRoot 'bin/BC2NativeTrace.exe'} default {Join-Path $runtimeRoot 'bin/BC2NativeResolution.exe'}}
         Bind $kind $session[$kind] $path $owned.supervisor.identity.pid
     }
     if($owned.ContainsKey('game')){$receipt.actual_game_started=$true}
@@ -385,9 +392,36 @@ try{
     $manifest=Json (Join-Path $OutputDir 'run-manifest.json')
     $manifest.runtime_manifest=Pin $runtimeManifest;$manifest.runtime_library=Pin $runtimeLibrary 256MB;$manifest.host_executable=Pin (Join-Path $runtimeRoot 'bin/BC2XrHost.exe') 256MB
     Save 'run-manifest.json' $manifest
+    if($PreAttachSetupSpec -or $PreAttachSetupSpecSha256){
+        $PreAttachSetupSpec=Full $PreAttachSetupSpec
+        Require ((Pin $PreAttachSetupSpec).sha256 -ceq $PreAttachSetupSpecSha256) 'Pre-launch setup specification changed.'
+        $preAttachSpec=Json $PreAttachSetupSpec
+        Require ($preAttachSpec.schema -ceq 'bc2vr.pre-attach-m95-spec.v1' -and $preAttachSpec.output_directory -ieq (Join-Path $OutputDir 'pre-attach-setup')) 'Setup output must belong to this exact new run.'
+        Require (($preAttachSpec.maximum_seconds -is [int] -or $preAttachSpec.maximum_seconds -is [long]) -and $preAttachSpec.maximum_seconds -ge 15 -and $preAttachSpec.maximum_seconds -le 90) 'Invalid setup admission bound.'
+        foreach($key in 'runner','bench','plan','python','preflight','server_capture','validator','local_config'){
+            Require ((Pin $preAttachSpec[$key].path 256MB).sha256 -ceq $preAttachSpec[$key].sha256) ('Setup input changed: '+$key)
+        }
+        Require ($preAttachSpec.python.path -ieq (Join-Path $runtimeRoot 'python/python.exe')) 'Setup must use the selected installed Python.'
+        $setupPlan=Json $preAttachSpec.plan.path
+        $preAttachProvisionRunner=Full $setupPlan.provisioning.runner.path
+        Require ((Pin $preAttachProvisionRunner 256MB).sha256 -ceq $setupPlan.provisioning.runner.sha256) 'Provisioning runner changed.'
+        Save 'pre-attach-specification.json' @{specification=(Pin $PreAttachSetupSpec);admission_seconds=$preAttachSpec.maximum_seconds;outer_deadline_unchanged=$true}
+    }
     foreach($name in 'GameSettings.bin','GameSettings.ini','settings.ini'){$profiles+=Backup (Join-Path $ProfileDirectory $name) ('profile-before/'+$name)}
     foreach($name in 'active.json','data/settings.json'){$launcherFiles+=Backup (Join-Path $InstallRoot $name) ('launcher-before/'+$name)}
     Save 'originals.json' @{profiles=$profiles;launcher=$launcherFiles}
+    if($preAttachSpec -and $preAttachSpec.ContainsKey('campaign_seed')){
+        $seed=$preAttachSpec.campaign_seed;$observedSeed=Pin $seed.path
+        Require ($seed.sha256 -ceq 'b2a9f98f0c0609b4bf793760634754e8c616f7095d07249c7fe2b4cb74083988' -and $seed.bytes -eq 117657 -and $observedSeed.sha256 -ceq $seed.sha256 -and $observedSeed.bytes -eq $seed.bytes) 'Reviewed SP03 save seed changed.'
+        $targets=@($profiles|Where-Object {[IO.Path]::GetFileName($_.original.path) -ceq 'GameSettings.bin'})
+        Require ($targets.Count -eq 1) 'Exactly one original profile backup required for the seed.'
+        $target=$targets[0];NoOtherProcesses -BeforeLaunch
+        Require ((Pin $target.original.path).sha256 -ceq $target.original.sha256) 'Original profile changed before seed preparation.'
+        [IO.File]::WriteAllBytes($target.original.path,[IO.File]::ReadAllBytes($seed.path))
+        Require ((Pin $target.original.path).sha256 -ceq $seed.sha256) 'Seed preparation differs.'
+        $preparedProfileHashes[$target.original.path]=$seed.sha256
+        Save 'pre-attach-profile-preparation.json' @{source=$observedSeed;original=$target.original;backup=$target.backup;prepared=(Pin $target.original.path);exact_original_restoration_required=$true}
+    }
     # Entry reuses these small preflight paths; retain the preceding episode first.
     foreach($name in 'active-session.json','xr-selection.json','xr-preflight.stdout.log','xr-preflight.stderr.log','launcher-placement.json'){
         $path=Join-Path $stateRoot $name;if([IO.File]::Exists($path)){$null=Backup $path ('state-before/'+$name)}
@@ -428,11 +462,11 @@ try{
     foreach($key in 'TEMP','TMP','TMPDIR'){$psi.Environment[$key]=$scratch};$psi.Environment['PYTHONDONTWRITEBYTECODE']='1'
     $launchScript=Join-Path $OutputDir 'launch.ps1'
     # Literal paths are passed as arguments, never interpolated into shell code.
-    [IO.File]::WriteAllText($launchScript,"param(`$EntryPath,`$SettingsPath,`$StateRoot,`$Log)`n`$ErrorActionPreference='Stop'`ntry { & `$EntryPath -Action Launch -SettingsPath `$SettingsPath -StateRoot `$StateRoot -StartAt MainMenu *>> `$Log } catch { [IO.File]::AppendAllText(`$Log,(`$_ | Out-String),[Text.UTF8Encoding]::new(`$false)); exit 1 }`n",$utf8)
-    foreach($arg in @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$launchScript,(Join-Path $runtimeRoot 'Entry.ps1'),$settingsPath,$stateRoot,(Join-Path $OutputDir 'entry.log'))){$psi.ArgumentList.Add($arg)}
+    [IO.File]::WriteAllText($launchScript,"param(`$EntryPath,`$SettingsPath,`$StateRoot,`$Log,`$SetupSpec,`$SetupHash)`n`$ErrorActionPreference='Stop'`ntry { `$setup=@{}; if(`$SetupSpec){`$setup.PreAttachSetupSpec=`$SetupSpec;`$setup.PreAttachSetupSpecSha256=`$SetupHash}; & `$EntryPath -Action Launch -SettingsPath `$SettingsPath -StateRoot `$StateRoot -StartAt MainMenu @setup *>> `$Log } catch { [IO.File]::AppendAllText(`$Log,(`$_ | Out-String),[Text.UTF8Encoding]::new(`$false)); exit 1 }`n",$utf8)
+    foreach($arg in @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$launchScript,(Join-Path $runtimeRoot 'Entry.ps1'),$settingsPath,$stateRoot,(Join-Path $OutputDir 'entry.log'),([string]$PreAttachSetupSpec),([string]$PreAttachSetupSpecSha256))){$psi.ArgumentList.Add($arg)}
     Save 'launch.json' @{executable=$pwsh;entry=(Join-Path $runtimeRoot 'Entry.ps1');action='Launch';start_at='MainMenu';activate_window=$false;environment=$environment;state_root=$stateRoot;capture_plan=$capturePlan;mechanism_snapshots_requested=[bool]$MechanismSnapshots;private_gpu_ordered_present=$privatePresentation;profile_attribution=$attributionProfile}
     NoOtherProcesses -BeforeLaunch
-    foreach($row in $profiles+$launcherFiles){Require ((Pin $row.original.path).sha256 -ceq $row.original.sha256) 'Original changed before launch.'}
+    foreach($row in $profiles+$launcherFiles){$expected=if($preparedProfileHashes.ContainsKey($row.original.path)){$preparedProfileHashes[$row.original.path]}else{$row.original.sha256};Require ((Pin $row.original.path).sha256 -ceq $expected) 'Prepared/original file changed before launch.'}
     $launchUtc=[DateTime]::UtcNow;$clock.Start();$entry=[Diagnostics.Process]::new();$entry.StartInfo=$psi
     Require ($entry.Start()) 'Could not start owned launcher child.';$null=$entry.Handle
     $owned.entry=@{process=$entry;identity=(Get-Bc2ProcessIdentity $entry -RequireLive $true)};Save 'entry-identity.json' $owned.entry.identity
@@ -466,13 +500,21 @@ finally{
             Require ($entry.HasExited) 'Owned Entry is still live at deadline; preserve game/profiles for root cleanup.'
             if($owned.ContainsKey('supervisor')){Require ($owned.supervisor.process.HasExited) 'Supervisor cleanup did not finish at deadline; preserve game/profiles.'}
             NoOtherProcesses
-            foreach($kind in 'host','trace','resolution_helper','resolution_release_helper'){if($owned.ContainsKey($kind)){Require ($owned[$kind].process.HasExited) "Owned $kind cleanup remains pending; no game close/restoration."}}
+            foreach($kind in 'host','trace','resolution_helper','resolution_release_helper','setup_helper'){if($owned.ContainsKey($kind)){Require ($owned[$kind].process.HasExited) "Owned $kind cleanup remains pending; no game close/restoration."}}
+            if($preAttachSpec){Require (-not(Get-Process ProvisionRunner -ErrorAction SilentlyContinue)) 'Provisioning helper is still live; no game close or profile restoration.'}
             if($owned.ContainsKey('game')){
                 $game=$owned.game.process
                 if(-not $game.HasExited){
                     SameIdentity (Get-Bc2ProcessIdentity $game -RequireLive $true) $owned.game.identity
                     Require ((Pin $gameExe 128MB).sha256 -ceq $gamePin.sha256) 'Original game image changed.'
                     $preActivation=$false
+                    $setupClose=$preAttachSpec -and $session.ContainsKey('pre_attach_setup') -and
+                        $session.pre_attach_setup.attempted -eq $true -and $session.pre_attach_setup.complete -eq $false -and
+                        $session.pre_attach_setup.normal_close_required -eq $true -and -not $session.host -and -not $session.trace
+                    if($setupClose){
+                        Require ($session.resolution_cleanup -ceq 'pre_attach_failed_normal_close_required') 'Setup failure cleanup boundary differs.'
+                        Save 'pre-attach-close-recovery.json' @{normal_close_only=$true;setup_complete=$false;native_retirement_claimed=$false;forced_termination=$false}
+                    }
                     if($session.trace){
                         Require ($owned.ContainsKey('trace') -and $owned.trace.process.HasExited) 'Native trace exit identity was not retained.'
                         $bootstrap=Read-Bc2NativeRunOutcome (Join-Path $folder 'native.stdout.log') $game.Id
@@ -502,7 +544,7 @@ finally{
                     # The supervisor leaves resolution release pending on trace exit 2.
                     # Only this proven early refusal may use normal process exit instead;
                     # no guard release or reload retirement is inferred from that close.
-                    if($session.ContainsKey('resolution_lease') -and -not $preActivation){
+                    if($session.ContainsKey('resolution_lease') -and -not $preActivation -and -not $setupClose){
                         $released=Json (Join-Path $folder 'resolution-release.json')
                         Assert-Bc2ResolutionIdentity $released $session.resolution_lease 'release'
                         try{Assert-Bc2ResolutionReleased $released $session.resolution_lease}catch{
