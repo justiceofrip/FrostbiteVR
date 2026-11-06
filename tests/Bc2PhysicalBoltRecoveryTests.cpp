@@ -165,6 +165,10 @@ int RecoveryRetainsCurrentLeftGunAndRequiresWholeBoltGesture(unsigned busy=0){
     r=f.Tick(weapon_cycle_detail::Target(f.calibration->profile,.01f,0));
     CHECK(!f.native.recoveryReleased&&!f.native.recoveryAcked&&r.blocksFire);
     f.native.busyRecovery=busy;f.native.blockRecoveryAck=true;CHECK(f.Stroke()==0);
+    // Busy retries can dispatch on Stroke's final tick. Publish the native
+    // outcome, then let the adapter see ready once with acknowledgement blocked.
+    for(unsigned n=0;n<2;++n)f.Tick(f.calibration->profile.closedContact);
+    CHECK(f.native.convergence.Outcome()&&!f.native.recoveryAcked&&f.last.blocksFire);
     CHECK(!f.bolt->CompletedObservation(f.sample,f.native.view));
     f.native.blockRecoveryAck=false;r=f.Tick(f.calibration->profile.closedContact);
     CHECK(r.recovered&&f.native.recoveryAcked==1);
