@@ -2,6 +2,7 @@
 param([string]$RunnerPath=(Join-Path $PSScriptRoot '../tools/Invoke-Bc2XrGameSimulation.ps1'))
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
+if(-not $IsWindows){throw 'Windows file sharing regression requires Windows'}
 $utf8=[Text.UTF8Encoding]::new($false)
 $original=[IO.File]::ReadAllText($RunnerPath).Replace("`r`n","`n")
 $source=$original
@@ -14,9 +15,9 @@ function FunctionText($Tree,[string]$Name){
     $fn=$Tree.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq $Name}.GetNewClosure(),$true)
     if(-not $fn){throw "Missing function $Name"};return $fn.Extent.Text
 }
-foreach($name in 'Require','Json','ObserveBounds'){. ([scriptblock]::Create((FunctionText $ast $name)))}
-# Only the exception-injection variant replaces the OS read; lock tests below use real ReadAllText.
-$injected=(FunctionText $ast 'Json').Replace('function Json(','function JsonInjected(').Replace('[IO.File]::ReadAllText($Path)','(Read-Injected $Path)')
+foreach($name in 'Require','ReadSimulatorStateText','Json','ObserveBounds'){. ([scriptblock]::Create((FunctionText $ast $name)))}
+# Only exception classification uses injection; sharing tests use actual Windows handles.
+$injected=(FunctionText $ast 'Json').Replace('function Json(','function JsonInjected(').Replace('[IO.File]::ReadAllText($Path)','(Read-Injected $Path)').Replace('ReadSimulatorStateText $Path $Maximum','Read-Injected $Path')
 . ([scriptblock]::Create($injected))
 function Read-Injected([string]$Path){$script:f.reads++;throw $script:f.injected}
 function Start-Sleep([int]$Milliseconds){
@@ -34,6 +35,7 @@ $fixture=Join-Path ([IO.Path]::GetTempPath()) ('fvr-state-read-'+[guid]::NewGuid
 if([IO.Directory]::Exists($fixture)){throw 'Preserve existing fixture directory'}
 $null=[IO.Directory]::CreateDirectory($fixture)
 $statePath=Join-Path $fixture 'state.json'
+$temporaryState=$statePath+'.tmp'
 $valid='{"pid":7,"runtime":"xr-sim","system":"fixture","headsetConfig":"fixture-profile","errors":0,"lastCmdError":"","captureSeq":0,"frame":10}'
 $script:f=$null
 function Reset([double]$Now=100){
@@ -49,7 +51,53 @@ function Reset([double]$Now=100){
 function Lock-State {$script:f.lock=[IO.File]::Open($statePath,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)}
 function Attempt([scriptblock]$Action){$script:caught=$null;try{& $Action}catch{$script:caught=$_}}
 function SharingFailure {return $script:caught -and $script:caught.Exception.GetBaseException() -is [IO.IOException] -and $script:caught.Exception.GetBaseException().HResult -eq -2147024864}
+$deleteOwner=$null;$heldReader=$null
 try{
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+public static class FvrStateReadTestIo {
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+    public static extern SafeFileHandle CreateFileW(string path, uint access, uint share, IntPtr security, uint creation, uint flags, IntPtr template);
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool MoveFileExW(string source, string destination, uint flags);
+}
+'@
+    Reset
+    # Match the DELETE access used by the atomic publisher. This owner stays
+    # open through both reads, so retrying cannot explain the successful read.
+    $deleteOwner=[FvrStateReadTestIo]::CreateFileW($statePath,0x10000,7,[IntPtr]::Zero,3,0x80,[IntPtr]::Zero)
+    Check (-not $deleteOwner.IsInvalid) 'real DELETE-access publisher handle opened'
+    $ioClock=[Diagnostics.Stopwatch]::StartNew()
+    Attempt {$null=[IO.File]::ReadAllText($statePath)}
+    Check (SharingFailure) 'legacy ReadAllText refuses the open DELETE owner with real Windows sharing error 32'
+    $contract=@{legacy_hresult=$caught.Exception.GetBaseException().HResult;legacy_seconds=$ioClock.Elapsed.TotalSeconds}
+    $clock=$ioClock
+    $read=Json $statePath -SharingDeadlineSeconds ($clock.Elapsed.TotalSeconds+0.25)
+    $contract.fixed_seconds=$ioClock.Elapsed.TotalSeconds
+    Check ($read.frame -eq 10 -and $f.sleeps -eq 0 -and -not $deleteOwner.IsClosed) 'actual live reader reads complete state while DELETE owner remains open without retry'
+    $script:clock=[pscustomobject]@{Elapsed=[pscustomobject]@{TotalSeconds=100.0};ElapsedMilliseconds=100000L}
+    Attempt {$null=Json $statePath}
+    Check (SharingFailure) 'generic reader retains its sharing policy'
+    $deleteOwner.Dispose();$deleteOwner=$null
+    Reset
+    # Use the producer's exact API, keeping its failed-replacement possibility
+    # explicit: sharing DELETE does not guarantee replacement of an open target.
+    [IO.File]::WriteAllText($temporaryState,$f.recoveredText,$utf8)
+    $heldReader=[IO.File]::Open($statePath,[IO.FileMode]::Open,[IO.FileAccess]::Read,([IO.FileShare]::Read -bor [IO.FileShare]::Delete))
+    $replaced=[FvrStateReadTestIo]::MoveFileExW($temporaryState,$statePath,1)
+    $replaceError=if($replaced){0}else{[Runtime.InteropServices.Marshal]::GetLastWin32Error()}
+    $contract.replace_while_open=$replaced;$contract.replace_win32_error=$replaceError
+    $reader=[IO.StreamReader]::new($heldReader);$snapshot=$reader.ReadToEnd();$reader.Dispose();$heldReader=$null
+    Check ($snapshot -ceq $valid) 'opened snapshot remains complete through actual replacement attempt'
+    if(-not $replaced){
+        Check ($replaceError -in @(5,32) -and [IO.File]::ReadAllText($statePath) -ceq $valid) 'failed replacement preserves original published state'
+        $replaced=[FvrStateReadTestIo]::MoveFileExW($temporaryState,$statePath,1)
+    }
+    Check ($replaced -and (Json $statePath -SharingDeadlineSeconds 100.25).frame -eq 20) 'closed-reader replacement succeeds and next read observes newly published state'
+    Write-Output ('Windows state sharing contract: '+($contract|ConvertTo-Json -Compress))
     Reset;ObserveBounds
     Check ($f.observed -eq 1 -and $f.state.frame -eq 10 -and $f.sleeps -eq 0) 'uncontended current state observed normally'
     Reset;Lock-State;Attempt {$null=Json $statePath}
@@ -58,6 +106,10 @@ try{
     Check ($f.observed -eq 1 -and $f.state.frame -eq 20 -and $f.sleeps -eq 5) 'real sharing violation beyond old limit recovers only newly read state'
     Reset;Lock-State;Attempt {ObserveBounds}
     Check ((SharingFailure) -and $f.sleeps -eq 24 -and $f.observed -eq 0) 'persistent sharing violation refuses after 25 reads / 240 ms sleep'
+    $detail=$caught.Exception.Data['fvr_json_read']
+    Check ($detail.attempts -eq 25 -and $detail.started_seconds -eq 100 -and $detail.deadline_seconds -eq 100.25 -and [Math]::Abs($detail.failed_seconds-100.24) -lt 0.00001 -and $detail.hresult -eq -2147024864 -and $detail.stop_reason -ceq 'attempt_limit') 'failure retains exact attempt count, original clock, deadline and Windows exception'
+    Reset;$f.lock=[IO.File]::Open($statePath,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete));Attempt {ObserveBounds}
+    Check ((SharingFailure) -and $f.observed -eq 0) 'live reader still denies an in-place writer rather than reading partial JSON'
     Reset;Lock-State;$f.releaseAt=5;$f.recoveredText='{';Attempt {ObserveBounds}
     Check ($caught -and -not (SharingFailure) -and $f.sleeps -eq 5 -and $f.observed -eq 0) 'malformed recovered JSON still fails immediately'
     Reset;[IO.File]::Delete($statePath);Attempt {$null=Json $statePath -SharingDeadlineSeconds 100.25}
@@ -88,6 +140,8 @@ try{
     }
     Reset;Lock-State;$f.releaseAt=1;$f.oversleep=1.0;Attempt {ObserveBounds}
     Check ((SharingFailure) -and $f.sleeps -eq 1 -and $f.observed -eq 0) 'scheduler oversleep cannot turn a late read into success'
+    $detail=$caught.Exception.Data['fvr_json_read']
+    Check ($detail.attempts -eq 1 -and $detail.deadline_seconds -eq 100.25 -and [Math]::Abs($detail.stopped_seconds-101.01) -lt 0.00001 -and $detail.stop_reason -ceq 'deadline_after_sleep') 'oversleep diagnostic preserves original deadline and actual stop clock'
     Reset;Lock-State;$clock.Elapsed.TotalSeconds=360.0;Attempt {ObserveBounds}
     Check ((SharingFailure) -and $f.sleeps -eq 0) 'expired cleanup allowance never sleeps'
     foreach($change in @(
@@ -107,7 +161,9 @@ try{
     Check ([IO.File]::ReadAllText($RunnerPath).Replace("`r`n","`n") -ceq $original) 'shared runner remains unchanged'
     Write-Output "XR game state-read checks passed: $script:checks; deterministic offline only; no game, subprocesses or shared source writes."
 }finally{
+    if($deleteOwner){$deleteOwner.Dispose()};if($heldReader){$heldReader.Dispose()}
     if($f -and $f.lock){$f.lock.Dispose()}
+    if([IO.File]::Exists($temporaryState)){[IO.File]::Delete($temporaryState)}
     [IO.File]::Delete($statePath)
     [IO.Directory]::Delete($fixture)
 }

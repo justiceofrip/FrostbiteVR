@@ -55,19 +55,42 @@ function Pin([string]$Path,[long]$Maximum=4MB){
     Require (-not $item.PSIsContainer -and $item.Length -le $Maximum) "Invalid or oversized file: $Path"
     return @{path=$Path;bytes=$item.Length;sha256=(Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()}
 }
+function ReadSimulatorStateText([string]$Path,[long]$Maximum){
+    # xr-sim closes state.json.tmp before MoveFileExW(REPLACE_EXISTING). Admit
+    # its DELETE-access owner while reading one complete published file. Do not
+    # share writes or assume replacement succeeds while this handle is open.
+    $stream=[IO.File]::Open($Path,[IO.FileMode]::Open,[IO.FileAccess]::Read,([IO.FileShare]::Read -bor [IO.FileShare]::Delete))
+    try{
+        Require ($stream.Length -le $Maximum) "JSON exceeds bound: $Path"
+        $reader=[IO.StreamReader]::new($stream)
+        try{return $reader.ReadToEnd()}finally{$reader.Dispose()}
+    }finally{$stream.Dispose()}
+}
 function Json([string]$Path,[long]$Maximum=128KB,[double]$SharingDeadlineSeconds=0){
     $attemptLimit=if($SharingDeadlineSeconds -gt 0){25}else{5}
+    $readStartedAt=if($SharingDeadlineSeconds -gt 0){$clock.Elapsed.TotalSeconds}else{$null}
     for($attempt=0;$attempt -lt $attemptLimit;$attempt++){
         Require ((Get-Item -LiteralPath $Path).Length -le $Maximum) "JSON exceeds bound: $Path"
-        try{$text=[IO.File]::ReadAllText($Path);break}
+        try{
+            $text=if($SharingDeadlineSeconds -gt 0){ReadSimulatorStateText $Path $Maximum}else{[IO.File]::ReadAllText($Path)}
+            break
+        }
         catch{
             $cause=$_.Exception;while($cause.InnerException){$cause=$cause.InnerException}
+            $detail=$null
+            if($SharingDeadlineSeconds -gt 0){
+                $detail=@{path=$Path;attempts=$attempt+1;attempt_limit=$attemptLimit;started_seconds=$readStartedAt;failed_seconds=$clock.Elapsed.TotalSeconds;stopped_seconds=$clock.Elapsed.TotalSeconds;deadline_seconds=$SharingDeadlineSeconds;exception_type=$cause.GetType().FullName;hresult=$cause.HResult;stop_reason=$null}
+                $_.Exception.Data['fvr_json_read']=$detail
+            }
             # Only live state opts into longer sharing-violation (32) retries.
             # Other reads and lock violations (33) retain their five attempts.
-            if($cause -isnot [IO.IOException] -or $cause.HResult -notin @(-2147024864,-2147024863) -or $attempt -eq $attemptLimit-1 -or ($attempt -ge 4 -and $cause.HResult -ne -2147024864)){throw}
-            if($SharingDeadlineSeconds -gt 0 -and $clock.Elapsed.TotalSeconds+0.01 -ge $SharingDeadlineSeconds){throw}
+            $retryStop=if($cause -isnot [IO.IOException] -or $cause.HResult -notin @(-2147024864,-2147024863)){'non_retryable_exception'}
+                elseif($attempt -eq $attemptLimit-1){'attempt_limit'}
+                elseif($attempt -ge 4 -and $cause.HResult -ne -2147024864){'lock_violation_limit'}
+                elseif($SharingDeadlineSeconds -gt 0 -and $clock.Elapsed.TotalSeconds+0.01 -ge $SharingDeadlineSeconds){'deadline_before_sleep'}else{$null}
+            if($retryStop){if($detail){$detail.stop_reason=$retryStop};throw}
             Start-Sleep -Milliseconds 10
-            if($SharingDeadlineSeconds -gt 0 -and $clock.Elapsed.TotalSeconds -ge $SharingDeadlineSeconds){throw}
+            if($SharingDeadlineSeconds -gt 0 -and $clock.Elapsed.TotalSeconds -ge $SharingDeadlineSeconds){$detail.stopped_seconds=$clock.Elapsed.TotalSeconds;$detail.stop_reason='deadline_after_sleep';throw}
         }
     }
     return $text|ConvertFrom-Json -AsHashtable -DateKind String -Depth 100
@@ -412,6 +435,7 @@ try{
 }catch{
     $failures.Add($_.Exception.Message)
     $receipt.failure_context=@{message=$_.Exception.Message;stack=$_.ScriptStackTrace;position=$_.InvocationInfo.PositionMessage}
+    if($_.Exception.Data.Contains('fvr_json_read')){$receipt.failure_context.json_read=$_.Exception.Data['fvr_json_read']}
 }
 finally{
     if($entry){
