@@ -288,12 +288,14 @@ class SinglePlayerSelectionTests(unittest.TestCase):
                     layers=[dict(i=0, type="quad", space="stage", pose=[0, 1.6, -1.5],
                                  sizeM=[2.2, 1.65])],
                     views=[dict(eye="left", pos=[-.0315, 1.6, 0],
-                                fovDeg=dict(l=-54.431, r=42.972, u=48.701, d=-48.701))])
+                                fovDeg=dict(l=-54.431, r=42.972, u=48.701, d=-48.701)),
+                           dict(eye="right", pos=[.0315, 1.6, 0],
+                                fovDeg=dict(l=-42.972, r=54.431, u=48.701, d=-48.701))])
 
-    def harness(self, schedule=None, hover=False):
-        h = Harness(self, schedule, r.SinglePlayerDriver)
-        h.v.menu_capture = self.capture()
-        h.v.pose = r.single_player_geometry(h.v.menu_capture)["pose"]
+    def harness(self, schedule=None, hover=False, driver_type=r.SinglePlayerDriver):
+        h = Harness(self, schedule, driver_type)
+        h.v.menu_capture = SinglePlayerSelectionTests.capture()
+        h.v.pose = h.v.geometry(h.v.menu_capture)["pose"]
         h.v.args.max_clicks = 1
         h.v.args.single_player_hover_only = hover
         h.v.hard_deadline = h.v.started + 10 * NS
@@ -393,27 +395,132 @@ class SinglePlayerSelectionTests(unittest.TestCase):
             v.artifacts = SimpleNamespace(save=lambda *a, **k: None)
         cases = (
             ("sim/capture/menu.json", lambda c: None, True),
+            ("sim/capture/menu.json", lambda c: c.update(displayTimeNs=40 * NS), True),
             ("outside/menu.json", lambda c: None, False),
+            ("G:/fixture/other/sim/capture/menu.json", lambda c: None, False),
             ("sim/capture/menu.json", lambda c: c.update(displayTimeNs=39 * NS), False),
             ("sim/capture/menu.json", lambda c: c.update(displayTimeNs=101 * NS), False),
             ("sim/capture/menu.json", lambda c: c.update(frameIndex=99), False),
             ("sim/capture/menu.json", lambda c: c.update(frameIndex=151), False),
             ("sim/capture/menu.json", lambda c: c.update(name="different"), False),
+            ("sim/capture/menu.json", lambda c: c.update(width=320, height=240), False),
         )
-        for relative, mutate, allowed in cases:
-            c = self.capture()
+        for driver_type in (r.SinglePlayerDriver, r.DropdownResumeDriver):
+            for relative, mutate, allowed in cases:
+                c = self.capture()
+                mutate(c)
+                args = SimpleNamespace(run=run, single_player_capture=Path(relative),
+                                       dropdown_resume_capture=Path(relative), single_player_hover_only=False,
+                                       max_clicks=3)
+                with self.subTest(driver=driver_type.__name__, relative=relative, capture=c), \
+                     patch.object(d, "local_path", side_effect=lambda p: Path(p)), \
+                     patch.object(d, "read_json", return_value=(c, b"synthetic capture")), \
+                     patch.object(r.ResumeDriver, "__init__", initialize), \
+                     patch.object(r.time, "perf_counter_ns", return_value=100 * NS):
+                    if allowed:
+                        driver_type(args)
+                        if driver_type is r.DropdownResumeDriver:
+                            self.assertEqual(args.max_clicks, 1)
+                    else:
+                        with self.assertRaises(r.REFUSAL):
+                            driver_type(args)
+
+
+class DropdownResumeTests(unittest.TestCase):
+    def harness(self, schedule=None):
+        h = SinglePlayerSelectionTests.harness(self, schedule, driver_type=r.DropdownResumeDriver)
+        h.v.hard_deadline = h.v.started + 35 * NS
+        h.v.deadline = h.v.hard_deadline - r.RELEASE_RESERVE_NS
+        h.v.stage_deadline = h.v.deadline
+        return h
+
+    def test_full_quad_projects_reviewed_second_item_and_requires_both_eye_frames(self):
+        g = r.dropdown_resume_geometry(SinglePlayerSelectionTests.capture())
+        self.assertEqual(g["referencePixel"], [349, 186])
+        self.assertEqual(g["referenceRightPixel"], [209, 186])
+        self.assertEqual(g["pose"], "hand r grip pose 0.2 1.3 -0.35 20.084579104 29.067720941 0")
+        self.assertAlmostEqual(g["rasterUv"][0], .399777588342)
+        self.assertAlmostEqual(g["rasterUv"][1], .269318501132)
+        self.assertFalse(g["nativeWidgetAcceptance"])
+        for mutate in (
+            lambda c: c["views"].pop(),
+            lambda c: c["views"][1].update(pos=[.04, 1.6, 0]),
+            lambda c: c["views"][1]["fovDeg"].update(r=50),
+            lambda c: c["head"].update(pos=[0, 1.7, 0]),
+            lambda c: c["layers"][0].update(sizeM=[2.2, 1.2]),
+        ):
+            c = SinglePlayerSelectionTests.capture()
             mutate(c)
-            args = SimpleNamespace(run=run, single_player_capture=Path(relative), single_player_hover_only=False)
-            with self.subTest(relative=relative, capture=c), \
-                 patch.object(d, "local_path", side_effect=lambda p: Path(p)), \
-                 patch.object(d, "read_json", return_value=(c, b"synthetic capture")), \
-                 patch.object(r.ResumeDriver, "__init__", initialize), \
-                 patch.object(r.time, "perf_counter_ns", return_value=100 * NS):
-                if allowed:
-                    r.SinglePlayerDriver(args)
-                else:
-                    with self.assertRaises(r.REFUSAL):
-                        r.SinglePlayerDriver(args)
+            with self.assertRaises(r.REFUSAL):
+                r.dropdown_resume_geometry(c)
+
+    def test_one_click_waits_for_delayed_native_world_progress(self):
+        h = self.harness(lambda elapsed: (max(0, elapsed - 11) * 100, elapsed < 3))
+        self.assertTrue(h.v.resume())
+        self.assertGreaterEqual(h.now - h.v.started, 12 * NS)
+        self.assertEqual(len(h.downs()), 1)
+        self.assertEqual(h.v.clicks, 1)
+        self.assertTrue(h.v.world_progressed)
+        self.assertFalse(h.v.held_trigger or h.v.pending_command)
+        self.assertEqual(h.writes[0][1][:-1], h.v.neutral_commands())
+        self.assertEqual(h.writes[-1][1][0], "trigger r 0")
+        before = [e for e in h.v.artifacts.events if e["type"] == "resume_event_before"]
+        self.assertEqual([e["event"] for e in before], ["neutral-ray", "trigger-down", "trigger-up"])
+        self.assertGreater(before[1]["native"]["sampleNs"], before[0]["native"]["sampleNs"])
+
+    def test_acknowledged_dropdown_click_without_world_never_reports_success_or_retries(self):
+        h = self.harness()
+        self.assertFalse(h.v.resume())
+        self.assertEqual(len(h.downs()), 1)
+        self.assertFalse(h.v.world_progressed or h.v.held_trigger or h.v.pending_command)
+        self.assertLessEqual(h.now - h.v.started, 35 * NS)
+
+    def test_initial_menu_loss_stops_all_input_even_if_ready_recovers(self):
+        h = self.harness(lambda elapsed: (0, elapsed > 0))
+        self.assertFalse(h.v.resume())
+        self.assertEqual(h.writes, [])
+        self.assertEqual(h.v.input_stopped, "menu readiness lost; possible loading")
+
+    def test_loss_after_aim_never_presses_but_continues_observing_world(self):
+        h = self.harness(lambda elapsed: (max(0, elapsed - 3), elapsed != 1))
+        self.assertTrue(h.v.resume())
+        self.assertEqual(h.downs(), [])
+        self.assertEqual(len(h.writes), 1)
+        self.assertTrue(h.v.world_progressed)
+
+    def test_menu_and_head_loss_after_down_preserves_owned_release_and_observation(self):
+        h = self.harness()
+        original = h.native
+        def native():
+            row = original()
+            if h.downs():
+                row["selected_knife"]["sample_ns"] = h.now
+                row["menu_connection"]["ready"] = False
+                row["world_calls"] = max(0, (h.now - h.v.started) // NS - 3)
+                h.state["head"]["pos"] = [.1, 1.6, 0]
+            return row
+        h.v.tail.read = native
+        self.assertTrue(h.v.resume())
+        self.assertEqual(len(h.downs()), 1)
+        self.assertEqual(h.writes[-1][1][0], "trigger r 0")
+        self.assertFalse(h.v.held_trigger or h.v.pending_command)
+        self.assertGreaterEqual(h.now - h.v.started, 4 * NS)
+
+    def test_changed_head_blocks_dropdown_press(self):
+        h = self.harness()
+        h.on_sleep = lambda: h.state["head"].update(pos=[.1, 1.6, 0])
+        with self.assertRaisesRegex(r.REFUSAL, "pointing frame changed"):
+            h.v.resume()
+        self.assertEqual(h.downs(), [])
+
+    def test_dropdown_cleanup_cannot_release_a_competing_writers_trigger(self):
+        h = self.harness()
+        h.v.held_trigger = True
+        h.files[h.v.command_path] = b"competing writer\n"
+        with self.assertRaisesRegex(r.REFUSAL, "another writer"):
+            h.v.release_after_failure()
+        self.assertEqual(h.writes, [])
+        self.assertTrue(h.v.unsafe_owner)
 
 
 if __name__ == "__main__":

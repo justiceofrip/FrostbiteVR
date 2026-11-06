@@ -7,6 +7,9 @@ Success requires fresh native world_calls progression. No launch or capture.
 --single-player-capture sim/capture/NAME.json instead selects the reviewed Main
 menu's Single Player tab once, then returns released for ROOT capture/review.
 --single-player-hover-only aims without clicking. Neither mode invokes Resume.
+--dropdown-resume-capture sim/capture/NAME.json selects the reviewed open Single
+Player dropdown's Resume Game item once, then waits for native world progression.
+ROOT must review both current dropdown images before invoking this option.
 """
 import argparse
 import importlib.util
@@ -83,6 +86,7 @@ def observation(row, now):
 
 class ResumeDriver(transport.Driver):
     pose = RESUME_POSE
+    reviewed_menu_required = False
 
     def neutral_commands(self):
         return [self.pose, "trigger r 0"]
@@ -134,7 +138,7 @@ class ResumeDriver(transport.Driver):
             self.input_stopped = "world observed"
             if before and current["sampleNs"] > before["sampleNs"] and current["worldCalls"] > before["worldCalls"]:
                 self.world_progressed = True
-        elif self.ever_ready and not current["menuReady"]:
+        elif (self.ever_ready or self.reviewed_menu_required) and not current["menuReady"]:
             # Ready is gated by native Menu display. False is NOT proof of loading,
             # but is sufficient to suppress every further press, even if it recovers.
             self.input_stopped = "menu readiness lost; possible loading"
@@ -223,13 +227,12 @@ class ResumeDriver(transport.Driver):
             time.sleep(POLL_SECONDS)
 
 
-def single_player_geometry(capture):
-    """Invert the reviewed actual452 left-eye pixel through its full menu quad.
+def reviewed_menu_geometry(capture, pixel):
+    """Invert a reviewed actual452 left-eye pixel through its full menu quad.
 
     MenuPointer.h uses a yaw-only head anchor, -1.5 m depth and 2.2 m width.
     OpenXrMenu submits the complete raster; native DispatchMenuRasterPointer
     performs viewport conversion. Do not remove the raster's black letterbox.
-    Target: left (354,174), corroborated by right (214,174), at 640x480.
     Only this reviewed initial head/panel/FOV configuration is supported.
     """
     require(capture["sessionState"] == "FOCUSED"
@@ -248,7 +251,7 @@ def single_player_geometry(capture):
             "unsupported captured eye projection")
     fov = {k: math.tan(math.radians(v)) for k, v in left["fovDeg"].items()}
     # Pixel centers; retain the whole 4:3 surface including native letterbox.
-    sx, sy = 354.5 / 640, 174.5 / 480
+    sx, sy = (pixel[0] + .5) / 640, (pixel[1] + .5) / 480
     x = left["pos"][0] + 1.5 * (fov["l"] + sx * (fov["r"] - fov["l"]))
     y = left["pos"][1] + 1.5 * (fov["u"] - sy * (fov["u"] - fov["d"]))
     dx, dy, dz = x - .2, y - 1.3, -1.5 + .35
@@ -256,30 +259,47 @@ def single_player_geometry(capture):
     pitch = math.degrees(math.atan2(dy, math.hypot(dx, dz)))
     return dict(pose=f"hand r grip pose 0.2 1.3 -0.35 {yaw:.9f} {pitch:.9f} 0",
                 targetMeters=[x, y, -1.5], rasterUv=[.5 + x / 2.2, .5 - (y - 1.6) / 1.65],
-                referencePixel=[354, 174], referenceImageSize=[640, 480], nativeWidgetAcceptance=False)
+                referencePixel=list(pixel), referenceImageSize=[640, 480], nativeWidgetAcceptance=False)
 
 
-class SinglePlayerDriver(ResumeDriver):
-    """One ordinary tab click; use the existing owner, native tail and transport."""
+def single_player_geometry(capture):
+    """Main tab: left (354,174), corroborated by right (214,174)."""
+    return reviewed_menu_geometry(capture, (354, 174))
+
+
+def dropdown_resume_geometry(capture):
+    """Actual452 open dropdown, second item RESUME GAME; both views reviewed."""
+    require(len(capture["views"]) == 2, "dropdown capture requires both eye views")
+    right = capture["views"][1]
+    require(right["eye"] == "right" and right["pos"] == [.0315, 1.6, 0]
+            and right["fovDeg"] == dict(l=-42.972, r=54.431, u=48.701, d=-48.701),
+            "unsupported captured right eye projection")
+    geometry = reviewed_menu_geometry(capture, (349, 186))
+    geometry["referenceRightPixel"] = [209, 186]
+    return geometry
+
+
+class ReviewedMenuDriver(ResumeDriver):
+    """Share capture admission, full-quad pointing and owned-release guards."""
     def __init__(self, args):
         run = transport.local_path(args.run)
-        path = transport.child(run, run / args.single_player_capture)
+        path = transport.child(run, run / getattr(args, self.capture_argument))
         require(path.parent == run / "sim" / "capture" and path.suffix == ".json",
                 "menu capture must belong to this exact run's sim/capture directory")
         self.menu_capture, raw = transport.read_json(path, 65536)
         require(self.menu_capture["name"] == path.stem, "capture name/path mismatch")
-        geometry = single_player_geometry(self.menu_capture)
+        geometry = self.geometry(self.menu_capture)
         self.pose = geometry["pose"]
         super().__init__(args)
         require(0 <= time.perf_counter_ns() - integer(self.menu_capture["displayTimeNs"]) <= 60 * NS,
-                "menu capture is stale or future-dated; capture/review the current Main menu")
+                "menu capture is stale or future-dated; ROOT must capture/review both current menu views")
         require(integer(self.startup["settled_state"]["frame"]) <= integer(self.menu_capture["frameIndex"])
                 <= integer(self.state["frame"]), "menu capture frame is outside the current run")
         require(self.menu_capture["width"] == self.capture_plan["width"]
                 and self.menu_capture["height"] == self.capture_plan["height"], "capture budget dimensions changed")
-        self.artifacts.save("single-player-calibration.json", dict(geometry, capturePath=str(path),
+        self.artifacts.save(self.calibration_name, dict(geometry, capturePath=str(path),
             captureSha256=transport.digest(raw), hoverOnly=args.single_player_hover_only,
-            evidence="actual452 reviewed Main tab; projected pixel is geometry, not widget acceptance"))
+            evidence=self.capture_evidence))
 
     def neutral_commands(self):
         return ["hand r follow off", "hand r aimtrim 0 0", self.pose, "trigger r 0"]
@@ -294,6 +314,14 @@ class SinglePlayerDriver(ResumeDriver):
                 and state["head"]["ypr"] == [0, 0, 0]
                 and state["handR"]["pos"] == [.2, 1.3, -.35]
                 and state["handR"]["followsHead"] is False, "captured pointing frame changed")
+
+
+class SinglePlayerDriver(ReviewedMenuDriver):
+    """One ordinary tab click; use the existing owner, native tail and transport."""
+    capture_argument = "single_player_capture"
+    geometry = staticmethod(single_player_geometry)
+    calibration_name = "single-player-calibration.json"
+    capture_evidence = "actual452 reviewed Main tab; projected pixel is geometry, not widget acceptance"
 
     def resume(self):
         controls = self.state["controls"]
@@ -328,18 +356,38 @@ class SinglePlayerDriver(ResumeDriver):
         return True  # Input delivery only. ROOT captures/reviews before a separate Resume invocation.
 
 
+class DropdownResumeDriver(ReviewedMenuDriver):
+    """One reviewed dropdown click; inherit bounded native-world observation."""
+    capture_argument = "dropdown_resume_capture"
+    geometry = staticmethod(dropdown_resume_geometry)
+    calibration_name = "dropdown-resume-calibration.json"
+    capture_evidence = "actual452 reviewed RESUME GAME dropdown item; geometry is not widget acceptance"
+    # The reviewed dropdown is already open. Any readiness loss, including the
+    # first live observation, retires its authority to admit new input forever.
+    reviewed_menu_required = True
+
+    def __init__(self, args):
+        args.max_clicks = 1
+        super().__init__(args)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=Path, required=True, help="exact already-live runner output directory")
     parser.add_argument("--timeout-seconds", type=int, default=35)
     parser.add_argument("--max-clicks", type=int, default=3)
-    parser.add_argument("--single-player-capture", type=Path,
+    capture_mode = parser.add_mutually_exclusive_group()
+    capture_mode.add_argument("--single-player-capture", type=Path,
                         help="reviewed current Main menu capture JSON inside this run; one tab click only")
+    capture_mode.add_argument("--dropdown-resume-capture", type=Path,
+                        help="current open Single Player dropdown JSON; ROOT must review both images; one Resume click")
     parser.add_argument("--single-player-hover-only", action="store_true",
                         help="with --single-player-capture, leave a neutral ray for ROOT capture/review")
     args = parser.parse_args(argv)
     if args.single_player_capture:
         args.max_clicks, args.timeout_seconds = 1, min(args.timeout_seconds, 10)
+    elif args.dropdown_resume_capture:
+        args.max_clicks = 1
     started = time.perf_counter_ns()
     args.overall_deadline_ns = started + min(args.timeout_seconds, 35) * NS
     driver = None
@@ -348,6 +396,9 @@ def main(argv=None):
     if args.single_player_capture:
         result.update(schema="bc2vr.single-player-selection.v1",
                       evidence="one ordinary tab selection/hover; ROOT must capture/review before Resume")
+    elif args.dropdown_resume_capture:
+        result.update(schema="bc2vr.dropdown-resume.v1",
+                      evidence="one reviewed dropdown Resume click; success requires native world counter progression")
     code = 2
     carry = None
     identity = None
@@ -356,7 +407,8 @@ def main(argv=None):
     try:
         require(not args.single_player_hover_only or args.single_player_capture,
                 "hover-only requires --single-player-capture")
-        driver_type = SinglePlayerDriver if args.single_player_capture else ResumeDriver
+        driver_type = (SinglePlayerDriver if args.single_player_capture else
+                       DropdownResumeDriver if args.dropdown_resume_capture else ResumeDriver)
         for _ in range(1 if args.single_player_capture else 4):
             require(time.perf_counter_ns() + 2 * NS < args.overall_deadline_ns,
                     "overall Resume observation budget exhausted without world progression")
@@ -405,7 +457,8 @@ def main(argv=None):
                     inputStopped=driver.input_stopped, artifactDirectory=str(driver.artifacts.directory),
                     episodeArtifactDirectories=episodes)
                 try:
-                    name = "single-player-result.json" if args.single_player_capture else "resume-result.json"
+                    name = ("single-player-result.json" if args.single_player_capture else
+                            "dropdown-resume-result.json" if args.dropdown_resume_capture else "resume-result.json")
                     driver.artifacts.save(name, result, final=True)
                 except (REFUSAL, OSError) as write_error:
                     result["resultWriteError"], code = str(write_error), 2

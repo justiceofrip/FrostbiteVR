@@ -1,6 +1,8 @@
 Reload test continuation, November6
 
-Actual452 on the existing private0.1.65 connected through the simulated runtime and received native VR input. Every owned process exited0; BC2 closed normally and all three profiles plus launcher settings were preserved. The separate menu-capture command arrived after closure and refused. No rendered-menu, reload, headset or FPS pass follows from this startup result. Installed65/fallback64 and the native source/builds are unchanged.
+Actual452 on existing private0.1.65 connected through the simulated runtime and received native VR input. Startup's late capture refused; feed65/xr-game01 subsequently rendered both Main menu eyes. Feed65/xr-game03 selected Single Player and both fresh images show its dropdown; the old right-side Resume ray was not used there. All three launched episodes closed normally, with all owned exits0 and exact profiles/settings preservation. No current reload, headset or FPS pass. Installed65/fallback64 and native source/builds are unchanged.
+
+Feed65/xr-game02 refused before game launch at the launcher's logical4GiB evidence cap. One closed automated0.1.29 session was relocated, preserving and SHA256-verifying all93 files/183438776bytes. Exact old/new paths are in canonical452/retained-runtime-sessions/relocation.json. No user headset recording, current/fallback binary, failed run or active-session pointer was removed. NTFS compression cannot relieve a logical-byte cap.
 
 The previous408 generic startup failure used61. The classifier introduced in62 and present in the actual installed65 DLL makes a fresh startup distinguishable; the old failure was not a blanket reason to stop remaining work.
 
@@ -10,4 +12,4 @@ The existing feed driver accepts an optional post-CloseCover neutral rearm and o
 
 The final postrelease suite passed25 tests and transport suite19. Initial sandbox fixture-file access failures are retained; the normal-token run exposed one old failure-injection stub that omitted existing publication deadline keywords. Correcting that stub preserved the intended failed-publication assertion; only its affected suite was rerun. No native rebuild was required.
 
-Agent453 diagnosed the saved bootstrap boundary;454 prepared the optional completion tail;455 repaired early cleanup;456 corrected native log-format and acceptance assumptions against the writer and actual269 CloseCover artifacts. All retired. ROOT owns integration and the next bounded actual five-step reload plus firing observation. Exact evidence and failures stay in local reports/coordinator-20261106-feedback452.
+Agents453-459 completed and retired.457 supplied one captured-geometry Single Player selection;23 focused Resume/selection tests pass.458 identified the logical retention boundary;459 supplied a gated chest-knife recipe and corrected return instructions to trigger release then grip release. 461 added one-click reviewed-dropdown Resume with native world progression required;31 focused tests pass. ROOT owns integration and actual input;460 is preparing fixed-container post-reload firing support. Exact evidence and failures stay in local reports/coordinator-20261106-feedback452.
