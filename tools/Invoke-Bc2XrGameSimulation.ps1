@@ -9,13 +9,14 @@ param(
     [Parameter(Mandatory)][string]$LocalConfig,
     [Parameter(Mandatory)][ValidatePattern('^[a-f0-9]{64}$')][string]$ExpectedSourceSha256,
     [string]$ProfileDirectory=(Join-Path $env:USERPROFILE 'Documents/BFBC2'),
-    [ValidateRange(15,300)][int]$Seconds=300,
-    [ValidateRange(90,420)][int]$TimeoutSeconds=420,
+    [ValidateRange(15,420)][int]$Seconds=300,
+    [ValidateRange(90,540)][int]$TimeoutSeconds=420,
     [ValidateRange(1,12)][int]$CaptureCount=4,
     [ValidateRange(64,1024)][int]$CaptureWidth=1024,
     [ValidateRange(64,768)][int]$CaptureHeight=768,
     [switch]$MechanismSnapshots,
-    [switch]$PrivateGpuOrderedPresent
+    [switch]$PrivateGpuOrderedPresent,
+    [switch]$ExtendedObservation
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
@@ -40,6 +41,11 @@ $receipt=[ordered]@{schema='fvr.xr-game-simulation.v1';status='failed';evidence_
     capture_plan=$capturePlan;mechanism_snapshots=$mechanismMarker;private_gpu_ordered_present=$privatePresentation;
     failures=$failures;forced_termination_by_wrapper=$false}
 function Require([bool]$Condition,[string]$Message){if(-not $Condition){throw $Message}}
+function AssertObservationLimits([int]$HostSeconds,[int]$OuterSeconds,[bool]$Extended){
+    Require ($HostSeconds -ge 15 -and $HostSeconds -le 420 -and $OuterSeconds -ge 90 -and $OuterSeconds -le 540) 'Observation duration exceeds the bounded runner limits.'
+    Require ($Extended -or ($HostSeconds -le 300 -and $OuterSeconds -le 420)) 'Durations beyond 300/420 seconds require explicit ExtendedObservation.'
+    Require ($OuterSeconds -ge $HostSeconds+60) 'Outer deadline must reserve at least 60 seconds beyond host duration.'
+}
 function Full([string]$Path){
     Require ([IO.Path]::IsPathFullyQualified($Path)) "Absolute path required: $Path"
     $full=[IO.Path]::GetFullPath($Path);Assert-FvrNoLinks $full;return $full
@@ -302,7 +308,8 @@ try{
     . (Join-Path $sourceRoot 'launcher/runtime/Resolution.ps1')
     . (Join-Path $sourceRoot 'tools/StorageBudget.ps1')
     $RepositoryRoot=Full $RepositoryRoot;$InstallRoot=Full $InstallRoot;$OutputDir=Full $OutputDir;$ProfileDirectory=Full $ProfileDirectory
-    Require ($TimeoutSeconds -ge $Seconds+60) 'Outer deadline must reserve at least 60 seconds beyond host duration.'
+    AssertObservationLimits $Seconds $TimeoutSeconds ([bool]$ExtendedObservation)
+    $receipt.limits.extended_observation=[bool]$ExtendedObservation
     Require ([IO.Path]::GetPathRoot($RepositoryRoot) -ieq 'G:\' -and [IO.Path]::GetPathRoot($InstallRoot) -ieq 'G:\') 'Local development repository/install must remain on G:.'
     Require ($OutputDir.StartsWith((Join-Path $RepositoryRoot 'reports')+'\',[StringComparison]::OrdinalIgnoreCase)) 'Use a fresh output under RepositoryRoot/reports.'
     Require (-not(Test-Path -LiteralPath $OutputDir)) 'Existing output refused; preserve all prior episodes.'
