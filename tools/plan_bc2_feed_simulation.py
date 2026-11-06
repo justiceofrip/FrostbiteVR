@@ -18,7 +18,9 @@ import time
 
 STAGES = {"OpenCover": 2, "DetachContainer": 4, "AttachContainer": 5,
           "SeatFeed": 6, "CloseCover": 7}
-SNAPSHOT_LIMIT = 32768
+# Match live_snapshot::MaximumBytes; complete magazine/bolt recovery records
+# exceed the former 32 KiB per-response bound. Total episode budgets stay fixed.
+SNAPSHOT_LIMIT = 64 * 1024
 XRSIM_REVISION = "ca14f5b1c549cf49dca49233250b8f3cdad013f4"
 XRSIM_MATH_SHA256 = "2e23909fdf3aa98ba3314571509df1db55e854ad8e820c55eafec504d7d3889e"
 COORDINATE_REPORT_SHA256 = "341f59330f6a48cece1dceb9119495d3422e36efd3fff75e7425c9908f4b9bfe"

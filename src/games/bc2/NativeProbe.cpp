@@ -4192,7 +4192,10 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
                 DWORD written=0;
                 if(!WriteFile(file,p.payload.data(),DWORD(p.payload.size()),&written,nullptr)){failedStage="write_pending";error=GetLastError();}
                 else if(written!=p.payload.size())failedStage="short_write_pending";
-                else if(!FlushFileBuffers(file)){failedStage="flush_pending";error=GetLastError();}
+                // This nonce-bound snapshot is transient command evidence.
+                // A checked complete write, close and atomic rename preserve
+                // old-or-new reads; power-loss durability cannot extend its
+                // original leases. Keep failure records durable separately.
                 if(!CloseHandle(file)&&!failedStage){failedStage="close_pending";error=GetLastError();}
                 if(!failedStage){
                     const auto attributes=GetFileAttributesW(final.c_str());
@@ -4201,7 +4204,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
                     else if(attributes!=INVALID_FILE_ATTRIBUTES&&(attributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT)))failedStage="unsafe_final";
                     else if(attributes!=INVALID_FILE_ATTRIBUTES){
                         if(!ReplaceFileW(final.c_str(),temporary.c_str(),nullptr,0,nullptr,nullptr)){failedStage="replace_final";error=GetLastError();}
-                    }else if(!MoveFileExW(temporary.c_str(),final.c_str(),MOVEFILE_WRITE_THROUGH)){failedStage="move_final";error=GetLastError();}
+                    }else if(!MoveFileExW(temporary.c_str(),final.c_str(),0)){failedStage="move_final";error=GetLastError();}
                 }
                 if(failedStage&&!DeleteFileW(temporary.c_str()))p.cleanupError=GetLastError();
             }

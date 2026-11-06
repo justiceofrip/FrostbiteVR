@@ -98,6 +98,13 @@ struct Bc2PhysicalBoltResult {
     std::optional<interaction::WeaponCycleIdleDebtReady> recovered;
     std::optional<interaction::MechanismAudioEvent> audio;
 };
+// A copied, successfully acknowledged event for diagnostics only. It is never
+// returned from Tick again and never grants a current lease or a native request.
+struct Bc2BoltCompletedEvent {
+    ReloadHoldIdentity native{};
+    std::optional<interaction::WeaponCycleReady> settled;
+    std::optional<interaction::WeaponCycleIdleDebtReady> recovered;
+};
 // One instance per interaction domain. The ordinary gun/support adapter must
 // yield its claims while ownsGunCustody is true and adopt custodyChange claims
 // together. No native activation, hook, pointer write or input action lives here.
@@ -110,8 +117,13 @@ public:
     std::optional<interaction::HandInteractionResult> UpdateGunHold(const Bc2PhysicalBoltSample&,
         interaction::HandInteraction&)noexcept;
     bool BlocksFire()const noexcept{return blocks_;}
+    // Gameplay-thread copy, joined to the snapshot's independently read native
+    // identity and original cycle. Receipt clocks remain historical verbatim.
+    std::optional<Bc2BoltCompletedEvent> CompletedObservation(const Bc2PhysicalBoltSample&,
+        const std::optional<Bc2NativeCycleView>&)const noexcept;
     void Cancel(const interaction::HandInteractionSample&,interaction::HandInteraction&)noexcept;
 private:
+    void RetireCompletedObservation(const Bc2PhysicalBoltSample&,const Bc2NativeCycleView* =nullptr)noexcept;
     template<class Lease> std::optional<Bc2PhysicalBoltResult> TickReload(const Bc2PhysicalBoltSample&,
         interaction::BoltWeaponCustodyT<Lease>&,interaction::HandInteraction&)noexcept;
     Bc2PhysicalBoltResult TickRecovery(const Bc2PhysicalBoltSample&,const Bc2NativeCycleRecoveryView&,
@@ -127,6 +139,7 @@ private:
     std::optional<interaction::WeaponCycleIdleDebtLease> recoveryCycle_;
     std::optional<interaction::WeaponCycleIdleDebtRelease> recoveryPending_;
     std::optional<interaction::WeaponCycleIdleDebtReady> recoveryAcknowledged_;
+    std::optional<Bc2BoltCompletedEvent> completedObservation_;
     bool recoverySettled_=false,recoveryPlacement_=false;
     ReloadStateOwner owner_{};
     bool blocks_=false,settled_=false,reloadPrepared_=false;

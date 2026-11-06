@@ -300,6 +300,7 @@ void RecordOrdinaryBoltPreparationSkip(unsigned reason,const interaction::InputF
 }
 std::optional<Bc2PhysicalBoltSample> ordinaryBoltSample;
 Bc2PhysicalBoltResult ordinaryBoltResult;
+std::shared_ptr<const BoltLiveObservation> ordinaryBoltObservation;
 Bc2BoltControllerContact ordinaryBoltContact;
 bool ordinaryBoltEarlyTick=false,ordinarySelectionReady=false,ordinaryTrackingRecovery=false;
 Bc2PhysicalBoltApi OrdinaryBoltApi()noexcept {
@@ -718,6 +719,25 @@ std::int64_t HandNanos(std::int64_t ticks)noexcept {
     if(seconds>INT64_MAX/1000000000)return 0;
     return seconds*1000000000+std::int64_t((static_cast<long double>(ticks%handFrequency)*1000000000)/handFrequency);
 }
+std::shared_ptr<const BoltLiveObservation> CaptureLiveBolt(const Bc2PhysicalBoltSample& sample,
+    const Bc2BoltControllerContact& contact,const Bc2PhysicalBoltResult& result,
+    const std::optional<std::array<math::Matrix4,2>>& references={})noexcept {
+    if(!rigPublication::ShellPumpObservationRequested(sample.input.nowNs))return {};
+    try{auto o=std::make_shared<BoltLiveObservation>();
+        o->owner=sample.nativeOwner;o->input=sample.input;o->weapon=sample.item;
+        o->contact=contact;o->contact.raw=sample.raw;o->result=result;o->cancel=sample.cancel;
+        o->controllerCustody=sample.controllerCustody;
+        o->originalGripReferences=references;
+        o->left=handOwnership.Current(interaction::InteractionHand::Left);
+        o->right=handOwnership.Current(interaction::InteractionHand::Right);
+        LARGE_INTEGER stamp{};if(!QueryPerformanceCounter(&stamp))return {};
+        o->capturedNs=o->nativeReadNs=HandNanos(stamp.QuadPart);
+        if(!rigPublication::ShellPumpObservationRequested(o->capturedNs))return {};
+        o->native=reloadFlowRuntime::ReadNativeCycleView(o->nativeReadNs);
+        if(physicalBolt)o->completion=physicalBolt->CompletedObservation(sample,o->native);
+        return o;
+    }catch(...){return {};}
+}
 std::int64_t HandTicks(std::int64_t nanos)noexcept {
     if(nanos<=0||handFrequency<=0)return 0;
     const auto seconds=nanos/1000000000;
@@ -1029,7 +1049,7 @@ void SelectOrdinaryCycle(const Owner& owner,const interaction::InputFrame& input
     }
 }
 void PrepareOrdinaryBoltBeforeHands(const Owner& owner,const interaction::InputFrame& input,bool cancelling)noexcept {
-    ordinaryBoltSample.reset();ordinaryBoltResult={};ordinaryBoltContact={};ordinaryBoltEarlyTick=false;
+    ordinaryBoltSample.reset();ordinaryBoltResult={};ordinaryBoltContact={};ordinaryBoltEarlyTick=false;ordinaryBoltObservation.reset();
     if(!ordinaryManualCycles||!ordinaryBoltPlayer||!physicalBolt||ordinaryShotgunEquipment||
        !physicalBoltCalibration||owner.equipment.Asset()!=physicalBoltCalibration->asset)return;
     const ReloadStateOwner current{owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
@@ -1054,6 +1074,7 @@ void PrepareOrdinaryBoltBeforeHands(const Owner& owner,const interaction::InputF
         // This explicit atomic transaction consumes the real release edge before
         // the generic arbiter can destroy its departing Gun+Support pair.
         ordinaryBoltResult=physicalBolt->Tick(*ordinaryBoltSample,handOwnership,handIntent);
+        ordinaryBoltObservation=CaptureLiveBolt(*ordinaryBoltSample,ordinaryBoltContact,ordinaryBoltResult,ordinaryBoltPlayer->References());
         ordinaryBoltPlayer->Observe(ordinaryBoltResult);ordinaryBoltEarlyTick=true;
         physicalBoltCustody=ordinaryBoltResult.tracking.custody;
         if(ordinaryBoltResult.custodyChange&&ordinaryBoltResult.custodyChange->transaction.accepted)HandChanged("bolt_player_enter");
@@ -2799,6 +2820,8 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     if(charge&&deferActions)charge->semanticReload=ExpackAttempt::ReloadLevels(out);
     Bc2PhysicalPistolSlideResult pistolSlideResult;
     Bc2PhysicalFixedContainerResult fixedResult;
+    std::shared_ptr<const MagazineLiveObservation> magazineObservation;
+    std::shared_ptr<const BoltLiveObservation> boltObservation;
     std::optional<Bc2FixedContainerObservation> fixedContainerObservation;
     if(physicalFixedContainer&&rigPublication::FixedContainerObservationRequested(handSample.nowNs))
         fixedContainerObservation.emplace();
@@ -2954,6 +2977,18 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             LARGE_INTEGER processed{};QueryPerformanceCounter(&processed);sample.input.nowNs=HandNanos(processed.QuadPart);
             magazineResult=magazineDetached->Prepare(sample,detachedReserve,scope->nativeTick,owner.cache,handOwnership);}
         else magazineResult=magazinePhysical->Tick(sample,handOwnership,handIntent);
+        if(!detachedUsed&&rigPublication::ShellPumpObservationRequested(sample.input.nowNs)){
+            try{auto o=std::make_shared<MagazineLiveObservation>();
+                o->owner=sample.nativeOwner;o->input=sample.input;o->weapon=sample.weapon;o->profile=sample.entryProfile;
+                o->family=sample.family;o->raw=sample.raw;o->originalHandEvidence=sample.originalHandEvidence;
+                o->left=handOwnership.Current(interaction::InteractionHand::Left);
+                o->right=handOwnership.Current(interaction::InteractionHand::Right);
+                o->resourceBackend=magazinePhysical->ResourceBackend();o->cancel=sample.cancel;o->pouch=magazinePhysical->BodyAmmoContact();
+                LARGE_INTEGER stamp{};if(QueryPerformanceCounter(&stamp)&&rigPublication::ShellPumpObservationRequested(HandNanos(stamp.QuadPart))){
+                    o->capturedNs=HandNanos(stamp.QuadPart);o->state=magazinePhysical->ResourceProbeState(o->capturedNs);
+                    o->state.result=magazineResult;magazineObservation=std::move(o);}
+            }catch(...){}
+        }
         if(magazinePhysicalFixture){LARGE_INTEGER stamp{};QueryPerformanceCounter(&stamp);const auto now=HandNanos(stamp.QuadPart);
             magazinePhysicalFixture->Observe(magazinePhysical->ProbeState(now),rigPublication::ReadMagazinePackCounters(),now);
             if(magazinePhysicalFixture->CancelConsumer()){auto safety=handSample;safety.nowNs=now;
@@ -3096,10 +3131,13 @@ void __fastcall GatherHook(void* self,void*,void* cache){
                 physicalBoltCustody==interaction::BoltCustodyPhase::ReloadResumePending;
             ordinaryBoltSample->cancel=ordinaryBoltSample->cancel||!aimValid||!out.active||bodyDraw.pending||
                 (physicalReload&&physicalReload->BlocksEquipment())||(!magazineHandoff&&magazineResult.blocksWeaponActions);
-            boltResult=physicalBolt->Tick(*ordinaryBoltSample,handOwnership,handIntent);ordinaryBoltPlayer->Observe(boltResult);
+            boltResult=physicalBolt->Tick(*ordinaryBoltSample,handOwnership,handIntent);
+            ordinaryBoltObservation=CaptureLiveBolt(*ordinaryBoltSample,boltContact,boltResult,ordinaryBoltPlayer->References());
+            ordinaryBoltPlayer->Observe(boltResult);
             physicalBoltCustody=boltResult.tracking.custody;
             if(boltResult.custodyChange&&boltResult.custodyChange->transaction.accepted)HandChanged("bolt_player_return");
         }
+        boltObservation=ordinaryBoltObservation;
         if(ordinaryBoltSample)PublishMechanismAudio(ordinaryBoltSample->nativeOwner,ordinaryBoltSample->input,
             ordinaryBoltSample->item,mechanismAudio::Cue::M95,boltResult.audio,!ordinaryBoltSample->cancel&&ordinarySelectionReady,nullptr);
         if(ordinaryBoltInputFixture){LARGE_INTEGER processed{};QueryPerformanceCounter(&processed);const auto now=HandNanos(processed.QuadPart);
@@ -3130,7 +3168,8 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         if(wrists&&physicalBoltFixture){const auto grips=physicalBoltFixture->OriginalGripReferences();
             if(grips)sample.custodyTransfer=BuildBoltCustodyTransfer(handSample,handItem,boltContact,*grips,handOwnership,
                 physicalBoltFixture->WantsEnter(),physicalBoltFixture->WantsReturn(),handIntent);}
-        if(physicalBoltContactStarted)boltResult=physicalBolt->Tick(sample,handOwnership,handIntent);
+        if(physicalBoltContactStarted){boltResult=physicalBolt->Tick(sample,handOwnership,handIntent);
+            boltObservation=CaptureLiveBolt(sample,boltContact,boltResult);}
         else {boltResult.tracking={true,sample.nativeOwner,handSample,physicalBoltCalibration};boltResult.blocksFire=true;}
         physicalBoltCustody=boltResult.tracking.custody;
         if(physicalBoltFixture){LARGE_INTEGER processed{};QueryPerformanceCounter(&processed);const auto now=HandNanos(processed.QuadPart);
@@ -3493,6 +3532,8 @@ void __fastcall GatherHook(void* self,void*,void* cache){
                 if(observeFamily)sample.sightResolution=familyObservation;
                 sample.controllerOwner={owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
                 sample.controllerEvidence=handSample;
+                sample.magazineObservation=std::move(magazineObservation);
+                sample.boltObservation=std::move(boltObservation);
                 if(fixedContainerObservation){
                     fixedContainerObservation->leftClaim=handOwnership.Current(interaction::InteractionHand::Left);
                     try{sample.fixedContainerObservation=std::make_shared<const Bc2FixedContainerObservation>(std::move(*fixedContainerObservation));}catch(...){}

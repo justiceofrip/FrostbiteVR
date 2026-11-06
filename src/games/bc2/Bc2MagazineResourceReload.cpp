@@ -36,7 +36,8 @@ void Bc2MagazineResourceReload::Suspend(const HandInteractionSample& in,HandInte
     latestResult_={};latestResult_.interaction=last_;latestResult_.blocksWeaponActions=true;
 }
 MagazineResourceProbeState Bc2MagazineResourceReload::ProbeState(std::int64_t now)const noexcept {
-    return {latestResult_,!viewDeferred_&&latestView_&&AmmoResourceViewFresh(*latestView_,now)?latestView_:std::nullopt};
+    return {latestResult_,!viewDeferred_&&latestView_&&AmmoResourceViewFresh(*latestView_,now)?latestView_:std::nullopt,
+        supply_.Held(),reservation_,pendingRequest_,submittedSeat_,original_,seatedEvent_,pending_};
 }
 bool Bc2MagazineResourceReload::Send(const AmmoResourceView& v,const MagazinePhysicalSample& s,AmmunitionOperation op,bool discard,std::uint64_t& intent)noexcept {
     if(pending_||!api_.submit||intent==UINT64_MAX)return false;

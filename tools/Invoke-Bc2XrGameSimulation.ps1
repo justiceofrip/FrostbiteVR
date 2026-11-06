@@ -503,7 +503,23 @@ finally{
                     # Only this proven early refusal may use normal process exit instead;
                     # no guard release or reload retirement is inferred from that close.
                     if($session.ContainsKey('resolution_lease') -and -not $preActivation){
-                        $released=Json (Join-Path $folder 'resolution-release.json');Assert-Bc2ResolutionIdentity $released $session.resolution_lease 'release';Assert-Bc2ResolutionReleased $released $session.resolution_lease
+                        $released=Json (Join-Path $folder 'resolution-release.json')
+                        Assert-Bc2ResolutionIdentity $released $session.resolution_lease 'release'
+                        try{Assert-Bc2ResolutionReleased $released $session.resolution_lease}catch{
+                            # Actual514 retired gameplay and restored/drained the resolution
+                            # hook, but the inactive guard remained resident until game exit.
+                            # Normal close of this exact owned process can finish teardown;
+                            # retain the release failure instead of claiming a clean run.
+                            Require ($nativeRetired -and $released.passed -is [bool] -and -not $released.passed -and
+                                $released.hook_restored -is [bool] -and $released.hook_restored -and
+                                $released.callbacks_drained -is [bool] -and $released.callbacks_drained -and
+                                $released.guard_active -is [bool] -and -not $released.guard_active -and
+                                $released.guard_cleanup_pending -is [bool] -and $released.guard_cleanup_pending -and
+                                $released.module_retained_until_game_exit -is [bool] -and $released.module_retained_until_game_exit -and
+                                $released.game_exited -is [bool] -and -not $released.game_exited) 'Resolution cleanup does not permit retained-module process-exit recovery.'
+                            $failures.Add('Resolution release remained unconfirmed; exact owned game normal close used for process-exit recovery. '+$_.Exception.Message)
+                            Save 'resolution-close-recovery.json' @{release=$released;native_retirement_proven=$true;resolution_release_confirmed=$false;normal_close_only=$true;forced_termination=$false}
+                        }
                     }
                     NoOtherProcesses;SameIdentity (Get-Bc2ProcessIdentity $game -RequireLive $true) $owned.game.identity
                     $accepted=$game.CloseMainWindow();Save 'close-request.json' @{game=$owned.game.identity;accepted=$accepted;forced_termination=$false}

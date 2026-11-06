@@ -12,6 +12,19 @@ bool CurrentGun(const HandClaim& gun,const HandInteractionSample& input,HandInte
     return gun.token.kind==HandClaimKind::GunHold&&gun.token.owner==input.owner&&gun.token.item==item&&
         gun.inputSequence==input.sequence&&gun.deadlineNs>input.nowNs&&gun.deadlineNs<=input.deadlineNs;
 }
+template<class Ready> bool CompletedSource(const Ready& ready,const Bc2PhysicalBoltSample& s,
+    HandInteractionKey mechanism,const Bc2NativeCycleView* native)noexcept {
+    const auto& cycle=ready.release.cycle;
+    return cycle.owner==s.input.owner&&cycle.item==s.item&&cycle.mechanism==mechanism&&
+        (!native||(native->cycle==cycle.cycle&&native->shot==cycle.shot));
+}
+bool CompletedSource(const Bc2BoltCompletedEvent& event,const Bc2PhysicalBoltSample& s,
+    const Bc2BoltCalibration& calibration,const Bc2NativeCycleView* native)noexcept {
+    const HandInteractionKey mechanism{calibration.profile.id,s.item.generation};
+    return event.native.owner==s.nativeOwner&&s.asset==calibration.asset&&s.mesh==calibration.mesh&&
+        (!native||event.native==native->native)&&(bool(event.settled)!=bool(event.recovered))&&
+        (event.settled?CompletedSource(*event.settled,s,mechanism,native):CompletedSource(*event.recovered,s,mechanism,native));
+}
 template<class Custody> Bc2PhysicalBoltResult RetainBoltCustody(const Bc2PhysicalBoltSample& s,
     const std::shared_ptr<const Bc2BoltCalibration>& calibration,Custody* custody,HandInteraction& hands)noexcept {
     Bc2PhysicalBoltResult out;out.blocksFire=true;out.tracking={true,s.nativeOwner,s.input,calibration};
@@ -38,6 +51,16 @@ bool BoltCalibrationValid(const Bc2BoltCalibration& c)noexcept {
 }
 Bc2PhysicalBolt::Bc2PhysicalBolt(std::shared_ptr<const Bc2BoltCalibration> c,Bc2PhysicalBoltApi api)noexcept:
     calibration_(std::move(c)),api_(api){}
+std::optional<Bc2BoltCompletedEvent> Bc2PhysicalBolt::CompletedObservation(const Bc2PhysicalBoltSample& s,
+    const std::optional<Bc2NativeCycleView>& native)const noexcept {
+    if(!completedObservation_||!calibration_||!native||
+       !CompletedSource(*completedObservation_,s,*calibration_,&*native))return {};
+    return completedObservation_;
+}
+void Bc2PhysicalBolt::RetireCompletedObservation(const Bc2PhysicalBoltSample& s,const Bc2NativeCycleView* native)noexcept {
+    if(completedObservation_&&(!calibration_||!CompletedSource(*completedObservation_,s,*calibration_,native)))
+        completedObservation_.reset();
+}
 std::optional<HandInteractionResult> Bc2PhysicalBolt::UpdateGunHold(
     const Bc2PhysicalBoltSample& s,HandInteraction& hands)noexcept {
     const auto gun=custody_?custody_->Gun():std::nullopt;
@@ -54,6 +77,8 @@ std::optional<HandInteractionResult> Bc2PhysicalBolt::UpdateGunHold(
         custody_->UpdateGunHold(s.input,s.wristWorld[hand],s.gunContacts[hand],hands);
 }
 void Bc2PhysicalBolt::Cancel(const HandInteractionSample& input,HandInteraction& hands)noexcept {
+    if(completedObservation_&&((completedObservation_->settled&&completedObservation_->settled->release.cycle.owner!=input.owner)||
+       (completedObservation_->recovered&&completedObservation_->recovered->release.cycle.owner!=input.owner)))completedObservation_.reset();
     if(deferredControl_&&pending_&&custody_->RejectUndispatched(*pending_)){pending_.reset();deferredControl_.reset();}
     if(deferredRecovery_&&recoveryPending_&&recoveryCustody_&&recoveryCustody_->RejectUndispatched(*recoveryPending_)){
         recoveryPending_.reset();deferredRecovery_.reset();}
@@ -113,6 +138,7 @@ template<class Lease> std::optional<Bc2PhysicalBoltResult> Bc2PhysicalBolt::Tick
 }
 Bc2PhysicalBoltResult Bc2PhysicalBolt::Tick(const Bc2PhysicalBoltSample& s,HandInteraction& hands,std::uint64_t& intent)noexcept {
     Bc2PhysicalBoltResult out;
+    RetireCompletedObservation(s);
     if(!calibration_||!BoltCalibrationValid(*calibration_)||(!api_.control&&!api_.controlResult)||!api_.view||!api_.ack||!api_.cancel)return out;
     const auto& p=calibration_->profile;
     const bool samePresentation=!s.cancel&&s.asset==calibration_->asset&&s.mesh==calibration_->mesh;
@@ -135,20 +161,26 @@ Bc2PhysicalBoltResult Bc2PhysicalBolt::Tick(const Bc2PhysicalBoltSample& s,HandI
         if(auto reload=TickReload(s,*custody_,hands))return *reload;
     }
     auto view=api_.view(api_.context,s.input.nowNs);
+    if(view)RetireCompletedObservation(s,&*view);
     // A ready receipt settles only its exact previously submitted transaction.
     // It remains consumable after the physical owner or tracking has changed.
     if(view&&view->ready){
         if(!acknowledged_&&custody_->ReconcileReady(*view->ready,s.input.nowNs))acknowledged_=view->ready;
         if(acknowledged_&&api_.ack(api_.context,*acknowledged_)){
+            completedObservation_=Bc2BoltCompletedEvent{view->native,acknowledged_,{}};
+            RetireCompletedObservation(s,&*view);
             out.settled=acknowledged_;acknowledged_.reset();pending_.reset();deferredControl_.reset();settled_=true;
         }
         view=api_.view(api_.context,s.input.nowNs);
+        if(view)RetireCompletedObservation(s,&*view);
     }
     auto recovery=api_.recovery.Complete()?api_.recovery.view(api_.context,s.input.nowNs):std::nullopt;
     if(recovery&&recovery->ready&&recoveryCustody_){
         if(!recoveryAcknowledged_&&recoveryPending_&&recovery->ready->release==*recoveryPending_&&
            recoveryCustody_->ReconcileReady(*recovery->ready,s.input.nowNs))recoveryAcknowledged_=recovery->ready;
         if(recoveryAcknowledged_&&api_.recovery.ack(api_.context,*recoveryAcknowledged_)){
+            completedObservation_=Bc2BoltCompletedEvent{recovery->native,{},recoveryAcknowledged_};
+            RetireCompletedObservation(s);
             out.recovered=recoveryAcknowledged_;recoveryAcknowledged_.reset();recoveryPending_.reset();deferredRecovery_.reset();recoverySettled_=true;
         }
         recovery=api_.recovery.view(api_.context,s.input.nowNs);
@@ -242,6 +274,7 @@ Bc2PhysicalBoltResult Bc2PhysicalBolt::Tick(const Bc2PhysicalBoltSample& s,HandI
         blocks_=true;out.blocksFire=true;out.ownsGunCustody=bool(existingGun);hands.Update(s.input);return out;
     }
     view=api_.view(api_.context,s.input.nowNs);
+    if(view)RetireCompletedObservation(s,&*view);
     out.tracking={true,s.nativeOwner,s.input,calibration_};
     if(view&&view->held&&(view->native.owner!=s.nativeOwner||view->held->owner!=s.input.owner||
        view->held->item!=s.item||view->held->mechanism!=control.mechanism)){

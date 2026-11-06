@@ -960,7 +960,7 @@ class SightArtifactTests(unittest.TestCase):
         raw = b"x" * s.sight.frame.SNAPSHOT_LIMIT
         self.assertEqual(s.MAX_SIGHT_SNAPSHOT_BYTES, 4 * 1024 * 1024)
         count = s.MAX_SIGHT_SNAPSHOT_BYTES // len(raw)
-        self.assertEqual(count, 128)
+        self.assertEqual(count, 64)
         for index in range(count):
             store.save(f"snapshot-{index:03}.json", raw)
         store.save("snapshot-000.json", raw)

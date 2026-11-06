@@ -68,6 +68,13 @@ struct MagazinePhysicalResult {
 struct MagazineResourceProbeState {
  MagazinePhysicalResult result{};
  std::optional<AmmoResourceView> resource;
+ // Read-only custody copies; absence of a fresh view never erases or renews them.
+ std::optional<interaction::AmmoSupplyObject> carriedReplacement;
+ std::optional<interaction::AmmoSupplyReservation> reservation;
+ std::optional<AmmoResourceRequest> pendingRequest,submittedSeat;
+ std::optional<interaction::OriginalMagazine> original;
+ std::uint64_t seatedRequest=0;
+ bool requestPending=false;
 };
 // A physically submitted/attached magazine may free the support hand while
 // its native ammo transaction still blocks Fire and equipment changes. This

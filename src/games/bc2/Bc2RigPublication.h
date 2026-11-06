@@ -4,6 +4,8 @@
 #include "Bc2ContextualToolSource.h"
 #endif
 #include "Bc2PhysicalPump.h"
+#include "Bc2MagazineBoltObservation.h"
+#include "Bc2LiveMechanismSnapshotBudget.h"
 #include "Bc2PhysicalReload.h"
 #include "Bc2BoltRuntimeGeometry.h"
 #include "Bc2FixedContainerPresentation.h"
@@ -138,6 +140,8 @@ struct Tracking {
     MagazineTracking magazine{};
     Bc2PumpTracking pump{};
     std::shared_ptr<const ShellPumpObservation> shellPumpObservation;
+    std::shared_ptr<const MagazineLiveObservation> magazineObservation;
+    std::shared_ptr<const BoltLiveObservation> boltObservation;
     Bc2BoltTracking bolt{};
     // Same immutable Gameplay packet; never substitute a later global feed pose.
     // Family keys resolve immutable rows; render admission separately checks
@@ -344,9 +348,8 @@ void ReportLiveCounters(std::ostream&);
 bool ShellPumpObservationRequested(std::int64_t nowNs)noexcept;
 bool WeaponModeObservationRequested(std::int64_t nowNs)noexcept;
 bool FixedContainerObservationRequested(std::int64_t nowNs)noexcept;
-// A populated pump snapshot retains both shell and cycle receipts. Keep a
-// bounded margin for exact profile paths and native identity widths.
-inline constexpr std::size_t LiveMechanismSnapshotLimit=32768;
+// Shared with the complete magazine/bolt composition budget and Python reader.
+inline constexpr std::size_t LiveMechanismSnapshotLimit=live_snapshot::MaximumBytes;
 void WriteLiveMechanismSnapshot(std::ostream&,std::uint64_t nonce);
 void Report(std::ostream&);
 }

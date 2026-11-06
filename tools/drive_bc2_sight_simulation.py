@@ -35,7 +35,7 @@ SELECTION_UNAVAILABLE = "selected_configuration_or_rig_missing_changed_or_expire
 # Actual40 retained 57 snapshots / 902,600 source bytes before the 1 MiB
 # artifact cap refused during neutral approach. Gzip level 1 retains those exact
 # bytes in 254,159 bytes. Keep the shared disk cap and its cleanup/result reserves;
-# separately bound decoded retention to 128 maximum-size (32 KiB) responses.
+# separately keep decoded retention at 4 MiB (64 maximum-size64 KiB responses).
 MAX_SIGHT_SNAPSHOT_BYTES = 4 * 1024 * 1024
 
 

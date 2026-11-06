@@ -8,14 +8,14 @@ constexpr std::int64_t ms=1000000;constexpr auto left=InteractionHand::Left,righ
 math::Matrix4 Identity(){math::Matrix4 m{};for(unsigned n=0;n<4;++n)m.values[n][n]=1;return m;}
 bool Equal(const math::Matrix4& a,const math::Matrix4& b){for(unsigned r=0;r<4;++r)for(unsigned c=0;c<4;++c)if(std::abs(a.values[r][c]-b.values[r][c])>1e-5f)return false;return true;}
 struct Native {
-    Bc2NativeCycleView view{};unsigned controls=0,releases=0,acks=0,cancels=0;bool rejectRelease=false;
+    Bc2NativeCycleView view{};unsigned controls=0,releases=0,acks=0,cancels=0;bool rejectRelease=false,blockAck=false;
     unsigned busyControls=0,busyReleases=0;bool precheckExpired=false;std::vector<Bc2NativeCycleControl> releaseAttempts;
     std::optional<WeaponCycleRelease> release;
     Bc2PhysicalBoltApi Api(){auto api=Bc2PhysicalBoltApi{this,
         [](void* p,const Bc2NativeCycleControl& c)noexcept{auto& n=*static_cast<Native*>(p);++n.controls;
             if(c.release){++n.releases;n.release=c.release;n.view.phase=Bc2NativeCyclePhase::Releasing;n.view.held.reset();return !n.rejectRelease;}return true;},
         [](void* p,std::int64_t)noexcept->std::optional<Bc2NativeCycleView>{return static_cast<Native*>(p)->view;},
-        [](void* p,const WeaponCycleReady& r)noexcept{auto& n=*static_cast<Native*>(p);if(!n.view.ready||n.view.ready->release!=r.release||n.view.ready->sequence!=r.sequence)return false;
+        [](void* p,const WeaponCycleReady& r)noexcept{auto& n=*static_cast<Native*>(p);if(n.blockAck||!n.view.ready||n.view.ready->release!=r.release||n.view.ready->sequence!=r.sequence)return false;
             ++n.acks;n.view.ready.reset();n.view.phase=Bc2NativeCyclePhase::Complete;n.view.blocksFire=false;return true;},
         [](void* p)noexcept{++static_cast<Native*>(p)->cancels;}};
         api.controlResult=[](void* p,const Bc2NativeCycleControl& c)noexcept{auto& n=*static_cast<Native*>(p);
@@ -113,6 +113,49 @@ int NativeReadyDoesNotReturnCustody(){
     CHECK(r.settled&&f.native.acks==1&&r.blocksFire&&f.hands.Current(left)&&!f.hands.Current(right));
     CHECK(f.Return()==0);r=f.Tick(f.calibration->profile.closedContact);CHECK(!r.blocksFire);return 0;
 }
+int CompletedObservationIsHistoricalAndExact(){
+    for(unsigned retirement=0;retirement<4;++retirement){
+        Fixture f;f.native.view.cycle=f.native.view.shot=1;
+        f.native.view.native.firing={0x110000,0x120000,0x130000};
+        f.native.view.native.serverPlayer=0x140000;f.native.view.native.serverSoldier=0x150000;f.native.view.native.serverItem=0x160000;
+        CHECK(!f.bolt->CompletedObservation(f.sample,f.native.view));
+        CHECK(f.Enter()==0&&f.Stroke()==0);CHECK(!f.bolt->CompletedObservation(f.sample,f.native.view));
+        f.Ready();const auto ready=*f.native.view.ready;
+        f.native.blockAck=true;auto r=f.Tick(f.calibration->profile.closedContact);
+        CHECK(!r.settled&&!f.native.acks&&!f.bolt->CompletedObservation(f.sample,f.native.view));
+        f.native.blockAck=false;r=f.Tick(f.calibration->profile.closedContact);CHECK(r.settled&&f.native.acks==1&&!f.native.view.ready);
+        auto history=f.bolt->CompletedObservation(f.sample,f.native.view);CHECK(history&&history->settled&&!history->recovered);
+        CHECK(history->native==f.native.view.native&&history->settled->release==ready.release);
+        r=f.Tick(f.calibration->profile.closedContact);CHECK(!r.settled&&!r.recovered);
+        CHECK(f.Return()==0);for(unsigned n=0;n<40;++n)r=f.Tick(f.calibration->profile.closedContact);
+        CHECK(!r.settled&&!r.recovered&&!r.tracking.held&&!r.blocksFire);
+        history=f.bolt->CompletedObservation(f.sample,f.native.view);CHECK(history&&history->settled);
+        CHECK(history->settled->release==ready.release&&history->settled->sequence==ready.sequence&&
+            history->settled->observedNs==ready.observedNs&&history->settled->deadlineNs==ready.deadlineNs&&
+            history->settled->nativeReady&&history->settled->unchangedAmmunition);
+        CHECK(f.sample.input.nowNs>ready.deadlineNs); // No receipt deadline renewal.
+        CHECK(!f.bolt->CompletedObservation(f.sample,{}));
+        const auto controls=f.native.controls,releases=f.native.releases,acks=f.native.acks;
+        for(unsigned fault=0;fault<14;++fault){auto sample=f.sample;auto native=f.native.view;
+            switch(fault){case 0:++sample.nativeOwner.weak;break;case 1:++sample.input.owner.actor;break;
+            case 2:++sample.input.owner.actorGeneration;break;case 3:++sample.input.owner.equipGeneration;break;
+            case 4:++sample.input.owner.space;break;case 5:++sample.item.id;break;case 6:++sample.item.generation;break;
+            case 7:++native.native.firing[0];break;case 8:++native.native.firing[1];break;case 9:++native.native.firing[2];break;
+            case 10:++native.native.serverItem;break;case 11:++native.cycle;break;case 12:++native.shot;break;case 13:sample.mesh="other";break;}
+            CHECK(!f.bolt->CompletedObservation(sample,native));
+        }
+        CHECK(f.native.controls==controls&&f.native.releases==releases&&f.native.acks==acks);
+        const auto originalSample=f.sample;const auto originalNative=f.native.view;
+        if(retirement==0)++f.native.view.cycle;
+        else if(retirement==1)++f.sample.input.owner.equipGeneration;
+        else if(retirement==2)++f.native.view.native.firing[2];
+        else {auto changed=f.sample.input;++changed.owner.actorGeneration;f.bolt->Cancel(changed,f.hands);}
+        if(retirement<3)f.Tick(f.calibration->profile.closedContact);
+        // Returning to the previous values cannot resurrect a retired event.
+        CHECK(!f.bolt->CompletedObservation(originalSample,originalNative));
+        CHECK(f.native.releases==1&&f.native.acks==1);
+    }return 0;
+}
 int CompletedCycleRetainsOnlyCurrentGunPlacement(){
     Fixture f;CHECK(f.Enter()==0&&f.Stroke()==0&&f.Return()==0);f.Ready();
     auto r=f.Tick(f.calibration->profile.closedContact);CHECK(r.settled&&r.tracking.weapon);
@@ -209,6 +252,7 @@ int NativeOwnerAndHandOwnerStaySeparate(){
 }
 }
 int main(){
+    if(CompletedObservationIsHistoricalAndExact())return 1;
     if(PredispatchExpiredReleaseKeepsGunAndNeedsNewGesture(0)||PredispatchExpiredReleaseKeepsGunAndNeedsNewGesture(2))return 1;
     if(BusyControlRetainsCustodyWithoutMechanismMotion()||BusyReleaseRetriesExactPacketAndExpiresWithoutDispatch())return 1;
     if(CompletedCycleRetainsOnlyCurrentGunPlacement()||AdmissionRemainsDisabled()||OrderedPhysicalNativeHandshake()||NativeReadyDoesNotReturnCustody()||AmbiguousSubmissionNeverRetries()||

@@ -99,6 +99,7 @@ struct Fixture {
         auto support=hands.Acquire(sample.input,Request(left,HandClaimKind::WeaponSupport,2,originalGun.id));originalSupport=support.claim->token;
         native.view.phase=Bc2NativeCyclePhase::Held;native.view.blocksFire=true;
         native.view.native.owner=sample.nativeOwner;
+        native.view.cycle=native.view.shot=1;
         native.view.held=WeaponCycleLease{sample.input.owner,sample.item,{calibration->profile.id,3},1,1,1,sample.input.observedNs,sample.input.deadlineNs,true};
         bolt=std::make_unique<Bc2PhysicalBolt>(calibration,native.Api());
     }
@@ -163,7 +164,14 @@ int RecoveryRetainsCurrentLeftGunAndRequiresWholeBoltGesture(unsigned busy=0){
     // A partial rear motion without real unlocking cannot discharge debt.
     r=f.Tick(weapon_cycle_detail::Target(f.calibration->profile,.01f,0));
     CHECK(!f.native.recoveryReleased&&!f.native.recoveryAcked&&r.blocksFire);
-    f.native.busyRecovery=busy;CHECK(f.Stroke()==0);
+    f.native.busyRecovery=busy;f.native.blockRecoveryAck=true;CHECK(f.Stroke()==0);
+    CHECK(!f.bolt->CompletedObservation(f.sample,f.native.view));
+    f.native.blockRecoveryAck=false;r=f.Tick(f.calibration->profile.closedContact);
+    CHECK(r.recovered&&f.native.recoveryAcked==1);
+    const auto ready=*r.recovered;
+    auto history=f.bolt->CompletedObservation(f.sample,f.native.view);
+    CHECK(history&&history->recovered&&!history->settled&&history->recovered->release==ready.release);
+    r=f.Tick(f.calibration->profile.closedContact);CHECK(!r.recovered&&!r.settled);
     CHECK(f.Return()==0);
     for(unsigned n=0;n<8;++n)f.Tick(f.calibration->profile.closedContact);
     CHECK(f.native.recoveryReleased==1&&f.native.recoveryAcked==1&&!f.native.releases&&!f.native.acks&&!f.last.blocksFire);
@@ -178,10 +186,18 @@ int RecoveryRetainsCurrentLeftGunAndRequiresWholeBoltGesture(unsigned busy=0){
     for(unsigned n=0;n<25;++n){f.sample.wristWorld[1].values[3][0]+=.001f;r=f.Tick(f.calibration->profile.closedContact);
         CHECK(r.tracking.weapon&&!r.tracking.recoveryTarget&&!r.tracking.target&&!r.blocksFire);
         CHECK(Near(r.tracking.weapon->weaponInWorld.values[3][0],returned.values[3][0]+.001f*float(n+1)));}
+    history=f.bolt->CompletedObservation(f.sample,f.native.view);CHECK(history&&history->recovered);
+    CHECK(history->recovered->release==ready.release&&history->recovered->sequence==ready.sequence&&
+        history->recovered->observedNs==ready.observedNs&&history->recovered->deadlineNs==ready.deadlineNs&&
+        history->recovered->nativeReady&&history->recovered->unchangedAmmunition);
+    auto wrong=f.sample;++wrong.input.owner.equipGeneration;CHECK(!f.bolt->CompletedObservation(wrong,f.native.view));
+    const auto previous=f.native.view;
     f.native.recoveryMode=false;f.native.view.blocksFire=true;f.native.view.phase=Bc2NativeCyclePhase::Held;
+    f.native.view.cycle=f.native.view.shot=2;
     f.native.view.held=WeaponCycleLease{f.sample.input.owner,f.sample.item,{f.calibration->profile.id,3},2,2,200,
         f.sample.input.observedNs,f.sample.input.deadlineNs,true};
     r=f.Tick(f.calibration->profile.closedContact);
+    CHECK(!f.bolt->CompletedObservation(f.sample,f.native.view)&&!f.bolt->CompletedObservation(f.sample,previous));
     CHECK(r.blocksFire&&r.tracking.weapon&&r.tracking.custody==BoltCustodyPhase::Returned&&!r.tracking.target&&!r.tracking.recoveryTarget);
     const auto rightToken=f.hands.Current(right)->token;
     f.sample.custodyTransfer=HandGunCustodyTransfer{rightToken,f.originalSupport,

@@ -20,6 +20,8 @@
 #include "Bc2M95ShotPartCapture.h"
 #include "Bc2WeaponFrameAccess.h"
 #include "Bc2MagazineFallbackObservation.h"
+#include "Bc2MagazineBoltObservationJson.h"
+#include "Bc2LiveMechanismSnapshotBudget.h"
 #include "Bc2AuthoredSupport.h"
 #include "Bc2SupportControllerMapping.h"
 #ifdef FVR_BC2_AUTHORED_SUPPORT_HEADER
@@ -140,6 +142,8 @@ struct ShotPublication {WeaponShotFrame frame;ShotGuard identity;std::optional<A
     std::shared_ptr<const Bc2PhysicalFeedPresentation> feed;
     std::optional<WeaponModeCommand> sightMode;std::uint64_t sightModeObservedMs=0;
     std::shared_ptr<const ShellPumpObservation> shellPumpObservation;
+    std::shared_ptr<const MagazineLiveObservation> magazineObservation;
+    std::shared_ptr<const BoltLiveObservation> boltObservation;
     std::shared_ptr<const WeaponModeObservation> sightResolution;
     std::shared_ptr<const Bc2FixedContainerObservation> fixedContainerObservation;
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
@@ -2590,7 +2594,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
         const ShotGuard identity{input.soldier,input.weak,input.weapon,input.ownerGeneration,input.input.spaceGeneration,input.input.generation,input.deadline,true,targets->tracked[0],0,input.weaponActionsBlocked,input.equipmentGeneration,input.nativeEquipment};
         preparedShot=std::make_shared<const ShotPublication>(ShotPublication{*pose->shot,identity,authored.binding,measuredSupport,authoredAim,sightSelection,
             input.input,input.selectedMeshes,handRoleReady&&handBinding?std::optional<math::Matrix4>{handBinding->wristToGrip}:std::nullopt,input.feed,
-            input.sightMode,input.sightModeObservedMs,input.shellPumpObservation,input.sightResolution,input.fixedContainerObservation
+            input.sightMode,input.sightModeObservedMs,input.shellPumpObservation,input.magazineObservation,input.boltObservation,input.sightResolution,input.fixedContainerObservation
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
             ,rig->identity,!targets->weaponAttachmentPending,
             originAuthoredExit||bool(pose->shot->muzzlePartObservation),originAuthoredExit,pose
@@ -3210,6 +3214,7 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
         json<<",\"persistentId\":";text(family.persistentId);json<<'}';
     }
     json<<",\"resolutionObservation\":";
+    const auto sightResolutionBegin=static_cast<std::size_t>(json.tellp());
     if(!source->sightResolution)json<<"{\"status\":\"capture_pending_or_not_requested\"}";
     else{const auto& original=*source->sightResolution;
         const bool joined=original.owner==m.owner&&original.equipment==identity.equipment&&
@@ -3220,6 +3225,7 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
             <<",\"observedMs\":"<<original.observedMs<<",\"inputGeneration\":"<<original.inputGeneration<<",\"owner\":";owner(original.owner);
         json<<",\"resolution\":";WriteWeaponModeResolution(json,original.resolution);json<<'}';
     }
+    const auto sightResolutionEnd=static_cast<std::size_t>(json.tellp());
     json<<",\"adapter\":";
     if(!sightAdapter)json<<"null";else{
         json<<"{\"assembly\":";text(sightAdapter->assembly==SightAssemblyKind::OpposedLeaves?"opposed_leaves":"subtree");
@@ -3409,17 +3415,22 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     std::ostringstream feedObservation;feedObservation.imbue(std::locale::classic());feedObservation<<std::boolalpha;
     gameplay::ReportFeedObservation(feedObservation);
     const auto snapshotPrefix=json.str();
+    std::ostringstream magazineBolt;magazineBolt.imbue(std::locale::classic());magazineBolt<<std::boolalpha;magazineBolt.precision(17);
+    live_magazine_bolt::Json magazineBoltJson(magazineBolt);
+    magazineBolt<<",\"magazine\":";
+    magazineBoltJson.Magazine(source->magazineObservation.get(),m.owner,m.inputEvidence,m.rig,m.rigFingerprint,configuration,aim->meshPath,now);
+    magazineBolt<<",\"bolt\":";
+    magazineBoltJson.Bolt(source->boltObservation.get(),m.owner,m.inputEvidence,m.rig,m.rigFingerprint,configuration,aim->meshPath,now);
     // Optional normal stock-trigger observation keeps its own original leases.
     // A racing gather/expiry drops only its proof, never the generic snapshot.
     const auto knifeJson=ObserveChestKnifeLiveJson(gameplay::ReadChestKnifeLiveObservation,[](){return ReloadNanos();},m.owner,m.inputEvidence,input);
     const auto diagnosticBase=fixedGateAdmission+feedGateAdmission+",\"feedObservation\":"+feedObservation.str();
-    const auto diagnosticSuffix=diagnosticBase+",\"chestKnife\":"+knifeJson+"}\n";
-    auto payload=snapshotPrefix+feedAdmission+diagnosticSuffix;
-    // Optional diagnostics may grow after a failure. Try the already captured
-    // compact form before discarding otherwise current pose/mapping evidence.
-    if(payload.size()>snapshotLimit)payload=snapshotPrefix+compactFeedAdmission+diagnosticSuffix;
-    // Optional knife evidence must not consume the existing payload allowance.
-    if(payload.size()>snapshotLimit)payload=snapshotPrefix+compactFeedAdmission+diagnosticBase+"}\n";
+    const auto diagnosticSuffix=diagnosticBase+",\"chestKnife\":"+knifeJson+magazineBolt.str()+"}\n";
+    // Preserve action evidence. Only overflow compacts Feed first, then the
+    // optional sight resolver trace; original sight mode/contact/native fields
+    // and every magazine/bolt/knife source clock and receipt stay untouched.
+    const auto payload=live_snapshot::Compose(snapshotPrefix,feedAdmission,compactFeedAdmission,diagnosticSuffix,
+        sightResolutionBegin,sightResolutionEnd,snapshotLimit);
     if(ReloadNanos()>=until){invalid("expired_during_serialization");return;}
     const auto guardAfter=shotGuard.load(std::memory_order_acquire);
     if(!enabled.load(std::memory_order_acquire)||!guardAfter||!Fresh(guardAfter->deadline)||
