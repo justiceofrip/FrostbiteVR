@@ -194,10 +194,10 @@ class FeedPostreleaseObservationTests(unittest.TestCase):
 
     def test_failed_publication_does_not_enter_observation_mode(self):
         h, _, target = self.release_race()
-        def fail_command(path, raw):
+        def fail_command(path, raw, **kwargs):
             if path == h.driver.command_path:
                 raise OSError("synthetic publication failure")
-            h.write(path, raw)
+            h.write(path, raw, **kwargs)
         with patch.object(d, "atomic", fail_command):
             with self.assertRaisesRegex(OSError, "publication failure"):
                 self.finish_release(h, target)
@@ -401,6 +401,246 @@ class FeedPostreleaseObservationTests(unittest.TestCase):
                 self.assertEqual(len(h.responses_seen), 2)
                 self.assertNotIn("receiptCounterAdvanced", v.plans[-1])
                 self.assert_no_new_commands(h, write, commands)
+
+
+class FeedPostreloadShotTests(unittest.TestCase):
+    @staticmethod
+    def ready(now=NS, nonce=1):
+        profiles, s = released_fixture(now, nonce)
+        s["weapon_actions_blocked"] = s["feed"]["blocksFire"] = False
+        s["feed"]["coverRadians"] = 0.
+        s["feedObservation"]["latest_tick"].update(gate_failed=False, submit_refused=False)
+        mapping = {k: copy.deepcopy(s[k]) for k in ("owner", "equipment", "rig", "physical_equipment_generation")}
+        mapping["selected"] = {k: s["selected"][k] for k in
+                               ("configurationPath", "configurationPathPointer", "inventory", "selectedSlot",
+                                "soleConfiguredArray", "matchedMeshPath", "meshes")}
+        return profiles, s, dict(mapping=mapping, lifetime=s["feed"]["lifetime"])
+
+    def test_closed_cover_alone_cannot_hide_custody_claim_or_stale_owner(self):
+        faults = (lambda s: s["feed"].update(carriedPartsMask=2),
+                  lambda s: s["feed"].update(supplyObject={}),
+                  lambda s: s["feed"].update(mechanismClaim={}),
+                  lambda s: s["feed"].update(mechanismInput=s["input_evidence"]),
+                  lambda s: s["feed"].update(lifetime=9),
+                  lambda s: s["feed"].update(coverRadians=.01),
+                  lambda s: s.update(weapon_actions_blocked=True),
+                  lambda s: s["input"]["hands"][1].update(trigger=1),
+                  lambda s: s["owner"].update(equipGeneration=99),
+                  lambda s: s.update(valid_until_ns=NS))
+        for fault in faults:
+            with self.subTest(fault=fault):
+                profiles, s, closure = self.ready()
+                fault(s)
+                with self.assertRaises(d.REFUSAL):
+                    d.post_reload_ready(profiles, s, NS, closure, neutral=True)
+        profiles, s, closure = self.ready()
+        original = copy.deepcopy(s)
+        d.post_reload_ready(profiles, s, NS, closure, neutral=True)
+        self.assertEqual(s, original)
+
+    @staticmethod
+    def native(rounds=1):
+        import struct
+        _, s, closure = FeedPostreloadShotTests.ready()
+        boundary = dict(schema="bc2vr.feed-post-reload-pulse.v1", status="native_shot_observation_pending",
+                        owner=s["owner"], closure=closure, nativeAcceptance=False,
+                        neutralWrittenNs=NS, pressWrittenNs=NS+200*MS, releaseWrittenNs=NS+240*MS,
+                        releaseCommittedNs=NS+250*MS, observationEndNs=NS+500*MS)
+        owner = dict(player=1, soldier=2, weak=3, weapon=4, actor_generation=5, equip_generation=6, space=7)
+        rows = []
+        for branch in range(3):
+            steps = [(150, 200, 200, 2, 2, 0, 0)]
+            steps += [(210+20*i, 200-i, 199-i, 2 if i == 0 else 9, 9, 1, 77+i) for i in range(rounds)]
+            steps += [(350, 200-rounds, 200-rounds, 2, 2, 0, 0)]
+            for begin, before, after, previous, state, flags, token in steps:
+                b = dict(owner, branch=branch, firing=100+branch, loaded=before, reserve=487,
+                         current=previous, next=previous, previous=2, timer=0., flags_a8=0,
+                         snapshot_sequence=10, wrapper_offset=16 if branch == 2 else 0, soldier_flags=0,
+                         server_player=201 if branch == 2 else 0, server_soldier=202 if branch == 2 else 0,
+                         server_item=203 if branch == 2 else 0)
+                a = dict(b, loaded=after, current=state, next=state)
+                raw = bytearray(0x30)
+                struct.pack_into("<fIf", raw, 0x18, .016, token, 1.)
+                struct.pack_into("<I", raw, 0x2c, flags)
+                context = dict(decoded_valid=True, input_flags=flags, raw_1c=token, bytes=list(raw),
+                               delta_seconds=.016, reload_multiplier=1.)
+                # Real writer: numeric guard bools; closed positive-ammo feed
+                # still applies/restores a no-op pair. This is synthetic data.
+                guards = {k: dict(requested=0, applied=0, restored=0, unexpected_write=0)
+                          for k in ("fixed_input", "pistol_input", "cycle_guard")}
+                guards["feed_input"] = dict(requested=1, applied=1, restored=1, unexpected_write=0,
+                                             original=[0, flags], effective=[0, flags], before_restore=[0, flags])
+                rows.append(dict(kind=0, depth=1, parent=0, update=0, native_parent=0,
+                    thread=10+branch, caller=1234, context=5678, argument=0,
+                    finished=True, identity_retained=True,
+                    begin_ns=NS+begin*MS, end_ns=NS+(begin+5)*MS,
+                    begin_tick_ms=1000+begin, end_tick_ms=1005+begin,
+                    before=b, after=a, context_before=copy.deepcopy(context), context_after=copy.deepcopy(context),
+                    transfer_path=None, hold_requested=False, hold_applied=False, **guards))
+        rows.sort(key=lambda r: (r["begin_ns"], r["before"]["branch"]))
+        for index, row in enumerate(rows, 1):
+            row.update(id=index, native_invocation=100+index, native_update=100+index)
+        flow = dict(started=True, drained=True, server_binding_verified=True, in_flight=0,
+                    capacity=20480, window_seconds=20, start_ns=NS-NS//2,
+                    dropped=0, record_lock_drops=0, record_begin_lock_drops=0, record_end_lock_drops=0,
+                    owner_lock_drops=0, records=rows)
+        return flow, boundary
+
+    @staticmethod
+    def event(flow, branch=2, index=0):
+        return [r for r in flow["records"] if r["before"]["branch"] == branch
+                and r["before"]["loaded"] != r["after"]["loaded"]][index]
+
+    def test_matching_native_fire_is_observed_without_complete_capture_claim(self):
+        flow, boundary = self.native()
+        result = d.audit_post_reload_shot(flow, boundary)
+        self.assertTrue(result["nativeShotObserved"])
+        self.assertEqual((result["loadedBefore"], result["loadedAfter"], result["reserve"]), (200, 199, 487))
+        self.assertEqual(result["roundsObserved"], 1)
+        self.assertEqual(len(result["observedBounds"]), 3)
+        self.assertFalse(result["completeWindow"])
+        self.assertFalse(result["nativeAcceptance"])
+        self.assertFalse(result["headsetAcceptance"])
+
+    def test_one_ordinary_burst_with_unlocalized_drops_discloses_limited_evidence(self):
+        flow, boundary = self.native(rounds=2)
+        # Scaled recorder capacity: events and final ready rows survive; later
+        # records did not. Lock counters carry no timestamps to localize them.
+        flow.update(capacity=len(flow["records"]), dropped=3, record_lock_drops=5,
+                    record_begin_lock_drops=2, record_end_lock_drops=3, owner_lock_drops=1)
+        result = d.audit_post_reload_shot(flow, boundary)
+        self.assertTrue(result["nativeShotObserved"])
+        self.assertEqual((result["roundsObserved"], result["loadedAfter"]), (2, 198))
+        self.assertEqual([[e["token"] for e in result["events"] if e["branch"] == n]
+                          for n in range(3)], [[77, 78]] * 3)
+        self.assertEqual(result["nativeDropCounters"], {k: flow[k] for k in result["nativeDropCounters"]})
+        self.assertFalse(result["completeWindow"])
+        self.assertFalse(result["nativeAcceptance"])
+
+    def test_missing_events_mismatched_tokens_and_unexplained_counts_refuse(self):
+        def duplicate(f, b):
+            extra = copy.deepcopy(self.event(f))
+            extra.update(id=99, begin_ns=NS+220*MS, end_ns=NS+225*MS)
+            f["records"].append(extra)
+        faults = (lambda f, b: f.update(records=[]),
+                  lambda f, b: f.update(drained=False),
+                  lambda f, b: f.update(records=[r for r in f["records"] if r["before"]["branch"] != 2]),
+                  lambda f, b: self.event(f)["before"].update(equip_generation=99),
+                  lambda f, b: self.event(f)["after"].update(server_item=999),
+                  lambda f, b: self.event(f)["context_after"].update(raw_1c=78),
+                  lambda f, b: self.event(f).update(hold_applied=True),
+                  lambda f, b: self.event(f)["cycle_guard"].update(applied=1),
+                  lambda f, b: self.event(f)["after"].update(loaded=198),
+                  lambda f, b: self.event(f)["after"].update(reserve=486),
+                  lambda f, b: self.event(f)["after"].update(current=2, next=2),
+                  lambda f, b: b.update(releaseCommittedNs=b["pressWrittenNs"]+101*MS), duplicate)
+        for fault in faults:
+            with self.subTest(fault=fault):
+                flow, boundary = self.native()
+                fault(flow, boundary)
+                with self.assertRaises(d.REFUSAL):
+                    d.audit_post_reload_shot(flow, boundary)
+
+    def test_feed_filter_only_passes_exact_restored_unchanged_native_words(self):
+        faults = (lambda r: r["feed_input"].update(effective=[1, 0]),
+                  lambda r: r["feed_input"].update(restored=0),
+                  lambda r: r["feed_input"].update(unexpected_write=1),
+                  lambda r: r["feed_input"].update(before_restore=[0, 0]),
+                  lambda r: r["context_after"]["bytes"].__setitem__(0x2c, 0))
+        for fault in faults:
+            with self.subTest(fault=fault):
+                flow, boundary = self.native()
+                fault(self.event(flow))
+                with self.assertRaises(d.REFUSAL):
+                    d.audit_post_reload_shot(flow, boundary)
+
+    def test_drops_cannot_excuse_missing_event_or_post_ready_boundary(self):
+        for missing in ("event", "post"):
+            flow, boundary = self.native(rounds=2)
+            if missing == "event":
+                flow["records"].remove(self.event(flow, index=1))
+            else:
+                flow["records"] = [r for r in flow["records"] if r["begin_ns"] < NS+300*MS]
+            flow.update(dropped=100, record_lock_drops=5, owner_lock_drops=2)
+            with self.subTest(missing=missing), self.assertRaises(d.REFUSAL):
+                d.audit_post_reload_shot(flow, boundary)
+
+    def test_burst_tokens_must_be_unique_and_match_all_copies(self):
+        for token in (77, 79):
+            flow, boundary = self.native(rounds=2)
+            event = self.event(flow, index=1)
+            for name in ("context_before", "context_after"):
+                event[name]["raw_1c"] = event[name]["bytes"][0x1c] = token
+            with self.subTest(token=token), self.assertRaises(d.REFUSAL):
+                d.audit_post_reload_shot(flow, boundary)
+
+    def test_real_counts_without_a_native_fire_event_are_not_success(self):
+        flow, boundary = self.native()
+        flow["records"] = [r for r in flow["records"] if r["before"]["loaded"] == r["after"]["loaded"]]
+        with self.assertRaisesRegex(d.REFUSAL, "native shot observation absent"):
+            d.audit_post_reload_shot(flow, boundary)
+
+    def test_single_pulse_rearms_then_releases_and_a_second_attempt_is_refused(self):
+        import tempfile
+        from test_bc2_feed_driver_observation import MemoryArtifacts
+        with tempfile.TemporaryDirectory() as temp:
+            v = d.Driver.__new__(d.Driver)
+            v.run, v.artifacts = d.Path(temp), MemoryArtifacts()
+            path = v.run / "close" / "result.json"
+            v.host, v.manifest = dict(pid=7), dict(source_sha256="source")
+            v.pending_command = v.unsafe_owner = v.held_left = v.held_right = v.held_trigger = False
+            v.held_buttons, v.reference = set(), None
+            v.deadline, v.stage_deadline = 10*NS, 10*NS
+            clock, commands = [NS], []
+            profiles, s, closure = self.ready()
+            v.profiles = profiles
+            closed = dict(schema="bc2vr.reload-stimulus-result.v1", status="ordinary_stimulus_completed",
+                          stimulusCompleted=True, boundaryChecksPassed=True, observerStopped=True,
+                          observationIncomplete=False, leftGripHeld=False, pendingCommand=False,
+                          plans=[dict(family="feed", stage="CloseCover")],
+                          boundaries=dict(feed_released=dict(receiptCounterAdvanced=True, lifetime=2)))
+            plan = dict(schema="bc2vr.reload-stimulus.v1", family="feed", stage="CloseCover", mapping=closure["mapping"])
+            sources = {v.run / "live-driver-owner.json": dict(artifactDirectory=str(path.parent)),
+                       path: closed, path.parent / "stimulus-01.json": plan}
+            generation = [10]
+            def fresh():
+                clock[0] += 20*MS
+                _, current, _ = self.ready(clock[0], generation[0])
+                current["input"]["generation"] = current["shot_input_generation"] = generation[0]
+                current["input_evidence"]["sequence"] = generation[0]
+                current["feed"]["input"]["sequence"] = generation[0]
+                generation[0] += 1
+                v.latest_snapshot = current
+                return current, b"{}", clock[0]
+            def send(lines, **kwargs):
+                v.validate_publication(lines, None, False)
+                clock[0] += 25*MS
+                if "source_deadline" in kwargs:
+                    d.require(clock[0] < kwargs["source_deadline"], "expired")
+                v.last_write = clock[0]
+                clock[0] += 5*MS
+                v.last_commit = clock[0]
+                v.remember_controls(lines)
+                commands.append(lines)
+            v.fresh, v.send = fresh, send
+            v.pause_until = lambda until: clock.__setitem__(0, max(clock[0], until))
+            with patch.object(d, "child", side_effect=lambda root, p: p), \
+                 patch.object(d, "read_json", side_effect=lambda p, *a: (copy.deepcopy(sources[p]), b"{}")), \
+                 patch.object(d.time, "perf_counter_ns", side_effect=lambda: clock[0]):
+                for failure_field in ("error", "observationFailure", "diagnosticFailure"):
+                    sources[path][failure_field] = "retained CloseCover failure"
+                    with self.subTest(field=failure_field), self.assertRaises(d.REFUSAL):
+                        v.post_reload_shot(path)
+                    sources[path][failure_field] = None
+                self.assertEqual(commands, [])
+                result = v.post_reload_shot(path)
+                self.assertEqual(commands, [["grip l 0", "trigger r 0"], ["trigger r 1"], ["trigger r 0"]])
+                self.assertFalse(v.held_trigger)
+                self.assertFalse(result["nativeShotObserved"])
+                self.assertEqual(result["status"], "native_shot_observation_pending")
+                with self.assertRaises(FileExistsError):
+                    v.post_reload_shot(path)
+                self.assertEqual(len(commands), 3)
 
 
 if __name__ == "__main__":

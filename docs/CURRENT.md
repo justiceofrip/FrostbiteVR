@@ -1,11 +1,11 @@
 # Current state — shared normal integration / public 0.1.15
 
-Updated November 5, 2026. This replaces old next-step instructions; prior evidence remains in
+Updated November 6, 2026. This replaces old next-step instructions; prior evidence remains in
 [history/](history/README.md) (search it by run number; never read a log whole).
 
 ## Active work
 
-Private 0.1.65 is installed with 0.1.64 as fallback. Built source 002da42 is pushed to both development branches. Both normal builds passed (350 x86, 347 x64); installed setup validated all 105 package files and the retained 307-part cache, with settings preserved. The local test shortcut selects this exact installation. No new game/headset session or public release occurred.
+Private 0.1.65 is installed with 0.1.64 as fallback. Built source 002da42 is pushed to both development branches. Both normal builds passed (350 x86, 347 x64); installed setup validated all 105 package files and the retained 307-part cache, with settings preserved. The local test shortcut selects this exact installation. Actual452 on65 connected through xr-sim, received native VR input and closed normally with all profiles/settings preserved; the separate menu capture was late and refused. No gameplay/headset or public-release claim. The shared test driver now supports a post-reload firing check, and known early graphics refusals can close normally while retaining failed status. [Testing continuation](../handoff/integrations/coordinator-20261106-reload-testing/README.txt).
 
 The chest knife now has a stock trigger attack: with an empty right hand, grip the chest handle to draw, release then press the trigger to request BC2's original attack, and release the trigger before gripping to return. Physical tracked stabbing remains disabled. Unchanged native inventory reads also reuse their existing policy lists, eliminating repeated allocations in the measured helper. Actual knife damage and FPS gains have not been demonstrated. [Stock knife and allocation scope](../handoff/integrations/coordinator-20261105-stock-knife/README.txt).
 

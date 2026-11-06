@@ -1,0 +1,13 @@
+Reload test continuation, November6
+
+Actual452 on the existing private0.1.65 connected through the simulated runtime and received native VR input. Every owned process exited0; BC2 closed normally and all three profiles plus launcher settings were preserved. The separate menu-capture command arrived after closure and refused. No rendered-menu, reload, headset or FPS pass follows from this startup result. Installed65/fallback64 and the native source/builds are unchanged.
+
+The previous408 generic startup failure used61. The classifier introduced in62 and present in the actual installed65 DLL makes a fresh startup distinguishable; the old failure was not a blanket reason to stop remaining work.
+
+The shared game-session runner now recognizes only exact proven early graphics/menu refusals, with remote exit and disabled hooks, for normal owned-game closure. The supervisor intentionally leaves resolution release pending on that failed path; process exit retires it. Failure stays failure, with no reload-drain or native-retirement success. Successful gameplay still requires its existing drain and release evidence.94 focused production-cleanup assertions passed.
+
+The existing feed driver accepts an optional post-CloseCover neutral rearm and one bounded trigger press/release. It consumes the actual reload-stimulus result, keeps original ownership/deadline/custody gates and permits one attempt. Pulse delivery alone is not firing evidence. A separate read-only audit of the retired native report requires matching Fire events and connected observed ammunition across all three native copies, including the server. A legitimate short automatic burst is supported. It accepts only exactly restored unchanged feed input, rejects effective overrides, and discloses drop counters with completeWindow=false; full reload acceptance remains separate.
+
+The final postrelease suite passed25 tests and transport suite19. Initial sandbox fixture-file access failures are retained; the normal-token run exposed one old failure-injection stub that omitted existing publication deadline keywords. Correcting that stub preserved the intended failed-publication assertion; only its affected suite was rerun. No native rebuild was required.
+
+Agent453 diagnosed the saved bootstrap boundary;454 prepared the optional completion tail;455 repaired early cleanup;456 corrected native log-format and acceptance assumptions against the writer and actual269 CloseCover artifacts. All retired. ROOT owns integration and the next bounded actual five-step reload plus firing observation. Exact evidence and failures stay in local reports/coordinator-20261106-feedback452.

@@ -387,6 +387,178 @@ def receive_timed(name):
     return decorate
 
 
+def post_reload_ready(profiles, snapshot, now, closure, *, neutral):
+    """Current closed feed/custody gate; diagnostic counts never prove a shot."""
+    planner.admit(profiles, snapshot, now, integer(snapshot["nonce"]))
+    mapping = closure["mapping"]
+    require(all(snapshot[k] == mapping[k] for k in
+                ("owner", "equipment", "rig", "physical_equipment_generation"))
+            and all(snapshot["selected"][k] == v for k, v in mapping["selected"].items()),
+            "post-reload owner/configuration changed")
+    f = snapshot["feed"]
+    require(f is not None and f["lifetime"] == closure["lifetime"]
+            and f["blocksFire"] is False and snapshot["weapon_actions_blocked"] is False
+            and abs(planner.finite(f["coverRadians"])) <= .001
+            and integer(f["carriedPartsMask"]) == 0 and f["supplyObject"] is None,
+            "post-reload requires closed cover and exact empty carried custody")
+    tick = snapshot["feedObservation"]["latest_tick"]
+    require(all(tick[k] is False for k in ("pending", "gate_failed", "submit_refused")),
+            "post-reload native operation pending/refused")
+    if neutral:
+        require(f["mechanismClaim"] is None and f["mechanismInput"] is None
+                and f["input"]["released"][0] is True
+                and snapshot["input_evidence"]["released"][0] is True
+                and all(h[k] == 0 for h in snapshot["input"]["hands"]
+                        for k in ("squeeze", "trigger", "held", "stickX", "stickY")),
+                "post-reload neutral rearm/claim release not observed")
+
+
+def post_reload_input_unmodified(row):
+    """A closed-feed filter can apply and exactly restore unchanged input words."""
+    require(row["transfer_path"] is None and row["hold_requested"] is False and row["hold_applied"] is False,
+            "native shot boundary contains reload/hold overrides")
+    # Native guard bool members are streamed as JSON integers, unlike hold flags.
+    for name in ("fixed_input", "pistol_input", "cycle_guard"):
+        require(all(type(row[name][k]) is int and row[name][k] == 0
+                    for k in ("requested", "applied", "restored", "unexpected_write")),
+                "native shot boundary contains input overrides")
+    guard = row["feed_input"]
+    flags = tuple(guard[k] for k in ("requested", "applied", "restored", "unexpected_write"))
+    require(all(type(v) is int for v in flags), "invalid native feed guard flags")
+    if flags == (0, 0, 0, 0):
+        return
+    require(flags == (1, 1, 1, 0)
+            and guard["original"] == guard["effective"] == guard["before_restore"],
+            "native feed guard changed input or did not restore exactly")
+    for name in ("context_before", "context_after"):
+        context = row[name]
+        require(isinstance(context, dict) and context["decoded_valid"] is True,
+                "native feed guard lacks copied input")
+        raw = context["bytes"]
+        require(len(raw) == 0x30 and all(type(v) is int and 0 <= v <= 255 for v in raw),
+                "native feed guard lacks exact input bytes")
+        words = [sum(raw[offset+i] << (8*i) for i in range(4)) for offset in (0x28, 0x2c)]
+        require(guard["original"] == words and words[0] & 255 == 0
+                and words[1] in (0, 1) and context["input_flags"] == words[1],
+                "native feed guard changed or inhibited ordinary Fire input")
+
+
+def audit_post_reload_shot(flow, boundary):
+    """Positive retained native Fire evidence; never claims exhaustive capture."""
+    require(boundary["schema"] == "bc2vr.feed-post-reload-pulse.v1"
+            and boundary["status"] == "native_shot_observation_pending"
+            and boundary["nativeAcceptance"] is False, "missing completed pulse boundary")
+    start, release, end = (integer(boundary[k]) for k in
+                           ("pressWrittenNs", "releaseWrittenNs", "releaseCommittedNs"))
+    begin, finish = integer(boundary["neutralWrittenNs"]), integer(boundary["observationEndNs"])
+    require(0 < begin < start < release <= end < finish
+            and end - start <= 100_000_000 and finish - end <= NS,
+            "post-reload pulse/observation outside original bound")
+    require(flow["started"] is True and flow["drained"] is True
+            and flow["server_binding_verified"] is True and integer(flow["in_flight"]) == 0,
+            "native shot observation absent: drained native report required")
+    # Record IDs are allocated after owner and record-lock gates; contiguous
+    # retained IDs cannot localize global losses or prove exhaustive capture.
+    drops = {k: integer(flow[k]) for k in
+             ("dropped", "record_lock_drops", "record_begin_lock_drops", "record_end_lock_drops", "owner_lock_drops")}
+    require(all(v >= 0 for v in drops.values()), "invalid native drop counters")
+    source = boundary["owner"]
+    owner = {key: source[value] for key, value in
+             (("player", "player"), ("soldier", "soldier"), ("weak", "weak"), ("weapon", "weapon"),
+              ("actor_generation", "actorGeneration"), ("equip_generation", "equipGeneration"), ("space", "space"))}
+    copies, seen, window = {n: [] for n in range(3)}, set(), []
+    for r in flow["records"]:
+        if not (begin <= integer(r["begin_ns"]) <= finish):
+            continue
+        window.append(r)
+        b = r.get("before")
+        if not isinstance(b, dict) or not all(b.get(k) == v for k, v in owner.items()):
+            continue
+        a = r.get("after")
+        require(r["finished"] is True and r["identity_retained"] is True and isinstance(a, dict)
+                and all(a.get(k) == v for k, v in owner.items())
+                and integer(r["begin_ns"]) <= integer(r["end_ns"]) <= finish,
+                "native shot observation has an unfinished/changed owner callback")
+        post_reload_input_unmodified(r)
+        require(integer(r["id"]) > 0 and integer(r["id"]) not in seen,
+                "native shot record duplicated or invalid")
+        seen.add(integer(r["id"]))
+        if integer(r["kind"]) != 0 or integer(r["depth"]) != 1:
+            require((b["loaded"], b["reserve"]) == (a["loaded"], a["reserve"]),
+                    "native count changed outside an original top-level Update")
+            continue
+        n = integer(b["branch"])
+        require(n in copies and a["branch"] == n and integer(b["firing"]) > 0
+                and b["firing"] == a["firing"],
+                "native shot firing identity/record duplicated or changed")
+        if n == 2:
+            require(all(integer(b[k]) > 0 and b[k] == a[k]
+                        for k in ("server_player", "server_soldier", "server_item")),
+                    "authoritative server shot owner absent")
+        copies[n].append(r)
+    events, counts, firing, tokens, bounds = [], [], [], [], []
+    for n, rows in copies.items():
+        rows.sort(key=lambda r: r["begin_ns"])
+        pre = [r for r in rows if r["end_ns"] < start
+               and r["after"]["current"] == r["after"]["next"] == 2]
+        post = [r for r in rows if end <= r["begin_ns"]
+                and r["after"]["current"] == r["after"]["next"] == 2]
+        changed = [r for r in rows if (r["before"]["loaded"], r["before"]["reserve"])
+                   != (r["after"]["loaded"], r["after"]["reserve"])]
+        require(pre and post and changed, "native shot observation absent on copy " + str(n))
+        old, new, shot = pre[-1]["after"], post[-1]["after"], changed[0]["before"]
+        count, previous_end, order = integer(old["loaded"]), begin, []
+        require(count > 0 and integer(old["reserve"]) >= 0, "invalid pre-shot ammunition")
+        for r in rows:
+            b, a = r["before"], r["after"]
+            require(previous_end <= r["begin_ns"] and b["firing"] == shot["firing"]
+                    and integer(b["loaded"]) == count and b["reserve"] == a["reserve"] == old["reserve"],
+                    "native observed firing identity/count chain changed")
+            previous_end = r["end_ns"]
+            if b["loaded"] == a["loaded"]:
+                continue
+            x, y = r["context_before"], r["context_after"]
+            require(start <= r["begin_ns"] <= r["end_ns"] <= end
+                    and 0 <= integer(a["loaded"]) == count - 1,
+                    "native observed change is not one loaded round during the pulse")
+            require(b["current"] in (2, 9) and b["next"] == b["current"] and a["current"] == a["next"] == 9
+                    and isinstance(x, dict) and isinstance(y, dict)
+                    and x["decoded_valid"] is True and y["decoded_valid"] is True
+                    and x["input_flags"] == y["input_flags"] == 1
+                    and 0 <= integer(x["raw_1c"]) <= 0xffffffff and x["raw_1c"] == y["raw_1c"],
+                    "native decrement lacks an original Fire event")
+            count = integer(a["loaded"])
+            order.append(x["raw_1c"])
+            events.append(dict(branch=n, recordId=r["id"], token=x["raw_1c"],
+                               loadedBefore=b["loaded"], loadedAfter=a["loaded"],
+                               beginNs=r["begin_ns"], endNs=r["end_ns"]))
+        require(count == new["loaded"] and len(set(order)) == len(order),
+                "native observed burst has duplicate tokens or unexplained final ammunition")
+        if n == 2:
+            require(all(s[k] == shot[k] for r in rows for s in (r["before"], r["after"])
+                        for k in ("server_player", "server_soldier", "server_item")),
+                    "native server association changed")
+        counts.append((old["loaded"], new["loaded"], old["reserve"]))
+        firing.append(shot["firing"])
+        tokens.append(order)
+        bounds.append(dict(branch=n, firstRecordId=rows[0]["id"], lastRecordId=rows[-1]["id"],
+                           preReadyRecordId=pre[-1]["id"], postReadyRecordId=post[-1]["id"],
+                           beginNs=rows[0]["begin_ns"], endNs=rows[-1]["end_ns"]))
+    require(len(set(counts)) == 1 and len(set(firing)) == 3 and tokens[0] == tokens[1] == tokens[2],
+            "native copies disagree on the observed Fire events")
+    require(all(all(s.get(k) == v for k, v in owner.items())
+                for r in window for s in (r.get("before"), r.get("after"))
+                if isinstance(s, dict) and s.get("firing") in firing),
+            "native selected firing copy changed owner inside the observation")
+    return dict(status="native_post_reload_shot_observed", nativeShotObserved=True,
+                loadedBefore=counts[0][0], loadedAfter=counts[0][1], reserve=counts[0][2],
+                roundsObserved=len(tokens[0]), events=events, observedBounds=bounds,
+                completeWindow=False, nativeDropCounters=drops,
+                nativeAcceptance=False, headsetAcceptance=False,
+                evidence="Matched same-owner native Fire events and connected retained ammunition on all three copies; "
+                         "capture completeness and full reload acceptance are not established.")
+
+
 class Driver:
     @contextmanager
     def receive_timing_scope(self, name):
@@ -441,7 +613,16 @@ class Driver:
 
     def validate_publication(self, lines, expected, cleanup):
         """Optional final validation after polling, immediately before publishing."""
-        pass
+        phase = getattr(self, "post_reload_phase", None)
+        if phase is None:
+            return
+        if lines == ["trigger r 0"]:
+            require(self.held_trigger and not self.pending_command, "post-reload trigger release is not owned")
+            return
+        require(phase == "press" and lines == ["trigger r 1"] and not cleanup
+                and not self.held_trigger and not self.pending_command, "post-reload permits one trigger press only")
+        post_reload_ready(self.profiles, self.latest_snapshot, time.perf_counter_ns(),
+                          self.post_reload_closure, neutral=True)
 
     def __init__(self, args):
         require(os.name == "nt", "live driver requires Windows")
@@ -537,7 +718,7 @@ class Driver:
         self.initial_sim = self.state
         self.artifacts.save("initial-state.json", self.state)
         self.profiles = None
-        if args.stage:
+        if args.stage or getattr(args, "post_reload_shot", None):
             require(self.link["mechanism_snapshots"]["requested"] is True
                     and read_bytes(self.folder / "mechanism-snapshot.enable", 2) == b"1\n",
                     "session did not opt in to mechanism snapshots before native startup")
@@ -1362,6 +1543,75 @@ class Driver:
                         ("owner", "weapon", "registrationKey", "rigFingerprint", "lifetime")),
                     "post-release retained feed identity changed")
 
+    def post_reload_shot(self, result_path):
+        # Reuse the exact preceding completed CloseCover artifact, then consume
+        # one run-local attempt even if admission or delivery fails.
+        path = child(self.run, result_path)
+        previous, _ = read_json(self.run / "live-driver-owner.json", 8192)
+        require(same_path(previous["artifactDirectory"], path.parent),
+                "post-reload shot must immediately follow the owned CloseCover")
+        closed, raw = read_json(path)
+        require(closed["schema"] == "bc2vr.reload-stimulus-result.v1"
+                and closed["status"] == "ordinary_stimulus_completed"
+                and closed["stimulusCompleted"] is True and closed["boundaryChecksPassed"] is True
+                and closed["observerStopped"] is True and closed["observationIncomplete"] is False
+                and closed.get("error") is None and closed.get("observationFailure") is None
+                and closed.get("diagnosticFailure") is None
+                and closed["leftGripHeld"] is False and closed["pendingCommand"] is False
+                and [(p["family"], p["stage"]) for p in closed["plans"]] == [("feed", "CloseCover")],
+                "post-reload requires a completed released CloseCover stimulus")
+        plan, plan_raw = read_json(path.parent / "stimulus-01.json", MAX_BYTES)
+        require(plan["schema"] == "bc2vr.reload-stimulus.v1"
+                and (plan["family"], plan["stage"]) == ("feed", "CloseCover")
+                and closed["boundaries"]["feed_released"]["receiptCounterAdvanced"] is True,
+                "original CloseCover boundary missing")
+        closure = dict(mapping=plan["mapping"], lifetime=closed["boundaries"]["feed_released"]["lifetime"])
+        with (self.run / "post-reload-shot-attempt.json").open("xb") as stream:
+            stream.write(json_bytes(dict(host=self.host, closeResult=str(path), closeSha256=digest(raw),
+                                         artifactDirectory=str(self.artifacts.directory))))
+        self.artifacts.save("close-cover-binding.json", dict(path=str(path), sha256=digest(raw),
+                                                           planSha256=digest(plan_raw), closure=closure))
+        before, _, now = self.fresh()
+        post_reload_ready(self.profiles, before, now, closure, neutral=False)
+        self.reference = before
+        require(not self.pending_command and not self.unsafe_owner
+                and not (self.held_left or self.held_right or self.held_trigger or self.held_buttons),
+                "post-reload input ownership not settled")
+        # Ordinary release can retire a retained mechanism claim. No pose,
+        # claim, ammunition, or hand-angle change is fabricated.
+        self.send(["grip l 0", "trigger r 0"])
+        neutral_written = self.last_write
+        ready, _, now = self.fresh()
+        post_reload_ready(self.profiles, ready, now, closure, neutral=True)
+        require(integer(ready["input_evidence"]["observedNs"]) >= neutral_written
+                and integer(ready["shot_input_generation"]) > integer(before["shot_input_generation"]),
+                "neutral rearm needs a new original input packet")
+        self.post_reload_closure = closure
+        self.post_reload_phase = "press"
+        self.stage_deadline = min(self.deadline, time.perf_counter_ns() + 100_000_000)
+        self.send(["trigger r 1"], source_deadline=self.snapshot_source_deadline(ready))
+        press = self.last_write
+        self.post_reload_phase = "release"
+        self.send(["trigger r 0"])
+        release, committed = self.last_write, self.last_commit
+        require(committed - press <= 100_000_000, "single trigger pulse exceeded 100ms; no retry")
+        self.post_reload_phase = "observe"
+        self.stage_deadline = min(self.deadline, committed + 600_000_000)
+        self.pause_until(committed + 100_000_000)
+        after, _, now = self.fresh()
+        post_reload_ready(self.profiles, after, now, closure, neutral=True)
+        require(integer(after["input_evidence"]["observedNs"]) >= committed
+                and integer(after["shot_input_generation"]) > integer(ready["shot_input_generation"]),
+                "post-shot release not observed in a new original packet")
+        boundary = dict(schema="bc2vr.feed-post-reload-pulse.v1", status="native_shot_observation_pending",
+                        owner=ready["owner"], closure=closure, host=self.host,
+                        sourceSha256=self.manifest["source_sha256"], closeResultSha256=digest(raw),
+                        neutralWrittenNs=neutral_written, pressWrittenNs=press, releaseWrittenNs=release,
+                        releaseCommittedNs=committed, observationEndNs=after["observed_ns"],
+                        nativeAcceptance=False, headsetAcceptance=False, nativeShotObserved=False)
+        self.artifacts.save("post-reload-shot.json", boundary)
+        return boundary
+
     def capture(self, name):
         require(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,47}", name) is not None, "invalid capture tag")
         require(self.capture_sequence < integer(self.capture_plan["maximum_compositions"]), "capture budget exhausted")
@@ -1473,6 +1723,9 @@ def main(argv=None):
     mode.add_argument("--stage", choices=[*planner.STAGES, "SupplyPickup"])
     mode.add_argument("--capture", help="one explicit named composition within runner budget")
     mode.add_argument("--menu-batches", type=Path, help="bounded JSON batches inside exact run directory")
+    mode.add_argument("--post-reload-shot", type=Path, help="preceding CloseCover result.json; one pulse, native proof pending")
+    mode.add_argument("--audit-post-reload-shot", type=Path, help="saved post-reload-shot.json; read-only drained native audit")
+    parser.add_argument("--root-authorized-ordinary-input", action="store_true")
     parser.add_argument("--profiles", type=Path, help="production profile export copied inside exact run directory")
     parser.add_argument("--pickup-first", action="store_true", help="continuous fresh chest pickup then held AttachContainer")
     parser.add_argument("--step-ms", type=int, default=0, help="0 chooses min(60ms,maxInputGapNs/2) from production policy")
@@ -1481,14 +1734,40 @@ def main(argv=None):
     result = {"schema": "bc2vr.live-feed-driver.v1", "status": "refused", "nativeAcceptance": False,
               "headsetAcceptance": False, "evidence": "actual simulator commands; native receipts require separate review"}
     try:
-        require(not args.stage or args.profiles is not None, "stage requires --profiles inside run")
+        require(not (args.stage or args.post_reload_shot) or args.profiles is not None, "stage/shot requires --profiles inside run")
+        require(not args.post_reload_shot or args.root_authorized_ordinary_input, "root ordinary-input authorization required")
+        if args.audit_post_reload_shot:
+            run = local_path(args.run)
+            boundary_path = child(run, args.audit_post_reload_shot)
+            boundary, _ = read_json(boundary_path)
+            manifest, _ = read_json(run / "run-manifest.json")
+            link, _ = read_json(run / "session-link.json")
+            attempt, _ = read_json(run / "post-reload-shot-attempt.json")
+            require(boundary["host"] == link["host"] == attempt["host"]
+                    and boundary["sourceSha256"] == manifest["source_sha256"]
+                    and boundary["closeResultSha256"] == attempt["closeSha256"]
+                    and same_path(boundary_path.parent, attempt["artifactDirectory"]),
+                    "post-reload boundary belongs to another run/attempt")
+            retirement, _ = read_json(run / "native-retirement.json")
+            require(retirement["hooks_disabled"] is True and retirement["reload_flow_drained"] is True
+                    and retirement["pre_activation_refusal"] is False,
+                    "native shot observation absent: await ordinary native retirement")
+            report_path = check_pin(retirement["native_report"], 160 * 1024 * 1024)
+            require(same_path(report_path, local_path(link["folder"]) / "native-trace.json"),
+                    "retired native report belongs to another session")
+            native, _ = read_json(report_path, 160 * 1024 * 1024)
+            result.update(audit_post_reload_shot(native["gameplay"]["reload_flow"], boundary))
+            print(json.dumps(result, separators=(",", ":"), allow_nan=False))
+            return 0
         require(not args.pickup_first or args.stage == "AttachContainer", "--pickup-first requires AttachContainer")
         require(0 <= args.step_ms <= 100, "invalid command period")
         # Keep a partially initialized instance available for handle cleanup and
         # a refusal artifact if admission fails after creating the output folder.
         driver = Driver.__new__(Driver)
         driver.__init__(args)
-        if args.stage:
+        if args.post_reload_shot:
+            result["postReloadShot"] = driver.post_reload_shot(args.post_reload_shot)
+        elif args.stage:
             pickup = driver.stage("SupplyPickup") if args.pickup_first else None
             # While awaiting the fresh post-pickup source, the unchanged held
             # pose continues producing genuine XR packets each host frame.
@@ -1498,7 +1777,7 @@ def main(argv=None):
             driver.capture(args.capture)
         else:
             driver.menu(args.menu_batches)
-        result["status"] = "commands_acknowledged"
+        result["status"] = "native_shot_observation_pending" if args.post_reload_shot else "commands_acknowledged"
         return_code = 0
     except (Exception, KeyboardInterrupt) as error:
         result["error"] = str(error)
@@ -1514,6 +1793,7 @@ def main(argv=None):
                 result.update({"durationNs": time.perf_counter_ns() - driver.started,
                                "commands": driver.commands, "plans": driver.plans,
                                "leftGripHeld": driver.held_left, "pendingCommand": driver.pending_command,
+                               "triggerHeld": driver.held_trigger,
                                "captureSequence": getattr(driver, "capture_sequence", None),
                                "artifactDirectory": str(driver.artifacts.directory)})
                 try:
