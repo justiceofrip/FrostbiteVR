@@ -92,12 +92,23 @@ The switch adds no private native arguments and never enables an existing worker
 Optional -PrivateGpuOrderedPresent enables the existing private host presentation
 path for one fresh run. Omit it for OFF (or use -PrivateGpuOrderedPresent:$false).
 After scrubbing every inherited FVR_/BC2_ variable, the child receives only
-FVR_PRIVATE_GPU_ORDERED_PRESENT=0 or 1; no other FVR_/BC2_ variable is admitted.
-Thus CPU copy service, early admission, extra source slots, export overlap,
-lookahead, GPU timing and phase-delay injection remain absent/off. launch.json
+FVR_PRIVATE_GPU_ORDERED_PRESENT=0 or 1 by default. Explicit -ProfileAttribution
+also admits exactly FVR_BC2_PRIVATE_CPU_ATTRIBUTION=12 and
+FVR_PRIVATE_GPU_TIMING436=8. Other FVR_/BC2_ variables remain absent, including
+CPU copy service, early admission, extra source slots, export overlap,
+lookahead and phase-delay injection. launch.json
 and result.json record the requested value and verified child isolation; verify
 actual configured/available/composed counters and query retirement in host.json.
 This does not recompile, change installed files, registry or global settings.
+
+Attribution is opt-in for a fresh game only: CPU sampling starts automatically
+at the first verified infantry owner for12 seconds, including arrival/warmup;
+GPU timing admits at most8 tracked pairs within2 seconds, then drains for up to4.
+There is no runtime rearm or guaranteed steady interaction window. Attribution
+adds no raw images and keeps the existing session/capture limits. Manifest,
+launch and result records distinguish requested controls from native enablement;
+inspect native-trace.json private_cpu_attribution/private_gpu_attribution after
+normal retirement. These measurements do not establish headset FPS or damage.
 
 For a comparison, use separate fresh OFF/ON OutputDirs with the same installed
 Version/source, binary/loader/runtime/tape/game hashes, original profile hashes,

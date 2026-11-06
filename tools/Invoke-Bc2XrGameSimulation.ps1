@@ -16,6 +16,7 @@ param(
     [ValidateRange(64,768)][int]$CaptureHeight=768,
     [switch]$MechanismSnapshots,
     [switch]$PrivateGpuOrderedPresent,
+    [switch]$ProfileAttribution,
     [switch]$ExtendedObservation
 )
 Set-StrictMode -Version Latest
@@ -31,6 +32,12 @@ $clock=[Diagnostics.Stopwatch]::new();$hostStartedAt=$null;$launchUtc=$null
 $startup=$null
 $mechanismMarker=@{requested=[bool]$MechanismSnapshots;status=$(if($MechanismSnapshots){'awaiting_session'}else{'not_requested'});native_enabled_claimed=$false}
 $privatePresentation=@{requested=[bool]$PrivateGpuOrderedPresent;environment_variable='FVR_PRIVATE_GPU_ORDERED_PRESENT';environment_value=$(if($PrivateGpuOrderedPresent){'1'}else{'0'});child_environment_verified=$false;other_fvr_bc2_environment_absent=$false;actual_host_enablement_claimed=$false}
+# Finite native attribution starts automatically at first verified infantry, including warmup.
+# This does not select a steady Insert window, rearm profiling or establish headset FPS.
+$attributionProfile=@{requested=[bool]$ProfileAttribution;environment=@{};
+    cpu_window_seconds=12;gpu_maximum_tracked_pairs=8;runtime_rearm=$false;steady_insert_window_guaranteed=$false;
+    child_environment_verified=$false;unapproved_fvr_bc2_environment_absent=$false;native_enablement_claimed=$false}
+if($ProfileAttribution){$attributionProfile.environment=@{FVR_BC2_PRIVATE_CPU_ATTRIBUTION='12';FVR_PRIVATE_GPU_TIMING436='8'}}
 # Two eyes, with the mandatory SBS duplicate as a second image stream. Layers stay off.
 $simRawBytes=[long]$CaptureCount*$CaptureWidth*$CaptureHeight*4*2*2+$CaptureCount*64KB
 $rawBytes=512MB+$simRawBytes;$plannedBytes=$rawBytes+128MB;$rawLimitBytes=660MB
@@ -38,7 +45,7 @@ $capturePlan=@{maximum_compositions=$CaptureCount;width=$CaptureWidth;height=$Ca
 $receipt=[ordered]@{schema='fvr.xr-game-simulation.v1';status='failed';evidence_level='actual_game_simulated_runtime';
     actual_game_started=$false;native_running_observed=$false;reload_success_claimed=$false;headset_accepted=$false;
     limits=@{host_seconds=$Seconds;outer_seconds=$TimeoutSeconds;planned_bytes=$plannedBytes;raw_budget_bytes=$rawBytes;raw_budget_limit_bytes=$rawLimitBytes;raw_budget_reason='Readable menu/mechanism captures: native eight bounded images plus at most twelve 1024x768 stereo/SBS compositions.';native_maximum_raw_images=8;sim_compositions=$CaptureCount;sim_capture_width=$CaptureWidth;sim_capture_height=$CaptureHeight;render_width=1024;render_height=768;tape_max_frames=30000};
-    capture_plan=$capturePlan;mechanism_snapshots=$mechanismMarker;private_gpu_ordered_present=$privatePresentation;
+    capture_plan=$capturePlan;mechanism_snapshots=$mechanismMarker;private_gpu_ordered_present=$privatePresentation;profile_attribution=$attributionProfile;
     failures=$failures;forced_termination_by_wrapper=$false}
 function Require([bool]$Condition,[string]$Message){if(-not $Condition){throw $Message}}
 function AssertObservationLimits([int]$HostSeconds,[int]$OuterSeconds,[bool]$Extended){
@@ -341,7 +348,7 @@ try{
     $budget=Assert-FvrStorageBudget -RepositoryRoot $RepositoryRoot -OutputPath $OutputDir -Operation Session -PlannedBytes $plannedBytes -RawCaptureBytes $rawBytes -MaxRawCaptureBytes $rawLimitBytes -AdditionalRoots @($InstallRoot,$sourceRoot,(Join-Path (Split-Path -Parent $RepositoryRoot) 'bc2vr-task-worktrees'))
     $budget|Add-Member -NotePropertyName raw_budget_reason -NotePropertyValue $receipt.limits.raw_budget_reason
     $null=[IO.Directory]::CreateDirectory($OutputDir);$outputReady=$true;Save 'storage.json' $budget
-    Save 'run-manifest.json' @{schema='fvr.xr-game-run.v1';output_directory=$OutputDir;version=$Version;source_sha256=$ExpectedSourceSha256;artifact_binding_path=(Join-Path $OutputDir 'artifact-binding.json');limits=$receipt.limits;capture_plan=$capturePlan;mechanism_snapshots=$mechanismMarker;startup_receipt=(Join-Path $OutputDir 'sim-startup.json');command_authority='Runner owns startup. Root may send acknowledged batches only after sim-startup.json has status ready and exact retained host identity.'}
+    Save 'run-manifest.json' @{schema='fvr.xr-game-run.v1';output_directory=$OutputDir;version=$Version;source_sha256=$ExpectedSourceSha256;artifact_binding_path=(Join-Path $OutputDir 'artifact-binding.json');limits=$receipt.limits;capture_plan=$capturePlan;mechanism_snapshots=$mechanismMarker;profile_attribution=$attributionProfile;startup_receipt=(Join-Path $OutputDir 'sim-startup.json');command_authority='Runner owns startup. Root may send acknowledged batches only after sim-startup.json has status ready and exact retained host identity.'}
     NoOtherProcesses -BeforeLaunch
     $null=Assert-FvrVersion $Version
     $packageRoot=Get-FvrChild $InstallRoot ('versions/'+$Version)
@@ -403,18 +410,27 @@ try{
     $psi.UseShellExecute=$false;$psi.CreateNoWindow=$true;$psi.WindowStyle=[Diagnostics.ProcessWindowStyle]::Hidden
     # No caller/global XR mutation: launcher descendants inherit this isolated map.
     foreach($key in @($psi.Environment.Keys)){if($key -match '^(XR_|XRSIM_|XRTAPE_|BVR_XRSIM_|FVR_|BC2_)'){$null=$psi.Environment.Remove($key)}}
-    # The only private comparison control is inserted after scrubbing inherited flags.
+    # Admit only explicit private controls after scrubbing every inherited flag.
     $environment[$privatePresentation.environment_variable]=$privatePresentation.environment_value
+    $permittedPrivateKeys=@($privatePresentation.environment_variable)
+    if($ProfileAttribution){
+        foreach($key in $attributionProfile.environment.Keys){$environment[$key]=$attributionProfile.environment[$key]}
+        $permittedPrivateKeys+=@('FVR_BC2_PRIVATE_CPU_ATTRIBUTION','FVR_PRIVATE_GPU_TIMING436')
+    }
     foreach($key in $environment.Keys){$psi.Environment[$key]=[string]$environment[$key]}
     $privateEnvironmentKeys=@($psi.Environment.Keys|Where-Object {$_ -match '^(FVR_|BC2_)'})
-    Require ($privateEnvironmentKeys.Count -eq 1 -and $privateEnvironmentKeys[0] -ceq $privatePresentation.environment_variable -and $psi.Environment[$privatePresentation.environment_variable] -ceq $privatePresentation.environment_value) 'Private comparison environment is not isolated.'
-    $privatePresentation.child_environment_verified=$true;$privatePresentation.other_fvr_bc2_environment_absent=$true
+    Require ($privateEnvironmentKeys.Count -eq $permittedPrivateKeys.Count -and @($privateEnvironmentKeys|Where-Object {$_ -cnotin $permittedPrivateKeys}).Count -eq 0 -and $psi.Environment[$privatePresentation.environment_variable] -ceq $privatePresentation.environment_value) 'Private comparison environment is not isolated.'
+    if($ProfileAttribution){
+        Require ($psi.Environment['FVR_BC2_PRIVATE_CPU_ATTRIBUTION'] -ceq '12' -and $psi.Environment['FVR_PRIVATE_GPU_TIMING436'] -ceq '8') 'Finite attribution environment differs.'
+    }
+    $privatePresentation.child_environment_verified=$true;$privatePresentation.other_fvr_bc2_environment_absent=(-not [bool]$ProfileAttribution)
+    $attributionProfile.child_environment_verified=$true;$attributionProfile.unapproved_fvr_bc2_environment_absent=$true
     foreach($key in 'TEMP','TMP','TMPDIR'){$psi.Environment[$key]=$scratch};$psi.Environment['PYTHONDONTWRITEBYTECODE']='1'
     $launchScript=Join-Path $OutputDir 'launch.ps1'
     # Literal paths are passed as arguments, never interpolated into shell code.
     [IO.File]::WriteAllText($launchScript,"param(`$EntryPath,`$SettingsPath,`$StateRoot,`$Log)`n`$ErrorActionPreference='Stop'`ntry { & `$EntryPath -Action Launch -SettingsPath `$SettingsPath -StateRoot `$StateRoot -StartAt MainMenu *>> `$Log } catch { [IO.File]::AppendAllText(`$Log,(`$_ | Out-String),[Text.UTF8Encoding]::new(`$false)); exit 1 }`n",$utf8)
     foreach($arg in @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$launchScript,(Join-Path $runtimeRoot 'Entry.ps1'),$settingsPath,$stateRoot,(Join-Path $OutputDir 'entry.log'))){$psi.ArgumentList.Add($arg)}
-    Save 'launch.json' @{executable=$pwsh;entry=(Join-Path $runtimeRoot 'Entry.ps1');action='Launch';start_at='MainMenu';activate_window=$false;environment=$environment;state_root=$stateRoot;capture_plan=$capturePlan;mechanism_snapshots_requested=[bool]$MechanismSnapshots;private_gpu_ordered_present=$privatePresentation}
+    Save 'launch.json' @{executable=$pwsh;entry=(Join-Path $runtimeRoot 'Entry.ps1');action='Launch';start_at='MainMenu';activate_window=$false;environment=$environment;state_root=$stateRoot;capture_plan=$capturePlan;mechanism_snapshots_requested=[bool]$MechanismSnapshots;private_gpu_ordered_present=$privatePresentation;profile_attribution=$attributionProfile}
     NoOtherProcesses -BeforeLaunch
     foreach($row in $profiles+$launcherFiles){Require ((Pin $row.original.path).sha256 -ceq $row.original.sha256) 'Original changed before launch.'}
     $launchUtc=[DateTime]::UtcNow;$clock.Start();$entry=[Diagnostics.Process]::new();$entry.StartInfo=$psi
