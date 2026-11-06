@@ -295,6 +295,7 @@ class SinglePlayerSelectionTests(unittest.TestCase):
     def harness(self, schedule=None, hover=False, driver_type=r.SinglePlayerDriver):
         h = Harness(self, schedule, driver_type)
         h.v.menu_capture = SinglePlayerSelectionTests.capture()
+        h.v.menu_capture["displayTimeNs"] = h.now
         h.v.pose = h.v.geometry(h.v.menu_capture)["pose"]
         h.v.args.max_clicks = 1
         h.v.args.single_player_hover_only = hover

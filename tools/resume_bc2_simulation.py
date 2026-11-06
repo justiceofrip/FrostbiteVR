@@ -291,8 +291,7 @@ class ReviewedMenuDriver(ResumeDriver):
         geometry = self.geometry(self.menu_capture)
         self.pose = geometry["pose"]
         super().__init__(args)
-        require(0 <= time.perf_counter_ns() - integer(self.menu_capture["displayTimeNs"]) <= 60 * NS,
-                "menu capture is stale or future-dated; ROOT must capture/review both current menu views")
+        self.validate_capture_age()
         require(integer(self.startup["settled_state"]["frame"]) <= integer(self.menu_capture["frameIndex"])
                 <= integer(self.state["frame"]), "menu capture frame is outside the current run")
         require(self.menu_capture["width"] == self.capture_plan["width"]
@@ -303,6 +302,28 @@ class ReviewedMenuDriver(ResumeDriver):
 
     def neutral_commands(self):
         return ["hand r follow off", "hand r aimtrim 0 0", self.pose, "trigger r 0"]
+
+    def validate_capture_age(self):
+        require(0 <= time.perf_counter_ns() - integer(self.menu_capture["displayTimeNs"]) <= 60 * NS,
+                "menu capture is stale or future-dated; ROOT must capture/review both current menu views")
+
+    def wait_initial_menu_readiness(self):
+        """Passively admit an initial sample, using this driver's original budget."""
+        require(self.commands == self.clicks == 0 and not self.pending_command
+                and not self.held_trigger and not self.unsafe_owner,
+                "initial menu readiness wait requires untouched owned input")
+        while True:
+            current = self.observe()  # Retains owner, stop, freshness and monotonic checks.
+            require(not self.input_stopped, "menu changed before initial input; review required")
+            require(current["menuGraphicsFailures"] == 0, "native menu graphics failed")
+            self.validate_capture_age()
+            now = time.perf_counter_ns()
+            self.bounds(now)
+            if current["menuReady"]:
+                return
+            # A fresh false initial sample authorizes observation only. Never
+            # catch a refusal, renew the driver/capture lease, or publish input.
+            time.sleep(min(POLL_SECONDS, (self.deadline - now) / NS))
 
     def validate_publication(self, lines, expected, cleanup):
         super().validate_publication(lines, expected, cleanup)
@@ -328,6 +349,7 @@ class SinglePlayerDriver(ReviewedMenuDriver):
         require(all(float(controls[k]) == 0 for k in ("trigR", "trigL", "gripR", "gripL"))
                 and not any(controls[k] for k in ("a", "b", "x", "y", "menu", "clickL", "clickR"))
                 and controls["stickL"] == controls["stickR"] == [0, 0], "tab selection requires neutral input")
+        self.wait_initial_menu_readiness()
         self.event("single-player-neutral-ray", self.neutral_commands())
         neutral_ns, before = self.last_commit, self.pre_event
         while True:
