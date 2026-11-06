@@ -49,16 +49,19 @@ function Pin([string]$Path,[long]$Maximum=4MB){
     Require (-not $item.PSIsContainer -and $item.Length -le $Maximum) "Invalid or oversized file: $Path"
     return @{path=$Path;bytes=$item.Length;sha256=(Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()}
 }
-function Json([string]$Path,[long]$Maximum=128KB){
-    for($attempt=0;$attempt -lt 5;$attempt++){
+function Json([string]$Path,[long]$Maximum=128KB,[double]$SharingDeadlineSeconds=0){
+    $attemptLimit=if($SharingDeadlineSeconds -gt 0){25}else{5}
+    for($attempt=0;$attempt -lt $attemptLimit;$attempt++){
         Require ((Get-Item -LiteralPath $Path).Length -le $Maximum) "JSON exceeds bound: $Path"
         try{$text=[IO.File]::ReadAllText($Path);break}
         catch{
             $cause=$_.Exception;while($cause.InnerException){$cause=$cause.InnerException}
-            # The producer can briefly deny reads. Retry only Win32 sharing/lock
-            # violations (32/33), with at most 40 ms of backoff on existing deadlines.
-            if($cause -isnot [IO.IOException] -or $cause.HResult -notin @(-2147024864,-2147024863) -or $attempt -eq 4){throw}
+            # Only live state opts into longer sharing-violation (32) retries.
+            # Other reads and lock violations (33) retain their five attempts.
+            if($cause -isnot [IO.IOException] -or $cause.HResult -notin @(-2147024864,-2147024863) -or $attempt -eq $attemptLimit-1 -or ($attempt -ge 4 -and $cause.HResult -ne -2147024864)){throw}
+            if($SharingDeadlineSeconds -gt 0 -and $clock.Elapsed.TotalSeconds+0.01 -ge $SharingDeadlineSeconds){throw}
             Start-Sleep -Milliseconds 10
+            if($SharingDeadlineSeconds -gt 0 -and $clock.Elapsed.TotalSeconds -ge $SharingDeadlineSeconds){throw}
         }
     }
     return $text|ConvertFrom-Json -AsHashtable -DateKind String -Depth 100
@@ -273,7 +276,15 @@ function ObserveBounds {
     if($null -ne $hostStartedAt -and -not $simObserved -and -not $stopReason){Require ($clock.Elapsed.TotalSeconds-$hostStartedAt -le 20) 'Retained actual-host simulator startup did not complete within twenty seconds.'}
     $statePath=Join-Path $simDir 'state.json'
     if([IO.File]::Exists($statePath) -and $owned.ContainsKey('host')){
-        $sim=Json $statePath
+        # Spend at most 250 ms inside the existing stop/startup clocks. Never
+        # cache a prior state or turn a missing/invalid read into an observation.
+        $readUntil=[Math]::Min($clock.Elapsed.TotalSeconds+0.25,$TimeoutSeconds-60)
+        if($null -ne $hostStartedAt){$readUntil=[Math]::Min($readUntil,$hostStartedAt+$Seconds)}
+        if(-not $simObserved -and -not $stopReason){
+            if($null -ne $hostStartedAt){$readUntil=[Math]::Min($readUntil,$hostStartedAt+20)}
+            if($startup){$readUntil=[Math]::Min($readUntil,$startup.sent_at_seconds+15)}
+        }
+        $sim=Json $statePath -SharingDeadlineSeconds $readUntil
         # Preflight and actual host can publish different PIDs into the same directory.
         if($sim.pid -eq $owned.host.identity.pid){
             Require ($sim.runtime -ceq 'xr-sim' -and $sim.system -ceq $systemName -and $sim.headsetConfig -ieq $profilePath) 'Actual host simulator identity differs.'
