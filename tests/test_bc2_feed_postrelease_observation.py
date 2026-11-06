@@ -533,7 +533,9 @@ class FeedPostreloadShotTests(unittest.TestCase):
                   lambda f, b: self.event(f)["after"].update(loaded=198),
                   lambda f, b: self.event(f)["after"].update(reserve=486),
                   lambda f, b: self.event(f)["after"].update(current=2, next=2),
-                  lambda f, b: b.update(releaseCommittedNs=b["pressWrittenNs"]+101*MS), duplicate)
+                  lambda f, b: b.update(releaseWrittenNs=b["pressWrittenNs"]+101*MS,
+                                        releaseCommittedNs=b["pressWrittenNs"]+102*MS),
+                  lambda f, b: b.update(releaseCommittedNs=b["releaseWrittenNs"]+251*MS), duplicate)
         for fault in faults:
             with self.subTest(fault=fault):
                 flow, boundary = self.native()

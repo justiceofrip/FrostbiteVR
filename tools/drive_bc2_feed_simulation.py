@@ -387,8 +387,117 @@ def receive_timed(name):
     return decorate
 
 
-def post_reload_ready(profiles, snapshot, now, closure, *, neutral):
-    """Current closed feed/custody gate; diagnostic counts never prove a shot."""
+def fixed_post_reload_planner():
+    # Load only for a fixed Close; ordinary feed execution remains unchanged.
+    global _fixed_post_reload_planner
+    if "_fixed_post_reload_planner" not in globals():
+        spec = importlib.util.spec_from_file_location(
+            "bc2_post_reload_fixed", Path(__file__).with_name("plan_bc2_fixed_container_simulation.py"))
+        _fixed_post_reload_planner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_fixed_post_reload_planner)
+    return _fixed_post_reload_planner
+
+
+def fixed_post_reload_closure(plan, closed):
+    fixed = fixed_post_reload_planner()
+    geometry = plan["geometryEvidence"]
+    acquired = closed["boundaries"]["fixed_acquired"]["gate"]
+    complete = closed["boundaries"]["fixed_step_complete"]["gate"]
+    baseline, selection = geometry["baseline"], geometry["selection"]
+    profile, family = selection["profile"], selection["physicalFamily"]
+    require(geometry["schema"] == fixed.SCHEMA and geometry["stage"] == "Close"
+            and plan["mapping"]["mechanismSelection"] == selection
+            and all(plan["mapping"][k] == selection[k] for k in ("owner", "equipment", "rig"))
+            and plan["mapping"]["physical_equipment_generation"] == selection["physical"]
+            and integer(profile["kind"]) == 3 and integer(profile["capacity"]) == 1
+            and isinstance(family, dict) and family["selectedSecondary"] is True
+            and baseline["counts"]["loaded"] == baseline["counts"]["capacity"] == 1
+            and integer(baseline["lastCompletedRequest"]) > 0,
+            "fixed shot requires a completed single-round selected-secondary breech reload")
+    proof = acquired["completionPrerequisite"]
+    require(acquired["gate"] == "fixed_acquired" and acquired["observed"] is True
+            and complete["gate"] == "fixed_step_complete" and complete["observed"] is True
+            and complete["completionOnly"] is True
+            and proof["stage"] == "Close" and proof["planSourceNonce"] == geometry["snapshotNonce"]
+            and proof["planEvaluatedAtNs"] == geometry["evaluatedAtNs"]
+            and proof["lifetime"] == baseline["lifetime"] and proof["gunToken"] == baseline["gun"]
+            and geometry["evaluatedAtNs"] < acquired["observedNs"] < complete["observedNs"]
+            < complete["sourceValidUntilNs"], "fixed Close lacks its own acquired/completed boundary")
+    return dict(family="fixed", mapping=plan["mapping"], lifetime=baseline["lifetime"],
+                fixedPlan=geometry, acquired=acquired, completed=complete)
+
+
+def fixed_post_reload_ready(snapshot, now, closure, *, neutral, after_shot):
+    fixed = fixed_post_reload_planner()
+    geometry, acquired = closure["fixedPlan"], closure["acquired"]
+    baseline = geometry["baseline"]
+    try:
+        if not after_shot:
+            # The saved Close/acquisition is historical context only. Every
+            # command decision consumes a new original current observation.
+            fixed.check_gate(geometry, snapshot, "fixed_step_complete", now,
+                             integer(snapshot["nonce"]), acquired=acquired)
+        else:
+            # A fired empty breech may owe Open. This is selected-ammunition
+            # observation only and cannot authorize another trigger or pose.
+            planner.admit_frame(snapshot, now, integer(snapshot["nonce"]),
+                mechanism_admission=lambda s, n: s is snapshot and n == now)
+        x = snapshot["fixedContainer"]
+        require(x["schema"] == fixed.OBSERVATION_SCHEMA and x["available"] is True
+                and x["observationOnly"] is True and x["owner"] == snapshot["owner"]
+                and all(x["input"][k] == snapshot["input_evidence"][k] for k in
+                        ("owner", "sequence", "observedNs", "deadlineNs", "focused", "tracked", "released")),
+                "fixed post-shot current observation identity/input changed")
+        fixed.require_reobserved(geometry, snapshot)
+        t, view = x["tracking"], fixed.ammo(snapshot, now, idle=True)
+        gun = fixed.claim(t["gun"], x["input"], now, 1, 1)
+        require(gun == baseline["gun"] and gun["item"] == fixed.physical_item(snapshot, now)
+                and t["enabled"] is True and t["current"] is True
+                and t["step"] in ((0, 4) if after_shot else (4,))
+                and snapshot.get("feed") is None and snapshot["weapon_actions_blocked"] == t["blocksFire"]
+                and t["hand"] is None and x["leftClaim"] is None and t["target"] is None
+                and t["carried"] is False and t["carriedSupply"] is None,
+                "fixed post-shot root/custody or retained step changed")
+        expected = dict(baseline["counts"], loaded=0 if after_shot else 1)
+        require(view["snapshot"]["counts"] == expected,
+                "fixed post-shot chamber/reserve differs from the completed reload")
+        event = x["lastCompletion"]
+        out = event["outcome"]
+        request, receipt = out["request"], out["receipt"]
+        fixed.request_proof(request, view)
+        require(event["lifetime"] == baseline["lifetime"] and event["supply"] == baseline["supply"]
+                and out["state"] == 3 and out["nativeDispatched"] is True and out["actorRetirement"] is None
+                and request["intent"]["id"] == baseline["lastCompletedRequest"]
+                and request["preparedCommand"] == receipt["command"]
+                and receipt["authorityVerified"] is True and receipt["copiesVerified"] is True
+                and integer(receipt["authorityInvocation"]) > 0
+                and receipt["after"] == request["preparedCommand"]["after"]
+                    == event["postSnapshot"]["counts"] == baseline["counts"]
+                and receipt["before"] == request["preparedCommand"]["before"]
+                and event["postSnapshot"]["coherentIdleVerified"] is True
+                and event["postSnapshot"]["context"] == view["binding"]["context"]
+                and integer(request["preparedCommand"]["requestedNs"]) <= integer(receipt["beganNs"])
+                    <= integer(receipt["completedNs"]) <= integer(out["resolvedNs"])
+                    <= integer(event["acceptedNs"]) <= integer(geometry["evaluatedAtNs"])
+                and integer(receipt["completedNs"]) <= integer(event["postSnapshot"]["observedNs"])
+                    <= integer(event["acceptedNs"]) < integer(event["postSnapshot"]["deadlineNs"])
+                and integer(event["postSnapshot"]["sequence"]) > integer(request["preparedCommand"]["sourceSequence"]),
+                "fixed post-shot lost its exact completed insertion receipt")
+        require(integer(snapshot["observed_ns"]) > integer(closure["completed"]["observedNs"]),
+                "fixed shot requires a new observation after Close")
+        if neutral:
+            require(x["input"]["released"][0] is True and snapshot["input"]["hands"][0]["squeeze"] == 0
+                    and all(h[k] == 0 for h in snapshot["input"]["hands"]
+                            for k in ("trigger", "held", "stickX", "stickY")),
+                    "fixed post-shot neutral release not observed")
+    except fixed.Refusal as error:
+        raise REFUSAL(str(error)) from error
+
+
+def post_reload_ready(profiles, snapshot, now, closure, *, neutral, after_shot=False):
+    """Current completed reload/custody gate; counts never prove a shot."""
+    if closure.get("family") == "fixed":
+        return fixed_post_reload_ready(snapshot, now, closure, neutral=neutral, after_shot=after_shot)
     planner.admit(profiles, snapshot, now, integer(snapshot["nonce"]))
     mapping = closure["mapping"]
     require(all(snapshot[k] == mapping[k] for k in
@@ -445,14 +554,16 @@ def post_reload_input_unmodified(row):
 
 def audit_post_reload_shot(flow, boundary):
     """Positive retained native Fire evidence; never claims exhaustive capture."""
-    require(boundary["schema"] == "bc2vr.feed-post-reload-pulse.v1"
+    fixed_shot = boundary["schema"] == "bc2vr.fixed-post-reload-pulse.v1"
+    require(boundary["schema"] in ("bc2vr.feed-post-reload-pulse.v1", "bc2vr.fixed-post-reload-pulse.v1")
             and boundary["status"] == "native_shot_observation_pending"
             and boundary["nativeAcceptance"] is False, "missing completed pulse boundary")
     start, release, end = (integer(boundary[k]) for k in
                            ("pressWrittenNs", "releaseWrittenNs", "releaseCommittedNs"))
     begin, finish = integer(boundary["neutralWrittenNs"]), integer(boundary["observationEndNs"])
     require(0 < begin < start < release <= end < finish
-            and end - start <= 100_000_000 and finish - end <= NS,
+            and release - start <= 100_000_000 and end - release <= 250_000_000
+            and finish - end <= NS,
             "post-reload pulse/observation outside original bound")
     require(flow["started"] is True and flow["drained"] is True
             and flow["server_binding_verified"] is True and integer(flow["in_flight"]) == 0,
@@ -462,6 +573,13 @@ def audit_post_reload_shot(flow, boundary):
     drops = {k: integer(flow[k]) for k in
              ("dropped", "record_lock_drops", "record_begin_lock_drops", "record_end_lock_drops", "owner_lock_drops")}
     require(all(v >= 0 for v in drops.values()), "invalid native drop counters")
+    fixed_baseline = boundary["closure"]["fixedPlan"]["baseline"] if fixed_shot else None
+    if fixed_shot:
+        require(boundary["closure"]["family"] == "fixed"
+                and boundary["beforeCounts"] == fixed_baseline["counts"]
+                and boundary["afterCounts"] == dict(fixed_baseline["counts"], loaded=0)
+                and boundary["beforeCounts"]["loaded"] == boundary["beforeCounts"]["capacity"] == 1,
+                "fixed pulse lost its completed Close ammunition boundary")
     source = boundary["owner"]
     owner = {key: source[value] for key, value in
              (("player", "player"), ("soldier", "soldier"), ("weak", "weak"), ("weapon", "weapon"),
@@ -502,11 +620,23 @@ def audit_post_reload_shot(flow, boundary):
         pre = [r for r in rows if r["end_ns"] < start
                and r["after"]["current"] == r["after"]["next"] == 2]
         post = [r for r in rows if end <= r["begin_ns"]
-                and r["after"]["current"] == r["after"]["next"] == 2]
+                and r["after"]["current"] == r["after"]["next"]
+                and (r["after"]["loaded"] == 0 if fixed_shot else r["after"]["current"] == 2)]
         changed = [r for r in rows if (r["before"]["loaded"], r["before"]["reserve"])
                    != (r["after"]["loaded"], r["after"]["reserve"])]
         require(pre and post and changed, "native shot observation absent on copy " + str(n))
         old, new, shot = pre[-1]["after"], post[-1]["after"], changed[0]["before"]
+        if fixed_shot:
+            identity = fixed_baseline["nativeIdentity"]
+            require(boundary["owner"] == identity["owner"]
+                    and shot["firing"] == identity["firing"][n]
+                    and (old["loaded"], new["loaded"], old["reserve"])
+                        == (1, 0, fixed_baseline["counts"]["reserve"]),
+                    "native shot does not belong to the reloaded fixed ammunition")
+            if n == 2:
+                require(all(shot[k] == identity[v] for k, v in
+                            (("server_player", "serverPlayer"), ("server_soldier", "serverSoldier"),
+                             ("server_item", "serverItem"))), "fixed server ammunition association changed")
         count, previous_end, order = integer(old["loaded"]), begin, []
         require(count > 0 and integer(old["reserve"]) >= 0, "invalid pre-shot ammunition")
         for r in rows:
@@ -518,7 +648,9 @@ def audit_post_reload_shot(flow, boundary):
             if b["loaded"] == a["loaded"]:
                 continue
             x, y = r["context_before"], r["context_after"]
-            require(start <= r["begin_ns"] <= r["end_ns"] <= end
+            # Release acknowledgement may arrive later; retained native
+            # Fire events still have the original 100ms pulse window.
+            require(start <= r["begin_ns"] <= r["end_ns"] <= min(end, start + 100_000_000)
                     and 0 <= integer(a["loaded"]) == count - 1,
                     "native observed change is not one loaded round during the pulse")
             require(b["current"] in (2, 9) and b["next"] == b["current"] and a["current"] == a["next"] == 9
@@ -606,6 +738,10 @@ class Driver:
 
     def admit_snapshot(self, snapshot, now, nonce):
         """Mechanism-specific admission; transport and original leases stay shared."""
+        closure = getattr(self, "post_reload_closure", None)
+        if closure is not None and closure.get("family") == "fixed":
+            return post_reload_ready(self.profiles, snapshot, now, closure, neutral=False,
+                                     after_shot=getattr(self, "post_reload_phase", None) == "observe")
         return planner.admit(self.profiles, snapshot, now, nonce)
 
     def stable_snapshot(self, before, after):
@@ -987,8 +1123,17 @@ class Driver:
 
     def snapshot_source_deadline(self, snapshot):
         """Adapters may include shorter original mechanism evidence leases."""
-        return min(integer(snapshot["valid_until_ns"]),
-                   integer(snapshot["input_evidence"]["observedNs"]) + SNAPSHOT_PERIOD)
+        deadline = min(integer(snapshot["valid_until_ns"]),
+                       integer(snapshot["input_evidence"]["observedNs"]) + SNAPSHOT_PERIOD)
+        if (getattr(self, "post_reload_closure", None) or {}).get("family") == "fixed":
+            x = snapshot["fixedContainer"]
+            deadline = min(deadline, integer(snapshot["native_deadline_ns"]),
+                integer(x["input"]["deadlineNs"]), integer(x["physicalFamily"]["deadlineNs"]),
+                integer(x["view"]["binding"]["deadlineNs"]), integer(x["view"]["snapshot"]["deadlineNs"]),
+                integer(x["tracking"]["gun"]["deadlineNs"]))
+            if getattr(self, "post_reload_phase", None) != "observe":
+                deadline = min(deadline, integer(x["raw"]["input"]["deadlineNs"]))
+        return deadline
 
     def defer_invalid_snapshot(self, snapshot, now):
         """Optional observation-only hold of this exact consumed response.
@@ -1544,12 +1689,12 @@ class Driver:
                     "post-release retained feed identity changed")
 
     def post_reload_shot(self, result_path):
-        # Reuse the exact preceding completed CloseCover artifact, then consume
+        # Reuse the exact preceding completed closing artifact, then consume
         # one run-local attempt even if admission or delivery fails.
         path = child(self.run, result_path)
         previous, _ = read_json(self.run / "live-driver-owner.json", 8192)
         require(same_path(previous["artifactDirectory"], path.parent),
-                "post-reload shot must immediately follow the owned CloseCover")
+                "post-reload shot must immediately follow the owned closing stimulus")
         closed, raw = read_json(path)
         require(closed["schema"] == "bc2vr.reload-stimulus-result.v1"
                 and closed["status"] == "ordinary_stimulus_completed"
@@ -1558,19 +1703,24 @@ class Driver:
                 and closed.get("error") is None and closed.get("observationFailure") is None
                 and closed.get("diagnosticFailure") is None
                 and closed["leftGripHeld"] is False and closed["pendingCommand"] is False
-                and [(p["family"], p["stage"]) for p in closed["plans"]] == [("feed", "CloseCover")],
-                "post-reload requires a completed released CloseCover stimulus")
+                and [(p["family"], p["stage"]) for p in closed["plans"]] in ([("feed", "CloseCover")], [("fixed", "Close")]),
+                "post-reload requires a completed released closing stimulus")
         plan, plan_raw = read_json(path.parent / "stimulus-01.json", MAX_BYTES)
         require(plan["schema"] == "bc2vr.reload-stimulus.v1"
-                and (plan["family"], plan["stage"]) == ("feed", "CloseCover")
-                and closed["boundaries"]["feed_released"]["receiptCounterAdvanced"] is True,
-                "original CloseCover boundary missing")
-        closure = dict(mapping=plan["mapping"], lifetime=closed["boundaries"]["feed_released"]["lifetime"])
+                and [(plan["family"], plan["stage"])] == [(p["family"], p["stage"]) for p in closed["plans"]],
+                "original closing plan differs from its completed result")
+        if plan["family"] == "fixed":
+            closure = fixed_post_reload_closure(plan, closed)
+        else:
+            require(closed["boundaries"]["feed_released"]["receiptCounterAdvanced"] is True,
+                    "original CloseCover boundary missing")
+            closure = dict(mapping=plan["mapping"], lifetime=closed["boundaries"]["feed_released"]["lifetime"])
         with (self.run / "post-reload-shot-attempt.json").open("xb") as stream:
             stream.write(json_bytes(dict(host=self.host, closeResult=str(path), closeSha256=digest(raw),
                                          artifactDirectory=str(self.artifacts.directory))))
         self.artifacts.save("close-cover-binding.json", dict(path=str(path), sha256=digest(raw),
                                                            planSha256=digest(plan_raw), closure=closure))
+        self.post_reload_closure = closure
         before, _, now = self.fresh()
         post_reload_ready(self.profiles, before, now, closure, neutral=False)
         self.reference = before
@@ -1592,23 +1742,31 @@ class Driver:
         self.send(["trigger r 1"], source_deadline=self.snapshot_source_deadline(ready))
         press = self.last_write
         self.post_reload_phase = "release"
+        # UP remains mandatory even if the pulse has already run late.
+        # Its exact owned ACK/next-frame observation has a separate bound;
+        # it neither renews the DOWN source lease nor admits another DOWN.
+        self.stage_deadline = min(self.deadline, time.perf_counter_ns() + 250_000_000)
         self.send(["trigger r 0"])
         release, committed = self.last_write, self.last_commit
-        require(committed - press <= 100_000_000, "single trigger pulse exceeded 100ms; no retry")
+        require(release - press <= 100_000_000, "single trigger pulse publication exceeded 100ms; released; no retry")
         self.post_reload_phase = "observe"
         self.stage_deadline = min(self.deadline, committed + 600_000_000)
         self.pause_until(committed + 100_000_000)
         after, _, now = self.fresh()
-        post_reload_ready(self.profiles, after, now, closure, neutral=True)
+        post_reload_ready(self.profiles, after, now, closure, neutral=True, after_shot=True)
         require(integer(after["input_evidence"]["observedNs"]) >= committed
                 and integer(after["shot_input_generation"]) > integer(ready["shot_input_generation"]),
                 "post-shot release not observed in a new original packet")
-        boundary = dict(schema="bc2vr.feed-post-reload-pulse.v1", status="native_shot_observation_pending",
+        schema = "bc2vr.fixed-post-reload-pulse.v1" if closure.get("family") == "fixed" else "bc2vr.feed-post-reload-pulse.v1"
+        boundary = dict(schema=schema, status="native_shot_observation_pending",
                         owner=ready["owner"], closure=closure, host=self.host,
                         sourceSha256=self.manifest["source_sha256"], closeResultSha256=digest(raw),
                         neutralWrittenNs=neutral_written, pressWrittenNs=press, releaseWrittenNs=release,
                         releaseCommittedNs=committed, observationEndNs=after["observed_ns"],
                         nativeAcceptance=False, headsetAcceptance=False, nativeShotObserved=False)
+        if closure.get("family") == "fixed":
+            boundary.update(beforeCounts=ready["fixedContainer"]["view"]["snapshot"]["counts"],
+                            afterCounts=after["fixedContainer"]["view"]["snapshot"]["counts"])
         self.artifacts.save("post-reload-shot.json", boundary)
         return boundary
 
@@ -1723,7 +1881,7 @@ def main(argv=None):
     mode.add_argument("--stage", choices=[*planner.STAGES, "SupplyPickup"])
     mode.add_argument("--capture", help="one explicit named composition within runner budget")
     mode.add_argument("--menu-batches", type=Path, help="bounded JSON batches inside exact run directory")
-    mode.add_argument("--post-reload-shot", type=Path, help="preceding CloseCover result.json; one pulse, native proof pending")
+    mode.add_argument("--post-reload-shot", type=Path, help="preceding feed CloseCover or fixed Close result.json; one pulse, native proof pending")
     mode.add_argument("--audit-post-reload-shot", type=Path, help="saved post-reload-shot.json; read-only drained native audit")
     parser.add_argument("--root-authorized-ordinary-input", action="store_true")
     parser.add_argument("--profiles", type=Path, help="production profile export copied inside exact run directory")
