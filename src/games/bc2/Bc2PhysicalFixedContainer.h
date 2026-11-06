@@ -13,6 +13,23 @@ struct Bc2FixedContainerCompletionObservation {
     interaction::AmmunitionSnapshot postSnapshot{};
     std::int64_t acceptedNs=0;
 };
+enum class Bc2FixedContainerReleaseStage:std::uint8_t {
+    Captured,DuplicateRaw,RawRejected,GateUnavailable,LedgerUnavailable,
+    Policy,RequestUnavailable,Submitted,SubmissionRejected,Invalidated,Cancelled
+};
+// One historical attempt, retained across duplicate polls. This copy grants no
+// claim, source lease, gesture completion or native ammunition authority.
+struct Bc2FixedContainerReleaseObservation {
+    std::uint64_t lifetime=0,lastRaw=0;
+    interaction::FeedSupplyKey supply{};
+    interaction::FixedContainerReleaseEvidence evidence{};
+    interaction::HandInteractionSample input{},rawInput{};
+    Bc2FixedContainerReleaseStage stage=Bc2FixedContainerReleaseStage::Captured;
+    interaction::FixedContainerStatus status=interaction::FixedContainerStatus::Invalid;
+    interaction::FixedContainerRejection rejection=interaction::FixedContainerRejection::Unknown;
+    interaction::FeedInteractionStatus feedStatus=interaction::FeedInteractionStatus::NeedNeutral;
+    bool rawAdmitted=false,retainedEvidence=false,policyUpdated=false,dispatch=false;
+};
 struct Bc2FixedContainerObservation {
     ReloadStateOwner owner{};
     interaction::HandInteractionSample input{};
@@ -26,6 +43,7 @@ struct Bc2FixedContainerObservation {
     std::optional<AmmoResourceRequest> pendingRequest;
     std::optional<interaction::HandClaim> leftClaim;
     std::optional<Bc2FixedContainerCompletionObservation> lastCompletion;
+    std::optional<Bc2FixedContainerReleaseObservation> lastRelease;
     interaction::FixedContainerStatus status=interaction::FixedContainerStatus::Invalid;
     bool rawAdmitted=false; // Exact Tick predicate, including recorded hand evidence.
 };

@@ -23,7 +23,7 @@ struct Fixture {
     Bc2FixedContainerObservation observation{};bool observe=false;
     std::optional<AmmoResourceRequest> submitted;std::optional<FixedContainerGate> gate;
     std::optional<Bc2FixedContainerRawContact> previousRaw;
-    AmmunitionCounts counts{};bool delayedRaw=false,missingRaw=false,rendererFeedback=false,missingView=false,staleView=false;
+    AmmunitionCounts counts{};bool delayedRaw=false,missingRaw=false,rendererFeedback=false,missingView=false,staleView=false,releaseLevels=false;
     const WeaponModeFamilyProfile* linkedFamily=nullptr;
     std::unique_ptr<Bc2PhysicalFixedContainer> physical;HandClaimToken gun{};
     std::int64_t now=1000000000;bool priorGrip=false,allowGate=true,allowLedger=true;unsigned calls=0,gateCalls=0,busyGateMask=0,rejectedGateMask=0;
@@ -60,7 +60,7 @@ struct Fixture {
         now+=10000000;++sequence;binding.observedNs=now;binding.deadlineNs=now+100000000;
         AmmunitionSnapshot ammunition{binding.context,sequence,now,now+100000000,counts,true};
         service.Select(binding,native,ammunition,now);
-        sample={};sample.nativeOwner=native.owner;sample.input={owner,sequence,now,now+100000000,now,true,{true,true},{priorGrip&&!grip,false}};
+        sample={};sample.nativeOwner=native.owner;sample.input={owner,sequence,now,now+100000000,now,true,{true,true},{releaseLevels?!grip:priorGrip&&!grip,false}};
         sample.observation=observe?&observation:nullptr;
         sample.weapon={linkedFamily?binding.persistence:binding.context.resource.weapon,owner.equipGeneration};sample.equipment=equipment;
         if(linkedFamily)sample.family=FixedContainerBodyAmmo::FamilyBinding{native.owner,
@@ -1036,7 +1036,102 @@ int RecurringRawGapsConsumeDelayedGeometry(){
     return 0;
 }
 
-int main(){if(FixedReleaseCauseDiagnostics())return 1;
+int ReadyForDuplicateRelease(Fixture& f){
+    SelectFixedFamily(f);f.observe=true;f.releaseLevels=true;
+    const auto kind=f.equipment->interaction.kind;
+    if(kind==FixedContainerKind::Cylinder||kind==FixedContainerKind::SingleRoundBreech)f.Hinge(0);
+    if(kind==FixedContainerKind::Cylinder)f.Hinge(1);
+    const auto& motion=f.equipment->interaction.geometry[2].motion;
+    f.Send(At(motion,0),false);f.Send(At(motion,0),true,true);f.Send(At(motion,0),true);
+    for(unsigned n=1;n<=30;++n)f.Send(At(motion,n/30.),true);
+    for(unsigned n=0;n<8;++n)f.Send(At(motion,1),true);
+    CHECK(f.result.tracking.carried&&f.result.tracking.hand&&f.result.tracking.target&&f.calls==0);
+    return 0;
+}
+int DuplicateRawRetainsExactReleaseUntilEligibleGeometry(){
+    unsigned profiles=0;
+    for(const auto registry:{std::span<const FixedContainerEquipmentProfile>(generated::FixedContainerEquipment),
+                            std::span<const FixedContainerEquipmentProfile>(generated::UnderbarrelFixedContainerEquipment)})
+        for(const auto& e:registry)for(bool newerSafety:{false,true}){
+            Fixture f(&e,0,e.interaction.roundsPerInsertion);CHECK(!ReadyForDuplicateRelease(f));
+            const auto held=f.sample.raw;const auto token=f.result.tracking.hand->token;
+            const auto supply=f.observation.supply;const auto lifetime=f.result.tracking.lifetime;const auto before=f.counts;
+            f.Prepare(At(e.interaction.geometry[2].motion,1),false);const auto released=f.sample.raw;
+            CHECK(f.sample.releaseEvidence);const auto event=*f.sample.releaseEvidence;
+            // Actual452's boundary shape: central release removes the exact
+            // claim; an already consumed held raw packet reaches Gather first.
+            f.Consume(&held);
+            CHECK(!f.hands.Current(InteractionHand::Left)&&!f.result.ammoOwnsHand&&!f.result.tracking.hand);
+            CHECK(f.result.tracking.carried&&f.calls==0&&!f.result.tracking.pending);
+            CHECK(f.observation.lastRelease&&f.observation.lastRelease->stage==Bc2FixedContainerReleaseStage::DuplicateRaw);
+            CHECK(!f.observation.lastRelease->policyUpdated);
+            // Next Gather of the same packet has no central lifecycle event.
+            f.sample.releaseEvidence.reset();++f.now;f.sample.input.nowNs=f.now;
+            CHECK(f.hands.Update(f.sample.input).inputValid);f.Consume(&held);
+            CHECK(f.calls==0&&!f.result.tracking.hand&&f.observation.lastRelease->retainedEvidence);
+            if(newerSafety)f.Prepare(At(e.interaction.geometry[2].motion,1),false);
+            f.Consume(&released);
+            CHECK(f.calls==1&&f.submitted&&f.submitted->preparedCommand&&f.result.tracking.pending);
+            CHECK(!f.result.ammoOwnsHand&&!f.hands.Current(InteractionHand::Left));
+            CHECK(f.observation.supply==supply&&f.result.tracking.lifetime==lifetime);
+            CHECK(f.submitted->preparedCommand->before==before&&f.service.View()->snapshot.counts==before);
+            CHECK(f.submitted->intent.observedNs==released.input.observedNs&&f.submitted->intent.deadlineNs==released.input.deadlineNs);
+            CHECK(f.submitted->sourceProof&&f.submitted->sourceProof->inputSequence==released.input.sequence);
+            const auto attempt=*f.observation.lastRelease;
+            CHECK(attempt.stage==Bc2FixedContainerReleaseStage::Submitted&&attempt.policyUpdated&&attempt.retainedEvidence);
+            CHECK(attempt.evidence.before.token==token&&attempt.evidence.before.deadlineNs==event.before.deadlineNs);
+            CHECK(attempt.evidence.input.sequence==event.input.sequence&&attempt.evidence.input.deadlineNs==event.input.deadlineNs);
+            CHECK(attempt.status==FixedContainerStatus::NativeQueued&&attempt.dispatch);
+            f.Consume(&released);f.Consume(&released);
+            CHECK(f.calls==1&&f.observation.lastRelease->stage==attempt.stage&&f.observation.lastRelease->policyUpdated);
+            CHECK(f.observation.lastRelease->input.sequence==attempt.input.sequence);
+            std::ostringstream json;WriteFixedContainerObservation(json,&f.observation,f.native.owner,f.sample.input,f.sample.raw.rig,&e,f.now);
+            CHECK(json.str().find("\"lastRelease\":{\"historical\":true")!=std::string::npos);
+            CHECK(json.str().find("\"retainedEvidence\":true,\"policyUpdated\":true")!=std::string::npos);
+            CHECK(json.str().size()<20000);++profiles;
+        }
+    CHECK(profiles==168);return 0;
+}
+int DuplicateReleaseCannotOutliveItsEvidence(){
+    for(unsigned branch=0;branch<9;++branch){
+        Fixture f(1);CHECK(!ReadyForDuplicateRelease(f));const auto held=f.sample.raw;
+        const auto& motion=f.equipment->interaction.geometry[2].motion;const auto before=f.counts;
+        f.Prepare(At(motion,1),false);auto released=f.sample.raw;CHECK(f.sample.releaseEvidence);
+        const auto event=*f.sample.releaseEvidence;
+        if(branch==0)f.sample.releaseEvidence.reset(); // No captured event may be reconstructed from neutral input.
+        f.Consume(&held);CHECK(f.calls==0);f.sample.releaseEvidence.reset();
+        if(branch>=1&&branch<=3){
+            if(branch==1)++f.owner.actorGeneration;
+            if(branch==2)++f.owner.equipGeneration;
+            if(branch==3)++f.owner.space;
+            f.gun={};f.Prepare(At(motion,1),false);
+        }
+        if(branch==4){f.now=event.before.deadlineNs;f.sample.input.nowNs=f.now;(void)f.hands.Update(f.sample.input);}
+        if(branch==5){f.Prepare(At(motion,1),false);released=f.sample.raw;} // Raw newer than the eligible release is not replay authority.
+        if(branch==6){f.Prepare(At(motion,1),true);} // A regrasp ends the neutral interval.
+        if(branch==7){released.weaponFromWrist.values[3][0]+=10;}
+        if(branch==8){
+            CHECK(f.hands.Release(f.sample.input,f.gun).accepted);
+            const auto replacement=f.hands.Acquire(f.sample.input,{f.owner,InteractionHand::Right,HandClaimKind::GunHold,f.sample.weapon,
+                {{300,1},f.sequence,f.sample.input.deadlineNs,true},++f.intent,0});
+            CHECK(replacement.claim);f.gun=replacement.claim->token;
+        }
+        f.Consume(&released);CHECK(f.calls==0&&!f.submitted&&!f.result.ammoOwnsHand);
+        CHECK(f.service.View()->snapshot.counts==before&&!f.result.tracking.pending);
+        if(branch==7){
+            CHECK(f.observation.lastRelease&&f.observation.lastRelease->policyUpdated);
+            const auto attempt=*f.observation.lastRelease;
+            CHECK(attempt.stage==Bc2FixedContainerReleaseStage::Policy&&attempt.rejection==FixedContainerRejection::Gesture);
+            CHECK(attempt.feedStatus==FeedInteractionStatus::MotionJump);
+            f.Consume(&released);CHECK(f.result.status==FixedContainerStatus::Invalid);
+            CHECK(f.observation.lastRelease->feedStatus==FeedInteractionStatus::MotionJump);
+        }
+    }
+    return 0;
+}
+
+int main(){if(DuplicateRawRetainsExactReleaseUntilEligibleGeometry()||DuplicateReleaseCannotOutliveItsEvidence())return 1;
+    if(FixedReleaseCauseDiagnostics())return 1;
     if(InterruptedGateEnrollmentKeepsBothWeaponsUsable())return 1;
     if(ReplacementRawGapRetainsCustodyAndResumes()||ReplacementRawGapStillHonorsInvalidation())return 1;
     if(RecurringRawGapsConsumeDelayedGeometry()||EveryFixedFamilyFreshPickupGapCompletesOnce())return 1;

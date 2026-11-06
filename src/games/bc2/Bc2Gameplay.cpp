@@ -4315,6 +4315,21 @@ std::optional<TwoGrenadeNativeWitness> ReadTwoGrenadeDeathReadiness(std::int64_t
 #endif
     return {};
 }
+void RequestChestKnifeLiveObservation(std::int64_t now)noexcept {
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    if(enabled.load(std::memory_order_acquire)&&chestKnife)chestKnife->RequestLiveObservation(now);
+#else
+    (void)now;
+#endif
+}
+std::shared_ptr<const ChestKnifeLiveObservation> ReadChestKnifeLiveObservation(std::int64_t now)noexcept {
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    if(enabled.load(std::memory_order_acquire)&&chestKnife)return chestKnife->LiveObservation(now);
+#else
+    (void)now;
+#endif
+    return {};
+}
 std::optional<ChestKnifeProbeWitness> ReadChestKnifeProbeWitness(std::int64_t now)noexcept {
 #ifdef FVR_BC2_CHEST_KNIFE_PROBE
     // The coordinator is installed before Start and retained through Stop.

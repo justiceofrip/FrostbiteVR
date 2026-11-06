@@ -307,7 +307,47 @@ int StockTriggerCases(){
     return 0;
 }
 
-int main(){CHECK(!StockTriggerRevocationCases());CHECK(!StockTriggerCases());CHECK(!IdleGunNeedsANewEmptyHandNeutral());CHECK(!WalkingStrokeUsesSameNativeBoundaryPredicate());CHECK(!MovingHoldAndQuietRearm());CHECK(!DrawStillNeedsNeutral());
+int StockTriggerPassiveReadiness(){
+    Fixture f;CHECK(f.Held());f.s.nativeAttackReady=false;f.s.stockTriggerReady=f.s.stockTriggerInputCurrent=true;
+    CHECK(!f.knife.StockTriggerArmedFor(f.s,f.hands));CHECK(!f.Step());
+    CHECK(!f.knife.StockTriggerArmedFor(f.s,f.hands)); // First valid neutral is a baseline, not an edge.
+    CHECK(!f.knife.Prepare(f.s,f.hands));CHECK(!f.knife.StockTriggerArmedFor(f.s,f.hands));
+    CHECK(!f.Step());CHECK(f.knife.StockTriggerArmedFor(f.s,f.hands));
+    const auto original=f.s.source;const auto hold=*f.knife.Hold();
+    for(unsigned n=0;n<4;++n)CHECK(f.knife.StockTriggerArmedFor(f.s,f.hands));
+    CHECK(f.knife.Hold()==hold&&f.s.source.sequence==original.sequence&&f.s.source.deadlineNs==original.deadlineNs);
+    CHECK(!f.knife.Prepare(f.s,f.hands));CHECK(f.knife.StockTriggerArmedFor(f.s,f.hands));
+    for(unsigned fault=0;fault<17;++fault){auto bad=f.s;
+        if(fault==0)++bad.source.sequence;if(fault==1)++bad.source.observedNs;if(fault==2)++bad.source.deadlineNs;
+        if(fault==3)bad.source.nowNs=bad.source.deadlineNs;if(fault==4)++bad.source.owner.equipGeneration;
+        if(fault==5)++bad.source.owner.space;if(fault==6)bad.source.focused=false;
+        if(fault==7)bad.source.tracked[1]=false;if(fault==8)bad.gripHeld[1]=false;
+        if(fault==9)bad.stockTrigger=1;if(fault==10)bad.stockTriggerReady=false;
+        if(fault==11)bad.stockTriggerInputCurrent=false;if(fault==12)bad.fireSuppressed=false;
+        if(fault==13)bad.trackedKnifeOwned=false;if(fault==14)bad.mechanicsSettled=false;
+        if(fault==15)++bad.menu.epoch;if(fault==16)bad.heldContact.eligible=false;
+        CHECK(!f.knife.StockTriggerArmedFor(bad,f.hands));
+        CHECK(f.knife.StockTriggerArmedFor(f.s,f.hands)); // A read does not revoke or rearm policy.
+    }
+    f.s.stockTrigger=1;const auto attack=f.Step();CHECK(attack&&attack->stockTriggerHold&&!attack->stroke);
+    CHECK(!f.knife.StockTriggerArmedFor(f.s,f.hands));CHECK(!f.Step());
+    // An actual observed gate loss revokes arming; recovery cannot revive it.
+    for(unsigned fault=0;fault<8;++fault){Fixture x;CHECK(x.Held());x.s.nativeAttackReady=false;
+        x.s.stockTriggerReady=x.s.stockTriggerInputCurrent=true;CHECK(!x.Step()&&!x.Step());
+        CHECK(x.knife.StockTriggerArmedFor(x.s,x.hands));
+        if(fault==0)x.s.stockTriggerReady=false;if(fault==1)x.s.source.focused=false;
+        if(fault==2)x.s.source.tracked[1]=false;if(fault==3)x.s.fireSuppressed=false;
+        if(fault==4)x.s.trackedKnifeOwned=false;if(fault==5)x.s.mechanicsSettled=false;
+        if(fault==6)x.s.stockTriggerInputCurrent=false;if(fault==7)x.s.menu.owner=InputMenuOwner::Menu;
+        CHECK(!x.Step());CHECK(!x.knife.StockTriggerArmedFor(x.s,x.hands));
+        x.s.stockTriggerReady=x.s.source.focused=x.s.source.tracked[1]=x.s.fireSuppressed=true;
+        x.s.trackedKnifeOwned=x.s.mechanicsSettled=x.s.stockTriggerInputCurrent=true;x.s.menu.owner=InputMenuOwner::Gameplay;
+        x.s.stockTrigger=1;CHECK(!x.Step());CHECK(!x.knife.StockTriggerArmedFor(x.s,x.hands));
+    }
+    std::puts("Passive stock readiness: fresh neutral arming, immutable observation, exact source/claim negatives and lost-gate cancellation.");
+    return 0;
+}
+int main(){CHECK(!StockTriggerPassiveReadiness());CHECK(!StockTriggerRevocationCases());CHECK(!StockTriggerCases());CHECK(!IdleGunNeedsANewEmptyHandNeutral());CHECK(!WalkingStrokeUsesSameNativeBoundaryPredicate());CHECK(!MovingHoldAndQuietRearm());CHECK(!DrawStillNeedsNeutral());
     CHECK(!MissingAuthorityNeverBecomesHeldInput());CHECK(!RealRawInputSeparatesHoldAndIntent());
     CHECK(!FocusGapReturnsBeforeFreshChestDraw());CHECK(!DuplicateCannotWidenOrReacquire());
     std::puts("Eight knife held-input groups PASS: idle gun rearm, real custody/quiet intent, input negatives, focus-gap return then deliberate redraw, immutable duplicate lease.");}

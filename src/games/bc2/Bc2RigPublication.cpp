@@ -2754,6 +2754,7 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     // calls an actor resolver/native method or accesses poseMutex scratch.
     constexpr std::size_t snapshotLimit=LiveMechanismSnapshotLimit;
     auto observed=ReloadNanos();std::string feedDiagnostics;
+    gameplay::RequestChestKnifeLiveObservation(observed);
     // Explicit snapshot request opts in subsequent serialized Gameplay copies.
     // No source deadline is changed; an initial request may report pending.
     shellPumpObservationUntil.store(observed+1000000000ll,std::memory_order_relaxed);
@@ -2778,7 +2779,8 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
         header<<"{\"schema\":\"fvr.bc2.live-mechanism-snapshot.v1\",\"nonce\":\""<<nonce
             <<"\",\"valid\":false,\"invalid_reason\":\""<<reason<<"\",\"observed_ns\":"<<observed
             <<",\"bodyHolster\":{\"available\":false,\"reason\":\"snapshot_unavailable\"}"
-            <<",\"bodyInventory\":{\"observationOnly\":true,\"available\":false,\"reason\":\"snapshot_unavailable\"}";
+            <<",\"bodyInventory\":{\"observationOnly\":true,\"available\":false,\"reason\":\"snapshot_unavailable\"}"
+            <<",\"chestKnife\":{\"observationOnly\":true,\"available\":false,\"reason\":\"snapshot_unavailable\"}";
         const auto prefix=header.str();
         const auto diagnostics=feedDiagnostics.empty()?std::string{}:",\"feedDiagnostics\":"+feedDiagnostics;
         std::ostringstream observation;observation.imbue(std::locale::classic());observation<<std::boolalpha;
@@ -3403,11 +3405,17 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     std::ostringstream feedObservation;feedObservation.imbue(std::locale::classic());feedObservation<<std::boolalpha;
     gameplay::ReportFeedObservation(feedObservation);
     const auto snapshotPrefix=json.str();
-    const auto diagnosticSuffix=fixedGateAdmission+feedGateAdmission+",\"feedObservation\":"+feedObservation.str()+"}\n";
+    // Optional normal stock-trigger observation keeps its own original leases.
+    // A racing gather/expiry drops only its proof, never the generic snapshot.
+    const auto knifeJson=ObserveChestKnifeLiveJson(gameplay::ReadChestKnifeLiveObservation,[](){return ReloadNanos();},m.owner,m.inputEvidence,input);
+    const auto diagnosticBase=fixedGateAdmission+feedGateAdmission+",\"feedObservation\":"+feedObservation.str();
+    const auto diagnosticSuffix=diagnosticBase+",\"chestKnife\":"+knifeJson+"}\n";
     auto payload=snapshotPrefix+feedAdmission+diagnosticSuffix;
     // Optional diagnostics may grow after a failure. Try the already captured
     // compact form before discarding otherwise current pose/mapping evidence.
     if(payload.size()>snapshotLimit)payload=snapshotPrefix+compactFeedAdmission+diagnosticSuffix;
+    // Optional knife evidence must not consume the existing payload allowance.
+    if(payload.size()>snapshotLimit)payload=snapshotPrefix+compactFeedAdmission+diagnosticBase+"}\n";
     if(ReloadNanos()>=until){invalid("expired_during_serialization");return;}
     const auto guardAfter=shotGuard.load(std::memory_order_acquire);
     if(!enabled.load(std::memory_order_acquire)||!guardAfter||!Fresh(guardAfter->deadline)||

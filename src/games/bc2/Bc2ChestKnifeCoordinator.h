@@ -2,6 +2,7 @@
 #include "Bc2ChestKnifeNative.h"
 #include "Bc2ChestKnifeRendering.h"
 #include "Bc2ChestKnifeProbeWitness.h"
+#include "Bc2ChestKnifeLiveObservation.h"
 #include <atomic>
 namespace fvr::bc2 {
 // Actual gather coordinator. Owns no transport, hand allocator or inventory.
@@ -21,8 +22,11 @@ public:
     bool ClaimsHand()const noexcept{return policy_.Hold().has_value()||nativeOwned_;}
     const std::optional<ChestKnifeRenderSource>& Rendering()const noexcept{return rendering_;}
     std::optional<ChestKnifeProbeWitness> ProbeWitness(std::int64_t nowNs)const noexcept;
+    void RequestLiveObservation(std::int64_t nowNs)noexcept{liveObservation_.Request(nowNs);}
+    std::shared_ptr<const ChestKnifeLiveObservation> LiveObservation(std::int64_t nowNs)const noexcept{return liveObservation_.Read(nowNs);}
     void Report(std::ostream&)const;
 private:
+    void InvalidateLiveObservation()noexcept{liveObservation_.Invalidate();}
     interaction::ChestKnifeCustody policy_;
     interaction::KnifeRecognitionDiagnostic recognition_;
     std::optional<private_knife::Anchor> anchor_;
@@ -31,5 +35,6 @@ private:
     bool nativeOwned_=false;
     mutable std::atomic_flag witnessGate_=ATOMIC_FLAG_INIT;
     ChestKnifeProbeWitness witness_{};
+    ChestKnifeLivePublication liveObservation_;
 };
 }

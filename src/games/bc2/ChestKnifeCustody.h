@@ -80,6 +80,22 @@ public:
     bool RecognitionReady(const HandInteractionSample& source)const noexcept {
         return phase_==KnifePhase::Held&&!returnWanted_&&motion_.ReadyFor(source);
     }
+    // Passive observation after Prepare. This cannot arm, stage or renew input.
+    bool StockTriggerArmedFor(const KnifeSample& s,const HandInteraction& hands)const noexcept {
+        if(!stockTriggerArmed_||!stockTriggerSource_||phase_!=KnifePhase::Held||returnWanted_||staged_||pending_||
+           !Fresh(s)||!GameplayOwnsInput(s.menu,s.source.nowNs)||s.menu.epoch!=menuEpoch_||
+           !s.stockTriggerReady||!s.stockTriggerInputCurrent||!HoldInputCurrent(s)||!s.onFoot||
+           !s.fireSuppressed||!s.mechanicsSettled||!s.knifeSelected||!s.trackedKnifeOwned||s.knife!=knife_||
+           !s.gripHeld[unsigned(hand_)]||s.source.released[unsigned(hand_)]||!Contact(s.heldContact,s.source)||
+           !claim_||!std::isfinite(s.stockTrigger)||s.stockTrigger<0||s.stockTrigger>.1f)return false;
+        const auto& p=stockTriggerSource_->source;const auto& f=s.source;const auto held=hands.Current(hand_);
+        return p.owner==f.owner&&p.sequence==f.sequence&&p.observedNs==f.observedNs&&p.deadlineNs==f.deadlineNs&&
+            p.nowNs<=f.nowNs&&p.focused==f.focused&&p.tracked==f.tracked&&p.released==f.released&&
+            stockTriggerSource_->trigger==s.stockTrigger&&stockTriggerSource_->hold==*claim_&&
+            claim_->kind==HandClaimKind::GunHold&&claim_->owner==f.owner&&claim_->item==s.knife&&
+            held&&held->token==*claim_&&held->inputSequence==f.sequence&&held->deadlineNs>f.nowNs&&
+            hands.HasRecordedEvidence(f,hand_);
+    }
     std::optional<KnifeCommand> Prepare(const KnifeSample& s,HandInteraction& hands)noexcept {
         KnifeRecognitionRecord record;
         auto* observation=recognition_?&record:nullptr;
