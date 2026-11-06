@@ -15,7 +15,7 @@ $state=@{schema='bc2vr.session.v1';state='starting';phase='Starting BC2 and wait
 $stateFile=Join-Path $folder 'session.json';$stopFile=Join-Path $folder 'stop.request'
 $hostProcess=$null;$game=$null;$trace=$null;$resolutionProcess=$null
 $resolutionLease=$null;$resolutionAttempted=$false;$resolutionReleaseProcess=$null
-function Save-State {Write-FvrJson $stateFile $state}
+function Save-State {Write-FvrJson $stateFile $state -RetrySessionPublication}
 function Save-NativeOutcome {
     if(-not $trace -or -not $trace.HasExited -or -not $state.game){return $null}
     $state.native_bootstrap_exited=$true

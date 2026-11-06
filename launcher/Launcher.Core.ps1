@@ -49,11 +49,28 @@ function Get-FvrLocalLaunchRoute($Backend, [ValidateSet('MainMenu','Campaign')][
     if ($StartAt -eq 'Campaign') { return @{entry=$Backend.launch;arguments=$arguments;start_at=$StartAt} }
     throw 'This runtime profile only supports the old campaign test launch. Install the main-menu VR profile before using Launch BC2 in VR.'
 }
-function Write-FvrJson([string]$Path, $Value) {
+function Write-FvrJson([string]$Path, $Value, [switch]$RetrySessionPublication) {
     $temp = $Path + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
     try {
         [IO.File]::WriteAllText($temp, ($Value | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
-        [IO.File]::Move($temp, $Path, $true)
+        $publicationClock=if($RetrySessionPublication){[Diagnostics.Stopwatch]::StartNew()}else{$null}
+        for($attempt=0;;$attempt++){
+            try{[IO.File]::Move($temp, $Path, $true);break}
+            catch{
+                $cause=$_.Exception.GetBaseException()
+                # Windows Move cannot replace an open destination even with
+                # delete sharing. Only session state opts into a short wait for
+                # its polling readers; keep one serialized image and one clock.
+                $retryable=($cause -is [UnauthorizedAccessException] -and $cause.HResult -eq -2147024891) -or
+                    ($cause -is [IO.IOException] -and $cause.HResult -in @(-2147024864,-2147024863))
+                if(-not $RetrySessionPublication -or -not $IsWindows -or -not $retryable -or $attempt -ge 24){throw}
+                if(-not [IO.File]::Exists($temp) -or -not [IO.File]::Exists($Path) -or
+                   (([IO.File]::GetAttributes($Path) -band [IO.FileAttributes]::ReadOnly) -ne 0)){throw}
+                if($publicationClock.Elapsed.TotalMilliseconds+10 -ge 250){throw}
+                Start-Sleep -Milliseconds 10
+                if($publicationClock.Elapsed.TotalMilliseconds -ge 250){throw}
+            }
+        }
     } finally { if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force } }
 }
 function Assert-FvrVersion([string]$Version) {
