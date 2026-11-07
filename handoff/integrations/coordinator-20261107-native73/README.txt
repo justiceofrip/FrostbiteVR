@@ -48,7 +48,13 @@ Actual625 closed normally121.4240573s/native retired/all7 processes0/profiles an
 settings restored. Retained runtime452 batch27 preserves41 files without deletion.
 628 compared both625/599 raster pairs and found no supported coordinate defect;
 the later pointer/widget state was not captured. Do not retry the same click blind.
-Knife604 needs a fresh tools binding and game check;625 proves no weapon behavior.
+Later630 reached genuine Empty but its first knife publication expired.634 removes
+one duplicate neutral-baseline read barrier offline;636 stopped during the earlier
+holster release before that helper/knife driver ran. It closed normally191.636s.
+Tools638 corrects timeout/owner-interference classification and adds bounded timing
+spans; native73 is unchanged. See ../coordinator-20261107-tools638/README.txt.
+Actual637 opened the campaign list in both eyes;639's historical-image expiry stopped
+before its click. Neither establishes an opening-mission or vehicle episode.
 Retained QJU88 full cycle/subsequent shot on65 and user pump/AN94 passes are unchanged.
 Full underbarrel/M95 reloads, broader weapons/vehicles, family/headset reliability,
 knife rendered/strict-Held/attack qualification and measured FPS improvement remain

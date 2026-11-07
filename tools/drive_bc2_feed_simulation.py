@@ -110,15 +110,24 @@ def open_snapshot(path, *, share_write=True):
     return os.fdopen(descriptor, "rb")
 
 
+class ReadDeadlineExceeded(REFUSAL):
+    """Read budget exhausted without itself establishing an owner mismatch."""
+
+
+def require_read_time(deadline_ns):
+    if time.perf_counter_ns() >= deadline_ns:
+        raise ReadDeadlineExceeded("original acknowledgement/read deadline exceeded")
+
+
 def read_until(deadline_ns, function, *args):
     """Apply an existing absolute budget to nested reads, including overrides."""
     outer = _read_deadline_ns.get()
     until = min(deadline_ns, outer) if outer is not None else deadline_ns
-    require(time.perf_counter_ns() < until, "original acknowledgement/read deadline exceeded")
+    require_read_time(until)
     token = _read_deadline_ns.set(until)
     try:
         result = function(*args)
-        require(time.perf_counter_ns() < until, "original acknowledgement/read deadline exceeded")
+        require_read_time(until)
         return result
     finally:
         _read_deadline_ns.reset(token)
@@ -135,7 +144,7 @@ def read_bytes(path, maximum):
     if deadline is not None:
         until = min(until, deadline)
     for attempt in range(250):
-        require(time.perf_counter_ns() < until, "original acknowledgement/read deadline exceeded")
+        require_read_time(until)
         try:
             stream = (open_snapshot(path, share_write=False) if simulator_state else
                       open_snapshot(path) if path.name == "mechanism-snapshot.json" else path.open("rb"))
@@ -151,7 +160,7 @@ def read_bytes(path, maximum):
                 raise
             time.sleep(min(.001, remaining / NS))
     if deadline is not None:
-        require(time.perf_counter_ns() < deadline, "original acknowledgement/read deadline exceeded")
+        require_read_time(deadline)
     require(len(data) <= maximum, "file grew beyond bound: " + str(path))
     return data
 
@@ -933,6 +942,8 @@ class Driver:
                     "command file replaced by another writer")
             require(integer(state["cmdSeq"]) == sequence and state["lastCmd"] == sentinel,
                     "command sequence/sentinel belongs to another writer")
+        except ReadDeadlineExceeded:
+            raise
         except BaseException:
             self.unsafe_owner = True
             raise
@@ -1369,8 +1380,9 @@ class Driver:
             require(written < source_deadline, "original source/claim lease expired before command publication")
         if self.last_commit is not None and not cleanup:
             self.bounds(written)
-        self.artifacts.event({"type": "command_request", "atNs": written, "beforeSequence": self.sequence,
-                              "targetSequence": target, "commands": batch}, cleanup=cleanup)
+        self.receive_timing_call("publish_request_event", self.artifacts.event,
+            {"type": "command_request", "atNs": written, "beforeSequence": self.sequence,
+             "targetSequence": target, "commands": batch}, cleanup)
         until = min(self.deadline, self.stage_deadline,
                     written + (250_000_000 if self.motion_started is not None else NS))
         if cleanup:
@@ -1382,7 +1394,7 @@ class Driver:
         self.pending_batch, self.pending_before = batch, before
         pending_owner = self.owner_bytes(True)
         try:
-            self.save_owner(True)
+            self.receive_timing_call("publish_owner_save", self.save_owner, True)
         except BaseException:
             self.sequence, self.sentinel, self.command_hash = previous_owner
             self.pending_command = False
@@ -1391,19 +1403,28 @@ class Driver:
             if self.last_commit is not None and not cleanup:
                 self.bounds(time.perf_counter_ns())
             try:
-                require(read_bytes(self.run / "live-driver-owner.json", 8192) == pending_owner,
+                require(self.receive_timing_call("publish_owner_read", read_bytes,
+                        self.run / "live-driver-owner.json", 8192) == pending_owner,
                         "command owner record replaced before publication")
-                current = read_until(publication_deadline, self.read_state)
-                self.ownership(current, expected=previous_owner)
+                current = self.receive_timing_call("publish_state_read", read_until,
+                    publication_deadline, self.read_state)
+                self.receive_timing_call("publish_command_read", self.ownership, current, previous_owner)
                 require(integer(current["captureSeq"]) == self.capture_sequence, "unrequested capture before publication")
                 if self.reference is not None and not cleanup:
                     require(all(current[key] == self.initial_sim[key] for key in ("head", "handR")),
                             "simulator head/right-hand basis changed before publication")
+            except ReadDeadlineExceeded:
+                # Expiry refuses this publication, but is not an observed owner
+                # change. The unpublished rollback below must independently
+                # rejoin the exact previous writer and unchanged input before
+                # existing bounded release-only cleanup can become eligible.
+                raise
             except BaseException:
                 self.unsafe_owner = True
                 raise
         try:
-            publish_command(self.command_path, raw, publication_deadline, validate_publication_owner)
+            self.receive_timing_call("publish_file", publish_command,
+                self.command_path, raw, publication_deadline, validate_publication_owner)
         except BaseException as error:
             # Atomic replacement never committed. No target sequence or held
             # input is ours to settle; cleanup retains the prior exact command.
@@ -1413,7 +1434,11 @@ class Driver:
                 try:
                     require(read_bytes(self.run / "live-driver-owner.json", 8192) == pending_owner,
                             "unpublished owner record replaced")
-                    self.ownership(self.read_state())
+                    restored = self.read_state()
+                    self.ownership(restored)
+                    require(all(restored[key] == before[key]
+                                for key in ("head", "handL", "handR", "controls", "captureSeq")),
+                            "unpublished simulator input changed before owner restoration")
                     self.save_owner(False)
                 except BaseException as owner_error:
                     self.unsafe_owner = True

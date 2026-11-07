@@ -146,6 +146,97 @@ class Harness:
 
 
 class FeedDriverObservationTests(unittest.TestCase):
+    def test_unpublished_read_expiry_rejoins_owner_for_release_only(self):
+        for phase in ("before_state_read", "command_read"):
+            with self.subTest(phase=phase):
+                h = Harness(self)
+                v = h.driver
+                v.monitor = False
+                source_deadline = h.now + 5 * MS
+                deadlines = v.deadline, v.stage_deadline, v.hard_deadline
+                original = v.sequence, v.sentinel, v.command_hash, v.last_write, v.commands
+                delayed = False
+                def read(path, maximum):
+                    nonlocal delayed
+                    target = v.run / "live-driver-owner.json" if phase == "before_state_read" else v.command_path
+                    if v.pending_command and path == target and not delayed:
+                        delayed = True
+                        h.now = source_deadline
+                        if phase == "command_read":
+                            return d.read_until(source_deadline, lambda: h.files[path])
+                    return h.files[path]
+                with patch.object(d, "read_bytes", read), self.assertRaisesRegex(
+                        d.ReadDeadlineExceeded, "original acknowledgement/read deadline"):
+                    v.send(["grip l 1"], source_deadline=source_deadline)
+                self.assertFalse(v.pending_command or v.unsafe_owner)
+                self.assertEqual(h.command_writes, [])
+                self.assertEqual((v.sequence, v.sentinel, v.command_hash, v.last_write, v.commands), original)
+                self.assertEqual(h.files[v.run / "live-driver-owner.json"], v.owner_bytes(False))
+                self.assertEqual(v.release_after_failure(), "ordinary owned controller release acknowledged")
+                self.assertEqual(len(h.command_writes), 1)
+                self.assertEqual(h.command_writes[0][1].decode().splitlines()[:-1], ["grip l 0"])
+                self.assertFalse(v.held_left)
+                self.assertEqual((v.deadline, v.stage_deadline, v.hard_deadline), deadlines)
+
+    def test_read_expiry_recovery_rejects_changed_writer_or_input(self):
+        for changed in ("owner", "command", "sequence", "sentinel", "controls", "head", "handL", "handR", "capture"):
+            with self.subTest(changed=changed):
+                h = Harness(self)
+                v = h.driver
+                v.monitor = False
+                source_deadline = h.now + 5 * MS
+                owner = v.run / "live-driver-owner.json"
+                delayed = False
+                def read(path, maximum):
+                    nonlocal delayed
+                    raw = h.files[path]
+                    if path == owner and v.pending_command and not delayed:
+                        delayed = True
+                        h.now = source_deadline
+                        if changed == "owner":
+                            h.files[owner] = b"other owner"
+                        elif changed == "command":
+                            h.files[v.command_path] = b"other command"
+                        elif changed == "sequence":
+                            h.state["cmdSeq"] += 1
+                        elif changed == "sentinel":
+                            h.state["lastCmd"] = "note other writer"
+                        elif changed == "controls":
+                            h.state["controls"]["gripL"] = 0
+                        elif changed == "capture":
+                            h.state["captureSeq"] += 1
+                        else:
+                            h.state[changed] = {"changed": True}
+                    return raw
+                with patch.object(d, "read_bytes", read), self.assertRaisesRegex(d.REFUSAL, "owner restoration refused"):
+                    v.send(["grip l 1"], source_deadline=source_deadline)
+                self.assertTrue(v.unsafe_owner)
+                self.assertFalse(v.pending_command)
+                self.assertEqual(v.release_after_failure(), "not attempted: no settled owned held controller")
+                self.assertEqual(h.command_writes, [])
+
+    def test_read_expiry_recovery_preserves_action_and_cleanup_deadlines(self):
+        h = Harness(self)
+        v = h.driver
+        v.monitor = False
+        source_deadline = h.now + 5 * MS
+        delayed = False
+        def read(path, maximum):
+            nonlocal delayed
+            if v.pending_command and path == v.run / "live-driver-owner.json" and not delayed:
+                delayed = True
+                h.now = source_deadline
+            return h.files[path]
+        with patch.object(d, "read_bytes", read), self.assertRaises(d.ReadDeadlineExceeded):
+            v.send(["grip l 1"], source_deadline=source_deadline)
+        self.assertFalse(v.unsafe_owner)
+        with self.assertRaisesRegex(d.REFUSAL, "source/claim lease expired"):
+            v.send(["grip l 1"], source_deadline=source_deadline)
+        v.hard_deadline = h.now + 250 * MS
+        self.assertEqual(v.release_after_failure(), "not attempted: bounded driver deadline")
+        self.assertEqual(h.command_writes, [])
+
+
     def test_unpublished_failure_restores_previous_command_without_false_pending(self):
         h = Harness(self)
         v = h.driver
