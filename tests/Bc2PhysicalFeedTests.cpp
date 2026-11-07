@@ -3112,7 +3112,9 @@ int EveryEnrolledFeedKeepsNaturalHeldGraspsThroughCompletion(){
         const auto afterGap=f.hands.Current(InteractionHand::Left);CHECK(afterGap&&f.result.ownsHand);
         CHECK(afterGap->token==beforeGap->token&&afterGap->deadlineNs==beforeGap->deadlineNs);
         CHECK(!f.result.diagnostic.policyEvaluated&&f.submits==1);f.sample.raw.valid=true;
-        for(unsigned step=0;step<12;++step){f.Tick(wrist(1,1.4f),true);CHECK(held()&&f.submits==1);}
+        // Native entry must occur inside the original command lease. Hold
+        // continuity after a delayed accepted receipt is exercised below.
+        for(unsigned step=0;step<3;++step){f.Tick(wrist(1,1.4f),true);CHECK(held()&&f.submits==1);}
         CHECK(f.Callback());
         for(unsigned step=0;step<12;++step){f.Tick(wrist(1,1.4f),true);CHECK(held()&&f.submits==1);}
         CHECK(!f.result.pending&&f.result.presentation->operation==FeedPhysicalOperation::OpenCover);
