@@ -105,6 +105,24 @@ function Save-NativeOutcome {
     }
     return $result
 }
+function Save-NativeReportCompletion {
+    if(-not $trace -or -not $state.game){return}
+    # A signaled bootstrap/remote thread (even exit 0) is not a final-report
+    # receipt. Keep its outcome and existing native_drained field unchanged.
+    $state.native_bootstrap_exited=[bool]$trace.HasExited
+    $completion=@{status='pending';complete=$false;bytes=$null}
+    if($state.native_bootstrap_exited){
+        $completion=Read-Bc2NativeReportCompletion (Join-Path $folder 'native-trace.json') ([uint32]$state.game.pid)
+    }
+    $state.native_report_status=$completion.status
+    $state.native_report_completed=$completion.complete
+    $state.native_hooks_disabled_observed=$completion.complete
+    $state.native_report_verified_bytes=$completion.bytes
+    if($state.state -in @('ended','stopped') -and -not $state.error){
+        $state.phase=if($completion.complete){'VR session ended; final diagnostics saved.'}
+            else{'VR session ended, but the final diagnostic report is unavailable. Use Report feedback to save the logs.'}
+    }
+}
 function Stop-OwnedHost {
     if($hostProcess -and -not $hostProcess.HasExited){
         [IO.File]::WriteAllText($stopFile,'Session supervisor cleanup')
@@ -344,6 +362,7 @@ finally {
         $state.restart_required=$true
         $state.error+=' BC2 remains open. Enable Restart BC2 before launch, or close BC2 normally and launch again. Reinstalling BC2VR is unnecessary.'
     }
+    Save-NativeReportCompletion
     $state.ended_utc=[DateTime]::UtcNow.ToString('o');Save-State
     # A stop request can return from inside try. The failure exit belongs here
     # so that return cannot conceal a cleanup failure recorded by finally.

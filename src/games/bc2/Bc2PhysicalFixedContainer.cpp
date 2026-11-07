@@ -17,9 +17,10 @@ bool Fresh(const HandInteractionSample& i,std::int64_t now)noexcept {
 math::Matrix4 Contact(const FeedMotionProfile& m)noexcept {
     return m.kind==FeedMotionKind::FreePlacement?Multiply(m.placement.sourceFromGrip,m.placement.weaponFromSource):Multiply(m.motionFromContact,m.weaponFromMotion);
 }
-bool Near(const math::Matrix4& a,const math::Matrix4& b,const FeedContactBinding& c)noexcept {
+bool Near(const math::Matrix4& a,const math::Matrix4& b,const FixedContainerGeometry& g)noexcept {
     return feed_mechanism_detail::Pose(a)&&feed_mechanism_detail::Pose(b)&&
-        feed_interaction_detail::Distance(a,b)<=c.radiusMeters&&feed_interaction_detail::Angle(a,b)<=c.maxAngleRadians;
+        feed_interaction_detail::Distance(a,b)<=(std::max)(g.contact.radiusMeters,g.motion.acquisitionRadiusMeters)&&
+        (g.contact.orientation==FeedContactOrientation::Acquired||feed_interaction_detail::Angle(a,b)<=g.contact.maxAngleRadians);
 }
 }
 struct Bc2PhysicalFixedContainer::Slot {
@@ -34,9 +35,9 @@ struct Bc2PhysicalFixedContainer::Slot {
     std::optional<SupportNeutral> supportNeutral;
     std::optional<ReleaseWait> releaseWait;
     std::optional<FixedContainerGate> acceptedGate;
-    bool closedGatePublished=false;
+    bool closedGatePublished=false,completedHold=false;
     bool carried=false,seedNeutral=false,submissionFailed=false,restart=false,geometryBound=false,recoveryPrepared=false;
-    std::optional<math::Matrix4> carriedSupply,target;
+    std::optional<math::Matrix4> carriedSupply,target,handFromContact;
     FixedContainerStep targetStep=FixedContainerStep::Open;
     std::array<math::Matrix4,16> parts{};
     std::optional<AmmoResourceRequest> request;
@@ -57,7 +58,7 @@ void Bc2PhysicalFixedContainer::Cancel(const HandInteractionSample& input,HandIn
     active_->recoveryPrepared=false;
     active_->supportNeutral.reset();
     active_->acceptedGate.reset();
-    active_->target.reset();active_=nullptr;
+    active_->target.reset();active_->handFromContact.reset();active_->completedHold=false;active_=nullptr;
 }
 Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2PhysicalFixedContainerSample& s,
     HandInteraction& hands,std::uint64_t& intent)noexcept {
@@ -185,7 +186,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
     if(s.observation)s.observation->rawAdmitted=rawFresh;
     if(releaseAttempt)releaseAttempt->rawAdmitted=rawFresh;
     if(slot->policy&&slot->policy->Step()==FixedContainerStep::Complete&&slot->closedGatePublished&&
-       !slot->request&&!slot->restart&&rawFresh&&raw.gripPressed&&
+       !slot->request&&!slot->restart&&!slot->completedHold&&rawFresh&&raw.gripPressed&&
        view->snapshot.counts.loaded<view->snapshot.counts.capacity&&view->snapshot.counts.reserve>0){
         slot->lifetime=0;slot->supply={};slot->restart=true;
     }
@@ -228,7 +229,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
     };
     // Establish the native blocker before starting a new physical gesture.
     const bool priorBlocked=!slot->geometryBound||(slot->policy&&slot->policy->BlocksFire());
-    const bool touching=rawFresh&&raw.grip&&(raw.gripPressed||slot->hand||slot->carried);
+    const bool touching=rawFresh&&raw.grip&&!slot->completedHold&&(raw.gripPressed||slot->hand||slot->carried);
     if(slot->revision>UINT64_MAX-2)return out;
     const FixedContainerGate beforeGate{view->binding,s.input.owner,lifetime,++slot->revision,s.input.sequence,
         s.input.observedNs,s.input.deadlineNs,priorBlocked||touching,!(priorBlocked||touching)};
@@ -247,7 +248,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
     Work work{this,slot,&s,&*view,&terminal,&hands,&intent,rawFresh,beforePublication==FixedContainerGateResult::Published,cause(HandReleaseSite::FixedRaw),&result,&dispatch,&releaseEvidence,releaseAttempt};
     const bool updated=api_.withLedger(api_.context,view->binding,s.input.owner,&work,[](void* opaque,AmmunitionLedger& ledger)noexcept {
         auto& w=*static_cast<Work*>(opaque);auto& self=*w.self;auto& z=*w.slot;const auto& x=*w.sample;const auto& v=*w.view;auto& h=*w.hands;
-        const auto& profile=z.equipment->interaction;const auto now=x.input.nowNs;
+        const auto profile=FixedContainerInteractionProfile(*z.equipment);const auto now=x.input.nowNs;
         if(z.ledger&&z.ledger!=&ledger)return false;
         if(!z.policy){
             try{z.policy=std::make_unique<FixedContainerReload>(profile,v.binding.context,FeedKey{profile.id,z.lifetime},
@@ -281,7 +282,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
             z.binding.data==v.binding.data&&z.binding.persistence==v.binding.persistence&&z.handOwner==x.input.owner;
         if(z.binding.context!=v.binding.context||z.handOwner!=x.input.owner){
             if(!z.policy->RebindContext(v.snapshot,x.input.owner,now,x.weapon))return false;
-            z.hand.reset();z.target.reset();z.handOwner=x.input.owner;z.recoveryPrepared=false;z.supportNeutral.reset();
+            z.hand.reset();z.target.reset();z.handFromContact.reset();z.completedHold=false;z.handOwner=x.input.owner;z.recoveryPrepared=false;z.supportNeutral.reset();
         }
         z.binding=v.binding;
         if(w.rawFresh)z.geometryBound=true;
@@ -291,11 +292,16 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
                 FeedKey{profile.id,profile.revision},z.supply,z.lifetime,ledger,true,x.input.owner,x.weapon);}catch(...){return false;}
             if(!z.policy->Bind(v.snapshot,now))return false;z.lastRaw=0;z.restart=false;z.seedNeutral=true;z.supportNeutral.reset();
         }
+        if(z.completedHold&&(!z.hand||!x.grip||x.input.released[0]||!h.Current(InteractionHand::Left)||
+           h.Current(InteractionHand::Left)->token!=z.hand->token)){
+            if(z.hand){(void)h.Release(x.input,z.hand->token,{HandReleaseSite::FixedGrip});z.hand.reset();}
+            z.target.reset();z.handFromContact.reset();z.completedHold=false;
+        }
         if(!w.rawFresh||x.raw.input.sequence<=z.lastRaw){
             if(w.releaseAttempt)w.releaseAttempt->stage=w.rawFresh?Bc2FixedContainerReleaseStage::DuplicateRaw:Bc2FixedContainerReleaseStage::RawRejected;
             if(!w.rawFresh){
                 z.releaseWait.reset();
-                z.target.reset();z.recoveryPrepared=false;z.supportNeutral.reset();
+                z.target.reset();z.handFromContact.reset();z.completedHold=false;z.recoveryPrepared=false;z.supportNeutral.reset();
                 // The current native view, owner and GunHold were admitted
                 // above. A missing renderer contact cannot discard ammunition
                 // that is still genuinely held; contradictory raw evidence
@@ -308,6 +314,28 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
             return true;
         }
         const auto& r=x.raw;auto original=r.input;original.nowNs=now;
+        if(z.completedHold){
+            const auto held=h.Current(InteractionHand::Left),gun=h.Current(InteractionHand::Right);
+            const bool exact=z.hand&&held&&gun&&held->token==z.hand->token&&
+                held->token.kind==HandClaimKind::Mechanism&&held->token.owner==x.input.owner&&
+                held->token.item==x.weapon&&held->token.prerequisiteClaim==gun->token.id&&
+                held->deadlineNs>now&&z.hand->deadlineNs>now&&sameResource&&
+                ledger.Phase()==AmmunitionLedgerPhase::Ready&&!ledger.WellEmpty()&&
+                ledger.Snapshot().context==v.snapshot.context&&ledger.Snapshot().counts==v.snapshot.counts;
+            if(exact&&r.grip&&x.grip&&!original.released[0]&&!x.input.released[0]){
+                const auto renewed=h.RenewFrom(x.input,original,z.hand->token,
+                    {z.hand->token.contact,original.sequence,original.deadlineNs,true});
+                if(renewed.claim){
+                    z.hand=renewed.claim;z.lastRaw=original.sequence;
+                    w.result->step=z.policy->Step();w.result->status=FixedContainerStatus::Gesture;
+                    w.result->interaction.status=FeedInteractionStatus::Endpoint;
+                    return true; // Completed contact grants no next-step recognition or dispatch.
+                }
+            }
+            if(z.hand){(void)h.Release(x.input,z.hand->token,{HandReleaseSite::FixedGrip});z.hand.reset();}
+            z.target.reset();z.handFromContact.reset();z.completedHold=false;
+            // Only a fresh actual neutral may arm the next operation below.
+        }
         auto step=z.policy->Step();if(step==FixedContainerStep::Complete)return true;
         const auto index=unsigned(step);const auto& g=profile.geometry[index];auto motion=g.motion;
         auto expected=Contact(motion);
@@ -344,7 +372,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
         }
         if(w.allowAcquire&&!z.hand&&pressed&&*w.intent!=UINT64_MAX){
             const bool insertion=step==FixedContainerStep::Insert;
-            const bool eligible=insertion?(z.carried?Near(r.weaponFromWrist,expected,g.contact):r.pouchContact):Near(r.weaponFromWrist,expected,g.contact);
+            const bool eligible=insertion?(z.carried?Near(r.weaponFromWrist,expected,g):r.pouchContact):Near(r.weaponFromWrist,expected,g);
             if(eligible&&(!insertion||(v.snapshot.counts.loaded<v.snapshot.counts.capacity&&v.snapshot.counts.reserve>0))){
                 if(insertion&&!z.carried){
                     motion.placement.weaponFromSource=Multiply(feed_interaction_detail::Inverse(motion.placement.sourceFromGrip),r.weaponFromWrist);
@@ -407,9 +435,17 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
             z.recoveryPrepared=false;
         if(result.interaction.target){
             z.target=result.interaction.target;z.targetStep=step;
+            if(step!=FixedContainerStep::Insert&&result.interaction.status==FeedInteractionStatus::Acquired){
+                // Recovery acquires at its saved raw wrist. Reconstruct the
+                // measured contact before capturing the new wrist offset or
+                // applying a part delta, preserving retained mechanical travel.
+                z.target=Multiply(feed_interaction_detail::Along(g.motion.motionFromContact,g.motion.kind,
+                    std::clamp(result.interaction.progress,0.,1.)*g.motion.travel),g.motion.weaponFromMotion);
+                z.handFromContact=Multiply(r.weaponFromWrist,feed_interaction_detail::Inverse(*z.target));
+            }
             if(step==FixedContainerStep::Insert)z.carriedSupply=result.interaction.target;
             else {
-                const auto delta=Multiply(feed_interaction_detail::Inverse(Contact(g.motion)),*result.interaction.target);
+                const auto delta=Multiply(feed_interaction_detail::Inverse(Contact(g.motion)),*z.target);
                 for(unsigned n=0;n<z.equipment->parts.size();++n)if(z.equipment->parts[n].coupledOpening)
                     z.parts[n]=g.motion.kind==FeedMotionKind::Linear?
                         reload_insertion_detail::BlendRigid(z.equipment->parts[n].weaponFromStepStart[index],
@@ -421,7 +457,10 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
             z.recoveryPrepared=false;
             for(unsigned n=0;n<z.equipment->parts.size();++n)if(z.equipment->parts[n].coupledOpening)
                 z.parts[n]=g.motion.returnToStart?z.equipment->parts[n].weaponFromStepStart[index]:z.equipment->parts[n].weaponFromStepEnd[index];
-            z.target.reset();if(z.hand){(void)h.Release(x.input,z.hand->token,{HandReleaseSite::FixedPhysicalStep});z.hand.reset();}
+            z.completedHold=g.motion.retainWhileGripped&&z.hand&&z.target&&r.grip&&x.grip&&
+                !original.released[0]&&!x.input.released[0];
+            if(!z.completedHold){z.target.reset();z.handFromContact.reset();
+                if(z.hand){(void)h.Release(x.input,z.hand->token,{HandReleaseSite::FixedPhysicalStep});z.hand.reset();}}
         }
         if(result.dispatch){
             const auto requestId=self.api_.nextRequest(self.api_.context);
@@ -461,6 +500,8 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
     if(slot->releaseWait)t.hand.reset(); // Retained release evidence is not a live hand claim.
     t.blocksFire=out.blocksFire;t.carried=slot->carried;t.pending=bool(slot->request);t.step=slot->policy->Step();t.targetStep=slot->targetStep;
     t.lifetime=slot->lifetime;t.revision=slot->revision;t.target=slot->target;t.carriedSupply=slot->carriedSupply;t.parts=slot->parts;t.partCount=unsigned(e->parts.size());
+    if(t.target&&t.targetStep!=FixedContainerStep::Insert&&slot->handFromContact)
+        t.target=Multiply(*slot->handFromContact,*t.target);
     t.grip=s.grip;t.gripPressed=s.gripPressed;
     if(s.geometrySequence==s.input.sequence&&s.trackingEpoch==s.input.owner.space&&feed_mechanism_detail::Pose(s.bodyFromHand)){
         const auto contact=pouch_;double d=0;

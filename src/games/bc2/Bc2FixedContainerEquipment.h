@@ -21,6 +21,19 @@ inline const FixedContainerEquipmentProfile* FindFixedContainerEquipment(std::st
         }
     return found;
 }
+// Shared BC2 handle policy; measured axes, travel, contacts and native ammo
+// semantics stay in the registered profile. Free-placement insertion is exact.
+inline interaction::FixedContainerProfile FixedContainerInteractionProfile(const FixedContainerEquipmentProfile& e)noexcept {
+    auto out=e.interaction;
+    for(unsigned step=0;step<out.geometry.size();++step){
+        auto& g=out.geometry[step];
+        if(step==unsigned(interaction::FixedContainerStep::Insert)||
+           (g.motion.kind!=interaction::FeedMotionKind::Hinge&&g.motion.kind!=interaction::FeedMotionKind::Linear))continue;
+        g.contact.orientation=interaction::FeedContactOrientation::Acquired;
+        g.motion.retainWhileGripped=true;g.motion.acquisitionRadiusMeters=.12f;
+    }
+    return out;
+}
 inline bool FixedContainerHandOwner(const AmmoResourceBinding& b,const interaction::HandInteractionOwner& h)noexcept {
     return h.actor==((std::uint64_t(b.owner.weak)<<32)|b.owner.soldier)&&h.actorGeneration==b.owner.actorGeneration&&
         h.equipGeneration&&h.space==b.owner.space;

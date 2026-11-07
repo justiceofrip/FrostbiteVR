@@ -300,3 +300,31 @@ function Read-Bc2NativeRunOutcome([string]$Path,[uint32]$ExpectedPid) {
         return $row
     }catch{return $null}finally{if($file){$file.Dispose()}}
 }
+
+function Read-Bc2NativeReportCompletion([string]$Path,[uint32]$ExpectedPid) {
+    $result=@{status='unavailable';complete=$false;bytes=$null};$file=$null
+    try {
+        Assert-FvrNoLinks $Path
+        if(-not(Test-Path -LiteralPath $Path -PathType Leaf)){$result.status='missing';return $result}
+        $file=[IO.File]::Open($Path,'Open','Read',([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+        $count=$file.Length;$result.bytes=$count
+        if($count -eq 0){$result.status='empty';return $result}
+        # Final traces include gameplay arrays; bound the diagnostic read without
+        # truncating JSON or modifying the original report/streaming evidence.
+        if($count -gt 64MB){$result.status='too_large';return $result}
+        $bytes=[byte[]]::new([int]$count);$read=0
+        $result.status='incomplete'
+        while($read -lt $count){$n=$file.Read($bytes,$read,[int]$count-$read);if($n -eq 0){return $result};$read+=$n}
+        if($file.Length -ne $count){return $result}
+        $result.status='malformed'
+        $row=[Text.UTF8Encoding]::new($false,$true).GetString($bytes)|ConvertFrom-Json -AsHashtable -NoEnumerate -Depth 64 -ErrorAction Stop
+        if($row -isnot [hashtable]){return $result}
+        if(-not $row.ContainsKey('pid') -or -not $row.ContainsKey('hooks_disabled')){$result.status='incomplete';return $result}
+        if(($row.pid -isnot [int] -and $row.pid -isnot [long]) -or $row.pid -le 0 -or $row.pid -gt [uint32]::MaxValue -or
+            $row.hooks_disabled -isnot [bool]){return $result}
+        if($row.pid -ne $ExpectedPid){$result.status='pid_mismatch';return $result}
+        if(-not $row.hooks_disabled){$result.status='incomplete';return $result}
+        $result.status='complete';$result.complete=$true
+        return $result
+    }catch{return $result}finally{if($file){$file.Dispose()}}
+}

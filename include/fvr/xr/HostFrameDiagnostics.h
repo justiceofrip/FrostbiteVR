@@ -41,6 +41,14 @@ enum HostGapReason : std::uint32_t {HostMenu=1,HostShouldRender=2,HostFocus=4,Ho
     HostHead=16,HostViews=32,HostTracking=64,HostSpace=128,HostNoProvider=256,HostNoNewPair=512,
     HostRetainedAge=1024,HostRetainedSpace=2048,HostRetainedFuture=4096,HostRejectedPair=8192,
     HostNoRetained=16384,HostEndFailed=32768};
+// Uncensored CPU call boundaries. Zero/descending stamps remain visible as
+// invalid clock observations; consumers must not turn them into durations.
+struct HostCallInterval {std::int64_t startedNs=0,returnedNs=0;};
+enum class HostCopyPollPhase {PreWait,PostInput,BeforePresentation,BoundedService,AfterEnd};
+struct HostCopyPollObservation : HostCallInterval {
+    HostCopyPollPhase phase=HostCopyPollPhase::PreWait;
+    std::uint32_t result=0,error=0;
+};
 struct HostCopyObservation {
     // Copy phase/result are diagnostic facts, never authority to acknowledge a
     // shared ticket. Result is TransferResult's value; error preserves HRESULT bits.
@@ -60,6 +68,17 @@ struct HostCopyObservation {
     graphics::PairTicket copyTicket{};
     void SetCopyTicket(const graphics::PairTicket& ticket)noexcept {copyTicket=ticket;copySequence=ticket.sequence;}
     std::uint32_t copyResult=0,copyError=0;
+    // Every retained poll belongs to copyTicket above. Four covers ordinary
+    // service points; an opt-in service may exceed it. Never overwrite samples
+    // or grow storage; disclose each omitted poll without changing service.
+    static constexpr unsigned PollCapacity=4;
+    std::array<HostCopyPollObservation,PollCapacity> copyPolls{};
+    unsigned copyPollCount=0;
+    std::uint64_t copyPollDropped=0;
+    void RecordCopyPoll(const HostCopyPollObservation& poll)noexcept {
+        if(copyPollCount<PollCapacity)copyPolls[copyPollCount++]=poll;
+        else AddHostDiagnosticSaturated(copyPollDropped,1);
+    }
 };
 struct HostFrameObservation : HostCopyObservation {
     std::uint64_t frame=0,wallMs=0,space=0,retainedGeneration=0,retainedSpace=0;
@@ -68,6 +87,9 @@ struct HostFrameObservation : HostCopyObservation {
     std::uint64_t priorInputSuccessGeneration=0;
     std::int64_t inputStartedNs=0,inputReturnedNs=0,lastInputSuccessReturnedNs=0;
     std::int64_t priorInputSuccessReturnedNs=0;
+    HostCallInterval waitFrame{};
+    std::int32_t waitFrameResult=0;
+    bool waitFrameAttempted=false;
     std::uint32_t inputResult=0,reasons=0,layers=0,menuLayers=0;
     std::int32_t endResult=0;
     bool shouldRender=false,focused=false,present=false,viewsValid=false,headValid=false,trackingValid=false;
@@ -133,6 +155,7 @@ struct HostFrameDiagnostics {
     std::uint64_t copySubmittedFrames=0,copyPendingFrames=0,copyCompletedFrames=0,copyRetiredFrames=0,copyCancelledFrames=0;
     std::uint64_t maxCopyPendingAgeNs=0,copyPreWaitPollFrames=0,copyPreWaitCompletedFrames=0;
     std::uint64_t copyCompletedObservations=0,copyDualTicketFrames=0,copyObservationOverflowFrames=0;
+    std::uint64_t copyPollOverflowFrames=0;
     std::uint64_t copyAfterEndPollFrames=0,copyAfterEndCompletedFrames=0;
     std::uint64_t copyPostInputPollFrames=0,copyPostInputCompletedFrames=0;
     std::uint32_t lastCopyResult=0,lastCopyError=0;
@@ -197,12 +220,16 @@ struct HostFrameDiagnostics {
         copyCompletedObservations+=unsigned(f.copyCompleted)+unsigned(f.hasPriorCopy&&prior.copyCompleted);
         if(f.hasPriorCopy&&copyObserved)++copyDualTicketFrames;
         if(f.copyObservationOverflow)++copyObservationOverflowFrames;
+        if(f.copyPollDropped||(f.hasPriorCopy&&prior.copyPollDropped))++copyPollOverflowFrames;
         if(f.hasPriorCopy){maxCopyPendingAgeNs=(std::max)(maxCopyPendingAgeNs,prior.copyPendingAgeNs);
             lastCopyResult=prior.copyResult;lastCopyError=prior.copyError;}
         if(copyObserved){maxCopyPendingAgeNs=(std::max)(maxCopyPendingAgeNs,f.copyPendingAgeNs);
             lastCopyResult=f.copyResult;lastCopyError=f.copyError;}
-        // Pending age grows each tick; only phase/identity/result changes merit
-        // a row. Aggregates still cover every frame, including an unchanged wait.
+        // Preserve every frame with query samples, including repeated Busy,
+        // so wait boundaries remain with their exact current/prior tickets.
+        // The existing ring and dropped count still bound retained history.
+        const bool copyPolled=f.copyPollCount||f.copyPollDropped||
+            (f.hasPriorCopy&&(prior.copyPollCount||prior.copyPollDropped));
         const bool ticketChanged=f.copyTicket.resourceEpoch!=previousCopyTicket.resourceEpoch||
             f.copyTicket.sequence!=previousCopyTicket.sequence||f.copyTicket.frameId!=previousCopyTicket.frameId||
             f.copyTicket.trackingGeneration!=previousCopyTicket.trackingGeneration||
@@ -238,7 +265,7 @@ struct HostFrameDiagnostics {
         else ++failedFrames;
         const bool changed=!frames||f.reasons!=previousReasons||f.layers!=previousLayers||f.worldLayer!=previousWorld||
             f.inputKnown!=previousInputKnown||f.inputSucceeded!=previousInputSucceeded||f.inputResult!=previousInputResult||copyChanged;
-        if(changed||slow||!f.endSucceeded){rows[next]=f;next=(next+1)%Capacity;++recorded;
+        if(changed||copyPolled||slow||!f.endSucceeded){rows[next]=f;next=(next+1)%Capacity;++recorded;
             if(count<Capacity)++count;else ++dropped;}
         ++frames;previousSpace=f.space;previousReasons=f.reasons;previousLayers=f.layers;previousWorld=f.worldLayer;
         previousInputKnown=f.inputKnown;previousInputSucceeded=f.inputSucceeded;lastFrameEndedNs=f.endedNs;
@@ -266,6 +293,7 @@ struct HostFrameDiagnostics {
            <<",\"copy_post_input_poll_frames\":"<<copyPostInputPollFrames<<",\"copy_post_input_completed_frames\":"<<copyPostInputCompletedFrames
            <<",\"copy_completed_observations\":"<<copyCompletedObservations
            <<",\"copy_dual_ticket_frames\":"<<copyDualTicketFrames<<",\"copy_observation_overflow_frames\":"<<copyObservationOverflowFrames
+           <<",\"copy_poll_capacity\":"<<HostCopyObservation::PollCapacity<<",\"copy_poll_overflow_frames\":"<<copyPollOverflowFrames
            <<",\"copy_after_end_poll_frames\":"<<copyAfterEndPollFrames<<",\"copy_after_end_completed_frames\":"<<copyAfterEndCompletedFrames
            <<",\"last_copy_result\":"<<lastCopyResult<<",\"last_copy_error\":"<<lastCopyError
            <<",\"last_input_success_generation\":"<<lastInputSuccessGeneration<<",\"last_input_success_returned_ns\":"<<lastInputSuccessReturnedNs
@@ -322,9 +350,25 @@ struct HostFrameDiagnostics {
                <<",\"copy_result\":"<<f.copyResult<<",\"copy_error\":"<<f.copyError
                <<",\"copy_composed\":"<<f.copyComposed<<",\"copy_composed_ns\":"<<f.copyComposedNs
                <<",\"copy_after_end_polled\":"<<f.copyAfterEndPolled<<",\"copy_after_end_completed\":"<<f.copyAfterEndCompleted;
+            out<<",\"copy_poll_dropped\":"<<f.copyPollDropped<<",\"copy_polls\":[";
+            for(unsigned i=0;i<f.copyPollCount;++i){if(i)out<<',';const auto& poll=f.copyPolls[i];
+                const char* phase="unknown";
+                switch(poll.phase){
+                    case HostCopyPollPhase::PreWait:phase="pre_wait";break;
+                    case HostCopyPollPhase::PostInput:phase="post_input";break;
+                    case HostCopyPollPhase::BeforePresentation:phase="before_presentation";break;
+                    case HostCopyPollPhase::BoundedService:phase="bounded_service";break;
+                    case HostCopyPollPhase::AfterEnd:phase="after_end";break;
+                }
+                out<<"{\"phase\":\""<<phase<<"\",\"started_ns\":"<<poll.startedNs<<",\"returned_ns\":"<<poll.returnedNs
+                   <<",\"result\":"<<poll.result<<",\"error\":"<<poll.error<<'}';
+            }
+            out<<']';
     }
     static void WriteFrame(std::ostream& out,const HostFrameObservation& f){
             out<<"{\"frame\":"<<f.frame<<",\"wall_ms\":"<<f.wallMs<<",\"started_ns\":"<<f.startedNs<<",\"ended_ns\":"<<f.endedNs
+               <<",\"wait_frame_attempted\":"<<f.waitFrameAttempted<<",\"wait_frame_started_ns\":"<<f.waitFrame.startedNs
+               <<",\"wait_frame_returned_ns\":"<<f.waitFrame.returnedNs<<",\"wait_frame_result\":"<<f.waitFrameResult
                <<",\"gap_before_ns\":"<<f.gapBeforeNs<<",\"predicted_ns\":"<<f.predictedNs<<",\"space\":"<<f.space<<",\"reasons\":"<<f.reasons
                <<",\"world_layer\":"<<f.worldLayer<<",\"layer_count\":"<<f.layers<<",\"menu_layers\":"<<f.menuLayers
                <<",\"end_attempted\":"<<f.endAttempted<<",\"end_succeeded\":"<<f.endSucceeded<<",\"end_result\":"<<f.endResult
@@ -349,10 +393,12 @@ struct HostFrameDiagnostics {
 class HostStageTimer {
 public:
     using Clock=std::int64_t(*)()noexcept;
-    HostStageTimer(HostFrameObservation& f,HostStage s,Clock c)noexcept:frame_(f),stage_(s),clock_(c),start_(c()){}
-    ~HostStageTimer(){const auto end=clock_();if(start_>0&&end>=start_){const auto index=unsigned(stage_);
+    HostStageTimer(HostFrameObservation& f,HostStage s,Clock c,HostCallInterval* interval=nullptr)noexcept:
+        frame_(f),stage_(s),clock_(c),start_(c()),interval_(interval){if(interval_)interval_->startedNs=start_;}
+    ~HostStageTimer(){const auto end=clock_();if(interval_)interval_->returnedNs=end;
+        if(start_>0&&end>=start_){const auto index=unsigned(stage_);
         frame_.stageObservedMask|=1u<<index;
         if(AddHostDiagnosticSaturated(frame_.stageNs[index],std::uint64_t(end-start_)))frame_.stageSaturatedMask|=1u<<index;}}
-private:HostFrameObservation& frame_;HostStage stage_;Clock clock_;std::int64_t start_;
+private:HostFrameObservation& frame_;HostStage stage_;Clock clock_;std::int64_t start_;HostCallInterval* interval_;
 };
 }

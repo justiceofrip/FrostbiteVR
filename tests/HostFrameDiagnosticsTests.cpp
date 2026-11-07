@@ -72,6 +72,96 @@ int LegacyProviderContract(){
 }
 std::int64_t fakeNow=1000000000;
 std::int64_t Clock()noexcept{return fakeNow;}
+unsigned boundaryClockCalls=0;
+std::int64_t BoundaryClock()noexcept{++boundaryClockCalls;return fakeNow;}
+void ObservePoll(HostFrameObservation& f,HostCopyPollPhase phase,std::uint32_t result,
+    std::uint32_t error,std::int64_t start,std::int64_t returned){
+    HostCopyPollObservation poll;poll.phase=phase;fakeNow=start;
+    {HostStageTimer timer(f,HostStage::ColorPoll,BoundaryClock,&poll);fakeNow=returned;}
+    poll.result=result;poll.error=error;f.RecordCopyPoll(poll);
+}
+int CopyPollBoundariesAcrossWait(){
+    // TransferResult fixture values: Ok=0, Busy=1, Faulted=4. No query, wait,
+    // ACK or native device is issued by the diagnostic recorder itself.
+    constexpr std::uint32_t okay=0,busy=1,faulted=4;
+    auto f=Frame();f.copyPending=true;f.copyTicket.sequence=7;f.copyTicket.resourceEpoch=9;
+    f.copyTicket.frameId=11;f.copyTicket.trackingGeneration=13;f.copyTicket.spaceGeneration=1;
+    f.copyTicket.predictedNs=15000;f.copyTicket.session[0]=17;f.copySequence=7;
+    boundaryClockCalls=0;
+    ObservePoll(f,HostCopyPollPhase::PreWait,busy,0,1000,1100);
+    fakeNow=1200;f.waitFrameAttempted=true;
+    {HostStageTimer timer(f,HostStage::WaitFrame,BoundaryClock,&f.waitFrame);fakeNow=2000;}
+    f.waitFrameResult=0;
+    ObservePoll(f,HostCopyPollPhase::BeforePresentation,okay,0,2100,2200);
+    CHECK(boundaryClockCalls==6); // Reuses the stage timer's two reads per call.
+    CHECK(f.copyPollCount==2&&f.copyPollDropped==0&&f.copyPending&&!f.copyCompleted);
+    CHECK(f.copyPolls[0].result==busy&&f.copyPolls[0].returnedNs<f.waitFrame.startedNs);
+    CHECK(f.copyPolls[1].result==okay&&f.copyPolls[1].startedNs>f.waitFrame.returnedNs);
+    HostFrameDiagnostics d;d.Observe(f);const auto& retained=d.Row(0);
+    CHECK(retained.stageNs[unsigned(HostStage::WaitFrame)]==0);
+    CHECK(retained.stageNs[unsigned(HostStage::ColorPoll)]==0);
+    CHECK(d.stageAggregates[unsigned(HostStage::WaitFrame)].totalNs==800);
+    CHECK(d.stageAggregates[unsigned(HostStage::ColorPoll)].totalNs==200);
+    CHECK(retained.waitFrame.startedNs==1200&&retained.waitFrame.returnedNs==2000);
+    CHECK(retained.copyPolls[0].startedNs==1000&&retained.copyPolls[1].returnedNs==2200);
+    CHECK(retained.copyTicket.trackingGeneration==13&&retained.copyTicket.session[0]==17);
+    std::ostringstream json;HostFrameDiagnostics::WriteFrame(json,retained);
+    CHECK(json.str().find("\"wait_frame_started_ns\":1200,\"wait_frame_returned_ns\":2000,\"wait_frame_result\":0")!=std::string::npos);
+    CHECK(json.str().find("\"phase\":\"pre_wait\",\"started_ns\":1000,\"returned_ns\":1100,\"result\":1,\"error\":0")!=std::string::npos);
+    CHECK(json.str().find("\"phase\":\"before_presentation\",\"started_ns\":2100,\"returned_ns\":2200,\"result\":0,\"error\":0")!=std::string::npos);
+    // A failed wait or clock does not erase its raw boundaries or manufacture
+    // a valid duration; error results remain distinct from observed readiness.
+    f=Frame(2);f.SetCopyTicket(retained.copyTicket);f.waitFrameAttempted=true;
+    fakeNow=0;{HostStageTimer timer(f,HostStage::WaitFrame,BoundaryClock,&f.waitFrame);fakeNow=2300;}
+    f.waitFrameResult=-2;
+    ObservePoll(f,HostCopyPollPhase::PostInput,faulted,0x887a0005u,2500,2400);
+    CHECK(f.stageObservedMask==0&&f.waitFrame.returnedNs==2300);
+    CHECK(f.copyPolls[0].startedNs==2500&&f.copyPolls[0].returnedNs==2400);
+    CHECK(f.copyPolls[0].result==faulted&&f.copyPolls[0].error==0x887a0005u);
+    d.Observe(f);CHECK(d.Row(1).waitFrameResult==-2);
+    CHECK(d.stageAggregates[unsigned(HostStage::WaitFrame)].frames==1);
+    CHECK(d.stageAggregates[unsigned(HostStage::ColorPoll)].frames==1);
+    return 0;
+}
+int CopyPollTicketsOverflowAndRetention(){
+    auto f=Frame();f.copyTicket.sequence=7;f.copyTicket.resourceEpoch=9;f.copyTicket.session[0]=17;f.copySequence=7;
+    ObservePoll(f,HostCopyPollPhase::PreWait,1,0,1000,1100);
+    ObservePoll(f,HostCopyPollPhase::PostInput,0,0,2100,2200);
+    f.copyComposed=f.copyCompleted=true;CHECK(f.PreserveCompletedCopy());
+    CHECK(f.copyPollCount==0&&f.copyPollDropped==0&&f.priorCopy.copyPollCount==2);
+    auto next=f.priorCopy.copyTicket;++next.resourceEpoch;++next.session[0];f.SetCopyTicket(next);
+    for(unsigned i=0;i<HostCopyObservation::PollCapacity+3;++i)
+        ObservePoll(f,HostCopyPollPhase::BoundedService,1,0,3000+i*100,3010+i*100);
+    CHECK(f.copyPollCount==HostCopyObservation::PollCapacity&&f.copyPollDropped==3);
+    CHECK(f.copyPolls[0].startedNs==3000&&f.copyPolls[3].returnedNs==3310);
+    CHECK(f.priorCopy.copyPolls[1].result==0&&f.priorCopy.copyTicket.resourceEpoch==9);
+    CHECK(f.copyTicket.sequence==f.priorCopy.copyTicket.sequence&&f.copyTicket.resourceEpoch==10);
+    f.copyError=258; // A retirement timeout must not replace the query's error.
+    CHECK(f.copyPolls[0].error==0);
+    HostFrameDiagnostics d;d.Observe(f);
+    CHECK(d.copyPollOverflowFrames==1&&d.copyDualTicketFrames==1);
+    std::ostringstream json;HostFrameDiagnostics::WriteFrame(json,d.Row(0));
+    CHECK(json.str().find("\"copy_poll_dropped\":3")!=std::string::npos);
+    CHECK(json.str().find("\"phase\":\"bounded_service\"")!=std::string::npos);
+    CHECK(json.str().find("\"phase\":\"post_input\"")!=std::string::npos);
+    CHECK(d.Row(0).priorCopy.copyPolls[1].returnedNs==2200);
+    // Repeated Busy/result/identity still records each frame, with the existing
+    // ring loss count. No slow-stage or copy-phase change is required.
+    for(unsigned n=2;n<=300;++n){f=Frame(n);f.SetCopyTicket(next);f.copyPending=true;
+        ObservePoll(f,HostCopyPollPhase::PreWait,1,0,n*10000,n*10000+10);d.Observe(f);}
+    CHECK(d.frames==300&&d.recorded==300&&d.count==256&&d.dropped==44);
+    CHECK(d.Row(0).frame==45&&d.Row(0).copyPolls[0].startedNs==450000);
+    CHECK(d.Row(255).copyPolls[0].returnedNs==3000010&&d.copyPollOverflowFrames==1);
+    // Explicit overflow survives promotion to prior without contaminating a
+    // successor. Saturating count cannot wrap into a false no-loss claim.
+    f.copyPollDropped=~std::uint64_t{0};f.copyPollCount=HostCopyObservation::PollCapacity;
+    f.RecordCopyPoll({});CHECK(f.copyPollDropped==~std::uint64_t{0});
+    f.copyPending=false;f.copyCompleted=f.copyComposed=true;CHECK(f.PreserveCompletedCopy());
+    CHECK(f.priorCopy.copyPollDropped==~std::uint64_t{0}&&f.copyPollDropped==0&&f.copyPollCount==0);
+    d.Observe(f);CHECK(d.copyPollOverflowFrames==2);
+    CHECK(sizeof(HostCopyObservation)<=320&&sizeof(HostFrameDiagnostics)<320*1024);
+    return 0;
+}
 int BoundedAndTimer(){
     HostFrameDiagnostics d;
     for(unsigned n=1;n<=300;++n){auto f=Frame(n);{HostStageTimer t(f,HostStage::EndFrame,Clock);fakeNow+=30000000;}
@@ -82,7 +172,9 @@ int BoundedAndTimer(){
     CHECK(d.stageAggregates[unsigned(HostStage::EndFrame)].totalNs==9000000000ull);
     std::ostringstream json;d.Write(json);CHECK(json.str().find("\"zero_layer_frames\":0")!=std::string::npos);
     CHECK(json.str().find("\"slow_stage_ns\":[")!=std::string::npos);
-    CHECK(json.str().size()<384000);
+    CHECK(json.str().size()<512000); // Fixed ring, including uncensored boundary fields.
+    std::printf("Host diagnostic bounds: copy=%zu frame=%zu ring=%zu bytes; empty-poll report=%zu bytes\n",
+        sizeof(HostCopyObservation),sizeof(HostFrameObservation),sizeof(HostFrameDiagnostics),json.str().size());
     return 0;
 }
 
@@ -696,9 +788,11 @@ int ThreeSourceImportsKeepOneCopyAndDepthQuartet(){
 }
 
 int main(int argc,char** argv){
+    if(argc==2&&std::string(argv[1])=="--copy-poll-boundaries")return CopyPollBoundariesAcrossWait()||CopyPollTicketsOverflowAndRetention();
     if(argc==2&&std::string(argv[1])=="--first-input-gap")return FirstPublicationGapSurvivesOverwrite();
     if(argc==2&&std::string(argv[1])=="--focused-render")return FocusedRenderEvidenceSurvivesIdleTail();
     if(FocusedRenderEvidenceSurvivesIdleTail())return 1;
+    if(CopyPollBoundariesAcrossWait()||CopyPollTicketsOverflowAndRetention())return 1;
     if(SourceImportCacheCases()||ThreeSourceImportsKeepOneCopyAndDepthQuartet())return 1;
     if(PostInputComposedServicePolicy()||ComposedLeaseKeepsSourceOwnership()||DualTicketCompletionKeepsExactEvidence()||DualTicketFirstFailureSurvivesWrap()||CopyLeaseCompletionAndCancellation()||PreWaitCompletionTimestamps()||CopyTicketOwnsDeliveredIdentity()||UncensoredStageAggregates()||StageHistogramBoundariesAndOverflow()||StageTimerZeroRepeatedAndInvalidClock()||FirstPublicationGapSurvivesOverwrite()||FirstRejectedFrameSurvivesOverwrite()||CopyPhasesBelowSlowThreshold()||LayersAndReasons()||PublicationAndSlowStages()||LegacyProviderContract()||BoundedAndTimer())return 1;
     std::puts("Host diagnostics: menu/zero distinction, loss/recovery reasons, input outcomes, slow stages and bounded overwrite passed");return 0;}

@@ -472,14 +472,20 @@ struct Host {
             diagnostic.copyPreWaitCompleted=beforeWait&&diagnostic.copyCompleted;
             observeCopy();
         };
-        const auto pollCopy=[&](bool beforeWait){
+        const auto pollCopy=[&](HostCopyPollPhase phase){
             if(!pendingCopy||!pendingCopy->Copying())return;
+            const bool beforeWait=phase==HostCopyPollPhase::PreWait;
             Require(pendingCopy->importIndex<HostSourceImportCache::Capacity&&sourceImports.ActiveEntry(pendingCopy->ticket)==pendingCopy->importIndex,
                 "Pending copy lost its exact imported source entry");
             auto& consumer=consumers[pendingCopy->importIndex];
             observeCopy();diagnostic.copyPreWaitPolled|=beforeWait;
-            const auto copied=timed(HostStage::ColorPoll,[&]{return consumer.PollCopy(pendingCopy->ticket);});
-            diagnostic.copyResult=std::uint32_t(copied);diagnostic.copyError=consumer.LastError();
+            HostCopyPollObservation poll;poll.phase=phase;
+            graphics::TransferResult copied;
+            {HostStageTimer timer(diagnostic,HostStage::ColorPoll,BodyPropClockNs,&poll);
+                copied=consumer.PollCopy(pendingCopy->ticket);}
+            poll.result=std::uint32_t(copied);poll.error=consumer.LastError();
+            diagnostic.RecordCopyPoll(poll);
+            diagnostic.copyResult=poll.result;diagnostic.copyError=poll.error;
             if(copied==graphics::TransferResult::Ok){completeCopy(beforeWait);return;}
             // Single zero-wait poll. Busy retains images and still permits this
             // frame's input/menu work; it never spins or extends the pose age.
@@ -500,7 +506,7 @@ struct Host {
         if(stopping||sessionState!=XR_SESSION_STATE_FOCUSED||!userPresent){
             CancelPendingPresentation();if(provider)provider->Suspend();
         }else if(!spaceChanges.empty()&&provider)provider->Suspend();
-        pollCopy(true);
+        pollCopy(HostCopyPollPhase::PreWait);
         // A fault retired the old generation, not a normal completion. Keep
         // this frame's only copy observation and retry delivery next frame.
         if(carriedComposed&&!pendingCopy)carriedCopy=true;
@@ -524,7 +530,11 @@ struct Host {
             report.frameDiagnostics.Input(input.generation,diagnostic.inputReturnedNs,result.known,result.succeeded);
         };
         XrFrameWaitInfo wait{XR_TYPE_FRAME_WAIT_INFO};XrFrameState frame{XR_TYPE_FRAME_STATE};
-        Check(timed(HostStage::WaitFrame,[&]{return api.WaitFrame(session,&wait,&frame);}),"Wait frame");++report.waitedFrames;frameTime=frame.predictedDisplayTime;
+        XrResult waited;
+        {HostStageTimer timer(diagnostic,HostStage::WaitFrame,BodyPropClockNs,&diagnostic.waitFrame);
+            diagnostic.waitFrameAttempted=true;waited=api.WaitFrame(session,&wait,&frame);}
+        diagnostic.waitFrameResult=std::int32_t(waited);
+        Check(waited,"Wait frame");++report.waitedFrames;frameTime=frame.predictedDisplayTime;
         diagnostic.predictedNs=frameTime;diagnostic.shouldRender=frame.shouldRender==XR_TRUE;
         XrFrameBeginInfo begin{XR_TYPE_FRAME_BEGIN_INFO};Check(timed(HostStage::BeginFrame,[&]{return api.BeginFrame(session,&begin);}),"Begin frame");frameOpen=true;
         for(auto at=spaceChanges.begin();at!=spaceChanges.end();)if(*at<=frameTime){AdvanceReference(interaction::TrackingReferenceChange::RuntimeSpaceReplacement);referenceValid=false;retained.Reset();at=spaceChanges.erase(at);}else ++at;
@@ -605,7 +615,7 @@ struct Host {
         // is one zero-wait poll of the held ticket, never another delivery.
         const auto postInput=ServiceComposedCopyAfterInput(pendingCopy,[&]{
             diagnostic.copyPostInputPolled=true;++report.privateGpuOrderedPresent.postInputPolls;
-            pollCopy(false);
+            pollCopy(HostCopyPollPhase::PostInput);
         },[&](const PendingCopy&){
             diagnostic.copyPostInputCompleted=true;++report.privateGpuOrderedPresent.postInputRetirements;
             return diagnostic.PreserveCompletedCopy();
@@ -714,7 +724,7 @@ struct Host {
                     (pendingCopy->Ready()||consumer.HasPendingCopy());
             };
             const auto pending=[&]()noexcept {return pendingCopy&&pendingCopy->Copying();};
-            const auto pump=[&]()noexcept {copyPolledAfterSubmit=true;pollCopy(false);};
+            const auto pump=[&]()noexcept {copyPolledAfterSubmit=true;pollCopy(HostCopyPollPhase::BoundedService);};
             const auto clock=[]()noexcept {LARGE_INTEGER q{};return QueryPerformanceCounter(&q)&&q.QuadPart>0?std::uint64_t(q.QuadPart):0;};
             const auto pause=[&]()noexcept {return copyServiceWait.Pause();};
             const auto serviced=ServiceBoundedHostCopy(report.privateHostCopyService.BudgetTicks(),admitted,pending,pump,clock,pause);
@@ -728,7 +738,7 @@ struct Host {
             // query before composition, unless the private service polled it.
             // Busy retains the exact source; only query success makes it Ready.
             ServiceUncomposedCopyBeforePresentation(pendingCopy,submittedCopy,
-                copyPolledAfterSubmit,[&]{pollCopy(false);});
+                copyPolledAfterSubmit,[&]{pollCopy(HostCopyPollPhase::BeforePresentation);});
             observeCopy();
             if(pendingCopy&&!pendingCopy->Composed()&&(pendingCopy->Ready()||
                (pendingCopy->gpuOrdered&&pendingCopy->Copying()&&pendingCopy->importIndex<HostSourceImportCache::Capacity&&consumers[pendingCopy->importIndex].HasPendingCopy()))){
@@ -810,7 +820,7 @@ struct Host {
         // zero-wait completion observation. No second presentation or delivery.
         if(pendingCopy&&pendingCopy->Composed()){
             diagnostic.copyAfterEndPolled=true;++report.privateGpuOrderedPresent.postEndPolls;
-            pollCopy(false);
+            pollCopy(HostCopyPollPhase::AfterEnd);
             if(pendingCopy&&pendingCopy->Ready()){
                 diagnostic.copyAfterEndCompleted=true;++report.privateGpuOrderedPresent.postEndCompletions;
                 pendingCopy.reset();

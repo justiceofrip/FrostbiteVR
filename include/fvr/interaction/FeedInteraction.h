@@ -456,9 +456,10 @@ public:
         out.progress=travel/motion.travel;
         const auto expected=Along(grabbed_,motion.kind,travel);
         const double overtravel=1-motion.releaseFraction;
-        if(motion.retainWhileGripped&&motion.kind==FeedMotionKind::Hinge){
-            // A hinged part constrains position, not the player's wrist roll.
-            // Project natural off-axis/radial motion onto its one measured DOF.
+        if(motion.retainWhileGripped){
+            // A held mechanical part constrains position, not wrist roll.
+            // Project onto its measured hinge or rail; a discontinuous position
+            // was already frozen/rebased above and cannot earn endpoint dwell.
             out.progress=std::clamp(out.progress,0.,1.);travel=out.progress*motion.travel;
         }else if(out.progress < -overtravel||out.progress>1+overtravel||Distance(local,expected)>motion.pathToleranceMeters||
                  Angle(local,expected)>motion.orientationToleranceRadians){

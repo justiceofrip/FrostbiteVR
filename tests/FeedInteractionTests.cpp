@@ -809,7 +809,50 @@ int HeldPlacementRejectsTeleportCompletionWithoutDroppingGrasp(){
     return 0;
 }
 }
+int HeldLinearProjectsNaturalMotionWithoutTeleportCompletion(){
+    // Also protects opt-in belt-fed rails sharing the fixed-breech path.
+    for(const auto op:{Op::ReleaseLatch,Op::SeatFeed,Op::CycleAction}){
+        Fixture f(op);f.Motion().retainWhileGripped=true;f.Motion().acquisitionRadiusMeters=.12f;
+        f.p.contacts[f.Part()].orientation=FeedContactOrientation::Acquired;f.graspOrientation=Turn(2.1f);
+        const auto step=[&](float progress,float drift=0,float twist=0,bool grip=true){
+            f.graspOrientation=Turn(2.1f+twist);f.Prepare(progress,grip);
+            f.sample.contact.weaponFromHandContact.values[3][1]+=.09f+drift;
+            return f.Run();
+        };
+        CHECK(step(0,0,0,false).status==Status::Armed);CHECK(step(0).status==Status::Acquired);
+        // A full-travel teleport does not move the part or create completion.
+        CHECK(step(1).status==Status::Moving&&!f.result.completion&&f.result.progress==0);
+        for(unsigned n=1;n<=10;++n){
+            CHECK(step(1+.095f*n,.003f*n,.2f*n).status<Status::InvalidProfile);
+            CHECK(!f.result.completion);
+        }
+        CHECK(step(1.95f,.03f,2).status==Status::Endpoint);
+        const auto endpoint=step(1.95f,.03f,2);
+        if(op==Op::CycleAction){
+            CHECK(endpoint.status==Status::Returning&&!endpoint.completion);
+            for(unsigned n=1;n<=10;++n)step(1.95f-.095f*n,.03f,2);
+            CHECK(step(1,.03f,2).completion);
+        }else CHECK(endpoint.completion);
+        const auto receipt=f.result.completion;CHECK(receipt);
+        for(unsigned n=0;n<4;++n)CHECK(!step(1.95f,.03f,2).completion);
+    }
+    Fixture strict;CHECK(strict.Acquire());strict.Prepare(.2f);
+    strict.sample.contact.weaponFromHandContact.values[3][1]=.02f;
+    CHECK(strict.Run().status==Status::OffPath&&!strict.result.completion);
+    for(unsigned fault=0;fault<5;++fault){
+        Fixture f;f.Motion().retainWhileGripped=true;CHECK(f.Acquire());f.Prepare(.2f);
+        if(fault==0)f.sample.contact.owner.actor++;
+        if(fault==1)f.sample.contact.tracked=false;
+        if(fault==2)f.sample.focused=false;
+        if(fault==3)f.now+=f.p.maxAgeNs+1;
+        if(fault==4)f.sample.grip=false;
+        CHECK(!f.Run().target&&!f.result.completion);
+    }
+    return 0;
+}
+
 int main(){
+    if(HeldLinearProjectsNaturalMotionWithoutTeleportCompletion())return 1;
     if(HeldHingeAcceptsNaturalGraspAndKeepsFreshContinuity()||HeldPlacementRejectsTeleportCompletionWithoutDroppingGrasp()||
        AcquiredOrientationBindsTheActualGrasp()||LinearReceiptAndNoStateMutation()||EveryOperationKeepsItsTypeAndResource()||RotatedTranslatedMetreFrame()||
        LinearRotatedAxisAndNegativeTravel()||InitialHeldAndMissedPressNeedNeutral()||FreshNeutralAndNewPressForEveryReceipt()||
@@ -834,5 +877,5 @@ int main(){
        RecoveryWaitRetainsPartialTravelUntilNewNativeObservation()||RecoveryWaitKeepsExpiryMutationAndInputSafety()||
        EndpointPlacementRecoveryCannotReuseOldDwell()||RecoveryProofCannotAuthorizeAnotherOwnerProfileOrRecognizer()||
        WorldCarryRecoveryProjectsOnlyRetainedMovementFrame())return 1;
-    std::puts("FeedInteraction: 54 deterministic cases passed (synthetic measured geometry; no native acceptance).");return 0;
+    std::puts("FeedInteraction: 55 deterministic cases passed (synthetic measured geometry; no native acceptance).");return 0;
 }

@@ -463,7 +463,9 @@ int MeasuredUnderbarrelLoadsOneRoundAndCloses(){
         // Opening an unfired breech preserves its live round and cannot draw
         // another round. The muzzle family likewise cannot top up a full tube.
         Fixture loaded(&e,1,1);loaded.linkedFamily=f.linkedFamily;
-        if(breech){loaded.Hinge(0);CHECK(loaded.result.tracking.step==FixedContainerStep::Close);loaded.Hinge(3);}
+        if(breech){loaded.Hinge(0);CHECK(loaded.result.tracking.step==FixedContainerStep::Insert&&loaded.result.mechanismOwnsHand);
+            loaded.Send(At(e.interaction.geometry[0].motion,1),false);
+            CHECK(loaded.result.tracking.step==FixedContainerStep::Close);loaded.Hinge(3);}
         else{loaded.Send(At(insertion,0),false);loaded.Send(At(insertion,0),true,true);}
         CHECK(loaded.calls==0&&!loaded.submitted&&!loaded.result.ammoOwnsHand);
         CHECK((loaded.service.View()->snapshot.counts==AmmunitionCounts{1,1,1}));
@@ -547,7 +549,9 @@ int FinishFixedStroke(Fixture& f,unsigned step){
         for(unsigned n=1;n<=30;++n)f.Send(At(motion,1-n/30.),true);
         for(unsigned n=0;n<8;++n)f.Send(At(motion,0),true);
     }
-    CHECK(f.result.tracking.step!=FixedContainerStep(step)&&!f.result.mechanismOwnsHand);
+    CHECK(f.result.tracking.step!=FixedContainerStep(step)&&f.result.mechanismOwnsHand);
+    f.Send(At(motion,motion.returnToStart?0:1),false);
+    CHECK(!f.result.mechanismOwnsHand&&!f.hands.Current(InteractionHand::Left));
     return 0;
 }
 int TransferFixedSupportStroke(Fixture& f,unsigned step,bool sameCurrent){
@@ -705,7 +709,9 @@ int EveryFixedFamilyFreshPickupGapCompletesOnce(){
             CHECK(!InsertFixedWithOfflineReceipt(f,true));
             const auto committed=f.counts;if(mechanism)f.Hinge(3);
             CHECK(f.result.tracking.step==FixedContainerStep::Complete&&!f.result.blocksFire&&f.gate&&f.gate->closedVerified);
-            CHECK(f.calls==1&&f.service.View()->snapshot.counts==committed&&!f.hands.Current(InteractionHand::Left));
+            CHECK(f.calls==1&&f.service.View()->snapshot.counts==committed);
+            if(f.result.mechanismOwnsHand)f.Send(At(e.interaction.geometry[3].motion,1),false);
+            CHECK(!f.hands.Current(InteractionHand::Left));
             CHECK(committed.loaded+committed.reserve==e.interaction.roundsPerInsertion);
             ++profiles;if(f.linkedFamily)++linked;kinds[static_cast<unsigned>(kind)]=true;
         }
@@ -899,13 +905,15 @@ int FixedReleaseCauseDiagnostics(){
         if(branch==4){f.Prepare(start,true);f.sample.raw.weaponFromWrist.values[3][0]+=10;site=HandReleaseSite::FixedPolicy;}
         if(branch==5){f.sample.raw.valid=false;site=HandReleaseSite::FixedRaw;rejection=FixedContainerReleaseRejection::RawInvalid;}
         if(branch==3)f.physical->Cancel(f.sample.input,f.hands);else f.Consume();
+        if(branch==4){
+            // A discontinuous held pose freezes movement; it grants neither
+            // completion nor a native command, and keeps the acquired claim.
+            CHECK(journal.count==0&&f.result.mechanismOwnsHand&&f.result.tracking.target);
+            CHECK(f.result.tracking.step==FixedContainerStep::Open&&f.calls==0);continue;
+        }
         CHECK(journal.count==1&&journal.entries[0].cause.site==site);
         const auto& cause=journal.entries[0].cause;
-        if(branch==4){
-            CHECK(cause.rejection==static_cast<std::uint8_t>(FixedContainerRejection::Gesture));
-            CHECK(cause.fixedStatus==static_cast<std::uint8_t>(FixedContainerStatus::Suspended));
-            CHECK(cause.feedStatus>=static_cast<std::uint8_t>(FeedInteractionStatus::InvalidProfile)&&cause.feedStatus!=HandReleaseCause::Unknown);
-        }else CHECK(cause.rejection==(branch==3?HandReleaseCause::Unknown:static_cast<std::uint8_t>(rejection)));
+        CHECK(cause.rejection==(branch==3?HandReleaseCause::Unknown:static_cast<std::uint8_t>(rejection)));
         CHECK(!f.hands.Current(InteractionHand::Left)&&f.calls==0);
     }
     return 0;
@@ -1130,7 +1138,175 @@ int DuplicateReleaseCannotOutliveItsEvidence(){
     return 0;
 }
 
-int main(){if(DuplicateRawRetainsExactReleaseUntilEligibleGeometry()||DuplicateReleaseCannotOutliveItsEvidence())return 1;
+namespace {
+Matrix NaturalFixedWrist(const FeedMotionProfile& motion,double progress,double twist=0,double drift=0){
+    auto rotation=Identity();const auto angle=2.1+twist;
+    rotation.values[0][0]=rotation.values[1][1]=float(std::cos(angle));
+    rotation.values[0][1]=float(std::sin(angle));rotation.values[1][0]=float(-std::sin(angle));
+    auto grasp=Multiply(rotation,motion.motionFromContact);
+    if(motion.kind==FeedMotionKind::Hinge){
+        const auto radius=std::hypot(grasp.values[3][0],grasp.values[3][1]);
+        for(unsigned n=0;n<2;++n)grasp.values[3][n]*=float(1+.09/radius);
+    }else grasp.values[3][1]+=.09f;
+    auto local=feed_interaction_detail::Along(grasp,motion.kind,motion.travel*progress);
+    local.values[3][2]+=float(drift);
+    return Multiply(local,motion.weaponFromMotion);
+}
+int FixedMechanicalGraspAndHeldEndpointAcrossRegistry(){
+    unsigned profiles=0,mechanical=0,linear=0,hinged=0;
+    for(const auto registry:{std::span<const FixedContainerEquipmentProfile>(generated::FixedContainerEquipment),
+                            std::span<const FixedContainerEquipmentProfile>(generated::UnderbarrelFixedContainerEquipment)})
+        for(const auto& e:registry){
+            ++profiles;const auto policy=FixedContainerInteractionProfile(e);
+            CHECK(fixed_container_detail::Profile(policy));
+            CHECK(feed_interaction_detail::Same(policy.geometry[2].motion,e.interaction.geometry[2].motion));
+            CHECK(policy.geometry[2].contact==e.interaction.geometry[2].contact);
+            if(e.interaction.kind!=FixedContainerKind::Cylinder&&e.interaction.kind!=FixedContainerKind::SingleRoundBreech)continue;
+            ++mechanical;Fixture f(&e,0,e.interaction.roundsPerInsertion);SelectFixedFamily(f);
+            const auto& motion=e.interaction.geometry[0].motion;
+            if(motion.kind==FeedMotionKind::Linear)++linear;else ++hinged;
+            CHECK(!motion.retainWhileGripped&&motion.acquisitionRadiusMeters==0);
+            const auto start=NaturalFixedWrist(motion,0);
+            f.Send(start,false);f.Send(start,true);
+            CHECK(f.result.mechanismOwnsHand&&f.result.tracking.hand&&f.result.tracking.target);
+            const auto token=f.result.tracking.hand->token;
+            CHECK(feed_interaction_detail::Distance(*f.result.tracking.target,start)<.00001);
+            CHECK(feed_interaction_detail::Angle(*f.result.tracking.target,start)<.001);
+            for(unsigned n=1;n<=24;++n)f.Send(NaturalFixedWrist(motion,n/24.,n/24.,.025*n/24.),true);
+            for(unsigned n=0;n<8;++n)f.Send(NaturalFixedWrist(motion,1,1,.025),true);
+            const auto next=e.interaction.kind==FixedContainerKind::Cylinder?FixedContainerStep::EjectSpent:FixedContainerStep::Insert;
+            CHECK(f.result.tracking.step==next&&f.result.mechanismOwnsHand&&f.result.tracking.hand->token==token);
+            const auto target=f.result.tracking.target;const auto parts=f.result.tracking.parts;
+            const auto life=f.result.tracking.lifetime;
+            // A held hand at the next operation's source cannot recognize it.
+            for(unsigned n=0;n<20;++n){
+                f.Send(At(e.interaction.geometry[unsigned(next)].motion,0),true,true,true);
+                CHECK(f.result.tracking.step==next&&f.result.mechanismOwnsHand&&f.result.tracking.hand->token==token);
+                CHECK(feed_interaction_detail::Same(f.result.tracking.target,target)&&f.result.tracking.lifetime==life);
+                for(unsigned i=0;i<f.result.tracking.partCount;++i)CHECK(f.result.tracking.parts[i].values==parts[i].values);
+                CHECK(f.calls==0&&!f.result.tracking.pending&&f.service.View()->snapshot.counts==f.counts);
+            }
+            // Even a repeated old renderer packet cannot conceal real release.
+            const auto raw=f.sample.raw;f.Prepare(*target,false);f.Consume(&raw);
+            CHECK(!f.result.mechanismOwnsHand&&!f.result.tracking.hand&&!f.result.tracking.target);
+            CHECK(f.result.tracking.step==next&&f.calls==0);
+            for(unsigned i=0;i<f.result.tracking.partCount;++i)CHECK(f.result.tracking.parts[i].values==parts[i].values);
+            if(next==FixedContainerStep::EjectSpent)f.Hinge(1);
+            // Existing full registry tests cover exact insertion receipts.
+            f.Send(At(e.interaction.geometry[2].motion,0),false,false,true);
+            CHECK(f.result.tracking.step==FixedContainerStep::Close);f.Hinge(3);
+            CHECK(f.result.tracking.step==FixedContainerStep::Complete&&f.result.mechanismOwnsHand&&!f.result.blocksFire);
+            const auto closed=f.result.tracking.target;const auto closedToken=f.result.tracking.hand->token;
+            for(unsigned n=0;n<12;++n){
+                f.Send(start,true);CHECK(f.result.tracking.step==FixedContainerStep::Complete&&!f.result.blocksFire);
+                CHECK(f.result.tracking.hand&&f.result.tracking.hand->token==closedToken&&feed_interaction_detail::Same(f.result.tracking.target,closed));
+                CHECK(f.result.tracking.lifetime==life&&f.calls==0&&f.gate->closedVerified);
+            }
+            f.Send(start,false);CHECK(!f.result.tracking.hand&&!f.result.tracking.target);
+        }
+    CHECK(profiles==84&&mechanical==59&&linear&&hinged);
+    std::printf("Fixed grasp: %u registered profiles, %u mechanical (%u rail/%u hinge), held open/close and explicit release\n",profiles,mechanical,linear,hinged);
+    return 0;
+}
+int FixedPartialRecoveryPreservesNaturalWristAndMeasuredParts(){
+    unsigned released=0,trackingGaps=0,rails=0,hinges=0;
+    for(const auto registry:{std::span<const FixedContainerEquipmentProfile>(generated::FixedContainerEquipment),
+                            std::span<const FixedContainerEquipmentProfile>(generated::UnderbarrelFixedContainerEquipment)})
+        for(const auto& e:registry){
+            if(e.interaction.kind!=FixedContainerKind::Cylinder&&e.interaction.kind!=FixedContainerKind::SingleRoundBreech)continue;
+            const auto& motion=e.interaction.geometry[0].motion;
+            if(motion.kind==FeedMotionKind::Linear)++rails;else ++hinges;
+            for(bool trackingGap:{false,true}){
+                Fixture f(&e,0,e.interaction.roundsPerInsertion);SelectFixedFamily(f);
+                const auto wrist=[&](double progress,double twist=0){return NaturalFixedWrist(motion,progress,twist,.025);};
+                f.Send(wrist(0),false);f.Send(wrist(0),true);
+                for(unsigned n=1;n<=7;++n)f.Send(wrist(n/20.),true);
+                CHECK(f.result.mechanismOwnsHand&&f.result.tracking.hand&&f.result.tracking.target);
+                CHECK(f.result.tracking.step==FixedContainerStep::Open);
+                const auto before=f.result.tracking;
+                if(trackingGap){
+                    f.Prepare(wrist(.35),true);f.sample.input.tracked[0]=false;f.Consume();++trackingGaps;
+                }else {f.Send(wrist(.35),false);++released;}
+                CHECK(!f.result.mechanismOwnsHand&&!f.hands.Current(InteractionHand::Left)&&!f.result.tracking.target);
+                // Preparation and arming use fresh neutral packets; a new
+                // claim may adopt a different natural wrist angle at regrasp.
+                const auto regrasp=wrist(.35,.4);
+                for(unsigned n=0;n<2;++n){
+                    f.Send(regrasp,false);
+                    CHECK(!f.result.mechanismOwnsHand&&!f.result.tracking.target);
+                    CHECK(f.result.tracking.step==FixedContainerStep::Open&&f.result.tracking.lifetime==before.lifetime);
+                    for(unsigned part=0;part<before.partCount;++part)
+                        CHECK(f.result.tracking.parts[part].values==before.parts[part].values);
+                }
+                f.Send(regrasp,true);
+                CHECK(f.result.mechanismOwnsHand&&f.result.tracking.hand&&f.result.tracking.target);
+                CHECK(f.result.tracking.hand->token.id!=before.hand->token.id);
+                CHECK(f.result.tracking.hand->token.owner==before.hand->token.owner);
+                CHECK(f.result.tracking.lifetime==before.lifetime);
+                CHECK(feed_interaction_detail::Distance(*f.result.tracking.target,regrasp)<.00001);
+                CHECK(feed_interaction_detail::Angle(*f.result.tracking.target,regrasp)<.001);
+                for(unsigned part=0;part<before.partCount;++part){
+                    CHECK(feed_interaction_detail::Distance(f.result.tracking.parts[part],before.parts[part])<.00001);
+                    CHECK(feed_interaction_detail::Angle(f.result.tracking.parts[part],before.parts[part])<.001);
+                }
+                const auto token=f.result.tracking.hand->token;
+                const auto handFromContact=Multiply(regrasp,feed_interaction_detail::Inverse(At(motion,.35)));
+                // The first ordinary update must not snap back to the authored
+                // contact; subsequent motion retains that acquired wrist offset.
+                for(unsigned n=7;n<=13;++n){
+                    const auto progress=n/20.;f.Send(wrist(progress,.4),true);
+                    CHECK(f.result.mechanismOwnsHand&&f.result.tracking.hand->token==token&&f.result.tracking.target);
+                    CHECK(f.result.tracking.step==FixedContainerStep::Open&&f.result.tracking.targetStep==FixedContainerStep::Open);
+                    const auto target=Multiply(handFromContact,At(motion,progress));
+                    CHECK(feed_interaction_detail::Distance(*f.result.tracking.target,target)<.00001);
+                    CHECK(feed_interaction_detail::Angle(*f.result.tracking.target,target)<.001);
+                    const auto delta=Multiply(feed_interaction_detail::Inverse(At(motion,0)),At(motion,progress));
+                    for(unsigned part=0;part<e.parts.size();++part)if(e.parts[part].coupledOpening){
+                        const auto expected=motion.kind==FeedMotionKind::Linear?
+                            reload_insertion_detail::BlendRigid(e.parts[part].weaponFromStepStart[0],e.parts[part].weaponFromStepEnd[0],progress):
+                            Multiply(e.parts[part].weaponFromStepStart[0],delta);
+                        CHECK(feed_interaction_detail::Distance(f.result.tracking.parts[part],expected)<.00001);
+                        CHECK(feed_interaction_detail::Angle(f.result.tracking.parts[part],expected)<.001);
+                    }
+                    CHECK(f.calls==0&&!f.result.tracking.pending&&f.service.View()->snapshot.counts==f.counts);
+                }
+            }
+        }
+    CHECK(released==59&&trackingGaps==59&&rails==47&&hinges==12);
+    std::printf("Fixed recovery: %u angled/off-axis partial releases, %u tracking gaps, %u rails/%u hinges preserve wrist and measured parts\n",released,trackingGaps,rails,hinges);
+    return 0;
+}
+int FixedCompletedHoldKeepsSafetyBoundaries(){
+    unsigned cases=0;
+    for(const auto& e:generated::FixedContainerEquipment){
+        if(e.interaction.kind!=FixedContainerKind::Cylinder)continue;
+        for(unsigned fault=0;fault<8;++fault){
+            Fixture f(&e,0,2);f.Hinge(0);CHECK(f.result.mechanismOwnsHand&&f.result.tracking.hand);
+            const auto step=f.result.tracking.step;const auto counts=f.counts;
+            f.Prepare(At(e.interaction.geometry[0].motion,1),true);
+            if(fault==0)f.sample.input.focused=false;
+            if(fault==1)f.sample.input.tracked[0]=false;
+            if(fault==2)f.sample.input.nowNs=f.sample.input.deadlineNs;
+            if(fault==3)++f.sample.raw.nativeOwner.weapon;
+            if(fault==4)++f.sample.raw.input.owner.actor;
+            if(fault==5)f.sample.raw.valid=false;
+            if(fault==6)f.staleView=true;
+            if(fault==7)CHECK(f.hands.Release(f.sample.input,f.gun).accepted);
+            f.Consume();CHECK(!f.result.mechanismOwnsHand&&!f.hands.Current(InteractionHand::Left));
+            CHECK(f.calls==0&&f.service.View()->snapshot.counts==counts);++cases;
+        }
+        Fixture miss(&e,0,2);auto far=NaturalFixedWrist(e.interaction.geometry[0].motion,0);
+        far.values[3][0]+=1;miss.Send(far,false);miss.Send(far,true);
+        CHECK(!miss.result.mechanismOwnsHand);miss.Send(At(e.interaction.geometry[0].motion,0),true);
+        CHECK(!miss.result.mechanismOwnsHand&&miss.calls==0);
+    }
+    CHECK(cases==8);return 0;
+}
+}
+
+int main(){
+    if(FixedPartialRecoveryPreservesNaturalWristAndMeasuredParts())return 1;
+    if(FixedMechanicalGraspAndHeldEndpointAcrossRegistry()||FixedCompletedHoldKeepsSafetyBoundaries())return 1;if(DuplicateRawRetainsExactReleaseUntilEligibleGeometry()||DuplicateReleaseCannotOutliveItsEvidence())return 1;
     if(FixedReleaseCauseDiagnostics())return 1;
     if(InterruptedGateEnrollmentKeepsBothWeaponsUsable())return 1;
     if(ReplacementRawGapRetainsCustodyAndResumes()||ReplacementRawGapStillHonorsInvalidation())return 1;
