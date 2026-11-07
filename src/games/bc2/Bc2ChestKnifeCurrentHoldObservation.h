@@ -31,7 +31,7 @@ inline std::string_view ChestKnifeCurrentHoldRejection(const ChestKnifeCurrentHo
     const auto& c=v.current;
     if(!c.continuity||!c.bodyOperation||!c.draws||c.phase!=interaction::KnifePhase::Held||!c.held||
        !c.fireSuppressed||!c.mechanicsSettled||!c.nativeOwned||!c.nativeHealthy||!c.stockTriggerEnabled||
-       c.motionEnabled||c.attackBridgeEnabled||v.needsNativeCleanup||!v.leftEmpty||!v.bodyOperationMatches)
+       c.attackBridgeEnabled||v.needsNativeCleanup||!v.leftEmpty||!v.bodyOperationMatches)
         return "current_nonfiring_hold_not_ready";
     if(c.nativeInspection!=chestKnifeNative::InspectReason::Available||!c.readinessKnife||
        c.readiness.reason!=chestKnifeNative::ReadyReason::Ready)return "current_knife_readiness_unavailable";
@@ -138,7 +138,8 @@ inline void WriteChestKnifeCurrentHoldObservation(std::ostream& out,const ChestK
     out<<",\"bodyOperation\":"<<c.bodyOperation<<",\"nativeLifetime\":"<<v.nativeWork.lifetime<<",\"drawReceipts\":"<<c.draws
         <<",\"returnReceipts\":"<<c.returns<<",\"phase\":"<<unsigned(c.phase)<<",\"held\":true,\"nativeOwned\":true,\"nativeHealthy\":true"
         <<",\"fireSuppressed\":true,\"mechanicsSettled\":true,\"nativeObservationComplete\":";flag(c.nativeObservationComplete);
-    out<<",\"firstObservationGap\":{\"reason\":"<<c.firstObservationGap/4<<",\"branch\":"<<(c.firstObservationGap?c.firstObservationGap%4:3)
+    out<<",\"motionEnabled\":"<<(c.motionEnabled?"true":"false")<<",\"attackBridgeEnabled\":false"
+        <<",\"firstObservationGap\":{\"reason\":"<<c.firstObservationGap/4<<",\"branch\":"<<(c.firstObservationGap?c.firstObservationGap%4:3)
         <<"},\"noAttackOrReturnSinceDraw\":true,\"nativeWorkIdle\":true,\"needsNativeCleanup\":false,\"leftEmpty\":true,\"inputEvidence\":";input(c.input);
     out<<",\"menu\":{\"owner\":"<<unsigned(c.controls.menu.owner)<<",\"sequence\":"<<c.controls.menu.sequence<<",\"epoch\":"<<c.controls.menu.epoch
         <<",\"deadlineNs\":"<<c.controls.menu.deadlineNs<<"},\"trackingBasisGeneration\":"<<c.controls.trackingBasisGeneration

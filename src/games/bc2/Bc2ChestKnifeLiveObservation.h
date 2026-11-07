@@ -197,7 +197,7 @@ inline std::string_view ChestKnifeCurrentJoins(const ChestKnifeLiveObservation& 
 inline std::string_view ChestKnifeLiveRejection(const ChestKnifeLiveObservation& v,std::int64_t now)noexcept {
     if(!v.continuity||!v.bodyOperation||!v.draws||v.phase!=interaction::KnifePhase::Held||
        !v.held||!v.stockTriggerReady||!v.stockTriggerArmed||!v.fireSuppressed||!v.mechanicsSettled||
-       !v.nativeOwned||!v.nativeHealthy||!v.nativeObservationComplete||!v.stockTriggerEnabled||v.motionEnabled||v.attackBridgeEnabled)
+       !v.nativeOwned||!v.nativeHealthy||!v.nativeObservationComplete||!v.stockTriggerEnabled||v.attackBridgeEnabled)
         return "held_stock_trigger_not_ready";
     return ChestKnifeCurrentJoins(v,now);
 }
@@ -251,7 +251,7 @@ inline std::string_view ChestKnifePublicationBranch(const ChestKnifeLiveObservat
     if(!v.fireSuppressed)return "fire_suppressed";if(!v.mechanicsSettled)return "mechanics_settled";
     if(!v.nativeOwned)return "native_owned";if(!v.nativeHealthy)return "native_healthy";
     if(!v.nativeObservationComplete)return "native_observation_complete";if(!v.stockTriggerEnabled)return "stock_trigger_enabled";
-    if(v.motionEnabled)return "motion_enabled";if(v.attackBridgeEnabled)return "attack_bridge_enabled";
+    if(v.attackBridgeEnabled)return "attack_bridge_enabled";
     return "join";
 }
 inline void WriteChestKnifePublicationDiagnostic(std::ostream& out,const std::optional<ChestKnifePublicationDiagnostic>& d){
@@ -352,7 +352,7 @@ inline void WriteChestKnifeLiveObservation(std::ostream& out,const ChestKnifeLiv
     out<<",\"bodyOperation\":"<<v.bodyOperation<<",\"drawReceipts\":"<<v.draws<<",\"returnReceipts\":"<<v.returns
         <<",\"phase\":"<<unsigned(v.phase)<<",\"held\":true,\"stockTriggerReady\":true,\"stockTriggerArmed\":true"
         <<",\"nativeOwned\":true,\"nativeHealthy\":true,\"nativeObservationComplete\":true,\"stockTriggerEnabled\":true"
-        <<",\"motionEnabled\":false,\"attackBridgeEnabled\":false,\"fireSuppressed\":true,\"mechanicsSettled\":true,\"inputEvidence\":";evidence(f);
+        <<",\"motionEnabled\":"<<(v.motionEnabled?"true":"false")<<",\"attackBridgeEnabled\":false,\"fireSuppressed\":true,\"mechanicsSettled\":true,\"inputEvidence\":";evidence(f);
     out<<",\"menu\":{\"owner\":"<<unsigned(v.controls.menu.owner)<<",\"sequence\":"<<v.controls.menu.sequence<<",\"epoch\":"<<v.controls.menu.epoch
         <<",\"deadlineNs\":"<<v.controls.menu.deadlineNs<<"},\"trackingBasisGeneration\":"<<v.controls.trackingBasisGeneration<<",\"controls\":[";
     for(unsigned n=0;n<2;++n){if(n)out<<',';const auto& h=v.controls.hands[n];out<<"{\"held\":"<<h.held<<",\"squeeze\":"<<h.squeeze

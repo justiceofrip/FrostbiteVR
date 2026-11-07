@@ -28,6 +28,11 @@ struct FeedMotionProfile {
     // fractions or returnToStart. Path/orientation tolerances bound source
     // contact agreement and destination alignment, never the free carry path.
     FeedPlacementGeometry placement{};
+    // Explicit adapter policy for held physical parts. Valid owner/tracking/
+    // input evidence remains mandatory; geometry controls movement, not grasp
+    // lifetime. A rejected step freezes/rebases without issuing completion.
+    bool retainWhileGripped=false;
+    float acquisitionRadiusMeters=0; // Zero uses the measured contact policy.
 };
 struct FeedInteractionProfile {
     std::uint64_t profileId=0,profileRevision=0;
@@ -137,7 +142,8 @@ inline bool Same(const FeedMotionProfile& a,const FeedMotionProfile& b)noexcept 
         a.maximumGestureNs==b.maximumGestureNs&&a.maxInputGapNs==b.maxInputGapNs&&
         a.placement.weaponFromSource.values==b.placement.weaponFromSource.values&&
         a.placement.weaponFromDestination.values==b.placement.weaponFromDestination.values&&
-        a.placement.sourceFromGrip.values==b.placement.sourceFromGrip.values;
+        a.placement.sourceFromGrip.values==b.placement.sourceFromGrip.values&&
+        a.retainWhileGripped==b.retainWhileGripped&&a.acquisitionRadiusMeters==b.acquisitionRadiusMeters;
 }
 inline bool Same(const FeedMechanismProfile& a,const FeedMechanismProfile& b)noexcept {
     if(a.family!=b.family||a.id!=b.id||a.revision!=b.revision||a.ammunitionKind!=b.ammunitionKind||
@@ -151,6 +157,7 @@ inline bool Same(const FeedMechanismProfile& a,const FeedMechanismProfile& b)noe
     return true;
 }
 inline bool Motion(const FeedMotionProfile& m)noexcept {
+    if(!std::isfinite(m.acquisitionRadiusMeters)||m.acquisitionRadiusMeters<0||m.acquisitionRadiusMeters>.5f)return false;
     const auto op=static_cast<unsigned>(m.operation);
     if(m.kind==FeedMotionKind::FreePlacement){
         if(!m.measured||m.returnToStart||
@@ -195,6 +202,20 @@ inline bool Motion(const FeedMotionProfile& m)noexcept {
 // Pure gesture policy. It neither changes a FeedMechanismSnapshot nor dispatches
 // native work. Keep this instance alive for the associated FeedReload lifetime:
 // receipt IDs never reset on interruption, rearming, or ownership changes.
+// Preserve every original identity/freshness/contact gate. Only the spatial
+// acquisition envelope can be explicitly enlarged by an interaction adapter.
+inline FeedContactResult EvaluateFeedInteractionContact(const FeedMechanismProfile& profile,
+    const FeedMotionProfile& motion,const FeedMechanismSnapshot& snapshot,FeedSupplyKey desired,
+    const FeedPhysicalCandidate& candidate,const FeedContactSample& sample,std::int64_t now)noexcept {
+    auto result=EvaluateFeedContact(profile,snapshot,desired,candidate,sample,now);
+    if(result.status!=FeedMechanismStatus::ContactMiss)return result;
+    const auto& binding=profile.contacts[static_cast<unsigned>(candidate.part)];
+    if(feed_interaction_detail::Motion(motion)&&
+       result.distanceMeters<=(std::max)(binding.radiusMeters,motion.acquisitionRadiusMeters)&&
+       (binding.orientation==FeedContactOrientation::Acquired||result.angleRadians<=binding.maxAngleRadians))
+        result.status=FeedMechanismStatus::ContactMatch;
+    return result;
+}
 class FeedInteraction {
 public:
     explicit FeedInteraction(std::uint64_t lifetime=0)noexcept:lifetime_(lifetime){}
@@ -263,7 +284,7 @@ public:
             return fail(FeedInteractionStatus::InvalidInput);
         if(recoveryStart_&&(!Same(recoveryStart_->candidate_,candidate)||!Same(recoveryStart_->motion_,motion)||
            !Same(recoveryStart_->mechanism_,mechanismProfile)))return fail(FeedInteractionStatus::CandidateChanged);
-        const auto checked=EvaluateFeedContact(mechanismProfile,snapshot,desired,candidate,contact,nowNs);out.evidence=checked.status;
+        const auto checked=EvaluateFeedInteractionContact(mechanismProfile,motion,snapshot,desired,candidate,contact,nowNs);out.evidence=checked.status;
         if(checked.status!=FeedMechanismStatus::ContactMatch&&checked.status!=FeedMechanismStatus::ContactMiss)
             return fail(FeedInteractionStatus::InvalidInput);
         if(contact.observedNs<snapshot.observedNs)return fail(FeedInteractionStatus::InvalidInput);
@@ -271,7 +292,7 @@ public:
             return fail(FeedInteractionStatus::Interrupted);
         if(nowNs<lastNow_)return fail(FeedInteractionStatus::InvalidInput);
         lastNow_=nowNs;
-        if(moving_&&nowNs-started_>motion.maximumGestureNs)return fail(FeedInteractionStatus::Expired);
+        if(moving_&&!motion.retainWhileGripped&&nowNs-started_>motion.maximumGestureNs)return fail(FeedInteractionStatus::Expired);
         const bool waitingRecovery=recoveryStart_&&!moving_&&snapshot.sequence==recoverySnapshot_.sequence;
         if(recoveryStart_&&!moving_&&(contact.inputSequence<=recoveryInput_||contact.observedNs<=recoveryObserved_||
            snapshot.sequence<recoverySnapshot_.sequence||
@@ -330,13 +351,24 @@ public:
             const auto& observed=snapshot.contacts[static_cast<unsigned>(candidate.part)].weaponFromContact;
             const auto& binding=mechanismProfile.contacts[static_cast<unsigned>(candidate.part)];
             if(Distance(start,observed)>motion.pathToleranceMeters||Angle(start,observed)>motion.orientationToleranceRadians||
-               Distance(start,contact.weaponFromHandContact)>binding.radiusMeters||
+               Distance(start,contact.weaponFromHandContact)>(std::max)(binding.radiusMeters,motion.acquisitionRadiusMeters)||
                (binding.orientation==FeedContactOrientation::Authored&&Angle(start,contact.weaponFromHandContact)>binding.maxAngleRadians))
                 return fail(FeedInteractionStatus::OffPath);
             // Preserve the actual pickup offset: neither hand nor carried
             // object jumps to the measured grip or destination socket.
             grabbed_=placement?feed_interaction_detail::Multiply(source,Inverse(contact.weaponFromHandContact)):
                 feed_interaction_detail::Multiply(contact.weaponFromHandContact,Inverse(motion.weaponFromMotion));
+            hingeOffset_={};
+            if(motion.retainWhileGripped&&motion.kind==FeedMotionKind::Hinge&&
+               std::hypot(grabbed_.values[3][0],grabbed_.values[3][1])<=motion.pathToleranceMeters*2){
+                // Offset acquisition onto the measured lever. Grabbing near
+                // its hinge is valid and cannot create a zero-radius dead spot.
+                const auto measured=Along(motion.motionFromContact,motion.kind,recoveryStart_?recoveryStart_->travel_:0);
+                for(unsigned axis=0;axis<3;++axis){
+                    hingeOffset_[axis]=measured.values[3][axis]-grabbed_.values[3][axis];
+                    grabbed_.values[3][axis]=measured.values[3][axis];
+                }
+            }
             recoveringActive_=recoveryStart_.has_value();moved_=recoveringActive_;recoveryDwelled_=false;
             movingWorld_=sample.weaponWorld.has_value();
             returning_=recoveryStart_&&recoveryStart_->returning_;
@@ -355,14 +387,41 @@ public:
         const bool placement=motion.kind==FeedMotionKind::FreePlacement;
         if(!sample.grip&&!placement&&!recoveringActive_)return fail(FeedInteractionStatus::Interrupted);
         if(contact.observedNs<=previousObserved)return fail(FeedInteractionStatus::InvalidInput);
+        const auto retain=[&](){
+            // A fresh but discontinuous pose cannot move a part or accumulate
+            // endpoint dwell. Rebase from this real packet so a held hand can
+            // continue naturally, without a release/reacquisition ritual.
+            endpoint_=0;placementDwelled_=recoveryDwelled_=false;
+            previous_=contact.weaponFromHandContact;
+            if(placement){
+                grabbed_=feed_interaction_detail::Multiply(carried_,Inverse(contact.weaponFromHandContact));
+                out.target=carried_;out.targetKind=FeedInteractionTargetKind::Object;
+            }else {
+                auto local=feed_interaction_detail::Multiply(contact.weaponFromHandContact,Inverse(motion.weaponFromMotion));
+                if(motion.kind==FeedMotionKind::Hinge){
+                    const auto held=Along(grabbed_,motion.kind,travel_);
+                    for(unsigned axis=0;axis<3;++axis)hingeOffset_[axis]=held.values[3][axis]-local.values[3][axis];
+                }else grabbed_=Along(local,motion.kind,-travel_);
+                out.progress=travel_/motion.travel;
+                out.target=feed_interaction_detail::Multiply(Along(motion.motionFromContact,motion.kind,
+                    std::clamp(out.progress,0.,1.)*motion.travel),motion.weaponFromMotion);
+                out.targetKind=FeedInteractionTargetKind::Contact;
+            }
+            out.status=FeedInteractionStatus::Moving;return out;
+        };
         if(Distance(previous_,contact.weaponFromHandContact)>motion.maxStepMeters||
-           Angle(previous_,contact.weaponFromHandContact)>motion.maxStepRadians)return fail(FeedInteractionStatus::MotionJump);
+           ((!motion.retainWhileGripped||placement)&&Angle(previous_,contact.weaponFromHandContact)>motion.maxStepRadians)){
+            if(motion.retainWhileGripped&&sample.grip)return retain();
+            return fail(FeedInteractionStatus::MotionJump);
+        }
         if(placement){
             out.target=feed_interaction_detail::Multiply(grabbed_,contact.weaponFromHandContact);
             out.targetKind=FeedInteractionTargetKind::Object;
             if(!feed_mechanism_detail::Pose(*out.target))return fail(FeedInteractionStatus::OffPath);
-            if(Distance(carried_,*out.target)>motion.maxStepMeters||Angle(carried_,*out.target)>motion.maxStepRadians)
+            if(Distance(carried_,*out.target)>motion.maxStepMeters||Angle(carried_,*out.target)>motion.maxStepRadians){
+                if(motion.retainWhileGripped&&sample.grip)return retain();
                 return fail(FeedInteractionStatus::MotionJump);
+            }
             moved_=moved_||Distance(carried_,*out.target)>1e-6||Angle(carried_,*out.target)>1e-6;
             previous_=contact.weaponFromHandContact;carried_=*out.target;
             const bool aligned=Distance(carried_,motion.placement.weaponFromDestination)<=motion.pathToleranceMeters&&
@@ -383,18 +442,29 @@ public:
             Remember(candidate,motion,mechanismProfile,contact,*out.target,sample.weaponWorld);
             out.status=FeedInteractionStatus::Completed;Drop();return out;
         }
-        const auto local=feed_interaction_detail::Multiply(contact.weaponFromHandContact,Inverse(motion.weaponFromMotion));
+        auto local=feed_interaction_detail::Multiply(contact.weaponFromHandContact,Inverse(motion.weaponFromMotion));
+        if(motion.retainWhileGripped&&motion.kind==FeedMotionKind::Hinge)
+            for(unsigned axis=0;axis<3;++axis)local.values[3][axis]+=hingeOffset_[axis];
         if(!feed_mechanism_detail::Pose(local))return fail(FeedInteractionStatus::OffPath);
         double travel=double(local.values[3][0])-grabbed_.values[3][0];
         if(motion.kind==FeedMotionKind::Hinge){
             const double x=grabbed_.values[3][0],y=grabbed_.values[3][1];
+            if(motion.retainWhileGripped&&std::hypot(local.values[3][0],local.values[3][1])<=motion.pathToleranceMeters)
+                return sample.grip?retain():fail(FeedInteractionStatus::Interrupted);
             travel=std::atan2(x*local.values[3][1]-y*local.values[3][0],x*local.values[3][0]+y*local.values[3][1]);
         }
         out.progress=travel/motion.travel;
         const auto expected=Along(grabbed_,motion.kind,travel);
         const double overtravel=1-motion.releaseFraction;
-        if(out.progress < -overtravel||out.progress>1+overtravel||Distance(local,expected)>motion.pathToleranceMeters||
-           Angle(local,expected)>motion.orientationToleranceRadians)return fail(FeedInteractionStatus::OffPath);
+        if(motion.retainWhileGripped&&motion.kind==FeedMotionKind::Hinge){
+            // A hinged part constrains position, not the player's wrist roll.
+            // Project natural off-axis/radial motion onto its one measured DOF.
+            out.progress=std::clamp(out.progress,0.,1.);travel=out.progress*motion.travel;
+        }else if(out.progress < -overtravel||out.progress>1+overtravel||Distance(local,expected)>motion.pathToleranceMeters||
+                 Angle(local,expected)>motion.orientationToleranceRadians){
+            if(motion.retainWhileGripped&&sample.grip)return retain();
+            return fail(FeedInteractionStatus::OffPath);
+        }
         moved_=moved_||Distance(previous_,contact.weaponFromHandContact)>1e-6||Angle(previous_,contact.weaponFromHandContact)>1e-6;
         previous_=contact.weaponFromHandContact;travel_=travel;
         out.target=feed_interaction_detail::Multiply(Along(motion.motionFromContact,motion.kind,std::clamp(out.progress,0.,1.)*motion.travel),motion.weaponFromMotion);
@@ -445,6 +515,7 @@ private:
     FeedPhysicalCandidate candidate_{};FeedMotionProfile motion_{};FeedMechanismProfile mechanism_{};
     FeedMechanismSnapshot lastNativeSnapshot_{},recoverySnapshot_{};
     math::Matrix4 grabbed_{},previous_{},lastRaw_{},carried_{};
+    std::array<float,3> hingeOffset_{};
     const std::uint64_t lifetime_=0;
     std::uint64_t proofId_=0,recoveryInput_=0;
     std::int64_t recoveryObserved_=0;

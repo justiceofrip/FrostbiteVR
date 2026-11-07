@@ -6,10 +6,11 @@
 #include <ostream>
 #include <cmath>
 namespace fvr::bc2::chestKnifeNative {
-// PRIVATE only. Existing draw/hold/return default; motion requires a separate
-// explicit pre-start opt-in. attackBridgeEnabled is a separate default-off
-// qualification request; no existing normal caller enables it. stockTriggerEnabled
-// is a mutually exclusive default-off stock Fire8 request. Requires the existing firing dispatcher installed.
+// The default is draw/hold/return. motionEnabled admits deliberate tracked
+// jabs; stockTriggerEnabled also admits trigger edges. Normal mode4 enables
+// both causes through the original Fire8 consumer. attackBridgeEnabled remains
+// a separate default-off qualification request, forbidden in stock mode.
+// Requires the existing firing dispatcher installed.
 bool Install(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t imageBase,
     const ReloadStateMemory&,bool motionEnabled=false,bool attackBridgeEnabled=false,bool stockTriggerEnabled=false)noexcept;
 void Start()noexcept;

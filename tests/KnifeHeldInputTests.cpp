@@ -3,6 +3,9 @@
 #include "Bc2ChestKnifeInput.h"
 #include "Bc2KnifeAttackGate.h"
 #include "Bc2KnifeStockTriggerSource.h"
+#include "Bc2ChestKnifeStockHold.h"
+#include "Bc2KnifeStockMotionSource.h"
+#include "NativeProbeConfig.h"
 #include <cstdio>
 using namespace fvr::interaction;
 using namespace fvr::bc2;
@@ -347,7 +350,9 @@ int StockTriggerPassiveReadiness(){
     std::puts("Passive stock readiness: fresh neutral arming, immutable observation, exact source/claim negatives and lost-gate cancellation.");
     return 0;
 }
-int main(){CHECK(!StockTriggerPassiveReadiness());CHECK(!StockTriggerRevocationCases());CHECK(!StockTriggerCases());CHECK(!IdleGunNeedsANewEmptyHandNeutral());CHECK(!WalkingStrokeUsesSameNativeBoundaryPredicate());CHECK(!MovingHoldAndQuietRearm());CHECK(!DrawStillNeedsNeutral());
+#include "KnifeStockHoldCases.inc"
+#include "KnifeStockJabCases.inc"
+int main(){CHECK(!StockJabCases());CHECK(!StockHoldPublicationGapCases());CHECK(!StockTriggerPassiveReadiness());CHECK(!StockTriggerRevocationCases());CHECK(!StockTriggerCases());CHECK(!IdleGunNeedsANewEmptyHandNeutral());CHECK(!WalkingStrokeUsesSameNativeBoundaryPredicate());CHECK(!MovingHoldAndQuietRearm());CHECK(!DrawStillNeedsNeutral());
     CHECK(!MissingAuthorityNeverBecomesHeldInput());CHECK(!RealRawInputSeparatesHoldAndIntent());
     CHECK(!FocusGapReturnsBeforeFreshChestDraw());CHECK(!DuplicateCannotWidenOrReacquire());
     std::puts("Eight knife held-input groups PASS: idle gun rearm, real custody/quiet intent, input negatives, focus-gap return then deliberate redraw, immutable duplicate lease.");}

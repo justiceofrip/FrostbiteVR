@@ -760,9 +760,58 @@ int ReplenishmentPolicyAndEvidenceCannotChangeDuringGesture(){
     duplicate.s.refill={FeedRefillState::Required,500,0};CHECK(duplicate.Acquire());
     ++duplicate.s.refill.lifetime;CHECK(duplicate.Run().status==Status::CandidateChanged);return 0;
 }
+
+int HeldHingeAcceptsNaturalGraspAndKeepsFreshContinuity(){
+    Fixture f(Op::OpenCover);auto& m=f.Motion();m.retainWhileGripped=true;m.acquisitionRadiusMeters=.12f;
+    f.p.contacts[f.Part()].orientation=FeedContactOrientation::Acquired;
+    auto grasp=Product(Turn(2.2f),m.motionFromContact);grasp.values[3][0]+=.10f;
+    const auto step=[&](float progress,float roll=0,float radial=0,float depth=0,bool grip=true){
+        f.Prepare(progress,grip);auto local=Product(Turn(roll),feed_interaction_detail::Along(grasp,m.kind,progress*m.travel));
+        local.values[3][0]+=radial*std::cos(progress*m.travel);
+        local.values[3][1]+=radial*std::sin(progress*m.travel);local.values[3][2]+=depth;
+        f.sample.contact.weaponFromHandContact=Product(local,m.weaponFromMotion);return f.Run();
+    };
+    CHECK(step(0,0,0,0,false).status==Status::Armed);CHECK(step(0).status==Status::Acquired);
+    for(unsigned i=1;i<=8;++i){const auto t=float(i)/8;
+        CHECK(step(.2f*t,.8f*t,.03f*t,.035f*t).status==Status::Moving);
+        CHECK(f.result.target&&!f.result.completion);
+    }
+    // A patient human grip is not a gesture timeout, and a wrist roll is not
+    // a new controller lifetime. Every packet/native sample remains fresh.
+    for(unsigned i=0;i<120;++i){CHECK(step(.2f,.8f,.03f,.035f).status==Status::Moving);CHECK(f.result.target&&!f.result.completion);}
+    const auto retained=*f.result.target;
+    f.Prepare(.2f);f.sample.contact.weaponFromHandContact.values[3][2]+=.5f;
+    CHECK(f.Run().status==Status::Moving&&f.result.target&&!f.result.completion);
+    CHECK(feed_interaction_detail::Distance(retained,*f.result.target)<.00001);
+    CHECK(f.Run().status==Status::Duplicate&&!f.result.target&&!f.result.completion);
+    // No continued grip may substitute for a release or current safety proof.
+    f.Prepare(.2f);f.sample.focused=false;CHECK(f.Run().status==Status::Interrupted&&!f.result.target);
+    f.sample.focused=true;CHECK(step(.2f).status==Status::NeedNeutral);
+    return 0;
+}
+int HeldPlacementRejectsTeleportCompletionWithoutDroppingGrasp(){
+    PlacementFixture f;f.Motion().retainWhileGripped=true;f.Motion().acquisitionRadiusMeters=.12f;
+    CHECK(f.Pickup());const auto source=*f.result.target;
+    CHECK(f.At(f.Destination()).status==Status::Moving&&f.result.target&&!f.result.completion);
+    CHECK(feed_interaction_detail::Distance(source,*f.result.target)<.00001);
+    for(unsigned i=0;i<110;++i){CHECK(f.At(f.Destination()).status==Status::Moving);CHECK(f.result.target&&!f.result.completion);}
+    CHECK(f.At(f.Destination(),false).status==Status::Interrupted&&!f.result.completion);
+    PlacementFixture ordinary;ordinary.Motion().retainWhileGripped=true;CHECK(ordinary.Pickup());
+    CHECK(ordinary.Place().status==Status::Completed&&ordinary.result.completion);
+    for(unsigned fault=0;fault<4;++fault){PlacementFixture invalid;invalid.Motion().retainWhileGripped=true;CHECK(invalid.Pickup());
+        invalid.PrepareHand(invalid.Hand(invalid.Source()));
+        if(fault==0)invalid.sample.contact.tracked=false;
+        if(fault==1)invalid.sample.contact.handAvailable=false;
+        if(fault==2)++invalid.sample.contact.owner.actor;
+        if(fault==3)invalid.now+=invalid.p.maxAgeNs+1;
+        CHECK(!invalid.Run().target&&!invalid.result.completion);
+    }
+    return 0;
+}
 }
 int main(){
-    if(AcquiredOrientationBindsTheActualGrasp()||LinearReceiptAndNoStateMutation()||EveryOperationKeepsItsTypeAndResource()||RotatedTranslatedMetreFrame()||
+    if(HeldHingeAcceptsNaturalGraspAndKeepsFreshContinuity()||HeldPlacementRejectsTeleportCompletionWithoutDroppingGrasp()||
+       AcquiredOrientationBindsTheActualGrasp()||LinearReceiptAndNoStateMutation()||EveryOperationKeepsItsTypeAndResource()||RotatedTranslatedMetreFrame()||
        LinearRotatedAxisAndNegativeTravel()||InitialHeldAndMissedPressNeedNeutral()||FreshNeutralAndNewPressForEveryReceipt()||
        HysteresisPreservesDwellWithinBand()||HysteresisResetsBelowRelease()||DuplicateCannotAccrueDwell()||
        ReturnStrokeRequiresRearAndFreshFrontDwell()||TrackingLossCannotFinishOrResumeHeld()||InputGapCannotBridgeGesture()||
@@ -785,5 +834,5 @@ int main(){
        RecoveryWaitRetainsPartialTravelUntilNewNativeObservation()||RecoveryWaitKeepsExpiryMutationAndInputSafety()||
        EndpointPlacementRecoveryCannotReuseOldDwell()||RecoveryProofCannotAuthorizeAnotherOwnerProfileOrRecognizer()||
        WorldCarryRecoveryProjectsOnlyRetainedMovementFrame())return 1;
-    std::puts("FeedInteraction: 52 deterministic cases passed (synthetic measured geometry; no native acceptance).");return 0;
+    std::puts("FeedInteraction: 54 deterministic cases passed (synthetic measured geometry; no native acceptance).");return 0;
 }

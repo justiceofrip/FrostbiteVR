@@ -175,7 +175,16 @@ int SupplyHandKeepsItsActualAmmoClaim(){
     auto bad=p;bad.supplyObject.reset();CHECK(!Bc2FeedMechanismClaimFresh(bad,1020000000));
     bad=p;++bad.supplyObject->item.generation;CHECK(!Bc2FeedMechanismClaimFresh(bad,1020000000));
     bad=p;bad.operation=FeedPhysicalOperation::OpenCover;CHECK(!Bc2FeedMechanismClaimFresh(bad,1020000000));
-    bad=p;++bad.supplyObject->units;CHECK(!Bc2FeedPresentationRetained(p,bad,false,1020000000));
+    bad=p;++bad.supplyObject->units;CHECK(Bc2FeedPresentationRetained(p,bad,false,1020000000));
+    CHECK(!Bc2FeedPresentationRetained(p,bad,true,1020000000));
+    auto display=p;display.displayInput=p.input;display.displayEquipment=Equipment();
+    display.mechanismClaim.reset();display.mechanismInput.reset();display.mechanismWristWorldMeters.reset();display.supplyObject.reset();
+    display.operation=FeedPhysicalOperation::None;display.targetKind=FeedInteractionTargetKind::None;
+    CHECK(Bc2FeedSourceFresh(display,p.owner,*display.displayInput,Equipment(),p.rig,1020000000));
+    CHECK(Bc2FeedRetainedPalette(p,display,true,1020000000)==Bc2FeedPaletteRetention::Parts);
+    CHECK(!Bc2FeedPresentationRetained(p,display,true,1020000000));
+    ++display.supply.container.generation;
+    CHECK(Bc2FeedRetainedPalette(p,display,true,1020000000)==Bc2FeedPaletteRetention::None);
     bad=p;bad.input.released[0]=true;CHECK(!Bc2FeedMechanismClaimFresh(bad,1020000000));return 0;
 }
 int SupplyClaimAndDelayedRawKeepIndependentOriginalLeases(){
@@ -352,8 +361,62 @@ int RegistrationAndChainIdentitySurvivePairRetention(){
     CHECK(!Bc2FeedPresentationRetained(p,bad,false,1020000000));
     bad=p;bad.carriedPartsMask=1u<<8;CHECK(!Bc2FeedWorldBases(bad,Identity()));return 0;
 }
+
+int MechanicalPoseSurvivesHandGapsUntilOwnershipExit(){
+    auto opened=Physical();Claim(opened);
+    opened.coverRadians=.8f;
+    opened.weaponFromCoverHinge=feed_interaction_detail::Multiply(
+        feed_interaction_detail::Along(Identity(),FeedMotionKind::Hinge,opened.coverRadians),Geometry().weaponFromHinge);
+    const auto rig=Rig();const auto binding=feed_presentation_detail::Derive(rig);CHECK(binding);
+    const Bc2FeedPresentation parts{opened.supply,opened.weaponFromPouch,opened.weaponFromChain,opened.chainCount};
+    const auto openFrames=Bc2FeedPartWorldFrames(parts,opened.weaponFromCoverHinge,Bases(),1);CHECK(openFrames);
+    const auto closedFrames=Bc2FeedPartWorldFrames(parts,Geometry().weaponFromHinge,Bases(),1);CHECK(closedFrames);
+    CHECK(!Same((*openFrames)[1],(*closedFrames)[1]));
+    auto current=opened;
+    for(unsigned frame=0;frame<6;++frame){
+        current.input.sequence=21+frame;current.input.observedNs=1010000000+frame*10000000;
+        current.input.deadlineNs=current.input.observedNs+100000000;
+        current.mechanismInput=current.input;current.mechanismClaim=opened.mechanismClaim;
+        current.mechanismClaim->inputSequence=current.input.sequence;current.mechanismClaim->deadlineNs=current.input.deadlineNs;
+        if(frame==1)current.mechanismClaim.reset(); // Ordinary missing hand publication.
+        if(frame==2)current.mechanismClaim->deadlineNs=current.input.observedNs; // Expired attachment only.
+        if(frame==3)current.input.released[0]=true;else current.input.released[0]=false;
+        if(frame==4)++current.mechanismClaim->token.id; // New claim cannot reuse the old hand pose.
+        const auto mode=Bc2FeedRetainedPalette(opened,current,true,current.input.observedNs+1);
+        CHECK(mode==(frame==0||frame==5?Bc2FeedPaletteRetention::Hand:Bc2FeedPaletteRetention::Parts));
+        const auto writes=BuildBc2FeedPartWrites(*binding,rig,*openFrames);CHECK(writes);
+        const auto cover=std::find_if(writes->begin(),writes->end(),[&](const auto& w){return w.index==binding->parts[1];});
+        CHECK(cover!=writes->end()&&Same(cover->transform,(*openFrames)[1]));
+    }
+    CHECK(Bc2FeedRetainedPalette(opened,current,false,1060000001)==Bc2FeedPaletteRetention::Parts); // No IK hand.
+    auto changed=current;++changed.lifetime;
+    CHECK(Bc2FeedRetainedPalette(opened,changed,false,1060000001)==Bc2FeedPaletteRetention::None);
+    changed=current;++changed.owner.actorGeneration;
+    CHECK(Bc2FeedRetainedPalette(opened,changed,false,1060000001)==Bc2FeedPaletteRetention::None);
+    changed=current;++changed.supply.container.generation;
+    CHECK(Bc2FeedRetainedPalette(opened,changed,false,1060000001)==Bc2FeedPaletteRetention::None);
+    CHECK(Bc2FeedRetainedPalette(opened,current,false,opened.input.deadlineNs)==Bc2FeedPaletteRetention::None);
+    return 0;
+}
+int DisplayConfirmationNeverRenewsRawOrHandAuthority(){
+    auto p=Physical();Claim(p);const auto raw=p.input;
+    p.displayInput=p.input;p.displayInput->sequence+=20;p.displayInput->observedNs+=300000000;
+    p.displayInput->deadlineNs+=300000000;p.displayEquipment=Equipment();const auto now=p.displayInput->observedNs+1;
+    CHECK(!Bc2FeedSourceFresh(p,p.owner,*p.displayInput,Equipment(),p.rig,now)); // Claims cannot enter display-only route.
+    p.mechanismClaim.reset();p.mechanismInput.reset();p.mechanismWristWorldMeters.reset();
+    p.operation=FeedPhysicalOperation::None;p.targetKind=FeedInteractionTargetKind::None;
+    CHECK(Bc2FeedSourceFresh(p,p.owner,*p.displayInput,Equipment(),p.rig,now));
+    CHECK(!Bc2FeedMechanismClaimFresh(p,now));CHECK(p.input.sequence==raw.sequence&&p.input.deadlineNs==raw.deadlineNs);
+    auto equipment=Equipment();++equipment.persistence;
+    CHECK(!Bc2FeedSourceFresh(p,p.owner,*p.displayInput,equipment,p.rig,now));
+    CHECK(!Bc2FeedSourceFresh(p,p.owner,*p.displayInput,Equipment(),p.rig,p.displayInput->deadlineNs));
+    return 0;
+}
+
 }
 int main(){
+    CHECK(MechanicalPoseSurvivesHandGapsUntilOwnershipExit()==0);
+    CHECK(DisplayConfirmationNeverRenewsRawOrHandAuthority()==0);
     CHECK(MeasuredCoverFrameIsNotTheHingeFrame()==0);
     CHECK(CarriedWorldBasisIsIndependentOfNewWeapon()==0);
     CHECK(ArticulatedSubtreesPreserveUnownedAnimation()==0);
@@ -368,5 +431,5 @@ int main(){
     CHECK(IndependentSixBoneChainUsesOwnRolesAndCoverFrame()==0);
     CHECK(RigidCoverSiblingsKeepOwnTargetsAndNativeDescendants()==0);
     CHECK(RegistrationAndChainIdentitySurvivePairRetention()==0);
-    std::puts("Bc2FeedPresentationTests: 15 geometry/lease/selector/claim/carry groups; no native/headset acceptance");
+    std::puts("Bc2FeedPresentationTests: 17 geometry/lease/selector/claim/carry groups; no native/headset acceptance");
 }

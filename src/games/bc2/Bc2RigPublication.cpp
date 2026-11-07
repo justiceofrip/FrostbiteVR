@@ -116,7 +116,7 @@ std::atomic<unsigned> m95ShotCapturePhase=0;M95ShotPartCapture m95ShotPartCaptur
 struct FeedPalette {
     std::shared_ptr<const Bc2PhysicalFeedPresentation> feed;
     std::shared_ptr<const SelectedMeshesSnapshot> feedSelected;
-    std::vector<std::array<std::byte,64>> feedBase;
+    std::vector<std::array<std::byte,64>> feedBase,feedParts;
     bool feedHand=false;
 };
 struct PistolSlidePalette {
@@ -423,23 +423,38 @@ bool FixedContainerCurrent(const FixedContainerPalette& palette,const WeaponEqui
     return binding.owner.weapon==equipment.weapon&&binding.data==equipment.data&&binding.persistence==equipment.persistence&&
         FixedContainerTrackingRetained(*palette.fixedContainer,*current,ReloadNanos());
 }
-bool FeedCurrent(const FeedPalette& palette,const WeaponEquipmentIdentity& equipment)noexcept {
-    if(!palette.feed)return true;
+Bc2FeedPaletteRetention FeedCurrent(const FeedPalette& palette,const WeaponEquipmentIdentity& equipment)noexcept {
+    if(!palette.feed)return Bc2FeedPaletteRetention::Parts;
     const auto input=renderTracking.load(std::memory_order_acquire);
     const auto guard=shotGuard.load(std::memory_order_acquire);const auto now=ReloadNanos();
     if(!input||!input->feed||!guard||!guard->valid||!Fresh(guard->deadline)||!palette.feedSelected||
        input->nativeEquipment!=equipment||guard->equipment!=equipment||guard->generation!=input->input.generation||
        guard->soldier!=input->soldier||guard->weak!=input->weak||guard->weapon!=input->weapon||
        guard->owner!=input->ownerGeneration||guard->equipmentGeneration!=input->equipmentGeneration||
-       guard->space!=input->input.spaceGeneration||(palette.feedHand&&input->controllerEvidence.released[0])||
+       guard->space!=input->input.spaceGeneration||
        !FeedTrackingFresh(*input,*palette.feed,now)||!FeedTrackingFresh(*input,*input->feed,now)||
-       !Bc2FeedPresentationRetained(*palette.feed,*input->feed,palette.feedHand,now))return false;
+       !Bc2FeedPresentationRetained(*palette.feed,*input->feed,false,now))return Bc2FeedPaletteRetention::None;
     const auto selected=gameplay::ReadSelectedMeshes(palette.feed->owner,now);
-    if(!selected||!Bc2FeedSelectedRetained(*palette.feedSelected,*selected,*palette.feed,equipment,input->input.generation,now))return false;
+    if(!selected||!Bc2FeedSelectedRetained(*palette.feedSelected,*selected,*palette.feed,equipment,input->input.generation,now))return Bc2FeedPaletteRetention::None;
     const RigMemory memory{nullptr,[](void*,unsigned at,void* out,std::size_t n){return Read(at,out,n);}};
     const auto rig=ReadFirstPersonRigIdentity(memory,palette.feed->owner.soldier,palette.feed->owner.weak);
-    return rig&&*rig==palette.feed->rig&&renderTracking.load(std::memory_order_acquire)==input&&
-        shotGuard.load(std::memory_order_acquire)==guard;
+    if(!rig||*rig!=palette.feed->rig||renderTracking.load(std::memory_order_acquire)!=input||
+       shotGuard.load(std::memory_order_acquire)!=guard)return Bc2FeedPaletteRetention::None;
+    return Bc2FeedRetainedPalette(*palette.feed,*input->feed,
+        palette.feedHand&&!input->controllerEvidence.released[0],now);
+}
+// The parts-only alternative is captured before optional mechanism-hand IK.
+// Claim loss cannot hand an open cover back to the stock closed animation.
+bool RetainFeedPalette(FeedPalette& palette,std::vector<std::array<std::byte,64>>& posed,
+    const WeaponEquipmentIdentity& equipment)noexcept {
+    const auto retained=FeedCurrent(palette,equipment);
+    if(retained==Bc2FeedPaletteRetention::None)return false;
+    if(palette.feedHand&&retained==Bc2FeedPaletteRetention::Parts){
+        if(palette.feedParts.size()!=posed.size())return false;
+        std::copy(palette.feedParts.begin(),palette.feedParts.end(),posed.begin());
+        palette.feedHand=false;
+    }
+    return true;
 }
 bool PistolSlideCurrent(const PistolSlidePalette& palette,const WeaponEquipmentIdentity& equipment)noexcept {
     if(!palette.pistolSlide)return true;
@@ -550,7 +565,7 @@ std::uintptr_t __cdecl PackHook(const void* source,void* destination,unsigned co
                 scope.posed=fallback?pose->previewBase:pose->posed;
                 if(pose->feed){
                     static_cast<FeedPalette&>(scope)=static_cast<const FeedPalette&>(*pose);
-                    if(!FeedCurrent(scope,pose->equipment)){
+                    if(!RetainFeedPalette(scope,scope.posed,pose->equipment)){
                         if(scope.feedBase.size()==count)scope.posed=scope.feedBase;else scope.posed=pose->before;
                         scope.feed.reset();scope.feedSelected.reset();scope.feedHand=false;
                     }
@@ -745,14 +760,15 @@ std::uintptr_t __cdecl PackHook(const void* source,void* destination,unsigned co
         if(!valid){if(scope.boltBase.size()==count)scope.posed=scope.boltBase;else scope.changed=false;
             scope.bolt.reset();scope.boltMask=0;++boltFallbacks;}
     }
-    // Both native pack callbacks validate the original feed lease, actual
-    // current claim, exact selected rig and ORIGINAL animation bytes. The
-    // captured pre-feed palette is private; no native buffer is overwritten.
+    // Both native pack callbacks validate the original geometry lease,
+    // exact selected rig and ORIGINAL animation bytes. Hand claim loss selects
+    // the parts-only palette; mechanical/lifetime loss selects the pre-feed
+    // palette. Both alternatives are private; native buffers stay untouched.
     if(scope.feed){
         std::vector<std::array<std::byte,64>> actual(count);
         if(!Read(reinterpret_cast<unsigned>(source),actual.data(),count*64)||actual!=scope.before){
             scope.changed=false;scope.feed.reset();scope.feedSelected.reset();scope.feedHand=false;
-        }else if(!FeedCurrent(scope,scope.equipment)){
+        }else if(!RetainFeedPalette(scope,scope.posed,scope.equipment)){
             if(scope.feedBase.size()==count)scope.posed=scope.feedBase;else scope.changed=false;
             scope.feed.reset();scope.feedSelected.reset();scope.feedHand=false;
         }
@@ -2128,7 +2144,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
                 if(!MagazinePaletteTargetFresh(input.magazine,ReloadNanos()))++magazineFreshRejects;}
         }else ++magazineBindingRejects;
     }
-    std::vector<std::array<std::byte,64>> feedBase;bool feedAttached=false,feedHandPosed=false;
+    std::vector<std::array<std::byte,64>> feedBase,feedParts;bool feedAttached=false,feedHandPosed=false;
     if(!pistolSlideClaimed&&feedRegistration&&feedBinding&&!sightAttached&&!reloadAttached&&!magazineAttached&&!pumpAttached&&!boltCustody&&
        targets->tracked[1]&&!targets->weaponAttachmentPending&&FeedTrackingFresh(input,*input.feed,ReloadNanos())){
         auto placedMeters=placed;for(unsigned axis=0;axis<3;++axis)placedMeters.values[3][axis]/=input.input.worldUnitsPerMeter;
@@ -2138,29 +2154,37 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
             input.feed->weaponFromCoverHinge,*bases,input.input.worldUnitsPerMeter):std::nullopt;
         const auto partWrites=frames?BuildBc2FeedPartWrites(*feedBinding,*rig,*frames):std::nullopt;
         if(partWrites){
-            const auto ordinaryWrites=writes;bool valid=true;
-            auto feedSolved=solved;auto wrist=freeLeft;
-            if(feedHandClaimed){
-                const auto feedWrist=Bc2FeedMechanismWristWorld(*input.feed,placedMeters);
-                valid=handRoleReady&&feedWrist&&Bc2FeedMechanismClaimFresh(*input.feed,ReloadNanos());
-                if(valid){
-                    wrist=feed_presentation_detail::ScaleTranslation(*feedWrist,input.input.worldUnitsPerMeter);
-                    feedSolved=interaction::SolveTrackedArms(rig->parents,armNative,rig->left,rig->right,
-                        {wrist,targets->arms[0].poleDirection,targets->arms[0].shoulder,true,trackedReach},{{},{},{},false});
-                    valid=feedSolved&&!feedSolved->reachClamped[0]&&feedSolved->targetError[0]<=.0001f*input.input.worldUnitsPerMeter;
-                    if(valid){merge(feedSolved->writes);valid=poseHand(interaction::HandPoseRole::MechanismGrip,feedSolved->writes);}
+            const auto ordinaryWrites=writes;
+            merge(*partWrites);
+            if(const auto partsPlan=BuildRigPosePlan(*rig,writes)){
+                feedBase=rig->nativeEvaluated;for(const auto& edit:plan->edits)feedBase[edit.index]=edit.after;
+                feedParts=rig->nativeEvaluated;for(const auto& edit:partsPlan->edits)feedParts[edit.index]=edit.after;
+                plan=partsPlan;feedAttached=true;
+                const auto partsWrites=writes;
+                // A hand solve is optional presentation. Failure must leave the
+                // already built mechanical pose in place, including a held lid.
+                if(feedHandClaimed){
+                    const auto feedWrist=Bc2FeedMechanismWristWorld(*input.feed,placedMeters);
+                    if(handRoleReady&&feedWrist&&Bc2FeedMechanismClaimFresh(*input.feed,ReloadNanos())){
+                        const auto wrist=feed_presentation_detail::ScaleTranslation(*feedWrist,input.input.worldUnitsPerMeter);
+                        const auto feedSolved=interaction::SolveTrackedArms(rig->parents,armNative,rig->left,rig->right,
+                            {wrist,targets->arms[0].poleDirection,targets->arms[0].shoulder,true,trackedReach},{{},{},{},false});
+                        if(feedSolved&&!feedSolved->reachClamped[0]&&feedSolved->targetError[0]<=.0001f*input.input.worldUnitsPerMeter){
+                            merge(feedSolved->writes);
+                            if(poseHand(interaction::HandPoseRole::MechanismGrip,feedSolved->writes)){
+                                // Hand writes cannot replace the separately owned parts.
+                                merge(*partWrites);
+                                if(const auto heldPlan=BuildRigPosePlan(*rig,writes)){
+                                    plan=heldPlan;feedHandPosed=true;solved->writes=writes;
+                                    solved->targetError[0]=feedSolved->targetError[0];solved->reachClamped[0]=false;
+                                    leftTarget=wrist;handPosed=true;handRole=interaction::HandPoseRole::MechanismGrip;
+                                }
+                            }
+                        }
+                    }
+                    if(!feedHandPosed)writes=partsWrites;
                 }
-            }
-            if(valid){
-                merge(*partWrites);
-                if(const auto candidate=BuildRigPosePlan(*rig,writes)){
-                    feedBase=rig->nativeEvaluated;for(const auto& edit:plan->edits)feedBase[edit.index]=edit.after;
-                    plan=candidate;feedAttached=true;feedHandPosed=feedHandClaimed;
-                    if(feedHandPosed){solved->writes=writes;solved->targetError[0]=feedSolved->targetError[0];
-                        solved->reachClamped[0]=false;leftTarget=wrist;handPosed=true;handRole=interaction::HandPoseRole::MechanismGrip;}
-                }else valid=false;
-            }
-            if(!valid)writes=ordinaryWrites;
+            }else writes=ordinaryWrites;
         }
     }
     std::vector<std::array<std::byte,64>> pistolSlideBase;bool pistolSlideAttached=false;
@@ -2245,7 +2269,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
             }
         }
     }
-    if(feedAttached){pose->feed=input.feed;pose->feedSelected=feedSelected;pose->feedBase=std::move(feedBase);pose->feedHand=feedHandPosed;}
+    if(feedAttached){pose->feed=input.feed;pose->feedSelected=feedSelected;pose->feedBase=std::move(feedBase);pose->feedParts=std::move(feedParts);pose->feedHand=feedHandPosed;}
     if(pistolSlideAttached){pose->pistolSlide=input.pistolSlide;pose->pistolSlideSelected=pistolSlideSelected;
         pose->pistolSlideBase=std::move(pistolSlideBase);}
     if(magazineAttached){
@@ -2562,7 +2586,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
         };
         // These are all local palette alternatives selected by Pack. Equality
         // is only required for weapon + exit; hands, covers and ammo may differ.
-        if((pose->feed&&!same(pose->feedBase))||(pose->pump&&!same(pose->pumpBase))||
+        if((pose->feed&&(!same(pose->feedBase)||!same(pose->feedParts)))||(pose->pump&&!same(pose->pumpBase))||
            (pose->pistolSlide&&!same(pose->pistolSlideBase))||(pose->bolt&&!same(pose->boltBase))||
            (pose->magazine&&!same(pose->magazineBase)))return false;
         if(pose->shellHide&&(!same(pose->shellHide->ordinary)||!same(pose->shellHide->hidden)))return false;
@@ -2630,7 +2654,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
         std::array<std::byte,64> current{};
         if(!currentRig||*currentRig!=rig->identity||!Read(at,current.data(),64)||current!=original||
            !EquipmentStillCurrent(input.nativeEquipment)||!AuthoredCurrent(authored.binding)||
-           !SupportCurrent(measuredSupport)||!AimCurrent(authoredAim)||!SightCurrent(sightSelection)||!FeedCurrent(*pose,input.nativeEquipment))return false;
+           !SupportCurrent(measuredSupport)||!AimCurrent(authoredAim)||!SightCurrent(sightSelection)||!RetainFeedPalette(*pose,pose->posed,input.nativeEquipment))return false;
         if(pose->pistolSlide){
             // Slide admission also pins the complete original animation bytes
             // at commit. Only a still-owned slide reaches the private pose;
@@ -3042,7 +3066,7 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     auto holsterUntil=holsterJoined?std::min(holster->hand.deadlineNs,holster->sampledNs+150000000):0;
     if(freeRightCurrent){holsterUntil=std::min(holsterUntil,freeRight->receipt.deadlineNs);
         if(freeRight->authorizationDeadlineNs)holsterUntil=std::min(holsterUntil,freeRight->authorizationDeadlineNs);}
-    if(feed)until=std::min(until,feed->input.deadlineNs);
+    if(feed)until=std::min(until,Bc2FeedDisplayInput(*feed).deadlineNs);
     if(sight.valid)until=std::min(until,ReloadNanos(sight.deadline));
     const auto* fixedEquipment=FindFixedContainerEquipment(configuration,aim->meshPath,m.rigFingerprint);
     const auto& fixedObservation=source->fixedContainerObservation;

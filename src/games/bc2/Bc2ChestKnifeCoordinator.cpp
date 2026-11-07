@@ -3,6 +3,7 @@
 #include "Bc2SelectedKnifeMotion.h"
 #include "Bc2ChestKnifeMissing.h"
 #include "Bc2ChestKnifeInput.h"
+#include "Bc2ChestKnifeStockHold.h"
 #include <cmath>
 namespace fvr::bc2 {namespace {
 using namespace interaction;
@@ -64,6 +65,7 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
     chestKnifeNative::InspectReason nativeInspection=chestKnifeNative::InspectReason::NotAttempted;
     const auto native=key?chestKnifeNative::Inspect(s.owner,knife,s.hand.sequence,s.hand.nowNs,&nativeInspection):std::nullopt;
     std::optional<selectedKnife::Geometry> attackGeometry;
+    bool measuredKnifeHold=false;
     KnifeSample sample;sample.source=s.hand;sample.menu=s.input.menu;
     if(key)sample.knife={key->id,key->generation};
     sample.holdInputCurrent=ChestKnifeControlInputCurrent(s.input)&&
@@ -90,22 +92,31 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
         sample.mechanicsSettled=mechanics&&native->healthy&&(!nativeOwned_||body.TemporaryToolOperation()==bodyOperation_)&&
             private_knife::KnifeSentinel(native->snapshot)&&
             Ready(sample.knifeSelected?native->snapshot.knife:native->snapshot.original,nativeReadiness);
-        sample.trackedKnifeOwned=sample.knifeSelected&&nativeOwned_&&bodyOperation_&&body.TemporaryToolOperation()==bodyOperation_&&rendered&&
+        const bool nativeHoldCurrent=native->healthy&&sample.knifeSelected&&nativeOwned_&&bodyOperation_&&
+            body.TemporaryToolOperation()==bodyOperation_;
+        measuredKnifeHold=nativeHoldCurrent&&rendered&&
             rendered->source.bodyOperation==bodyOperation_&&rendered->source.knife==*key&&
             rendered->rigFingerprint==ChestKnifeGripProfiles()[0].rigFingerprint&&
             ChestKnifeRenderCurrent(rendered->source,s.owner,s.hand,s.hand.nowNs);
-        sample.stockTriggerReady=native->stockTriggerEnabled&&!native->attackBridgeEnabled&&
-            sample.trackedKnifeOwned&&sample.mechanicsSettled;
-        if(sample.trackedKnifeOwned)sample.heldContact={{0x4243324b47524950ull,key->generation},s.hand.sequence,
+        sample.trackedKnifeOwned=measuredKnifeHold;
+        if(measuredKnifeHold)sample.heldContact={{0x4243324b47524950ull,key->generation},s.hand.sequence,
             (std::min)(s.hand.deadlineNs,rendered->source.input.deadlineNs),true};
+        else if(!rendered){
+            const auto retained=ChestKnifeRetainedStockContact(policy_,hands,sample,
+                native->stockTriggerEnabled&&!native->attackBridgeEnabled,nativeHoldCurrent);
+            if(retained){sample.trackedKnifeOwned=true;sample.heldContact=*retained;}
+        }
+        const bool existingHoldCurrent=!policy_.NeedsInitialHeldPose()&&ChestKnifeRenderPoseCustody(policy_,hands,s.hand);
+        sample.stockTriggerReady=existingHoldCurrent&&native->stockTriggerEnabled&&!native->attackBridgeEnabled&&
+            sample.trackedKnifeOwned&&sample.mechanicsSettled;
         // Raw original grip in one fixed tracking epoch, never rendered/head
         // motion. Native and shared hand admission are checked again at Stage.
-        if(sample.trackedKnifeOwned&&s.input.hands[1].gripTracked)
+        if(measuredKnifeHold&&s.input.hands[1].gripTracked)
         if(const auto motion=private_knife::KnifeMotionFromTrackedGrip(s.input,rendered->wristInGrip)){
             sample.tip=motion->tip;sample.direction=motion->direction;
             if(native->attackBridgeEnabled&&currentBody)
                 attackGeometry=selectedKnife::MapTrackedGeometry(s.input,rendered->wristInGrip,*currentBody);
-            sample.nativeAttackReady=native->motionEnabled&&sample.trackedKnifeOwned&&sample.mechanicsSettled&&
+            sample.nativeAttackReady=existingHoldCurrent&&native->motionEnabled&&measuredKnifeHold&&sample.mechanicsSettled&&
                 (!native->attackBridgeEnabled||attackGeometry.has_value());
         }
     }else ++readGaps_;
@@ -172,7 +183,7 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
     witness.phase=unsigned(policy_.Phase());witness.nativeOwned=nativeOwned_;
     witness.empty=sample.emptyHands&&!body.TemporaryToolActive()&&!policy_.Hold()&&!nativeOwned_&&
         sample.controlsNeutral&&sample.fireSuppressed&&GameplayOwnsInput(sample.menu,s.hand.nowNs)&&native&&native->healthy;
-    witness.held=policy_.Hold()&&policy_.Hold()->kind==HandClaimKind::GunHold&&poseCustody&&sample.trackedKnifeOwned&&native&&native->healthy&&
+    witness.held=policy_.Hold()&&policy_.Hold()->kind==HandClaimKind::GunHold&&poseCustody&&measuredKnifeHold&&native&&native->healthy&&
         sample.gripHeld[1]&&sample.holdInputCurrent&&sample.fireSuppressed&&GameplayOwnsInput(sample.menu,s.hand.nowNs);
     witness.attackReady=witness.held&&KnifeActionInputCurrent(sample)&&sample.nativeAttackReady;
     witness.recognizerReady=witness.attackReady&&policy_.RecognitionReady(sample.source);
@@ -198,7 +209,7 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
     observation.phase=policy_.Phase();observation.nativeOwned=nativeOwned_;observation.nativeHealthy=native->healthy;
     observation.nativeObservationComplete=native->observationComplete;observation.stockTriggerEnabled=native->stockTriggerEnabled;
     observation.motionEnabled=native->motionEnabled;observation.attackBridgeEnabled=native->attackBridgeEnabled;
-    observation.held=poseCustody&&policy_.Hold()&&held->token==*policy_.Hold()&&sample.trackedKnifeOwned&&rendering_.has_value();
+    observation.held=poseCustody&&policy_.Hold()&&held->token==*policy_.Hold()&&measuredKnifeHold&&rendering_.has_value();
     observation.stockTriggerReady=sample.stockTriggerReady;observation.stockTriggerArmed=policy_.StockTriggerArmedFor(sample,hands);
     observation.fireSuppressed=sample.fireSuppressed;observation.mechanicsSettled=sample.mechanicsSettled;
     ChestKnifeCurrentHoldObservation current;current.current=observation;current.nativeWork=native->currentHoldWork;

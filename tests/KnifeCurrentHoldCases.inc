@@ -34,6 +34,9 @@ int CurrentHoldCases(){
     CurrentHoldFixture fixture;CHECK(fixture.SetUp());const auto v=fixture.value;const auto now=v.current.input.nowNs;
     CHECK(!ChestKnifeCurrentHoldObservation::actionAuthority);
     CHECK(ChestKnifeCurrentHoldRejection(v,now).empty());
+    auto jab=v;jab.current.motionEnabled=true;CHECK(ChestKnifeCurrentHoldRejection(jab,now).empty());
+    std::ostringstream jabJson;WriteChestKnifeCurrentHoldObservation(jabJson,&jab,now);
+    CHECK(jabJson.str().find("\"motionEnabled\":true")!=std::string::npos);
     CHECK(!ChestKnifeLiveRejection(v.current,now).empty());
     CHECK(ChestKnifePublicationBranch(v.current)=="native_observation_complete");
     ChestKnifeLivePublication strict;strict.Request(now);CHECK(!strict.Publish(v.current,now)&&!strict.Read(now));
@@ -64,7 +67,7 @@ int CurrentHoldCases(){
         case 12:c.phase=KnifePhase::ReturnStaged;break;case 13:c.phase=KnifePhase::Returning;break;
         case 14:c.phase=KnifePhase::Unknown;break;case 15:c.nativeHealthy=false;break;
         case 16:c.nativeOwned=false;break;case 17:c.stockTriggerEnabled=false;break;
-        case 18:c.motionEnabled=true;break;case 19:c.attackBridgeEnabled=true;break;
+        case 18:c.motionEnabled=true;c.attackBridgeEnabled=true;break;case 19:c.attackBridgeEnabled=true;break;
         case 20:c.held=false;break;case 21:c.fireSuppressed=false;break;case 22:c.mechanicsSettled=false;break;
         case 23:c.input.observedNs=now+1;break;case 24:c.rendered.source.input.deadlineNs=now;break;
         case 25:c.controls.hands[0].trigger=.2f;break;case 26:c.controls.hands[1].trigger=.2f;break;

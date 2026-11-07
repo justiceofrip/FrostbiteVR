@@ -26,7 +26,7 @@ int IndependentCompileAndRuntimeKnobs(){
  CHECK(!NormalKnifeMotion(KnifeOff)&&!NormalKnifeMotion(KnifeHolsterOnly));
  CHECK(NormalKnifeMotion(KnifeStockMotion));
  CHECK(ValidNormalPlayerTools(KnifeStockTrigger,0,flags,123,3,false,true,false));
- CHECK(!NormalKnifeMotion(KnifeStockTrigger)&&NormalKnifeStockTrigger(KnifeStockTrigger));
+ CHECK(NormalKnifeMotion(KnifeStockTrigger)&&NormalKnifeStockTrigger(KnifeStockTrigger));
  for(unsigned mode:{KnifeOff,KnifeStockMotion,KnifeHolsterOnly,KnifeTrackedQualification})CHECK(!NormalKnifeStockTrigger(mode));
  CHECK(!ValidNormalPlayerTools(5,0,flags,123,3,false,true,true));
  CHECK(!ValidNormalPlayerTools(0,2,flags,123,3,false,true,true));return 0;

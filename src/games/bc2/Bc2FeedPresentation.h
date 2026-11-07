@@ -79,17 +79,25 @@ template<std::size_t N> inline std::string_view Text(const std::array<char,N>& v
     return end==value.end()?std::string_view{}:std::string_view(value.data(),std::size_t(end-value.begin()));
 }
 }
+inline const interaction::HandInteractionSample& Bc2FeedDisplayInput(const Bc2PhysicalFeedPresentation& p)noexcept {
+    return p.displayInput?*p.displayInput:p.input;
+}
 // Native equipment generation and HandInteraction equipment generation are
 // distinct domains. The current actual hand owner validates the latter.
 inline bool Bc2FeedSourceFresh(const Bc2PhysicalFeedPresentation& p,const ReloadStateOwner& owner,
     const interaction::HandInteractionSample& current,const WeaponEquipmentIdentity& equipment,
     const RigIdentity& rig,std::int64_t now)noexcept {
     using namespace feed_presentation_detail;
-    const auto* row=FindBc2FeedRegistration(p.registrationKey);
+    const auto* row=FindBc2FeedRegistration(p.registrationKey);const auto& display=Bc2FeedDisplayInput(p);
     return row&&p.chainCount==row->geometry.chainCount&&p.rigFingerprint==row->geometry.rigFingerprint&&
         owner.player&&owner.soldier&&owner.weak&&owner.weapon&&owner.actorGeneration&&owner.equipGeneration&&owner.space&&
         p.owner==owner&&p.rig==rig&&rig.soldier==owner.soldier&&rig.weak==owner.weak&&
-        p.lifetime&&p.revision&&p.rigFingerprint&&Window(p.input,now)&&Window(current,now)&&
+        p.lifetime&&p.revision&&p.rigFingerprint&&Window(display,now)&&Window(current,now)&&
+        (!p.displayInput||(p.displayEquipment==equipment&&!p.mechanismClaim&&!p.mechanismInput&&
+            !p.mechanismWristWorldMeters&&!p.supplyObject&&p.operation==interaction::FeedPhysicalOperation::None&&
+            p.targetKind==interaction::FeedInteractionTargetKind::None&&display.owner==p.input.owner&&
+            display.sequence>=p.input.sequence&&display.observedNs>=p.input.observedNs))&&
+        display.owner==current.owner&&display.sequence<=current.sequence&&display.observedNs<=current.observedNs&&
         p.input.owner==current.owner&&p.input.sequence<=current.sequence&&p.input.observedNs<=current.observedNs&&
         (!p.mechanismInput||(p.mechanismInput->owner==current.owner&&
             p.mechanismInput->sequence<=current.sequence&&p.mechanismInput->observedNs<=current.observedNs))&&
@@ -114,7 +122,7 @@ inline std::optional<math::Matrix4> Bc2FeedMechanismWristWorld(const Bc2Physical
     return Pose(wrist)?std::optional<math::Matrix4>{wrist}:std::nullopt;
 }
 inline bool Bc2FeedMechanismClaimFresh(const Bc2PhysicalFeedPresentation& p,std::int64_t now)noexcept {
-    if(!p.mechanismClaim||!p.mechanismInput||!p.mechanismWristWorldMeters||
+    if(p.displayInput||!p.mechanismClaim||!p.mechanismInput||!p.mechanismWristWorldMeters||
        !feed_presentation_detail::Window(p.input,now)||!feed_presentation_detail::Window(*p.mechanismInput,now))return false;
     const auto& claim=*p.mechanismClaim;const auto& token=claim.token;
     const auto& hand=*p.mechanismInput;
@@ -174,22 +182,36 @@ inline bool Bc2FeedSelectedRetained(const SelectedMeshesSnapshot& old,const Sele
 inline bool Bc2FeedPresentationRetained(const Bc2PhysicalFeedPresentation& original,
     const Bc2PhysicalFeedPresentation& current,bool posedHand,std::int64_t now)noexcept {
     const auto* row=FindBc2FeedRegistration(original.registrationKey);
-    if(!feed_presentation_detail::Window(original.input,now)||!feed_presentation_detail::Window(current.input,now)||
+    if(!feed_presentation_detail::Window(Bc2FeedDisplayInput(original),now)||!feed_presentation_detail::Window(Bc2FeedDisplayInput(current),now)||
        original.owner!=current.owner||original.rig!=current.rig||original.rigFingerprint!=current.rigFingerprint||
        original.registrationKey!=current.registrationKey||original.chainCount!=current.chainCount||
        !row||original.chainCount!=row->geometry.chainCount||original.rigFingerprint!=row->geometry.rigFingerprint||
        (original.carriedPartsMask&~feed_presentation_detail::CarryMask(original.chainCount))||
        original.input.owner!=current.input.owner||current.input.sequence<original.input.sequence||
+       Bc2FeedDisplayInput(current).sequence<Bc2FeedDisplayInput(original).sequence||
        original.weapon!=current.weapon||original.supply!=current.supply||original.lifetime!=current.lifetime||
-       current.revision<original.revision||original.carriedPartsMask!=current.carriedPartsMask||
-       bool(original.supplyObject)!=bool(current.supplyObject)||
-       (original.supplyObject&&(original.supplyObject->identity!=current.supplyObject->identity||
-        original.supplyObject->item!=current.supplyObject->item||original.supplyObject->units!=current.supplyObject->units)))return false;
-    return !posedHand||(Bc2FeedMechanismClaimFresh(original,now)&&Bc2FeedMechanismClaimFresh(current,now)&&
+       current.revision<original.revision||original.carriedPartsMask!=current.carriedPartsMask)return false;
+    // The supply object carries hand authority. Persistent part geometry is
+    // pinned by the supply, lifetime and carried-part identities above.
+    return !posedHand||(bool(original.supplyObject)==bool(current.supplyObject)&&
+        (!original.supplyObject||(original.supplyObject->identity==current.supplyObject->identity&&
+            original.supplyObject->item==current.supplyObject->item&&original.supplyObject->units==current.supplyObject->units))&&
+        Bc2FeedMechanismClaimFresh(original,now)&&Bc2FeedMechanismClaimFresh(current,now)&&
         current.mechanismInput->sequence>=original.mechanismInput->sequence&&
         current.mechanismInput->observedNs>=original.mechanismInput->observedNs&&
         original.mechanismClaim->token==current.mechanismClaim->token&&original.operation==current.operation&&
         original.targetKind==current.targetKind);
+}
+// Geometry belongs to the mechanical state. A missing/expired hand claim
+// removes only its hand attachment, never the still-owned cover/box/belt pose.
+// This grants no new lease: source, selection and native rig checks remain at
+// each caller, and the original presentation window still bounds both choices.
+enum class Bc2FeedPaletteRetention { None, Parts, Hand };
+inline Bc2FeedPaletteRetention Bc2FeedRetainedPalette(const Bc2PhysicalFeedPresentation& original,
+    const Bc2PhysicalFeedPresentation& current,bool posedHand,std::int64_t now)noexcept {
+    if(!Bc2FeedPresentationRetained(original,current,false,now))return Bc2FeedPaletteRetention::None;
+    return posedHand&&Bc2FeedPresentationRetained(original,current,true,now)?
+        Bc2FeedPaletteRetention::Hand:Bc2FeedPaletteRetention::Parts;
 }
 inline std::optional<Bc2FeedPartFrames> Bc2FeedWorldBases(
     const Bc2PhysicalFeedPresentation& p,const math::Matrix4& placedWeaponWorldMeters)noexcept {

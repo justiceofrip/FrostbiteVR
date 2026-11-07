@@ -228,6 +228,9 @@ inline const Bc2M60FeedGeometry M60Geometry{
     if(!ValidateBc2FeedGeometry(geometry)||
        Bc2FeedOperationAvailability(operation)!=Bc2FeedGeometryAvailability::MeasuredAuthoredGeometry)return {};
     FeedMotionProfile out;out.operation=operation;out.measured=true;
+    // Shared belt-fed interaction policy; authored geometry and native
+    // transaction eligibility are unchanged for every registered configuration.
+    out.retainWhileGripped=true;out.acquisitionRadiusMeters=.12f;
     out.pathToleranceMeters=policy.pathToleranceMeters;
     out.orientationToleranceRadians=policy.orientationToleranceRadians;
     out.maxStepMeters=policy.maxStepMeters;out.maxStepRadians=policy.maxStepRadians;

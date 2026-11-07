@@ -109,6 +109,9 @@ ChestKnifeLiveObservation LiveFixture(){
 int LiveObservationCases(){
     const auto v=LiveFixture();const auto now=v.input.nowNs;
     CHECK(ChestKnifeLiveRejection(v,now).empty());
+    auto jab=v;jab.motionEnabled=true;CHECK(ChestKnifeLiveRejection(jab,now).empty());
+    std::ostringstream jabJson;WriteChestKnifeLiveObservation(jabJson,&jab,jab.owner,jab.input,jab.controls,now);
+    CHECK(jabJson.str().find("\"motionEnabled\":true")!=std::string::npos);
     CHECK(ChestKnifeLiveJoinRejection(v,v.owner,v.input,v.controls,now).empty());
     CHECK(ChestKnifeLiveDeadline(v)==v.input.deadlineNs);
     for(unsigned fault=0;fault<49;++fault){auto bad=v;
@@ -119,7 +122,7 @@ int LiveObservationCases(){
         case 6:bad.bodyOperation=0;break;case 7:bad.phase=KnifePhase::Attacking;break;
         case 8:bad.nativeHealthy=false;break;case 9:bad.nativeOwned=false;break;
         case 10:bad.nativeObservationComplete=false;break;case 11:bad.stockTriggerEnabled=false;break;
-        case 12:bad.motionEnabled=true;break;case 13:bad.attackBridgeEnabled=true;break;
+        case 12:bad.motionEnabled=true;bad.attackBridgeEnabled=true;break;case 13:bad.attackBridgeEnabled=true;break;
         case 14:bad.held=false;break;case 15:bad.stockTriggerReady=false;break;
         case 16:bad.stockTriggerArmed=false;break;case 17:bad.fireSuppressed=false;break;
         case 18:bad.mechanicsSettled=false;break;case 19:bad.input.observedNs=now+1;break;

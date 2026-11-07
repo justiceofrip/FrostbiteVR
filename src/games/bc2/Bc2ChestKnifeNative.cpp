@@ -3,6 +3,7 @@
 #include "KnifeNativeCode.h"
 #include "Bc2KnifeAttackGate.h"
 #include "Bc2KnifeStockTriggerSource.h"
+#include "Bc2KnifeStockMotionSource.h"
 #include "Bc2KnifeCopyReceipt.h"
 #include "Bc2OriginalFiringUnwind.h"
 #include "Bc2KnifeAcceptedOwnership.h"
@@ -56,6 +57,7 @@ struct Service {
     std::atomic<std::shared_ptr<const pk::Anchor>> deployGuard;pk::DrawReturnGate commands;pk::KnifeAttackGate attacks;KnifeSample source{};
     pk::OriginalKnifeSource sourceIdentity;
     pk::StockKnifeSourceRevocation stockTriggerSource;std::uint64_t stagedStockTriggerRevocation=0;
+    pk::StockKnifeMotionSourceRevocation stockMotionSource;std::uint64_t stagedStockMotionRevocation=0;
     std::uint64_t stagedEpoch=0,bodyOperation=0,nativeLifetime=0,observationSequence=0;
     std::optional<KnifeCommand> outstanding;
     std::uint64_t currentHoldDrawSerial=0;bool currentHoldDrawOnly=false; // Passive per-Draw provenance.
@@ -112,6 +114,8 @@ bool SameCommandSource(const KnifeCommand& c,const KnifeSample& s)noexcept {
 bool SourceCurrent(const KnifeCommand& c,std::int64_t now)noexcept {
     if(c.stockTriggerHold&&!service.attacks.Accepted()&&
        !service.stockTriggerSource.Current(service.stagedStockTriggerRevocation))return false;
+    if(c.stroke&&!service.attackBridgeEnabled&&!service.attacks.Accepted()&&
+       !service.stockMotionSource.Current(service.stagedStockMotionRevocation))return false;
     if(service.closing.load(std::memory_order_acquire)||service.stagedEpoch!=service.sourceEpoch.load(std::memory_order_acquire)||
        !pk::DrawReturnGate::Fresh(c,now)||!SameCommandSource(c,service.source)||
        !GameplayOwnsInput(service.source.menu,now))return false;
@@ -417,7 +421,7 @@ bool __fastcall DeployReady(void* self,void*){
 }
 #include "Bc2ChestKnifeAttackBridge.inc"
 bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uintptr_t base,const ReloadStateMemory& memory,bool motionEnabled,bool attackBridgeEnabled,bool stockTriggerEnabled)noexcept {
-    if((attackBridgeEnabled&&!ChestKnifeTrackedStrikeAvailable)||(stockTriggerEnabled&&(motionEnabled||attackBridgeEnabled)))return false;
+    if((attackBridgeEnabled&&!ChestKnifeTrackedStrikeAvailable)||(stockTriggerEnabled&&attackBridgeEnabled))return false;
     if(service.installed||base>UINT32_MAX||!memory.read||!memory.type)return false;
     const auto mode=DiscoverWeaponMode(bytes,pe);const auto state=DiscoverReloadState(bytes,pe);const auto server=DiscoverReloadServer(bytes,pe);const auto flow=DiscoverReloadFlow(bytes,pe);
     if(!mode||!state||!server||!flow||!ValidateReloadFlowLive(memory,*flow,unsigned(base))||!pk::VerifyAttackCode(memory,unsigned(base),state->imageSize)||!pk::VerifyDrawReturnCode(memory,unsigned(base),state->imageSize,*mode)||
@@ -465,7 +469,7 @@ void SourceAdvanced(const HandInteractionSample& source)noexcept {
 }
 bool TryIdleHeldGun(const KnifeSample& source)noexcept {
     std::unique_lock lock(service.gate,std::try_to_lock);
-    if(!lock.owns_lock()||!service.enabled.load()||service.closing.load()||service.motionEnabled||
+    if(!lock.owns_lock()||!service.enabled.load()||service.closing.load()||(service.motionEnabled&&!service.stockTriggerEnabled)||
        service.attackBridgeEnabled||service.bad||service.anchor||service.owned||service.outstanding||
        service.commands.Pending()||service.returnReady)return false;
     SourceAdvanced(source.source);
@@ -479,6 +483,7 @@ bool BeforePrepare(const KnifeSample& source,ChestKnifeCustody& policy)noexcept 
     // Stock authority may disappear on an identical controller packet, even
     // when the service lock is busy. Restoration cannot revive its old stage.
     if(service.stockTriggerEnabled)service.stockTriggerSource.Advance(source,policy.NeedsNativeCleanup());
+    if(service.motionEnabled&&!service.attackBridgeEnabled)service.stockMotionSource.Advance(source,policy.NeedsNativeCleanup());
     // A repeated input can lose its rendered grip/handout. Revoke the blade
     // before taking the service lock; this is not the draw/return source epoch.
     if(service.enabled.load(std::memory_order_acquire)&&service.attackBridgeEnabled&&
@@ -535,6 +540,7 @@ bool Stage(const KnifeCommand& command,const KnifeSample& source,const HandInter
         service.lastAttackObservedNs=command.source.observedNs;service.lastAttackSerial=command.serial;}
     service.source=source;service.stagedEpoch=service.sourceEpoch.load(std::memory_order_acquire);
     service.stagedStockTriggerRevocation=command.stockTriggerHold?service.stockTriggerSource.Stamp():0;
+    service.stagedStockMotionRevocation=command.stroke&&!service.attackBridgeEnabled?service.stockMotionSource.Stamp():0;
     service.outstanding=command;service.returnReady=false;
     if(drawing){service.currentHoldDrawSerial=command.serial;service.currentHoldDrawOnly=true;}
     if(command.kind==KnifeCommandKind::Return){service.lastReturnReason=ReturnPendingReason::NotObserved;service.lastReturnObservedNs=0;service.lastReturnReadiness={};service.lastReturnBad=false;service.lastReturnBadKnown=false;}

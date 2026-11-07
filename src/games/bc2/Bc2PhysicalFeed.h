@@ -16,6 +16,10 @@ struct Bc2PhysicalFeedPresentation {
     ReloadStateOwner owner{};
     RigIdentity rig{};
     interaction::HandInteractionSample input{};
+    // Display confirmation is separate from the original raw motion packet.
+    // It grants only the retained local mechanical pose, never hand authority.
+    std::optional<interaction::HandInteractionSample> displayInput;
+    WeaponEquipmentIdentity displayEquipment{};
     interaction::HandInteractionKey weapon{};
     interaction::FeedSupplyKey supply{};
     std::uint64_t lifetime=0,revision=0,rigFingerprint=0,registrationKey=0;
