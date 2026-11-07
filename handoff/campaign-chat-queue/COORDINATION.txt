@@ -11,6 +11,11 @@ Ownership: prior CHAT25/26 close.json confirms lease release, idle helpers and
 exact profile restoration. Coordinator acquired the lease before shared mutations.
 External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned.
 
+Native74 candidate664/ROOT669 protects active frame readers during owner teardown
+and retains the complete BC2 bridge on failed close;667 review found no actionable
+issue. Both normal builds and resource/CRT-exit tests are pending. Installed73 is
+unchanged; actual646 crash causation is not established. See native74 README.
+
 Private0.1.73/native73/fallback72 is installed and setup-validated; source5d7d04f
 is pushed to campaign and accepted checkpoint. Normal351 x86/348 x64 passed;
 settings/307 cached parts are preserved and the stable private entry verifies73.

@@ -8,6 +8,8 @@
 #include "fvr/ipc/RemoteFrameProvider.h"
 #include "fvr/xr/HostCopyLease.h"
 #include "Test.h"
+#include "../src/games/bc2/Bc2ProcessRetainedFrameBridge.h"
+#include <cstdlib>
 #include <Windows.h>
 #include <d3d11.h>
 #include <wrl/client.h>
@@ -17,17 +19,42 @@
 #include <sstream>
 #include <string_view>
 #include <thread>
+#include <future>
+#include <chrono>
+#include <utility>
 // Test-only access to force the real local staged gate busy, rather than
 // hoping for a timing race or faking a GPU completion.
 namespace fvr::ipc {struct StagedFrameProducerTestAccess {
  static bool Lock(StagedFrameProducer& p){return !p.gate_.test_and_set(std::memory_order_acquire);}
  static void Unlock(StagedFrameProducer& p){p.gate_.clear(std::memory_order_release);}
+ static bool OwnsSource(const StagedFrameProducer& p,unsigned slot){
+  return p.channel_.SourceSlotCount()>1?p.pipelineSlots_[slot].ownsSource&&!p.pipelineSlots_[slot].callbackComplete:
+   p.step_==StagedFrameProducer::Step::Publishing||p.step_==StagedFrameProducer::Step::Waiting;
+ }
+ static bool Targets(const StagedFrameProducer& p,const runtime::IFrameProvider& target,const void* observer){return &p.feedback_==&target&&p.observerContext_==observer;}
+ template<class Read> static ChannelResult ReadInputHeld(StagedFrameProducer& p,interaction::InputFrame& out,std::int64_t* deadline,Read&& read){
+  return p.ReadInputGuarded(out,deadline,std::forward<Read>(read));
+ }
 };}
 namespace fvr::graphics {struct D3D11FrameBridgeTestAccess {
  static ipc::StagedFrameProducer& Channel(D3D11FrameBridge& b){return b.channel_;}
  static bool Prepared(const D3D11FrameBridge& b,const ipc::FrameLease& l){return b.PreparedGraphicsMatches(l);}
  static void ReleaseCapture(D3D11FrameBridge& b,unsigned slot){b.TryReleasePipelineCapture(slot);}
  static bool CaptureReleased(const D3D11FrameBridge& b,unsigned slot){return b.pipeline_[slot].captureReleased;}
+ static ID3D11Texture2D* CaptureSource(const D3D11FrameBridge& b,unsigned eye){return b.eyes_[eye].Get();}
+ // Read only after the graphics worker has joined, or on that worker itself.
+ static bool RetainedSource(const D3D11FrameBridge& b,unsigned slot){
+  if(!b.device_||!b.context_||!b.eyes_[0]||!b.eyes_[1]||
+     !ipc::StagedFrameProducerTestAccess::Targets(b.channel_,b,&b)||
+     !ipc::StagedFrameProducerTestAccess::OwnsSource(b.channel_,slot))return false;
+  if(b.pipelineEnabled_){const auto& s=b.pipeline_[slot];return Valid(s.color.Descriptor())&&s.depthInitialized&&s.depthFrame.flags;}
+  return Valid(b.producer_.Descriptor())&&b.depthInitialized_&&b.pendingDepth_.flags;
+ }
+ static bool ResourcesClosed(const D3D11FrameBridge& b){
+  if(b.device_||b.context_||b.eyes_[0]||b.eyes_[1]||Valid(b.producer_.Descriptor())||b.depthInitialized_)return false;
+  for(const auto& s:b.pipeline_)if(Valid(s.color.Descriptor())||s.depthInitialized)return false;
+  return true;
+ }
 };}
 using namespace fvr::graphics;using Microsoft::WRL::ComPtr;
 namespace {
@@ -1041,7 +1068,210 @@ int RunBridgeWorldTransition(bool thirdSource){using namespace fvr;
  bridge.CloseGraphics();host.Close();std::cout<<"World-owner bridge GPU sources="<<(thirdSource?3:2)<<": held/draining rejection, live input, frame-1 fresh resources and exact new pixels passed\n";return 0;
 }
 
-int main(int argc,char** argv){if(argc==2&&std::string_view(argv[1])=="--legacy-depth-cache"){for(unsigned samples:{1u,2u,4u,8u})if(Run(samples))return 1;return 0;}
+// Headset-free WARP lifetime check; no shared textures or native game callbacks.
+// This exercises the real D3D11 bridge/channel and COM owner retention on Busy.
+int RunShutdownLifetime(unsigned slots){
+ using namespace fvr;using namespace std::chrono_literals;
+ struct Environment {
+  const wchar_t* name;std::wstring saved;bool present=false;
+  explicit Environment(const wchar_t* n):name(n){wchar_t value[32768]{};const auto size=GetEnvironmentVariableW(n,value,unsigned(std::size(value)));present=size>0&&size<std::size(value);if(present)saved.assign(value,size);}
+  ~Environment(){SetEnvironmentVariableW(name,present?saved.c_str():nullptr);}
+ } pipelineEnvironment(L"FVR_PRIVATE_TWO_SOURCE_SLOTS"),thirdEnvironment(L"FVR_PRIVATE_THREE_SOURCE_SLOTS"),earlyEnvironment(L"FVR_PRIVATE_EARLY_FRAME_ADMISSION");
+ CHECK(SetEnvironmentVariableW(pipelineEnvironment.name,slots>1?L"1":nullptr));
+ CHECK(SetEnvironmentVariableW(thirdEnvironment.name,slots==3?L"1":nullptr));
+ CHECK(SetEnvironmentVariableW(earlyEnvironment.name,nullptr));
+ ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;D3D_FEATURE_LEVEL level;
+ CHECK(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&device,&level,&context)));
+ ipc::FrameChannel host;CHECK(host.CreateHost(slots>1,slots==3,slots==3,slots==3));
+ auto storage=std::make_unique<D3D11FrameBridge>();auto& bridge=*storage;
+ interaction::InputFrame beforeConnect{};std::int64_t beforeDeadline=99;
+ CHECK(bridge.ReadInput(beforeConnect,&beforeDeadline)==ipc::ChannelResult::Closed&&!beforeDeadline);
+ CHECK(!bridge.PublishFeedback({}));
+ CHECK(bridge.ConnectGraphics(device.Get(),host.Token(),FrameSharingPreference::LegacyIpc));
+ CHECK(bridge.SourceSlotCount()==slots&&bridge.MatchesGraphicsOwner(device.Get(),context.Get())&&bridge.OnGraphicsThread());
+ interaction::InputFrame input{};input.generation=1;input.spaceGeneration=7;
+ input.predictedNs=1000000000;input.headValid=input.focused=true;
+ CHECK(host.PublishInput(input)==ipc::ChannelResult::Ok);
+ auto& staged=D3D11FrameBridgeTestAccess::Channel(bridge);
+ std::promise<void> entered;auto admission=entered.get_future();
+ std::future<ipc::ChannelResult> reader;
+ std::promise<void> release;auto released=release.get_future().share();
+ reader=std::async(std::launch::async,[&,released]{
+  interaction::InputFrame read{};return ipc::StagedFrameProducerTestAccess::ReadInputHeld(staged,read,nullptr,
+   [&](ipc::FrameChannel& wire,interaction::InputFrame& value,std::int64_t* deadline)noexcept {
+    const auto result=wire.ReadInput(value,deadline);entered.set_value();released.wait();return result;
+   });
+ });
+ CHECK(admission.wait_for(1s)==std::future_status::ready);
+ CHECK(!bridge.CloseGraphics()&&!bridge.CloseGraphics());
+ CHECK(bridge.Connected()&&bridge.OnGraphicsThread()&&bridge.MatchesGraphicsOwner(device.Get(),context.Get()));
+ CHECK(host.Connected()&&reader.wait_for(0ms)==std::future_status::timeout);
+ interaction::InputFrame rejected{};CHECK(bridge.ReadInput(rejected)==ipc::ChannelResult::Closed);
+ release.set_value();CHECK(reader.get()==ipc::ChannelResult::Ok);
+ CHECK(bridge.ReadInput(rejected)==ipc::ChannelResult::Closed);
+ CHECK(bridge.CloseGraphics()&&!bridge.Connected()&&!bridge.OnGraphicsThread());
+ CHECK(!bridge.MatchesGraphicsOwner(device.Get(),context.Get())&&!host.Connected()&&!bridge.Fatal());
+ CHECK(bridge.CloseGraphics());host.Close();
+ std::cout<<"Shutdown lifetime sources="<<slots<<": held real input, sealed admission, retained graphics owner, completed close passed\n";
+ return 0;
+}
+
+
+// Explicit HARDWARE shared-resource cases. Separate from the unchanged WARP
+// --shutdown-lifetime gate test; neither mode starts BC2 or an XR session.
+namespace {
+struct ShutdownEnvironment {
+ const wchar_t* name;std::wstring value;bool present=false;
+ explicit ShutdownEnvironment(const wchar_t* n):name(n){wchar_t text[32768]{};const auto count=GetEnvironmentVariableW(n,text,unsigned(std::size(text)));present=count&&count<std::size(text);if(present)value.assign(text,count);}
+ ~ShutdownEnvironment(){SetEnvironmentVariableW(name,present?value.c_str():nullptr);}
+};
+struct SourceReleaseCounts {
+ std::atomic<unsigned> released=0,wrongThread=0;
+ DWORD owner=0;
+} sourceReleaseCounts;
+// D3D owns this witness through the two REAL bridge capture textures. It has
+// no reference back to a texture/device and cannot keep either resource alive.
+class SourceReleaseWitness final:public IUnknown {
+ std::atomic<ULONG> references_=1;
+public:
+ HRESULT STDMETHODCALLTYPE QueryInterface(REFIID id,void** out)override {
+  if(!out)return E_POINTER;*out=nullptr;if(id!=IID_IUnknown)return E_NOINTERFACE;
+  *out=static_cast<IUnknown*>(this);AddRef();return S_OK;
+ }
+ ULONG STDMETHODCALLTYPE AddRef()override{return ++references_;}
+ ULONG STDMETHODCALLTYPE Release()override {
+  const auto count=--references_;if(!count){
+   if(GetCurrentThreadId()!=sourceReleaseCounts.owner)++sourceReleaseCounts.wrongThread;
+   ++sourceReleaseCounts.released;delete this;
+  }return count;
+ }
+};
+const GUID sourceReleaseGuid{0x8d92c941,0x3108,0x411a,{0x9b,0x91,0x82,0x9c,0x65,0x30,0x21,0x64}};
+struct RetainedExit {
+ D3D11FrameBridge* bridge=nullptr;unsigned slot=0;bool armed=false;
+} retainedExit;
+bool RetainedExitIntact(){
+ return retainedExit.bridge&&retainedExit.bridge->Connected()&&
+  retainedExit.bridge->Published()==2&&retainedExit.bridge->Consumed()==1&&!retainedExit.bridge->Discarded()&&
+  !sourceReleaseCounts.released.load()&&!sourceReleaseCounts.wrongThread.load()&&
+  D3D11FrameBridgeTestAccess::RetainedSource(*retainedExit.bridge,retainedExit.slot);
+}
+void CheckRetainedProcessExit(){
+ if(!retainedExit.armed)return;
+ // No GPU calls or CloseGraphics here. The owner is gone, and no later
+ // callback is supplied to make this case succeed. This is the CRT-exit path.
+ if(!RetainedExitIntact()){
+  std::fprintf(stderr,"Retained bridge/source graph changed during process teardown\n");std::_Exit(1);
+ }
+ std::fprintf(stdout,"Retained bridge/source graph survived CRT exit; no foreign-thread release\n");
+}
+}
+
+int RunShutdownResources(unsigned slots,bool retainUntilExit,bool acknowledge){
+ using namespace fvr;
+ ShutdownEnvironment pipeline(L"FVR_PRIVATE_TWO_SOURCE_SLOTS"),third(L"FVR_PRIVATE_THREE_SOURCE_SLOTS"),early(L"FVR_PRIVATE_EARLY_FRAME_ADMISSION");
+ CHECK(SetEnvironmentVariableW(pipeline.name,slots>1?L"1":nullptr));
+ CHECK(SetEnvironmentVariableW(third.name,slots==3?L"1":nullptr));
+ CHECK(SetEnvironmentVariableW(early.name,nullptr));
+ ComPtr<ID3D11Device> device,hostDevice;ComPtr<ID3D11DeviceContext> context,hostContext;D3D_FEATURE_LEVEL level;
+ CHECK(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_HARDWARE,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&device,&level,&context)));
+ CHECK(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_HARDWARE,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&hostDevice,&level,&hostContext)));
+ ComPtr<IDXGIDevice> dx;ComPtr<IDXGIAdapter> adapter;DXGI_ADAPTER_DESC gpu{};
+ CHECK(SUCCEEDED(device.As(&dx))&&SUCCEEDED(dx->GetAdapter(&adapter))&&SUCCEEDED(adapter->GetDesc(&gpu)));
+ ipc::RemoteFrameProvider host;CHECK(host.Create(slots>1,slots==3,slots==3,slots==3)&&host.SetRequestLifetime(200));
+ // EXACT production lifetime factory, rather than a test-only leak wrapper.
+ auto& bridge=bc2::MakeProcessRetainedFrameBridge();
+ CHECK(!bridge.ConnectGraphics(device.Get(),host.Token()+L"-missing",FrameSharingPreference::LegacyIpc));
+ CHECK(!bridge.Connected()&&D3D11FrameBridgeTestAccess::ResourcesClosed(bridge));
+ CHECK(bridge.ConnectGraphics(device.Get(),host.Token(),FrameSharingPreference::LegacyIpc));
+ CHECK(bridge.SourceSlotCount()==slots&&bridge.OnGraphicsThread());
+ std::array<Color,2> native,copied;for(unsigned eye=0;eye<2;++eye)CHECK(MakeColor(device.Get(),native[eye])&&MakeColor(hostDevice.Get(),copied[eye]));
+ const float blue[]{0,0,1,1},red[]{1,0,0,1};context->ClearRenderTargetView(native[0].target.Get(),blue);context->ClearRenderTargetView(native[1].target.Get(),red);
+ D3D11_TEXTURE2D_DESC dd{};dd.Width=dd.Height=32;dd.MipLevels=dd.ArraySize=dd.SampleDesc.Count=1;
+ dd.Format=DXGI_FORMAT_R24G8_TYPELESS;dd.BindFlags=D3D11_BIND_DEPTH_STENCIL;
+ ComPtr<ID3D11Texture2D> nativeDepth;ComPtr<ID3D11DepthStencilView> depthTarget;
+ CHECK(SUCCEEDED(device->CreateTexture2D(&dd,nullptr,&nativeDepth)));
+ D3D11_DEPTH_STENCIL_VIEW_DESC ds{};ds.Format=DXGI_FORMAT_D24_UNORM_S8_UINT;ds.ViewDimension=D3D11_DSV_DIMENSION_TEXTURE2D;
+ CHECK(SUCCEEDED(device->CreateDepthStencilView(nativeDepth.Get(),&ds,&depthTarget)));
+ runtime::PresentationRequirements req{32,32,28,gpu.AdapterLuid.LowPart,gpu.AdapterLuid.HighPart};
+ runtime::TrackingFrame input{};input.generation=input.spaceGeneration=1;input.predictedNs=1000000000;input.focused=input.headValid=true;
+ input.fov={math::FovTangents{-1,1,1,-1},math::FovTangents{-1,1,1,-1}};
+ runtime::TrackingFrame rendered;TextureDescriptor descriptor;PairTicket ticket;ipc::FrameLease lease;
+ D3D11PairConsumer reader;D3D11SceneDepthConsumer depthReader;CHECK(depthReader.Initialize(hostDevice.Get()));
+ for(unsigned step=0;step<2;++step){
+  input.generation=step+1;input.predictedNs=1000000000+step*10000000;
+  CHECK(!host.TryGetCompletedPair(req,input,rendered,descriptor,ticket));CHECK(bridge.TryBegin({1,100u+step,1},lease));
+  // Warm-up establishes the native single-source sharing mode. The second
+  // pair uses its ordinary full color plus four-depth-source publication path.
+  if(step)CHECK(bridge.BeginDepthCapture(lease,false));
+  for(unsigned eye=0;eye<2;++eye){
+   if(step)for(unsigned stage=0;stage<2;++stage){
+    context->ClearDepthStencilView(depthTarget.Get(),D3D11_CLEAR_DEPTH,.25f+.1f*float(eye*2+stage),0);
+    CHECK(bridge.CaptureDepth(eye,stage,nativeDepth.Get(),lease));
+   }
+   CHECK(bridge.CaptureEye(eye,native[eye].texture.Get(),lease));
+  }
+  CHECK(bridge.PublishRestored(lease));const auto deadline=GetTickCount64()+2000;bool delivered=false;
+  do{bridge.PumpGraphics();delivered=host.TryGetCompletedPair(req,input,rendered,descriptor,ticket);if(!delivered)Sleep(1);}while(!delivered&&GetTickCount64()<deadline);
+  CHECK(delivered&&bridge.Published()==step+1&&!bridge.Fatal());
+  SceneDepthFrame depth;CHECK(host.ReadSceneDepth(descriptor,ticket,depth)==bool(step));
+  if(!step||acknowledge){
+   if(step)CHECK(depthReader.CopyBeforeColor(depth,descriptor,ticket,lease.sourceSlot,slots));
+   CHECK(reader.Open(hostDevice.Get(),descriptor)==TransferResult::Ok);
+   CHECK(reader.SubmitCopy(ticket,{{{copied[0].texture.Get(),0},{copied[1].texture.Get(),0}}})==TransferResult::Busy);
+   CHECK(CompleteCopy(reader,ticket));
+   CHECK(Pixel(hostDevice.Get(),hostContext.Get(),copied[0])[2]==255&&Pixel(hostDevice.Get(),hostContext.Get(),copied[1])[0]==255);
+   host.PairConsumed(ticket,true);const auto feedbackDeadline=GetTickCount64()+2000;
+   do{host.FlushFeedback();bridge.PumpGraphics();if(bridge.Consumed()==step+1)break;Sleep(1);}while(GetTickCount64()<feedbackDeadline);
+   CHECK(bridge.Consumed()==step+1&&!bridge.Discarded());reader.Reset();depthReader.ResetSources();
+  }
+ }
+ CHECK(bridge.Published()==2&&bridge.Consumed()==(acknowledge?2u:1u));
+ if(!acknowledge)CHECK(D3D11FrameBridgeTestAccess::RetainedSource(bridge,lease.sourceSlot));
+ sourceReleaseCounts.owner=GetCurrentThreadId();sourceReleaseCounts.released=0;sourceReleaseCounts.wrongThread=0;
+ for(unsigned eye=0;eye<2;++eye){
+  auto* source=D3D11FrameBridgeTestAccess::CaptureSource(bridge,eye);CHECK(source);
+  auto* witness=new SourceReleaseWitness;const auto hr=source->SetPrivateDataInterface(sourceReleaseGuid,witness);witness->Release();CHECK(SUCCEEDED(hr));
+ }
+ auto& staged=D3D11FrameBridgeTestAccess::Channel(bridge);
+ //661 already holds an actual ReadInput admission. Here hold that SAME gate
+ // with real outstanding graphics sources to isolate the missing ownership case.
+ CHECK(ipc::StagedFrameProducerTestAccess::Lock(staged));
+ const bool deferred=!bridge.CloseGraphics();ipc::StagedFrameProducerTestAccess::Unlock(staged);
+ CHECK(deferred&&bridge.Connected()&&bridge.OnGraphicsThread()&&!sourceReleaseCounts.released.load());
+ interaction::InputFrame rejected{};CHECK(bridge.ReadInput(rejected)==ipc::ChannelResult::Closed);
+ if(retainUntilExit){
+  CHECK(!acknowledge);retainedExit.bridge=&bridge;retainedExit.slot=lease.sourceSlot;CHECK(RetainedExitIntact());
+  // Return from the graphics worker without another pump/close. Local host
+  // resources go away; the native source and its feedback target remain owned.
+  std::cout<<"Retained hardware sources="<<slots<<": owner exits with published color/depth ticket\n";return 0;
+ }
+ CHECK(bridge.CloseGraphics()&&!bridge.Connected()&&!bridge.OnGraphicsThread());
+ CHECK(D3D11FrameBridgeTestAccess::ResourcesClosed(bridge));
+ CHECK(bridge.Consumed()==(acknowledge?2u:1u)&&bridge.Discarded()==(acknowledge?0u:1u));
+ CHECK(sourceReleaseCounts.released.load()==2&&!sourceReleaseCounts.wrongThread.load());
+ CHECK(bridge.CloseGraphics());
+ CHECK(sourceReleaseCounts.released.load()==2&&bridge.Discarded()==(acknowledge?0u:1u));
+ host.Close();std::cout<<"Hardware shutdown sources="<<slots<<" acknowledged="<<acknowledge<<": exact source release on owner passed\n";return 0;
+}
+
+
+int main(int argc,char** argv){
+ if(argc==2&&std::string_view(argv[1])=="--shutdown-resources"){
+  for(unsigned slots:{1u,2u,3u})for(bool acknowledge:{false,true})if(RunShutdownResources(slots,false,acknowledge))return 1;return 0;
+ }
+ if(argc==3&&std::string_view(argv[1])=="--shutdown-retained-process"){
+  const std::string_view argument=argv[2];const unsigned slots=argument=="1"?1:argument=="2"?2:argument=="3"?3:0;CHECK(slots);
+  // Register BEFORE construction so a regressed static bridge destructor
+  // would run before this final check. Return normally through CRT teardown.
+  CHECK(!std::atexit(CheckRetainedProcessExit));int result=1;
+  std::thread graphics([&]{result=RunShutdownResources(slots,true,false);});graphics.join();if(result)return result;
+  CHECK(retainedExit.bridge&&!retainedExit.bridge->CloseGraphics()); // Original owner has exited.
+  CHECK(RetainedExitIntact());retainedExit.armed=true;return 0;
+ }
+
+ if(argc==2&&std::string_view(argv[1])=="--shutdown-lifetime"){for(unsigned slots:{1u,2u,3u})if(RunShutdownLifetime(slots))return 1;return 0;}
+if(argc==2&&std::string_view(argv[1])=="--legacy-depth-cache"){for(unsigned samples:{1u,2u,4u,8u})if(Run(samples))return 1;return 0;}
  if(RunTwoSlotBridge()||RunTwoSlotBridge(true)||RunTwoSlotBridge(true,true))return 1;if(RunBridgeWorldTransition(false)||RunBridgeWorldTransition(true))return 1;if(RunAsyncCopy())return 1;for(unsigned samples:{1u,8u})for(bool reversed:{false,true})if(RunOrderedComposition(samples,reversed))return 1;for(unsigned samples:{1u,2u,4u,8u})if(Run(samples))return 1;if(RunBridge()||RunEarlyAdmission())return 1;
  if(RunBridgeMirror(FrameSharingPreference::Automatic,1))return 1;
  if(RunBridgeMirror(FrameSharingPreference::LegacyRelay,2))return 1;

@@ -102,8 +102,11 @@ public:
     ~D3D11FrameBridge(){publicationObserver_=nullptr;CloseGraphics();}
     bool ConnectGraphics(ID3D11Device*,const std::wstring&,FrameSharingPreference preference=FrameSharingPreference::Automatic)noexcept;
     bool TryBegin(const ipc::NativeFrameKey&,ipc::FrameLease&)noexcept;
-    ipc::ChannelResult ReadInput(interaction::InputFrame& out,std::int64_t* deadlineQpc=nullptr)noexcept{return channel_.ReadInput(out,deadlineQpc);}
-    bool PublishFeedback(const interaction::FeedbackEvent& event)noexcept{return channel_.PublishFeedback(event);}
+    ipc::ChannelResult ReadInput(interaction::InputFrame& out,std::int64_t* deadlineQpc=nullptr)noexcept {
+        if(!Connected()){out={};if(deadlineQpc)*deadlineQpc=0;return ipc::ChannelResult::Closed;}
+        return channel_.ReadInput(out,deadlineQpc);
+    }
+    bool PublishFeedback(const interaction::FeedbackEvent& event)noexcept{return Connected()&&channel_.PublishFeedback(event);}
     // DiscardPair only tolerates width/height changes. False still requires the
     // caller to restore native state and cancel this unsubmitted lease.
     bool CaptureEye(unsigned,ID3D11Texture2D*,const ipc::FrameLease&,SourceDimensionPolicy=SourceDimensionPolicy::Fatal)noexcept;
@@ -136,7 +139,10 @@ public:
     // consumption OR discard/cancel/failure/close, even if a successor is queued.
     bool TryGetRestoredPairLease(RestoredPairLease& out)const noexcept;
     bool SameRestoredPairPending(const RestoredPairLease&)const noexcept;
-    void CloseGraphics()noexcept;
+    // Original graphics owner only. False retains every graphics resource
+    // while an admitted channel user finishes; retry at a later boundary.
+    // Connected stays true until the complete graphics teardown has returned.
+    bool CloseGraphics()noexcept;
     std::uint64_t Published()const noexcept{return published_.load();}
     std::uint64_t Consumed()const noexcept{return consumed_.load();}
     std::uint64_t Discarded()const noexcept{return discarded_.load();}

@@ -7,6 +7,7 @@
 #include <chrono>
 #include <future>
 #include <thread>
+#include <utility>
 using namespace fvr;
 using namespace std::chrono_literals;
 struct Feedback final:runtime::IFrameProvider {
@@ -822,6 +823,9 @@ namespace fvr::ipc {
 struct StagedFrameProducerTestAccess {
     static FrameChannel& Channel(StagedFrameProducer& p){return p.channel_;}
     static std::atomic_flag& Gate(StagedFrameProducer& p){return p.gate_;}
+    template<class Read> static ChannelResult ReadInputHeld(StagedFrameProducer& p,interaction::InputFrame& out,std::int64_t* deadline,Read&& read){
+        return p.ReadInputGuarded(out,deadline,std::forward<Read>(read));
+    }
 };
 }
 int PipelineOwnerTransition(bool third,bool expire){
@@ -950,7 +954,73 @@ int PipelineOwnerTransitionCold(bool third){
     return 0;
 }
 
+// Uses a real mapped channel and the same guarded read invoked by ReadInput.
+// The test pauses after the actual read, before that production admission scope
+// returns; no copy of the admission/close algorithm is exercised.
+int ShutdownWaitsForInput(unsigned slots){
+    struct ClosingFeedback final:runtime::IFrameProvider {
+        ipc::StagedFrameProducer* producer=nullptr;
+        std::thread::id graphics=std::this_thread::get_id();
+        unsigned calls=0;bool wrong=false,reentrantDeclined=false,inputClosed=false;
+        bool TryGetPair(const runtime::PresentationRequirements&,const runtime::TrackingFrame&,graphics::TextureDescriptor&,graphics::PairTicket&)noexcept override{return false;}
+        void PairConsumed(const graphics::PairTicket&,bool consumed)noexcept override {
+            ++calls;wrong|=consumed||std::this_thread::get_id()!=graphics;
+            reentrantDeclined=!producer->CloseGraphics();
+            interaction::InputFrame input{};std::int64_t deadline=99;
+            inputClosed=producer->ReadInput(input,&deadline)==ipc::ChannelResult::Closed&&!deadline&&!input.generation;
+        }
+    } feedback;
+    const bool pipeline=slots>1,third=slots==3;
+    ipc::FrameChannel host;CHECK(host.CreateHost(pipeline,third,third,third));
+    ipc::StagedFrameProducer producer(feedback);feedback.producer=&producer;
+    CHECK(producer.Connect(host.Token(),pipeline,third)&&producer.SourceSlotCount()==slots);
+    const runtime::PresentationRequirements req{100,120,29,19,4};auto pose=DeferredTracking();
+    CHECK(host.BeginRequest(req,pose,200)==ipc::ChannelResult::Ok);
+    ipc::FrameLease lease{};CHECK(producer.TryBegin({101,201,301},lease));
+    graphics::TextureDescriptor descriptor{};graphics::PairTicket ticket{};graphics::SceneDepthFrame depth{};
+    if(pipeline)MakePipelinePair(lease,descriptor,ticket,depth);else MakeTicket(lease,descriptor,ticket);
+    CHECK(producer.Submit(lease,descriptor,ticket,pipeline?&depth:nullptr)==ipc::ChannelResult::Ok);
+    interaction::InputFrame input{};input.generation=1;input.spaceGeneration=7;
+    input.predictedNs=1000000000;input.headValid=input.focused=true;
+    CHECK(host.PublishInput(input)==ipc::ChannelResult::Ok);
+    std::promise<void> entered;auto admission=entered.get_future();
+    // On an assertion failure, destruction of release wakes the read before the
+    // async future is joined, so a regression fails instead of hanging the test.
+    interaction::InputFrame read{};std::int64_t readDeadline=0;
+    std::future<ipc::ChannelResult> reader;
+    std::promise<void> release;auto released=release.get_future().share();
+    reader=std::async(std::launch::async,[&,released]{
+        return ipc::StagedFrameProducerTestAccess::ReadInputHeld(producer,read,&readDeadline,
+            [&](ipc::FrameChannel& wire,interaction::InputFrame& value,std::int64_t* deadline)noexcept {
+                const auto result=wire.ReadInput(value,deadline);
+                entered.set_value();released.wait();return result;
+            });
+    });
+    CHECK(admission.wait_for(1s)==std::future_status::ready);
+    CHECK(!producer.CloseGraphics()&&!producer.CloseGraphics());
+    CHECK(reader.wait_for(0ms)==std::future_status::timeout);
+    CHECK(feedback.calls==0&&host.Connected()&&producer.SourceSlotCount()==slots);
+    // A closed admission refuses a second reader without waiting on the first.
+    interaction::InputFrame rejected=input;std::int64_t deadline=99;
+    CHECK(producer.ReadInput(rejected,&deadline)==ipc::ChannelResult::Closed&&!deadline&&!rejected.generation);
+    CHECK(!producer.TryBegin({101,202,301},lease));
+    CHECK(!producer.PublishFeedback({}));
+    release.set_value();CHECK(reader.get()==ipc::ChannelResult::Ok&&read.generation==1&&readDeadline>0);
+    // Releasing the last reader never reopens admission before graphics close.
+    CHECK(producer.ReadInput(rejected,&deadline)==ipc::ChannelResult::Closed);
+    CHECK(producer.CloseGraphics());
+    CHECK(feedback.calls==1&&!feedback.wrong&&feedback.reentrantDeclined&&feedback.inputClosed);
+    CHECK(!host.Connected()&&producer.CloseGraphics()&&feedback.calls==1);
+    host.Close();CHECK(host.CreateHost(pipeline,third,third,third));
+    CHECK(producer.Connect(host.Token(),pipeline,third));CHECK(host.PublishInput(input)==ipc::ChannelResult::Ok);
+    CHECK(producer.ReadInput(read,&deadline)==ipc::ChannelResult::Ok&&read.generation==1);
+    CHECK(producer.CloseGraphics());host.Close();CHECK(feedback.calls==1);
+    return 0;
+}
+
+
 int main(){
+    for(unsigned slots:{1u,2u,3u})CHECK(!ShutdownWaitsForInput(slots));
     for(bool third:{false,true}){
         CHECK(!PipelineOwnerTransition(third,false));CHECK(!PipelineOwnerTransition(third,true));
         CHECK(!PipelineOwnerTransitionWireProof(third));CHECK(!PipelineOwnerTransitionCold(third));

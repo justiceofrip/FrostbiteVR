@@ -1,19 +1,23 @@
 #include "fvr/ipc/StagedFrameProducer.h"
 namespace fvr::ipc {
 bool StagedFrameProducer::Connect(const std::wstring& token,bool twoSourceSlots,bool thirdSource)noexcept {
-    CloseGraphics();if(generation_==UINT64_MAX)return false;
-    ++generation_;return channel_.ConnectProducer(token,twoSourceSlots,thirdSource);
+    if(!CloseGraphics()||generation_==UINT64_MAX)return false;
+    ++generation_;const bool connected=channel_.ConnectProducer(token,twoSourceSlots,thirdSource);
+    closing_.store(!connected,std::memory_order_release);return connected;
 }
-void StagedFrameProducer::CloseGraphics()noexcept {
-    if(channel_.SourceSlotCount()>1){ClosePipelineGraphics();return;}
-    // Caller has stopped both hooks; no callback may race destruction/connection.
+bool StagedFrameProducer::CloseGraphics()noexcept {
+    closing_.store(true,std::memory_order_release);
+    Lock lock(gate_);if(!lock)return false;
+    if(channel_.SourceSlotCount()>1){ClosePipelineGraphics();return true;}
+    // The same gate protects ReadInput, frame admission and feedback. Keep it
+    // through mapping release; reentrant callbacks decline without waiting.
     DrainRetiredGraphics();
     channel_.Close();
     if(step_==Step::Publishing||step_==Step::Waiting)feedback_.PairConsumed(ticket_,false);
-    step_=Step::Idle;lease_={};ticket_={};descriptor_={};sceneDepth_={};
+    step_=Step::Idle;lease_={};ticket_={};descriptor_={};sceneDepth_={};return true;
 }
 bool StagedFrameProducer::SetDeferredGraphicsRetirement(bool enabled)noexcept {
-    Lock lock(gate_);if(!lock||channel_.SourceSlotCount()>1||step_!=Step::Idle||retired_.outcome!=Outcome::Pending)return false;
+    Lock lock(gate_,&closing_);if(!lock||channel_.SourceSlotCount()>1||step_!=Step::Idle||retired_.outcome!=Outcome::Pending)return false;
     deferredGraphicsRetirement_=enabled;return true;
 }
 bool StagedFrameProducer::Matches(const FrameLease& lease)const noexcept {
@@ -21,7 +25,7 @@ bool StagedFrameProducer::Matches(const FrameLease& lease)const noexcept {
 }
 bool StagedFrameProducer::TryBegin(const NativeFrameKey& native,FrameLease& out,bool allowDeferred)noexcept {
     if(!native.owner||!native.frameId||!native.deviceEpoch)return false;
-    Lock lock(gate_);if(!lock)return false;
+    Lock lock(gate_,&closing_);if(!lock)return false;
     if(native.owner==lastNative_.owner&&native.deviceEpoch==lastNative_.deviceEpoch&&native.frameId<=lastNative_.frameId)return false;
     if(channel_.SourceSlotCount()>1)return TryBeginPipeline(native,out);
     if(step_==Step::Waiting&&deferredGraphicsRetirement_&&allowDeferred&&retired_.outcome==Outcome::Pending){
@@ -49,21 +53,21 @@ void StagedFrameProducer::DrainRetiredGraphics()noexcept {
     feedback_.PairConsumed(old.ticket,old.outcome==Outcome::Consumed);
 }
 ChannelResult StagedFrameProducer::PrepareGraphicsResult(const FrameLease& lease)noexcept {
-    Lock lock(gate_);if(!lock)return ChannelResult::Busy;
+    Lock lock(gate_,&closing_);if(!lock)return lock.Unavailable();
     if(channel_.SourceSlotCount()>1){DrainPipelineGraphics();return !pipelineFaulted_&&PipelineMatches(lease)&&
         pipelineSlots_[lease.sourceSlot].step==Step::Rendering?ChannelResult::Ok:ChannelResult::Invalid;}
     DrainRetiredGraphics();
     return step_==Step::Rendering&&Matches(lease)?ChannelResult::Ok:ChannelResult::Invalid;
 }
 ChannelResult StagedFrameProducer::SetBodyProps(const FrameLease& lease,unsigned eye,const graphics::BodyPropEye& props)noexcept {
-    Lock lock(gate_);if(!lock)return ChannelResult::Busy;
+    Lock lock(gate_,&closing_);if(!lock)return lock.Unavailable();
     if(channel_.SourceSlotCount()>1){if(!PipelineMatches(lease)||pipelineSlots_[lease.sourceSlot].step!=Step::Rendering||pipelineSlots_[lease.sourceSlot].captureReleased||eye>1||props.count>graphics::MaxBodyProps)return ChannelResult::Invalid;
         pipelineSlots_[lease.sourceSlot].bodyProps.eyes[eye]=props;return ChannelResult::Ok;}
     if(step_!=Step::Rendering||!Matches(lease)||eye>1||props.count>graphics::MaxBodyProps)return ChannelResult::Invalid;
     bodyProps_.eyes[eye]=props;return ChannelResult::Ok;
 }
 ChannelResult StagedFrameProducer::SetBodyPropPair(const FrameLease& lease,const std::array<graphics::BodyPropEye,2>& eyes)noexcept {
-    Lock lock(gate_);if(!lock)return ChannelResult::Busy;
+    Lock lock(gate_,&closing_);if(!lock)return lock.Unavailable();
     if(channel_.SourceSlotCount()>1){if(!PipelineMatches(lease)||pipelineSlots_[lease.sourceSlot].step!=Step::Rendering||pipelineSlots_[lease.sourceSlot].captureReleased||eyes[0].count>graphics::MaxBodyProps||eyes[1].count>graphics::MaxBodyProps)return ChannelResult::Invalid;
         pipelineSlots_[lease.sourceSlot].bodyProps.eyes=eyes;return ChannelResult::Ok;}
     if(step_!=Step::Rendering||!Matches(lease)||eyes[0].count>graphics::MaxBodyProps||eyes[1].count>graphics::MaxBodyProps)
@@ -71,7 +75,7 @@ ChannelResult StagedFrameProducer::SetBodyPropPair(const FrameLease& lease,const
     bodyProps_.eyes=eyes;return ChannelResult::Ok;
 }
 ChannelResult StagedFrameProducer::Submit(const FrameLease& lease,const graphics::TextureDescriptor& descriptor,const graphics::PairTicket& ticket,const graphics::SceneDepthFrame* depth)noexcept {
-    Lock lock(gate_);if(!lock)return ChannelResult::Busy;
+    Lock lock(gate_,&closing_);if(!lock)return lock.Unavailable();
     if(channel_.SourceSlotCount()>1){
         if(pipelineFaulted_||!PipelineMatches(lease))return ChannelResult::Invalid;auto& slot=pipelineSlots_[lease.sourceSlot];
         if(slot.step!=Step::Rendering||slot.ownsSource||ticket.frameId!=slot.lease.native.frameId||descriptor.sharing!=graphics::TextureSharing::LegacyFenced||
@@ -87,14 +91,14 @@ ChannelResult StagedFrameProducer::Submit(const FrameLease& lease,const graphics
     sceneDepth_=depth?*depth:graphics::SceneDepthFrame{};descriptor_=descriptor;ticket_=ticket;step_=Step::Publishing;return ChannelResult::Ok;
 }
 ChannelResult StagedFrameProducer::Cancel(const FrameLease& lease)noexcept {
-    Lock lock(gate_);if(!lock)return ChannelResult::Busy;
+    Lock lock(gate_,&closing_);if(!lock)return lock.Unavailable();
     if(channel_.SourceSlotCount()>1){if(!PipelineMatches(lease)||pipelineSlots_[lease.sourceSlot].step!=Step::Rendering)return ChannelResult::Invalid;
         pipelineSlots_[lease.sourceSlot].step=Step::Skipping;return ChannelResult::Ok;}
     if(step_!=Step::Rendering||!Matches(lease))return ChannelResult::Invalid;
     step_=Step::Skipping;return ChannelResult::Ok;
 }
 void StagedFrameProducer::PumpGraphics()noexcept {
-    Lock lock(gate_);if(!lock)return;
+    Lock lock(gate_,&closing_);if(!lock)return;
     if(channel_.SourceSlotCount()>1){PumpPipelineGraphics();return;}
     DrainRetiredGraphics();
     if(step_==Step::Skipping){if(channel_.Skip()!=ChannelResult::Busy){step_=Step::Idle;lease_={};}return;}
@@ -116,7 +120,7 @@ void StagedFrameProducer::FailPipeline()noexcept {
     pipelineFaulted_=true;(void)channel_.StopPipelineAdmission();
 }
 ChannelResult StagedFrameProducer::TransitionWorldOwner(const NativeFrameKey& expectedOld,const NativeFrameKey& replacement)noexcept {
-    Lock lock(gate_);if(!lock)return ChannelResult::Busy;
+    Lock lock(gate_,&closing_);if(!lock)return lock.Unavailable();
     if(channel_.SourceSlotCount()<2)return ChannelResult::Invalid;
     if(pipelineFaulted_)return ChannelResult::Closed;
     const bool cold=!pipelineOwner_.owner&&!pipelineOwner_.frameId&&!pipelineOwner_.deviceEpoch&&
@@ -145,7 +149,7 @@ bool StagedFrameProducer::PipelineMatches(const FrameLease& lease)const noexcept
         current.sourceSlot==lease.sourceSlot&&current.sourceSlotCount==channel_.SourceSlotCount();
 }
 ChannelResult StagedFrameProducer::MarkCaptureReleased(const FrameLease& lease)noexcept {
-    Lock lock(gate_);if(!lock)return ChannelResult::Busy;
+    Lock lock(gate_,&closing_);if(!lock)return lock.Unavailable();
     if(pipelineFaulted_||!channel_.ExportOverlapEnabled()||!PipelineMatches(lease))return ChannelResult::Invalid;
     auto& slot=pipelineSlots_[lease.sourceSlot];
     if(slot.step!=Step::Rendering||slot.ownsSource)return ChannelResult::Invalid;
@@ -228,7 +232,7 @@ void StagedFrameProducer::PumpPipelineGraphics()noexcept {
     DrainPipelineGraphics();
 }
 void StagedFrameProducer::ClosePipelineGraphics()noexcept {
-    // Both callback threads quiescent, graphics owner held. Drain proven ACKs
+    // Admission sealed and gate_ held on graphics. Drain proven ACKs
     // once, then retire every unresolved adopted source without claiming ready.
     DrainPipelineGraphics(); // Never publish newly staged work during close.
     for(auto& slot:PipelineSlots()){if(slot.ownsSource&&!slot.callbackComplete)feedback_.PairConsumed(slot.ticket,false);slot={};}

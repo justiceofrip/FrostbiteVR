@@ -405,16 +405,19 @@ ipc::ChannelResult D3D11FrameBridge::TransitionWorldOwnerGraphics(const ipc::Nat
     preparedGraphics_={};preparedDevice_=nullptr;preparedContext_=nullptr;
     return ipc::ChannelResult::Ok;
 }
-void D3D11FrameBridge::CloseGraphics()noexcept {
-    if(pipelineEnabled_&&graphicsThread_.load(std::memory_order_acquire)&&
-       GetCurrentThreadId()!=graphicsThread_.load(std::memory_order_acquire)){Fail(20,E_UNEXPECTED);return;}
+bool D3D11FrameBridge::CloseGraphics()noexcept {
+    if(graphicsThread_.load(std::memory_order_acquire)&&
+       GetCurrentThreadId()!=graphicsThread_.load(std::memory_order_acquire)){Fail(20,E_UNEXPECTED);return false;}
+    // Retire exact source feedback with the graphics state still intact. Busy
+    // must not reset COM objects, the context owner, or Connected publication.
+    if(!channel_.CloseGraphics())return false;
     preparedGraphicsValid_=false;preparedGraphics_={};preparedDevice_=nullptr;preparedContext_=nullptr;
     deferredCancellationPending_=false;deferredCancellation_={};
     restoredPairPending_=false;
     renderQueue_.Close();
     fvr::diagnostics::privateGpu::recorder.Stop();
     desktopMirror_.Reset();
-    connected_.store(false,std::memory_order_release);channel_.CloseGraphics();producer_.Reset();relay_.Reset();depthProducer_.Close();depthInitialized_=depthActive_=false;depthLease_={};pendingDepth_={};waitingGameCopies_=waitingLegacyExport_=false;
+    producer_.Reset();relay_.Reset();depthProducer_.Close();depthInitialized_=depthActive_=false;depthLease_={};pendingDepth_={};waitingGameCopies_=waitingLegacyExport_=false;
     timing_.Close(TimingQpc());
     if(pipelineEnabled_){for(unsigned i=0;i<pipelineSourceCount_;++i){auto& s=pipeline_[i];
         s.color.Reset();s.depth.Close();s.depthInitialized=s.depthAllocationAdmitted=false;s.cancelPending=false;s.cancelLease={};ClearPipelineLease(s);
@@ -422,6 +425,7 @@ void D3D11FrameBridge::CloseGraphics()noexcept {
     }pipelineAllocated_=false;pipelineCaptureSlot_=PipelineInvalidSlot;}
     for(auto& eye:eyes_)eye.Reset();context_.Reset();device_.Reset();submitting_=canceling_=false;mask_=0;
     graphicsThread_.store(0,std::memory_order_release);
+    connected_.store(false,std::memory_order_release);return true;
 }
 
 // Explicit private source pipeline; negotiated count never changes in a session.

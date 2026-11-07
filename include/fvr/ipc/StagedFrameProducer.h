@@ -33,11 +33,14 @@ public:
     ~StagedFrameProducer(){CloseGraphics();}
     StagedFrameProducer(const StagedFrameProducer&)=delete;
     StagedFrameProducer& operator=(const StagedFrameProducer&)=delete;
-    // Setup/teardown only with both callback threads quiescent, on graphics thread.
+    // Setup/destruction require quiescent callbacks and the graphics owner.
+    // Runtime close seals admission first, then tries the existing gate once.
+    // False preserves the channel and all feedback ownership: retry on graphics
+    // after the admitted operation returns. No callback drain wait is added.
     bool Connect(const std::wstring&,bool twoSourceSlots=false,bool thirdSource=false)noexcept;
     unsigned SourceSlotCount()const noexcept{return channel_.SourceSlotCount();}
     bool ExportOverlapEnabled()const noexcept{return channel_.ExportOverlapEnabled();}
-    void CloseGraphics()noexcept;
+    bool CloseGraphics()noexcept;
     // Setup only, with callbacks quiescent. Default is the original ordering.
     bool SetDeferredGraphicsRetirement(bool enabled)noexcept;
     // Once taken, a frame cannot be retried, even after cancellation/reconnect.
@@ -54,9 +57,11 @@ public:
     // Busy retains the caller's pending proof; retry only while still Rendering.
     ChannelResult MarkCaptureReleased(const FrameLease&)noexcept;
     ChannelResult ReadInput(interaction::InputFrame& out,std::int64_t* deadlineQpc=nullptr)noexcept {
-        if(deadlineQpc)*deadlineQpc=0;out={};Lock lock(gate_);return lock?channel_.ReadInput(out,deadlineQpc):ChannelResult::Busy;
+        return ReadInputGuarded(out,deadlineQpc,[](FrameChannel& channel,interaction::InputFrame& input,std::int64_t* deadline)noexcept {
+            return channel.ReadInput(input,deadline);
+        });
     }
-    bool PublishFeedback(const interaction::FeedbackEvent& e)noexcept {Lock lock(gate_);return lock&&channel_.PublishFeedback(e);}
+    bool PublishFeedback(const interaction::FeedbackEvent& e)noexcept {Lock lock(gate_,&closing_);return lock&&channel_.PublishFeedback(e);}
     // Ok transfers ticket ownership. On Busy/Invalid caller still owns the pair
     // and must retry or reclaim it. Submit ONLY after exact native restoration.
     ChannelResult Submit(const FrameLease&,const graphics::TextureDescriptor&,const graphics::PairTicket&,const graphics::SceneDepthFrame* depth=nullptr)noexcept;
@@ -77,17 +82,31 @@ private:
     friend struct StagedFrameProducerTestAccess;
     enum class Step{Idle,Rendering,Skipping,Publishing,Waiting,Retiring};
     struct Lock {
-        std::atomic_flag& flag;bool held;
-        explicit Lock(std::atomic_flag& f):flag(f),held(!f.test_and_set(std::memory_order_acquire)){}
+        std::atomic_flag& flag;bool held=false,closed=false;
+        explicit Lock(std::atomic_flag& f,const std::atomic<bool>* closing=nullptr):flag(f){
+            if(closing&&(closed=closing->load(std::memory_order_acquire)))return;
+            held=!flag.test_and_set(std::memory_order_acquire);
+            // Seal may win between the first check and acquisition. Do not
+            // admit that delayed caller, including after the mapping is gone.
+            if(held&&closing&&(closed=closing->load(std::memory_order_acquire))){flag.clear(std::memory_order_release);held=false;}
+        }
         ~Lock(){if(held)flag.clear(std::memory_order_release);}
         explicit operator bool()const{return held;}
+        ChannelResult Unavailable()const noexcept{return closed?ChannelResult::Closed:ChannelResult::Busy;}
     };
+    // The production input read and a test-held reader use this exact admission
+    // scope. A compile-time callable adds no runtime observer to normal reads.
+    template<class Read> ChannelResult ReadInputGuarded(interaction::InputFrame& out,std::int64_t* deadline,Read&& read)noexcept {
+        if(deadline)*deadline=0;out={};Lock lock(gate_,&closing_);
+        return lock?read(channel_,out,deadline):lock.Unavailable();
+    }
     bool Matches(const FrameLease&)const noexcept;
-    // Caller holds gate_, or both callback threads are quiescent at teardown.
+    // Caller holds gate_, including graphics teardown.
     void DrainRetiredGraphics()noexcept;
     FrameChannel channel_;runtime::IFrameProvider& feedback_;
     StagedFrameObserver observer_=nullptr;void* observerContext_=nullptr;
     std::atomic_flag gate_=ATOMIC_FLAG_INIT;
+    std::atomic<bool> closing_=false; // Reopened only by quiescent Connect.
     Step step_=Step::Idle;std::uint64_t generation_=0;
     bool deferredGraphicsRetirement_=false;
     struct Retirement {

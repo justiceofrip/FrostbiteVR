@@ -63,6 +63,7 @@
 #include "Bc2Camera.h"
 #include "fvr/interaction/TrackingMath.h"
 #include "NativeProbeConfig.h"
+#include "Bc2ProcessRetainedFrameBridge.h"
 #include "Bc2MagazineReloadSession.h"
 #include "Bc2ResourceMagazineSession.h"
 #include "fvr/platform/windows/ProcessLifetime.h"
@@ -422,9 +423,11 @@ bool RestoreBorrowed(const ListSnapshot& callbacks,const std::array<CallbackSnap
 }
 std::atomic<unsigned> inputSamples=0,inputTrackedSamples=0;std::uint64_t lastInputGeneration=0;
 bool opticEvidenceEnabled=false;bool passEvidenceEnabled=false,uncapMirror=false;bool streamMode=false;std::wstring streamToken;
-fvr::graphics::D3D11FrameBridge frameBridge{[](const fvr::ipc::FrameLease& lease,const fvr::graphics::PairTicket& ticket)noexcept {
+// The supported loader retains this module/trampolines until process exit.
+// A failed owner close must retain the complete callback target graph as well.
+auto& frameBridge=fvr::bc2::MakeProcessRetainedFrameBridge([](const fvr::ipc::FrameLease& lease,const fvr::graphics::PairTicket& ticket)noexcept {
     fvr::bc2::gameplay::ObserveRenderedViewPublication(lease,ticket);
-}};
+});
 fvr::graphics::PrivatePresentationExperiment privatePresentationExperiment;
 struct PrivatePresentProgress {
     unsigned budgetMs=0;
@@ -1725,6 +1728,11 @@ void PumpFrameBridge()noexcept {
         if(capture.step==ColorCapture::Step::Pending)CaptureWorldColor(capture,capture.frame);
     fvr::runtime::DrainUnwrittenFrameCancellation(stereoRecovery.cancelUnwrittenRequest,tracked.lease.requestId,
         tracked.state.load(std::memory_order_acquire)==3,[]{FinishTrackedFrame(false,TrackedFinishCallsite::UnwrittenCancellation);});
+    if(!sampling.load(std::memory_order_acquire)&&stereoExperiment.stage.load(std::memory_order_acquire)==StereoExperiment::Released){
+        // Close seals channel admission and defers if an existing reader still
+        // owns it. Keep this graphics boundary alive until Connected clears.
+        ClosePrivatePresentationExperiment();frameBridge.CloseGraphics();return;
+    }
     if(!frameBridge.Connected()){
         static bool attempted=false;if(attempted)return;
         auto* device=GraphicsBootstrapConnectionDevice(U32(imageBase+profile.rendererGlobal));if(!device)return;
@@ -1748,9 +1756,6 @@ void PumpFrameBridge()noexcept {
     if(controlsResult==fvr::ipc::ChannelResult::Ok&&controls.generation!=lastInputGeneration){
         lastInputGeneration=controls.generation;++inputSamples;
         if(controls.focused&&controls.headValid&&controls.hands[0].gripTracked&&controls.hands[1].aimTracked)++inputTrackedSamples;
-    }
-    if(!sampling.load(std::memory_order_acquire)&&stereoExperiment.stage.load(std::memory_order_acquire)==StereoExperiment::Released){
-        ClosePrivatePresentationExperiment();frameBridge.CloseGraphics();
     }
 }
 fvr::graphics::SwapChainPresentFn desktopPresentOriginal=nullptr;
@@ -2709,8 +2714,12 @@ void __fastcall UpdateHook(void* self,void*,void* request,unsigned frame,float d
     if(deferredCleanup.load(std::memory_order_acquire)){
         const auto stage=stereoExperiment.stage.load(std::memory_order_acquire);
         if(stage!=StereoExperiment::Armed&&stage!=StereoExperiment::Retiring){
-            if(hookEntries[4])MH_DisableHook(hookEntries[4]);
-            if(streamMode&&bodyAmmoRenderer.Quiescent())for(unsigned index=0;index<3;++index)if(hookEntries[index])MH_DisableHook(hookEntries[index]);
+            // Update owns deferred hook retirement. Retain it and Draw until
+            // the original graphics owner finishes a possibly deferred close.
+            if(!streamMode||!frameBridge.Connected()){
+                if(hookEntries[4])MH_DisableHook(hookEntries[4]);
+                if(streamMode&&bodyAmmoRenderer.Quiescent())for(unsigned index=0;index<3;++index)if(hookEntries[index])MH_DisableHook(hookEntries[index]);
+            }
         }
     }
     sceneTrace::Mark(milestone,SceneMilestoneStage::Exit);
@@ -3138,7 +3147,8 @@ bool DisableProbeHooks()noexcept {
     weatherHooksDisabled=true;
     for(unsigned index=0;index<hookEntries.size();++index){if(!hookEntries[index])continue;
         // Keep the owning graphics boundary until its private resources drain.
-        if(index==2&&!bodyAmmoRenderer.Quiescent()){allDisabled=false;continue;}
+        if((index==2&&!bodyAmmoRenderer.Quiescent())||
+           (streamMode&&(index==2||index==4)&&frameBridge.Connected())){allDisabled=false;continue;}
         const auto stage=stereoExperiment.stage.load(std::memory_order_acquire);
         if((((streamMode&&index<3)||index==4)&&(stage==StereoExperiment::Armed||stage==StereoExperiment::Retiring))||(index==5&&workPool.stage.load(std::memory_order_acquire)==1)){allDisabled=false;continue;}
         const auto result=MH_DisableHook(hookEntries[index]);if(result!=MH_OK&&result!=MH_ERROR_DISABLED){allDisabled=false;if(index==14||index==15)weatherHooksDisabled=false;}
@@ -4274,7 +4284,8 @@ Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4
 #endif
 
         sampling.store(false,std::memory_order_release);
-        if(stereoMode){for(unsigned attempt=0;attempt<200;++attempt){const auto state=stereoExperiment.stage.load(std::memory_order_acquire);if(state!=StereoExperiment::Armed&&state!=StereoExperiment::Retiring)break;Sleep(5);}}
+        if(stereoMode){for(unsigned attempt=0;attempt<200;++attempt){const auto state=stereoExperiment.stage.load(std::memory_order_acquire);if(state!=StereoExperiment::Armed&&state!=StereoExperiment::Retiring&&
+            !(streamMode&&state==StereoExperiment::Released&&frameBridge.Connected()))break;Sleep(5);}}
         for(unsigned attempt=0;attempt<200&&workPool.stage.load(std::memory_order_acquire)==1;++attempt)Sleep(5);
         disabled=DisableProbeHooks();hooksEnabled=false;
         persistSessionTelemetry(true);
