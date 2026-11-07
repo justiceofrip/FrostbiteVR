@@ -214,9 +214,9 @@ int DeferredRetirement(bool consumed,RetirementRoute route){
         CHECK(observed.published==2&&observed.acknowledged==1&&observed.reaped==2);
     }
     const auto total=feedback.consumed.load()+feedback.discarded.load();
-    producer.PumpGraphics();producer.CloseGraphics();producer.CloseGraphics();
+    producer.PumpGraphics();CHECK(producer.CloseGraphics()&&producer.CloseGraphics());
     CHECK(feedback.consumed+feedback.discarded==total&&!feedback.wrongThread&&!observed.wrong);
-    CHECK(producer.PrepareGraphicsResult(next)==ipc::ChannelResult::Invalid);host.Close();return 0;
+    CHECK(producer.PrepareGraphicsResult(next)==ipc::ChannelResult::Closed);host.Close();return 0;
 }
 int DeferredSuccessorCancelledOrExpired(bool expired){
     Feedback feedback;feedback.graphicsThread=std::this_thread::get_id();
