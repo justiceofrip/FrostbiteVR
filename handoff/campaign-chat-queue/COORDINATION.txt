@@ -11,20 +11,22 @@ Ownership: prior CHAT25/26 close.json confirms lease release, idle helpers and
 exact profile restoration. Coordinator acquired the lease before shared mutations.
 External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned.
 
-Pending native73 combines596 render-only recovery from the same live knife hand
-claim with600 separate passive current-hold observation; strict Held and attack
-predicates remain unchanged. Fresh combined builds/delivery are pending.
-See handoff/integrations/coordinator-20261107-native73/README.txt.
+Private0.1.73/native73/fallback72 is installed and setup-validated; source5d7d04f
+is pushed to campaign and accepted checkpoint. Normal351 x86/348 x64 passed;
+settings/307 cached parts are preserved and the stable private entry verifies73.
+Native73 combines596 render-only recovery from the same live knife hand claim
+with600 separate passive current-hold observation; strict Held/attack gates remain.
+See handoff/integrations/coordinator-20261107-native73/README.txt for delivery.
 
-Private0.1.72/native72/fallback71 is installed and setup-validated; bdb54b4 is
-pushed to campaign and accepted checkpoint. Both normal builds passed and the
-stable headset entry verifies72. Actual593 established ordinary native Draw and
-Return; strict Held/render qualification and attack/damage remain unproven.
-Actual599 completed underbarrel selection/release/current Held, then ROOT's review
-reserve expired before shot/reload. Normal close/retirement/restoration passed.
-603 prepares a new bounded review window, preserving every earlier failed run.
-Source/build/install and actual-game/headset results remain distinct; no public release.
-See handoff/integrations/coordinator-20261107-native72/README.txt for delivery.
+Actual603 connected native VR, but the first capture failed with Errno13 reading
+sim/state.json: two neutral commands, captureSeq0, no gameplay or reload evidence.
+Normal close in61.1577544s, all owners0, native retirement and profile restoration
+passed. Source619 repairs shared state reads with original deadlines;32 focused
+checks pass. Actual603's exact OS denial cause and a new game pass remain open.
+Native73 is unchanged. Knife604 shares the pending capture check. Actual593's ordinary
+Draw/Return proof remains; strict Held/render qualification and attack are open.
+Actual599's selection/release/current Held and pre-shot/reload review stop remain
+retained. Earlier failed runs are preserved. No headset acceptance/public release.
 
 Retained milestones: actual269 complete QJU88 native belt reload;304 launcher Open;319 accepted native launcher projectile helper/target;348/353 qualified same-shot diagnostic geometry.320 post-shot observation fix pushed and12 methods pass. Broader family/headset reliability, full launcher reload, muzzle correction/destruction and performance remain open. Compact COORDINATOR-STATE.txt tracks live ownership; below is historical.
 Historical Feedback100 builtb6bd507/nativeb2919811 introduced retained normal graphics creation correction and compressed sight diagnostics. Actual101 joined creation1->0 to nativeflag0 device/context, bothmenu/worldeyes/noAV30/liveDetach/normalclosure. Actual104 physical SightFlip/native shot/HUD1/5->0/5 passed, but no impact/newdamage established; no crashcause/performance/destruction/headset claim.

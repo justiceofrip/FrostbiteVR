@@ -45,6 +45,7 @@ SNAPSHOT_REFRESH_BUDGET = 500_000_000
 MAX_SNAPSHOT_REFRESHES = 2
 MAX_RECEIVE_TIMING_SPANS = 24
 _snapshot_json_timing = ContextVar('snapshot_json_timing', default=None)
+_read_deadline_ns = ContextVar('read_deadline_ns', default=None)
 REFUSAL = planner.Refusal
 require = planner.require
 integer = planner.integer
@@ -86,7 +87,7 @@ def child(root, value):
     return path
 
 
-def open_snapshot(path):
+def open_snapshot(path, *, share_write=True):
     """Share replacement with the native publisher; the open handle stays immutable."""
     if os.name != "nt":
         return path.open("rb")
@@ -97,7 +98,7 @@ def open_snapshot(path):
     api.CreateFileW.restype = wintypes.HANDLE
     api.CloseHandle.argtypes = (wintypes.HANDLE,)
     # OPEN_EXISTING / OPEN_REPARSE_POINT never creates or follows the final link.
-    handle = api.CreateFileW(str(path), 0x80000000, 0x1 | 0x2 | 0x4,
+    handle = api.CreateFileW(str(path), 0x80000000, 0x1 | 0x4 | (0x2 if share_write else 0),
                              None, 3, 0x00200000, None)
     if handle == wintypes.HANDLE(-1).value:
         raise ctypes.WinError(ctypes.get_last_error())
@@ -109,22 +110,48 @@ def open_snapshot(path):
     return os.fdopen(descriptor, "rb")
 
 
+def read_until(deadline_ns, function, *args):
+    """Apply an existing absolute budget to nested reads, including overrides."""
+    outer = _read_deadline_ns.get()
+    until = min(deadline_ns, outer) if outer is not None else deadline_ns
+    require(time.perf_counter_ns() < until, "original acknowledgement/read deadline exceeded")
+    token = _read_deadline_ns.set(until)
+    try:
+        result = function(*args)
+        require(time.perf_counter_ns() < until, "original acknowledgement/read deadline exceeded")
+        return result
+    finally:
+        _read_deadline_ns.reset(token)
+
+
 def read_bytes(path, maximum):
     local_path(path)
-    # Windows may briefly deny a reader while the native writer atomically
-    # replaces its snapshot. Bound the retry; original source leases are still
-    # checked after the read and are never renewed by this wait.
-    until = time.perf_counter_ns() + 40_000_000
-    while True:
+    # xr-sim closes state.json.tmp before replacement. Share DELETE, never
+    # in-place writes; retain WinError so ACL denial (5) fails immediately.
+    # As in the runner's bounded state policy, only transient 2/32/33 retry.
+    simulator_state = path.name == "state.json"
+    until = time.perf_counter_ns() + (250_000_000 if simulator_state else 40_000_000)
+    deadline = _read_deadline_ns.get()
+    if deadline is not None:
+        until = min(until, deadline)
+    for attempt in range(250):
+        require(time.perf_counter_ns() < until, "original acknowledgement/read deadline exceeded")
         try:
-            with (open_snapshot(path) if path.name == "mechanism-snapshot.json" else path.open("rb")) as stream:
+            stream = (open_snapshot(path, share_write=False) if simulator_state else
+                      open_snapshot(path) if path.name == "mechanism-snapshot.json" else path.open("rb"))
+            with stream:
                 require(os.fstat(stream.fileno()).st_size <= maximum, "oversized file: " + str(path))
                 data = stream.read(maximum + 1)
             break
-        except (PermissionError, FileNotFoundError):
-            if time.perf_counter_ns() >= until:
+        except OSError as error:
+            transient = (getattr(error, "winerror", None) in (2, 32, 33) if simulator_state and os.name == "nt"
+                         else isinstance(error, (PermissionError, FileNotFoundError)))
+            remaining = until - time.perf_counter_ns()
+            if not transient or remaining <= 0 or attempt == 249:
                 raise
-            time.sleep(.001)
+            time.sleep(min(.001, remaining / NS))
+    if deadline is not None:
+        require(time.perf_counter_ns() < deadline, "original acknowledgement/read deadline exceeded")
     require(len(data) <= maximum, "file grew beyond bound: " + str(path))
     return data
 
@@ -887,7 +914,7 @@ class Driver:
                 and session["version"] == self.manifest["version"] and session["state"] == "running",
                 "linked native session is no longer running with the exact owners")
         require(not (self.folder / "stop.request").exists(), "normal session stop was requested")
-        state, _ = read_json(self.state_path, 16384)
+        state, _ = read_until(self.hard_deadline, read_json, self.state_path, 16384)
         require(integer(state["pid"]) == integer(self.host["pid"]) and state["runtime"] == "xr-sim",
                 "simulator PID/runtime identity differs")
         require(integer(state["errors"]) == 0 and state["lastCmdError"] == "", "simulator reports an error")
@@ -1366,7 +1393,7 @@ class Driver:
             try:
                 require(read_bytes(self.run / "live-driver-owner.json", 8192) == pending_owner,
                         "command owner record replaced before publication")
-                current = self.read_state()
+                current = read_until(publication_deadline, self.read_state)
                 self.ownership(current, expected=previous_owner)
                 require(integer(current["captureSeq"]) == self.capture_sequence, "unrequested capture before publication")
                 if self.reference is not None and not cleanup:
@@ -1409,15 +1436,15 @@ class Driver:
             if not cleanup:
                 self.pump()
             require(time.perf_counter_ns() < until, "command acknowledgement/commit deadline exceeded")
-            state = self.receive_timing_call("ack_state_read", self.read_state)
-            require(digest(self.receive_timing_call("ack_command_read", read_bytes, self.command_path, 4096))
+            state = self.receive_timing_call("ack_state_read", read_until, until, self.read_state)
+            require(digest(self.receive_timing_call("ack_command_read", read_until, until, read_bytes, self.command_path, 4096))
                     == self.command_hash, "concurrent command writer")
             seq = integer(state["cmdSeq"])
             require(seq in (target - len(batch), target), "unexpected command sequence advancement")
             if seq == target:
                 require(state["lastCmd"] == sentinel, "unique command sentinel mismatch")
                 if self.receive_timing_call("ack_exists", self.ack_path.exists):
-                    ack_raw = self.receive_timing_call("ack_read", read_bytes, self.ack_path, 4096).decode("utf-8")
+                    ack_raw = self.receive_timing_call("ack_read", read_until, until, read_bytes, self.ack_path, 4096).decode("utf-8")
                     match = re.fullmatch(r"seq=(\d+) frame=(\d+) error=-\r?\nlast=([^\r\n]*)\r?\n", ack_raw)
                     if match and int(match[1]) == target:
                         require(match[3] == " | ".join(batch), "acknowledgement batch text mismatch")
@@ -1437,6 +1464,7 @@ class Driver:
             time.sleep(.001)
         require(settled is not None, "bounded acknowledgement iteration limit")
         committed = time.perf_counter_ns()
+        require(committed < until, "command acknowledgement/commit deadline exceeded")
         if trace is not None:
             trace.phase("command", committed)
         if not cleanup:
@@ -1838,17 +1866,18 @@ class Driver:
         for _ in range(100):
             if time.perf_counter_ns() >= until:
                 return
-            state = self.read_state()
-            require(digest(read_bytes(self.command_path, 4096)) == self.command_hash,
+            state = read_until(until, self.read_state)
+            require(digest(read_until(until, read_bytes, self.command_path, 4096)) == self.command_hash,
                     "pending command replaced; ordinary release ownership lost")
             require(integer(state["cmdSeq"]) in (self.sequence - len(self.pending_batch), self.sequence),
                     "pending command sequence changed")
             if integer(state["cmdSeq"]) == self.sequence and self.ack_path.exists():
                 self.ownership(state)
-                raw = read_bytes(self.ack_path, 4096).decode("utf-8")
+                raw = read_until(until, read_bytes, self.ack_path, 4096).decode("utf-8")
                 match = re.fullmatch(r"seq=(\d+) frame=(\d+) error=-\r?\nlast=([^\r\n]*)\r?\n", raw)
                 if match and int(match[1]) == self.sequence and match[3] == " | ".join(self.pending_batch):
                     if integer(state["frame"]) > int(match[2]) and integer(state["endFrames"]) > integer(self.pending_before["endFrames"]):
+                        require(time.perf_counter_ns() < until, "original acknowledgement/read deadline exceeded")
                         self.pending_command = False
                         self.remember_controls(self.pending_batch)
                         self.save_owner(False)
