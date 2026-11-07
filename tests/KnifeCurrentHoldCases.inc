@@ -98,7 +98,11 @@ int CurrentHoldCases(){
         case 83:++b.drawOriginalGun.generation;break;case 84:c.draws=0;break;
         }
         CHECK(!ChestKnifeCurrentHoldRejection(b,now).empty());
-        ChestKnifeCurrentHoldPublication p;p.Request(now);CHECK(!p.Publish(b,now)&&!p.Read(now));
+        ChestKnifeCurrentHoldPublication p;p.Request(now);
+        if(fault==8){ // Raw packets require continuity; Publish owns its stamp.
+            CHECK(p.Publish(b,now));const auto stamped=p.Read(now);
+            CHECK(stamped&&stamped->current.continuity!=0&&ChestKnifeCurrentHoldRejection(*stamped,now).empty());
+        }else CHECK(!p.Publish(b,now)&&!p.Read(now));
     }
     for(unsigned field=0;field<11;++field){auto b=v;auto& r=b.drawReceipt;
         if(field==0)r.coherent=false;if(field==1)r.originalAmmoUnchanged=false;if(field==2)r.knifeSentinelUnchanged=false;
