@@ -1719,29 +1719,39 @@ int EveryEnrolledSupplyRejectsPickupWithoutItsOriginalNative(){
     CHECK(cases==24);std::printf("Feed supply unpaired pickup: %u profiles rejected without native or pose substitution\n",cases);
     return 0;
 }
-int EveryEnrolledSupplyKeepsLogicalOwnershipWithoutMagneticAuthority(){
+int EveryEnrolledSupplyFreezesMotionJumpWithoutDroppingHeldGrasp(){
     unsigned cases=0;
     for(const auto& registration:RegisteredBc2FeedProfiles())for(bool trackingLoss:{false,true}){
         Fixture f(&registration);CHECK(f.OpenCover()&&f.Reconcile());
         CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&f.Reconcile());f.submitted.reset();
         CHECK(f.PickSupply());const auto claim=f.hands.Current(InteractionHand::Left);CHECK(claim);
-        const auto counts=f.native.counts;
+        const auto counts=f.native.counts;const auto held=f.result.presentation;
+        CHECK(held&&held->supplyObject&&held->mechanismWristWorldMeters);
+        // Reject discontinuous motion without losing the valid grasp. The
+        // carried object and guided wrist stay at their last accepted pose.
         auto jump=f.lastWrist;jump.values[3][0]+=2;f.Tick(jump,true);
-        CHECK(f.result.interactionStatus==FeedInteractionStatus::MotionJump&&f.result.ownsHand);
+        CHECK(f.result.interactionStatus==FeedInteractionStatus::Moving&&f.result.ownsHand);
         CHECK(f.result.presentation&&f.result.presentation->supplyObject);
-        CHECK(f.result.presentation->supplyObject->claim.token==claim->token);
-        CHECK(!f.result.presentation->mechanismClaim&&!f.result.presentation->mechanismInput);
-        CHECK(!f.result.presentation->mechanismWristWorldMeters&&!Bc2FeedMechanismClaimFresh(*f.result.presentation,f.sample.input.nowNs));
+        const auto& frozen=*f.result.presentation;
+        CHECK(f.hands.Current(InteractionHand::Left)&&f.hands.Current(InteractionHand::Left)->token==claim->token);
+        CHECK(frozen.supplyObject->claim.token==claim->token&&frozen.supplyObject->identity==held->supplyObject->identity);
+        CHECK(frozen.supplyObject->item==held->supplyObject->item&&frozen.supplyObject->units==held->supplyObject->units);
+        CHECK(frozen.lifetime==held->lifetime&&frozen.supply==held->supply&&Near(frozen.coverRadians,held->coverRadians));
+        CHECK(NearPose(frozen.weaponFromPouch,held->weaponFromPouch)&&NearPose(frozen.pouchCarryWeaponWorldMeters,held->pouchCarryWeaponWorldMeters));
+        CHECK(Bc2FeedMechanismClaimFresh(frozen,f.sample.input.nowNs)&&!frozen.displayInput);
+        CHECK(frozen.mechanismClaim->token==claim->token&&frozen.mechanismInput->sequence==f.sample.input.sequence);
+        CHECK(NearPose(*frozen.mechanismWristWorldMeters,*held->mechanismWristWorldMeters));
         CHECK(f.native.counts==counts&&f.submits==2&&!f.result.pending&&!f.backend.Pending()&&f.BlocksFire());
         if(trackingLoss)f.sample.input.tracked[0]=false;
         f.Tick(jump,trackingLoss);
         CHECK(!f.hands.Current(InteractionHand::Left)&&!f.result.ownsHand);
-        CHECK(!f.result.presentation||(!f.result.presentation->supplyObject&&!f.result.presentation->mechanismWristWorldMeters));
+        CHECK(!f.result.presentation||(!f.result.presentation->supplyObject&&!f.result.presentation->mechanismWristWorldMeters&&
+            !f.result.presentation->mechanismClaim&&!f.result.presentation->mechanismInput));
         CHECK(f.native.counts==counts&&f.submits==2&&!f.result.pending&&!f.backend.Pending()&&f.BlocksFire());
         ++cases;
     }
     CHECK(cases==48);
-    std::printf("Feed supply logical publication: 24 profiles, %u targetless-policy/release-or-tracking cases\n",cases);
+    std::printf("Feed supply held publication: 24 profiles, %u frozen-jump/release-or-tracking cases\n",cases);
     return 0;
 }
 ReloadRawContact RepublishFeedContact(const ReloadRawContact& source,const fvr::math::Matrix4& world,std::int64_t now){
@@ -2004,6 +2014,7 @@ int EveryEnrolledFeedCompletesAcrossGameplayPublicationLoss(){
                     CHECK(f.PickSupply());const auto carry=f.hands.Current(InteractionHand::Left);
                     CHECK(carry&&carry->token.kind==HandClaimKind::AmmoObject);
                     const auto carriedRaw=f.sample.raw;
+                    const auto carriedPresentation=f.result.presentation;CHECK(carriedPresentation);
                     const auto carriedSelection=f.sample.selected;CHECK(carriedSelection);
                     const auto carriedSelectedDeadline=carriedSelection->deadlineNs;
                     f.publishSelected=false;f.nativeCadence={0};f.missingPacketNative=missingPacketNative;
@@ -2018,7 +2029,13 @@ int EveryEnrolledFeedCompletesAcrossGameplayPublicationLoss(){
                         CHECK(reached(retained&&retained->token==carry->token&&f.result.ownsHand,"carried supply survives bounded render gap"));
                         CHECK(retained->inputSequence==carry->inputSequence&&retained->deadlineNs==carry->deadlineNs);
                         CHECK(f.sample.selected==carriedSelection&&carriedSelection->deadlineNs==carriedSelectedDeadline);
-                        CHECK(!f.result.presentation&&!f.result.pending&&!f.backend.Pending()&&f.submits==2&&f.native.counts==before);
+                        CHECK(DisplayOnlyFeed(f.result)&&!f.result.diagnostic.policyEvaluated&&!f.result.pending&&
+                            !f.backend.Pending()&&f.submits==2&&f.native.counts==before);
+                        const auto& shown=*f.result.presentation;
+                        CHECK(shown.lifetime==carriedPresentation->lifetime&&shown.supply==carriedPresentation->supply);
+                        CHECK(shown.input.sequence==carriedPresentation->input.sequence&&shown.input.deadlineNs==carriedPresentation->input.deadlineNs);
+                        CHECK(Near(shown.coverRadians,carriedPresentation->coverRadians)&&NearPose(shown.weaponFromPouch,carriedPresentation->weaponFromPouch));
+                        CHECK(NearPose(shown.pouchCarryWeaponWorldMeters,carriedPresentation->pouchCarryWeaponWorldMeters));
                     }
                     failureStage="recover carried supply";
                     f.reloadOwnerLoss.reset();f.publishSelected=true;f.nativeCadence={1};f.missingPacketNative=false;
@@ -2709,6 +2726,7 @@ int RepeatedFeedPacketRejectsChangedSourceAndExpiredAuthority(){
         Fixture f;f.wristCalibration=Identity();const auto m=f.Open();
         const auto start=feed_interaction_detail::Multiply(m.motionFromContact,m.weaponFromMotion);
         f.Tick(start,false);f.Tick(start,true);CHECK(f.result.interactionStatus==FeedInteractionStatus::Acquired);
+        const auto original=f.result.presentation;CHECK(original);
         auto repeated=f.sample.raw;f.PrepareTick(start,true);
         switch(defect){
         case 0:++repeated.inputEvidence.observedNs;break;
@@ -2730,7 +2748,15 @@ int RepeatedFeedPacketRejectsChangedSourceAndExpiredAuthority(){
         }
         f.Consume(&repeated);
         CHECK(!f.result.ownsHand&&!f.result.pending&&!f.result.diagnostic.policyEvaluated&&f.submits==0);
-        CHECK(f.result.blocksFire&&!f.result.presentation&&!f.hands.Current(InteractionHand::Left));
+        CHECK(f.result.blocksFire&&!f.hands.Current(InteractionHand::Left));
+        // Invalid raw evidence or a released hand cannot authorize IK or
+        // motion; independently current equipment may still display its parts.
+        const bool displayOnly=defect<4||defect==7||defect==11;
+        CHECK(displayOnly?DisplayOnlyFeed(f.result):!f.result.presentation);
+        if(displayOnly){const auto& shown=*f.result.presentation;
+            CHECK(shown.lifetime==original->lifetime&&shown.supply==original->supply&&Near(shown.coverRadians,original->coverRadians));
+            CHECK(shown.input.sequence==original->input.sequence&&shown.input.deadlineNs==original->input.deadlineNs);
+        }
         if(defect<5)CHECK(f.result.diagnostic.exit==Bc2PhysicalFeedExit::GunOrRawUnverified);
         if(defect==11)CHECK(f.result.diagnostic.rawChecked==15&&f.result.diagnostic.rawPassed==7);
     }
@@ -3195,7 +3221,7 @@ int main(){
     CHECK(EveryEnrolledFeedTransfersDelayedSupportAtEachAcquisition()==0);
     CHECK(EveryEnrolledFeedRejectsUnarmedOrUnrelatedSupportTransfer()==0);
     CHECK(EveryEnrolledSupplyRejectsPickupWithoutItsOriginalNative()==0);
-    CHECK(EveryEnrolledSupplyKeepsLogicalOwnershipWithoutMagneticAuthority()==0);
+    CHECK(EveryEnrolledSupplyFreezesMotionJumpWithoutDroppingHeldGrasp()==0);
     CHECK(EveryEnrolledFeedCompletesWithIndependentPublicationClocks()==0);
     CHECK(EveryEnrolledFeedCompletesAcrossGameplayPublicationLoss()==0);
     CHECK(ChestPreparationSurvivesNeutralJitterButNotContactLoss()==0);

@@ -2,6 +2,11 @@ name: Windows build and offline checks
 
 'on':
   push:
+    # The coordinator push checks the same commit; retain every other branch/tag.
+    branches-ignore:
+      - checkpoint/436-r56-equipment-rendering
+    tags:
+      - '**'
   pull_request:
   workflow_dispatch:
 
@@ -29,6 +34,7 @@ jobs:
       _CL_: /Z7
     steps:
       - name: Check out source
+        id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -40,6 +46,41 @@ jobs:
       - name: Install offline test dependencies
         if: matrix.architecture == 'x64'
         run: 'python -m pip install --only-binary=:all: -r requirements-dev.txt'
+      - name: Configure production feed profiles and export Python inputs
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = $env:GITHUB_WORKSPACE
+          $architecture = '${{ matrix.architecture }}'
+          $build = Join-Path $root ('build/' + $architecture)
+          . .\tools\StorageBudget.ps1
+          $null = Assert-FvrStorageBudget -RepositoryRoot $root -OutputPath $build -Operation Build -PlannedBytes 3GB
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          $vsInstall = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vsInstall) { throw 'Visual Studio C++ tools are required.' }
+          $vsArch = if ($architecture -eq 'x64') { 'amd64' } else { 'x86' }
+          & (Join-Path $vsInstall 'Common7/Tools/Launch-VsDevShell.ps1') -VsInstallationPath $vsInstall -Arch $vsArch -HostArch amd64 -SkipAutomaticLocation | Out-Null
+          $feedHeader = Join-Path $root 'profiles/mechanism-family41/Feed.generated.h'
+          $symbols = Join-Path $build 'symbols'
+          # Build.ps1 reuses this cache; its unset CACHE default preserves this header.
+          cmake -S $root -B $build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON "-DBC2_FEED_REGISTRY_HEADER=$feedHeader" "-DCMAKE_PDB_OUTPUT_DIRECTORY=$symbols" "-DCMAKE_PDB_OUTPUT_DIRECTORY_RELWITHDEBINFO=$symbols"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($architecture -eq 'x64') {
+            cmake --build $build --target BC2Camera --parallel 4
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $exporter = Join-Path $build 'ExportBc2FeedSimulation.exe'
+            $compileArgs = @(
+              '/nologo', '/std:c++20', '/EHsc', '/permissive-', '/MT', '/O2', '/DNDEBUG', '/DNOMINMAX',
+              "/I$root/include", "/I$root/include/fvr/interaction", "/I$root/include/fvr/math", "/I$root/src/games/bc2",
+              "$root/tools/debug/ExportBc2FeedSimulation.cpp", "/Fo$build/ExportBc2FeedSimulation.obj", "/Fe$exporter",
+              '/link', "/LIBPATH:$build", 'BC2Camera.lib', 'FrostbiteCamera.lib', 'FvrCore.lib', 'BC2Profile.lib', 'FrostbiteDiscovery.lib'
+            )
+            & cl @compileArgs
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $profiles = Join-Path $build 'feed-simulation-profiles.json'
+            & $exporter > $profiles
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            [IO.File]::AppendAllText($env:GITHUB_ENV, "BC2_FEED_SIMULATION_PROFILES=$profiles`n", [Text.UTF8Encoding]::new($false))
+          }
       - name: Check offline Python tools and launcher behavior
         if: matrix.architecture == 'x64'
         run: |
@@ -47,6 +88,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & .\tests\Test-PreviewLaunchers.ps1
       - name: Build and run deterministic C++ tests
+        # Python/setup failures must not prevent the full native build and CTest.
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: .\Build.ps1 -Architecture '${{ matrix.architecture }}' -Jobs 4
       - name: Check source export and packaged helper
         run: python -B .\tools\package_preview.py --root . --out .\dist\ci-source --version ci --source-only
