@@ -521,14 +521,18 @@ finally{
                         $bootstrap=Read-Bc2NativeRunOutcome (Join-Path $folder 'native.stdout.log') $game.Id
                         Require ($bootstrap -and $bootstrap.outcome -ceq 'remote_thread_exited' -and $bootstrap.remote_thread_exit_observed -is [bool] -and $bootstrap.remote_thread_exit_observed -and $bootstrap.report_nonempty -is [bool] -and $bootstrap.report_nonempty) 'Native remote thread exit not proven.'
                         $native=Json (Join-Path $folder 'native-trace.json') 160MB
-                        # Actual581/584: the worker returned unsuccessfully while its
-                        # module and unresolved hooks remain valid until process exit.
-                        # This authorizes only normal close, never hook/reload retirement.
+                        # Actual581/584 retained unresolved hooks; Actual644 disabled
+                        # hooks and drained reload, but still failed qualification.
+                        # Both permit only normal close, never native retirement.
                         $failedWorkerClose=$owned.trace.process.ExitCode -eq 2 -and $bootstrap.probe_exit -eq 12 -and
                             $bootstrap.module_retained_until_game_exit -is [bool] -and $bootstrap.module_retained_until_game_exit -and
                             $native.state -is [string] -and $native.state -ceq 'observed' -and
                             ($native.pid -is [int] -or $native.pid -is [long]) -and $native.pid -eq $game.Id -and
-                            $native.hooks_disabled -is [bool] -and -not $native.hooks_disabled -and
+                            $native.hooks_disabled -is [bool] -and
+                            (-not $native.hooks_disabled -or
+                                ($native.gameplay.reload_flow.drained -is [bool] -and $native.gameplay.reload_flow.drained -and
+                                 ($native.gameplay.reload_flow.in_flight -is [int] -or $native.gameplay.reload_flow.in_flight -is [long]) -and
+                                 $native.gameplay.reload_flow.in_flight -eq 0)) -and
                             $native.module_retained_until_exit -is [bool] -and $native.module_retained_until_exit
                         if($failedWorkerClose){
                             $nativePin=Pin (Join-Path $folder 'native-trace.json') 160MB
@@ -540,8 +544,8 @@ finally{
                                     $session.resolution_guard_released -is [bool] -and -not $session.resolution_guard_released) 'Resolution state does not permit failed-worker normal close.'
                             }
                             $nativeRetired=$false
-                            $failures.Add('Native hooks are not proven disabled; failed worker ended with module retained for exact owned game normal close.')
-                            Save 'native-close-recovery.json' @{bootstrap=$bootstrap;native_report=$nativePin;hooks_disabled=$false;native_retirement_proven=$false;reload_flow_drain_claimed=$false;resolution_release_confirmed=$false;normal_close_only=$true;forced_termination=$false}
+                            $failures.Add('Native worker exited unsuccessfully; native retirement remains unproven with module retained for exact owned game normal close.')
+                            Save 'native-close-recovery.json' @{bootstrap=$bootstrap;native_report=$nativePin;hooks_disabled=$native.hooks_disabled;native_retirement_proven=$false;reload_flow_drain_claimed=$false;resolution_release_confirmed=$false;normal_close_only=$true;forced_termination=$false}
                         }else{
                             Require ($native.hooks_disabled -is [bool] -and $native.hooks_disabled) 'Native hooks are not proven disabled.'
                             # These exact setup errors precede gameplay Start. Never use a
@@ -559,7 +563,7 @@ finally{
                                 'Native Present graphics bootstrap unavailable: expected chain no longer matches the renderer',
                                 'Native Present graphics bootstrap unavailable: capture did not publish before deadline')
                             $preActivation=$owned.trace.process.ExitCode -eq 2 -and ($bootstrap.probe_exit -is [int] -or $bootstrap.probe_exit -is [long]) -and $bootstrap.probe_exit -eq 20 -and $native.state -is [string] -and $native.state -ceq 'failed' -and $native.error -is [string] -and $native.error -cin $preActivationErrors
-                            if(-not $preActivation){Require ($owned.trace.process.ExitCode -eq 0 -and $bootstrap.probe_exit -eq 0 -and $native.pid -eq $game.Id -and $native.gameplay.reload_flow.drained -is [bool] -and $native.gameplay.reload_flow.drained -and $native.gameplay.reload_flow.in_flight -eq 0) 'Native reload hooks did not prove successful drain.'}
+                            if(-not $preActivation){Require ($owned.trace.process.ExitCode -eq 0 -and $bootstrap.probe_exit -eq 0 -and $native.pid -eq $game.Id -and $native.gameplay.reload_flow.drained -is [bool] -and $native.gameplay.reload_flow.drained -and $native.gameplay.reload_flow.in_flight -eq 0) 'Native clean retirement requires successful trace/probe exits, matching game PID, and reload drain.'}
                             $nativeRetired=-not $preActivation
                             if($preActivation){$failures.Add('Native pre-activation refusal: '+$native.error)}
                             Save 'native-retirement.json' @{bootstrap=$bootstrap;hooks_disabled=$true;pre_activation_refusal=$preActivation;native_retirement_proven=$nativeRetired;reload_flow_drained=(-not $preActivation);native_report=(Pin (Join-Path $folder 'native-trace.json') 160MB)}

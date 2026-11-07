@@ -18,21 +18,22 @@ Native73 combines596 render-only recovery from the same live knife hand claim
 with600 separate passive current-hold observation; strict Held/attack gates remain.
 See handoff/integrations/coordinator-20261107-native73/README.txt for delivery.
 
-Tools638 corrects false unsafe-owner latching on an expired read budget, including
-the nested command-file read. Unpublished action stays refused; fresh exact owner,
-session and unchanged input can permit only existing bounded release cleanup.
-Three portable regressions pass against applied source; actual holster inheritance
-replay and focused author checks pass. Six bounded timing spans locate remaining
-publication cost. No native rebuild, installation change or latency fix is claimed.
-Batch: handoff/integrations/coordinator-20261107-tools638/README.txt.
-Actual636 reached/rendered gameplay but holster release expired before knife input;
-normal close191.636s/native retirement/profiles/settings passed.630's earlier first
-knife-publication refusal remains;634's duplicate-barrier fix is not game-qualified.
-Actual637 opened MY CAMPAIGN in both eyes;639 stopped before its click on historical
-image expiry. Both closed/restored; opening mission/jeep observation remains open.
-Actual593 Draw/Return and599 selection/current Held remain valid. Knife visibility,
-strict Held/attack and full launcher reload are open. Prior625's delivered click and
-626's passive-observation/count repairs remain retained. No headset/public release.
+Tools648 permits normal game close after an exactly owned failed native worker
+disabled hooks and drained reload callbacks. The original failed outcome remains;
+no forced termination or native-retirement success is inferred. Existing123+889
+checks and new410 checks/36 saved-evidence cases pass; applied candidate text and
+PowerShell parsing agree. Tools638's timeout/ownership distinction is retained.
+Batch: handoff/integrations/coordinator-20261107-tools648/README.txt.
+No native rebuild, installation change, performance gain or headset pass.
+Actual643 selected the underbarrel/current Held but expired before its setup shot.
+Private645 moves immutable review preparation ahead of fresh reads; its29 offline
+checks pass, but646 stopped earlier, before selection, so645 remains unqualified.
+Actual646: native retirement and all process exits/profile/settings restoration
+recorded; game exit0xc0000005 keeps the run failed. Timing/crash diagnosis pending.
+Actual644 reached the opening title; no loaded-map/vehicle proof. Failed native
+qualification is preserved with exact normal-close recovery/profile restoration.
+Knife visibility/attack, complete launcher reload, broader weapon/vehicle/headset
+reliability and FPS remain open. No public release.
 
 Retained milestones: actual269 complete QJU88 native belt reload;304 launcher Open;319 accepted native launcher projectile helper/target;348/353 qualified same-shot diagnostic geometry.320 post-shot observation fix pushed and12 methods pass. Broader family/headset reliability, full launcher reload, muzzle correction/destruction and performance remain open. Compact COORDINATOR-STATE.txt tracks live ownership; below is historical.
 Historical Feedback100 builtb6bd507/nativeb2919811 introduced retained normal graphics creation correction and compressed sight diagnostics. Actual101 joined creation1->0 to nativeflag0 device/context, bothmenu/worldeyes/noAV30/liveDetach/normalclosure. Actual104 physical SightFlip/native shot/HUD1/5->0/5 passed, but no impact/newdamage established; no crashcause/performance/destruction/headset claim.
