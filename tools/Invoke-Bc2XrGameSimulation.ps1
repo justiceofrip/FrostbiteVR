@@ -402,7 +402,8 @@ try{
             Require ((Pin $preAttachSpec[$key].path 256MB).sha256 -ceq $preAttachSpec[$key].sha256) ('Setup input changed: '+$key)
         }
         Require ($preAttachSpec.python.path -ieq (Join-Path $runtimeRoot 'python/python.exe')) 'Setup must use the selected installed Python.'
-        $setupPlan=Json $preAttachSpec.plan.path
+        # Campaign bench plans are bounded to 8 MiB by bc2_campaign_bench.write_new.
+        $setupPlan=Json $preAttachSpec.plan.path 8MB
         $preAttachProvisionRunner=Full $setupPlan.provisioning.runner.path
         Require ((Pin $preAttachProvisionRunner 256MB).sha256 -ceq $setupPlan.provisioning.runner.sha256) 'Provisioning runner changed.'
         Save 'pre-attach-specification.json' @{specification=(Pin $PreAttachSetupSpec);admission_seconds=$preAttachSpec.maximum_seconds;outer_deadline_unchanged=$true}

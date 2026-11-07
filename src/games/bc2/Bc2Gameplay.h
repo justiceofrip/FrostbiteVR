@@ -116,6 +116,7 @@ bool Stop()noexcept;
 // Real menu and normal body custody must be installed first.
 std::optional<ChestKnifeProbeWitness> ReadChestKnifeProbeWitness(std::int64_t nowNs)noexcept;
 // Passive normal-build stock-trigger observation; independent of the motion probe.
+ChestKnifeReturnDiagnostic ReadChestKnifeReturnObservation()noexcept;
 void RequestChestKnifeLiveObservation(std::int64_t nowNs)noexcept;
 std::shared_ptr<const ChestKnifeLiveObservation> ReadChestKnifeLiveObservation(std::int64_t nowNs)noexcept;
 bool EnableChestKnifeDrawReturn(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t,bool motionEnabled=false,bool trackedAttackRequested=false,bool stockTriggerEnabled=false)noexcept;

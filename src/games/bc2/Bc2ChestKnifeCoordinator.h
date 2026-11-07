@@ -24,6 +24,7 @@ public:
     std::optional<ChestKnifeProbeWitness> ProbeWitness(std::int64_t nowNs)const noexcept;
     void RequestLiveObservation(std::int64_t nowNs)noexcept{liveObservation_.Request(nowNs);}
     std::shared_ptr<const ChestKnifeLiveObservation> LiveObservation(std::int64_t nowNs)const noexcept{return liveObservation_.Read(nowNs);}
+    std::shared_ptr<const ChestKnifeReturnObservation> ReturnObservation()const noexcept{return returnObservation_.Read();}
     void Report(std::ostream&)const;
 private:
     void InvalidateLiveObservation()noexcept{liveObservation_.Invalidate();}
@@ -36,5 +37,9 @@ private:
     mutable std::atomic_flag witnessGate_=ATOMIC_FLAG_INIT;
     ChestKnifeProbeWitness witness_{};
     ChestKnifeLivePublication liveObservation_;
+    ChestKnifeReturnPublication returnObservation_;
+    std::optional<interaction::KnifeCommand> drawCommand_;
+    std::optional<interaction::KnifeReceipt> drawReceipt_;
+    std::optional<interaction::BodyItemKey> originalGun_;
 };
 }

@@ -58,6 +58,7 @@ struct Service {
     pk::StockKnifeSourceRevocation stockTriggerSource;std::uint64_t stagedStockTriggerRevocation=0;
     std::uint64_t stagedEpoch=0,bodyOperation=0,nativeLifetime=0,observationSequence=0;
     std::optional<KnifeCommand> outstanding;
+    ReturnPendingReason lastReturnReason=ReturnPendingReason::NotObserved;std::int64_t lastReturnObservedNs=0;
     std::uint64_t lastAttackSequence=0,lastAttackSerial=0;std::int64_t lastAttackObservedNs=0,lastAttackReceiptNs=0;
     std::array<std::atomic<std::uint64_t>,3> returnedCopySerial{},abortedCopySerial{};unsigned attackUnknown=0;
     std::array<unsigned,3> updates{},states{};std::array<std::atomic<unsigned>,3> deploy{};unsigned chooserOverrides=0;std::atomic<unsigned> deployMisses=0,foreignGuards=0,returnSuppressed=0;unsigned attackCopies=0,attackReceipts=0;
@@ -517,26 +518,41 @@ bool Stage(const KnifeCommand& command,const KnifeSample& source,const HandInter
         service.lastAttackObservedNs=command.source.observedNs;service.lastAttackSerial=command.serial;}
     service.source=source;service.stagedEpoch=service.sourceEpoch.load(std::memory_order_acquire);
     service.stagedStockTriggerRevocation=command.stockTriggerHold?service.stockTriggerSource.Stamp():0;
-    service.outstanding=command;service.returnReady=false;return true;
+    service.outstanding=command;service.returnReady=false;
+    if(command.kind==KnifeCommandKind::Return){service.lastReturnReason=ReturnPendingReason::NotObserved;service.lastReturnObservedNs=0;}
+    return true;
 }
 std::optional<KnifeReceipt> Observe(const ReloadStateOwner& current,const Bc2BodyHolster& body,
-    const std::optional<BodyFreeRightEvidence>& empty,std::int64_t now)noexcept {
+    const std::optional<BodyFreeRightEvidence>& empty,std::int64_t now,std::optional<ReturnCompletion>* completed)noexcept {
+    if(completed)completed->reset();
     std::unique_lock lock(service.gate,std::try_to_lock);
     if(!lock.owns_lock()||!service.enabled.load()||!service.anchor||!service.outstanding)return {};
     const auto command=*service.outstanding;const bool drawing=command.kind==KnifeCommandKind::Draw,attacking=command.kind==KnifeCommandKind::Attack;
+    const auto pending=[&](ReturnPendingReason reason){
+        if(!drawing&&!attacking){service.lastReturnReason=reason;service.lastReturnObservedNs=now;}
+    };
+    pending(ReturnPendingReason::Chooser);
     if(attacking?service.attacks.ConsumedMask()!=pk::KnifeAttackGate::InputMask:service.commands.Mask()!=3)return {};
     if(attacking)for(unsigned branch=1;branch<3;++branch)
         if(service.returnedCopySerial[branch].load(std::memory_order_acquire)!=command.serial)return {};
     const auto v=pk::Read(service.memory,service.state,service.server,service.base,*service.anchor,current,++service.observationSequence,now);
+    pending(ReturnPendingReason::NativeRead);
     if(!v){++service.gaps;return {};}
+    pending(ReturnPendingReason::Ammunition);
     if(!Ammo(*v)){service.bad=true;return {};}
     const auto wanted=(drawing||attacking)?service.anchor->knifeSlot:service.anchor->original.client.selectedSlot;
+    pending(ReturnPendingReason::OriginalSelection);
     for(auto selected:v->selected.current)if(selected!=wanted)return {};
+    pending(ReturnPendingReason::OriginalReadyOrBad);
     if(!Ready((drawing||attacking)?v->knife:v->original)||service.bad)return {};
     if(drawing){for(auto n:service.updates)if(!n)return {};}
     else if(!attacking){service.returnReady=true;
-        if(body.LastTemporaryToolReturn()!=service.bodyOperation||!empty||
-           !BodyFreeRightEvidenceCurrent(*empty,now)||empty->visibility.nativeOwner!=current)return {};}
+        pending(ReturnPendingReason::BodyRehide);
+        if(body.LastTemporaryToolReturn()!=service.bodyOperation)return {};
+        pending(ReturnPendingReason::FreeRightMissing);if(!empty)return {};
+        pending(ReturnPendingReason::FreeRightInvalid);if(!BodyFreeRightEvidenceCurrent(*empty,now))return {};
+        pending(ReturnPendingReason::FreeRightOwner);if(empty->visibility.nativeOwner!=current)return {};}
+    pending(ReturnPendingReason::CommandCompletion);
     bool attackUnobserved=false;
     if(attacking){
         for(unsigned branch=1;branch<3;++branch)
@@ -561,8 +577,23 @@ std::optional<KnifeReceipt> Observe(const ReloadStateOwner& current,const Bc2Bod
     receipt.attackObserved=attacking&&!attackUnobserved;receipt.attackSettled=attacking;receipt.attackQuiescentOnly=attackUnobserved;
     if(attacking){if(!attackUnobserved)++service.attackReceipts;service.lastAttackReceiptNs=now;}
     receipt.originalSelectedHidden=!drawing&&!attacking;receipt.fireSuppressed=!drawing&&!attacking;
+    // Copy only the actual successful ordinary Return, before the original
+    // anchor/outstanding transaction are retired. No native read or lease added.
+    if(!drawing&&!attacking&&completed)
+        *completed=CaptureReturnCompletion(command,receipt,*service.anchor,*v,*empty,
+            service.nativeLifetime,service.bodyOperation,service.commands.Mask(),service.commands.AcceptedNs());
     service.outstanding.reset();if(!drawing&&!attacking){service.owned=false;service.returnReady=false;service.anchor.reset();service.deployGuard.store({},std::memory_order_release);}return receipt;
 }
+std::optional<ReturnPendingObservation> ReadReturnPendingObservation()noexcept {
+    std::unique_lock lock(service.gate,std::try_to_lock);
+    if(!lock.owns_lock()||!service.outstanding||!service.anchor||
+       service.outstanding->kind!=KnifeCommandKind::Return)return {};
+    ReturnPendingObservation out;out.command=*service.outstanding;out.originalOwner=service.anchor->original.client.owner;
+    out.lifetime=service.nativeLifetime;out.bodyOperation=service.bodyOperation;
+    out.chooserMask=service.commands.Mask();out.returnReady=service.returnReady;
+    out.lastObserveReason=service.lastReturnReason;out.lastObservedNs=service.lastReturnObservedNs;return out;
+}
+
 std::optional<std::uint64_t> ReturnNeedsRehide()noexcept {
     std::unique_lock lock(service.gate,std::try_to_lock);return lock.owns_lock()&&service.returnReady?std::optional(service.bodyOperation):std::nullopt;
 }
@@ -732,7 +763,8 @@ bool TryIdleHeldGun(const interaction::KnifeSample&)noexcept{return false;}
 bool BeforePrepare(const interaction::KnifeSample&,interaction::ChestKnifeCustody&)noexcept{return false;}
 bool Stage(const interaction::KnifeCommand&,const interaction::KnifeSample&,const interaction::HandInteraction&,interaction::ChestKnifeCustody&,
  const private_knife::Anchor&,const ReloadStateOwner&,std::uint64_t,const std::optional<math::Matrix4>&,float,std::int64_t)noexcept{return false;}
-std::optional<interaction::KnifeReceipt> Observe(const ReloadStateOwner&,const Bc2BodyHolster&,const std::optional<BodyFreeRightEvidence>&,std::int64_t)noexcept{return {};}
+std::optional<interaction::KnifeReceipt> Observe(const ReloadStateOwner&,const Bc2BodyHolster&,const std::optional<BodyFreeRightEvidence>&,std::int64_t,std::optional<ReturnCompletion>* completed)noexcept{if(completed)completed->reset();return {};}
+std::optional<ReturnPendingObservation> ReadReturnPendingObservation()noexcept{return {};}
 std::optional<std::uint64_t> ReturnNeedsRehide()noexcept{return {};}
 void ObserveLifetime(const ReloadStateOwner&)noexcept{}
 void RequestSessionClose()noexcept{}

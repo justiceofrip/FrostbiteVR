@@ -107,11 +107,15 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
         }
     }else ++readGaps_;
     if(!chestKnifeNative::BeforePrepare(sample,policy_)){InvalidateLiveObservation();recognition_.NativeGate(sample.source,unsigned(policy_.Phase()));return;}
-    if(const auto receipt=chestKnifeNative::Observe(s.owner,body,bodyResult.freeRight,s.hand.nowNs)){
-        if(policy_.Observe(*receipt)){
-            if(receipt->kind==KnifeCommandKind::Draw)++draws_;
-            if(receipt->kind==KnifeCommandKind::Return){++returns_;nativeOwned_=false;anchor_.reset();bodyOperation_=0;}
-        }
+    std::optional<chestKnifeNative::ReturnCompletion> completedReturn;
+    if(const auto receipt=chestKnifeNative::Observe(s.owner,body,bodyResult.freeRight,s.hand.nowNs,&completedReturn)){
+        const bool accepted=policy_.Observe(*receipt);
+        if(accepted&&receipt->kind==KnifeCommandKind::Draw){++draws_;drawReceipt_=*receipt;}
+        // Record the exact native/policy join before originals reset. History
+        // never feeds Prepare, rendering, suppression or session retirement.
+        if(completedReturn) returnObservation_.Publish(*completedReturn,*receipt,accepted,
+            originalGun_,drawCommand_,drawReceipt_,bodyOperation_,draws_,returns_+(accepted?1:0),s.hand.nowNs);
+        if(accepted&&receipt->kind==KnifeCommandKind::Return){++returns_;nativeOwned_=false;anchor_.reset();bodyOperation_=0;}
     }
     if(const auto rehide=chestKnifeNative::ReturnNeedsRehide())body.RequestTemporaryToolRehide(*rehide);
     if(intent==UINT64_MAX){Missing(s.hand.nowNs,hands);return;}sample.claimIntent=++intent;
@@ -122,7 +126,9 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
             const auto operation=body.NextTemporaryToolOperation();
             bodyOkay=operation&&native&&key&&bodyResult.freeRight&&policy_.Hold()&&
                 inventory.BeginTemporaryTool(memory,s,post,body,*key,operation,*bodyResult.freeRight,*policy_.Hold(),hands);
-            if(bodyOkay){anchor_=native->anchor;bodyOperation_=operation;}
+            if(bodyOkay){anchor_=native->anchor;bodyOperation_=operation;
+                originalGun_=inventory.ItemKey(native->anchor.original.client.owner.weapon);
+                drawCommand_=*command;drawReceipt_.reset();}
         }
         if(!bodyOkay||!anchor_||!chestKnifeNative::Stage(*command,sample,hands,policy_,*anchor_,s.owner,bodyOperation_,
             attackGeometry?std::optional(attackGeometry->nativeAcquisition):std::nullopt,s.input.worldUnitsPerMeter,

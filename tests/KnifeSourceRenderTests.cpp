@@ -5,7 +5,87 @@
 #include <cstdio>
 #include <sstream>
 using namespace fvr;using namespace fvr::bc2;using namespace fvr::interaction;
+#include "KnifeCustodyFixture.inc"
 namespace {
+int ReturnObservationCases(){
+    Fixture f;f.s.source.owner.actor=(std::uint64_t(0x30000)<<32)|0x20000;
+    const auto draw=f.Draw();CHECK(draw);f.knife.Committed(*draw,KnifeCommit::Accepted);
+    const auto drawn=f.Receipt(*draw);CHECK(f.knife.Observe(drawn));
+    f.s.knifeSelected=f.s.trackedKnifeOwned=true;f.s.emptyHands=false;CHECK(!f.Step());
+    f.Grip(false);const auto returned=f.Step();CHECK(returned&&returned->kind==KnifeCommandKind::Return);
+    f.knife.Committed(*returned,KnifeCommit::Accepted);CHECK(f.knife.Phase()==KnifePhase::Returning);
+    ChestKnifeReturnPublication history;
+    // Actual544's boundary: draw1/return0 and an outstanding Return. Missing
+    // Held publication, expiry or independent Empty cannot create completion.
+    chestKnifeNative::ReturnPendingObservation pending;pending.command=*returned;pending.bodyOperation=17;pending.lifetime=4;
+    // Synthetic rejection detail: actual544 did not expose its first blocker.
+    pending.chooserMask=3;pending.returnReady=true;pending.lastObserveReason=chestKnifeNative::ReturnPendingReason::BodyRehide;
+    pending.lastObservedNs=f.s.source.nowNs;
+    ChestKnifeLivePublication held;held.Begin();held.Invalidate();CHECK(!held.Read(f.s.source.deadlineNs));
+    std::ostringstream waiting;WriteChestKnifeReturnObservation(waiting,{history.Read(),pending});
+    CHECK(waiting.str().find("\"completed\":null")!=std::string::npos);
+    CHECK(waiting.str().find("\"lastObserveReason\":6")!=std::string::npos);
+    CHECK(!history.Read());
+
+    auto receipt=f.Receipt(*returned);receipt.selectedKnife=receipt.drawDidNotAttack=receipt.holdGatesOwned=false;
+    private_knife::Anchor anchor;anchor.original.client.owner={0x10000,0x20000,0x30000,0x51000,2,5,4};
+    anchor.original.client.sequence=3;anchor.original.client.observedNs=1000000000;anchor.original.client.selectedSlot=2;
+    anchor.knifeWeapon=unsigned(returned->knife.id);anchor.knifeSlot=7;
+    private_knife::Snapshot snapshot;snapshot.selectedOwner=anchor.original.client.owner;
+    snapshot.selectedOwner.equipGeneration=8;snapshot.sequence=41;snapshot.observedNs=receipt.nowNs;snapshot.selected.current={2,2,2};
+    for(auto* state:{&snapshot.original.client.branches[0],&snapshot.original.client.branches[1],&snapshot.original.server})
+        {state->currentState=state->nextState=2;state->loaded=30;state->reserve=210;}
+    BodyFreeRightEvidence empty;empty.visibility.enabled=empty.visibility.hide=true;empty.visibility.request=19;
+    empty.visibility.nativeOwner=snapshot.selectedOwner;empty.visibility.input=empty.input=f.s.source;
+    empty.receipt.nativeOwner=snapshot.selectedOwner;empty.receipt.request=19;empty.receipt.inputSequence=f.s.source.sequence;
+    empty.receipt.physicalEquipGeneration=6;empty.receipt.drawSerial=23;empty.receipt.verifiedCopyMask=3;empty.receipt.hidden=true;
+    empty.receipt.observedNs=receipt.nowNs;empty.receipt.deadlineNs=f.s.source.deadlineNs;
+    auto plan=std::make_shared<WeaponVisibilityPlan>();plan->nativeOwner=snapshot.selectedOwner;plan->request=19;
+    plan->inputSequence=f.s.source.sequence;plan->physicalEquipGeneration=6;plan->meshSequence=29;plan->hidden=true;
+    plan->observedNs=receipt.nowNs;plan->deadlineNs=plan->inputDeadlineNs=f.s.source.deadlineNs;
+    empty.receipt.evidence=plan;
+    empty.suppression.owner=snapshot.selectedOwner;empty.suppression.input=f.s.source;empty.suppression.request=19;empty.suppression.nativeTick=43;
+    const auto completion=chestKnifeNative::CaptureReturnCompletion(*returned,receipt,anchor,snapshot,empty,4,17,3,returned->source.nowNs);
+    // Expired release source is still copied verbatim; only the real receipt
+    // can pass policy.Observe. A rejected or wrong serial remains nonmatching.
+    auto wrong=receipt;++wrong.serial;CHECK(!f.knife.Observe(wrong));
+    const BodyItemKey original{anchor.original.client.owner.weapon,6};
+    history.Publish(completion,wrong,false,original,*draw,drawn,17,1,0,receipt.nowNs);
+    CHECK(history.Read()&&!history.Read()->policyMatched&&!history.Read()->policyAccepted);
+    CHECK(f.knife.Observe(receipt));CHECK(f.knife.Phase()==KnifePhase::NeedNeutral);
+    history.Publish(completion,receipt,true,original,*draw,drawn,17,1,1,receipt.nowNs);
+    const auto first=history.Read();CHECK(first&&first->policyMatched);
+    CHECK(first->native.command.source.deadlineNs==returned->source.deadlineNs);
+    CHECK(first->native.freeRight.drawSerial==23&&first->native.freeRight.verifiedCopyMask==3);
+    // Destruction/reset of the original successful values cannot erase or
+    // restamp the copied historical proof. No current Held/armed frame exists.
+    anchor={};snapshot={};empty={};plan->request=99;held.Begin();held.Invalidate();
+    CHECK(first->native.freeRight.planRequest==19&&first->native.freeRight.planMeshSequence==29);
+    std::ostringstream complete;WriteChestKnifeReturnObservation(complete,{history.Read(),{}});
+    const auto section=complete.str();CHECK(section.size()<14000);
+    CHECK(section.find("\"historical\":true,\"nativeCompleted\":true")!=std::string::npos);
+    CHECK(section.find("\"policyMatched\":true")!=std::string::npos);
+    CHECK(section.find("\"actionAuthority\":false,\"freshEmptyRequired\":true")!=std::string::npos);
+    CHECK(section.find("\"validUntilNs\"")==std::string::npos&&section.find("\"stockTriggerArmed\"")==std::string::npos);
+    CHECK(section.find("\"selected\":[2,2,2]")!=std::string::npos);
+    const auto invalid=std::string("{\"valid\":false,\"invalid_reason\":\"shot_expired\",\"chestKnifeReturn\":")+section+"}";
+    CHECK(invalid.starts_with("{\"valid\":false,"));
+    CHECK(first->native.receipt.deadlineNs==receipt.deadlineNs&&history.Read()==first);
+    for(unsigned fault=0;fault<10;++fault){auto n=completion;auto r=receipt;auto g=original;auto d=*draw;auto dr=drawn;std::uint64_t operation=17;
+        if(fault==0)++r.serial;if(fault==1)++n.bodyOperation;if(fault==2)++g.id;if(fault==3)g.generation=0;
+        if(fault==4)++d.knife.generation;if(fault==5)++dr.serial;if(fault==6)++n.receipt.deadlineNs;
+        if(fault==7)++operation;if(fault==8)n.chooserMask=1;if(fault==9)n.lifetime=0;
+        history.Publish(n,r,true,g,d,dr,operation,1,1,receipt.nowNs);CHECK(history.Read()&&!history.Read()->policyMatched);
+    }
+    // Capacity one; a second event replaces the slot without altering a reader's
+    // retained immutable first record. Neither a count nor Empty is an input.
+    auto later=completion;later.command.serial+=2;later.receipt.serial+=2;++later.bodyOperation;
+    history.Publish(later,later.receipt,true,original,*draw,drawn,18,2,2,receipt.nowNs);
+    CHECK(history.Read()!=first&&first->native.bodyOperation==17&&history.Read()->native.bodyOperation==18);
+    std::puts("Historical knife Return: pending failure boundary, policy join, immutable original clocks, independent publication and one-slot retention.");
+    return 0;
+}
+
 ChestKnifeLiveObservation LiveFixture(){
     ChestKnifeLiveObservation v;v.owner={0x10000,0x20000,0x30000,0x52000,4,7,9};
     v.originalOwner=v.owner;v.originalOwner.weapon=0x51000;v.originalOwner.equipGeneration=6;
@@ -119,11 +199,46 @@ int LiveObservationCases(){
         CHECK(section.find("\"available\":false")!=std::string::npos&&section.find("\"held\":true")==std::string::npos);
         CHECK(reads==2); // No retries/waits and no cancellation of the enclosing snapshot.
     }
+
+    // Independent body observation cannot promote the invalid firearm frame.
+    {
+        ChestKnifeLivePublication p;p.Request(now);CHECK(p.Publish(v,now));unsigned reads=0;
+        const auto section=ObserveOwnedChestKnifeLiveJson([&](std::int64_t sampled){++reads;return p.Read(sampled);},[&](){return now;});
+        const auto outer=std::string("{\"valid\":false,\"invalid_reason\":\"selected_configuration_or_rig_missing_changed_or_expired\",\"chestKnife\":")+section+"}";
+        CHECK(outer.starts_with("{\"valid\":false,"));CHECK(reads==2);
+        CHECK(section.find("\"available\":true")!=std::string::npos);
+        CHECK(section.find("\"validUntilNs\":1100000000")!=std::string::npos);
+        CHECK(section.find("\"originalOwner\":")!=std::string::npos&&section.find("\"selectedSlots\":[7,7,7]")!=std::string::npos);
+    }
+    for(unsigned fault=0;fault<8;++fault){ChestKnifeLivePublication p;p.Request(now);CHECK(p.Publish(v,now));
+        unsigned reads=0;auto clock=now;
+        const auto section=ObserveOwnedChestKnifeLiveJson([&](std::int64_t sampled){
+            if(++reads==2){
+                if(fault==0)p.Begin();
+                if(fault==1)p.Invalidate();
+                if(fault==2)clock=v.input.deadlineNs;
+                if(fault==3){p.Invalidate();p.Publish(v,now);}
+                if(fault==4){auto changed=v;changed.owner.equipGeneration++;changed.rendered.source.owner=changed.owner;p.Publish(changed,now);}
+                if(fault==5){auto changed=v;changed.hold.token.id++;p.Publish(changed,now);}
+                if(fault==6){auto changed=v;changed.phase=KnifePhase::Returning;p.Publish(changed,now);}
+                if(fault==7){auto changed=v;changed.hold.deadlineNs=now;p.Publish(changed,now);}
+            }
+            return p.Read((std::max)(sampled,clock));
+        },[&](){return clock;});
+        CHECK(reads==2);CHECK(section.find("\"available\":false")!=std::string::npos);
+        CHECK(section.find("\"held\":true")==std::string::npos);
+    }
+    {
+        ChestKnifeLivePublication p;p.Request(now);unsigned reads=0;
+        const auto section=ObserveOwnedChestKnifeLiveJson([&](std::int64_t sampled){++reads;return p.Read(sampled);},[&](){return now;});
+        CHECK(reads==1);CHECK(section.find("observation_unavailable")!=std::string::npos);
+    }
     std::puts("Passive live knife observation: exact owner/source/claim/native joins, mode separation, continuity and bounded serialization negatives.");
     return 0;
 }
 }
 int main(){
+    CHECK(!ReturnObservationCases());
     CHECK(!LiveObservationCases());
     {private_knife::OriginalKnifeSource source;HandInteractionSample value{{1,2,3,4},9,1000000000,1100000000,1000000000,true,{true,true}};
      CHECK(source.Advance(value));CHECK(!source.Advance(value));++value.nowNs;CHECK(!source.Advance(value));

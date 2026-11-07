@@ -2783,14 +2783,26 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     std::ostringstream nativeFeedAdmission;nativeFeedAdmission.imbue(std::locale::classic());nativeFeedAdmission<<std::boolalpha;
     reloadFlowRuntime::WriteFeedEquipmentGateObservation(nativeFeedAdmission);
     const auto feedGateAdmission=",\"feedGateAdmission\":"+nativeFeedAdmission.str();
-    const auto invalid=[&](const char* reason){
+    // One passive bounded load, independent of firearm/Held publication.
+    // The completed event preserves its original clocks; Empty is separate.
+    const auto returnDiagnostic=gameplay::ReadChestKnifeReturnObservation();
+    std::ostringstream knifeReturn;knifeReturn.imbue(std::locale::classic());knifeReturn.precision(9);
+    WriteChestKnifeReturnObservation(knifeReturn,returnDiagnostic);
+    const auto knifeReturnSection=",\"chestKnifeReturn\":"+knifeReturn.str();
+    const auto invalid=[&](const char* reason,bool observeOwnedKnife=false){
         std::ostringstream header;header.imbue(std::locale::classic());
         header<<"{\"schema\":\"fvr.bc2.live-mechanism-snapshot.v1\",\"nonce\":\""<<nonce
             <<"\",\"valid\":false,\"invalid_reason\":\""<<reason<<"\",\"observed_ns\":"<<observed
             <<",\"bodyHolster\":{\"available\":false,\"reason\":\"snapshot_unavailable\"}"
             <<",\"bodyInventory\":{\"observationOnly\":true,\"available\":false,\"reason\":\"snapshot_unavailable\"}"
-            <<",\"chestKnife\":{\"observationOnly\":true,\"available\":false,\"reason\":\"snapshot_unavailable\"}";
-        const auto prefix=header.str();
+            <<",\"chestKnife\":";
+        const auto knifePrefix=header.str();
+        // Only the admitted body frame's firearm-selection/aim refusal uses
+        // this independent proof. Global validity stays false; action admission is unchanged.
+        if(observeOwnedKnife)header<<ObserveOwnedChestKnifeLiveJson(gameplay::ReadChestKnifeLiveObservation,[](){return ReloadNanos();});
+        else header<<"{\"observationOnly\":true,\"available\":false,\"reason\":\"snapshot_unavailable\"}";
+        if(observeOwnedKnife)header<<",\"chestKnifeObservationBasis\":\"independent_owned_body\"";
+        const auto prefix=header.str()+knifeReturnSection;
         const auto diagnostics=feedDiagnostics.empty()?std::string{}:",\"feedDiagnostics\":"+feedDiagnostics;
         std::ostringstream observation;observation.imbue(std::locale::classic());observation<<std::boolalpha;
         gameplay::ReportFeedObservation(observation);
@@ -2801,6 +2813,14 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
         // original press receipts alongside both bounded native gate journals.
         // It was serialized from the same load as feedAdmission above.
         if(payload.size()>snapshotLimit)payload=prefix+compactFeedAdmission+fixedGateAdmission+feedGateAdmission+",\"diagnosticsOmitted\":\"payload_limit\"}\n";
+        // Optional body proof must not displace the existing bounded gate journals.
+        if(payload.size()>snapshotLimit&&observeOwnedKnife)
+            payload=knifePrefix+"{\"observationOnly\":true,\"available\":false,\"reason\":\"payload_limit\"}"+
+                knifeReturnSection+compactFeedAdmission+fixedGateAdmission+feedGateAdmission+",\"diagnosticsOmitted\":\"payload_limit\"}\n";
+        if(payload.size()>snapshotLimit)
+            payload=knifePrefix+"{\"observationOnly\":true,\"available\":false,\"reason\":\"payload_limit\"}"+
+                ",\"chestKnifeReturn\":{\"observationOnly\":true,\"available\":false,\"reason\":\"payload_limit\"}"+
+                compactFeedAdmission+fixedGateAdmission+feedGateAdmission+",\"diagnosticsOmitted\":\"payload_limit\"}\n";
         out<<payload;
     };
     const auto candidate=shotPublication.load(std::memory_order_acquire);
@@ -2914,7 +2934,7 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
        current->states!=selected->states||current->soleConfiguredArray!=selected->soleConfiguredArray||
        !current->configurationPathVerified||current->configurationPath!=selected->configurationPath||
        current->configurationPathPointer!=selected->configurationPathPointer){
-        invalid("selected_configuration_or_rig_missing_changed_or_expired");return;
+        invalid("selected_configuration_or_rig_missing_changed_or_expired",true);return;
     }
     if(feed&&(!sourceFresh||!selectedRetained||!coverFinite||!pouchRigid||!hingeRigid||
        !pouchCarryRigid||!chainCarryRigid||!wristRigid)){
@@ -3425,11 +3445,16 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     // A racing gather/expiry drops only its proof, never the generic snapshot.
     const auto knifeJson=ObserveChestKnifeLiveJson(gameplay::ReadChestKnifeLiveObservation,[](){return ReloadNanos();},m.owner,m.inputEvidence,input);
     const auto diagnosticBase=fixedGateAdmission+feedGateAdmission+",\"feedObservation\":"+feedObservation.str();
-    const auto diagnosticSuffix=diagnosticBase+",\"chestKnife\":"+knifeJson+magazineBolt.str()+"}\n";
+    const auto diagnosticSuffix=diagnosticBase+",\"chestKnife\":"+knifeJson+knifeReturnSection+magazineBolt.str()+"}\n";
     // Preserve action evidence. Only overflow compacts Feed first, then the
     // optional sight resolver trace; original sight mode/contact/native fields
     // and every magazine/bolt/knife source clock and receipt stay untouched.
-    const auto payload=live_snapshot::Compose(snapshotPrefix,feedAdmission,compactFeedAdmission,diagnosticSuffix,
+    auto payload=live_snapshot::Compose(snapshotPrefix,feedAdmission,compactFeedAdmission,diagnosticSuffix,
+        sightResolutionBegin,sightResolutionEnd,snapshotLimit);
+    // Optional history must never turn an otherwise valid firearm snapshot
+    // into a refusal. Restore the exact pre-history payload if it cannot fit.
+    if(payload.size()>snapshotLimit)payload=live_snapshot::Compose(snapshotPrefix,feedAdmission,compactFeedAdmission,
+        diagnosticBase+",\"chestKnife\":"+knifeJson+magazineBolt.str()+"}\n",
         sightResolutionBegin,sightResolutionEnd,snapshotLimit);
     if(ReloadNanos()>=until){invalid("expired_during_serialization");return;}
     const auto guardAfter=shotGuard.load(std::memory_order_acquire);

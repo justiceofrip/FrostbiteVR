@@ -114,6 +114,20 @@ def held_evidence(s, now_ns):
             "stale/mismatched Held claim")
 
 
+
+def untrimmed_aim(grip, aim):
+    """Compare two pose channels, not byte-preserved copies of one sample.
+
+    xr-sim normalizes aim after applying even an identity trim. This can change
+    more than one float32 component step without changing the represented pose.
+    Keep exact translation/metadata and the existing four-epsilon angular cap;
+    from_pose retains shape, finiteness and near-unit quaternion validation.
+    """
+    g, a = frame.from_pose(grip), frame.from_pose(aim)
+    return ({k: v for k, v in grip.items() if k != "orientation"}
+            == {k: v for k, v in aim.items() if k != "orientation"}
+            and frame.pose_error(g, a)[1] <= 4 * 2**-23)
+
 def calibrate(s, now_ns):
     require(s["valid"] is True and s["invalid_reason"] is None, "invalid snapshot")
     require(s["observed_ns"] <= now_ns < min(s["valid_until_ns"], s["native_deadline_ns"],
@@ -133,7 +147,7 @@ def calibrate(s, now_ns):
                 and hand["squeeze"] == hand["trigger"] == hand["stickX"] == hand["stickY"] == 0,
                 "nonneutral/untracked input")
     hand = inp["hands"][1]
-    require(frame.preserved_pose_equal(hand["grip"], hand["aim"]), "aim trim unsupported")
+    require(untrimmed_aim(hand["grip"], hand["aim"]), "aim trim unsupported")
     w = frame.rigid(s["mapping"]["weaponWorldMeters"])
     b = frame.rigid(s["mapping"]["trackingBodyWorldMeters"])
     r = frame.from_pose(inp["referenceHead"])
