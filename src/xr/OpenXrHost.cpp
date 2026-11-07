@@ -530,11 +530,11 @@ struct Host {
             report.frameDiagnostics.Input(input.generation,diagnostic.inputReturnedNs,result.known,result.succeeded);
         };
         XrFrameWaitInfo wait{XR_TYPE_FRAME_WAIT_INFO};XrFrameState frame{XR_TYPE_FRAME_STATE};
-        XrResult waited;
+        XrResult waitResult;
         {HostStageTimer timer(diagnostic,HostStage::WaitFrame,BodyPropClockNs,&diagnostic.waitFrame);
-            diagnostic.waitFrameAttempted=true;waited=api.WaitFrame(session,&wait,&frame);}
-        diagnostic.waitFrameResult=std::int32_t(waited);
-        Check(waited,"Wait frame");++report.waitedFrames;frameTime=frame.predictedDisplayTime;
+            diagnostic.waitFrameAttempted=true;waitResult=api.WaitFrame(session,&wait,&frame);}
+        diagnostic.waitFrameResult=std::int32_t(waitResult);
+        Check(waitResult,"Wait frame");++report.waitedFrames;frameTime=frame.predictedDisplayTime;
         diagnostic.predictedNs=frameTime;diagnostic.shouldRender=frame.shouldRender==XR_TRUE;
         XrFrameBeginInfo begin{XR_TYPE_FRAME_BEGIN_INFO};Check(timed(HostStage::BeginFrame,[&]{return api.BeginFrame(session,&begin);}),"Begin frame");frameOpen=true;
         for(auto at=spaceChanges.begin();at!=spaceChanges.end();)if(*at<=frameTime){AdvanceReference(interaction::TrackingReferenceChange::RuntimeSpaceReplacement);referenceValid=false;retained.Reset();at=spaceChanges.erase(at);}else ++at;
