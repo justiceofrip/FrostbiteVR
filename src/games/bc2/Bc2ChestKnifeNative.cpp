@@ -58,6 +58,7 @@ struct Service {
     pk::StockKnifeSourceRevocation stockTriggerSource;std::uint64_t stagedStockTriggerRevocation=0;
     std::uint64_t stagedEpoch=0,bodyOperation=0,nativeLifetime=0,observationSequence=0;
     std::optional<KnifeCommand> outstanding;
+    std::uint64_t currentHoldDrawSerial=0;bool currentHoldDrawOnly=false; // Passive per-Draw provenance.
     ReturnPendingReason lastReturnReason=ReturnPendingReason::NotObserved;std::int64_t lastReturnObservedNs=0;
     ReadyObservation lastReturnReadiness{};bool lastReturnBad=false,lastReturnBadKnown=false;
     std::uint64_t lastAttackSequence=0,lastAttackSerial=0;std::int64_t lastAttackObservedNs=0,lastAttackReceiptNs=0;
@@ -447,7 +448,10 @@ std::optional<View> Inspect(const ReloadStateOwner& current,unsigned knifeWeapon
     reason(InspectReason::NativeRead);if(!snapshot)return {};
     reason(InspectReason::Flags);if(!Flags(*anchor))return {};
     reason(InspectReason::Available);
-    return View{*anchor,*snapshot,service.owned,!service.bad.load(),!service.ownedObservationGap.load(),service.motionEnabled&&(!service.attackBridgeEnabled||service.attackHooksAvailable.load()),service.attackBridgeEnabled,service.stockTriggerEnabled,service.firstObservationGap.load()};
+    return View{*anchor,*snapshot,service.owned,!service.bad.load(),!service.ownedObservationGap.load(),service.motionEnabled&&(!service.attackBridgeEnabled||service.attackHooksAvailable.load()),service.attackBridgeEnabled,service.stockTriggerEnabled,service.firstObservationGap.load(),
+        {service.nativeLifetime,service.bodyOperation,service.currentHoldDrawSerial,true,service.currentHoldDrawOnly,
+         bool(service.outstanding),bool(service.commands.Pending()),bool(service.attacks.Pending()),service.returnReady,
+         service.closing.load(std::memory_order_acquire),bool(service.attackNative),bool(service.bridge.Pending())}};
 }
 void AcknowledgeNoEffectRehide(const Bc2BodyHolster& body)noexcept {
     std::unique_lock lock(service.gate,std::try_to_lock);
@@ -492,6 +496,8 @@ bool Stage(const KnifeCommand& command,const KnifeSample& source,const HandInter
     const pk::Anchor& anchor,const ReloadStateOwner& current,std::uint64_t bodyOperation,
     const std::optional<math::Matrix4>& attackGeometry,float units,std::int64_t geometryDeadlineNs)noexcept {
     std::unique_lock lock(service.gate,std::try_to_lock);
+    // A later attempted action cannot revive this Draw's passive-only provenance.
+    if(lock.owns_lock()&&command.kind!=KnifeCommandKind::Draw)service.currentHoldDrawOnly=false;
     const auto reject=[&](){policy.Committed(command,KnifeCommit::RejectedNoEffect);return false;};
     if(!lock.owns_lock()||service.closing.load(std::memory_order_acquire)||!service.enabled.load()||service.bad||!bodyOperation||
        (command.kind==KnifeCommandKind::Attack&&(command.stockTriggerHold?
@@ -530,6 +536,7 @@ bool Stage(const KnifeCommand& command,const KnifeSample& source,const HandInter
     service.source=source;service.stagedEpoch=service.sourceEpoch.load(std::memory_order_acquire);
     service.stagedStockTriggerRevocation=command.stockTriggerHold?service.stockTriggerSource.Stamp():0;
     service.outstanding=command;service.returnReady=false;
+    if(drawing){service.currentHoldDrawSerial=command.serial;service.currentHoldDrawOnly=true;}
     if(command.kind==KnifeCommandKind::Return){service.lastReturnReason=ReturnPendingReason::NotObserved;service.lastReturnObservedNs=0;service.lastReturnReadiness={};service.lastReturnBad=false;service.lastReturnBadKnown=false;}
     return true;
 }

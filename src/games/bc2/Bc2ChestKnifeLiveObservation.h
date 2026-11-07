@@ -163,12 +163,8 @@ struct ChestKnifeLiveObservation {
 inline std::int64_t ChestKnifeLiveDeadline(const ChestKnifeLiveObservation& v)noexcept {
     return (std::min)({v.input.deadlineNs,v.controls.menu.deadlineNs,v.hold.deadlineNs,v.rendered.source.input.deadlineNs});
 }
-inline std::string_view ChestKnifeLiveRejection(const ChestKnifeLiveObservation& v,std::int64_t now)noexcept {
+inline std::string_view ChestKnifeCurrentJoins(const ChestKnifeLiveObservation& v,std::int64_t now)noexcept {
     const auto& f=v.input;const auto& o=v.owner;const auto& original=v.originalOwner;
-    if(!v.continuity||!v.bodyOperation||!v.draws||v.phase!=interaction::KnifePhase::Held||
-       !v.held||!v.stockTriggerReady||!v.stockTriggerArmed||!v.fireSuppressed||!v.mechanicsSettled||
-       !v.nativeOwned||!v.nativeHealthy||!v.nativeObservationComplete||!v.stockTriggerEnabled||v.motionEnabled||v.attackBridgeEnabled)
-        return "held_stock_trigger_not_ready";
     if(!o.player||!o.soldier||!o.weak||!o.weapon||!o.actorGeneration||!o.equipGeneration||!o.space||
        original.player!=o.player||original.soldier!=o.soldier||original.weak!=o.weak||
        original.actorGeneration!=o.actorGeneration||original.space!=o.space||!original.equipGeneration||
@@ -198,9 +194,15 @@ inline std::string_view ChestKnifeLiveRejection(const ChestKnifeLiveObservation&
        !v.nativeTick||!v.suppressionRequest)return "native_selection_or_suppression_not_joined";
     return {};
 }
-inline std::string_view ChestKnifeLiveJoinRejection(const ChestKnifeLiveObservation& v,const ReloadStateOwner& owner,
+inline std::string_view ChestKnifeLiveRejection(const ChestKnifeLiveObservation& v,std::int64_t now)noexcept {
+    if(!v.continuity||!v.bodyOperation||!v.draws||v.phase!=interaction::KnifePhase::Held||
+       !v.held||!v.stockTriggerReady||!v.stockTriggerArmed||!v.fireSuppressed||!v.mechanicsSettled||
+       !v.nativeOwned||!v.nativeHealthy||!v.nativeObservationComplete||!v.stockTriggerEnabled||v.motionEnabled||v.attackBridgeEnabled)
+        return "held_stock_trigger_not_ready";
+    return ChestKnifeCurrentJoins(v,now);
+}
+inline std::string_view ChestKnifeCurrentPacketJoins(const ChestKnifeLiveObservation& v,const ReloadStateOwner& owner,
     const interaction::HandInteractionSample& input,const interaction::InputFrame& controls,std::int64_t now)noexcept {
-    if(const auto reason=ChestKnifeLiveRejection(v,now);!reason.empty())return reason;
     const auto& f=v.input;
     if(v.owner!=owner||f.owner!=input.owner||!input.sequence||input.observedNs<=0||input.observedNs>now||
        input.nowNs<input.observedNs||input.nowNs>now||input.deadlineNs<=now||input.deadlineNs-input.observedNs>100000000||
@@ -214,9 +216,13 @@ inline std::string_view ChestKnifeLiveJoinRejection(const ChestKnifeLiveObservat
         return "snapshot_owner_or_input_not_joined";
     return {};
 }
-inline bool ChestKnifeLiveContinues(const ChestKnifeLiveObservation& before,const ChestKnifeLiveObservation& after,std::int64_t now)noexcept {
-    return ChestKnifeLiveRejection(before,now).empty()&&ChestKnifeLiveRejection(after,now).empty()&&
-        before.continuity==after.continuity&&before.owner==after.owner&&before.originalOwner==after.originalOwner&&
+inline std::string_view ChestKnifeLiveJoinRejection(const ChestKnifeLiveObservation& v,const ReloadStateOwner& owner,
+    const interaction::HandInteractionSample& input,const interaction::InputFrame& controls,std::int64_t now)noexcept {
+    if(const auto reason=ChestKnifeLiveRejection(v,now);!reason.empty())return reason;
+    return ChestKnifeCurrentPacketJoins(v,owner,input,controls,now);
+}
+inline bool ChestKnifeSameCurrent(const ChestKnifeLiveObservation& before,const ChestKnifeLiveObservation& after)noexcept {
+    return before.continuity==after.continuity&&before.owner==after.owner&&before.originalOwner==after.originalOwner&&
         before.knife==after.knife&&before.originalGun==after.originalGun&&before.bodyOperation==after.bodyOperation&&
         before.hold.token==after.hold.token&&before.draws==after.draws&&before.returns==after.returns&&
         before.controls.trackingBasisGeneration==after.controls.trackingBasisGeneration&&
@@ -225,6 +231,9 @@ inline bool ChestKnifeLiveContinues(const ChestKnifeLiveObservation& before,cons
         (before.input.sequence==after.input.sequence?
             before.input.observedNs==after.input.observedNs&&before.input.deadlineNs==after.input.deadlineNs:
             before.input.observedNs<after.input.observedNs);
+}
+inline bool ChestKnifeLiveContinues(const ChestKnifeLiveObservation& before,const ChestKnifeLiveObservation& after,std::int64_t now)noexcept {
+    return ChestKnifeLiveRejection(before,now).empty()&&ChestKnifeLiveRejection(after,now).empty()&&ChestKnifeSameCurrent(before,after);
 }
 // Bounded passive rejection history. Begin clears only authority, never these
 // original failure facts. First resets for a new operation or its first draw

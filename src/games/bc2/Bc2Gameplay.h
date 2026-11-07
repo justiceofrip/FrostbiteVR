@@ -1,6 +1,7 @@
 #pragma once
 #include "Bc2ChestKnifeProbeWitness.h"
 #include "Bc2ChestKnifeLiveObservation.h"
+#include "Bc2ChestKnifeCurrentHoldObservation.h"
 #include "Bc2ContextualToolProbeWitness.h"
 #include "Bc2PumpReceiverGapProbe.h"
 #include "Bc2TwoGrenadeDeathWitness.h"
@@ -120,6 +121,8 @@ ChestKnifeReturnDiagnostic ReadChestKnifeReturnObservation()noexcept;
 std::optional<ChestKnifePublicationDiagnostic> ReadChestKnifePublicationDiagnostic()noexcept;
 void RequestChestKnifeLiveObservation(std::int64_t nowNs)noexcept;
 std::shared_ptr<const ChestKnifeLiveObservation> ReadChestKnifeLiveObservation(std::int64_t nowNs)noexcept;
+std::shared_ptr<const ChestKnifeCurrentHoldObservation> ReadChestKnifeCurrentNonfiringHold(std::int64_t nowNs)noexcept;
+std::optional<ChestKnifeCurrentHoldFailure> ReadChestKnifeCurrentHoldDiagnostic()noexcept;
 bool EnableChestKnifeDrawReturn(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t,bool motionEnabled=false,bool trackedAttackRequested=false,bool stockTriggerEnabled=false)noexcept;
 // Default-OFF contextual tool binding; private finite fixture only.
 std::optional<ContextualToolProbeWitness> ReadContextualToolProbeWitness(std::int64_t nowNs)noexcept;

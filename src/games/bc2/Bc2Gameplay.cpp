@@ -4375,6 +4375,20 @@ void RequestChestKnifeLiveObservation(std::int64_t now)noexcept {
     (void)now;
 #endif
 }
+std::optional<ChestKnifeCurrentHoldFailure> ReadChestKnifeCurrentHoldDiagnostic()noexcept {
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    if(chestKnife)return chestKnife->CurrentHoldDiagnostic();
+#endif
+    return {};
+}
+std::shared_ptr<const ChestKnifeCurrentHoldObservation> ReadChestKnifeCurrentNonfiringHold(std::int64_t now)noexcept {
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    if(enabled.load(std::memory_order_acquire)&&chestKnife)return chestKnife->CurrentNonfiringHold(now);
+#else
+    (void)now;
+#endif
+    return {};
+}
 std::shared_ptr<const ChestKnifeLiveObservation> ReadChestKnifeLiveObservation(std::int64_t now)noexcept {
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
     if(enabled.load(std::memory_order_acquire)&&chestKnife)return chestKnife->LiveObservation(now);

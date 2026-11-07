@@ -3,6 +3,7 @@
 #include "Bc2ChestKnifeRendering.h"
 #include "Bc2ChestKnifeProbeWitness.h"
 #include "Bc2ChestKnifeLiveObservation.h"
+#include "Bc2ChestKnifeCurrentHoldObservation.h"
 #include <atomic>
 namespace fvr::bc2 {
 // Actual gather coordinator. Owns no transport, hand allocator or inventory.
@@ -22,13 +23,15 @@ public:
     bool ClaimsHand()const noexcept{return policy_.Hold().has_value()||nativeOwned_;}
     const std::optional<ChestKnifeRenderSource>& Rendering()const noexcept{return rendering_;}
     std::optional<ChestKnifeProbeWitness> ProbeWitness(std::int64_t nowNs)const noexcept;
-    void RequestLiveObservation(std::int64_t nowNs)noexcept{liveObservation_.Request(nowNs);}
+    void RequestLiveObservation(std::int64_t nowNs)noexcept{liveObservation_.Request(nowNs);currentHoldObservation_.Request(nowNs);}
+    std::shared_ptr<const ChestKnifeCurrentHoldObservation> CurrentNonfiringHold(std::int64_t nowNs)const noexcept{return currentHoldObservation_.Read(nowNs);}
+    std::optional<ChestKnifeCurrentHoldFailure> CurrentHoldDiagnostic()const noexcept{return currentHoldObservation_.ReadDiagnostic();}
     std::shared_ptr<const ChestKnifeLiveObservation> LiveObservation(std::int64_t nowNs)const noexcept{return liveObservation_.Read(nowNs);}
     std::optional<ChestKnifePublicationDiagnostic> PublicationDiagnostic()const noexcept{return liveObservation_.ReadDiagnostic();}
     std::shared_ptr<const ChestKnifeReturnObservation> ReturnObservation()const noexcept{return returnObservation_.Read();}
     void Report(std::ostream&)const;
 private:
-    void InvalidateLiveObservation()noexcept{liveObservation_.Invalidate();}
+    void InvalidateLiveObservation()noexcept{liveObservation_.Invalidate();currentHoldObservation_.Invalidate();}
     interaction::ChestKnifeCustody policy_;
     interaction::KnifeRecognitionDiagnostic recognition_;
     std::optional<private_knife::Anchor> anchor_;
@@ -38,6 +41,8 @@ private:
     mutable std::atomic_flag witnessGate_=ATOMIC_FLAG_INIT;
     ChestKnifeProbeWitness witness_{};
     ChestKnifeLivePublication liveObservation_;
+    ChestKnifeCurrentHoldPublication currentHoldObservation_;
+    bool drawOnlyIssued_=false;
     ChestKnifeReturnPublication returnObservation_;
     std::optional<interaction::KnifeCommand> drawCommand_;
     std::optional<interaction::KnifeReceipt> drawReceipt_;

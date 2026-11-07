@@ -2792,7 +2792,10 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     // frame. The existing optional-section fallback still enforces 64 KiB.
     std::ostringstream knifePublication;knifePublication.imbue(std::locale::classic());knifePublication.precision(9);
     WriteChestKnifePublicationDiagnostic(knifePublication,gameplay::ReadChestKnifePublicationDiagnostic());
-    const auto knifeReturnSection=",\"chestKnifeReturn\":"+knifeReturn.str()+",\"chestKnifePublication\":"+knifePublication.str();
+    std::ostringstream currentHoldDiagnostic;currentHoldDiagnostic.imbue(std::locale::classic());
+    WriteChestKnifeCurrentHoldDiagnostic(currentHoldDiagnostic,gameplay::ReadChestKnifeCurrentHoldDiagnostic());
+    const auto knifeReturnSection=",\"chestKnifeReturn\":"+knifeReturn.str()+",\"chestKnifePublication\":"+knifePublication.str()+
+        ",\"currentNonfiringHoldDiagnostic\":"+currentHoldDiagnostic.str();
     const auto invalid=[&](const char* reason,bool observeOwnedKnife=false){
         std::ostringstream header;header.imbue(std::locale::classic());
         header<<"{\"schema\":\"fvr.bc2.live-mechanism-snapshot.v1\",\"nonce\":\""<<nonce
@@ -2806,6 +2809,9 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
         if(observeOwnedKnife)header<<ObserveOwnedChestKnifeLiveJson(gameplay::ReadChestKnifeLiveObservation,[](){return ReloadNanos();});
         else header<<"{\"observationOnly\":true,\"available\":false,\"reason\":\"snapshot_unavailable\"}";
         if(observeOwnedKnife)header<<",\"chestKnifeObservationBasis\":\"independent_owned_body\"";
+        header<<",\"currentNonfiringHold\":";
+        if(observeOwnedKnife)header<<ObserveChestKnifeCurrentHoldJson(gameplay::ReadChestKnifeCurrentNonfiringHold,[](){return ReloadNanos();});
+        else WriteChestKnifeCurrentHoldObservation(header,nullptr,ReloadNanos());
         const auto prefix=header.str()+knifeReturnSection;
         const auto diagnostics=feedDiagnostics.empty()?std::string{}:",\"feedDiagnostics\":"+feedDiagnostics;
         std::ostringstream observation;observation.imbue(std::locale::classic());observation<<std::boolalpha;
@@ -3449,7 +3455,8 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     // A racing gather/expiry drops only its proof, never the generic snapshot.
     const auto knifeJson=ObserveChestKnifeLiveJson(gameplay::ReadChestKnifeLiveObservation,[](){return ReloadNanos();},m.owner,m.inputEvidence,input);
     const auto diagnosticBase=fixedGateAdmission+feedGateAdmission+",\"feedObservation\":"+feedObservation.str();
-    const auto diagnosticSuffix=diagnosticBase+",\"chestKnife\":"+knifeJson+knifeReturnSection+magazineBolt.str()+"}\n";
+    const auto currentHoldJson=ObserveChestKnifeCurrentHoldJson(gameplay::ReadChestKnifeCurrentNonfiringHold,[](){return ReloadNanos();},m.owner,m.inputEvidence,input);
+    const auto diagnosticSuffix=diagnosticBase+",\"chestKnife\":"+knifeJson+",\"currentNonfiringHold\":"+currentHoldJson+knifeReturnSection+magazineBolt.str()+"}\n";
     // Preserve action evidence. Only overflow compacts Feed first, then the
     // optional sight resolver trace; original sight mode/contact/native fields
     // and every magazine/bolt/knife source clock and receipt stay untouched.

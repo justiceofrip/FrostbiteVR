@@ -12,6 +12,20 @@ inline bool ChestKnifePoseCustody(const interaction::ChestKnifeCustody& policy,c
     return policy.Hold()&&held&&held->token==*policy.Hold()&&held->token.kind==interaction::HandClaimKind::GunHold&&
         held->token.owner==input.owner&&held->inputSequence==input.sequence&&held->deadlineNs>input.nowNs;
 }
+// Rendering may recover from one missing incoming receipt while our exact
+// existing GunHold is still live. Requiring that hold to have ALREADY renewed
+// on this input would deadlock: renewal itself needs the next rendered receipt.
+// This never renews/acquires a claim. The caller still proves current native
+// ownership/selection, suppression, input, grip and expiry; the renderer must
+// produce a fresh measured receipt. Current-sequence Held qualification above
+// remains separate, and an expired/lost/foreign claim cannot take this path.
+inline bool ChestKnifeRenderPoseCustody(const interaction::ChestKnifeCustody& policy,const interaction::HandInteraction& hands,
+    const interaction::HandInteractionSample& input)noexcept {
+    if(policy.NeedsInitialHeldPose())return true;
+    const auto held=hands.Current(interaction::InteractionHand::Right);
+    return policy.Hold()&&held&&held->token==*policy.Hold()&&held->token.kind==interaction::HandClaimKind::GunHold&&
+        held->token.owner==input.owner&&held->inputSequence&&held->inputSequence<=input.sequence&&held->deadlineNs>input.nowNs;
+}
 // Display-only custody, published from the actual accepted native selection and
 // current original hand source. It grants neither attack nor native selection.
 struct ChestKnifeRenderSource {

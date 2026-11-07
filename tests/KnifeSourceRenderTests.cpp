@@ -1,7 +1,9 @@
 #include "Test.h"
 #include "Bc2KnifeDrawReturnGate.h"
+#include "Bc2KnifeAttackGate.h"
 #include "Bc2ChestKnifeRendering.h"
 #include "Bc2ChestKnifeLiveObservation.h"
+#include "Bc2ChestKnifeCurrentHoldObservation.h"
 #include <cstdio>
 #include <sstream>
 #include <limits>
@@ -103,6 +105,7 @@ ChestKnifeLiveObservation LiveFixture(){
     v.nativeOwned=v.nativeHealthy=v.nativeObservationComplete=v.stockTriggerEnabled=true;
     v.held=v.stockTriggerReady=v.stockTriggerArmed=v.fireSuppressed=v.mechanicsSettled=true;return v;
 }
+#include "KnifeCurrentHoldCases.inc"
 int LiveObservationCases(){
     const auto v=LiveFixture();const auto now=v.input.nowNs;
     CHECK(ChestKnifeLiveRejection(v,now).empty());
@@ -276,8 +279,63 @@ int main(){
         p.Request(v.input.deadlineNs);CHECK(!p.Read(v.input.deadlineNs));
         CHECK(p.ReadDiagnostic()->latest.value.input.deadlineNs==v.input.deadlineNs);
     }
+    {
+        // Actual593 exhibited this dependency: a real held claim stopped
+        // renewing after input7356, then expired on7360. A missed receipt must
+        // not forbid rendering while that SAME claim is still live. Fixture
+        // contact below is a test-owned renderer stand-in, not native evidence.
+        Fixture f;CHECK(f.Held());const auto before=*f.hands.Current(InteractionHand::Right);
+        f.s.trackedKnifeOwned=false;CHECK(!f.Step());
+        CHECK(!ChestKnifePoseCustody(f.knife,f.hands,f.s.source));
+        CHECK(ChestKnifeRenderPoseCustody(f.knife,f.hands,f.s.source));
+        const auto suspended=*f.hands.Current(InteractionHand::Right);
+        CHECK(suspended.token==before.token&&suspended.inputSequence==before.inputSequence&&suspended.deadlineNs==before.deadlineNs);
+        // Reading render custody never mints/renews anything or enables attack.
+        CHECK(!f.knife.StockTriggerArmedFor(f.s,f.hands));
+        CHECK(!f.knife.RecognitionReady(f.s.source));
+        CHECK(!f.knife.NeedsInitialHeldPose());
+        auto future=f.s.source;future.sequence=before.inputSequence-1;
+        CHECK(!ChestKnifeRenderPoseCustody(f.knife,f.hands,future));
+        future.sequence=0;CHECK(!ChestKnifeRenderPoseCustody(f.knife,f.hands,future));
+        for(unsigned owner=0;owner<4;++owner){auto wrong=f.s.source;
+            if(owner==0)++wrong.owner.actor;if(owner==1)++wrong.owner.actorGeneration;
+            if(owner==2)++wrong.owner.equipGeneration;if(owner==3)++wrong.owner.space;
+            CHECK(!ChestKnifeRenderPoseCustody(f.knife,f.hands,wrong));}
+        // Only a later actually supplied receipt permits the ordinary Prepare
+        // path to renew. There is no receipt construction in the helper.
+        f.s.trackedKnifeOwned=true;CHECK(!f.Step());
+        const auto recovered=*f.hands.Current(InteractionHand::Right);
+        CHECK(recovered.token==before.token&&recovered.inputSequence==f.s.source.sequence);
+        CHECK(ChestKnifePoseCustody(f.knife,f.hands,f.s.source));
+        CHECK(ChestKnifeRenderPoseCustody(f.knife,f.hands,f.s.source));
+    }
+    {
+        Fixture f;CHECK(f.Held());const auto before=*f.hands.Current(InteractionHand::Right);
+        f.s.trackedKnifeOwned=false;CHECK(!f.Step(100*ms));
+        CHECK(!f.hands.Current(InteractionHand::Right));
+        CHECK(!ChestKnifeRenderPoseCustody(f.knife,f.hands,f.s.source));
+        f.s.trackedKnifeOwned=true;CHECK(!f.Step());
+        CHECK(!f.hands.Current(InteractionHand::Right)); // no expired reacquire
+        CHECK(!ChestKnifeRenderPoseCustody(f.knife,f.hands,f.s.source));
+        CHECK(!f.knife.Hold()||f.knife.Hold()->id==before.token.id);
+    }
+    for(unsigned fault=0;fault<7;++fault){Fixture f;CHECK(f.Held());f.s.trackedKnifeOwned=false;
+        if(fault==0)f.Grip(false);if(fault==1)f.s.source.focused=false;if(fault==2)f.s.source.tracked[1]=false;
+        if(fault==3)++f.s.source.owner.actor;if(fault==4)++f.s.source.owner.actorGeneration;
+        if(fault==5)++f.s.source.owner.equipGeneration;if(fault==6)++f.s.source.owner.space;
+        (void)f.Step();CHECK(!f.hands.Current(InteractionHand::Right));
+        CHECK(!ChestKnifeRenderPoseCustody(f.knife,f.hands,f.s.source));
+    }
+    {
+        Fixture f;CHECK(f.Held());const auto old=*f.knife.Hold();
+        auto replacement=f.hands.Transfer(f.s.source,old,{f.s.source.owner,InteractionHand::Right,
+            HandClaimKind::BodyInventory,{999,1},f.s.heldContact,f.s.claimIntent+1,0});
+        CHECK(replacement.claim&&replacement.claim->token!=old);
+        CHECK(!ChestKnifeRenderPoseCustody(f.knife,f.hands,f.s.source));
+    }
     CHECK(!ReturnObservationCases());
     CHECK(!LiveObservationCases());
+    CHECK(!CurrentHoldCases());
     {private_knife::OriginalKnifeSource source;HandInteractionSample value{{1,2,3,4},9,1000000000,1100000000,1000000000,true,{true,true}};
      CHECK(source.Advance(value));CHECK(!source.Advance(value));++value.nowNs;CHECK(!source.Advance(value));
      ++value.sequence;CHECK(source.Advance(value));value.focused=false;CHECK(source.Advance(value));

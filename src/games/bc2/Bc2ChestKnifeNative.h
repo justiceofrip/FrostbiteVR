@@ -41,10 +41,22 @@ inline void WriteReadyObservation(std::ostream& out,const ReadyObservation& r){
     if(std::isfinite(r.phaseTimer))out<<r.phaseTimer;else out<<"null";out<<'}';
 }
 enum class InspectReason:unsigned {NotAttempted,Available,Busy,Disabled,Anchor,KnifeIdentity,NativeRead,Flags,Unsupported};
+// Read-only work state copied under Inspect's existing gate. Unknown refuses;
+// no field changes native command, attack, cleanup or history authority.
+struct CurrentHoldWorkObservation {
+    std::uint64_t lifetime=0,bodyOperation=0,drawSerial=0;
+    bool known=false,drawOnly=false,outstanding=false,commandPending=false,attackPending=false;
+    bool returnReady=false,closing=false,attackNative=false,bridgePending=false;
+};
+inline bool CurrentHoldWorkIdle(const CurrentHoldWorkObservation& v)noexcept {
+    return v.known&&v.lifetime&&v.bodyOperation&&v.drawSerial&&v.drawOnly&&!v.outstanding&&!v.commandPending&&
+        !v.attackPending&&!v.returnReady&&!v.closing&&!v.attackNative&&!v.bridgePending;
+}
 struct View {
     private_knife::Anchor anchor{};private_knife::Snapshot snapshot{};
     bool owned=false,healthy=false,observationComplete=false,motionEnabled=false,attackBridgeEnabled=false,stockTriggerEnabled=false;
     unsigned firstObservationGap=0; // Packed diagnostic: reason*4 + branch, never authority.
+    CurrentHoldWorkObservation currentHoldWork{};
 };
 // Current coherent observation only; it creates no staged native action.
 std::optional<View> Inspect(const ReloadStateOwner&,unsigned knifeWeapon,std::uint64_t sequence,std::int64_t nowNs,InspectReason* diagnostic=nullptr)noexcept;
