@@ -975,7 +975,8 @@ int ShutdownWaitsForInput(unsigned slots){
     ipc::StagedFrameProducer producer(feedback);feedback.producer=&producer;
     CHECK(producer.Connect(host.Token(),pipeline,third)&&producer.SourceSlotCount()==slots);
     const runtime::PresentationRequirements req{100,120,29,19,4};auto pose=DeferredTracking();
-    CHECK(host.BeginRequest(req,pose,200)==ipc::ChannelResult::Ok);
+    // The three-source host negotiates lookahead, which rejects BeginRequest.
+    CHECK((third?host.SubmitLookaheadRequest(req,pose,200):host.BeginRequest(req,pose,200))==ipc::ChannelResult::Ok);
     ipc::FrameLease lease{};CHECK(producer.TryBegin({101,201,301},lease));
     graphics::TextureDescriptor descriptor{};graphics::PairTicket ticket{};graphics::SceneDepthFrame depth{};
     if(pipeline)MakePipelinePair(lease,descriptor,ticket,depth);else MakeTicket(lease,descriptor,ticket);
