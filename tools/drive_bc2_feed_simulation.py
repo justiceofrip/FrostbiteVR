@@ -46,6 +46,7 @@ MAX_SNAPSHOT_REFRESHES = 2
 MAX_RECEIVE_TIMING_SPANS = 24
 _snapshot_json_timing = ContextVar('snapshot_json_timing', default=None)
 _read_deadline_ns = ContextVar('read_deadline_ns', default=None)
+_owner_read_timing = ContextVar('owner_read_timing', default=None)
 REFUSAL = planner.Refusal
 require = planner.require
 integer = planner.integer
@@ -134,6 +135,11 @@ def read_until(deadline_ns, function, *args):
 
 
 def read_bytes(path, maximum):
+    # Only the final publication owner read enables these bounded in-memory
+    # phases. Retain every path/file check and the original read behavior.
+    trace = _owner_read_timing.get()
+    if trace is not None:
+        trace.phase("publish_owner_path_check")
     local_path(path)
     # xr-sim closes state.json.tmp before replacement. Share DELETE, never
     # in-place writes; retain WinError so ACL denial (5) fails immediately.
@@ -146,19 +152,39 @@ def read_bytes(path, maximum):
     for attempt in range(250):
         require_read_time(until)
         try:
+            if trace is not None:
+                trace.phase("publish_owner_open")
             stream = (open_snapshot(path, share_write=False) if simulator_state else
                       open_snapshot(path) if path.name == "mechanism-snapshot.json" else path.open("rb"))
             with stream:
-                require(os.fstat(stream.fileno()).st_size <= maximum, "oversized file: " + str(path))
-                data = stream.read(maximum + 1)
+                try:
+                    if trace is not None:
+                        trace.phase("publish_owner_size_check")
+                    require(os.fstat(stream.fileno()).st_size <= maximum, "oversized file: " + str(path))
+                    if trace is not None:
+                        trace.phase("publish_owner_read_bytes")
+                    data = stream.read(maximum + 1)
+                except BaseException as error:
+                    if trace is not None:
+                        trace.error(error)
+                    raise
+                finally:
+                    if trace is not None:
+                        trace.phase("publish_owner_close")
             break
         except OSError as error:
+            if trace is not None:
+                trace.error(error)
             transient = (getattr(error, "winerror", None) in (2, 32, 33) if simulator_state and os.name == "nt"
                          else isinstance(error, (PermissionError, FileNotFoundError)))
             remaining = until - time.perf_counter_ns()
             if not transient or remaining <= 0 or attempt == 249:
                 raise
+            if trace is not None:
+                trace.phase("publish_owner_retry_wait")
             time.sleep(min(.001, remaining / NS))
+    if trace is not None:
+        trace.phase("publish_owner_read")
     if deadline is not None:
         require_read_time(deadline)
     require(len(data) <= maximum, "file grew beyond bound: " + str(path))
@@ -364,6 +390,7 @@ class ReceiveTiming:
         self.count, self.phase_ns, self.last_error = 0, {}, None
         self.last_nonce = None
         self.timeout_evaluated_ns = None
+        self.publication_deadline_ns = None
         if not initial:
             self.at = now
 
@@ -406,6 +433,7 @@ class ReceiveTiming:
                     nonce=self.nonce, requestStartedNs=self.requested_ns,
                     requestPublishedNs=self.published_ns,
                     originalResponseDeadlineNs=self.requested_ns + SNAPSHOT_TIMEOUT,
+                    originalPublicationDeadlineNs=self.publication_deadline_ns,
                     timeoutEvaluatedNs=self.timeout_evaluated_ns,
                     frozenNs=self.at, pendingCommand=self.pending_command, sequence=self.sequence,
                     lastObservedResponseNonce=self.last_nonce, firstPhaseError=self.last_error,
@@ -760,6 +788,14 @@ class Driver:
                 return result
             finally:
                 _snapshot_json_timing.reset(token)
+
+    def read_publication_owner(self):
+        with self.receive_timing_scope("publish_owner_read") as trace:
+            token = _owner_read_timing.set(trace)
+            try:
+                return read_bytes(self.run / "live-driver-owner.json", 8192)
+            finally:
+                _owner_read_timing.reset(token)
 
     def save_receive_timing_failure(self):
         trace = getattr(self, "_receive_timing", None)
@@ -1388,6 +1424,7 @@ class Driver:
         if cleanup:
             until = min(self.hard_deadline, written + 250_000_000)
         publication_deadline = min(until, source_deadline) if source_deadline is not None else until
+        self._receive_timing.publication_deadline_ns = publication_deadline
         previous_owner = self.sequence, self.sentinel, self.command_hash
         self.sequence, self.sentinel, self.command_hash = target, sentinel, digest(raw)
         self.pending_command = True
@@ -1403,8 +1440,7 @@ class Driver:
             if self.last_commit is not None and not cleanup:
                 self.bounds(time.perf_counter_ns())
             try:
-                require(self.receive_timing_call("publish_owner_read", read_bytes,
-                        self.run / "live-driver-owner.json", 8192) == pending_owner,
+                require(self.read_publication_owner() == pending_owner,
                         "command owner record replaced before publication")
                 current = self.receive_timing_call("publish_state_read", read_until,
                     publication_deadline, self.read_state)
