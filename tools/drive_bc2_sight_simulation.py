@@ -242,10 +242,20 @@ class SightDriver(transport.Driver):
                     requestAcknowledgementAvailable=False, nativeAcceptance=False)
                 self.artifacts.save("selected-transition.json", self.transition_observation)
 
-    def current_source(self):
+    def current_source(self, defer_poll=False):
         if self.latest_snapshot is None:
             self.fresh()
         self.monitor = True
+        # The first planned command still polls in transport.send.pause_until
+        # before its publication checks. Coalesce this earlier optional poll
+        # only while the admitted source remains live; never skip the final one.
+        if (defer_poll and self.pending_nonce is not None and self.latest_snapshot is not None
+                and self.snapshot_refresh_started is None
+                and getattr(self, "snapshot_readiness", None) is None
+                and (self.selection_hold_until is None or self.transition_observation is not None)
+                and time.perf_counter_ns() < source_deadline(self.latest_snapshot)):
+            self.bounds(time.perf_counter_ns())
+            return
         # As in pump motion, consume the pending publication through the shared
         # polling path. fresh() drains it and requests again for stage starts;
         # repeating that on a motion lease boundary wastes current authority.
@@ -287,7 +297,7 @@ class SightDriver(transport.Driver):
         if cleanup:
             return super().send(lines, expected=expected, cleanup=True, source_deadline=source_deadline)
         for _ in range(800):
-            self.current_source()
+            self.current_source(defer_poll=self.commands == 0 and source_deadline is not None)
             state = self.read_state()
             require({k: v for k, v in state["controls"].items() if k != "gripL"}
                     == {k: v for k, v in self.initial_sim["controls"].items() if k != "gripL"},
@@ -319,7 +329,7 @@ class SightDriver(transport.Driver):
         require(time.perf_counter_ns() < source_deadline(snapshot), "planning consumed original sight source lease")
         self.sight_plan, self.reference, self.latest_snapshot = plan, snapshot, snapshot
         self.artifacts.save("sight-plan.json", plan)
-        self.artifacts.save(f"snapshot-{self.snapshot_index:03}.json", raw)
+        # receive_snapshot retained these exact raw bytes before admission.
         schedule, policy = plan["schedule"], plan["policy"]
         require(0 < len(schedule) <= transport.MAX_COMMANDS
                 and self.commands + sum(len(row["commands"]) + 1 for row in schedule) + 2 <= transport.MAX_COMMANDS,

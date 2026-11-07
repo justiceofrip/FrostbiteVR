@@ -902,6 +902,220 @@ class SightDriverTests(unittest.TestCase):
         s.ordinary_left(["hand l follow off", "hand l aimtrim 0 0", "hand l grip pose 0 0 0 0 0 0", "grip l 1"])
 
 
+class SourceCommandReached(Exception):
+    pass
+
+
+class SingleSourceRetentionTests(unittest.TestCase):
+    def test_first_command_keeps_original_receipt_once_and_original_deadline(self):
+        h, plan = stage_harness(self, approach_samples=1)
+        v, calls, sent = h.driver, [], []
+        original_save = v.artifacts.save
+
+        def save(name, data, **kw):
+            calls.append((name, data))
+            return original_save(name, data, **kw)
+
+        def stop(lines, **kw):
+            sent.append((lines, kw))
+            raise SourceCommandReached()
+
+        self.enterContext(patch.object(v.artifacts, "save", side_effect=save))
+        self.enterContext(patch.object(v, "send", side_effect=stop))
+        with self.assertRaises(SourceCommandReached):
+            v.stage()
+        source_name = f"snapshot-{v.snapshot_index:03}.json"
+        receipts = [(name, data) for name, data in calls if name == source_name]
+        self.assertEqual(len(receipts), 1)
+        self.assertEqual(json.loads(receipts[0][1]), v.reference)
+        self.assertEqual(v.artifacts.saved[source_name], receipts[0][1])
+        self.assertIn("sight-plan.json", v.artifacts.saved)
+        self.assertEqual(sent[0][0], plan["schedule"][0]["commands"])
+        self.assertEqual(sent[0][1]["source_deadline"], s.source_deadline(v.reference))
+        self.assertEqual(h.command_writes, [])
+
+    def test_initial_evidence_write_failure_stops_before_plan_or_command(self):
+        h, _ = stage_harness(self, approach_samples=1)
+        original_save = h.driver.artifacts.save
+
+        def fail(name, data, **kw):
+            if name == "snapshot-001.json":
+                raise OSError("synthetic artifact write failure")
+            return original_save(name, data, **kw)
+
+        self.enterContext(patch.object(h.driver.artifacts, "save", side_effect=fail))
+        with self.assertRaisesRegex(OSError, "synthetic artifact write failure"):
+            h.driver.stage()
+        self.assertNotIn("sight-plan.json", h.driver.artifacts.saved)
+        self.assertEqual(h.command_writes, [])
+
+
+class FirstPublicationTests(unittest.TestCase):
+    """The first plan coalesces its early poll, retaining the transport poll."""
+    def first_plan(self, pending=True):
+        h = harness(self)
+        v = h.driver
+        v.held_left = False
+        h.state["controls"]["gripL"] = 0.
+        v.initial_sim = copy.deepcopy(h.state)
+        v.last_write, v.last_commit = 0, None
+        source = admit_current(h)
+        if pending:
+            v.request_snapshot()
+        else:
+            v.last_request = h.now - s.transport.SNAPSHOT_PERIOD
+        return h, source, s.source_deadline(source)
+
+    def test_first_plan_polls_pending_response_once_before_publication(self):
+        h, source, deadline = self.first_plan()
+        v = h.driver
+        original = copy.deepcopy(source)
+        receive, before_publication = v.receive_snapshot, []
+        def counted():
+            if not v.pending_command:
+                before_publication.append(v.pending_nonce)
+            return receive()
+        with patch.object(v, "receive_snapshot", side_effect=counted):
+            v.send(["grip l 0"], source_deadline=deadline)
+        self.assertEqual(len(before_publication), 1)
+        self.assertEqual(len(h.command_writes), 1)
+        self.assertEqual(h.driver_publication_deadline, deadline)
+        self.assertEqual(source, original)
+        self.assertFalse(v.pending_command or v.held_left)
+        self.assertEqual(v.artifacts.events[-1]["type"], "command_commit")
+
+    def test_later_or_unplanned_commands_keep_ordinary_source_poll(self):
+        for case in ("later", "unplanned"):
+            with self.subTest(case=case):
+                h, _, deadline = self.first_plan()
+                v = h.driver
+                if case == "later":
+                    v.commands = 2
+                receive, polls = v.receive_snapshot, []
+                def counted():
+                    if not v.pending_command:
+                        polls.append(v.pending_nonce)
+                    return receive()
+                with patch.object(v, "receive_snapshot", side_effect=counted):
+                    v.send(["grip l 0"], source_deadline=deadline if case == "later" else None)
+                self.assertEqual(len(polls), 2)
+
+    def test_first_plan_without_pending_request_reads_new_failure_before_publication(self):
+        h, _, deadline = self.first_plan(pending=False)
+        v = h.driver
+        self.assertIsNone(v.pending_nonce)
+
+        def fail_new_request(path, raw, **options):
+            h.write(path, raw, **options)
+            if path == v.request_path:
+                nonce = int(raw.decode().strip())
+                failure = dict(schema="fvr.bc2.mechanism-snapshot-failure.v1",
+                    nonce=nonce, nonce_end=nonce, publication=dict(nonce=nonce,
+                        status="failed", stage="synthetic", win32_error=5, attempts=1))
+                h.files[v.snapshot_path.with_name("mechanism-snapshot-failure.json")] = (
+                    s.transport.json_bytes(failure) + b"\n")
+
+        with patch.object(s.transport, "atomic", side_effect=fail_new_request):
+            with self.assertRaisesRegex(s.REFUSAL, "native snapshot publication failed"):
+                v.send(["grip l 0"], source_deadline=deadline)
+        self.assertEqual(h.command_writes, [])
+        self.assertFalse(v.pending_command)
+        self.assertIn("snapshot-002-failure.json", v.artifacts.saved)
+
+    def test_final_poll_rejects_pending_writer_native_family_input_and_rig_faults(self):
+        for fault in ("request_writer", "native_invalid", "family", "input", "rig", "actor"):
+            with self.subTest(fault=fault):
+                h, _, deadline = self.first_plan()
+                v = h.driver
+                _, response = fixture(h.now, v.pending_nonce)
+                if fault == "request_writer":
+                    h.files[v.request_path] = b"999\n"
+                elif fault == "native_invalid":
+                    response.update(valid=False, invalid_reason="synthetic native refusal")
+                elif fault == "family":
+                    response["sight"]["family"]["physicalItem"] = 999
+                elif fault == "input":
+                    response["input"]["hands"][1]["trigger"] = 1.
+                elif fault == "rig":
+                    response["rig"]["fingerprint"] += 1
+                elif fault == "actor":
+                    response["owner"]["actorGeneration"] += 1
+                h.publish(response)
+                with self.assertRaises(s.REFUSAL):
+                    v.send(["grip l 0"], source_deadline=deadline)
+                self.assertEqual(h.command_writes, [])
+                if fault != "request_writer":
+                    self.assertIn("snapshot-002.json", v.artifacts.saved)
+
+    def test_final_poll_runs_subclass_admission_before_publication(self):
+        h, _, deadline = self.first_plan()
+        v = h.driver
+        calls = []
+        class ScopedSight(s.SightDriver):
+            def admit_snapshot(self, snapshot, now, nonce):
+                super().admit_snapshot(snapshot, now, nonce)
+                calls.append(nonce)
+                raise s.REFUSAL("current adapter family refusal")
+        v.__class__ = ScopedSight
+        _, response = fixture(h.now, v.pending_nonce)
+        h.publish(response)
+        with self.assertRaisesRegex(s.REFUSAL, "current adapter family refusal"):
+            v.send(["grip l 0"], source_deadline=deadline)
+        self.assertEqual(calls, [response["nonce"]])
+        self.assertEqual(h.command_writes, [])
+        self.assertIn("snapshot-002.json", v.artifacts.saved)
+
+    def test_first_plan_original_deadline_still_refuses_during_final_owner_read(self):
+        h, source, deadline = self.first_plan()
+        v = h.driver
+        before = copy.deepcopy(source)
+        def expire_owner_read(path, maximum):
+            if v.pending_command and path == v.run / "live-driver-owner.json":
+                h.now = deadline
+            return h.files[path]
+        with patch.object(s.transport, "read_bytes", side_effect=expire_owner_read):
+            with self.assertRaises(s.transport.ReadDeadlineExceeded):
+                v.send(["grip l 0"], source_deadline=deadline)
+        self.assertEqual(h.command_writes, [])
+        self.assertFalse(v.pending_command or v.unsafe_owner)
+        self.assertEqual(source, before)
+        self.assertIn("not attempted", v.release_after_failure())
+
+    def test_first_plan_final_owner_input_and_capture_guards_remain(self):
+        for fault in ("owner", "command", "head", "handR", "capture"):
+            with self.subTest(fault=fault):
+                h, _, deadline = self.first_plan()
+                v = h.driver
+                def intervene(path, raw, **options):
+                    if path == v.command_path:
+                        if fault == "owner":
+                            h.files[v.run / "live-driver-owner.json"] = b"other owner"
+                        elif fault == "command":
+                            h.files[v.command_path] = b"other command"
+                        elif fault == "capture":
+                            h.state["captureSeq"] += 1
+                        else:
+                            h.state[fault] = {"changed": True}
+                    h.write(path, raw, **options)
+                with patch.object(s.transport, "atomic", side_effect=intervene):
+                    with self.assertRaises(s.REFUSAL):
+                        v.send(["grip l 0"], source_deadline=deadline)
+                self.assertEqual(h.command_writes, [])
+                self.assertTrue(v.unsafe_owner)
+
+    def test_first_plan_pending_terminal_failure_is_not_deferred_past_publication(self):
+        h, _, deadline = self.first_plan()
+        v = h.driver
+        failure = dict(schema="fvr.bc2.mechanism-snapshot-failure.v1", nonce=v.pending_nonce,
+            nonce_end=v.pending_nonce, publication=dict(nonce=v.pending_nonce, status="failed",
+                stage="synthetic", win32_error=5, attempts=1))
+        h.files[v.snapshot_path.with_name("mechanism-snapshot-failure.json")] = s.transport.json_bytes(failure) + b"\n"
+        with self.assertRaisesRegex(s.REFUSAL, "native snapshot publication failed"):
+            v.send(["grip l 0"], source_deadline=deadline)
+        self.assertEqual(h.command_writes, [])
+        self.assertIn("snapshot-002-failure.json", v.artifacts.saved)
+
+
 class SightArtifactTests(unittest.TestCase):
     def store(self, compressed=True):
         directory = Path(self.enterContext(tempfile.TemporaryDirectory(dir=ROOT / "reports")))

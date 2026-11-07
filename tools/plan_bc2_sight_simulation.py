@@ -163,15 +163,18 @@ def plan(snapshot, now_ns, expected_nonce, step_ns=20_000_000, target="secondary
     mapping, inp, contact = snapshot["mapping"], snapshot["input"], sight["contact"]
     w, b, f = [frame.rigid(mapping[k]) for k in ("weaponWorldMeters", "trackingBodyWorldMeters", "rawLeftWristWorldMeters")]
     reference, absolute = frame.from_pose(inp["referenceHead"]), frame.from_pose(inp["hands"][0]["grip"])
-    relative = frame.multiply(absolute, frame.inverse(reference))
-    calibration = frame.rigid(frame.multiply(frame.multiply(f, frame.inverse(b)), frame.inverse(relative)))
+    # Reuse only this invocation's validated, unchanged frame matrices.
+    inverse_reference, inverse_body = frame.inverse(reference), frame.inverse(b)
+    relative = frame.multiply(absolute, inverse_reference)
+    calibration = frame.rigid(frame.multiply(frame.multiply(f, inverse_body), frame.inverse(relative)))
     require(math.dist(calibration[3][:3], [0, 0, 0]) <= .002, "anatomical calibration translation exceeds 2mm")
     calibration[3] = [0., 0., 0., 1.]
     bound = frame.rigid(mapping["anatomicalWristToGrip"])
     require(math.dist(bound[3][:3], [0, 0, 0]) <= .00001, "bind calibration is not zero translation")
     require(all(e <= limit for e, limit in zip(frame.pose_error(calibration, bound), (.002, .005))), "derived calibration disagrees with actual anatomical binding")
     require(all(e <= limit for e, limit in zip(frame.pose_error(frame.multiply(frame.multiply(calibration, relative), b), f), (.002, .005))), "original anatomical forward round trip failed")
-    current = frame.multiply(f, frame.inverse(w))
+    inverse_world = frame.inverse(w)
+    current = frame.multiply(f, inverse_world)
     pivot, axis, palm, grasp = [vector(contact[k]) for k in ("pivotMeters", "axis", "rawPalmPointWristMeters", "graspPointMeters")]
     radial = [g-p for g, p in zip(grasp, pivot)]
     axial = sum(r*a for r, a in zip(radial, axis))
@@ -186,8 +189,10 @@ def plan(snapshot, now_ns, expected_nonce, step_ns=20_000_000, target="secondary
     if target == "primary":
         signed_angle = -signed_angle
 
+    inverse_calibration = frame.inverse(calibration)
+
     def inverse_target(local):
-        return frame.multiply(frame.multiply(frame.multiply(frame.inverse(calibration), frame.multiply(local, w)), frame.inverse(b)), reference)
+        return frame.multiply(frame.multiply(frame.multiply(inverse_calibration, frame.multiply(local, w)), inverse_body), reference)
 
     # Additional planner caps limit ordinary-controller motion, not native policy.
     position_cap, angle_cap = .025, .175
@@ -218,10 +223,10 @@ def plan(snapshot, now_ns, expected_nonce, step_ns=20_000_000, target="secondary
         pose = frame.to_pose(inverse_target(local))
         numbers = [float(f"{v:.9f}") for v in pose["position"]+frame.quaternion_ypr(pose["orientation"])]
         emitted = frame.from_pose(dict(position=numbers[:3], orientation=frame.ypr_quaternion(numbers[3:])))
-        wrist = frame.multiply(frame.multiply(calibration, frame.multiply(emitted, frame.inverse(reference))), b)
+        wrist = frame.multiply(frame.multiply(calibration, frame.multiply(emitted, inverse_reference)), b)
         error = frame.pose_error(wrist, frame.multiply(local, w))
         require(error[0] <= .0005 and error[1] <= .005, "formatted sight XR/anatomical round trip failed")
-        actual = frame.multiply(wrist, frame.inverse(w))
+        actual = frame.multiply(wrist, inverse_world)
         require(math.dist(point(palm, actual), point(palm, local)) <= .0005, "formatted bind-derived mechanism point misses hinge path")
         errors.append(error)
         paths[0].append(actual)
