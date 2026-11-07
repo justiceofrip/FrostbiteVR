@@ -134,14 +134,14 @@ function Bind([string]$Name,$Identity,[string]$ExpectedPath,[int]$ParentId){
         Save ($Name+'-identity.json') $owned[$Name].identity
     }finally{if(-not $retained){$process.Dispose()}}
 }
-function NoOtherProcesses([switch]$BeforeLaunch){
+function NoOtherProcesses([switch]$BeforeLaunch,[switch]$RetainedOnly){
     foreach($process in @(Get-Process BFBC2Game,BC2XrHost,BC2NativeTrace,BC2NativeIpcProbe,BC2NativeResolution,ProvisionRunner -ErrorAction SilentlyContinue)){
         try{
             if($process.HasExited){continue}
             $identity=Get-Bc2ProcessIdentity $process -RequireLive $true
             $known=@($owned.Values|Where-Object {$_.identity.pid -eq $identity.pid -and $_.identity.start_utc -ceq $identity.start_utc -and $_.identity.path -ieq $identity.path}).Count -eq 1
             # Session publishes each identity just after Start-Process. Parentage permits that small window.
-            if(-not $BeforeLaunch -and -not $known){
+            if(-not $BeforeLaunch -and -not $RetainedOnly -and -not $known){
                 $parentId=[FvrStorage.NativeSize]::ParentPid($process.Id)
                 $fromSupervisor=$owned.ContainsKey('supervisor') -and $parentId -eq $owned.supervisor.identity.pid
                 $preflight=$entry -and $parentId -eq $entry.Id -and $identity.path -ieq (Join-Path $runtimeRoot 'bin/BC2XrHost.exe')
@@ -508,7 +508,7 @@ finally{
                 if(-not $game.HasExited){
                     SameIdentity (Get-Bc2ProcessIdentity $game -RequireLive $true) $owned.game.identity
                     Require ((Pin $gameExe 128MB).sha256 -ceq $gamePin.sha256) 'Original game image changed.'
-                    $preActivation=$false
+                    $preActivation=$false;$failedWorkerClose=$false
                     $setupClose=$preAttachSpec -and $session.ContainsKey('pre_attach_setup') -and
                         $session.pre_attach_setup.attempted -eq $true -and $session.pre_attach_setup.complete -eq $false -and
                         $session.pre_attach_setup.normal_close_required -eq $true -and -not $session.host -and -not $session.trace
@@ -521,31 +521,54 @@ finally{
                         $bootstrap=Read-Bc2NativeRunOutcome (Join-Path $folder 'native.stdout.log') $game.Id
                         Require ($bootstrap -and $bootstrap.outcome -ceq 'remote_thread_exited' -and $bootstrap.remote_thread_exit_observed -is [bool] -and $bootstrap.remote_thread_exit_observed -and $bootstrap.report_nonempty -is [bool] -and $bootstrap.report_nonempty) 'Native remote thread exit not proven.'
                         $native=Json (Join-Path $folder 'native-trace.json') 160MB
-                        Require ($native.hooks_disabled -is [bool] -and $native.hooks_disabled) 'Native hooks are not proven disabled.'
-                        # These exact setup errors precede gameplay Start. Never use a
-                        # prefix match: later failures still require reload drain.
-                        $preActivationErrors=@(
-                            'Main-menu startup requires native menu capture and input',
-                            'Native Present graphics bootstrap unavailable',
-                            'Native Present graphics bootstrap unavailable: swap-chain device query or identity failed',
-                            'Native Present graphics bootstrap unavailable: no immediate context',
-                            'Native Present graphics bootstrap unavailable: missing context method',
-                            'Native Present graphics bootstrap unavailable: renderer changed during capture',
-                            'Native Present graphics bootstrap unavailable: no Present callback before deadline',
-                            'Native Present graphics bootstrap unavailable: only foreign swap chains presented',
-                            'Native Present graphics bootstrap unavailable: only test presents on the expected chain',
-                            'Native Present graphics bootstrap unavailable: expected chain no longer matches the renderer',
-                            'Native Present graphics bootstrap unavailable: capture did not publish before deadline')
-                        $preActivation=$owned.trace.process.ExitCode -eq 2 -and ($bootstrap.probe_exit -is [int] -or $bootstrap.probe_exit -is [long]) -and $bootstrap.probe_exit -eq 20 -and $native.state -is [string] -and $native.state -ceq 'failed' -and $native.error -is [string] -and $native.error -cin $preActivationErrors
-                        if(-not $preActivation){Require ($owned.trace.process.ExitCode -eq 0 -and $bootstrap.probe_exit -eq 0 -and $native.pid -eq $game.Id -and $native.gameplay.reload_flow.drained -is [bool] -and $native.gameplay.reload_flow.drained -and $native.gameplay.reload_flow.in_flight -eq 0) 'Native reload hooks did not prove successful drain.'}
-                        $nativeRetired=-not $preActivation
-                        if($preActivation){$failures.Add('Native pre-activation refusal: '+$native.error)}
-                        Save 'native-retirement.json' @{bootstrap=$bootstrap;hooks_disabled=$true;pre_activation_refusal=$preActivation;native_retirement_proven=$nativeRetired;reload_flow_drained=(-not $preActivation);native_report=(Pin (Join-Path $folder 'native-trace.json') 160MB)}
+                        # Actual581/584: the worker returned unsuccessfully while its
+                        # module and unresolved hooks remain valid until process exit.
+                        # This authorizes only normal close, never hook/reload retirement.
+                        $failedWorkerClose=$owned.trace.process.ExitCode -eq 2 -and $bootstrap.probe_exit -eq 12 -and
+                            $bootstrap.module_retained_until_game_exit -is [bool] -and $bootstrap.module_retained_until_game_exit -and
+                            $native.state -is [string] -and $native.state -ceq 'observed' -and
+                            ($native.pid -is [int] -or $native.pid -is [long]) -and $native.pid -eq $game.Id -and
+                            $native.hooks_disabled -is [bool] -and -not $native.hooks_disabled -and
+                            $native.module_retained_until_exit -is [bool] -and $native.module_retained_until_exit
+                        if($failedWorkerClose){
+                            $nativePin=Pin (Join-Path $folder 'native-trace.json') 160MB
+                            Require ($bootstrap.report_bytes -eq $nativePin.bytes) 'Native worker report length differs from its exit outcome.'
+                            Require ($session.state -ceq 'failed') 'Native failed-close requires the original failed session.'
+                            if($session.ContainsKey('resolution_lease')){
+                                Require ($session.resolution_cleanup -ceq 'unconfirmed' -and
+                                    $session.resolution_cleanup_pending -is [bool] -and $session.resolution_cleanup_pending -and
+                                    $session.resolution_guard_released -is [bool] -and -not $session.resolution_guard_released) 'Resolution state does not permit failed-worker normal close.'
+                            }
+                            $nativeRetired=$false
+                            $failures.Add('Native hooks are not proven disabled; failed worker ended with module retained for exact owned game normal close.')
+                            Save 'native-close-recovery.json' @{bootstrap=$bootstrap;native_report=$nativePin;hooks_disabled=$false;native_retirement_proven=$false;reload_flow_drain_claimed=$false;resolution_release_confirmed=$false;normal_close_only=$true;forced_termination=$false}
+                        }else{
+                            Require ($native.hooks_disabled -is [bool] -and $native.hooks_disabled) 'Native hooks are not proven disabled.'
+                            # These exact setup errors precede gameplay Start. Never use a
+                            # prefix match: later failures still require reload drain.
+                            $preActivationErrors=@(
+                                'Main-menu startup requires native menu capture and input',
+                                'Native Present graphics bootstrap unavailable',
+                                'Native Present graphics bootstrap unavailable: swap-chain device query or identity failed',
+                                'Native Present graphics bootstrap unavailable: no immediate context',
+                                'Native Present graphics bootstrap unavailable: missing context method',
+                                'Native Present graphics bootstrap unavailable: renderer changed during capture',
+                                'Native Present graphics bootstrap unavailable: no Present callback before deadline',
+                                'Native Present graphics bootstrap unavailable: only foreign swap chains presented',
+                                'Native Present graphics bootstrap unavailable: only test presents on the expected chain',
+                                'Native Present graphics bootstrap unavailable: expected chain no longer matches the renderer',
+                                'Native Present graphics bootstrap unavailable: capture did not publish before deadline')
+                            $preActivation=$owned.trace.process.ExitCode -eq 2 -and ($bootstrap.probe_exit -is [int] -or $bootstrap.probe_exit -is [long]) -and $bootstrap.probe_exit -eq 20 -and $native.state -is [string] -and $native.state -ceq 'failed' -and $native.error -is [string] -and $native.error -cin $preActivationErrors
+                            if(-not $preActivation){Require ($owned.trace.process.ExitCode -eq 0 -and $bootstrap.probe_exit -eq 0 -and $native.pid -eq $game.Id -and $native.gameplay.reload_flow.drained -is [bool] -and $native.gameplay.reload_flow.drained -and $native.gameplay.reload_flow.in_flight -eq 0) 'Native reload hooks did not prove successful drain.'}
+                            $nativeRetired=-not $preActivation
+                            if($preActivation){$failures.Add('Native pre-activation refusal: '+$native.error)}
+                            Save 'native-retirement.json' @{bootstrap=$bootstrap;hooks_disabled=$true;pre_activation_refusal=$preActivation;native_retirement_proven=$nativeRetired;reload_flow_drained=(-not $preActivation);native_report=(Pin (Join-Path $folder 'native-trace.json') 160MB)}
+                        }
                     }
                     # The supervisor leaves resolution release pending on trace exit 2.
-                    # Only this proven early refusal may use normal process exit instead;
-                    # no guard release or reload retirement is inferred from that close.
-                    if($session.ContainsKey('resolution_lease') -and -not $preActivation -and -not $setupClose){
+                    # The explicit early refusal or ended failed worker may use normal
+                    # process exit; neither establishes guard release or reload retirement.
+                    if($session.ContainsKey('resolution_lease') -and -not $preActivation -and -not $setupClose -and -not $failedWorkerClose){
                         $released=Json (Join-Path $folder 'resolution-release.json')
                         Assert-Bc2ResolutionIdentity $released $session.resolution_lease 'release'
                         try{Assert-Bc2ResolutionReleased $released $session.resolution_lease}catch{
@@ -564,7 +587,8 @@ finally{
                             Save 'resolution-close-recovery.json' @{release=$released;native_retirement_proven=$true;resolution_release_confirmed=$false;normal_close_only=$true;forced_termination=$false}
                         }
                     }
-                    NoOtherProcesses;SameIdentity (Get-Bc2ProcessIdentity $game -RequireLive $true) $owned.game.identity
+                    NoOtherProcesses -RetainedOnly:$failedWorkerClose;SameIdentity (Get-Bc2ProcessIdentity $game -RequireLive $true) $owned.game.identity
+                    if($failedWorkerClose){Require ($clock.Elapsed.TotalSeconds -lt $TimeoutSeconds) 'Failed-worker normal close has no remaining original cleanup time.'}
                     $accepted=$game.CloseMainWindow();Save 'close-request.json' @{game=$owned.game.identity;accepted=$accepted;forced_termination=$false}
                     Require $accepted 'Original game refused normal close; no profile restoration.'
                     $remaining=[Math]::Max(0,[Math]::Min(10000,[int](($TimeoutSeconds-$clock.Elapsed.TotalSeconds)*1000)))

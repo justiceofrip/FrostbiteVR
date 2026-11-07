@@ -24,6 +24,7 @@ public:
     std::optional<ChestKnifeProbeWitness> ProbeWitness(std::int64_t nowNs)const noexcept;
     void RequestLiveObservation(std::int64_t nowNs)noexcept{liveObservation_.Request(nowNs);}
     std::shared_ptr<const ChestKnifeLiveObservation> LiveObservation(std::int64_t nowNs)const noexcept{return liveObservation_.Read(nowNs);}
+    std::optional<ChestKnifePublicationDiagnostic> PublicationDiagnostic()const noexcept{return liveObservation_.ReadDiagnostic();}
     std::shared_ptr<const ChestKnifeReturnObservation> ReturnObservation()const noexcept{return returnObservation_.Read();}
     void Report(std::ostream&)const;
 private:

@@ -31,7 +31,7 @@ struct Service {
     bool attackBridgeEnabled=false;std::atomic<bool> attackHooksAvailable=false;std::atomic<std::uint64_t> poseRevocation=1;
     pk::ChestAttackTransaction bridge;std::optional<AttackNative> attackNative;
     std::optional<pk::ChestAttackReceipt> lastBridgeReceipt;
-    std::mutex gate;std::atomic<bool> enabled=false;std::atomic<unsigned> active=0,gaps=0;std::atomic<bool> ownedObservationGap=false;
+    std::mutex gate;std::atomic<bool> enabled=false;std::atomic<unsigned> active=0,gaps=0;std::atomic<bool> ownedObservationGap=false;std::atomic<unsigned> firstObservationGap=0;
     std::atomic<std::uint64_t> sourceEpoch=1;
     // Session lifecycle only: no input sequence/lease and no attack capability.
     std::atomic<bool> closing=false;std::atomic<std::int64_t> closeRequestedNs=0;
@@ -59,6 +59,7 @@ struct Service {
     std::uint64_t stagedEpoch=0,bodyOperation=0,nativeLifetime=0,observationSequence=0;
     std::optional<KnifeCommand> outstanding;
     ReturnPendingReason lastReturnReason=ReturnPendingReason::NotObserved;std::int64_t lastReturnObservedNs=0;
+    ReadyObservation lastReturnReadiness{};bool lastReturnBad=false,lastReturnBadKnown=false;
     std::uint64_t lastAttackSequence=0,lastAttackSerial=0;std::int64_t lastAttackObservedNs=0,lastAttackReceiptNs=0;
     std::array<std::atomic<std::uint64_t>,3> returnedCopySerial{},abortedCopySerial{};unsigned attackUnknown=0;
     std::array<unsigned,3> updates{},states{};std::array<std::atomic<unsigned>,3> deploy{};unsigned chooserOverrides=0;std::atomic<unsigned> deployMisses=0,foreignGuards=0,returnSuppressed=0;unsigned attackCopies=0,attackReceipts=0;
@@ -76,6 +77,12 @@ struct Service {
     std::array<std::atomic<std::uint64_t>,3> copySerial{},copyInput{},copyObservedNs{},copyContext{},copyCaller{};
     std::array<std::atomic<std::uint64_t>,3> copyReturnedNs{},copyOriginalUnchanged{},copyPostReadKnown{},copyHashBefore{},copyHashAfter{};
 } service;
+// First cause since the ordinary draw reset. No native read, clock, logging or
+// retry. Diagnostic does not clear the existing conservative incomplete latch.
+void ObservationGap(unsigned reason,unsigned branch=3)noexcept {
+    unsigned empty=0;service.firstObservationGap.compare_exchange_strong(empty,reason*4+branch,std::memory_order_relaxed);
+    service.ownedObservationGap=true;
+}
 using ChooseFn=int(__thiscall*)(void*,void*);using ReadyFn=bool(__thiscall*)(void*);
 using SetterFn=void(__thiscall*)(void*,unsigned,bool);
 ChooseFn originalChoose=nullptr;ReadyFn originalReady=nullptr;SetterFn originalSetter=nullptr;std::array<void*,3> hooks{};
@@ -155,9 +162,7 @@ bool Ammo(const pk::Snapshot& v)noexcept {
     return true;
 }
 bool Ready(const pk::Item& v)noexcept {
-    for(const auto* s:{&v.client.branches[0],&v.client.branches[1],&v.server})
-        if(s->currentState!=2||s->nextState!=2||!std::isfinite(s->phaseTimer)||s->phaseTimer<0||s->phaseTimer>1000000||(s->flagsA8&8))return false;
-    return true;
+    return InspectReady(v).reason==ReadyReason::Ready;
 }
 
 // Fresh native facts only. Never turn retained controller metadata into close
@@ -228,13 +233,14 @@ OriginalFiringToken Enter(void*,const OriginalFiringUpdate& call)noexcept {
     std::unique_lock lock(service.gate,std::try_to_lock);
     if(!lock.owns_lock()){service.gaps.fetch_add(1);
         const auto guard=service.deployGuard.load(std::memory_order_acquire);
-        if(guard&&std::find(guard->knifeFiring.begin(),guard->knifeFiring.end(),call.firing)!=guard->knifeFiring.end())service.ownedObservationGap=true;
+        if(guard){const auto firing=std::find(guard->knifeFiring.begin(),guard->knifeFiring.end(),call.firing);
+            if(firing!=guard->knifeFiring.end())ObservationGap(1,unsigned(firing-guard->knifeFiring.begin()));}
         return token;}
     const auto branch=service.owned?Branch(call.firing):0;if(!branch)return token;
     pk::Selection selected;std::array<std::byte,0xb0> state{};std::array<std::byte,0x30> context{};
     const pk::detail::Reader r{service.memory};
-    if(!NativeSelection(selected)||!State(call.firing,state)||!r.Read(call.context,context.data(),context.size())){++service.gaps;service.ownedObservationGap=true;return token;}
-    const auto input=DecodeReloadUpdateContext(context);if(!input){++service.gaps;service.ownedObservationGap=true;return token;}
+    if(!NativeSelection(selected)||!State(call.firing,state)||!r.Read(call.context,context.data(),context.size())){++service.gaps;ObservationGap(2,branch-1);return token;}
+    const auto input=DecodeReloadUpdateContext(context);if(!input){++service.gaps;ObservationGap(3,branch-1);return token;}
     token.words[0]=service.nativeLifetime;token.words[1]=branch;token.words[2]=Word<unsigned>(state.data(),0x3c);
     token.words[3]=input->fireRequested?1:0;
     if(service.attackNative&&branch==3&&input->inputFlags)service.bridge.Fail(service.attackNative->key);
@@ -247,7 +253,7 @@ void AbortUpdate(void*,const OriginalFiringUpdate&,const OriginalFiringToken& to
         // A delayed unwind may belong to an actor already retired on another thread.
         std::lock_guard lock(service.gate);
         if(service.owned&&token.words[0]==service.nativeLifetime){
-            ++service.gaps;service.ownedObservationGap=true;
+            ++service.gaps;ObservationGap(4,unsigned(token.words[1]-1));
             if(token.words[6]&&service.attacks.Pending()&&service.attacks.Pending()->serial==token.words[6]){
                 const auto branch=unsigned(token.words[1]-1);
                 if((token.words[3]&2)&&service.copySerial[branch].load()==token.words[6])
@@ -280,10 +286,10 @@ void Leave(void*,const OriginalFiringUpdate& call,const OriginalFiringToken& tok
     }
     if(token.words[1]&&service.enabled.load(std::memory_order_acquire)){
         std::unique_lock lock(service.gate,std::try_to_lock);
-        if(!lock.owns_lock()){++service.gaps;service.ownedObservationGap=true;}
+        if(!lock.owns_lock()){++service.gaps;ObservationGap(5,unsigned(token.words[1]-1));}
         else if(service.owned&&token.words[0]==service.nativeLifetime){
             std::array<std::byte,0xb0> state{};pk::Selection selected;
-            if(!State(call.firing,state)||!NativeSelection(selected)){++service.gaps;service.ownedObservationGap=true;}
+            if(!State(call.firing,state)||!NativeSelection(selected)){++service.gaps;ObservationGap(6,unsigned(token.words[1]-1));}
             else {const auto branch=unsigned(token.words[1]-1),current=Word<unsigned>(state.data(),0x3c),next=Word<unsigned>(state.data(),0x44);
                 ++service.updates[branch];service.states[branch]=current;
                 service.fireSeen|=(token.words[3]&1)!=0;service.attackSeen|=token.words[2]==5||token.words[2]==6||current==5||current==6||next==5||next==6;
@@ -336,7 +342,7 @@ int __fastcall Choose(void* self,void*,void* input){
 bool RetainGuard(const std::shared_ptr<const pk::Anchor>& guard)noexcept {
     const auto ownership=pk::ReadAcceptedKnifeOwnership(service.memory,*guard,service.base+service.state.firingVtableRva);
     if(ownership==pk::AcceptedKnifeOwnership::Same)return true;
-    service.ownedObservationGap=true;
+    ObservationGap(7);
     if(ownership==pk::AcceptedKnifeOwnership::Unknown){++service.deployMisses;return true;}
     service.bad=true;++service.foreignGuards;auto expected=guard;
     service.deployGuard.compare_exchange_strong(expected,{},std::memory_order_acq_rel);return false;
@@ -351,7 +357,7 @@ void __fastcall AutomaticReturn(void* self,void*,unsigned slot,bool eligibility)
             pk::detail::Reader reader{service.memory};std::array<unsigned,2> selected{},again{};
             if(!reader.Read(std::uint64_t(unsigned(self))+0x14c,selected.data(),sizeof(selected))||
                !reader.Read(std::uint64_t(unsigned(self))+0x14c,again.data(),sizeof(again))||selected!=again){
-                service.ownedObservationGap=true;
+                ObservationGap(8);
             }else if(selected[0]==guard->knifeSlot&&selected[1]==slot&&RetainGuard(guard)){
             // Exact native automatic-return caller only. Explicit chooser
             // return follows its ordinary setter call and remains untouched.
@@ -430,13 +436,18 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
 }
 bool TrackedAttackRequested()noexcept{return service.enabled.load(std::memory_order_acquire)&&service.attackBridgeEnabled&&service.attackHooksAvailable.load();}
 void Start()noexcept{if(service.installed)service.enabled.store(true,std::memory_order_release);}
-std::optional<View> Inspect(const ReloadStateOwner& current,unsigned knifeWeapon,std::uint64_t sequence,std::int64_t now)noexcept {
-    std::unique_lock lock(service.gate,std::try_to_lock);if(!lock.owns_lock()||!service.enabled.load())return {};
+std::optional<View> Inspect(const ReloadStateOwner& current,unsigned knifeWeapon,std::uint64_t sequence,std::int64_t now,InspectReason* diagnostic)noexcept {
+    const auto reason=[&](InspectReason r){if(diagnostic)*diagnostic=r;};
+    std::unique_lock lock(service.gate,std::try_to_lock);reason(InspectReason::Busy);if(!lock.owns_lock())return {};
+    reason(InspectReason::Disabled);if(!service.enabled.load())return {};
     auto anchor=service.anchor;if(!anchor)anchor=pk::MakeAnchor(service.memory,service.state,service.server,service.base,current,knifeWeapon,sequence,now);
-    if(!anchor||anchor->knifeWeapon!=knifeWeapon)return {};
+    reason(InspectReason::Anchor);if(!anchor)return {};
+    reason(InspectReason::KnifeIdentity);if(anchor->knifeWeapon!=knifeWeapon)return {};
     const auto snapshot=pk::Read(service.memory,service.state,service.server,service.base,*anchor,current,sequence,now);
-    if(!snapshot||!Flags(*anchor))return {};
-    return View{*anchor,*snapshot,service.owned,!service.bad.load(),!service.ownedObservationGap.load(),service.motionEnabled&&(!service.attackBridgeEnabled||service.attackHooksAvailable.load()),service.attackBridgeEnabled,service.stockTriggerEnabled};
+    reason(InspectReason::NativeRead);if(!snapshot)return {};
+    reason(InspectReason::Flags);if(!Flags(*anchor))return {};
+    reason(InspectReason::Available);
+    return View{*anchor,*snapshot,service.owned,!service.bad.load(),!service.ownedObservationGap.load(),service.motionEnabled&&(!service.attackBridgeEnabled||service.attackHooksAvailable.load()),service.attackBridgeEnabled,service.stockTriggerEnabled,service.firstObservationGap.load()};
 }
 void AcknowledgeNoEffectRehide(const Bc2BodyHolster& body)noexcept {
     std::unique_lock lock(service.gate,std::try_to_lock);
@@ -493,7 +504,7 @@ bool Stage(const KnifeCommand& command,const KnifeSample& source,const HandInter
     if(!native||!Flags(anchor)||!pk::KnifeSentinel(*native)||!Ready(drawing?native->original:native->knife))return reject();
     for(auto selected:native->selected.current)if(selected!=(drawing?anchor.original.client.selectedSlot:anchor.knifeSlot))return reject();
     if(drawing){service.anchor=anchor;service.bodyOperation=bodyOperation;++service.nativeLifetime;
-        service.ownedObservationGap=false;service.updates={};for(auto& n:service.deploy)n.store(0);service.states={};service.fireSeen=service.attackSeen=service.sentinelChanged=false;}
+        service.firstObservationGap=0;service.ownedObservationGap=false;service.updates={};for(auto& n:service.deploy)n.store(0);service.states={};service.fireSeen=service.attackSeen=service.sentinelChanged=false;}
     else if(!Ammo(*native))return reject();
     try{service.stagedGuard=std::make_shared<const pk::Anchor>(anchor);}catch(...){return reject();}
     if(command.kind==KnifeCommandKind::Attack? !service.attacks.Stage(command,now):!service.commands.Stage(command,now))return reject();
@@ -519,7 +530,7 @@ bool Stage(const KnifeCommand& command,const KnifeSample& source,const HandInter
     service.source=source;service.stagedEpoch=service.sourceEpoch.load(std::memory_order_acquire);
     service.stagedStockTriggerRevocation=command.stockTriggerHold?service.stockTriggerSource.Stamp():0;
     service.outstanding=command;service.returnReady=false;
-    if(command.kind==KnifeCommandKind::Return){service.lastReturnReason=ReturnPendingReason::NotObserved;service.lastReturnObservedNs=0;}
+    if(command.kind==KnifeCommandKind::Return){service.lastReturnReason=ReturnPendingReason::NotObserved;service.lastReturnObservedNs=0;service.lastReturnReadiness={};service.lastReturnBad=false;service.lastReturnBadKnown=false;}
     return true;
 }
 std::optional<KnifeReceipt> Observe(const ReloadStateOwner& current,const Bc2BodyHolster& body,
@@ -531,6 +542,7 @@ std::optional<KnifeReceipt> Observe(const ReloadStateOwner& current,const Bc2Bod
     const auto pending=[&](ReturnPendingReason reason){
         if(!drawing&&!attacking){service.lastReturnReason=reason;service.lastReturnObservedNs=now;}
     };
+    if(!drawing&&!attacking){service.lastReturnReadiness={};service.lastReturnBad=false;service.lastReturnBadKnown=false;}
     pending(ReturnPendingReason::Chooser);
     if(attacking?service.attacks.ConsumedMask()!=pk::KnifeAttackGate::InputMask:service.commands.Mask()!=3)return {};
     if(attacking)for(unsigned branch=1;branch<3;++branch)
@@ -544,7 +556,12 @@ std::optional<KnifeReceipt> Observe(const ReloadStateOwner& current,const Bc2Bod
     pending(ReturnPendingReason::OriginalSelection);
     for(auto selected:v->selected.current)if(selected!=wanted)return {};
     pending(ReturnPendingReason::OriginalReadyOrBad);
-    if(!Ready((drawing||attacking)?v->knife:v->original)||service.bad)return {};
+    const auto readiness=InspectReady((drawing||attacking)?v->knife:v->original);
+    const bool ready=readiness.reason==ReadyReason::Ready;
+    // Preserve Ready's short circuit: a failing Ready did not load bad before.
+    const bool bad=ready&&service.bad.load();
+    if(!drawing&&!attacking){service.lastReturnReadiness=readiness;service.lastReturnBad=bad;service.lastReturnBadKnown=ready;}
+    if(!ready||bad)return {};
     if(drawing){for(auto n:service.updates)if(!n)return {};}
     else if(!attacking){service.returnReady=true;
         pending(ReturnPendingReason::BodyRehide);
@@ -567,7 +584,7 @@ std::optional<KnifeReceipt> Observe(const ReloadStateOwner& current,const Bc2Bod
         if(!service.attacks.Complete(command.serial,true,true,attackUnobserved))return {};
         if(service.attackBridgeEnabled){service.lastBridgeReceipt=service.bridge.Settle(service.attackNative->key);service.attackNative.reset();}
         service.completedInputMask=service.attacks.ConsumedMask();service.completedObservationMask=service.attacks.AttackMask();
-        if(attackUnobserved){++service.attackUnknown;service.ownedObservationGap=true;}
+        if(attackUnobserved){++service.attackUnknown;ObservationGap(9);}
     }else if(!service.commands.Complete(command.serial))return {};
     KnifeReceipt receipt;receipt.kind=command.kind;receipt.serial=command.serial;receipt.actor=command.source.owner.actor;
     receipt.actorGeneration=command.source.owner.actorGeneration;receipt.space=command.source.owner.space;receipt.knife=command.knife;
@@ -591,7 +608,7 @@ std::optional<ReturnPendingObservation> ReadReturnPendingObservation()noexcept {
     ReturnPendingObservation out;out.command=*service.outstanding;out.originalOwner=service.anchor->original.client.owner;
     out.lifetime=service.nativeLifetime;out.bodyOperation=service.bodyOperation;
     out.chooserMask=service.commands.Mask();out.returnReady=service.returnReady;
-    out.lastObserveReason=service.lastReturnReason;out.lastObservedNs=service.lastReturnObservedNs;return out;
+    out.lastObserveReason=service.lastReturnReason;out.lastObservedNs=service.lastReturnObservedNs;out.readiness=service.lastReturnReadiness;out.nativeBad=service.lastReturnBad;out.nativeBadKnown=service.lastReturnBadKnown;return out;
 }
 
 std::optional<std::uint64_t> ReturnNeedsRehide()noexcept {
@@ -755,7 +772,7 @@ namespace fvr::bc2::chestKnifeNative {
 bool Install(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t,const ReloadStateMemory&,bool,bool,bool)noexcept{return false;}
 void Start()noexcept{}
 bool TrackedAttackRequested()noexcept{return false;}
-std::optional<View> Inspect(const ReloadStateOwner&,unsigned,std::uint64_t,std::int64_t)noexcept{return {};}
+std::optional<View> Inspect(const ReloadStateOwner&,unsigned,std::uint64_t,std::int64_t,InspectReason* diagnostic)noexcept{if(diagnostic)*diagnostic=InspectReason::Unsupported;return {};}
 void AcknowledgeNoEffectRehide(const Bc2BodyHolster&)noexcept{}
 
 void SourceAdvanced(const interaction::HandInteractionSample&)noexcept{}

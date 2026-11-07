@@ -102,7 +102,9 @@ inline void WriteChestKnifeReturnObservation(std::ostream& out,const ChestKnifeR
     if(value.pending){const auto& p=*value.pending;out<<"{\"historicalLastObserve\":true,\"command\":";command(p.command);
         out<<",\"originalOwner\":";owner(p.originalOwner);out<<",\"lifetime\":"<<p.lifetime<<",\"bodyOperation\":"<<p.bodyOperation
             <<",\"chooserMask\":"<<p.chooserMask<<",\"returnReady\":";flag(p.returnReady);
-        out<<",\"lastObserveReason\":"<<unsigned(p.lastObserveReason)<<",\"lastObservedNs\":"<<p.lastObservedNs<<'}';}else out<<"null";
+        out<<",\"lastObserveReason\":"<<unsigned(p.lastObserveReason)<<",\"lastObservedNs\":"<<p.lastObservedNs<<",\"readiness\":";
+        chestKnifeNative::WriteReadyObservation(out,p.readiness);out<<",\"nativeBadKnown\":";flag(p.nativeBadKnown);
+        out<<",\"nativeBad\":";if(p.nativeBadKnown)flag(p.nativeBad);else out<<"null";out<<'}';}else out<<"null";
     out<<",\"completed\":";
     if(!value.completed){out<<"null}";return;}
     const auto& v=*value.completed;const auto& n=v.native;const auto& a=n.anchor;const auto& s=n.snapshot;const auto& f=n.freeRight;
@@ -153,6 +155,10 @@ struct ChestKnifeLiveObservation {
     bool nativeOwned=false,nativeHealthy=false,nativeObservationComplete=false;
     bool stockTriggerEnabled=false,motionEnabled=false,attackBridgeEnabled=false;
     bool held=false,stockTriggerReady=false,stockTriggerArmed=false,fireSuppressed=false,mechanicsSettled=false;
+    // Diagnostic fields never participate in Held authority.
+    chestKnifeNative::ReadyObservation readiness{};
+    chestKnifeNative::InspectReason nativeInspection=chestKnifeNative::InspectReason::NotAttempted;
+    unsigned firstObservationGap=0;bool readinessKnife=false;
 };
 inline std::int64_t ChestKnifeLiveDeadline(const ChestKnifeLiveObservation& v)noexcept {
     return (std::min)({v.input.deadlineNs,v.controls.menu.deadlineNs,v.hold.deadlineNs,v.rendered.source.input.deadlineNs});
@@ -220,6 +226,49 @@ inline bool ChestKnifeLiveContinues(const ChestKnifeLiveObservation& before,cons
             before.input.observedNs==after.input.observedNs&&before.input.deadlineNs==after.input.deadlineNs:
             before.input.observedNs<after.input.observedNs);
 }
+// Bounded passive rejection history. Begin clears only authority, never these
+// original failure facts. First resets for a new operation or its first draw
+// receipt; latest follows rejection. Missing gather/expiry never renews a lease.
+struct ChestKnifePublicationFailure {
+    ChestKnifeLiveObservation value{};
+    std::string_view reason{},branch{};
+    std::int64_t observedNs=0;
+};
+struct ChestKnifePublicationDiagnostic {ChestKnifePublicationFailure first{},latest{};unsigned dropped=0;};
+inline std::string_view ChestKnifePublicationBranch(const ChestKnifeLiveObservation& v)noexcept {
+    if(!v.continuity)return "continuity";if(!v.bodyOperation)return "body_operation";if(!v.draws)return "draw_receipt";
+    if(v.phase!=interaction::KnifePhase::Held)return "phase";if(!v.held)return "held";
+    if(!v.stockTriggerReady)return "stock_trigger_ready";if(!v.stockTriggerArmed)return "stock_trigger_armed";
+    if(!v.fireSuppressed)return "fire_suppressed";if(!v.mechanicsSettled)return "mechanics_settled";
+    if(!v.nativeOwned)return "native_owned";if(!v.nativeHealthy)return "native_healthy";
+    if(!v.nativeObservationComplete)return "native_observation_complete";if(!v.stockTriggerEnabled)return "stock_trigger_enabled";
+    if(v.motionEnabled)return "motion_enabled";if(v.attackBridgeEnabled)return "attack_bridge_enabled";
+    return "join";
+}
+inline void WriteChestKnifePublicationDiagnostic(std::ostream& out,const std::optional<ChestKnifePublicationDiagnostic>& d){
+    out<<"{\"schema\":\"fvr.bc2.chest-knife-publication.v1\",\"observationOnly\":true,\"actionAuthority\":false,\"historical\":true,\"available\":";
+    if(!d){out<<"false}";return;}out<<"true,\"branchNames\":[\"client0\",\"client1\",\"server\",\"none_or_unknown\"]"
+        <<",\"gapReasonNames\":[\"none\",\"enter_busy\",\"enter_selection_state_context\",\"enter_context_decode\",\"update_unwind\",\"leave_busy\",\"leave_state_selection\",\"guard_ownership\",\"automatic_return_read\",\"attack_unobserved\"]"
+        <<",\"inspectReasonNames\":[\"not_attempted\",\"available\",\"busy\",\"disabled\",\"anchor\",\"knife_identity\",\"native_read\",\"flags\",\"unsupported\"]";
+    const auto owner=[&](const ReloadStateOwner& o){out<<"{\"player\":"<<o.player<<",\"soldier\":"<<o.soldier<<",\"weak\":"<<o.weak
+        <<",\"weapon\":"<<o.weapon<<",\"actorGeneration\":"<<o.actorGeneration<<",\"equipGeneration\":"<<o.equipGeneration<<",\"space\":"<<o.space<<'}';};
+    const auto row=[&](const ChestKnifePublicationFailure& r){const auto& v=r.value;const auto& s=v.input;
+        out<<"{\"reason\":\""<<r.reason<<"\",\"branch\":\""<<r.branch<<"\",\"observedNs\":"<<r.observedNs
+            <<",\"phase\":"<<unsigned(v.phase)<<",\"bodyOperation\":"<<v.bodyOperation<<",\"drawReceipts\":"<<v.draws<<",\"returnReceipts\":"<<v.returns
+            <<",\"owner\":";owner(v.owner);out<<",\"originalOwner\":";owner(v.originalOwner);
+        out<<",\"source\":{\"owner\":{\"actor\":"<<s.owner.actor<<",\"actorGeneration\":"<<s.owner.actorGeneration
+            <<",\"equipGeneration\":"<<s.owner.equipGeneration<<",\"space\":"<<s.owner.space<<"},\"sequence\":"<<s.sequence
+            <<",\"observedNs\":"<<s.observedNs<<",\"nowNs\":"<<s.nowNs<<",\"deadlineNs\":"<<s.deadlineNs<<'}'
+            <<",\"knife\":{\"id\":"<<v.knife.id<<",\"generation\":"<<v.knife.generation<<"},\"nativeInspection\":"<<unsigned(v.nativeInspection)
+            <<",\"firstObservationGap\":{\"reason\":"<<v.firstObservationGap/4<<",\"branch\":"<<(v.firstObservationGap?v.firstObservationGap%4:3)<<'}'
+            <<",\"nativeOwned\":"<<(v.nativeOwned?"true":"false")<<",\"nativeHealthy\":"<<(v.nativeHealthy?"true":"false")
+            <<",\"nativeObservationComplete\":"<<(v.nativeObservationComplete?"true":"false")<<",\"mechanicsSettled\":"<<(v.mechanicsSettled?"true":"false")
+            <<",\"selectedSlots\":["<<v.selectedSlots[0]<<','<<v.selectedSlots[1]<<','<<v.selectedSlots[2]<<']'
+            <<",\"readinessItem\":\""<<(v.readinessKnife?"knife":"original")<<"\",\"readiness\":";
+        chestKnifeNative::WriteReadyObservation(out,v.readiness);out<<'}';};
+    out<<",\"dropped\":"<<d->dropped<<",\"firstRecordedRejection\":";row(d->first);
+    out<<",\"latestRecordedRejection\":";row(d->latest);out<<'}';
+}
 // One gather writer, explicit snapshot readers. Missing/rejected source clears
 // authority immediately; recovery gets a new continuity identity. The request
 // window enables copying only and cannot extend any source or claim deadline.
@@ -231,11 +280,35 @@ public:
     bool Requested(std::int64_t now)const noexcept{return now>0&&now<until_.load(std::memory_order_acquire);}
     void Begin()noexcept{value_.store({},std::memory_order_release);}
     void Invalidate()noexcept{Begin();if(continuity_!=UINT64_MAX)++continuity_;}
+    void Reject(const ChestKnifeLiveObservation& value,std::int64_t now,std::string_view reason,std::string_view branch)noexcept {
+        if(Requested(now)){
+          if(diagnosticGate_.test_and_set(std::memory_order_acquire))diagnosticDropped_.fetch_add(1,std::memory_order_relaxed);
+          else{
+            ChestKnifePublicationFailure row{value,reason,branch,now};
+            const auto& first=diagnostic_.first.value;
+            if(!diagnostic_.first.observedNs||(value.bodyOperation&&(value.bodyOperation!=first.bodyOperation||
+               value.draws>first.draws||(value.input.owner.actor&&(value.input.owner.actor!=first.input.owner.actor||
+               value.input.owner.actorGeneration!=first.input.owner.actorGeneration)))))diagnostic_.first=row;
+            diagnostic_.latest=row;diagnosticGate_.clear(std::memory_order_release);
+          }
+        }
+        Invalidate();
+    }
+    std::optional<ChestKnifePublicationDiagnostic> ReadDiagnostic()const noexcept {
+        if(diagnosticGate_.test_and_set(std::memory_order_acquire))return {};
+        auto copy=diagnostic_;diagnosticGate_.clear(std::memory_order_release);
+        copy.dropped=diagnosticDropped_.load(std::memory_order_relaxed);
+        if(!copy.first.observedNs)return {};return copy;
+    }
     bool Publish(ChestKnifeLiveObservation value,std::int64_t now)noexcept {
         value.continuity=continuity_;
-        if(!Requested(now)||continuity_==UINT64_MAX||!ChestKnifeLiveRejection(value,now).empty()){Invalidate();return false;}
+        if(!Requested(now)){Invalidate();return false;}
+        const auto reason=ChestKnifeLiveRejection(value,now);
+        if(continuity_==UINT64_MAX||!reason.empty()){
+            Reject(value,now,continuity_==UINT64_MAX?"continuity_exhausted":reason,ChestKnifePublicationBranch(value));return false;
+        }
         try{value_.store(std::make_shared<const ChestKnifeLiveObservation>(value),std::memory_order_release);return true;}
-        catch(...){Invalidate();return false;}
+        catch(...){Reject(value,now,"publication_allocation","publication");return false;}
     }
     std::shared_ptr<const ChestKnifeLiveObservation> Read(std::int64_t now)const noexcept {
         const auto value=value_.load(std::memory_order_acquire);
@@ -246,6 +319,9 @@ private:
     std::atomic<std::int64_t> until_{0};
     std::atomic<std::shared_ptr<const ChestKnifeLiveObservation>> value_{};
     std::uint64_t continuity_=1; // Original gather writer only.
+    mutable std::atomic_flag diagnosticGate_=ATOMIC_FLAG_INIT;
+    std::atomic<unsigned> diagnosticDropped_=0;
+    ChestKnifePublicationDiagnostic diagnostic_{};
 };
 inline void WriteChestKnifeLiveObservation(std::ostream& out,const ChestKnifeLiveObservation* value,
     const ReloadStateOwner& owner,const interaction::HandInteractionSample& input,const interaction::InputFrame& controls,std::int64_t now) {

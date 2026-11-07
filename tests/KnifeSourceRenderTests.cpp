@@ -4,6 +4,7 @@
 #include "Bc2ChestKnifeLiveObservation.h"
 #include <cstdio>
 #include <sstream>
+#include <limits>
 using namespace fvr;using namespace fvr::bc2;using namespace fvr::interaction;
 #include "KnifeCustodyFixture.inc"
 namespace {
@@ -238,6 +239,43 @@ int LiveObservationCases(){
 }
 }
 int main(){
+    {
+        private_knife::Item item;
+        for(auto* s:{&item.client.branches[0],&item.client.branches[1],&item.server})s->currentState=s->nextState=2;
+        CHECK(chestKnifeNative::InspectReady(item).reason==chestKnifeNative::ReadyReason::Ready);
+        for(unsigned branch=0;branch<3;++branch)for(unsigned field=0;field<6;++field){
+            auto bad=item;auto& s=branch<2?bad.client.branches[branch]:bad.server;
+            if(field==0)s.currentState=3;if(field==1)s.nextState=3;
+            if(field==2)s.phaseTimer=std::numeric_limits<float>::quiet_NaN();
+            if(field==3)s.phaseTimer=-1;if(field==4)s.phaseTimer=1000001;if(field==5)s.flagsA8=8;
+            const auto r=chestKnifeNative::InspectReady(bad);CHECK(r.branch==branch);
+            CHECK(unsigned(r.reason)==unsigned(chestKnifeNative::ReadyReason::Current)+field);
+            std::ostringstream json;chestKnifeNative::WriteReadyObservation(json,r);
+            CHECK(json.str().find("nan")==std::string::npos);
+            if(field==2)CHECK(json.str().find("\"phaseTimer\":null")!=std::string::npos);
+        }
+        auto v=LiveFixture();ChestKnifeLivePublication p;const auto now=v.input.nowNs;p.Request(now);
+        CHECK(p.Publish(v,now));v.nativeObservationComplete=false;v.firstObservationGap=5*4+1;
+        CHECK(!p.Publish(v,now));CHECK(!p.Read(now));const auto first=p.ReadDiagnostic();CHECK(first);
+        CHECK(first->first.branch=="native_observation_complete");
+        p.Begin();p.Invalidate();CHECK(p.ReadDiagnostic()->first.observedNs==now);
+        auto later=v;later.input.nowNs++;later.stockTriggerReady=false;
+        CHECK(!p.Publish(later,now+1));const auto retained=p.ReadDiagnostic();CHECK(retained);
+        CHECK(retained->first.branch=="native_observation_complete"&&retained->latest.branch=="stock_trigger_ready");
+        CHECK(retained->first.value.input.deadlineNs==v.input.deadlineNs);
+        std::ostringstream out;WriteChestKnifePublicationDiagnostic(out,retained);
+        CHECK(out.str().size()<8192&&out.str().find("\"actionAuthority\":false")!=std::string::npos);
+        CHECK(out.str().find("\"held\":true")==std::string::npos&&out.str().find("validUntilNs")==std::string::npos);
+        CHECK(out.str().find("\"reason\":5,\"branch\":1")!=std::string::npos);
+        p.Begin();CHECK(!p.Read(now));CHECK(p.ReadDiagnostic());
+        p.Reject(later,now+2,"producer_prerequisite","render_receipt");
+        CHECK(p.ReadDiagnostic()->latest.branch=="render_receipt");
+        CHECK(p.ReadDiagnostic()->first.branch=="native_observation_complete");
+        ++later.bodyOperation;++later.draws;p.Reject(later,now+3,"producer_prerequisite","native_view");
+        CHECK(p.ReadDiagnostic()->first.branch=="native_view");
+        p.Request(v.input.deadlineNs);CHECK(!p.Read(v.input.deadlineNs));
+        CHECK(p.ReadDiagnostic()->latest.value.input.deadlineNs==v.input.deadlineNs);
+    }
     CHECK(!ReturnObservationCases());
     CHECK(!LiveObservationCases());
     {private_knife::OriginalKnifeSource source;HandInteractionSample value{{1,2,3,4},9,1000000000,1100000000,1000000000,true,{true,true}};

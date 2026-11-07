@@ -6,11 +6,8 @@
 #include <cmath>
 namespace fvr::bc2 {namespace {
 using namespace interaction;
-bool Ready(const private_knife::Item& item)noexcept {
-    for(const auto* state:{&item.client.branches[0],&item.client.branches[1],&item.server})
-        if(state->currentState!=2||state->nextState!=2||!std::isfinite(state->phaseTimer)||state->phaseTimer<0||
-           state->phaseTimer>1000000||(state->flagsA8&8))return false;
-    return true;
+bool Ready(const private_knife::Item& item,chestKnifeNative::ReadyObservation& diagnostic)noexcept {
+    diagnostic=chestKnifeNative::InspectReady(item);return diagnostic.reason==chestKnifeNative::ReadyReason::Ready;
 }
 
 }
@@ -40,7 +37,10 @@ bool Bc2ChestKnifeCoordinator::TickIdleHeldGun(const BodyDrawSample& s,const Bc2
 #endif
 }
 void Bc2ChestKnifeCoordinator::Missing(std::int64_t now,HandInteraction& hands)noexcept {
-    InvalidateLiveObservation();
+    ChestKnifeLiveObservation failure;failure.phase=policy_.Phase();failure.bodyOperation=bodyOperation_;
+    failure.draws=draws_;failure.returns=returns_;if(anchor_)failure.originalOwner=anchor_->original.client.owner;
+    // There is no current hand source in this path; zero fields remain unknown.
+    liveObservation_.Reject(failure,now,"producer_prerequisite","gather_missing");
     rendering_.reset();PrepareChestKnifeMissing(now,hands,policy_,[&](const KnifeSample& sample,ChestKnifeCustody& policy)noexcept{
         const bool okay=chestKnifeNative::BeforePrepare(sample,policy);
         if(!okay)recognition_.NativeGate(sample.source,unsigned(policy.Phase()));return okay;});
@@ -60,7 +60,8 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
     if(!knife&&display)for(unsigned n=0;n<display->carried.count;++n)if(display->carried.items[n].category==11){
         if(knife){knife=0;break;}knife=display->carried.items[n].weapon;}
     const auto key=knife?inventory.ItemKey(knife):std::nullopt;
-    const auto native=key?chestKnifeNative::Inspect(s.owner,knife,s.hand.sequence,s.hand.nowNs):std::nullopt;
+    chestKnifeNative::InspectReason nativeInspection=chestKnifeNative::InspectReason::NotAttempted;
+    const auto native=key?chestKnifeNative::Inspect(s.owner,knife,s.hand.sequence,s.hand.nowNs,&nativeInspection):std::nullopt;
     std::optional<selectedKnife::Geometry> attackGeometry;
     KnifeSample sample;sample.source=s.hand;sample.menu=s.input.menu;
     if(key)sample.knife={key->id,key->generation};
@@ -81,12 +82,13 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
     for(unsigned h=0;h<2;++h)sample.gripHeld[h]=(s.input.hands[h].active&Squeeze)&&s.input.hands[h].squeeze>=.65f;
     if(const auto point=BodyAnchorHandPose(s.input,InteractionHand::Right))
         sample.chest[1]={{0x4243324b43485354ull,1},s.hand.sequence,s.hand.deadlineNs,BodyAnchorContains(private_knife::KnifeChest,*point)};
+    chestKnifeNative::ReadyObservation nativeReadiness;
     if(native){
         nativeOwned_=native->owned;sample.knifeSelected=s.owner.weapon==knife;
         for(auto selected:native->snapshot.selected.current)sample.knifeSelected&=selected==native->anchor.knifeSlot;
         sample.mechanicsSettled=mechanics&&native->healthy&&(!nativeOwned_||body.TemporaryToolOperation()==bodyOperation_)&&
             private_knife::KnifeSentinel(native->snapshot)&&
-            Ready(sample.knifeSelected?native->snapshot.knife:native->snapshot.original);
+            Ready(sample.knifeSelected?native->snapshot.knife:native->snapshot.original,nativeReadiness);
         sample.trackedKnifeOwned=sample.knifeSelected&&nativeOwned_&&bodyOperation_&&body.TemporaryToolOperation()==bodyOperation_&&rendered&&
             rendered->source.bodyOperation==bodyOperation_&&rendered->source.knife==*key&&
             rendered->rigFingerprint==ChestKnifeGripProfiles()[0].rigFingerprint&&
@@ -106,7 +108,20 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
                 (!native->attackBridgeEnabled||attackGeometry.has_value());
         }
     }else ++readGaps_;
-    if(!chestKnifeNative::BeforePrepare(sample,policy_)){InvalidateLiveObservation();recognition_.NativeGate(sample.source,unsigned(policy_.Phase()));return;}
+    // Copy only facts already obtained by this gather. Diagnostics cannot
+    // provide a render receipt, native view, claim or current input authority.
+    const auto diagnostic=[&](){ChestKnifeLiveObservation v;v.owner=s.owner;v.input=s.hand;v.phase=policy_.Phase();
+        v.bodyOperation=bodyOperation_;v.draws=draws_;v.returns=returns_;v.nativeInspection=nativeInspection;
+        if(key)v.knife=*key;if(anchor_)v.originalOwner=anchor_->original.client.owner;
+        if(native){v.originalOwner=native->anchor.original.client.owner;v.nativeOwned=native->owned;v.nativeHealthy=native->healthy;
+            v.nativeObservationComplete=native->observationComplete;v.firstObservationGap=native->firstObservationGap;
+            v.selectedSlots=native->snapshot.selected.current;v.readinessKnife=sample.knifeSelected;
+            v.readiness=nativeReadiness;}
+        v.mechanicsSettled=sample.mechanicsSettled;return v;};
+    if(!chestKnifeNative::BeforePrepare(sample,policy_)){
+        liveObservation_.Reject(diagnostic(),s.hand.nowNs,"producer_prerequisite","before_prepare");
+        recognition_.NativeGate(sample.source,unsigned(policy_.Phase()));return;
+    }
     std::optional<chestKnifeNative::ReturnCompletion> completedReturn;
     if(const auto receipt=chestKnifeNative::Observe(s.owner,body,bodyResult.freeRight,s.hand.nowNs,&completedReturn)){
         const bool accepted=policy_.Observe(*receipt);
@@ -165,9 +180,10 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
     if(!liveObservation_.Requested(s.hand.nowNs)){InvalidateLiveObservation();return;}
     const auto held=hands.Current(InteractionHand::Right);
     const auto original=native?inventory.ItemKey(native->anchor.original.client.owner.weapon):std::nullopt;
-    if(!native||!rendered||!key||!original||!held||!post.suppression||
-       native->snapshot.selectedOwner!=s.owner){InvalidateLiveObservation();return;}
-    ChestKnifeLiveObservation observation;
+    const auto missing=!native?"native_view":!rendered?"render_receipt":!key?"knife_key":!original?"original_key":
+        !held?"right_claim":!post.suppression?"suppression":native->snapshot.selectedOwner!=s.owner?"selected_owner":nullptr;
+    if(missing){liveObservation_.Reject(diagnostic(),s.hand.nowNs,"producer_prerequisite",missing);return;}
+    ChestKnifeLiveObservation observation=diagnostic();
     observation.owner=s.owner;observation.originalOwner=native->anchor.original.client.owner;
     observation.knife=*key;observation.originalGun=*original;observation.input=s.hand;observation.controls=s.input;
     observation.hold=*held;observation.rendered=*rendered;

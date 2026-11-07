@@ -4362,6 +4362,12 @@ ChestKnifeReturnDiagnostic ReadChestKnifeReturnObservation()noexcept {
 #endif
     return {};
 }
+std::optional<ChestKnifePublicationDiagnostic> ReadChestKnifePublicationDiagnostic()noexcept {
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    if(chestKnife)return chestKnife->PublicationDiagnostic();
+#endif
+    return {};
+}
 void RequestChestKnifeLiveObservation(std::int64_t now)noexcept {
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
     if(enabled.load(std::memory_order_acquire)&&chestKnife)chestKnife->RequestLiveObservation(now);

@@ -2788,7 +2788,11 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     const auto returnDiagnostic=gameplay::ReadChestKnifeReturnObservation();
     std::ostringstream knifeReturn;knifeReturn.imbue(std::locale::classic());knifeReturn.precision(9);
     WriteChestKnifeReturnObservation(knifeReturn,returnDiagnostic);
-    const auto knifeReturnSection=",\"chestKnifeReturn\":"+knifeReturn.str();
+    // Separate passive history; survives rejected Held and an invalid firearm
+    // frame. The existing optional-section fallback still enforces 64 KiB.
+    std::ostringstream knifePublication;knifePublication.imbue(std::locale::classic());knifePublication.precision(9);
+    WriteChestKnifePublicationDiagnostic(knifePublication,gameplay::ReadChestKnifePublicationDiagnostic());
+    const auto knifeReturnSection=",\"chestKnifeReturn\":"+knifeReturn.str()+",\"chestKnifePublication\":"+knifePublication.str();
     const auto invalid=[&](const char* reason,bool observeOwnedKnife=false){
         std::ostringstream header;header.imbue(std::locale::classic());
         header<<"{\"schema\":\"fvr.bc2.live-mechanism-snapshot.v1\",\"nonce\":\""<<nonce

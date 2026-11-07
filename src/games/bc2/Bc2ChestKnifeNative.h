@@ -4,6 +4,7 @@
 #include "Bc2BodyHolster.h"
 #include "Bc2OriginalFiringObserver.h"
 #include <ostream>
+#include <cmath>
 namespace fvr::bc2::chestKnifeNative {
 // PRIVATE only. Existing draw/hold/return default; motion requires a separate
 // explicit pre-start opt-in. attackBridgeEnabled is a separate default-off
@@ -13,12 +14,40 @@ bool Install(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t im
     const ReloadStateMemory&,bool motionEnabled=false,bool attackBridgeEnabled=false,bool stockTriggerEnabled=false)noexcept;
 void Start()noexcept;
 bool TrackedAttackRequested()noexcept;
+// First failing branch/field of the unchanged Ready predicate. Existing values
+// only; branch 0/1/2 means client0/client1/server, 3 means not inspected/ready.
+enum class ReadyReason:unsigned {NotInspected,Ready,Current,Next,TimerFinite,TimerLow,TimerHigh,FlagsA8};
+struct ReadyObservation {
+    ReadyReason reason=ReadyReason::NotInspected;unsigned branch=3,current=0,next=0,flagsA8=0;float phaseTimer=0;
+};
+inline ReadyObservation InspectReady(const private_knife::Item& item)noexcept {
+    unsigned branch=0;
+    for(const auto* s:{&item.client.branches[0],&item.client.branches[1],&item.server}){
+        const auto reason=s->currentState!=2?ReadyReason::Current:s->nextState!=2?ReadyReason::Next:
+            !std::isfinite(s->phaseTimer)?ReadyReason::TimerFinite:s->phaseTimer<0?ReadyReason::TimerLow:
+            s->phaseTimer>1000000?ReadyReason::TimerHigh:(s->flagsA8&8)?ReadyReason::FlagsA8:ReadyReason::Ready;
+        if(reason!=ReadyReason::Ready)return {reason,branch,s->currentState,s->nextState,s->flagsA8,s->phaseTimer};
+        ++branch;
+    }
+    return {ReadyReason::Ready};
+}
+inline void WriteReadyObservation(std::ostream& out,const ReadyObservation& r){
+    constexpr const char* names[]{"not_inspected","ready","current","next","timer_finite","timer_low","timer_high","flags_a8_bit8"};
+    out<<"{\"reason\":\""<<names[unsigned(r.reason)]<<"\",\"branch\":"<<r.branch;
+    if(r.reason==ReadyReason::NotInspected||r.reason==ReadyReason::Ready){
+        out<<",\"current\":null,\"next\":null,\"flagsA8\":null,\"phaseTimer\":null}";return;
+    }
+    out<<",\"current\":"<<r.current<<",\"next\":"<<r.next<<",\"flagsA8\":"<<r.flagsA8<<",\"phaseTimer\":";
+    if(std::isfinite(r.phaseTimer))out<<r.phaseTimer;else out<<"null";out<<'}';
+}
+enum class InspectReason:unsigned {NotAttempted,Available,Busy,Disabled,Anchor,KnifeIdentity,NativeRead,Flags,Unsupported};
 struct View {
     private_knife::Anchor anchor{};private_knife::Snapshot snapshot{};
     bool owned=false,healthy=false,observationComplete=false,motionEnabled=false,attackBridgeEnabled=false,stockTriggerEnabled=false;
+    unsigned firstObservationGap=0; // Packed diagnostic: reason*4 + branch, never authority.
 };
 // Current coherent observation only; it creates no staged native action.
-std::optional<View> Inspect(const ReloadStateOwner&,unsigned knifeWeapon,std::uint64_t sequence,std::int64_t nowNs)noexcept;
+std::optional<View> Inspect(const ReloadStateOwner&,unsigned knifeWeapon,std::uint64_t sequence,std::int64_t nowNs,InspectReason* diagnostic=nullptr)noexcept;
 // No-effect draw cleanup after its exact new paired empty receipt.
 void AcknowledgeNoEffectRehide(const Bc2BodyHolster&)noexcept;
 
@@ -90,6 +119,7 @@ struct ReturnPendingObservation {
     unsigned chooserMask=0;bool returnReady=false;
     ReturnPendingReason lastObserveReason=ReturnPendingReason::NotObserved;
     std::int64_t lastObservedNs=0;
+    ReadyObservation readiness{};bool nativeBad=false,nativeBadKnown=false;
 };
 // Passive try-lock copy of already-owned pending scalars; no memory/native call.
 // A null value means unavailable, never completion or absence of native work.
