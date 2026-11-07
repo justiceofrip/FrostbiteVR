@@ -2,6 +2,8 @@
 import copy
 import importlib.util
 import io
+import json
+import contextlib
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -522,6 +524,129 @@ class DropdownResumeTests(unittest.TestCase):
             h.v.release_after_failure()
         self.assertEqual(h.writes, [])
         self.assertTrue(h.v.unsafe_owner)
+
+
+class Review626Tests(unittest.TestCase):
+    def test_expiry_between_neutral_and_press_refuses_without_down(self):
+        h = SinglePlayerSelectionTests.harness(self, driver_type=r.DropdownResumeDriver)
+        h.v.menu_capture['displayTimeNs'] = h.now - 59_500_000_000
+        with self.assertRaisesRegex(r.REFUSAL, 'stale'):
+            h.v.resume()
+        self.assertEqual(h.downs(), [])
+        self.assertEqual(len(h.writes), 1)
+
+    def test_owned_release_survives_capture_expiry(self):
+        h = SinglePlayerSelectionTests.harness(self, driver_type=r.DropdownResumeDriver)
+        h.v.held_trigger = True
+        h.v.menu_capture['displayTimeNs'] = h.now - 61 * NS
+        self.assertEqual(h.v.release_after_failure(), 'ordinary owned controller release acknowledged')
+        self.assertEqual(h.writes[-1][1][0], 'trigger r 0')
+
+    def test_passive_handoff_rejects_even_fresh_new_input(self):
+        h = SinglePlayerSelectionTests.harness(self, driver_type=r.DropdownResumeDriver)
+        h.v.observation_only = True
+        with self.assertRaisesRegex(r.REFUSAL, 'passive Resume handoff'):
+            h.v.resume()
+        self.assertEqual(h.writes, [])
+
+    def replay(self, *, world=False, mutate=None, changed_owner=False):
+        run = Path('G:/fixture/run')
+        clock = [100 * NS]
+        capture = SinglePlayerSelectionTests.capture()
+        capture['displayTimeNs'] = 100 * NS - 43_209_034_700
+        made, observed = [], []
+        def initialize(v, args):
+            v.args, v.started = args, clock[0]
+            v.startup = dict(settled_state=dict(frame=100))
+            v.state = dict(frame=150)
+            v.capture_plan = dict(width=640, height=480)
+            v.manifest, v.link = {}, dict(owner=len(made) if changed_owner else 1)
+            v.tail = SimpleNamespace(path=Path('memory-native'))
+            v.artifacts = SimpleNamespace(directory=Path('memory-'+str(len(made))), save=lambda *a, **k: None)
+            v.latest = v.pre_event = v.input_stopped = None
+            v.ever_ready = v.world_progressed = False
+            v.clicks = v.commands = v.next_click = 0
+            v.last_click_sample, v.neutral_sample = -1, None
+            v.pending_command = v.held_trigger = False
+            made.append(v)
+        def read_json(path, maximum):
+            c = copy.deepcopy(capture)
+            if mutate and len(made) >= 2:
+                mutate(c)
+            return c, json.dumps(c, sort_keys=True).encode()
+        def resume(v):
+            observed.append(v)
+            if len(observed) == 1:
+                self.assertFalse(v.observation_only)
+                v.clicks, v.commands = 1, 9
+                v.latest = dict(worldCalls=0, menuReady=True)
+                clock[0] += 8_542_684_200
+            else:
+                self.assertTrue(v.observation_only)
+                self.assertEqual(v.clicks, 1)
+                self.assertEqual(v.commands, 0)
+                clock[0] += 8_500_486_300
+                if world and len(observed) == 3:
+                    v.latest = dict(worldCalls=2, menuReady=False)
+                    return True
+            return False
+        output = io.StringIO()
+        with patch.object(d, 'local_path', side_effect=Path), \
+             patch.object(d, 'read_json', side_effect=read_json), \
+             patch.object(r.ResumeDriver, '__init__', initialize), \
+             patch.object(r.DropdownResumeDriver, 'resume', resume), \
+             patch.object(r.ResumeDriver, 'close'), \
+             patch.object(r.ResumeDriver, 'release_after_failure', return_value='no held input'), \
+             patch.object(r.time, 'perf_counter_ns', lambda: clock[0]), contextlib.redirect_stdout(output):
+            code = r.main(['--run', str(run), '--dropdown-resume-capture', 'sim/capture/menu.json'])
+        return code, json.loads(output.getvalue()), made, observed
+
+    def test_saved625_clock_continues_passively_after60_without_retry_or_false_success(self):
+        code, result, made, observed = self.replay()
+        self.assertEqual(code, 2)
+        self.assertEqual(len(observed), 4)
+        self.assertEqual((result['clicks'], result['commands']), (1, 9))
+        self.assertEqual(result['native']['worldCalls'], 0)
+        self.assertIn('bounded Resume episodes exhausted', result['error'])
+        self.assertEqual(len(result['episodeArtifactDirectories']), 4)
+
+    def test_native_world_progress_after60_can_complete_same_bounded_observation(self):
+        code, result, made, observed = self.replay(world=True)
+        self.assertEqual(code, 0)
+        self.assertEqual(result['status'], 'world_progressed')
+        self.assertEqual((result['clicks'], result['commands']), (1, 9))
+        self.assertEqual(len(observed), 3)
+
+    def test_passive_changed_capture_keeps_original_click_evidence_and_refuses(self):
+        code, result, made, observed = self.replay(mutate=lambda c: c.update(frameIndex=121))
+        self.assertEqual(code, 2)
+        self.assertIn('generation changed', result['error'])
+        self.assertEqual(len(observed), 2)
+        self.assertEqual((result['clicks'], result['commands']), (1, 9))
+
+    def test_passive_future_capture_is_refused_and_counts_survive_failed_constructor(self):
+        code, result, made, observed = self.replay(mutate=lambda c: c.update(displayTimeNs=999 * NS))
+        self.assertEqual(code, 2)
+        self.assertIn('future-dated', result['error'])
+        self.assertEqual(len(observed), 2)
+        self.assertEqual((result['clicks'], result['commands']), (1, 9))
+
+    def test_passive_changed_native_identity_is_refused(self):
+        code, result, made, observed = self.replay(changed_owner=True)
+        self.assertEqual(code, 2)
+        self.assertEqual(len(observed), 1)
+        self.assertIn('generation changed', result['error'])
+        self.assertEqual((result['clicks'], result['commands']), (1, 9))
+
+    def test_geometry_refusal_before_artifact_creation_retains_prior_episode_evidence(self):
+        code, result, made, observed = self.replay(mutate=lambda c: c.update(width=641))
+        self.assertEqual(code, 2)
+        self.assertEqual(len(made), 2)
+        self.assertEqual(len(observed), 2)
+        self.assertEqual((result['clicks'], result['commands']), (1, 9))
+        self.assertEqual(result['artifactDirectory'], 'memory-1')
+        self.assertEqual(len(result['episodeArtifactDirectories']), 2)
+
 
 
 if __name__ == "__main__":

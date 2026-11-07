@@ -36,8 +36,19 @@ Source619 reuses the Win32 replacement-sharing reader for simulator state and
 clips retries to original source/ACK/cleanup deadlines.32 focused checks pass,
 including real reproduction of the old CRT denial and the corrected read.
 Actual603 did not retain WinError, so its exact denial cause is unconfirmed.
-This tools-only source repair leaves installed native73 unchanged; no new game
-or reload pass is established. Knife604 shares the pending capture check.
+Actual625 passed main/dropdown captures with619 and ROOT reviewed both eyes.
+Its first Resume episode delivered one click/nine commands, then only observed;
+world calls stayed0. A third initializer rejected the expired input image before
+restoring the passive state, and final counts incorrectly became0. Raw625 stays.
+626 separates passive observation from image-authorized input, preserves the
+original60s input/35s total limits and reports all attempts even after refusal.
+40 focused checks pass; ROOT reused them after normalized applied-source equality
+and ran13 affected menu-readiness checks. No native rebuild or installation change.
+Actual625 closed normally121.4240573s/native retired/all7 processes0/profiles and
+settings restored. Retained runtime452 batch27 preserves41 files without deletion.
+628 compared both625/599 raster pairs and found no supported coordinate defect;
+the later pointer/widget state was not captured. Do not retry the same click blind.
+Knife604 needs a fresh tools binding and game check;625 proves no weapon behavior.
 Retained QJU88 full cycle/subsequent shot on65 and user pump/AN94 passes are unchanged.
 Full underbarrel/M95 reloads, broader weapons/vehicles, family/headset reliability,
 knife rendered/strict-Held/attack qualification and measured FPS improvement remain

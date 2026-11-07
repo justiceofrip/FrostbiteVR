@@ -18,13 +18,14 @@ Native73 combines596 render-only recovery from the same live knife hand claim
 with600 separate passive current-hold observation; strict Held/attack gates remain.
 See handoff/integrations/coordinator-20261107-native73/README.txt for delivery.
 
-Actual603 connected native VR, but the first capture failed with Errno13 reading
-sim/state.json: two neutral commands, captureSeq0, no gameplay or reload evidence.
-Normal close in61.1577544s, all owners0, native retirement and profile restoration
-passed. Source619 repairs shared state reads with original deadlines;32 focused
-checks pass. Actual603's exact OS denial cause and a new game pass remain open.
-Native73 is unchanged. Knife604 shares the pending capture check. Actual593's ordinary
-Draw/Return proof remains; strict Held/render qualification and attack are open.
+Actual625 passed main/dropdown captures after619's state-reader repair, then
+delivered one Resume click without world progression.626 repairs passive menu
+observation after image-input expiry and preserves aggregate action counts;
+40 focused plus13 affected checks pass.625's final zero counts are contradicted
+by its retained events: one click/nine commands. Widget activation is unexplained.
+Normal close121.424s, all owners0, native retirement/profiles/settings restored.
+Native73 is unchanged. Knife604 needs a fresh tools binding and game check.
+Actual593's ordinary Draw/Return proof remains; render/strict Held/attack are open.
 Actual599's selection/release/current Held and pre-shot/reload review stop remain
 retained. Earlier failed runs are preserved. No headset acceptance/public release.
 

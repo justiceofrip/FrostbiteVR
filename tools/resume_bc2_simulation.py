@@ -281,17 +281,22 @@ def dropdown_resume_geometry(capture):
 
 class ReviewedMenuDriver(ResumeDriver):
     """Share capture admission, full-quad pointing and owned-release guards."""
-    def __init__(self, args):
+    def __init__(self, args, *, observation_only=False):
+        self.observation_only = observation_only
         run = transport.local_path(args.run)
         path = transport.child(run, run / getattr(args, self.capture_argument))
         require(path.parent == run / "sim" / "capture" and path.suffix == ".json",
                 "menu capture must belong to this exact run's sim/capture directory")
         self.menu_capture, raw = transport.read_json(path, 65536)
+        self.menu_capture_sha256 = transport.digest(raw)
         require(self.menu_capture["name"] == path.stem, "capture name/path mismatch")
         geometry = self.geometry(self.menu_capture)
         self.pose = geometry["pose"]
         super().__init__(args)
-        self.validate_capture_age()
+        require(integer(self.menu_capture["displayTimeNs"]) <= time.perf_counter_ns(),
+                "menu capture is future-dated")
+        if not self.observation_only:
+            self.validate_capture_age()
         require(integer(self.startup["settled_state"]["frame"]) <= integer(self.menu_capture["frameIndex"])
                 <= integer(self.state["frame"]), "menu capture frame is outside the current run")
         require(self.menu_capture["width"] == self.capture_plan["width"]
@@ -329,6 +334,9 @@ class ReviewedMenuDriver(ResumeDriver):
         super().validate_publication(lines, expected, cleanup)
         if lines == ["trigger r 0"]:
             return  # Preserve owned release even after head/menu/world changes.
+        require(not getattr(self, "observation_only", False),
+                "passive Resume handoff cannot publish input")
+        self.validate_capture_age()  # Original capture clock; never renewed by an episode.
         state = self.read_state()
         self.ownership(state)
         require(state["head"]["pos"] == self.menu_capture["head"]["pos"]
@@ -388,9 +396,9 @@ class DropdownResumeDriver(ReviewedMenuDriver):
     # first live observation, retires its authority to admit new input forever.
     reviewed_menu_required = True
 
-    def __init__(self, args):
+    def __init__(self, args, *, observation_only=False):
         args.max_clicks = 1
-        super().__init__(args)
+        super().__init__(args, observation_only=observation_only)
 
 
 def main(argv=None):
@@ -426,6 +434,7 @@ def main(argv=None):
     identity = None
     native_tail = None
     episodes = []
+    attempts = []  # Retain evidence even when a later constructor refuses.
     try:
         require(not args.single_player_hover_only or args.single_player_capture,
                 "hover-only requires --single-player-capture")
@@ -435,8 +444,16 @@ def main(argv=None):
             require(time.perf_counter_ns() + 2 * NS < args.overall_deadline_ns,
                     "overall Resume observation budget exhausted without world progression")
             driver = driver_type.__new__(driver_type)
-            driver.__init__(args)
+            attempts.append(driver)
+            passive = (issubclass(driver_type, ReviewedMenuDriver) and carry is not None
+                       and (carry["clicks"] >= args.max_clicks or carry["input_stopped"] is not None))
+            if passive:
+                driver.__init__(args, observation_only=True)
+            else:
+                driver.__init__(args)
             current_identity = dict(manifest=driver.manifest, link=driver.link, startup=driver.startup)
+            if isinstance(driver, ReviewedMenuDriver):
+                current_identity["menuCaptureSha256"] = driver.menu_capture_sha256
             require(identity is None or current_identity == identity,
                     "run/process/session generation changed across Resume episodes")
             identity = current_identity
@@ -472,16 +489,25 @@ def main(argv=None):
                 result["release"] = "refused: " + str(cleanup_error)
     finally:
         if driver is not None:
-            if getattr(driver, "artifacts", None):
-                result.update(durationNs=time.perf_counter_ns() - started, clicks=driver.clicks,
-                    commands=driver.commands, pendingCommand=driver.pending_command,
-                    triggerHeld=driver.held_trigger, native=driver.latest,
-                    inputStopped=driver.input_stopped, artifactDirectory=str(driver.artifacts.directory),
-                    episodeArtifactDirectories=episodes)
+            evidence_driver = next((attempt for attempt in reversed(attempts)
+                                    if getattr(attempt, "artifacts", None)), None)
+            if evidence_driver is not None:
+                result.update(durationNs=time.perf_counter_ns() - started,
+                    clicks=max(getattr(attempt, "clicks", 0) for attempt in attempts),
+                    commands=sum(getattr(attempt, "commands", 0) for attempt in attempts),
+                    pendingCommand=getattr(driver, "pending_command", False),
+                    triggerHeld=getattr(driver, "held_trigger", False),
+                    native=next((attempt.latest for attempt in reversed(attempts)
+                                 if getattr(attempt, "latest", None) is not None), None),
+                    inputStopped=next((attempt.input_stopped for attempt in reversed(attempts)
+                                       if getattr(attempt, "input_stopped", None) is not None), None),
+                    artifactDirectory=str(evidence_driver.artifacts.directory),
+                    episodeArtifactDirectories=[str(attempt.artifacts.directory) for attempt in attempts
+                                                if getattr(attempt, "artifacts", None)])
                 try:
                     name = ("single-player-result.json" if args.single_player_capture else
                             "dropdown-resume-result.json" if args.dropdown_resume_capture else "resume-result.json")
-                    driver.artifacts.save(name, result, final=True)
+                    evidence_driver.artifacts.save(name, result, final=True)
                 except (REFUSAL, OSError) as write_error:
                     result["resultWriteError"], code = str(write_error), 2
             driver.close()
