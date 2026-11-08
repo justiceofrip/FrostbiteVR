@@ -1623,6 +1623,7 @@ class Driver:
             plan = planner.plan_supply_pickup(self.profiles, snapshot, evaluated, integer(snapshot["nonce"]), step)
         else:
             plan = planner.plan(self.profiles, snapshot, name, evaluated, integer(snapshot["nonce"]), step,
+                                held_cover_probe=getattr(self.args, "held_cover_probe", False),
                                 **({"pickup_plan": pickup} if pickup is not None else {}))
         require(time.perf_counter_ns() < min(integer(snapshot["valid_until_ns"]),
                 integer(snapshot["input_evidence"]["observedNs"]) + SNAPSHOT_PERIOD), "planning consumed original source lease")
@@ -1663,6 +1664,8 @@ class Driver:
             acquisition_deadline = None
             if target["phase"] == "acquire" and plan["requiresPostAcquisitionReobservation"]:
                 acquisition_deadline = self.observe_acquisition(row, plan, self.last_write)
+            elif target["phase"].startswith("held_probe_"):
+                acquisition_deadline = self.observe_held_cover(row, plan, target, snapshot)
         self.plans[-1]["actualDurationNs"] = time.perf_counter_ns() - start
         self.motion_started = None
         self.stage_deadline = self.deadline
@@ -1686,11 +1689,27 @@ class Driver:
         self.plans[-1]["postAcquisitionNonce"] = snapshot["nonce"]
         claim = planner.held_feed(self.profiles, row, snapshot, time.perf_counter_ns(), plan, command_written_ns)
         self.plans[-1]["postAcquisitionClaim"] = claim
+        if plan.get("heldCoverProbe") is not None:
+            self.plans[-1]["postAcquisitionHingeFromWrist"] = planner.cover_wrist_in_hinge(snapshot)
         self.artifacts.event({"type": "feed_acquisition_observed", "stage": plan["stage"],
                               "nonce": snapshot["nonce"], "claim": claim,
                               "commandWrittenNs": command_written_ns, "nativeReceiptProof": False})
         self.monitor = True
         return min(integer(snapshot["valid_until_ns"]), integer(claim["deadlineNs"]),
+                   integer(snapshot["input_evidence"]["observedNs"]) + SNAPSHOT_PERIOD)
+
+    def observe_held_cover(self, row, plan, target, before):
+        snapshot, raw, evaluated = self.fresh()
+        self.accept_snapshot(snapshot, raw, evaluated)
+        record = self.plans[-1]
+        observations = record.setdefault("heldCoverObservations", [])
+        observed = planner.held_cover_observation(
+            self.profiles, row, snapshot, time.perf_counter_ns(), plan, target, self.last_write,
+            record["postAcquisitionClaim"], record["postAcquisitionHingeFromWrist"],
+            before["feedObservation"], observations[-1] if observations else None)
+        observations.append(observed)
+        self.artifacts.event(dict(type="held_cover_probe_observed", **observed))
+        return min(integer(snapshot["valid_until_ns"]), integer(observed["claim"]["deadlineNs"]),
                    integer(snapshot["input_evidence"]["observedNs"]) + SNAPSHOT_PERIOD)
 
     def observe_stage_receipt(self, before):
@@ -1976,6 +1995,8 @@ def main(argv=None):
     parser.add_argument("--root-authorized-ordinary-input", action="store_true")
     parser.add_argument("--profiles", type=Path, help="production profile export copied inside exact run directory")
     parser.add_argument("--pickup-first", action="store_true", help="continuous fresh chest pickup then held AttachContainer")
+    parser.add_argument("--held-cover-probe", action="store_true",
+                        help="OpenCover only: held 3cm/20deg CONTROL/+EPS/-EPS/RESTORE with joint custody/lid observations")
     parser.add_argument("--step-ms", type=int, default=0, help="0 chooses min(60ms,maxInputGapNs/2) from production policy")
     args = parser.parse_args(argv)
     driver = None
@@ -2008,6 +2029,7 @@ def main(argv=None):
             print(json.dumps(result, separators=(",", ":"), allow_nan=False))
             return 0
         require(not args.pickup_first or args.stage == "AttachContainer", "--pickup-first requires AttachContainer")
+        require(not args.held_cover_probe or args.stage == "OpenCover", "--held-cover-probe requires OpenCover")
         require(0 <= args.step_ms <= 100, "invalid command period")
         # Keep a partially initialized instance available for handle cleanup and
         # a refusal artifact if admission fails after creating the output folder.

@@ -22,6 +22,10 @@ continuity and trigger-free jabs retained. Stable shortcut verifies76. All707-72
 agents retired. Historical scripted cycles/offline checks do not override human74
 failure. No headset acceptance/FPS gain/public release claimed. See native76 README.
 
+ROOT721/tools725 adds bounded natural held-cover comparison;16planner/22driver
+checks pass, current24 production profiles reused. Source tools only/native76
+unchanged; actualgame/renderedlid/headset confirmation pending. See tools725 README.
+
 Earlier native74/ROOT669 was installed and setup-validated; fallback73/settings/cache verified.
 Native sourcef55fe8e is pushed. Both normal architectures and mapped-reader,
 hardware-resource and CRT-exit retention checks passed. Stable private shortcut74

@@ -233,6 +233,159 @@ class FeedSimulationPlanTests(unittest.TestCase):
         self.assertLessEqual(d, distance)
         self.assertLessEqual(r, angle)
 
+    def cover_probe_case(self, row):
+        # All ownership/receipt fields below are invented fixtures. Only the
+        # registered geometry/policy comes from the unchanged production export.
+        before = synthetic_snapshot(row)
+        local = p.multiply(before["mapping"]["rawLeftWristWorldMeters"],
+                           p.inverse(before["mapping"]["weaponWorldMeters"]))
+        natural = p.multiply(p.along(p.identity(), math.radians(20)), local)
+        set_wrist(before, p.multiply(natural, before["mapping"]["weaponWorldMeters"]))
+        before["feedObservation"] = dict(observations="independent_atomics_not_native_proof",
+            submit_attempts=1, receipts_accepted=1, latest_tick=dict(pending=False))
+        plan = p.plan(self.profiles, before, "OpenCover", NOW, before["nonce"], held_cover_probe=True)
+        acquire = next(t for t in plan["schedule"] if t["phase"] == "acquire")
+        acquired = synthetic_snapshot(row, now=NOW+100_000_000, sequence=102)
+        acquired["feed"]["revision"] = 22
+        set_wrist(acquired, emitted_wrist(before, acquire))
+        add_synthetic_feed_claim(row, acquired, "OpenCover")
+        # Native contact presentation constrains translation, retaining the
+        # actual acquisition orientation (Bc2PhysicalFeed::GripTarget).
+        bound = p.multiply(acquired["mapping"]["rawLeftWristWorldMeters"],
+                           p.inverse(acquired["mapping"]["weaponWorldMeters"]))
+        motion = row["operations"]["OpenCover"]["motion"]
+        bound[3] = p.multiply(motion["motionFromContact"], motion["weaponFromMotion"])[3]
+        acquired["feed"]["mechanismWristWorldMeters"] = p.multiply(bound, acquired["mapping"]["weaponWorldMeters"])
+        claim = p.held_feed(self.profiles, row, acquired, NOW+100_000_000, plan, NOW+80_000_000)
+        anchor = p.cover_wrist_in_hinge(acquired)
+        def held(target, now, sequence):
+            snapshot = synthetic_snapshot(row, now=now, sequence=sequence)
+            set_wrist(snapshot, emitted_wrist(before, target))
+            add_synthetic_feed_claim(row, snapshot, "OpenCover")
+            feed = snapshot["feed"]
+            feed["revision"] = sequence
+            feed["coverRadians"] = row["geometry"]["coverTravelRadians"]
+            feed["weaponFromCoverHinge"] = p.multiply(p.along(p.identity(), feed["coverRadians"]),
+                                                     row["geometry"]["weaponFromHinge"])
+            feed["mechanismWristWorldMeters"] = p.multiply(p.multiply(anchor, feed["weaponFromCoverHinge"]),
+                                                          feed["originalWeaponWorldMeters"])
+            snapshot["feedObservation"] = dict(observations="independent_atomics_not_native_proof",
+                submit_attempts=2, receipts_accepted=2, latest_tick=dict(pending=False))
+            return snapshot
+        return before, plan, claim, anchor, held
+
+    def test_held_cover_probe_natural_acquisition_and_one_bounded_comparison_all24(self):
+        for row in self.profiles["profiles"]:
+            with self.subTest(asset=row["asset"], key=row["key"]):
+                before, plan, claim, anchor, held = self.cover_probe_case(row)
+                self.assert_schedule(plan, before)
+                self.assertEqual(plan["pickup"], "actual observed offset")
+                probe = [t for t in plan["schedule"] if t["phase"].startswith("held_probe_")]
+                named = {t["phase"]: t for t in probe if t["phase"] != "held_probe_transition"}
+                self.assertEqual(list(named), ["held_probe_"+n for n in ("control", "positive", "negative", "restore")])
+                control = emitted_wrist(before, named["held_probe_control"])
+                for name in ("positive", "negative"):
+                    distance, angle = p.pose_error(control, emitted_wrist(before, named["held_probe_"+name]))
+                    self.assertAlmostEqual(distance, .03, places=6)
+                    self.assertAlmostEqual(angle, math.radians(20), places=6)
+                self.assert_pose(control, emitted_wrist(before, named["held_probe_restore"]), 1e-8, 1e-7)
+                previous = None
+                for index, target in enumerate(probe):
+                    now = NOW+200_000_000+index*20_000_000
+                    snapshot = held(target, now, 104+index)
+                    previous = p.held_cover_observation(self.profiles, row, snapshot, now, plan, target,
+                        now-20_000_000, claim, anchor, before["feedObservation"], previous)
+                    self.assertFalse(previous["nativeReceiptProof"])
+                    if target["phase"] == "held_probe_positive":
+                        with self.assertRaisesRegex(p.Refusal, "actual raw contact"):
+                            p.held_feed(self.profiles, row, snapshot, now, plan, now-20_000_000)
+
+    def test_held_cover_probe_rejects_custody_pose_and_source_loss_despite_completed_action(self):
+        row = self.profiles["profiles"][0]
+        before, plan, claim, anchor, held = self.cover_probe_case(row)
+        control = next(t for t in plan["schedule"] if t["phase"] == "held_probe_control")
+        target = next(t for t in plan["schedule"] if t["phase"] == "held_probe_positive")
+        first = held(control, NOW+200_000_000, 104)
+        previous = p.held_cover_observation(self.profiles, row, first, NOW+200_000_000, plan, control,
+            NOW+180_000_000, claim, anchor, before["feedObservation"])
+        base = held(target, NOW+240_000_000, 106)
+        faults = {
+            "lost_claim": lambda s: s["feed"].update(mechanismClaim=None),
+            "different_token": lambda s: s["feed"]["mechanismClaim"]["token"].update(id=29),
+            "closed_lid": lambda s: s["feed"].update(coverRadians=0, weaponFromCoverHinge=row["geometry"]["weaponFromHinge"]),
+            "wrist_detached": lambda s: s["feed"]["mechanismWristWorldMeters"][3].__setitem__(0, 4),
+            "old_command": lambda s: s["feed"]["mechanismInput"].update(observedNs=NOW),
+            "expired_claim": lambda s: s["feed"]["mechanismClaim"].update(deadlineNs=NOW),
+            "other_part": lambda s: s["feed"]["mechanismClaim"]["token"]["contact"].update(id=1),
+            "other_owner": lambda s: s["feed"]["mechanismClaim"]["token"]["owner"].update(actor=1),
+            "other_lifetime": lambda s: s["feed"].update(lifetime=99),
+            "different_hand_input": lambda s: s["input"]["hands"][0]["grip"]["position"].__setitem__(0, 8),
+            "no_receipt": lambda s: s["feedObservation"].update(receipts_accepted=1),
+            "second_action": lambda s: s["feedObservation"].update(submit_attempts=3, receipts_accepted=3),
+            "pending": lambda s: s["feedObservation"]["latest_tick"].update(pending=True),
+        }
+        for name, fault in faults.items():
+            with self.subTest(fault=name):
+                snapshot = copy.deepcopy(base)
+                fault(snapshot)
+                with self.assertRaises(p.Refusal):
+                    p.held_cover_observation(self.profiles, row, snapshot, NOW+240_000_000, plan, target,
+                        NOW+220_000_000, claim, anchor, before["feedObservation"], previous)
+
+    def test_driver_held_cover_probe_stops_on_joint_observation_failure(self):
+        spec = importlib.util.spec_from_file_location("feed_probe_driver", ROOT / "tools/drive_bc2_feed_simulation.py")
+        driver = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(driver)
+        row = self.profiles["profiles"][0]
+        before, _, _, anchor, held = self.cover_probe_case(row)
+        for fault in (None, "claim", "lid"):
+            with self.subTest(fault=fault):
+                clock, sent = [NOW], []
+                instance = driver.Driver.__new__(driver.Driver)
+                instance.profiles, instance.args = self.profiles, argparse.Namespace(step_ms=20, held_cover_probe=True)
+                instance.reference, instance.snapshot_index = None, 1
+                instance.plans, instance.commands, instance.last_commit = [], 0, None
+                instance.deadline, instance.last_write = NOW+10_000_000_000, 0
+                instance.artifacts = mock.Mock()
+                def fresh():
+                    clock[0] += 20_000_000
+                    if not sent:
+                        return before, b"synthetic", NOW
+                    target = sent[-1]
+                    snapshot = held(target, clock[0], 102+len(sent))
+                    if target["phase"] == "acquire":
+                        snapshot["feed"]["coverRadians"] = 0
+                        snapshot["feed"]["weaponFromCoverHinge"] = row["geometry"]["weaponFromHinge"]
+                        snapshot["feed"]["mechanismWristWorldMeters"] = p.multiply(
+                            p.multiply(anchor, row["geometry"]["weaponFromHinge"]), snapshot["feed"]["originalWeaponWorldMeters"])
+                    if target["phase"] == "held_probe_positive":
+                        if fault == "claim":
+                            snapshot["feed"]["mechanismClaim"] = None
+                        elif fault == "lid":
+                            snapshot["feed"].update(coverRadians=0, weaponFromCoverHinge=row["geometry"]["weaponFromHinge"])
+                    return snapshot, b"synthetic", clock[0]
+                def send(lines, expected=None, source_deadline=None, final_release=False):
+                    if source_deadline is not None:
+                        self.assertLess(clock[0], source_deadline)
+                    sent.append(expected)
+                    instance.last_write = instance.last_commit = clock[0]
+                instance.fresh, instance.send = fresh, send
+                instance.pause_until = lambda deadline: clock.__setitem__(0, max(clock[0], deadline))
+                instance.accept_snapshot = mock.Mock()
+                instance.observe_stage_receipt = mock.Mock()
+                with mock.patch.object(driver.time, "perf_counter_ns", side_effect=lambda: clock[0]):
+                    if fault:
+                        with self.assertRaises(driver.REFUSAL):
+                            instance.stage("OpenCover")
+                        self.assertEqual(sent[-1]["phase"], "held_probe_positive")
+                        instance.observe_stage_receipt.assert_not_called()
+                    else:
+                        instance.stage("OpenCover")
+                        self.assertEqual(sent[-1]["phase"], "release")
+                        instance.observe_stage_receipt.assert_called_once()
+                        phases = [v["phase"] for v in instance.plans[-1]["heldCoverObservations"]]
+                        self.assertIn("held_probe_restore", phases)
+
     def assert_schedule(self, result, snapshot):
         self.assertFalse(result["nativeAcceptance"])
         self.assertFalse(result["executionAuthorized"])

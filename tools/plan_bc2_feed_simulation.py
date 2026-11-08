@@ -304,8 +304,8 @@ def held_supply(profiles, row, snapshot, now, pickup_plan):
     return obj
 
 
-def held_feed(profiles, row, snapshot, now, acquisition_plan, command_written_ns):
-    """Require native ownership after the actual squeeze, before moving a part."""
+def _owned_feed(profiles, row, snapshot, now, acquisition_plan, command_written_ns):
+    """Original-source ownership gates shared by acquisition and held observation."""
     selected = admit(profiles, snapshot, now, integer(snapshot["nonce"]))
     stage = acquisition_plan["stage"]
     require(stage in ("OpenCover", "DetachContainer", "SeatFeed", "CloseCover"),
@@ -355,13 +355,73 @@ def held_feed(profiles, row, snapshot, now, acquisition_plan, command_written_ns
             and all(preserved_pose_equal(inp[k], acquisition_plan["preserve"][k]) for k in ("referenceHead", "head"))
             and preserved_pose_equal(inp["hands"][1]["grip"], acquisition_plan["preserve"]["rightGrip"]),
             "feed acquisition reference/right-hand basis changed")
-    distance, angle = pose_error(rigid(feed["mechanismWristWorldMeters"]),
+    return claim
+
+
+def held_feed(profiles, row, snapshot, now, acquisition_plan, command_written_ns):
+    """Require native ownership and actual contact after squeeze, before motion."""
+    claim = _owned_feed(profiles, row, snapshot, now, acquisition_plan, command_written_ns)
+    distance, angle = pose_error(rigid(snapshot["feed"]["mechanismWristWorldMeters"]),
                                  rigid(snapshot["mapping"]["rawLeftWristWorldMeters"]))
-    policy = motion["policy"]
+    policy = row["operations"][acquisition_plan["stage"]]["motion"]["policy"]
     require(distance <= finite(policy["pathToleranceMeters"])
             and angle <= finite(policy["orientationToleranceRadians"]),
             "reobserve feed acquisition after its actual raw contact arrives")
     return claim
+
+
+def cover_wrist_in_hinge(snapshot):
+    feed = snapshot["feed"]
+    return rigid(multiply(multiply(rigid(feed["mechanismWristWorldMeters"]),
+                                   inverse(rigid(feed["originalWeaponWorldMeters"]))),
+                          inverse(rigid(feed["weaponFromCoverHinge"]))))
+
+
+def held_cover_observation(profiles, row, snapshot, now, plan, target, written_ns,
+                           acquired_claim, acquired_wrist, before_observation, previous=None):
+    """Observe completed-held cover custody and pose together, never grant a receipt.
+
+    Bc2PhysicalFeed's completedHold renews the original token while gripped and
+    freezes its endpoint target. Raw wrist deviation is intentional here; the
+    strict acquisition-contact check remains in held_feed above.
+    """
+    require(plan.get("heldCoverProbe") is not None and plan["stage"] == "OpenCover"
+            and target["phase"].startswith("held_probe_"), "not a held cover probe")
+    claim = _owned_feed(profiles, row, snapshot, now, plan, written_ns)
+    require(claim["token"] == acquired_claim["token"], "held cover changed its acquired token")
+    actual = from_pose(snapshot["input"]["hands"][0]["grip"])
+    expected = from_pose({"position": target["positionMeters"],
+                          "orientation": ypr_quaternion(target["yawPitchRollDegrees"])})
+    require(all(e <= cap for e, cap in zip(pose_error(actual, expected), (.0002, .001))),
+            "held cover observation precedes actual perturbed controller input")
+    feed, observation = snapshot["feed"], snapshot["feedObservation"]
+    require(observation["observations"] == before_observation["observations"]
+            == "independent_atomics_not_native_proof"
+            and integer(observation["submit_attempts"]) > integer(before_observation["submit_attempts"])
+            and integer(observation["receipts_accepted"]) > integer(before_observation["receipts_accepted"])
+            and observation["latest_tick"]["pending"] is False,
+            "held cover lacks completed-action observation; native receipt review still required")
+    full = finite(row["geometry"]["coverTravelRadians"])
+    expected_hinge = multiply(along(identity(), full), rigid(row["geometry"]["weaponFromHinge"]))
+    require(abs(finite(feed["coverRadians"])-full) <= .005
+            and all(e <= cap for e, cap in zip(pose_error(rigid(feed["weaponFromCoverHinge"]), expected_hinge),
+                                               (.0005, .005))), "held cover left its open endpoint")
+    wrist = cover_wrist_in_hinge(snapshot)
+    require(all(e <= cap for e, cap in zip(pose_error(wrist, acquired_wrist), (.0005, .005))),
+            "held cover wrist separated from its acquired lid anchor")
+    if previous is not None:
+        require(integer(snapshot["nonce"]) != integer(previous["nonce"])
+                and integer(claim["inputSequence"]) > integer(previous["claim"]["inputSequence"])
+                and integer(feed["revision"]) > integer(previous["feedRevision"]),
+                "held cover probe reused an observation")
+        require(integer(observation["submit_attempts"]) == integer(previous["submitAttempts"])
+                and integer(observation["receipts_accepted"]) == integer(previous["receiptsAccepted"]),
+                "held cover perturbation caused another action observation")
+    return {"phase": target["phase"], "nonce": snapshot["nonce"], "claim": claim,
+            "feedRevision": feed["revision"], "coverRadians": feed["coverRadians"],
+            "hingeFromWrist": wrist, "rawWristWorldMeters": snapshot["mapping"]["rawLeftWristWorldMeters"],
+            "submitAttempts": observation["submit_attempts"], "receiptsAccepted": observation["receipts_accepted"],
+            "nativeReceiptProof": False}
 
 
 def evidence(sample, owner, physical_generation, now):
@@ -484,11 +544,15 @@ def admit(profiles, snapshot, now, nonce):
     return row
 
 
-def plan(profiles, snapshot, stage, now_ns, expected_nonce, step_ns=20_000_000, pickup_plan=None, contact="chest"):
+def plan(profiles, snapshot, stage, now_ns, expected_nonce, step_ns=20_000_000, pickup_plan=None, contact="chest",
+         held_cover_probe=False):
     """Return a geometric schedule. Native eligibility remains outside this tool."""
     supply_pickup = stage == "SupplyPickup"
     require(stage in STAGES or supply_pickup, "stage has no implemented measured trajectory")
     row = admit(profiles, snapshot, integer(now_ns), integer(expected_nonce))
+    require(not held_cover_probe or (stage == "OpenCover"
+            and row["mechanism"]["contacts"][0]["orientation"] == "Acquired"),
+            "held cover probe requires OpenCover with production Acquired contact")
     motion = row["operations"]["AttachContainer" if supply_pickup else stage]["motion"]
     require(motion is not None and motion["measured"] is True and not motion["returnToStart"], "missing measured production motion")
     policy = motion["policy"]
@@ -617,6 +681,22 @@ def plan(profiles, snapshot, stage, now_ns, expected_nonce, step_ns=20_000_000, 
     endpoint_index = len(local_schedule)-1
     if not supply_pickup:
         local_schedule += [("endpoint_dwell", 1, motion_samples[-1]) for _ in range(math.ceil(dwell/step_ns))]
+        if held_cover_probe:
+            # One causal comparison, no angle grid. Completed-held native cover
+            # policy anchors the hand/lid independently of the raw wrist; strict
+            # motion tolerances exported above are not its held-pose limits.
+            endpoint = motion_samples[-1]
+            local_schedule.append(("held_probe_control", 1, endpoint))
+            prior = endpoint
+            for phase, sign in (("positive", 1), ("negative", -1), ("restore", 0)):
+                perturb = along(identity(), sign*math.radians(20))
+                perturb[3][2] = sign*.03
+                target = multiply(perturb, endpoint)
+                path = lambda t, a=prior, z=target: blend(a, z, t)
+                samples = subdivide([path, lambda t: inverse_target(path(t))])
+                local_schedule += [("held_probe_transition", 1, value) for value in samples[1:-1]]
+                local_schedule.append(("held_probe_"+phase, 1, samples[-1]))
+                prior = target
         local_schedule += [("release", 0, motion_samples[-1])]
     gesture_ns = (len(local_schedule)-1-acquire_index)*step_ns
     require(gesture_ns <= maximum and (len(local_schedule)-1)*step_ns <= maximum,
@@ -656,6 +736,9 @@ def plan(profiles, snapshot, stage, now_ns, expected_nonce, step_ns=20_000_000, 
             "sourceFeedLifetime": feed["lifetime"] if feed else None,
             "sourceValidUntilNs": source_until, "owner": snapshot["owner"],
             "heldSupply": supply_object, "requiresPostPickupReobservation": supply_pickup,
+            "heldCoverProbe": ({"translationMeters": .03, "wristRotationRadians": math.radians(20),
+                                "contract": "completed-held native cover; original acquisition gates retained"}
+                               if held_cover_probe else None),
             "requiresPostAcquisitionReobservation": not supply_pickup and not continuation,
             "fieldSources": {"mapping": "original admitted shot input; LH row metres, never rescale rotation/translation",
                              "referenceAndGrips": "same original input generation and XR tracking/reference space",
@@ -704,6 +787,7 @@ def main(argv=None):
     parser.add_argument("--output", type=Path, required=True, help="offline JSON artifact; command.txt/state.json refused")
     parser.add_argument("--now-ns", type=int, help="explicit historical QPC nanoseconds; omitted uses local perf_counter_ns")
     parser.add_argument("--step-ms", type=int, default=20)
+    parser.add_argument("--held-cover-probe", action="store_true", help="OpenCover held 3cm/20deg comparison")
     args = parser.parse_args(argv)
     try:
         require(args.output.suffix.lower() == ".json" and args.output.name.lower() not in
@@ -715,7 +799,7 @@ def main(argv=None):
         pickup = load_json(args.pickup_plan, 8*1024*1024)[0] if args.pickup_plan else None
         require(pickup is None or args.stage == "AttachContainer", "pickup prerequisite only applies to AttachContainer")
         result = plan(profiles, snapshot, args.stage, evaluated, args.nonce, args.step_ms*1_000_000,
-                      pickup_plan=pickup, contact=args.supply_contact)
+                      pickup_plan=pickup, contact=args.supply_contact, held_cover_probe=args.held_cover_probe)
         result["evaluationClock"] = "explicit historical QPC nanoseconds" if args.now_ns is not None else "local QPC perf_counter_ns"
         result["sourceHashes"] = {"profilesJson": profile_hash, "snapshotJson": snapshot_hash,
                                   "planner": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
