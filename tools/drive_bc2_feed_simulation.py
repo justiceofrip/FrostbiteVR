@@ -798,13 +798,18 @@ def post_reload_input_unmodified(row):
 
 def audit_post_reload_shot(flow, boundary):
     """Positive retained native Fire evidence; never claims exhaustive capture."""
-    fixed_shot = boundary["schema"] == "bc2vr.fixed-post-reload-pulse.v1"
-    require(boundary["schema"] in ("bc2vr.feed-post-reload-pulse.v1", "bc2vr.fixed-post-reload-pulse.v1")
+    preparation = boundary["schema"] == "bc2vr.fixed-preparation-pulse.v1"
+    fixed_shot = preparation or boundary["schema"] == "bc2vr.fixed-post-reload-pulse.v1"
+    if preparation:
+        require(boundary["preparationOnly"] is True and "closure" not in boundary
+                and "closeResultSha256" not in boundary, "preparation cannot claim reload completion")
+    require(boundary["schema"] in ("bc2vr.feed-post-reload-pulse.v1", "bc2vr.fixed-post-reload-pulse.v1", "bc2vr.fixed-preparation-pulse.v1")
             and boundary["status"] == "native_shot_observation_pending"
             and boundary["nativeAcceptance"] is False, "missing completed pulse boundary")
     start, release, end = (integer(boundary[k]) for k in
                            ("pressWrittenNs", "releaseWrittenNs", "releaseCommittedNs"))
-    begin, finish = integer(boundary["neutralWrittenNs"]), integer(boundary["observationEndNs"])
+    begin = integer(boundary["preparationObservedNs"] if preparation else boundary["neutralWrittenNs"])
+    finish = integer(boundary["observationEndNs"])
     require(0 < begin < start < release <= end < finish
             and release - start <= 100_000_000 and end - release <= 250_000_000
             and finish - end <= NS,
@@ -817,9 +822,10 @@ def audit_post_reload_shot(flow, boundary):
     drops = {k: integer(flow[k]) for k in
              ("dropped", "record_lock_drops", "record_begin_lock_drops", "record_end_lock_drops", "owner_lock_drops")}
     require(all(v >= 0 for v in drops.values()), "invalid native drop counters")
-    fixed_baseline = boundary["closure"]["fixedPlan"]["baseline"] if fixed_shot else None
+    fixed_baseline = (boundary["preparation"] if preparation else
+                      boundary["closure"]["fixedPlan"]["baseline"] if fixed_shot else None)
     if fixed_shot:
-        require(boundary["closure"]["family"] == "fixed"
+        require((preparation or boundary["closure"]["family"] == "fixed")
                 and boundary["beforeCounts"] == fixed_baseline["counts"]
                 and boundary["afterCounts"] == dict(fixed_baseline["counts"], loaded=0)
                 and boundary["beforeCounts"]["loaded"] == boundary["beforeCounts"]["capacity"] == 1,
@@ -926,7 +932,8 @@ def audit_post_reload_shot(flow, boundary):
                 for r in window for s in (r.get("before"), r.get("after"))
                 if isinstance(s, dict) and s.get("firing") in firing),
             "native selected firing copy changed owner inside the observation")
-    return dict(status="native_post_reload_shot_observed", nativeShotObserved=True,
+    return dict(status="native_fixed_preparation_shot_observed" if preparation else "native_post_reload_shot_observed",
+                **({"preparationOnly": True, "reloadCompleted": False} if preparation else {}), nativeShotObserved=True,
                 loadedBefore=counts[0][0], loadedAfter=counts[0][1], reserve=counts[0][2],
                 roundsObserved=len(tokens[0]), events=events, observedBounds=bounds,
                 completeWindow=False, nativeDropCounters=drops,

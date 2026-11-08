@@ -169,7 +169,7 @@ if(BUILD_TESTING)
   add_executable(NativeResolutionControllerTests tests/NativeResolutionControllerTests.cpp)
   target_link_libraries(NativeResolutionControllerTests PRIVATE BC2Camera)
   add_test(NAME NativeResolutionController COMMAND NativeResolutionControllerTests)
-  foreach(name TrackedBodyAnchor Bc2MuzzleAdmission Bc2VehicleCameraEvidence)
+  foreach(name TrackedBodyAnchor Bc2MuzzleAdmission Bc2VehicleCameraEvidence OriginalFiringMonitor)
     add_executable(${name}Tests tests/${name}Tests.cpp)
     target_link_libraries(${name}Tests PRIVATE FvrCore BC2Camera)
     add_test(NAME ${name} COMMAND ${name}Tests)
@@ -1554,6 +1554,14 @@ if(BUILD_TESTING)
     COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_bc2_provision_target.py")
   add_test(NAME NativeBatchEvidence
     COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_batch.py")
+  add_test(NAME Bc2MagazinePreparation
+    COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_bc2_magazine_preparation.py")
+  add_test(NAME Bc2PendingOwner
+    COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_bc2_pending_owner.py")
+  add_test(NAME Bc2FixedPreparation
+    COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_bc2_fixed_preparation.py")
+  add_test(NAME Bc2DrawBindingGeneration
+    COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_bc2_draw_binding_generation.py")
 endif()
 
 # Developer-only retained campaign provisioning. This does not change packaging

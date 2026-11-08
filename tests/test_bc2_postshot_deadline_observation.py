@@ -127,7 +127,9 @@ class PostshotDeadlineTests(unittest.TestCase):
 
     def test_release_window_cannot_renew_expired_down_source(self):
         h, v, path = self.scenario(press_publish=90)
-        with self.assertRaisesRegex(d.REFUSAL, 'original command publication deadline'):
+        # Owner custody can detect the same expired source during its final
+        # read gate before the rename gate. Neither phase may publish DOWN.
+        with self.assertRaises(d.ReadDeadlineExceeded):
             v.post_reload_shot(path)
         self.assertEqual(self.commands(h), [['grip l 0', 'trigger r 0']])
         self.assertFalse(v.pending_command or v.held_trigger)

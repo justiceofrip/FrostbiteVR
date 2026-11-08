@@ -5,6 +5,7 @@ namespace fvr::bc2::campaignProvisioning {
 std::optional<ProcessIdentity> Identify(std::span<const std::byte> executableImage)noexcept;
 // NativeProbe owns installation and the worker. All values default to disabled.
 bool Install(const ProcessIdentity&,const ReloadStateMemory&,bool explicitRequest=false)noexcept;
+const char* StartupFailure()noexcept;
 bool Start()noexcept;
 bool Stop()noexcept;
 bool Submit(const Request&)noexcept;

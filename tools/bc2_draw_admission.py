@@ -91,6 +91,7 @@ class Session:
     last_now_ns: int = 0
     last_nonce: int = 0
     last_observed_ns: int = 0
+    last_display_cohort: int = 0
     identity: str = ""
     mapping_identity: str = ""
     previous_evidence: str = ""
@@ -264,7 +265,16 @@ def _mapping_identity(snapshot, binding):
                          configuration={key: c[key] for key in (
                              "asset", "configurationPath", "configurationPathPointer", "soleConfiguredArray")}))
     rows.sort(key=lambda row: row["assignment"]["slot"])
-    return freeze(dict(binding=binding, count=d["count"], nativeCount=d["nativeCount"], rows=rows))
+    # A newer producer supplies a lifetime counter over EVERY coherent native
+    # read, independent of display availability. Keep legacy cohort exact when
+    # that evidence is absent; never infer it from equal pointers or names.
+    native_generation = d.get("nativeBindingGeneration")
+    identity_binding = dict(binding)
+    if native_generation is not None:
+        require(integer(native_generation) > 0, "invalid native binding generation")
+        identity_binding.pop("cohort")
+    return freeze(dict(binding=identity_binding, nativeBindingGeneration=native_generation,
+                       count=d["count"], nativeCount=d["nativeCount"], rows=rows))
 
 
 def _identity(snapshot):
@@ -358,10 +368,13 @@ def assess(snapshot, now_ns, context, session, full_admission, observe_admission
         require(ready or unknown, "explicit unsupported/disabled or inconsistent inventory evaluation")
         d = snapshot["bodyInventory"]
         mapping_identity, binding = session.mapping_identity, None
+        display_cohort = session.last_display_cohort
         if d["available"] is True:
             require(callable(full_admission), "complete original admission callback required")
             binding = full_admission(snapshot, now_ns)
             require(isinstance(binding, dict) and binding, "complete exact mapping binding required")
+            display_cohort = integer(d["cohort"])
+            require(display_cohort >= session.last_display_cohort, "display cohort regressed")
             mapping_identity = _mapping_identity(snapshot, binding)
             require(not session.mapping_identity or mapping_identity == session.mapping_identity,
                     "source complete mapping changed")
@@ -384,6 +397,7 @@ def assess(snapshot, now_ns, context, session, full_admission, observe_admission
             current_evidence["mapping"] = json.loads(session.previous_evidence)["mapping"]
         current = replace(session, observations_used=used, last_now_ns=now_ns,
                           last_nonce=nonce, last_observed_ns=snapshot["observed_ns"],
+                          last_display_cohort=display_cohort,
                           identity=identity, mapping_identity=mapping_identity,
                           previous_evidence=freeze(current_evidence))
         if ready:

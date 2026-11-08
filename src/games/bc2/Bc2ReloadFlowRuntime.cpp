@@ -5,11 +5,14 @@
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
 #include "Bc2SelectedKnifeNative.h"
 #include "Bc2KnifeTimingObservation.h"
+#endif
+#if defined(FVR_BC2_CHEST_KNIFE_DRAW_RETURN) || defined(FVR_BC2_CAMPAIGN_PROVISIONING)
 #include "Bc2OriginalFiringUnwind.h"
 #endif
 #include "Bc2OriginalFiringObserver.h"
 #ifdef FVR_BC2_CAMPAIGN_PROVISIONING
 #include "Bc2CampaignProvisioningAdmission.h"
+#include "Bc2OriginalFiringMonitor.h"
 #endif
 #ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
 #include "Bc2PrivateMountedUpdate419.h"
@@ -582,6 +585,9 @@ std::optional<Lease> abortOwner;std::atomic<std::uint64_t> cleanupOwnerEpoch=1;
 std::atomic<std::int64_t> cleanupObservationDeadline=0;
 std::int64_t frequency=0,startNs=0;bool installed=false,started=false,drained=false;
 OriginalFiringObserver independentFiringObserver{};
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+OriginalFiringObserver campaignFiringMonitor{};
+#endif
 ReloadRecordWindow recordWindowClock;
 // Set only by the existing startup diagnostic opt-in, before Start publishes enabled.
 bool feedRecordsDeferred=false;
@@ -2253,8 +2259,12 @@ NativeGuardFrame::NativeGuardFrame(Observation& source,unsigned f,unsigned c,con
 NativeGuardFrame::~NativeGuardFrame(){nativeGuardFrame=previous;}
 template<class Body,class... Scopes>
 void RunChestFiringBody(Body&& body,Scopes&... scopes) {
-#if defined(FVR_BC2_CHEST_KNIFE_DRAW_RETURN) && !defined(FVR_BC2_VEHICLE_MOUNTED_PROBE)
-    if(independentFiringObserver.abort){
+#if (defined(FVR_BC2_CHEST_KNIFE_DRAW_RETURN) || defined(FVR_BC2_CAMPAIGN_PROVISIONING)) && !defined(FVR_BC2_VEHICLE_MOUNTED_PROBE)
+    if(independentFiringObserver.abort
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+        ||campaignFiringMonitor.abort
+#endif
+    ){
         auto* const previousGuard=nativeGuardFrame;
         auto abort=[&]()noexcept{
             nativeGuardFrame=previousGuard;
@@ -2803,6 +2813,9 @@ void __fastcall Update(void* self,void*,void* context,unsigned extra){
     selectedKnife::ObserveUpdate({firing,unsigned(context),caller,extra});
 #endif
 #ifndef FVR_BC2_VEHICLE_MOUNTED_PROBE
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+    OriginalFiringMonitorScope campaignObservation(campaignFiringMonitor,{firing,unsigned(context),caller,extra});
+#endif
     OriginalFiringScope independentObservation(independentFiringObserver,{firing,unsigned(context),caller,extra});
 #endif
     NativeCycleCallback cycleCallback(NativeCycleCallbackKind::Update,firing,unsigned(context));
@@ -2815,7 +2828,13 @@ void __fastcall Update(void* self,void*,void* context,unsigned extra){
         );
     };
 #if defined(FVR_BC2_CHEST_KNIFE_DRAW_RETURN) && !defined(FVR_BC2_VEHICLE_MOUNTED_PROBE)
-    RunChestFiringBody(body,observation,cycleCallback,independentObservation,knifeTiming,activeScope);
+    RunChestFiringBody(body,observation,cycleCallback,independentObservation,
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+        campaignObservation,
+#endif
+        knifeTiming,activeScope);
+#elif defined(FVR_BC2_CAMPAIGN_PROVISIONING) && !defined(FVR_BC2_VEHICLE_MOUNTED_PROBE)
+    RunChestFiringBody(body,observation,cycleCallback,independentObservation,campaignObservation,activeScope);
 #else
     body();
 #endif
@@ -3557,6 +3576,17 @@ bool CampaignProvisioningSettled(const ReloadStateOwner& owner,std::int64_t now)
     return ammo&&campaignProvisioning::SettledItem(*ammo,owner,now,view,nativePumpCandidate);
 #else
     (void)owner;(void)now;return false;
+#endif
+}
+#endif
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+bool RegisterOriginalFiringMonitor(const OriginalFiringObserver& observer)noexcept {
+#ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
+    (void)observer;return false; // The isolated mounted dispatcher has no side slot.
+#else
+    if(!installed||started||enabled.load()||active.load()||campaignFiringMonitor.enter||
+       !ValidOriginalFiringMonitor(observer))return false;
+    campaignFiringMonitor=observer;return true;
 #endif
 }
 #endif
@@ -5223,6 +5253,9 @@ bool EnablePumpHoldDiagnostic()noexcept{return false;}
 #ifdef FVR_BC2_CAMPAIGN_PROVISIONING
 std::optional<ReloadServerSnapshot> ReadCampaignProvisioningSource(std::int64_t)noexcept{return {};}
 bool CampaignProvisioningSettled(const ReloadStateOwner&,std::int64_t)noexcept{return false;}
+#endif
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+bool RegisterOriginalFiringMonitor(const OriginalFiringObserver&)noexcept{return false;}
 #endif
 bool RegisterOriginalFiringObserver(const OriginalFiringObserver&)noexcept{return false;}
 bool RemoveOriginalFiringObserver(void*)noexcept{return false;}

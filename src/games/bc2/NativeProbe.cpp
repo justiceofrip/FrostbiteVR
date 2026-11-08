@@ -3937,8 +3937,9 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             for(const auto name:{L"campaign-provision-request.bin",L"campaign-provision-source.bin",L"campaign-provision-receipt.bin"})
                 Require(!std::filesystem::exists(output.parent_path()/name),"Campaign provisioning requires fresh private transport");
             const auto identity=fvr::bc2::campaignProvisioning::Identify(bytes);
-            Require(identity&&fvr::bc2::campaignProvisioning::Install(*identity,fvr::bc2::gameplay::CampaignProvisioningMemory(),true),
-                "Campaign provisioning code, observer ownership or input admission unavailable");
+            Require(identity.has_value(),"Campaign provisioning process identity unavailable");
+            const bool provisioningInstalled=fvr::bc2::campaignProvisioning::Install(*identity,fvr::bc2::gameplay::CampaignProvisioningMemory(),true);
+            Require(provisioningInstalled,fvr::bc2::campaignProvisioning::StartupFailure());
         }
 #endif
         hooksEnabled=true;

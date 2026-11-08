@@ -8,6 +8,7 @@ ordinary draw observations retain the base driver's existing ten-second bound.
 No command, transport, filesystem or clock operation runs on module import.
 """
 import copy
+import json
 from dataclasses import replace
 import time
 
@@ -159,7 +160,17 @@ def make_driver(base_class, binding_module, *, budget, clock=time.perf_counter_n
                 self.args.stow_asset, self.args.stow_config,
                 self.args.target_asset, self.args.target_config)
             expected = self.slot_binding or getattr(self.args, "observed_binding", None)
-            policy.require(expected is None or result == expected,
+            # The complete policy below still requires the SAME producer
+            # native identity generation, all mapped rows, GunHold token/request
+            # and fresh neutral source. This callback never updates history.
+            history = json.loads(budget.session.mapping_identity) if budget.session.mapping_identity else {}
+            renewed = (expected is not None
+                       and snapshot["bodyInventory"].get("nativeBindingGeneration") is not None
+                       and history.get("nativeBindingGeneration") == snapshot["bodyInventory"]["nativeBindingGeneration"]
+                       and policy.integer(snapshot["bodyInventory"]["nativeBindingGeneration"]) > 0
+                       and policy.integer(result["cohort"]) > policy.integer(expected["cohort"])
+                       and result == dict(expected, cohort=result["cohort"]))
+            policy.require(expected is None or result == expected or renewed,
                            "body/native binding changed after original admission")
             return result
 
@@ -209,6 +220,18 @@ def make_driver(base_class, binding_module, *, budget, clock=time.perf_counter_n
                                    observe_admission=self._observe_admission)
             self.artifacts.event(dict(type="draw_readiness_decision", **budget.decisions[-1]))
             if result.status == policy.Status.READY:
+                # Rebase only AFTER full pure admission, before any inherited
+                # publication. Pressed/Empty transitions never enter this path.
+                current = json.loads(result.binding)
+                prior = self.slot_binding or getattr(self.args, "observed_binding", None)
+                if prior is not None and prior != current:
+                    self.artifacts.event(dict(type="neutral_source_display_rebound",
+                        beforeCohort=prior["cohort"], afterCohort=current["cohort"],
+                        nativeBindingGeneration=snapshot["bodyInventory"]["nativeBindingGeneration"],
+                        nonce=snapshot["nonce"], commands=0))
+                    if self.slot_binding is not None:
+                        self.slot_binding = copy.deepcopy(current)
+                    self.args.observed_binding = copy.deepcopy(current)
                 self._readiness_ready, self._readiness_record = snapshot, result.observation
                 return snapshot, raw, now
             # Both unknown and refused evidence lose command-source authority.

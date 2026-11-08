@@ -1,0 +1,362 @@
+"""Deterministic shared preparation tests; synthetic evidence grants no acceptance."""
+import copy
+import importlib.util
+from pathlib import Path
+import tempfile
+from types import SimpleNamespace
+import unittest
+from unittest.mock import patch
+
+ROOT=Path(__file__).resolve().parents[1]
+
+def load(name,path):
+    spec=importlib.util.spec_from_file_location(name,path)
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);return module
+
+d=load('prepare_fixed_tests',ROOT/'tools/prepare_bc2_fixed_chamber.py')
+fixture=load('prepare_fixed_fixtures',ROOT/'tests/test_bc2_selected_shot_readiness.py')
+audit_fixture=load('prepare_fixed_audit',ROOT/'tests/test_bc2_fixed_postreload_observation.py')
+insert_fixture=load('prepare_fixed_insert',ROOT/'tests/test_bc2_reload_stimulus_geometry.py')
+NOW=1_120_000_000
+
+def snapshot():
+    _,s=fixture.SelectedShotReadinessTests().response(NOW)
+    return s
+
+def preparation_native():
+    flow,b=audit_fixture.FixedPostreloadTests().native()
+    baseline=copy.deepcopy(b['closure']['fixedPlan']['baseline'])
+    b.update(schema='bc2vr.fixed-preparation-pulse.v1',preparationOnly=True,preparation=baseline,
+             preparationObservedNs=b.pop('neutralWrittenNs'))
+    del b['closure']
+    b.pop('closeResultSha256',None)
+    return flow,b
+
+def inserted(with_pickup=False):
+    g,xf=insert_fixture.g,insert_fixture.xf
+    start=xf.NOW
+    source=insert_fixture.complete(xf.snapshot(4))
+    pickup=g.build_stimulus('fixed',None,source,start,'Pickup')
+    held=xf.held_after_pickup(source,pickup['geometryEvidence'])
+    plan=g.build_stimulus('fixed',None,held,start+200_000_000,'Insert',pickup=pickup)
+    aligned=xf.aligned_for_insert(held)
+    prior={'fixed_aligned':g.check_boundary(plan,aligned,'fixed_aligned',start+300_000_000)}
+    done=xf.completed(aligned,plan['geometryEvidence']);done['fixedContainer']['raw']['admittedAtTick']=False
+    complete=g.check_boundary(plan,done,'fixed_inserted',start+500_000_000,prior=prior)
+    result=dict(schema='bc2vr.reload-stimulus-result.v1',status='ordinary_stimulus_completed',
+        stimulusCompleted=True,boundaryChecksPassed=True,observerStopped=True,observationIncomplete=False,
+        leftGripHeld=False,pendingCommand=False,plans=[dict(family='fixed',stage=p['stage'],source=copy.deepcopy(p['source']),
+            stimulusCompleted=True,boundaryChecksPassed=True) for p in (pickup,plan)],
+        boundaries=dict(prior,fixed_inserted=complete))
+    current=xf.refresh(done,start+520_000_000,130)
+    current['fixedContainer']['lastCompletion']=copy.deepcopy(done['fixedContainer']['lastCompletion'])
+    values=plan,result,current,start+520_000_000
+    return (*values,pickup) if with_pickup else values
+
+
+class FixedCaptureCompositionTests(unittest.TestCase):
+    """Producer-shaped artifacts only; no game/input/native acceptance."""
+    def test_paired_production_order_and_final_plan_source_are_required(self):
+        plan,result,_,_,pickup=inserted(True)
+        self.assertEqual(d.paired_insertion(plan,pickup,result)['geometry']['stage'],'Insert')
+        for mutate in (
+            lambda p,r,u:r.update(plans=r['plans'][1:]),
+            lambda p,r,u:r['plans'][0].update(stimulusCompleted=False),
+            lambda p,r,u:r['plans'][1]['source'].update(nonce=999),
+            lambda p,r,u:p.update(continuesHeldCustody=False),
+            lambda p,r,u:u['geometryEvidence']['baseline'].update(nativeIdentity={}),
+            lambda p,r,u:r.update(observerStopped=False)):
+            p,r,u=copy.deepcopy((plan,result,pickup));mutate(p,r,u)
+            with self.subTest(mutate=mutate),self.assertRaises(d.transport.REFUSAL):d.paired_insertion(p,u,r)
+
+    def capture_fixture(self,run):
+        def save(path,value):
+            path.parent.mkdir(parents=True,exist_ok=True)
+            raw=d.transport.json_bytes(value);path.write_bytes(raw)
+            return d.artifact_pin(path,raw)
+        plan,result,current,now,pickup=inserted(True)
+        insert=run/'insert';capture=run/'capture-writer'
+        result['artifactDirectory']=str(insert)
+        result_pin=save(insert/'result.json',result)
+        plan_pin=save(insert/'stimulus-02.json',plan)
+        save(insert/'stimulus-01.json',pickup)
+        host=dict(pid=123,path='test-host',startTicks=1)
+        head=dict(valid=True,pos=[0,0,0],ypr=[0,0,0])
+        state=dict(pid=123,runtime='xr-sim',cmdSeq=100,lastCmd='note insert',lastCmdError='',errors=0,
+            frame=600,endFrames=600,captureSeq=1,sessionState='FOCUSED',head=head,handL=copy.deepcopy(head),
+            handR=copy.deepcopy(head),controls=dict(gripL=0,gripR=0,triggerR=0))
+        old=dict(host=host,pending=False,sequence=100,sentinel='note insert',commandSha256='old',artifactDirectory=str(insert))
+        handoff=dict(schema='bc2vr.fixed-insert-capture-handoff.v1',insertResult=result_pin,insertPlan=plan_pin,
+            owner=old,state=state,host=host,sourceSha256='source',startedNs=1_000_000_000,
+            deadlineNs=101_000_000_000,retainedNs=2_000_000_000,observationOnly=True,commandAuthority=False)
+        handoff_path=run/'handoff.json';save(handoff_path,handoff)
+        save(capture/'initial-state.json',state)
+        save(capture/'invocation.json',dict(stage=None,pickup_first=False,capture='review',menu_batches=None,
+            host=host,startedNs=2_100_000_000,driverSha256=d.transport.digest(Path(d.transport.__file__).read_bytes()),
+            plannerSha256=d.transport.digest(Path(d.transport.planner.__file__).read_bytes())))
+        metadata=run/'sim/capture/review.json'
+        settled=copy.deepcopy(state);settled.update(cmdSeq=102,lastCmd='note root-feed-test',captureSeq=2,frame=610,endFrames=610,
+            lastCapture=str(metadata.with_suffix('')))
+        commands=['shot review','note root-feed-test']
+        owner=dict(host=host,pending=False,sequence=102,sentinel=commands[-1],
+            commandSha256=d.transport.digest(('\n'.join(commands)+'\n').encode('ascii')),artifactDirectory=str(capture))
+        save(run/'live-driver-owner.json',owner)
+        save(capture/'result.json',dict(schema='bc2vr.live-feed-driver.v1',status='commands_acknowledged',commands=2,
+            plans=[],pendingCommand=False,leftGripHeld=False,triggerHeld=False,captureSequence=2,artifactDirectory=str(capture)))
+        save(capture/'capture.json',dict(path=str(metadata),captureSeq=2,width=10,height=10))
+        save(metadata,dict(name='review',frameIndex=605,sessionState='FOCUSED'))
+        events=[dict(type='command_request',atNs=2_200_000_000,beforeSequence=100,targetSequence=102,commands=commands),
+                dict(type='command_commit',writtenNs=2_210_000_000,committedNs=2_220_000_000,cleanup=False,state=settled)]
+        (capture/'events.jsonl').write_bytes(b''.join(d.transport.json_bytes(e) for e in events))
+        captures=[]
+        for eye in ('left','right'):
+            path=metadata.with_name('review_'+eye+'.png');path.write_bytes(b'deterministic fixture; not rendered evidence')
+            captures.append(dict(d.artifact_pin(path,path.read_bytes()),eye=eye))
+        driver=SimpleNamespace(run=run,host=host,manifest=dict(source_sha256='source'),state=copy.deepcopy(settled),
+            deadline=200_000_000_000,stage_deadline=200_000_000_000,
+            clearance=dict(reviewedNs=2_300_000_000,captures=captures))
+        return driver,handoff_path,capture,save,current,now
+
+    def test_actual_paired_artifact02_and_single_capture_keep_original_deadline(self):
+        with tempfile.TemporaryDirectory() as temp,patch.object(d.time,'perf_counter_ns',return_value=3_000_000_000):
+            driver,handoff,_,_,current,now=self.capture_fixture(Path(temp))
+            context=d.read_insertion(driver,Path(temp)/'insert/result.json',handoff)
+            self.assertTrue(context['plan']['path'].endswith('stimulus-02.json'))
+            self.assertTrue(context['pickup']['path'].endswith('stimulus-01.json'))
+            self.assertEqual(driver.deadline,101_000_000_000)
+            d.current_insertion(context,current,now)
+            current['fixedContainer']['lastCompletion']['outcome']['receipt']['copiesVerified']=False
+            with self.assertRaises(d.fixed.Refusal):d.current_insertion(context,current,now)
+
+    def test_capture_operation_pose_source_lineage_and_stale_pair_are_refused(self):
+        mutations=(
+            ('invocation.json',lambda x:x.update(menu_batches='movement')),
+            ('result.json',lambda x:x.update(commands=4)),
+            ('result.json',lambda x:x.update(status='refused')),
+            ('initial-state.json',lambda x:x.update(cmdSeq=101)),
+            ('initial-state.json',lambda x:x['handL']['pos'].__setitem__(0,1)),
+            ('invocation.json',lambda x:x.update(driverSha256='stale')),
+            ('capture.json',lambda x:x.update(captureSeq=1)))
+        for filename,mutate in mutations:
+            with self.subTest(filename=filename),tempfile.TemporaryDirectory() as temp,patch.object(d.time,'perf_counter_ns',return_value=3_000_000_000):
+                driver,handoff,folder,save,_,_=self.capture_fixture(Path(temp))
+                path=folder/filename;value=d.transport.read_json(path)[0];mutate(value);save(path,value)
+                with self.assertRaises(d.transport.REFUSAL):d.read_insertion(driver,Path(temp)/'insert/result.json',handoff)
+
+    def test_expiry_changed_original_source_or_noncurrent_image_refuses(self):
+        for target in ('expiry','source','image','review','partial','extra-command'):
+            with self.subTest(target=target),tempfile.TemporaryDirectory() as temp,patch.object(d.time,'perf_counter_ns',return_value=3_000_000_000):
+                driver,handoff,folder,save,_,_=self.capture_fixture(Path(temp))
+                if target in ('expiry','source'):
+                    value=d.transport.read_json(handoff)[0]
+                    if target=='expiry':value['deadlineNs']=3_000_000_000
+                    else:value['sourceSha256']='foreign'
+                    save(handoff,value)
+                elif target=='image':driver.clearance['captures'][0]['path']=str(Path(temp)/'stale.png')
+                elif target=='review':driver.clearance['reviewedNs']=1
+                elif target=='partial':
+                    path=Path(temp)/'insert/result.json';value=d.transport.read_json(path)[0];value['stimulusCompleted']=False;save(path,value)
+                else:
+                    path=folder/'events.jsonl';raw=path.read_bytes();path.write_bytes(raw+raw)
+                with self.assertRaises(d.transport.REFUSAL):d.read_insertion(driver,Path(temp)/'insert/result.json',handoff)
+
+    def test_immediate_kind4_still_joins_the_real_paired_result_without_fake_close(self):
+        with tempfile.TemporaryDirectory() as temp:
+            driver,handoff,_,save,_,_=self.capture_fixture(Path(temp))
+            original=d.transport.read_json(handoff)[0]
+            save(Path(temp)/'live-driver-owner.json',original['owner'])
+            context=d.read_insertion(driver,Path(temp)/'insert/result.json')
+            self.assertNotIn('captureHandoff',context)
+            self.assertNotIn('Close',str(context))
+
+class FixedPreparationTests(unittest.TestCase):
+    def test_native_family_selected_without_weapon_name_or_slot_alias(self):
+        for slot,kind,label in ((2,3,'first'),(5,4,'other')):
+            s=snapshot();x=s['fixedContainer'];family=s['sight']['family']
+            s['selected']['selectedSlot']=slot;x['profile']['kind']=kind
+            s['selected']['configurationPath']=x['profile']['configurationPath']=family['secondaryConfiguration']='Objects/Weapons/'+label
+            s['equipment']['asset']=family['secondaryAsset']=label
+            before=copy.deepcopy(s)
+            result=d.baseline(s,NOW)
+            self.assertEqual(result['profile']['kind'],kind)
+            self.assertEqual(s,before)
+
+    def test_nonselected_wrong_physical_primary_action_or_configuration_refuses(self):
+        mutations=(lambda s:s['sight']['family'].update(selectedSecondary=False),
+            lambda s:s['sight']['family'].update(physicalItem=999),
+            lambda s:s['sight']['family'].update(targetAction=33),
+            lambda s:s['sight']['family'].update(secondaryConfiguration='wrong'),
+            lambda s:s['sight']['family'].update(inventory=999),
+            lambda s:s['fixedContainer']['profile'].update(rigFingerprint=999))
+        for mutation in mutations:
+            s=snapshot();mutation(s)
+            with self.subTest(mutation=mutation),self.assertRaises((d.transport.REFUSAL,d.fixed.Refusal)):
+                d.baseline(s,NOW)
+
+    def test_loaded_native_copies_pending_hands_and_original_expiry_refuse(self):
+        mutations=(lambda s:s['fixedContainer']['view']['snapshot']['counts'].update(loaded=0),
+            lambda s:s['fixedContainer']['view']['snapshot']['counts'].update(capacity=2),
+            lambda s:s['fixedContainer']['view']['snapshot']['counts'].update(reserve=0),
+            lambda s:s['fixedContainer']['view']['snapshot'].update(coherentIdleVerified=False),
+            lambda s:s['fixedContainer']['view']['identity'].update(firing=[51,51,53]),
+            lambda s:s['fixedContainer']['view']['binding'].update(deadlineNs=NOW),
+            lambda s:s['fixedContainer']['tracking'].update(hand={'unexpected':True}),
+            lambda s:s['fixedContainer']['tracking'].update(carried=True),
+            lambda s:s['fixedContainer']['input'].update(released=[True,True]),
+            lambda s:s['fixedContainer'].update(pendingRequest={'unexpected':True}),
+            lambda s:s.update(weapon_actions_blocked=True))
+        for mutation in mutations:
+            s=snapshot();mutation(s)
+            with self.subTest(mutation=mutation),self.assertRaises((d.transport.REFUSAL,d.fixed.Refusal)):
+                d.baseline(s,NOW)
+
+    def test_after_shot_requires_exact_one_round_and_same_custody(self):
+        s=snapshot();b=d.baseline(s,NOW)
+        s['fixedContainer']['view']['snapshot']['counts']['loaded']=0
+        self.assertEqual(d.after_shot(s,NOW,b),dict(loaded=0,reserve=7,capacity=1))
+        for mutation in (lambda s:s['fixedContainer']['view']['snapshot']['counts'].update(reserve=6),
+                         lambda s:s['fixedContainer']['view'].update(request=2),
+                         lambda s:s['fixedContainer']['tracking']['gun']['token'].update(id=999),
+                         lambda s:s['fixedContainer']['view']['identity'].update(serverItem=999)):
+            altered=copy.deepcopy(s);mutation(altered)
+            with self.subTest(mutation=mutation),self.assertRaises((d.transport.REFUSAL,d.fixed.Refusal)):
+                d.after_shot(altered,NOW,b)
+
+    def test_new_audit_joins_all_three_copies_without_a_close_receipt(self):
+        flow,b=preparation_native();result=d.transport.audit_post_reload_shot(flow,b)
+        self.assertEqual(result['status'],'native_fixed_preparation_shot_observed')
+        self.assertEqual((result['loadedBefore'],result['loadedAfter'],result['roundsObserved']),(1,0,1))
+        self.assertTrue(result['preparationOnly']);self.assertFalse(result['reloadCompleted'])
+        self.assertFalse(result['nativeAcceptance']);self.assertFalse(result['headsetAcceptance'])
+        self.assertEqual({e['branch'] for e in result['events']},{0,1,2})
+
+    def test_kind4_post_insert_uses_actual_insert_gate_without_close(self):
+        plan,result,current,now=inserted()
+        context=d.insertion_context(plan,result)
+        d.current_insertion(context,current,now)
+        self.assertEqual(context['geometry']['stage'],'Insert')
+        self.assertEqual(context['geometry']['selection']['profile']['kind'],4)
+        self.assertNotIn('Close',str(context))
+
+    def test_kind3_or_unfinished_wrong_alignment_cannot_bypass_close_gate(self):
+        mutations=(lambda p,r:p['geometryEvidence']['selection']['profile'].update(kind=3),
+            lambda p,r:r.update(status='refused'),
+            lambda p,r:r.update(pendingCommand=True),
+            lambda p,r:r['boundaries']['fixed_aligned']['gate']['completionPrerequisite'].update(stage='Close'),
+            lambda p,r:r['boundaries']['fixed_inserted']['gate'].update(observed=False))
+        for mutation in mutations:
+            plan,result,_,_=inserted();mutation(plan,result)
+            with self.subTest(mutation=mutation),self.assertRaises(d.transport.REFUSAL):
+                d.insertion_context(plan,result)
+
+    def test_kind4_current_completion_requires_exact_verified_native_receipt(self):
+        plan,result,current,now=inserted();context=d.insertion_context(plan,result)
+        for mutation in (lambda s:s['fixedContainer']['lastCompletion']['outcome']['receipt'].update(copiesVerified=False),
+                         lambda s:s['fixedContainer']['view']['snapshot']['counts'].update(reserve=5),
+                         lambda s:s['fixedContainer']['tracking'].update(lifetime=999),
+                         lambda s:s.update(observed_ns=context['completed']['observedNs'])):
+            s=copy.deepcopy(current);mutation(s)
+            with self.subTest(mutation=mutation),self.assertRaises((d.transport.REFUSAL,d.fixed.Refusal)):
+                d.current_insertion(context,s,now)
+
+    def test_only_post_insert_mode_can_consume_last_reserved_round(self):
+        s=snapshot();s['fixedContainer']['view']['snapshot']['counts']['reserve']=0
+        with self.assertRaises(d.transport.REFUSAL):d.baseline(s,NOW)
+        self.assertEqual(d.baseline(s,NOW,require_reserve=False)['counts']['reserve'],0)
+
+    def test_post_insert_publication_still_consumes_current_receipt_and_review(self):
+        with tempfile.TemporaryDirectory() as temp,patch.object(d.time,'perf_counter_ns',return_value=NOW):
+            v,p,_,_=self.pulse_driver(Path(temp));s=snapshot()
+            s['fixedContainer']['view']['snapshot']['counts']['reserve']=0
+            v.latest_snapshot=s;v.preparation=d.baseline(s,NOW,require_reserve=False)
+            v.clearance,_=d.transport.read_json(p);v.insertion={'synthetic':'test dispatch only'}
+            v.commands=0;v.held_trigger=False;v.pending_command=False
+            observed=[];v.admit_snapshot=lambda *args:observed.append(args)
+            with patch.object(d,'current_insertion') as receipt:
+                v.validate_publication(['trigger r 1'],None,False)
+                receipt.assert_called_once_with(v.insertion,s,NOW)
+            self.assertEqual(len(observed),1)
+            with patch.object(d,'current_insertion',side_effect=d.transport.REFUSAL('invalid actual receipt')):
+                with self.assertRaisesRegex(d.transport.REFUSAL,'invalid actual receipt'):
+                    v.validate_publication(['trigger r 1'],None,False)
+            v.commands=2
+            with self.assertRaises(d.transport.REFUSAL):v.validate_publication(['trigger r 1'],None,False)
+
+    def test_preparation_never_accepts_fabricated_close_or_reload_identity(self):
+        for field,value in (('preparationOnly',False),('closure',{}),('closeResultSha256','fake')):
+            flow,b=preparation_native();b[field]=value
+            with self.subTest(field=field),self.assertRaises(d.transport.REFUSAL):
+                d.transport.audit_post_reload_shot(flow,b)
+
+    def test_audit_missing_copy_wrong_firing_reserve_timing_or_override_refuses(self):
+        mutations=(lambda f,b:f.update(records=[r for r in f['records'] if r['before']['branch']!=2]),
+            lambda f,b:b['preparation']['nativeIdentity']['firing'].__setitem__(1,999),
+            lambda f,b:b['afterCounts'].update(reserve=999),
+            lambda f,b:b.update(releaseWrittenNs=b['pressWrittenNs']+100_000_001),
+            lambda f,b:f.update(drained=False),
+            lambda f,b:f['records'][0]['fixed_input'].update(applied=1))
+        for mutation in mutations:
+            flow,b=preparation_native();mutation(flow,b)
+            with self.subTest(mutation=mutation),self.assertRaises(d.transport.REFUSAL):
+                d.transport.audit_post_reload_shot(flow,b)
+
+    def pulse_driver(self,folder,*,late=False,wrong_after=False):
+        driver=d.PreparationDriver.__new__(d.PreparationDriver)
+        before=snapshot();after=fixture.fixed.refresh(before,NOW+170_000_000,2)
+        after['fixedContainer']['view']['snapshot']['counts'].update(loaded=0,reserve=6 if wrong_after else 7)
+        after['input_evidence']['observedNs']=NOW+60_000_000
+        after['observed_ns']=NOW+170_000_000
+        captures=[]
+        for eye in ('left','right'):
+            path=folder/(eye+'.png');path.write_bytes(eye.encode())
+            captures.append(dict(eye=eye,path=str(path),bytes=path.stat().st_size,sha256=d.transport.digest(path.read_bytes())))
+        state=dict(head={},handR={},handL={},controls={'trigR':0.,'gripL':0.,'gripR':0.})
+        clearance=dict(schema='bc2vr.root-fire-clearance.v1',rootReviewedVisibleCorridor=True,
+            host={'pid':1},owner=before['owner'],configurationPath=before['selected']['configurationPath'],
+            rig=before['rig'],reviewedNs=NOW-1,referenceHead=before['input']['referenceHead'],
+            rightAim=before['input']['hands'][1]['aim'],captures=captures,**state)
+        path=folder/'clearance.json';path.write_bytes(d.transport.json_bytes(clearance))
+        saved={};sent=[];driver.run=folder;driver.host={'pid':1};driver.state=state
+        driver.manifest={'source_sha256':'a'*64};driver.deadline=NOW+10*d.NS
+        driver.artifacts=SimpleNamespace(directory=folder/'artifact',save=lambda name,value:saved.__setitem__(name,value))
+        values=iter([(before,b'',NOW),(after,b'',NOW+170_000_000)])
+        driver.fresh_available=lambda:next(values)
+        def send(lines):
+            sent.extend(lines)
+            driver.last_write=NOW+(10_000_000 if len(sent)==1 else 120_000_001 if late else 50_000_000)
+            driver.last_commit=driver.last_write+10_000_000
+        driver.send=send;driver.pause_until=lambda until:None
+        return driver,path,sent,saved
+
+    def test_one_bounded_pulse_and_permanent_same_owner_attempt(self):
+        with tempfile.TemporaryDirectory() as temp,patch.object(d.time,'perf_counter_ns',return_value=NOW):
+            folder=Path(temp);v,p,sent,saved=self.pulse_driver(folder)
+            # Pure fixture keeps leases original atNOW; postshot stamp is separately checked.
+            with patch.object(v,'fresh_available',side_effect=v.fresh_available):
+                result=v.prepare(p)
+            self.assertEqual(sent,['trigger r 1','trigger r 0'])
+            self.assertTrue(result['preparationOnly']);self.assertNotIn('closure',result)
+            second,p,sent2,_=self.pulse_driver(folder)
+            with self.assertRaises(FileExistsError):second.prepare(p)
+            self.assertEqual(sent2,[])
+
+    def test_late_release_or_uncertain_after_never_repeats_press(self):
+        for late,wrong in ((True,False),(False,True)):
+            with self.subTest(late=late),tempfile.TemporaryDirectory() as temp,patch.object(d.time,'perf_counter_ns',return_value=NOW):
+                v,p,sent,_=self.pulse_driver(Path(temp),late=late,wrong_after=wrong)
+                with self.assertRaises(d.transport.REFUSAL):v.prepare(p)
+                self.assertEqual(sent,['trigger r 1','trigger r 0'])
+
+    def test_current_review_capture_hash_and_aim_are_not_optional(self):
+        for change in ('hash','aim'):
+            with self.subTest(change=change),tempfile.TemporaryDirectory() as temp,patch.object(d.time,'perf_counter_ns',return_value=NOW):
+                v,p,sent,_=self.pulse_driver(Path(temp))
+                if change=='hash':(Path(temp)/'right.png').write_bytes(b'changed')
+                else:
+                    review,_=d.transport.read_json(p)
+                    review['handR']={'changed':True}
+                    p.write_bytes(d.transport.json_bytes(review))
+                with self.assertRaises((d.transport.REFUSAL,d.clearance_geometry.Refusal)):v.prepare(p)
+                self.assertEqual(sent,[])
+
+if __name__=='__main__':unittest.main()

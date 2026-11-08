@@ -51,7 +51,7 @@ struct BodyInventoryDisplaySlot {
 struct BodyInventoryDisplay {
     ReloadStateOwner selectedOwner{};interaction::HandInteractionOwner physicalOwner{};
     BodyCarriedIdentity carried{};interaction::BodyItemKey physicalSelected{};
-    std::uint64_t revision=0,cohort=0,sequence=0;
+    std::uint64_t revision=0,cohort=0,sequence=0,nativeBindingGeneration=0;
     std::int64_t observedNs=0,deadlineNs=0;
     std::array<BodyInventoryDisplaySlot,8> slots{};unsigned count=0;
     // Physical item key from the coherent inventory, never a policy assignment.
@@ -179,6 +179,16 @@ private:
         std::uint64_t& intent,const std::optional<DrawApproach>&,bool* observedInteractiveItem=nullptr)noexcept;
     void PublishDisplay(const BodyNativeInventory&,const BodyDrawSample&,interaction::BodyItemKey)noexcept;
     std::optional<BodyInventoryDisplay> display_;std::uint64_t displayCohort_=0;
+    // Coherent native identity history only; never display/input/pose authority.
+    // Observe every successful native read, including while display is absent,
+    // so a carried item/slot change and return cannot reuse this generation.
+    struct NativeBinding {
+        ReloadStateOwner selectedOwner{};interaction::HandInteractionOwner physicalOwner{};
+        BodyCarriedIdentity carried{};
+        bool operator==(const NativeBinding&)const=default;
+    };
+    std::optional<NativeBinding> nativeBinding_;std::uint64_t nativeBindingGeneration_=0;
+    bool ObserveNativeBinding(const BodyNativeInventory&,const BodyDrawSample&)noexcept;
     struct Life {BodyNativeItem native{};interaction::BodyItemKey key{};};
     struct Actor {std::uint32_t manager=0,player=0,soldier=0,weak=0;bool operator==(const Actor&)const=default;};
     Actor automaticActor_{};bool automaticEnabled_=false,automaticFoot_=false,automaticPending_=false,automaticNeutral_=false;

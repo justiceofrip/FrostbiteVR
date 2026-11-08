@@ -1,5 +1,5 @@
 #include "Bc2CampaignProvisioningRuntime.h"
-#include "Bc2OriginalFiringObserver.h"
+#include "Bc2OriginalFiringMonitor.h"
 #include "Bc2ReloadFlowRuntime.h"
 #include "Bc2Gameplay.h"
 #include <atomic>
@@ -23,6 +23,7 @@ std::recursive_mutex gate;
 std::atomic<unsigned> firingDepth=0,seatCalls=0;
 std::atomic<bool> enabled=false;
 bool installed=false,started=false;std::uint64_t seatSequence=0,serverSequence=0;
+const char* startupFailure="Campaign provisioning not installed";
 thread_local unsigned seatDepth=0;
 std::array<unsigned char,5> seatPrefix{};
 bool OwnerCurrent(void*,const policy::Owner& owner,std::int64_t now){
@@ -81,12 +82,16 @@ std::optional<ProcessIdentity> Identify(std::span<const std::byte> bytes)noexcep
         ULONG(bytes.size()),id.image.data(),ULONG(id.image.size()));
     BCryptCloseAlgorithmProvider(algorithm,0);return result<0?std::nullopt:std::optional(id);
 }
+const char* StartupFailure()noexcept{return startupFailure;}
 bool Install(const ProcessIdentity& process,const ReloadStateMemory& reader,bool explicitRequest)noexcept {
+    startupFailure="Campaign provisioning startup state or reader unavailable";
     if(installed||started||!explicitRequest||process.pid!=GetCurrentProcessId()||!reader.read||!reader.type)return false;
+    startupFailure="Campaign provisioning process creation differs";
     FILETIME creation{},exit{},kernel{},user{};
     if(!GetProcessTimes(GetCurrentProcess(),&creation,&exit,&kernel,&user)||
        ((std::uint64_t(creation.dwHighDateTime)<<32)|creation.dwLowDateTime)!=process.creation)return false;
     const policy::Memory pm{reader.context,reader.read,reader.type};
+    startupFailure="Campaign provisioning original code differs";
     if(!policy::ValidateOriginalProvisioningCode(pm))return false;
     memory=reader;identity=process;
     const LifetimeHost life{nullptr,
@@ -94,15 +99,19 @@ bool Install(const ProcessIdentity& process,const ReloadStateMemory& reader,bool
         [](void*,const ReloadServerSnapshot& source,unsigned item,unsigned data,std::uint64_t nonce,std::int64_t now)noexcept{
             return gameplay::RetireCampaignProvisioningItem(source,item,data,nonce,now);},
         [](void*,const ReloadServerSnapshot& source,std::uint64_t nonce)noexcept{return gameplay::ResumeCampaignProvisioning(source,nonce);}};
+    startupFailure="Campaign provisioning service configuration refused";
     if(!service.Configure(process,pm,{nullptr,OwnerCurrent,policy::InvokeOriginalAssignment},life,true))return false;
+    startupFailure="Campaign provisioning seat hook creation refused";
     if(MH_CreateHook(reinterpret_cast<void*>(0x6b0830),SeatHook,reinterpret_cast<void**>(&originalSeat))!=MH_OK)return false;
     const OriginalFiringObserver observer{&service,Enter,Leave,nullptr,Leave};
-    if(!reloadFlowRuntime::RegisterOriginalFiringObserver(observer)){
+    startupFailure="Campaign provisioning passive firing monitor unavailable";
+    if(!reloadFlowRuntime::RegisterOriginalFiringMonitor(observer)){
         // Before Start: only our newly created, disabled seat hook is removed.
         MH_RemoveHook(reinterpret_cast<void*>(0x6b0830));return false;
     }
+    startupFailure="Campaign provisioning gameplay input admission unavailable";
     if(!gameplay::EnableCampaignProvisioning())return false;
-    installed=true;return true;
+    installed=true;startupFailure="Campaign provisioning installed";return true;
 }
 bool Start()noexcept {
     if(!installed||started)return false;started=true;
@@ -165,6 +174,7 @@ void ServiceTransport(const std::filesystem::path& directory)noexcept {
 #else
 namespace fvr::bc2::campaignProvisioning {
 std::optional<ProcessIdentity> Identify(std::span<const std::byte>)noexcept{return {};}
+const char* StartupFailure()noexcept{return "Campaign provisioning unavailable on this architecture";}
 bool Install(const ProcessIdentity&,const ReloadStateMemory&,bool)noexcept{return false;}
 bool Start()noexcept{return false;}bool Stop()noexcept{return true;}
 bool Submit(const Request&)noexcept{return false;}std::optional<Request> SourceRequest()noexcept{return {};}

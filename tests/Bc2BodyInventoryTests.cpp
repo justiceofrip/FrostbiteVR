@@ -709,6 +709,38 @@ int SchedulingPausePreservesResourceIdentity(){
  }
  std::puts("Scheduling pause retains verified physical resources, expires leases and retires commands");return 0;
 }
+int NativeBindingGenerationEdges(){
+ // Display loss alone retires authority, not coherent native identity.
+ {Run r;r.Tick();const auto first=r.adapter.Display(r.s.hand.nowNs);CHECK(first&&first->nativeBindingGeneration);
+  r.adapter.SuspendInteraction();CHECK(!r.adapter.Display(r.s.hand.nowNs));r.Advance();r.Tick();
+  const auto renewed=r.adapter.Display(r.s.hand.nowNs);CHECK(renewed&&renewed->cohort>first->cohort);
+  CHECK(renewed->nativeBindingGeneration==first->nativeBindingGeneration&&renewed->observedNs>first->observedNs);
+  r.adapter.Cancel();r.Advance();r.Tick();const auto cancelled=r.adapter.Display(r.s.hand.nowNs);
+  CHECK(cancelled&&cancelled->nativeBindingGeneration>renewed->nativeBindingGeneration);
+ }
+ // Metadata is observed even while display/interaction is suspended. A native
+ // slot move and return retains physical item keys but MUST advance the token.
+ {Run r;r.Tick();const auto first=r.adapter.Display(r.s.hand.nowNs);CHECK(first);
+  const auto key=r.adapter.ItemKey(Fixture::b);r.s.interaction=bc2::BodyInteractionState::Suspended;
+  r.f.Word(Fixture::array+4,0);r.f.Word(Fixture::array+8,Fixture::b);r.Advance();r.Tick();
+  CHECK(!r.adapter.Display(r.s.hand.nowNs)&&r.adapter.ItemKey(Fixture::b)==key);
+  r.f.Word(Fixture::array+4,Fixture::b);r.f.Word(Fixture::array+8,0);r.Advance();r.Tick();
+  CHECK(!r.adapter.Display(r.s.hand.nowNs));r.s.interaction=bc2::BodyInteractionState::Available;r.Advance();r.Tick();
+  const auto returned=r.adapter.Display(r.s.hand.nowNs);CHECK(returned);
+  CHECK(returned->nativeBindingGeneration==first->nativeBindingGeneration+2);
+ }
+ // A failed coherent read is a history gap even when Held/GunHold and physical
+ // item keys survive. Only the diagnostic identity token is retired.
+ {HolsterRun h;const auto first=h.r.adapter.Display(h.r.s.hand.nowNs);CHECK(first);
+  const auto key=h.r.adapter.ItemKey(Fixture::a);const auto hold=h.r.hands.Current(interaction::InteractionHand::Right);CHECK(hold);
+  h.r.f.denyMap=true;h.Step();CHECK(!h.r.adapter.Display(h.r.s.hand.nowNs));
+  CHECK(h.r.adapter.ItemKey(Fixture::a)==key&&h.out.phase==bc2::BodyHolsterPhase::Held);
+  const auto retained=h.r.hands.Current(interaction::InteractionHand::Right);CHECK(retained&&retained->token==hold->token);
+  h.r.f.denyMap=false;h.Step();const auto recovered=h.r.adapter.Display(h.r.s.hand.nowNs);CHECK(recovered);
+  CHECK(recovered->nativeBindingGeneration>first->nativeBindingGeneration);
+ }
+ std::puts("Native identity generation distinguishes display renewal from hidden native replacement");return 0;
+}
 int RepeatedInventoryObservationEdges(){
  // Warm identical metadata (including empty native slots), then change one
  // boundary. Every observation must still call the native reader.
@@ -717,7 +749,7 @@ int RepeatedInventoryObservationEdges(){
   const auto first=r.adapter.Display(r.s.hand.nowNs);CHECK(first);
   for(unsigned repeat=0;repeat<8;++repeat){bool read=false;r.f.onRead=[&]{read=true;};r.Advance();
    CHECK(!r.Tick().command&&read&&r.adapter.ItemKey(Fixture::a)==a&&r.adapter.ItemKey(Fixture::b)==b);
-   const auto display=r.adapter.Display(r.s.hand.nowNs);CHECK(display&&display->revision==first->revision);
+   const auto display=r.adapter.Display(r.s.hand.nowNs);CHECK(display&&display->revision==first->revision&&display->nativeBindingGeneration==first->nativeBindingGeneration);
    const auto binding=r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs);CHECK(binding&&binding->observedNs==r.s.hand.nowNs);
   }
   if(change==0){r.f.Word(Fixture::array+4,0);r.f.Word(Fixture::array+8,Fixture::b);}
@@ -733,7 +765,7 @@ int RepeatedInventoryObservationEdges(){
    r.f.denyMap=false;r.Advance();r.Tick();
    CHECK(r.adapter.ItemKey(Fixture::a)!=a&&r.adapter.ItemKey(Fixture::b)!=b);continue;
   }
-  const auto display=r.adapter.Display(r.s.hand.nowNs);CHECK(display&&display->selectedOwner==r.s.owner);
+  const auto display=r.adapter.Display(r.s.hand.nowNs);CHECK(display&&display->selectedOwner==r.s.owner&&display->nativeBindingGeneration>first->nativeBindingGeneration);
   const auto binding=r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs);CHECK(binding&&binding->owner==r.s.owner);
   CHECK((r.adapter.ItemKey(Fixture::a)==a)==(change==0||change==4||change==6));
   CHECK((r.adapter.ItemKey(Fixture::b)==b)==(change!=3));
@@ -985,7 +1017,7 @@ int CampaignProvisioningRetiresOnlyDestroyedItem(){
     return 0;
 }
 
-int main(){if(CampaignProvisioningRetiresOnlyDestroyedItem())return 1;if(HipCarryChecks())return 1;if(OrdinaryBoltStartupPreservesOriginalRigPublication())return 1;if(NativePumpDebtProtectsActualShoulderAndResourceLifetime())return 1;if(PlayerRepeatedHolsterRecovery())return 1;if(SharedLifecycleBoundary())return 1;if(OrdinaryOwnSlotStowIsExplicitlyUnavailable())return 1;if(ActualCarriedCrossDrawRetirement()||CarriedCrossDrawIdentityFailures()||CarriedCrossDrawAuthorityFailures()||HolsterTransitionJournalKeepsLatest())return 1;if(ShoulderEarlyDirectSwap()||ShoulderDirectSwapFailures()||ShoulderSwapRereadAndTimeout())return 1;if(ShoulderEarlyGrabAndReleaseStow()||ShoulderMissKeepsUsableGun()||ShoulderReleaseExactContinuity()||ShoulderFailedHideRecoversHeld()||ShoulderEmptyApproachInputBreaks())return 1;if(HeldApproachBoundaries()||ScrollThenActualHeldApproach())return 1;if(ActualUnsupportedExchangeRetirement())return 1;if(ScopedXm8OrdinaryAutoStowDraw()||ScopedXm8OrdinaryAdmissionNegatives()||ScopedXm8OrdinaryKeepsSlotsAcrossDraw())return 1;
+int main(){if(NativeBindingGenerationEdges())return 1;if(CampaignProvisioningRetiresOnlyDestroyedItem())return 1;if(HipCarryChecks())return 1;if(OrdinaryBoltStartupPreservesOriginalRigPublication())return 1;if(NativePumpDebtProtectsActualShoulderAndResourceLifetime())return 1;if(PlayerRepeatedHolsterRecovery())return 1;if(SharedLifecycleBoundary())return 1;if(OrdinaryOwnSlotStowIsExplicitlyUnavailable())return 1;if(ActualCarriedCrossDrawRetirement()||CarriedCrossDrawIdentityFailures()||CarriedCrossDrawAuthorityFailures()||HolsterTransitionJournalKeepsLatest())return 1;if(ShoulderEarlyDirectSwap()||ShoulderDirectSwapFailures()||ShoulderSwapRereadAndTimeout())return 1;if(ShoulderEarlyGrabAndReleaseStow()||ShoulderMissKeepsUsableGun()||ShoulderReleaseExactContinuity()||ShoulderFailedHideRecoversHeld()||ShoulderEmptyApproachInputBreaks())return 1;if(HeldApproachBoundaries()||ScrollThenActualHeldApproach())return 1;if(ActualUnsupportedExchangeRetirement())return 1;if(ScopedXm8OrdinaryAutoStowDraw()||ScopedXm8OrdinaryAdmissionNegatives()||ScopedXm8OrdinaryKeepsSlotsAcrossDraw())return 1;
     if(ShoulderDrawSurvivesReceiptGap())return 1;
     if(ShoulderDrawReleaseStaysHeld())return 1;
     std::puts("Ordinary scoped XM8: automatic stow/draw/fire continuity, six admission negatives, cross-draw slots passed");

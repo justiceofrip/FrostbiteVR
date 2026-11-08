@@ -3200,7 +3200,7 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
         json<<",\"selectedOwner\":";owner(d.selectedOwner);json<<",\"physicalOwner\":";handOwner(d.physicalOwner);
         json<<",\"physicalSelected\":";key(d.physicalSelected);
         json<<",\"inputEvidence\":";evidence(inventoryTracking->controllerEvidence);
-        json<<",\"revision\":"<<d.revision<<",\"cohort\":"<<d.cohort<<",\"sequence\":"<<d.sequence
+        json<<",\"revision\":"<<d.revision<<",\"cohort\":"<<d.cohort<<",\"nativeBindingGeneration\":"<<d.nativeBindingGeneration<<",\"sequence\":"<<d.sequence
             <<",\"observedNs\":"<<d.observedNs<<",\"deadlineNs\":"<<d.deadlineNs
             <<",\"inventory\":"<<d.carried.inventory<<",\"switching\":"<<d.carried.switching
             <<",\"nativeCount\":"<<d.carried.count<<",\"count\":"<<d.count<<",\"slots\":[";

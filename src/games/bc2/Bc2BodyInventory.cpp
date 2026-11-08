@@ -165,7 +165,7 @@ bool BodyInventoryRenderDisplayFresh(const BodyInventoryDisplay& s,std::int64_t 
 bool SameBodyInventoryDisplayCohort(const BodyInventoryDisplay& a,const BodyInventoryDisplay& b)noexcept {
     return a.selectedOwner==b.selectedOwner&&a.physicalOwner==b.physicalOwner&&a.carried==b.carried&&
         a.physicalSelected==b.physicalSelected&&a.revision==b.revision&&a.count==b.count&&a.slots==b.slots&&
-        a.knifeCandidate==b.knifeCandidate;
+        a.knifeCandidate==b.knifeCandidate&&a.nativeBindingGeneration==b.nativeBindingGeneration;
 }
 void Bc2BodyInventory::PublishDisplay(const BodyNativeInventory& n,const BodyDrawSample& s,BodyItemKey selected)noexcept {
     BodyInventoryDisplay out;out.selectedOwner=s.owner;out.physicalOwner=s.hand.owner;
@@ -175,7 +175,7 @@ void Bc2BodyInventory::PublishDisplay(const BodyNativeInventory& n,const BodyDra
         if(item.weapon&&item.weapon!=s.owner.weapon&&item.category==11&&item.persistence)
             if(const auto key=ItemKey(item.weapon)){out.knifeCandidate=*key;if(!BodyKnifeCandidateCurrent(out))out.knifeCandidate={};}
     }
-    out.revision=revision_;out.sequence=s.hand.sequence;out.observedNs=s.hand.observedNs;
+    out.revision=revision_;out.nativeBindingGeneration=nativeBindingGeneration_;out.sequence=s.hand.sequence;out.observedNs=s.hand.observedNs;
     out.deadlineNs=std::min(s.hand.deadlineNs,s.hand.observedNs+100000000);
     if(slots_.size()>out.slots.size()||s.cancel||s.reloadBusy||!s.hand.focused||!s.input.focused||!s.input.headValid){display_.reset();return;}
     for(const auto& slot:slots_){const auto item=std::find_if(life_.begin(),life_.end(),[&](const Life& l){return l.key==slot.item;});
@@ -237,11 +237,11 @@ bool Bc2BodyInventory::RetireProvisionedItem(const AmmoResourceBinding& binding,
     // This receipt revokes transient selection/display only. It does not reset
     // generation_, any other item key, any ammo ledger, or completed transfer.
     display_.reset();armed_=false;heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();
-    ++revision_;provisionRetirementNonce_=nonce;return true;
+    nativeBinding_.reset();++revision_;provisionRetirementNonce_=nonce;return true;
 }
 void Bc2BodyInventory::Cancel()noexcept {
     ordinaryDrawIssue_.reset();
-    display_.reset();
+    display_.reset();nativeBinding_.reset();
     heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();
     if(pending_)++cancels_;pending_.reset();armed_=false;lastInput_=0;automaticNeutral_=false;
     policy_.Update({});
@@ -334,6 +334,14 @@ BodyDrawResult Bc2BodyInventory::ObserveSuspended(const WeaponModeMemory& memory
     lastNow_=s.hand.nowNs;SuspendInteraction();lastInput_=s.input.generation;
     out.blockFire=out.cancelled!=0;++blocked_;return out;
 }
+bool Bc2BodyInventory::ObserveNativeBinding(const BodyNativeInventory& native,const BodyDrawSample& s)noexcept {
+    const NativeBinding next{native.owner,s.hand.owner,{native.inventory,native.switching,native.count,native.items}};
+    if(!nativeBinding_||*nativeBinding_!=next){
+        if(nativeBindingGeneration_==UINT64_MAX){nativeBinding_.reset();return false;}
+        ++nativeBindingGeneration_;nativeBinding_=next;
+    }
+    return true;
+}
 bool Bc2BodyInventory::Observe(const BodyNativeInventory& native,const BodyDrawSample& s)noexcept {
     // A scheduling gap expires interaction authority, not physical equipment.
     // This entry is reached only after a new coherent native read: retain an
@@ -360,7 +368,7 @@ bool Bc2BodyInventory::Observe(const BodyNativeInventory& native,const BodyDrawS
         for(unsigned n=0;n<native.count;++n){const auto& item=native.items[n];if(!item.weapon)continue;
             if(carried==life_.size()||life_[carried].native!=item){identical=false;break;}++carried;
         }
-        if(identical&&carried==life_.size()){pruneSlots(items_);nativeOwner_=native.owner;return true;}
+        if(identical&&carried==life_.size()){pruneSlots(items_);nativeOwner_=native.owner;return ObserveNativeBinding(native,s);}
     }
     std::vector<Life> next;std::vector<BodyInventoryItem> items;
     for(unsigned n=0;n<native.count;++n){const auto& item=native.items[n];if(!item.weapon)continue;
@@ -375,7 +383,7 @@ bool Bc2BodyInventory::Observe(const BodyNativeInventory& native,const BodyDrawS
     changed=changed||items!=items_;
     if(changed||owner.space!=owner_.space){if(revision_==UINT64_MAX)return false;++revision_;armed_=false;heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();}
     pruneSlots(items);
-    owner_=owner;nativeOwner_=native.owner;inventory_=native.inventory;switching_=native.switching;life_=std::move(next);items_=std::move(items);return true;
+    owner_=owner;nativeOwner_=native.owner;inventory_=native.inventory;switching_=native.switching;life_=std::move(next);items_=std::move(items);return ObserveNativeBinding(native,s);
 }
 std::optional<AmmoResourceBinding> Bc2BodyInventory::ResourceBinding(const ReloadStateOwner& owner,std::int64_t now)const noexcept {
     if(!enabled_||owner!=nativeOwner_||nativeProofNs_<=0||nativeProofNs_>INT64_MAX-100000000)return {};
@@ -520,11 +528,11 @@ BodyHolsterResult Bc2BodyInventory::TickHolster(const WeaponModeMemory& memory,c
         // Read the ACTUAL selected owner and current inventory; never substitute
         // the original firearm to renew its expired pose/hide/input authority.
         BodyHolsterResult waiting;waiting.phase=holster.Phase();waiting.blockWeaponActions=true;waiting.allowAutomaticGunHold=false;
-        if(s.hand.nowNs<=0||s.hand.nowNs<lastNow_){display_.reset();return waiting;}
+        if(s.hand.nowNs<=0||s.hand.nowNs<lastNow_){display_.reset();nativeBinding_.reset();return waiting;}
         const auto read=ReadBodyInventory(memory,s.owner,true);++readStatuses_[unsigned(read.status)];
-        if(!read.snapshot||!Observe(*read.snapshot,s)||sequence_==UINT64_MAX){display_.reset();return waiting;}
+        if(!read.snapshot||!Observe(*read.snapshot,s)||sequence_==UINT64_MAX){display_.reset();nativeBinding_.reset();return waiting;}
         const auto selected=std::find_if(life_.begin(),life_.end(),[&](const auto& item){return item.native.weapon==s.owner.weapon;});
-        if(selected==life_.end()){display_.reset();return waiting;}
+        if(selected==life_.end()){display_.reset();nativeBinding_.reset();return waiting;}
         const auto& native=*read.snapshot;
         sample.nativeOwner=s.owner;sample.hand=s.hand;sample.gun=s.gun;sample.ordinary=s.visible;
         sample.carried=BodyCarriedIdentity{native.inventory,native.switching,native.count,native.items};
@@ -604,9 +612,9 @@ BodyHolsterResult Bc2BodyInventory::TickHolster(const WeaponModeMemory& memory,c
     const bool fresh=ValidBodyAnchors(config_)&&ValidInput(s.input)&&s.input.generation==s.hand.sequence&&
         s.input.spaceGeneration==s.owner.space&&s.hand.nowNs>=lastNow_;
     const auto read=ReadBodyInventory(memory,s.owner,fresh);++readStatuses_[unsigned(read.status)];
-    if(!read.snapshot||!Observe(*read.snapshot,s)||sequence_==UINT64_MAX){display_.reset();heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();sample.cancel=true;return evaluate();}
+    if(!read.snapshot||!Observe(*read.snapshot,s)||sequence_==UINT64_MAX){display_.reset();nativeBinding_.reset();heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();sample.cancel=true;return evaluate();}
     const auto selected=std::find_if(life_.begin(),life_.end(),[&](const auto& item){return item.native.weapon==s.owner.weapon;});
-    if(selected==life_.end()){display_.reset();heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();sample.cancel=true;return evaluate();}
+    if(selected==life_.end()){display_.reset();nativeBinding_.reset();heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();sample.cancel=true;return evaluate();}
     ObserveAutomaticSelection(selected->native);
     const auto& native=*read.snapshot;
     sample.carried=BodyCarriedIdentity{native.inventory,native.switching,native.count,native.items};
