@@ -82,6 +82,17 @@ try {
     $runtime=Join-Path $root 'data/runtime';$sessionFolder=Join-Path $runtime 'sessions/test-owned'
     $null=[IO.Directory]::CreateDirectory($sessionFolder)
     $sessionPath=Join-Path $sessionFolder 'session.json';$activePath=Join-Path $runtime 'active-session.json'
+    $publicationPath=Join-Path $sessionFolder 'reader-publication.json'
+    Write-FvrJson $publicationPath @{generation=1;payload='complete original'}
+    Read-FvrBoundedSessionJson $publicationPath | ForEach-Object {
+        $snapshot=$_
+        # The real consumer runs before the reader returns. A retained handle
+        # makes the real atomic writer exhaust its original bounded retry.
+        Write-FvrJson $publicationPath @{generation=2;payload='complete replacement'} -RetrySessionPublication
+        Check ($snapshot.generation -eq 1 -and $snapshot.payload -ceq 'complete original') 'bounded reader releases publication handle before emitting its complete snapshot'
+    }
+    $replacement=Read-FvrBoundedSessionJson $publicationPath
+    Check ($replacement.generation -eq 2 -and $replacement.payload -ceq 'complete replacement') 'downstream publication atomically exposes the complete replacement'
     $operation=@{action='Launch';state='started';utc='2026-10-18T15:00:00Z'}
     $identity=@{pid=123;start_utc='2026-10-18T14:59:00Z';path='G:\Owned\pwsh.exe'}
     $activeSession=@{schema='bc2vr.active-session.v1';version='0.1.6';relative_folder='sessions/test-owned';supervisor=$identity}

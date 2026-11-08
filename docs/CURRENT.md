@@ -1,6 +1,6 @@
 # Current state — shared normal integration / public 0.1.15
 
-Updated November 7, 2026. This replaces old next-step instructions; prior evidence remains in
+Updated November 8, 2026. This replaces old next-step instructions; prior evidence remains in
 [history/](history/README.md) (search it by run number; never read a log whole).
 
 ## Active work
@@ -8,6 +8,8 @@ Updated November 7, 2026. This replaces old next-step instructions; prior eviden
 Private 0.1.76/native76 is installed and setup-validated, with75 as fallback. It extends natural mechanical grips, held endpoints and partial-regrasp recovery across59 hinge/rail profiles, and adds truthful shutdown-report status and exact-ticket timing tools. The preceding belt-fed continuity and trigger-free stock knife jab remain included. Normal351x86/348x64 checks passed; source is pushed and the stable headset shortcut verifies76, including logging space. Settings/cache are preserved. Full underbarrel reloads, headset reliability, knife damage and FPS gains remain unproved; the latest human74 failure is not superseded by offline checks. [Delivery and limits](../handoff/integrations/coordinator-20261107-native76/README.txt), [headset feedback](archive/2026-11-07-bc2vr-0.1.74-headset-feedback.md).
 
 Native76 delivery reuses the actual passed x86 build at c11d600 and corrected x64 build at c16ff07; the only later source difference is an x64-only local-variable rename. The explicit postbuild continuation forbids new compilation and preserves original evidence. Delivery/private-session scope is52GiB with the15GiB free floor,4GiB runtime cap and capture/session reservations unchanged. Retained evidence and compiler caches were preserved. The earlier CI profile setup and duplicate checkpoint-push correction remain included. No public release or measured FPS gain is claimed.
+
+Candidate77 keeps vehicle camera evidence recording through long sessions and closes the launcher status reader before emitting its result, fixing a reproduced atomic-publication conflict. Actual721 stopped before host/weapon input with a File.Move error; the game closed normally and profiles/settings were restored. The original failing writer path is unknown. Native76 remains installed pending combined77 validation. [Candidate and limits](../handoff/integrations/coordinator-20261108-native77/README.txt).
 
 Tools725 adds a bounded held-cover comparison with3cm/20degree hand-motion changes, observing original custody and published lid/wrist poses together.16 planner and22 driver checks passed across24 production profiles; native76 remains unchanged and actual/rendered headset continuity remains unproved. [Tool and evidence limits](../handoff/integrations/coordinator-20261108-tools725/README.txt).
 

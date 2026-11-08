@@ -134,10 +134,11 @@ function Read-FvrBoundedSessionJson([string]$Path) {
         $bytes=[byte[]]::new(32769);$count=0
         do{$read=$file.Read($bytes,$count,$bytes.Length-$count);$count+=$read}while($read -gt 0 -and $count -lt $bytes.Length)
         if($count -gt 32768){throw 'Session record exceeds 32 KiB.'}
-        $value=ConvertFrom-Json -InputObject ([Text.Encoding]::UTF8.GetString($bytes,0,$count).TrimStart([char]0xfeff)) -AsHashtable -DateKind String
-        if($value -isnot [Collections.IDictionary]){throw 'Session record must be an object.'}
-        return $value
     }finally{$file.Dispose()}
+    # Parsing and downstream consumers must not retain the publication handle.
+    $value=ConvertFrom-Json -InputObject ([Text.Encoding]::UTF8.GetString($bytes,0,$count).TrimStart([char]0xfeff)) -AsHashtable -DateKind String
+    if($value -isnot [Collections.IDictionary]){throw 'Session record must be an object.'}
+    return $value
 }
 function Get-FvrRuntimeSessionNotice([string]$InstallRoot,[string]$Version,$Operation) {
     # A terminal runtime notice may replace only its successful Launch status.

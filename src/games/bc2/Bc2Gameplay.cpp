@@ -585,11 +585,11 @@ std::atomic<unsigned> boatAimSamples=0,boatAimRejects=0,boatAimCommits=0,boatAim
 struct BoatAimRecord {ULONGLONG ms=0;std::uint64_t sequence=0;float yaw=0,pitch=0,yawError=0,pitchError=0,jointYaw=0,jointPitch=0,fire=0;};
 std::array<BoatAimRecord,64> boatAimRecords{};unsigned boatAimRecordCount=0;ULONGLONG boatAimRecordedAt=0;
 struct VehicleCameraRecord {
-    interaction::VehicleTrackingOwner owner{};unsigned frame=0,appliedMask=0;ULONGLONG ms=0;
+    VehicleCameraEvidenceKey key{};unsigned appliedMask=0;ULONGLONG ms=0;
     runtime::TrackingFrame tracking{};math::Matrix4 native{},adjusted{};
     std::array<math::Matrix4,2> planned{},applied{};
 };
-std::array<VehicleCameraRecord,16> vehicleCameraRecords{};unsigned vehicleCameraRecordCount=0;
+VehicleCameraEvidence<VehicleCameraRecord> vehicleCameraRecords;
 bool CameraEvidenceMatrix(const RenderViewCopy& copy,math::Matrix4& matrix)noexcept {
     engine::FrostbiteCameraInput source{};std::memcpy(&source.transform,copy.bytes.data()+0x50,64);
     std::memcpy(&source.nearPlane,copy.bytes.data()+0x1c,4);std::memcpy(&source.farPlane,copy.bytes.data()+0x20,4);source.worldUnitsPerMeter=1;
@@ -5154,23 +5154,21 @@ void ObserveRenderedViewPublication(const ipc::FrameLease& lease,const graphics:
     baseRecords.Enrich([&](const BaseRecord& row){return row.rendered.Sampled()&&row.rendered.key==key;},
         [&](BaseRecord& row){row.rendered.Published(key,ticket);});
 }
-bool ObserveVehicleCameraPlan(unsigned frame,const runtime::TrackingFrame& tracking,const RenderViewCopy& native,const RenderViewCopy& adjusted,const std::array<RenderViewCopy,2>& planned)noexcept {
-    std::lock_guard lock(vehicleViewMutex);
-    if(!vehicleView.live||vehicleView.space!=tracking.spaceGeneration||!frame||vehicleCameraRecordCount>=vehicleCameraRecords.size())return false;
-    const auto now=GetTickCount64();
-    if(vehicleCameraRecordCount){const auto& previous=vehicleCameraRecords[vehicleCameraRecordCount-1];
-        const bool changed=previous.owner!=vehicleView.owner||previous.tracking.spaceGeneration!=tracking.spaceGeneration||std::memcmp(&previous.tracking.head,&tracking.head,sizeof(tracking.head));
-        if(!changed&&now-previous.ms<500)return false;
-    }
-    VehicleCameraRecord record;record.owner=vehicleView.owner;record.frame=frame;record.ms=now;record.tracking=tracking;
+bool ObserveVehicleCameraPlan(unsigned frame,const runtime::TrackingFrame& tracking,const RenderViewCopy& native,const RenderViewCopy& adjusted,const std::array<RenderViewCopy,2>& planned,VehicleCameraEvidenceKey& key)noexcept {
+    key={};std::lock_guard lock(vehicleViewMutex);
+    if(!vehicleView.live||vehicleView.space!=tracking.spaceGeneration||!frame)return false;
+    VehicleCameraRecord record;record.key={vehicleView.owner,frame,tracking.spaceGeneration,tracking.generation,tracking.predictedNs};
+    record.ms=GetTickCount64();
+    if(!vehicleCameraRecords.Due(record.key,record.ms))return false;
+    record.tracking=tracking;
     if(!CameraEvidenceMatrix(native,record.native)||!CameraEvidenceMatrix(adjusted,record.adjusted)||!CameraEvidenceMatrix(planned[0],record.planned[0])||!CameraEvidenceMatrix(planned[1],record.planned[1]))return false;
-    vehicleCameraRecords[vehicleCameraRecordCount++]=record;return true;
+    if(!vehicleCameraRecords.Observe(record))return false;
+    key=record.key;return true;
 }
-void ObserveVehicleCameraApplied(unsigned frame,unsigned eye,const RenderViewCopy& actual)noexcept {
+void ObserveVehicleCameraApplied(const VehicleCameraEvidenceKey& key,unsigned eye,const RenderViewCopy& actual)noexcept {
     if(eye>1)return;std::lock_guard lock(vehicleViewMutex);
-    if(!vehicleCameraRecordCount)return;auto& record=vehicleCameraRecords[vehicleCameraRecordCount-1];
-    if(record.frame!=frame||record.appliedMask&(1u<<eye))return;
-    if(CameraEvidenceMatrix(actual,record.applied[eye]))record.appliedMask|=1u<<eye;
+    math::Matrix4 matrix{};if(!CameraEvidenceMatrix(actual,matrix))return;
+    vehicleCameraRecords.Enrich(key,vehicleView,eye,[&](VehicleCameraRecord& record){record.applied[eye]=matrix;});
 }
 void ReportBoatAimEvidence(std::ostream& out){
     std::lock_guard lock(vehicleViewMutex);out<<",\"boat_head_aim\":"<<(boatHeadAim?"true":"false")<<",\"boat_head_fire\":"<<(boatHeadFire?"true":"false")
@@ -5183,11 +5181,16 @@ void ReportVehicleCameraEvidence(std::ostream& out){
     std::lock_guard lock(vehicleViewMutex);const auto precision=out.precision();out.precision(9);out<<",\"vehicle_camera_evidence\":[";
     const auto matrix=[&](const math::Matrix4& m){out<<'[';for(unsigned r=0;r<4;++r)for(unsigned c=0;c<4;++c){if(r||c)out<<',';out<<m.values[r][c];}out<<']';};
     const auto pose=[&](const math::Pose& p){out<<'['<<p.position.x<<','<<p.position.y<<','<<p.position.z<<','<<p.orientation.x<<','<<p.orientation.y<<','<<p.orientation.z<<','<<p.orientation.w<<']';};
-    for(unsigned n=0;n<vehicleCameraRecordCount;++n){const auto& r=vehicleCameraRecords[n];if(n)out<<',';
-        out<<"{\"native_frame\":"<<r.frame<<",\"ms\":"<<r.ms<<",\"actor\":"<<r.owner.actor<<",\"actor_generation\":"<<r.owner.generation<<",\"vehicle\":"<<r.owner.vehicle<<",\"entry\":"<<r.owner.seat<<",\"tracking_sequence\":"<<r.tracking.generation<<",\"space\":"<<r.tracking.spaceGeneration<<",\"predicted_ns\":"<<r.tracking.predictedNs<<",\"units_per_metre\":"<<r.tracking.worldUnitsPerMeter<<",\"applied_mask\":"<<r.appliedMask<<",\"reference_pose\":";pose(r.tracking.referenceHead);
+    for(std::size_t n=0;n<vehicleCameraRecords.Size();++n){const auto& r=vehicleCameraRecords.At(n);if(n)out<<',';
+        out<<"{\"native_frame\":"<<r.key.frame<<",\"ms\":"<<r.ms<<",\"actor\":"<<r.key.owner.actor<<",\"actor_generation\":"<<r.key.owner.generation<<",\"vehicle\":"<<r.key.owner.vehicle<<",\"entry\":"<<r.key.owner.seat<<",\"tracking_sequence\":"<<r.tracking.generation<<",\"space\":"<<r.tracking.spaceGeneration<<",\"predicted_ns\":"<<r.tracking.predictedNs<<",\"units_per_metre\":"<<r.tracking.worldUnitsPerMeter<<",\"applied_mask\":"<<r.appliedMask<<",\"reference_pose\":";pose(r.tracking.referenceHead);
         out<<",\"head_pose\":";pose(r.tracking.head);out<<",\"eye_poses\":[";pose(r.tracking.eyes[0]);out<<',';pose(r.tracking.eyes[1]);out<<"],\"native_camera\":";matrix(r.native);out<<",\"adjusted_camera\":";matrix(r.adjusted);
         out<<",\"planned_eyes\":[";matrix(r.planned[0]);out<<',';matrix(r.planned[1]);out<<"],\"applied_eyes\":[";matrix(r.applied[0]);out<<',';matrix(r.applied[1]);out<<"]}";
-    }out<<']';out.precision(precision);
+    }out<<']';
+    out<<",\"vehicle_camera_evidence_retention\":{\"policy\":\"first_and_rolling_latest\",\"minimum_interval_ms\":"<<VehicleCameraEvidence<VehicleCameraRecord>::MinimumIntervalMs
+        <<",\"capacity\":"<<VehicleCameraEvidence<VehicleCameraRecord>::MaxRecords<<",\"samples\":"<<vehicleCameraRecords.Samples()<<",\"retained\":"<<vehicleCameraRecords.Size()
+        <<",\"omitted\":"<<vehicleCameraRecords.Omitted()<<",\"incomplete_pairs\":"<<vehicleCameraRecords.Incomplete()<<",\"retained_incomplete_pairs\":"<<vehicleCameraRecords.RetainedIncomplete()
+        <<",\"omitted_incomplete_pairs\":"<<vehicleCameraRecords.OmittedIncomplete()<<",\"duplicate_eye_updates\":"<<vehicleCameraRecords.DuplicateEyes()<<",\"unmatched_eye_updates\":"<<vehicleCameraRecords.UnmatchedEyes()<<'}';
+    out.precision(precision);
 }
 bool InstallProjectileTarget(std::span<const std::byte> bytes,const engine::PeImage& pe,
     std::uintptr_t base,bool observe,bool originRequest,bool processRetainedProbe,bool smokeRequest=false)noexcept {

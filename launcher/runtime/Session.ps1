@@ -340,7 +340,16 @@ try {
         $state.phase='BC2 closed; native cleanup and final report completion were not observed.'
     }
     $state.state='ended'
-} catch {$state.state='failed';$state.error=$_.Exception.Message;Write-Error -Message $_.Exception.Message -ErrorAction Continue}
+} catch {
+    $sessionFailure=$_
+    $state.state='failed';$state.error=$sessionFailure.Exception.Message
+    try{
+        $cause=$sessionFailure.Exception.GetBaseException()
+        $state.failure_context=@{phase=$state.phase;script=$sessionFailure.InvocationInfo.ScriptName;line=$sessionFailure.InvocationInfo.ScriptLineNumber;exception_type=$cause.GetType().FullName;hresult=$cause.HResult}
+        if($cause.Data.Contains('fvr_json_write')){$state.failure_context.json_write=$cause.Data['fvr_json_write']}
+    }catch{} # Preserve the original error even if diagnostic capture fails.
+    Write-Error -Message $sessionFailure.Exception.Message -ErrorAction Continue
+}
 finally {
     try {Stop-OwnedHost}catch{$state.state='failed';$state.error+=" Headset host cleanup failed: $($_.Exception.Message)"}
     # Native bootstrap must drain its hooks after the host exits. Do not kill a

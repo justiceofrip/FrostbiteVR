@@ -1,5 +1,5 @@
 BC2 VR shared integration coordination
-Updated: November 7, 2026
+Updated: November 8, 2026
 Policy for this run: one coordinator worktree; coordinator owns shared integration.
 Canonical repository: G:\Unity\VRMMO\FrostbiteVR
 Canonical integration branch: integrate/coordinator-20261101-feedback72; accepted ref: checkpoint/436-r56-equipment-rendering
@@ -21,6 +21,11 @@ truthful shutdown reports and bounded timing tools included; earlier belt-fed
 continuity and trigger-free jabs retained. Stable shortcut verifies76. All707-720
 agents retired. Historical scripted cycles/offline checks do not override human74
 failure. No headset acceptance/FPS gain/public release claimed. See native76 README.
+
+ROOT721 candidate77 combines rolling vehicle camera evidence and the reproduced
+launcher status-reader publication repair; builds/install remain pending.
+Actual721 launch failed before host/input, closed normally and restored profiles.
+Original failure retained; no unchanged retry. See native77 README.
 
 ROOT721/tools725 adds bounded natural held-cover comparison;16planner/22driver
 checks pass, current24 production profiles reused. Source tools only/native76

@@ -524,6 +524,7 @@ struct TrackedTransaction {
     fvr::ipc::FrameLease lease{};std::array<fvr::bc2::RenderViewCopy,2> saved{},written{},observed{},right{};
     bool capturesOkay=true;
     fvr::bc2::RenderedViewEvidence renderedView;
+    fvr::bc2::VehicleCameraEvidenceKey vehicleCameraEvidence{};
     fvr::bc2::BodyPropPair bodyPropPair;
     std::array<float,16> savedAnchor{},writtenAnchor{};bool anchorWritten=false;
 } tracked;
@@ -1646,7 +1647,7 @@ void ApplyTrackedView(unsigned world,unsigned request,unsigned view)noexcept {
         auto source=tracked.saved;if(!fvr::bc2::gameplay::AdjustViewBase(source,tracked.lease.tracking,&tracked.lease,&tracked.renderedView)){cancel();return;}
         auto plan=fvr::bc2::BuildTrackedViews(source,tracked.lease.tracking,tracked.lease.tracking.worldUnitsPerMeter);if(!plan){cancel();return;}
         for(auto& eye:plan->camera)for(auto& camera:eye)fvr::bc2::PrecomputeCameraCaches(camera,updateView,updateProjection,updateFrustum,updateScale);
-        vehicleCameraEvidenceFrame.store(fvr::bc2::gameplay::ObserveVehicleCameraPlan(e.frame,tracked.lease.tracking,tracked.saved[0],source[0],{plan->camera[0][0],plan->camera[1][0]})?e.frame.load():0,std::memory_order_release);
+        vehicleCameraEvidenceFrame.store(fvr::bc2::gameplay::ObserveVehicleCameraPlan(e.frame,tracked.lease.tracking,tracked.saved[0],source[0],{plan->camera[0][0],plan->camera[1][0]},tracked.vehicleCameraEvidence)?e.frame.load():0,std::memory_order_release);
         if(weatherObservationEnabled)weatherGate.Begin(GetTickCount64(),CurrentWeatherKey());
         if(!trackedCameraEvidence.frame.load(std::memory_order_acquire)&&
            (!weatherObservationEnabled||weatherGate.Active(CurrentWeatherKey())))trackedCameraEvidence.frame.store(e.frame,std::memory_order_release);
@@ -1661,7 +1662,7 @@ void ApplyTrackedView(unsigned world,unsigned request,unsigned view)noexcept {
         tracked.right=plan->camera[1];SetDiagnosticCameras(e.main,plan->camera[0]);
         for(unsigned i=0;i<2;++i)Read(e.main+(i?layout.secondaryOffset:layout.primaryOffset),tracked.written[i].bytes.data(),0x460);
         if(!e.framesRendered.load(std::memory_order_acquire)){e.firstFrame=e.frame;e.initialColorFrame=e.frame;}
-        if(vehicleCameraEvidenceFrame.load(std::memory_order_acquire)==e.frame.load()){fvr::bc2::RenderViewCopy actualLeft{};if(Read(e.main+layout.primaryOffset,actualLeft.bytes.data(),0x460))fvr::bc2::gameplay::ObserveVehicleCameraApplied(e.frame,0,actualLeft);}
+        if(vehicleCameraEvidenceFrame.load(std::memory_order_acquire)==e.frame.load()){fvr::bc2::RenderViewCopy actualLeft{};if(Read(e.main+layout.primaryOffset,actualLeft.bytes.data(),0x460))fvr::bc2::gameplay::ObserveVehicleCameraApplied(tracked.vehicleCameraEvidence,0,actualLeft);}
         SaveTrackedCameraEvidence(e.main,0,0);
         tracked.state.store(1,std::memory_order_release);
         BeginWeatherRuntime();
@@ -1670,7 +1671,7 @@ void ApplyTrackedView(unsigned world,unsigned request,unsigned view)noexcept {
         // Apply the right camera at the same post-clamp boundary. This also
         // preserves the conservative culling extent from the owned stereo plan.
         SetDiagnosticCameras(e.eye,tracked.right);SaveTrackedCameraEvidence(e.eye,1,0);
-        if(vehicleCameraEvidenceFrame.load(std::memory_order_acquire)==e.frame.load()){fvr::bc2::RenderViewCopy actualRight{};if(Read(e.eye+layout.primaryOffset,actualRight.bytes.data(),0x460))fvr::bc2::gameplay::ObserveVehicleCameraApplied(e.frame,1,actualRight);}
+        if(vehicleCameraEvidenceFrame.load(std::memory_order_acquire)==e.frame.load()){fvr::bc2::RenderViewCopy actualRight{};if(Read(e.eye+layout.primaryOffset,actualRight.bytes.data(),0x460))fvr::bc2::gameplay::ObserveVehicleCameraApplied(tracked.vehicleCameraEvidence,1,actualRight);}
     }
 }
 

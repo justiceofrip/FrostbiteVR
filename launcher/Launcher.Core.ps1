@@ -51,8 +51,10 @@ function Get-FvrLocalLaunchRoute($Backend, [ValidateSet('MainMenu','Campaign')][
 }
 function Write-FvrJson([string]$Path, $Value, [switch]$RetrySessionPublication) {
     $temp = $Path + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
+    $publicationStage='serialize_temporary';$attempt=0
     try {
         [IO.File]::WriteAllText($temp, ($Value | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+        $publicationStage='atomic_move'
         $publicationClock=if($RetrySessionPublication){[Diagnostics.Stopwatch]::StartNew()}else{$null}
         for($attempt=0;;$attempt++){
             try{[IO.File]::Move($temp, $Path, $true);break}
@@ -71,6 +73,13 @@ function Write-FvrJson([string]$Path, $Value, [switch]$RetrySessionPublication) 
                 if($publicationClock.Elapsed.TotalMilliseconds -ge 250){throw}
             }
         }
+    } catch {
+        $publicationFailure=$_
+        try{
+            $cause=$publicationFailure.Exception.GetBaseException()
+            $cause.Data['fvr_json_write']=@{path=$Path;temporary=$temp;stage=$publicationStage;hresult=$cause.HResult;attempts=$(if($publicationStage -eq 'atomic_move'){$attempt+1}else{0})}
+        }catch{} # Diagnostics must never replace the publication failure.
+        throw $publicationFailure
     } finally { if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force } }
 }
 function Assert-FvrVersion([string]$Version) {

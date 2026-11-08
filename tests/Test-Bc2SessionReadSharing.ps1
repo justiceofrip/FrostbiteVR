@@ -85,6 +85,8 @@ try{
     $wall.Stop()
     Check ((BaseException) -is [UnauthorizedAccessException] -and (BaseException).HResult -eq -2147024891 -and $f.attempts -le 25 -and $f.sleeps -le 24) 'persistent actual reader is refused within bounded attempts'
     Check-Preserved 'persistent reader refusal preserves complete old target and removes temporary'
+    $detail=(BaseException).Data['fvr_json_write']
+    Check ($detail.path -ceq $statePath -and $detail.stage -ceq 'atomic_move' -and $detail.hresult -eq -2147024891 -and $detail.attempts -eq $f.attempts -and $detail.temporary -ceq $f.temporary) 'publication failure preserves exact path, stage, original error and bounded attempt count'
     $cases.Add(@{reader_share='Read';attempts=$f.attempts;sleeps=$f.sleeps;elapsed_ms=$wall.Elapsed.TotalMilliseconds;outcome='bounded_refusal'})
 
     Reset;Hold
@@ -122,6 +124,14 @@ try{
     Reset
     Attempt {Write-ObservedFvrJson (Join-Path $fixture 'missing/session.json') @{generation=2} -RetrySessionPublication}
     Check ((BaseException) -is [IO.DirectoryNotFoundException] -and $f.attempts -eq 0 -and $f.sleeps -eq 0) 'missing parent directory is not recovered or retried'
+    $detail=(BaseException).Data['fvr_json_write']
+    Check ($detail.path -ceq (Join-Path $fixture 'missing/session.json') -and $detail.stage -ceq 'serialize_temporary' -and $detail.attempts -eq 0) 'temporary-write failure is distinguished from atomic replacement'
+    if(-not ('FvrFailingExceptionData' -as [type])){
+        Add-Type 'public sealed class FvrFailingExceptionData : System.Exception { public FvrFailingExceptionData() : base("original diagnostic failure fixture") {} public override System.Collections.IDictionary Data { get { throw new System.InvalidOperationException("diagnostic Data unavailable"); } } }'
+    }
+    Reset;$originalFailure=[FvrFailingExceptionData]::new();$f.injected=$originalFailure
+    Attempt {Write-ObservedFvrJson $statePath @{generation=2} -RetrySessionPublication}
+    Check ([object]::ReferenceEquals((BaseException),$originalFailure) -and $f.attempts -eq 1 -and $f.sleeps -eq 0) 'diagnostic recording failure never masks or retries the original exception'
     Reset
     [IO.File]::Delete($statePath)
     Write-ObservedFvrJson $statePath @{generation=2;payload='first publication'} -RetrySessionPublication

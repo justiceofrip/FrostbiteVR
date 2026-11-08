@@ -17,6 +17,7 @@
 #include "Bc2BodyHolsterObservation.h"
 #include "Bc2BodyHolsterProbe.h"
 #include "Bc2RenderedViewEvidence.h"
+#include "Bc2VehicleCameraEvidence.h"
 #include "fvr/interaction/BodyAnchors.h"
 #include "fvr/graphics/VehicleReticle.h"
 #include <memory>
@@ -106,8 +107,8 @@ void ObserveRenderedView(const RenderedViewEvidence&)noexcept;
 void ObserveRenderedViewAccepted(const ipc::FrameLease&,bool accepted)noexcept;
 void ObserveRenderedViewPublication(const ipc::FrameLease&,const graphics::PairTicket&)noexcept;
 // Bounded read-only plan and post-setter camera evidence; no native writes.
-bool ObserveVehicleCameraPlan(unsigned,const runtime::TrackingFrame&,const RenderViewCopy&,const RenderViewCopy&,const std::array<RenderViewCopy,2>&)noexcept;
-void ObserveVehicleCameraApplied(unsigned,unsigned,const RenderViewCopy&)noexcept;
+bool ObserveVehicleCameraPlan(unsigned,const runtime::TrackingFrame&,const RenderViewCopy&,const RenderViewCopy&,const std::array<RenderViewCopy,2>&,VehicleCameraEvidenceKey&)noexcept;
+void ObserveVehicleCameraApplied(const VehicleCameraEvidenceKey&,unsigned,const RenderViewCopy&)noexcept;
 void Start()noexcept;
 // Normal owned-knife close before disabling render/shared Update dependencies.
 // Existing session thread only; bounded wait, no new diagnostic worker.
