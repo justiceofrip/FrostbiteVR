@@ -19,6 +19,7 @@
 #include <new>
 #endif
 #include "Bc2DiagnosticObservationWindow.h"
+#include "Bc2AmmoPublisherObservation.h"
 #include "Bc2NativeCycleRuntime.h"
 #include "Bc2NativeCycleRecovery.h"
 #include "Bc2NativeCycleFailureJournal.h"
@@ -741,6 +742,24 @@ struct FixedGateObservation {
 std::atomic_flag fixedGateObservationLock=ATOMIC_FLAG_INIT;
 using FixedGateObservationWindow=DiagnosticObservationWindow<FixedGateObservation>;
 FixedGateObservationWindow fixedGateObservations(fixedGateObservationLock);
+std::atomic_flag ammoPublisherObservationLock=ATOMIC_FLAG_INIT;
+AmmoPublisherObservationWindow ammoPublisherObservations(ammoPublisherObservationLock);
+// This scope owns only value copies. Its destructor runs after the producer's
+// probe/request/channel guards have released, including every early return.
+class AmmoPublisherCapture {
+    AmmoPublisherObservationWindow::Ticket ticket_;
+public:
+    std::optional<AmmoPublisherObservation> row;
+    explicit AmmoPublisherCapture(std::int64_t now)noexcept:ticket_(ammoPublisherObservations.Begin(now)){
+        if(ticket_.epoch){row.emplace();row->windowEpoch=ticket_.epoch;row->windowBeginNs=ticket_.beginNs;
+            row->windowEndNs=ticket_.endNs;row->beginNs=now;}
+    }
+    AmmoPublisherObservation* Get()noexcept{return row?&*row:nullptr;}
+    ~AmmoPublisherCapture(){
+        if(!ticket_.epoch)return;
+        row->endNs=Now();ammoPublisherObservations.Publish(ticket_,*row,row->failure!=nullptr);
+    }
+};
 // Sole diagnostic lock: one try, no allocation, no gameplay lock acquisition.
 // Declared before gameplay guards, so destruction publishes after they release.
 class FixedGateCapture {
@@ -1595,17 +1614,23 @@ bool RequestTiming(const ReloadObservedConfig& c)noexcept {
     return requestCycle.IsMagazine()?requestCycle.MagazineProfile().ReadTiming(memory,c):ReadReloadRoundTiming(memory,c);
 }
 bool PrepareHoldOnce(const Observation& observation,unsigned firing,unsigned caller,unsigned context,ReloadHoldInput& input,unsigned& deltaBits,
-    ReloadCohortRejection& rejected,bool feedEquipmentRead=false,bool fixedContainerRead=false)noexcept {
+    ReloadCohortRejection& rejected,bool feedEquipmentRead=false,bool fixedContainerRead=false,AmmoPublisherObservation* diagnostic=nullptr)noexcept {
+    const auto fail=[&](const char* name,bool failed)noexcept{
+        if(diagnostic&&failed&&!diagnostic->failure)diagnostic->failureNs=Now();
+        return AmmoPublisherFails(diagnostic,name,failed);};
     rejected={};const auto reject=[&](unsigned reason){rejected.stage=reason;++holdPrepareRejected[reason];return false;};
-    if(!(requestMode?observation.frame.invocation.Record().id:observation.frame.id)||!observation.lease||observation.frame.depth!=1||!holdCodeVerified||
-       caller!=base+binding.code[1].rva+0x2f||!context||(context&3))return reject(0);
+    if(fail("prepare.invocation",!(requestMode?observation.frame.invocation.Record().id:observation.frame.id))||
+       fail("prepare.lease",!observation.lease)||fail("prepare.depth",observation.frame.depth!=1)||
+       fail("prepare.hold_code",!holdCodeVerified)||fail("prepare.caller",caller!=base+binding.code[1].rva+0x2f)||
+       fail("prepare.context_null",!context)||fail("prepare.context_alignment",context&3))return reject(0);
     ULONG_PTR low=0,high=0;GetCurrentThreadStackLimits(&low,&high);
-    if(context<low||std::uint64_t(context)+0x30>high)return reject(1);
+    if(diagnostic){diagnostic->stackLow=low;diagnostic->stackHigh=high;}
+    if(fail("prepare.stack_low",context<low)||fail("prepare.stack_high",std::uint64_t(context)+0x30>high))return reject(1);
     const auto& lease=*observation.lease;
-    if(!lease.server||!serverBinding||!IsCurrent(lease,Now())||
-       !(fixedContainerRead?ReadFixedContainerNativeConfig(memory,lease.snapshot.config):
+    if(fail("prepare.server",!lease.server)||fail("prepare.server_binding",!serverBinding)||fail("prepare.current",!IsCurrent(lease,Now()))||
+       fail("prepare.native_config",!(fixedContainerRead?ReadFixedContainerNativeConfig(memory,lease.snapshot.config):
          feedEquipmentRead?FeedEquipmentConfigMatches(lease.snapshot.config):
-         nativeBoltCandidate&&NativeCycleTarget(firing)?ReadManualBoltConfig(memory,lease.snapshot.config):RequestConfig(lease.snapshot.config)))return reject(2);
+         nativeBoltCandidate&&NativeCycleTarget(firing)?ReadManualBoltConfig(memory,lease.snapshot.config):RequestConfig(lease.snapshot.config))))return reject(2);
     input.identity.owner=lease.snapshot.owner;
     input.identity.firing={lease.snapshot.branches[0].address,lease.snapshot.branches[1].address,lease.server->links.firing};
     input.identity.serverPlayer=lease.server->links.player;input.identity.serverSoldier=lease.server->links.soldier;input.identity.serverItem=lease.server->links.item;
@@ -1613,26 +1638,34 @@ bool PrepareHoldOnce(const Observation& observation,unsigned firing,unsigned cal
     for(unsigned n=0;n<3;++n)if(input.identity.firing[n]==firing)input.branch=n;
     rejected.callerBranch=input.branch;
     for(unsigned n=0;n<3;++n){
-        ReloadServerBoundaryDiagnostic diagnostic;ReloadFlowBoundaryDiagnostic clientDiagnostic;
-        const auto boundary=BoundaryFor(lease,input.identity.firing[n],Now(),&diagnostic,&clientDiagnostic);
+        ReloadServerBoundaryDiagnostic serverDiagnostic;ReloadFlowBoundaryDiagnostic clientDiagnostic;
+        const auto boundary=BoundaryFor(lease,input.identity.firing[n],Now(),&serverDiagnostic,&clientDiagnostic);
         const auto capacity=Capacity(input.identity.firing[n],input.config.baseCapacity);
-        if(!boundary||!capacity){
+        if(diagnostic)diagnostic->failedBranch=n;
+        if(fail("prepare.boundary",!boundary)||fail("prepare.capacity",!capacity)){
+            if(diagnostic){diagnostic->preparationBoundary=boundary;diagnostic->preparationCapacity=capacity;}
             rejected.readBranch=n;rejected.boundaryOkay=bool(boundary);rejected.capacityOkay=bool(capacity);
-            rejected.server=diagnostic;rejected.client=clientDiagnostic;
+            rejected.server=serverDiagnostic;rejected.client=clientDiagnostic;
             if(input.branch<3){if(!boundary)++holdReadRejected[input.branch][n][0];if(!capacity)++holdReadRejected[input.branch][n][1];}
             const auto index=holdReadRejectionCount.fetch_add(1,std::memory_order_relaxed);
-            if(index<holdReadRejectionSamples.size())holdReadRejectionSamples[index]={Now(),input.branch,n,input.identity.firing[n],bool(boundary),bool(capacity),capacity.value_or(-1),diagnostic,clientDiagnostic};
+            if(index<holdReadRejectionSamples.size())holdReadRejectionSamples[index]={Now(),input.branch,n,input.identity.firing[n],bool(boundary),bool(capacity),capacity.value_or(-1),serverDiagnostic,clientDiagnostic};
             return reject(3);
         }
         auto& state=input.branches[n];state.address=boundary->firing;state.wrapperOffset=boundary->wrapperOffset;
         state.currentState=boundary->current;state.previousState=boundary->previous;state.nextState=boundary->next;state.phaseTimer=boundary->timer;
         state.loaded=boundary->loaded;state.reserve=boundary->reserve;state.flagsA8=boundary->flagsA8;input.capacities[n]=*capacity;
     }
-    input.contextObservedNs=Now();std::array<std::byte,0x30> raw{};if(!Context(context,raw))return reject(4);
-    const auto decoded=DecodeReloadUpdateContext(raw);if(!decoded)return reject(4);
+    if(diagnostic)diagnostic->failedBranch=3;
+    input.contextObservedNs=Now();std::array<std::byte,0x30> raw{};
+    const bool copied=Context(context,raw);
+    if(diagnostic){diagnostic->rawContext=raw;diagnostic->rawContextCopied=copied;}
+    if(fail("prepare.context_read",!copied))return reject(4);
+    const auto decoded=DecodeReloadUpdateContext(raw);if(fail("prepare.context_decode",!decoded))return reject(4);
     input.context=*decoded;deltaBits=Word<unsigned>(raw.data(),0x18);input.nowNs=Now();
     input.leaseDeadlineNs=std::min(lease.deadline,lease.snapshot.observedNs+200000000ll);
-    input.verified=input.branch<3&&IsCurrent(lease,input.nowNs)&&input.nowNs<input.leaseDeadlineNs;return input.verified?true:reject(5);
+    input.verified=!fail("prepare.branch",!(input.branch<3))&&
+        !fail("prepare.final_current",!IsCurrent(lease,input.nowNs))&&
+        !fail("prepare.deadline",!(input.nowNs<input.leaseDeadlineNs));return input.verified?true:reject(5);
 }
 bool PrepareHold(Observation& observation,unsigned firing,unsigned caller,unsigned context,ReloadHoldInput& input,unsigned& deltaBits)noexcept {
     ReloadCohortRejection rejected;
@@ -1818,37 +1851,69 @@ void ObserveFeedEquipment(const ReloadFlowRecord& completed)noexcept {
 }
 #ifdef FVR_BC2_AMMO_RESOURCE_HANDS
 enum class MagazineUpdateRoute {Ordinary,PausedBolt,IdleBolt};
+void PublishAmmoPlayerObserved(AmmoPublisherObservation* diagnostic,bool afterUpdate)noexcept {
+    if(!diagnostic){ammoPlayerChannel.Publish(ammoPlayerService.View(),ammoPlayerService.Outcome());return;}
+    auto& p=afterUpdate?diagnostic->updatePublication:diagnostic->selectPublication;
+    p.attempted=true;p.beginNs=Now();
+    const auto& view=ammoPlayerService.View();const auto& outcome=ammoPlayerService.Outcome();
+    p.passed=ammoPlayerChannel.Publish(view,outcome);p.endNs=Now();p.viewPresent=bool(view);
+    if(view){p.binding=view->binding;p.snapshot=view->snapshot;}
+    diagnostic->freshPublication=diagnostic->freshPublication||AmmoPublisherFreshPublication(*diagnostic,p);
+    if(!afterUpdate){if(!p.passed&&!diagnostic->failure)diagnostic->failureNs=p.endNs;
+        AmmoPublisherFails(diagnostic,"publisher.publish",!p.passed);}
+}
 void TryAmmoResourceHands(const Observation& observation,const ReloadHoldInput& in,void* self,void* context,
-    MagazineUpdateRoute route=MagazineUpdateRoute::Ordinary,bool* yielded=nullptr)noexcept {
+    MagazineUpdateRoute route=MagazineUpdateRoute::Ordinary,bool* yielded=nullptr,AmmoPublisherObservation* diagnostic=nullptr)noexcept {
+    const auto fail=[&](const char* name,bool failed)noexcept{
+        if(diagnostic&&failed&&!diagnostic->failure)diagnostic->failureNs=Now();
+        return AmmoPublisherFails(diagnostic,name,failed);};
     const bool pausedCycle=route==MagazineUpdateRoute::PausedBolt;
     const bool idleBolt=route==MagazineUpdateRoute::IdleBolt;
-    if(idleBolt&&!yielded)return;
-    if(!requestMode||!observation.lease||!in.verified||in.branch>=3||in.config.reloadType!=1)return;
-    Gate lock(ammoMoveProbeGate);if(!lock.held)return;
+    if(idleBolt&&fail("publisher.yield_slot",!yielded))return;
+    if(fail("publisher.request_mode",!requestMode)||fail("publisher.lease",!observation.lease)||
+       fail("publisher.verified",!in.verified)||fail("publisher.branch",in.branch>=3)||fail("publisher.reload_type",in.config.reloadType!=1))return;
+    Gate lock(ammoMoveProbeGate);if(fail("publisher.probe_lock",!lock.held))return;
     ammoPlayerService.Expire(Now());
     static ReloadHoldIdentity neutralOwner;static std::array<std::int64_t,3> neutral{};
     const auto& c=in.context;const auto now=Now();
-    if(in.contextObservedNs<=0||now<in.contextObservedNs||now-in.contextObservedNs>=50000000||now>=in.leaseDeadlineNs||
-       !ValidManualReloadDelta(c.deltaSeconds)||c.reloadTimeMultiplier!=1||c.inputFlags||c.fireRequested||c.orderRequested||
-       c.reloadRequested||!c.flags24Through28[0]||c.flags24Through28[2]||c.flags24Through28[4])return;
-    if(neutralOwner!=in.identity){neutralOwner=in.identity;neutral={};}
-    neutral[in.branch]=now;if(in.branch!=2)return;
-    for(auto stamp:neutral)if(stamp<=0||now<stamp||now-stamp>=50000000)return;
+    if(diagnostic){diagnostic->checkNowNs=now;diagnostic->neutral=neutral;diagnostic->neutralIdentity=neutralOwner;}
+    if(fail("publisher.context_time",in.contextObservedNs<=0)||fail("publisher.context_future",now<in.contextObservedNs)||
+       fail("publisher.context_age",now-in.contextObservedNs>=50000000)||fail("publisher.lease_deadline",now>=in.leaseDeadlineNs)||
+       fail("publisher.delta",!ValidManualReloadDelta(c.deltaSeconds))||fail("publisher.multiplier",c.reloadTimeMultiplier!=1)||
+       fail("publisher.input_flags",c.inputFlags)||fail("publisher.fire",c.fireRequested)||fail("publisher.order",c.orderRequested)||
+       fail("publisher.reload",c.reloadRequested)||fail("publisher.flag24",!c.flags24Through28[0])||
+       fail("publisher.flag26",c.flags24Through28[2])||fail("publisher.flag28",c.flags24Through28[4]))return;
+    if(neutralOwner!=in.identity){if(diagnostic)diagnostic->neutralOwnerChanged=true;neutralOwner=in.identity;neutral={};}
+    neutral[in.branch]=now;if(diagnostic){diagnostic->neutral=neutral;diagnostic->neutralIdentity=neutralOwner;}
+    if(in.branch!=2)return; // Expected client progress; not a failed fresh publication.
+    for(unsigned n=0;n<neutral.size();++n){const auto stamp=neutral[n];if(diagnostic)diagnostic->failedBranch=n;
+        if(fail("publisher.neutral_missing",stamp<=0)||fail("publisher.neutral_future",now<stamp)||
+           fail("publisher.neutral_age",now-stamp>=50000000))return;
+    }
     const auto& server=in.branches[2];
     for(unsigned n=0;n<3;++n){const auto& b=in.branches[n];
-        if(b.address!=in.identity.firing[n]||b.wrapperOffset!=(n==0?0x3cu:n==1?0x40u:0x10u)||
-           b.currentState!=2||b.nextState!=2||b.phaseTimer!=0||(b.flagsA8&(8|16))||b.loaded!=server.loaded||
-           b.reserve!=server.reserve||in.capacities[n]!=in.capacities[2])return;
+        if(diagnostic)diagnostic->failedBranch=n;
+        if(fail("publisher.firing_address",b.address!=in.identity.firing[n])||
+           fail("publisher.wrapper",b.wrapperOffset!=(n==0?0x3cu:n==1?0x40u:0x10u))||
+           fail("publisher.current_state",b.currentState!=2)||fail("publisher.next_state",b.nextState!=2)||
+           fail("publisher.phase_timer",b.phaseTimer!=0)||fail("publisher.flags_a8",b.flagsA8&(8|16))||
+           fail("publisher.loaded_coherence",b.loaded!=server.loaded)||fail("publisher.reserve_coherence",b.reserve!=server.reserve)||
+           fail("publisher.capacity_coherence",in.capacities[n]!=in.capacities[2]))return;
     }
-    const auto resource=ammoResourceBindings.Read(in.identity.owner,now);if(!resource)return;
+    if(diagnostic){diagnostic->failedBranch=3;diagnostic->bindingReadNs=now;}
+    const auto resource=ammoResourceBindings.Read(in.identity.owner,now,diagnostic?&diagnostic->bindingRead:nullptr);
+    if(fail("publisher.binding",!resource))return;
     Reader reader{memory};
     const auto profile=FindMagazineEquipment(in.config);
     const bool fixed=fixedContainerReloadEnabled&&ReadFixedContainerNativeConfig(memory,in.config);
     const bool bolt=(pausedCycle||idleBolt)&&ReadManualBoltConfig(memory,in.config);
+    if(diagnostic){diagnostic->fixed=fixed;diagnostic->bolt=bolt;diagnostic->profilePresent=bool(profile);}
     if(idleBolt&&(!bolt||!profile||!profile->Ready()||
        profile->native->cycleAdmission!=MagazineCycleAdmission::ReviewedBoltActionReload11Transfer12))return;
-    if((!fixed&&!bolt&&(!profile||!profile->Ready()))||!reader.Equals(std::uint64_t(in.identity.owner.weapon)+4,resource->data)||
-       !reader.Equals(std::uint64_t(resource->data)+0x64,resource->persistence)||ammoPlayerSequence==UINT64_MAX)return;
+    if((!fixed&&!bolt&&(fail("publisher.profile",!profile)||fail("publisher.profile_ready",!profile->Ready())))||
+       fail("publisher.weapon_data",!reader.Equals(std::uint64_t(in.identity.owner.weapon)+4,resource->data))||
+       fail("publisher.persistence",!reader.Equals(std::uint64_t(resource->data)+0x64,resource->persistence))||
+       fail("publisher.sequence_exhausted",ammoPlayerSequence==UINT64_MAX))return;
     bool idle=false;std::uint64_t inputFloor=0;
     if(pausedCycle)WithNativeCycle(NativeCycleAccess::Observation,[&]{
         idle=bolt&&nativeCycle.ReloadPause()&&!nativeCycle.ReloadCommand()&&
@@ -1856,8 +1921,9 @@ void TryAmmoResourceHands(const Observation& observation,const ReloadHoldInput& 
         inputFloor=nativeCycle.LastControlInput().sequence;
     });
     else WithRequest([&]{const auto phase=requestCycle.Phase();
-        idle=(phase==ReloadRequestCyclePhase::Idle||phase==ReloadRequestCyclePhase::Finished||phase==ReloadRequestCyclePhase::Cancelled)&&
-            (fixed||requestCycle.MatchesSelectedConfig(in.config));
+        if(diagnostic){diagnostic->requestLockEntered=true;diagnostic->requestPhase=int(phase);}
+        idle=!fail("publisher.request_phase",!(phase==ReloadRequestCyclePhase::Idle||phase==ReloadRequestCyclePhase::Finished||phase==ReloadRequestCyclePhase::Cancelled))&&
+            (fixed||!fail("publisher.request_config",!requestCycle.MatchesSelectedConfig(in.config)));
     },false);
     if(idle&&idleBolt){
         idle=false;
@@ -1865,11 +1931,14 @@ void TryAmmoResourceHands(const Observation& observation,const ReloadHoldInput& 
             idle=!nativeCycleReload.Active()&&nativeCycle.IdleBoltMagazine({in.identity,in.config});
         });
     }
-    if(!idle)return;
+    if(fail("publisher.request_lock_or_idle",!idle))return;
     ammoPlayerSequence=std::max(ammoPlayerSequence+1,inputFloor);
     const auto snapshot=AmmoResourceSample(in,*resource,ammoPlayerSequence);
-    if(!ammoPlayerService.Select(*resource,in.identity,snapshot,now)){ammoPlayerChannel.Publish(ammoPlayerService.View(),ammoPlayerService.Outcome());return;}
-    ammoPlayerChannel.Publish(ammoPlayerService.View(),ammoPlayerService.Outcome());
+    if(diagnostic){diagnostic->selectedSnapshot=snapshot;diagnostic->selectBeginNs=Now();}
+    const bool selected=ammoPlayerService.Select(*resource,in.identity,snapshot,now);
+    if(diagnostic){diagnostic->selected=selected;diagnostic->selectEndNs=Now();}
+    if(fail("publisher.select",!selected)){PublishAmmoPlayerObserved(diagnostic,false);return;}
+    PublishAmmoPlayerObserved(diagnostic,false);
     if(ammoPlayerService.Active())return;
     const auto request=ammoPlayerChannel.TakeIf([&](const AmmoResourceRequest& queued)noexcept {
         if(!idleBolt)return true;
@@ -1983,11 +2052,12 @@ void TryAmmoResourceHands(const Observation& observation,const ReloadHoldInput& 
     if(!called||!ammoResourceHandoff.Arm(invocation)){reject();return;}
     RecordPistolOutcome();ammoPlayerChannel.Publish(ammoPlayerService.View(),ammoPlayerService.Outcome());
 }
-void ObserveCycleAmmoResource(const ReloadFlowRecord& completed)noexcept {
+void ObserveCycleAmmoResource(const ReloadFlowRecord& completed,AmmoPublisherObservation* diagnostic=nullptr)noexcept {
+    if(diagnostic)diagnostic->updateBoundary=bool(completed.exit.boundary);
     if(!completed.exit.boundary)return;
     const auto row=AmmoResourceRow(completed);
     ammoResourceHandoff.Publish(row); // The exact helper-owning Update survives contention.
-    Gate lock(ammoMoveProbeGate);if(!lock.held)return;
+    Gate lock(ammoMoveProbeGate);if(diagnostic)diagnostic->updateProbeLock=lock.held;if(!lock.held)return;
     if(const auto pending=ammoResourceHandoff.Take())
         if(ammoPlayerService.Observe(*pending,Now()))++ammoPlayerCompleted;
     if(ammoPlayerService.Observe(row,Now()))++ammoPlayerCompleted;
@@ -1996,7 +2066,7 @@ void ObserveCycleAmmoResource(const ReloadFlowRecord& completed)noexcept {
         WithNativeCycle(NativeCycleAccess::NativeFinish,[&]{
             if(nativeCycleReload.Active())nativeCycleReload.Receipt(*outcome->receipt,ammoPlayerService.CompletionOwnUpdates());
         },&completed);
-    ammoPlayerChannel.Publish(ammoPlayerService.View(),ammoPlayerService.Outcome());
+    PublishAmmoPlayerObserved(diagnostic,true);
 }
 #endif
 #endif
@@ -2513,11 +2583,21 @@ void UpdateAfterObservation(void* self,void* context,unsigned extra,unsigned fir
 #ifdef FVR_BC2_AMMO_RESOURCE_HANDS
     if(requestMode&&fixedContainerReloadEnabled&&!cycleTarget&&observation.lease&&!observation.frame.cleanupOnly&&
        FixedContainerNativeConfig(observation.lease->snapshot.config)){
+        AmmoPublisherCapture capture(observation.entry.nowNs?observation.entry.nowNs:Now());auto* diagnostic=capture.Get();
+        if(diagnostic){
+            diagnostic->invocation=observation.frame.invocation.Record().id;diagnostic->parent=observation.entry.nativeParent;
+            diagnostic->update=observation.entry.nativeUpdate;diagnostic->frameId=observation.frame.id;
+            diagnostic->firing=firing;diagnostic->caller=caller;diagnostic->contextAddress=unsigned(context);diagnostic->depth=observation.frame.depth;
+            const auto& lease=*observation.lease;diagnostic->leasePresent=true;diagnostic->serverPresent=bool(lease.server);
+            diagnostic->leaseSnapshot=lease.snapshot;diagnostic->leaseIdentity=RoundIdentity(lease);diagnostic->leaseDeadlineNs=lease.deadline;
+            diagnostic->leaseRevision=lease.revision;diagnostic->cleanupEpoch=lease.cleanupEpoch;diagnostic->completionCycle=lease.completionCycle;
+        }
         ReloadHoldInput fixedInput;unsigned fixedDelta=0;ReloadCohortRejection rejected;
-        if(PrepareHoldOnce(observation,firing,caller,unsigned(context),fixedInput,fixedDelta,rejected,false,true))
-            TryAmmoResourceHands(observation,fixedInput,self,context);
+        const bool prepared=PrepareHoldOnce(observation,firing,caller,unsigned(context),fixedInput,fixedDelta,rejected,false,true,diagnostic);
+        if(diagnostic){diagnostic->prepared=prepared;diagnostic->preparation=rejected;diagnostic->input=fixedInput;diagnostic->deltaBits=fixedDelta;}
+        if(prepared)TryAmmoResourceHands(observation,fixedInput,self,context,MagazineUpdateRoute::Ordinary,nullptr,diagnostic);
         OriginalUpdateWithPistol(observation,self,context,extra);
-        if(const auto completed=observation.Finish())ObserveCycleAmmoResource(*completed);
+        if(const auto completed=observation.Finish())ObserveCycleAmmoResource(*completed,diagnostic);
         return;
     }
 #endif
@@ -3556,11 +3636,17 @@ std::optional<ReloadCycleRetirement> RetireRequestCycle(const ReloadHoldIdentity
     ++retireSuccesses;return receipt;
 }
 #ifdef FVR_BC2_CAMPAIGN_PROVISIONING
-std::optional<ReloadServerSnapshot> ReadCampaignProvisioningSource(std::int64_t now)noexcept {
+std::optional<ReloadServerSnapshot> ReadCampaignProvisioningSource(std::int64_t now,
+    campaignProvisioning::AdmissionEvent* failure)noexcept {
+    using Event=campaignProvisioning::AdmissionEvent;
+    const auto reject=[&](Event reason)->std::optional<ReloadServerSnapshot>{if(failure)*failure=reason;return {};};
     OwnerCopyGate gate;
-    if(!gate.held||!enabled.load(std::memory_order_acquire)||!serverBinding||!published.server||
-       !IsCurrent(published,now)||!ReadReloadServerOwner(memory,*serverBinding,binding.state,base,
-            *published.server,published.deadline,now))return {};
+    // Same ordered short-circuit predicates and native reads as before.
+    if(!gate.held)return reject(Event::SourceGateBusy);
+    if(!enabled.load(std::memory_order_acquire)||!serverBinding||!published.server)return reject(Event::SourceUnavailable);
+    if(!IsCurrent(published,now))return reject(Event::SourceStale);
+    if(!ReadReloadServerOwner(memory,*serverBinding,binding.state,base,
+            *published.server,published.deadline,now))return reject(Event::SourceOwnerVerification);
     return published.server;
 }
 bool CampaignProvisioningSettled(const ReloadStateOwner& owner,std::int64_t now)noexcept {
@@ -3731,7 +3817,129 @@ void RequestFixedContainerGateObservation(std::int64_t observedNs,std::int64_t e
     // Copy only the existing live snapshot window; no native/input lease changes.
     fixedGateObservations.Request(observedNs,existingObservationUntilNs);
     feedGateObservations.Request(observedNs,existingObservationUntilNs);
+    ammoPublisherObservations.Request(observedNs,existingObservationUntilNs);
 }
+void WriteAmmoPublisherObservation(std::ostream& out,bool details=true){
+    AmmoPublisherObservationWindow::Snapshot copy;
+    if(!ammoPublisherObservations.Read(copy)){out<<"{\"available\":false,\"reason\":\"diagnostic_busy\"}";return;}
+    const auto drops=ammoPublisherObservations.Drops();
+    const auto owner=[&](const ReloadStateOwner& o){
+        out<<"{\"player\":"<<o.player<<",\"soldier\":"<<o.soldier<<",\"weak\":"<<o.weak<<",\"weapon\":"<<o.weapon
+            <<",\"actorGeneration\":"<<o.actorGeneration<<",\"equipGeneration\":"<<o.equipGeneration<<",\"space\":"<<o.space<<'}';};
+    const auto identity=[&](const ReloadHoldIdentity& i){out<<"{\"owner\":";owner(i.owner);
+        out<<",\"firing\":["<<i.firing[0]<<','<<i.firing[1]<<','<<i.firing[2]<<"],\"serverPlayer\":"<<i.serverPlayer
+            <<",\"serverSoldier\":"<<i.serverSoldier<<",\"serverItem\":"<<i.serverItem<<'}';};
+    const auto context=[&](const interaction::AmmoResourceContext& c){const auto& r=c.resource;
+        out<<"{\"actor\":"<<r.actor<<",\"actorGeneration\":"<<r.actorGeneration<<",\"weapon\":"<<r.weapon
+            <<",\"weaponGeneration\":"<<r.weaponGeneration<<",\"equipGeneration\":"<<c.equipGeneration<<",\"space\":"<<c.space<<'}';};
+    const auto binding=[&](const std::optional<AmmoResourceBinding>& b){if(!b){out<<"null";return;}
+        out<<"{\"owner\":";owner(b->owner);out<<",\"context\":";context(b->context);
+        out<<",\"inventory\":"<<b->inventory<<",\"switching\":"<<b->switching<<",\"data\":"<<b->data<<",\"persistence\":"<<b->persistence
+            <<",\"observedNs\":"<<b->observedNs<<",\"deadlineNs\":"<<b->deadlineNs<<'}';};
+    const auto snapshot=[&](const std::optional<interaction::AmmunitionSnapshot>& s){if(!s){out<<"null";return;}
+        out<<"{\"context\":";context(s->context);out<<",\"sequence\":"<<s->sequence<<",\"observedNs\":"<<s->observedNs
+            <<",\"deadlineNs\":"<<s->deadlineNs<<",\"loaded\":"<<s->counts.loaded<<",\"reserve\":"<<s->counts.reserve
+            <<",\"capacity\":"<<s->counts.capacity<<",\"coherentIdleVerified\":"<<s->coherentIdleVerified<<'}';};
+    // Float bit patterns preserve nonfinite refused values without invalid JSON.
+    const auto bits=[](float value){unsigned word=0;static_assert(sizeof(word)==sizeof(value));std::memcpy(&word,&value,sizeof(word));return word;};
+    const auto config=[&](const ReloadObservedConfig& c){out<<"{\"weaponData\":"<<c.weaponData<<",\"firingData\":"<<c.firingData
+        <<",\"primaryFire\":"<<c.primaryFire<<",\"ammoAddress\":"<<c.ammoAddress<<",\"fireLogicType\":"<<c.fireLogicType
+        <<",\"reloadType\":"<<c.reloadType<<",\"baseCapacity\":"<<c.baseCapacity<<",\"numberOfMagazines\":"<<c.numberOfMagazines
+        <<",\"fireInputAction\":"<<c.fireInputAction<<",\"reloadInputAction\":"<<c.reloadInputAction
+        <<",\"reloadDelayBits\":"<<bits(c.reloadDelay)<<",\"reloadTimeBits\":"<<bits(c.reloadTime)
+        <<",\"reloadThresholdBits\":"<<bits(c.reloadThreshold)<<",\"postReloadTimeBits\":"<<bits(c.postReloadTime)
+        <<",\"boltDelayBits\":"<<bits(c.boltDelay)<<",\"boltTimeBits\":"<<bits(c.boltTime)
+        <<",\"holdBoltUntilFireRelease\":"<<c.holdBoltUntilFireRelease<<",\"holdBoltUntilZoomRelease\":"<<c.holdBoltUntilZoomRelease
+        <<",\"authoredStateCount\":"<<unsigned(c.authoredStateCount)<<",\"assetNameBytes\":[";
+        for(unsigned n=0;n<c.assetName.size();++n){if(n)out<<',';out<<unsigned(static_cast<unsigned char>(c.assetName[n]));}
+        out<<"],\"assetPathBytes\":[";for(unsigned n=0;n<c.assetPath.size();++n){if(n)out<<',';out<<unsigned(static_cast<unsigned char>(c.assetPath[n]));}
+        out<<"],\"authoredPumpHandling\":[";for(unsigned n=0;n<c.authoredPumpHandling.size();++n){if(n)out<<',';out<<c.authoredPumpHandling[n];}out<<"]}";};
+    const auto publication=[&](const AmmoPublisherObservation::Publication& p){out<<"{\"attempted\":"<<p.attempted
+        <<",\"passed\":"<<p.passed<<",\"beginNs\":"<<p.beginNs<<",\"endNs\":"<<p.endNs<<",\"viewPresent\":"<<p.viewPresent
+        <<",\"binding\":";binding(p.binding);out<<",\"snapshot\":";snapshot(p.snapshot);out<<'}';};
+    const auto row=[&](const std::optional<AmmoPublisherObservation>& value){if(!value){out<<"null";return;}const auto& r=*value;
+        out<<"{\"windowEpoch\":"<<r.windowEpoch<<",\"windowBeginNs\":"<<r.windowBeginNs<<",\"windowEndNs\":"<<r.windowEndNs
+            <<",\"beginNs\":"<<r.beginNs<<",\"endNs\":"<<r.endNs<<",\"failureNs\":"<<r.failureNs<<",\"firstFailedPredicate\":";
+        if(r.failure)out<<'"'<<r.failure<<'"';else out<<"null";
+        if(!details){
+            out<<",\"invocation\":"<<r.invocation<<",\"failedBranch\":"<<r.failedBranch<<",\"prepareStage\":"<<r.preparation.stage
+                <<",\"prepareReadBranch\":"<<r.preparation.readBranch<<",\"owner\":";owner(r.leaseIdentity.owner);
+            out<<",\"selected\":"<<r.selected<<",\"selectBeginNs\":"<<r.selectBeginNs<<",\"selectEndNs\":"<<r.selectEndNs
+                <<",\"selectPublished\":"<<r.selectPublication.passed<<",\"selectPublicationNs\":"<<r.selectPublication.endNs
+                <<",\"updatePublished\":"<<r.updatePublication.passed<<",\"updatePublicationNs\":"<<r.updatePublication.endNs
+                <<",\"freshPublication\":"<<r.freshPublication<<",\"selectedSnapshot\":";snapshot(r.selectedSnapshot);out<<'}';return;
+        }
+        out<<",\"invocation\":"<<r.invocation<<",\"parent\":"<<r.parent<<",\"update\":"<<r.update<<",\"frameId\":"<<r.frameId
+            <<",\"firing\":"<<r.firing<<",\"caller\":"<<r.caller<<",\"contextAddress\":"<<r.contextAddress<<",\"depth\":"<<r.depth
+            <<",\"failedBranch\":"<<r.failedBranch<<",\"lease\":{\"present\":"<<r.leasePresent<<",\"server\":"<<r.serverPresent
+            <<",\"identity\":";identity(r.leaseIdentity);out<<",\"config\":";config(r.leaseSnapshot.config);
+        out<<",\"sequence\":"<<r.leaseSnapshot.sequence<<",\"observedNs\":"<<r.leaseSnapshot.observedNs<<",\"deadlineNs\":"<<r.leaseDeadlineNs
+            <<",\"revision\":"<<r.leaseRevision<<",\"cleanupEpoch\":"<<r.cleanupEpoch<<",\"completionCycle\":"<<r.completionCycle<<'}';
+        const auto& d=r.preparation;const auto& c=d.client;const auto& s=d.server;
+        out<<",\"preparation\":{\"passed\":"<<r.prepared<<",\"stage\":"<<d.stage<<",\"callerBranch\":"<<d.callerBranch
+            <<",\"readBranch\":"<<d.readBranch<<",\"boundaryOkay\":"<<d.boundaryOkay<<",\"capacityOkay\":"<<d.capacityOkay
+            <<",\"stackLow\":"<<r.stackLow<<",\"stackHigh\":"<<r.stackHigh<<",\"clientFailure\":"<<unsigned(c.failure)
+            <<",\"clientChangedOffset\":"<<c.changedOffset<<",\"clientChangedBefore\":"<<unsigned(c.changedBefore)
+            <<",\"clientChangedAfter\":"<<unsigned(c.changedAfter)<<",\"clientBeforeSoldierFlags\":"<<unsigned(c.beforeSoldierFlags)
+            <<",\"clientAfterSoldierFlags\":"<<unsigned(c.afterSoldierFlags)<<",\"serverFailure\":"<<unsigned(s.failure)
+            <<",\"serverStateFailure\":"<<s.stateFailure<<",\"serverChangedOffset\":"<<s.changedOffset
+            <<",\"serverChangedBefore\":"<<unsigned(s.changedBefore)<<",\"serverChangedAfter\":"<<unsigned(s.changedAfter)
+            <<",\"serverExpectedSoldierFlags\":"<<unsigned(s.expectedSoldierFlags)<<",\"serverObservedSoldierFlags\":"<<unsigned(s.observedSoldierFlags)
+            <<",\"serverAfterSoldierFlags\":"<<unsigned(s.afterSoldierFlags)<<",\"links\":[";
+        for(unsigned n=0;n<std::min<unsigned>(s.linkDifference.count,unsigned(s.linkDifference.first.size()));++n){const auto& l=s.linkDifference.first[n];if(n)out<<',';
+            out<<"{\"field\":\""<<l.field<<"\",\"index\":"<<l.index<<",\"expected\":"<<l.expected<<",\"observed\":"<<l.observed<<'}';}
+        out<<"],\"capacity\":";if(r.preparationCapacity)out<<*r.preparationCapacity;else out<<"null";
+        out<<",\"boundary\":";if(!r.preparationBoundary)out<<"null";else{const auto& b=*r.preparationBoundary;
+            out<<"{\"firing\":"<<b.firing<<",\"branch\":"<<unsigned(b.branch)<<",\"current\":"<<b.current<<",\"next\":"<<b.next
+                <<",\"timerBits\":"<<bits(b.timer)<<",\"flagsA8\":"<<unsigned(b.flagsA8)<<",\"loaded\":"<<b.loaded<<",\"reserve\":"<<b.reserve<<'}';}
+        out<<",\"rawContextCopied\":"<<r.rawContextCopied<<",\"rawContextBytes\":[";
+        for(unsigned n=0;n<r.rawContext.size();++n){if(n)out<<',';out<<unsigned(r.rawContext[n]);}out<<"]}";
+        const auto& in=r.input;const auto& u=in.context;out<<",\"input\":{\"identity\":";identity(in.identity);
+        out<<",\"branch\":"<<in.branch<<",\"verified\":"<<in.verified<<",\"nowNs\":"<<in.nowNs
+            <<",\"contextObservedNs\":"<<in.contextObservedNs<<",\"leaseDeadlineNs\":"<<in.leaseDeadlineNs
+            <<",\"deltaBits\":"<<r.deltaBits<<",\"deltaSecondsBits\":"<<bits(u.deltaSeconds)
+            <<",\"reloadTimeMultiplierBits\":"<<bits(u.reloadTimeMultiplier)<<",\"inputFlags\":"<<u.inputFlags
+            <<",\"rawWord1c\":"<<u.rawWord1c<<",\"fire\":"<<u.fireRequested<<",\"order\":"<<u.orderRequested
+            <<",\"reload\":"<<u.reloadRequested<<",\"flags24Through28\":[";
+        for(unsigned n=0;n<u.flags24Through28.size();++n){if(n)out<<',';out<<u.flags24Through28[n];}
+        out<<"],\"branches\":[";
+        for(unsigned n=0;n<3;++n){if(n)out<<',';const auto& b=in.branches[n];out<<"{\"address\":"<<b.address
+            <<",\"wrapperOffset\":"<<b.wrapperOffset<<",\"current\":"<<b.currentState<<",\"previous\":"<<b.previousState
+            <<",\"next\":"<<b.nextState<<",\"timerBits\":"<<bits(b.phaseTimer)<<",\"flagsA8\":"<<unsigned(b.flagsA8)
+            <<",\"loaded\":"<<b.loaded<<",\"reserve\":"<<b.reserve<<",\"capacity\":"<<in.capacities[n]<<'}';}out<<"]}";
+        out<<",\"checkNowNs\":"<<r.checkNowNs<<",\"neutral\":["<<r.neutral[0]<<','<<r.neutral[1]<<','<<r.neutral[2]
+            <<"],\"neutralOwnerChanged\":"<<r.neutralOwnerChanged<<",\"neutralIdentity\":";identity(r.neutralIdentity);
+        out<<",\"bindingRead\":{\"nowNs\":"<<r.bindingReadNs
+            <<",\"reason\":"<<unsigned(r.bindingRead.reason)<<",\"gateHeld\":"<<r.bindingRead.gateHeld
+            <<",\"revisionRead\":"<<r.bindingRead.revisionRead<<",\"storedRevision\":"<<r.bindingRead.storedRevision
+            <<",\"currentRevision\":"<<r.bindingRead.currentRevision<<",\"value\":";binding(r.bindingRead.value);out<<'}';
+        out<<",\"fixed\":"<<r.fixed<<",\"bolt\":"<<r.bolt<<",\"profilePresent\":"<<r.profilePresent
+            <<",\"requestLockEntered\":"<<r.requestLockEntered<<",\"requestPhase\":"<<r.requestPhase
+            <<",\"selectBeginNs\":"<<r.selectBeginNs<<",\"selectEndNs\":"<<r.selectEndNs<<",\"selected\":"<<r.selected
+            <<",\"selectedSnapshot\":";snapshot(r.selectedSnapshot);out<<",\"selectPublication\":";publication(r.selectPublication);
+        out<<",\"updateBoundary\":"<<r.updateBoundary<<",\"updateProbeLock\":"<<r.updateProbeLock<<",\"updatePublication\":";
+        publication(r.updatePublication);out<<",\"freshPublication\":"<<r.freshPublication<<'}';
+    };
+    const auto& r=copy.retention;
+    out<<"{\"available\":true,\"schema\":\"bc2vr.ammo-publisher-observation.v1\",\"commandAuthority\":false"
+        <<",\"windowEpoch\":"<<copy.window.epoch<<",\"windowBeginNs\":"<<copy.window.beginNs<<",\"windowEndNs\":"<<copy.window.endNs
+        <<",\"calls\":"<<copy.calls<<",\"rejected\":"<<copy.rejected<<",\"accepted\":"<<r.accepted<<",\"selections\":"<<r.selections
+        <<",\"cachedRepublishes\":"<<r.republished<<",\"episodes\":"<<r.episodes<<",\"episodeCapacity\":"<<r.Capacity
+        <<",\"overwritten\":"<<r.overwritten<<",\"outOfOrder\":"<<r.outOfOrder<<",\"scopeChanges\":"<<r.scopeChanges
+        <<",\"firstTimingComplete\":"<<(!r.overwritten&&!r.outOfOrder&&!copy.lateEpochDropped&&!drops.publication&&!drops.request)
+        <<",\"retentionOrder\":\"diagnostic_commit\",\"lateEpochDropped\":"<<copy.lateEpochDropped
+        <<",\"publicationDropped\":"<<drops.publication<<",\"requestDropped\":"<<drops.request<<",\"snapshotDropped\":"<<drops.snapshot
+        <<",\"busyDropCounterScope\":\"process\",\"open\":"<<r.open<<",\"details\":"<<details
+        <<",\"liveOmittedOlderGaps\":"<<(!details&&r.count?r.count-1:0)<<",\"gaps\":[";
+    const auto first=details||!r.count?0:r.count-1;
+    for(unsigned n=first;n<r.count;++n){if(n!=first)out<<',';const auto& gap=r.gaps[(r.next+r.Capacity-r.count+n)%r.Capacity];
+        out<<"{\"precedingAccepted\":";row(gap.precedingAccepted);out<<",\"firstFailure\":";row(gap.firstFailure);
+        out<<",\"latestFailure\":";row(gap.latestFailure);out<<",\"firstSelect\":";row(gap.firstSelect);
+        out<<",\"firstPublication\":";row(gap.firstPublication);out<<'}';}
+    out<<"],\"lastFresh\":";row(r.lastFresh);out<<",\"latest\":";
+    row(copy.latest?std::optional<AmmoPublisherObservation>{copy.latest->value}:std::nullopt);out<<'}';
+}
+
 void WriteFixedContainerGateObservation(std::ostream& out){
     FixedGateObservationWindow::Snapshot captured;
     if(!fixedGateObservations.Read(captured)){out<<"{\"available\":false,\"reason\":\"diagnostic_busy\"}";return;}
@@ -3830,7 +4038,8 @@ void WriteFixedContainerGateObservation(std::ostream& out){
         first->value.publication.lifetime==preceding->value.publication.lifetime&&
         first->value.publication.inputSequence==preceding->value.publication.inputSequence&&
         first->value.publication.revision>0&&preceding->value.publication.revision==first->value.publication.revision-1;
-    out<<",\"precedingAcceptedSameInput\":"<<joined<<",\"latest\":";row(latest,false);out<<'}';
+    out<<",\"precedingAcceptedSameInput\":"<<joined<<",\"latest\":";row(latest,false);
+    out<<",\"ammoPublisher\":";WriteAmmoPublisherObservation(out,false);out<<'}';
 }
 FixedContainerGateResult PublishFixedContainerGateResult(const FixedContainerGate& publication)noexcept {
 #ifdef FVR_BC2_AMMO_RESOURCE_HANDS
@@ -4723,6 +4932,7 @@ void Report(std::ostream& out){
     out<<']';
 #endif
 #ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+    out<<",\"ammo_publisher_observation\":";WriteAmmoPublisherObservation(out);
     out<<",\"ammo_resource_hands\":{\"private_candidate\":true,\"ordinary_input_build\":";
 #ifdef FVR_BC2_RESOURCE_MAGAZINES
     out<<"true";
@@ -5251,7 +5461,10 @@ bool AcknowledgeNativeCycleRecovery(const interaction::WeaponCycleIdleDebtReady&
 bool EnableNativeCycleRecovery()noexcept{return false;}
 bool EnablePumpHoldDiagnostic()noexcept{return false;}
 #ifdef FVR_BC2_CAMPAIGN_PROVISIONING
-std::optional<ReloadServerSnapshot> ReadCampaignProvisioningSource(std::int64_t)noexcept{return {};}
+std::optional<ReloadServerSnapshot> ReadCampaignProvisioningSource(std::int64_t,
+    campaignProvisioning::AdmissionEvent* failure)noexcept{
+    if(failure)*failure=campaignProvisioning::AdmissionEvent::SourceUnavailable;return {};
+}
 bool CampaignProvisioningSettled(const ReloadStateOwner&,std::int64_t)noexcept{return false;}
 #endif
 #ifdef FVR_BC2_CAMPAIGN_PROVISIONING

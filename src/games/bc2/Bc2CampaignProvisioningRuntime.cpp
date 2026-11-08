@@ -51,15 +51,22 @@ void CallSeatOriginal(void* self,unsigned seat,void* context){
 void __fastcall SeatHook(void* self,void*,unsigned seat,void* context){
     const auto caller=unsigned(_ReturnAddress());seatCalls.fetch_add(1,std::memory_order_acq_rel);++seatDepth;
     if(enabled.load(std::memory_order_acquire)){
+        auto diagnosticToken=service.AdmissionToken();
+        if(diagnosticToken)service.RecordAdmission(diagnosticToken,AdmissionEvent::SeatHook,Now());
         std::unique_lock lock(gate,std::try_to_lock);
         if(lock.owns_lock()){
-            const auto now=Now();const auto source=reloadFlowRuntime::ReadCampaignProvisioningSource(now);
-            if(source&&source->links.soldier==unsigned(self)){
+            diagnosticToken=service.AdmissionToken();
+            AdmissionEvent sourceFailure=AdmissionEvent::SourceUnavailable;
+            const auto now=Now();const auto source=reloadFlowRuntime::ReadCampaignProvisioningSource(now,&sourceFailure);
+            if(!source)service.RecordAdmission(diagnosticToken,sourceFailure,now);
+            else if(source->links.soldier!=unsigned(self))service.RecordAdmission(diagnosticToken,AdmissionEvent::SoldierMismatch,now);
+            else {
                 policy::Boundary boundary{ProvisionOwner(*source,identity.session),++seatSequence,now,
                     source->client.observedNs,GetCurrentThreadId(),caller,seat,firingDepth.load(std::memory_order_acquire),seatDepth,seatPrefix};
-                gameplay::CampaignProvisioningSeatEntry(service,*source,boundary);
+                if(!gameplay::CampaignProvisioningSeatEntry(service,*source,boundary))
+                    service.RecordAdmission(diagnosticToken,AdmissionEvent::InputGateRefused,now);
             }
-        }
+        }else if(diagnosticToken)service.RecordAdmission(diagnosticToken,AdmissionEvent::RuntimeGateBusy,Now());
     }
     // Exactly one original invocation on every ordinary path, even refusal.
     // SEH finally preserves depth on native unwind; it does not catch or retry.
@@ -163,12 +170,22 @@ void ServiceTransport(const std::filesystem::path& directory)noexcept {
         okay=CloseHandle(file)&&okay;
         const auto attributes=GetFileAttributesW(path.c_str());
         if(attributes!=INVALID_FILE_ATTRIBUTES&&(attributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT)))okay=false;
-        if(okay)MoveFileExW(temporary.c_str(),path.c_str(),MOVEFILE_REPLACE_EXISTING);
+        if(okay)okay=MoveFileExW(temporary.c_str(),path.c_str(),MOVEFILE_REPLACE_EXISTING)!=FALSE;
+        // CREATE_NEW above is the ownership boundary: never remove a
+        // preexisting pending file. Discard only this invocation's temporary
+        // so a later passive worker pass can publish a fresh value snapshot.
+        // Cleanup is best effort if the OS still refuses access.
+        if(!okay)(void)DeleteFileW(temporary.c_str());
         // Failed publication never retries a native command or changes nonce.
     };
     Request request{};if(read(directory/L"campaign-provision-request.bin",request))(void)Submit(request);
     if(const auto source=SourceRequest())write(directory/L"campaign-provision-source.bin",*source);
-    write(directory/L"campaign-provision-receipt.bin",ToWire(Snapshot()));
+    // Join both value-only outputs under the existing gate. Files are separate
+    // publications; consumers must match full process identity + nonce + job.
+    WireReceipt receipt;AdmissionReceipt admission;
+    {std::lock_guard lock(gate);service.Expire(Now());receipt=ToWire(service.Read());admission=service.ReadAdmission();}
+    write(directory/L"campaign-provision-receipt.bin",receipt);
+    if(admission.nonce)write(directory/L"campaign-provision-admission.bin",admission);
 }
 }
 #else

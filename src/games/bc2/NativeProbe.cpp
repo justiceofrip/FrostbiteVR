@@ -3934,7 +3934,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         }();
         if(campaignProvisioningRequested){
             Require(continuous&&streamMode&&(config.flags&0x800u),"Campaign provisioning requires retained VR gameplay");
-            for(const auto name:{L"campaign-provision-request.bin",L"campaign-provision-source.bin",L"campaign-provision-receipt.bin"})
+            for(const auto name:{L"campaign-provision-request.bin",L"campaign-provision-source.bin",L"campaign-provision-receipt.bin",L"campaign-provision-admission.bin"})
                 Require(!std::filesystem::exists(output.parent_path()/name),"Campaign provisioning requires fresh private transport");
             const auto identity=fvr::bc2::campaignProvisioning::Identify(bytes);
             Require(identity.has_value(),"Campaign provisioning process identity unavailable");

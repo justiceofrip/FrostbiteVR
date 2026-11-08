@@ -7,7 +7,10 @@
 namespace fvr::bc2 {
 // Bounded diagnostic value copies only. The supplied flag is dedicated to this
 // journal; updates/copies try it once and hold it for no native work.
-template<class Row> class DiagnosticObservationWindow {
+struct DiagnosticObservationNoRetention {
+    template<class Entry> void Observe(const Entry&,bool)noexcept {}
+};
+template<class Row,class Retention=DiagnosticObservationNoRetention> class DiagnosticObservationWindow {
 public:
     struct Ticket {
         std::uint64_t epoch=0;
@@ -18,6 +21,7 @@ public:
         Ticket window{};
         std::uint64_t calls=0,rejected=0,lateEpochDropped=0;
         std::optional<Entry> firstFailure,precedingAccepted,lastAccepted,latest;
+        Retention retention{};
     };
     struct DropCounts {std::uint64_t publication=0,request=0,snapshot=0;};
     explicit DiagnosticObservationWindow(std::atomic_flag& flag)noexcept:flag_(flag){}
@@ -59,7 +63,7 @@ public:
             ++state_.rejected;
             if(!state_.firstFailure){state_.firstFailure=entry;state_.precedingAccepted=state_.lastAccepted;}
         }else state_.lastAccepted=entry;
-        state_.latest=entry;return true;
+        state_.latest=entry;state_.retention.Observe(entry,rejected);return true;
     }
     bool Read(Snapshot& copy)noexcept {
         Gate gate(flag_);

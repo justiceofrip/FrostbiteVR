@@ -218,7 +218,134 @@ unsigned TestInputGate(){unsigned groups=0;
     return groups;
 }
 
-int main(){unsigned groups=TestInputGate();
+unsigned TestAdmissionDiagnostics(){unsigned groups=0;
+    {CampaignFixture f;f.Configure();
+        // Exercise exhaustion through accepted requests, not a private counter
+        // shortcut. Expiry has no native assignment or input ownership effect.
+        for(unsigned nonce=1;nonce<=cp::AdmissionCounters::MaxScopes;++nonce){
+            const auto request=f.Request(cp::Operation::Observe,nonce);
+            CHECK(f.campaign.Submit(request,f.b.nowNs));
+            CHECK(f.campaign.ReadAdmission().scope==nonce);
+            f.campaign.Expire(request.deadlineNs);
+            CHECK(f.campaign.ReadAdmission().status==unsigned(cp::Status::Expired));
+            f.b.nowNs=request.deadlineNs;f.b.ownerObservedNs=f.b.nowNs;f.Sync();
+        }
+        const auto request=f.Request(cp::Operation::Observe,cp::AdmissionCounters::MaxScopes+1);
+        CHECK(f.campaign.Submit(request,f.b.nowNs));const auto accepted=f.campaign.ReadAdmission();
+        CHECK(!accepted.scope&&accepted.frozen&&!accepted.frozenNs&&!f.campaign.AdmissionToken());
+        CHECK(accepted.status==unsigned(cp::Status::Observing)&&accepted.nonce==request.nonce);
+        CHECK(accepted.process==request.process&&accepted.job==request.job&&accepted.acceptedNs==f.b.nowNs);
+        CHECK(accepted.issuedNs==request.issuedNs&&accepted.deadlineNs==request.deadlineNs);
+        f.campaign.RecordAdmission(cp::AdmissionCounters::MaxScopes,cp::AdmissionEvent::SeatHook,f.b.nowNs);
+        f.campaign.Expire(request.deadlineNs);const auto terminal=f.campaign.ReadAdmission();
+        CHECK(terminal.status==unsigned(cp::Status::Expired)&&terminal.frozenNs==request.deadlineNs);
+        CHECK(!terminal.scope&&terminal.frozen&&!terminal.saturatedMask);
+        for(const auto count:terminal.counts)CHECK(!count);
+        f.campaign.Expire(request.deadlineNs+1);f.campaign.SeatEntry(f.source,f.b);
+        const auto later=f.campaign.ReadAdmission();CHECK(std::memcmp(&terminal,&later,sizeof(terminal))==0);
+        // A subsequent request still reaches Ready with exhausted diagnostics.
+        f.b.nowNs=request.deadlineNs;f.b.ownerObservedNs=f.b.nowNs;f.Sync();
+        const auto next=f.Request(cp::Operation::Observe,cp::AdmissionCounters::MaxScopes+2);
+        CHECK(f.campaign.Submit(next,f.b.nowNs));
+        CHECK(f.campaign.ReadAdmission().status==unsigned(cp::Status::Observing)&&!f.campaign.ReadAdmission().frozenNs);
+        for(unsigned n=0;n<8;++n)f.Step();const auto ready=f.campaign.ReadAdmission();
+        CHECK(f.campaign.Read().status==cp::Status::Ready&&ready.status==unsigned(cp::Status::Ready));
+        CHECK(!ready.scope&&ready.frozen&&ready.frozenNs==f.b.nowNs&&ready.nonce==next.nonce);
+        f.campaign.Stop();const auto stopped=f.campaign.ReadAdmission();
+        CHECK(f.campaign.Read().status==cp::Status::Stopped&&std::memcmp(&ready,&stopped,sizeof(ready))==0);
+        CHECK(!f.calls&&!f.excluded&&!f.retired&&!f.resumed&&!f.campaign.BlocksInput());++groups;
+    }
+    {cp::AdmissionCounters counters;CHECK(!counters.Token());
+        counters.Begin(100,200);const auto token=counters.Token();CHECK(token);
+        for(unsigned n=0;n<cp::AdmissionCounters::Count;++n){
+            const auto event=cp::AdmissionEvent(n);
+            counters.Record(token,event,99);counters.Record(token,event,200);counters.Record(token,event,201);
+            CHECK(counters.Read().counts[n]==0);counters.Record(token,event,100);
+        }
+        for(const auto count:counters.Read().counts)CHECK(count==1);
+        CHECK(counters.Freeze());const auto frozen=counters.Read();CHECK(!counters.Token());
+        counters.Record(token,cp::AdmissionEvent::SeatHook,101);CHECK(counters.Read().counts==frozen.counts);
+        CHECK(!counters.Freeze());counters.Begin(201,300);CHECK(counters.Token()!=token);
+        counters.Record(token,cp::AdmissionEvent::ServiceEntered,250);
+        for(const auto count:counters.Read().counts)CHECK(!count);++groups;
+    }
+    {cp::AdmissionCounters counters;counters.Begin(100,200);const auto token=counters.Token();
+        std::array<std::thread,4> threads;
+        for(auto& thread:threads)thread=std::thread([&]{for(unsigned i=0;i<1000;++i)
+            counters.Record(token,cp::AdmissionEvent::RuntimeGateBusy,150);});
+        for(auto& thread:threads)thread.join();counters.Freeze();const auto snapshot=counters.Read();
+        CHECK(snapshot.counts[unsigned(cp::AdmissionEvent::RuntimeGateBusy)]==cp::AdmissionCounters::Limit);
+        CHECK(snapshot.saturatedMask==(1u<<unsigned(cp::AdmissionEvent::RuntimeGateBusy)));
+        CHECK(!snapshot.counts[unsigned(cp::AdmissionEvent::ServiceEntered)]);++groups;
+    }
+    {cp::AdmissionCounters counters;counters.Begin(100,200);const auto token=counters.Token();
+        std::latch ready(1),release(1);std::thread old([&]{ready.count_down();release.wait();
+            counters.Record(token,cp::AdmissionEvent::SoldierMismatch,150);});
+        ready.wait();counters.Freeze();const auto before=counters.Read();
+        counters.Begin(100,200);release.count_down();old.join();
+        CHECK(counters.Read().scope!=before.scope);CHECK(!counters.Read().counts[unsigned(cp::AdmissionEvent::SoldierMismatch)]);
+        for(unsigned n=2;n<cp::AdmissionCounters::MaxScopes;++n)counters.Begin(100,200);
+        CHECK(counters.Token());counters.Begin(100,200);CHECK(!counters.Token()&&!counters.Read().scope);++groups;
+    }
+    {CampaignFixture f;f.Configure();f.b.ownerObservedNs-=82222100;f.Sync();
+        const auto request=f.Request(cp::Operation::Observe);
+        CHECK(f.campaign.Submit(request,f.b.nowNs));const auto token=f.campaign.AdmissionToken();
+        f.campaign.ObserveServer(f.source,f.b.owner.firing[2],f.b.thread,f.b.sequence,f.b.nowNs);
+        f.campaign.RecordAdmission(token,cp::AdmissionEvent::SeatHook,f.b.nowNs);
+        f.campaign.RecordAdmission(token,cp::AdmissionEvent::RuntimeGateBusy,f.b.nowNs);
+        f.campaign.Expire(request.deadlineNs+39103900);
+        const auto before=cp::ToWire(f.campaign.Read());const auto diagnostic=f.campaign.ReadAdmission();
+        CHECK(before.status==unsigned(cp::Status::Expired)&&!before.preflight&&!before.nativeCalls);
+        CHECK(before.current==fvr::bc2::ReloadStateOwner{}&&before.boundary==0);
+        CHECK(diagnostic.frozen&&diagnostic.status==before.status&&diagnostic.deadlineNs==request.deadlineNs);
+        CHECK(diagnostic.nonce==request.nonce&&diagnostic.job==request.job&&diagnostic.process==request.process);
+        CHECK(diagnostic.counts[unsigned(cp::AdmissionEvent::SeatHook)]==1);
+        CHECK(!diagnostic.counts[unsigned(cp::AdmissionEvent::ServiceEntered)]);
+        // Later valid-looking source + ServerAge must not rewrite the retained
+        // actual79/09 zero-current Expired receipt or its diagnostic snapshot.
+        f.b.nowNs=request.deadlineNs+28000000000ll;f.b.ownerObservedNs=f.b.nowNs;f.Sync();f.campaign.SeatEntry(f.source,f.b);
+        const auto after=cp::ToWire(f.campaign.Read());CHECK(std::memcmp(&before,&after,sizeof(before))==0);
+        const auto afterDiagnostic=f.campaign.ReadAdmission();
+        CHECK(std::memcmp(&diagnostic,&afterDiagnostic,sizeof(diagnostic))==0);
+        f.campaign.RecordAdmission(token,cp::AdmissionEvent::ServiceEntered,request.issuedNs+1);
+        CHECK(f.campaign.ReadAdmission().counts==diagnostic.counts);
+        CHECK(!f.campaign.Submit(request,f.b.nowNs));CHECK(f.campaign.ReadAdmission().nonce==request.nonce);
+        CHECK(f.campaign.Submit(f.Request(cp::Operation::Observe,2),f.b.nowNs));
+        CHECK(!f.campaign.ReadAdmission().frozen&&f.campaign.ReadAdmission().nonce==2);
+        for(const auto count:f.campaign.ReadAdmission().counts)CHECK(!count);CHECK(!f.calls);++groups;
+    }
+    {CampaignFixture f;f.Configure();CHECK(f.campaign.Submit(f.Request(cp::Operation::Observe),f.b.nowNs));
+        auto nested=f.b;nested.seatDepth=2;const auto before=cp::ToWire(f.campaign.Read());
+        f.campaign.SeatEntry(f.source,nested);const auto after=cp::ToWire(f.campaign.Read());
+        CHECK(std::memcmp(&before,&after,sizeof(before))==0);
+        CHECK(f.campaign.ReadAdmission().counts[unsigned(cp::AdmissionEvent::NestedDepth)]==1);
+        CHECK(!f.campaign.ReadAdmission().counts[unsigned(cp::AdmissionEvent::ServiceEntered)]);
+        for(unsigned n=0;n<8;++n)f.Step();CHECK(f.campaign.Read().status==cp::Status::Ready);
+        const auto complete=cp::ToWire(f.campaign.Read());const auto diagnostic=f.campaign.ReadAdmission();
+        CHECK(diagnostic.frozen&&diagnostic.counts[unsigned(cp::AdmissionEvent::ServiceEntered)]==8);
+        f.Step();const auto later=cp::ToWire(f.campaign.Read());CHECK(std::memcmp(&complete,&later,sizeof(complete))==0);
+        CHECK(f.campaign.ReadAdmission().counts==diagnostic.counts&&!f.calls);++groups;
+    }
+    {CampaignFixture f;f.Begin();f.settled=false;for(unsigned n=0;n<8;++n)f.Step();
+        CHECK(f.campaign.Read().status==cp::Status::Refused);const auto before=cp::ToWire(f.campaign.Read());
+        f.Step();const auto after=cp::ToWire(f.campaign.Read());CHECK(std::memcmp(&before,&after,sizeof(before))==0);
+        CHECK(f.campaign.ReadAdmission().frozen&&!f.calls);++groups;
+    }
+    {CampaignFixture f;f.Begin();f.Dispatch();f.Converge(0xa0000);
+        const auto equipped=cp::ToWire(f.campaign.Read());const auto equipDiagnostic=f.campaign.ReadAdmission();
+        CHECK(equipDiagnostic.frozen&&equipDiagnostic.status==unsigned(cp::Status::Equipped));
+        f.Step();const auto later=cp::ToWire(f.campaign.Read());CHECK(std::memcmp(&equipped,&later,sizeof(later))==0);
+        CHECK(f.campaign.Submit(f.Request(cp::Operation::Restore,2),f.b.nowNs));f.Step();f.Converge(0x90000);
+        const auto restored=cp::ToWire(f.campaign.Read());const auto restoreDiagnostic=f.campaign.ReadAdmission();
+        CHECK(restoreDiagnostic.frozen&&restoreDiagnostic.status==unsigned(cp::Status::Restored));
+        CHECK(restoreDiagnostic.scope!=equipDiagnostic.scope&&restoreDiagnostic.nonce==2);
+        f.Step();const auto last=cp::ToWire(f.campaign.Read());CHECK(std::memcmp(&restored,&last,sizeof(last))==0);
+        CHECK(f.calls==2&&f.retired==2&&f.resumed==2);++groups;
+    }
+    return groups;
+}
+
+int main(){unsigned groups=TestInputGate()+TestAdmissionDiagnostics();
     {CampaignFixture f;f.Begin();
         f.duringAssignment=[&]{
             auto nested=f.b;nested.seatDepth=2;nested.nowNs+=3000000000ll;

@@ -34,7 +34,7 @@ using FeedbackWriter=bool(*)(const interaction::FeedbackEvent&)noexcept;
 #ifdef FVR_BC2_CAMPAIGN_PROVISIONING
 bool EnableCampaignProvisioning()noexcept;
 ReloadStateMemory CampaignProvisioningMemory()noexcept;
-void CampaignProvisioningSeatEntry(campaignProvisioning::Service&,const ReloadServerSnapshot&,const campaignProvisioning::policy::Boundary&)noexcept;
+bool CampaignProvisioningSeatEntry(campaignProvisioning::Service&,const ReloadServerSnapshot&,const campaignProvisioning::policy::Boundary&)noexcept;
 campaignProvisioning::LifetimeHost::Exclusion ExcludeCampaignProvisioning(const ReloadServerSnapshot&,std::uint64_t)noexcept;
 bool RetireCampaignProvisioningItem(const ReloadServerSnapshot&,std::uint32_t,std::uint32_t,std::uint64_t,std::int64_t)noexcept;
 bool ResumeCampaignProvisioning(const ReloadServerSnapshot&,std::uint64_t)noexcept;

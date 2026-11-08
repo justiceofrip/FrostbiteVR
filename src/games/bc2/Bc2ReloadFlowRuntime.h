@@ -2,6 +2,7 @@
 #include "Bc2ReloadObservation.h"
 #ifdef FVR_BC2_CAMPAIGN_PROVISIONING
 #include "Bc2ReloadServer.h"
+#include "Bc2CampaignProvisioningDiagnostics.h"
 #endif
 #include "Bc2ReloadOwnerLoss.h"
 #include "Bc2PreholdEntryObservation.h"
@@ -396,7 +397,8 @@ bool PublishOwner(const ReloadStateSnapshot&,std::int64_t deadlineNs)noexcept;
 // retire an old resource domain. Same-actor changes and input loss do nothing.
 bool RetireAmmoForReplacementActor(const ReloadStateOwner&)noexcept;
 #ifdef FVR_BC2_CAMPAIGN_PROVISIONING
-std::optional<ReloadServerSnapshot> ReadCampaignProvisioningSource(std::int64_t now)noexcept;
+std::optional<ReloadServerSnapshot> ReadCampaignProvisioningSource(std::int64_t now,
+    campaignProvisioning::AdmissionEvent* failure=nullptr)noexcept;
 bool CampaignProvisioningSettled(const ReloadStateOwner&,std::int64_t now)noexcept;
 #endif
 void ClearOwner(ReloadOwnerLoss loss=ReloadOwnerLoss::LifetimeEnded)noexcept;

@@ -1,5 +1,6 @@
 #pragma once
 #include "Bc2CampaignProvisioningPolicy.h"
+#include "Bc2CampaignProvisioningDiagnostics.h"
 #include "Bc2ReloadServer.h"
 #include <array>
 #include <cstdint>
@@ -54,6 +55,17 @@ struct WireReceipt {
 };
 static_assert(std::is_trivially_copyable_v<WireReceipt>&&sizeof(WireReceipt)==1272);
 WireReceipt ToWire(const Receipt&)noexcept;
+// Separate private v1 output. Request (1264) and WireReceipt (1272) are intact.
+// Counts are diagnostic lower bounds when their bit in saturatedMask is set.
+struct AdmissionReceipt {
+    std::uint32_t magic=0x31414342,version=1,bytes=0,operation=0;
+    ProcessIdentity process{};
+    std::uint64_t nonce=0,job=0;
+    std::int64_t acceptedNs=0,issuedNs=0,deadlineNs=0,frozenNs=0;
+    std::uint32_t status=0,scope=0,frozen=1,saturatedMask=0;
+    std::array<std::uint32_t,AdmissionCounters::Count> counts{};
+};
+static_assert(std::is_trivially_copyable_v<AdmissionReceipt>&&sizeof(AdmissionReceipt)==1200);
 struct LifetimeHost {
     enum class Exclusion:std::uint32_t {Refused,Pending,Ready};
     void* context=nullptr;
@@ -82,12 +94,21 @@ public:
     void Stop()noexcept;
     const Receipt& Read()const noexcept{return receipt_;}
     bool BlocksInput()const noexcept{return receipt_.inputExcluded;}
+    // Only these two diagnostic accessors may run without the runtime gate.
+    std::uint64_t AdmissionToken()const noexcept{return admission_.Token();}
+    void RecordAdmission(std::uint64_t token,AdmissionEvent event,std::int64_t now)noexcept{
+        admission_.Record(token,event,now);
+    }
+    AdmissionReceipt ReadAdmission()const noexcept; // existing runtime gate held
 private:
     bool Source(const Request&,const ReloadServerSnapshot&,const policy::Boundary&)const noexcept;
     void Quarantine(std::int64_t now)noexcept;
+    void FreezeAdmission(std::int64_t now)noexcept;
     void FinishUnsent(Status,std::int64_t now,const ReloadServerSnapshot*)noexcept;
     ProcessIdentity process_{};policy::Memory memory_{};policy::Host host_{};LifetimeHost lifetime_{};
     policy::WeaponProvisioner policy_{};Receipt receipt_{};
+    AdmissionCounters admission_;AdmissionReceipt admissionReceipt_{};
+    bool admissionTerminal_=true; // Metadata remains available after counter-scope exhaustion.
     std::optional<Request> request_;std::optional<policy::Resource> target_;
     std::optional<ReloadServerSnapshot> retiredSource_;
     std::uint64_t lastNonce_=0,job_=0;

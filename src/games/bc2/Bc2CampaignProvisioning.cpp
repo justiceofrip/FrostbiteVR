@@ -40,7 +40,24 @@ bool Service::Submit(const Request& request,std::int64_t now)noexcept {
     if(request.operation==Operation::Observe&&(request.targetAsset||request.targetData))return false;
     request_=request;dispatchArmed_=false;lastNonce_=request.nonce;job_=request.job;receipt_.nonce=request.nonce;receipt_.job=request.job;
     receipt_.status=request.operation==Operation::Observe?Status::Observing:Status::Preflight;
-    receipt_.observedNs=now;return true;
+    receipt_.observedNs=now;
+    admissionReceipt_={};admissionReceipt_.bytes=sizeof(AdmissionReceipt);admissionReceipt_.process=process_;
+    admissionReceipt_.nonce=request.nonce;admissionReceipt_.job=request.job;
+    admissionReceipt_.operation=std::uint32_t(request.operation);admissionReceipt_.acceptedNs=now;
+    admissionReceipt_.issuedNs=request.issuedNs;admissionReceipt_.deadlineNs=request.deadlineNs;
+    admissionReceipt_.status=std::uint32_t(receipt_.status);admissionTerminal_=false;
+    admission_.Begin(now,request.deadlineNs);return true;
+}
+AdmissionReceipt Service::ReadAdmission()const noexcept {
+    auto out=admissionReceipt_;const auto counters=admission_.Read();
+    out.scope=counters.scope;out.frozen=counters.frozen;out.saturatedMask=counters.saturatedMask;out.counts=counters.counts;
+    if(!admissionTerminal_)out.status=std::uint32_t(receipt_.status);
+    return out;
+}
+void Service::FreezeAdmission(std::int64_t now)noexcept {
+    admission_.Freeze();
+    if(!admissionTerminal_){admissionTerminal_=true;
+        admissionReceipt_.status=std::uint32_t(receipt_.status);admissionReceipt_.frozenNs=now;}
 }
 void Service::ObserveServer(const ReloadServerSnapshot& source,std::uint32_t firing,std::uint32_t thread,
                             std::uint64_t sequence,std::int64_t now)noexcept {
@@ -56,17 +73,21 @@ bool Service::Source(const Request& request,const ReloadServerSnapshot& source,c
         b.ownerObservedNs==source.client.observedNs;
 }
 void Service::Quarantine(std::int64_t now)noexcept {
-    receipt_.status=Status::Quarantined;receipt_.inputExcluded=true;receipt_.observedNs=now;request_.reset();
+    receipt_.status=Status::Quarantined;receipt_.inputExcluded=true;receipt_.observedNs=now;request_.reset();FreezeAdmission(now);
 }
 void Service::FinishUnsent(Status status,std::int64_t now,const ReloadServerSnapshot* source)noexcept {
     policy_.CancelUnsent();
     if(receipt_.inputExcluded&&(!source||!lifetime_.resume(lifetime_.context,*source,receipt_.nonce))){Quarantine(now);return;}
-    receipt_.inputExcluded=false;receipt_.status=status;receipt_.observedNs=now;request_.reset();
+    receipt_.inputExcluded=false;receipt_.status=status;receipt_.observedNs=now;request_.reset();FreezeAdmission(now);
 }
 void Service::SeatEntry(const ReloadServerSnapshot& source,const policy::Boundary& b)noexcept {
     // A nested native seat call cannot expire or clear the outer in-flight
     // request. Only the verified top-level seat boundary owns this transition.
-    if(!configured_||stopped_||receipt_.status==Status::Quarantined||b.seatDepth!=1)return;
+    // A completed request owns an immutable receipt until a fresh Submit.
+    // In particular, a later SeatEntry cannot overwrite Expired current/age.
+    if(!configured_||stopped_||receipt_.status==Status::Quarantined||!request_)return;
+    admission_.Record(admission_.Token(),b.seatDepth==1?AdmissionEvent::ServiceEntered:AdmissionEvent::NestedDepth,b.nowNs);
+    if(b.seatDepth!=1)return;
     receipt_.observedNs=b.nowNs;receipt_.current=source.client.owner;
     // Seat callbacks enforce the same terminal deadline as worker expiry.
     // In particular, late convergence cannot reopen excluded input.
@@ -79,7 +100,7 @@ void Service::SeatEntry(const ReloadServerSnapshot& source,const policy::Boundar
             receipt_.native=policy_.Receipt();
             if(!receipt_.oldItemRetired||!lifetime_.resume(lifetime_.context,source,receipt_.nonce)){Quarantine(b.nowNs);return;}
             receipt_.inputExcluded=false;receipt_.status=phase==policy::ProvisionPhase::AwaitingRestore?Status::Restored:Status::Equipped;
-            request_.reset();
+            request_.reset();FreezeAdmission(b.nowNs);
         }
         return;
     }
@@ -89,7 +110,7 @@ void Service::SeatEntry(const ReloadServerSnapshot& source,const policy::Boundar
     if(phase==policy::ProvisionPhase::Preflight){
         if(policy_.Preflight(memory_,host_,b))++receipt_.preflight;
         if(receipt_.preflight<8)return; // Retained bench requirement, not policy's lower minimum.
-        if(request_->operation==Operation::Observe){receipt_.status=Status::Ready;request_.reset();return;}
+        if(request_->operation==Operation::Observe){receipt_.status=Status::Ready;request_.reset();FreezeAdmission(b.nowNs);return;}
         target_=policy::SelectExactProvisionResource(memory_,request_->targetData,request_->targetAsset,request_->variant);
         if(!target_){FinishUnsent(Status::Refused,b.nowNs,&source);return;}
     }
@@ -121,7 +142,7 @@ void Service::SeatEntry(const ReloadServerSnapshot& source,const policy::Boundar
 void Service::Stop()noexcept {
     if(stopped_)return;stopped_=true;policy_.CancelUnsent();request_.reset();
     // Terminal session cleanup owns release. Stop never reopens an exclusion.
-    receipt_.status=Status::Stopped;
+    receipt_.status=Status::Stopped;FreezeAdmission(0); // Stop has no observation timestamp.
 }
 void Service::Expire(std::int64_t now)noexcept {
     if(!request_||stopped_||now<request_->deadlineNs)return;
