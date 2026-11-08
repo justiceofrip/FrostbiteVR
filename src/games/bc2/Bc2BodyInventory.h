@@ -161,6 +161,10 @@ public:
     void EnableAutomaticStow()noexcept{automaticEnabled_=enabled_;}
     void ObserveNativeActor(std::uint32_t manager,std::uint32_t player,std::uint32_t soldier,std::uint32_t weak,bool onFoot)noexcept;
     bool AutomaticStowPending()const noexcept{return automaticPending_;}
+    // Explicit private assignment receipt only, after native server replacement.
+    // Retire one exact resource lifetime; all other carried keys remain stable.
+    bool CanRetireProvisionedItem(const AmmoResourceBinding&)const noexcept;
+    bool RetireProvisionedItem(const AmmoResourceBinding&,std::uint64_t nonce)noexcept;
     void Cancel()noexcept;
     void SuspendInteraction()noexcept;
     void Report(std::ostream&)const;
@@ -200,6 +204,7 @@ private:
     std::vector<interaction::BodyInventoryItem> items_;std::vector<interaction::BodySlotAssignment> slots_;
     interaction::BodyInventoryOwner owner_{};
     std::uint32_t inventory_=0,switching_=0;
+    std::uint64_t provisionRetirementNonce_=0;
     std::uint64_t generation_=0,revision_=0,sequence_=0,lastInput_=0,lastHolsterInput_=0;
     std::int64_t lastNow_=0,nativeProofNs_=0;
     ReloadStateOwner nativeOwner_{};

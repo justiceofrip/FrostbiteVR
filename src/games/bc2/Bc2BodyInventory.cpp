@@ -214,6 +214,31 @@ void Bc2BodyInventory::ObserveAutomaticSelection(const BodyNativeItem& item)noex
     if(automaticItem_&&*automaticItem_!=item){automaticPending_=false;++automaticSuperseded_;}
     else automaticItem_=item;
 }
+bool Bc2BodyInventory::CanRetireProvisionedItem(const AmmoResourceBinding& binding)const noexcept {
+    return binding.owner==nativeOwner_&&!pending_&&!ordinaryDrawIssue_&&!automaticPending_&&revision_!=UINT64_MAX&&
+        binding.inventory==inventory_&&binding.switching==switching_&&
+        std::any_of(life_.begin(),life_.end(),[&](const Life& item){return item.native.weapon==binding.owner.weapon&&
+            item.native.data==binding.data&&item.native.persistence==binding.persistence&&
+            item.key.id==binding.context.resource.weapon&&item.key.generation==binding.context.resource.weaponGeneration;});
+}
+bool Bc2BodyInventory::RetireProvisionedItem(const AmmoResourceBinding& binding,std::uint64_t nonce)noexcept {
+    if(!CanRetireProvisionedItem(binding))return false;
+    if(!nonce||nonce<=provisionRetirementNonce_||binding.owner!=nativeOwner_||pending_||ordinaryDrawIssue_||
+       automaticPending_||binding.inventory!=inventory_||binding.switching!=switching_||revision_==UINT64_MAX)return false;
+    const auto found=std::find_if(life_.begin(),life_.end(),[&](const Life& item){
+        return item.native.weapon==binding.owner.weapon&&item.native.data==binding.data&&
+            item.native.persistence==binding.persistence&&item.key.id==binding.context.resource.weapon&&
+            item.key.generation==binding.context.resource.weaponGeneration;
+    });
+    if(found==life_.end())return false;
+    const auto key=found->key;life_.erase(found);
+    std::erase_if(items_,[&](const auto& item){return item.key==key;});
+    std::erase_if(slots_,[&](const auto& slot){return slot.item==key;});
+    // This receipt revokes transient selection/display only. It does not reset
+    // generation_, any other item key, any ammo ledger, or completed transfer.
+    display_.reset();armed_=false;heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();
+    ++revision_;provisionRetirementNonce_=nonce;return true;
+}
 void Bc2BodyInventory::Cancel()noexcept {
     ordinaryDrawIssue_.reset();
     display_.reset();

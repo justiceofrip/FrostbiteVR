@@ -1,5 +1,8 @@
 #pragma once
 #include "Bc2ReloadObservation.h"
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+#include "Bc2ReloadServer.h"
+#endif
 #include "Bc2ReloadOwnerLoss.h"
 #include "Bc2PreholdEntryObservation.h"
 #include "Bc2ReloadKeepAlive.h"
@@ -392,6 +395,10 @@ bool PublishOwner(const ReloadStateSnapshot&,std::int64_t deadlineNs)noexcept;
 // Only a proved replacement native actor plus excluded/drained callbacks may
 // retire an old resource domain. Same-actor changes and input loss do nothing.
 bool RetireAmmoForReplacementActor(const ReloadStateOwner&)noexcept;
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+std::optional<ReloadServerSnapshot> ReadCampaignProvisioningSource(std::int64_t now)noexcept;
+bool CampaignProvisioningSettled(const ReloadStateOwner&,std::int64_t now)noexcept;
+#endif
 void ClearOwner(ReloadOwnerLoss loss=ReloadOwnerLoss::LifetimeEnded)noexcept;
 // Private resource backend consumes the body's native lifetime, independently
 // of rendering or active hand claims. Normal builds do not dispatch from it.

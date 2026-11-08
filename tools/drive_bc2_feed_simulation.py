@@ -201,6 +201,25 @@ def read_json(path, maximum=128 * 1024):
     return json.loads(data.decode("utf-8-sig"), parse_constant=invalid), data
 
 
+def replace_command(temporary, path, deadline_ns, validate, replace=None):
+    for _ in range(1200):
+        require(time.perf_counter_ns() < deadline_ns, "original command publication deadline exceeded")
+        validate()
+        require(time.perf_counter_ns() < deadline_ns, "original command publication deadline exceeded")
+        try:
+            (os.replace if replace is None else replace)(temporary, path)
+            break
+        except OSError as error:
+            if getattr(error, "winerror", None) not in (5, 32, 33):
+                raise
+            remaining = deadline_ns - time.perf_counter_ns()
+            if remaining <= 0:
+                raise REFUSAL("original command publication deadline exceeded") from error
+            time.sleep(min(.001, remaining / NS))
+    else:
+        raise REFUSAL("bounded command publication iteration limit")
+
+
 def atomic(path, data, *, deadline_ns=None, validate=None):
     local_path(path)
     require(len(data) <= MAX_BYTES, "oversized atomic write")
@@ -216,22 +235,7 @@ def atomic(path, data, *, deadline_ns=None, validate=None):
             os.replace(temporary, path)
         else:
             require(callable(validate), "command publication requires its ownership guard")
-            for _ in range(1200):
-                require(time.perf_counter_ns() < deadline_ns, "original command publication deadline exceeded")
-                validate()
-                require(time.perf_counter_ns() < deadline_ns, "original command publication deadline exceeded")
-                try:
-                    os.replace(temporary, path)
-                    break
-                except OSError as error:
-                    if getattr(error, "winerror", None) not in (5, 32, 33):
-                        raise
-                    remaining = deadline_ns - time.perf_counter_ns()
-                    if remaining <= 0:
-                        raise REFUSAL("original command publication deadline exceeded") from error
-                    time.sleep(min(.001, remaining / NS))
-            else:
-                raise REFUSAL("bounded command publication iteration limit")
+            replace_command(temporary, path, deadline_ns, validate)
         published = True
     finally:
         if not published and temporary.exists():
@@ -247,6 +251,131 @@ def publish_command(path, data, deadline_ns, validate):
     Never retry a successful replace or create a new command identity.
     """
     atomic(path, data, deadline_ns=deadline_ns, validate=validate)
+
+
+
+def open_prepared_command(path):
+    """Own a new temporary exclusively until the final publication attempt."""
+    require(os.name == "nt", "disk command preparation requires Windows handle custody")
+    import msvcrt
+    api = ctypes.WinDLL("kernel32", use_last_error=True)
+    api.CreateFileW.argtypes = (wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                               ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE)
+    api.CreateFileW.restype = wintypes.HANDLE
+    api.CloseHandle.argtypes = (wintypes.HANDLE,)
+    # CREATE_NEW plus share=0: neither replace nor mutate the owned file while
+    # waiting for fresh native evidence. No command path is published here.
+    handle = api.CreateFileW(str(path), 0x40000000 | 0x00010000, 0, None, 1, 0x80, None)
+    if handle == wintypes.HANDLE(-1).value:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        descriptor = msvcrt.open_osfhandle(handle, os.O_WRONLY | os.O_BINARY)
+    except BaseException:
+        api.CloseHandle(handle)
+        raise
+    return os.fdopen(descriptor, "wb")
+
+
+def prepared_file_api(stream):
+    import msvcrt
+    api = ctypes.WinDLL("kernel32", use_last_error=True)
+    api.SetFileInformationByHandle.argtypes = (wintypes.HANDLE, ctypes.c_int,
+                                               ctypes.c_void_p, wintypes.DWORD)
+    api.SetFileInformationByHandle.restype = wintypes.BOOL
+    return api, msvcrt.get_osfhandle(stream.fileno())
+
+
+def prepare_command_rename(stream, path):
+    """Build FILE_RENAME_INFO before the fresh source; retain the exact HANDLE.
+
+    The SDK union is BOOLEAN ReplaceIfExists / DWORD Flags, followed by the
+    naturally aligned HANDLE, DWORD byte length and variable UTF-16 name.
+    FileRenameInfo (3), not FileRenameInfoEx, uses ReplaceIfExists.
+    """
+    class RenameFlags(ctypes.Union):
+        _fields_ = [("ReplaceIfExists", wintypes.BYTE), ("Flags", wintypes.DWORD)]
+    class RenameInfo(ctypes.Structure):
+        _fields_ = [("Flags", RenameFlags), ("RootDirectory", wintypes.HANDLE),
+                    ("FileNameLength", wintypes.DWORD), ("FileName", wintypes.WCHAR * 1)]
+    require(ctypes.sizeof(wintypes.WCHAR) == 2
+            and RenameInfo.FileName.offset == (20 if ctypes.sizeof(wintypes.HANDLE) == 8 else 12),
+            "unsupported Windows FILE_RENAME_INFO layout")
+    encoded = str(path).encode("utf-16-le")
+    buffer = ctypes.create_string_buffer(max(ctypes.sizeof(RenameInfo),
+                                            RenameInfo.FileName.offset + len(encoded) + 2))
+    info = RenameInfo.from_buffer(buffer)
+    info.Flags.ReplaceIfExists, info.RootDirectory = 1, None
+    info.FileNameLength = len(encoded)
+    ctypes.memmove(ctypes.addressof(buffer) + RenameInfo.FileName.offset, encoded, len(encoded))
+    api, handle = prepared_file_api(stream)
+    def rename(source, destination):
+        require(source is stream and destination == path, "prepared rename destination changed")
+        if not api.SetFileInformationByHandle(handle, 3, buffer, len(buffer)):
+            raise ctypes.WinError(ctypes.get_last_error())
+    return rename
+
+
+def delete_prepared_command(stream):
+    # Delete the owned FILE_OBJECT while its exclusive handle is still held.
+    # Never close and then unlink a pathname that could have been replaced.
+    api, handle = prepared_file_api(stream)
+    disposition = wintypes.BYTE(1)  # FILE_DISPOSITION_INFO.DeleteFile BOOLEAN
+    if not api.SetFileInformationByHandle(handle, 4, ctypes.byref(disposition), ctypes.sizeof(disposition)):
+        raise ctypes.WinError(ctypes.get_last_error())
+
+
+class PreparedCommand:
+    """Immutable command bytes, not an input source or publication permission."""
+    def __init__(self, driver, lines):
+        self.path = local_path(driver.command_path)
+        self.lines = tuple(lines)
+        self.previous = driver.sequence, driver.sentinel, driver.command_hash
+        self.command_count = driver.commands
+        self.sentinel = "note root-feed-" + uuid.uuid4().hex
+        self.batch = list(self.lines) + [self.sentinel]
+        require(len(" | ".join(self.batch).encode("ascii")) < 508,
+                "batch exceeds complete xr-sim acknowledgement bound")
+        self.raw = ("\n".join(self.batch) + "\n").encode("ascii")
+        self.target = driver.sequence + len(self.batch)
+        self.hash = digest(self.raw)
+        self.temporary = self.path.with_name(self.path.name + "." + uuid.uuid4().hex + ".tmp")
+        self.stream, self.owned, self.consumed = None, False, False
+        try:
+            self.stream = open_prepared_command(self.temporary)
+            self.owned = True
+            self.stream.write(self.raw)
+            self.stream.flush()
+            self.rename = prepare_command_rename(self.stream, self.path)
+        except BaseException:
+            # Retain the original creation/write refusal if disposal also fails.
+            driver.dispose_prepared_command(self)
+            raise
+
+    def matches(self, driver, lines):
+        require(not self.consumed and self.lines == tuple(lines)
+                and self.path == driver.command_path and self.command_count == driver.commands
+                and self.previous == (driver.sequence, driver.sentinel, driver.command_hash),
+                "prepared command does not match exact owned next batch")
+
+    def publish(self, path, raw, deadline_ns, validate):
+        require(not self.consumed and self.owned and path == self.path and raw == self.raw,
+                "prepared command bytes/path were changed or consumed")
+        self.consumed = True
+        # The exact CREATE_NEW FILE_OBJECT stays exclusive through validation,
+        # the unchanged deadline checks and the handle-based atomic rename.
+        local_path(path)
+        local_path(self.temporary)
+        replace_command(self.stream, path, deadline_ns, validate, self.rename)
+        self.owned = False  # committed: subsequent close failure must not roll back
+
+    def close(self):
+        if self.owned:
+            delete_prepared_command(self.stream)
+            self.owned = False
+        if self.stream is not None:
+            self.stream.close()
+            self.stream = None
+
 
 
 def check_pin(pin, maximum=128 * 1024 * 1024):
@@ -950,6 +1079,12 @@ class Driver:
                 self.lock = None
             self.owner.close()
         self.save_receive_timing_failure()
+        # Preserve failed-episode timing and retire the process handles even if
+        # deleting an unpublished prepared temporary itself fails.
+        self.discard_prepared_command()
+        for prepared in tuple(getattr(self, "_prepared_cleanup_pending", [])):
+            self.dispose_prepared_command(prepared)
+        self.save_prepared_cleanup_failure()
 
     def read_state(self):
         self.owner.check()
@@ -1372,9 +1507,71 @@ class Driver:
             time.sleep(.001)
         raise REFUSAL("fresh snapshot request iteration bound")
 
+    def prepare_next_command(self, lines):
+        require(getattr(self, "_prepared_command", None) is None
+                and not getattr(self, "_prepared_cleanup_pending", [])
+                and not self.pending_command and not self.unsafe_owner,
+                "command preparation requires unambiguous current ownership")
+        require(0 < len(lines) <= 8 and all(isinstance(x, str) and "\n" not in x and "\r" not in x for x in lines),
+                "invalid command batch")
+        require(self.commands + len(lines) + 1 <= MAX_COMMANDS, "512-command budget exhausted")
+        self.bounds(time.perf_counter_ns())
+        self._prepared_command = PreparedCommand(self, lines)
+
+    def dispose_prepared_command(self, prepared):
+        if prepared is None:
+            return
+        try:
+            prepared.close()
+        except BaseException as error:
+            # Independent bounded diagnostics: never feed cleanup into the first
+            # command-phase error, and retain custody for a later close attempt.
+            errors = getattr(self, "_prepared_cleanup_errors", None)
+            if errors is None:
+                self._prepared_cleanup_errors = errors = deque(maxlen=16)
+            errors.append(dict(atNs=time.perf_counter_ns(), kind=type(error).__name__,
+                               error=str(error)[:256], temporary=str(prepared.temporary),
+                               winerror=getattr(error, "winerror", None)))
+            pending = getattr(self, "_prepared_cleanup_pending", None)
+            if pending is None:
+                self._prepared_cleanup_pending = pending = []
+            if prepared not in pending:
+                pending.append(prepared)
+            return
+        pending = getattr(self, "_prepared_cleanup_pending", [])
+        if prepared in pending:
+            pending.remove(prepared)
+
+    def discard_prepared_command(self):
+        prepared = getattr(self, "_prepared_command", None)
+        self._prepared_command = None
+        self.dispose_prepared_command(prepared)
+
+    def save_prepared_cleanup_failure(self):
+        errors = getattr(self, "_prepared_cleanup_errors", None)
+        if errors:
+            try:
+                self.artifacts.save("prepared-command-cleanup-failure.json", dict(
+                    schema="bc2vr.prepared-command-cleanup-failure.v1", errors=list(errors),
+                    retainedTemporaryCount=len(getattr(self, "_prepared_cleanup_pending", []))), final=True)
+            except Exception:
+                pass
+
     @receive_timed("command")
     def send(self, lines, expected=None, capture=None, cleanup=False, source_deadline=None,
              final_release=False):
+        prepared = getattr(self, "_prepared_command", None)
+        self._prepared_command = None  # one attempt only, even on refusal
+        if cleanup:
+            # Failure to dispose cannot suppress the normal owned release.
+            self.dispose_prepared_command(prepared)
+            prepared = None
+        try:
+            return self._send(lines, expected, capture, cleanup, source_deadline, final_release, prepared)
+        finally:
+            self.dispose_prepared_command(prepared)
+
+    def _send(self, lines, expected, capture, cleanup, source_deadline, final_release, prepared):
         require(0 < len(lines) <= 8 and all(isinstance(x, str) and "\n" not in x and "\r" not in x for x in lines),
                 "invalid command batch")
         require(self.commands + len(lines) + 1 <= MAX_COMMANDS, "512-command budget exhausted")
@@ -1390,11 +1587,15 @@ class Driver:
         if self.reference is not None and not cleanup:
             for key in ("head", "handR"):
                 require(before[key] == self.initial_sim[key], "simulator head/right-hand basis changed")
-        sentinel = "note root-feed-" + uuid.uuid4().hex
-        batch = lines + [sentinel]
-        require(len(" | ".join(batch).encode("ascii")) < 508, "batch exceeds complete xr-sim acknowledgement bound")
-        target = self.sequence + len(batch)
-        raw = ("\n".join(batch) + "\n").encode("ascii")
+        if prepared is not None:
+            prepared.matches(self, lines)
+            sentinel, batch, target, raw = prepared.sentinel, prepared.batch, prepared.target, prepared.raw
+        else:
+            sentinel = "note root-feed-" + uuid.uuid4().hex
+            batch = lines + [sentinel]
+            require(len(" | ".join(batch).encode("ascii")) < 508, "batch exceeds complete xr-sim acknowledgement bound")
+            target = self.sequence + len(batch)
+            raw = ("\n".join(batch) + "\n").encode("ascii")
         self.validate_publication(lines, expected, cleanup)
         require(getattr(self, "snapshot_readiness", None) is None,
                 "command publication forbidden during neutral snapshot observation")
@@ -1424,9 +1625,10 @@ class Driver:
         if cleanup:
             until = min(self.hard_deadline, written + 250_000_000)
         publication_deadline = min(until, source_deadline) if source_deadline is not None else until
-        self._receive_timing.publication_deadline_ns = publication_deadline
+        if not self._receive_timing.frozen:
+            self._receive_timing.publication_deadline_ns = publication_deadline
         previous_owner = self.sequence, self.sentinel, self.command_hash
-        self.sequence, self.sentinel, self.command_hash = target, sentinel, digest(raw)
+        self.sequence, self.sentinel, self.command_hash = target, sentinel, prepared.hash if prepared else digest(raw)
         self.pending_command = True
         self.pending_batch, self.pending_before = batch, before
         pending_owner = self.owner_bytes(True)
@@ -1459,7 +1661,7 @@ class Driver:
                 self.unsafe_owner = True
                 raise
         try:
-            self.receive_timing_call("publish_file", publish_command,
+            self.receive_timing_call("publish_file", prepared.publish if prepared else publish_command,
                 self.command_path, raw, publication_deadline, validate_publication_owner)
         except BaseException as error:
             # Atomic replacement never committed. No target sequence or held
@@ -1489,6 +1691,10 @@ class Driver:
             self.monitor = False
         self.last_write = published
         self.commands += len(batch)
+        # Rename has committed and pending ownership is retained before closing
+        # the exclusive handle lets the simulator consume the command. A close
+        # failure is separate cleanup evidence, never an unpublished rollback.
+        self.dispose_prepared_command(prepared)
         trace = getattr(self, "_receive_timing", None)
         if trace is not None:
             trace.phase("ack_gap", published)

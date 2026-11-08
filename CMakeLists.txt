@@ -1547,6 +1547,45 @@ if(WIN32 AND BUILD_TESTING)
   add_test(NAME NormalKnifeHeldCloseReceiver COMMAND NormalKnifeHeldCloseReceiverTests)
 endif()
 
+if(BUILD_TESTING)
+  add_test(NAME Bc2CommandPreparation
+    COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_bc2_command_preparation.py")
+  add_test(NAME Bc2ProvisionTarget
+    COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_bc2_provision_target.py")
+  add_test(NAME NativeBatchEvidence
+    COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_batch.py")
+endif()
+
+# Developer-only retained campaign provisioning. This does not change packaging
+# or enable native assignment in the normal player configuration.
+option(FVR_BC2_CAMPAIGN_PROVISIONING "Private retained campaign provisioning service" OFF)
+if(FVR_BC2_CAMPAIGN_PROVISIONING)
+  if(TARGET BC2NativeProbe)
+    target_compile_definitions(BC2NativeProbe PRIVATE FVR_BC2_CAMPAIGN_PROVISIONING)
+    target_sources(BC2NativeProbe PRIVATE
+      src/games/bc2/Bc2CampaignProvisioning.cpp
+      src/games/bc2/Bc2CampaignProvisioningAssignment.cpp
+      src/games/bc2/Bc2CampaignProvisioningRuntime.cpp)
+  endif()
+  if(BUILD_TESTING)
+    add_executable(Bc2CampaignProvisioningTests tests/Bc2CampaignProvisioningTests.cpp
+      src/games/bc2/Bc2CampaignProvisioning.cpp src/games/bc2/Bc2CampaignProvisioningAssignment.cpp
+      src/games/bc2/Bc2HolsterInput.cpp)
+    target_include_directories(Bc2CampaignProvisioningTests PRIVATE include src/games/bc2)
+    target_compile_features(Bc2CampaignProvisioningTests PRIVATE cxx_std_20)
+    add_test(NAME Bc2CampaignProvisioningTests COMMAND Bc2CampaignProvisioningTests)
+    add_executable(Bc2CampaignProvisioningSourceTests tests/Bc2CampaignProvisioningSourceTests.cpp)
+    target_include_directories(Bc2CampaignProvisioningSourceTests PRIVATE include src/games/bc2 tools)
+    target_compile_features(Bc2CampaignProvisioningSourceTests PRIVATE cxx_std_20)
+    add_test(NAME Bc2CampaignProvisioningSourceTests COMMAND Bc2CampaignProvisioningSourceTests)
+  endif()
+  if(WIN32)
+    add_executable(Bc2CampaignProvisioningCommand tools/Bc2CampaignProvisioningCommand.cpp)
+    target_include_directories(Bc2CampaignProvisioningCommand PRIVATE include src/games/bc2)
+    target_compile_features(Bc2CampaignProvisioningCommand PRIVATE cxx_std_20)
+  endif()
+endif()
+
 # Hundreds of small regression executables link the same native/core libraries.
 # Their full linker PDBs duplicate gigabytes of type records. Keep compiler
 # symbols and runtime/tool PDBs; only normal RelWithDebInfo *Tests executables

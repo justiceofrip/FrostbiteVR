@@ -962,7 +962,30 @@ int OrdinaryBoltStartupPreservesOriginalRigPublication(){
  return 0;
 }
  #include "Bc2HipCarryChecks.inc"
-int main(){if(HipCarryChecks())return 1;if(OrdinaryBoltStartupPreservesOriginalRigPublication())return 1;if(NativePumpDebtProtectsActualShoulderAndResourceLifetime())return 1;if(PlayerRepeatedHolsterRecovery())return 1;if(SharedLifecycleBoundary())return 1;if(OrdinaryOwnSlotStowIsExplicitlyUnavailable())return 1;if(ActualCarriedCrossDrawRetirement()||CarriedCrossDrawIdentityFailures()||CarriedCrossDrawAuthorityFailures()||HolsterTransitionJournalKeepsLatest())return 1;if(ShoulderEarlyDirectSwap()||ShoulderDirectSwapFailures()||ShoulderSwapRereadAndTimeout())return 1;if(ShoulderEarlyGrabAndReleaseStow()||ShoulderMissKeepsUsableGun()||ShoulderReleaseExactContinuity()||ShoulderFailedHideRecoversHeld()||ShoulderEmptyApproachInputBreaks())return 1;if(HeldApproachBoundaries()||ScrollThenActualHeldApproach())return 1;if(ActualUnsupportedExchangeRetirement())return 1;if(ScopedXm8OrdinaryAutoStowDraw()||ScopedXm8OrdinaryAdmissionNegatives()||ScopedXm8OrdinaryKeepsSlotsAcrossDraw())return 1;
+
+int CampaignProvisioningRetiresOnlyDestroyedItem(){
+    Run r;r.Tick();
+    const auto first=r.adapter.ItemKey(Fixture::a),other=r.adapter.ItemKey(Fixture::b);
+    const auto binding=r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs);
+    CHECK(first&&other&&binding);
+    auto wrong=*binding;++wrong.context.resource.weaponGeneration;
+    CHECK(!r.adapter.RetireProvisionedItem(wrong,1));
+    CHECK(r.adapter.ItemKey(Fixture::a)==first&&r.adapter.ItemKey(Fixture::b)==other);
+    CHECK(r.adapter.RetireProvisionedItem(*binding,1));
+    CHECK(!r.adapter.ItemKey(Fixture::a)&&r.adapter.ItemKey(Fixture::b)==other);
+    CHECK(!r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs));
+    // Native allocator reuse with exactly the same pointer/data still creates
+    // a new physical lifetime; unrelated carried identity stays unchanged.
+    r.Advance();r.Tick();
+    const auto replacement=r.adapter.ItemKey(Fixture::a);CHECK(replacement&&replacement->generation>first->generation);
+    CHECK(r.adapter.ItemKey(Fixture::b)==other);
+    CHECK(!r.adapter.RetireProvisionedItem(*binding,2));
+    const auto fresh=r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs);CHECK(fresh);
+    CHECK(fresh->context.resource.weaponGeneration==replacement->generation);
+    return 0;
+}
+
+int main(){if(CampaignProvisioningRetiresOnlyDestroyedItem())return 1;if(HipCarryChecks())return 1;if(OrdinaryBoltStartupPreservesOriginalRigPublication())return 1;if(NativePumpDebtProtectsActualShoulderAndResourceLifetime())return 1;if(PlayerRepeatedHolsterRecovery())return 1;if(SharedLifecycleBoundary())return 1;if(OrdinaryOwnSlotStowIsExplicitlyUnavailable())return 1;if(ActualCarriedCrossDrawRetirement()||CarriedCrossDrawIdentityFailures()||CarriedCrossDrawAuthorityFailures()||HolsterTransitionJournalKeepsLatest())return 1;if(ShoulderEarlyDirectSwap()||ShoulderDirectSwapFailures()||ShoulderSwapRereadAndTimeout())return 1;if(ShoulderEarlyGrabAndReleaseStow()||ShoulderMissKeepsUsableGun()||ShoulderReleaseExactContinuity()||ShoulderFailedHideRecoversHeld()||ShoulderEmptyApproachInputBreaks())return 1;if(HeldApproachBoundaries()||ScrollThenActualHeldApproach())return 1;if(ActualUnsupportedExchangeRetirement())return 1;if(ScopedXm8OrdinaryAutoStowDraw()||ScopedXm8OrdinaryAdmissionNegatives()||ScopedXm8OrdinaryKeepsSlotsAcrossDraw())return 1;
     if(ShoulderDrawSurvivesReceiptGap())return 1;
     if(ShoulderDrawReleaseStaysHeld())return 1;
     std::puts("Ordinary scoped XM8: automatic stow/draw/fire continuity, six admission negatives, cross-draw slots passed");

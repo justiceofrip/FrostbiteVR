@@ -7,6 +7,9 @@
 #include "Bc2TwoGrenadeDeathWitness.h"
 #include "Bc2ShellFocusLossProbe.h"
 #include "Bc2Profile.h"
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+#include "Bc2CampaignProvisioning.h"
+#endif
 #include "CandidateOriginAdmission388.h"
 #include "Bc2PhysicalPump.h"
 #include "Bc2AmmoCounterHost.h"
@@ -28,6 +31,14 @@
 namespace fvr::bc2::gameplay {
 using InputReader=ipc::ChannelResult(*)(interaction::InputFrame&,std::int64_t&)noexcept;
 using FeedbackWriter=bool(*)(const interaction::FeedbackEvent&)noexcept;
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+bool EnableCampaignProvisioning()noexcept;
+ReloadStateMemory CampaignProvisioningMemory()noexcept;
+void CampaignProvisioningSeatEntry(campaignProvisioning::Service&,const ReloadServerSnapshot&,const campaignProvisioning::policy::Boundary&)noexcept;
+campaignProvisioning::LifetimeHost::Exclusion ExcludeCampaignProvisioning(const ReloadServerSnapshot&,std::uint64_t)noexcept;
+bool RetireCampaignProvisioningItem(const ReloadServerSnapshot&,std::uint32_t,std::uint32_t,std::uint64_t,std::int64_t)noexcept;
+bool ResumeCampaignProvisioning(const ReloadServerSnapshot&,std::uint64_t)noexcept;
+#endif
 // Optional one-way notification, configured after Install and before Start.
 // A failed nonblocking send is dropped; feedback never changes native reload.
 bool SetFeedbackWriter(FeedbackWriter)noexcept;

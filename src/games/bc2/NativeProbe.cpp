@@ -12,6 +12,9 @@
 #include "Bc2StereoRecovery.h"
 #include "fvr/runtime/RenderOwnerRecovery.h"
 #include "Bc2Gameplay.h"
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+#include "Bc2CampaignProvisioningRuntime.h"
+#endif
 #ifdef FVR_BC2_ORIGIN_ENROLLMENT_HEADER
 #include "CandidateOriginEnrollment392.generated.h"
 #endif
@@ -3142,6 +3145,10 @@ bool DisableProbeHooks()noexcept {
     workerViewLease.store({},std::memory_order_release);
     fvr::bc2::shellReloadAudio::Stop();
     const bool audioDisabled=fvr::bc2::mechanismAudio::Stop();
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+    const bool provisionDisabled=fvr::bc2::campaignProvisioning::Stop();
+    if(!provisionDisabled)return false;
+#endif
     const bool gameplayDisabled=fvr::bc2::gameplay::Stop();
     const bool menuDisabled=fvr::bc2::menu::Stop();
     deferredCleanup.store(true,std::memory_order_release);bool allDisabled=true;
@@ -3909,11 +3916,39 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             CloseHandle(file);return enabled;
         }();
         if(mechanismSnapshotsEnabled)(void)fvr::bc2::reloadFlowRuntime::EnableFeedGuardTrace();
+
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+        const bool campaignProvisioningRequested=[&]{
+            const auto marker=output.parent_path()/L"campaign-provision.enable";
+            const auto file=CreateFileW(marker.c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_FLAG_OPEN_REPARSE_POINT,nullptr);
+            if(file==INVALID_HANDLE_VALUE){const auto error=GetLastError();
+                Require(error==ERROR_FILE_NOT_FOUND||error==ERROR_PATH_NOT_FOUND,"Campaign provisioning marker unreadable");return false;}
+            constexpr char expected[]="campaign-provision-v1\n";
+            BY_HANDLE_FILE_INFORMATION info{};std::array<char,sizeof(expected)> data{};DWORD length=0;
+            const bool valid=GetFileType(file)==FILE_TYPE_DISK&&GetFileInformationByHandle(file,&info)&&
+                !(info.dwFileAttributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT))&&
+                !info.nFileSizeHigh&&info.nFileSizeLow==sizeof(expected)-1&&
+                ReadFile(file,data.data(),DWORD(data.size()),&length,nullptr)&&length==sizeof(expected)-1&&
+                std::memcmp(data.data(),expected,sizeof(expected)-1)==0;
+            CloseHandle(file);Require(valid,"Campaign provisioning marker invalid");return true;
+        }();
+        if(campaignProvisioningRequested){
+            Require(continuous&&streamMode&&(config.flags&0x800u),"Campaign provisioning requires retained VR gameplay");
+            for(const auto name:{L"campaign-provision-request.bin",L"campaign-provision-source.bin",L"campaign-provision-receipt.bin"})
+                Require(!std::filesystem::exists(output.parent_path()/name),"Campaign provisioning requires fresh private transport");
+            const auto identity=fvr::bc2::campaignProvisioning::Identify(bytes);
+            Require(identity&&fvr::bc2::campaignProvisioning::Install(*identity,fvr::bc2::gameplay::CampaignProvisioningMemory(),true),
+                "Campaign provisioning code, observer ownership or input admission unavailable");
+        }
+#endif
         hooksEnabled=true;
         const auto globalEnable=MH_EnableHook(MH_ALL_HOOKS);
         const bool workerStarted=!workerObservation||fvr::bc2::rigWorkerRuntime::CompleteGlobalStart(globalEnable==MH_OK);
         const bool opticStarted=!opticEvidenceEnabled||fvr::bc2::opticFilterRuntime::CompleteGlobalStart(globalEnable==MH_OK);
         Require(globalEnable==MH_OK,"Enable native trace");
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+        Require(!campaignProvisioningRequested||fvr::bc2::campaignProvisioning::Start(),"Campaign provisioning owned seat patch unavailable");
+#endif
         Require(opticStarted,"Enable bounded native lens-filter observer");
         Require(workerStarted,"Enable bounded palette worker observation");
         graphicsRuntimeReady.store(true,std::memory_order_release);
@@ -4253,6 +4288,9 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         };
         if(continuous){
             while(!hostLifetime.Ended()){
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+                if(campaignProvisioningRequested)fvr::bc2::campaignProvisioning::ServiceTransport(output.parent_path());
+#endif
                 serviceMechanismSnapshot();
                 serviceDestructionRequest();if(graphicsProvenanceEnabled)fvr::graphics::callProvenance::Flush(output.parent_path()/L"graphics-call-provenance.jsonl");
                 persistCycleFailure();sceneWriter.Flush();persistSessionTelemetry();

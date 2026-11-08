@@ -14,6 +14,9 @@
 #include <intrin.h>
 #include <MinHook.h>
 #include "Bc2Gameplay.h"
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+#include "Bc2CampaignProvisioningInputGate.h"
+#endif
 #ifdef FVR_BC2_SMOKE_ORIGIN_CANDIDATE
 #include "Bc2SmokeOrigin402.h"
 #include "CandidateSmokeOrigin402.h"
@@ -153,6 +156,16 @@ unsigned projectileReceiverCodeRangeCount=0;
 std::atomic<std::uint64_t> shotInvocationSerial=0;
 FeedbackWriter writeFeedback=nullptr;unsigned feedbackSent=0,feedbackDropped=0;
 std::atomic<bool> enabled=false;std::atomic<unsigned> active=0,inputThread=0;
+
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+std::atomic<bool> provisionRequested=false,provisionRearm=false;
+campaignProvisioning::InputGate provisionGate;
+struct ProvisionReady {AmmoResourceBinding binding{};std::int64_t deadline=0;interaction::HandClaimToken gun{};unsigned cache=0;};
+std::atomic<std::shared_ptr<const ProvisionReady>> provisionReady;
+std::optional<ProvisionReady> provisionHeld;
+std::atomic<std::uint64_t> provisionNonce=0;
+bool provisionRetired=false;
+#endif
 bool fireRouteTelemetryEnabled=false;
 FireRouteTelemetry fireRouteTelemetry;
 thread_local FireRouteRecord* interactionTrace=nullptr; // Callback-local observation only.
@@ -678,7 +691,11 @@ bool Writable(unsigned at,unsigned n)noexcept {
         std::uintptr_t(mbi.BaseAddress)<=at&&std::uint64_t(at)+n<=std::uintptr_t(mbi.BaseAddress)+mbi.RegionSize;
 }
 struct Callback {Callback(){++active;}~Callback(){--active;}};
-struct Scope {Owner owner{};InputOverride patch;bool used=false;std::uint64_t nativeTick=0;};thread_local Scope* scope=nullptr;
+struct Scope {Owner owner{};InputOverride patch;bool used=false;std::uint64_t nativeTick=0;
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+    bool provisionExcluded=false; // Immutable admission for this entire Update.
+#endif
+};thread_local Scope* scope=nullptr;
 Owner lastOwner{};NativeInputEpochs nativeEpochs{};
 auto& epoch=nativeEpochs.equipment;auto& inputEpoch=nativeEpochs.input;auto& movementEpoch=nativeEpochs.movement;
 std::uint64_t rigEpoch=0,renderEquipmentEpoch=0,nativeInputPauses=0;ULONGLONG lastTick=0;
@@ -2214,9 +2231,48 @@ std::uintptr_t __fastcall ComposeHook(void* self,void*,void* output,const void* 
     if(recording&&fireRecordCount<fireRecords.size())fireRecords[fireRecordCount++]=row;return result;
 }
 void __fastcall GatherHook(void* self,void*,void* cache){
-    Callback callback;gatherOriginal(self,cache);
+    Callback callback;
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+    campaignProvisioning::InputGate::Gather provisionGather(provisionGate,provisionRequested.load(std::memory_order_acquire));
+#endif
+    gatherOriginal(self,cache);
     if(!enabled.load(std::memory_order_acquire)||!scope||scope->used)return;
     if(reinterpret_cast<unsigned>(self)!=scope->owner.router||reinterpret_cast<unsigned>(cache)!=scope->owner.cache){++mismatches;return;}
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+    if(scope->provisionExcluded){
+        // No gestures, physical policy, lifetime loss or cancellation during
+        // exclusion. Keep actual typed observation alive for replication.
+        const auto& owner=scope->owner;LARGE_INTEGER stamp{};
+        if(QueryPerformanceCounter(&stamp)&&reloadStateBinding&&rigEpoch&&epoch&&handSample.owner.space){
+            const ReloadStateMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t n){return Read(at,dst,n);},
+                [](void*,unsigned at,const char* name){return Type(at,name);}};
+            const auto source=ReadReloadState(memory,*reloadStateBinding,unsigned(image),
+                {owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,handSample.owner.space},
+                handSample.sequence,HandNanos(stamp.QuadPart));
+            if(source.snapshot)reloadFlowRuntime::PublishOwnerObserved(*source.snapshot,source.snapshot->observedNs+200000000);
+        }
+        interaction::ActionOutput neutral{};neutral.active=true;neutral.owner=owner.soldier;
+        if(Writable(owner.cache,InputBytes)&&scope->patch.Apply({reinterpret_cast<std::byte*>(owner.cache),InputBytes},
+            neutral,false,false,{},false,EntryAction::Fire)){
+            auto safety=handSample;safety.nowNs=HandNanos(stamp.QuadPart);
+            const ReloadStateOwner current{owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,safety.owner.space};
+            HolsterSuppressionRequest request{current,safety,provisionGather.Nonce(),provisionGather.NativeTick(),owner.cache};
+            HolsterInputOverride weapon;
+            const HolsterInputOwner check{&provisionGather,[](void* p,const HolsterSuppressionRequest& r)noexcept{
+                const auto& gather=*static_cast<campaignProvisioning::InputGate::Gather*>(p);
+                Owner current{};return gather.Excluded()&&gather.Nonce()==r.request&&Resolve(current)&&
+                    current.player==r.owner.player&&current.soldier==r.owner.soldier&&current.weak==r.owner.weak&&
+                    current.weapon==r.owner.weapon&&current.cache==r.cache&&Writable(current.cache,InputBytes);}};
+            if(weapon.Apply({reinterpret_cast<std::byte*>(owner.cache),InputBytes},request,check)){
+                if(const auto receipt=weapon.Commit()){
+                    scope->patch.Commit();(void)provisionGather.Commit(*receipt);
+                }
+            }
+        }
+        scope->used=true;return;
+    }
+#endif
+
 #ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
     // Each accepted local Gather gets a unique immutable source, even on a
     // repeated XR packet. Failed readback and all early returns retire it.
@@ -3894,6 +3950,29 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             dispatchClockOkay?HandNanos(dispatchClock.QuadPart):0);
         return;
     }
+
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+    if(provisionRequested.load(std::memory_order_acquire)){
+    provisionReady.store({},std::memory_order_release);
+    const ReloadStateOwner provisionOwner{owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
+    const auto provisionBinding=bodyInventory?bodyInventory->ResourceBinding(provisionOwner,HandNanos(dispatchClock.QuadPart)):std::nullopt;
+    const auto provisionGun=handOwnership.Current(interaction::InteractionHand::Right);
+    const bool provisionQuiet=provisionBinding&&bodyHolster&&bodyHolster->Phase()==BodyHolsterPhase::Held&&
+        bodyInventory->CanRetireProvisionedItem(*provisionBinding)&&provisionGun&&
+        provisionGun->token.kind==interaction::HandClaimKind::GunHold&&provisionGun->token.item==handItem&&
+        !bodyInventory->Pending()&&!bodyInventory->AutomaticStowPending()&&!bodyHolster->TemporaryToolActive()&&
+        !pumpDebt&&!fixedResult.blocksFire&&!fixedResult.ammoOwnsHand&&!fixedResult.mechanismOwnsHand&&
+        !pistolSlideResult.blocksFire&&!pistolSlideResult.blocksEquipment&&!pistolSlideResult.ownsHand&&
+        !feedResult.blocksFire&&!feedResult.blocksEquipment&&!feedResult.ownsHand&&!magazineResult.blocksWeaponActions&&
+        !(physicalReload&&physicalReload->BlocksEquipment())&&!(magazinePhysical&&magazinePhysical->BlocksEquipment())&&
+        !(magazineDetached&&magazineDetached->BlocksActions())&&!pendingMode&&
+        sightPhase==interaction::SightFlipPhase::Idle&&!out.held&&!out.pressed&&
+        !handOwnership.Current(interaction::InteractionHand::Left)&&
+        reloadFlowRuntime::CampaignProvisioningSettled(provisionOwner,HandNanos(dispatchClock.QuadPart));
+    if(provisionQuiet)provisionReady.store(std::make_shared<const ProvisionReady>(ProvisionReady{*provisionBinding,
+        std::min(provisionBinding->deadlineNs,HandNanos(dispatchClock.QuadPart)+100000000),provisionGun->token,owner.cache}),std::memory_order_release);
+    }
+#endif
     if(scope->patch.Apply({reinterpret_cast<std::byte*>(owner.cache),InputBytes},out,grenade,cycle,weaponMode,contextUseVehicleAlias,verifiedFireAction)){++applied;if(out.pressed&interaction::NextWeapon)++nextWeaponCommands;if(out.pressed&interaction::PreviousWeapon)++previousWeaponCommands;if(out.forward||out.strafe)++moving;if(out.held)++buttons;
         // Do not restore at the end of player update: BC2 also consumes this
         // buffer afterward. The next original gather replaces every action.
@@ -4215,12 +4294,18 @@ void __fastcall GatherHook(void* self,void*,void* cache){
 }
 void __fastcall UpdateHook(void* self,void*,float dt){
     Callback callback;++updates;
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+    campaignProvisioning::InputGate::Update provisionInputRead(provisionGate,provisionRequested.load(std::memory_order_acquire));
+#endif
     namespace trace=fvr::bc2::sceneMilestones;
     using fvr::runtime::SceneMilestoneKind;using fvr::runtime::SceneMilestoneStage;
     using fvr::runtime::SceneOwnerOutcome;
     fvr::runtime::SceneMilestoneContext observed{};observed.self=reinterpret_cast<unsigned>(self);
     const auto updateMilestone=trace::Begin(SceneMilestoneKind::GameplayUpdate,observed);
     Scope local{};
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+    local.provisionExcluded=provisionInputRead.Excluded();
+#endif
     const auto returnOriginal=[&](SceneOwnerOutcome outcome){
         observed.outcome=static_cast<unsigned>(outcome);
         const auto ownerTransition=outcome==SceneOwnerOutcome::Unknown?fvr::runtime::SceneMilestoneToken{}:
@@ -4245,6 +4330,12 @@ void __fastcall UpdateHook(void* self,void*,float dt){
     if(local.owner.player!=reinterpret_cast<unsigned>(self)){returnOriginal(SceneOwnerOutcome::PlayerMismatch);return;}
     const auto thread=GetCurrentThreadId();unsigned expected=0;inputThread.compare_exchange_strong(expected,thread);
     if(inputThread.load()!=thread){++mismatches;returnOriginal(SceneOwnerOutcome::WrongThread);return;}
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+    if(local.provisionExcluded){
+        struct Current {Scope*& slot;~Current(){slot=nullptr;}} current{scope};scope=&local;
+        returnOriginal(SceneOwnerOutcome::Valid);return;
+    }
+#endif
     observed.inputThread=thread;observed.outcome=static_cast<unsigned>(SceneOwnerOutcome::Valid);
     observed.actorGeneration=rigEpoch;observed.inputEpoch=inputEpoch;
     const auto localMilestone=trace::Begin(SceneMilestoneKind::LocalGameplayUpdate,observed);
@@ -4276,7 +4367,11 @@ void __fastcall UpdateHook(void* self,void*,float dt){
     // Item changes still re-arm semantic actions, but cannot recalibrate anatomy.
     // A pause rearms button input independently of durable native equipment.
     // The complete resolved owner tuple still detects actual replacement.
-    const bool ownerChanged=local.owner!=lastOwner;
+    const bool ownerChanged=local.owner!=lastOwner
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+        ||provisionRearm.exchange(false,std::memory_order_acq_rel)
+#endif
+        ;
     const bool inputPause=lastTick&&now-lastTick>150;
     if(inputPause&&!ownerChanged)++nativeInputPauses;
     if(bodyHolster&&!ownerChanged&&local.owner.foot&&inputPause&&epoch){
@@ -4493,6 +4588,73 @@ bool EnableEmptyFireProbe()noexcept {
 #endif
     return true;
 }
+
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+bool EnableCampaignProvisioning()noexcept {
+    if(enabled.load(std::memory_order_acquire)||!bodyInventory||!bodyHolster||provisionRequested.load())return false;
+    provisionRequested.store(true,std::memory_order_release);return true;
+}
+ReloadStateMemory CampaignProvisioningMemory()noexcept {
+    return {nullptr,[](void*,unsigned at,void* dst,std::size_t n){return Read(at,dst,n);},
+        [](void*,unsigned at,const char* name){return Type(at,name);}};
+}
+void CampaignProvisioningSeatEntry(campaignProvisioning::Service& service,const ReloadServerSnapshot& source,
+    const campaignProvisioning::policy::Boundary& boundary)noexcept {
+    campaignProvisioning::InputGate::Control control(provisionGate);
+    // Keep admission closed through dispatch, retirement and any resumption.
+    // Busy callbacks defer this seat observation; no waiting/reentrant dispatch.
+    if(control)service.SeatEntry(source,boundary);
+}
+campaignProvisioning::LifetimeHost::Exclusion ExcludeCampaignProvisioning(const ReloadServerSnapshot& source,std::uint64_t nonce)noexcept {
+    using Result=campaignProvisioning::LifetimeHost::Exclusion;
+    campaignProvisioning::InputGate::Control control(provisionGate);
+    if(!control)return Result::Refused;
+    if(control.Excluded()){
+        if(nonce!=provisionNonce.load()||!provisionHeld||source.client.owner!=provisionHeld->binding.owner)return Result::Refused;
+        LARGE_INTEGER now{};
+        if(!QueryPerformanceCounter(&now)||HandNanos(now.QuadPart)>=provisionHeld->deadline||
+           !reloadFlowRuntime::CampaignProvisioningSettled(source.client.owner,HandNanos(now.QuadPart)))return Result::Refused;
+        return control.Neutral(source.client.owner,nonce,HandNanos(now.QuadPart))?Result::Ready:Result::Pending;
+    }
+    const auto ready=provisionReady.load(std::memory_order_acquire);LARGE_INTEGER clock{};
+    if(!nonce||!ready||!QueryPerformanceCounter(&clock)||
+       ready->binding.owner!=source.client.owner||ready->binding.data!=source.client.config.weaponData||
+       HandNanos(clock.QuadPart)>=ready->deadline||
+       !reloadFlowRuntime::CampaignProvisioningSettled(source.client.owner,HandNanos(clock.QuadPart)))return Result::Refused;
+    if(!control.Begin(nonce,ready->binding.owner,ready->cache))return Result::Refused;
+    provisionHeld=*ready;provisionNonce.store(nonce,std::memory_order_release);provisionRetired=false;
+    return Result::Pending;
+}
+bool RetireCampaignProvisioningItem(const ReloadServerSnapshot& source,unsigned returnedItem,unsigned data,
+    std::uint64_t nonce,std::int64_t now)noexcept {
+    campaignProvisioning::InputGate::Control control(provisionGate);
+    if(!control.Excluded()||
+       !provisionHeld||nonce!=provisionNonce||provisionRetired||source.client.owner!=provisionHeld->binding.owner||
+       returnedItem<0x10000||data<0x10000||!bodyInventory||
+       !bodyInventory->RetireProvisionedItem(provisionHeld->binding,nonce))return false;
+    // No actor-wide ClearOwner/Cancel. The old ready ledger and completed
+    // transfer receipts stay historical under their retired resource generation.
+    auto safety=handSample;safety.nowNs=now;
+    if(const auto claim=handOwnership.Current(interaction::InteractionHand::Right);claim&&claim->token==provisionHeld->gun)
+        (void)handOwnership.Release(safety,claim->token);
+    handPhysical=0; // Next real hand observation advances its monotonic item generation.
+    selectedMeshes.Clear();rigPublication::PublishTracking({});
+    reloadFlowRuntime::PublishAmmoResourceBinding({});provisionRetired=true;
+    provisionRearm.store(true,std::memory_order_release);return true;
+}
+bool ResumeCampaignProvisioning(const ReloadServerSnapshot& source,std::uint64_t nonce)noexcept {
+    campaignProvisioning::InputGate::Control control(provisionGate);
+    if(!control.Excluded()||!provisionHeld||nonce!=provisionNonce)return false;
+    const auto& before=provisionHeld->binding.owner;
+    if(source.client.owner.player!=before.player||source.client.owner.soldier!=before.soldier||
+       source.client.owner.weak!=before.weak||source.client.owner.actorGeneration!=before.actorGeneration)return false;
+    if(!provisionRetired&&source.client.owner!=before)return false;
+    if(!control.Resume(nonce))return false;
+    provisionHeld.reset();provisionReady.store({},std::memory_order_release);
+    // Control unlocks only after cleanup; the next Update captures normal mode.
+    return true;
+}
+#endif
 bool EnableWeaponVisibilityProbe()noexcept {
     if(enabled.load()||weaponVisibilityProbe||!hooks[0]||!twoHandGrip||!handPoses||!bodyFollow||!motionAim||
         bodyInventory||physicalReloadMode||physicalReloadFixture||reloadRequestFixture||deathProbe||equipProbe||sightFlip)return false;

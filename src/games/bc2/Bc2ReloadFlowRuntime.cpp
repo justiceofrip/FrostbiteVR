@@ -8,6 +8,9 @@
 #include "Bc2OriginalFiringUnwind.h"
 #endif
 #include "Bc2OriginalFiringObserver.h"
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+#include "Bc2CampaignProvisioningAdmission.h"
+#endif
 #ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
 #include "Bc2PrivateMountedUpdate419.h"
 #include <new>
@@ -3533,6 +3536,30 @@ std::optional<ReloadCycleRetirement> RetireRequestCycle(const ReloadHoldIdentity
     retireLastObserved.store(receipt->observedNs,std::memory_order_release);retireLastDeadline.store(receipt->deadlineNs,std::memory_order_release);
     ++retireSuccesses;return receipt;
 }
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+std::optional<ReloadServerSnapshot> ReadCampaignProvisioningSource(std::int64_t now)noexcept {
+    OwnerCopyGate gate;
+    if(!gate.held||!enabled.load(std::memory_order_acquire)||!serverBinding||!published.server||
+       !IsCurrent(published,now)||!ReadReloadServerOwner(memory,*serverBinding,binding.state,base,
+            *published.server,published.deadline,now))return {};
+    return published.server;
+}
+bool CampaignProvisioningSettled(const ReloadStateOwner& owner,std::int64_t now)noexcept {
+#if defined(FVR_BC2_NATIVE_AMMO_BACKEND) && defined(FVR_BC2_AMMO_RESOURCE_HANDS)
+    if(!enabled.load(std::memory_order_acquire))return false;
+    Gate resources(ammoMoveProbeGate);if(!resources.held)return false;
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+    if(ammoPlayerService.Active()||ammoPlayerService.Inventory().NeedsMagazineRoute(owner.soldier,owner.actorGeneration,owner.weapon))return false;
+#endif
+    if(feedEquipment.Pending())return false;
+    const auto view=ReadNativeCycleView(now);
+    const auto& ammo=ammoPlayerService.View();
+    return ammo&&campaignProvisioning::SettledItem(*ammo,owner,now,view,nativePumpCandidate);
+#else
+    (void)owner;(void)now;return false;
+#endif
+}
+#endif
 bool RegisterOriginalFiringObserver(const OriginalFiringObserver& observer)noexcept {
 #ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
     if(observer.copyInput)return false; // This isolated dispatcher observes only.
@@ -5193,6 +5220,10 @@ bool SubmitNativeCycleRecovery(const interaction::WeaponCycleIdleDebtRelease&,co
 bool AcknowledgeNativeCycleRecovery(const interaction::WeaponCycleIdleDebtReady&)noexcept{return false;}
 bool EnableNativeCycleRecovery()noexcept{return false;}
 bool EnablePumpHoldDiagnostic()noexcept{return false;}
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+std::optional<ReloadServerSnapshot> ReadCampaignProvisioningSource(std::int64_t)noexcept{return {};}
+bool CampaignProvisioningSettled(const ReloadStateOwner&,std::int64_t)noexcept{return false;}
+#endif
 bool RegisterOriginalFiringObserver(const OriginalFiringObserver&)noexcept{return false;}
 bool RemoveOriginalFiringObserver(void*)noexcept{return false;}
 bool Install(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t,const ReloadStateMemory&,bool,bool,bool,bool){return false;}
