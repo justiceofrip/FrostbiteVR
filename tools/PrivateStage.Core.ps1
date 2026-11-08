@@ -80,7 +80,7 @@ function New-PrivateStageDecision($ConfigPin,[string]$InstallRoot,[string]$Launc
     $m=Read-StageJson $manifest.path;$a=Read-StageJson $active.path
     Assert-Stage ($m.schema -ceq 'bc2vr.runtime.v1' -and $m.version -ceq '0.1.77' -and $m.diagnostic_only -is [bool] -and -not $m.diagnostic_only) 'installed77 normal manifest required'
     Assert-Stage ($a.current -ceq '0.1.77' -and $a.previous -ceq '0.1.76') 'installed77/fallback76 identity differs'
-    Assert-Stage ($c.budget.root_authorized -is [bool] -and $c.budget.root_authorized -and $c.budget.freeze_ceiling_bytes -eq 52GB -and $c.budget.floor_bytes -eq 15GB) 'accepted stage budget must be 52 GiB with 15 GiB floor'
+    Assert-Stage ($c.budget.root_authorized -is [bool] -and $c.budget.root_authorized -and $c.budget.freeze_ceiling_bytes -ge 52GB -and $c.budget.floor_bytes -eq 15GB) 'accepted build freeze must cover the fixed 52 GiB stage budget with 15 GiB floor'
     Assert-StageSameRoots $c.budget.roots $c.budget.roots
     $app=@();foreach($name in 'Launcher.Core.ps1','Launcher.Storage.ps1'){$app+=Get-StagePin (Get-FvrChild $InstallRoot ('versions/0.1.77/app/'+$name))}
     $d=[ordered]@{
