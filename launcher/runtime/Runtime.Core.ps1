@@ -56,6 +56,10 @@ namespace Bc2Vr {
             var buffer=new StringBuilder(32768);uint length=32768;
             if(!QueryFullProcessImageName(handle,0,buffer,ref length)) {
                 int error=Marshal.GetLastWin32Error();
+                // The helper may exit after the first live check but before
+                // the image query. Recheck the same handle; a still-live query
+                // failure must retain its original Win32 error below.
+                if(requireLive)RequireLive(handle);
                 // An exited helper can lose its queryable image path even
                 // while its retained handle still proves PID and birth.
                 // This is diagnostic identity only, never action authority.

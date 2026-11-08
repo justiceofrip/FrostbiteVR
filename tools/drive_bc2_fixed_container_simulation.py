@@ -265,6 +265,8 @@ class SelectedAmmoDriver(FixedContainerDriver):
     ordinary selected-ammo observers and other fixed launchers do not need sights.
     """
     require_shot_attachment_ready = False
+    post_shot_request_limit = 1 + transport.MAX_SNAPSHOT_REFRESHES
+    pace_post_shot_refresh = False
 
     def assert_selected_family(self, snapshot):
         raise transport.REFUSAL("selected ammunition requires an exact family assertion")
@@ -317,7 +319,7 @@ class SelectedAmmoDriver(FixedContainerDriver):
     def request_snapshot(self):
         if getattr(self, 'post_shot_observing', False):
             self.check_post_shot_observation_owner()
-            require(self.snapshot_index - self.post_shot_request_start < 1 + transport.MAX_SNAPSHOT_REFRESHES,
+            require(self.snapshot_index - self.post_shot_request_start < self.post_shot_request_limit,
                     'Selected ammunition observation refresh request budget exhausted')
         return super().request_snapshot()
 
@@ -339,7 +341,10 @@ class SelectedAmmoDriver(FixedContainerDriver):
             refreshRequests=self.snapshot_index-self.post_shot_request_start,
             lastCommandWrittenNs=self.last_write, commandAuthority=False))
         self.pending_nonce = None
-        self.request_snapshot()
+        if not self.pace_post_shot_refresh:
+            self.request_snapshot()
+        # The preparation observer lets fresh_postrelease_observation request
+        # again at the existing SNAPSHOT_PERIOD; no input/source clock changes.
         return True
 
     def check_post_shot_observation_tracking(self, x, now):
@@ -380,7 +385,7 @@ class SelectedAmmoDriver(FixedContainerDriver):
         # identity and never becomes a source for input. No capture clock resets.
         self.latest_snapshot = None
         try:
-            for _ in range(1 + transport.MAX_SNAPSHOT_REFRESHES):
+            for _ in range(self.post_shot_request_limit):
                 self.check_post_shot_observation_owner()
                 snapshot, raw, now = self.fresh_postrelease_observation(deadline)
                 self.check_post_shot_observation_owner()

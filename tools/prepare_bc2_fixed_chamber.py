@@ -268,6 +268,12 @@ def after_shot(snapshot, now, before):
 
 
 class PreparationDriver(fixed_driver.SelectedAmmoDriver):
+    # Reuse the shared initial capture-readiness cap for passive settling.
+    # This bounds observation only; response/native/input leases stay original.
+    post_shot_observation_ns = NS
+    post_shot_request_limit = post_shot_observation_ns // transport.SNAPSHOT_PERIOD
+    pace_post_shot_refresh = True
+
     def assert_selected_family(self, snapshot):
         selected_family(snapshot)
 
@@ -327,7 +333,7 @@ class PreparationDriver(fixed_driver.SelectedAmmoDriver):
         self.send(['trigger r 0'])
         release, committed = self.last_write, self.last_commit
         require(release-press <= pulse, 'preparation pulse exceeded100ms; released; no retry')
-        self.stage_deadline = min(self.deadline, committed+600_000_000)
+        self.stage_deadline = min(self.deadline, committed+self.post_shot_observation_ns)
         self.pause_until(committed+100_000_000)
         after, _, now = self.fresh_available()
         counts = after_shot(after, now, self.preparation)

@@ -23,17 +23,16 @@ exact profiles/settings restored. No unchanged retry. See native77 README.
 ROOT721 native80 source3b69bc6 is pushed and privately staged; normal361x86/358x64
 and34 focused provisioning groups perarchitecture pass. Frozen normal validation
 was reused for fresh-shell private linking. Installed77/fallback76 unchanged.
-Actual79/07 completes held-cover comparison and all5feed stages with closedlid
-200/487 stereo; broader headset reliability and exact transfer receipts remain open.
-Actual79/10 fires underbarrel but stale ammo publication blocks reload;79/09 setup
-expires before native assignment.80 adds bounded diagnostics for both failures.
-Actual80/01 failed before activation on startup-status replacement; all6processes
-exited and exact profiles/settings restored. Tools822 corrects only scoped startup
-publication with original clocks;63focused+103existing sharing assertions PASS.
-Native80 artifacts unchanged; no native rebuild/retest/public release.
-Next: corrected actual underbarrel/setup diagnostics, then knife and other ready
-campaign work. Vehicle checkpoint metadata alone gives no verified ordinary route.
-See coordinator-20261108-native80/tools822 integration handoffs and compact state.
+Actual79/07 completes held-cover comparison/all5feed stages with closedlid200/487;
+headset reliability and exact per-operation transfer receipts remain open.
+Actual80/03 fires the underbarrel but observes too early for settled ammunition;
+04 import,06 menu-review and07 helper-exit failures precede target mechanics.
+Tools833/834 handles confirmed helper exit and bounded passive ammo settling.
+13focused+38Windows identity checks and79Python tests PASS;3optional replays skipped.
+No native rebuild/retest/newinstallation/publicrelease. Source-only correction.
+Next: corrected setup/underbarrel actuals, trigger-free knife and stationary vehicle
+scene discovery.831/832 prepared reusable wrappers; no route/weapon success inferred.
+See coordinator-20261108-tools833 handoff and compact coordinator state.
 
 Earlier native74/ROOT669 was installed and setup-validated; fallback73/settings/cache verified.
 Native sourcef55fe8e is pushed. Both normal architectures and mapped-reader,
