@@ -11,14 +11,16 @@ Ownership: prior CHAT25/26 close.json confirms lease release, idle helpers and
 exact profile restoration. Coordinator acquired the lease before shared mutations.
 External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned.
 
-Native75 is installed and setup-validated, fallback74/settings/cache preserved.
-Source67202df is pushed; original run03 normal351x86/348x64 and CI697 checks passed.
-Run04 postbuild delivery preserves those checks without recompilation; explicit
-51GiB private storage exception retains the4GiBruntime/15GiBfloor/capture bounds.
-Shared belt-fed grasp/hold, independent parts display and trigger-free knife jabs
-are included; stable shortcut verifies75. All690-705 agents retired. Historical
-scripted cycles and offline checks do not override the latest human74 failure.
-No headset acceptance, FPS gain or public release claimed. See native75 README.
+Native76 is installed and setup-validated, fallback75/settings/cache preserved.
+Sourcec16ff07 is pushed; actual normal351x86(c11)/348x64(c16) and17focused suites
+passed. Corrected x64-only host naming did not trigger an unchanged x86 rebuild.
+ROOT706 run03 imports original run02/x64-repair01 evidence with explicit per-arch
+compilation identities. Delivery/private-session52GiB,15GiBfloor/4GiBruntime and
+capture bounds remain. Shared fixed mechanical grips/held endpoints/recovery,
+truthful shutdown reports and bounded timing tools included; earlier belt-fed
+continuity and trigger-free jabs retained. Stable shortcut verifies76. All707-720
+agents retired. Historical scripted cycles/offline checks do not override human74
+failure. No headset acceptance/FPS gain/public release claimed. See native76 README.
 
 Earlier native74/ROOT669 was installed and setup-validated; fallback73/settings/cache verified.
 Native sourcef55fe8e is pushed. Both normal architectures and mapped-reader,
