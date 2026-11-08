@@ -61,8 +61,22 @@ class MemoryArtifacts:
         self.events.append(copy.deepcopy(event))
 
 
+class MemoryPendingOwner:
+    """Fake only the OS custody boundary; byte/owner validation stays real."""
+    def __init__(self, driver, path, raw):
+        self.path = self.temporary = path
+        self.stream = self
+        d.atomic(path, raw)
+
+    def read(self):
+        return d.read_bytes(self.path, 8192)
+
+    def close(self):
+        self.stream = None
+
+
 class Harness:
-    def __init__(self, testcase, ack_ms=5):
+    def __init__(self, testcase, ack_ms=5, *, real_pending_owner=False):
         self.now, self.ack_ms = NS + 120 * MS, ack_ms
         self.files, self.json_files, self.command_writes = {}, {}, []
         self.response_after, self.response_stale, self.on_sleep = 40 * MS, False, None
@@ -102,6 +116,8 @@ class Harness:
         testcase.enterContext(patch.object(d, "read_bytes", lambda path, maximum: self.files[path]))
         testcase.enterContext(patch.object(d, "read_json", self.read_json))
         testcase.enterContext(patch.object(d, "atomic", self.write))
+        if not real_pending_owner:
+            testcase.enterContext(patch.object(d, "PendingOwner", MemoryPendingOwner))
 
     def read_json(self, path, maximum=128 * 1024):
         return copy.deepcopy(self.json_files[path]), self.files[path]

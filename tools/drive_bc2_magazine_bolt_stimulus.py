@@ -1,7 +1,7 @@
 """ROOT-only ordinary magazine replacement and bolt continuation.
 
 Uses the installed normal observer and canonical session/command/ACK transport.
-Modes compose across settled owner records: magazine; shot-bolt; bolt.
+Modes compose across settled owner records: prep-shot-bolt; magazine; shot-bolt; bolt.
 No process launch, fixture, ammo write, resource grant or acceptance verdict.
 """
 import argparse
@@ -60,6 +60,8 @@ class MagazineBoltDriver(transport.Driver):
         self.boundaries = []
         self.debt = None
         self.gun_root = None
+        self.preparation = None
+        self.preparation_mode = args.mode == "prep-shot-bolt"
         self.motion_reference = None
         controls_allowed(self.state["controls"])
         require(self.state["controls"]["trigR"] == 0, "trigger must be released at invocation")
@@ -102,8 +104,11 @@ class MagazineBoltDriver(transport.Driver):
         return True
 
     def snapshot_source_deadline(self, snapshot):
-        return min(super().snapshot_source_deadline(snapshot), geometry.source_deadline(snapshot, self.family),
-                   integer(snapshot[self.family]["input"]["deadlineNs"]))
+        deadline = min(super().snapshot_source_deadline(snapshot), geometry.source_deadline(snapshot, self.family),
+                       integer(snapshot[self.family]["input"]["deadlineNs"]))
+        if getattr(self, "preparation_mode", False):
+            deadline = min(deadline, geometry.source_deadline(snapshot, "magazine"))
+        return deadline
 
     def validate_publication(self, lines, expected, cleanup):
         require(expected is not None, "ordinary command requires a typed target")
@@ -122,6 +127,11 @@ class MagazineBoltDriver(transport.Driver):
                 geometry.movement_continuation(self.motion_reference, self.latest_snapshot,
                                                now, self.family, self.debt)
         if expected.get("fire"):
+            if getattr(self, "preparation_mode", False):
+                current = geometry.preparation_baseline(self.latest_snapshot, time.perf_counter_ns())
+                require(all(current[k] == self.preparation[k] for k in current
+                            if k not in ("startedNs", "sequence")),
+                        "preparation full-magazine/owner/shot baseline changed before publication")
             geometry.fire_clearance(self.fire_permission, self.latest_snapshot, state, self.host,
                                     time.perf_counter_ns(), self.deadline)
 
@@ -344,6 +354,42 @@ class MagazineBoltDriver(transport.Driver):
                 "release changed gun custody/ammunition")
         return dict(released=True, retainedNativeReceipt=True)
 
+    def run_preparation_shot(self):
+        require(self.args.fire_clearance is not None and self.args.magazine_result is None,
+                "prep-shot-bolt requires ROOT corridor review and does not consume a magazine result")
+        s, now, self.preparation = self.boundary("before_preparation_shot", geometry.preparation_baseline)
+        # One attempt per exact host/owner/native shot identity, including a
+        # refused clearance or uncertain publication. This is evidence only.
+        key = dict(host=self.host, owner=self.preparation["owner"], identity=self.preparation["identity"],
+                   cycle=self.preparation["cycle"], shot=self.preparation["shot"])
+        encoded = json.dumps(key, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        attempt = self.run / ("magazine-preparation-attempt-"+transport.digest(encoded)+".json")
+        with attempt.open("xb") as stream:
+            stream.write(transport.json_bytes(dict(schema="bc2vr.magazine-preparation-attempt.v1",
+                key=key, preparationOnly=True, artifactDirectory=str(self.artifacts.directory))))
+        self.fire_permission, _ = transport.read_json(self.args.fire_clearance, 16384)
+        for pin in self.fire_permission["captures"]:
+            require(transport.child(self.run, pin["path"]) == transport.local_path(pin["path"]),
+                    "ROOT reviewed capture is outside the linked run")
+            transport.check_pin(pin)
+        pulse = geometry.fire_clearance(self.fire_permission, s, self.state, self.host,
+                                        time.perf_counter_ns(), self.deadline)
+        self.stage_deadline = min(self.deadline, time.perf_counter_ns()+pulse)
+        self.command(control="trigger r", value=1, source=self.snapshot_source_deadline(s), fire=True)
+        self.preparation["pressedNs"] = self.last_write
+        self.stage_deadline = min(self.deadline, time.perf_counter_ns()+250_000_000)
+        self.command(control="trigger r", value=0)
+        require(self.last_write-self.preparation["pressedNs"] <= pulse,
+                "single preparation trigger pulse exceeded100ms; released; no retry")
+        self.stage_deadline = self.deadline
+        s, now, self.debt = self.boundary("preparation_shot_created_owed_bolt", geometry.owed)
+        self.boundary("preparation_shot_counts", lambda s, n:
+                      geometry.preparation_debt(s, n, self.preparation, self.debt))
+
+    def finish_preparation(self):
+        self.boundary("preparation_completed", lambda s, n:
+                      geometry.preparation_complete(s, n, self.preparation, self.debt))
+
     def run_shot(self):
         require(self.args.magazine_result is not None and self.args.fire_clearance is not None,
                 "shot-bolt requires the immediately preceding magazine result and ROOT corridor review")
@@ -407,9 +453,7 @@ class MagazineBoltDriver(transport.Driver):
         maximum_pos, maximum_angle = frame.finite(p["maxStepMeters"]), .08
         # The rotation subdivision is a command resolution; endpoint/geometry
         # acceptance still uses the observed production calibration.
-        require(0 < integer(p["endpointDwellNs"]) < integer(p["maximumCycleNs"]) <= 10*NS,
-                "invalid bounded bolt cycle policy")
-        self.stage_deadline = min(self.deadline, time.perf_counter_ns()+integer(p["maximumCycleNs"]))
+        self.stage_deadline = min(self.deadline, time.perf_counter_ns()+geometry.bolt_cycle_budget(p))
         if not (b["custodyCurrent"] and b["gunClaim"] and integer(b["gunClaim"]["token"]["hand"]) == 0):
             require(b["leftClaim"] is None or integer(b["leftClaim"]["token"]["kind"]) == 2,
                     "another object occupies the support hand")
@@ -495,14 +539,15 @@ def counts_of(x):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=Path, required=True)
-    parser.add_argument("--mode", choices=("magazine", "shot-bolt", "bolt"), required=True)
+    parser.add_argument("--mode", choices=("magazine", "prep-shot-bolt", "shot-bolt", "bolt"), required=True)
     parser.add_argument("--fire-clearance", type=Path)
     parser.add_argument("--magazine-result", type=Path)
     parser.add_argument("--root-authorized-ordinary-input", action="store_true")
     args = parser.parse_args(argv)
     result = dict(schema="bc2vr.magazine-bolt-stimulus-result.v1", status="refused",
                   stimulusCompleted=False, nativeAcceptance=False, headsetAcceptance=False,
-                  shotAllThreeCopiesVerified=False)
+                  shotAllThreeCopiesVerified=False, mode=args.mode,
+                  preparationOnly=args.mode == "prep-shot-bolt", preparationCompleted=False)
     driver, code = None, 2
     try:
         require(args.root_authorized_ordinary_input, "ROOT ordinary-input authorization required")
@@ -513,8 +558,14 @@ def main(argv=None):
         else:
             if args.mode == "shot-bolt":
                 driver.run_shot()
+            elif args.mode == "prep-shot-bolt":
+                driver.run_preparation_shot()
             driver.run_bolt()
-        result.update(status="ordinary_stimulus_completed", stimulusCompleted=True)
+            if args.mode == "prep-shot-bolt":
+                driver.finish_preparation()
+        result.update(status="ordinary_preparation_completed" if args.mode == "prep-shot-bolt"
+                      else "ordinary_stimulus_completed", stimulusCompleted=True,
+                      preparationCompleted=args.mode == "prep-shot-bolt")
         code = 0
     except (Exception, KeyboardInterrupt) as error:
         result["error"] = str(error)
@@ -543,7 +594,7 @@ def main(argv=None):
                         artifacts.flush()
                     result["artifactDirectory"] = str(artifacts.directory)
                     if code:
-                        result.update(status="refused", stimulusCompleted=False)
+                        result.update(status="refused", stimulusCompleted=False, preparationCompleted=False)
                     artifacts.save("result.json", result, final=True)
                 except Exception as error:
                     result["archiveError"] = str(error)
