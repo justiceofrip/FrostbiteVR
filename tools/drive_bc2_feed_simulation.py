@@ -1990,6 +1990,7 @@ class Driver:
             before["feedObservation"], observations[-1] if observations else None)
         observations.append(observed)
         self.artifacts.event(dict(type="held_cover_probe_observed", **observed))
+        self.monitor = True
         return min(integer(snapshot["valid_until_ns"]), integer(observed["claim"]["deadlineNs"]),
                    integer(snapshot["input_evidence"]["observedNs"]) + SNAPSHOT_PERIOD)
 

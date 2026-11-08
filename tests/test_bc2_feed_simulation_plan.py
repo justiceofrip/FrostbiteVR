@@ -348,6 +348,7 @@ class FeedSimulationPlanTests(unittest.TestCase):
                 instance.deadline, instance.last_write = NOW+10_000_000_000, 0
                 instance.artifacts = mock.Mock()
                 def fresh():
+                    instance.monitor = False  # Match the production fresh() handoff.
                     clock[0] += 20_000_000
                     if not sent:
                         return before, b"synthetic", NOW
@@ -365,6 +366,7 @@ class FeedSimulationPlanTests(unittest.TestCase):
                             snapshot["feed"].update(coverRadians=0, weaponFromCoverHinge=row["geometry"]["weaponFromHinge"])
                     return snapshot, b"synthetic", clock[0]
                 def send(lines, expected=None, source_deadline=None, final_release=False):
+                    self.assertTrue(instance.monitor)
                     if source_deadline is not None:
                         self.assertLess(clock[0], source_deadline)
                     sent.append(expected)
