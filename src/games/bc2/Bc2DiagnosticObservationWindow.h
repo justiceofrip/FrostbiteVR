@@ -65,6 +65,16 @@ public:
         }else state_.lastAccepted=entry;
         state_.latest=entry;state_.retention.Observe(entry,rejected);return true;
     }
+    // Optional bounded auxiliary evidence uses the SAME epoch and diagnostic
+    // flag without becoming a gameplay observation or replacing firstFailure.
+    template<class Evidence> bool ObserveRetention(const Ticket& ticket,const Evidence& evidence)noexcept {
+        if(!ticket.epoch)return false;
+        Gate gate(flag_);
+        if(!gate.held){retentionDropped_.fetch_add(1,std::memory_order_relaxed);return false;}
+        if(ticket.epoch!=state_.window.epoch){++state_.lateEpochDropped;return false;}
+        state_.retention.ObserveAuxiliary(evidence);return true;
+    }
+    std::uint64_t RetentionDropped()const noexcept{return retentionDropped_.load(std::memory_order_relaxed);}
     bool Read(Snapshot& copy)noexcept {
         Gate gate(flag_);
         if(!gate.held){snapshotDropped_.fetch_add(1,std::memory_order_relaxed);return false;}
@@ -83,7 +93,7 @@ private:
         ~Gate(){if(held)flag.clear(std::memory_order_release);}
     };
     std::atomic_flag& flag_;
-    std::atomic<std::uint64_t> epoch_=0,publicationDropped_=0,requestDropped_=0,snapshotDropped_=0;
+    std::atomic<std::uint64_t> epoch_=0,publicationDropped_=0,requestDropped_=0,snapshotDropped_=0,retentionDropped_=0;
     std::atomic<std::int64_t> beginNs_=0,endNs_=0;
     Snapshot state_{};
 };

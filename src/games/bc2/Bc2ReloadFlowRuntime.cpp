@@ -19,6 +19,7 @@
 #include <new>
 #endif
 #include "Bc2DiagnosticObservationWindow.h"
+#include "Bc2AmmoResourceBindingObservation.h"
 #include "Bc2AmmoPublisherObservation.h"
 #include "Bc2NativeCycleRuntime.h"
 #include "Bc2NativeCycleRecovery.h"
@@ -731,7 +732,7 @@ struct FixedGateObservation {
     bool nativeCopied=false,nativeServer=false;
     ReloadStateOwner nativeOwner{};std::uint64_t nativeSequence=0,nativeRevision=0,cleanupEpoch=0,completionCycle=0;
     std::int64_t nativeObservedNs=0,nativeDeadlineNs=0;
-    AmmoResourceBindingReadObservation bindingRead{};
+    AmmoResourceBindingReadObservation bindingRead{};std::int64_t bindingReadEndNs=0;
     int resourceLock=-1,gateLock=-1,serviceActive=-1,ledgerPresent=-1,ledgerPending=-1,ledgerPhase=-1,viewPresent=-1;
     std::optional<interaction::AmmunitionSnapshot> ledger;
     std::optional<AmmoResourceBinding> viewBinding;std::optional<interaction::AmmunitionSnapshot> viewSnapshot;
@@ -740,7 +741,7 @@ struct FixedGateObservation {
     std::optional<std::uint64_t> lastLifetime;
 };
 std::atomic_flag fixedGateObservationLock=ATOMIC_FLAG_INIT;
-using FixedGateObservationWindow=DiagnosticObservationWindow<FixedGateObservation>;
+using FixedGateObservationWindow=DiagnosticObservationWindow<FixedGateObservation,AmmoResourceBindingPublicationRetention>;
 FixedGateObservationWindow fixedGateObservations(fixedGateObservationLock);
 std::atomic_flag ammoPublisherObservationLock=ATOMIC_FLAG_INIT;
 AmmoPublisherObservationWindow ammoPublisherObservations(ammoPublisherObservationLock);
@@ -3772,7 +3773,13 @@ bool PublishOwner(const ReloadStateSnapshot& snapshot,std::int64_t deadline)noex
 }
 void PublishAmmoResourceBinding(const std::optional<AmmoResourceBinding>& binding)noexcept {
 #ifdef FVR_BC2_NATIVE_AMMO_BACKEND
-    ammoResourceBindings.Publish(binding);
+    const auto begin=Now();const auto ticket=fixedGateObservations.Begin(begin);
+    if(!ticket.epoch){ammoResourceBindings.Publish(binding);return;}
+    AmmoResourceBindingPublicationObservation diagnostic;diagnostic.beginNs=begin;
+    ammoResourceBindings.Publish(binding,&diagnostic.publication);
+    diagnostic.endNs=Now();
+    // Publish has released its channel gate. A missing diagnostic stays unknown.
+    fixedGateObservations.ObserveRetention(ticket,diagnostic);
 #else
     (void)binding;
 #endif
@@ -4000,7 +4007,7 @@ void WriteFixedContainerGateObservation(std::ostream& out){
         for(unsigned n=0;n<std::min<unsigned>(s.linkDifference.count,unsigned(s.linkDifference.first.size()));++n){
             const auto& link=s.linkDifference.first[n];if(n)out<<',';
             out<<"{\"field\":\""<<link.field<<"\",\"index\":"<<link.index<<",\"expected\":"<<link.expected<<",\"observed\":"<<link.observed<<'}';
-        }out<<"]}},\"bindingRead\":{\"nowNs\":"<<r.bindingReadNs<<",\"reason\":"<<unsigned(r.bindingRead.reason)
+        }out<<"]}},\"bindingRead\":{\"nowNs\":"<<r.bindingReadNs<<",\"endNs\":"<<r.bindingReadEndNs<<",\"reason\":"<<unsigned(r.bindingRead.reason)
             <<",\"gateHeld\":"<<r.bindingRead.gateHeld<<",\"storedRevision\":"<<r.bindingRead.storedRevision<<",\"currentRevision\":";
         if(r.bindingRead.revisionRead)out<<r.bindingRead.currentRevision;else out<<"null";
         out<<",\"binding\":";if(r.bindingRead.value)binding(*r.bindingRead.value);else out<<"null";
@@ -4039,6 +4046,28 @@ void WriteFixedContainerGateObservation(std::ostream& out){
         first->value.publication.inputSequence==preceding->value.publication.inputSequence&&
         first->value.publication.revision>0&&preceding->value.publication.revision==first->value.publication.revision-1;
     out<<",\"precedingAcceptedSameInput\":"<<joined<<",\"latest\":";row(latest,false);
+    const auto& retained=captured.retention;
+    out<<",\"bindingPublication\":{\"capacity\":"<<retained.Capacity<<",\"attempts\":"<<retained.attempts
+        <<",\"overwritten\":"<<retained.overwritten<<",\"publicationDropped\":"<<fixedGateObservations.RetentionDropped()
+        <<",\"dropCounterScope\":\"process\",\"exactRevisionMatched\":"<<bool(retained.matched)
+        <<",\"readBeginNs\":"<<retained.readBeginNs<<",\"readEndNs\":"<<retained.readEndNs
+        <<",\"attemptMatchesStoredIdentity\":";
+    const auto sameIdentity=retained.AttemptMatchesStoredIdentity();
+    if(sameIdentity)out<<*sameIdentity;else out<<"null";
+    out<<",\"reasonNames\":[\"not_attempted\",\"published\",\"busy\",\"superseded\",\"revision_overflow\"],\"matched\":";
+    if(!retained.matched)out<<"null";else {
+        const auto& attempt=*retained.matched;const auto& p=attempt.publication;
+        out<<"{\"beginNs\":"<<attempt.beginNs<<",\"endNs\":"<<attempt.endNs
+            <<",\"completedBeforeReadBegin\":"<<(attempt.endNs<=retained.readBeginNs)
+            <<",\"completedAfterReadEnd\":"<<(attempt.endNs>retained.readEndNs)
+            <<",\"attemptedRevision\":"<<p.attemptedRevision<<",\"reason\":"<<unsigned(p.reason)
+            <<",\"gateHeld\":"<<p.gateHeld<<",\"currentRevision\":";
+        if(p.revisionRead)out<<p.currentRevision;else out<<"null";
+        out<<",\"attempted\":";if(p.attempted)binding(*p.attempted);else out<<"null";
+        out<<",\"previousCopied\":"<<p.previousCopied<<",\"previousRevision\":";
+        if(p.previousCopied)out<<p.previousRevision;else out<<"null";
+        out<<",\"previous\":";if(p.previous)binding(*p.previous);else out<<"null";out<<'}';
+    }out<<'}';
     out<<",\"ammoPublisher\":";WriteAmmoPublisherObservation(out,false);out<<'}';
 }
 FixedContainerGateResult PublishFixedContainerGateResult(const FixedContainerGate& publication)noexcept {
@@ -4082,6 +4111,7 @@ FixedContainerGateResult PublishFixedContainerGateResult(const FixedContainerGat
         capture.Requested()?&diagnostic.ownerEvidence:nullptr))return capture.Reject("native_owner");
     const auto bindingNow=Now();if(capture.Requested())diagnostic.bindingReadNs=bindingNow;
     const auto current=ammoResourceBindings.Read(binding.owner,bindingNow,capture.Requested()?&diagnostic.bindingRead:nullptr);
+    if(capture.Requested())diagnostic.bindingReadEndNs=Now();
     if(!current)return capture.Reject("binding_read");
     if(current->context!=binding.context)return capture.Reject("binding_context");
     if(current->inventory!=binding.inventory)return capture.Reject("binding_inventory");

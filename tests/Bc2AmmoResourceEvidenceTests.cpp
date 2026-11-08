@@ -3,10 +3,18 @@
 #include "Bc2AmmoResourceHandoff.h"
 #include "Bc2AmmoResourceBinding.h"
 #include "Bc2DiagnosticObservationWindow.h"
+#include "Bc2AmmoResourceBindingObservation.h"
 #include <chrono>
 #include <iostream>
 #include <string>
 #include <thread>
+namespace fvr::bc2 {
+// Test-only ownership of the actual channel gate: no runtime waits or hooks.
+struct AmmoResourceBindingChannelTestAccess {
+    static bool Hold(AmmoResourceBindingChannel& c){return !c.gate_.test_and_set(std::memory_order_acquire);}
+    static void Release(AmmoResourceBindingChannel& c){c.gate_.clear(std::memory_order_release);}
+};
+}
 using namespace fvr::bc2;
 using namespace fvr::interaction;
 namespace {
@@ -224,6 +232,128 @@ int ObservationWindows(){
     CHECK(journal.Drops().request==1&&journal.Drops().publication==1&&journal.Drops().snapshot==1);
     return 0;
 }
+struct FixedBindingReadRow {
+    AmmoResourceBindingReadObservation bindingRead{};
+    std::int64_t bindingReadNs=0,bindingReadEndNs=0;
+};
+using BindingWindow=DiagnosticObservationWindow<FixedBindingReadRow,AmmoResourceBindingPublicationRetention>;
+int BindingPublicationRaces(){
+    // Each case invokes the real Publish while the channel gate is held, then
+    // the real Read: even a same-identity failed writer MUST still invalidate.
+    for(unsigned change=0;change<10;++change){
+        const auto i=Identity();const auto s=Snapshot(i,22,191,30,Now);
+        const AmmoResourceBinding original{i.owner,s.context,0x80000,0x90000,0xa0000,0,Now,Now+100000000};
+        AmmoResourceBindingChannel channel;AmmoResourceBindingPublishObservation committed;
+        CHECK(channel.Publish(original,&committed));
+        CHECK(committed.reason==AmmoResourceBindingPublishReason::Published&&committed.attemptedRevision==1);
+        CHECK(committed.previousCopied&&!committed.previous&&committed.previousRevision==0);
+        std::optional<AmmoResourceBinding> attempted=original;
+        ++attempted->observedNs;++attempted->deadlineNs;
+        if(change==1)++attempted->owner.equipGeneration;
+        if(change==2)++attempted->context.resource.weaponGeneration;
+        if(change==3)++attempted->inventory;
+        if(change==4)++attempted->switching;
+        if(change==5)++attempted->data;
+        if(change==6)++attempted->persistence;
+        if(change==7)++attempted->context.space;
+        if(change==8)attempted.reset();
+        if(change==9)++attempted->owner.actorGeneration;
+        AmmoResourceBindingPublicationObservation failure{Now+10,Now+20,{}};
+        // Dirty values must not survive a failed publication.
+        failure.publication=committed;
+        CHECK(AmmoResourceBindingChannelTestAccess::Hold(channel));
+        bool published=true;
+        std::thread publisher([&]{published=channel.Publish(attempted,&failure.publication);});publisher.join();
+        AmmoResourceBindingReadObservation busy;
+        const auto busyRead=channel.Read(i.owner,Now+21,&busy);
+        AmmoResourceBindingChannelTestAccess::Release(channel);
+        CHECK(!published&&!busyRead&&busy.reason==AmmoResourceBindingReadReason::Busy&&!busy.value);
+        CHECK(failure.publication.reason==AmmoResourceBindingPublishReason::Busy);
+        CHECK(failure.publication.attemptedRevision==2&&failure.publication.attempted==attempted);
+        CHECK(!failure.publication.previousCopied&&!failure.publication.previous&&!failure.publication.revisionRead);
+        FixedBindingReadRow refused;refused.bindingReadNs=Now+30;refused.bindingReadEndNs=Now+31;
+        CHECK(!channel.Read(i.owner,Now+30,&refused.bindingRead)&&!channel.Read(i.owner,Now+30));
+        CHECK(refused.bindingRead.reason==AmmoResourceBindingReadReason::Revision&&refused.bindingRead.value==original);
+        CHECK(refused.bindingRead.storedRevision==1&&refused.bindingRead.currentRevision==2);
+        std::atomic_flag flag=ATOMIC_FLAG_INIT;BindingWindow journal(flag);BindingWindow::Snapshot copy;
+        CHECK(journal.Request(Now,Now+1000));const auto ticket=journal.Begin(Now+1);
+        if(change%2==0)CHECK(journal.ObserveRetention(ticket,failure));
+        CHECK(journal.Publish(ticket,refused,true));
+        if(change%2!=0)CHECK(journal.ObserveRetention(ticket,failure));
+        CHECK(journal.Read(copy)&&copy.calls==1&&copy.rejected==1&&copy.retention.matched);
+        CHECK(copy.firstFailure&&copy.firstFailure->value.bindingRead.value==original);
+        const auto same=copy.retention.AttemptMatchesStoredIdentity();
+        if(change==8)CHECK(!same);else CHECK(same&&*same==(change==0));
+        // Recovery uses a new real commit; it cannot reinterpret the refusal.
+        CHECK(channel.Publish(original,&committed)&&channel.Read(i.owner,Now+40));
+        CHECK(committed.attemptedRevision==3&&committed.previousCopied&&committed.previous==original&&committed.previousRevision==1);
+        CHECK(journal.ObserveRetention(ticket,AmmoResourceBindingPublicationObservation{Now+40,Now+41,committed}));
+        CHECK(journal.Read(copy)&&copy.retention.matched->publication.attemptedRevision==2);
+    }
+    return 0;
+}
+int BindingPublicationRetention(){
+    const auto i=Identity();const auto s=Snapshot(i,22,191,30,Now);
+    const AmmoResourceBinding b{i.owner,s.context,0x80000,0x90000,0xa0000,0,Now,Now+100000000};
+    const auto attempt=[&](std::uint64_t revision,std::int64_t begin,std::int64_t end){
+        AmmoResourceBindingPublicationObservation p{begin,end,{}};
+        p.publication.attemptedRevision=revision;p.publication.reason=AmmoResourceBindingPublishReason::Busy;
+        p.publication.attempted=b;return p;};
+    FixedBindingReadRow refused;refused.bindingReadNs=Now+30;refused.bindingReadEndNs=Now+31;
+    refused.bindingRead.reason=AmmoResourceBindingReadReason::Revision;
+    refused.bindingRead.gateHeld=refused.bindingRead.revisionRead=true;
+    refused.bindingRead.storedRevision=1;refused.bindingRead.currentRevision=2;refused.bindingRead.value=b;
+    std::atomic_flag flag=ATOMIC_FLAG_INIT;BindingWindow journal(flag);BindingWindow::Snapshot copy;
+    CHECK(!journal.ObserveRetention({},attempt(2,Now+10,Now+20)));
+    CHECK(journal.Request(Now,Now+1000));const auto ticket=journal.Begin(Now+1);
+    CHECK(journal.Publish(ticket,refused,true));
+    CHECK(journal.Read(copy)&&!copy.retention.matched&&!copy.retention.AttemptMatchesStoredIdentity());
+    CHECK(journal.ObserveRetention(ticket,attempt(3,Now+32,Now+33))); // Later different revision is no evidence.
+    CHECK(journal.ObserveRetention(ticket,attempt(2,Now+32,Now+33))); // Even matching claimed revision began too late.
+    CHECK(journal.Read(copy)&&!copy.retention.matched);
+    CHECK(!flag.test_and_set(std::memory_order_acquire));
+    const bool dropped=journal.ObserveRetention(ticket,attempt(2,Now+10,Now+20));
+    flag.clear(std::memory_order_release);
+    CHECK(!dropped&&journal.RetentionDropped()==1&&journal.Read(copy)&&!copy.retention.matched);
+    // An exact attempt that finishes later is retained, with its true interval.
+    CHECK(journal.ObserveRetention(ticket,attempt(2,Now+10,Now+40)));
+    CHECK(journal.Read(copy)&&copy.retention.matched&&copy.retention.matched->endNs>copy.retention.readEndNs);
+    for(unsigned n=0;n<32;++n)CHECK(journal.ObserveRetention(ticket,attempt(10+n,Now+50+n,Now+51+n)));
+    CHECK(journal.Read(copy)&&copy.retention.count==16&&copy.retention.overwritten==19);
+    CHECK(copy.calls==1&&copy.rejected==1&&copy.retention.matched->publication.attemptedRevision==2);
+    CHECK(journal.Request(Now+1000,Now+2000));const auto next=journal.Begin(Now+1001);
+    CHECK(!journal.ObserveRetention(ticket,attempt(2,Now+10,Now+20)));
+    CHECK(journal.Read(copy)&&copy.lateEpochDropped==1&&!copy.retention.target&&!copy.retention.matched);
+    // A prior attempt evicted before the refusal stays unknown.
+    CHECK(journal.ObserveRetention(next,attempt(2,Now+1010,Now+1020)));
+    for(unsigned n=0;n<16;++n)CHECK(journal.ObserveRetention(next,attempt(10+n,Now+1010,Now+1020)));
+    refused.bindingReadNs=Now+1030;refused.bindingReadEndNs=Now+1031;
+    CHECK(journal.Publish(next,refused,true)&&journal.Read(copy)&&!copy.retention.matched);
+    CHECK(copy.retention.overwritten==1);
+    // An earlier non-Revision refusal remains the window's first failure.
+    CHECK(journal.Request(Now+2000,Now+3000));const auto third=journal.Begin(Now+2001);
+    auto other=refused;other.bindingRead.reason=AmmoResourceBindingReadReason::Busy;
+    CHECK(journal.Publish(third,other,true)&&journal.Publish(third,refused,true));
+    CHECK(journal.ObserveRetention(third,attempt(2,Now+1010,Now+1020)));
+    CHECK(journal.Read(copy)&&!copy.retention.target&&!copy.retention.matched);
+    // Missing read metadata is unknown even when an attempt claims its revision.
+    for(unsigned missing=0;missing<7;++missing){
+        std::atomic_flag missingFlag=ATOMIC_FLAG_INIT;BindingWindow missingJournal(missingFlag);
+        CHECK(missingJournal.Request(Now,Now+1000));const auto missingTicket=missingJournal.Begin(Now+1);
+        auto incomplete=refused;incomplete.bindingReadNs=Now+30;incomplete.bindingReadEndNs=Now+31;
+        if(missing==0)incomplete.bindingRead.gateHeld=false;
+        if(missing==1)incomplete.bindingRead.revisionRead=false;
+        if(missing==2)incomplete.bindingRead.storedRevision=0;
+        if(missing==3)incomplete.bindingRead.storedRevision=2;
+        if(missing==4)incomplete.bindingRead.storedRevision=3;
+        if(missing==5)incomplete.bindingReadNs=0;
+        if(missing==6)incomplete.bindingReadEndNs=Now+29;
+        CHECK(missingJournal.Publish(missingTicket,incomplete,true));
+        CHECK(missingJournal.ObserveRetention(missingTicket,attempt(2,Now+10,Now+20)));
+        CHECK(missingJournal.Read(copy)&&!copy.retention.matched&&!copy.retention.AttemptMatchesStoredIdentity());
+    }
+    return 0;
+}
 void ReadOwner(ReloadStateOwner& o){std::cin>>o.player>>o.soldier>>o.weak>>o.weapon>>o.actorGeneration>>o.equipGeneration>>o.space;}
 int Replay(){
     ReloadHoldIdentity identity;ReadOwner(identity.owner);
@@ -263,6 +393,7 @@ int Replay(){
 }
 int main(int argc,char** argv){
     if(argc==2&&std::string(argv[1])=="--replay")return Replay();
-    CHECK(argc==1&&Regression()==0&&DelayedServerCompletion()==0&&ConcurrentHandoff()==0&&BindingPublication()==0&&ObservationWindows()==0);
-    std::puts("Bc2AmmoResourceEvidence: actual server invocation and independent client completion required");return 0;
+    CHECK(argc==1&&Regression()==0&&DelayedServerCompletion()==0&&ConcurrentHandoff()==0&&BindingPublication()==0&&ObservationWindows()==0&&BindingPublicationRaces()==0&&BindingPublicationRetention()==0);
+    std::puts("Bc2AmmoResourceEvidence: actual server invocation and independent client completion required");
+    std::puts("Binding publication diagnostics: 10 real channel contention cases and bounded exact-revision retention passed");return 0;
 }

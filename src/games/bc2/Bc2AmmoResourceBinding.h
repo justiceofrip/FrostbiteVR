@@ -33,13 +33,36 @@ struct AmmoResourceBindingReadObservation {
     std::uint64_t storedRevision=0,currentRevision=0;
     std::optional<AmmoResourceBinding> value;
 };
+// These copies explain publication attempts, including attempts that invalidated
+// the revision but never committed. They never supply binding authority.
+enum class AmmoResourceBindingPublishReason:unsigned {
+    NotAttempted,Published,Busy,Superseded,RevisionOverflow
+};
+struct AmmoResourceBindingPublishObservation {
+    AmmoResourceBindingPublishReason reason=AmmoResourceBindingPublishReason::NotAttempted;
+    std::uint64_t attemptedRevision=0,currentRevision=0,previousRevision=0;
+    bool gateHeld=false,revisionRead=false,previousCopied=false;
+    std::optional<AmmoResourceBinding> attempted,previous;
+};
 class AmmoResourceBindingChannel {
 public:
-    bool Publish(const std::optional<AmmoResourceBinding>& binding)noexcept {
+    bool Publish(const std::optional<AmmoResourceBinding>& binding,
+        AmmoResourceBindingPublishObservation* observation=nullptr)noexcept {
+        if(observation){*observation={};observation->attempted=binding;}
         const auto revision=revision_.fetch_add(1,std::memory_order_acq_rel)+1;
-        if(!revision)return false;
-        Gate gate(gate_);if(!gate.held||revision!=revision_.load(std::memory_order_acquire))return false;
-        value_=binding;storedRevision_=revision;return true;
+        if(observation)observation->attemptedRevision=revision;
+        if(!revision){if(observation)observation->reason=AmmoResourceBindingPublishReason::RevisionOverflow;return false;}
+        Gate gate(gate_);
+        if(!gate.held){if(observation)observation->reason=AmmoResourceBindingPublishReason::Busy;return false;}
+        const auto current=revision_.load(std::memory_order_acquire);
+        if(observation){
+            observation->gateHeld=observation->revisionRead=observation->previousCopied=true;
+            observation->currentRevision=current;observation->previousRevision=storedRevision_;
+            observation->previous=value_; // Existing channel gate only; no second read or lock.
+        }
+        if(revision!=current){if(observation)observation->reason=AmmoResourceBindingPublishReason::Superseded;return false;}
+        value_=binding;storedRevision_=revision;
+        if(observation)observation->reason=AmmoResourceBindingPublishReason::Published;return true;
     }
     std::optional<AmmoResourceBinding> Read(const ReloadStateOwner& owner,std::int64_t now,
         AmmoResourceBindingReadObservation* observation=nullptr)noexcept {
@@ -52,10 +75,12 @@ public:
         if(observation){observation->gateHeld=true;observation->storedRevision=storedRevision_;}
         if(!storedRevision_)return reject(AmmoResourceBindingReadReason::Unpublished);
         const auto revision=revision_.load(std::memory_order_acquire);
-        if(observation){observation->revisionRead=true;observation->currentRevision=revision;}
+        if(observation){
+            observation->revisionRead=true;observation->currentRevision=revision;
+            observation->value=value_; // Protected stored value is DIAGNOSTIC ONLY on Revision.
+        }
         if(storedRevision_!=revision)return reject(AmmoResourceBindingReadReason::Revision);
         if(!value_)return reject(AmmoResourceBindingReadReason::NoBinding);
-        if(observation)observation->value=value_;
         if(!AmmoResourceBindingFresh(*value_,owner,now)){
             // Classification uses the already locked value. It never retries.
             const auto reason=value_->owner!=owner?AmmoResourceBindingReadReason::Owner:
@@ -67,6 +92,7 @@ public:
         return value_;
     }
 private:
+    friend struct AmmoResourceBindingChannelTestAccess;
     struct Gate {std::atomic_flag& flag;bool held;
         explicit Gate(std::atomic_flag& f):flag(f),held(!f.test_and_set(std::memory_order_acquire)){}
         ~Gate(){if(held)flag.clear(std::memory_order_release);}};
