@@ -4603,7 +4603,9 @@ bool CampaignProvisioningSeatEntry(campaignProvisioning::Service& service,const 
     campaignProvisioning::InputGate::Control control(provisionGate);
     // Keep admission closed through dispatch, retirement and any resumption.
     // Busy callbacks defer this seat observation; no waiting/reentrant dispatch.
-    if(!control)return false;
+    if(!control){
+        service.RecordControlRefusal(service.AdmissionToken(),boundary,control.Acquisition());return false;
+    }
     service.SeatEntry(source,boundary);return true;
 }
 campaignProvisioning::LifetimeHost::Exclusion ExcludeCampaignProvisioning(const ReloadServerSnapshot& source,std::uint64_t nonce)noexcept {

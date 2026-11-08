@@ -1,6 +1,7 @@
 #pragma once
 #include "Bc2CampaignProvisioningPolicy.h"
 #include "Bc2CampaignProvisioningDiagnostics.h"
+#include "Bc2CampaignProvisioningControlDiagnostics.h"
 #include "Bc2ReloadServer.h"
 #include <array>
 #include <cstdint>
@@ -66,6 +67,16 @@ struct AdmissionReceipt {
     std::array<std::uint32_t,AdmissionCounters::Count> counts{};
 };
 static_assert(std::is_trivially_copyable_v<AdmissionReceipt>&&sizeof(AdmissionReceipt)==1200);
+// Separate explicit v1 sidecar; the existing request/receipt/admission wire
+// layouts and their counter meanings remain unchanged. Embed the exact v1
+// admission snapshot for full identity/window/status/freeze joins across files.
+struct ControlRefusalReceipt {
+    std::uint32_t magic=0x31464342,version=1,bytes=0,reserved=0;
+    AdmissionReceipt admission{};
+    ControlRefusalDetails details{};
+};
+static_assert(std::is_trivially_copyable_v<ControlRefusalReceipt>&&sizeof(ControlRefusalReceipt)==1344);
+static_assert(offsetof(ControlRefusalReceipt,admission)==16&&offsetof(ControlRefusalReceipt,details)==1216);
 struct LifetimeHost {
     enum class Exclusion:std::uint32_t {Refused,Pending,Ready};
     void* context=nullptr;
@@ -100,6 +111,10 @@ public:
         admission_.Record(token,event,now);
     }
     AdmissionReceipt ReadAdmission()const noexcept; // existing runtime gate held
+    // These accessors REQUIRE the existing runtime gate, including the exact
+    // failed Control site. They cannot run from the unlocked SeatHook counter.
+    void RecordControlRefusal(std::uint64_t token,const policy::Boundary&,const ControlAcquisition&)noexcept;
+    ControlRefusalReceipt ReadControlRefusals()const noexcept;
 private:
     bool Source(const Request&,const ReloadServerSnapshot&,const policy::Boundary&)const noexcept;
     void Quarantine(std::int64_t now)noexcept;
@@ -107,7 +122,7 @@ private:
     void FinishUnsent(Status,std::int64_t now,const ReloadServerSnapshot*)noexcept;
     ProcessIdentity process_{};policy::Memory memory_{};policy::Host host_{};LifetimeHost lifetime_{};
     policy::WeaponProvisioner policy_{};Receipt receipt_{};
-    AdmissionCounters admission_;AdmissionReceipt admissionReceipt_{};
+    AdmissionCounters admission_;AdmissionReceipt admissionReceipt_{};ControlRefusalDiagnostics controlRefusals_;
     bool admissionTerminal_=true; // Metadata remains available after counter-scope exhaustion.
     std::optional<Request> request_;std::optional<policy::Resource> target_;
     std::optional<ReloadServerSnapshot> retiredSource_;

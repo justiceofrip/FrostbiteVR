@@ -46,13 +46,24 @@ bool Service::Submit(const Request& request,std::int64_t now)noexcept {
     admissionReceipt_.operation=std::uint32_t(request.operation);admissionReceipt_.acceptedNs=now;
     admissionReceipt_.issuedNs=request.issuedNs;admissionReceipt_.deadlineNs=request.deadlineNs;
     admissionReceipt_.status=std::uint32_t(receipt_.status);admissionTerminal_=false;
-    admission_.Begin(now,request.deadlineNs);return true;
+    admission_.Begin(now,request.deadlineNs);controlRefusals_.Reset();return true;
 }
 AdmissionReceipt Service::ReadAdmission()const noexcept {
     auto out=admissionReceipt_;const auto counters=admission_.Read();
     out.scope=counters.scope;out.frozen=counters.frozen;out.saturatedMask=counters.saturatedMask;out.counts=counters.counts;
     if(!admissionTerminal_)out.status=std::uint32_t(receipt_.status);
     return out;
+}
+void Service::RecordControlRefusal(std::uint64_t token,const policy::Boundary& boundary,const ControlAcquisition& acquisition)noexcept {
+    // Existing runtime gate serializes submit, this write, freeze and reads.
+    // Reuse the captured Boundary clock; no timer/lease extension or new read.
+    if(admissionTerminal_||!token||token!=admission_.Token()||
+       boundary.nowNs<admissionReceipt_.acceptedNs||boundary.nowNs>=admissionReceipt_.deadlineNs)return;
+    controlRefusals_.Record({boundary.nowNs,boundary.sequence,boundary.thread,boundary.returnAddress,
+        boundary.seat,boundary.nativeFiringDepth,boundary.seatDepth,acquisition,0});
+}
+ControlRefusalReceipt Service::ReadControlRefusals()const noexcept {
+    ControlRefusalReceipt out;out.bytes=sizeof(out);out.admission=ReadAdmission();out.details=controlRefusals_.Read();return out;
 }
 void Service::FreezeAdmission(std::int64_t now)noexcept {
     admission_.Freeze();

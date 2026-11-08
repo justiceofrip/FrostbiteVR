@@ -1562,6 +1562,16 @@ if(BUILD_TESTING)
     COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_bc2_fixed_preparation.py")
   add_test(NAME Bc2DrawBindingGeneration
     COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_bc2_draw_binding_generation.py")
+  # Exercise the value-only diagnostic contract in normal test builds without
+  # enabling native campaign provisioning in the player runtime.
+  add_executable(Bc2CampaignProvisioningControlDiagnosticsTests tests/Bc2CampaignProvisioningControlDiagnosticsTests.cpp
+    src/games/bc2/Bc2CampaignProvisioning.cpp src/games/bc2/Bc2CampaignProvisioningAssignment.cpp
+    src/games/bc2/Bc2HolsterInput.cpp)
+  target_include_directories(Bc2CampaignProvisioningControlDiagnosticsTests PRIVATE include src/games/bc2)
+  target_compile_features(Bc2CampaignProvisioningControlDiagnosticsTests PRIVATE cxx_std_20)
+  add_test(NAME Bc2CampaignProvisioningControlDiagnosticsTests COMMAND Bc2CampaignProvisioningControlDiagnosticsTests)
+  add_test(NAME Bc2ProvisionControlReader
+    COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_bc2_provision_control.py")
 endif()
 
 # Developer-only retained campaign provisioning. This does not change packaging

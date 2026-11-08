@@ -182,10 +182,14 @@ void ServiceTransport(const std::filesystem::path& directory)noexcept {
     if(const auto source=SourceRequest())write(directory/L"campaign-provision-source.bin",*source);
     // Join both value-only outputs under the existing gate. Files are separate
     // publications; consumers must match full process identity + nonce + job.
-    WireReceipt receipt;AdmissionReceipt admission;
-    {std::lock_guard lock(gate);service.Expire(Now());receipt=ToWire(service.Read());admission=service.ReadAdmission();}
+    WireReceipt receipt;AdmissionReceipt admission;ControlRefusalReceipt control;
+    {std::lock_guard lock(gate);service.Expire(Now());receipt=ToWire(service.Read());admission=service.ReadAdmission();
+        control=service.ReadControlRefusals();}
     write(directory/L"campaign-provision-receipt.bin",receipt);
-    if(admission.nonce)write(directory/L"campaign-provision-admission.bin",admission);
+    if(admission.nonce){
+        write(directory/L"campaign-provision-admission.bin",admission);
+        write(directory/L"campaign-provision-control.bin",control);
+    }
 }
 }
 #else

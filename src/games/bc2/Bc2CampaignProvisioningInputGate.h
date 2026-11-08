@@ -1,5 +1,6 @@
 #pragma once
 #include "Bc2HolsterInput.h"
+#include "Bc2CampaignProvisioningControlDiagnostics.h"
 #include <mutex>
 #include <optional>
 
@@ -13,9 +14,9 @@ public:
     class Update {
     public:
         explicit Update(InputGate& gate,bool enabled=true):gate_(gate),lock_(gate.mutex_,std::defer_lock){
-            if(enabled){lock_.lock();++gate_.callbacks_;excluded_=gate_.excluded_;}
+            if(enabled){lock_.lock();++gate_.callbacks_;++gate_.updateDepth_;excluded_=gate_.excluded_;}
         }
-        ~Update(){if(lock_.owns_lock())--gate_.callbacks_;}
+        ~Update(){if(lock_.owns_lock()){--gate_.callbacks_;--gate_.updateDepth_;}}
         Update(const Update&)=delete;Update& operator=(const Update&)=delete;
         bool Excluded()const noexcept{return excluded_;}
     private:
@@ -25,7 +26,7 @@ public:
     public:
         explicit Gather(InputGate& gate,bool enabled=true):gate_(gate),lock_(gate.mutex_,std::defer_lock){
             if(enabled){
-                lock_.lock();++gate_.callbacks_;sequence_=++gate_.gatherSequence_;
+                lock_.lock();++gate_.callbacks_;++gate_.gatherDepth_;sequence_=++gate_.gatherSequence_;
                 // Must happen BEFORE every original Gather, including failed,
                 // mismatched, repeated, nested and out-of-Update callbacks.
                 gate_.neutral_.reset();
@@ -34,7 +35,7 @@ public:
         ~Gather(){if(lock_.owns_lock()){
             // An outer Gather may write again after a nested one returned.
             if(!committed_||sequence_!=gate_.gatherSequence_)gate_.neutral_.reset();
-            --gate_.callbacks_;
+            --gate_.callbacks_;--gate_.gatherDepth_;
         }}
         Gather(const Gather&)=delete;Gather& operator=(const Gather&)=delete;
         bool Excluded()const noexcept{return lock_.owns_lock()&&gate_.excluded_;}
@@ -51,7 +52,12 @@ public:
     };
     class Control {
     public:
-        explicit Control(InputGate& gate):gate_(gate),lock_(gate.mutex_,std::try_to_lock){}
+        explicit Control(InputGate& gate):gate_(gate),lock_(gate.mutex_,std::try_to_lock){
+            if(!lock_.owns_lock())acquisition_.reason=ControlRefusalReason::MutexUnavailable;
+            else acquisition_={gate_.callbacks_?ControlRefusalReason::ActiveCallbacks:ControlRefusalReason::None,
+                gate_.callbacks_,gate_.updateDepth_,gate_.gatherDepth_};
+        }
+        const ControlAcquisition& Acquisition()const noexcept{return acquisition_;}
         Control(const Control&)=delete;Control& operator=(const Control&)=delete;
         // The count also rejects same-thread reentry through the recursive lock.
         explicit operator bool()const noexcept{return lock_.owns_lock()&&!gate_.callbacks_;}
@@ -76,10 +82,10 @@ public:
             gate_.neutral_.reset();gate_.excluded_=false;gate_.nonce_=0;return true;
         }
     private:
-        InputGate& gate_;std::unique_lock<std::recursive_mutex> lock_;
+        InputGate& gate_;std::unique_lock<std::recursive_mutex> lock_;ControlAcquisition acquisition_{};
     };
 private:
-    std::recursive_mutex mutex_;unsigned callbacks_=0;bool excluded_=false;
+    std::recursive_mutex mutex_;unsigned callbacks_=0,updateDepth_=0,gatherDepth_=0;bool excluded_=false;
     std::uint64_t nonce_=0,gatherSequence_=0;ReloadStateOwner owner_{};std::uint32_t cache_=0;
     std::optional<HolsterSuppressionReceipt> neutral_;
 };
