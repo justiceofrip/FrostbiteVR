@@ -342,6 +342,28 @@ class SelectedAmmoDriver(FixedContainerDriver):
         self.request_snapshot()
         return True
 
+    def check_post_shot_observation_tracking(self, x, now):
+        # Tick returns default tracking when its native ammo view is absent.
+        # This exact empty shape permits only the existing passive wait; it
+        # never becomes latest_snapshot or supplies custody for an action.
+        empty_key = dict(id=0, generation=0)
+        empty_gun = dict(token=dict(id=0, owner=dict(actor=0, actorGeneration=0,
+            equipGeneration=0, space=0), hand=0, kind=0, item=empty_key,
+            contact=empty_key, prerequisiteClaim=0), deadlineNs=0, inputSequence=0)
+        t = x['tracking']
+        if x['view'] is None and t['gun'] == empty_gun:
+            require(t == dict(enabled=False, current=False, blocksFire=False,
+                    carried=False, pending=False, step=0, targetStep=0, lifetime=0,
+                    revision=0, gun=empty_gun, hand=None, target=None, carriedSupply=None,
+                    pouchContact=False, grip=False, gripPressed=False)
+                    and x['leftClaim'] is None and x['input']['released'] == [True, False],
+                    'Missing selected ammunition has nonempty fixed tracking')
+            return
+        root = planner.claim(t['gun'], x['input'], now, 1, 1)
+        retained = self.reference['fixedContainer']['tracking']['gun']
+        require(isinstance(retained, dict) and root == retained['token'],
+                'Selected ammunition observation GunHold root changed')
+
     def fresh_available(self):
         if self.commands != 4 or not self.demand_finished:
             return super().fresh_available()
@@ -378,10 +400,7 @@ class SelectedAmmoDriver(FixedContainerDriver):
                 x = snapshot['fixedContainer']
                 if x.get('available') is True:
                     self.admit_selected_observation_identity(snapshot)
-                    root = planner.claim(x['tracking']['gun'], x['input'], now, 1, 1)
-                    retained = self.reference['fixedContainer']['tracking']['gun']
-                    require(isinstance(retained, dict) and root == retained['token'],
-                            'Selected ammunition observation GunHold root changed')
+                    self.check_post_shot_observation_tracking(x, now)
                 if self.selected_ammo_unpublished(snapshot):
                     if x['available'] is True:
                         require(x['viewFresh'] is False and x['tracking']['pending'] is False

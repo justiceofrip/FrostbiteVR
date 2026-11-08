@@ -982,8 +982,22 @@ class SelectedAmmoDriverTests(unittest.TestCase):
         s['fixedContainer'] = dict(schema=p.OBSERVATION_SCHEMA, available=False,
                                    reason='capture_pending_or_not_requested')
 
+    @staticmethod
+    def native_view_missing(s):
+        # Actual79/08: Tick returned before tracking when the ammo view expired.
+        SelectedAmmoDriverTests.missing(s)
+        s['fixedContainer']['tracking'] = dict(
+            enabled=False, current=False, blocksFire=False, carried=False,
+            pending=False, step=0, targetStep=0, lifetime=0, revision=0,
+            gun=dict(token=dict(id=0, owner=dict(actor=0, actorGeneration=0,
+                equipGeneration=0, space=0), hand=0, kind=0,
+                item=dict(id=0, generation=0), contact=dict(id=0, generation=0),
+                prerequisiteClaim=0), deadlineNs=0, inputSequence=0),
+            hand=None, target=None, carriedSupply=None, pouchContact=False,
+            grip=False, gripPressed=False)
+
     def test_owned_post_shot_capture_absence_waits_for_same_native_empty_ammo_without_input(self):
-        for missing in (self.capture_missing, self.missing):
+        for missing in (self.capture_missing, self.missing, self.native_view_missing):
             with self.subTest(missing=missing):
                 h, future, ready = self.shot_harness()
                 v = h.driver
@@ -1013,6 +1027,32 @@ class SelectedAmmoDriverTests(unittest.TestCase):
                 self.assertFalse(v.post_shot_observing)
                 with self.assertRaisesRegex(d.transport.REFUSAL, 'already attempted'):
                     v.fresh_available()
+
+    def test_native_missing_view_never_accepts_partial_tracking_or_an_empty_published_claim(self):
+        for fault in ('pending', 'root', 'left_claim', 'released', 'published'):
+            with self.subTest(fault=fault):
+                h, future, ready = self.shot_harness()
+                def response(s):
+                    original_view = s['fixedContainer']['view']
+                    self.native_view_missing(s)
+                    x = s['fixedContainer']
+                    if fault == 'pending':
+                        x['tracking']['pending'] = True
+                    elif fault == 'root':
+                        x['tracking']['gun']['token']['id'] = 2
+                    elif fault == 'left_claim':
+                        x['leftClaim'] = {}
+                    elif fault == 'released':
+                        x['input']['released'] = [True, True]
+                    else:
+                        x.update(view=original_view, viewFresh=True)
+                future['mutate'] = response
+                commands = list(h.command_writes)
+                with self.assertRaises((d.transport.REFUSAL, d.planner.Refusal)):
+                    h.driver.fresh_available()
+                self.assertIsNone(h.driver.latest_snapshot)
+                self.assertIs(h.driver.reference, ready)
+                self.assertEqual(h.command_writes, commands)
 
     def test_post_shot_capture_wait_rejects_changed_owner_config_root_and_native_identity(self):
         mutations = (
