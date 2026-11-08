@@ -1,7 +1,11 @@
 #requires -Version 7.5
 # Portable runtime policy. All mutable files live under the chosen data drive.
 Set-StrictMode -Version 3
-function Get-Bc2RuntimeConfig {
+function Get-Bc2RuntimeConfig([string]$PrivateSessionBinding='', [string]$PrivateSessionBindingSha256='', [string]$InstallRoot='') {
+    if($PrivateSessionBinding -or $PrivateSessionBindingSha256){
+        . (Join-Path $PSScriptRoot 'PrivateSession.ps1')
+        return (Get-Bc2PrivateAdmission $PrivateSessionBinding $PrivateSessionBindingSha256 $PSScriptRoot $InstallRoot).config
+    }
     $config=Read-FvrJson (Join-Path $PSScriptRoot 'runtime.json')
     if($config.schema -ne 'bc2vr.runtime.v1' -or $config.diagnostic_only -or $config.source_sha256 -notmatch '^[a-f0-9]{64}$'){throw 'Unsupported runtime package.'}
     foreach($file in $config.files){

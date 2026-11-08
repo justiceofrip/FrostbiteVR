@@ -180,7 +180,19 @@ function Complete-ResolutionSession {
 try {
     Save-State
     $preAttachSpecification=Read-PreAttachSpecification
-    $config=Get-Bc2RuntimeConfig
+    $privateAdmission=$null
+    if($options.ContainsKey('private_campaign')){
+        . (Join-Path $PSScriptRoot 'PrivateSession.ps1')
+        $request=$options.private_campaign
+        $privateAdmission=Get-Bc2PrivateAdmission $request.binding.path $request.binding.sha256 $PSScriptRoot (Split-Path (Split-Path $options.state_root -Parent) -Parent)
+        Assert-Bc2PrivateSamePin $request.binding $privateAdmission.binding
+        Assert-Bc2PrivateSamePin $request.normal_artifacts_receipt $privateAdmission.specification.normal_artifacts_receipt
+        Assert-Bc2PrivateSamePin $request.private_artifacts_receipt $privateAdmission.specification.private_artifacts_receipt
+        Assert-Bc2Private ($request.diagnostic_only -ceq $true -and $request.source_commit -ceq $privateAdmission.specification.source_commit -and -not $preAttachSpecification) 'session options differ'
+        Assert-Bc2PrivateMarkers $folder $request.markers -BeforeAttach
+        $config=$privateAdmission.config;$state.private_campaign=$request
+        Save-State
+    }else{$config=Get-Bc2RuntimeConfig}
     if($options.source_sha256 -ne $config.source_sha256 -or $options.version -ne $config.version){throw 'Runtime changed between launch and session.'}
     if(-not $options.ContainsKey('render_plan') -or $options.render_plan -isnot [hashtable]){throw 'The headset render plan is missing. BC2 has not been started.'}
     $renderPlan=$options.render_plan;Assert-Bc2ResolutionPlan $renderPlan
@@ -276,7 +288,15 @@ try {
             throw $state.error
         }
     }
+    if($privateAdmission){
+        $null=Get-Bc2PrivateAdmission $request.binding.path $request.binding.sha256 $PSScriptRoot (Split-Path (Split-Path $options.state_root -Parent) -Parent)
+        Assert-Bc2PrivateMarkers $folder $request.markers -BeforeAttach
+    }
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'bin/BC2NativeProbe.dll') -Destination (Join-Path $folder 'BC2NativeProbe.dll')
+    if($privateAdmission){
+        $state.private_campaign.staged_probe=Get-Bc2PrivatePin (Join-Path $folder 'BC2NativeProbe.dll')
+        Assert-Bc2Private ($state.private_campaign.staged_probe.sha256 -ceq (Get-Bc2PrivatePin (Join-Path $PSScriptRoot 'bin/BC2NativeProbe.dll')).sha256) 'probe copy differs'
+    }
     Copy-Item -LiteralPath (Join-Path $options.cache 'body-ammo-assets.fvrprop') -Destination (Join-Path $folder 'body-ammo-assets.fvrprop')
     $channel=Join-Path $folder 'channel.txt';$ready=Join-Path $folder 'ready.json'
     $state.phase='Connecting the headset through '+$options.xr_label+'…';Save-State

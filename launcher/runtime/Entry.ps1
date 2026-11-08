@@ -3,7 +3,7 @@
 param([ValidateSet('Validate','Launch','Stop')][string]$Action,
       [Parameter(Mandatory)][string]$SettingsPath,[Parameter(Mandatory)][string]$StateRoot,
       [switch]$Fresh,[ValidateSet('MainMenu','Campaign')][string]$StartAt='MainMenu',[switch]$ActivateGameWindow,
-      [switch]$QualifyChestKnife,[string]$PreAttachSetupSpec,[string]$PreAttachSetupSpecSha256)
+      [switch]$QualifyChestKnife,[string]$PreAttachSetupSpec,[string]$PreAttachSetupSpecSha256,[string]$PrivateSessionBinding,[string]$PrivateSessionBindingSha256)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot '../app/Launcher.Core.ps1')
 . (Join-Path $PSScriptRoot 'Runtime.Core.ps1')
@@ -28,7 +28,13 @@ if($PreAttachSetupSpec -or $PreAttachSetupSpecSha256){
     if((Get-FileHash -LiteralPath $PreAttachSetupSpec -Algorithm SHA256).Hash.ToLowerInvariant() -cne $PreAttachSetupSpecSha256){throw 'Pre-launch setup specification changed.'}
     $preAttachSetup=@{path=[IO.Path]::GetFullPath($PreAttachSetupSpec);sha256=$PreAttachSetupSpecSha256}
 }
-$config=Get-Bc2RuntimeConfig
+$privateAdmission=$null
+if($PrivateSessionBinding -or $PrivateSessionBindingSha256){
+    if($Action -ne 'Launch' -or $preAttachSetup){throw 'Private campaign admission requires Launch without pre-attach setup.'}
+    . (Join-Path $PSScriptRoot 'PrivateSession.ps1')
+    $privateAdmission=Get-Bc2PrivateAdmission $PrivateSessionBinding $PrivateSessionBindingSha256 $PSScriptRoot (Split-Path (Split-Path $StateRoot -Parent) -Parent)
+    $config=$privateAdmission.config
+}else{$config=Get-Bc2RuntimeConfig}
 $settings=Read-FvrJson $SettingsPath
 $installation=Test-Bc2GameInstallation $settings $config $StateRoot
 $exe=$installation.exe;$gameHash=$installation.sha256
@@ -87,7 +93,14 @@ if(-not $cached){
 }
 $relative='sessions/'+[DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss-fff')+'-'+[guid]::NewGuid().ToString('N').Substring(0,8)
 $folder=Get-FvrChild $StateRoot $relative;$null=New-Item -ItemType Directory -Path $folder
+# The owned report directory exists now; no supervisor/native startup can race publication.
+$privateMarkers=if($privateAdmission){New-Bc2PrivateMarkers $folder}else{$null}
 $options=@{schema='bc2vr.session-options.v1';state_root=$StateRoot;relative_folder=$relative;game_path=$settings.game_path;game_sha256=$gameHash;steam_compatibility=($installation.ContainsKey('experimental_steam') -and $installation.experimental_steam);cache=$cache;python=$python;activate_window=[bool]$ActivateGameWindow;version=$config.version;source_sha256=$config.source_sha256;xr_manifest=$xr.manifest;xr_label=$xr.label;render_plan=$renderPlan}
+if($privateAdmission){
+    $options.private_campaign=@{binding=$privateAdmission.binding;markers=$privateMarkers;diagnostic_only=$true;
+        source_commit=$privateAdmission.specification.source_commit;normal_artifacts_receipt=$privateAdmission.specification.normal_artifacts_receipt;
+        private_artifacts_receipt=$privateAdmission.specification.private_artifacts_receipt}
+}
 if($QualifyChestKnife){$options.qualify_chest_knife=$true}
 if($preAttachSetup){$options.pre_attach_setup=$preAttachSetup}
 $optionsFile=Join-Path $folder 'options.json';Write-FvrJson $optionsFile $options

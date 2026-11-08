@@ -19,6 +19,8 @@ param(
     [switch]$ProfileAttribution,
     [string]$PreAttachSetupSpec,
     [string]$PreAttachSetupSpecSha256,
+    [string]$PrivateSessionBinding,
+    [string]$PrivateSessionBindingSha256,
     [switch]$ExtendedObservation
 )
 Set-StrictMode -Version Latest
@@ -31,6 +33,7 @@ $owned=@{};$profiles=@();$launcherFiles=@();$entry=$null;$folder=$null;$session=
 $outputReady=$false;$runningObserved=$false;$simObserved=$false;$restored=$false;$launcherPreserved=$false
 $stopReason=$null;$stopWritten=$false;$nativeRetired=$false;$gameClosed=$false;$lastScan=-1000L
 $clock=[Diagnostics.Stopwatch]::new();$hostStartedAt=$null;$launchUtc=$null
+$privateAdmission=$null;$runtimeVersion=$Version
 $startup=$null;$preAttachSpec=$null;$preAttachProvisionRunner=$null;$preparedProfileHashes=@{}
 $mechanismMarker=@{requested=[bool]$MechanismSnapshots;status=$(if($MechanismSnapshots){'awaiting_session'}else{'not_requested'});native_enabled_claimed=$false}
 $privatePresentation=@{requested=[bool]$PrivateGpuOrderedPresent;environment_variable='FVR_PRIVATE_GPU_ORDERED_PRESENT';environment_value=$(if($PrivateGpuOrderedPresent){'1'}else{'0'});child_environment_verified=$false;other_fvr_bc2_environment_absent=$false;actual_host_enablement_claimed=$false}
@@ -181,6 +184,13 @@ function Library([string]$Manifest,[string]$Path){
 }
 function PrepareMechanismMarker {
     if(-not $MechanismSnapshots){return}
+    if($privateAdmission){
+        Assert-Bc2PrivateMarkers $folder $options.private_campaign.markers
+        $mechanismMarker.marker=$options.private_campaign.markers.mechanism
+        $mechanismMarker.path=$mechanismMarker.marker.path;$mechanismMarker.status='placed_before_supervisor_start'
+        Save 'mechanism-snapshot-marker.json' $mechanismMarker
+        return
+    }
     $mechanismMarker.status='refused';$mechanismMarker.path=Join-Path $folder 'mechanism-snapshot.enable'
     try{
         $created=(Get-Item -LiteralPath $folder).CreationTimeUtc
@@ -221,15 +231,22 @@ function ObserveSession {
         if(-not [IO.File]::Exists($activePath)){return}
         $active=Json $activePath
         if($priorActive -and $active.relative_folder -ceq $priorActive.relative_folder){return}
-        Require ($active.version -ceq $Version -and $active.relative_folder -cmatch '^sessions/[A-Za-z0-9-]+$') 'Unexpected active-session record.'
+        Require ($active.version -ceq $runtimeVersion -and $active.relative_folder -cmatch '^sessions/[A-Za-z0-9-]+$') 'Unexpected active-session record.'
         Bind 'supervisor' $active.supervisor $pwsh $entry.Id
         Require ($owned.ContainsKey('supervisor')) 'New supervisor identity could not be retained.'
         $candidate=Get-FvrChild $stateRoot $active.relative_folder;Assert-FvrNoLinks $candidate
         $options=Json (Join-Path $candidate 'options.json')
-        Require ($options.version -ceq $Version -and $options.source_sha256 -ceq $ExpectedSourceSha256 -and $options.xr_manifest -ieq $runtimeManifest -and $options.game_sha256 -ceq $gamePin.sha256 -and -not $options.activate_window) 'Session options do not match the admitted launch.'
+        Require ($options.version -ceq $runtimeVersion -and $options.source_sha256 -ceq $ExpectedSourceSha256 -and $options.xr_manifest -ieq $runtimeManifest -and $options.game_sha256 -ceq $gamePin.sha256 -and -not $options.activate_window) 'Session options do not match the admitted launch.'
         if($preAttachSpec){
             Require ($options.ContainsKey('pre_attach_setup') -and $options.pre_attach_setup.path -ieq $PreAttachSetupSpec -and $options.pre_attach_setup.sha256 -ceq $PreAttachSetupSpecSha256) 'Pre-attach setup option differs.'
         }else{Require (-not $options.ContainsKey('pre_attach_setup')) 'Unrequested pre-attach setup.'}
+        if($privateAdmission){
+            Require ($options.ContainsKey('private_campaign')) 'Missing private session binding.'
+            Assert-Bc2PrivateSamePin $options.private_campaign.binding $privateAdmission.binding
+            Assert-Bc2PrivateSamePin $options.private_campaign.normal_artifacts_receipt $privateAdmission.specification.normal_artifacts_receipt
+            Assert-Bc2PrivateSamePin $options.private_campaign.private_artifacts_receipt $privateAdmission.specification.private_artifacts_receipt
+            Assert-Bc2PrivateMarkers $candidate $options.private_campaign.markers
+        }else{Require (-not $options.ContainsKey('private_campaign')) 'Unrequested private campaign session.'}
         $script:folder=$candidate;$receipt.session_folder=$candidate
         PrepareMechanismMarker
         Save 'session-link.json' @{folder=$candidate;options=(Join-Path $candidate 'options.json');session=(Join-Path $candidate 'session.json');sim_state=(Join-Path $simDir 'state.json');command=(Join-Path $simDir 'command.txt');startup_receipt=(Join-Path $OutputDir 'sim-startup.json');root_commands_ready=$false;capture_plan=$capturePlan;mechanism_snapshots=$mechanismMarker;stop_request=(Join-Path $candidate 'stop.request');supervisor=$owned.supervisor.identity}
@@ -238,7 +255,7 @@ function ObserveSession {
     }
     $record=Join-Path $folder 'session.json';if(-not [IO.File]::Exists($record)){return}
     $script:session=Json $record
-    Require ($session.schema -ceq 'bc2vr.session.v1' -and $session.source_sha256 -ceq $ExpectedSourceSha256 -and $session.version -ceq $Version) 'Session source identity differs.'
+    Require ($session.schema -ceq 'bc2vr.session.v1' -and $session.source_sha256 -ceq $ExpectedSourceSha256 -and $session.version -ceq $runtimeVersion) 'Session source identity differs.'
     SameIdentity $session.supervisor $owned.supervisor.identity
     foreach($kind in 'game','host','trace','resolution_helper','resolution_release_helper','setup_helper'){
         if(-not $session.ContainsKey($kind) -or -not $session[$kind]){continue}
@@ -362,9 +379,23 @@ try{
     $package=Test-FvrPackage $packageRoot $Version
     Require ($package.runtime_entry -ceq 'runtime/Entry.ps1') 'Expected the normal installed runtime entry.'
     $runtimeRoot=Full (Join-Path $packageRoot 'runtime');$config=Json (Join-Path $runtimeRoot 'runtime.json') 4MB
-    Require ($config.schema -ceq 'bc2vr.runtime.v1' -and $config.version -ceq $Version -and $config.diagnostic_only -eq $false -and $config.source_sha256 -ceq $ExpectedSourceSha256) 'Installed normal runtime/source differs.'
+    $baselineRuntimePin=Pin (Join-Path $runtimeRoot 'runtime.json')
+    $baselineSource=$ExpectedSourceSha256
+    if($PrivateSessionBinding -or $PrivateSessionBindingSha256){
+        Require ($MechanismSnapshots -and -not $PreAttachSetupSpec -and -not $PreAttachSetupSpecSha256) 'Private retained provisioning requires mechanism snapshots and no pre-attach setup.'
+        . (Join-Path $sourceRoot 'launcher/runtime/PrivateSession.ps1')
+        $PrivateSessionBinding=Full $PrivateSessionBinding
+        Require ((Pin $PrivateSessionBinding).sha256 -ceq $PrivateSessionBindingSha256) 'Private binding differs.'
+        $privateSpec=Json $PrivateSessionBinding
+        $privateAdmission=Get-Bc2PrivateAdmission $PrivateSessionBinding $PrivateSessionBindingSha256 (Full $privateSpec.runtime_root) $InstallRoot
+        Require ($privateSpec.baseline_version -ceq $Version -and $privateSpec.source_sha256 -ceq $ExpectedSourceSha256) 'Private baseline/candidate source differs.'
+        Assert-Bc2PrivateSamePin $privateSpec.installed_runtime_manifest $baselineRuntimePin
+        $baselineSource=$privateAdmission.baseline.source_sha256
+    }
+    Require ($config.schema -ceq 'bc2vr.runtime.v1' -and $config.version -ceq $Version -and $config.diagnostic_only -eq $false -and $config.source_sha256 -ceq $baselineSource) 'Installed normal runtime/source differs.'
     foreach($file in $config.files){Require ((Pin (Get-FvrChild $runtimeRoot $file.path) 256MB).sha256 -ceq $file.sha256) ('Runtime file differs: '+$file.path)}
     $active=Json (Join-Path $InstallRoot 'active.json');Require ($active.current -ceq $Version) 'Requested version is not the active install.'
+    if($privateAdmission){$runtimeRoot=Full $privateSpec.runtime_root;$config=$privateAdmission.config;$runtimeVersion=$config.version}
     $settingsPath=Join-Path $InstallRoot 'data/settings.json';$settings=Json $settingsPath
     $gameExe=Full (Join-Path $settings.game_path 'BFBC2Game.exe');$gamePin=Pin $gameExe 128MB
     Require ($gamePin.sha256 -cin $config.game_sha256) 'Installed normal runtime does not admit this game hash.'
@@ -387,9 +418,17 @@ try{
     $pePaths=@{};foreach($name in 'BC2XrHost.exe','openxr_loader.dll'){$pePaths[(Join-Path $runtimeRoot ('bin/'+$name))]=0x8664}
     foreach($name in 'BC2NativeTrace.exe','BC2NativeProbe.dll','BC2NativeResolution.exe','BC2ResolutionBootstrap.dll'){$pePaths[(Join-Path $runtimeRoot ('bin/'+$name))]=0x14c}
     $pePaths[$runtimeLibrary]=0x8664;$pePaths[$tapeLibrary]=0x8664;$pePaths[$gameExe]=0x14c;$pePaths[$pwsh]=0x8664
+    if($privateAdmission){$pePaths[(Join-Path $runtimeRoot 'bin/Bc2CampaignProvisioningCommand.exe')]=0x14c}
     $binaryPins=@();foreach($path in $pePaths.Keys){$binaryPins+=Pin $path 256MB;Pe $path $pePaths[$path]}
     Save 'artifact-binding.json' @{version=$Version;source_sha256=$ExpectedSourceSha256;package=(Pin (Join-Path $packageRoot 'package.json'));runtime=(Pin (Join-Path $runtimeRoot 'runtime.json'));local_config=(Pin $LocalConfig);runtime_manifest=(Pin $runtimeManifest);tape_manifest=(Pin $tapeManifest);binaries=$binaryPins;game=$gamePin}
     $manifest=Json (Join-Path $OutputDir 'run-manifest.json')
+    if($privateAdmission){
+        $privateRecord=@{diagnostic_only=$true;binding=$privateAdmission.binding;runtime_version=$runtimeVersion;baseline_version=$Version;baseline_runtime=$baselineRuntimePin;
+            source_commit=$privateSpec.source_commit;normal_artifacts_receipt=$privateSpec.normal_artifacts_receipt;private_artifacts_receipt=$privateSpec.private_artifacts_receipt;shared_build_state=$privateSpec.shared_build_state}
+        $manifest.version=$runtimeVersion;$receipt.version=$runtimeVersion
+        $manifest.private_campaign=$privateRecord;$receipt.private_campaign=$privateRecord
+        $artifacts=Json (Join-Path $OutputDir 'artifact-binding.json');$artifacts.version=$runtimeVersion;$artifacts.private_campaign=$privateRecord;Save 'artifact-binding.json' $artifacts
+    }
     $manifest.runtime_manifest=Pin $runtimeManifest;$manifest.runtime_library=Pin $runtimeLibrary 256MB;$manifest.host_executable=Pin (Join-Path $runtimeRoot 'bin/BC2XrHost.exe') 256MB
     Save 'run-manifest.json' $manifest
     if($PreAttachSetupSpec -or $PreAttachSetupSpecSha256){
@@ -463,8 +502,8 @@ try{
     foreach($key in 'TEMP','TMP','TMPDIR'){$psi.Environment[$key]=$scratch};$psi.Environment['PYTHONDONTWRITEBYTECODE']='1'
     $launchScript=Join-Path $OutputDir 'launch.ps1'
     # Literal paths are passed as arguments, never interpolated into shell code.
-    [IO.File]::WriteAllText($launchScript,"param(`$EntryPath,`$SettingsPath,`$StateRoot,`$Log,`$SetupSpec,`$SetupHash)`n`$ErrorActionPreference='Stop'`ntry { `$setup=@{}; if(`$SetupSpec){`$setup.PreAttachSetupSpec=`$SetupSpec;`$setup.PreAttachSetupSpecSha256=`$SetupHash}; & `$EntryPath -Action Launch -SettingsPath `$SettingsPath -StateRoot `$StateRoot -StartAt MainMenu @setup *>> `$Log } catch { [IO.File]::AppendAllText(`$Log,(`$_ | Out-String),[Text.UTF8Encoding]::new(`$false)); exit 1 }`n",$utf8)
-    foreach($arg in @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$launchScript,(Join-Path $runtimeRoot 'Entry.ps1'),$settingsPath,$stateRoot,(Join-Path $OutputDir 'entry.log'),([string]$PreAttachSetupSpec),([string]$PreAttachSetupSpecSha256))){$psi.ArgumentList.Add($arg)}
+    [IO.File]::WriteAllText($launchScript,"param(`$EntryPath,`$SettingsPath,`$StateRoot,`$Log,`$SetupSpec,`$SetupHash,`$PrivateBinding,`$PrivateHash)`n`$ErrorActionPreference='Stop'`ntry { `$setup=@{}; if(`$SetupSpec){`$setup.PreAttachSetupSpec=`$SetupSpec;`$setup.PreAttachSetupSpecSha256=`$SetupHash}; if(`$PrivateBinding){`$setup.PrivateSessionBinding=`$PrivateBinding;`$setup.PrivateSessionBindingSha256=`$PrivateHash}; & `$EntryPath -Action Launch -SettingsPath `$SettingsPath -StateRoot `$StateRoot -StartAt MainMenu @setup *>> `$Log } catch { [IO.File]::AppendAllText(`$Log,(`$_ | Out-String),[Text.UTF8Encoding]::new(`$false)); exit 1 }`n",$utf8)
+    foreach($arg in @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$launchScript,(Join-Path $runtimeRoot 'Entry.ps1'),$settingsPath,$stateRoot,(Join-Path $OutputDir 'entry.log'),([string]$PreAttachSetupSpec),([string]$PreAttachSetupSpecSha256),([string]$PrivateSessionBinding),([string]$PrivateSessionBindingSha256))){$psi.ArgumentList.Add($arg)}
     Save 'launch.json' @{executable=$pwsh;entry=(Join-Path $runtimeRoot 'Entry.ps1');action='Launch';start_at='MainMenu';activate_window=$false;environment=$environment;state_root=$stateRoot;capture_plan=$capturePlan;mechanism_snapshots_requested=[bool]$MechanismSnapshots;private_gpu_ordered_present=$privatePresentation;profile_attribution=$attributionProfile}
     NoOtherProcesses -BeforeLaunch
     foreach($row in $profiles+$launcherFiles){$expected=if($preparedProfileHashes.ContainsKey($row.original.path)){$preparedProfileHashes[$row.original.path]}else{$row.original.sha256};Require ((Pin $row.original.path).sha256 -ceq $expected) 'Prepared/original file changed before launch.'}
