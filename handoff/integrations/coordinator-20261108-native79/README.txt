@@ -1,4 +1,4 @@
-Native79 candidate: shared diagnostic continuity and private observer coexistence.
+Native79 source0206a52: shared diagnostic continuity and private observer coexistence.
 
 Actual772 stopped during neutral holster reach on a renewed display cohort.
 A producer token now distinguishes display renewal from coherent native identity
@@ -18,6 +18,15 @@ Permanent tests register the new monitor, transport custody, magazine preparatio
 fixed preparation and binding-generation contracts in normal combined checks.
 
 ROOT evidence: reports/coordinator-20261108-feedback721/batch79.
-Combined build/frozen artifacts/actual-session results belong in those receipts.
+Normal360x86/357x64 checks passed; frozen normal and23-step private compile receipts
+are retained there. Source0206a52 is pushed; immutable private stage79 is prepared.
+Actual reports/coordinator-20261108-feedback780/private79/xr-game01-04 reached
+native startup and retired normally with exact profiles/settings restored.
+01/02/04 also reached campaign world. No LMG interaction was executed: the runs
+stopped at expired review, zero initial observation accounting, partial review
+publication, and disappearing temporary-file classification respectively.
+785/787 correct the first two report-adapter issues; ROOT publishes complete
+review JSON atomically. Tools788 corrects the shared temporary-file guard;
+20 focused checks pass and native79 artifacts/checks remain unchanged.
 Installed0.1.77/fallback76 remains unchanged until verified delivery. No public
 release, all-weapon completion, headset reliability or measured FPS claim.

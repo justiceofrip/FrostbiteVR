@@ -99,12 +99,20 @@ function Get-FvrChild([string]$Root, [string]$Relative) {
 function Assert-FvrNoLinks([string]$Path) {
     $next = [IO.Path]::GetFullPath($Path)
     while ($next) {
-        $item = $null
-        try { $item = Get-Item -LiteralPath $next -Force -ErrorAction Stop }
+        try {
+            $item = Get-Item -LiteralPath $next -Force -ErrorAction Stop
+            $attributes = $item.Attributes
+            # FileInfo can cache -1 when a file vanishes during its lookup. That
+            # sentinel contains every flag; re-query to distinguish disappearance
+            # from a real reparse point or another filesystem failure.
+            if ([int]$attributes -eq -1) { $attributes = [IO.File]::GetAttributes($next) }
+            if ($attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Linked install path refused: $next" }
+        }
         catch [System.Management.Automation.ItemNotFoundException] {
             # A temporary file may be renamed during inspection; still check its ancestors.
         }
-        if ($null -ne $item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw "Linked install path refused: $next" }
+        catch [IO.FileNotFoundException] {}
+        catch [IO.DirectoryNotFoundException] {}
         $next = Split-Path -Parent $next
     }
 }
