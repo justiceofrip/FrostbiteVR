@@ -107,7 +107,15 @@ function Json([string]$Path,[long]$Maximum=128KB,[double]$SharingDeadlineSeconds
     }
     return $text|ConvertFrom-Json -AsHashtable -DateKind String -Depth 100
 }
-function Save([string]$Name,$Value){Write-FvrJson (Join-Path $OutputDir $Name) $Value}
+function Save([string]$Name,$Value){
+    if($Name -cnotin @('sim-startup.json','session-link.json')){Write-FvrJson (Join-Path $OutputDir $Name) $Value;return}
+    # Only these two handoff files are polled while startup replaces them.
+    # Spend the existing bounded publisher wait inside every original clock.
+    $deadline=$TimeoutSeconds-60
+    if($null -ne $hostStartedAt){$deadline=[Math]::Min($deadline,[Math]::Min($hostStartedAt+$Seconds,$hostStartedAt+20))}
+    if($startup){$deadline=[Math]::Min($deadline,$startup.sent_at_seconds+15)}
+    Write-FvrJson (Join-Path $OutputDir $Name) $Value -RetrySessionPublication -PublicationDeadlineClock $clock -PublicationDeadlineSeconds $deadline
+}
 function SameIdentity($Actual,$Expected){
     Require ($Actual.pid -eq $Expected.pid -and $Actual.start_utc -ceq $Expected.start_utc -and $Actual.path -ieq $Expected.path) 'Retained process identity differs.'
 }
@@ -526,6 +534,10 @@ try{
     $failures.Add($_.Exception.Message)
     $receipt.failure_context=@{message=$_.Exception.Message;stack=$_.ScriptStackTrace;position=$_.InvocationInfo.PositionMessage}
     if($_.Exception.Data.Contains('fvr_json_read')){$receipt.failure_context.json_read=$_.Exception.Data['fvr_json_read']}
+    try{
+        $writeCause=$_.Exception.GetBaseException()
+        if($writeCause.Data.Contains('fvr_json_write')){$receipt.failure_context.json_write=$writeCause.Data['fvr_json_write']}
+    }catch{} # Diagnostic capture must not replace the original failure.
 }
 finally{
     if($entry){
