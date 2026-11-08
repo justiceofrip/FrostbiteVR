@@ -14,6 +14,10 @@ _spec = importlib.util.spec_from_file_location('holster_prepared_frozen100', FRO
 frozen = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(frozen)
 transport, require = frozen.transport, frozen.require
+_snapshot_spec = importlib.util.spec_from_file_location(
+    'holster_prepared_snapshot_transport', Path(__file__).with_name('bc2_holster_snapshot_transport.py'))
+_snapshot_transport = importlib.util.module_from_spec(_snapshot_spec)
+_snapshot_spec.loader.exec_module(_snapshot_transport)
 
 
 class HolsterDriver(frozen.HolsterDriver):
@@ -41,6 +45,9 @@ class HolsterDriver(frozen.HolsterDriver):
         except BaseException:
             self.discard_prepared_command()
             raise
+
+
+HolsterDriver = _snapshot_transport.canonical_holster_snapshot_driver(HolsterDriver, transport)
 
 
 def main(argv=None, *, observed_binding=None):
