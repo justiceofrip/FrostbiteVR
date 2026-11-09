@@ -49,7 +49,56 @@ struct Fixture {
     }
 };
 
+namespace {
+thread_local std::uint32_t diagnosticThread=0;
+std::atomic<std::int64_t> diagnosticClock=1000000000;
+std::uint32_t DiagnosticThread()noexcept{return diagnosticThread;}
+std::int64_t DiagnosticNow()noexcept{return diagnosticClock.fetch_add(1);}
+}
 int main(){unsigned groups=0;
+    // Real nested Update-original -> Gather-original holder on another thread.
+    // First unavailable snapshot must name both active originals and remain
+    // immutable after original returns, real unlock, and terminal expiry.
+    {Fixture f;f.Begin();cp::InputGate gate(DiagnosticThread,DiagnosticNow);
+        std::latch entered(1),release(1);diagnosticThread=123;
+        std::thread callback([&]{diagnosticThread=456;cp::InputGate::Update update(gate);update.OriginalEnter();
+            {cp::InputGate::Gather gather(gate);gather.OriginalEnter();entered.count_down();release.wait();
+                gather.OriginalReturned();}update.OriginalReturned();});
+        entered.wait();const auto token=f.service.AdmissionToken();const auto boundary=f.Boundary();
+        CHECK(f.service.WantsInputHold(token,boundary));
+        {cp::InputGate::Control control(gate,true);CHECK(!control);
+            const auto& a=control.HoldAttempt();CHECK(a.sampled&&a.bracketed);
+            CHECK(a.before.thread==456&&a.before.kind==unsigned(cp::InputHoldKind::Gather));
+            CHECK(a.before.phase==unsigned(cp::InputHoldPhase::Original));
+            CHECK(a.before.updateDepth==1&&a.before.gatherDepth==1&&!a.before.controlDepth);
+            CHECK(a.before.updateOriginalDepth==1&&a.before.gatherOriginalDepth==1);
+            f.service.RecordControlRefusal(token,boundary,control.Acquisition(),&a);}
+        const auto first=f.service.ReadInputHold();CHECK(first.captured);
+        CHECK(!f.service.WantsInputHold(token,boundary));release.count_down();callback.join();
+        {cp::InputGate::Control control(gate);CHECK(control);}
+        const auto afterRelease=f.service.ReadInputHold();CHECK(std::memcmp(&first.attempt,&afterRelease.attempt,sizeof(first.attempt))==0);
+        f.service.Expire(f.Deadline);const auto frozen=f.service.ReadInputHold();
+        cp::InputHoldAttempt replacement{};replacement.sampled=99;
+        f.service.RecordControlRefusal(token,boundary,{cp::ControlRefusalReason::MutexUnavailable},&replacement);
+        const auto terminal=f.service.ReadInputHold();CHECK(std::memcmp(&frozen,&terminal,sizeof(frozen))==0);
+        CHECK(!f.nativeCalls);++groups;
+    }
+    // Direct diagnostic lifecycle: releasing is not released; nested return
+    // restores the enclosing original phase, and Control has its own kind.
+    {diagnosticThread=456;cp::InputHoldDiagnostics d(DiagnosticThread,DiagnosticNow);
+        auto update=d.Enter(cp::InputHoldKind::Update);d.OriginalEnter(update);const auto original=d.Read();
+        auto gather=d.Enter(cp::InputHoldKind::Gather);d.OriginalEnter(gather);
+        d.OriginalReturned(gather);CHECK(d.Read().gatherOriginalDepth==0&&d.Read().updateOriginalDepth==1);
+        CHECK(d.Leaving(gather)==0);CHECK(d.Read().kind==unsigned(cp::InputHoldKind::Update));
+        CHECK(d.Read().phase==unsigned(cp::InputHoldPhase::Original));
+        d.OriginalReturned(update);const auto generation=d.Leaving(update);
+        CHECK(generation==original.generation&&d.Read().phase==unsigned(cp::InputHoldPhase::Releasing));
+        CHECK(d.Read().releasedGeneration!=generation);d.Released(generation);CHECK(d.Read().releasedGeneration==generation);
+        auto control=d.Enter(cp::InputHoldKind::Control);const auto held=d.Read();
+        CHECK(held.generation!=generation&&held.controlDepth==1&&!held.updateDepth&&!held.gatherDepth);
+        cp::InputHoldAttempt attempt{1,0,100,101,original,held};CHECK(!cp::InputHoldDiagnostics::Bracketed(attempt));
+        d.Released(d.Leaving(control));++groups;
+    }
     // Genuine same-thread nested callbacks: acquired recursive lock, exact
     // callback kinds/depths, and constructor snapshot retained after unwinding.
     {Fixture f;f.Begin();cp::ControlAcquisition captured;

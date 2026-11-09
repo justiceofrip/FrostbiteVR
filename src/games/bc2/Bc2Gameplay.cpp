@@ -16,6 +16,7 @@
 #include "Bc2Gameplay.h"
 #ifdef FVR_BC2_CAMPAIGN_PROVISIONING
 #include "Bc2CampaignProvisioningInputGate.h"
+#include "Bc2CampaignProvisioningRuntime.h"
 #endif
 #ifdef FVR_BC2_SMOKE_ORIGIN_CANDIDATE
 #include "Bc2SmokeOrigin402.h"
@@ -159,7 +160,8 @@ std::atomic<bool> enabled=false;std::atomic<unsigned> active=0,inputThread=0;
 
 #ifdef FVR_BC2_CAMPAIGN_PROVISIONING
 std::atomic<bool> provisionRequested=false,provisionRearm=false;
-campaignProvisioning::InputGate provisionGate;
+campaignProvisioning::InputGate provisionGate{
+    []()noexcept -> std::uint32_t{return GetCurrentThreadId();},campaignProvisioning::Now};
 struct ProvisionReady {AmmoResourceBinding binding{};std::int64_t deadline=0;interaction::HandClaimToken gun{};unsigned cache=0;};
 std::atomic<std::shared_ptr<const ProvisionReady>> provisionReady;
 std::optional<ProvisionReady> provisionHeld;
@@ -2235,7 +2237,13 @@ void __fastcall GatherHook(void* self,void*,void* cache){
 #ifdef FVR_BC2_CAMPAIGN_PROVISIONING
     campaignProvisioning::InputGate::Gather provisionGather(provisionGate,provisionRequested.load(std::memory_order_acquire));
 #endif
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+    provisionGather.OriginalEnter();
+#endif
     gatherOriginal(self,cache);
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+    provisionGather.OriginalReturned();
+#endif
     if(!enabled.load(std::memory_order_acquire)||!scope||scope->used)return;
     if(reinterpret_cast<unsigned>(self)!=scope->owner.router||reinterpret_cast<unsigned>(cache)!=scope->owner.cache){++mismatches;return;}
 #ifdef FVR_BC2_CAMPAIGN_PROVISIONING
@@ -4312,7 +4320,13 @@ void __fastcall UpdateHook(void* self,void*,float dt){
             trace::journal.Owner(static_cast<unsigned>(observed.self),outcome,observed,trace::Stamp);
         trace::Mark(ownerTransition,SceneMilestoneStage::CallingOriginal,observed);
         trace::Mark(updateMilestone,SceneMilestoneStage::CallingOriginal,observed);
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+        provisionInputRead.OriginalEnter();
+#endif
         updateOriginal(self,dt);
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+        provisionInputRead.OriginalReturned();
+#endif
         trace::Mark(ownerTransition,SceneMilestoneStage::OriginalReturned,observed);
         trace::Mark(ownerTransition,SceneMilestoneStage::Exit,observed);
         trace::Mark(updateMilestone,SceneMilestoneStage::OriginalReturned,observed);
@@ -4400,7 +4414,13 @@ void __fastcall UpdateHook(void* self,void*,float dt){
     const auto previousAttachedUpdate=attachedCurrentUpdate;
     if(local.owner.role==OwnerRole::AttachedSoldier)attachedCurrentUpdate=++attachedUpdateSerial;
     ObserveAttached(local.owner,AttachedPhase::UpdateBefore,reinterpret_cast<unsigned>(self));
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+    provisionInputRead.OriginalEnter();
+#endif
     updateOriginal(self,dt);
+#ifdef FVR_BC2_CAMPAIGN_PROVISIONING
+    provisionInputRead.OriginalReturned();
+#endif
     ObserveAttached(local.owner,AttachedPhase::UpdateAfter,reinterpret_cast<unsigned>(self));
     attachedCurrentUpdate=previousAttachedUpdate;
 #if defined(FVR_BC2_ORDINARY_GRENADE_PROBE) || defined(FVR_BC2_PLAYER_GRENADE)
@@ -4600,11 +4620,12 @@ ReloadStateMemory CampaignProvisioningMemory()noexcept {
 }
 bool CampaignProvisioningSeatEntry(campaignProvisioning::Service& service,const ReloadServerSnapshot& source,
     const campaignProvisioning::policy::Boundary& boundary)noexcept {
-    campaignProvisioning::InputGate::Control control(provisionGate);
+    const auto token=service.AdmissionToken();
+    campaignProvisioning::InputGate::Control control(provisionGate,service.WantsInputHold(token,boundary));
     // Keep admission closed through dispatch, retirement and any resumption.
     // Busy callbacks defer this seat observation; no waiting/reentrant dispatch.
     if(!control){
-        service.RecordControlRefusal(service.AdmissionToken(),boundary,control.Acquisition());return false;
+        service.RecordControlRefusal(token,boundary,control.Acquisition(),&control.HoldAttempt());return false;
     }
     service.SeatEntry(source,boundary);return true;
 }
