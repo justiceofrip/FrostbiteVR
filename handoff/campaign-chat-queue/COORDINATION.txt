@@ -30,8 +30,18 @@ Actual80/03 fires the underbarrel but observes too early for settled ammunition;
 Tools833/834 handles confirmed helper exit and bounded passive ammo settling.
 13focused+38Windows identity checks and79Python tests PASS;3optional replays skipped.
 No native rebuild/retest/newinstallation/publicrelease. Source-only correction.
-Next: corrected setup/underbarrel actuals, trigger-free knife and stationary vehicle
-scene discovery.831/832 prepared reusable wrappers; no route/weapon success inferred.
+Actual80/15 now selects/prepares an empty underbarrel, then loses the mechanical
+claim during a binding revision gap; no complete reload.80/13 identifies the map
+and captures two stationary views without finding a vehicle. Both close normally.
+Native81 source7a561065 adds bounded setup/refused-binding diagnostics; normal
+363x86/360x64 and34 focused groups perarchitecture pass; frozen/private stage passes.
+Actual81/02 identifies setup-lock contention;03 stops at a wall-facing shot review.
+04 briefly proves visible strict Held, then loses observation and crashes at exit.
+All6 processes exited; profiles/settings restored; native retirement remains failed.
+Native82 shared mechanism-gap recovery874 and reviewed audio shutdown882 are applied.
+Combined builds/actual validation pending; standalone focused link failed before
+assertions and is replaced by complete normal CMake dependencies. Crash symbols retained.
+Installed77/fallback76 remain unchanged; no public release/headset success inferred.
 See coordinator-20261108-tools833 handoff and compact coordinator state.
 
 Earlier native74/ROOT669 was installed and setup-validated; fallback73/settings/cache verified.

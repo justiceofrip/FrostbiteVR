@@ -68,6 +68,12 @@ struct Service {
     std::array<unsigned,3> updates{},states{};std::array<std::atomic<unsigned>,3> deploy{};unsigned chooserOverrides=0;std::atomic<unsigned> deployMisses=0,foreignGuards=0,returnSuppressed=0;unsigned attackCopies=0,attackReceipts=0;
     bool fireSeen=false,attackSeen=false,sentinelChanged=false;
     unsigned completedInputMask=0,completedObservationMask=0;
+    struct LeaveReadFailure {
+        bool recorded=false,stateOkay=false;std::int64_t observedNs=0;
+        unsigned branch=0,firing=0,context=0,caller=0,argument=0,actor=0,weak=0,knife=0,original=0;
+        std::uint64_t tokenLifetime=0,currentLifetime=0,tokenSerial=0;
+        pk::detail::CallbackStateDiagnostic state{};pk::detail::SelectionDiagnostic selection{};
+    } firstLeaveReadFailure;
     struct CallbackWitness {
         bool recorded=false;std::int64_t observedNs=0;
         unsigned reason=0,branch=0,firing=0,context=0,caller=0,argument=0,before=0,current=0,next=0,consumed=0,observed=0;
@@ -82,9 +88,10 @@ struct Service {
 } service;
 // First cause since the ordinary draw reset. No native read, clock, logging or
 // retry. Diagnostic does not clear the existing conservative incomplete latch.
-void ObservationGap(unsigned reason,unsigned branch=3)noexcept {
-    unsigned empty=0;service.firstObservationGap.compare_exchange_strong(empty,reason*4+branch,std::memory_order_relaxed);
+bool ObservationGap(unsigned reason,unsigned branch=3)noexcept {
+    unsigned empty=0;const bool first=service.firstObservationGap.compare_exchange_strong(empty,reason*4+branch,std::memory_order_relaxed);
     service.ownedObservationGap=true;
+    return first;
 }
 using ChooseFn=int(__thiscall*)(void*,void*);using ReadyFn=bool(__thiscall*)(void*);
 using SetterFn=void(__thiscall*)(void*,unsigned,bool);
@@ -140,16 +147,13 @@ bool Flags(const pk::Anchor& a)noexcept {
 // Derive ACTUAL current selected item from the native inventory. This local
 // identity is used only for hook-side native coherence, never published as an
 // input/pose/equipment lease. Source authority remains the original command.
-bool NativeSelection(const pk::Anchor& a,pk::Selection& out)noexcept {
-    pk::detail::Reader r{service.memory};
-    unsigned slot=0;if(!r.Get(std::uint64_t(a.original.links.clientInventory)+0x14c,slot)||slot>=a.original.links.clientItems.size())return false;
-    auto actual=a.original.client.owner;actual.weapon=a.original.links.clientItems[slot];
-    pk::Selection before,after;
-    if(!pk::detail::Actor(r,service.server,service.base,a,actual,before)||
-       !pk::detail::Actor(r,service.server,service.base,a,actual,after)||before!=after)return false;
-    out=before;return true;
+bool NativeSelection(const pk::Anchor& a,pk::Selection& out,pk::detail::SelectionDiagnostic* diagnostic=nullptr)noexcept {
+    return pk::detail::CurrentSelection(pk::detail::Reader{service.memory},service.server,service.base,a,out,diagnostic);
 }
-bool NativeSelection(pk::Selection& out)noexcept {return service.anchor&&NativeSelection(*service.anchor,out);}
+bool NativeSelection(pk::Selection& out,pk::detail::SelectionDiagnostic* diagnostic=nullptr)noexcept {
+    if(!service.anchor){if(diagnostic){*diagnostic={};diagnostic->stage="anchor_missing";}return false;}
+    return NativeSelection(*service.anchor,out,diagnostic);
+}
 bool SameAnchor(const pk::Anchor& a,const pk::Anchor& b)noexcept {
     return a.original.client.owner==b.original.client.owner&&a.original.links==b.original.links&&
         a.original.client.config==b.original.client.config&&a.knifeWeapon==b.knifeWeapon&&a.knifeSlot==b.knifeSlot&&
@@ -214,11 +218,9 @@ bool CloseIdle(const pk::Snapshot& s,bool returned=false)noexcept {return Ready(
 unsigned Branch(unsigned firing)noexcept {
     if(service.anchor)for(unsigned n=0;n<3;++n)if(service.anchor->knifeFiring[n]==firing)return n+1;return 0;
 }
-bool State(unsigned firing,std::array<std::byte,0xb0>& bytes)noexcept {
-    pk::detail::Reader r{service.memory};return service.anchor&&r.Read(firing,bytes.data(),bytes.size())&&
-        Word<unsigned>(bytes.data(),0)==service.base+service.state.firingVtableRva&&
-        Word<unsigned>(bytes.data(),8)==service.anchor->knifeFiringData&&
-        Word<unsigned>(bytes.data(),0x3c)<=15&&Word<unsigned>(bytes.data(),0x44)<=15;
+bool State(unsigned firing,std::array<std::byte,0xb0>& bytes,pk::detail::CallbackStateDiagnostic* diagnostic=nullptr)noexcept {
+    return pk::detail::CallbackState(pk::detail::Reader{service.memory},service.state,service.base,
+        service.anchor?&*service.anchor:nullptr,firing,bytes,diagnostic);
 }
 void RecordCallback(Service::CallbackWitness& receipt,unsigned reason,unsigned branch,const OriginalFiringUpdate& call,
     const OriginalFiringToken& token,const std::array<std::byte,0xb0>& state,const pk::Selection& selected)noexcept {
@@ -294,7 +296,24 @@ void Leave(void*,const OriginalFiringUpdate& call,const OriginalFiringToken& tok
         if(!lock.owns_lock()){++service.gaps;ObservationGap(5,unsigned(token.words[1]-1));}
         else if(service.owned&&token.words[0]==service.nativeLifetime){
             std::array<std::byte,0xb0> state{};pk::Selection selected;
-            if(!State(call.firing,state)||!NativeSelection(selected)){++service.gaps;ObservationGap(6,unsigned(token.words[1]-1));}
+            // Observe only the first missing native proof. The original State ->
+            // Selection order, read count and conservative latch are unchanged.
+            Service::LeaveReadFailure failure;
+            const bool inspect=service.firstObservationGap.load(std::memory_order_relaxed)==0;
+            const bool stateOkay=State(call.firing,state,inspect?&failure.state:nullptr);
+            if(!stateOkay||!NativeSelection(selected,inspect?&failure.selection:nullptr)){
+                ++service.gaps;
+                if(ObservationGap(6,unsigned(token.words[1]-1))){
+                    failure.recorded=true;failure.stateOkay=stateOkay;failure.observedNs=Now();
+                    failure.branch=unsigned(token.words[1]-1);failure.firing=call.firing;failure.context=call.context;
+                    failure.caller=call.caller;failure.argument=call.argument;failure.tokenLifetime=token.words[0];
+                    failure.currentLifetime=service.nativeLifetime;failure.tokenSerial=token.words[6];
+                    if(service.anchor){failure.actor=service.anchor->original.client.owner.soldier;
+                        failure.weak=service.anchor->original.client.owner.weak;failure.knife=service.anchor->knifeWeapon;
+                        failure.original=service.anchor->original.client.owner.weapon;}
+                    service.firstLeaveReadFailure=failure;
+                }
+            }
             else {const auto branch=unsigned(token.words[1]-1),current=Word<unsigned>(state.data(),0x3c),next=Word<unsigned>(state.data(),0x44);
                 ++service.updates[branch];service.states[branch]=current;
                 service.fireSeen|=(token.words[3]&1)!=0;service.attackSeen|=token.words[2]==5||token.words[2]==6||current==5||current==6||next==5||next==6;
@@ -515,7 +534,7 @@ bool Stage(const KnifeCommand& command,const KnifeSample& source,const HandInter
     if(!native||!Flags(anchor)||!pk::KnifeSentinel(*native)||!Ready(drawing?native->original:native->knife))return reject();
     for(auto selected:native->selected.current)if(selected!=(drawing?anchor.original.client.selectedSlot:anchor.knifeSlot))return reject();
     if(drawing){service.anchor=anchor;service.bodyOperation=bodyOperation;++service.nativeLifetime;
-        service.firstObservationGap=0;service.ownedObservationGap=false;service.updates={};for(auto& n:service.deploy)n.store(0);service.states={};service.fireSeen=service.attackSeen=service.sentinelChanged=false;}
+        service.firstLeaveReadFailure={};service.firstObservationGap=0;service.ownedObservationGap=false;service.updates={};for(auto& n:service.deploy)n.store(0);service.states={};service.fireSeen=service.attackSeen=service.sentinelChanged=false;}
     else if(!Ammo(*native))return reject();
     try{service.stagedGuard=std::make_shared<const pk::Anchor>(anchor);}catch(...){return reject();}
     if(command.kind==KnifeCommandKind::Attack? !service.attacks.Stage(command,now):!service.commands.Stage(command,now))return reject();
@@ -745,6 +764,31 @@ void Report(std::ostream& out){std::unique_lock lock(service.gate,std::try_to_lo
            <<",\"aborted_serial\":"<<service.abortedCopySerial[n].load()<<",\"returned_serial\":"<<service.returnedCopySerial[n].load()<<",\"returned_ns\":"<<service.copyReturnedNs[n].load()
            <<",\"original_read_known\":"<<service.copyPostReadKnown[n].load()<<",\"original_hash_match\":"<<service.copyOriginalUnchanged[n].load()<<",\"before_fnv64\":"<<service.copyHashBefore[n].load()<<",\"after_fnv64\":"<<service.copyHashAfter[n].load()<<'}';}
     out<<"]";
+    // Serialization is outside native callbacks and under the existing gate.
+    const auto quoted=[&](const char* text){if(!text){out<<"null";return;}out<<'"';
+        for(;*text;++text){if(*text=='"'||*text=='\\')out<<'\\';out<<*text;}out<<'"';};
+    const auto readProof=[&](const pk::detail::ReadDiagnostic& r){
+        out<<"{\"kind\":"<<unsigned(r.kind)<<",\"address\":"<<r.address<<",\"bytes\":"<<r.bytes
+           <<",\"known\":"<<r.known<<",\"result\":"<<r.result<<",\"value\":"<<r.value<<",\"expected\":"<<r.expected<<",\"type\":";
+        quoted(r.type);out<<'}';};
+    const auto selectionProof=[&](const pk::Selection& v){out<<"{\"soldier_flags\":"<<unsigned(v.soldierFlags);
+        const auto array=[&](const char* name,const auto& values){out<<",\""<<name<<"\":[";for(unsigned i=0;i<values.size();++i){if(i)out<<',';out<<values[i];}out<<']';};
+        array("inventory",v.inventory);array("current",v.current);array("previous",v.previous);out<<'}';};
+    const auto& failure=service.firstLeaveReadFailure;
+    out<<",\"first_leave_read_failure\":{\"recorded\":"<<failure.recorded<<",\"observed_ns\":"<<failure.observedNs
+       <<",\"branch\":"<<failure.branch<<",\"firing\":"<<failure.firing<<",\"context\":"<<failure.context<<",\"caller\":"<<failure.caller
+       <<",\"argument\":"<<failure.argument<<",\"actor\":"<<failure.actor<<",\"weak\":"<<failure.weak<<",\"knife\":"<<failure.knife<<",\"original\":"<<failure.original
+       <<",\"token_lifetime\":"<<failure.tokenLifetime<<",\"current_lifetime\":"<<failure.currentLifetime<<",\"token_serial\":"<<failure.tokenSerial
+       <<",\"state_okay\":"<<failure.stateOkay<<",\"state\":{\"predicate\":";quoted(failure.state.predicate);
+    out<<",\"vtable\":"<<failure.state.vtable<<",\"expected_vtable\":"<<failure.state.expectedVtable
+       <<",\"data\":"<<failure.state.data<<",\"expected_data\":"<<failure.state.expectedData
+       <<",\"current\":"<<failure.state.current<<",\"next\":"<<failure.state.next<<",\"read\":";readProof(failure.state.read);
+    out<<"},\"selection\":{\"stage\":";quoted(failure.selection.stage);
+    out<<",\"slot\":"<<failure.selection.slot<<",\"actual_weapon\":"<<failure.selection.actualWeapon<<",\"slot_read\":";readProof(failure.selection.slotRead);
+    out<<",\"predicate\":";quoted(failure.selection.actor.predicate);out<<",\"last_read\":";readProof(failure.selection.actor.lastRead);
+    out<<",\"difference_index\":"<<failure.selection.actor.differenceIndex<<",\"actual_item\":"<<failure.selection.actor.actualItem
+       <<",\"expected_item\":"<<failure.selection.actor.expectedItem<<",\"partial\":";selectionProof(failure.selection.actor.partial);
+    out<<",\"before\":";selectionProof(failure.selection.before);out<<",\"after\":";selectionProof(failure.selection.after);out<<"}}";
     const auto closeProof=[&](const Service::CloseProof& r){
         out<<"{\"snapshot\":"<<r.snapshot<<",\"stage\":"<<r.stage<<",\"branch\":"<<r.branch
            <<",\"reason\":"<<r.reason<<",\"phase\":"<<r.phase<<",\"mask\":"<<r.mask

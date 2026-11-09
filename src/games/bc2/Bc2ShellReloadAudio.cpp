@@ -1,4 +1,5 @@
 #include "Bc2ShellReloadAudio.h"
+#include "fvr/platform/windows/RetainedModuleThread.h"
 #include "Bc2AudioCachePath.h"
 #include "Bc2ShellReloadAudioProfile.h"
 #include "fvr/interaction/MechanismAudio.h"
@@ -33,7 +34,7 @@ std::atomic<std::shared_ptr<const Source>> current;
 ShellReloadAudioSuppression<> suppression;
 std::atomic_flag suppressionGate=ATOMIC_FLAG_INIT;
 std::vector<char> wave;
-std::mutex queueMutex;std::condition_variable changed;std::thread worker;
+std::mutex queueMutex;std::condition_variable changed;platform::RetainedModuleThread worker;
 ShellReloadAudioLedger<> ledger;
 struct Pending {ShellReloadAudioEvent event{};std::uint64_t receipt=0;};
 std::array<Pending,8> events{};unsigned head=0,count=0;
@@ -206,7 +207,7 @@ bool Install(const Config& config){
     suppression={};ledger={};head=count=0;receipts={};receiptCount=0;nativeRows={};nativeCount=0;
     starts=stops=suppressed=accepted=queued=played=completed=interrupted=stale=failures=routeChecks=routeFailures=cleanupFailures=rowsLost=0;
     ready=false;unsafe=false;quit=false;routeVerifiedNs=0;current.store({});replacing=config.replace;
-    enabled=true;if(config.replace)worker=std::thread(Player);return true;
+    enabled=true;if(config.replace)worker.Start(Player);return true;
 }
 bool Dispatch(bool start,std::uintptr_t receiver,const std::array<unsigned char,16>& guid)noexcept {
     if(!enabled.load())return false;++inFlight;struct Exit{~Exit(){--inFlight;}} exit;

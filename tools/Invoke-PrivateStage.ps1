@@ -8,6 +8,7 @@ param(
     [Parameter(Mandatory,ParameterSetName='Plan')][string]$LauncherCommit,
     [Parameter(Mandatory,ParameterSetName='Plan')][string]$ReviewedLauncherPins,
     [Parameter(Mandatory,ParameterSetName='Plan')][string]$ReviewedLauncherPinsSha256,
+    [Parameter(ParameterSetName='Plan')][long]$MaxGeneratedBytes=52GB,
     [Parameter(Mandatory,ParameterSetName='Stage')][string]$Decision,
     [Parameter(Mandatory,ParameterSetName='Stage')][string]$DecisionSha256,
     [Parameter(Mandatory,ParameterSetName='Stage')][switch]$RootAccept
@@ -42,7 +43,7 @@ $reviewedGuard=@($review.files|Where-Object path -CEQ 'launcher/runtime/PrivateS
 Assert-Stage ($guardPin.sha256 -ceq $reviewedGuard.sha256 -and $guardPin.bytes -eq $reviewedGuard.bytes) 'accepted753 guard has not been integrated exactly'
 . $guardPath
 if($Plan){
-    New-PrivateStageDecision $configPin $InstallRoot $LauncherCommit $review $reviewPin|ConvertTo-Json -Depth 60
+    New-PrivateStageDecision $configPin $InstallRoot $LauncherCommit $review $reviewPin -MaxGeneratedBytes $MaxGeneratedBytes|ConvertTo-Json -Depth 60
 }else{
     Invoke-PrivateStage $decisionPin $review -RootAccept:$RootAccept|ConvertTo-Json -Depth 60
 }

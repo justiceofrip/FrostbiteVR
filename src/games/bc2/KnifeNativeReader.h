@@ -32,83 +32,213 @@ struct Snapshot {
     static constexpr bool actionAuthority=false,atomic=false;
 };
 namespace detail {
+// Optional passive diagnostics. Each value comes from the existing read;
+// no retry, additional native read or authority is introduced.
+struct ReadDiagnostic {
+    enum class Kind:unsigned {None,Bytes,Equal,Type};
+    Kind kind=Kind::None;std::uint64_t address=0;unsigned bytes=0,value=0,expected=0;
+    bool known=false,result=false;const char* type=nullptr;
+};
 struct Reader {
-    const ReloadStateMemory& memory;
+    const ReloadStateMemory& memory;ReadDiagnostic* diagnostic=nullptr;
     bool Read(std::uint64_t at,void* out,std::size_t count)const noexcept {
-        return memory.read&&at>=0x10000&&count&&count<=4096&&at+count<=UINT32_MAX&&
+        const bool okay=memory.read&&at>=0x10000&&count&&count<=4096&&at+count<=UINT32_MAX&&
             memory.read(memory.context,unsigned(at),out,count);
+        if(diagnostic){*diagnostic={};diagnostic->kind=ReadDiagnostic::Kind::Bytes;
+            diagnostic->address=at;diagnostic->bytes=unsigned(count);diagnostic->known=diagnostic->result=okay;
+            if(okay&&count<=4)std::memcpy(&diagnostic->value,out,count);}
+        return okay;
     }
     template<class T>bool Get(std::uint64_t at,T& out)const noexcept{return Read(at,&out,sizeof(out));}
-    bool Eq(std::uint64_t at,unsigned wanted)const noexcept {unsigned value=0;return Get(at,value)&&value==wanted;}
-    bool Type(unsigned at,const char* name)const noexcept{return memory.type&&at>=0x10000&&memory.type(memory.context,at,name);}
+    bool Eq(std::uint64_t at,unsigned wanted)const noexcept {
+        unsigned value=0;const bool okay=Get(at,value)&&value==wanted;
+        if(diagnostic){diagnostic->kind=ReadDiagnostic::Kind::Equal;diagnostic->expected=wanted;diagnostic->result=okay;}
+        return okay;
+    }
+    bool Type(unsigned at,const char* name)const noexcept {
+        const bool okay=memory.type&&at>=0x10000&&memory.type(memory.context,at,name);
+        if(diagnostic){*diagnostic={};diagnostic->kind=ReadDiagnostic::Kind::Type;
+            diagnostic->address=at;diagnostic->type=name;diagnostic->known=bool(memory.type)&&at>=0x10000;diagnostic->result=okay;}
+        return okay;
+    }
+};
+struct ActorDiagnostic {
+    const char* predicate=nullptr;ReadDiagnostic lastRead{};Selection partial{};
+    unsigned differenceIndex=UINT32_MAX,actualItem=0,expectedItem=0;
 };
 // Same stable actor/inventory membership used by accepted316/318/336. The real
 // current selectors are recorded separately and may converge asynchronously.
 // Unlike the firearm target reader, no firearm-specific melee +d4/+128 layout
 // is presumed: exact inventory membership owns the separate melee effects.
-inline bool Actor(const Reader& r,const ReloadServerBinding& binding,unsigned base,
-    const Anchor& a,const ReloadStateOwner& current,Selection& out)noexcept {
+inline bool Actor(const Reader& reader,const ReloadServerBinding& binding,unsigned base,
+    const Anchor& a,const ReloadStateOwner& current,Selection& out,ActorDiagnostic* diagnostic=nullptr)noexcept {
+    if(diagnostic)*diagnostic={};
+    const Reader r{reader.memory,diagnostic?&diagnostic->lastRead:nullptr};
+    const auto fail=[&](const char* predicate){if(diagnostic){diagnostic->predicate=predicate;diagnostic->partial=out;}return false;};
+#define FVR_KNIFE_ACTOR_REFUSE(predicate) if(predicate)return fail(#predicate)
     const auto& s=a.original;const auto& o=s.client.owner;const auto& v=s.links;
-    if(base!=binding.preferredBase||base>UINT32_MAX-binding.imageSize||binding.imageSize<12||
-       binding.contextRva>binding.imageSize-12||binding.managerVtableRva>binding.imageSize-4||
-       binding.controlledGetterRva>=binding.imageSize||
-       !s.client.sequence||s.client.observedNs<=0||o.player<0x10000||o.soldier<0x10000||
-       o.soldier>UINT32_MAX-4||o.weak<0x10000||o.weapon<0x10000||!o.actorGeneration||
-       current.player!=o.player||current.soldier!=o.soldier||current.weak!=o.weak||
-       current.actorGeneration!=o.actorGeneration||!current.equipGeneration||!current.space||
-       !a.knifeWeapon||a.knifeSlot>=64||a.knifeSlot==s.client.selectedSlot||
-       v.clientItems[a.knifeSlot]!=a.knifeWeapon||!a.knifeData||!a.knifeFiringData||
-       v.clientBegin<0x10000||v.clientEnd<=v.clientBegin||v.clientEnd-v.clientBegin>256||
-       (v.clientEnd-v.clientBegin)%4||a.knifeSlot>=(v.clientEnd-v.clientBegin)/4||
-       s.client.selectedSlot>=(v.clientEnd-v.clientBegin)/4||
-       v.begin<0x10000||v.end<=v.begin||v.end-v.begin>256||(v.end-v.begin)%4||
-       a.knifeSlot>=(v.end-v.begin)/4||s.client.selectedSlot>=(v.end-v.begin)/4||
-       v.clientItems[s.client.selectedSlot]!=o.weapon||v.items[s.client.selectedSlot]!=v.item)return false;
+    FVR_KNIFE_ACTOR_REFUSE(base!=binding.preferredBase);
+    FVR_KNIFE_ACTOR_REFUSE(base>UINT32_MAX-binding.imageSize);
+    FVR_KNIFE_ACTOR_REFUSE(binding.imageSize<12);
+    FVR_KNIFE_ACTOR_REFUSE(binding.contextRva>binding.imageSize-12);
+    FVR_KNIFE_ACTOR_REFUSE(binding.managerVtableRva>binding.imageSize-4);
+    FVR_KNIFE_ACTOR_REFUSE(binding.controlledGetterRva>=binding.imageSize);
+    FVR_KNIFE_ACTOR_REFUSE(!s.client.sequence);
+    FVR_KNIFE_ACTOR_REFUSE(s.client.observedNs<=0);
+    FVR_KNIFE_ACTOR_REFUSE(o.player<0x10000);
+    FVR_KNIFE_ACTOR_REFUSE(o.soldier<0x10000);
+    FVR_KNIFE_ACTOR_REFUSE(o.soldier>UINT32_MAX-4);
+    FVR_KNIFE_ACTOR_REFUSE(o.weak<0x10000);
+    FVR_KNIFE_ACTOR_REFUSE(o.weapon<0x10000);
+    FVR_KNIFE_ACTOR_REFUSE(!o.actorGeneration);
+    FVR_KNIFE_ACTOR_REFUSE(current.player!=o.player);
+    FVR_KNIFE_ACTOR_REFUSE(current.soldier!=o.soldier);
+    FVR_KNIFE_ACTOR_REFUSE(current.weak!=o.weak);
+    FVR_KNIFE_ACTOR_REFUSE(current.actorGeneration!=o.actorGeneration);
+    FVR_KNIFE_ACTOR_REFUSE(!current.equipGeneration);
+    FVR_KNIFE_ACTOR_REFUSE(!current.space);
+    FVR_KNIFE_ACTOR_REFUSE(!a.knifeWeapon);
+    FVR_KNIFE_ACTOR_REFUSE(a.knifeSlot>=64);
+    FVR_KNIFE_ACTOR_REFUSE(a.knifeSlot==s.client.selectedSlot);
+    FVR_KNIFE_ACTOR_REFUSE(v.clientItems[a.knifeSlot]!=a.knifeWeapon);
+    FVR_KNIFE_ACTOR_REFUSE(!a.knifeData);
+    FVR_KNIFE_ACTOR_REFUSE(!a.knifeFiringData);
+    FVR_KNIFE_ACTOR_REFUSE(v.clientBegin<0x10000);
+    FVR_KNIFE_ACTOR_REFUSE(v.clientEnd<=v.clientBegin);
+    FVR_KNIFE_ACTOR_REFUSE(v.clientEnd-v.clientBegin>256);
+    FVR_KNIFE_ACTOR_REFUSE((v.clientEnd-v.clientBegin)%4);
+    FVR_KNIFE_ACTOR_REFUSE(a.knifeSlot>=(v.clientEnd-v.clientBegin)/4);
+    FVR_KNIFE_ACTOR_REFUSE(s.client.selectedSlot>=(v.clientEnd-v.clientBegin)/4);
+    FVR_KNIFE_ACTOR_REFUSE(v.begin<0x10000);
+    FVR_KNIFE_ACTOR_REFUSE(v.end<=v.begin);
+    FVR_KNIFE_ACTOR_REFUSE(v.end-v.begin>256);
+    FVR_KNIFE_ACTOR_REFUSE((v.end-v.begin)%4);
+    FVR_KNIFE_ACTOR_REFUSE(a.knifeSlot>=(v.end-v.begin)/4);
+    FVR_KNIFE_ACTOR_REFUSE(s.client.selectedSlot>=(v.end-v.begin)/4);
+    FVR_KNIFE_ACTOR_REFUSE(v.clientItems[s.client.selectedSlot]!=o.weapon);
+    FVR_KNIFE_ACTOR_REFUSE(v.items[s.client.selectedSlot]!=v.item);
     unsigned manager=0,attached=0;std::uint8_t playerFlags=0;
-    if(!r.Get(std::uint64_t(o.player)+0xc60,attached)||attached||
-       !r.Get(std::uint64_t(o.player)+0xccd,playerFlags)||!(playerFlags&8)||
-       !r.Eq(std::uint64_t(o.player)+0xc54,o.weak)||!r.Eq(o.weak,o.soldier+4)||
-       !r.Eq(std::uint64_t(o.player)+0xc68,o.soldier)||!r.Eq(std::uint64_t(o.soldier)+0x220,o.player)||
-       !r.Get(std::uint64_t(o.soldier)+0x114,out.soldierFlags)||
-       (out.soldierFlags&~0x18u)!=(s.client.soldierFlags&~0x18u)||
-       !r.Eq(std::uint64_t(o.soldier)+((out.soldierFlags&1)?0x24c:0x248),v.clientInventory)||
-       !r.Eq(std::uint64_t(o.soldier)+0x260,v.clientBegin)||!r.Eq(std::uint64_t(o.soldier)+0x264,v.clientEnd)||
-       !r.Get(std::uint64_t(base)+binding.contextRva+8,manager)||manager!=v.manager||
-       !r.Eq(manager,base+binding.managerVtableRva)||!r.Eq(std::uint64_t(manager)+4,v.capacity)||
-       !r.Eq(std::uint64_t(manager)+0x6c,v.players)||!v.capacity||v.capacity>256||v.playerId>=v.capacity||
-       !r.Eq(std::uint64_t(o.player)+0x154,v.playerId)||!r.Eq(std::uint64_t(v.players)+v.playerId*4,v.player)||
-       !r.Eq(std::uint64_t(v.player)+0x154,v.playerId)||!r.Eq(v.player,v.playerTable)||
-       !r.Eq(std::uint64_t(v.playerTable)+0x30,base+binding.controlledGetterRva)||
-       !r.Eq(std::uint64_t(v.player)+0xc3c,v.soldier)||!r.Eq(std::uint64_t(v.player)+0xc6c,v.soldier)||
-       !r.Eq(v.soldier,v.soldierTable)||!r.Type(v.soldier,"ServerSoldierEntity")||
-       !r.Eq(std::uint64_t(v.soldier)+0xc,v.soldierData)||!r.Eq(std::uint64_t(o.soldier)+0xc,v.soldierData)||
-       !r.Eq(std::uint64_t(v.soldier)+0x220,v.player)||!r.Eq(std::uint64_t(v.soldier)+0x2b4,v.inventory)||
-       !r.Eq(std::uint64_t(v.inventory)+4,v.inventoryData)||
-       !r.Eq(std::uint64_t(v.soldier)+0x2b8,v.begin)||!r.Eq(std::uint64_t(v.soldier)+0x2bc,v.end)||
-       !r.Eq(std::uint64_t(v.item)+0xc,v.effects)||!r.Eq(v.effects,v.effectsTable)||
-       !r.Eq(std::uint64_t(v.effects)+0x128,v.player)||!r.Eq(std::uint64_t(v.effects)+0xd4,v.callback)||
-       !r.Eq(std::uint64_t(v.callback)+4,s.client.config.firingData))return false;
+    FVR_KNIFE_ACTOR_REFUSE(!r.Get(std::uint64_t(o.player)+0xc60,attached));
+    FVR_KNIFE_ACTOR_REFUSE(attached);
+    FVR_KNIFE_ACTOR_REFUSE(!r.Get(std::uint64_t(o.player)+0xccd,playerFlags));
+    FVR_KNIFE_ACTOR_REFUSE(!(playerFlags&8));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(o.player)+0xc54,o.weak));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(o.weak,o.soldier+4));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(o.player)+0xc68,o.soldier));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(o.soldier)+0x220,o.player));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Get(std::uint64_t(o.soldier)+0x114,out.soldierFlags));
+    FVR_KNIFE_ACTOR_REFUSE((out.soldierFlags&~0x18u)!=(s.client.soldierFlags&~0x18u));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(o.soldier)+((out.soldierFlags&1)?0x24c:0x248),v.clientInventory));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(o.soldier)+0x260,v.clientBegin));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(o.soldier)+0x264,v.clientEnd));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Get(std::uint64_t(base)+binding.contextRva+8,manager));
+    FVR_KNIFE_ACTOR_REFUSE(manager!=v.manager);
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(manager,base+binding.managerVtableRva));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(manager)+4,v.capacity));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(manager)+0x6c,v.players));
+    FVR_KNIFE_ACTOR_REFUSE(!v.capacity);
+    FVR_KNIFE_ACTOR_REFUSE(v.capacity>256);
+    FVR_KNIFE_ACTOR_REFUSE(v.playerId>=v.capacity);
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(o.player)+0x154,v.playerId));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(v.players)+v.playerId*4,v.player));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(v.player)+0x154,v.playerId));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(v.player,v.playerTable));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(v.playerTable)+0x30,base+binding.controlledGetterRva));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(v.player)+0xc3c,v.soldier));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(v.player)+0xc6c,v.soldier));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(v.soldier,v.soldierTable));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Type(v.soldier,"ServerSoldierEntity"));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(v.soldier)+0xc,v.soldierData));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(o.soldier)+0xc,v.soldierData));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(v.soldier)+0x220,v.player));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(v.soldier)+0x2b4,v.inventory));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(v.inventory)+4,v.inventoryData));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(v.soldier)+0x2b8,v.begin));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(v.soldier)+0x2bc,v.end));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(v.item)+0xc,v.effects));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(v.effects,v.effectsTable));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(v.effects)+0x128,v.player));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(v.effects)+0xd4,v.callback));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(v.callback)+4,s.client.config.firingData));
     decltype(v.clientItems) clients{};decltype(v.items) servers{};
-    if(!r.Read(v.clientBegin,clients.data(),v.clientEnd-v.clientBegin)||clients!=v.clientItems||
-       !r.Read(v.begin,servers.data(),v.end-v.begin)||servers!=v.items||
-       std::count(clients.begin(),clients.end(),a.knifeWeapon)!=1||
-       std::count(servers.begin(),servers.end(),v.items[a.knifeSlot])!=1||
-       !r.Eq(std::uint64_t(o.weapon)+4,s.client.config.weaponData)||
-       !r.Eq(std::uint64_t(v.item)+4,s.client.config.weaponData)||
-       !r.Eq(std::uint64_t(a.knifeWeapon)+4,a.knifeData)||
-       !r.Eq(std::uint64_t(v.items[a.knifeSlot])+4,a.knifeData)||
-       !r.Type(a.knifeData,"SoldierWeaponData")||!r.Eq(std::uint64_t(a.knifeData)+0x84,11)||
-       !r.Eq(std::uint64_t(a.knifeData)+0x98,a.knifeFiringData))return false;
+    FVR_KNIFE_ACTOR_REFUSE(!r.Read(v.clientBegin,clients.data(),v.clientEnd-v.clientBegin));
+    if(clients!=v.clientItems){if(diagnostic)for(unsigned n=0;n<clients.size();++n)if(clients[n]!=v.clientItems[n]){
+        diagnostic->differenceIndex=n;diagnostic->actualItem=clients[n];diagnostic->expectedItem=v.clientItems[n];break;}
+        return fail("clients!=v.clientItems");}
+    FVR_KNIFE_ACTOR_REFUSE(!r.Read(v.begin,servers.data(),v.end-v.begin));
+    if(servers!=v.items){if(diagnostic)for(unsigned n=0;n<servers.size();++n)if(servers[n]!=v.items[n]){
+        diagnostic->differenceIndex=n;diagnostic->actualItem=servers[n];diagnostic->expectedItem=v.items[n];break;}
+        return fail("servers!=v.items");}
+    FVR_KNIFE_ACTOR_REFUSE(std::count(clients.begin(),clients.end(),a.knifeWeapon)!=1);
+    FVR_KNIFE_ACTOR_REFUSE(std::count(servers.begin(),servers.end(),v.items[a.knifeSlot])!=1);
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(o.weapon)+4,s.client.config.weaponData));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(v.item)+4,s.client.config.weaponData));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(a.knifeWeapon)+4,a.knifeData));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(v.items[a.knifeSlot])+4,a.knifeData));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Type(a.knifeData,"SoldierWeaponData"));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(a.knifeData)+0x84,11));
+    FVR_KNIFE_ACTOR_REFUSE(!r.Eq(std::uint64_t(a.knifeData)+0x98,a.knifeFiringData));
     out.inventory={v.clientInventory,v.inventory,0};
-    if(!r.Get(std::uint64_t(o.soldier)+0x248,out.inventory[2]))return false;
-    for(unsigned n=0;n<3;++n)if(!r.Get(std::uint64_t(out.inventory[n])+0x14c,out.current[n])||
-        !r.Get(std::uint64_t(out.inventory[n])+0x150,out.previous[n])||out.previous[n]>=32||
-        (out.current[n]!=s.client.selectedSlot&&out.current[n]!=a.knifeSlot))return false;
-    return clients[out.current[0]]==current.weapon;
+    FVR_KNIFE_ACTOR_REFUSE(!r.Get(std::uint64_t(o.soldier)+0x248,out.inventory[2]));
+    for(unsigned n=0;n<3;++n){
+        FVR_KNIFE_ACTOR_REFUSE(!r.Get(std::uint64_t(out.inventory[n])+0x14c,out.current[n]));
+        FVR_KNIFE_ACTOR_REFUSE(!r.Get(std::uint64_t(out.inventory[n])+0x150,out.previous[n]));
+        FVR_KNIFE_ACTOR_REFUSE(out.previous[n]>=32);
+        FVR_KNIFE_ACTOR_REFUSE((out.current[n]!=s.client.selectedSlot&&out.current[n]!=a.knifeSlot));
+    }
+    if(clients[out.current[0]]!=current.weapon){if(diagnostic){diagnostic->differenceIndex=out.current[0];
+        diagnostic->actualItem=clients[out.current[0]];diagnostic->expectedItem=current.weapon;}
+        return fail("clients[out.current[0]]!=current.weapon");}
+#undef FVR_KNIFE_ACTOR_REFUSE
+    return true;
 }
 template<class T>T Word(const std::array<std::byte,0xb0>& bytes,unsigned at)noexcept {
     T out{};std::memcpy(&out,bytes.data()+at,sizeof(out));return out;
 }
+struct SelectionDiagnostic {
+    const char* stage=nullptr;unsigned slot=0,actualWeapon=0;ReadDiagnostic slotRead{};
+    ActorDiagnostic actor{};Selection before{},after{};
+};
+inline bool CurrentSelection(const Reader& reader,const ReloadServerBinding& binding,unsigned base,
+    const Anchor& a,Selection& out,SelectionDiagnostic* diagnostic=nullptr)noexcept {
+    if(diagnostic)*diagnostic={};
+    const Reader r{reader.memory,diagnostic?&diagnostic->slotRead:nullptr};
+    const auto fail=[&](const char* stage){if(diagnostic)diagnostic->stage=stage;return false;};
+    unsigned slot=0;
+    if(!r.Get(std::uint64_t(a.original.links.clientInventory)+0x14c,slot))return fail("slot_read");
+    if(diagnostic)diagnostic->slot=slot;
+    if(slot>=a.original.links.clientItems.size())return fail("slot_range");
+    auto actual=a.original.client.owner;actual.weapon=a.original.links.clientItems[slot];
+    if(diagnostic)diagnostic->actualWeapon=actual.weapon;
+    Selection before,after;
+    if(!Actor(reader,binding,base,a,actual,before,diagnostic?&diagnostic->actor:nullptr))return fail("actor_before");
+    if(diagnostic)diagnostic->before=before;
+    if(!Actor(reader,binding,base,a,actual,after,diagnostic?&diagnostic->actor:nullptr))return fail("actor_after");
+    if(diagnostic)diagnostic->after=after;
+    if(before!=after)return fail("selection_changed");
+    out=before;return true;
+}
+struct CallbackStateDiagnostic {
+    const char* predicate=nullptr;ReadDiagnostic read{};
+    unsigned vtable=0,expectedVtable=0,data=0,expectedData=0,current=0,next=0;
+};
+inline bool CallbackState(const Reader& reader,const ReloadStateBinding& binding,unsigned base,
+    const Anchor* anchor,unsigned firing,std::array<std::byte,0xb0>& bytes,CallbackStateDiagnostic* diagnostic=nullptr)noexcept {
+    if(diagnostic)*diagnostic={};
+    const Reader r{reader.memory,diagnostic?&diagnostic->read:nullptr};
+    const auto fail=[&](const char* predicate){if(diagnostic)diagnostic->predicate=predicate;return false;};
+    if(!anchor)return fail("anchor_missing");
+    if(!r.Read(firing,bytes.data(),bytes.size()))return fail("state_read");
+    if(diagnostic){diagnostic->vtable=Word<unsigned>(bytes,0);diagnostic->expectedVtable=base+binding.firingVtableRva;
+        diagnostic->data=Word<unsigned>(bytes,8);diagnostic->expectedData=anchor->knifeFiringData;
+        diagnostic->current=Word<unsigned>(bytes,0x3c);diagnostic->next=Word<unsigned>(bytes,0x44);}
+    if(Word<unsigned>(bytes,0)!=base+binding.firingVtableRva)return fail("vtable");
+    if(Word<unsigned>(bytes,8)!=anchor->knifeFiringData)return fail("firing_data");
+    if(Word<unsigned>(bytes,0x3c)>15)return fail("current_state");
+    if(Word<unsigned>(bytes,0x44)>15)return fail("next_state");
+    return true;
+}
+
 enum class BranchFailure:unsigned {None,ItemRead,StateRead,Identity,Malformed,Incoherent,Count};
 struct BranchDiagnostic {
     BranchFailure failure=BranchFailure::None;

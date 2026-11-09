@@ -41,14 +41,14 @@ bool FixedContainerTrackingRetained(const Bc2FixedContainerTracking& a,const Bc2
 }
 Bc2FixedContainerRawContact BuildFixedContainerRawContact(const Bc2FixedContainerTracking& t,const RigSnapshot& rig,
     const math::Matrix4& wrist,const math::Matrix4& placed,float units,std::int64_t now)noexcept {
-    if(!FixedContainerTrackingFresh(t,now)||!FixedContainerRigMatches(*t.source.equipment,rig)||
+    if(!FixedContainerRawCaptureFresh(t,now)||!FixedContainerRigMatches(*t.source.equipment,rig)||
        rig.identity.soldier!=t.source.binding.owner.soldier||rig.identity.weak!=t.source.binding.owner.weak||
        !std::isfinite(units)||units<=0||units>1000||!InverseRigid(wrist))return {};
     const auto inverse=InverseRigid(placed);if(!inverse)return {};
     Bc2FixedContainerRawContact out;out.nativeOwner=t.source.binding.owner;out.rig=rig.identity;out.equipment=t.source.equipment;out.input=t.input;
     out.weaponFromWrist=Multiply(wrist,*inverse);out.weaponWorldMeters=placed;
     for(unsigned n=0;n<3;++n){out.weaponFromWrist.values[3][n]/=units;out.weaponWorldMeters.values[3][n]/=units;}
-    out.valid=bool(InverseRigid(out.weaponFromWrist));out.grip=t.grip;out.gripPressed=t.gripPressed;out.pouchContact=t.pouchContact;return out;
+    out.valid=bool(InverseRigid(out.weaponFromWrist));out.grip=t.grip;out.gripPressed=t.gripPressed;out.pouchContact=t.pouchContact;out.recoverySequence=t.recoverySequence;return out;
 }
 Bc2FixedContainerPresentation BuildFixedContainerPresentation(const Bc2FixedContainerTracking& t,const RigSnapshot& rig,
     const math::Matrix4& placed,float units,std::int64_t now)noexcept {

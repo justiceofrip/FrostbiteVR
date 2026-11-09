@@ -19,7 +19,9 @@ struct FixedContainerGate {
     bool blocksFire=true,closedVerified=false;
     bool operator==(const FixedContainerGate&)const=default;
 };
-enum class FixedContainerGateResult {Published,Busy,Rejected};
+// BindingUnavailable has no retained-gate authority. Only a Busy/Revision
+// binding read may return it; observed contradictions remain Rejected.
+enum class FixedContainerGateResult {Published,Busy,Rejected,BindingUnavailable};
 struct FixedContainerInputGuard {
     std::array<std::uint32_t,2> original{},effective{},beforeRestore{};
     bool requested=false,applied=false,restored=false,unexpectedWrite=false;

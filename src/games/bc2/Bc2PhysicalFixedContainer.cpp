@@ -26,6 +26,8 @@ bool Near(const math::Matrix4& a,const math::Matrix4& b,const FixedContainerGeom
 struct Bc2PhysicalFixedContainer::Slot {
     struct SupportNeutral {HandInteractionSample input{};FixedContainerStep step=FixedContainerStep::Open;HandClaimToken gun{};};
     struct ReleaseWait {FixedContainerReleaseEvidence evidence{};HandClaimToken gun{};};
+    struct Reservation {HandClaim hand;HandClaimToken gun;std::uint64_t gapInput=0,captureInput=0;std::int64_t gapObservedNs=0;};
+    std::optional<Reservation> reservation;
     AmmoResourceBinding binding{};HandInteractionOwner handOwner{};
     const FixedContainerEquipmentProfile* equipment=nullptr;
     std::unique_ptr<FixedContainerReload> policy;
@@ -54,7 +56,7 @@ void Bc2PhysicalFixedContainer::Cancel(const HandInteractionSample& input,HandIn
     if(active_->releaseWait&&active_->lastRelease&&!active_->lastRelease->policyUpdated){
         active_->lastRelease->input=input;active_->lastRelease->stage=Bc2FixedContainerReleaseStage::Cancelled;
     }
-    active_->releaseWait.reset();
+    active_->releaseWait.reset();active_->reservation.reset();
     active_->recoveryPrepared=false;
     active_->supportNeutral.reset();
     active_->acceptedGate.reset();
@@ -137,6 +139,12 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
     const bool sameBinding=slot->binding.owner==view->binding.owner&&slot->binding.context==view->binding.context&&
         slot->binding.inventory==view->binding.inventory&&slot->binding.switching==view->binding.switching&&
         slot->binding.data==view->binding.data&&slot->binding.persistence==view->binding.persistence&&slot->handOwner==s.input.owner;
+    // A successful contradictory view is the first observable revocation point.
+    // Unknown binding publication is not evidence that an unseen owner stayed put.
+    if(slot->reservation&&(!sameBinding||!slot->hand||!s.grip||s.input.released[0]||
+       slot->reservation->gun!=gun->token||!hands.MechanismReservation(slot->reservation->hand.token))){
+        Cancel(s.input,hands,{HandReleaseSite::FixedGunHold});return out;
+    }
     const auto validRelease=[&](const FixedContainerReleaseEvidence& event)noexcept {
         return slot->hand&&event.before.token==slot->hand->token&&event.released.token==slot->hand->token&&
             event.released.reason==HandInteractionReason::Released&&event.before.deadlineNs>s.input.nowNs&&
@@ -211,6 +219,22 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
         else if(result==FixedContainerGateResult::Rejected)slot->acceptedGate.reset();
         return result;
     };
+    const auto reserve=[&]()noexcept {
+        if(!heldAtEntry||!slot->hand||slot->hand->token!=heldAtEntry->token||
+           heldAtEntry->token.kind!=HandClaimKind::Mechanism||!slot->policy||!sameBinding||
+           !s.grip||s.input.released[0]||slot->request||slot->restart||slot->releaseWait||
+           heldAtEntry->token.item!=s.weapon||heldAtEntry->token.prerequisiteClaim!=gun->token.id)return false;
+        const auto deadline=slot->reservation?slot->reservation->hand.deadlineNs:heldAtEntry->deadlineNs;
+        if(!hands.ReserveMechanism(s.input,heldAtEntry->token,deadline))return false;
+        slot->hand=hands.MechanismReservation(heldAtEntry->token);
+        if(!slot->reservation)slot->reservation=Slot::Reservation{*slot->hand,gun->token,s.input.sequence,0};
+        // A new unknown read invalidates any previous raw-only admission.
+        slot->reservation->gapInput=s.input.sequence;slot->reservation->gapObservedNs=s.input.observedNs;
+        slot->reservation->captureInput=0;
+        slot->acceptedGate.reset();slot->supportNeutral.reset();
+        out.blocksFire=slot->policy->BlocksFire();out.status=FixedContainerStatus::Suspended;
+        return true;
+    };
     const auto continueHeld=[&](const FixedContainerGate& gate)noexcept {
         const auto left=hands.Current(InteractionHand::Left);const auto& accepted=slot->acceptedGate;
         if(!accepted||!heldAtEntry||!slot->hand||!left||left->token!=heldAtEntry->token||slot->hand->token!=heldAtEntry->token||
@@ -229,17 +253,90 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
     };
     // Establish the native blocker before starting a new physical gesture.
     const bool priorBlocked=!slot->geometryBound||(slot->policy&&slot->policy->BlocksFire());
+    // Admitted mechanical debt survives loss of transient hand/pose authority.
+    // Owner retirement above still returns without exporting the old blocker.
+    out.blocksFire=priorBlocked;
     const bool touching=rawFresh&&raw.grip&&!slot->completedHold&&(raw.gripPressed||slot->hand||slot->carried);
     if(slot->revision>UINT64_MAX-2)return out;
     const FixedContainerGate beforeGate{view->binding,s.input.owner,lifetime,++slot->revision,s.input.sequence,
         s.input.observedNs,s.input.deadlineNs,priorBlocked||touching,!(priorBlocked||touching)};
     const auto beforePublication=publish(beforeGate);
+    if(beforePublication==FixedContainerGateResult::BindingUnavailable){
+        if(!reserve())Cancel(s.input,hands,{HandReleaseSite::FixedRaw});
+        return out; // No policy/ledger/pose/native work is authorized by this result.
+    }
     if(beforePublication!=FixedContainerGateResult::Published&&
        !(beforePublication==FixedContainerGateResult::Busy&&continueHeld(beforeGate))){
         if(releaseAttempt)releaseAttempt->stage=Bc2FixedContainerReleaseStage::GateUnavailable;
         slot->releaseWait.reset();
-        slot->acceptedGate.reset();slot->supportNeutral.reset();out.blocksFire=priorBlocked;return out;
+        slot->acceptedGate.reset();slot->supportNeutral.reset();out.blocksFire=priorBlocked;
+        if(slot->reservation||(slot->hand&&slot->hand->token.kind==HandClaimKind::Mechanism))
+            Cancel(s.input,hands,{HandReleaseSite::FixedRaw});
+        return out;
     }
+    if(slot->reservation){
+        // Fresh publication alone cannot restore motion/pose. Verify the exact
+        // ledger before enabling one separate renderer raw-only capture phase.
+        auto& reservation=*slot->reservation;
+        if(raw.valid&&(raw.nativeOwner!=s.nativeOwner||raw.equipment!=e||raw.input.owner!=s.input.owner)){
+            Cancel(s.input,hands,{HandReleaseSite::FixedRaw});return out;
+        }
+        auto contact=slot->target;
+        if(contact&&slot->handFromContact)contact=Multiply(*slot->handFromContact,*contact);
+        const auto profile=FixedContainerInteractionProfile(*e);
+        const bool captured=reservation.captureInput&&rawFresh&&raw.grip&&!raw.input.released[0]&&contact&&
+            Near(raw.weaponFromWrist,*contact,profile.geometry[unsigned(slot->targetStep)])&&
+            raw.recoverySequence==reservation.captureInput&&raw.input.sequence>=reservation.captureInput&&
+            raw.input.sequence>reservation.gapInput&&raw.input.observedNs>reservation.gapObservedNs&&raw.input.sequence>slot->lastRaw;
+        struct Proof {Slot* slot;const AmmoResourceView* view;const Bc2PhysicalFixedContainerSample* sample;
+            HandInteraction* hands;bool captured,exact=false;} proof{slot,&*view,&s,&hands,captured};
+        const bool ledgerRead=api_.withLedger(api_.context,view->binding,s.input.owner,&proof,
+            [](void* p,AmmunitionLedger& ledger)noexcept {
+                auto& q=*static_cast<Proof*>(p);auto& z=*q.slot;const auto& a=q.view->snapshot;const auto& b=ledger.Snapshot();
+                q.exact=z.ledger==&ledger&&ledger.Phase()==AmmunitionLedgerPhase::Ready&&
+                    !ledger.Pending()&&!ledger.WellEmpty()&&a.context==b.context&&a.counts==b.counts&&
+                    a.sequence==b.sequence&&a.observedNs==b.observedNs&&a.deadlineNs==b.deadlineNs&&b.coherentIdleVerified;
+                if(!q.exact||!q.captured)return q.exact;
+                const auto& x=*q.sample;auto original=x.raw.input;original.nowNs=x.input.nowNs;
+                const auto token=z.reservation->hand.token;
+                const auto resumed=q.hands->ResumeMechanismFrom(x.input,original,token,
+                    {token.contact,original.sequence,original.deadlineNs,true});
+                if(!resumed.claim||(!z.completedHold&&!z.policy->RebaseReservedMechanism(a,original,token,x.raw.weaponFromWrist)))return false;
+                z.hand=resumed.claim;z.lastRaw=original.sequence;return true;
+            });
+        out.blocksFire=slot->policy->BlocksFire();
+        if(!ledgerRead||!proof.exact){Cancel(s.input,hands,{HandReleaseSite::FixedRaw});return out;}
+        if(captured){
+            slot->reservation.reset();
+            // Re-entry consumes this actual packet only as a baseline. The next
+            // ordinary Tick needs strictly newer geometry to earn any progress.
+            const bool blocked=out.blocksFire;
+            const FixedContainerGate recoveryGate{view->binding,s.input.owner,slot->lifetime,++slot->revision,s.input.sequence,
+                s.input.observedNs,s.input.deadlineNs,blocked,!blocked};
+            const auto recoveryPublication=publish(recoveryGate);
+            if(recoveryPublication!=FixedContainerGateResult::Published){
+                if(recoveryPublication!=FixedContainerGateResult::BindingUnavailable||!reserve())
+                    Cancel(s.input,hands,{HandReleaseSite::FixedRaw});
+                return out;
+            }
+        }else if(!reservation.captureInput)reservation.captureInput=s.input.sequence;
+        auto& t=out.tracking;t.enabled=!slot->reservation;t.rawCaptureOnly=bool(slot->reservation);
+        t.recoverySequence=slot->reservation?slot->reservation->captureInput:0;
+        t.recoveryDeadlineNs=slot->reservation?slot->reservation->hand.deadlineNs:0;
+        t.source={e,view->binding,view->snapshot,s.family};t.input=s.input;t.gun=*gun;
+        t.hand=t.enabled?slot->hand:std::nullopt;t.lifetime=slot->lifetime;t.revision=slot->revision;
+        t.blocksFire=out.blocksFire=slot->policy->BlocksFire();t.step=slot->policy->Step();t.targetStep=slot->targetStep;
+        t.parts=slot->parts;t.partCount=unsigned(e->parts.size());t.grip=s.grip;
+        if(t.enabled){t.target=slot->target;
+            if(t.target&&slot->handFromContact)t.target=Multiply(*slot->handFromContact,*t.target);}
+        out.mechanismOwnsHand=t.enabled;out.status=FixedContainerStatus::Suspended;
+        return out;
+    }
+    // COMMIT CONTRACT: this successful before gate authorizes the following
+    // local policy/ledger changes. Existing Busy continuation retains its own
+    // narrow authorization. A later unavailable final gate cannot roll back
+    // committed physical steps or queued obligations, but grants NO submission
+    // or pose/part-write authority. Reservation uses heldAtEntry's deadline.
     FixedContainerResult result;std::optional<AmmoResourceRequest> dispatch;
     struct Work {Bc2PhysicalFixedContainer* self;Slot* slot;const Bc2PhysicalFixedContainerSample* sample;
         const AmmoResourceView* view;const std::optional<AmmoResourceOutcome>* terminal;HandInteraction* hands;
@@ -489,6 +586,11 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
     const bool published=publication==FixedContainerGateResult::Published;
     const bool trackingPermitted=published||(publication==FixedContainerGateResult::Busy&&continueHeld(gate));
     if(!trackingPermitted){slot->acceptedGate.reset();slot->supportNeutral.reset();}
+    if(publication==FixedContainerGateResult::BindingUnavailable){
+        if((beforePublication!=FixedContainerGateResult::Published||!reserve())&&!slot->request)
+            Cancel(s.input,hands,{HandReleaseSite::FixedRaw});
+    }else if(publication==FixedContainerGateResult::Rejected&&slot->hand&&slot->hand->token.kind==HandClaimKind::Mechanism)
+        Cancel(s.input,hands,{HandReleaseSite::FixedRaw});
     if(dispatch){
         // The service gate is established before native admission, outside its
         // ledger lock. Neither accepted submission nor final counts are a receipt.
@@ -509,8 +611,11 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
         t.pouchContact=d<=contact.radiusMeters*contact.radiusMeters;
     }
     out.ammoOwnsHand=slot->hand&&!slot->releaseWait&&slot->hand->token.kind==HandClaimKind::AmmoObject;
-    out.mechanismOwnsHand=slot->hand&&slot->hand->token.kind==HandClaimKind::Mechanism;
-    if(!slot->carried&&!slot->request){
+    out.mechanismOwnsHand=trackingPermitted&&!slot->reservation&&slot->hand&&slot->hand->token.kind==HandClaimKind::Mechanism;
+    if(publication==FixedContainerGateResult::BindingUnavailable){
+        t.hand.reset();t.target.reset();out.ammoOwnsHand=out.mechanismOwnsHand=false;
+    }
+    if(publication!=FixedContainerGateResult::BindingUnavailable&&!slot->carried&&!slot->request){
         if(const auto source=FixedContainerBodySource(t.source,s.input,s.input.nowNs)){
             AmmoSupplyVisualSample visual{true,false,*source,s.input,*gun,pouch_,frame_};
             if(AmmoSupplyVisualFresh(visual,s.input.nowNs)){out.bodyAmmo=t.source;out.bodyVisual=visual;}

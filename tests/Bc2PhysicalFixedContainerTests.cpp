@@ -26,7 +26,7 @@ struct Fixture {
     AmmunitionCounts counts{};bool delayedRaw=false,missingRaw=false,rendererFeedback=false,missingView=false,staleView=false,releaseLevels=false;
     const WeaponModeFamilyProfile* linkedFamily=nullptr;
     std::unique_ptr<Bc2PhysicalFixedContainer> physical;HandClaimToken gun{};
-    std::int64_t now=1000000000;bool priorGrip=false,allowGate=true,allowLedger=true;unsigned calls=0,gateCalls=0,busyGateMask=0,rejectedGateMask=0;
+    std::int64_t now=1000000000;bool priorGrip=false,allowGate=true,allowLedger=true;unsigned calls=0,gateCalls=0,busyGateMask=0,rejectedGateMask=0,unavailableGateMask=0;
     explicit Fixture(unsigned index=0):Fixture(&generated::FixedContainerEquipment[index],2,20){}
     Fixture(const FixedContainerEquipmentProfile* profile,int loaded,int reserve,bool typedGate=true):equipment(profile){
         counts={loaded,reserve,equipment->interaction.capacity};
@@ -50,6 +50,7 @@ struct Fixture {
         if(typedGate)api.publishGateObserved=[](void* p,const FixedContainerGate& g)noexcept {
             auto& f=*static_cast<Fixture*>(p);const auto mask=1u<<(f.gateCalls++%2);
             if(!f.allowGate||(f.rejectedGateMask&mask))return FixedContainerGateResult::Rejected;
+            if(f.unavailableGateMask&mask)return FixedContainerGateResult::BindingUnavailable;
             if(f.busyGateMask&mask)return FixedContainerGateResult::Busy;
             f.gate=g;return FixedContainerGateResult::Published;
         };
@@ -85,9 +86,9 @@ struct Fixture {
             // disabled/expired tracking produces invalid next-frame contact;
             // valid tracking carries its original input lease, never this Tick's.
             const auto& t=result.tracking;
-            if(!FixedContainerTrackingFresh(t,now))sample.raw={};
+            if(!FixedContainerRawCaptureFresh(t,now))sample.raw={};
             else{sample.raw.nativeOwner=t.source.binding.owner;sample.raw.equipment=t.source.equipment;sample.raw.input=t.input;
-                sample.raw.grip=t.grip;sample.raw.gripPressed=t.gripPressed;sample.raw.pouchContact=t.pouchContact;}
+                sample.raw.grip=t.grip;sample.raw.gripPressed=t.gripPressed;sample.raw.pouchContact=t.pouchContact;sample.raw.recoverySequence=t.recoverySequence;}
         }
         if(missingRaw)sample.raw={};
         priorGrip=grip;
@@ -1304,7 +1305,263 @@ int FixedCompletedHoldKeepsSafetyBoundaries(){
 }
 }
 
+// These are behavioral checks of the actual service, policy and hand arbiter;
+// the fixture reproduces the renderer's original-input/raw-capture boundary.
+namespace {
+int BeforeUnavailablePreservesReleasedOpenBlocker(){
+    for(bool migrate:{false,true}){
+        Fixture f;const auto& opening=f.equipment->interaction.geometry[0].motion;
+        f.Hinge(0);CHECK(f.result.tracking.step==FixedContainerStep::EjectSpent&&f.result.blocksFire);
+        f.Send(At(opening,1),false);
+        CHECK(!f.hands.Current(InteractionHand::Left)&&!f.result.tracking.hand&&f.result.blocksFire);
+        const auto committed=f.result.tracking;const auto counts=f.service.View()->snapshot.counts;
+        if(migrate){
+            ++f.native.owner.equipGeneration;f.binding.owner=f.native.owner;
+            ++f.binding.context.equipGeneration;++f.owner.equipGeneration;f.gun={};
+        }
+        f.unavailableGateMask=1;
+        for(unsigned n=0;n<2;++n){
+            f.Send(At(opening,1),false);
+            CHECK(f.result.blocksFire&&!f.result.tracking.enabled&&!f.result.tracking.rawCaptureOnly);
+            CHECK(!f.result.mechanismOwnsHand&&!f.result.ammoOwnsHand&&!f.result.tracking.hand&&!f.result.tracking.target);
+            CHECK(!f.result.bodyAmmo&&!f.result.bodyVisual&&!f.hands.Current(InteractionHand::Left));
+            CHECK(f.gateCalls==1&&f.calls==0&&f.service.View()->snapshot.counts==counts);
+        }
+        f.unavailableGateMask=0;f.Send(At(opening,1),false);
+        CHECK(f.result.blocksFire&&f.result.tracking.step==committed.step&&f.result.tracking.lifetime==committed.lifetime);
+        for(unsigned n=0;n<committed.partCount;++n)CHECK(f.result.tracking.parts[n].values==committed.parts[n].values);
+        f.Hinge(1);f.Send(At(f.equipment->interaction.geometry[2].motion,0),false,false,true);f.Hinge(3);
+        CHECK(f.result.tracking.step==FixedContainerStep::Complete&&!f.result.blocksFire);
+        f.Send(At(opening,0),false);f.unavailableGateMask=1;f.Send(At(opening,0),false);
+        CHECK(!f.result.blocksFire&&f.calls==0&&f.service.View()->snapshot.counts==counts);
+    }
+    return 0;
+}
+int BeforeUnavailablePreservesPendingAndAmmoBlockers(){
+    Fixture pending(1);pending.observe=true;const auto& insertion=pending.equipment->interaction.geometry[2].motion;
+    pending.Send(At(insertion,0),false);pending.Send(At(insertion,0),true,true);pending.Send(At(insertion,0),true);
+    for(unsigned n=1;n<=30;++n)pending.Send(At(insertion,n/30.),true);
+    for(unsigned n=0;n<8;++n)pending.Send(At(insertion,1),true);
+    pending.Send(At(insertion,1),false);
+    CHECK(pending.calls==1&&pending.submitted&&pending.result.tracking.pending&&pending.result.blocksFire);
+    CHECK(pending.observation.pendingRequest==pending.submitted&&!pending.hands.Current(InteractionHand::Left));
+    const auto request=pending.submitted;pending.unavailableGateMask=1;
+    for(unsigned n=0;n<2;++n){
+        pending.Send(At(insertion,1),false);
+        CHECK(pending.result.blocksFire&&!pending.result.tracking.enabled&&!pending.result.tracking.rawCaptureOnly);
+        CHECK(!pending.result.mechanismOwnsHand&&!pending.result.ammoOwnsHand&&!pending.result.bodyAmmo&&!pending.result.bodyVisual);
+        CHECK(pending.observation.pendingRequest==request&&pending.submitted==request&&pending.calls==1&&pending.gateCalls==1);
+        CHECK(pending.service.View()->snapshot.counts==pending.counts);
+    }
+    Fixture ammo;ammo.Hinge(0);ammo.Hinge(1);const auto& loading=ammo.equipment->interaction.geometry[2].motion;
+    ammo.Send(At(loading,0),false);ammo.Send(At(loading,0),true,true);ammo.Send(At(loading,0),true);
+    CHECK(ammo.result.blocksFire&&ammo.result.ammoOwnsHand&&ammo.result.tracking.hand);
+    const auto token=ammo.result.tracking.hand->token;CHECK(token.kind==HandClaimKind::AmmoObject);
+    ammo.unavailableGateMask=1;ammo.Send(At(loading,0),true);
+    CHECK(ammo.result.blocksFire&&!ammo.result.tracking.enabled&&!ammo.result.tracking.rawCaptureOnly);
+    CHECK(!ammo.result.ammoOwnsHand&&!ammo.result.mechanismOwnsHand&&!ammo.result.tracking.target);
+    CHECK(!ammo.result.bodyAmmo&&!ammo.result.bodyVisual&&!ammo.hands.Current(InteractionHand::Left));
+    CHECK(!ammo.hands.MechanismReservation(token)&&ammo.calls==0&&ammo.service.View()->snapshot.counts==ammo.counts);
+    return 0;
+}
+int RecoveryFailurePreservesCommittedOpenBlocker(){
+    for(unsigned fault=0;fault<4;++fault){
+        Fixture f;const auto& opening=f.equipment->interaction.geometry[0].motion;
+        f.Hinge(0);CHECK(f.result.tracking.step==FixedContainerStep::EjectSpent&&f.result.tracking.hand&&f.result.blocksFire);
+        const auto token=f.result.tracking.hand->token;
+        f.unavailableGateMask=1;f.Send(At(opening,1),true);
+        CHECK(f.hands.MechanismReservation(token)&&f.result.blocksFire);
+        f.unavailableGateMask=0;f.Send(At(opening,1),true);
+        CHECK(f.result.tracking.rawCaptureOnly&&f.result.blocksFire);
+        const auto capture=f.result.tracking;
+        f.Prepare(At(opening,1),true);f.sample.raw.recoverySequence=capture.recoverySequence;
+        if(fault==0)++f.sample.raw.nativeOwner.weapon;
+        if(fault==1)f.allowLedger=false;
+        if(fault==2)f.rejectedGateMask=2;
+        if(fault==3)f.busyGateMask=2;
+        f.Consume();
+        CHECK(f.result.blocksFire&&!f.result.tracking.enabled&&!f.result.tracking.rawCaptureOnly);
+        CHECK(!f.result.mechanismOwnsHand&&!f.result.ammoOwnsHand&&!f.result.bodyAmmo&&!f.result.bodyVisual);
+        CHECK(!f.hands.MechanismReservation(token)&&!f.hands.Current(InteractionHand::Left));
+        CHECK(f.calls==0&&f.service.View()->snapshot.counts==f.counts);
+        f.allowLedger=true;f.rejectedGateMask=f.busyGateMask=0;f.Send(At(opening,1),false);
+        CHECK(f.result.blocksFire&&f.result.tracking.step==FixedContainerStep::EjectSpent);
+        for(unsigned n=0;n<capture.partCount;++n)CHECK(f.result.tracking.parts[n].values==capture.parts[n].values);
+    }
+    return 0;
+}
+int RetiredOwnerDoesNotExportOpenBlocker(){
+    Fixture f;const auto& opening=f.equipment->interaction.geometry[0].motion;
+    f.Hinge(0);CHECK(f.result.blocksFire&&f.result.tracking.hand);
+    const auto token=f.result.tracking.hand->token;
+    f.unavailableGateMask=1;f.Send(At(opening,1),true);CHECK(f.hands.MechanismReservation(token));
+    f.Prepare(At(opening,1),true);++f.sample.nativeOwner.actorGeneration;f.Consume();
+    CHECK(!f.result.blocksFire&&!f.result.tracking.enabled&&f.gateCalls==0);
+    CHECK(!f.hands.MechanismReservation(token)&&!f.hands.Current(InteractionHand::Left));
+    ++f.native.owner.actorGeneration;f.binding.owner=f.native.owner;
+    ++f.binding.context.resource.actorGeneration;++f.owner.actorGeneration;f.gun={};f.unavailableGateMask=0;
+    f.Send(At(opening,0),false);
+    CHECK(f.result.tracking.enabled&&f.result.tracking.step==FixedContainerStep::Open&&!f.result.blocksFire&&f.calls==0);
+    return 0;
+}
+int BindingGapReservationsAcrossMechanicalRegistry(){
+    unsigned cases=0;
+    for(const auto registry:{std::span<const FixedContainerEquipmentProfile>(generated::FixedContainerEquipment),
+                            std::span<const FixedContainerEquipmentProfile>(generated::UnderbarrelFixedContainerEquipment)})
+        for(const auto& e:registry){
+            if(e.interaction.kind!=FixedContainerKind::Cylinder&&e.interaction.kind!=FixedContainerKind::SingleRoundBreech)continue;
+            for(unsigned position:{1u,2u})for(unsigned gaps:{1u,2u}){
+                Fixture f(&e,0,e.interaction.roundsPerInsertion);SelectFixedFamily(f);
+                const auto& motion=e.interaction.geometry[0].motion;
+                f.Send(At(motion,0),false);f.Send(At(motion,0),true);f.Send(At(motion,.25),true);
+                CHECK(f.result.mechanismOwnsHand&&f.result.tracking.hand);
+                const auto before=f.result.tracking;const auto entry=*before.hand;
+                f.unavailableGateMask=position;f.Send(At(motion,.30),true);
+                CHECK(!f.result.tracking.enabled&&!f.result.tracking.rawCaptureOnly&&!f.result.mechanismOwnsHand);
+                CHECK(!f.result.bodyAmmo&&!f.result.bodyVisual&&!f.result.tracking.target&&!f.result.tracking.hand);
+                CHECK(!f.hands.Current(InteractionHand::Left)&&f.calls==0);
+                auto reserved=f.hands.MechanismReservation(entry.token);
+                CHECK(reserved&&reserved->deadlineNs==entry.deadlineNs);
+                // Ordinary renew cannot use a reservation.
+                const auto renewed=f.hands.Renew(f.sample.input,entry.token,
+                    {entry.token.contact,f.sequence,f.sample.input.deadlineNs,true});
+                CHECK(!renewed.claim&&!f.hands.Current(InteractionHand::Left));
+                const auto transfer=f.hands.Transfer(f.sample.input,entry.token,
+                    {f.owner,InteractionHand::Left,HandClaimKind::WeaponSupport,f.sample.weapon,
+                     {{301,1},f.sequence,f.sample.input.deadlineNs,true},++f.intent,f.gun.id});
+                CHECK(!transfer.claim&&f.hands.MechanismReservation(entry.token));
+                if(gaps==2){f.unavailableGateMask=1;f.Send(At(motion,.30),true);
+                    CHECK(f.hands.MechanismReservation(entry.token)->deadlineNs==entry.deadlineNs);}
+                f.unavailableGateMask=0;f.rendererFeedback=true;f.Send(At(motion,position==1?.25:.30),true);
+                CHECK(f.result.tracking.rawCaptureOnly&&!f.result.tracking.enabled&&!f.result.mechanismOwnsHand);
+                CHECK(!FixedContainerTrackingFresh(f.result.tracking,f.now)&&FixedContainerRawCaptureFresh(f.result.tracking,f.now));
+                CHECK(!f.result.tracking.target&&!f.result.tracking.hand&&!f.hands.Current(InteractionHand::Left));
+                const auto committed=f.result.tracking;bool changed=false;
+                for(unsigned n=0;n<before.partCount;++n)changed|=before.parts[n].values!=committed.parts[n].values;
+                CHECK(changed==(position==2)); // Before: no progress. Final: explicit prior-gate commit.
+                CHECK(committed.step==before.step&&committed.lifetime==before.lifetime&&f.calls==0);
+                f.Send(At(motion,position==1?.25:.30),true);
+                CHECK(f.result.tracking.enabled&&!f.result.tracking.rawCaptureOnly&&f.result.mechanismOwnsHand);
+                CHECK(f.result.tracking.hand&&f.result.tracking.hand->token==entry.token);
+                CHECK(f.result.tracking.hand->deadlineNs==entry.deadlineNs&&!f.hands.MechanismReservation(entry.token));
+                for(unsigned n=0;n<before.partCount;++n)CHECK(f.result.tracking.parts[n].values==committed.parts[n].values);
+                CHECK(f.result.tracking.step==committed.step&&f.result.tracking.lifetime==before.lifetime&&f.calls==0);
+                // An actual newer movement, after the recovery baseline, may progress.
+                f.Send(At(motion,position==1?.30:.35),true);
+                CHECK(f.result.mechanismOwnsHand&&f.result.tracking.hand->token==entry.token&&f.calls==0);
+                ++cases;
+            }
+        }
+    CHECK(cases==236);return 0;
+}
+int BindingGapRequiresNewContactAndExpires(){
+    for(unsigned fault=0;fault<6;++fault){
+        Fixture f;const auto& motion=f.equipment->interaction.geometry[0].motion;
+        f.Send(At(motion,0),false);f.Send(At(motion,0),true);
+        const auto entry=*f.result.tracking.hand;const auto oldRaw=f.sample.raw;
+        f.unavailableGateMask=1;f.Send(At(motion,0),true);
+        f.unavailableGateMask=0;f.Send(At(motion,0),true);
+        CHECK(f.result.tracking.rawCaptureOnly&&!f.hands.Current(InteractionHand::Left));
+        const auto capture=f.result.tracking;
+        f.Prepare(At(motion,0),true);
+        switch(fault){
+        case 0:f.sample.raw={};break;
+        case 1:f.sample.raw=oldRaw;break;
+        case 2:f.sample.raw.recoverySequence=capture.recoverySequence+1;break;
+        case 3:f.sample.raw.recoverySequence=capture.recoverySequence;
+            f.sample.raw.weaponFromWrist.values[3][0]+=1;break;
+        case 4:f.sample.raw.recoverySequence=capture.recoverySequence;
+            f.sample.raw.input.sequence+=100;break;
+        case 5:f.sample.raw.recoverySequence=capture.recoverySequence;
+            f.sample.raw.input.observedNs-=1;break; // Unrecorded counterfeit packet.
+        }
+        f.Consume();CHECK(!f.result.tracking.enabled&&!f.hands.Current(InteractionHand::Left));
+        CHECK(f.hands.MechanismReservation(entry.token)&&f.hands.MechanismReservation(entry.token)->deadlineNs==entry.deadlineNs);
+        f.now=entry.deadlineNs-10000000;f.Send(At(motion,0),true);
+        CHECK(!f.hands.MechanismReservation(entry.token)&&!f.hands.Current(InteractionHand::Left)&&f.calls==0);
+        f.Send(At(motion,0),true);CHECK(!f.result.mechanismOwnsHand); // Held input cannot resurrect expiry.
+    }
+    return 0;
+}
+int BindingGapRevokesObservableContradictions(){
+    for(unsigned fault=0;fault<15;++fault){
+        Fixture f;const auto& motion=f.equipment->interaction.geometry[0].motion;
+        f.Send(At(motion,0),false);f.Send(At(motion,0),true);
+        const auto token=f.result.tracking.hand->token;
+        f.unavailableGateMask=1;f.Send(At(motion,0),true);
+        CHECK(f.hands.MechanismReservation(token));
+        f.unavailableGateMask=0;
+        switch(fault){
+        case 0:++f.binding.inventory;break;
+        case 1:++f.binding.switching;break;
+        case 2:++f.binding.data;break;
+        case 3:++f.binding.persistence;break;
+        case 4:++f.binding.context.resource.weaponGeneration;break;
+        case 5:++f.owner.equipGeneration;break;
+        case 6:f.missingView=true;break;
+        case 7:f.staleView=true;break;
+        case 8:f.allowLedger=false;break;
+        case 9:f.rejectedGateMask=1;break;
+        }
+        f.Prepare(At(motion,0),fault!=10);
+        switch(fault){
+        case 11:f.sample.cancel=true;break;
+        case 12:(void)f.hands.Release(f.sample.input,f.gun);break;
+        case 13:f.sample.input.focused=false;break;
+        case 14:++f.sample.raw.nativeOwner.weapon;break;
+        }
+        f.Consume();CHECK(!f.hands.MechanismReservation(token)&&!f.hands.Current(InteractionHand::Left)&&f.calls==0);
+        if(fault==9){f.rejectedGateMask=0;f.busyGateMask=3;f.Send(At(motion,0),true);
+            CHECK(!f.result.mechanismOwnsHand&&!f.result.tracking.enabled);}
+    }
+    return 0;
+}
+int FinalUnavailablePreservesQueuedObligationWithoutDispatch(){
+    Fixture f(1);const auto& insertion=f.equipment->interaction.geometry[2].motion;
+    f.Send(At(insertion,0),false);f.Send(At(insertion,0),true,true);f.Send(At(insertion,0),true);
+    for(unsigned n=1;n<=30;++n)f.Send(At(insertion,n/30.),true);
+    for(unsigned n=0;n<8;++n)f.Send(At(insertion,1),true);
+    f.unavailableGateMask=2;f.Send(At(insertion,1),false);
+    CHECK(f.result.tracking.pending&&!f.result.tracking.enabled&&f.result.blocksFire);
+    CHECK(f.calls==0&&!f.submitted&&f.service.View()->snapshot.counts==f.counts);
+    f.unavailableGateMask=0;f.Send(At(insertion,1),false);
+    CHECK(!f.result.tracking.pending&&f.calls==0&&!f.submitted&&f.service.View()->snapshot.counts==f.counts);
+    return 0;
+}
+int BindingGapResetsDwellAndPreservesCommittedStep(){
+    for(bool finalCommit:{false,true}){
+        Fixture f;const auto& motion=f.equipment->interaction.geometry[0].motion;
+        f.Send(At(motion,0),false);f.Send(At(motion,0),true);
+        for(unsigned n=1;n<=10;++n)f.Send(At(motion,n/10.),true);
+        CHECK(f.result.tracking.step==FixedContainerStep::Open&&motion.endpointDwellNs==60000000);
+        if(finalCommit)for(unsigned n=0;n<5;++n)f.Send(At(motion,1),true);
+        CHECK(f.result.tracking.step==FixedContainerStep::Open);
+        const auto entry=*f.result.tracking.hand;
+        f.unavailableGateMask=finalCommit?2:1;f.Send(At(motion,1),true);
+        CHECK(f.hands.MechanismReservation(entry.token)&&!f.hands.Current(InteractionHand::Left));
+        // Gap time exceeds dwell but stays inside the original 100 ms lease.
+        if(!finalCommit)f.now+=50000000;
+        f.unavailableGateMask=0;f.rendererFeedback=true;f.Send(At(motion,1),true);
+        CHECK(f.result.tracking.rawCaptureOnly&&f.result.tracking.step==
+            (finalCommit?FixedContainerStep::EjectSpent:FixedContainerStep::Open));
+        const auto committed=f.result.tracking.parts;
+        f.Send(At(motion,1),true);
+        CHECK(f.result.mechanismOwnsHand&&f.result.tracking.hand->token==entry.token&&
+            f.result.tracking.hand->deadlineNs==entry.deadlineNs);
+        f.Send(At(motion,1),true);
+        CHECK(f.result.tracking.step==(finalCommit?FixedContainerStep::EjectSpent:FixedContainerStep::Open));
+        for(unsigned n=0;n<f.result.tracking.partCount;++n)CHECK(f.result.tracking.parts[n].values==committed[n].values);
+        CHECK(f.calls==0);
+    }
+    return 0;
+}
+}
 int main(){
+    if(BeforeUnavailablePreservesReleasedOpenBlocker()||BeforeUnavailablePreservesPendingAndAmmoBlockers()||
+       RecoveryFailurePreservesCommittedOpenBlocker()||RetiredOwnerDoesNotExportOpenBlocker())return 1;
+    if(BindingGapReservationsAcrossMechanicalRegistry()||BindingGapRequiresNewContactAndExpires()||
+       BindingGapRevokesObservableContradictions()||FinalUnavailablePreservesQueuedObligationWithoutDispatch()||
+       BindingGapResetsDwellAndPreservesCommittedStep())return 1;
     if(FixedPartialRecoveryPreservesNaturalWristAndMeasuredParts())return 1;
     if(FixedMechanicalGraspAndHeldEndpointAcrossRegistry()||FixedCompletedHoldKeepsSafetyBoundaries())return 1;if(DuplicateRawRetainsExactReleaseUntilEligibleGeometry()||DuplicateReleaseCannotOutliveItsEvidence())return 1;
     if(FixedReleaseCauseDiagnostics())return 1;

@@ -191,6 +191,33 @@ public:
         if(!feed_interaction_detail::Same(expected,motion))return false;
         prior=motion;Suspend();return true;
     }
+    // Called only after fresh binding+ledger+hand proof and an actual post-gap
+    // raw capture. Preserve committed travel; this packet earns no movement,
+    // endpoint dwell, step or request. Never extend the gesture's start clock.
+    [[nodiscard]] bool RebaseReservedMechanism(const AmmunitionSnapshot& snapshot,
+        const HandInteractionSample& input,const HandClaimToken& token,const math::Matrix4& wrist)noexcept {
+        if(!bound_||pending_||step_==FixedContainerStep::Insert||step_==FixedContainerStep::Complete||
+           !gestureClaim_||*gestureClaim_!=token||!gesture_.bound_||!gesture_.moving_||
+           !Snapshot(snapshot,input.nowNs)||snapshot.sequence<lastSnapshot_||
+           input.sequence<=lastInput_||input.observedNs<=gesture_.lastObserved_||input.nowNs<lastNow_||
+           !feed_mechanism_detail::Pose(wrist)||ledger_.Phase()!=AmmunitionLedgerPhase::Ready||
+           ledger_.Pending()||ledger_.WellEmpty()||ledger_.Snapshot().context!=snapshot.context||
+           ledger_.Snapshot().counts!=snapshot.counts)return false;
+        const auto& motion=profile_.geometry[static_cast<unsigned>(step_)].motion;
+        if(motion.kind==FeedMotionKind::FreePlacement)return false;
+        auto local=feed_interaction_detail::Multiply(wrist,feed_interaction_detail::Inverse(motion.weaponFromMotion));
+        if(motion.kind==FeedMotionKind::Hinge){
+            const auto held=feed_interaction_detail::Along(gesture_.grabbed_,motion.kind,gesture_.travel_);
+            for(unsigned n=0;n<3;++n)gesture_.hingeOffset_[n]=held.values[3][n]-local.values[3][n];
+        }else gesture_.grabbed_=feed_interaction_detail::Along(local,motion.kind,-gesture_.travel_);
+        gesture_.previous_=wrist;gesture_.endpoint_=0;
+        gesture_.placementDwelled_=gesture_.recoveryDwelled_=false;
+        // Rebase the stream floor; the next Update must consume a newer packet.
+        gesture_.lastInput_=input.sequence;gesture_.lastObserved_=input.observedNs;
+        gesture_.lastRaw_=wrist;gesture_.lastNow_=input.nowNs;
+        lastInput_=input.sequence;lastInputDeadline_=input.deadlineNs;lastNow_=input.nowNs;
+        return true;
+    }
     [[nodiscard]] std::optional<FeedMotionRecovery> RecoveryMotion()const noexcept{return gesture_.RecoveryMotion();}
     [[nodiscard]] bool RecoverMotion(const FixedContainerSample& x,const FeedMotionRecovery& proof,
         const std::optional<FeedRecoveryFrame>& frame={})noexcept {

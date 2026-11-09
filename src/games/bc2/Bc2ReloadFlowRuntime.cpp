@@ -774,6 +774,7 @@ public:
     bool Requested()const noexcept{return ticket_.epoch!=0;}
     FixedContainerGateResult Reject(const char* reason)noexcept{row.refusal=reason;return FixedContainerGateResult::Rejected;}
     FixedContainerGateResult Busy(const char* reason)noexcept{row.refusal=reason;return FixedContainerGateResult::Busy;}
+    FixedContainerGateResult Unavailable(const char* reason)noexcept{row.refusal=reason;return FixedContainerGateResult::BindingUnavailable;}
     ~FixedGateCapture(){
         if(!Requested())return;
         row.endNs=Now();
@@ -4110,9 +4111,15 @@ FixedContainerGateResult PublishFixedContainerGateResult(const FixedContainerGat
     if(!RequestOwnerEvidence(*lease,ownerNow,capture.Requested()?&diagnostic.boundary:nullptr,
         capture.Requested()?&diagnostic.ownerEvidence:nullptr))return capture.Reject("native_owner");
     const auto bindingNow=Now();if(capture.Requested())diagnostic.bindingReadNs=bindingNow;
-    const auto current=ammoResourceBindings.Read(binding.owner,bindingNow,capture.Requested()?&diagnostic.bindingRead:nullptr);
-    if(capture.Requested())diagnostic.bindingReadEndNs=Now();
-    if(!current)return capture.Reject("binding_read");
+    // The typed result is operational evidence, even with diagnostics disabled.
+    AmmoResourceBindingReadObservation bindingRead;
+    const auto current=ammoResourceBindings.Read(binding.owner,bindingNow,&bindingRead);
+    if(capture.Requested()){diagnostic.bindingRead=bindingRead;diagnostic.bindingReadEndNs=Now();}
+    if(!current){
+        if(bindingRead.reason==AmmoResourceBindingReadReason::Busy||bindingRead.reason==AmmoResourceBindingReadReason::Revision)
+            return capture.Unavailable("binding_read");
+        return capture.Reject("binding_read");
+    }
     if(current->context!=binding.context)return capture.Reject("binding_context");
     if(current->inventory!=binding.inventory)return capture.Reject("binding_inventory");
     if(current->switching!=binding.switching)return capture.Reject("binding_switching");

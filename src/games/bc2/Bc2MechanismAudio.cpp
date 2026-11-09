@@ -1,4 +1,5 @@
 #include "Bc2MechanismAudio.h"
+#include "fvr/platform/windows/RetainedModuleThread.h"
 #include "Bc2AudioCachePath.h"
 #include "Bc2ShellReloadAudio.h"
 #include "Bc2SelectedKnifeNative.h"
@@ -128,7 +129,7 @@ void __fastcall End(void* self,void*,const void* guid,unsigned unused){Dispatch(
 
 struct CueWave {std::vector<char> pcm;};
 std::array<CueWave,2> waves;
-std::mutex queueMutex;std::condition_variable queueChanged;std::thread worker;
+std::mutex queueMutex;std::condition_variable queueChanged;platform::RetainedModuleThread worker;
 void WakeAudioPlayer()noexcept {queueChanged.notify_one();}
 enum class CueDisposition:unsigned { ObservedOnly,NotReady,QueueFull,Queued,Playing,Completed,Interrupted,Stale,Failed,StockStartNotSuppressed };
 enum class CueStop:unsigned { None,Completed,MissingSource,ExpiredOrUntracked,ItemLifetimeChanged,CycleSuperseded,NextCue,Shutdown,Failure,RouteChanged,StockStartPassed };
@@ -362,7 +363,7 @@ bool Install(std::uintptr_t image,const Config& config){
     if(MH_CreateHook(hooks[0],reinterpret_cast<void*>(&Start),reinterpret_cast<void**>(&startOriginal))!=MH_OK){hooks={};return false;}
     if(MH_CreateHook(hooks[1],reinterpret_cast<void*>(&End),reinterpret_cast<void**>(&stopOriginal))!=MH_OK){MH_RemoveHook(hooks[0]);hooks={};return false;}
     replacing=config.replaceSpas;workerQuit=false;
-    if(config.replaceSpas)worker=std::thread(Player);
+    if(config.replaceSpas)worker.Start(Player);
     enabled.store(true,std::memory_order_release);
     if(MH_EnableHook(hooks[0])!=MH_OK||MH_EnableHook(hooks[1])!=MH_OK){Stop();DrainAndRemove();return false;}
     return true;

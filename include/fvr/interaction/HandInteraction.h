@@ -1,5 +1,6 @@
 #pragma once
 #include <array>
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -192,11 +193,19 @@ public:
     HandGunCustodyResult TransferGunCustody(const HandInteractionSample& currentSafety,const HandGunCustodyTransfer&)noexcept;
     HandInteractionResult Release(const HandInteractionSample&,const HandClaimToken&,HandReleaseCause cause={})noexcept;
     HandInteractionResult Reset()noexcept;
+    // An inert reservation occupies the hand but grants no Current/Renew/Transfer
+    // authority. Safety, release, root loss and the ORIGINAL deadline still drop it.
+    bool ReserveMechanism(const HandInteractionSample&,const HandClaimToken&,std::int64_t originalDeadline)noexcept;
+    std::optional<HandClaim> MechanismReservation(const HandClaimToken& token)const noexcept {
+        return Exact(token)&&reserved_[Index(token.hand)]?claims_[Index(token.hand)]:std::nullopt;
+    }
+    HandInteractionResult ResumeMechanismFrom(const HandInteractionSample&,const HandInteractionSample&,
+        const HandClaimToken&,const HandContactProof&)noexcept;
     void ObserveDrops(HandDropObserver observer)noexcept{dropObserver_=observer;}
     // Inspect only after Update with the current clock/input. This is not a
     // clock source and cannot expire a lease while the adapter is not ticking.
     std::optional<HandClaim> Current(InteractionHand hand)const noexcept {
-        return ValidHand(hand)?claims_[Index(hand)]:std::nullopt;
+        return ValidHand(hand)&&!reserved_[Index(hand)]?claims_[Index(hand)]:std::nullopt;
     }
     // Validate delayed geometry provenance independently of a newer held-grip
     // claim. Read-only: callers must Update with current safety first. This
@@ -245,6 +254,8 @@ private:
     HandInteractionResult Refresh(const HandInteractionSample&,const HandClaimToken&,const HandContactProof&,const HandInteractionSample* evidence)noexcept;
     HandInteractionConfig config_{};
     std::array<std::optional<HandClaim>,2> claims_{};
+    std::array<bool,2> reserved_{};
+    std::array<std::uint64_t,2> reservationInput_{};
     HandInteractionSample sample_{};
     std::array<std::uint64_t,2> intents_{},releaseBarrier_{},invalidationBarrier_{};
     std::array<HandInteractionSample,32> history_{};
@@ -258,7 +269,7 @@ inline void HandInteraction::Drop(std::size_t hand,HandInteractionReason reason,
     if(!claims_[hand])return;
     if(dropObserver_.drop)dropObserver_.drop(dropObserver_.context,*claims_[hand],reason,cause);
     for(auto& event:out.released)if(!event){event=HandClaimRelease{claims_[hand]->token,reason};break;}
-    claims_[hand].reset();
+    claims_[hand].reset();reserved_[hand]=false;reservationInput_[hand]=0;
 }
 inline void HandInteraction::DropAll(HandInteractionReason reason,HandInteractionResult& out)noexcept {
     for(std::size_t h=0;h<2;++h)Drop(h,reason,out);
@@ -368,6 +379,7 @@ inline bool HandInteraction::Available(InteractionHand hand,HandInteractionResul
     if(!sample_.focused){out.reason=HandInteractionReason::FocusLost;return false;}
     if(!sample_.tracked[Index(hand)]){out.reason=HandInteractionReason::TrackingLost;return false;}
     if(sample_.released[Index(hand)]){out.reason=HandInteractionReason::Released;return false;}
+    if(reserved_[Index(hand)]){out.reason=HandInteractionReason::HandOccupied;return false;}
     return true;
 }
 inline bool HandInteraction::Evidence(const HandInteractionSample& source,InteractionHand hand,HandInteractionResult& out,bool awaitingRelease)const noexcept {
@@ -446,6 +458,31 @@ inline HandInteractionResult HandInteraction::Change(const HandInteractionSample
     if(old)Drop(Index(old->hand),HandInteractionReason::Transferred,out);
     claims_[h]=next;DropDependents(out);
     out.accepted=true;out.reason=HandInteractionReason::None;out.claim=next;return out;
+}
+inline bool HandInteraction::ReserveMechanism(const HandInteractionSample& s,const HandClaimToken& token,std::int64_t deadline)noexcept {
+    auto out=Prepare(s);
+    if(!out.inputValid||!Exact(token)||token.kind!=HandClaimKind::Mechanism||!token.prerequisiteClaim)return false;
+    const auto h=Index(token.hand);const auto root=Current(h?InteractionHand::Left:InteractionHand::Right);
+    if(!root||root->token.kind!=HandClaimKind::GunHold||root->token.id!=token.prerequisiteClaim||
+       root->token.owner!=token.owner||root->token.item!=token.item||root->inputSequence!=s.sequence||
+       root->deadlineNs<=s.nowNs||deadline<=s.nowNs||deadline>claims_[h]->deadlineNs)return false;
+    claims_[h]->deadlineNs=deadline;
+    if(!reserved_[h])reservationInput_[h]=s.sequence;
+    reserved_[h]=true;return true;
+}
+inline HandInteractionResult HandInteraction::ResumeMechanismFrom(const HandInteractionSample& s,
+    const HandInteractionSample& source,const HandClaimToken& token,const HandContactProof& proof)noexcept {
+    auto out=Prepare(s);
+    if(!out.inputValid||!Exact(token)||!reserved_[Index(token.hand)]){out.reason=HandInteractionReason::StaleToken;return out;}
+    const auto h=Index(token.hand);const auto root=Current(h?InteractionHand::Left:InteractionHand::Right);
+    if(!root||root->token.kind!=HandClaimKind::GunHold||root->token.id!=token.prerequisiteClaim||
+       root->token.owner!=token.owner||root->token.item!=token.item||root->inputSequence!=s.sequence||
+       root->deadlineNs<=s.nowNs||source.sequence<=reservationInput_[h]||proof.key!=token.contact||
+       !Evidence(source,token.hand,out)||!Contact(proof,out,&source))return out;
+    auto& claim=*claims_[h];claim.inputSequence=source.sequence;
+    claim.deadlineNs=(std::min)(claim.deadlineNs,proof.deadlineNs);
+    reserved_[h]=false;reservationInput_[h]=0;
+    out.accepted=true;out.reason=HandInteractionReason::None;out.claim=claim;return out;
 }
 inline HandInteractionResult HandInteraction::Acquire(const HandInteractionSample& s,const HandClaimRequest& r)noexcept {
     return Change(s,nullptr,r);

@@ -244,7 +244,9 @@ int LiveObservationCases(){
     return 0;
 }
 }
+#include "KnifeNativeReadDiagnosticCases.inc"
 int main(){
+    CHECK(!knife_read_diagnostic_cases::Cases());
     {
         private_knife::Item item;
         for(auto* s:{&item.client.branches[0],&item.client.branches[1],&item.server})s->currentState=s->nextState=2;

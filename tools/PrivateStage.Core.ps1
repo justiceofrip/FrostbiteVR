@@ -52,13 +52,15 @@ function Assert-StageSameRoots($Actual,$Expected) {
     $e=@($Expected|ForEach-Object {[IO.Path]::GetFullPath($_).TrimEnd('\').ToLowerInvariant()}|Sort-Object -Unique)
     Assert-Stage ($a.Count -eq 13 -and $e.Count -eq 13 -and ($a -join "`n") -ceq ($e -join "`n")) 'fresh inventory must contain the exact accepted 13 roots'
 }
-function New-PrivateStageDecision($ConfigPin,[string]$InstallRoot,[string]$LauncherCommit,$ReviewedPins,$ReviewedPinSetPin) {
+function New-PrivateStageDecision($ConfigPin,[string]$InstallRoot,[string]$LauncherCommit,$ReviewedPins,$ReviewedPinSetPin,[long]$MaxGeneratedBytes=52GB) {
     Assert-StagePin $ConfigPin
     Assert-StagePin $ReviewedPinSetPin
     $expectedNames=@('launcher/runtime/Entry.ps1','launcher/runtime/Session.ps1','launcher/runtime/Runtime.Core.ps1','launcher/runtime/PrivateSession.ps1','tools/Invoke-Bc2XrGameSimulation.ps1')
     Assert-Stage ($ReviewedPins.schema -ceq 'fvr.private-stage-reviewed-launcher.v1' -and @($ReviewedPins.files).Count -eq 5 -and @($ReviewedPins.files.path|Select-Object -Unique).Count -eq 5 -and @($ReviewedPins.files.path|Where-Object {$_ -cnotin $expectedNames}).Count -eq 0) 'exact reviewed launcher pinset required'
     $c=Read-StageJson $ConfigPin.path
     Assert-Stage ($c.schema -ceq 'fvr.native-batch.v1' -and $c.root_accepted -is [bool] -and $c.root_accepted) 'accepted native batch required'
+    Assert-Stage ($MaxGeneratedBytes -gt 0) 'stage budget ceiling must be positive'
+    Assert-Stage ($c.budget.root_authorized -is [bool] -and $c.budget.root_authorized -and $MaxGeneratedBytes -le $c.budget.freeze_ceiling_bytes -and $c.budget.floor_bytes -eq 15GB) 'stage budget must not exceed the accepted build freeze ceiling and must retain the 15 GiB floor'
     Assert-Stage ($c.source_commit -cmatch '^[a-f0-9]{40}$' -and $c.source_sha256 -cmatch '^[a-f0-9]{64}$') 'final native source identity required'
     Assert-Stage ($LauncherCommit -cmatch '^[a-f0-9]{40}$') 'explicit final launcher commit required'
     foreach($path in @($c.repository,$c.run,$InstallRoot)){Assert-StageNoLinks $path}
@@ -80,7 +82,6 @@ function New-PrivateStageDecision($ConfigPin,[string]$InstallRoot,[string]$Launc
     $m=Read-StageJson $manifest.path;$a=Read-StageJson $active.path
     Assert-Stage ($m.schema -ceq 'bc2vr.runtime.v1' -and $m.version -ceq '0.1.77' -and $m.diagnostic_only -is [bool] -and -not $m.diagnostic_only) 'installed77 normal manifest required'
     Assert-Stage ($a.current -ceq '0.1.77' -and $a.previous -ceq '0.1.76') 'installed77/fallback76 identity differs'
-    Assert-Stage ($c.budget.root_authorized -is [bool] -and $c.budget.root_authorized -and $c.budget.freeze_ceiling_bytes -ge 52GB -and $c.budget.floor_bytes -eq 15GB) 'accepted build freeze must cover the fixed 52 GiB stage budget with 15 GiB floor'
     Assert-StageSameRoots $c.budget.roots $c.budget.roots
     $app=@();foreach($name in 'Launcher.Core.ps1','Launcher.Storage.ps1'){$app+=Get-StagePin (Get-FvrChild $InstallRoot ('versions/0.1.77/app/'+$name))}
     $d=[ordered]@{
@@ -93,7 +94,7 @@ function New-PrivateStageDecision($ConfigPin,[string]$InstallRoot,[string]$Launc
         shared_build_state=(Get-StagePin (Join-Path $c.run 'private-x86/shared-build-state.json'))
         installed_runtime_manifest=$manifest;installed_active=$active;installed_app_files=$app
         reviewed_runtime_scripts=$scriptPins;reviewed_runner=$runner;reviewed_launcher_pinset=$ReviewedPinSetPin
-        budget=@{roots=@($c.budget.roots);max_generated_bytes=52GB;min_free_bytes=15GB;raw_capture_bytes=0}
+        budget=@{roots=@($c.budget.roots);max_generated_bytes=$MaxGeneratedBytes;min_free_bytes=15GB;raw_capture_bytes=0}
         estimate=$null
     }
     $plan=Get-PrivateStageCopyPlan $d
@@ -169,15 +170,15 @@ function Invoke-PrivateStage($DecisionPin,$ReviewedPins,[switch]$RootAccept) {
     $d=Read-StageJson $DecisionPin.path
     Assert-Stage ($d.schema -ceq 'fvr.private-stage-decision.v1' -and $d.root_accepted -is [bool] -and $d.root_accepted -and -not [string]::IsNullOrWhiteSpace($d.reason)) 'pinned ROOT-accepted decision and reason required'
     # Recreate the entire plan from live pinned inputs. No final IDs are inferred from draft values.
-    $fresh=New-PrivateStageDecision $d.native_batch_config $d.install_root $d.launcher_source_commit $ReviewedPins $d.reviewed_launcher_pinset
+    $fresh=New-PrivateStageDecision $d.native_batch_config $d.install_root $d.launcher_source_commit $ReviewedPins $d.reviewed_launcher_pinset -MaxGeneratedBytes $d.budget.max_generated_bytes
     foreach($key in $fresh.Keys|Where-Object {$_ -notin @('root_accepted','reason','created_utc')}){
         Assert-Stage (Test-StageSameValue $fresh[$key] $d[$key]) ('reviewed decision changed: '+$key)
     }
     $plan=Get-PrivateStageCopyPlan $d
     $c=Read-StageJson $d.native_batch_config.path
     Assert-Stage (-not $d.stage_root.StartsWith($d.install_root.TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase)) 'stage must be separate from install'
-    # A fresh complete scan, never a previous receipt or launch handoff. Fixed stage limits.
-    $admission=Assert-FvrStorageBudget -RepositoryRoot $d.repository -OutputPath $d.stage_root -Operation Build -PlannedBytes $plan.estimate.planned_bytes -RawCaptureBytes 0 -MaxGeneratedBytes 52GB -MinFreeBytes 15GB -AdditionalRoots @($d.budget.roots)
+    # A fresh complete scan, never a previous receipt or launch handoff. Use the pinned reviewed ceiling.
+    $admission=Assert-FvrStorageBudget -RepositoryRoot $d.repository -OutputPath $d.stage_root -Operation Build -PlannedBytes $plan.estimate.planned_bytes -RawCaptureBytes 0 -MaxGeneratedBytes $d.budget.max_generated_bytes -MinFreeBytes 15GB -AdditionalRoots @($d.budget.roots)
     Assert-StageSameRoots @($admission.generated.roots|ForEach-Object {$_.path}) $d.budget.roots
     Assert-Stage (-not (Test-Path -LiteralPath $d.stage_root)) 'stage appeared during admission'
     Assert-StageNoLinks $d.stage_root

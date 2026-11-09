@@ -1212,13 +1212,13 @@ void PublishTracking(const Tracking& source)noexcept {
     if(!MagazineTrackingAdmitted(next,ReloadNanos(next.deadline),ReloadNanos()))next.magazine={};
     magazineGuard.store(next.magazine.enabled?std::make_shared<const MagazineTracking>(next.magazine):
         std::shared_ptr<const MagazineTracking>{},std::memory_order_release);
-    if(next.fixedContainer.enabled){
+    if(next.fixedContainer.enabled||next.fixedContainer.rawCaptureOnly){
         const auto& fixed=next.fixedContainer;
         const auto& owner=fixed.source.binding.owner;
         if(owner.soldier!=next.soldier||owner.weak!=next.weak||owner.weapon!=next.weapon||
            owner.actorGeneration!=next.ownerGeneration||owner.space!=next.input.spaceGeneration||
            fixed.input.sequence!=next.input.generation||fixed.input.deadlineNs>ReloadNanos(next.deadline)||
-           !FixedContainerTrackingFresh(fixed,ReloadNanos())){next.fixedContainer={};next.fixedBodyAmmo.reset();}
+           !FixedContainerRawCaptureFresh(fixed,ReloadNanos())){next.fixedContainer={};next.fixedBodyAmmo.reset();}
     }else next.fixedBodyAmmo.reset();
     fixedContainerGuard.store(next.fixedContainer.enabled?std::make_shared<const Bc2FixedContainerTracking>(next.fixedContainer):
         std::shared_ptr<const Bc2FixedContainerTracking>{},std::memory_order_release);
