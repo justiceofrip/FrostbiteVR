@@ -270,7 +270,10 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
         if(releaseAttempt)releaseAttempt->stage=Bc2FixedContainerReleaseStage::GateUnavailable;
         slot->releaseWait.reset();
         slot->acceptedGate.reset();slot->supportNeutral.reset();out.blocksFire=priorBlocked;
-        if(slot->reservation||(slot->hand&&slot->hand->token.kind==HandClaimKind::Mechanism))
+        // Busy expiry withdraws tracking while ordinary custody keeps its existing lease.
+        // An inert reservation or explicit rejection must revoke the mechanical claim.
+        if(slot->reservation||(beforePublication==FixedContainerGateResult::Rejected&&
+           slot->hand&&slot->hand->token.kind==HandClaimKind::Mechanism))
             Cancel(s.input,hands,{HandReleaseSite::FixedRaw});
         return out;
     }

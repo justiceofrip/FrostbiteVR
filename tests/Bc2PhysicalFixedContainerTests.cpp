@@ -213,12 +213,35 @@ int BusyExpiresWithoutGateLeaseExtension(){
     f.Send(At(m,0),false);f.Send(At(m,0),true);CHECK(f.result.mechanismOwnsHand);
     const auto accepted=f.gate;f.busyGateMask=3;f.rendererFeedback=true;
     for(unsigned n=1;n<10;++n){f.Send(At(m,0),true);CHECK(f.result.tracking.enabled&&f.gate==accepted);}
+    const auto heldBeforeExpiry=f.hands.Current(InteractionHand::Left);CHECK(heldBeforeExpiry);
     f.Send(At(m,0),true);
     CHECK(f.now==accepted->deadlineNs&&f.sample.raw.valid&&!f.result.tracking.enabled&&f.gate==accepted&&f.calls==0);
     CHECK(f.hands.Current(InteractionHand::Left)&&f.hands.Current(InteractionHand::Left)->deadlineNs>f.now);
+    const auto heldAfterExpiry=*f.hands.Current(InteractionHand::Left);
+    CHECK(heldAfterExpiry.token==heldBeforeExpiry->token&&heldAfterExpiry.deadlineNs==heldBeforeExpiry->deadlineNs&&
+          heldAfterExpiry.inputSequence==heldBeforeExpiry->inputSequence);
+    CHECK(!f.hands.MechanismReservation(heldAfterExpiry.token)&&!f.result.tracking.rawCaptureOnly);
+    CHECK(!f.result.mechanismOwnsHand&&!f.result.ammoOwnsHand&&f.result.blocksFire);
     f.busyGateMask=0;f.Send(At(m,0),true);
     CHECK(!f.sample.raw.valid&&!f.hands.Current(InteractionHand::Left)&&!f.result.mechanismOwnsHand);
+    CHECK(f.calls==0&&!f.submitted&&f.service.View()->snapshot.counts==f.counts);
     return 0;
+}
+int FailedGateRevokesReservationAndRejectedMechanism(){
+    for(bool reserved:{false,true}){
+        Fixture f;const auto& motion=f.equipment->interaction.geometry[0].motion;
+        f.Send(At(motion,0),false);f.Send(At(motion,0),true);CHECK(f.result.tracking.hand);
+        const auto token=f.result.tracking.hand->token;
+        if(reserved){
+            f.unavailableGateMask=1;f.Send(At(motion,0),true);CHECK(f.hands.MechanismReservation(token));
+            f.unavailableGateMask=0;f.busyGateMask=1;
+        }else f.rejectedGateMask=1;
+        f.Send(At(motion,0),true);
+        CHECK(!f.hands.Current(InteractionHand::Left)&&!f.hands.MechanismReservation(token));
+        CHECK(!f.result.tracking.enabled&&!f.result.tracking.rawCaptureOnly&&f.result.blocksFire);
+        CHECK(!f.result.mechanismOwnsHand&&!f.result.ammoOwnsHand&&f.calls==0&&!f.submitted);
+        CHECK(f.service.View()->snapshot.counts==f.counts);
+    }return 0;
 }
 int CylinderFlickReturnAndClose(){
     Fixture f;f.Hinge(0);CHECK(f.result.tracking.step==FixedContainerStep::EjectSpent);CHECK(f.result.blocksFire);
@@ -1569,7 +1592,8 @@ int main(){
     if(ReplacementRawGapRetainsCustodyAndResumes()||ReplacementRawGapStillHonorsInvalidation())return 1;
     if(RecurringRawGapsConsumeDelayedGeometry()||EveryFixedFamilyFreshPickupGapCompletesOnce())return 1;
     return ExactSelectorsAndSupply()||GateBeforePhysicalAndExactOwner()||BusyMechanismFeedbackContinuesOpening()||
-    BusyCannotStartReviveOrChangeOwner()||BusyExpiresWithoutGateLeaseExtension()||BusyCannotAuthorizeDispatchOrClosure()||
+    BusyCannotStartReviveOrChangeOwner()||BusyExpiresWithoutGateLeaseExtension()||
+    FailedGateRevokesReservationAndRejectedMechanism()||BusyCannotAuthorizeDispatchOrClosure()||
     CylinderFlickReturnAndClose()||ClipQueuesOneSharedCommand()||
     PriorRendererFrameQueuesAndCompletesOnceAfterReequip()||PartialCylinderMigrationReacquiresAtRetainedContact()||
     ObservationPreservesSourceLeasesAndRejectsWrongIdentity()||LinearPartsFollowTheirOwnMeasuredTravel()||MeasuredUnderbarrelLoadsOneRoundAndCloses()||
