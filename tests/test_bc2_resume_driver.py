@@ -25,6 +25,20 @@ class Artifacts:
         self.events.append(copy.deepcopy(row))
 
 
+class MemoryPendingOwner:
+    """Model only OS file custody; keep real owner bytes and validation."""
+    def __init__(self, driver, path, raw):
+        self.path = self.temporary = path
+        self.stream = self
+        d.atomic(path, raw)
+
+    def read(self):
+        return d.read_bytes(self.path, 8192)
+
+    def close(self):
+        self.stream = None
+
+
 class Harness:
     """Use the real inherited send/ack/ownership/cleanup protocol in memory."""
     def __init__(self, test, schedule=None, driver_type=None):
@@ -68,6 +82,7 @@ class Harness:
             test.enterContext(patch.object(r.time, name, fn))
         test.enterContext(patch.object(d, "read_bytes", lambda path, maximum: self.files[path]))
         test.enterContext(patch.object(d, "atomic", self.write))
+        test.enterContext(patch.object(d, "PendingOwner", MemoryPendingOwner))
         test.enterContext(patch.object(Path, "exists", lambda path: path in self.files))
 
     def native(self):
@@ -348,6 +363,145 @@ class SinglePlayerSelectionTests(unittest.TestCase):
         self.assertEqual(h.downs(), [])
         self.assertEqual(len(h.writes), 1)
         self.assertFalse(h.v.pending_command or h.v.held_trigger)
+
+    def test_hover_readiness_loss_hands_off_only_settled_neutral_progress(self):
+        h = self.harness(lambda elapsed: (0, elapsed == 0), hover=True)
+        deadlines = h.v.deadline, h.v.stage_deadline, h.v.hard_deadline
+        self.assertTrue(h.v.resume())
+        self.assertEqual(h.v.input_stopped, "menu readiness lost; possible loading")
+        self.assertFalse(h.v.latest["menuReady"])
+        self.assertGreater(h.v.latest["sampleNs"], h.v.last_commit)
+        self.assertGreater(h.v.latest["menuInputs"], h.v.pre_event["menuInputs"])
+        self.assertGreater(h.v.latest["menuPublished"], h.v.pre_event["menuPublished"])
+        self.assertEqual((h.v.clicks, h.v.commands), (0, 5))
+        self.assertEqual(h.downs(), [])
+        self.assertEqual(len(h.writes), 1)
+        self.assertEqual(h.writes[0][1][:-1], h.v.neutral_commands())
+        self.assertFalse(h.v.pending_command or h.v.held_trigger or h.v.world_progressed)
+        self.assertEqual(deadlines, (h.v.deadline, h.v.stage_deadline, h.v.hard_deadline))
+        self.assertLess(h.now, h.v.deadline)
+
+    def test_hover_handoff_never_rearms_after_readiness_recovers(self):
+        h = self.harness(lambda elapsed: (0, elapsed != 1), hover=True)
+        self.assertTrue(h.v.resume())
+        h.now += NS
+        h.v.pre_event = h.v.observe()
+        self.assertTrue(h.v.latest["menuReady"])
+        with self.assertRaises(r.MenuTransition):
+            h.v.send(["trigger r 1"])
+        self.assertEqual(h.downs(), [])
+        self.assertEqual(len(h.writes), 1)
+        self.assertEqual(h.v.input_stopped, "menu readiness lost; possible loading")
+
+    def test_hover_handoff_requires_both_native_counters_to_advance(self):
+        for counter in ("input_samples", "published"):
+            with self.subTest(counter=counter):
+                h = self.harness(lambda elapsed: (0, elapsed == 0), hover=True)
+                def native():
+                    row = h.native()
+                    row["menu_connection"][counter] = 100
+                    return row
+                h.v.tail.read = native
+                with self.assertRaisesRegex(r.REFUSAL, "menu changed before tab"):
+                    h.v.resume()
+                self.assertEqual(h.downs(), [])
+
+    def test_hover_handoff_requires_native_sample_after_neutral_commit(self):
+        h = self.harness(hover=True)
+        def native():
+            row = h.native()
+            if h.v.last_commit is not None:
+                row["selected_knife"]["sample_ns"] = h.v.last_commit
+                row["menu_connection"].update(ready=False, input_samples=101, published=101)
+            return row
+        h.v.tail.read = native
+        with self.assertRaisesRegex(r.REFUSAL, "menu changed before tab"):
+            h.v.resume()
+        self.assertEqual(h.v.latest["sampleNs"], h.v.last_commit)
+        self.assertEqual(h.downs(), [])
+
+    def test_world_progress_is_not_a_hover_handoff(self):
+        h = self.harness(lambda elapsed: (elapsed, elapsed == 0), hover=True)
+        with self.assertRaisesRegex(r.REFUSAL, "menu-only progress"):
+            h.v.resume()
+        self.assertEqual(h.downs(), [])
+
+    def test_hover_handoff_refuses_graphics_failure_with_readiness_false(self):
+        h = self.harness(lambda elapsed: (0, elapsed == 0), hover=True)
+        def native():
+            row = h.native()
+            if not row["menu_connection"]["ready"]:
+                row["menu_connection"]["graphics_failures"] = 1
+            return row
+        h.v.tail.read = native
+        with self.assertRaisesRegex(r.REFUSAL, "graphics failure"):
+            h.v.resume()
+        self.assertEqual(h.downs(), [])
+
+    def test_hover_handoff_refuses_stale_native_sample(self):
+        h = self.harness(hover=True)
+        def native():
+            row = h.native()
+            if h.v.last_commit is not None:
+                row["selected_knife"]["sample_ns"] = h.now - r.MAX_AGE_NS - 1
+            return row
+        h.v.tail.read = native
+        with self.assertRaisesRegex(r.REFUSAL, "stale"):
+            h.v.resume()
+        self.assertEqual(h.downs(), [])
+
+    def test_hover_handoff_refuses_competing_command_writer(self):
+        h = self.harness(lambda elapsed: (0, elapsed == 0), hover=True)
+        def interfere():
+            if h.writes and h.pending is None:
+                h.files[h.v.command_path] = b"competing writer\n"
+        h.on_sleep = interfere
+        with self.assertRaises(r.REFUSAL):
+            h.v.resume()
+        self.assertEqual(h.downs(), [])
+
+    def test_hover_handoff_requires_no_pending_command_held_trigger_or_click(self):
+        for field in ("pending_command", "held_trigger", "clicks"):
+            with self.subTest(field=field):
+                h = self.harness(lambda elapsed: (0, elapsed == 0), hover=True)
+                def native():
+                    row = h.native()
+                    if not row["menu_connection"]["ready"]:
+                        setattr(h.v, field, 1)
+                    return row
+                h.v.tail.read = native
+                with self.assertRaisesRegex(r.REFUSAL, "settled neutral command"):
+                    h.v.resume()
+                self.assertEqual(h.downs(), [])
+
+    def test_hover_main_distinguishes_delivery_review_from_ready_review(self):
+        for loses_readiness, status in ((True, "hover_delivered_for_review"),
+                                       (False, "hover_ready_for_review")):
+            with self.subTest(loses_readiness=loses_readiness):
+                h = self.harness(lambda elapsed: (0, not loses_readiness or elapsed == 0), hover=True)
+                def initialize(v, args):
+                    v.__dict__.update(h.v.__dict__)
+                    h.v, v.args = v, args
+                    v.manifest, v.link, v.startup = {}, {}, {}
+                    v.menu_capture_sha256 = d.digest(b"synthetic capture")
+                    v.artifacts.save = lambda *a, **k: None
+                output = io.StringIO()
+                with patch.object(r.SinglePlayerDriver, "__init__", initialize), \
+                     patch.object(r.SinglePlayerDriver, "close"), contextlib.redirect_stdout(output):
+                    code = r.main(["--run", "memory", "--single-player-capture", "sim/capture/menu.json",
+                                   "--single-player-hover-only"])
+                result = json.loads(output.getvalue())
+                self.assertEqual(code, 0, result)
+                self.assertEqual(result["status"], status)
+                self.assertEqual((result["clicks"], result["commands"]), (0, 5))
+                self.assertFalse(result["pendingCommand"] or result["triggerHeld"])
+                self.assertFalse(result["nativeWidgetAcceptance"] or result["headsetAcceptance"])
+                self.assertEqual(result["native"]["worldCalls"], 0)
+                self.assertEqual(result["native"]["menuReady"], not loses_readiness)
+                self.assertEqual(result["inputStopped"],
+                                 "menu readiness lost; possible loading" if loses_readiness else None)
+                self.assertEqual(len(result["episodeArtifactDirectories"]), 1)
+                self.assertEqual(h.downs(), [])
 
     def test_menu_loss_before_press_never_clicks(self):
         h = self.harness(lambda elapsed: (0, elapsed == 0))

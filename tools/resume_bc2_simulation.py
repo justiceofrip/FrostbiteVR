@@ -362,13 +362,21 @@ class SinglePlayerDriver(ReviewedMenuDriver):
         neutral_ns, before = self.last_commit, self.pre_event
         while True:
             current = self.observe()
+            progressed = (current["sampleNs"] > neutral_ns
+                          and current["menuInputs"] > before["menuInputs"]
+                          and current["menuPublished"] > before["menuPublished"])
+            if self.args.single_player_hover_only and progressed:
+                # The neutral ray already settled. Readiness loss still latches
+                # every future input off; a separate image review needs no press.
+                require(current["worldCalls"] == 0 and current["menuGraphicsFailures"] == 0,
+                        "hover review requires menu-only progress without graphics failure")
+                require(self.clicks == 0 and not self.pending_command and not self.held_trigger,
+                        "hover review requires a settled neutral command")
+                return True
             require(not self.input_stopped, "menu changed before tab selection; review required")
-            if (current["sampleNs"] > neutral_ns and current["menuInputs"] > before["menuInputs"]
-                    and current["menuPublished"] > before["menuPublished"]):
+            if progressed:
                 break
             time.sleep(POLL_SECONDS)
-        if self.args.single_player_hover_only:
-            return True
         self.event("single-player-trigger-down", ["trigger r 1"])
         self.clicks += 1
         hold_until = self.last_commit + 200_000_000
@@ -466,8 +474,9 @@ def main(argv=None):
             episodes.append(str(driver.artifacts.directory))
             completed = driver.resume()
             if completed:
-                result["status"] = (("hover_ready_for_review" if args.single_player_hover_only
-                                     else "single_player_click_delivered")
+                result["status"] = ((
+                    ("hover_delivered_for_review" if driver.input_stopped else "hover_ready_for_review")
+                    if args.single_player_hover_only else "single_player_click_delivered")
                                     if args.single_player_capture else "world_progressed")
                 code = 0
                 break
