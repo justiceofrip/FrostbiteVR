@@ -1909,6 +1909,7 @@ class Driver:
                 runtimeSha256=TIMED_TRIGGER_RUNTIME_SHA256, beforeFrame=integer(before["frame"]),
                 beforeEndFrames=integer(before["endFrames"]), neutralControls=before["controls"],
                 basis={key: before[key] for key in ("head", "handL", "handR")},
+                sequence=target, sentinel=sentinel, commandSha256=digest(raw),
                 publicationStartedNs=written, ackFrame=None, numericRelease=False)
         elif lines == ["trigger r 0"] and getattr(self, "timed_trigger", None) is not None:
             self.timed_trigger["numericRelease"] = True
@@ -2542,6 +2543,67 @@ class Driver:
             # unchanged controller pose. No fresh-input claims are synthesized.
             self.pause_until(time.perf_counter_ns() + integer(batch.get("holdMs", 0)) * 1_000_000)
 
+    def retire_timed_trigger_during_cleanup(self, state, ack_raw, ack_frame, until):
+        """Retain pre-zero natural expiry without reviving the failed action.
+
+        Only the exact pending timed batch can supply this cleanup observation.
+        The original press/ACK failure stays failed; no source or action clock
+        is renewed, and a numeric zero can never supply natural-expiry proof.
+        """
+        timer = getattr(self, "timed_trigger", None)
+        if not (timer is not None and getattr(self, "timed_trigger_supported", False)
+                and getattr(self, "_single_trigger_used", False)
+                and not (self.pending_command or self.unsafe_owner)
+                and timer.get("command") == TIMED_TRIGGER_COMMAND
+                and timer.get("runtimeSha256") == TIMED_TRIGGER_RUNTIME_SHA256
+                and timer.get("configuredMilliseconds") == 50
+                and timer.get("numericRelease") is False
+                and timer.get("sequence") == self.sequence
+                and timer.get("sentinel") == self.sentinel
+                and timer.get("commandSha256") == self.command_hash
+                and self.pending_batch == [TIMED_TRIGGER_COMMAND, self.sentinel]
+                and timer.get("ackFrame") == ack_frame
+                and timer.get("beforeFrame") == integer(self.pending_before["frame"])
+                and timer.get("beforeEndFrames") == integer(self.pending_before["endFrames"])
+                and timer.get("neutralControls") == self.pending_before["controls"]
+                and timer.get("basis") == {key: self.pending_before[key]
+                    for key in ("head", "handL", "handR")}
+                and integer(self.pending_before["cmdSeq"]) + 2 == self.sequence
+                and integer(state["frame"]) >= ack_frame + 2
+                and integer(state["frame"]) > timer["beforeFrame"]
+                and integer(state["endFrames"]) > timer["beforeEndFrames"]
+                and integer(state["captureSeq"]) == self.capture_sequence
+                and all(state[key] == value for key, value in timer["basis"].items())
+                and state["controls"] == timer["neutralControls"]
+                and state["controls"] and all(
+                    all(part == 0 for part in value) if isinstance(value, list) else value == 0
+                    for value in state["controls"].values())):
+            return
+        # The prior save retained timer custody. Rejoin that exact current
+        # owner record before clearing it, within the existing cleanup budget.
+        owner = read_until(until, read_bytes, self.run / "live-driver-owner.json", 8192)
+        if owner != self.owner_bytes(False):
+            self.unsafe_owner = True
+            raise REFUSAL("runtime timer cleanup owner record replaced")
+        read_until(until, self.ownership, state)
+        observed = time.perf_counter_ns()
+        require(0 < timer["publicationStartedNs"] <= self.last_write <= observed < until,
+                "runtime timer cleanup observation exceeded original bound")
+        proof = dict(type="timed_trigger_cleanup_neutral_observed", host=self.host,
+            timer=dict(timer), ack=ack_raw, neutralState=sim_summary(state),
+            neutralObservedNs=observed, cleanupDeadlineNs=until,
+            originalActionRemainsRefused=True, commandAuthority=False,
+            nativeAcceptance=False, headsetAcceptance=False)
+        self.artifacts.event(proof, cleanup=True)
+        require_read_time(until)
+        self.timed_trigger, self.held_trigger = None, False
+        try:
+            self.save_owner(False)
+        except BaseException:
+            self.timed_trigger, self.held_trigger = timer, True
+            raise
+        self.timed_trigger_cleanup = proof
+
     def settle_pending_for_release(self):
         """Observe only our exact pending batch before deciding release ownership."""
         until = min(self.hard_deadline - 150_000_000, time.perf_counter_ns() + 100_000_000)
@@ -2560,9 +2622,16 @@ class Driver:
                 if match and int(match[1]) == self.sequence and match[3] == " | ".join(self.pending_batch):
                     if integer(state["frame"]) > int(match[2]) and integer(state["endFrames"]) > integer(self.pending_before["endFrames"]):
                         require(time.perf_counter_ns() < until, "original acknowledgement/read deadline exceeded")
+                        if getattr(self, "timed_trigger", None) is not None:
+                            owner = read_until(until, read_bytes, self.run / "live-driver-owner.json", 8192)
+                            if owner != self.owner_bytes(True):
+                                self.unsafe_owner = True
+                                raise REFUSAL("pending runtime timer owner record replaced")
                         self.pending_command = False
                         if getattr(self, "timed_trigger", None) is not None:
                             if TIMED_TRIGGER_COMMAND in self.pending_batch:
+                                require(self.timed_trigger.get("ackFrame") in (None, int(match[2])),
+                                        "runtime timer acknowledgement frame changed")
                                 self.timed_trigger["ackFrame"] = int(match[2])
                             if "trigger r 0" in self.pending_batch:
                                 self.timed_trigger["numericRelease"] = True
@@ -2570,6 +2639,7 @@ class Driver:
                         self.save_owner(False)
                         self.artifacts.event({"type": "pending_command_settled_before_release", "ack": raw,
                                               "state": sim_summary(state)}, cleanup=True)
+                        self.retire_timed_trigger_during_cleanup(state, raw, int(match[2]), until)
                         return
             time.sleep(.001)
 
@@ -2580,6 +2650,11 @@ class Driver:
         self.monitor = False
         if self.pending_command and not self.unsafe_owner:
             self.settle_pending_for_release()
+        completed_timer = getattr(self, "timed_trigger_cleanup", None)
+        if (completed_timer is not None and self.sequence == completed_timer["timer"]["sequence"]
+                and not (self.pending_command or self.unsafe_owner or self.held_left or self.held_right
+                         or self.held_trigger or self.held_buttons or getattr(self, "timed_trigger", None))):
+            return "runtime timer natural neutral observed during cleanup; original action remains refused"
         timer = getattr(self, "timed_trigger", None)
         if timer is not None and not self.pending_command and not self.unsafe_owner:
             if timer["numericRelease"] and not self.held_trigger:

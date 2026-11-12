@@ -137,9 +137,17 @@ function Bind([string]$Name,$Identity,[string]$ExpectedPath,[int]$ParentId){
             # passed above. Only the brief resolution helpers may finish here.
             # Keep their session receipt; never turn an exited handle into live
             # authority, reopen its PID, or hide any other identity failure.
+            $imageQueryFailed=$cause -is [ComponentModel.Win32Exception] -and
+                $cause.Message -ceq 'Cannot query retained process image path'
             if($Name -in @('resolution_helper','resolution_release_helper') -and
-               $cause -is [InvalidOperationException] -and $cause.Message -ceq 'Retained process is no longer live' -and
-               $process.HasExited){return}
+               (($cause -is [InvalidOperationException] -and $cause.Message -ceq 'Retained process is no longer live') -or $imageQueryFailed) -and
+               $process.HasExited){
+                # The native query's immediate live check can precede this
+                # retained handle's signaled exit. Preserve the query error;
+                # only the exit proof permits skipping this finished helper.
+                if($imageQueryFailed){Save ($Name+'-binding-exit.json') @{identity=$Identity;query_native_error_code=$cause.NativeErrorCode;exact_handle_exit_observed=$true;live_authority_granted=$false}}
+                return
+            }
             throw
         }
         SameIdentity $observed $Identity

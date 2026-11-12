@@ -260,16 +260,169 @@ class TimedTriggerTests(unittest.TestCase):
         self.assertFalse(h.driver.pending_command or h.driver.held_trigger)
         self.assertFalse(json.loads(h.files[h.driver.run/'live-driver-owner.json'])['pending'])
 
-    def test_late_ack_settles_only_for_zero_cleanup_and_retains_pending_timer(self):
+    def test_late_ack_with_natural_neutral_retires_only_cleanup_custody(self):
         h = RuntimeHarness(self, ack_ms=120)
         v = h.driver
         with self.assertRaises(d.REFUSAL):
             v.single_trigger_pulse()
         self.assertTrue(v.pending_command)
-        self.assertIn('custody retained', v.release_after_failure())
-        self.assertEqual(h.batches(), [[d.TIMED_TRIGGER_COMMAND], ['trigger r 0']])
-        self.assertFalse(v.pending_command or v.held_trigger)
+        deadlines = v.deadline, v.stage_deadline, v.hard_deadline
+        self.assertIn('original action remains refused', v.release_after_failure())
+        self.assertEqual(h.batches(), [[d.TIMED_TRIGGER_COMMAND]])
+        self.assertFalse(v.pending_command or v.held_trigger or v.timed_trigger)
+        self.assertFalse(json.loads(h.files[v.run/'live-driver-owner.json'])['pending'])
+        self.assertEqual((v.deadline, v.stage_deadline, v.hard_deadline), deadlines)
+        with self.assertRaisesRegex(d.REFUSAL, 'already used'):
+            v.single_trigger_pulse()
+
+    def saved_pending_preparation(self):
+        """Normal87/01's failed phase and exact saved pre-zero seq/frame tuple."""
+        h = RuntimeHarness(self, ack_ms=120)
+        v = h.driver
+        h.now = h.origin = 640333113407600
+        v.deadline, v.hard_deadline = h.now+9*NS, h.now+10*NS
+        v.last_write, v.last_commit = h.now-60*MS, h.now-50*MS
+        v.sequence, v.sentinel = 67, 'initial'
+        h.state.update(cmdSeq=67, frame=8636, endFrames=8635, captureSeq=4)
+        v.capture_sequence = 4
+        h.freeze_frames = True
+        original_read = v.read_state
+        def delayed_read():
+            if h.now >= h.origin+99*MS:
+                h.now = 640333213757900
+            return original_read()
+        v.read_state = delayed_read
+        with patch.object(d.uuid, 'uuid4') as nonce:
+            nonce.return_value.hex = 'c83e7b5d3b454121a5a322396c5444ad'
+            with self.assertRaisesRegex(d.ReadDeadlineExceeded,
+                    'original acknowledgement/read deadline exceeded') as failure:
+                v.single_trigger_pulse(source_deadline=640333190230400)
+        v.read_state = original_read
+        self.assertEqual(h.now, 640333213757900)
+        self.assertTrue(v.pending_command)
+        h.state.update(cmdSeq=69, lastCmd=v.sentinel, frame=8643, endFrames=8642)
+        h.state['controls']['trigR'] = 0
+        h.files[v.ack_path] = (
+            'seq=69 frame=8639 error=-\r\n'
+            'last=trigger r pull 50 | note root-feed-c83e7b5d3b454121a5a322396c5444ad\r\n').encode('ascii')
+        h.ack_due = h.parse_due = h.expire_due = None
+        return h, failure.exception
+
+    def test_saved_preparation_neutral_before_zero_keeps_failure_and_no_action_authority(self):
+        h, failure = self.saved_pending_preparation()
+        v = h.driver
+        clocks = v.deadline, v.stage_deadline, v.hard_deadline, v.last_commit
+        self.assertIn('original action remains refused', v.release_after_failure())
+        self.assertEqual(str(failure), 'original acknowledgement/read deadline exceeded')
+        self.assertEqual((v.deadline, v.stage_deadline, v.hard_deadline, v.last_commit), clocks)
+        self.assertEqual(h.batches(), [[d.TIMED_TRIGGER_COMMAND]])
+        proof, = [e for e in v.artifacts.events if e['type']=='timed_trigger_cleanup_neutral_observed']
+        self.assertEqual((proof['timer']['sequence'], proof['timer']['ackFrame'],
+                          proof['neutralState']['frame'], proof['neutralState']['endFrames']),
+                         (69, 8639, 8643, 8642))
+        self.assertTrue(proof['originalActionRemainsRefused'])
+        self.assertFalse(proof['commandAuthority'] or proof['nativeAcceptance'] or proof['headsetAcceptance'])
+        self.assertLess(proof['neutralObservedNs'], proof['cleanupDeadlineNs'])
+        self.assertFalse(v.pending_command or v.held_trigger or v.timed_trigger)
+        owner = json.loads(h.files[v.run/'live-driver-owner.json'])
+        self.assertFalse(owner['pending'])
+        self.assertNotIn('timedTrigger', owner)
+        self.assertIsNone(getattr(v, 'selected_timed_release', None))
+        with self.assertRaisesRegex(d.REFUSAL, 'already used'):
+            v.single_trigger_pulse()
+
+    def test_cleanup_neutral_rejects_missing_mismatched_or_masked_timer_proof(self):
+        for fault in ('missing_runtime', 'runtime', 'sequence', 'sentinel', 'hash', 'duration',
+                      'numeric_zero', 'before_frame', 'before_end', 'ack_plus_one', 'stale_end',
+                      'not_neutral', 'other_control', 'basis', 'capture', 'missing_binding'):
+            with self.subTest(fault=fault):
+                h, _ = self.saved_pending_preparation()
+                v = h.driver
+                timer = v.timed_trigger
+                if fault == 'missing_runtime': del timer['runtimeSha256']
+                elif fault == 'runtime': timer['runtimeSha256'] = 'unverified'
+                elif fault == 'sequence': timer['sequence'] += 2
+                elif fault == 'sentinel': timer['sentinel'] = 'note foreign'
+                elif fault == 'hash': timer['commandSha256'] = 'other'
+                elif fault == 'duration': timer['configuredMilliseconds'] = 100
+                elif fault == 'numeric_zero': timer['numericRelease'] = True
+                elif fault == 'before_frame': timer['beforeFrame'] -= 1
+                elif fault == 'before_end': timer['beforeEndFrames'] -= 1
+                elif fault == 'ack_plus_one': h.state['frame'] = 8640
+                elif fault == 'stale_end': h.state['endFrames'] = 8635
+                elif fault == 'not_neutral': h.state['controls']['trigR'] = 1
+                elif fault == 'other_control': h.state['controls']['gripR'] = 1
+                elif fault == 'basis': h.state['head'] = dict(changed=True)
+                elif fault == 'capture': h.state['captureSeq'] += 1
+                elif fault == 'missing_binding': del timer['sentinel']
+                v.save_owner(True)
+                v.settle_pending_for_release()
+                self.assertIsNotNone(v.timed_trigger)
+                self.assertTrue(json.loads(h.files[v.run/'live-driver-owner.json'])['pending'])
+                self.assertIsNone(getattr(v, 'timed_trigger_cleanup', None))
+                self.assertFalse(any(e['type']=='timed_trigger_cleanup_neutral_observed'
+                                     for e in v.artifacts.events))
+                self.assertEqual(h.batches(), [[d.TIMED_TRIGGER_COMMAND]])
+
+    def test_cleanup_neutral_rejects_replaced_owner_command_ack_or_sentinel(self):
+        for fault in ('owner', 'command', 'ack', 'sentinel', 'ack_frame'):
+            with self.subTest(fault=fault):
+                h, _ = self.saved_pending_preparation()
+                v = h.driver
+                if fault == 'owner': h.files[v.run/'live-driver-owner.json'] = b'foreign'
+                elif fault == 'command': h.files[v.command_path] = b'foreign'
+                elif fault == 'ack': h.files[v.ack_path] = b'seq=69 frame=8639 error=-\nlast=foreign\n'
+                elif fault == 'sentinel': h.state['lastCmd'] = 'note foreign'
+                elif fault == 'ack_frame':
+                    v.timed_trigger['ackFrame'] = 8638
+                    v.save_owner(True)
+                if fault == 'ack':
+                    v.settle_pending_for_release()
+                else:
+                    with self.assertRaises(d.REFUSAL):
+                        v.settle_pending_for_release()
+                self.assertIsNotNone(v.timed_trigger)
+                self.assertIsNone(getattr(v, 'timed_trigger_cleanup', None))
+                self.assertEqual(h.batches(), [[d.TIMED_TRIGGER_COMMAND]])
+
+    def test_cleanup_proof_archive_or_owner_failure_retains_timer(self):
+        for fault in ('archive', 'owner'):
+            with self.subTest(fault=fault):
+                h, _ = self.saved_pending_preparation()
+                v = h.driver
+                event, save = v.artifacts.event, v.save_owner
+                def archive(value, cleanup=False):
+                    if fault == 'archive' and value['type']=='timed_trigger_cleanup_neutral_observed':
+                        raise OSError('proof archive failed')
+                    return event(value, cleanup=cleanup)
+                def owner(pending, **kwargs):
+                    if fault == 'owner' and v.timed_trigger is None:
+                        raise OSError('owner retirement failed')
+                    return save(pending, **kwargs)
+                with patch.object(v.artifacts, 'event', archive), patch.object(v, 'save_owner', owner), \
+                        self.assertRaises(OSError):
+                    v.release_after_failure()
+                self.assertTrue(v.timed_trigger and v.held_trigger)
+                self.assertTrue(json.loads(h.files[v.run/'live-driver-owner.json'])['pending'])
+                self.assertIsNone(getattr(v, 'timed_trigger_cleanup', None))
+                self.assertEqual(h.batches(), [[d.TIMED_TRIGGER_COMMAND]])
+
+    def test_cleanup_proof_uses_unchanged_existing_settlement_deadline(self):
+        h, _ = self.saved_pending_preparation()
+        v = h.driver
+        until = min(v.hard_deadline-150*MS, h.now+100*MS)
+        clocks = v.deadline, v.stage_deadline, v.hard_deadline
+        event = v.artifacts.event
+        def delayed_archive(value, cleanup=False):
+            event(value, cleanup=cleanup)
+            if value['type']=='timed_trigger_cleanup_neutral_observed':
+                h.now = until
+        with patch.object(v.artifacts, 'event', delayed_archive), self.assertRaises(d.ReadDeadlineExceeded):
+            v.release_after_failure()
+        self.assertEqual((v.deadline, v.stage_deadline, v.hard_deadline), clocks)
+        self.assertTrue(v.timed_trigger and v.held_trigger)
         self.assertTrue(json.loads(h.files[v.run/'live-driver-owner.json'])['pending'])
+        self.assertEqual(h.batches(), [[d.TIMED_TRIGGER_COMMAND]])
 
     def test_cancellation_leaves_only_owned_zero_cleanup_and_no_new_press(self):
         h = RuntimeHarness(self)
@@ -335,38 +488,8 @@ class TimedTriggerTests(unittest.TestCase):
         p = preparation_tests.d
         with tempfile.TemporaryDirectory() as temp, patch.dict(globals(), d=p.transport), \
                 patch.object(transport_tests, 'd', p.transport):
-            h = RuntimeHarness(self, ack_ms=88)
+            h, path = self.preparation_harness(temp)
             v = h.driver
-            v.__class__ = p.PreparationDriver
-            del v.validate_publication
-            v.run = Path(temp)
-            v.manifest = dict(source_sha256='source')
-            v.active_plan = v.demand_reference = None
-            v.demand_finished, v.demand_started = True, h.now
-            before = preparation_tests.snapshot()
-            captures = []
-            for eye in ('left', 'right'):
-                path = v.run/(eye+'.png')
-                path.write_bytes(eye.encode())
-                h.files[path] = eye.encode()
-                captures.append(dict(eye=eye, path=str(path), bytes=len(eye), sha256=d.digest(eye.encode())))
-            clearance = dict(schema='bc2vr.root-fire-clearance.v1', rootReviewedVisibleCorridor=True,
-                host=v.host, owner=before['owner'], configurationPath=before['selected']['configurationPath'],
-                rig=before['rig'], reviewedNs=h.now-1, referenceHead=before['input']['referenceHead'],
-                rightAim=before['input']['hands'][1]['aim'], captures=captures,
-                **{key: copy.deepcopy(h.state[key]) for key in ('head', 'handL', 'handR', 'controls')})
-            path = v.run/'clearance.json'
-            h.json_files[path], h.files[path] = clearance, d.json_bytes(clearance)
-            generation = 1
-            def fresh():
-                nonlocal generation
-                current = preparation_tests.fixture.fixed.refresh(before, h.now, generation)
-                if generation > 1:
-                    current['fixedContainer']['view']['snapshot']['counts']['loaded'] = 0
-                generation += 1
-                v.latest_snapshot = current
-                return current, b'{}', h.now
-            v.fresh_available = fresh
             result = v.prepare(path)
             self.assertEqual(h.batches(), [[d.TIMED_TRIGGER_COMMAND]])
             self.assertEqual(result['beforeCounts']['loaded'], 1)
@@ -375,6 +498,72 @@ class TimedTriggerTests(unittest.TestCase):
             self.assertIsNone(result['releaseWrittenNs'])
             self.assertEqual(result['pulseTransport']['configuredMilliseconds'], 50)
             self.assertFalse(v.held_trigger or v.timed_trigger)
+
+    def preparation_harness(self, temp, ack_ms=88):
+        p = preparation_tests.d
+        h = RuntimeHarness(self, ack_ms=ack_ms)
+        v = h.driver
+        v.__class__ = p.PreparationDriver
+        del v.validate_publication
+        v.run = Path(temp)
+        v.manifest = dict(source_sha256='source')
+        v.active_plan = v.demand_reference = None
+        v.demand_finished, v.demand_started = True, h.now
+        before = preparation_tests.snapshot()
+        captures = []
+        for eye in ('left', 'right'):
+            path = v.run/(eye+'.png')
+            path.write_bytes(eye.encode())
+            h.files[path] = eye.encode()
+            captures.append(dict(eye=eye, path=str(path), bytes=len(eye), sha256=d.digest(eye.encode())))
+        clearance = dict(schema='bc2vr.root-fire-clearance.v1', rootReviewedVisibleCorridor=True,
+            host=v.host, owner=before['owner'], configurationPath=before['selected']['configurationPath'],
+            rig=before['rig'], reviewedNs=h.now-1, referenceHead=before['input']['referenceHead'],
+            rightAim=before['input']['hands'][1]['aim'], captures=captures,
+            **{key: copy.deepcopy(h.state[key]) for key in ('head', 'handL', 'handR', 'controls')})
+        path = v.run/'clearance.json'
+        h.json_files[path], h.files[path] = clearance, d.json_bytes(clearance)
+        generation = 1
+        def fresh():
+            nonlocal generation
+            current = preparation_tests.fixture.fixed.refresh(before, h.now, generation)
+            if generation > 1:
+                current['fixedContainer']['view']['snapshot']['counts']['loaded'] = 0
+            generation += 1
+            v.latest_snapshot = current
+            return current, b'{}', h.now
+        v.fresh_available = fresh
+        return h, path
+
+    def test_preparation_main_keeps_failed_result_and_consumed_attempt_after_cleanup(self):
+        p = preparation_tests.d
+        with tempfile.TemporaryDirectory() as temp, patch.dict(globals(), d=p.transport), \
+                patch.object(transport_tests, 'd', p.transport):
+            h, path = self.preparation_harness(temp, ack_ms=120)
+            v = h.driver
+            v.__init__ = lambda args: None
+            v.close = lambda: None
+            class ExistingDriver:
+                def __new__(cls):
+                    return v
+            with patch.object(p, 'PreparationDriver', ExistingDriver), patch('builtins.print'):
+                code = p.main(['--run', str(v.run), '--fire-clearance', str(path),
+                               '--root-authorized-ordinary-input'])
+            result = v.artifacts.saved['result.json']
+            self.assertEqual((code, result['status']), (2, 'refused'))
+            self.assertEqual(result['error'], 'actual stage exceeded maximumGestureNs')
+            self.assertIn('original action remains refused', result['release'])
+            self.assertFalse(result['timedTriggerPending'] or result['reloadCompleted']
+                             or result['nativeAcceptance'] or result['headsetAcceptance'])
+            self.assertNotIn('releaseError', result)
+            self.assertNotIn('pulse', result)
+            attempt, = v.run.glob('fixed-preparation-attempt-*.json')
+            self.assertGreater(attempt.stat().st_size, 0)
+            with self.assertRaises(FileExistsError):
+                attempt.open('xb')
+            with self.assertRaisesRegex(d.REFUSAL, 'already used'):
+                v.single_trigger_pulse()
+            self.assertEqual(h.batches(), [[d.TIMED_TRIGGER_COMMAND]])
 
     def test_full_post_reload_uses_closed_receipt_and_shared_transport(self):
         t = postreload_tests.d
