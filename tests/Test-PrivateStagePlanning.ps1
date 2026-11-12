@@ -134,7 +134,15 @@ Refuses {Plan (Join-Path $batchRun 'unsafe.')} 'unsafe stage destination spellin
 if($IsWindows){
     $linkTarget=Join-Path $FixtureRoot 'synthetic-link-target';$null=[IO.Directory]::CreateDirectory($linkTarget)
     $junction=Join-Path $batchRun 'synthetic-junction';$null=New-Item -ItemType Junction -Path $junction -Target $linkTarget
-    Refuses {Plan (Join-Path $junction 'stage')} 'linked path' 'reparse ancestor'
+    try{Refuses {Plan (Join-Path $junction 'stage')} 'linked path' 'reparse ancestor'}
+    finally{
+        # Retain the fixture data, but never leave a synthetic link in the counted
+        # workspace: the next real complete storage inventory must reject it.
+        $link=Get-Item -LiteralPath $junction -Force
+        if($link.LinkType -cne 'Junction' -or [IO.Path]::GetFullPath([string]$link.Target) -ine [IO.Path]::GetFullPath($linkTarget)){throw 'Synthetic junction identity changed'}
+        [IO.Directory]::Delete($junction)
+    }
+    Check (-not (Test-Path -LiteralPath $junction) -and (Test-Path -LiteralPath $linkTarget -PathType Container)) 'synthetic link removed while target data remains'
 }
 Refuses {Plan (Join-Path $batchRun 'stage')} 'stage already exists' 'occupied old destination'
 $occupied=Join-Path $batchRun 'occupied-lock'

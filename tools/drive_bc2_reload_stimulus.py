@@ -44,11 +44,95 @@ MAX_BYTES = 1024 * 1024
 MAX_OBSERVATIONS = 100  # 10s / original100ms request period; not a renewed clock.
 MAX_DIAGNOSTIC_RECORDS = 2048
 MAX_ACK_TRACE_POLLS = 32  # First poll plus a bounded tail; no per-poll archival.
+MAX_PUBLICATION_TRACE_SPANS = 32  # First span plus a bounded tail across replace attempts.
 LEFT_POSE_SETUP = ["hand l follow off", "hand l aimtrim 0 0"]
 
 
 class ReadDeadline(Refusal):
     """A late read is not evidence that command ownership changed."""
+
+
+class PublicationTrace:
+    """Passive, bounded send timings; reports are materialized after cleanup.
+
+    The transport's validation callback brackets preparation and replacement.
+    Those intervals include transport checks, temporary-file cleanup and any
+    replace retry wait; they are not timings of individual filesystem calls.
+    No trace value authorizes input, a retry, ownership or a renewed deadline.
+    """
+    def __init__(self, driver, cleanup):
+        self.started_ns = time.perf_counter_ns()
+        self.cleanup, self.context = cleanup, "admission"
+        self.requested_ns = self.published_ns = self.committed_ns = self.finished_ns = None
+        self.action_deadline = self.source_deadline = self.ack_deadline = self.publication_deadline = None
+        self.hard_deadline = getattr(driver, "hard_deadline", None)
+        self.identity = None
+        self.outcome = "not_published"
+        self.failure = self.terminal_failure = None
+        self.first = self.current = None
+        self.tail = deque(maxlen=MAX_PUBLICATION_TRACE_SPANS - 1)
+        self.spans = self.validations = self.open_attempts = 0
+        self.phase_ns, self.winerrors = {}, {}
+        self.paths = {key: str(getattr(driver, key)) for key in
+                      ("session_path", "state_path", "command_path") if hasattr(driver, key)}
+        if hasattr(driver, "run"):
+            self.paths["owner_path"] = str(driver.run / "live-driver-owner.json")
+        self.phase("checks")
+
+    def phase(self, name):
+        now = time.perf_counter_ns()
+        if self.current is not None:
+            row = self.current
+            row["finishedNs"] = now
+            row["durationNs"] = now - row["startedNs"]
+            self.phase_ns[row["phase"]] = self.phase_ns.get(row["phase"], 0) + row["durationNs"]
+        self.spans += 1
+        self.current = dict(phase=self.context + "." + name, startedNs=now)
+        if self.first is None:
+            self.first = self.current
+        else:
+            self.tail.append(self.current)
+
+    def attempted_open(self, error=0):
+        self.open_attempts += 1
+        if error:
+            key = str(error)
+            self.winerrors[key] = self.winerrors.get(key, 0) + 1
+
+    def observed_state(self, state):
+        pass  # State payloads already have their existing guarded evidence path.
+
+    def exception(self, error):
+        return dict(atNs=time.perf_counter_ns(), kind=type(error).__name__,
+                    error=str(error)[:512], phase=self.current["phase"],
+                    errno=getattr(error, "errno", None), winError=getattr(error, "winerror", None))
+
+    def failed(self, error):
+        if self.failure is None:
+            self.failure = self.exception(error)
+            self.phase("exception_unwind")
+
+    def finish(self, error=None):
+        if error is not None:
+            self.terminal_failure = self.exception(error)
+            self.failed(error)
+        self.phase("finished")
+        self.finished_ns = self.current["startedNs"]
+
+    def report(self):
+        rows = [self.first] + list(self.tail)
+        return dict(type="command_publication_trace", startedNs=self.started_ns,
+                    requestedNs=self.requested_ns, publishedNs=self.published_ns,
+                    committedNs=self.committed_ns, finishedNs=self.finished_ns,
+                    originalActionDeadlineNs=self.action_deadline, sourceDeadlineNs=self.source_deadline,
+                    originalHardDeadlineNs=self.hard_deadline,
+                    originalAckDeadlineNs=self.ack_deadline, originalPublicationDeadlineNs=self.publication_deadline,
+                    command=self.identity, publicationOutcome=self.outcome, cleanup=self.cleanup,
+                    failure=self.failure, terminalFailure=self.terminal_failure, paths=self.paths,
+                    validationCalls=self.validations, openAttempts=self.open_attempts, winErrors=self.winerrors,
+                    phaseNs=self.phase_ns, spanCount=self.spans, retainedSpans=len(rows),
+                    droppedSpans=self.spans - len(rows), spans=rows,
+                    transportTiming="callback intervals include preparation/replace checks, retry wait and temporary cleanup")
 
 
 class AckReadTrace:
@@ -567,7 +651,7 @@ class ReloadStimulus:
         until = self.hard_deadline if cleanup else min(self.deadline, self.stage_deadline)
         if deadline_ns is not None:
             until = min(until, deadline_ns)
-        trace = getattr(self, "_ack_trace", None)
+        trace = getattr(self, "_ack_trace", None) or getattr(self, "_publication_trace", None)
         if trace is not None:
             trace.phase("owner_check")
         self.owner.check()
@@ -613,6 +697,9 @@ class ReloadStimulus:
 
     def ownership(self, state, deadline_ns=None, expected=None):
         sequence, sentinel, command_hash = expected or (self.sequence, self.sentinel, self.command_hash)
+        trace = getattr(self, "_publication_trace", None)
+        if trace is not None:
+            trace.phase("previous_command_read_validation")
         try:
             require(transport.digest(deadline_bytes(self.command_path, 4096, deadline_ns)) == command_hash,
                     "command file replaced by another writer")
@@ -836,12 +923,33 @@ class ReloadStimulus:
         raise Refusal("fresh typed stimulus boundary absent within original budget")
 
     def send(self, sample=None, *, cleanup=False, release_only=False):
+        trace = self._publication_trace = PublicationTrace(self, cleanup)
+        try:
+            self._send(sample, cleanup=cleanup, release_only=release_only)
+        except BaseException as error:
+            trace.finish(error)
+            if not hasattr(self, "_publication_failures"):
+                self._publication_failures = []
+            # Original input and its ordinary cleanup release; never retain an
+            # unbounded history or write evidence while command input is live.
+            if len(self._publication_failures) < 2:
+                self._publication_failures.append(trace)
+            raise
+        else:
+            trace.finish()
+            self._last_publication_trace = trace
+        finally:
+            self._publication_trace = None
+
+    def _send(self, sample=None, *, cleanup=False, release_only=False):
+        publication = self._publication_trace
         require(cleanup or getattr(self, "observation_failure", None) is None, "previous native observation failure")
         require(cleanup or release_only or not getattr(self, "completion_only_observed", False),
                 "completion-only observation cannot authorize another controller pose")
         require(not release_only or self.held_left, "ordinary release requires held left input")
         lines = ["grip l 0"] if cleanup or release_only else ordinary_commands(sample, self.first_sample_pending)
         require(self.commands + len(lines) + 1 <= MAX_COMMANDS, "512-command budget")
+        publication.phase("write_gap")
         if cleanup:
             require(time.perf_counter_ns() + ACK_NS < self.hard_deadline, "cleanup reserve exhausted")
             while time.perf_counter_ns() < self.last_write + WRITE_GAP_NS:
@@ -849,26 +957,38 @@ class ReloadStimulus:
         else:
             self.pause_until(max(self.last_write + WRITE_GAP_NS, time.perf_counter_ns()))
         action_deadline = self.hard_deadline if cleanup else min(self.deadline, self.stage_deadline)
+        publication.action_deadline = action_deadline
+        publication.source_deadline = self.initial_mapping_deadline if not cleanup and self.first_sample_pending else None
+        publication.context = "initial"
+        publication.phase("state_read")
         before = self.read_state(cleanup, action_deadline)
         self.ownership(before, action_deadline)
+        publication.phase("command_identity")
         sentinel = "note root-stimulus-" + uuid.uuid4().hex
         batch = lines + [sentinel]
         require(len(" | ".join(batch).encode("ascii")) < 508, "acknowledgement text overflow")
         raw, target = ("\n".join(batch) + "\n").encode("ascii"), self.sequence + len(batch)
         written = time.perf_counter_ns()
+        publication.requested_ns = written
+        publication.phase("request_bounds")
         if not cleanup:
             self.bounds()
             if self.first_sample_pending:
                 require(written < self.initial_mapping_deadline, "initial mapping expired before first publication")
+        publication.phase("request_journal")
         self.artifacts.event({"type": "command_request", "atNs": written, "beforeSequence": self.sequence,
             "targetSequence": target, "commands": batch, "ordinaryInputOnly": True}, cleanup=cleanup)
         previous_owner = self.sequence, self.sentinel, self.command_hash
         self.sequence, self.sentinel, self.command_hash = target, sentinel, transport.digest(raw)
         self.pending_command = True
         self.pending_batch, self.pending_before = batch, before
+        publication.phase("pending_owner_encode")
         pending_owner = self.owner_bytes(True)
         until = min(action_deadline, written + ACK_NS)
         publication_deadline = min(until, self.initial_mapping_deadline) if not cleanup and self.first_sample_pending else until
+        publication.ack_deadline, publication.publication_deadline = until, publication_deadline
+        publication.identity = dict(sequence=target, sentinel=sentinel, commandSha256=self.command_hash)
+        publication.phase("pending_owner_save")
         try:
             self.save_owner(True)
         except BaseException:
@@ -879,39 +999,66 @@ class ReloadStimulus:
             self.pending_command = False
             raise
         def validate_publication_owner():
-            if not cleanup:
-                self.bounds()
+            # Re-entry means the transport's previous replace was refused.
+            publication.outcome = "not_published"
+            publication.validations += 1
+            publication.context = "validation"
+            publication.phase("bounds")
             try:
+                if not cleanup:
+                    self.bounds()
+            except BaseException as error:
+                publication.failed(error)
+                raise
+            try:
+                publication.phase("pending_owner_read")
                 require(deadline_bytes(self.run / "live-driver-owner.json", 8192, publication_deadline) == pending_owner,
                         "command owner record replaced before publication")
                 self.ownership(self.read_state(cleanup, publication_deadline), publication_deadline, expected=previous_owner)
-            except ReadDeadline:
+            except ReadDeadline as error:
+                publication.failed(error)
                 raise
-            except BaseException:
+            except BaseException as error:
+                publication.failed(error)
                 self.unsafe_owner = True
                 raise
+            publication.context = "transport"
+            publication.phase("replace_or_retry")
+            publication.outcome = "publication_uncertain"
         try:
             # Required owner I/O and transient sharing consume the same
             # original source/ACK budget as the eventual command publication.
+            publication.phase("publication_bounds")
             require(time.perf_counter_ns() < action_deadline, "original prepublication deadline exceeded")
             if not cleanup and self.first_sample_pending:
                 require(time.perf_counter_ns() < self.initial_mapping_deadline,
                         "initial mapping expired during owner publication")
+            publication.context = "transport"
+            publication.phase("command_preparation")
             transport.publish_command(self.command_path, raw, publication_deadline, validate_publication_owner)
         except BaseException as error:
+            publication.failed(error)
+            publication.context = "restoration"
+            publication.phase("previous_identity")
             self.sequence, self.sentinel, self.command_hash = previous_owner
             self.pending_command = False
             if not self.unsafe_owner:
                 try:
+                    publication.phase("pending_owner_read")
                     require(deadline_bytes(self.run / "live-driver-owner.json", 8192, self.hard_deadline) == pending_owner,
                             "unpublished owner record replaced")
                     self.ownership(self.read_state(True, self.hard_deadline), self.hard_deadline)
+                    publication.outcome = "not_published"
+                    publication.phase("previous_owner_save")
                     self.save_owner(False)
                 except BaseException as owner_error:
                     self.unsafe_owner = True
                     raise Refusal(f"{error}; unpublished owner restoration refused: {owner_error}") from error
             raise
         published = time.perf_counter_ns()
+        publication.published_ns, publication.outcome = published, "published_unsettled"
+        publication.context = "settlement"
+        publication.phase("ack_wait")
         if not cleanup:
             self.first_sample_pending = False
         self.last_write = published
@@ -940,12 +1087,15 @@ class ReloadStimulus:
         finally:
             self._ack_trace = None
         self.last_commit = committed
+        publication.committed_ns, publication.outcome = committed, "settled"
+        publication.phase("owner_save")
         self.pending_command = False
         self.state = state
         self.held_left = False if cleanup or release_only else sample["grip"] == 1
         if lines[:2] == LEFT_POSE_SETUP:
             self.pose_setup_established = True
         self.save_owner(False)
+        publication.phase("post_commit")
         self.artifacts.event({"type": "command_commit", "requestedNs": written, "writtenNs": published, "committedNs": self.last_commit,
             "sequence": self.sequence, "frame": state["frame"], "endFrames": state["endFrames"],
             "handL": state["handL"], "gripL": state["controls"]["gripL"], "cleanup": cleanup}, cleanup=cleanup)
@@ -1157,6 +1307,18 @@ class ReloadStimulus:
             self.artifacts.event(value, cleanup=trace.cleanup)
         self._ack_failures = []
 
+    def defer_publication_traces(self, observer_stopped):
+        # As with ACK diagnostics, main calls this after cleanup and shutdown.
+        traces = list(getattr(self, "_publication_failures", ()))
+        last = getattr(self, "_last_publication_trace", None)
+        if last is not None:
+            traces.append(last)
+        for trace in traces:
+            value = trace.report()
+            value["observerStopped"] = observer_stopped
+            self.artifacts.event(value, cleanup=trace.cleanup)
+        self._publication_failures, self._last_publication_trace = [], None
+
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
@@ -1219,6 +1381,7 @@ def main(argv=None):
                 flush_started = time.perf_counter_ns()
                 try:
                     driver.defer_ack_failures(result.get("observerStopped", False))
+                    driver.defer_publication_traces(result.get("observerStopped", False))
                     driver.artifacts.flush()
                 except Exception as error:
                     result["archiveError"] = str(error)

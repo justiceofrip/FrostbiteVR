@@ -22,13 +22,15 @@ Native82 custody-gap recovery and audio-worker shutdown fixes are included.
 Native83's additional passive lock diagnostic is not a player-facing reload fix.
 
 CURRENT SOURCE BATCH
-coordinator-20261112-shared-entry removes report imports, fixed version/stage coupling
-and the need for a copied runner to use an explicit exceptional storage budget.
-944/945/946 completed; scoped offline checks pass and ROOT reviewed the changes.
-Prior tools941 observation fixes remain integrated/pushed; its164 passing checks are reused.
-Tooling changes do not rebuild or reinstall unchanged native83.
-Handoff: handoff/integrations/coordinator-20261112-shared-entry/README.txt.
-Actual push status/commit: reports/coordinator-20261108-feedback721/shared-entry/source-push.json.
+coordinator-20261112-publication-review adds deferred prepublication timing,
+a tracked stereo-review recorder and synthetic staging-link cleanup.
+949/951 completed; scoped checks passed and ROOT reviewed the combination.
+Earlier941/shared-entry source is integrated/pushed; native83 remains unchanged.
+Actual normal83/02 reached campaign, drew LMG and completed Open/Detach.
+Attach stopped before publishing its first pickup command; no complete reload/shot.
+Normal close/native retirement/profiles/settings restoration passed.
+Handoff: handoff/integrations/coordinator-20261112-publication-review/README.txt.
+Actual push status: reports/coordinator-20261108-feedback721/publication-review/source-push.json.
 
 NEXT ACCEPTANCE
 Work by shared mechanism and bulk profiles; complete representative reload/fire/switch.
