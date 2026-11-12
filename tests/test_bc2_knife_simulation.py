@@ -348,12 +348,14 @@ class KnifeTests(unittest.TestCase):
         driver.last_commit = self.clock.tick()
         driver.save_owner(False)
 
-    def run_assembled(self, jab=False, replace_at_publication=False, real_transport=False):
+    def run_assembled(self, jab=False, replace_at_publication=False, real_transport=False,
+                      stow_publication_expiry=False, pin_io_cost_ns=0):
         m = self.m
         original_request = m.t.Driver.request_snapshot
         original_replace = m.t.replace_command
         original_read = m.t.Driver.read_state
         original_pump = m.KnifeTransport.pump
+        original_pin = m.t.check_pin
         simulated_command = self.run.joinpath('sim/command.txt').read_bytes()
         current_driver = None
         delayed_ack = None
@@ -409,7 +411,10 @@ class KnifeTests(unittest.TestCase):
 
         def replace(temporary, path, deadline_ns, validate, rename=None):
             driver = current_driver
-            if isinstance(driver, m.KnifeDriver) and driver.phase == 'jab':
+            if stow_publication_expiry and not isinstance(driver, m.KnifeDriver):
+                self.original_stow_deadline = deadline_ns
+                self.clock.now = max(self.clock.now, deadline_ns)
+            if replace_at_publication and isinstance(driver, m.KnifeDriver) and driver.phase == 'jab':
                 self.assertTrue(driver.pending_command)
                 self.assertIsNotNone(driver.gate)
                 self.assertEqual(self.publication_refusals, [])
@@ -424,6 +429,11 @@ class KnifeTests(unittest.TestCase):
                     snapshot['nonce'] += 1
                     self.write(driver.snapshot_path, snapshot)
             return original_replace(temporary, path, deadline_ns, validate, rename)
+
+        def slow_pin(*args, **kwargs):
+            result = original_pin(*args, **kwargs)
+            self.clock.now += pin_io_cost_ns
+            return result
 
         def request(driver):
             nonlocal current_driver
@@ -495,11 +505,12 @@ class KnifeTests(unittest.TestCase):
                 SimulatorOwner if replace_at_publication or real_transport else FakeWindowsOwner))
             stack.enter_context(patch.object(m.t.Driver, 'acquire_lock', lambda driver: None))
             stack.enter_context(patch.object(m.t.Driver, 'request_snapshot', request))
-            if replace_at_publication or real_transport:
+            stack.enter_context(patch.object(m.t, 'check_pin', slow_pin))
+            if replace_at_publication or real_transport or stow_publication_expiry:
                 # Keep real preparation, send, publication revalidation, ACK and
                 # rollback. Only the native source and simulator are synthetic;
                 # Windows file handles below belong to this temporary fixture.
-                if replace_at_publication:
+                if replace_at_publication or stow_publication_expiry:
                     self.publication_refusals = []
                     stack.enter_context(patch.object(m.t, 'replace_command', replace))
             else:
@@ -519,6 +530,110 @@ class KnifeTests(unittest.TestCase):
         (self.root / 'tools/bc2_draw_admission.py').write_text('# changed', encoding='utf-8')
         with self.assertRaisesRegex(Exception, 'dependency source changed'):
             self.m.preflight(args)
+
+    def test_sealed_source_runtime_and_metadata_deny_writes_until_close(self):
+        m = self.m
+        paths = [self.root/'tools/bc2_draw_admission.py', self.root/'xrsim.dll', self.active]
+        admission = m.Admission(continuousPins=[m.pin(path) for path in paths])
+        self.addCleanup(admission.close)
+        admission.seal()
+        for path in paths:
+            raw = path.read_bytes()
+            replacement = path.with_name(path.name + '.replacement')
+            replacement.write_bytes(raw)
+            with self.assertRaises(PermissionError):
+                path.write_bytes(raw)
+            with self.assertRaises(PermissionError):
+                replacement.replace(path)
+            with self.assertRaises(PermissionError):
+                path.unlink()
+        m.check_continuous(admission)
+        streams = [entry[1] for entry in admission.lease.entries]
+        admission.close()
+        self.assertTrue(all(stream.closed for stream in streams))
+        for path in paths:
+            path.write_bytes(b'after custody')
+        with self.assertRaisesRegex(Exception, 'custody unavailable'):
+            m.check_continuous(admission)
+
+    def test_partial_pin_acquisition_failure_releases_prior_and_failing_file(self):
+        m = self.m
+        paths = [self.root/'xrsim.dll', self.active]
+        rows = [m.pin(path) for path in paths]
+        rows[-1]['sha256'] = '0'*64
+        with self.assertRaisesRegex(Exception, 'pinned file changed before custody'):
+            m.ContinuousPins(rows)
+        for path in paths:
+            path.write_bytes(b'failure retired every handle')
+
+    def test_same_bytes_alternate_path_identity_refuses_retained_pin(self):
+        m = self.m
+        path = self.root/'xrsim.dll'
+        raw = path.read_bytes()
+        replacement = path.with_suffix('.replacement')
+        replacement.write_bytes(raw)
+        admission = m.Admission(continuousPins=[m.pin(path)])
+        self.addCleanup(admission.close)
+        admission.seal()
+        original_open = admission.lease.api.CreateFileW
+        def alternate(name, access, share, *args):
+            self.assertEqual((name, access, share), (str(path), 0, 7))
+            # Inject a replaced pathname view while retaining the original
+            # real data HANDLE; both OS files contain exactly the same bytes.
+            return original_open(str(replacement), access, share, *args)
+        self.assertEqual(path.read_bytes(), raw)
+        with patch.object(admission.lease.api, 'CreateFileW', alternate):
+            with self.assertRaisesRegex(Exception, 'pinned file pathname identity changed'):
+                m.check_continuous(admission)
+
+    def test_pin_ancestor_redirect_and_changed_manifest_rows_are_refused(self):
+        m = self.m
+        admission = m.Admission(continuousPins=[m.pin(self.root/'xrsim.dll')])
+        self.addCleanup(admission.close)
+        admission.seal()
+        original = Path.lstat
+        def redirected(path):
+            if path == self.root:
+                return SimpleNamespace(st_mode=0, st_file_attributes=0x400, st_reparse_tag=0xa0000003)
+            return original(path)
+        with patch.object(Path, 'lstat', redirected):
+            with self.assertRaisesRegex(Exception, 'ancestor redirected'):
+                m.check_continuous(admission)
+        admission['continuousPins'][0]['sha256'] = '0'*64
+        with self.assertRaisesRegex(Exception, 'custody unavailable or changed'):
+            m.check_continuous(admission)
+
+    def test_repeated_pin_checks_keep_full_assembled_native_budget_and_close(self):
+        m = self.m
+        original = m.check_continuous
+        leases = []
+        def checked(admission):
+            leases.append(admission.lease)
+            # The slow disk model must not reenter payload hashing inside a
+            # source lease. Real pathname/ancestor checks still execute.
+            with patch.object(m.t, 'check_pin', side_effect=AssertionError('pin payload reread')):
+                return original(admission)
+        with patch.object(m, 'check_continuous', checked):
+            code, result = self.run_assembled(jab=True, real_transport=True, pin_io_cost_ns=1_000_000)
+        self.assertEqual(code, 0, result)
+        self.assertGreater(len(leases), 40)
+        self.assertTrue(all(lease is leases[0] for lease in leases))
+        self.assertEqual(leases[0].entries, [])
+        self.assertEqual(result['jabSteps'], 1)
+        self.assertFalse(result['pendingCommand'] or result['rightGripHeld'])
+
+    def test_expired_original_stow_publication_keeps_zero_commands_and_closes_pins(self):
+        code, result = self.run_assembled(real_transport=True, stow_publication_expiry=True)
+        self.assertEqual(code, 2, result)
+        self.assertEqual(result['error'], 'original command publication deadline exceeded')
+        self.assertEqual(result['commands'], 0)
+        self.assertFalse(result['pendingCommand'] or result['rightGripHeld'] or result['triggerHeld'])
+        self.assertIsNone(result['outstandingMotion'])
+        timing = json.loads((Path(result['artifactDirectory'])/'receive-timing-failure.json').read_text())
+        self.assertEqual(timing['originalPublicationDeadlineNs'], self.original_stow_deadline)
+        self.assertGreaterEqual(timing['firstPhaseError']['atNs'], self.original_stow_deadline)
+        for path in (self.root/'tools/bc2_draw_admission.py', self.root/'xrsim.dll', self.active):
+            path.write_bytes(b'failure retired invocation pins')
 
     def test_ordinary_preflight_and_installed_source_refusals(self):
         with patch.object(self.m.time, 'perf_counter_ns', self.clock.tick):

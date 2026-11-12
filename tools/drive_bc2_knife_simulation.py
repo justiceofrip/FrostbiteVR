@@ -6,12 +6,15 @@ transport. No launch, installation, retries, target or damage acceptance.
 """
 import argparse
 import copy
+import ctypes
 import datetime
 import importlib.util
 import json
 import math
+import os
 from pathlib import Path
 import re
+import stat
 import sys
 import time
 
@@ -381,9 +384,92 @@ def dependency_sha256(pins=None):
 IMPORTED_PINS = dependency_pins()
 
 
+class ContinuousPins:
+    """Hash once under write-denying custody; rejoin pathname identity each read.
+
+    As with MotionInputLease, FILE_SHARE_READ seals the data but Windows POSIX
+    rename can replace its name. Check every pathname and unique ancestor on
+    every call, without rereading immutable payloads inside a native lease.
+    """
+    def __init__(self, rows):
+        import msvcrt
+        require(os.name == 'nt', 'continuous pinned files require Windows custody')
+        self.rows, self.entries, self.ancestors = copy.deepcopy(rows), [], set()
+        self.api = ctypes.WinDLL('kernel32', use_last_error=True)
+        api, wt = self.api, t.wintypes
+        api.CreateFileW.argtypes = (wt.LPCWSTR, wt.DWORD, wt.DWORD, ctypes.c_void_p,
+                                   wt.DWORD, wt.DWORD, wt.HANDLE)
+        api.CreateFileW.restype = wt.HANDLE
+        api.CloseHandle.argtypes = (wt.HANDLE,)
+        api.CloseHandle.restype = wt.BOOL
+        try:
+            for row in self.rows:
+                path = t.local_path(row['path'])
+                require(0 <= integer(row['bytes']) <= 1024*1024, 'pinned file exceeds read bound')
+                handle = api.CreateFileW(str(path), 0x80000000, 1, None, 3, 0x00200000, None)
+                require(handle not in (None, wt.HANDLE(-1).value), 'cannot seal pinned file: ' + str(path))
+                try:
+                    fd = msvcrt.open_osfhandle(handle, os.O_RDONLY | os.O_BINARY)
+                except BaseException:
+                    api.CloseHandle(handle)
+                    raise
+                stream = os.fdopen(fd, 'rb')
+                self.entries.append((path, stream, None))
+                self.entries[-1] = path, stream, t.owner_file_identity(api, handle)
+                raw = stream.read(1024*1024 + 1)
+                require(len(raw) == row['bytes'] and t.digest(raw) == row['sha256'],
+                        'pinned file changed before custody: ' + str(path))
+                self.ancestors.update(path.parents)
+            self.check(rows)
+        except BaseException:
+            self.close()
+            raise
+
+    def check(self, rows):
+        require(rows == self.rows and len(self.entries) == len(rows) > 0,
+                'continuous pinned file custody unavailable or changed')
+        # Preserve local_path's redirect checks, visiting shared parents once.
+        for path in self.ancestors:
+            info = path.lstat()
+            require(not stat.S_ISLNK(info.st_mode)
+                    and (not getattr(info, 'st_file_attributes', 0) & 0x400
+                         or getattr(info, 'st_reparse_tag', 0) == 0x80000017),
+                    'pinned file ancestor redirected: ' + str(path))
+        for path, stream, identity in self.entries:
+            require(not stream.closed, 'pinned file read custody closed: ' + str(path))
+            handle = self.api.CreateFileW(str(path), 0, 7, None, 3, 0x00200000, None)
+            require(handle not in (None, t.wintypes.HANDLE(-1).value),
+                    'pinned file pathname disappeared: ' + str(path))
+            try:
+                require(t.owner_file_identity(self.api, handle) == identity,
+                        'pinned file pathname identity changed: ' + str(path))
+            finally:
+                self.api.CloseHandle(handle)
+
+    def close(self):
+        for _, stream, _ in self.entries:
+            stream.close()
+        self.entries = []
+
+
+class Admission(dict):
+    """Serializable evidence with one invocation-owned, non-serialized seal."""
+    lease = None
+
+    def seal(self):
+        require(self.lease is None, 'continuous pinned file custody already acquired')
+        self.lease = ContinuousPins(self['continuousPins'])
+
+    def close(self):
+        if self.lease is not None:
+            self.lease.close()
+            self.lease = None
+
+
 def check_continuous(admission):
-    for row in admission['continuousPins']:
-        t.check_pin(row, 1024 * 1024)
+    require(isinstance(admission, Admission) and admission.lease is not None,
+            'continuous pinned file custody unavailable')
+    admission.lease.check(admission['continuousPins'])
 
 
 def unit_direction(direction):
@@ -559,7 +645,7 @@ def preflight(args):
     paths = [run / name for name in ('run-manifest.json', 'artifact-binding.json',
                                     'session-link.json', 'sim-startup.json')]
     paths += [t.local_path(link['options']), active_path, runtime_path, package_path]
-    return dict(continuousPins=dependencies + jab_pins + [pin(path) for path in paths], world=world,
+    return Admission(continuousPins=dependencies + jab_pins + [pin(path) for path in paths], world=world,
                 storage=storage, host=link['host'], version=args.version, sourceSha256=args.source_sha256)
 
 
@@ -1016,10 +1102,11 @@ def main(argv=None):
         if not getattr(args, name):
             parser.error('--' + name.replace('_', '-') + ' is required')
     args.observed_binding = None
-    driver, code = None, 2
+    driver, admission, code = None, None, 2
     result = dict(status='refused', damage='unknown', nativeAcceptance=False, headsetAcceptance=False)
     try:
         admission = preflight(args)
+        admission.seal()
         Stow = make_stow(admission)
         driver = Stow.__new__(Stow)
         driver.__init__(args)
@@ -1049,6 +1136,12 @@ def main(argv=None):
             finish(driver, result)
         except Exception as error:
             result['resultWriteError'], code = str(error), 2
+        finally:
+            if admission is not None:
+                try:
+                    admission.close()
+                except Exception as error:
+                    result['pinCloseError'], code = str(error), 2
     print(json.dumps(result, separators=(',', ':'), allow_nan=False))
     return code
 
