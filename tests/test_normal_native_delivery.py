@@ -41,7 +41,7 @@ class DeliveryTests(unittest.TestCase):
         self.write('src/xr/OpenXrHost.cpp', b'#include "fvr/D3D11BodyPropCompositor.h"\n')
         self.write('include/fvr/D3D11BodyPropCompositor.h', b'#pragma once\n')
         self.write('src/graphics/D3D11BodyPropCompositor.cpp', b'// old graphics\n')
-        old_host = proof.source_receipt(self.root, roots=('src/xr/OpenXrHost.cpp',))
+        old_host = proof.source_receipt(self.root, roots=batch.LEGACY_HOST_ROOTS)
         old_source = proof.source_receipt(self.root)['source_sha256']
         old_header = self.write('baseline/header.h', ('// ' + old_source).encode())
         self.old_host = self.json('baseline/host-source.json', old_host)
@@ -65,7 +65,7 @@ class DeliveryTests(unittest.TestCase):
         self.write('src/graphics/SpentCaseAsset.h', b'// new asset\n')
         source_sha = proof.source_receipt(self.root)['source_sha256']
         header = self.write('review/header.h', ('// ' + source_sha).encode())
-        self.host = proof.source_receipt(self.root, roots=('src/xr/OpenXrHost.cpp',))
+        self.host = proof.source_receipt(self.root, roots=batch.LEGACY_HOST_ROOTS)
         self.config = dict(schema='fvr.native-batch.v1', root_accepted=True,
             repository=str(self.root), run=str(self.run), source_commit='a' * 40,
             source_sha256=source_sha, reviewed_header=header,
@@ -144,6 +144,159 @@ class DeliveryTests(unittest.TestCase):
 
     def check_host(self):
         return batch.verify_host_source(self.config, self.baseline, proof, self.root)
+
+    def add_host_provider(self):
+        self.write('src/ipc/RemoteFrameProvider.cpp', b'#include "fvr/ipc/RemoteFrameProvider.h"\n')
+        self.write('include/fvr/ipc/RemoteFrameProvider.h', b'#include "fvr/ipc/FrameChannel.h"\n')
+        self.write('include/fvr/ipc/FrameChannel.h', b'#pragma once\n')
+        self.write('src/platform/windows/FrameChannel.cpp', b'// unchanged transport\n')
+
+    def bind_host_source(self, roots):
+        self.host = proof.source_receipt(self.root, roots=roots)
+        self.config['host_source_receipt'] = self.json('review/host-source.json', self.host)
+        before = {r['path']: r['sha256'] for r in batch.load(batch.checked(self.old_host))['files']}
+        after = {r['path']: r['sha256'] for r in self.host['files']}
+        changes = [dict(relative_path=p, before_sha256=before.get(p), sha256=after.get(p))
+                   for p in sorted(before.keys() | after.keys()) if before.get(p) != after.get(p)]
+        self.config['candidate_files'] = [dict(relative_path=r['relative_path'], sha256=r['sha256']) for r in changes]
+        self.review.update(host_source_receipt=self.config['host_source_receipt'], changed_files=changes)
+        self.bind_review()
+
+    def bind_baseline_host(self, host):
+        self.old_host = self.json('baseline/host-source.json', host)
+        self.baseline.update(host_source_receipt=self.old_host, host_source_sha256=host['source_sha256'])
+        self.config['baseline_receipt'] = self.json('baseline/receipt.json', self.baseline)
+        self.review.update(baseline_receipt=self.config['baseline_receipt'],
+                           installed_normal_receipt=self.config['baseline_receipt'],
+                           previous_host_source_receipt=self.old_host)
+        self.bind_review()
+
+    def migrate_host_roots(self):
+        self.add_host_provider()
+        self.review['roots_migration'] = dict(root_accepted=True,
+            previous_roots=list(batch.LEGACY_HOST_ROOTS), roots=list(batch.HOST_ROOTS))
+        self.bind_host_source(batch.HOST_ROOTS)
+
+    def test_host_roots_migration_covers_provider_and_normal_delivery(self):
+        self.migrate_host_roots()
+        host = self.check_host()
+        self.assertEqual(host['roots'], list(batch.HOST_ROOTS))
+        paths = {r['path'] for r in host['files']}
+        self.assertTrue({'src/ipc/RemoteFrameProvider.cpp', 'include/fvr/ipc/RemoteFrameProvider.h',
+                         'include/fvr/ipc/FrameChannel.h', 'src/platform/windows/FrameChannel.cpp'} <= paths)
+        self.normal.update(config=self.config_pin, host_source_receipt=self.config['host_source_receipt'])
+        for stage in self.stages.values():
+            stage.update(config=self.config_pin, host_source_receipt=self.config['host_source_receipt'])
+        self.bind_stages()
+        receipt, _, _, _ = self.derive()
+        self.assertEqual(receipt['host_source_review']['review'], self.config['host_source_update'])
+
+    def test_host_roots_migration_requires_explicit_review(self):
+        self.migrate_host_roots()
+        self.review.pop('roots_migration')
+        self.bind_review()
+        with self.assertRaisesRegex(ValueError, 'Explicit ROOT host roots migration'):
+            self.check_host()
+
+    def test_host_roots_migration_rejects_forged_review(self):
+        self.migrate_host_roots()
+        valid = copy.deepcopy(self.review['roots_migration'])
+        mutations = [None, {}, dict(valid, root_accepted=False), dict(valid, root_accepted=1),
+                     dict(valid, previous_roots=list(batch.HOST_ROOTS)),
+                     dict(valid, roots=list(batch.LEGACY_HOST_ROOTS)), dict(valid, bypass=True)]
+        for migration in mutations:
+            with self.subTest(migration=migration):
+                self.review['roots_migration'] = migration
+                self.bind_review()
+                with self.assertRaisesRegex(ValueError, 'Explicit ROOT host roots migration'):
+                    self.check_host()
+
+    def test_host_roots_migration_requires_host_update(self):
+        self.migrate_host_roots()
+        self.config.pop('host_source_update')
+        with self.assertRaisesRegex(ValueError, 'explicit host_source_update'):
+            self.check_host()
+
+    def test_host_roots_reject_arbitrary_roots(self):
+        self.add_host_provider()
+        for roots in (('src/ipc/RemoteFrameProvider.cpp',), tuple(reversed(batch.HOST_ROOTS)),
+                      batch.HOST_ROOTS + ('src/platform/windows/FrameChannel.cpp',)):
+            with self.subTest(roots=roots):
+                self.bind_host_source(roots)
+                with self.assertRaisesRegex(ValueError, 'Unsupported host dependency roots'):
+                    self.check_host()
+
+    def test_host_roots_reject_unknown_baseline_roots(self):
+        self.add_host_provider()
+        self.bind_baseline_host(proof.source_receipt(self.root, roots=('src/ipc/RemoteFrameProvider.cpp',)))
+        with self.assertRaisesRegex(ValueError, 'Unsupported host dependency roots'):
+            self.check_host()
+
+    def test_host_roots_migration_rejects_downgrade(self):
+        self.migrate_host_roots()
+        self.bind_baseline_host(self.host)
+        self.review['roots_migration'] = dict(root_accepted=True,
+            previous_roots=list(batch.HOST_ROOTS), roots=list(batch.LEGACY_HOST_ROOTS))
+        self.bind_host_source(batch.LEGACY_HOST_ROOTS)
+        with self.assertRaisesRegex(ValueError, 'Only the legacy to provider'):
+            self.check_host()
+
+    def test_host_roots_migration_rejects_unchanged_roots(self):
+        self.review['roots_migration'] = dict(root_accepted=True,
+            previous_roots=list(batch.LEGACY_HOST_ROOTS), roots=list(batch.HOST_ROOTS))
+        self.bind_review()
+        with self.assertRaisesRegex(ValueError, 'migration requires changed roots'):
+            self.check_host()
+
+    def test_host_roots_migration_keeps_other_metadata_exact(self):
+        self.migrate_host_roots()
+        old = batch.load(batch.checked(self.old_host))
+        for field, value in (('recipe_sha256', '0' * 64), ('build_wiring_sha256', '0' * 64),
+                             ('reviewed_header_sha256', '0' * 64), ('excluded_generated_data', ['other.h']),
+                             ('excluded_data_sha256', [{'path': 'other.h', 'sha256': '0' * 64}]),
+                             ('native_admission_granted', True), ('schema', 'other.schema')):
+            with self.subTest(field=field):
+                changed = dict(old, **{field: value})
+                self.bind_baseline_host(changed)
+                with self.assertRaisesRegex(ValueError, 'Host closure metadata changed: ' + field):
+                    self.check_host()
+
+    def test_host_roots_migration_rejects_changed_provider_bytes(self):
+        self.migrate_host_roots()
+        for name in ('src/ipc/RemoteFrameProvider.cpp', 'include/fvr/ipc/RemoteFrameProvider.h',
+                     'src/platform/windows/FrameChannel.cpp'):
+            with self.subTest(path=name):
+                path = self.root / name
+                original = path.read_bytes()
+                path.write_bytes(original + b'// changed after review\n')
+                with self.assertRaisesRegex(ValueError, 'Host dependency closure changed'):
+                    self.check_host()
+                path.write_bytes(original)
+
+    def test_host_roots_migration_requires_every_newly_covered_candidate(self):
+        self.migrate_host_roots()
+        candidates = copy.deepcopy(self.config['candidate_files'])
+        for name in ('src/ipc/RemoteFrameProvider.cpp', 'include/fvr/ipc/RemoteFrameProvider.h',
+                     'include/fvr/ipc/FrameChannel.h', 'src/platform/windows/FrameChannel.cpp'):
+            with self.subTest(path=name):
+                self.config['candidate_files'] = [r for r in candidates if r['relative_path'] != name]
+                with self.assertRaisesRegex(ValueError, 'candidate file review'):
+                    self.check_host()
+
+    def test_current_host_roots_can_be_retained(self):
+        self.migrate_host_roots()
+        self.bind_baseline_host(self.host)
+        self.config.pop('host_source_update')
+        self.config['host_source_receipt'] = self.old_host
+        self.assertEqual(self.check_host()['source_sha256'], self.baseline['host_source_sha256'])
+
+    def test_current_host_roots_update_without_migration(self):
+        self.migrate_host_roots()
+        self.bind_baseline_host(self.host)
+        self.review.pop('roots_migration')
+        self.write('src/ipc/RemoteFrameProvider.cpp', b'#include "fvr/ipc/RemoteFrameProvider.h"\n// updated provider\n')
+        self.bind_host_source(batch.HOST_ROOTS)
+        self.assertEqual(self.check_host(), self.host)
 
     def test_full_normal_translation_and_metadata_pins(self):
         receipt, freeze, audit, stages = self.derive()

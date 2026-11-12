@@ -16,6 +16,8 @@ import sys
 
 sys.dont_write_bytecode = True
 PRIVATE = 'FVR_BC2_CAMPAIGN_PROVISIONING'
+LEGACY_HOST_ROOTS = ('src/xr/OpenXrHost.cpp',)
+HOST_ROOTS = LEGACY_HOST_ROOTS + ('src/ipc/RemoteFrameProvider.cpp',)
 ARTIFACTS = (
     ('probe', 'x86', 'BC2NativeProbe.dll'),
     ('trace', 'x86', 'BC2NativeTrace.exe'),
@@ -81,7 +83,10 @@ def verify_host_source(c, baseline, proof, root):
     host = load(checked(c['host_source_receipt']))
     old = load(checked(baseline['host_source_receipt']))
     need(old['source_sha256'] == baseline['host_source_sha256'], 'Baseline host source digest differs')
-    need(host == proof.source_receipt(root, roots=('src/xr/OpenXrHost.cpp',)),
+    known_roots = (list(LEGACY_HOST_ROOTS), list(HOST_ROOTS))
+    need(host.get('roots') in known_roots and old.get('roots') in known_roots,
+         'Unsupported host dependency roots')
+    need(host == proof.source_receipt(root, roots=tuple(host['roots'])),
          'Host dependency closure changed')
     if 'host_source_update' not in c:
         need(c['host_source_receipt'] == baseline['host_source_receipt'],
@@ -105,8 +110,20 @@ def verify_host_source(c, baseline, proof, root):
          c['operation_records_changed'] is False and c['normal_feature_grants_changed'] is False,
          'Host update requires full normal builds without capability grant changes')
     need(old['source_sha256'] != host['source_sha256'], 'Host update must change the source closure')
+    roots_changed = old['roots'] != host['roots']
+    if roots_changed:
+        need(old['roots'] == list(LEGACY_HOST_ROOTS) and host['roots'] == list(HOST_ROOTS),
+             'Only the legacy to provider host roots migration is supported')
+        migration = review.get('roots_migration')
+        need(isinstance(migration, dict) and migration.get('root_accepted') is True and
+             migration == dict(root_accepted=True, previous_roots=old['roots'], roots=host['roots']),
+             'Explicit ROOT host roots migration review required')
+    else:
+        need('roots_migration' not in review, 'Host roots migration requires changed roots')
     # Recipe/build wiring changes need their own review, not a graphics-source exemption.
     for field in set(old) | set(host):
+        if field == 'roots' and roots_changed:
+            continue  # Only the exact, explicitly reviewed migration above may differ.
         if field not in ('files', 'source_sha256'):
             need(old.get(field) == host.get(field), 'Host closure metadata changed: ' + field)
     before = {row['path']: row['sha256'] for row in old['files']}
