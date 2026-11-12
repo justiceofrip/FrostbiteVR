@@ -56,6 +56,127 @@ def observed(source, row, now, sequence, *, ejected=False):
 
 
 class SpentCaseTests(unittest.TestCase):
+    @staticmethod
+    def actual84_second_tilt():
+        # Retained normal84/xr-game01/live-driver-d67f844c... command 110.
+        position = [.200000002, 1.299999950, -.349999992]
+        grip = [-39.918906501, 3.857536194, -2.407631449]
+        aim = [-39.918905027, 3.857536132, -2.407631548]
+        return dict(atNs=40_000_000, phase="case_tilt", hand="r", grip=0,
+            positionMeters=position, yawPitchRollDegrees=grip,
+            aimPositionMeters=position, aimYawPitchRollDegrees=aim,
+            commands=["hand r grip pose " + " ".join(f"{v:.9f}" for v in position + grip),
+                      "hand r aim pose " + " ".join(f"{v:.9f}" for v in position + aim), "grip l 0"])
+
+    def actual84_pose_delivery(self, fault=None, *, cleanup=False):
+        """Real send/owner/ACK path with xr-sim's receipt-before-frame publication."""
+        clock = rf.Clock()
+        with rf.StimulusTests().ack_driver(clock, archive_ns=0) as h:
+            d = h.driver
+            d.args.family, d.args.stage = "fixed", "EjectSpent"
+            d.sequence = 106
+            h.state.update(cmdSeq=106, frame=15018, endFrames=15017)
+            h.state["handR"].update(pos=[.2, 1.3, -.35], ypr=[-40., 0., 0.], followsHead=False)
+            d.initial_sim = copy.deepcopy(h.state)
+            d.state = copy.deepcopy(h.state)
+            h.polls = 0
+            old_publish = m.transport.atomic.side_effect
+
+            def publish(path, raw, **kwargs):
+                old_publish(path, raw, **kwargs)
+                # parse_command_file advances the command receipt, writes ACK
+                # frame15019, then serializes the still-old snapshot grip.
+                h.state.update(frame=15019, endFrames=15019)
+                lines = raw.decode().splitlines()
+                h.ack = (f"seq=110 frame=15019 error=-\nlast={' | '.join(lines)}\n").encode()
+
+            def state_read(state):
+                if not h.published:
+                    return state
+                h.polls += 1
+                if h.polls > 1 and fault != "no_frame":
+                    # Same %.4f position / %.2f degree serialization as the
+                    # retained final sim state; the frame now follows the ACK.
+                    state.update(frame=15020, endFrames=15020)
+                    state["handR"].update(pos=[.2, 1.3, -.35], ypr=[-39.92, 3.86, -2.41])
+                    if fault == "committed_pose":
+                        state["handR"]["ypr"] = [-40., 0., 0.]
+                if fault == "host":
+                    state["pid"] = 999
+                elif fault == "sequence":
+                    state["cmdSeq"] = 111
+                elif fault == "sentinel":
+                    state["lastCmd"] = "note foreign"
+                elif fault == "left_grip":
+                    state["controls"]["gripL"] = 1.
+                elif fault == "trigger":
+                    state["controls"]["trigR"] = 1.
+                elif fault == "ack_batch":
+                    h.ack = h.ack.replace(d.sentinel.encode(), b"note foreign")
+                return state
+
+            h.alter_state = state_read
+            original_deadlines = d.deadline, d.stage_deadline, d.hard_deadline
+            error = None
+            with patch.object(m.transport, "atomic", side_effect=publish):
+                try:
+                    d.send(self.actual84_second_tilt())
+                except m.Refusal as caught:
+                    error = caught
+                if cleanup:
+                    with self.assertRaisesRegex(m.Refusal, "right controller pose did not commit"):
+                        d.cleanup()
+            self.assertEqual((d.deadline, d.stage_deadline, d.hard_deadline), original_deadlines)
+            self.assertEqual(len(h.published), 1)
+            self.assertEqual(d.commands, 4)
+            return d, h, error
+
+    def test_actual84_serialized_pose_already_fits_existing_geometry_bounds(self):
+        target = self.actual84_second_tilt()
+        state = dict(controls=dict(gripL=0.), handR=dict(
+            pos=[.2, 1.3, -.35], ypr=[-39.92, 3.86, -2.41], followsHead=False))
+        actual = f.from_pose(dict(position=state["handR"]["pos"],
+                                 orientation=f.ypr_quaternion(state["handR"]["ypr"])))
+        distance, radians = f.pose_error(actual, g.controller_pose(target))
+        self.assertLess(distance, .0002)
+        self.assertAlmostEqual(radians, .00006347029223164508, places=10)
+        m.ReloadStimulus.check_target(state, target)
+        state["handR"]["ypr"] = [-40., 0., 0.]
+        with self.assertRaisesRegex(m.Refusal, "right controller pose did not commit"):
+            m.ReloadStimulus.check_target(state, target)
+
+    def test_actual84_command_receipt_waits_for_pose_commit_frame(self):
+        d, h, error = self.actual84_pose_delivery()
+        self.assertIsNone(error, str(error))
+        self.assertEqual(h.polls, 2)
+        self.assertEqual((d.sequence, d.state["frame"]), (110, 15020))
+        self.assertFalse(d.pending_command or d.held_left or d.unsafe_owner)
+        self.assertEqual(d.settled_right_sample, self.actual84_second_tilt())
+        self.assertEqual(len([e for e in d.artifacts.events if e["type"] == "command_commit"]), 1)
+
+    def test_actual84_pending_pose_keeps_frame_owner_neutral_and_deadline_guards(self):
+        faults = dict(committed_pose="right controller pose did not commit",
+            no_frame="original command acknowledgement/commit deadline exceeded",
+            host="simulator identity/error changed", sequence="unexpected command sequence",
+            sentinel="command sentinel changed", left_grip="left input is not neutral",
+            trigger="unrequested controller input", ack_batch="acknowledgement batch differs")
+        for fault, expected in faults.items():
+            with self.subTest(fault=fault):
+                d, h, error = self.actual84_pose_delivery(fault)
+                self.assertIsNotNone(error)
+                self.assertIn(expected, str(error))
+                self.assertTrue(d.pending_command)
+                self.assertIsNone(d.last_commit)
+                self.assertFalse(any(e["type"] == "command_commit" for e in d.artifacts.events))
+                trace = d._ack_failures[0]
+                self.assertEqual(trace.deadline_ns, trace.requested_ns + m.ACK_NS)
+
+    def test_pending_cleanup_cannot_settle_a_committed_contradictory_right_pose(self):
+        d, h, error = self.actual84_pose_delivery("committed_pose", cleanup=True)
+        self.assertIsNotNone(error)
+        self.assertTrue(d.pending_command)
+        self.assertFalse(hasattr(d, "settled_right_sample"))
+
     def test_measured_case_axis_drives_bounded_right_tilt_without_ammo_commands(self):
         source = snapshot()
         original = copy.deepcopy(source)

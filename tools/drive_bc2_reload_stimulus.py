@@ -809,11 +809,17 @@ class ReloadStimulus:
                     "head/untouched-hand basis changed")
             if tilt:
                 applying = self.pending_command and integer(state["cmdSeq"]) == self.sequence
-                target = getattr(self, "pending_right_sample", None) if applying else getattr(self, "settled_right_sample", None)
-                if target is None:
-                    require(state["handR"] == self.initial_sim["handR"], "unrequested right-hand pose change")
-                else:
-                    self.check_target(state, target)
+                require(state["controls"]["gripL"] == 0, "spent-case left input is not neutral")
+                # xr-sim parse_command_file publishes the new cmdSeq with the
+                # previous frame snapshot before control_apply_pending commits
+                # the pose. _wait_ack checks this target only after the exact
+                # ACK's frame boundary; receipt alone is not pose commitment.
+                if not applying:
+                    target = getattr(self, "settled_right_sample", None)
+                    if target is None:
+                        require(state["handR"] == self.initial_sim["handR"], "unrequested right-hand pose change")
+                    else:
+                        self.check_target(state, target)
             require(neutral_controls(state["controls"], True), "unrequested controller input")
             require(integer(state["captureSeq"]) == self.capture_sequence, "unrequested capture")
         return state
@@ -1661,8 +1667,12 @@ class ReloadStimulus:
             while time.perf_counter_ns() < until:
                 state = self.read_state(True, until)
                 if self._acknowledged(state, self.pending_batch, self.pending_before, until):
+                    if self.args.family == "fixed" and self.args.stage == "EjectSpent":
+                        self.check_target(state, self.pending_right_sample)
                     require(time.perf_counter_ns() < until, "original pending cleanup deadline exceeded")
                     self.pending_command = False
+                    if self.args.family == "fixed" and self.args.stage == "EjectSpent":
+                        self.settled_right_sample = self.pending_right_sample
                     self.held_left = "grip l 1" in self.pending_batch
                     self.state = state
                     self.save_owner(False)

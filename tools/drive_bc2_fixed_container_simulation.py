@@ -375,18 +375,34 @@ class SelectedAmmoDriver(FixedContainerDriver):
 
     def check_post_shot_observation_tracking(self, x, now):
         # Tick returns default tracking when its native ammo view is absent.
-        # This exact empty shape permits only the existing passive wait; it
-        # never becomes latest_snapshot or supplies custody for an action.
+        # The current serializer also emits inert spent-case fields/policy for
+        # that default. Neither shape supplies custody or an ammunition result;
+        # both permit only the existing bounded passive wait.
         empty_key = dict(id=0, generation=0)
         empty_gun = dict(token=dict(id=0, owner=dict(actor=0, actorGeneration=0,
             equipGeneration=0, space=0), hand=0, kind=0, item=empty_key,
             contact=empty_key, prerequisiteClaim=0), deadlineNs=0, inputSequence=0)
         t = x['tracking']
         if x['view'] is None and t['gun'] == empty_gun:
-            require(t == dict(enabled=False, current=False, blocksFire=False,
-                    carried=False, pending=False, step=0, targetStep=0, lifetime=0,
-                    revision=0, gun=empty_gun, hand=None, target=None, carriedSupply=None,
-                    pouchContact=False, grip=False, gripPressed=False)
+            empty_tracking = dict(enabled=False, current=False, blocksFire=False,
+                carried=False, pending=False, step=0, targetStep=0, lifetime=0,
+                revision=0, gun=empty_gun, hand=None, target=None, carriedSupply=None,
+                pouchContact=False, grip=False, gripPressed=False)
+            empty_case = dict(spentCasePresent=False, spentCaseEpoch=0, spentCaseEjectedNs=0,
+                spentCaseEjectionWorldMeters=None, spentCasePoseWeaponMeters=None,
+                spentCasePolicy=dict(modOwned=True, outwardAxis=[0, 0, 1], maximumWorldUpDot=-.5,
+                                     dwellNs=100_000_000, maxInputGapNs=100_000_000))
+            # Project the documented custody/state fields. Future presentation
+            # metadata cannot turn an inert diagnostic into command authority.
+            case = {k: t[k] for k in empty_case if k in t}
+            if case:
+                policy = case.get('spentCasePolicy')
+                require(isinstance(policy, dict) and all(k in policy for k in empty_case['spentCasePolicy']),
+                        'Missing selected ammunition has malformed spent-case policy')
+                case['spentCasePolicy'] = {k: policy[k] for k in empty_case['spentCasePolicy']}
+                require(case == empty_case,
+                        'Missing selected ammunition has nonempty spent-case tracking')
+            require(all(k in t and t[k] == value for k, value in empty_tracking.items())
                     and x['leftClaim'] is None and x['input']['released'] == [True, False],
                     'Missing selected ammunition has nonempty fixed tracking')
             return

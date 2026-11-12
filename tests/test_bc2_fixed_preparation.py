@@ -365,7 +365,7 @@ class FixedPreparationTests(unittest.TestCase):
 
 class TimedPreparationObservationTests(unittest.TestCase):
     """Assembled prepare/send/ACK/passive read path, with simulated runtime IO."""
-    def timed_driver(self, folder, mutate=None):
+    def timed_driver(self, folder, mutate=None, missing=None):
         import test_bc2_timed_trigger as timed
         self.enterContext(patch.object(timed, 'd', d.transport))
         self.enterContext(patch.object(timed.transport_tests, 'd', d.transport))
@@ -398,6 +398,8 @@ class TimedPreparationObservationTests(unittest.TestCase):
                 if v.commands:
                     if not observed:
                         s['fixedContainer'].update(view=None, viewFresh=False)
+                        if missing is not None:
+                            missing(s)
                     else:
                         s['fixedContainer']['view']['snapshot']['counts']['loaded'] = 0
                         if mutate is not None:
@@ -476,6 +478,77 @@ class TimedPreparationObservationTests(unittest.TestCase):
             self.assertEqual(observed,[])
             self.assertEqual(h.batches(),[[d.transport.TIMED_TRIGGER_COMMAND]])
 
+    @staticmethod
+    def default_missing_tracking(s):
+        # Native84 serializes these defaults and its constant spent-case policy
+        # even when Tick could not read an ammunition view or publish custody.
+        s['fixedContainer']['tracking'] = dict(enabled=False, current=False, blocksFire=False,
+            carried=False, pending=False, step=0, targetStep=0, lifetime=0, revision=0,
+            gun=dict(token=dict(id=0, owner=dict(actor=0, actorGeneration=0, equipGeneration=0, space=0),
+                hand=0, kind=0, item=dict(id=0,generation=0), contact=dict(id=0,generation=0), prerequisiteClaim=0),
+                deadlineNs=0, inputSequence=0), hand=None, target=None, carriedSupply=None,
+            spentCasePresent=False, spentCaseEpoch=0, spentCaseEjectedNs=0,
+            spentCaseEjectionWorldMeters=None, spentCasePoseWeaponMeters=None,
+            spentCasePolicy=dict(modOwned=True, outwardAxis=[0,0,1], maximumWorldUpDot=-.5,
+                                 dwellNs=100_000_000, maxInputGapNs=100_000_000),
+            pouchContact=False, grip=False, gripPressed=False)
+
+    def test_timed_preparation_default_spent_case_fields_only_allow_passive_wait(self):
+        with tempfile.TemporaryDirectory() as temp:
+            def missing(s):
+                self.default_missing_tracking(s)
+                s['fixedContainer']['tracking']['presentationMetadata'] = {'diagnostic': True}
+                s['fixedContainer']['tracking']['spentCasePolicy']['presentationMetadata'] = None
+            h, path, observed = self.timed_driver(Path(temp), missing=missing)
+            v = h.driver
+            result = v.prepare(path)
+            self.assertEqual(h.batches(), [[d.transport.TIMED_TRIGGER_COMMAND]])
+            self.assertEqual(v.commands, 2)
+            self.assertEqual(len(observed), 2)
+            self.assertIsNone(observed[0]['fixedContainer']['view'])
+            self.assertEqual(result['afterCounts'], dict(loaded=0, reserve=7, capacity=1))
+            self.assertEqual(v.stage_deadline, result['releaseCommittedNs']+d.NS)
+            self.assertEqual(v.reference['fixedContainer']['view']['snapshot']['counts']['loaded'], 1)
+            held, = [e for e in v.artifacts.events if e['type']=='selected_ammo_post_shot_unpublished']
+            self.assertFalse(held['commandAuthority'])
+            self.assertEqual(held['observationDeadlineNs'], v.stage_deadline)
+            self.assertFalse(result['nativeShotObserved'] or result['nativeAcceptance'])
+
+    def test_missing_tracking_malformed_spent_case_or_foreign_owner_refuses_without_replay(self):
+        mutations = (
+            lambda x:x['tracking'].update(spentCasePresent=True),
+            lambda x:x['tracking'].update(spentCaseEpoch=1),
+            lambda x:x['tracking'].update(spentCaseEjectedNs=1),
+            lambda x:x['tracking'].update(spentCaseEjectionWorldMeters=[]),
+            lambda x:x['tracking'].update(spentCasePoseWeaponMeters=[]),
+            lambda x:x['tracking']['spentCasePolicy'].update(modOwned=False),
+            lambda x:x['tracking']['spentCasePolicy'].update(outwardAxis=[1,0,0]),
+            lambda x:x['tracking']['spentCasePolicy'].update(dwellNs='100000000'),
+            lambda x:x['tracking'].pop('spentCaseEpoch'),
+            lambda x:x['tracking'].update(current=True),
+            lambda x:x['tracking'].update(lifetime=1),
+            lambda x:x['tracking'].update(hand={}),
+            lambda x:x['tracking'].update(pending=True),
+            lambda x:x.update(leftClaim={}),
+            lambda x:x.update(pendingRequest={}),
+            lambda x:x['owner'].update(soldier=999),
+            lambda x:x['input']['owner'].update(actor=999),
+            lambda x:x['tracking']['gun']['token']['owner'].update(actor=999),
+        )
+        for mutate in mutations:
+            with self.subTest(mutate=mutate), tempfile.TemporaryDirectory() as temp, self.scoped_harness():
+                def missing(s):
+                    self.default_missing_tracking(s)
+                    mutate(s['fixedContainer'])
+                h, path, observed = self.timed_driver(Path(temp), missing=missing)
+                with self.assertRaises((d.transport.REFUSAL, d.fixed.Refusal)):
+                    h.driver.prepare(path)
+                self.assertEqual(h.batches(), [[d.transport.TIMED_TRIGGER_COMMAND]])
+                self.assertEqual(len(observed), 1)
+                self.assertIsNone(h.driver.latest_snapshot)
+                self.assertFalse(any(e['type']=='selected_ammo_post_shot_unpublished'
+                                     for e in h.driver.artifacts.events))
+
     @unittest.skipUnless(os.environ.get('BC2_FIXED_PREPARATION_REPLAY'),
                          'optional retained normal83/07 timed preparation replay')
     def test_actual_normal83_07_absence_is_diagnostic_then_original_observation_expires(self):
@@ -489,6 +562,30 @@ class TimedPreparationObservationTests(unittest.TestCase):
         }
         blobs = {name:(folder/name).read_bytes() for name in pins}
         self.assertEqual({name:hashlib.sha256(raw).hexdigest() for name,raw in blobs.items()},pins)
+        self.assert_retained_absence_expires(blobs)
+
+    @unittest.skipUnless(os.environ.get('BC2_FIXED_PREPARATION_GAP_REPLAY'),
+                         'optional retained normal84/01 default spent-case tracking replay')
+    def test_actual_normal84_01_default_spent_case_tracking_waits_without_ammunition_success(self):
+        folder = Path(os.environ['BC2_FIXED_PREPARATION_GAP_REPLAY'])
+        pins = {
+            'snapshot-002.json':'dd289aba406a71eb205cfcf3c58652a0300c839586ee6f8a877c147051bdf090',
+            'snapshot-003.json':'5c8b74d45aeca405103e108844970b71373bf8eab7736904e913006e2c94337d',
+            'events.jsonl':'1807cae6062fae28d2455cd76c3c66e0a62d023efb51c47cdf717dd22a37f918',
+            'request-003-timing.json':'b41c9678eb47eea0353a908e597e6eb7802909cbf271317462b4d572c9447560',
+            'receive-timing-failure.json':'37a7bd222864230aca48bb70074f2625f7d08facffddc7a7d3e5652b3cc120a1',
+        }
+        blobs = {name:(folder/name).read_bytes() for name in pins}
+        self.assertEqual({name:hashlib.sha256(raw).hexdigest() for name,raw in blobs.items()},pins)
+        actual = json.loads(blobs['snapshot-003.json'])
+        expected = copy.deepcopy(actual)
+        self.default_missing_tracking(expected)
+        self.assertEqual(actual['fixedContainer']['tracking'], expected['fixedContainer']['tracking'])
+        # This episode never produced a replacement ammo view. Its replay
+        # reaches the existing polling bound before the unchanged time budget.
+        self.assert_retained_absence_expires(blobs, 'iteration bound')
+
+    def assert_retained_absence_expires(self, blobs, expected_error='timed out'):
         before, absent = [json.loads(blobs[name]) for name in ('snapshot-002.json','snapshot-003.json')]
         events = [json.loads(line) for line in blobs['events.jsonl'].splitlines()]
         request, = [e for e in events if e['type']=='command_request']
@@ -500,7 +597,8 @@ class TimedPreparationObservationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             h, _, _ = self.timed_driver(Path(temp)); v=h.driver
             h.on_sleep = None
-            h.now = json.loads(blobs['receive-timing-failure.json'])['firstPhaseError']['atNs']
+            failure = json.loads(blobs['receive-timing-failure.json'])
+            h.now = failure['firstPhaseError']['atNs'] if failure['firstPhaseError'] else failure['frozenNs']
             self.enterContext(patch.object(d.time,'sleep',lambda seconds:setattr(h,'now',h.now+round(seconds*d.NS))))
             h.state = copy.deepcopy(neutral['neutralState']); v.state=copy.deepcopy(h.state)
             v.reference = v.latest_snapshot = before
@@ -520,10 +618,12 @@ class TimedPreparationObservationTests(unittest.TestCase):
             v.request_bytes = (str(v.pending_nonce)+'\n').encode(); h.files[v.request_path]=v.request_bytes
             h.publish(absent); h.files[v.snapshot_path]=blobs['snapshot-003.json']; h.response_after=None
             clocks = v.deadline,v.hard_deadline,v.stage_deadline,v.demand_started
-            with self.assertRaisesRegex(d.transport.REFUSAL,'post-stage receipt observation timed out'):
+            with self.assertRaisesRegex(d.transport.REFUSAL,'post-stage receipt observation '+expected_error):
                 v.fresh_available()
             self.assertEqual(v.artifacts.saved['snapshot-003.json'],blobs['snapshot-003.json'])
             self.assertEqual((v.deadline,v.hard_deadline,v.stage_deadline,v.demand_started),clocks)
+            # Timeout is checked immediately after the existing 1 ms poll.
+            self.assertLess(h.now, v.stage_deadline+1_000_000)
             self.assertIs(v.reference,before); self.assertIsNone(v.latest_snapshot)
             self.assertEqual(h.command_writes,[])
             held = [e for e in v.artifacts.events if e['type']=='selected_ammo_post_shot_unpublished']
