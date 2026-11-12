@@ -32,6 +32,18 @@ def load(name, path):
 fixtures = load("navigation_native_fixture", ROOT / "tests/test_bc2_holster_shared_entry.py")
 
 
+# Actual87/03 df55fccac9124123a37c7134c48d314d timing projection. Original
+# snapshot-002.json.gz SHA256 70752e6dd18ed6851eeb11da8be33f507f4375c3aa8fdab512c56dea3cdbd1cf;
+# receive-timing-failure.json SHA256 e29ab266cd7dbb85ba8d39f4148fa6f9eb55c0d896a1c6f2400016fe731ddf6e.
+# These are recorded offsets, not new native evidence. The regression translates
+# them to the synthetic clock and supplies a deliberately delayed successor.
+RECORDED_NAVIGATION_TIMING = dict(
+    firstResponseNs=43_000_900, secondResponseNs=142_554_400,
+    secondObservedNs=641193151238700, secondInputObservedNs=641193132176600,
+    secondValidUntilNs=641193232176600, secondMenuUntilNs=641193230793200,
+    thirdRequestNs=641193166731300, failureNs=641193233703300)
+
+
 # Admission projection of actual86/02 da9146dcd773411eb7e108a7675f1e4d
 # snapshot-001.json.gz (SHA256 43f8dcdaa90526ef0151c9bcc2c6d341690b88cf2d44a3ffe712c4300814b5d4).
 # Replay below changes only the synthetic clock, nonce and simulated input;
@@ -522,6 +534,10 @@ class NavigationTests(unittest.TestCase):
         self.held_owner_records = []
         self.bad_ack_once = False
         self.replay_empty = False
+        self.response_delay = lambda driver: 0
+        self.omit_response_from = None
+        self.snapshot_read_delay = 0
+        self.cached_expiry_phases = set()
 
     def write(self, path, value):
         path.write_text(json.dumps(value), encoding="utf-8")
@@ -559,7 +575,7 @@ class NavigationTests(unittest.TestCase):
         self.write(driver.snapshot_path, s)
 
     def assembled(self, args=None):
-        m, current, pending_ack = self.m, b"note startup\n", None
+        m, current, pending_ack, pending_snapshot = self.m, b"note startup\n", None, None
         original_request = m.t.Driver.request_snapshot
         original_init = m.NavigationDriver.__init__
         original_publish = m.t.publish_command
@@ -568,6 +584,12 @@ class NavigationTests(unittest.TestCase):
 
         def simulate():
             nonlocal current, pending_ack
+            sample = getattr(self.driver, "latest_snapshot", None)
+            if sample and self.clock.now >= sample["valid_until_ns"]:
+                self.cached_expiry_phases.add(
+                    "release" if self.driver.releasing_sticks else
+                    "ack" if self.driver.pending_command else
+                    "hold" if any(any(v) for v in self.driver.sticks) else "idle")
             path = self.run / "sim/command.txt"
             raw = path.read_bytes()
             if raw != current:
@@ -587,7 +609,8 @@ class NavigationTests(unittest.TestCase):
                         raise AssertionError("unexpected simulator input: " + line)
                 self.state.update(cmdSeq=self.state["cmdSeq"]+len(batch), lastCmd=batch[-1],
                                   frame=self.state["frame"]+1)
-                pending_ack = (self.clock.now+self.ack_delay, batch, self.state["frame"])
+                ack_delay = self.ack_delay(self.driver) if callable(self.ack_delay) else self.ack_delay
+                pending_ack = (self.clock.now+ack_delay, batch, self.state["frame"])
             if pending_ack and self.clock.now >= pending_ack[0] and not self.suppress_ack:
                 _, batch, frame = pending_ack
                 (self.run / "sim/ack.txt").write_text(
@@ -612,11 +635,22 @@ class NavigationTests(unittest.TestCase):
             original_init(driver, args)
 
         def request(driver):
+            nonlocal pending_snapshot
             original_request(driver)
-            self.snapshot(driver)
+            if self.omit_response_from is None or driver.snapshot_index < self.omit_response_from:
+                pending_snapshot = (driver.last_request + self.response_delay(driver), driver)
+                deliver_snapshot()
+
+        def deliver_snapshot():
+            nonlocal pending_snapshot
+            if pending_snapshot and self.clock.now >= pending_snapshot[0]:
+                _, driver = pending_snapshot
+                pending_snapshot = None
+                self.snapshot(driver)
 
         def publish(path, raw, deadline_ns, validate):
-            self.clock.now += self.publication_delay
+            self.clock.now += (self.publication_delay(self.driver) if callable(self.publication_delay)
+                               else self.publication_delay)
             if self.cleanup_failure and self.driver.cleanup_mode:
                 raise OSError("synthetic zero publication failure")
             if self.competing_writer and self.calls:
@@ -624,7 +658,13 @@ class NavigationTests(unittest.TestCase):
             return original_publish(path, raw, deadline_ns, validate)
 
         def read(path, maximum):
+            deliver_snapshot()
             raw = original_read(path, maximum)
+            if (self.snapshot_read_delay and self.driver is not None and self.driver.snapshot_index == 2
+                    and path == self.driver.snapshot_path
+                    and int(json.loads(raw)["nonce"]) == self.driver.pending_nonce):
+                self.clock.now += self.snapshot_read_delay
+                self.snapshot_read_delay = 0
             if self.bad_ack_once and path.name == "ack.txt":
                 self.bad_ack_once = False
                 raw = raw.split(b"last=")[0] + b"last=foreign batch\n"
@@ -785,6 +825,153 @@ class NavigationTests(unittest.TestCase):
         self.assertEqual(self.calls[-1], self.m.ZERO)
         self.assertLess(result["episodes"][0]["neutralCommittedNs"]-result["episodes"][0]["startedNs"],
                         self.rows[0]["holdMs"]*1_000_000)
+
+    def test_recorded_pending_response_crosses_cached_expiry_in_ack_hold_and_normal_zero(self):
+        recorded = RECORDED_NAVIGATION_TIMING
+        self.rows = [dict(left=[0, -.3], right=[0, 0], holdMs=400)]
+        self.ack_delay = 65_000_000
+        self.snapshot_read_delay = recorded["thirdRequestNs"] - recorded["secondObservedNs"]
+        self.response_delay = lambda driver: (
+            recorded["firstResponseNs"] if driver.snapshot_index == 1 else
+            recorded["secondResponseNs"] if driver.snapshot_index == 2 else 150_000_000)
+
+        def recorded_second_source(s, driver):
+            if driver.snapshot_index != 2:
+                return
+            offset = s["observed_ns"] - recorded["secondObservedNs"]
+            s["valid_until_ns"] = s["native_deadline_ns"] = recorded["secondValidUntilNs"] + offset
+            s["input_evidence"].update(observedNs=recorded["secondInputObservedNs"] + offset,
+                                       deadlineNs=s["valid_until_ns"])
+            s["selected"]["deadlineNs"] = s["valid_until_ns"]
+            s["input"]["menu"]["deadlineNs"] = recorded["secondMenuUntilNs"] + offset
+        self.snapshot_mutation = recorded_second_source
+        code, result = self.assembled()
+        self.assertEqual((code, result.get("error")), (0, None))
+        self.assertTrue({"ack", "hold", "release"} <= self.cached_expiry_phases)
+        self.assertEqual(self.calls, [["stick l 0 -0.3", "stick r 0 0"], self.m.ZERO])
+        episode = result["episodes"][0]
+        self.assertLess(episode["neutralCommittedNs"] - episode["startedNs"], 400_000_000)
+        artifacts = Path(result["artifactDirectory"])
+        events = [json.loads(line) for line in (artifacts / "events.jsonl").read_text().splitlines()]
+        self.assertTrue(all(not event["cleanup"] for event in events if event["type"] == "command_commit"))
+        original = json.loads(gzip.decompress((artifacts / "snapshot-002.json.gz").read_bytes()))
+        self.assertEqual(original, self.samples[1])
+        self.assertFalse(result["nativeAcceptance"])
+        self.assertFalse(result["normalStopRequired"])
+
+    def test_missing_response_retains_request_budget_then_releases_without_new_input(self):
+        self.rows = [dict(left=[0, .3], right=[0, 0], holdMs=400),
+                     dict(left=[.3, 0], right=[0, 0], holdMs=180)]
+        self.omit_response_from = 3
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertIn("snapshot response not received within request budget", result["error"])
+        self.assertEqual(len(self.calls), 2)
+        self.assertEqual(self.calls[-1], self.m.ZERO)
+        self.assertEqual(result["episodes"], [])
+        self.assertFalse(result["normalStopRequired"])
+        events = [json.loads(line) for line in
+                  (Path(result["artifactDirectory"]) / "events.jsonl").read_text().splitlines()]
+        timeout = next(event for event in events if event["type"] == "snapshot_response_timeout")
+        self.assertEqual(timeout["responseDeadlineNs"] - timeout["requestStartedNs"], 250_000_000)
+        self.assertGreaterEqual(timeout["elapsedNs"], 250_000_000)
+
+    def test_expired_response_refresh_cannot_delay_owned_normal_zero(self):
+        self.rows = [dict(left=[0, .3], right=[0, 0], holdMs=400)]
+        self.response_delay = lambda driver: 240_000_000 if driver.snapshot_index >= 3 else 0
+
+        def expired_original(sample, driver):
+            if driver.snapshot_index != 3:
+                return
+            def shift(value):
+                if isinstance(value, dict):
+                    for key, child in value.items():
+                        if type(child) is int and child > 0 and (key.endswith("Ns") or key.endswith("_ns")):
+                            value[key] -= 110_000_000
+                        else:
+                            shift(child)
+                elif isinstance(value, list):
+                    for child in value:
+                        shift(child)
+            shift(sample)
+        self.snapshot_mutation = expired_original
+        code, result = self.assembled()
+        self.assertEqual((code, result.get("error")), (0, None))
+        self.assertEqual(len(self.calls), 2)
+        self.assertEqual(self.calls[-1], self.m.ZERO)
+        self.assertIsNotNone(self.driver.snapshot_refresh_started)
+        self.assertIsNotNone(self.driver.pending_nonce)
+        self.assertLess(result["episodes"][0]["neutralCommittedNs"] - result["episodes"][0]["startedNs"],
+                        400_000_000)
+        events = [json.loads(line) for line in
+                  (Path(result["artifactDirectory"]) / "events.jsonl").read_text().splitlines()]
+        self.assertTrue(any(event["type"] == "snapshot_refresh_hold" for event in events))
+        self.assertTrue(all(not event["cleanup"] for event in events if event["type"] == "command_commit"))
+
+    def test_normal_zero_ack_cannot_extend_original_pulse_deadline(self):
+        self.ack_delay = lambda driver: (
+            90_000_000 if driver.releasing_sticks and not driver.cleanup_mode else 0)
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertRegex(result["error"], "deadline|maximumGestureNs")
+        self.assertEqual(result["episodes"], [])
+        self.assertEqual(sum(lines != self.m.ZERO for lines in self.calls), 1)
+        self.assertEqual(self.calls[-1], self.m.ZERO)
+        self.assertFalse(result["normalStopRequired"])
+
+    def test_missing_response_after_normal_zero_cannot_admit_next_pulse(self):
+        self.rows = [dict(left=[0, .3], right=[0, 0], holdMs=180),
+                     dict(left=[.3, 0], right=[0, 0], holdMs=180)]
+        self.omit_response_from = 3
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertIn("snapshot response not received within request budget", result["error"])
+        self.assertEqual(len(result["episodes"]), 1)
+        self.assertEqual(sum(lines != self.m.ZERO for lines in self.calls), 1)
+        self.assertEqual(self.calls[-1], self.m.ZERO)
+        self.assertFalse(result["normalStopRequired"])
+
+    def test_next_nonzero_publication_still_requires_current_source(self):
+        self.rows.append(dict(left=[.3, 0], right=[0, 0], holdMs=180))
+        self.publication_delay = lambda driver: (
+            90_000_000 if len(self.calls) >= 2 and not driver.releasing_sticks else 0)
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertRegex(result["error"], "deadline|lease|stale snapshot")
+        self.assertEqual(len(result["episodes"]), 1)
+        self.assertEqual(sum(lines != self.m.ZERO for lines in self.calls), 1)
+        self.assertEqual(self.calls[-1], self.m.ZERO)
+
+    def test_head_only_publication_still_requires_current_source(self):
+        self.rows = [dict(left=[0, 0], right=[0, 0], holdMs=180, lookDegrees=[10, 0])]
+        self.publication_delay = 90_000_000
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertRegex(result["error"], "deadline|lease|stale snapshot")
+        self.assertEqual(self.calls, [])
+
+    def assert_delayed_native_loss_releases(self, mutation, message):
+        self.rows = [dict(left=[0, .3], right=[0, 0], holdMs=400)]
+        self.response_delay = lambda driver: 120_000_000 if driver.snapshot_index >= 3 else 0
+        self.snapshot_mutation = lambda sample, driver: mutation(sample) if driver.snapshot_index >= 3 else None
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertIn(message, result["error"])
+        self.assertEqual(len(self.calls), 2)
+        self.assertEqual(self.calls[-1], self.m.ZERO)
+        self.assertFalse(result["normalStopRequired"])
+
+    def test_delayed_native_focus_loss_still_refuses(self):
+        self.assert_delayed_native_loss_releases(
+            lambda s: s["input"].update(focused=False), "invalid input focus/head/time")
+
+    def test_delayed_native_tracking_loss_still_refuses(self):
+        self.assert_delayed_native_loss_releases(
+            lambda s: s["input"]["hands"][1].update(aimTracked=False), "required controller tracking missing")
+
+    def test_delayed_native_epoch_loss_still_refuses(self):
+        self.assert_delayed_native_loss_releases(
+            lambda s: s["input"]["menu"].update(epoch=8), "tracking/head/menu epoch changed")
 
     def test_actor_loss_releases_owned_sticks_and_refuses_next_episode(self):
         self.rows.append(dict(left=[1, 0], right=[0, 0], holdMs=150))

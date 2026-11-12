@@ -32,14 +32,14 @@ Handoff: handoff/integrations/coordinator-20261112-underbarrel/README.txt.
 Source push: reports/coordinator-20261108-feedback721/normal87/run01/source-push.json.
 Later shared-tool source1393481 pushed/verified: reports/coordinator-20261108-feedback721/campaign-tools/source-push.json.
 Installed knife inspection lock-scope correction and genuineEmpty movement admission:
-handoff/integrations/coordinator-20261112-knife-inspection/README.txt. Both normal builds pass; current actual knife/movement validation pending.
+handoff/integrations/coordinator-20261112-knife-inspection/README.txt. Both normal builds pass; actual87/03 knife Draw/Held/Return and stereo visibility confirmed. Jab/damage and complete movement remain pending.
 
 NEXT ACCEPTANCE
 Work by shared mechanism and bulk profiles; complete representative reload/fire/switch.
 Do not add per-run wrapper chains or repeat passed angle sweeps and native builds.
 Tool-only work corrects the complete-route driver budget and adds bounded ordinary
 campaign movement; these changes do not require native rebuilds or reinstallation.
-Current knife Draw/Held/Return and real objective/vehicle access are next.
+Knife jab/damage and real objective/vehicle access are next; retain passed87/03 Draw/Held/Return.
 Knife damage/visibility, C4 progression, vehicle routes, cutscenes/optics and FPS remain open.
 Steam32 lacks the executable; do not repeat that blocked investigation.
 Earlier evidence remains in linked integration handoffs and Git history.

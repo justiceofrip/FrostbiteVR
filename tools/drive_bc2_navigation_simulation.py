@@ -113,6 +113,7 @@ class NavigationDriver(t.Driver):
         self.pending_sticks = None
         self.release_attempted = False
         self.cleanup_mode = False
+        self.releasing_sticks = False
         self.action_deadline = None
         self.authorized_lines = None
         self.command_fault = False
@@ -293,28 +294,46 @@ class NavigationDriver(t.Driver):
                 raise
         else:
             self.ownership(state)
-        self.check_observation_state(state)
-        if self.monitor:
+        if not self.releasing_sticks:
+            self.check_observation_state(state)
+        if self.monitor and not self.releasing_sticks:
             received = self.receive_snapshot()
             if received:
                 self.accept_snapshot(*received)
-            if self.latest_snapshot is not None:
-                self.admit_snapshot(self.latest_snapshot, time.perf_counter_ns(),
-                                    t.integer(self.latest_snapshot["nonce"]))
+            # A published pulse keeps its original deadline and exact command
+            # custody while the next diagnostic is pending. Re-admitting the
+            # cached frame here confuses observation age with new input: it can
+            # abort ACK settlement before the response budget has elapsed.
+            # Every received replacement and every new input publication still
+            # pass current native admission; no cached lease is extended.
             if self.pending_nonce is None and now - self.last_request >= PERIOD:
                 self.request_snapshot()
 
     def validate_publication(self, lines, expected, cleanup):
         require(lines == (ZERO if cleanup else self.authorized_lines), "unreviewed navigation command")
         require(not cleanup or self.release_attempted, "unowned navigation release")
-        if not cleanup:
+        require(not self.releasing_sticks or lines == ZERO, "release must contain only numeric stick zeros")
+        if not cleanup and not self.releasing_sticks:
             self.check_observation_state(self.read_state())
             self.admit_snapshot(self.latest_snapshot, time.perf_counter_ns(),
                                 t.integer(self.latest_snapshot["nonce"]))
 
+    def pause_until(self, deadline):
+        if not self.releasing_sticks:
+            return super().pause_until(deadline)
+        # A pending diagnostic refresh may gate the next movement, but cannot
+        # delay exact owned zeros. Preserve its state and original clocks while
+        # enforcing ordinary command spacing and this pulse's existing bounds.
+        for _ in range(6000):
+            self.pump()
+            if time.perf_counter_ns() >= deadline:
+                return
+            time.sleep(.001)
+        raise Refusal("bounded release polling iteration limit")
+
     def read_publication_owner(self, expected_bytes, deadline_ns):
         raw = super().read_publication_owner(expected_bytes, deadline_ns)
-        if not self.cleanup_mode:
+        if not self.cleanup_mode and not self.releasing_sticks:
             # Repeat readiness immediately at every shared atomic publication
             # attempt. These failures do not alone establish writer ambiguity.
             self.check_observation_state(self.read_state())
@@ -322,12 +341,18 @@ class NavigationDriver(t.Driver):
                                 t.integer(self.latest_snapshot["nonce"]))
         return raw
 
-    def publish_navigation(self, lines, sticks, *, cleanup=False):
+    def publish_navigation(self, lines, sticks, *, cleanup=False, release=False):
+        require(not self.releasing_sticks, "nested navigation release")
+        if release or cleanup:
+            require(lines == ZERO and sticks == [[0, 0], [0, 0]] and self.entry_admitted
+                    and not self.pending_command and not self.command_fault and not self.unsafe_owner,
+                    "numeric stick release requires exact settled command ownership")
+        self.releasing_sticks = release or cleanup
         self.authorized_lines = lines[:]
         self.pending_sticks = copy.deepcopy(sticks)
         try:
             result = super().send(lines, cleanup=cleanup,
-                source_deadline=None if cleanup else self.snapshot_source_deadline(self.latest_snapshot))
+                source_deadline=None if self.releasing_sticks else self.snapshot_source_deadline(self.latest_snapshot))
             require(self.pending_sticks is None and self.sticks == sticks,
                     "navigation custody did not settle")
             return result
@@ -343,6 +368,7 @@ class NavigationDriver(t.Driver):
             raise
         finally:
             self.authorized_lines = None
+            self.releasing_sticks = False
 
     def navigate(self, rows):
         self.fresh()
@@ -384,7 +410,10 @@ class NavigationDriver(t.Driver):
             while time.perf_counter_ns() + 80_000_000 < self.action_deadline:
                 self.pump()
                 time.sleep(.001)
-            self.publish_navigation(ZERO, [[0, 0], [0, 0]])
+            # Exact owned zeros retire this pulse; they do not need a new
+            # native observation. Keep the original normal pulse/ACK bounds
+            # (cleanup=False), including when a diagnostic is still pending.
+            self.publish_navigation(ZERO, [[0, 0], [0, 0]], release=True)
             require(neutral_controls(self.state["controls"]), "zero ACK lacks neutral committed controls")
             self.action_deadline = None
             self.stage_deadline = previous_stage_deadline

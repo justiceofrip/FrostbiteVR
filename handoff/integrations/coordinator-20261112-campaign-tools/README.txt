@@ -12,3 +12,5 @@ Saved86/01 plus final release fits the preserved caps; conservative13.1s assembl
 This source batch changes tools/docs only. Installed86 native3adca03 and both normal builds/WARP remain valid; no rebuild/reinstall.
 Actual86/01 native completion audit: reports/coordinator-20261108-feedback1021/result.json in coordinator worktree; original timeout stays failed.
 Actual86/02 knife stow reached genuineEmpty; strictHeld timed out afterdraw, ownedrelease acknowledged. New diagnosis1022; no repeat of prior publication audit.
+Actual87/03 navigation exposed cached snapshot expiry during an already-published command ACK wait, while the next native response still had183.028ms of its original budget. Owned zero-stick cleanup acknowledged and committed neutral controls; preserve the failed result.
+1028 separates fresh new-input admission from existing ACK/hold custody. Normal owned zeros no longer wait for diagnostic readiness, but retain the original pulse/ACK deadlines and exact owner checks. New native responses and every new nonzero/head publication retain current admission.36/36focused checks pass; actual movement remains pending.
