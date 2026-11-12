@@ -883,13 +883,38 @@ def audit_post_reload_shot(flow, boundary):
     require(boundary["schema"] in ("bc2vr.feed-post-reload-pulse.v1", "bc2vr.fixed-post-reload-pulse.v1", "bc2vr.fixed-preparation-pulse.v1")
             and boundary["status"] == "native_shot_observation_pending"
             and boundary["nativeAcceptance"] is False, "missing completed pulse boundary")
-    start, release, end = (integer(boundary[k]) for k in
-                           ("pressWrittenNs", "releaseWrittenNs", "releaseCommittedNs"))
+    start, end = (integer(boundary[k]) for k in ("pressWrittenNs", "releaseCommittedNs"))
     begin = integer(boundary["preparationObservedNs"] if preparation else boundary["neutralWrittenNs"])
     finish = integer(boundary["observationEndNs"])
-    require(0 < begin < start < release <= end < finish
-            and release - start <= 100_000_000 and end - release <= 250_000_000
-            and finish - end <= NS,
+    pulse = boundary.get("pulseTransport")
+    if pulse is None:
+        release = integer(boundary["releaseWrittenNs"])
+        require(start < release <= end and release - start <= 100_000_000
+                and end - release <= 250_000_000, "post-reload pulse outside original bound")
+    else:
+        state = pulse["neutralState"]
+        controls = pulse["expectedNeutralControls"]
+        press_started, press_deadline, press_committed, driver_deadline = (
+            integer(pulse[k]) for k in
+            ("pressStartedNs", "pressDeadlineNs", "pressCommittedNs", "driverDeadlineNs"))
+        require(pulse["backend"] == "runtime_timed" and pulse["command"] == TIMED_TRIGGER_COMMAND
+                and pulse["runtimeSha256"] == TIMED_TRIGGER_RUNTIME_SHA256
+                and pulse["configuredMilliseconds"] == 50 and boundary["releaseWrittenNs"] is None
+                and pulse["physicalDurationNs"] is None and pulse["nativeDeliveryProved"] is False
+                and 0 < press_started <= integer(pulse["publicationStartedNs"]) <= start < press_committed
+                and press_committed < press_deadline == min(driver_deadline, press_started + 100_000_000)
+                and press_committed <= end == integer(pulse["neutralObservedNs"])
+                and end < integer(pulse["observationDeadlineNs"])
+                    == min(driver_deadline, press_committed + 250_000_000)
+                and integer(state["frame"]) >= integer(pulse["ackFrame"]) + 2
+                and integer(state["frame"]) > integer(pulse["beforeFrame"])
+                and integer(state["endFrames"]) > integer(pulse["beforeEndFrames"])
+                and state["pid"] == boundary["host"]["pid"] and state["runtime"] == "xr-sim"
+                and state["sessionState"] == "FOCUSED" and state["errors"] == 0 and state["lastCmdError"] == ""
+                and state["controls"] == controls and controls.get("trigR") == 0
+                and all(all(v == 0 for v in value) if isinstance(value, list) else value == 0
+                        for value in controls.values()), "runtime pulse lacks bounded fresh neutral evidence")
+    require(0 < begin < start < end < finish and finish - end <= NS,
             "post-reload pulse/observation outside original bound")
     require(flow["started"] is True and flow["drained"] is True
             and flow["server_binding_verified"] is True and integer(flow["in_flight"]) == 0,
@@ -1019,6 +1044,10 @@ def audit_post_reload_shot(flow, boundary):
                          "capture completeness and full reload acceptance are not established.")
 
 
+TIMED_TRIGGER_RUNTIME_SHA256 = "2c5eb913be5d4a6b86ed38e308b085985cd86e7454c149e91d5d629c3259d20a"
+TIMED_TRIGGER_COMMAND = "trigger r pull 50"
+
+
 class Driver:
     @contextmanager
     def receive_timing_scope(self, name):
@@ -1113,6 +1142,8 @@ class Driver:
         self.motion_started = None
         self.held_left = False
         self.held_trigger = False
+        self.timed_trigger = None
+        self.timed_trigger_supported = False
         self.held_right = False
         self.held_buttons = set()
         self.pending_command = False
@@ -1169,6 +1200,8 @@ class Driver:
                 require(same_path(options["xr_manifest"], pinned), "session runtime manifest differs")
             if key == "host_executable":
                 require(same_path(self.host["path"], pinned), "pinned host executable differs")
+        # Capability belongs only to this checked runtime, never a version/name.
+        self.timed_trigger_supported = self.manifest["runtime_library"]["sha256"] == TIMED_TRIGGER_RUNTIME_SHA256
         self.capture_plan = self.manifest["capture_plan"]
         require(self.capture_plan["periodic"] is False and self.capture_plan["layers"] is False
                 and 1 <= integer(self.capture_plan["maximum_compositions"]) <= 12
@@ -1183,6 +1216,7 @@ class Driver:
         if owner_path.exists():
             previous, _ = read_json(owner_path, 8192)
             require(previous["host"] == self.host and previous["pending"] is False
+                    and previous.get("timedTrigger") is None
                     and previous["commandSha256"] == self.command_hash and previous["sequence"] == self.sequence
                     and previous["sentinel"] == self.sentinel, "another or unsettled command writer owns this session")
         else:
@@ -1258,9 +1292,15 @@ class Driver:
             raise
 
     def owner_bytes(self, pending):
-        return json_bytes({"host": self.host,
-               "pending": pending, "sequence": self.sequence, "sentinel": self.sentinel,
-               "commandSha256": self.command_hash, "artifactDirectory": str(self.artifacts.directory)})
+        timer = getattr(self, "timed_trigger", None)
+        value = {"host": self.host,
+               # Older readers only understand pending. They must also refuse
+               # a settled batch whose runtime timer has not been retired.
+               "pending": pending or timer is not None, "sequence": self.sequence, "sentinel": self.sentinel,
+               "commandSha256": self.command_hash, "artifactDirectory": str(self.artifacts.directory)}
+        if timer is not None:
+            value["timedTrigger"] = timer
+        return json_bytes(value)
 
     def dispose_publication_owner(self):
         record = getattr(self, "_publication_owner", None)
@@ -1726,6 +1766,14 @@ class Driver:
     def _send(self, lines, expected, capture, cleanup, source_deadline, final_release, prepared):
         require(0 < len(lines) <= 8 and all(isinstance(x, str) and "\n" not in x and "\r" not in x for x in lines),
                 "invalid command batch")
+        require(getattr(self, "timed_trigger", None) is None or lines == ["trigger r 0"],
+                "runtime trigger timer remains in custody; no new input permitted")
+        timed = getattr(self, "_timed_trigger_arm", False)
+        require(not timed or (lines == ["trigger r 1"] and not cleanup and prepared is None
+                and expected is None and capture is None and not final_release
+                and self.timed_trigger_supported), "invalid timed trigger publication")
+        require(all(not line.startswith("trigger r pull") for line in lines),
+                "timed trigger requires the shared admitted single-shot path")
         require(self.commands + len(lines) + 1 <= MAX_COMMANDS, "512-command budget exhausted")
         if not cleanup:
             self.pause_until(max(self.last_write + 25_000_000, time.perf_counter_ns()))
@@ -1744,7 +1792,7 @@ class Driver:
             sentinel, batch, target, raw = prepared.sentinel, prepared.batch, prepared.target, prepared.raw
         else:
             sentinel = "note root-feed-" + uuid.uuid4().hex
-            batch = lines + [sentinel]
+            batch = ([TIMED_TRIGGER_COMMAND] if timed else lines) + [sentinel]
             require(len(" | ".join(batch).encode("ascii")) < 508, "batch exceeds complete xr-sim acknowledgement bound")
             target = self.sequence + len(batch)
             raw = ("\n".join(batch) + "\n").encode("ascii")
@@ -1780,6 +1828,18 @@ class Driver:
         if not self._receive_timing.frozen:
             self._receive_timing.publication_deadline_ns = publication_deadline
         previous_owner = self.sequence, self.sentinel, self.command_hash
+        previous_timer = dict(self.timed_trigger) if getattr(self, "timed_trigger", None) is not None else None
+        if timed:
+            require(before["controls"].get("trigR") == 0 and all(
+                    all(v == 0 for v in value) if isinstance(value, list) else value == 0
+                    for value in before["controls"].values()), "timed trigger requires exact neutral controls")
+            self.timed_trigger = dict(command=TIMED_TRIGGER_COMMAND, configuredMilliseconds=50,
+                runtimeSha256=TIMED_TRIGGER_RUNTIME_SHA256, beforeFrame=integer(before["frame"]),
+                beforeEndFrames=integer(before["endFrames"]), neutralControls=before["controls"],
+                basis={key: before[key] for key in ("head", "handL", "handR")},
+                publicationStartedNs=written, ackFrame=None, numericRelease=False)
+        elif lines == ["trigger r 0"] and getattr(self, "timed_trigger", None) is not None:
+            self.timed_trigger["numericRelease"] = True
         self.sequence, self.sentinel, self.command_hash = target, sentinel, prepared.hash if prepared else digest(raw)
         self.pending_command = True
         self.pending_batch, self.pending_before = batch, before
@@ -1789,6 +1849,7 @@ class Driver:
         except BaseException:
             self.sequence, self.sentinel, self.command_hash = previous_owner
             self.pending_command = False
+            self.timed_trigger = previous_timer
             raise
         def validate_publication_owner():
             if self.last_commit is not None and not cleanup:
@@ -1820,6 +1881,7 @@ class Driver:
             # input is ours to settle; cleanup retains the prior exact command.
             self.sequence, self.sentinel, self.command_hash = previous_owner
             self.pending_command = False
+            self.timed_trigger = previous_timer
             if not self.unsafe_owner:
                 try:
                     require(self.read_publication_owner(pending_owner, self.hard_deadline) == pending_owner,
@@ -1914,6 +1976,12 @@ class Driver:
         self.pending_command = False
         self.capture_sequence = integer(settled["captureSeq"])
         self.state = settled
+        if timed:
+            self.timed_trigger["ackFrame"] = ack[0]
+        elif lines == ["trigger r 0"] and getattr(self, "timed_trigger", None) is not None:
+            # Numeric zero does not cancel xr-sim's hold timer. Retain its
+            # owner record even if this ordinary emergency release commits.
+            self.timed_trigger["numericRelease"] = True
         self.save_owner(False)
         self.artifacts.event({"type": "command_commit", "requestedNs": written, "writtenNs": published, "committedNs": committed,
                               "ack": ack[1], "state": sim_summary(settled), "cleanup": cleanup}, cleanup=cleanup)
@@ -1930,7 +1998,7 @@ class Driver:
             if line.startswith("grip l "):
                 self.held_left = float(line.split()[-1]) > 0
             if line.startswith("trigger r "):
-                self.held_trigger = float(line.split()[-1]) > 0
+                self.held_trigger = line == TIMED_TRIGGER_COMMAND or float(line.split()[-1]) > 0
             if line.startswith("grip r "):
                 self.held_right = float(line.split()[-1]) > 0
             if line.startswith("btn "):
@@ -1939,6 +2007,96 @@ class Driver:
                     self.held_buttons.add(button)
                 else:
                     self.held_buttons.discard(button)
+
+    def observe_timed_trigger_neutral(self):
+        """Observe natural expiry, without a zero command masking timer custody.
+
+        State snapshots do not expose the timer or every high sample. Exact
+        neutral controls in a newer committed frame prove settled input on the
+        pinned runtime only when no intervening write could have forced zero.
+        Native Fire delivery and physical pulse duration remain separate facts.
+        """
+        timer = self.timed_trigger
+        require(timer is not None and timer["ackFrame"] is not None
+                and timer["numericRelease"] is False and not self.pending_command
+                and not self.unsafe_owner, "runtime trigger expiry is unsettled")
+        for _ in range(1000):
+            self.bounds(time.perf_counter_ns())
+            state = read_until(self.stage_deadline, self.read_state)
+            self.ownership(state)
+            observed = time.perf_counter_ns()
+            self.bounds(observed)
+            require(integer(state["captureSeq"]) == self.capture_sequence
+                    and all(state[k] == v for k, v in timer["basis"].items()),
+                    "runtime trigger observation changed pose/capture")
+            controls = dict(state["controls"])
+            require(controls.get("trigR") in (0, 1), "runtime trigger control differs")
+            controls["trigR"] = 0
+            require(controls == timer["neutralControls"], "runtime trigger observation changed other controls")
+            if (state["controls"]["trigR"] == 0
+                    # Parsing can race the frame increment after pending input
+                    # was committed. ACK+1 may still be the old neutral frame.
+                    and integer(state["frame"]) >= timer["ackFrame"] + 2
+                    and integer(state["frame"]) > timer["beforeFrame"]
+                    and integer(state["endFrames"]) > timer["beforeEndFrames"]):
+                proof = dict(backend="runtime_timed", command=timer["command"],
+                    runtimeSha256=timer["runtimeSha256"], configuredMilliseconds=50,
+                    publicationStartedNs=timer["publicationStartedNs"],
+                    pressStartedNs=timer["pressStartedNs"], pressDeadlineNs=timer["pressDeadlineNs"],
+                    pressCommittedNs=timer["pressCommittedNs"], driverDeadlineNs=timer["driverDeadlineNs"],
+                    observationDeadlineNs=self.stage_deadline, ackFrame=timer["ackFrame"],
+                    beforeFrame=timer["beforeFrame"], beforeEndFrames=timer["beforeEndFrames"],
+                    neutralObservedNs=observed, neutralState=sim_summary(state),
+                    expectedNeutralControls=timer["neutralControls"],
+                    physicalDurationNs=None, nativeDeliveryProved=False)
+                self.state = state
+                self.held_trigger = False
+                self.timed_trigger = None
+                try:
+                    self.save_owner(False)
+                except BaseException:
+                    self.timed_trigger = timer
+                    self.held_trigger = True
+                    raise
+                self.artifacts.event(dict(type="timed_trigger_neutral_observed", **proof))
+                return proof
+            time.sleep(.001)
+        raise REFUSAL("runtime trigger neutral observation iteration bound")
+
+    def single_trigger_pulse(self, pulse_ns=100_000_000, source_deadline=None):
+        """One shared admitted shot; unknown runtimes retain the numeric path."""
+        require(pulse_ns == 100_000_000 and not getattr(self, "_single_trigger_used", False)
+                and getattr(self, "timed_trigger", None) is None,
+                "single trigger attempt already used or unsupported original pulse bound")
+        self._single_trigger_used = True  # refusal cannot grant another attempt
+        press_started, driver_deadline = time.perf_counter_ns(), self.deadline
+        press_deadline = self.stage_deadline = min(driver_deadline, press_started + pulse_ns)
+        self._timed_trigger_arm = getattr(self, "timed_trigger_supported", False)
+        try:
+            self.send(["trigger r 1"], **({"source_deadline": source_deadline} if source_deadline is not None else {}))
+        finally:
+            self._timed_trigger_arm = False
+        press = self.last_write
+        if getattr(self, "post_reload_phase", None) is not None:
+            self.post_reload_phase = "release"
+        if getattr(self, "timed_trigger_supported", False):
+            # The original DOWN stage bounds publication and settled ACK, not
+            # observation of release. Preserve the original separate 250ms UP
+            # observation phase, anchored to settled DOWN without renewing any
+            # source lease or global clock. Timer50ms is not physical duration.
+            self.timed_trigger.update(pressStartedNs=press_started, pressDeadlineNs=press_deadline,
+                pressCommittedNs=self.last_commit, driverDeadlineNs=driver_deadline)
+            self.stage_deadline = min(driver_deadline, self.last_commit + 250_000_000)
+            proof = self.observe_timed_trigger_neutral()
+            return dict(pressWrittenNs=press, releaseWrittenNs=None,
+                        releaseCommittedNs=proof["neutralObservedNs"], pulseTransport=proof)
+        # Ordinary UP remains mandatory even after a late DOWN acknowledgement.
+        self.stage_deadline = min(self.deadline, time.perf_counter_ns() + 250_000_000)
+        self.send(["trigger r 0"])
+        require(self.last_write - press <= pulse_ns,
+                "single trigger pulse publication exceeded 100ms; released; no retry")
+        return dict(pressWrittenNs=press, releaseWrittenNs=self.last_write,
+                    releaseCommittedNs=self.last_commit)
 
     @staticmethod
     def check_target(state, target):
@@ -2232,17 +2390,8 @@ class Driver:
                 "neutral rearm needs a new original input packet")
         self.post_reload_closure = closure
         self.post_reload_phase = "press"
-        self.stage_deadline = min(self.deadline, time.perf_counter_ns() + 100_000_000)
-        self.send(["trigger r 1"], source_deadline=self.snapshot_source_deadline(ready))
-        press = self.last_write
-        self.post_reload_phase = "release"
-        # UP remains mandatory even if the pulse has already run late.
-        # Its exact owned ACK/next-frame observation has a separate bound;
-        # it neither renews the DOWN source lease nor admits another DOWN.
-        self.stage_deadline = min(self.deadline, time.perf_counter_ns() + 250_000_000)
-        self.send(["trigger r 0"])
-        release, committed = self.last_write, self.last_commit
-        require(release - press <= 100_000_000, "single trigger pulse publication exceeded 100ms; released; no retry")
+        pulse = self.single_trigger_pulse(source_deadline=self.snapshot_source_deadline(ready))
+        committed = pulse["releaseCommittedNs"]
         self.post_reload_phase = "observe"
         self.stage_deadline = min(self.deadline, committed + 600_000_000)
         self.pause_until(committed + 100_000_000)
@@ -2255,8 +2404,7 @@ class Driver:
         boundary = dict(schema=schema, status="native_shot_observation_pending",
                         owner=ready["owner"], closure=closure, host=self.host,
                         sourceSha256=self.manifest["source_sha256"], closeResultSha256=digest(raw),
-                        neutralWrittenNs=neutral_written, pressWrittenNs=press, releaseWrittenNs=release,
-                        releaseCommittedNs=committed, observationEndNs=after["observed_ns"],
+                        neutralWrittenNs=neutral_written, **pulse, observationEndNs=after["observed_ns"],
                         nativeAcceptance=False, headsetAcceptance=False, nativeShotObserved=False)
         if closure.get("family") == "fixed":
             boundary.update(beforeCounts=ready["fixedContainer"]["view"]["snapshot"]["counts"],
@@ -2345,6 +2493,11 @@ class Driver:
                     if integer(state["frame"]) > int(match[2]) and integer(state["endFrames"]) > integer(self.pending_before["endFrames"]):
                         require(time.perf_counter_ns() < until, "original acknowledgement/read deadline exceeded")
                         self.pending_command = False
+                        if getattr(self, "timed_trigger", None) is not None:
+                            if TIMED_TRIGGER_COMMAND in self.pending_batch:
+                                self.timed_trigger["ackFrame"] = int(match[2])
+                            if "trigger r 0" in self.pending_batch:
+                                self.timed_trigger["numericRelease"] = True
                         self.remember_controls(self.pending_batch)
                         self.save_owner(False)
                         self.artifacts.event({"type": "pending_command_settled_before_release", "ack": raw,
@@ -2359,6 +2512,13 @@ class Driver:
         self.monitor = False
         if self.pending_command and not self.unsafe_owner:
             self.settle_pending_for_release()
+        timer = getattr(self, "timed_trigger", None)
+        if timer is not None and not self.pending_command and not self.unsafe_owner:
+            if timer["numericRelease"] and not self.held_trigger:
+                return "ordinary zero already acknowledged; runtime timer custody retained; future input refused"
+            # Timer custody survives an archive/owner-save failure after ACK,
+            # even if remember_controls was never reached.
+            self.held_trigger = True
         if self.unsafe_owner or self.pending_command or not (self.held_left or self.held_trigger or self.held_right or self.held_buttons):
             return "not attempted: no settled owned held controller"
         if time.perf_counter_ns() + 250_000_000 >= self.hard_deadline:
@@ -2366,6 +2526,8 @@ class Driver:
         lines = (["grip l 0"] if self.held_left else []) + (["trigger r 0"] if self.held_trigger else [])
         lines += (["grip r 0"] if self.held_right else []) + ["btn " + key + " up" for key in sorted(self.held_buttons)]
         self.send(lines, cleanup=True)
+        if getattr(self, "timed_trigger", None) is not None:
+            return "ordinary zero acknowledged; runtime timer custody retained; future input refused"
         return "ordinary owned controller release acknowledged"
 
 
@@ -2450,6 +2612,7 @@ def main(argv=None):
                                "commands": driver.commands, "plans": driver.plans,
                                "leftGripHeld": driver.held_left, "pendingCommand": driver.pending_command,
                                "triggerHeld": driver.held_trigger,
+                               "timedTriggerPending": getattr(driver, "timed_trigger", None) is not None,
                                "captureSequence": getattr(driver, "capture_sequence", None),
                                "artifactDirectory": str(driver.artifacts.directory)})
                 try:

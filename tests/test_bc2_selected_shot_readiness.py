@@ -227,7 +227,7 @@ class SelectedShotReadinessTests(unittest.TestCase):
                 h.now = deadline
             h.write(path, raw, **options)
         with patch.object(d.transport, 'atomic', side_effect=expire):
-            with self.assertRaisesRegex(d.transport.REFUSAL, 'original command publication deadline'):
+            with self.assertRaisesRegex(d.transport.REFUSAL, 'original (?:command publication|acknowledgement/read) deadline'):
                 v.send(['trigger r 1'])
         self.assertEqual(h.command_writes, [])
         self.assertEqual(v.commands, 0)

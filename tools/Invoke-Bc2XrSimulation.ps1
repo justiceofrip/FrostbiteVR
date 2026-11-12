@@ -15,6 +15,7 @@ param(
     [string]$Python,
     [string]$LocalConfig,
     [switch]$NeutralMotionCheck,
+    [switch]$TimedTriggerCheck,
     [ValidateRange(1,[long]::MaxValue)][long]$MaxGeneratedBytes=40GB,
     [string]$GeneratedBudgetReason,
     [string[]]$AdditionalBudgetRoots=@(),
@@ -44,7 +45,8 @@ $receipt=[ordered]@{
     source_contract=@{xr_sim='ca14f5b1c549cf49dca49233250b8f3cdad013f4';xr_tape='419c30d64d72ff9a41f00701ffe39c3c94bf3ac3'};
     limits=@{seconds=$Seconds;deadline_seconds=$TimeoutSeconds;planned_bytes=128MB;capture_frames=1;eye_width=320;eye_height=240;tape_max_frames=6000};
     commands=$commands;failures=$failures;cleanup=@();
-    motion=@{requested=[bool]$NeutralMotionCheck;status='not_requested'}
+    motion=@{requested=[bool]$NeutralMotionCheck;status='not_requested'};
+    timed_trigger=@{requested=[bool]$TimedTriggerCheck;status='not_requested'}
 }
 function Write-Json([string]$Path,$Value){
     [IO.File]::WriteAllText($Path,($Value|ConvertTo-Json -Depth 30),$utf8)
@@ -180,6 +182,90 @@ function Send-Commands([string]$Name,[string[]]$Lines,[scriptblock]$Predicate){
     Write-Json (Join-Path $OutputDirectory 'commands.json') $commands
     return $settled
 }
+function Timed-Stamp {
+    return @{elapsed_ms=$clock.Elapsed.TotalMilliseconds;utc=[DateTime]::UtcNow.ToString('o')}
+}
+function Read-TimedState([string]$Phase,[long]$Sequence,[string]$Command,[long]$PreviousSequence=-1,[string]$PreviousCommand='',[double]$UntilMs=0){
+    Check-Bounds
+    Require (-not $hostRun.process.HasExited) "Host exited during timed trigger $Phase"
+    $readStart=Timed-Stamp
+    if($UntilMs -le 0){$UntilMs=$clock.Elapsed.TotalMilliseconds+2000}
+    $transientReads=0
+    do{
+        Check-Bounds
+        Require ($clock.Elapsed.TotalMilliseconds -lt $UntilMs -and -not $hostRun.process.HasExited) "Timed trigger state read exceeded its original bound during $Phase"
+        try{$state=Read-Json $statePath;break}catch [IO.IOException]{
+            # Atomic state replacement may briefly deny/read-miss the path. Retry
+            # only that read inside this phase's original deadline, never input.
+            $readError=$_.Exception.GetBaseException()
+            Require ($readError -is [IO.IOException] -and ($readError.HResult -band 0xffff) -in @(2,32,33)) 'Non-transient timed trigger state read failure.'
+            $transientReads++
+            Start-Sleep -Milliseconds 2
+        }
+    }while($true)
+    Require ($clock.Elapsed.TotalMilliseconds -lt $UntilMs) "Timed trigger state read completed after its original bound during $Phase"
+    $sample=@{phase=$Phase;read_start=$readStart;read_end=(Timed-Stamp);transient_reads=$transientReads;state=$state}
+    $receipt.timed_trigger.observations.Add($sample)
+    Require ($state.pid -eq $hostRun.pid -and $state.runtime -eq 'xr-sim' -and $state.graphics -eq 'D3D11' -and $state.system -eq $systemName -and $state.headsetConfig -eq $profilePath) 'Timed trigger simulator identity changed.'
+    Require ($state.sessionRunning -and $state.actionsAttached -and $state.sessionState -eq 'FOCUSED') 'Timed trigger requires a running, focused controller session throughout.'
+    Require ([int]$state.errors -eq 0 -and [string]::IsNullOrEmpty($state.lastCmdError)) "Timed trigger simulator error: $($state.lastCmdError)"
+    Require ($state.head.valid -and $state.handL.valid -and $state.handR.valid -and $state.controls.trigL -eq 0 -and $state.controls.gripL -eq 0 -and $state.controls.gripR -eq 0) 'Timed trigger lost tracked poses or unrelated control neutrality.'
+    $expected=$state.cmdSeq -eq $Sequence -and $state.lastCmd -ceq $Command
+    $previous=$PreviousSequence -ge 0 -and $state.cmdSeq -eq $PreviousSequence -and $state.lastCmd -ceq $PreviousCommand
+    Require ($expected -or $previous) 'Timed trigger sequence/lastCmd changed unexpectedly; another writer may own the simulator.'
+    if($null -ne $script:timedLastSample){
+        foreach($field in @('cmdSeq','frame','endFrames','uptimeMs')){
+            Require ([long]$state.$field -ge [long]$script:timedLastSample.state.$field) "Timed trigger $field regressed."
+        }
+    }
+    $script:timedLastSample=$sample
+    return $sample
+}
+function Start-TimedCommand([string]$Name,[string]$Line,$Previous,[double]$TriggerBefore){
+    # Preserve the watcher's mtime spacing without spending a fixed 25 ms after a short pulse.
+    $remaining=25.0-($clock.Elapsed.TotalMilliseconds-$script:timedLastWriteMs)
+    if($remaining -gt 0){Start-Sleep -Milliseconds ([int][Math]::Ceiling($remaining))}
+    $before=Read-TimedState "$Name before write" ([long]$Previous.state.cmdSeq) ([string]$Previous.state.lastCmd)
+    Require ($before.state.controls.trigR -eq $TriggerBefore) "$Name baseline trigger changed before publication."
+    # ACK last= contains the entire prior batch; state.lastCmd contains only its final line.
+    $prior=$commands[$commands.Count-1]
+    Require ([long]$prior.before_sequence+$prior.lines.Count -eq [long]$before.state.cmdSeq -and $prior.lines[-1] -ceq $before.state.lastCmd) 'Timed trigger prior batch does not match the current command owner.'
+    $row=[ordered]@{name=$Name;lines=@($Line);before_sequence=$before.state.cmdSeq;before=$before;previous_ack_last=($prior.lines -join ' | ');target_sequence=([long]$before.state.cmdSeq+1);write_start=$null;publish_start=$null;write_end=$null;ack=$null;target_seen=$false;status='pending'}
+    $commands.Add($row)
+    $temporary=Join-Path $simDir 'command.txt.tmp'
+    $row.write_start=Timed-Stamp
+    [IO.File]::WriteAllText($temporary,$Line+"`n",$utf8)
+    $row.publish_start=Timed-Stamp
+    [IO.File]::Move($temporary,(Join-Path $simDir 'command.txt'),$true)
+    $row.write_end=Timed-Stamp
+    $script:timedLastWriteMs=$row.write_end.elapsed_ms
+    return $row
+}
+function Wait-TimedState($Row,[string]$Phase,[scriptblock]$Predicate){
+    $until=$clock.Elapsed.TotalMilliseconds+2000
+    do{
+        $previousSequence=if($Row.target_seen){-1L}else{[long]$Row.before_sequence}
+        $sample=Read-TimedState $Phase ([long]$Row.target_sequence) ([string]$Row.lines[0]) $previousSequence ([string]$Row.before.state.lastCmd) $until
+        if($sample.state.cmdSeq -eq $Row.target_sequence){$Row.target_seen=$true}
+        if($null -eq $Row.ack){
+            $readStart=Timed-Stamp
+            $ackText=[IO.File]::ReadAllText((Join-Path $simDir 'ack.txt'))
+            $readEnd=Timed-Stamp
+            Require ($ackText -cmatch '\Aseq=(\d+) frame=(\d+) error=-\r?\nlast=([^\r\n]*)\r?\n\z') 'Timed trigger ACK is malformed or reports an error.'
+            $ackSequence=[long]$Matches[1];$ackFrame=[long]$Matches[2];$ackCommand=$Matches[3]
+            Require (($ackSequence -eq $Row.target_sequence -and $ackCommand -ceq $Row.lines[0]) -or ($ackSequence -eq $Row.before_sequence -and $ackCommand -ceq $Row.previous_ack_last)) 'Timed trigger ACK sequence/command has an unexpected owner.'
+            if($ackSequence -eq $Row.target_sequence){
+                $Row.ack=@{sequence=$ackSequence;frame=$ackFrame;text=$ackText;read_start=$readStart;read_end=$readEnd}
+            }
+        }
+        if($Row.target_seen -and $null -ne $Row.ack -and $sample.state.cmdSeq -eq $Row.target_sequence -and $sample.state.frame -gt [Math]::Max([long]$Row.ack.frame,[long]$Row.before.state.frame) -and $sample.state.endFrames -gt $Row.before.state.endFrames -and (& $Predicate $sample)){
+            $Row.status='observed'
+            return $sample
+        }
+        Start-Sleep -Milliseconds 2
+    }while($clock.Elapsed.TotalMilliseconds -lt $until)
+    throw "Timed trigger failed to observe $Phase within 2000 ms; missing high or late observations do not qualify."
+}
 try{
     Require $IsWindows 'This host diagnostic requires Windows and PowerShell 7.2+.'
     . (Join-Path $PSScriptRoot 'StorageBudget.ps1')
@@ -187,6 +273,8 @@ try{
     $null=Set-FvrProjectTemporaryStorage -RepositoryRoot $repo
     Require ($TimeoutSeconds -ge $Seconds+10) 'TimeoutSeconds must reserve at least 10 seconds beyond the host duration.'
     Require (-not $NeutralMotionCheck -or $Seconds -ge 12) 'Neutral motion check requires at least 12 host seconds.'
+    Require (-not ($NeutralMotionCheck -and $TimedTriggerCheck)) 'NeutralMotionCheck and TimedTriggerCheck are separate diagnostic modes.'
+    Require (-not $TimedTriggerCheck -or $Seconds -ge 12) 'Timed trigger check requires at least 12 host seconds.'
     Require ($MaxGeneratedBytes -le 40GB -or -not [string]::IsNullOrWhiteSpace($GeneratedBudgetReason)) 'MaxGeneratedBytes above 40 GiB requires an explicit GeneratedBudgetReason.'
     $OutputDirectory=Full-Path $OutputDirectory
     $reportRoot=(Full-Path (Join-Path $repo 'reports')).TrimEnd('\')+'\'
@@ -257,7 +345,76 @@ try{
         Require ($ready.session_created -and $ready.width -eq 320 -and $ready.height -eq 240) 'Host readiness dimensions differ from the requested bounded eyes.'
         $null=Send-Commands 'pose-and-grip' @('pace free 60','capture off','capture size 320 240','compose oncapture','focus norender on','head pose 0.05 1.60 -0.03 12 0 0','hand l follow off','hand r follow off','hand l grip pose -0.20 1.30 -0.35 0 0 0','hand l aim pose -0.20 1.30 -0.35 0 0 0','hand r grip pose 0.20 1.30 -0.35 0 0 0','hand r aim pose 0.20 1.30 -0.35 0 0 0','grip l 1','grip r 1','trigger r 0') {param($s) $s.head.valid -and $s.handL.valid -and $s.handR.valid -and [Math]::Abs($s.head.pos[0]-0.05) -lt 0.001 -and [Math]::Abs($s.head.ypr[0]-12) -lt 0.1 -and $s.controls.gripL -eq 1 -and $s.controls.gripR -eq 1}
         $null=Send-Commands 'trigger-down' @('trigger r 1') {param($s) $s.controls.trigR -eq 1}
-        $null=Send-Commands 'trigger-up' @('trigger r 0','grip l 0','grip r 0') {param($s) $s.controls.trigR -eq 0 -and $s.controls.gripL -eq 0 -and $s.controls.gripR -eq 0}
+        $triggerUp=Send-Commands 'trigger-up' @('trigger r 0','grip l 0','grip r 0') {param($s) $s.controls.trigR -eq 0 -and $s.controls.gripL -eq 0 -and $s.controls.gripR -eq 0}
+        if($TimedTriggerCheck){
+            $receipt.timed_trigger=@{
+                requested=$true;status='pending';evidence_level='host_only_simulated_runtime';native_acceptance=$false;
+                sampling=@{poll_ms=2;wait_bound_ms=2000;pinned_default_state_hz=20;diagnostic_state_hz=0;restore_status='pending';production_sampling_qualified=$false};
+                timing_contract='Configured milliseconds arm a runtime timer; expiry is applied on a frame commit. Observed sample intervals are not exact physical pulse widths.';
+                tape_input_evidence=$false;observations=[Collections.Generic.List[object]]::new();
+                natural=@{configured_ms=50;status='pending';release_commands_written=0};
+                explicit_zero=@{configured_ms=200;status='pending';numeric_zero_cancels_timer=$false}
+            }
+            $script:timedLastSample=$null;$script:timedLastWriteMs=-1000.0
+            try{
+                # Per-frame state output makes the short pulse observable; production sampling differs.
+                $sampling=Start-TimedCommand 'timed-state-every-frame' 'state hz 0' @{state=$triggerUp} 0
+                $baseline=Wait-TimedState $sampling 'neutral per-frame baseline' {param($o) $o.state.controls.trigR -eq 0}
+                $pulse=Start-TimedCommand 'timed-natural-pull' 'trigger r pull 50' $baseline 0
+                $receipt.timed_trigger.natural.command=$pulse
+                $high=Wait-TimedState $pulse '50 ms fresh committed high' {param($o) $o.state.controls.trigR -eq 1}
+                $receipt.timed_trigger.natural.high=$high
+                # No write occurs between this high and the later neutral frame.
+                $low=Wait-TimedState $pulse '50 ms natural release' {
+                    param($o) $o.state.controls.trigR -eq 0 -and $o.state.frame -gt $high.state.frame -and $o.state.endFrames -gt $high.state.endFrames
+                }
+                $receipt.timed_trigger.natural.low=$low
+                $receipt.timed_trigger.natural.observed_high_to_low_runtime_ms=[long]$low.state.uptimeMs-[long]$high.state.uptimeMs
+                $receipt.timed_trigger.natural.observed_high_to_low_host_read_ms=$low.read_end.elapsed_ms-$high.read_end.elapsed_ms
+                $receipt.timed_trigger.natural.status='passed'
+                $hold=Start-TimedCommand 'timed-release-hold' 'trigger r pull 200' $low 0
+                $receipt.timed_trigger.explicit_zero.hold_command=$hold
+                $held=Wait-TimedState $hold '200 ms fresh committed high' {param($o) $o.state.controls.trigR -eq 1}
+                $receipt.timed_trigger.explicit_zero.high=$held
+                $zero=Start-TimedCommand 'timed-numeric-release' 'trigger r 0' $held 1
+                $receipt.timed_trigger.explicit_zero.release_command=$zero
+                $released=Wait-TimedState $zero 'numeric zero fresh committed low' {
+                    param($o) $o.state.controls.trigR -eq 0 -and $o.state.frame -ge ([long]$zero.ack.frame+2) -and $o.state.frame -gt $held.state.frame -and $o.state.endFrames -gt $held.state.endFrames
+                }
+                $receipt.timed_trigger.explicit_zero.low=$released
+                # A late zero cannot distinguish explicit release from natural expiry: fail it.
+                $earliestExpiry=[long]$hold.before.state.uptimeMs+200
+                $receipt.timed_trigger.explicit_zero.earliest_possible_expiry_runtime_ms=$earliestExpiry
+                Require ([long]$released.state.uptimeMs -lt $earliestExpiry) 'Numeric zero was observed too late to distinguish it from natural timer expiry.'
+                $drainRuntime=[long]$held.state.uptimeMs+200
+                $drainHost=$held.read_end.elapsed_ms+200
+                $receipt.timed_trigger.explicit_zero.drain_after_runtime_ms=$drainRuntime
+                $receipt.timed_trigger.explicit_zero.drain_after_host_read_ms=$drainHost
+                $receipt.timed_trigger.explicit_zero.parse_upper_bound='Observed high state uptimeMs and its host read end independently bound parse from above; each adds the configured 200 ms.'
+                $drained=Wait-TimedState $zero 'neutral advancing frames beyond timer drain bounds' {
+                    param($o)
+                    Require ($o.state.controls.trigR -eq 0) 'Released trigger became non-neutral while its old timer drained.'
+                    $o.state.uptimeMs -gt $drainRuntime -and $o.read_start.elapsed_ms -gt $drainHost -and $o.state.frame -gt $released.state.frame -and $o.state.endFrames -ge ([long]$released.state.endFrames+3)
+                }
+                $receipt.timed_trigger.explicit_zero.drained=$drained
+                $receipt.timed_trigger.explicit_zero.status='passed'
+                # No later press is allowed until the old timed hold has drained.
+                $restore=Start-TimedCommand 'timed-state-default-rate' 'state hz 20' $drained 0
+                $receipt.timed_trigger.sampling.restore=Wait-TimedState $restore 'restored state rate with neutral controls' {param($o) $o.state.controls.trigR -eq 0}
+                $receipt.timed_trigger.sampling.restore_status='passed'
+                $receipt.timed_trigger.status='passed'
+            }catch{
+                $receipt.timed_trigger.failure=$_.Exception.Message
+                throw
+            }finally{
+                if($receipt.timed_trigger.status -ne 'passed'){
+                    $receipt.timed_trigger.status='failed'
+                    if($receipt.timed_trigger.sampling.restore_status -eq 'pending'){$receipt.timed_trigger.sampling.restore_status='not_completed_owned_host_cleanup_required'}
+                }
+                Write-Json (Join-Path $OutputDirectory 'timed-trigger.json') $receipt.timed_trigger
+                Write-Json (Join-Path $OutputDirectory 'commands.json') $commands
+            }
+        }
         if($NeutralMotionCheck){
             $receipt.motion.status='pending'
             $middle=Send-Commands 'neutral-motion-out' @('hand l to grip 0.20 1.40 -0.55 30 0 0 1200') {
@@ -329,7 +486,7 @@ try{
         }else{Gate $false 'Invalid-hand control was not completed.'}
         Gate ([IO.File]::Exists((Join-Path $OutputDirectory 'xr-events.jsonl'))) 'Host XR event log is absent.'
     }catch{$failures.Add("Host evidence: $($_.Exception.Message)")}
-    $expectedCommandBatches=if($NeutralMotionCheck){10}else{7}
+    $expectedCommandBatches=if($NeutralMotionCheck){10}elseif($TimedTriggerCheck){12}else{7}
     $receipt.host_wiring_status=if($failures.Count -eq $hostFailureStart -and $hostFailureStart -eq 0 -and $commands.Count -eq $expectedCommandBatches){'passed'}else{'failed'}
     $captureFailureStart=$failures.Count
     try{

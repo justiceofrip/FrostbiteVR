@@ -326,24 +326,18 @@ class PreparationDriver(fixed_driver.SelectedAmmoDriver):
                 key=key, artifactDirectory=str(self.artifacts.directory), preparationOnly=True)))
         self.reference = snapshot
         begin = integer(snapshot['input_evidence']['observedNs'])
-        self.stage_deadline = min(self.deadline, time.perf_counter_ns()+pulse)
-        self.send(['trigger r 1'])
-        press = self.last_write
-        self.stage_deadline = min(self.deadline, time.perf_counter_ns()+250_000_000)
-        self.send(['trigger r 0'])
-        release, committed = self.last_write, self.last_commit
-        require(release-press <= pulse, 'preparation pulse exceeded100ms; released; no retry')
+        delivery = self.single_trigger_pulse(pulse)
+        committed = delivery['releaseCommittedNs']
         self.stage_deadline = min(self.deadline, committed+self.post_shot_observation_ns)
         self.pause_until(committed+100_000_000)
         after, _, now = self.fresh_available()
         counts = after_shot(after, now, self.preparation)
         require(integer(after['input_evidence']['observedNs']) >= committed,
-                'post-shot observation predates acknowledged release')
+                'post-shot observation predates observed release')
         result = dict(schema='bc2vr.fixed-preparation-pulse.v1', status='native_shot_observation_pending',
             preparationOnly=True, preparation=self.preparation, owner=snapshot['owner'],
             host=self.host, sourceSha256=self.manifest['source_sha256'],
-            preparationObservedNs=begin, pressWrittenNs=press, releaseWrittenNs=release,
-            releaseCommittedNs=committed, observationEndNs=integer(after['observed_ns']),
+            preparationObservedNs=begin, **delivery, observationEndNs=integer(after['observed_ns']),
             beforeCounts=self.preparation['counts'], afterCounts=counts,
             nativeAcceptance=False, headsetAcceptance=False, nativeShotObserved=False,
             attempt=str(attempt), clearance=self.clearance,
@@ -428,11 +422,13 @@ def main(argv=None):
             if getattr(driver, 'artifacts', None):
                 try:
                     result['release'] = driver.release_after_failure()
-                    require(not(driver.held_trigger or driver.held_left or driver.pending_command),
+                    require(not(driver.held_trigger or driver.held_left or driver.pending_command
+                                or getattr(driver,'timed_trigger',None)),
                             'preparation release remains unsettled')
                 except Exception as error:
                     result.update(releaseError=str(error), status='refused');code=2
-                result.update(commands=driver.commands, artifactDirectory=str(driver.artifacts.directory))
+                result.update(commands=driver.commands, artifactDirectory=str(driver.artifacts.directory),
+                              timedTriggerPending=getattr(driver,'timed_trigger',None) is not None)
                 try: driver.artifacts.save('result.json', result, final=True)
                 except Exception as error: result['archiveError']=str(error);code=2
             driver.close()
