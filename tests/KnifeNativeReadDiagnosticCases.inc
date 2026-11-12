@@ -71,6 +71,45 @@ int Cases(){
         CHECK(!std::strcmp(d.stage,"selection_changed")&&d.before.previous[1]==0&&d.after.previous[1]==1);}
     {Memory f;f.raceAt=Memory::ss+0x220;f.raceValue=Memory::sp+4;pk::Selection q;CHECK(!f.Selection(q,&d));
         CHECK(!std::strcmp(d.stage,"actor_after")&&d.actor.lastRead.address==Memory::ss+0x220&&d.actor.lastRead.value==Memory::sp+4);}
+    // Actual normal89 lost strict Held when one callback's two actor reads
+    // differed only by soldier flags 3->19. Actor accepts the 0x18 context
+    // bits already; its final selection bracket must use that same identity.
+    for(unsigned before:{3u,11u,19u,27u})for(unsigned after:{3u,11u,19u,27u}){
+        Memory a,b;
+        for(auto* f:{&a,&b}){
+            f->anchor.original.client.soldierFlags=std::uint8_t(before);
+            f->Put<std::uint8_t>(Memory::cs+0x114,std::uint8_t(before));
+            f->Put(Memory::cs+0x24c,Memory::ci);
+            f->raceAt=Memory::cs+0x114;f->raceValue=after;
+        }
+        pk::Selection p,q;CHECK(a.Selection(p)&&b.Selection(q,&d));
+        CHECK(a.reads==b.reads&&p==q&&p.soldierFlags==before);
+        CHECK(!d.stage&&!d.actor.predicate&&d.before.soldierFlags==before&&d.after.soldierFlags==after);
+        CHECK(pk::SameSelectionIdentity(d.before,d.after));
+        CHECK((d.before==d.after)==(before==after)); // Raw observation stays exact.
+        CHECK(a.raceCount==2&&b.raceCount==2); // No retry or extra actor read.
+        for(unsigned branch=0;branch<3;++branch)for(unsigned field=0;field<3;++field){
+            auto changed=d.after;
+            if(field==0)++changed.inventory[branch];
+            if(field==1)++changed.current[branch];
+            if(field==2)++changed.previous[branch];
+            CHECK(!pk::SameSelectionIdentity(d.before,changed));
+        }
+    }
+    for(unsigned bit:{1u,2u,4u,32u,64u,128u}){
+        Memory a,b;
+        for(auto* f:{&a,&b}){
+            f->anchor.original.client.soldierFlags=3;
+            f->Put<std::uint8_t>(Memory::cs+0x114,3);
+            f->Put(Memory::cs+0x24c,Memory::ci);
+            f->raceAt=Memory::cs+0x114;f->raceValue=3u^0x18u^bit;
+        }
+        pk::Selection p,q;CHECK(!a.Selection(p)&&!b.Selection(q,&d));CHECK(a.reads==b.reads);
+        CHECK(!std::strcmp(d.stage,"actor_after"));
+        CHECK(!std::strcmp(d.actor.predicate,"(out.soldierFlags&~0x18u)!=(s.client.soldierFlags&~0x18u)"));
+        pk::Selection original,changed;original.soldierFlags=3;changed.soldierFlags=std::uint8_t(3u^0x18u^bit);
+        CHECK(!pk::SameSelectionIdentity(original,changed));
+    }
     {Memory f;f.Put(Memory::ci+0x14c,64u);pk::Selection q;CHECK(!f.Selection(q,&d));CHECK(!std::strcmp(d.stage,"slot_range")&&d.slot==64);}
     {Memory f;pk::detail::CallbackStateDiagnostic state;CHECK(f.State());const auto reads=f.reads;f.reads.clear();CHECK(f.State(&state));
         CHECK(reads==f.reads&&!state.predicate&&state.read.known&&state.current==2);}
@@ -79,7 +118,7 @@ int Cases(){
         pk::detail::CallbackStateDiagnostic state;CHECK(!a.State()&&!b.State(&state));CHECK(a.reads==b.reads&&!std::strcmp(state.predicate,name)&&state.read.known);}
     {Memory f;f.denyRead=Memory::firing;pk::detail::CallbackStateDiagnostic state;CHECK(!f.State(&state));
         CHECK(!std::strcmp(state.predicate,"state_read")&&!state.read.known&&state.read.address==Memory::firing);}
-    std::puts("Knife native read diagnostics: unchanged read order, every read/type refusal, exact identity/value faults, paired selection races and callback state boundaries passed.");
+    std::puts("Knife native read diagnostics: unchanged read order, every read/type refusal, exact identity/value faults, 3->19 context bracket, non-context/selection races and callback state boundaries passed.");
     return 0;
 }
 }

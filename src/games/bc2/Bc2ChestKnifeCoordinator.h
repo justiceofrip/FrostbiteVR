@@ -51,6 +51,72 @@ private:
     std::optional<ChestKnifeMotionIdentity> identity_;
     std::optional<math::Matrix4> rotation_;
 };
+// Retains only the identity of the last fully admitted physical packet. This
+// can suppress a duplicate callback's reset, never supply geometry, native
+// proof, a hand renewal or a command. A new unavailable packet cannot bridge
+// an unobserved stroke into a later attack.
+class ChestKnifeRepeatedMotion {
+public:
+    bool Remember(const ChestKnifeMotionIdentity& identity,const interaction::InputFrame& input,
+        const interaction::KnifeSample& sample,const interaction::HandClaim& held,
+        const chestKnifeNative::CurrentHoldWorkObservation& work)noexcept {
+        Reset();
+        if(!chestKnifeNative::CurrentHoldWorkSettled(work))return false;
+        identity_=identity;input_=input;source_=sample.source;
+        contactDeadline_=sample.heldContact.deadlineNs;holdDeadline_=held.deadlineNs;lastNow_=source_.nowNs;
+        return true;
+    }
+    bool Same(const ReloadStateOwner& owner,interaction::BodyItemKey knife,std::uint64_t operation,
+        const interaction::InputFrame& input,const interaction::KnifeSample& sample,
+        const interaction::ChestKnifeCustody& policy,const interaction::HandInteraction& hands)const noexcept {
+        using namespace interaction;const auto& f=sample.source;
+        if(!identity_||policy.Phase()!=KnifePhase::Held||policy.NeedsNativeCleanup()||!policy.Hold()||
+           owner!=identity_->owner||knife!=identity_->knife||operation!=identity_->bodyOperation||
+           *policy.Hold()!=identity_->hold||!sample.holdInputCurrent||!KnifeActionInputCurrent(sample)||
+           !sample.fireSuppressed||!sample.gripHeld[1]||f.released[1]||!f.focused||!f.tracked[0]||!f.tracked[1]||
+           f.owner!=source_.owner||f.sequence!=source_.sequence||f.observedNs!=source_.observedNs||
+           f.deadlineNs!=source_.deadlineNs||f.focused!=source_.focused||f.tracked!=source_.tracked||
+           f.released!=source_.released||f.nowNs<lastNow_||f.nowNs<f.observedNs||f.deadlineNs<=f.nowNs||
+           contactDeadline_<=f.nowNs||!GameplayOwnsInput(sample.menu,f.nowNs)||sample.menu!=input_.menu||
+           !SameInput(input_,input)||hands.Current(InteractionHand::Left)||!hands.HasRecordedEvidence(f,InteractionHand::Right))return false;
+        const auto held=hands.Current(InteractionHand::Right);
+        return held&&held->token==identity_->hold&&held->inputSequence==f.sequence&&
+            held->deadlineNs==holdDeadline_&&held->deadlineNs>f.nowNs;
+    }
+    bool SameNative(const std::optional<ChestKnifeMotionIdentity>& identity)const noexcept {
+        return identity_&&identity&&*identity_==*identity;
+    }
+    bool TemporaryMiss(chestKnifeNative::InspectReason inspection,chestKnifeNative::BeforePrepareReason preparation,
+        const std::optional<ChestKnifeMotionIdentity>& current,bool continuous,bool nativeIdle)const noexcept {
+        using namespace chestKnifeNative;
+        if(preparation!=BeforePrepareReason::Busy&&preparation!=BeforePrepareReason::Available)return false;
+        if(InspectionLockMiss(inspection))return !current;
+        return inspection==InspectReason::Available&&preparation==BeforePrepareReason::Busy&&
+            nativeIdle&&continuous&&SameNative(current);
+    }
+    void Suspended(std::int64_t now)noexcept{lastNow_=now;}
+    void Reset()noexcept{identity_.reset();}
+private:
+    static bool SamePose(const math::Pose& a,const math::Pose& b)noexcept {
+        return a.position.x==b.position.x&&a.position.y==b.position.y&&a.position.z==b.position.z&&
+            a.orientation.x==b.orientation.x&&a.orientation.y==b.orientation.y&&
+            a.orientation.z==b.orientation.z&&a.orientation.w==b.orientation.w;
+    }
+    static bool SameInput(const interaction::InputFrame& a,const interaction::InputFrame& b)noexcept {
+        if(a.generation!=b.generation||a.spaceGeneration!=b.spaceGeneration||a.predictedNs!=b.predictedNs||
+           a.focused!=b.focused||a.headValid!=b.headValid||a.floorRelative!=b.floorRelative||
+           a.worldUnitsPerMeter!=b.worldUnitsPerMeter||a.trackingBasisGeneration!=b.trackingBasisGeneration||
+           a.menu!=b.menu||!SamePose(a.referenceHead,b.referenceHead)||!SamePose(a.head,b.head))return false;
+        for(unsigned n=0;n<2;++n){const auto& x=a.hands[n];const auto& y=b.hands[n];
+            if(!SamePose(x.grip,y.grip)||!SamePose(x.aim,y.aim)||x.gripTracked!=y.gripTracked||
+               x.aimTracked!=y.aimTracked||x.active!=y.active||x.held!=y.held||x.touchActive!=y.touchActive||
+               x.touched!=y.touched||x.stickX!=y.stickX||x.stickY!=y.stickY||x.trigger!=y.trigger||x.squeeze!=y.squeeze)return false;
+        }return true;
+    }
+    std::optional<ChestKnifeMotionIdentity> identity_;
+    interaction::InputFrame input_{};interaction::HandInteractionSample source_{};
+    std::int64_t contactDeadline_=0,holdDeadline_=0,lastNow_=0;
+};
 // Gather's source projection also services the original unconsumed attack.
 // AttackStaged suspends recognition, but cannot erase current measured
 // geometry/readiness before the native gate observes its first consumer.
@@ -108,6 +174,7 @@ private:
     void InvalidateLiveObservation()noexcept{liveObservation_.Invalidate();currentHoldObservation_.Invalidate();}
     interaction::ChestKnifeCustody policy_;
     ChestKnifeMotionCalibration motionCalibration_;
+    ChestKnifeRepeatedMotion repeatedMotion_;
     interaction::KnifeRecognitionDiagnostic recognition_;
     std::optional<private_knife::Anchor> anchor_;
     std::optional<ChestKnifeRenderSource> rendering_;

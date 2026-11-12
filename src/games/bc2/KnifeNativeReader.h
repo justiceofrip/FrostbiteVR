@@ -19,6 +19,13 @@ struct Selection {
     std::uint8_t soldierFlags=0;
     bool operator==(const Selection&)const=default;
 };
+inline bool SameSelectionIdentity(const Selection& a,const Selection& b)noexcept {
+    // Actor already admits these native context bits independently of custody.
+    // Keep raw flags for diagnostics, but use the same ownership equivalence
+    // at every selection bookend; a 3->19 context change is not a slot change.
+    return a.inventory==b.inventory&&a.current==b.current&&a.previous==b.previous&&
+        (a.soldierFlags&~0x18u)==(b.soldierFlags&~0x18u);
+}
 struct Item {
     ReloadInventoryItem client{};
     ReloadFiringObservation server{};
@@ -215,7 +222,7 @@ inline bool CurrentSelection(const Reader& reader,const ReloadServerBinding& bin
     if(diagnostic)diagnostic->before=before;
     if(!Actor(reader,binding,base,a,actual,after,diagnostic?&diagnostic->actor:nullptr))return fail("actor_after");
     if(diagnostic)diagnostic->after=after;
-    if(before!=after)return fail("selection_changed");
+    if(!SameSelectionIdentity(before,after))return fail("selection_changed");
     out=before;return true;
 }
 struct CallbackStateDiagnostic {
@@ -340,7 +347,7 @@ inline std::optional<Snapshot> Read(const ReloadStateMemory& memory,const Reload
     if(!detail::ReadItem(r,state,base,current,a.original.client.owner.weapon,a.original.links.item,false,originalAgain)||
        !detail::ReadItem(r,state,base,current,a.knifeWeapon,a.original.links.items[a.knifeSlot],true,knifeAgain)||
        !detail::SameItem(out.original,originalAgain)||!detail::SameItem(out.knife,knifeAgain)||
-       !detail::Actor(r,server,base,a,current,after)||after!=out.selected)return {};
+       !detail::Actor(r,server,base,a,current,after)||!SameSelectionIdentity(after,out.selected))return {};
     return out;
 }
 inline bool KnifeSentinel(const Snapshot& s)noexcept {

@@ -11,19 +11,19 @@ enum class KnifeMotionIdentityGate:unsigned {None,NativeView,ExistingHold,RightC
     RightTracking,Release,SourceTime,SourceDeadline,Evidence,InputSequence,Space,TrackingBasis,NativeLifetime,
     BodyOperation,SelectedOwner};
 enum class KnifeMotionCalibrationReason:unsigned {Continuous,Initial,IdentityMissing,IdentityChanged,
-    MeasurementInvalid,MeasurementChanged,MeasurementMissing};
-enum class KnifeMotionProjectionReason:unsigned {None,Phase,Calibration,Geometry,Ready};
+    MeasurementInvalid,MeasurementChanged,MeasurementMissing,DuplicateSuspended};
+enum class KnifeMotionProjectionReason:unsigned {None,Phase,Calibration,Geometry,Ready,Suspended};
 enum class KnifeMotionMechanicsGate:unsigned {None,OtherMechanics,NativeHealth,BodyOperation,KnifeSentinel,Readiness};
 struct KnifeRecognitionCoordinator {
     std::uint64_t bodyOperation=0,nativeLifetime=0,menuEpoch=0,renderInput=0;
     std::int64_t renderObservedNs=0,renderDeadlineNs=0;
-    unsigned trackingBasis=0,nativeInspection=0,readinessReason=0;
+    unsigned trackingBasis=0,nativeInspection=0,readinessReason=0,beforePrepare=0;
     KnifeMotionIdentityGate identityGate=KnifeMotionIdentityGate::NativeView;
     KnifeMotionCalibrationReason calibration=KnifeMotionCalibrationReason::IdentityMissing;
     KnifeMotionProjectionReason projection=KnifeMotionProjectionReason::None;
     KnifeMotionMechanicsGate mechanicsGate=KnifeMotionMechanicsGate::None;
     bool measuredRender=false,retainedContact=false,calibrationContinuous=false,gatherMissing=false;
-    bool trackingReady=false,attackReady=false;
+    bool trackingReady=false,attackReady=false,duplicateSuspended=false;
     bool operator==(const KnifeRecognitionCoordinator&)const=default;
 };
 struct KnifeRecognitionRecord {
@@ -76,9 +76,9 @@ public:
            <<",\"observation_only\":true,\"action_authority\":false,\"capacity\":"<<Capacity<<",\"seen\":"<<seen_
            <<",\"kept\":"<<kept_<<",\"dropped\":"<<dropped_
            <<",\"identity_gate_names\":[\"none\",\"native_view\",\"existing_hold\",\"right_claim\",\"native_hold\",\"motion_disabled\",\"mechanics\",\"native_cleanup\",\"tracked_knife\",\"hold_input\",\"action_input\",\"suppression\",\"menu\",\"grip\",\"focus\",\"left_tracking\",\"right_tracking\",\"release\",\"source_time\",\"source_deadline\",\"evidence\",\"input_sequence\",\"space\",\"tracking_basis\",\"native_lifetime\",\"body_operation\",\"selected_owner\"]"
-           <<",\"calibration_reason_names\":[\"continuous\",\"initial\",\"identity_missing\",\"identity_changed\",\"measurement_invalid\",\"measurement_changed\",\"measurement_missing\"]"
+           <<",\"calibration_reason_names\":[\"continuous\",\"initial\",\"identity_missing\",\"identity_changed\",\"measurement_invalid\",\"measurement_changed\",\"measurement_missing\",\"duplicate_suspended\"]"
            <<",\"mechanics_gate_names\":[\"none\",\"other_mechanics\",\"native_health\",\"body_operation\",\"knife_sentinel\",\"readiness\"]"
-           <<",\"projection_reason_names\":[\"none\",\"phase\",\"calibration\",\"geometry\",\"ready\"],\"rows\":[";
+           <<",\"projection_reason_names\":[\"none\",\"phase\",\"calibration\",\"geometry\",\"ready\",\"suspended\"],\"rows\":[";
         for(unsigned n=0;n<kept_;++n){if(n)out<<',';const auto& r=rows_[(first_+n)%Capacity];const auto& s=r.source;const auto& m=r.motion;
             out<<"{\"input\":"<<s.sequence<<",\"observed_ns\":"<<s.observedNs<<",\"deadline_ns\":"<<s.deadlineNs
                <<",\"now_ns\":"<<s.nowNs<<",\"actor\":"<<s.owner.actor<<",\"actor_generation\":"<<s.owner.actorGeneration
@@ -98,6 +98,7 @@ public:
             out<<"],\"coordinator\":{\"body_operation\":"<<c.bodyOperation<<",\"native_lifetime\":"<<c.nativeLifetime
                <<",\"menu_epoch\":"<<c.menuEpoch<<",\"tracking_basis\":"<<c.trackingBasis
                <<",\"native_inspection\":"<<c.nativeInspection<<",\"readiness_reason\":"<<c.readinessReason
+               <<",\"before_prepare\":"<<c.beforePrepare<<",\"duplicate_suspended\":"<<c.duplicateSuspended
                <<",\"mechanics_gate\":"<<unsigned(c.mechanicsGate)
                <<",\"identity_gate\":"<<unsigned(c.identityGate)<<",\"calibration\":"<<unsigned(c.calibration)
                <<",\"projection\":"<<unsigned(c.projection)<<",\"calibration_continuous\":"<<c.calibrationContinuous

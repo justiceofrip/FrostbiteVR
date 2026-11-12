@@ -3,12 +3,16 @@
 --navigation FILE (inside --run) is a reviewed JSON list, e.g.
 [{"left":[0,0.5],"right":[0,0],"holdMs":400,"lookDegrees":[10,0]}].
 lookDegrees is a relative yaw/pitch change; head position, roll and controller
-poses remain unchanged. holdMs bounds the entire pulse, including both ACKs;
+poses remain unchanged. holdMs allocates the row's aggregate pulse budget,
+including both ACKs per pulse; fresh admission also spends the invocation time.
 normal zero reserves the shared 250 ms publication/ACK window plus two bounded
 25 ms pump/preparation intervals. Pulses without an active budget are refused
-before input. Each of at most four pulses ends with acknowledged numeric zeros
-for both sticks. Pulses over 500 ms, up to 2000 ms, additionally require a current
-native observation throughout the hold; its loss permits only owned zero release.
+before input. Each of at most four rows expands into pulses of at most 500 ms,
+up to sixteen pulses total. Every pulse obtains new original native admission
+and ends with acknowledged numeric zeros for both sticks. Longer row budgets
+include a separate zero reserve per pulse; they do not promise continuous input.
+Rows of 501..601 ms cannot fit two active pulses with full zero reserves and
+are refused before any input, as are rows of 300 ms or less.
 The shared ten-second invocation limit remains. There are no buttons, triggers
 or hand claims.
 No launch, capture, objective-entry, native movement or headset claim is made.
@@ -59,18 +63,37 @@ def vector(value, count, cap):
 
 
 def plan(value):
-    require(isinstance(value, list) and 1 <= len(value) <= 4, "one to four reviewed pulses required")
+    require(isinstance(value, list) and 1 <= len(value) <= 4, "one to four reviewed rows required")
     for row in value:
         require(isinstance(row, dict) and set(row) <= {"left", "right", "holdMs", "lookDegrees"}
                 and {"left", "right", "holdMs"} <= set(row), "unknown or missing navigation fields")
         vector(row["left"], 2, 1)
         vector(row["right"], 2, 1)
         require(type(row["holdMs"]) is int and 100 <= row["holdMs"] <= 2000,
-                "pulse must be 100..2000 ms, including command and zero acknowledgement")
+                "row must be 100..2000 ms, including command and zero acknowledgement")
         if "lookDegrees" in row:
             look = vector(row["lookDegrees"], 2, 45)
             require(abs(look[1]) <= 30, "pitch step exceeds 30 degrees")
     return value
+
+
+def pulse_schedule(rows):
+    schedule = []
+    for row_index, row in enumerate(rows):
+        count = (row["holdMs"] + 499) // 500
+        duration, extra = divmod(row["holdMs"], count)
+        # Preserve the requested aggregate bound; never round a short tail up
+        # or publish one before discovering that its zero reserve cannot fit.
+        require(duration * 1_000_000 > RELEASE_RESERVE,
+                "pulse has no active budget after full zero publication/ACK reserve")
+        for index in range(count):
+            pulse = dict(rowIndex=row_index, subpulseIndex=index, subpulseCount=count,
+                         requestedRowMs=row["holdMs"], holdMs=duration + (index < extra),
+                         left=row["left"][:], right=row["right"][:])
+            if index == 0 and "lookDegrees" in row:
+                pulse["lookDegrees"] = row["lookDegrees"][:]
+            schedule.append(pulse)
+    return schedule
 
 
 def neutral_controls(controls):
@@ -124,11 +147,11 @@ class NavigationDriver(t.Driver):
         self.cleanup_mode = False
         self.releasing_sticks = False
         self.action_deadline = None
-        self.sustained_navigation = False
         self.authorized_lines = None
         self.command_fault = False
         self.normal_stop_required = False
         self.episodes = []
+        self.navigation_schedule = []
         args.stage = args.profiles = args.capture = args.menu_batches = None
         args.pickup_first = False
         super().__init__(args)
@@ -297,8 +320,6 @@ class NavigationDriver(t.Driver):
         deadline = min(self.deadline, self.stage_deadline)
         if self.action_deadline is not None:
             deadline = min(deadline, self.action_deadline)
-        if self.sustained_navigation and not self.releasing_sticks:
-            deadline = min(deadline, time.perf_counter_ns() + PERIOD)
         return t.read_until(deadline, self._pump)
 
     def _pump(self):
@@ -327,16 +348,10 @@ class NavigationDriver(t.Driver):
             received = self.receive_snapshot()
             if received:
                 self.accept_snapshot(*received)
-            if self.sustained_navigation:
-                # Longer holds need replacement native evidence before the
-                # preceding observation expires, even during an unsettled ACK.
-                # A pending request never renews that lease. Failure retains
-                # exact command custody for the existing zero-only cleanup.
-                need_observation(time.perf_counter_ns() < self.snapshot_source_deadline(self.latest_snapshot),
-                                 "sustained navigation lost current native observation")
-            # Short pulses retain their original ACK/hold behavior while the
-            # next diagnostic is pending. Every received replacement and every
-            # new publication still pass current native admission.
+            # Each bounded pulse retains the original ACK/hold behavior while
+            # a diagnostic is pending. Every received replacement and every
+            # new publication still pass current native admission. Continuation
+            # requires committed zeros and a newly requested original source.
             if self.pending_nonce is None and now - self.last_request >= PERIOD:
                 self.request_snapshot()
 
@@ -407,17 +422,22 @@ class NavigationDriver(t.Driver):
             self.releasing_sticks = False
 
     def navigate(self, rows):
+        self.navigation_schedule = pulse_schedule(rows)
+        self.artifacts.save("navigation-plan.json", self.navigation_schedule)
         self.fresh()
         self.navigation_reference = copy.deepcopy(self.latest_snapshot)
         require(all(h["stickX"] == h["stickY"] == 0 for h in self.latest_snapshot["input"]["hands"]),
                 "native entry sticks are not neutral")
         self.monitor = True
-        for row in rows:
+        for row in self.navigation_schedule:
             require(self.pending_sticks is None and not self.pending_command and not any(any(v) for v in self.sticks),
                     "previous navigation episode lacks committed neutral")
             # Obtain a new original source before each episode, never restamp.
             self.fresh()
+            require(all(h["stickX"] == h["stickY"] == 0 for h in self.latest_snapshot["input"]["hands"]),
+                    "native continuation sticks are not neutral")
             self.monitor = True
+            admission_nonce = self.latest_snapshot["nonce"]
             lines = []
             if "lookDegrees" in row:
                 yaw, pitch, roll = self.expected_head["ypr"]
@@ -439,13 +459,13 @@ class NavigationDriver(t.Driver):
                                        started + row["holdMs"]*1_000_000)
             active_deadline = self.action_deadline - RELEASE_RESERVE
             require(started < active_deadline, "pulse has no active budget after full zero publication/ACK reserve")
-            self.sustained_navigation = row["holdMs"] > 500
             # An initial publication/ACK or diagnostic refresh cannot consume
             # the reserved zero window. A late initial ACK stays a failure and
             # uses the existing exact-owner cleanup path.
             self.stage_deadline = active_deadline
             self.motion_started = started
             self.publish_navigation(lines, sticks)
+            command_committed = self.last_commit
             self.expected_head = self.next_head
             self.stage_deadline = self.action_deadline
             # A last hold pump gets at most one 25 ms interval; release
@@ -459,12 +479,18 @@ class NavigationDriver(t.Driver):
             # Exact owned zeros retire this pulse; they do not need a new
             # native observation. Keep the original normal pulse/ACK bounds
             # (cleanup=False), including when a diagnostic is still pending.
+            active_finished = time.perf_counter_ns()
             self.publish_navigation(ZERO, [[0, 0], [0, 0]], release=True)
             require(neutral_controls(self.state["controls"]), "zero ACK lacks neutral committed controls")
             self.action_deadline = None
-            self.sustained_navigation = False
             self.stage_deadline = previous_stage_deadline
-            self.episodes.append(dict(startedNs=started, neutralCommittedNs=self.last_commit,
+            self.episodes.append(dict(rowIndex=row["rowIndex"], subpulseIndex=row["subpulseIndex"],
+                                      subpulseCount=row["subpulseCount"], plannedDurationMs=row["holdMs"],
+                                      plannedActiveMs=row["holdMs"]-RELEASE_RESERVE//1_000_000,
+                                      admissionNonce=admission_nonce, startedNs=started,
+                                      commandCommittedNs=command_committed, neutralCommittedNs=self.last_commit,
+                                      acknowledgedActiveNs=active_finished-command_committed,
+                                      completedElapsedNs=self.last_commit-started,
                                       commandsAcknowledged=True, nativeMovement=False, objectiveEntry=False))
         self.monitor = False
         self.save_owner(False)
@@ -524,6 +550,7 @@ def main(argv=None):
         require(re.fullmatch(r"[a-f0-9]{64}", args.source_sha256) is not None, "invalid reviewed source SHA256")
         rows, raw = t.read_json(t.child(t.local_path(args.run), args.navigation), 16384)
         plan(rows)
+        result["requestedDurationMs"] = sum(row["holdMs"] for row in rows)
         driver = NavigationDriver.__new__(NavigationDriver)
         driver.__init__(args)
         driver.artifacts.save("navigation-request.json", raw)
@@ -543,6 +570,10 @@ def main(argv=None):
             if getattr(driver, "artifacts", None):
                 result.update(episodes=driver.episodes, pendingCommand=driver.pending_command,
                               sticks=driver.sticks, pendingSticks=driver.pending_sticks,
+                              plannedSubpulses=len(driver.navigation_schedule),
+                              plannedDurationMs=sum(row["holdMs"] for row in driver.navigation_schedule),
+                              completedElapsedNs=sum(row["completedElapsedNs"] for row in driver.episodes),
+                              acknowledgedActiveNs=sum(row["acknowledgedActiveNs"] for row in driver.episodes),
                               artifactDirectory=str(driver.artifacts.directory))
                 try:
                     driver.artifacts.save("navigation-result.json", result, final=True)

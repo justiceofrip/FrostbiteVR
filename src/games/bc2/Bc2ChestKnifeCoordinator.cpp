@@ -34,7 +34,7 @@ bool Bc2ChestKnifeCoordinator::TickIdleHeldGun(const BodyDrawSample& s,const Bc2
     if(!chestKnifeNative::TryIdleHeldGun(idle))return false;
     InvalidateLiveObservation();
     rendering_.reset();
-    motionCalibration_.Reset();policy_.InvalidateMotion();
+    motionCalibration_.Reset();policy_.InvalidateMotion();repeatedMotion_.Reset();
     idle.claimIntent=++intent;
     policy_.Prepare(idle,hands);
     return true;
@@ -45,7 +45,7 @@ void Bc2ChestKnifeCoordinator::Missing(std::int64_t now,HandInteraction& hands)n
     policy_.ObserveRecognition(recognition_.Enabled()?&recognition_:nullptr);
     KnifeRecognitionCoordinator projection;projection.bodyOperation=bodyOperation_;projection.gatherMissing=true;
     recognition_.Coordinator(projection);
-    motionCalibration_.Reset();policy_.InvalidateMotion();
+    motionCalibration_.Reset();policy_.InvalidateMotion();repeatedMotion_.Reset();
     ChestKnifeLiveObservation failure;failure.phase=policy_.Phase();failure.bodyOperation=bodyOperation_;
     failure.draws=draws_;failure.returns=returns_;if(anchor_)failure.originalOwner=anchor_->original.client.owner;
     // There is no current hand source in this path; zero fields remain unknown.
@@ -157,10 +157,14 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
     }else ++readGaps_;
     if(motionIdentity&&measuredKnifeHold&&native->attackBridgeEnabled&&currentBody)
         attackGeometry=selectedKnife::MapTrackedGeometry(s.input,rendered->wristInGrip,*currentBody);
-    PrepareChestKnifeMotionSource(motionCalibration_,policy_,motionIdentity,
+    const bool samePacket=mechanics&&nativeOwned_&&bodyOperation_&&body.TemporaryToolActive()&&
+        body.TemporaryToolOperation()==bodyOperation_&&key&&
+        repeatedMotion_.Same(s.owner,*key,bodyOperation_,s.input,sample,policy_,hands);
+    const bool inspectionSuspended=!native&&chestKnifeNative::InspectionLockMiss(nativeInspection)&&samePacket;
+    if(!inspectionSuspended)PrepareChestKnifeMotionSource(motionCalibration_,policy_,motionIdentity,
         measuredKnifeHold?std::optional(rendered->wristInGrip):std::nullopt,s.input,
         native&&native->motionEnabled&&sample.mechanicsSettled&&
-            (!native->attackBridgeEnabled||attackGeometry.has_value()),sample,recognition_.Enabled()?&projection:nullptr);
+            (!native->attackBridgeEnabled||attackGeometry.has_value()),sample,&projection);
     projection.bodyOperation=bodyOperation_;projection.nativeLifetime=native?native->currentHoldWork.lifetime:0;
     projection.menuEpoch=sample.menu.epoch;projection.trackingBasis=s.input.trackingBasisGeneration;
     projection.nativeInspection=unsigned(nativeInspection);projection.readinessReason=unsigned(nativeReadiness.reason);
@@ -178,12 +182,27 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
             v.selectedSlots=native->snapshot.selected.current;v.readinessKnife=sample.knifeSelected;
             v.readiness=nativeReadiness;}
         v.mechanicsSettled=sample.mechanicsSettled;return v;};
-    if(!chestKnifeNative::BeforePrepare(sample,policy_)){
-        motionCalibration_.Reset();policy_.InvalidateMotion();
-        liveObservation_.Reject(diagnostic(),s.hand.nowNs,"producer_prerequisite","before_prepare");
-        currentHoldObservation_.Reject(diagnostic(),s.hand.nowNs,"before_prepare");
+    chestKnifeNative::BeforePrepareReason beforePrepare=chestKnifeNative::BeforePrepareReason::NotAttempted;
+    const bool prepared=chestKnifeNative::BeforePrepare(sample,policy_,&beforePrepare);
+    projection.beforePrepare=unsigned(beforePrepare);
+    if(!prepared||inspectionSuspended){
+        // BeforePrepare has already revoked unavailable native authority. Only
+        // an unchanged already-observed packet may keep recognition stationary;
+        // it cannot run Observe/Prepare/Stage, renew custody or supply a view.
+        const bool keep=samePacket&&policy_.Phase()==KnifePhase::Held&&!policy_.NeedsNativeCleanup()&&
+            repeatedMotion_.TemporaryMiss(nativeInspection,beforePrepare,motionIdentity,projection.calibrationContinuous,
+                native&&native->observationComplete&&chestKnifeNative::CurrentHoldWorkSettled(native->currentHoldWork));
+        if(keep){repeatedMotion_.Suspended(s.hand.nowNs);projection.calibration=KnifeMotionCalibrationReason::DuplicateSuspended;
+            projection.calibrationContinuous=true;projection.projection=KnifeMotionProjectionReason::Suspended;}
+        else {motionCalibration_.Reset();policy_.InvalidateMotion();repeatedMotion_.Reset();}
+        projection.duplicateSuspended=keep;projection.trackingReady=projection.attackReady=false;
+        recognition_.Coordinator(projection);
+        const auto missing=prepared?"native_view":"before_prepare";
+        liveObservation_.Reject(diagnostic(),s.hand.nowNs,"producer_prerequisite",missing);
+        currentHoldObservation_.Reject(diagnostic(),s.hand.nowNs,missing);
         recognition_.NativeGate(sample.source,unsigned(policy_.Phase()),sample.knife,policy_.Hold()?policy_.Hold()->id:0);return;
     }
+    recognition_.Coordinator(projection);
     std::optional<chestKnifeNative::ReturnCompletion> completedReturn;
     if(const auto receipt=chestKnifeNative::Observe(s.owner,body,bodyResult.freeRight,s.hand.nowNs,&completedReturn)){
         const bool accepted=policy_.Observe(*receipt);
@@ -217,6 +236,12 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
             if(command->kind==KnifeCommandKind::Draw&&bodyOkay)body.RequestTemporaryToolRehide(bodyOperation_);
         }
     }
+    repeatedMotion_.Reset();
+    const auto motionHold=hands.Current(InteractionHand::Right);
+    if(!command&&motionIdentity&&native&&native->observationComplete&&
+       sample.nativeAttackReady&&sample.motionTrackingReady&&
+       policy_.Phase()==KnifePhase::Held&&!policy_.NeedsNativeCleanup()&&motionHold&&motionHold->token==motionIdentity->hold)
+        repeatedMotion_.Remember(*motionIdentity,s.input,sample,*motionHold,native->currentHoldWork);
     const bool poseCustody=ChestKnifePoseCustody(policy_,hands,s.hand);
     const bool renderPoseCustody=ChestKnifeRenderPoseCustody(policy_,hands,s.hand);
     if(renderPoseCustody&&native&&native->healthy&&nativeOwned_&&bodyOperation_&&body.TemporaryToolOperation()==bodyOperation_&&sample.knifeSelected&&

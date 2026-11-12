@@ -92,6 +92,7 @@ public:
     bool ExportOverlapEnabled()const noexcept{return channel_.ExportOverlapEnabled();}
     const std::wstring& Token()const noexcept{return channel_.Token();}
     unsigned SourceSlotCount()const noexcept override{return channel_.SourceSlotCount();}
+    bool SupportsPreWaitDelivery()const noexcept override{return lookahead_&&channel_.SourceSlotCount()==3;}
     bool ReadSourceSlot(const graphics::PairTicket& t,runtime::SourceSlotIdentity& out)noexcept override{return channel_.ReadSourceSlot(t,out);}
     bool Connected()noexcept{return channel_.Connected();}
     void Close()noexcept{channel_.Close();pending_=cancelling_=lookahead_=false;lookaheadPending_={};lookaheadCount_=0;lastIssued_={};}
@@ -108,6 +109,8 @@ public:
         return channel_.RequestPair(r,t,budgetMs_,d,p)==ChannelResult::Ok;
     }
     bool TryGetCompletedPair(const runtime::PresentationRequirements&,const runtime::TrackingFrame&,
+        runtime::TrackingFrame&,graphics::TextureDescriptor&,graphics::PairTicket&)noexcept override;
+    bool TryGetPendingPair(const runtime::PresentationRequirements&,const runtime::TrackingFrame&,
         runtime::TrackingFrame&,graphics::TextureDescriptor&,graphics::PairTicket&)noexcept override;
     bool ReadBodyProps(const graphics::PairTicket& t,graphics::BodyPropFrame& p)noexcept override{return channel_.ReadBodyProps(t,p);}
     bool ReadSceneDepth(const graphics::TextureDescriptor& d,const graphics::PairTicket& t,graphics::SceneDepthFrame& p)noexcept override{return channel_.ReadSceneDepth(d,t,p);}
@@ -130,7 +133,8 @@ private:FrameChannel channel_;unsigned budgetMs_=8,requestLifetimeMs_=150;
         unsigned lifetimeMs=0;
     };
     bool TryGetLookaheadPair(const runtime::PresentationRequirements&,const runtime::TrackingFrame&,
-        runtime::TrackingFrame&,graphics::TextureDescriptor&,graphics::PairTicket&)noexcept;
+        runtime::TrackingFrame&,graphics::TextureDescriptor&,graphics::PairTicket&,bool allowRequests=true)noexcept;
+    bool ValidateLookahead(const runtime::PresentationRequirements&,const runtime::TrackingFrame&)noexcept;
     void PopLookahead()noexcept;
     bool lookahead_=false;unsigned lookaheadCount_=0;
     std::array<PendingRequest,2> lookaheadPending_{};

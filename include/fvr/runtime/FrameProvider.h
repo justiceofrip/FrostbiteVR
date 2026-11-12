@@ -22,6 +22,13 @@ public:
         TrackingFrame& rendered,graphics::TextureDescriptor& d,graphics::PairTicket& t) noexcept {
         rendered=current;return TryGetPair(r,current,d,t);
     }
+    // Optional nonblocking delivery of an ALREADY requested pair before the XR
+    // wait. Never issues/renews a request or substitutes this prior tracking for
+    // the returned original pose. Current post-wait world/tracking validation
+    // is still required before presentation. Unsupported providers do nothing.
+    virtual bool SupportsPreWaitDelivery()const noexcept{return false;}
+    virtual bool TryGetPendingPair(const PresentationRequirements&,const TrackingFrame&,
+        TrackingFrame&,graphics::TextureDescriptor&,graphics::PairTicket&) noexcept {return false;}
     // Explicit negotiated delivery layout. Count2 never falls back to count1
     // when the exact delivered metadata is absent or stale.
     virtual unsigned SourceSlotCount()const noexcept{return 1;}

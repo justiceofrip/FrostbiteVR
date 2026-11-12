@@ -253,6 +253,88 @@ int MotionProjectionObservationCases(){
     std::puts("Normal knife projection observation: readiness versus tracking, geometry/calibration/phase resets, original hand deadline preserved.");
     return 0;
 }
+int RepeatedMotionContentionCases(){
+    using namespace chestKnifeNative;
+    StagedMotionFixture f;CHECK(f.f.Held());for(unsigned n=0;n<20;++n)CHECK(!f.Gather(true));
+    CHECK(f.f.knife.RecognitionReady(f.f.s.source));
+    const ChestKnifeMotionIdentity identity{{0x10000,0x20000,0x30000,42,2,3,4},*f.f.knife.Hold(),{42,1},7,8,1,9,1.f};
+    ChestKnifeRepeatedMotion repeated;const auto held=*f.f.hands.Current(InteractionHand::Right);
+    CurrentHoldWorkObservation work;work.known=work.drawOnly=true;
+    work.lifetime=identity.nativeLifetime;work.bodyOperation=identity.bodyOperation;work.drawSerial=1;
+    CHECK(repeated.Remember(identity,f.input,f.f.s,held,work));
+    const auto same=[&](const KnifeSample& sample,const InputFrame& input,const ChestKnifeMotionIdentity& local){
+        return repeated.Same(local.owner,local.knife,local.bodyOperation,input,sample,f.f.knife,f.f.hands);};
+    auto source=f.f.s;source.source.nowNs+=ms;
+    for(auto reason:{InspectReason::CaptureBusy,InspectReason::RejoinBusy}){
+        CHECK(same(source,f.input,identity));
+        CHECK(repeated.TemporaryMiss(reason,BeforePrepareReason::Available,std::nullopt,false,false));
+        CHECK(repeated.TemporaryMiss(reason,BeforePrepareReason::Busy,std::nullopt,false,false));
+        repeated.Suspended(source.source.nowNs);
+        // Production suspends before portable Prepare: no sample progress,
+        // attack or renewed contact. Revocation still observes ineligibility.
+        auto unavailable=source;unavailable.nativeAttackReady=unavailable.motionTrackingReady=unavailable.onFoot=false;
+        const auto stamp=f.source.Stamp();CHECK(f.source.Advance(unavailable));CHECK(!f.source.Current(stamp));
+        CHECK(f.f.knife.RecognitionReady(source.source));
+        CHECK(f.f.hands.Current(InteractionHand::Right)->deadlineNs==held.deadlineNs);
+    }
+    CHECK(repeated.TemporaryMiss(InspectReason::Available,BeforePrepareReason::Busy,identity,true,true));
+    // After an attack completes, passive draw-only provenance stays false.
+    // The production Remember admission must still accept settled native work.
+    work.drawOnly=false;CHECK(!CurrentHoldWorkIdle(work)&&CurrentHoldWorkSettled(work));
+    CHECK(repeated.Remember(identity,f.input,source,held,work));
+    CHECK(same(source,f.input,identity));
+    CHECK(repeated.TemporaryMiss(InspectReason::Available,BeforePrepareReason::Busy,identity,true,CurrentHoldWorkSettled(work)));
+    for(unsigned fault=0;fault<11;++fault){auto busy=work;
+        if(fault==0)busy.known=false;if(fault==1)busy.lifetime=0;if(fault==2)busy.bodyOperation=0;
+        if(fault==3)busy.drawSerial=0;if(fault==4)busy.outstanding=true;if(fault==5)busy.commandPending=true;
+        if(fault==6)busy.attackPending=true;if(fault==7)busy.returnReady=true;if(fault==8)busy.closing=true;
+        if(fault==9)busy.attackNative=true;if(fault==10)busy.bridgePending=true;
+        CHECK(!repeated.Remember(identity,f.input,source,held,busy));CHECK(!same(source,f.input,identity));
+    }
+    CHECK(repeated.Remember(identity,f.input,source,held,work));
+    CHECK(!repeated.TemporaryMiss(InspectReason::Available,BeforePrepareReason::Available,identity,true,true));
+    CHECK(!repeated.TemporaryMiss(InspectReason::Available,BeforePrepareReason::Busy,identity,false,true));
+    CHECK(!repeated.TemporaryMiss(InspectReason::Available,BeforePrepareReason::Busy,identity,true,false));
+    for(auto reason:{InspectReason::Busy,InspectReason::RejoinChanged,InspectReason::Closing,InspectReason::Disabled,
+                    InspectReason::NativeRead,InspectReason::Flags,InspectReason::KnifeIdentity})
+        CHECK(!repeated.TemporaryMiss(reason,BeforePrepareReason::Busy,std::nullopt,false,false));
+    CHECK(!repeated.TemporaryMiss(InspectReason::CaptureBusy,BeforePrepareReason::Closing,std::nullopt,false,false));
+    auto lifetime=identity;++lifetime.nativeLifetime;
+    CHECK(!repeated.TemporaryMiss(InspectReason::Available,BeforePrepareReason::Busy,lifetime,true,true));
+    for(unsigned fault=0;fault<26;++fault){auto changed=source;auto input=f.input;auto local=identity;
+        if(fault==0)++changed.source.sequence;if(fault==1)++changed.source.observedNs;
+        if(fault==2)++changed.source.deadlineNs;if(fault==3)changed.source.nowNs=changed.source.deadlineNs;
+        if(fault==4)--changed.source.nowNs;if(fault==5)++changed.source.owner.actorGeneration;
+        if(fault==6)++changed.source.owner.equipGeneration;if(fault==7)++changed.source.owner.space;
+        if(fault==8)changed.source.focused=false;if(fault==9)changed.source.tracked[1]=false;
+        if(fault==10)changed.source.released[1]=true;if(fault==11)changed.gripHeld[1]=false;
+        if(fault==12)changed.fireSuppressed=false;if(fault==13)changed.holdInputCurrent=false;
+        if(fault==14)++local.owner.weapon;if(fault==15)++local.knife.generation;if(fault==16)++local.bodyOperation;
+        if(fault==17)++input.trackingBasisGeneration;if(fault==18)input.worldUnitsPerMeter=2;
+        if(fault==19)input.hands[1].grip.position.x+=.001f;if(fault==20)input.hands[1].aim.orientation.x+=.001f;
+        if(fault==21)input.head.position.x+=.001f;if(fault==22)input.hands[0].held^=Primary;
+        if(fault==23)++input.menu.epoch;if(fault==24)++changed.menu.deadlineNs;
+        if(fault==25)changed.source.tracked[0]=false;
+        CHECK(!same(changed,input,local));
+    }
+    // A new unavailable packet takes the unchanged reset path. A completed
+    // jab on that packet cannot be queued across recovery into a fresh source.
+    ++source.source.sequence;source.source.observedNs+=10*ms;source.source.nowNs=source.source.observedNs;
+    CHECK(!same(source,f.input,identity));
+    PrepareChestKnifeMotionSource(f.calibration,f.f.knife,std::nullopt,std::nullopt,f.input,false,source);
+    repeated.Reset();CHECK(!f.f.knife.RecognitionReady(source.source));
+    CHECK(!same(f.f.s,f.input,identity));
+    CHECK(!f.Gather(true));CHECK(!f.f.knife.RecognitionReady(f.f.s.source));
+    f.input.hands[1].grip.position.z-=.1f;CHECK(!f.Gather(true));
+    CHECK(!f.f.knife.NativeAttackPending());
+    // Full identity validation after suspension also rejects a replaced native lifetime.
+    bool continuous=true;CHECK(!f.calibration.Update(lifetime,std::nullopt,continuous)&&!continuous);
+    CHECK(repeated.Remember(identity,f.input,f.f.s,*f.f.hands.Current(InteractionHand::Right),work));
+    CHECK(f.f.hands.Release(f.f.s.source,*f.f.knife.Hold()).accepted);
+    CHECK(!same(f.f.s,f.input,identity));
+    std::puts("Repeated knife contention: exact packet retains stationary recognition only; new/mutated packet, rejoin, lifetime, closing, claim and deadline changes refuse.");
+    return 0;
+}
 int ReturnObservationCases(){
     Fixture f;f.s.source.owner.actor=(std::uint64_t(0x30000)<<32)|0x20000;
     const auto draw=f.Draw();CHECK(draw);f.knife.Committed(*draw,KnifeCommit::Accepted);
@@ -494,6 +576,7 @@ int main(){
     CHECK(!MotionCalibrationCases());
     CHECK(!StagedMotionSourceCases());
     CHECK(!MotionProjectionObservationCases());
+    CHECK(!RepeatedMotionContentionCases());
     CHECK(!knife_read_diagnostic_cases::Cases());
     CHECK(!knife_inspection_cases::Cases());
     {

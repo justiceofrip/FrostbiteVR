@@ -41,7 +41,12 @@ inline void WriteReadyObservation(std::ostream& out,const ReadyObservation& r){
     out<<",\"current\":"<<r.current<<",\"next\":"<<r.next<<",\"flagsA8\":"<<r.flagsA8<<",\"phaseTimer\":";
     if(std::isfinite(r.phaseTimer))out<<r.phaseTimer;else out<<"null";out<<'}';
 }
-enum class InspectReason:unsigned {NotAttempted,Available,Busy,Disabled,Anchor,KnifeIdentity,NativeRead,Flags,Unsupported};
+enum class InspectReason:unsigned {NotAttempted,Available,Busy,Disabled,Anchor,KnifeIdentity,NativeRead,Flags,Unsupported,
+    CaptureBusy,RejoinBusy,RejoinChanged,Closing};
+inline bool InspectionLockMiss(InspectReason reason)noexcept {
+    return reason==InspectReason::CaptureBusy||reason==InspectReason::RejoinBusy;
+}
+enum class BeforePrepareReason:unsigned {NotAttempted,Available,Busy,Closing,Unsupported};
 // Read-only work state copied under Inspect's existing gate. Unknown refuses;
 // no field changes native command, attack, cleanup or history authority.
 struct CurrentHoldWorkObservation {
@@ -49,9 +54,13 @@ struct CurrentHoldWorkObservation {
     bool known=false,drawOnly=false,outstanding=false,commandPending=false,attackPending=false;
     bool returnReady=false,closing=false,attackNative=false,bridgePending=false;
 };
-inline bool CurrentHoldWorkIdle(const CurrentHoldWorkObservation& v)noexcept {
-    return v.known&&v.lifetime&&v.bodyOperation&&v.drawSerial&&v.drawOnly&&!v.outstanding&&!v.commandPending&&
+inline bool CurrentHoldWorkSettled(const CurrentHoldWorkObservation& v)noexcept {
+    return v.known&&v.lifetime&&v.bodyOperation&&v.drawSerial&&!v.outstanding&&!v.commandPending&&
         !v.attackPending&&!v.returnReady&&!v.closing&&!v.attackNative&&!v.bridgePending;
+}
+inline bool CurrentHoldWorkIdle(const CurrentHoldWorkObservation& v)noexcept {
+    // Passive draw-only observation retains its stricter historical contract.
+    return v.drawOnly&&CurrentHoldWorkSettled(v);
 }
 struct View {
     private_knife::Anchor anchor{};private_knife::Snapshot snapshot{};
@@ -73,7 +82,7 @@ void SourceAdvanced(const interaction::HandInteractionSample&)noexcept;
 // Publish an ineligible source only when the draw-only service is idle.
 // A busy lock or any outstanding work requires the full gather.
 bool TryIdleHeldGun(const interaction::KnifeSample&)noexcept;
-bool BeforePrepare(const interaction::KnifeSample&,interaction::ChestKnifeCustody&)noexcept;
+bool BeforePrepare(const interaction::KnifeSample&,interaction::ChestKnifeCustody&,BeforePrepareReason* diagnostic=nullptr)noexcept;
 // Proves real shared claims through policy.CanCommit and repeats actual native
 // identity/config/count admission. Chest draw body interval must already exist.
 bool Stage(const interaction::KnifeCommand&,const interaction::KnifeSample&,

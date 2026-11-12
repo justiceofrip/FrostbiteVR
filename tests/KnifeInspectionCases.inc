@@ -11,16 +11,19 @@ struct Fixture {
     InspectionStamp stamp{1,2,3,4,5,true,false};
     unsigned owner=7,lifetime=8,reads=0,joins=0,observed=0,originalCalls=0;
     bool gap=false,bad=false;
+    InspectReason inspection=InspectReason::NotAttempted;
     template<class Read> std::optional<View> Inspect(Read read){
+        inspection=InspectReason::CaptureBusy;
         return InspectOutsideGate<Capture,View>(gate,[&]()->std::optional<Capture>{
             return Capture{stamp,owner,lifetime};
         },[&](const Capture& c)->std::optional<View>{
-            ++reads;if(!read())return {};
+            ++reads;inspection=InspectReason::NativeRead;if(!read())return {};
+            inspection=InspectReason::RejoinBusy;
             return View{c.owner,c.lifetime,19,false,false};
         },[&](const Capture& c,View& v){
-            ++joins;
+            ++joins;inspection=InspectReason::RejoinChanged;
             if(!InspectionStillCurrent(c.stamp,stamp)||c.owner!=owner||c.lifetime!=lifetime)return false;
-            v.complete=!gap;v.healthy=!bad;return true;
+            v.complete=!gap;v.healthy=!bad;inspection=InspectReason::Available;return true;
         });
     }
     // The observer's try-lock and original invocation must both finish while
@@ -43,10 +46,12 @@ int Cases(){
         Fixture f;const auto view=f.Inspect([&]{f.Callback();return true;});
         CHECK(view&&view->complete&&view->healthy&&view->sequence==19);
         CHECK(f.observed==1&&f.originalCalls==1&&!f.gap&&f.reads==1&&f.joins==1);
+        CHECK(f.inspection==InspectReason::Available);
     }
     {
         Fixture f;const auto view=f.Inspect([&]{f.Callback(true);return true;});
         CHECK(!view&&f.observed==1&&f.originalCalls==1&&!f.gap&&f.reads==1&&f.joins==1);
+        CHECK(f.inspection==InspectReason::RejoinChanged&&!InspectionLockMiss(f.inspection));
     }
     // Same-owner operation ABA is still a different operation. No reread or
     // timestamp replacement can convert it into the captured observation.
@@ -66,6 +71,7 @@ int Cases(){
             case 6:++f.lifetime;break;
             }return true;
         }));CHECK(f.reads==1&&f.joins==1);
+        CHECK(f.inspection==InspectReason::RejoinChanged&&!InspectionLockMiss(f.inspection));
     }
     // A gap already present, or arriving during the native read, remains a
     // gap even though the current snapshot and later callback are successful.
@@ -77,6 +83,7 @@ int Cases(){
     }
     {
         Fixture f;CHECK(!f.Inspect([]{return false;}));CHECK(f.reads==1&&f.joins==0);
+        CHECK(f.inspection==InspectReason::NativeRead&&!InspectionLockMiss(f.inspection));
     }
     // Force contention at each short bookend, on a different thread. Neither
     // path waits for the owner, retries the native read, nor publishes a view.
@@ -88,6 +95,8 @@ int Cases(){
         const auto view=f.Inspect([&]{hold();return true;});
         release.set_value();holder.join();
         CHECK(!view&&f.reads==(first?0u:1u)&&f.joins==0);
+        CHECK(f.inspection==(first?InspectReason::CaptureBusy:InspectReason::RejoinBusy));
+        CHECK(InspectionLockMiss(f.inspection));
     }
     {
         Fixture f;f.stamp.operation=(std::numeric_limits<std::uint64_t>::max)();

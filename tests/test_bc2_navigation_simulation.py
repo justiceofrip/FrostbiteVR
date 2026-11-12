@@ -11,6 +11,7 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import random
 import shutil
 import sys
 import tempfile
@@ -53,6 +54,18 @@ RECORDED_ZERO_TIMING = dict(
     nonzeroCommittedNs=642354026059900, zeroRequestedNs=642354376735900,
     pulseDeadlineNs=642354442933500, zeroPreparationNs=3_750_700,
     lastPumpOvershootNs=13_802_400)
+
+
+# Actual89/01 666a666858e140c4b3cba04916f97625: the first 1500 ms row
+# failed while request 3 was still within its unchanged 250 ms response budget.
+# snapshot-002.json.gz SHA256 48cdf6416fc731380ae96ef58b4e115b7fe78d3d8a31456b23ae37d7a0e87769.
+# Later successors are synthetic: this projects the demonstrated timing gap,
+# not a native movement or successful campaign observation.
+RECORDED_LONG_TIMING = dict(
+    firstResponseNs=197_312_200, secondResponseNs=95_891_400,
+    secondObservedNs=650494711475000, secondInputObservedNs=650494690026100,
+    secondValidUntilNs=650494790026100, secondMenuUntilNs=650494778720600,
+    thirdRequestNs=650494724404300, commandAckNs=40_463_300)
 
 
 # Admission projection of actual86/02 da9146dcd773411eb7e108a7675f1e4d
@@ -734,15 +747,22 @@ class NavigationTests(unittest.TestCase):
         with self.assertRaises(self.m.Refusal):
             self.m.plan([dict(left=[0, 1], right=[0, 0], holdMs=150, commands=["trigger r 1"])])
 
-    def test_sustained_pulses_require_current_native_observation_and_original_total_budget(self):
-        for scenario in ("current", "missing", "native_focus_loss", "total_budget"):
+    def test_subpulses_require_new_original_admission_neutral_and_original_total_budget(self):
+        for scenario in ("current", "missing", "native_focus_loss", "total_budget", "artifact_limit"):
             with self.subTest(scenario=scenario):
                 if scenario != "current":
                     self.setUp()  # Each assembled CLI owns a fresh isolated session.
                 self.rows = [dict(left=[0, .3], right=[0, 0], holdMs=2000) for _ in range(4)]
+                self.rows[0]["lookDegrees"] = [10, 0]
                 self.m.plan(self.rows)
                 with self.assertRaises(self.m.Refusal):
                     self.m.plan(self.rows + [self.rows[0]])
+                self.response_delay = lambda driver: 100_000_000
+                # Slightly larger than actual89/01's 28,520 decoded / 7,729
+                # compressed source. Exercise the unchanged aggregate caps at
+                # a realistic round trip, retaining every original byte.
+                padding = random.Random(1057).randbytes(6500).hex() + "x"*16_000
+                self.snapshot_mutation = lambda sample, driver: sample.update(observationPadding=padding)
                 if scenario == "missing":
                     self.omit_response_from = 3
                 elif scenario == "native_focus_loss":
@@ -753,6 +773,10 @@ class NavigationTests(unittest.TestCase):
                     # to its original ten seconds, not a fresh per-pulse clock.
                     self.read_delay = lambda path, driver: (
                         7_000_000_000 if path.name == "run-manifest.json" else 0)
+                elif scenario == "artifact_limit":
+                    # More original responses must refuse at the same disk cap,
+                    # not silently raise it to finish sixteen subpulses.
+                    self.response_delay = lambda driver: 0
                 code, result = self.assembled()
                 driver = self.driver
                 self.assertEqual(driver.hard_deadline - driver.started, 10 * self.m.t.NS)
@@ -767,41 +791,106 @@ class NavigationTests(unittest.TestCase):
                 commits = [event for event in events if event["type"] == "command_commit"]
                 if scenario == "current":
                     self.assertEqual((code, result.get("error")), (0, None))
-                    self.assertEqual(len(result["episodes"]), 4)
-                    self.assertEqual(len(self.calls), 8)
-                    self.assertGreater(len(self.samples), 200)
+                    self.assertEqual(len(result["episodes"]), 16)
+                    self.assertEqual(result["plannedSubpulses"], 16)
+                    self.assertEqual(result["plannedDurationMs"], 8000)
+                    self.assertEqual(len(self.calls), 32)
+                    self.assertEqual(self.state["head"]["ypr"], [10, 0, 0])
                     self.assertTrue(all(not event["cleanup"] for event in commits))
-                    for episode in result["episodes"]:
+                    previous_commit = 0
+                    nonces = set()
+                    for index, episode in enumerate(result["episodes"]):
                         elapsed = episode["neutralCommittedNs"] - episode["startedNs"]
-                        self.assertGreater(elapsed, 1_600_000_000)
-                        self.assertLess(elapsed, 2_000_000_000)
-                        held = [sample for sample in self.samples
-                                if episode["startedNs"] <= sample["observed_ns"] < episode["neutralCommittedNs"]]
-                        self.assertGreater(len(held), 50)
-                        self.assertTrue(all(next_sample["observed_ns"] < driver.snapshot_source_deadline(sample)
-                                            for sample, next_sample in zip(held, held[1:])))
+                        self.assertEqual((episode["rowIndex"], episode["subpulseIndex"]), divmod(index, 4))
+                        self.assertEqual(episode["plannedDurationMs"], 500)
+                        self.assertEqual(episode["completedElapsedNs"], elapsed)
+                        self.assertLess(elapsed, 500_000_000)
+                        self.assertEqual(self.calls[index*2+1], self.m.ZERO)
+                        source = next(s for s in self.samples if s["nonce"] == episode["admissionNonce"])
+                        self.assertNotIn(source["nonce"], nonces)
+                        nonces.add(source["nonce"])
+                        self.assertGreater(source["observed_ns"], previous_commit)
+                        self.assertTrue(all(h["stickX"] == h["stickY"] == 0 for h in source["input"]["hands"]))
+                        self.assertLess(commits[index*2]["writtenNs"], driver.snapshot_source_deadline(source))
+                        previous_commit = episode["neutralCommittedNs"]
                     for window, commit in zip(self.publication_windows, commits):
                         if window["release"]:
                             self.assertEqual(window["deadlineNs"] - commit["requestedNs"], self.m.COMMAND_WINDOW)
                             self.assertLessEqual(window["deadlineNs"], window["pulseDeadlineNs"])
+                    self.assertEqual(result["completedElapsedNs"],
+                                     sum(e["completedElapsedNs"] for e in result["episodes"]))
+                    artifacts = Path(result["artifactDirectory"])
+                    restored = [gzip.decompress(path.read_bytes()) for path in sorted(artifacts.glob("snapshot-*.json.gz"))]
+                    self.assertEqual([json.loads(raw) for raw in restored], self.samples)
+                    self.assertLess(sum(map(len, restored)), 8*1024*1024)
+                    self.assertLess(sum(path.stat().st_size for path in artifacts.iterdir()), self.m.t.MAX_BYTES)
                 else:
                     self.assertEqual(code, 2)
                     self.assertTrue(commits[-1]["cleanup"])
                     if scenario == "total_budget":
-                        self.assertIn("no active budget", result["error"])
-                        self.assertLess(len(result["episodes"]), 4)
+                        self.assertRegex(result["error"], "no active budget|deadline|maximumGestureNs")
+                        self.assertLess(len(result["episodes"]), 16)
                         self.assertGreater(self.clock.now - driver.started, 9_000_000_000)
+                    elif scenario == "artifact_limit":
+                        self.assertIn("artifact budget", result["error"])
+                        self.assertLess(len(result["episodes"]), 16)
+                        self.assertLess(sum(path.stat().st_size for path in
+                                            Path(result["artifactDirectory"]).iterdir()), self.m.t.MAX_BYTES)
                     else:
-                        self.assertEqual(result["episodes"], [])
-                        self.assertEqual(len(self.calls), 2)
                         if scenario == "missing":
-                            self.assertIn("lost current native observation", result["error"])
-                            lost_at = driver.snapshot_source_deadline(driver.latest_snapshot)
+                            self.assertIn("snapshot response not received within request budget", result["error"])
+                            self.assertEqual(len(result["episodes"]), 1)
+                            self.assertEqual(sum(lines != self.m.ZERO for lines in self.calls), 1)
                         else:
+                            self.assertEqual(result["episodes"], [])
+                            self.assertEqual(len(self.calls), 2)
                             self.assertIn("invalid input focus/head/time", result["error"])
-                            lost_at = self.samples[-1]["observed_ns"]
-                        self.assertLess(commits[-1]["requestedNs"] - lost_at, self.m.PERIOD)
-                        self.assertLess(commits[-1]["committedNs"] - commits[0]["requestedNs"], 150_000_000)
+                            self.assertLess(commits[-1]["requestedNs"] - self.samples[-1]["observed_ns"], self.m.PERIOD)
+
+    def test_recorded_long_row_round_trip_is_split_before_head_turn(self):
+        recorded = RECORDED_LONG_TIMING
+        self.rows = [dict(left=[0, -.5], right=[0, 0], holdMs=1500),
+                     dict(left=[0, 0], right=[0, 0], holdMs=500, lookDegrees=[45, 0])]
+        self.ack_delay = recorded["commandAckNs"]
+        self.snapshot_read_delay = recorded["thirdRequestNs"] - recorded["secondObservedNs"]
+        self.response_delay = lambda driver: (
+            recorded["firstResponseNs"] if driver.snapshot_index == 1 else
+            recorded["secondResponseNs"] if driver.snapshot_index == 2 else 100_000_000)
+
+        def recorded_second_source(sample, driver):
+            if driver.snapshot_index != 2:
+                return
+            offset = sample["observed_ns"] - recorded["secondObservedNs"]
+            sample["valid_until_ns"] = sample["native_deadline_ns"] = recorded["secondValidUntilNs"] + offset
+            sample["input_evidence"].update(observedNs=recorded["secondInputObservedNs"] + offset,
+                                            deadlineNs=sample["valid_until_ns"])
+            sample["selected"]["deadlineNs"] = sample["valid_until_ns"]
+            sample["input"]["menu"]["deadlineNs"] = recorded["secondMenuUntilNs"] + offset
+        self.snapshot_mutation = recorded_second_source
+        code, result = self.assembled()
+        self.assertEqual((code, result.get("error")), (0, None))
+        self.assertEqual(len(result["episodes"]), 4)
+        self.assertEqual(result["plannedDurationMs"], 2000)
+        self.assertEqual([e["rowIndex"] for e in result["episodes"]], [0, 0, 0, 1])
+        self.assertEqual(self.calls[:6], [["stick l 0 -0.5", "stick r 0 0"], self.m.ZERO]*3)
+        self.assertEqual(self.calls[7], self.m.ZERO)
+        self.assertEqual(self.state["head"]["ypr"], [45, 0, 0])
+        self.assertIn("hold", self.cached_expiry_phases)
+        self.assertFalse(result["nativeAcceptance"])
+
+    def test_subpulse_partition_preserves_budget_and_refuses_unusable_tail_before_input(self):
+        for duration in (602, 750, 999, 1001, 1501, 1999, 2000):
+            rows = [dict(left=[0, .3], right=[0, 0], holdMs=duration, lookDegrees=[10, 0])]
+            schedule = self.m.pulse_schedule(self.m.plan(rows))
+            self.assertEqual(sum(row["holdMs"] for row in schedule), duration)
+            self.assertTrue(all(300 < row["holdMs"] <= 500 for row in schedule))
+            self.assertEqual(sum("lookDegrees" in row for row in schedule), 1)
+        self.rows = [dict(left=[0, .3], right=[0, 0], holdMs=500),
+                     dict(left=[0, .3], right=[0, 0], holdMs=501)]
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertIn("no active budget", result["error"])
+        self.assertEqual(self.calls, [])
 
     def test_recorded_genuine_empty_assembled_movement_preserves_fire_block(self):
         self.replay_empty = True

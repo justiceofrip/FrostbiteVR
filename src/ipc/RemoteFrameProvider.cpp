@@ -9,18 +9,23 @@ bool SameRequirements(const runtime::PresentationRequirements& a,const runtime::
     return a.width==b.width&&a.height==b.height&&a.format==b.format&&a.adapterLow==b.adapterLow&&a.adapterHigh==b.adapterHigh;
 }
 }
-void RemoteFrameProvider::ServiceRequests(const runtime::PresentationRequirements& requirements,const runtime::TrackingFrame& current)noexcept {
-    if(!lookahead_)return;
-    ++stats_.lookaheadServices;
+bool RemoteFrameProvider::ValidateLookahead(const runtime::PresentationRequirements& requirements,const runtime::TrackingFrame& current)noexcept {
+    if(!lookahead_)return false;
     const bool changed=(lookaheadCount_&&!SameRequirements(requirements,lookaheadPending_[0].requirements))||
         (lastIssued_.generation&&(current.spaceGeneration!=lastIssued_.spaceGeneration||
             current.predictedNs<lastIssued_.predictedNs||current.generation<lastIssued_.generation));
     if(cancelling_||changed||!current.focused||!current.headValid){
         // Cancel BOTH immutable pending samples before flushing an old GPU ACK.
         // Contention keeps that intent and those records until the wire agrees.
-        Suspend();if(cancelling_||!current.focused||!current.headValid)return;
+        Suspend();if(cancelling_||!current.focused||!current.headValid)return false;
     }
     channel_.FlushFeedback();
+    return true;
+}
+void RemoteFrameProvider::ServiceRequests(const runtime::PresentationRequirements& requirements,const runtime::TrackingFrame& current)noexcept {
+    if(!lookahead_)return;
+    ++stats_.lookaheadServices;
+    if(!ValidateLookahead(requirements,current))return;
     if(lookaheadCount_==lookaheadPending_.size()||
         (lastIssued_.generation&&(current.generation<=lastIssued_.generation||current.predictedNs<=lastIssued_.predictedNs)))return;
     const auto started=std::chrono::steady_clock::now();
@@ -35,10 +40,11 @@ void RemoteFrameProvider::PopLookahead()noexcept {
     lookaheadPending_[0]=lookaheadPending_[1];lookaheadPending_[1]={};--lookaheadCount_;
 }
 bool RemoteFrameProvider::TryGetLookaheadPair(const runtime::PresentationRequirements& requirements,const runtime::TrackingFrame& current,
-    runtime::TrackingFrame& rendered,graphics::TextureDescriptor& descriptor,graphics::PairTicket& ticket)noexcept {
+    runtime::TrackingFrame& rendered,graphics::TextureDescriptor& descriptor,graphics::PairTicket& ticket,bool allowRequests)noexcept {
     // Also supports direct provider callers. Repeated sampling of this same
     // generation cannot enqueue another request or renew either deadline.
-    ServiceRequests(requirements,current);
+    if(allowRequests)ServiceRequests(requirements,current);
+    else if(!ValidateLookahead(requirements,current))return false;
     if(cancelling_||!current.focused||!current.headValid||!lookaheadCount_)return false;
     FrameTimeoutSnapshot timeout{};
     const auto result=channel_.PollRequest(descriptor,ticket,&timeout);
@@ -64,8 +70,15 @@ bool RemoteFrameProvider::TryGetLookaheadPair(const runtime::PresentationRequire
     // v10 alone refills the newly freed local FIFO entry with this frame's
     // original sample. It cannot replace/renew either pending pose or ACK the
     // delivered source. Timeout above intentionally does not perform this step.
-    if(channel_.SourceSlotCount()==3)ServiceRequests(requirements,current);
+    if(allowRequests&&channel_.SourceSlotCount()==3)ServiceRequests(requirements,current);
     return true;
+}
+bool RemoteFrameProvider::TryGetPendingPair(const runtime::PresentationRequirements& r,const runtime::TrackingFrame& prior,
+    runtime::TrackingFrame& rendered,graphics::TextureDescriptor& d,graphics::PairTicket& ticket)noexcept {
+    // Only the negotiated three-source FIFO supports pre-wait delivery. The
+    // caller's prior sample validates existing work; it cannot create more.
+    if(!lookahead_||channel_.SourceSlotCount()!=3)return false;
+    return TryGetLookaheadPair(r,prior,rendered,d,ticket,false);
 }
 bool RemoteFrameProvider::TryGetCompletedPair(const runtime::PresentationRequirements& r,const runtime::TrackingFrame& current,
     runtime::TrackingFrame& rendered,graphics::TextureDescriptor& d,graphics::PairTicket& ticket)noexcept {

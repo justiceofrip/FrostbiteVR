@@ -115,6 +115,7 @@ struct Host {
     graphics::D3D11SceneDepthConsumer sceneDepth;bool sceneDepthSeen=false;
 
     runtime::RetainedPresentation retained;
+    runtime::TrackingFrame preWaitTracking{};
     // Own the exact delivered pair until ALL shared color/depth reads finish.
     // XR input, menus and frame submission keep running while the GPU is busy.
     struct PendingCopy : HostCopyLease {
@@ -185,6 +186,7 @@ struct Host {
         // Raw XR handles and loader HMODULE deliberately remain undisposed.
     }
     void CancelPendingPresentation()noexcept {
+        preWaitTracking={};
         if(pendingCopy){
             if(pendingCopy->Composed())retained.Reset();
             pendingCopy->CancelPresentation();pendingCopy->presentation.Reset();
@@ -454,6 +456,7 @@ struct Host {
         // query completes, a successor may be fetched later in this frame.
         bool carriedCopy=pendingCopy&&!pendingCopy->Composed();
         const bool carriedComposed=pendingCopy&&pendingCopy->Composed();
+        bool submittedCopy=false,submittedBeforeWait=false;
         const auto observeCopy=[&]{
             if(!pendingCopy)return;
             const auto& pending=*pendingCopy;diagnostic.SetCopyTicket(pending.ticket);
@@ -499,6 +502,81 @@ struct Host {
                 diagnostic.pairRejected=diagnostic.copyRetired=true;
             }
         };
+        const auto admitCopy=[&](const runtime::TrackingFrame& current,bool beforeWait){
+            graphics::TextureDescriptor descriptor{};graphics::PairTicket ticket{};runtime::TrackingFrame renderedTracking{};
+            diagnostic.providerQueried=true;
+            const auto requestStart=std::chrono::steady_clock::now();
+            const bool available=timed(HostStage::Provider,[&]{return beforeWait?
+                provider->TryGetPendingPair(report.requirements,current,renderedTracking,descriptor,ticket):
+                provider->TryGetCompletedPair(report.requirements,current,renderedTracking,descriptor,ticket);});
+            diagnostic.newPair=available;
+            const auto requestUs=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-requestStart).count();
+            report.maxProviderWaitUs=(std::max)(report.maxProviderWaitUs,std::uint64_t(requestUs));
+            if(!available)++report.providerMisses;
+            if(available){
+                // Even a rejected pre-wait delivery owns this frame's ticket
+                // observation; do not overwrite it with another delivery.
+                if(beforeWait)carriedCopy=submittedBeforeWait=true;
+                struct DeliveryGuard {IFrameProvider& provider;const graphics::PairTicket& ticket;bool transferred=false;
+                    ~DeliveryGuard(){if(!transferred)provider.PairConsumed(ticket,false);}} delivered{*provider,ticket};
+                pendingCopy=std::make_unique<PendingCopy>(*provider,ticket,sourceImports);
+                delivered.transferred=true;
+                auto& pending=*pendingCopy;
+                diagnostic.SetCopyTicket(ticket);
+                // Validate original poses before changing presenter-owned pixels.
+                // A pre-wait copy is revalidated against CURRENT tracking below.
+                bool accepted=pending.presentation.Commit(report.requirements,renderedTracking,descriptor,ticket)&&
+                    pending.presentation.Select(report.requirements,current,true);
+                HostSourceImportCache::Selection import;runtime::SourceSlotIdentity source;
+                if(accepted){
+                    const unsigned count=provider->SourceSlotCount();
+                    // v8 is unchanged. A negotiated v9 pair must have explicit,
+                    // exact delivered-slot evidence; failure is never fallback.
+                    accepted=(count==1||((count==2||count==3)&&provider->ReadSourceSlot(ticket,source)))&&
+                        sourceImports.Select(count,source,descriptor,ticket,import);
+                    if(accepted){
+                        if(import.resetPresentation){retained.Reset();sceneDepth.ResetSources();sceneDepthSeen=false;if(ammoHud)ammoHud->Reset();}
+                        if(import.resetAll)for(auto& entry:consumers)entry.Reset();
+                        auto& consumer=consumers[import.index];
+                        if(import.open){const auto opened=timed(HostStage::SharedOpen,[&]{return consumer.Open(device.Get(),descriptor);});
+                            diagnostic.copyResult=std::uint32_t(opened);diagnostic.copyError=consumer.LastError();
+                            accepted=opened==graphics::TransferResult::Ok;
+                            if(!accepted)sourceImports.OpenFailed(import);}
+                        if(accepted)accepted=pending.Bind(import);
+                    }
+                }
+                if(accepted){
+                    auto& consumer=consumers[pending.importIndex];
+                    graphics::SceneDepthFrame depthFrame;
+                    const bool hasDepth=provider->ReadSceneDepth(descriptor,ticket,depthFrame);
+                    sceneDepthSeen|=hasDepth;
+                    // Submit color AFTER every depth read on the same context.
+                    // Keep sources owned until a later zero-wait poll completes.
+                    // A v9 delivery explicitly distinguishes canonical absence
+                    // from a missing/malformed advertised attachment. Do not copy
+                    // unexpected depth or borrow the previous pair's local views.
+                    const bool depthConsistent=pending.sourceCount==1||source.depthPresent==hasDepth;
+                    pending.depthCopied=depthConsistent&&hasDepth&&timed(HostStage::DepthCopy,[&]{return sceneDepth.CopyBeforeColor(depthFrame,descriptor,ticket,pending.importIndex,pending.sourceCount)&&sceneDepth.Views(ticket,pending.depth);});
+                    if(hasDepth)++report.sceneDepthReceived;if(pending.depthCopied)++report.sceneDepthCopied;
+                    if(sceneDepthSeen&&!pending.depthCopied)++report.sceneDepthOmitted;
+                    pending.propsRead=provider->ReadBodyProps(ticket,pending.props);
+                    if(pending.sourceCount>1&&(!depthConsistent||(hasDepth&&!pending.depthCopied))){
+                        RetirePendingCopy();++report.rejectedPairs;diagnostic.pairRejected=diagnostic.copyRetired=true;
+                    }else {
+                    const std::array<graphics::TextureSlice,2> destinations{{{scratch[0].Get(),0},{scratch[1].Get(),0}}};
+                    pending.startedNs=BodyPropClockNs();submittedCopy=diagnostic.copySubmitted=true;
+                    const auto copied=timed(HostStage::ColorCopy,[&]{return consumer.SubmitCopy(ticket,destinations);});
+                    pending.submittedNs=BodyPropClockNs();diagnostic.copySubmittedNs=pending.submittedNs;
+                    diagnostic.copyResult=std::uint32_t(copied);diagnostic.copyError=consumer.LastError();
+                    if(copied==graphics::TransferResult::Ok)completeCopy(beforeWait);
+                    accepted=pending.Ready()||(copied==graphics::TransferResult::Busy&&consumer.HasPendingCopy());
+                    pending.gpuOrdered=accepted&&report.privateGpuOrderedPresent.available&&
+                        descriptor.sharing==graphics::TextureSharing::LegacyFenced;
+                    }
+                }
+                if(!accepted&&!diagnostic.copyRetired){RetirePendingCopy();++report.rejectedPairs;diagnostic.pairRejected=diagnostic.copyRetired=true;}
+            }
+        };
         // Events and known stop/focus loss precede source release. A reference
         // change announced for a future frame also cancels the queued successor,
         // while the already delivered image keeps its original effective-space
@@ -516,6 +594,14 @@ struct Host {
             pendingCopy.reset();++report.privateGpuOrderedPresent.preWaitRetirements;
         }
         if(provider)timed(HostStage::Feedback,[&]{provider->ServiceFeedback();});
+        // Three-source delivery can use the runtime wait for already-requested
+        // color/depth work. This drains only the existing FIFO head on the same
+        // immediate-context owner; current input is still sampled after WaitFrame.
+        if(!carriedCopy&&!pendingCopy&&provider&&provider->SourceSlotCount()==3&&provider->SupportsPreWaitDelivery()&&
+           !stopping&&sessionState==XR_SESSION_STATE_FOCUSED&&userPresent&&
+           referenceValid&&!recoveryPending&&spaceChanges.empty()&&
+           preWaitTracking.focused&&preWaitTracking.headValid&&preWaitTracking.spaceGeneration==spaceGeneration&&
+           lastFrameWall&&GetTickCount64()-lastFrameWall<1500)admitCopy(preWaitTracking,true);
         const auto publishInput=[&](const interaction::InputFrame& input){
             if(!provider)return;
             diagnostic.priorInputSuccessGeneration=report.frameDiagnostics.lastInputSuccessGeneration;
@@ -609,6 +695,7 @@ struct Host {
         // Providers without a menu channel retain their existing world route.
         const bool worldAllowed=!stopping&&frame.shouldRender&&!menuActive&&
             (!menu||menu->WorldAvailable())&&tracking.focused&&tracking.headValid;
+        preWaitTracking=worldAllowed?tracking:runtime::TrackingFrame{};
         if(!worldAllowed){CancelPendingPresentation();if(provider)provider->Suspend();}
         // A previously composed source may finish while WaitFrame/input ran.
         // Retire it before provider admission, after current cancellation. This
@@ -626,80 +713,11 @@ struct Host {
         // Current menu/recenter/tracking cancellation precedes a retry of an
         // early completion receipt that encountered a contended IPC mutex.
         if(provider)timed(HostStage::Feedback,[&]{provider->ServiceFeedback();});
-        bool submittedCopy=false;
         // Request metadata can lead pixel delivery by one immutable pose. This
         // service remains after current input/cancellation and real old-copy
         // retirement; it cannot overwrite or release the held source images.
         if(worldAllowed&&provider)timed(HostStage::Provider,[&]{provider->ServiceRequests(report.requirements,tracking);});
-        if(!carriedCopy&&!pendingCopy&&worldAllowed&&provider){
-            graphics::TextureDescriptor descriptor{};graphics::PairTicket ticket{};runtime::TrackingFrame renderedTracking{};
-            diagnostic.providerQueried=true;
-            const auto requestStart=std::chrono::steady_clock::now();
-            const bool available=timed(HostStage::Provider,[&]{return provider->TryGetCompletedPair(report.requirements,tracking,renderedTracking,descriptor,ticket);});
-            diagnostic.newPair=available;
-            const auto requestUs=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-requestStart).count();
-            report.maxProviderWaitUs=(std::max)(report.maxProviderWaitUs,std::uint64_t(requestUs));
-            if(!available)++report.providerMisses;
-            if(available){
-                struct DeliveryGuard {IFrameProvider& provider;const graphics::PairTicket& ticket;bool transferred=false;
-                    ~DeliveryGuard(){if(!transferred)provider.PairConsumed(ticket,false);}} delivered{*provider,ticket};
-                pendingCopy=std::make_unique<PendingCopy>(*provider,ticket,sourceImports);
-                delivered.transferred=true;
-                auto& pending=*pendingCopy;
-                diagnostic.SetCopyTicket(ticket);
-                // Validate original poses before changing presenter-owned pixels.
-                bool accepted=pending.presentation.Commit(report.requirements,renderedTracking,descriptor,ticket)&&
-                    pending.presentation.Select(report.requirements,tracking,worldAllowed);
-                HostSourceImportCache::Selection import;runtime::SourceSlotIdentity source;
-                if(accepted){
-                    const unsigned count=provider->SourceSlotCount();
-                    // v8 is unchanged. A negotiated v9 pair must have explicit,
-                    // exact delivered-slot evidence; failure is never fallback.
-                    accepted=(count==1||((count==2||count==3)&&provider->ReadSourceSlot(ticket,source)))&&
-                        sourceImports.Select(count,source,descriptor,ticket,import);
-                    if(accepted){
-                        if(import.resetPresentation){retained.Reset();sceneDepth.ResetSources();sceneDepthSeen=false;if(ammoHud)ammoHud->Reset();}
-                        if(import.resetAll)for(auto& entry:consumers)entry.Reset();
-                        auto& consumer=consumers[import.index];
-                        if(import.open){const auto opened=timed(HostStage::SharedOpen,[&]{return consumer.Open(device.Get(),descriptor);});
-                            diagnostic.copyResult=std::uint32_t(opened);diagnostic.copyError=consumer.LastError();
-                            accepted=opened==graphics::TransferResult::Ok;
-                            if(!accepted)sourceImports.OpenFailed(import);}
-                        if(accepted)accepted=pending.Bind(import);
-                    }
-                }
-                if(accepted){
-                    auto& consumer=consumers[pending.importIndex];
-                    graphics::SceneDepthFrame depthFrame;
-                    const bool hasDepth=provider->ReadSceneDepth(descriptor,ticket,depthFrame);
-                    sceneDepthSeen|=hasDepth;
-                    // Submit color AFTER every depth read on the same context.
-                    // Keep sources owned until a later zero-wait poll completes.
-                    // A v9 delivery explicitly distinguishes canonical absence
-                    // from a missing/malformed advertised attachment. Do not copy
-                    // unexpected depth or borrow the previous pair's local views.
-                    const bool depthConsistent=pending.sourceCount==1||source.depthPresent==hasDepth;
-                    pending.depthCopied=depthConsistent&&hasDepth&&timed(HostStage::DepthCopy,[&]{return sceneDepth.CopyBeforeColor(depthFrame,descriptor,ticket,pending.importIndex,pending.sourceCount)&&sceneDepth.Views(ticket,pending.depth);});
-                    if(hasDepth)++report.sceneDepthReceived;if(pending.depthCopied)++report.sceneDepthCopied;
-                    if(sceneDepthSeen&&!pending.depthCopied)++report.sceneDepthOmitted;
-                    pending.propsRead=provider->ReadBodyProps(ticket,pending.props);
-                    if(pending.sourceCount>1&&(!depthConsistent||(hasDepth&&!pending.depthCopied))){
-                        RetirePendingCopy();++report.rejectedPairs;diagnostic.pairRejected=diagnostic.copyRetired=true;
-                    }else {
-                    const std::array<graphics::TextureSlice,2> destinations{{{scratch[0].Get(),0},{scratch[1].Get(),0}}};
-                    pending.startedNs=BodyPropClockNs();submittedCopy=diagnostic.copySubmitted=true;
-                    const auto copied=timed(HostStage::ColorCopy,[&]{return consumer.SubmitCopy(ticket,destinations);});
-                    pending.submittedNs=BodyPropClockNs();diagnostic.copySubmittedNs=pending.submittedNs;
-                    diagnostic.copyResult=std::uint32_t(copied);diagnostic.copyError=consumer.LastError();
-                    if(copied==graphics::TransferResult::Ok)completeCopy(false);
-                    accepted=pending.Ready()||(copied==graphics::TransferResult::Busy&&consumer.HasPendingCopy());
-                    pending.gpuOrdered=accepted&&report.privateGpuOrderedPresent.available&&
-                        descriptor.sharing==graphics::TextureSharing::LegacyFenced;
-                    }
-                }
-                if(!accepted&&!diagnostic.copyRetired){RetirePendingCopy();++report.rejectedPairs;diagnostic.pairRejected=diagnostic.copyRetired=true;}
-            }
-        }
+        if(!carriedCopy&&!pendingCopy&&worldAllowed&&provider)admitCopy(tracking,false);
         // A short, opt-in opportunity to release THIS source set before the
         // next xrWaitFrame. The current frame already published input/menu
         // state. Expiry keeps the ordinary asynchronous copy path unchanged.
@@ -737,7 +755,7 @@ struct Host {
             // Give a newly submitted normal copy one nonblocking completion
             // query before composition, unless the private service polled it.
             // Busy retains the exact source; only query success makes it Ready.
-            ServiceUncomposedCopyBeforePresentation(pendingCopy,submittedCopy,
+            ServiceUncomposedCopyBeforePresentation(pendingCopy,submittedCopy&&!submittedBeforeWait,
                 copyPolledAfterSubmit,[&]{pollCopy(HostCopyPollPhase::BeforePresentation);});
             observeCopy();
             if(pendingCopy&&!pendingCopy->Composed()&&(pendingCopy->Ready()||

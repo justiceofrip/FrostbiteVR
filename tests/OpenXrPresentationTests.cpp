@@ -74,7 +74,12 @@ int NormalCopyPollRegression(){
     polled=false;pending->gpuOrdered=true;
     CHECK(!xr::ServiceUncomposedCopyBeforePresentation(pending,true,polled,[&]{++polls;}));
     CHECK(polls==0&&!polled&&pending->Copying());
-    pending.reset();CHECK(provider.negative==1&&provider.positive==0&&!provider.wrong);
+    // A submission before WaitFrame is no longer a just-issued GPU-ordered
+    // copy at the post-input service point. Its exact query gets one poll.
+    pending->CancelPresentation();
+    CHECK(xr::ServiceUncomposedCopyBeforePresentation(pending,false,polled,[&]{++polls;pending->Complete();}));
+    CHECK(polls==1&&polled&&pending->Ready()&&pending->Cancelled()&&!pending->MarkComposed());
+    pending.reset();CHECK(provider.negative==0&&provider.positive==1&&!provider.wrong);
     std::cout<<"Normal pre-composition poll: same-frame readiness, Busy retention, cancellation, fault retirement and no duplicate poll/ACK passed\n";
     return 0;
 }
@@ -430,6 +435,24 @@ struct TwoSourceAsync final:runtime::IFrameProvider {
     bool outstanding=false;std::string error;
     bool Fail(const char* message){++errors;error=message;return false;}
     unsigned SourceSlotCount()const noexcept override{return SourceCount;}
+    bool preWait=false,queuedForPreWait=false;
+    unsigned preWaitDeliveries=0;
+    unsigned DeliveryFrame(unsigned index)const noexcept {
+        // The pre-wait variant also crosses this runtime's no-render and
+        // invalid-head boundaries, which are unknown until after WaitFrame.
+        return preWait&&index==7?70u:preWait&&index==8?75u:DeliveryFrames[index];
+    }
+    bool SupportsPreWaitDelivery()const noexcept override{return preWait&&SourceCount==3;}
+    bool TryGetPendingPair(const runtime::PresentationRequirements& req,const runtime::TrackingFrame& prior,
+        runtime::TrackingFrame& rendered,graphics::TextureDescriptor& descriptor,graphics::PairTicket& ticket)noexcept override {
+        if(!queuedForPreWait)return false;
+        if(!SupportsPreWaitDelivery()||!outstanding||inputFrame+1!=DeliveryFrame(active)||
+           prior.predictedNs!=latestInput.predictedNs||prior.spaceGeneration!=heldTracking.spaceGeneration||
+           req.width!=descriptors[active].width||req.height!=descriptors[active].height)
+            return Fail("pre-wait delivery changed its queued request or previous input");
+        rendered=heldTracking;descriptor=descriptors[active];ticket=held;
+        queuedForPreWait=false;++preWaitDeliveries;return true;
+    }
     bool TryGetPair(const runtime::PresentationRequirements&,const runtime::TrackingFrame&,
         graphics::TextureDescriptor&,graphics::PairTicket&)noexcept override{return false;}
     void UpdateInput(const interaction::InputFrame& input)noexcept override {
@@ -441,7 +464,8 @@ struct TwoSourceAsync final:runtime::IFrameProvider {
         } // The final neutral teardown input must not rewrite frame100's evidence.
         if(outstanding&&inputFrame>DeliveryFrames[active])Sleep(1); // Fixture yield only, never fake GPU progress.
     }
-    void Suspend()noexcept override{++suspensions;lastSuspendOrder=++order;previous={};}
+    void Suspend()noexcept override{++suspensions;lastSuspendOrder=++order;previous={};
+        if(queuedForPreWait){queuedForPreWait=false;PairConsumed(held,false);}}
     void ServiceFeedback()noexcept override{lastFeedbackOrder=++order;}
     void ServiceRequests(const runtime::PresentationRequirements& req,const runtime::TrackingFrame& current)noexcept override {
         // Observe the actual host service boundary without creating a pair or
@@ -488,8 +512,8 @@ struct TwoSourceAsync final:runtime::IFrameProvider {
                 return Fail("provider delivery bypassed current request service or replaced its identity");
             if(outstanding){++queriesWhileHeld;return Fail("two-source queried with a delivered source owned");}
             const auto frame=unsigned((current.predictedNs-1000000000)/11000000);
-            if(next==DeliveryFrames.size()||frame<DeliveryFrames[next]){previous=current;return false;}
-            if(frame!=DeliveryFrames[next])return Fail("missed two-source delivery");
+            if(next==DeliveryFrames.size()||frame<DeliveryFrame(next)-unsigned(preWait)){previous=current;return false;}
+            if(frame!=DeliveryFrame(next)-unsigned(preWait))return Fail("missed two-source delivery");
             if(!previous.generation||previous.spaceGeneration!=current.spaceGeneration||previous.predictedNs>=current.predictedNs)return Fail("missing two-source original pose");
             if(!device&&!Initialize(req))return false;
             const auto slot=Slots[next];auto& s=sources[slot];
@@ -527,7 +551,9 @@ struct TwoSourceAsync final:runtime::IFrameProvider {
             heldSource.requestId=next;heldSource.slot=slot;heldSource.slotCount=SourceCount;
             heldSource.depthPresent=withDepth&&!(active==BadDepth&&depthFault==DepthFault::Unexpected);
             tickets[active]=ticket;descriptors[active]=descriptor;attachments[active]=heldDepth;
-            return true;
+            // In the pre-wait variant, this post-input call finishes the source
+            // but does not deliver it. Only the next drain reads this exact pair.
+            queuedForPreWait=preWait;return !preWait;
         }catch(...){return Fail("two-source fixture exception");}
     }
     bool ReadSourceSlot(const graphics::PairTicket& ticket,runtime::SourceSlotIdentity& out)noexcept override {
@@ -680,6 +706,60 @@ int TwoSourceActualHostRegression(const std::filesystem::path& path,unsigned(*ru
     return 0;
 }
 
+int ThreeSourcePreWaitActualHostRegression(const std::filesystem::path& path,unsigned(*runtimeErrors)()){
+    OrderedPresentEnvironment environment(false);CHECK(environment.okay);
+    TwoSourceAsync<3> provider;provider.preWait=true;
+    xr::HostOptions options;options.loaderPath=path;options.probeOnly=false;options.seconds=3;options.provider=&provider;
+    const auto storage=RunHostOnHeap(options);const auto& report=*storage;
+    if(!report.okay||!provider.error.empty())std::cerr<<"pre-wait host: "<<report.error<<" fixture: "<<provider.error<<'\n';
+    CHECK(report.okay&&runtimeErrors()==0&&provider.errors==0&&provider.error.empty());
+    CHECK(report.endedFrames==100&&provider.inputs==101&&report.inputFrames==100);
+    CHECK(provider.next==11&&provider.preWaitDeliveries==11&&!provider.outstanding&&!provider.queuedForPreWait);
+    CHECK(provider.queriesWhileHeld==0&&provider.suspensions>0&&provider.serviceSpaceChanges>0);
+    CHECK(report.privateHostCopyService.budgetMs==0&&!report.privateGpuOrderedPresent.configured);
+    for(unsigned i=0;i<provider.tickets.size();++i){
+        CHECK(provider.acknowledgements[i]==1&&provider.slotReads[i]==1&&provider.depthReads[i]==1);
+        CHECK(provider.ackFrames[i]>=provider.DeliveryFrame(i)-1);
+        if(i==provider.BadDepth)CHECK(!provider.consumed[i]&&provider.ackFrames[i]==29);
+        else if(i+1<provider.tickets.size())CHECK(provider.consumed[i]);
+    }
+    for(unsigned frame=1;frame<provider.requestService.size();++frame){const auto& service=provider.requestService[frame];
+        CHECK(service.inputPublished&&service.services==unsigned(service.inputEligible)&&service.queries<=1);
+        if(service.services)CHECK(service.inputOrder<service.feedbackOrder&&service.feedbackOrder<service.serviceOrder);
+        if(service.queries)CHECK(service.serviceOrder<service.queryOrder&&!service.sourceHeld);
+    }
+    unsigned earlySubmissions=0,sameIterationCompletions=0,postWaitPolls=0;
+    std::array<bool,2> cancelled{};
+    for(unsigned n=0;n<report.frameDiagnostics.count;++n){const auto& row=report.frameDiagnostics.Row(n);
+        CHECK(!row.copyObservationOverflow&&!row.hasPriorCopy);
+        if(!row.copyTicket.sequence)continue;
+        unsigned index=unsigned(provider.tickets.size());
+        for(unsigned i=0;i<provider.tickets.size();++i)if(!std::memcmp(&row.copyTicket,&provider.tickets[i],sizeof(row.copyTicket))){index=i;break;}
+        CHECK(index<provider.tickets.size());
+        if(row.copySubmitted){
+            ++earlySubmissions;CHECK(row.frame==provider.DeliveryFrame(index)&&row.providerQueried&&row.newPair);
+            CHECK(row.waitFrameAttempted&&row.copySubmittedNs>=row.startedNs&&row.copySubmittedNs<=row.waitFrame.startedNs);
+            CHECK(row.copyTicket.predictedNs<row.predictedNs); // Original pose is never the new XR sample.
+            sameIterationCompletions+=unsigned(row.copyCompleted);
+            for(unsigned p=0;p<row.copyPollCount;++p)if(row.copyPolls[p].phase==xr::HostCopyPollPhase::BeforePresentation){
+                ++postWaitPolls;CHECK(row.copyPolls[p].startedNs>=row.waitFrame.returnedNs&&row.copyPolls[p].startedNs>=row.inputReturnedNs);
+            }
+        }
+        if((index==7||index==8)&&row.copyCancelled)cancelled[index-7]=true;
+        if(row.frame==70||row.frame==75)CHECK(!row.worldLayer);
+        if(row.copyCompleted&&!row.copyCancelled&&row.worldLayer){
+            CHECK(row.retainedGeneration==row.copyTicket.trackingGeneration&&row.retainedPredictedNs==row.copyTicket.predictedNs);
+        }
+    }
+    CHECK(earlySubmissions==10&&cancelled[0]&&cancelled[1]);
+    CHECK(report.frameDiagnostics.copySubmittedFrames==10);
+    // Actual GPU completion timing is observed rather than forced. Deterministic
+    // readiness/Busy/cancel outcomes are covered by NormalCopyPollRegression.
+    std::cout<<"Three-source pre-wait actual host: "<<earlySubmissions<<" submissions before WaitFrame, "
+        <<postWaitPolls<<" post-input polls, "<<sameIterationCompletions<<" same-iteration completions; original poses, exact ACKs and no-render/head-loss cancellation passed\n";
+    return 0;
+}
+
 int wmain(int argc,wchar_t** argv){
     if(argc==2&&std::wstring(argv[1])==L"--normal-copy-poll")return NormalCopyPollRegression();
     if(argc==2&&std::wstring(argv[1])==L"--lifetime-child"){Sleep(1000);return 0;}CHECK(argc==2);const auto path=std::filesystem::absolute(argv[1]);HMODULE runtime=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);CHECK(runtime);
@@ -748,5 +828,6 @@ int wmain(int argc,wchar_t** argv){
     CHECK(TwoSourceActualHostRegression(path,errors,true,TwoSourceAsync<>::DepthFault::Unexpected)==0);
     CHECK(TwoSourceActualHostRegression<3>(path,errors,false)==0);
     CHECK(TwoSourceActualHostRegression<3>(path,errors,true)==0);
+    CHECK(ThreeSourcePreWaitActualHostRegression(path,errors)==0);
     FreeLibrary(runtime);return 0;
 }

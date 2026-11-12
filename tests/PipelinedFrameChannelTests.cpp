@@ -594,6 +594,72 @@ int ThreeSourceCapacityAndRetirement(){
     }
     return 0;
 }
+int PreWaitProviderDelivery(){
+    const auto req=Requirements();runtime::TrackingFrame rendered{};
+    graphics::TextureDescriptor out{};graphics::PairTicket got{};
+    // A drain cannot create initial work, including on unsupported providers.
+    for(unsigned count:{1u,2u,3u}){
+        ipc::RemoteFrameProvider host;
+        CHECK(host.Create(count>1,count>1,count>1,count==3));
+        CHECK(host.SupportsPreWaitDelivery()==(count==3));
+        CHECK(!host.TryGetPendingPair(req,Tracking(4),rendered,out,got));
+        CHECK(host.Statistics().requested==0&&host.Statistics().lookaheadServices==0);
+    }
+    ipc::RemoteFrameProvider host;CHECK(host.Create(true,true,true,true));CHECK(host.SetRequestLifetime(200));
+    ipc::FrameChannel producer;CHECK(producer.ConnectProducer(host.Token(),true,true));
+    host.ServiceRequests(req,Tracking(0));host.ServiceRequests(req,Tracking(1));
+    ipc::FrameRequest a{},b{},c{};ipc::PipelineSlotKey ak{},bk{},ck{};
+    CHECK(producer.TryTakePipeline(a,ak)==Result::Ok&&producer.MarkCaptureReleased(ak)==Result::Ok);
+    CHECK(producer.TryTakePipeline(b,bk)==Result::Ok&&producer.MarkCaptureReleased(bk)==Result::Ok);
+    graphics::TextureDescriptor ad{},bd{};graphics::PairTicket at{},bt{};
+    PipelinePair(a,ak,ad,at);PipelinePair(b,bk,bd,bt);
+    CHECK(producer.PublishPipeline(bk,bd,bt,nullptr,nullptr)==Result::Ok);
+    CHECK(!host.TryGetPendingPair(req,Tracking(2),rendered,out,got)); // No out-of-order B.
+    CHECK(producer.PublishPipeline(ak,ad,at,nullptr,nullptr)==Result::Ok);
+    CHECK(host.TryGetPendingPair(req,Tracking(2),rendered,out,got));
+    CHECK(!std::memcmp(&got,&at,sizeof(got))&&runtime::PairMatchesFrame(req,rendered,out,got));
+    CHECK(rendered.generation==Tracking(0).generation&&rendered.predictedNs==Tracking(0).predictedNs&&
+        rendered.eyes[0].position.x==Tracking(0).eyes[0].position.x);
+    CHECK(host.Statistics().requested==2&&host.Statistics().lookaheadServices==2&&host.Statistics().completed==1);
+    CHECK(producer.TryTakePipeline(c,ck)==Result::Busy); // Freed FIFO space was not refilled with prior input.
+    CHECK(!host.TryGetPendingPair(req,Tracking(2),rendered,out,got)); // Exact A still GPU-owned.
+    runtime::SourceSlotIdentity source{};CHECK(host.ReadSourceSlot(at,source)&&source.slot==ak.slot&&source.slotCount==3);
+    ipc::PipelineRetirement retired{};CHECK(producer.ClaimPipelineRetirement(ak,retired)==Result::Busy);
+    host.PairConsumed(at,true);
+    CHECK(producer.ClaimPipelineRetirement(ak,retired)==Result::Ok&&retired.outcome==ipc::Outcome::Consumed);
+    CHECK(producer.FinishPipelineRetirement(retired)==Result::Ok);
+    // Only the post-input service can admit C, using that newer exact pose.
+    host.ServiceRequests(req,Tracking(3));CHECK(producer.TryTakePipeline(c,ck)==Result::Ok);
+    CHECK(c.trackingGeneration==Tracking(3).generation&&c.predictedNs==Tracking(3).predictedNs);
+    CHECK(host.TryGetPendingPair(req,Tracking(3),rendered,out,got));
+    CHECK(!std::memcmp(&got,&bt,sizeof(got))&&rendered.generation==Tracking(1).generation&&
+        rendered.predictedNs==Tracking(1).predictedNs&&host.Statistics().requested==3);
+    host.PairConsumed(bt,true);host.Suspend();
+    CHECK(producer.ClaimPipelineRetirement(bk,retired)==Result::Ok&&retired.outcome==ipc::Outcome::Consumed);
+    CHECK(producer.FinishPipelineRetirement(retired)==Result::Ok);
+    CHECK(producer.SkipPipeline(ck)==Result::Ok&&producer.ClaimPipelineRetirement(ck,retired)==Result::Ok);
+    CHECK(retired.outcome==ipc::Outcome::Discarded&&producer.FinishPipelineRetirement(retired)==Result::Ok);
+    producer.Close();host.Close();
+    // Known focus, reference, dimensions and backwards-time changes cancel
+    // queued pairs before delivery, and never admit a replacement pose here.
+    for(unsigned change=0;change<4;++change){
+        CHECK(host.Create(true,true,true,true));CHECK(producer.ConnectProducer(host.Token(),true,true));
+        host.ServiceRequests(req,Tracking(0));
+        CHECK(producer.TryTakePipeline(a,ak)==Result::Ok&&producer.MarkCaptureReleased(ak)==Result::Ok);
+        PipelinePair(a,ak,ad,at);CHECK(producer.PublishPipeline(ak,ad,at,nullptr,nullptr)==Result::Ok);
+        auto changedReq=req;auto current=Tracking(1);
+        if(change==0)current.focused=false;
+        else if(change==1)++current.spaceGeneration;
+        else if(change==2)++changedReq.width;
+        else current.predictedNs=Tracking(0).predictedNs-1;
+        CHECK(!host.TryGetPendingPair(changedReq,current,rendered,out,got));
+        CHECK(host.Statistics().requested==1&&host.Statistics().completed==0&&host.Statistics().lookaheadServices==1);
+        CHECK(producer.ClaimPipelineRetirement(ak,retired)==Result::Ok&&retired.outcome==ipc::Outcome::Discarded);
+        CHECK(producer.FinishPipelineRetirement(retired)==Result::Ok&&producer.TryTakePipeline(c,ck)==Result::Busy);
+        producer.Close();host.Close();
+    }
+    return 0;
+}
 int ThreeSourceExpiryAndClose(){
     ipc::FrameChannel host,producer;CHECK(host.CreateHost(true,true,true,true));CHECK(producer.ConnectProducer(host.Token(),true,true));
     ipc::FrameRequest a{},b{};ipc::PipelineSlotKey ak{},bk{};graphics::TextureDescriptor ad{},bd{},out{};graphics::PairTicket at{},bt{},got{};
@@ -669,7 +735,7 @@ int ThreeSourceQueuedExpiry(){
 }
 int main(){
     if(TimeoutSnapshotsBeforeMutation())return 1;
-    if(ThreeSourceNegotiation()||ThreeSourceCapacityAndRetirement()||ThreeSourceExpiryAndClose()||ThreeSourceQueuedExpiry())return 1;
+    if(ThreeSourceNegotiation()||ThreeSourceCapacityAndRetirement()||PreWaitProviderDelivery()||ThreeSourceExpiryAndClose()||ThreeSourceQueuedExpiry())return 1;
     if(CaptureReleaseNegotiationAndCorruption()||CaptureReleaseMappedOwnership()||CaptureReleaseExpiryAndDeferredCancel())return 1;
     if(ConsecutiveProviderTicks()||QueuedOwnershipAndIdentity()||ExpiryBeforeAndAfterAcknowledgement()||
        CancelWhileGpuOwnsOldPair()||DeferredAcknowledgement()||ServiceDeferredFeedbackWithoutProviderQuery()||DeferredAcknowledgementThenSpaceChange()||

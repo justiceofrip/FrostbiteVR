@@ -215,7 +215,7 @@ std::optional<pk::Snapshot> CloseSnapshot(unsigned& reason)noexcept {
     current.weapon=service.anchor->original.links.clientItems[selected.current[0]];
     const auto snapshot=pk::Read(service.memory,service.state,service.server,service.base,*service.anchor,
         current,++service.observationSequence,Now());
-    if(!snapshot||snapshot->selected!=selected){reason=CloseRead;return {};}
+    if(!snapshot||!pk::SameSelectionIdentity(snapshot->selected,selected)){reason=CloseRead;return {};}
     if(!Flags(*service.anchor)){reason=CloseFlags;return {};}
     if(!Ammo(*snapshot)){service.bad=true;reason=CloseAmmo;return {};}
     const auto ended=Now();if(began<=0||ended<began||ended-began>=100000000){reason=CloseClock;return {};}
@@ -474,8 +474,8 @@ void Start()noexcept{if(service.installed)service.enabled.store(true,std::memory
 std::optional<View> Inspect(const ReloadStateOwner& current,unsigned knifeWeapon,std::uint64_t sequence,std::int64_t now,InspectReason* diagnostic)noexcept {
     const auto reason=[&](InspectReason r){if(diagnostic)*diagnostic=r;};
     struct Capture {std::optional<pk::Anchor> anchor;InspectionStamp stamp;std::uint64_t lifetime=0,operation=0;bool owned=false;};
-    reason(InspectReason::Busy);
-    return InspectOutsideGate<Capture,View>(service.gate,[&]()->std::optional<Capture>{
+    reason(InspectReason::CaptureBusy);
+    auto view=InspectOutsideGate<Capture,View>(service.gate,[&]()->std::optional<Capture>{
         if(!service.enabled.load(std::memory_order_acquire)){reason(InspectReason::Disabled);return {};}
         return Capture{service.anchor,InspectionSource(),service.nativeLifetime,service.bodyOperation,service.owned};
     },[&](const Capture& captured)->std::optional<View>{
@@ -487,8 +487,9 @@ std::optional<View> Inspect(const ReloadStateOwner& current,unsigned knifeWeapon
         const auto snapshot=pk::Read(service.memory,service.state,service.server,service.base,*anchor,current,sequence,now);
         reason(InspectReason::NativeRead);if(!snapshot)return {};
         reason(InspectReason::Flags);if(!Flags(*anchor))return {};
-        reason(InspectReason::Busy);View view;view.anchor=*anchor;view.snapshot=*snapshot;return view;
+        reason(InspectReason::RejoinBusy);View view;view.anchor=*anchor;view.snapshot=*snapshot;return view;
     },[&](const Capture& captured,View& view){
+        reason(InspectReason::RejoinChanged);
         if(!InspectionStillCurrent(captured.stamp,InspectionSource())||captured.lifetime!=service.nativeLifetime||
            captured.operation!=service.bodyOperation||captured.owned!=service.owned||bool(captured.anchor)!=bool(service.anchor)||
            (captured.anchor&&!SameAnchor(*captured.anchor,*service.anchor)))return false;
@@ -502,6 +503,13 @@ std::optional<View> Inspect(const ReloadStateOwner& current,unsigned knifeWeapon
             service.closing.load(std::memory_order_acquire),bool(service.attackNative),bool(service.bridge.Pending())};
         reason(InspectReason::Available);return true;
     });
+    // Atomic shutdown state can change even when neither bookend obtains the
+    // gate. Such a miss is never classified as temporary contention.
+    if(!view){
+        if(!service.enabled.load(std::memory_order_acquire))reason(InspectReason::Disabled);
+        else if(service.closing.load(std::memory_order_acquire))reason(InspectReason::Closing);
+    }
+    return view;
 }
 void AcknowledgeNoEffectRehide(const Bc2BodyHolster& body)noexcept {
     std::unique_lock lock(service.gate,std::try_to_lock);
@@ -524,7 +532,8 @@ bool TryIdleHeldGun(const KnifeSample& source)noexcept {
     service.source=source;
     return true;
 }
-bool BeforePrepare(const KnifeSample& source,ChestKnifeCustody& policy)noexcept {
+bool BeforePrepare(const KnifeSample& source,ChestKnifeCustody& policy,BeforePrepareReason* diagnostic)noexcept {
+    const auto reason=[&](BeforePrepareReason value){if(diagnostic)*diagnostic=value;};
     // Gather is the sole caller. Revoke first-boundary input authority before
     // waiting for the native gate; accepted native work is drained separately.
     SourceAdvanced(source.source);
@@ -538,13 +547,15 @@ bool BeforePrepare(const KnifeSample& source,ChestKnifeCustody& policy)noexcept 
        (!source.trackedKnifeOwned||!source.knifeSelected||!source.onFoot||!source.fireSuppressed||
         !source.holdInputCurrent||!KnifeActionInputCurrent(source)||!source.gripHeld[1]||
         !GameplayOwnsInput(source.menu,source.source.nowNs)))service.poseRevocation.fetch_add(1,std::memory_order_acq_rel);
-    std::unique_lock lock(service.gate,std::try_to_lock);if(!lock.owns_lock()||service.closing.load(std::memory_order_acquire))return false;
+    std::unique_lock lock(service.gate,std::try_to_lock);
+    if(service.closing.load(std::memory_order_acquire)){reason(BeforePrepareReason::Closing);return false;}
+    if(!lock.owns_lock()){reason(BeforePrepareReason::Busy);return false;}
     InspectionChanged();
     if(service.outstanding){const auto result=service.outstanding->kind==KnifeCommandKind::Attack?
         service.attacks.ResolveBeforeSource(source.source.sequence,source.source.observedNs,source.source.nowNs):
         service.commands.ResolveBeforeSource(source.source.sequence,source.source.observedNs,source.source.nowNs);
         if(result){policy.Committed(*service.outstanding,*result);if(*result==KnifeCommit::RejectedNoEffect){service.returnReady=service.outstanding->kind==KnifeCommandKind::Draw;service.outstanding.reset();service.bridge.LifetimeEnded();service.attackNative.reset();}}}
-    service.source=source;return true;
+    service.source=source;reason(BeforePrepareReason::Available);return true;
 }
 bool Stage(const KnifeCommand& command,const KnifeSample& source,const HandInteraction& hands,ChestKnifeCustody& policy,
     const pk::Anchor& anchor,const ReloadStateOwner& current,std::uint64_t bodyOperation,
@@ -869,7 +880,7 @@ void AcknowledgeNoEffectRehide(const Bc2BodyHolster&)noexcept{}
 
 void SourceAdvanced(const interaction::HandInteractionSample&)noexcept{}
 bool TryIdleHeldGun(const interaction::KnifeSample&)noexcept{return false;}
-bool BeforePrepare(const interaction::KnifeSample&,interaction::ChestKnifeCustody&)noexcept{return false;}
+bool BeforePrepare(const interaction::KnifeSample&,interaction::ChestKnifeCustody&,BeforePrepareReason* diagnostic)noexcept{if(diagnostic)*diagnostic=BeforePrepareReason::Unsupported;return false;}
 bool Stage(const interaction::KnifeCommand&,const interaction::KnifeSample&,const interaction::HandInteraction&,interaction::ChestKnifeCustody&,
  const private_knife::Anchor&,const ReloadStateOwner&,std::uint64_t,const std::optional<math::Matrix4>&,float,std::int64_t)noexcept{return false;}
 std::optional<interaction::KnifeReceipt> Observe(const ReloadStateOwner&,const Bc2BodyHolster&,const std::optional<BodyFreeRightEvidence>&,std::int64_t,std::optional<ReturnCompletion>* completed)noexcept{if(completed)completed->reset();return {};}
