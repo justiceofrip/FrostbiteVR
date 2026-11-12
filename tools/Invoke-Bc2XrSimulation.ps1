@@ -14,6 +14,10 @@ param(
     [string]$TapeChecker,
     [string]$Python,
     [string]$LocalConfig,
+    [switch]$NeutralMotionCheck,
+    [ValidateRange(1,[long]::MaxValue)][long]$MaxGeneratedBytes=40GB,
+    [string]$GeneratedBudgetReason,
+    [string[]]$AdditionalBudgetRoots=@(),
     [ValidateRange(8,30)][int]$Seconds=12,
     [ValidateRange(15,60)][int]$TimeoutSeconds=35
 )
@@ -39,7 +43,8 @@ $receipt=[ordered]@{
     started_utc=[DateTime]::UtcNow.ToString('o');actual_game_checked=$false;headset_accepted=$false;
     source_contract=@{xr_sim='ca14f5b1c549cf49dca49233250b8f3cdad013f4';xr_tape='419c30d64d72ff9a41f00701ffe39c3c94bf3ac3'};
     limits=@{seconds=$Seconds;deadline_seconds=$TimeoutSeconds;planned_bytes=128MB;capture_frames=1;eye_width=320;eye_height=240;tape_max_frames=6000};
-    commands=$commands;failures=$failures;cleanup=@()
+    commands=$commands;failures=$failures;cleanup=@();
+    motion=@{requested=[bool]$NeutralMotionCheck;status='not_requested'}
 }
 function Write-Json([string]$Path,$Value){
     [IO.File]::WriteAllText($Path,($Value|ConvertTo-Json -Depth 30),$utf8)
@@ -181,6 +186,8 @@ try{
     # The same minimal bootstrap used by admission keeps its WOF helper compilation on G:.
     $null=Set-FvrProjectTemporaryStorage -RepositoryRoot $repo
     Require ($TimeoutSeconds -ge $Seconds+10) 'TimeoutSeconds must reserve at least 10 seconds beyond the host duration.'
+    Require (-not $NeutralMotionCheck -or $Seconds -ge 12) 'Neutral motion check requires at least 12 host seconds.'
+    Require ($MaxGeneratedBytes -le 40GB -or -not [string]::IsNullOrWhiteSpace($GeneratedBudgetReason)) 'MaxGeneratedBytes above 40 GiB requires an explicit GeneratedBudgetReason.'
     $OutputDirectory=Full-Path $OutputDirectory
     $reportRoot=(Full-Path (Join-Path $repo 'reports')).TrimEnd('\')+'\'
     Require ($OutputDirectory.StartsWith($reportRoot,[StringComparison]::OrdinalIgnoreCase)) 'OutputDirectory must be a fresh child of this repository reports directory.'
@@ -220,7 +227,10 @@ try{
         @{path=$path;bytes=(Get-Item -LiteralPath $path).Length;sha256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()}
     })
     # One composition: two 320x240 BGRA eyes and the encoder's mandatory 640x240 SBS copy.
-    $storage=Assert-FvrStorageBudget -RepositoryRoot $repo -OutputPath $OutputDirectory -Operation Capture -PlannedBytes 128MB -RawCaptureBytes (320*240*4*4+64KB)
+    $storage=Assert-FvrStorageBudget -RepositoryRoot $repo -OutputPath $OutputDirectory -Operation Capture -PlannedBytes 128MB -RawCaptureBytes (320*240*4*4+64KB) -MaxGeneratedBytes $MaxGeneratedBytes -MinFreeBytes 15GB -AdditionalRoots $AdditionalBudgetRoots
+    $receipt.limits.max_generated_bytes=$MaxGeneratedBytes
+    $receipt.limits.generated_budget_reason=$GeneratedBudgetReason
+    $receipt.limits.additional_budget_roots=$AdditionalBudgetRoots
     $admitted=$true
     $null=[IO.Directory]::CreateDirectory($OutputDirectory);$outputReady=$true
     Write-Json (Join-Path $OutputDirectory 'storage.json') $storage
@@ -248,6 +258,33 @@ try{
         $null=Send-Commands 'pose-and-grip' @('pace free 60','capture off','capture size 320 240','compose oncapture','focus norender on','head pose 0.05 1.60 -0.03 12 0 0','hand l follow off','hand r follow off','hand l grip pose -0.20 1.30 -0.35 0 0 0','hand l aim pose -0.20 1.30 -0.35 0 0 0','hand r grip pose 0.20 1.30 -0.35 0 0 0','hand r aim pose 0.20 1.30 -0.35 0 0 0','grip l 1','grip r 1','trigger r 0') {param($s) $s.head.valid -and $s.handL.valid -and $s.handR.valid -and [Math]::Abs($s.head.pos[0]-0.05) -lt 0.001 -and [Math]::Abs($s.head.ypr[0]-12) -lt 0.1 -and $s.controls.gripL -eq 1 -and $s.controls.gripR -eq 1}
         $null=Send-Commands 'trigger-down' @('trigger r 1') {param($s) $s.controls.trigR -eq 1}
         $null=Send-Commands 'trigger-up' @('trigger r 0','grip l 0','grip r 0') {param($s) $s.controls.trigR -eq 0 -and $s.controls.gripL -eq 0 -and $s.controls.gripR -eq 0}
+        if($NeutralMotionCheck){
+            $receipt.motion.status='pending'
+            $middle=Send-Commands 'neutral-motion-out' @('hand l to grip 0.20 1.40 -0.55 30 0 0 1200') {
+                param($s) $s.handL.pos[0] -gt -0.19 -and $s.handL.pos[0] -lt 0.19 -and $s.controls.gripL -eq 0
+            }
+            $fraction=([double]$middle.handL.pos[0]+0.20)/0.40
+            Require ([Math]::Abs($middle.handL.pos[1]-(1.30+0.10*$fraction)) -lt 0.002 -and [Math]::Abs($middle.handL.pos[2]-(-0.35-0.20*$fraction)) -lt 0.002 -and [Math]::Abs($middle.handL.ypr[0]-30*$fraction) -lt 0.2) 'Motion intermediate does not follow the bounded position/rotation span.'
+            $endpoint=Wait-Sim {param($s) $s.cmdSeq -eq $middle.cmdSeq -and [Math]::Abs($s.handL.pos[0]-0.20) -lt 0.001 -and [Math]::Abs($s.handL.pos[1]-1.40) -lt 0.001 -and [Math]::Abs($s.handL.pos[2]+0.55) -lt 0.001 -and [Math]::Abs($s.handL.ypr[0]-30) -lt 0.1} 'neutral motion endpoint'
+            Require ($endpoint.endFrames -gt $middle.endFrames) 'Motion endpoint lacks fresh XR frames.'
+            $reverse=Send-Commands 'neutral-motion-reverse' @('hand l to grip -0.40 1.20 -0.20 -20 0 0 1200') {
+                param($s) $s.handL.pos[0] -lt 0.19 -and $s.handL.pos[0] -gt -0.39 -and $s.controls.gripL -eq 0
+            }
+            $cancel=Send-Commands 'neutral-motion-cancel' @('hand l to grip -0.20 1.30 -0.35 0 0 0 0','grip l 0') {
+                param($s) [Math]::Abs($s.handL.pos[0]+0.20) -lt 0.001 -and [Math]::Abs($s.handL.pos[1]-1.30) -lt 0.001 -and [Math]::Abs($s.handL.pos[2]+0.35) -lt 0.001 -and [Math]::Abs($s.handL.ypr[0]) -lt 0.1 -and $s.controls.gripL -eq 0
+            }
+            $cancelUntil=$clock.ElapsedMilliseconds+1300
+            $observedAfter=[long]$cancel.endFrames
+            do{
+                $stable=Wait-Sim {param($s) $s.endFrames -gt $observedAfter} 'frames after motion cancellation'
+                $observedAfter=[long]$stable.endFrames
+                Require ($stable.cmdSeq -eq $cancel.cmdSeq -and [Math]::Abs($stable.handL.pos[0]+0.20) -lt 0.001 -and [Math]::Abs($stable.handL.pos[1]-1.30) -lt 0.001 -and [Math]::Abs($stable.handL.pos[2]+0.35) -lt 0.001 -and [Math]::Abs($stable.handL.ypr[0]) -lt 0.1 -and $stable.controls.gripL -eq 0) 'Cancelled motion resumed or another writer changed it.'
+                Start-Sleep -Milliseconds 25
+            }while($clock.ElapsedMilliseconds -lt $cancelUntil)
+            Require ($stable.endFrames -ge $cancel.endFrames+3 -and $stable.handL.valid -and $stable.handR.valid -and $stable.controls.trigL -eq 0 -and $stable.controls.trigR -eq 0 -and $stable.controls.gripR -eq 0) 'Motion check lacks advancing tracked frames with neutral controls.'
+            $receipt.motion=@{requested=$true;status='passed';intermediate=$middle;endpoint=$endpoint;reverse=$reverse;cancel=$cancel;stable=$stable;cancel_watch_ms=1300;native_acceptance=$false}
+            Write-Json (Join-Path $OutputDirectory 'neutral-motion.json') $receipt.motion
+        }
         $null=Send-Commands 'focus-loss' @('focus lose') {param($s) $s.sessionState -eq 'VISIBLE'}
         $null=Send-Commands 'focus-return' @('focus regain') {param($s) $s.sessionState -eq 'FOCUSED' -and $s.layersLastFrame -ge 1 -and $s.projectionViews -eq 2}
         $capture=Send-Commands 'one-composition' @('shot host') {param($s) $s.captureSeq -eq 1}
@@ -292,7 +329,8 @@ try{
         }else{Gate $false 'Invalid-hand control was not completed.'}
         Gate ([IO.File]::Exists((Join-Path $OutputDirectory 'xr-events.jsonl'))) 'Host XR event log is absent.'
     }catch{$failures.Add("Host evidence: $($_.Exception.Message)")}
-    $receipt.host_wiring_status=if($failures.Count -eq $hostFailureStart -and $hostFailureStart -eq 0 -and $commands.Count -eq 7){'passed'}else{'failed'}
+    $expectedCommandBatches=if($NeutralMotionCheck){10}else{7}
+    $receipt.host_wiring_status=if($failures.Count -eq $hostFailureStart -and $hostFailureStart -eq 0 -and $commands.Count -eq $expectedCommandBatches){'passed'}else{'failed'}
     $captureFailureStart=$failures.Count
     try{
         $captureDirectory=Join-Path $simDir 'capture'

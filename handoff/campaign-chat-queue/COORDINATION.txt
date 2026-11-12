@@ -22,16 +22,16 @@ Native82 custody-gap recovery and audio-worker shutdown fixes are included.
 Native83's additional passive lock diagnostic is not a player-facing reload fix.
 
 CURRENT SOURCE BATCH
-coordinator-20261112-sealed-owner removes repeated owner payload reads from shared
-command publication, using sealed bytes with exclusive HANDLE/path-identity proof.
-956 implemented;957 verified Windows replacement/metadata semantics;958 reviewed.
-Original deadlines, command/session checks and release/rollback rules remain.
-Normal83/04 stopped before sight contact: owner-read interval308ms, no failed
-command published. Its exact closure/restoration and failed evidence are retained.
-Earlier941/shared-entry/publication-review/sight-completion are integrated/pushed.
-Handoff: handoff/integrations/coordinator-20261112-sealed-owner/README.txt.
-Actual push status: reports/coordinator-20261108-feedback721/sealed-owner/source-push.json.
-Native83 remains installed unchanged; no reload/fire/switch or latency-fix claim.
+coordinator-20261112-neutral-motion compiles eligible unheld approaches to bounded
+xr-sim interpolation, then demands fresh endpoint/contact before acquisition.
+960 completed;961 reviewed runtime/math; ROOT verified actual host interpolation
+and cancellation. Broader host result still fails five zero-layer frames.
+146 affected checks passed/3 optional skips. Original clocks/native gates remain.
+Normal83/05 published then timed out in state setup; closed/restored normally.
+Its failure and prior04 owner-read failure are one shared test-transport blocker.
+Handoff: handoff/integrations/coordinator-20261112-neutral-motion/README.txt.
+Actual push status: reports/coordinator-20261108-feedback721/neutral-motion/source-push.json.
+Native83 remains installed unchanged; complete game reload/fire/switch remains open.
 
 NEXT ACCEPTANCE
 Work by shared mechanism and bulk profiles; complete representative reload/fire/switch.

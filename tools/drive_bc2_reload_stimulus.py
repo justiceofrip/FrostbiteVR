@@ -46,6 +46,9 @@ MAX_DIAGNOSTIC_RECORDS = 2048
 MAX_ACK_TRACE_POLLS = 32  # First poll plus a bounded tail; no per-poll archival.
 MAX_PUBLICATION_TRACE_SPANS = 32  # First span plus a bounded tail across replace attempts.
 LEFT_POSE_SETUP = ["hand l follow off", "hand l aimtrim 0 0"]
+# Verified ca14f5b1 xr-sim build: one smoothstep grip motion per hand; aim is
+# derived from grip plus trim. Unknown binaries retain the ordinary pose path.
+NEUTRAL_MOTION_RUNTIME_SHA256 = "2c5eb913be5d4a6b86ed38e308b085985cd86e7454c149e91d5d629c3259d20a"
 
 
 class ReadDeadline(Refusal):
@@ -328,6 +331,81 @@ def ordinary_commands(sample, allow_setup=False):
     return lines
 
 
+def hand_to_command(sample, duration_ms):
+    ordinary_commands(sample, True)
+    require(type(duration_ms) is int and 0 <= duration_ms <= 10_000 and sample["grip"] == 0,
+            "unbounded/non-neutral interpolation")
+    values = sample["positionMeters"] + sample["yawPitchRollDegrees"]
+    return "hand l to grip " + " ".join(f"{v:.9f}" for v in values) + " " + str(duration_ms)
+
+
+class MotionInputLease:
+    """Seal driver-owned publications during motion, never runtime state files.
+
+    A read HANDLE with only FILE_SHARE_READ prevents in-place data writes.
+    Windows POSIX rename can still replace a pathname: cached metadata-only
+    identity checks cover that at the observer's100ms cadence. Payloads are
+    verified once, not on every XR frame. Runtime publications remain unlocked.
+    """
+    def __init__(self, driver, deadline_ns):
+        import msvcrt
+        self.streams, self.entries = [], []
+        self.api = driver.owner.api
+        class FileIdInfo(ctypes.Structure):
+            _fields_ = [("VolumeSerialNumber", ctypes.c_ulonglong), ("FileId", ctypes.c_ubyte * 16)]
+        self.api.GetFileInformationByHandleEx.argtypes = (wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD)
+        self.api.GetFileInformationByHandleEx.restype = wintypes.BOOL
+        self.info_type = FileIdInfo
+        self.next_check = time.perf_counter_ns() + PERIOD_NS
+        try:
+            for path, expected in ((driver.command_path, driver.command_hash),
+                    (driver.run / "live-driver-owner.json", transport.digest(driver.owner_bytes(False)))):
+                transport.require_read_time(deadline_ns)
+                handle = driver.owner.api.CreateFileW(str(path), 0x80000000, 1, None, 3, 0x00200000, None)
+                require(handle not in (None, wintypes.HANDLE(-1).value), "cannot seal motion input ownership")
+                try:
+                    fd = msvcrt.open_osfhandle(handle, os.O_RDONLY | os.O_BINARY)
+                except BaseException:
+                    driver.owner.api.CloseHandle(handle)
+                    raise
+                stream = os.fdopen(fd, "rb")
+                self.streams.append(stream)
+                require(transport.digest(stream.read(8193)) == expected, "motion input ownership changed")
+                self.entries.append((path, self.identity(handle)))
+                transport.require_read_time(deadline_ns)
+        except BaseException:
+            self.close()
+            raise
+
+    def identity(self, handle):
+        info = self.info_type()
+        if not self.api.GetFileInformationByHandleEx(handle, 18, ctypes.byref(info), ctypes.sizeof(info)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return info.VolumeSerialNumber, bytes(info.FileId)
+
+    def check(self, until):
+        if time.perf_counter_ns() < self.next_check:
+            return
+        for path, expected in self.entries:
+            transport.require_read_time(until)
+            # Access0 is metadata only. No path canonicalization, library setup,
+            # session JSON or command payload read occurs in this wait check.
+            handle = self.api.CreateFileW(str(path), 0, 7, None, 3, 0x00200000, None)
+            require(handle not in (None, wintypes.HANDLE(-1).value), "motion input pathname disappeared")
+            try:
+                require(self.identity(handle) == expected, "motion input pathname ownership changed")
+            finally:
+                self.api.CloseHandle(handle)
+            transport.require_read_time(until)
+        self.next_check = time.perf_counter_ns() + PERIOD_NS
+
+    def close(self):
+        for stream in self.streams:
+            stream.close()
+        self.streams = []
+        self.entries = []
+
+
 def neutral_controls(controls, allow_left_grip=False):
     buttons = {"a", "b", "x", "y", "menu", "clickL", "clickR", "restL", "restR"}
     axes, sticks = {"trigL", "trigR", "gripL", "gripR"}, {"stickL", "stickR"}
@@ -568,6 +646,9 @@ class ReloadStimulus:
         require(os.name == "nt", "ordinary XR stimulus requires Windows")
         self.args, self.run = args, transport.local_path(args.run)
         self.owner = self.lock = self.artifacts = self.observer = None
+        self.supervisor_owner = self.motion_lease = None
+        self.outstanding_motion = None
+        self.neutral_motion_supported = False
         self.started = time.perf_counter_ns()
         self.hard_deadline = self.started + 10 * NS
         self.deadline = self.hard_deadline - 400_000_000
@@ -622,6 +703,9 @@ class ReloadStimulus:
                 require(transport.same_path(options["xr_manifest"], pinned), "runtime manifest differs")
             if key == "host_executable":
                 require(transport.same_path(self.host["path"], pinned), "host executable differs")
+        self.neutral_motion_supported = self.manifest["runtime_library"]["sha256"] == NEUTRAL_MOTION_RUNTIME_SHA256
+        if self.neutral_motion_supported:
+            self.supervisor_owner = transport.WindowsOwner(self.link["supervisor"])
         self.capture_plan = self.manifest["capture_plan"]
         self.state = self.read_state()
         self.capture_sequence = integer(self.state["captureSeq"])
@@ -631,6 +715,7 @@ class ReloadStimulus:
         if owner_path.exists():
             previous, _ = transport.read_json(owner_path, 8192)
             require(previous["host"] == self.host and previous["pending"] is False
+                    and not previous.get("outstandingMotion")
                     and previous["commandSha256"] == self.command_hash and previous["sequence"] == self.sequence
                     and previous["sentinel"] == self.sentinel, "unsettled/foreign command owner")
         else:
@@ -670,7 +755,11 @@ class ReloadStimulus:
                 and session["source_sha256"] == self.manifest["source_sha256"]
                 and session["version"] == self.manifest["version"] and session["state"] == "running",
                 "native session/owner/source changed")
-        require(not (self.folder / "stop.request").exists(), "normal stop requested")
+        # A stop request forbids new stimulus, but must not prevent replacing
+        # our already-running neutral motion while the exact session is still
+        # live/focused. All owner/state/ACK checks remain required for cleanup.
+        require(not (self.folder / "stop.request").exists()
+                or cleanup and bool(getattr(self, "outstanding_motion", None)), "normal stop requested")
         if trace is not None:
             trace.phase("state_setup")
         state = sim_state(self.state_path, until, trace) if trace is not None else sim_state(self.state_path, until)
@@ -691,8 +780,12 @@ class ReloadStimulus:
         return state
 
     def owner_bytes(self, pending):
-        return transport.json_bytes({"host": self.host, "pending": pending, "sequence": self.sequence,
-            "sentinel": self.sentinel, "commandSha256": self.command_hash, "artifactDirectory": str(self.artifacts.directory)})
+        # Older shared drivers understand `pending`, not outstandingMotion.
+        # A parsed interpolation remains unsettled input ownership until its
+        # endpoint or explicit duration-zero replacement has been established.
+        return transport.json_bytes({"host": self.host, "pending": pending or bool(getattr(self, "outstanding_motion", None)), "sequence": self.sequence,
+            "sentinel": self.sentinel, "commandSha256": self.command_hash, "artifactDirectory": str(self.artifacts.directory),
+            "outstandingMotion": getattr(self, "outstanding_motion", None)})
 
     def save_owner(self, pending):
         require(os.name == "nt" and self.lock not in (None, wintypes.HANDLE(-1).value),
@@ -878,11 +971,78 @@ class ReloadStimulus:
             time.sleep(.001)
         self.guard()
 
-    def fresh(self, *, boundary=None, after_ns=0, pickup=None, prepare=False):
+    def motion_guard(self, until):
+        """No synchronous session/state/command payload reads during the sweep."""
+        require(time.perf_counter_ns() < min(until, self.deadline, self.stage_deadline),
+                "original neutral motion deadline")
+        require(self.motion_lease is not None and self.motion_lease.streams
+                and self.lock not in (None, wintypes.HANDLE(-1).value)
+                and not self.pending_command and not self.unsafe_owner,
+                "neutral motion lost exclusive input custody")
+        self.owner.check()
+        self.supervisor_owner.check()
+        require(not (self.folder / "stop.request").exists(), "normal stop requested")
+        try:
+            self.motion_lease.check(min(until, self.deadline, self.stage_deadline))
+        except transport.ReadDeadlineExceeded:
+            raise
+        except BaseException:
+            self.unsafe_owner = True
+            raise
+        self.observations(min(until, self.deadline, self.stage_deadline))
+        self.bounds()
+
+    def execute_neutral_motion(self, motion):
+        rows = self.stimulus["schedule"]
+        end = motion["lastSample"]
+        self.send(rows[0], motion=motion)
+        # ACK proves parsing and a subsequent frame, not arrival. Waiting from
+        # its committed timestamp is conservative about the runtime timer start.
+        finish = self.last_commit + motion["durationNs"]
+        until = min(self.deadline, self.stage_deadline, finish + RECEIVE_NS)
+        require(finish < until, "neutral interpolation exceeds original stage budget")
+        self.motion_lease = MotionInputLease(self, until)
+        try:
+            while time.perf_counter_ns() < finish:
+                self.motion_guard(until)
+                time.sleep(min(.01, max(0, finish-time.perf_counter_ns())/NS))
+            self.motion_guard(until)
+            first = self.guard(deadline_ns=until)
+            # Require a new committed frame after the elapsed-duration check.
+            # A stalled runtime or a stale endpoint file cannot finish motion.
+            while True:
+                self.motion_guard(until)
+                time.sleep(.01)
+                state = self.guard(deadline_ns=until)
+                if integer(state["frame"]) > integer(first["frame"]) and integer(state["endFrames"]) > integer(first["endFrames"]):
+                    break
+            self.check_target(state, rows[end])
+            self.state, self.last_commit = state, time.perf_counter_ns()
+            boundary = next((g for g in self.stimulus["boundaries"] if g["afterSample"] == end), None)
+            if boundary is None:
+                boundary = dict(id="neutral_motion_contact", timeoutNs=RECEIVE_NS)
+            snapshot, _ = self.fresh(boundary=boundary, after_ns=self.last_commit, deadline_ns=until)
+            self.artifacts.event(dict(type="neutral_motion_endpoint", motion=motion,
+                frame=state["frame"], endFrames=state["endFrames"], endpointNs=self.last_commit,
+                contactNonce=snapshot["nonce"], originalDeadlineNs=until, nativeAcceptance=False))
+            # Acquisition must still publish inside this contact's original
+            # source lifetime; completion does not renew a source or stage.
+            self.initial_mapping_deadline = self.geometry.source_deadline(snapshot, self.args.family)
+            self.first_sample_pending = True
+        finally:
+            self.motion_lease.close()
+            self.motion_lease = None
+        self.outstanding_motion = None
+        self.save_owner(False)
+        return rows[end]
+
+    def fresh(self, *, boundary=None, after_ns=0, pickup=None, prepare=False, deadline_ns=None):
         require(not prepare or boundary is None, "stimulus preparation requires initial stage admission")
         timeout = integer(boundary["timeoutNs"]) if boundary else RECEIVE_NS
         started = time.perf_counter_ns()
         until = min(self.deadline, self.stage_deadline, started + timeout)
+        if deadline_ns is not None:
+            until = min(until, deadline_ns)
         # Retain what was still awaited if a final guard consumes this clock.
         # This is diagnostic context, never an additional admission condition.
         self.pending_boundary = {"family": self.args.family, "stage": self.args.stage,
@@ -966,7 +1126,9 @@ class ReloadStimulus:
                     self.pending_boundary = None
                     return (snapshot, now, plan) if prepare else (snapshot, now)
                 try:
-                    if self.args.family == "sight" and snapshot.get("sight", {}).get("status") == "geometry_unavailable":
+                    if boundary["id"] == "neutral_motion_contact":
+                        summary = self.geometry.check_neutral_contact(self.stimulus, snapshot, now, profiles=self.profiles)
+                    elif self.args.family == "sight" and snapshot.get("sight", {}).get("status") == "geometry_unavailable":
                         summary = self.sight_completion_boundary(snapshot, boundary["id"], now)
                     else:
                         summary = self.geometry.check_boundary(self.stimulus, snapshot, boundary["id"], now,
@@ -980,7 +1142,8 @@ class ReloadStimulus:
                         "boundary validation consumed original deadline")
                 if summary.get("completionOnly") is True:
                     self.completion_only_observed = True
-                self.boundaries[boundary["id"]] = summary
+                if boundary["id"] != "neutral_motion_contact":
+                    self.boundaries[boundary["id"]] = summary
                 self.artifacts.event({"type": "fresh_stimulus_boundary", "id": boundary["id"], "summary": summary})
                 self.pending_boundary = None
                 return snapshot, now
@@ -988,10 +1151,10 @@ class ReloadStimulus:
         self.observation_incomplete = True
         raise Refusal("fresh typed stimulus boundary absent within original budget")
 
-    def send(self, sample=None, *, cleanup=False, release_only=False):
+    def send(self, sample=None, *, cleanup=False, release_only=False, motion=None, cancel_motion=False):
         trace = self._publication_trace = PublicationTrace(self, cleanup)
         try:
-            self._send(sample, cleanup=cleanup, release_only=release_only)
+            self._send(sample, cleanup=cleanup, release_only=release_only, motion=motion, cancel_motion=cancel_motion)
         except BaseException as error:
             trace.finish(error)
             if not hasattr(self, "_publication_failures"):
@@ -1008,13 +1171,25 @@ class ReloadStimulus:
             self.dispose_publication_owner()
             self._publication_trace = None
 
-    def _send(self, sample=None, *, cleanup=False, release_only=False):
+    def _send(self, sample=None, *, cleanup=False, release_only=False, motion=None, cancel_motion=False):
         publication = self._publication_trace
         require(cleanup or getattr(self, "observation_failure", None) is None, "previous native observation failure")
         require(cleanup or release_only or not getattr(self, "completion_only_observed", False),
                 "completion-only observation cannot authorize another controller pose")
         require(not release_only or self.held_left, "ordinary release requires held left input")
+        require(not getattr(self, "outstanding_motion", None) or cancel_motion,
+                "outstanding neutral motion requires endpoint settlement or explicit cancellation")
+        require(not cancel_motion or cleanup and self.outstanding_motion and not self.held_left,
+                "cancellation requires owned neutral motion")
+        require(motion is None or not cleanup and not release_only and not self.held_left
+                and self.first_sample_pending and getattr(self, "neutral_motion_supported", False),
+                "interpolation requires fresh unheld supported source")
         lines = ["grip l 0"] if cleanup or release_only else ordinary_commands(sample, self.first_sample_pending)
+        if motion is not None:
+            # Exported aim derives from grip + the existing zero trim. There is
+            # one runtime slot per hand, so never queue a second to-aim command.
+            lines = [line for line in lines if not line.startswith("hand l aim pose ")]
+            lines.append(hand_to_command(self.stimulus["schedule"][motion["lastSample"]], motion["durationMs"]))
         require(self.commands + len(lines) + 1 <= MAX_COMMANDS, "512-command budget")
         publication.phase("write_gap")
         if cleanup:
@@ -1032,6 +1207,18 @@ class ReloadStimulus:
         publication.phase("state_read")
         before = self.read_state(cleanup, action_deadline)
         self.ownership(before, action_deadline)
+        if motion is not None:
+            # The admitted native source and current simulator agree before
+            # staging that same starting pose. follow-off is part of setup.
+            source_state = {**before, "handL": {**before["handL"], "followsHead": False}}
+            self.check_target(source_state, sample)
+        if cancel_motion:
+            values = before["handL"]["pos"] + before["handL"]["ypr"]
+            coordinates = " ".join(f"{v:.9f}" for v in values)
+            sample = dict(positionMeters=values[:3], yawPitchRollDegrees=values[3:], grip=0,
+                          commands=["hand l grip pose " + coordinates, "grip l 0"])
+            lines = [hand_to_command(sample, 0), "grip l 0"]
+        require(self.commands + len(lines) + 1 <= MAX_COMMANDS, "512-command budget")
         publication.phase("command_identity")
         sentinel = "note root-stimulus-" + uuid.uuid4().hex
         batch = lines + [sentinel]
@@ -1048,6 +1235,9 @@ class ReloadStimulus:
         self.artifacts.event({"type": "command_request", "atNs": written, "beforeSequence": self.sequence,
             "targetSequence": target, "commands": batch, "ordinaryInputOnly": True}, cleanup=cleanup)
         previous_owner = self.sequence, self.sentinel, self.command_hash
+        previous_motion = getattr(self, "outstanding_motion", None)
+        if motion is not None:
+            self.outstanding_motion = dict(**motion, requestedNs=written, sequence=target, status="publication_pending")
         self.sequence, self.sentinel, self.command_hash = target, sentinel, transport.digest(raw)
         self.pending_command = True
         self.pending_batch, self.pending_before = batch, before
@@ -1066,6 +1256,7 @@ class ReloadStimulus:
             # preserve the owner-file failure, never retry the failed action.
             self.sequence, self.sentinel, self.command_hash = previous_owner
             self.pending_command = False
+            self.outstanding_motion = previous_motion
             raise
         def validate_publication_owner():
             # Re-entry means the transport's previous replace was refused.
@@ -1118,6 +1309,7 @@ class ReloadStimulus:
                             "unpublished owner record replaced")
                     self.ownership(self.read_state(True, self.hard_deadline), self.hard_deadline)
                     publication.outcome = "not_published"
+                    self.outstanding_motion = previous_motion
                     publication.phase("previous_owner_save")
                     self.save_owner(False)
                 except BaseException as owner_error:
@@ -1125,6 +1317,8 @@ class ReloadStimulus:
                     raise Refusal(f"{error}; unpublished owner restoration refused: {owner_error}") from error
             raise
         published = time.perf_counter_ns()
+        if motion is not None:
+            self.outstanding_motion.update(publishedNs=published, status="published_unsettled")
         publication.published_ns, publication.outcome = published, "published_unsettled"
         publication.context = "settlement"
         publication.phase("ack_wait")
@@ -1137,7 +1331,7 @@ class ReloadStimulus:
                             commandSha256=self.command_hash, commands=batch), cleanup)
         self._ack_trace = trace
         try:
-            state, committed = self._wait_ack(batch, before, sample, cleanup, until)
+            state, committed = self._wait_ack(batch, before, None if motion is not None else sample, cleanup, until)
         except BaseException as error:
             trace.failed(error)
             if not hasattr(self, "_ack_failures"):
@@ -1162,6 +1356,10 @@ class ReloadStimulus:
         self.pending_command = False
         self.state = state
         self.held_left = False if cleanup or release_only else sample["grip"] == 1
+        if cancel_motion:
+            self.outstanding_motion = None
+        elif motion is not None:
+            self.outstanding_motion.update(committedNs=committed, status="interpolating")
         if lines[:2] == LEFT_POSE_SETUP:
             self.pose_setup_established = True
         self.save_owner(False)
@@ -1191,6 +1389,8 @@ class ReloadStimulus:
                         self.check_target(state, sample)
                     else:
                         require(state["controls"]["gripL"] == 0, "cleanup grip did not commit")
+                        if getattr(self, "outstanding_motion", None):
+                            require(state["handL"]["followsHead"] is False, "neutral motion unexpectedly follows head")
                     committed = time.perf_counter_ns()
                     require(committed < until, "original command acknowledgement/commit deadline exceeded")
                     return state, committed
@@ -1254,10 +1454,20 @@ class ReloadStimulus:
         budget = stimulus["budget"]
         self.stage_deadline = min(self.deadline, start + integer(budget["totalNs"]))
         gesture_start = integer(budget["gestureStartSample"])
+        motion = self.geometry.neutral_motion(stimulus) if getattr(self, "neutral_motion_supported", False) else None
+        if motion is not None:
+            self.plans[-1]["neutralMotion"] = motion
         anchor_at, anchor_commit, previous, previous_at = None, None, None, 0
         for index, sample in enumerate(stimulus["schedule"]):
+            if motion is not None and 0 < index <= motion["lastSample"]:
+                continue
             if index == gesture_start:
                 self.stage_deadline = min(self.stage_deadline, time.perf_counter_ns() + integer(budget["maximumGestureNs"]))
+            if motion is not None and index == 0:
+                previous = self.execute_neutral_motion(motion)
+                previous_at = anchor_at = integer(previous["atNs"])
+                anchor_commit = self.last_commit
+                continue
             at = integer(sample["atNs"])
             same_pose = previous is not None and all(sample[k] == previous[k] for k in ("positionMeters", "yawPitchRollDegrees"))
             if same_pose and anchor_commit is not None:
@@ -1317,6 +1527,9 @@ class ReloadStimulus:
         require(not self.held_left, "standalone stimulus may not leave held custody; paired workflow required")
 
     def cleanup(self):
+        if getattr(self, "motion_lease", None) is not None:
+            self.motion_lease.close()
+            self.motion_lease = None
         if self.pending_command and not self.unsafe_owner:
             until = min(self.hard_deadline - ACK_NS - WRITE_GAP_NS, time.perf_counter_ns() + 100_000_000)
             while time.perf_counter_ns() < until:
@@ -1329,12 +1542,20 @@ class ReloadStimulus:
                     self.save_owner(False)
                     break
                 time.sleep(.001)
+        if getattr(self, "outstanding_motion", None):
+            require(not self.pending_command and not self.unsafe_owner,
+                    "neutral motion cancellation unsettled: retained command ownership uncertainty")
+            self.send(cleanup=True, cancel_motion=True)
+            return "ordinary owned neutral motion duration-zero cancellation acknowledged"
         if self.pending_command or self.unsafe_owner or not self.held_left:
             return "not attempted: no settled owned held left grip"
         self.send(cleanup=True)
         return "ordinary owned left-grip release acknowledged"
 
     def close(self):
+        if getattr(self, "motion_lease", None) is not None:
+            self.motion_lease.close()
+            self.motion_lease = None
         self.dispose_publication_owner()
         for record in tuple(getattr(self, "_prepared_cleanup_pending", ())):
             self.dispose_prepared_command(record)
@@ -1367,6 +1588,8 @@ class ReloadStimulus:
                     self.owner.api.CloseHandle(self.lock)
                     self.lock = None
                 self.owner.close()
+                if getattr(self, "supervisor_owner", None) is not None:
+                    self.supervisor_owner.close()
         # A still-returning observer retains the OS lock until process exit;
         # a subsequent driver cannot overlap its final read/request publication.
         return joined
@@ -1436,6 +1659,7 @@ def main(argv=None):
                 result.update(durationNs=time.perf_counter_ns() - driver.started, commands=driver.commands,
                     observationIncomplete=driver.observation_incomplete, leftGripHeld=driver.held_left,
                     pendingCommand=driver.pending_command, plans=driver.plans, boundaries=driver.boundaries,
+                    outstandingMotion=getattr(driver, "outstanding_motion", None),
                     pendingBoundary=driver.pending_boundary,
                     artifactDirectory=str(driver.artifacts.directory))
             try:

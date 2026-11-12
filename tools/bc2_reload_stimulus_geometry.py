@@ -221,6 +221,122 @@ def _boundary(name, index, schedule, timeout=250_000_000, span=0):
                 minimumObservationSpanNs=span, requiresFreshSnapshot=True, countsTowardGestureBudget=True)
 
 
+def controller_pose(row):
+    return feed.from_pose(dict(position=row["positionMeters"],
+        orientation=feed.ypr_quaternion(row["yawPitchRollDegrees"])))
+
+
+@_guard
+def neutral_motion(stimulus):
+    """Compile only the existing straight, unheld approach into xr-sim's curve.
+
+    The runtime uses smoothstep(position lerp, shortest quaternion slerp), not
+    a waypoint queue. A curved inverse controller path cannot use this backend.
+    Timing retains the original total/stage limits. A slower interpolation may
+    use their existing slack; the peak change per original interval retains
+    its caps, and the driver never restarts those clocks.
+    """
+    rows = stimulus["schedule"]
+    if stimulus.get("continuesHeldCustody") or rows[0]["phase"] != "neutral" or rows[0]["grip"] != 0:
+        return None
+    end = next((i for i, row in enumerate(rows) if row["phase"] == "neutral_at_contact"), None)
+    if end is None or end < 2 or any(row["grip"] != 0 or row["phase"] not in
+            ("neutral", "approach", "approach_supply", "neutral_at_contact") for row in rows[:end+1]):
+        return None
+    if any(g["afterSample"] < end for g in stimulus["boundaries"]):
+        return None
+    if end+1 >= len(rows) or rows[end+1]["phase"] not in ("acquire", "acquire_shell") or rows[end+1]["grip"] != 1:
+        return None
+    first, last = controller_pose(rows[0]), controller_pose(rows[end])
+    moving_end = end-1
+    duration = integer(rows[end]["atNs"]) - integer(rows[0]["atNs"])
+    linear_duration = integer(rows[moving_end]["atNs"]) - integer(rows[0]["atNs"])
+    if not 0 < duration <= 10_000_000_000 or duration % 1_000_000 or linear_duration <= 0:
+        return None
+    for row in rows[:end]:
+        t = (integer(row["atNs"])-integer(rows[0]["atNs"]))/linear_duration
+        distance, angle = feed.pose_error(controller_pose(row), feed.blend(first, last, t))
+        if distance > .000002 or angle > .00002:
+            return None
+    distance, angle = feed.pose_error(first, last)
+    if distance < .000002 and angle < .00002:
+        return None
+    # Smoothstep's largest interval delta is centered on t=.5. This includes
+    # its 1.5x peak speed instead of silently reusing linear sample timing.
+    policy = stimulus["policy"]
+    position_cap = float(policy.get("maxStepMeters", .025))
+    angle_cap = min(float(policy["maxStepRadians"]), .175) if stimulus["family"] == "sight" else float(policy["maxStepRadians"])
+    def change(ms):
+        interval = min(1., integer(stimulus["stepNs"])/(ms*1_000_000))
+        peak = 1.5*interval-.5*interval**3
+        # The pinned quaternion implementation uses normalized lerp for nearly
+        # parallel quaternions; its angular speed is not exactly constant.
+        return distance*peak, feed.pose_error(feed.blend(first, last, (1-peak)/2),
+                                             feed.blend(first, last, (1+peak)/2))[1]
+    tail = integer(rows[-1]["atNs"])-integer(rows[end]["atNs"])
+    maximum = min(10_000_000_000, integer(stimulus["budget"]["totalNs"])-tail)
+    if integer(stimulus["budget"]["gestureStartSample"]) == 0:
+        maximum = min(maximum, integer(stimulus["budget"]["maximumGestureNs"])-tail)
+    low, high = duration//1_000_000, maximum//1_000_000
+    if low > high or any(v > cap for v, cap in zip(change(high), (position_cap, angle_cap))):
+        return None
+    while low < high:
+        middle = (low+high)//2
+        if all(v <= cap for v, cap in zip(change(middle), (position_cap, angle_cap))):
+            high = middle
+        else:
+            low = middle+1
+    peak_distance, peak_angle = change(low)
+    return dict(backend="xr-sim.hand-to-grip.smoothstep.v1", firstSample=0, lastSample=end,
+                durationNs=low*1_000_000, durationMs=low, originalPrefixNs=duration,
+                peakStepMeters=peak_distance, peakStepRadians=peak_angle)
+
+
+@_guard
+def check_neutral_contact(stimulus, snapshot, now_ns, *, profiles=None):
+    """Fresh exact contact for pump/fixed, before their existing acquisition.
+
+    Rebuild from the current real geometry, preserving all family admissions;
+    the new observed controller must coincide with both old and new contact.
+    The rebuilt plan is comparison evidence and is never executed.
+    """
+    family = stimulus["family"]
+    require(family in ("pump", "fixed"), "unexpected neutral contact family")
+    now = integer(now_ns)
+    require(integer(snapshot["nonce"]) != integer(stimulus["source"]["nonce"])
+            and integer(snapshot["observed_ns"]) > integer(stimulus["source"]["evaluatedAtNs"]),
+            "neutral contact needs new original evidence")
+    _same(stimulus["mapping"], _mapping(snapshot, family))
+    require(snapshot["input"]["hands"][0]["squeeze"] == 0
+            and snapshot["input_evidence"]["released"][0] is True,
+            "neutral contact is not released")
+    current = build_stimulus(family, profiles, snapshot, now, stimulus["stage"],
+                            step_ms=integer(stimulus["stepNs"])//1_000_000)
+    original_plan, current_plan = stimulus["geometryEvidence"], current["geometryEvidence"]
+    if family == "fixed":
+        x = fixed.reobserve(original_plan, snapshot, now, integer(snapshot["nonce"]))
+        require(x["tracking"]["step"] == fixed.STEP[stimulus["stage"]]
+                and fixed.ammo(snapshot, now, idle=True)["snapshot"]["counts"] == original_plan["baseline"]["counts"],
+                "neutral contact changed native step/ammunition")
+    else:
+        pump.reobserve(original_plan, snapshot, now, integer(snapshot["nonce"]))
+        before, after = original_plan["baseline"], current_plan["baseline"]
+        require(all(before[k] == after[k] for k in
+                    ("ammo", "nativeIdentity", "shellCounters", "lastShellRequest", "lastPumpRequest")),
+                "neutral contact changed ammunition/lifetime/request")
+        if "pumpLease" in before:
+            require(pump.same_cycle(before["pumpLease"], after["pumpLease"]), "neutral contact changed pump cycle")
+    old, new = [next(row for row in plan["schedule"] if row["phase"] == "neutral_at_contact")
+                for plan in (stimulus, current)]
+    observed = feed.from_pose(snapshot["input"]["hands"][0]["grip"])
+    require(all(d <= .0002 and a <= .001 for d, a in
+        (feed.pose_error(controller_pose(old), controller_pose(new)),
+         feed.pose_error(controller_pose(new), observed))), "fresh exact neutral contact differs")
+    return dict(boundary="neutral_motion_contact", observed=True, snapshotNonce=snapshot["nonce"],
+                observedNs=snapshot["observed_ns"], sourceValidUntilNs=source_deadline(snapshot, family),
+                nativeAcceptance=False, headsetAcceptance=False)
+
+
 @_guard
 def build_stimulus(family, profiles, snapshot, now_ns, stage, *, step_ms=None, pickup=None, target="secondary"):
     step = integer(20 if family == "sight" and step_ms is None else 40 if step_ms is None else step_ms)*1_000_000
