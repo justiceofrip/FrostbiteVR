@@ -44,10 +44,16 @@ int RecordWindow(){
  ReloadRecordWindow normal;CHECK(!normal.OpenDeferred(1));normal.Start(1000);
  CHECK(normal.StartNs()==1000&&normal.Contains(1000)&&!normal.Contains(999)&&!normal.Defer());
  CHECK(!normal.Contains(1000+ReloadRecordWindow::Duration));normal.Start(2000);CHECK(normal.StartNs()==1000);
- ReloadRecordWindow deferred;CHECK(deferred.Defer());deferred.Start(1000);CHECK(!deferred.Contains(5000000000ll));
+ ReloadRecordWindow deferred;CHECK(deferred.Defer()&&!deferred.OpenDeferred(1000));
+ deferred.Start(1000);CHECK(deferred.StartNs()==0&&!deferred.Contains(5000000000ll));
  CHECK(!deferred.OpenDeferred(0)&&deferred.OpenDeferred(5000000000ll));CHECK(deferred.StartNs()==5000000000ll);
+ CHECK(!deferred.Contains(4999999999ll)&&deferred.Contains(5000000000ll));
  CHECK(deferred.OpenDeferred(6000000000ll)&&deferred.StartNs()==5000000000ll);
  CHECK(!deferred.Contains(5000000000ll+ReloadRecordWindow::Duration));
+ // Later accepted operations cannot reopen or extend the expired diagnostic.
+ CHECK(deferred.OpenDeferred(5000000001ll+ReloadRecordWindow::Duration));deferred.Start(90000000000ll);
+ CHECK(deferred.StartNs()==5000000000ll&&deferred.DurationNs()==20000000000ll);
+ CHECK(!deferred.Contains(5000000001ll+ReloadRecordWindow::Duration)&&!deferred.Defer());
  ReloadRecordWindow recovery;CHECK(recovery.Defer(true)&&!recovery.Defer());recovery.Start(1000);
  CHECK(recovery.DurationNs()==40000000000ll&&recovery.OpenDeferred(5000000000ll));
  CHECK(recovery.Contains(25000000000ll)&&!recovery.Contains(45000000000ll));

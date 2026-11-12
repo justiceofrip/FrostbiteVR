@@ -12,12 +12,12 @@ Ownership and ready/blocked tasks: COORDINATOR-STATE.txt (local scheduling recor
 External CHAT25/26/32 worktrees remain untouched; finished25/26 source is integrated.
 
 INSTALLED RUNTIME
-Normal0.1.83 is installed and Worker-validated; fallback0.1.77, retained0.1.76.
-Compiled native/launcher source:59dfee1929ca537655495301026f235f4f978d21.
+Normal0.1.84 is installed and Worker-validated; fallback0.1.83, retained0.1.77/0.1.76.
+Compiled native/launcher source:08042d78fa6b9819506b191a1709e1b739672ebf.
 Normal checks passed364x86/361x64; frozen normal artifacts were used for delivery.
 Settings, asset cache and stable desktop shortcut are preserved.
 No public release or new headset acceptance. Shared x86 build outputs are private.
-Receipt: reports/coordinator-20261108-feedback721/normal83/run01/installation.json.
+Receipt: reports/coordinator-20261108-feedback721/normal84/run02/installation.json.
 Native82 custody-gap recovery and audio-worker shutdown fixes are included.
 Native83's additional passive lock diagnostic is not a player-facing reload fix.
 
@@ -32,7 +32,7 @@ Normal83/06 reached underbarrel selection and fired; preparation timing refused.
 It closed/restored normally. Neutral-motion source is integrated and reused.
 Handoff: handoff/integrations/coordinator-20261112-timed-trigger/README.txt.
 Actual push status: reports/coordinator-20261108-feedback721/timed-trigger/source-push.json.
-Native83 remains installed unchanged; complete game reload/fire/switch remains open.
+That timed-trigger record is historical. Native84 adds guided single-round insertion and spent-case ejection; complete game reload/fire/switch remains open.
 
 NEXT ACCEPTANCE
 Work by shared mechanism and bulk profiles; complete representative reload/fire/switch.

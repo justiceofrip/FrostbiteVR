@@ -8,13 +8,16 @@ Opening breeches retain a synthetic spent case after coherent same-resource1->0 
 Open, release the mechanism, tilt the authored case outward axis downward, insert a round, close.
 Initial-empty chambers do not invent a spent case. Muzzle loaders remain front-insertion only.
 Ejection changes mod presentation only; insertion is the sole ammunition transfer.
-Actual intuitive muzzle-up orientation and complete reload/fire/switch require game validation.
+All58 opening-breech configurations join their measured muzzle by exact configuration/asset/mesh/rig: at Open, case +Z is rearward along the bore (dot -1.000000 to -0.999980). Raising the muzzle therefore points ejection downhill. All80 selectors match the generated profiles;22 front loaders remain separate. Actual complete reload/fire/switch and headset feel remain open.
 Family cache refresh now rereads native state when its original lease cannot cover current input.
 Snapshot publication cannot outlive its joined family lease; no timestamp restamping or wider deadlines.
 Selected-ammunition observation accepts completed shared timed pulses without inventing a changed binding on absent views.
 Shared simulation handles conditional ejection through the existing bounded transport.
 Actual normal84/01 selected/fired1/7->0/7 and completed Open; EjectSpent compared a newly parsed command to the preceding frame pose. Insert/Close/postshot remain unproved.
 A separate preparation observer refused new presentation fields in an otherwise inactive missing-ammunition snapshot; preserve that refusal independently of the visible shot.
-The320-second run closed normally with native retirement and exact profiles/settings restoration. Reuse passed builds; next fixes are shared-driver-only.
+Both prior driver corrections were integrated and pushed in cb06d16 without rebuilding native84.
+Actual84/02 preparation observed1/7->0/7; fullReload refused initial capture pending before any input. The378-second session closed normally and restored profiles/settings.
+995 separates bounded pre-command capture readiness from original command/source deadlines.998 starts the existing one-shot native diagnostic on accepted fixed reload dispatch, since the feed-only trigger left this session with zero records. Preparation Fire does not arm it; no gameplay authority or recording capacity is changed.999 independently reviewed the native change.
+These next fixes are staged for combined validation;0.1.84 remains installed until a later delivery receipt says otherwise.
 Historical failed traces and all passed unchanged checks remain retained.
 ROOT evidence/state: reports/coordinator-20261108-feedback721/CURRENT-STATE.txt.

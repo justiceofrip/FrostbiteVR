@@ -2016,6 +2016,11 @@ void TryAmmoResourceHands(const Observation& observation,const ReloadHoldInput& 
         PublishPistolVeto(command->context.resource,true);
     }
     const auto call=[&](std::int64_t began)noexcept {
+        // Dispatch has accepted this real fixed-container reload. Open the
+        // admitted diagnostic before its helper; later calls never rearm it.
+        // Recording success grants no native authority and never blocks entry.
+        if(fixed&&feedRecordsDeferred&&!recordWindowClock.StartNs())
+            (void)BeginInventoryReloadRecords();
         // Empty-mag removal/return is an owned no-op. Its exact original server
         // Update and both client Updates are still mandatory for completion.
         const bool returned=!command->mutationRequired||

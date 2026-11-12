@@ -1088,10 +1088,13 @@ class ReloadStimulus:
         until = min(self.deadline, self.stage_deadline, started + timeout)
         if deadline_ns is not None:
             until = min(until, deadline_ns)
+        capture_readiness = (boundary is None and self.args.family == "fixed"
+            and self.commands == 0 and self.mapping is None and pickup is None
+            and not self.held_left and not self.pending_command and not self.unsafe_owner)
         # Retain what was still awaited if a final guard consumes this clock.
         # This is diagnostic context, never an additional admission condition.
         self.pending_boundary = {"family": self.args.family, "stage": self.args.stage,
-            "id": boundary["id"] if boundary else "stage_admission", "startedNs": started,
+            "id": boundary["id"] if boundary else "fixed_capture_readiness" if capture_readiness else "stage_admission", "startedNs": started,
             "deadlineNs": until, "lastPending": None}
         used = set()
         capture_reference = None
@@ -1146,8 +1149,9 @@ class ReloadStimulus:
                                 and x.get("available") is False
                                 and x.get("reason") == "capture_pending_or_not_requested"):
                             # A request arms subsequent Gameplay diagnostic copies.
-                            # An absent first copy is never a plan or an ammo view;
-                            # retain only identity inside this existing admission clock.
+                            # This pre-command probe is not stage admission or an
+                            # input ACK. Permit one follow-up receive window, never another
+                            # retry or any reuse/extension of a source/input lease.
                             require(self.commands == 0 and self.mapping is None and pickup is None
                                     and not self.held_left and not self.pending_command and not self.unsafe_owner,
                                     "fixed capture pending outside initial unheld observation")
@@ -1162,9 +1166,32 @@ class ReloadStimulus:
                                             == frame.finite(h["stickY"]) == 0 and integer(h["held"]) == 0
                                             for h in snapshot["input"]["hands"]),
                                     "fixed capture absence contradicts neutral initial state")
-                            if capture_reference is None:
-                                capture_reference = snapshot
+                            require(capture_readiness and capture_reference is None,
+                                    "fixed capture still absent after original follow-up receive")
+                            capture_reference = snapshot
+                            probe_until = until
+                            until = min(self.deadline, self.stage_deadline, item["receivedNs"] + RECEIVE_NS)
+                            if deadline_ns is not None:
+                                until = min(until, deadline_ns)
+                            self.pending_boundary.update(deadlineNs=until, probeDeadlineNs=probe_until)
                             raise self.geometry.BoundaryPending("initial fixed-container capture pending")
+                        if capture_readiness and isinstance(x, dict) and x.get("available") is True:
+                            # Only a complete fresh copy can start typed admission.
+                            # The first copy remains identity evidence only; geometry
+                            # and the first command use this copy's original lease.
+                            if capture_reference is not None:
+                                require(integer(snapshot["observed_ns"]) > integer(capture_reference["observed_ns"])
+                                        and integer(snapshot["input_evidence"]["sequence"])
+                                            > integer(capture_reference["input_evidence"]["sequence"]),
+                                        "fixed capture follow-up did not advance native input")
+                            self.artifacts.event({"type": "fixed_capture_ready", "nonce": snapshot["nonce"],
+                                "startedNs": started, "finishedNs": now, "deadlineNs": until})
+                            capture_readiness = False
+                            until = min(self.deadline, self.stage_deadline, now + RECEIVE_NS)
+                            if deadline_ns is not None:
+                                until = min(until, deadline_ns)
+                            self.pending_boundary = {"family": self.args.family, "stage": self.args.stage,
+                                "id": "stage_admission", "startedNs": now, "deadlineNs": until, "lastPending": None}
                         if prepare:
                             # Building includes typed stage admission. Keep its
                             # plan local to this fresh snapshot and original lease.
@@ -1182,7 +1209,7 @@ class ReloadStimulus:
                     except self.geometry.BoundaryPending as pending:
                         self.observation_incomplete = True
                         self.pending_boundary["lastPending"] = {"nonce": snapshot["nonce"], "reason": str(pending)}
-                        self.artifacts.event({"type": "boundary_pending", "id": "stage_admission", "nonce": snapshot["nonce"],
+                        self.artifacts.event({"type": "boundary_pending", "id": self.pending_boundary["id"], "nonce": snapshot["nonce"],
                                               "reason": str(pending), "deadlineNs": until})
                         continue
                     require(time.perf_counter_ns() < min(until, self.geometry.source_deadline(snapshot, self.args.family)),

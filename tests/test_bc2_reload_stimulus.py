@@ -765,6 +765,7 @@ class StimulusTests(unittest.TestCase):
         driver.initial_sim = copy.deepcopy(state)
         session = dict(host=driver.host, supervisor=driver.link["supervisor"], state="running", **driver.manifest)
         h = types.SimpleNamespace(driver=driver, published=[], owners=[], state_deadlines=[],
+                                  publish_observations=True, publication_deadlines=[],
                                   command=b"note previous\n", ack=b"", ready_ns=0,
                                   state_read_ns=40_000_000, ack_read_ns=0, session_read_ns=0,
                                   session_read_after_publication=False,
@@ -775,6 +776,8 @@ class StimulusTests(unittest.TestCase):
             self.assertEqual(path, driver.command_path)
             if validate is not None:
                 h.publication_deadline = deadline_ns
+                trace = driver._publication_trace
+                h.publication_deadlines.append((trace.requested_ns, deadline_ns, trace.ack_deadline))
                 validate()
                 m.require(clock.now < deadline_ns, "original command publication deadline exceeded")
             h.published.append(raw)
@@ -793,9 +796,10 @@ class StimulusTests(unittest.TestCase):
                      f"last={' | '.join(lines)}\n").encode()
             h.ready_ns = clock.now + h.state_read_ns
             snapshot = dict(valid=True, nonce=str(len(h.published)), observed_ns=clock.now + 30_000_000)
-            driver.observer.inbox.put(dict(kind="snapshot", index=len(h.published), snapshot=snapshot,
-                raw=json.dumps(snapshot).encode(), requestNs=clock.now,
-                receivedNs=clock.now + 35_000_000, deadlineNs=clock.now + m.RECEIVE_NS))
+            if h.publish_observations:
+                driver.observer.inbox.put(dict(kind="snapshot", index=len(h.published), snapshot=snapshot,
+                    raw=json.dumps(snapshot).encode(), requestNs=clock.now,
+                    receivedNs=clock.now + 35_000_000, deadlineNs=clock.now + m.RECEIVE_NS))
 
         def read_state(path, until, trace=None):
             self.assertEqual(path, driver.state_path)
@@ -1388,6 +1392,185 @@ class StimulusTests(unittest.TestCase):
         self.assertEqual(calls, ["2"])
         self.assertTrue(driver.observation_incomplete)
         self.assertLess(clock.now, 1_400_000_000)
+
+    @contextmanager
+    def fixed_capture_driver(self, clock, deliveries):
+        # Real guard, ownership, observation admission, geometry, dispatch and
+        # command transport; only external process/file publications are modeled.
+        with self.ack_driver(clock) as h:
+            d = h.driver
+            d.geometry, d.mapping, d.stimulus, d.profiles = fixtures.g, None, None, None
+            d.target_observed = d.neutral_motion_supported = False
+            d.args = types.SimpleNamespace(family="fixed", stage="Reload", target="secondary",
+                                          step_ms=40, pickup_first=False)
+            d.boundaries, d.plans = {}, []
+            pending = iter(deliveries)
+            next_delivery = next(pending, None)
+            read_state = m.sim_state
+            def publish_observations(path, until, trace=None):
+                nonlocal next_delivery
+                state = read_state(path, until, trace)
+                while next_delivery is not None and clock.now >= next_delivery["drainedNs"]:
+                    d.observer.inbox.put({k: v for k, v in next_delivery.items() if k != "drainedNs"})
+                    next_delivery = next(pending, None)
+                return state
+            with patch.object(m, "sim_state", side_effect=publish_observations):
+                yield h
+
+    def fixed_capture_deliveries(self, start):
+        ready = fixtures.xf.refresh(fixtures.complete(fixtures.xf.snapshot(kind=3)), start+300_000_000, 102)
+        pending = fixtures.xf.refresh(ready, start+160_000_000, 101)
+        pending["fixedContainer"] = dict(schema=fixtures.g.fixed.OBSERVATION_SCHEMA,
+                                         available=False, reason="capture_pending_or_not_requested")
+        result = []
+        for index, (snapshot, received, requested) in enumerate(((pending, start+160_000_000, start),
+                                                               (ready, start+300_000_000, start+161_000_000))):
+            result.append(dict(kind="snapshot", index=index, snapshot=snapshot,
+                raw=json.dumps(snapshot).encode(), requestNs=requested, deadlineNs=requested+m.RECEIVE_NS,
+                receivedNs=received, ownershipCheckedNs=received, drainedNs=received,
+                requestNonce=int(snapshot["nonce"]), requestOwned=True, responseOwned=True))
+        return result
+
+    def test_cold_fixed_capture_reaches_real_reload_plan_and_first_command(self):
+        clock = Clock()
+        start = clock.now
+        with self.fixed_capture_driver(clock, self.fixed_capture_deliveries(start)) as h:
+            d = h.driver
+            fresh = d.fresh
+            class FirstBoundary(Exception):
+                pass
+            def stop_at_boundary(**kwargs):
+                if kwargs.get("boundary") is not None:
+                    raise FirstBoundary()
+                result = fresh(**kwargs)
+                # Later native publications are deliberately absent in this
+                # test. Never invent a completed mechanical boundary.
+                h.publish_observations = False
+                return result
+            d.fresh = stop_at_boundary
+            with self.assertRaises(FirstBoundary):
+                d.run_stimulus()
+            self.assertGreater(clock.now, start+m.RECEIVE_NS)
+            self.assertEqual(d.plans[0]["stage"], "Open")
+            self.assertEqual(d.mapping["nonce"], 102)
+            self.assertTrue(h.published)
+            self.assertEqual(h.publication_deadlines[0][1], d.initial_mapping_deadline)
+            for requested, published_until, ack_until in h.publication_deadlines:
+                self.assertEqual(ack_until, requested+m.ACK_NS)
+                self.assertLessEqual(published_until, ack_until)
+            self.assertEqual(d.last_commit, d.last_write+h.state_read_ns)
+            self.assertFalse(d.pending_command)
+            self.assertFalse(d.plans[0].get("stimulusCompleted", False))
+            self.assertEqual(d.boundaries, {})
+            event = next(e for e in d.artifacts.events if e["type"] == "boundary_pending")
+            self.assertEqual(event["id"], "fixed_capture_readiness")
+            self.assertEqual(event["deadlineNs"], start+160_000_000+m.RECEIVE_NS)
+            ready = next(e for e in d.artifacts.events if e["type"] == "fixed_capture_ready")
+            self.assertEqual(ready["finishedNs"], start+300_000_000)
+
+    def test_fixed_capture_followup_preserves_gates_and_never_retries_absence(self):
+        for fault, message in (("owner", "owner/equipment/rig changed"),
+                               ("basis", "reference/head/right-controller input changed"),
+                               ("absent", "still absent after original follow-up"),
+                               ("input", "did not advance native input"),
+                               ("request", "competing snapshot request writer"),
+                               ("source", "original budget"),
+                               ("late", "original budget")):
+            with self.subTest(fault=fault):
+                clock = Clock()
+                deliveries = self.fixed_capture_deliveries(clock.now)
+                second = deliveries[1]
+                if fault == "owner":
+                    second["snapshot"]["owner"]["weapon"] += 1
+                elif fault == "basis":
+                    second["snapshot"]["input"]["hands"][1]["grip"]["position"][0] += .1
+                elif fault == "absent":
+                    second["snapshot"]["fixedContainer"] = copy.deepcopy(deliveries[0]["snapshot"]["fixedContainer"])
+                elif fault == "input":
+                    second["snapshot"]["input_evidence"]["sequence"] = 101
+                elif fault == "request":
+                    second["requestOwned"] = False
+                elif fault == "source":
+                    second["snapshot"]["valid_until_ns"] = second["receivedNs"]
+                else:
+                    second["drainedNs"] = clock.now+500_000_000
+                second["raw"] = json.dumps(second["snapshot"]).encode()
+                with self.fixed_capture_driver(clock, deliveries) as h:
+                    with self.assertRaisesRegex(m.Refusal, message):
+                        h.driver.run_stimulus()
+                    self.assertEqual(h.published, [])
+                    self.assertEqual(h.driver.commands, 0)
+                    self.assertLessEqual(clock.now, 1_410_000_000)
+
+    def test_fixed_capture_cannot_extend_admission_after_complete_copy(self):
+        clock = Clock()
+        deliveries = self.fixed_capture_deliveries(clock.now)
+        with self.fixed_capture_driver(clock, deliveries) as h:
+            original_build = fixtures.g.build_stimulus
+            def slow_build(*args, **kwargs):
+                plan = original_build(*args, **kwargs)
+                clock.now = plan["source"]["validUntilNs"]
+                return plan
+            with patch.object(fixtures.g, "build_stimulus", side_effect=slow_build), \
+                    self.assertRaisesRegex(m.Refusal, "initial boundary validation consumed original deadline"):
+                h.driver.run_stimulus()
+            self.assertEqual(h.published, [])
+            self.assertEqual(h.driver.pending_boundary["id"], "stage_admission")
+            self.assertEqual(h.driver.pending_boundary["deadlineNs"], 1_300_000_000+m.RECEIVE_NS)
+
+    @unittest.skipUnless(os.environ.get("BC2_FIXED_CAPTURE_REPLAY"), "pinned normal84/02 evidence required")
+    def test_actual_normal84_02_capture_refusal_replay_does_not_claim_reload(self):
+        root = Path(os.environ["BC2_FIXED_CAPTURE_REPLAY"])
+        pinned = {"observation-000.json.gz": "16a272e4c9cf801f62b3a88f6015231c099db116c9e03afb6589e87070943afa",
+                  "events.jsonl": "1abf8620cfce3dc33be499698b380c81c340c77d9597b8919f80cfc50e5307a4",
+                  "result.json": "250c486ac04f0bc706063d5501696f775ff62212dab28bc30b9f5e9f59d54c47"}
+        raw = {name: (root/name).read_bytes() for name in pinned}
+        for name, digest in pinned.items():
+            self.assertEqual(m.transport.digest(raw[name]), digest)
+        snapshot_raw = m.gzip.decompress(raw["observation-000.json.gz"])
+        snapshot = json.loads(snapshot_raw)
+        events = [json.loads(line) for line in raw["events.jsonl"].splitlines()]
+        original = json.loads(raw["result.json"])
+        received, failure = events[0], events[-1]
+        self.assertEqual((original["status"], original["commands"]), ("refused", 0))
+        self.assertEqual(original["error"], "original acknowledgement/read deadline exceeded")
+        for explicit_original_budget in (True, False):
+            with self.subTest(explicit_original_budget=explicit_original_budget):
+                class ReplayClock(Clock):
+                    def sleep(self, seconds):
+                        end = self.now + int(seconds*m.NS)
+                        for checkpoint in (received["drainedNs"], failure["startedNs"]):
+                            if self.now < checkpoint < end:
+                                end = checkpoint
+                        self.now = end
+                clock = ReplayClock()
+                clock.now = original["pendingBoundary"]["startedNs"]
+                delivery = {k: received[k] for k in ("index", "requestNs", "deadlineNs", "receivedNs",
+                    "ownershipCheckedNs", "requestNonce", "requestOwned", "responseOwned", "drainedNs")}
+                delivery.update(kind="snapshot", snapshot=snapshot, raw=snapshot_raw)
+                with self.fixed_capture_driver(clock, [delivery]) as h:
+                    read = m.transport.read_bytes
+                    def measured_read(path, maximum):
+                        if path == h.driver.session_path and clock.now == failure["startedNs"]:
+                            clock.now = failure["finishedNs"]
+                        return read(path, maximum)
+                    with patch.object(m.transport, "read_bytes", side_effect=measured_read):
+                        with self.assertRaises(m.Refusal) as caught:
+                            h.driver.fresh(prepare=True, fixed_reload=True,
+                                deadline_ns=failure["deadlineNs"] if explicit_original_budget else None)
+                    if explicit_original_budget:
+                        self.assertEqual(str(caught.exception), original["error"])
+                        self.assertEqual(clock.now, failure["finishedNs"])
+                    else:
+                        self.assertEqual(str(caught.exception), "fresh typed stimulus boundary absent within original budget")
+                        self.assertGreater(clock.now, failure["finishedNs"])
+                        self.assertLessEqual(clock.now, received["receivedNs"]+m.RECEIVE_NS+1_000_000)
+                    self.assertEqual(h.driver.pending_boundary["id"], "fixed_capture_readiness")
+                    self.assertEqual(h.driver.commands, 0)
+                    self.assertEqual(h.published, [])
+                    self.assertEqual(h.driver.plans, [])
+                    self.assertTrue(h.driver.observation_incomplete)
+                    self.assertEqual(h.driver.artifacts.saved["observation-000.json.gz"], snapshot_raw)
 
     def test_real_geometry_contracts_cross_transport_interface(self):
         for family, source, stage in (
