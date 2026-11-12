@@ -40,9 +40,17 @@ RECEIVE_NS = 250_000_000
 PERIOD_NS = 100_000_000
 ACK_NS = 250_000_000
 WRITE_GAP_NS = 25_000_000
+MAX_STAGE_NS = 10 * NS
+CLEANUP_RESERVE_NS = 400_000_000
+MAX_FIXED_RELOAD_STAGES = 5
+# Allocate once, before any observation/input: five bounded stages, their
+# admission receives, the initial capture probe/follow-up, and owned cleanup.
+# This is an invocation ceiling, never a renewal of a stage or source lease.
+FIXED_RELOAD_NS = (MAX_FIXED_RELOAD_STAGES * (MAX_STAGE_NS + RECEIVE_NS)
+                   + 2 * RECEIVE_NS + CLEANUP_RESERVE_NS)
 MAX_COMMANDS = 512
 MAX_BYTES = 1024 * 1024
-MAX_OBSERVATIONS = 100  # 10s / original100ms request period; not a renewed clock.
+MAX_OBSERVATIONS = 100  # Single-stage10s / original100ms request period.
 MAX_DIAGNOSTIC_RECORDS = 2048
 MAX_ACK_TRACE_POLLS = 32  # First poll plus a bounded tail; no per-poll archival.
 MAX_PUBLICATION_TRACE_SPANS = 32  # First span plus a bounded tail across replace attempts.
@@ -50,6 +58,10 @@ LEFT_POSE_SETUP = ["hand l follow off", "hand l aimtrim 0 0"]
 # Verified ca14f5b1 xr-sim build: one smoothstep grip motion per hand; aim is
 # derived from grip plus trim. Unknown binaries retain the ordinary pose path.
 NEUTRAL_MOTION_RUNTIME_SHA256 = "2c5eb913be5d4a6b86ed38e308b085985cd86e7454c149e91d5d629c3259d20a"
+
+
+def invocation_duration_ns(family, stage):
+    return FIXED_RELOAD_NS if (family, stage) == ("fixed", "Reload") else MAX_STAGE_NS
 
 
 class ReadDeadline(Refusal):
@@ -452,8 +464,8 @@ def validate_stimulus(value, continuation=False):
     require(value.get("nativeAcceptance") is False and value.get("headsetAcceptance") is False,
             "stimulus must not claim native/headset acceptance")
     budget, schedule = value["budget"], value["schedule"]
-    require(0 < integer(budget["totalNs"]) <= 10 * NS
-            and 0 < integer(budget["maximumGestureNs"]) <= 10 * NS
+    require(0 < integer(budget["totalNs"]) <= MAX_STAGE_NS
+            and 0 < integer(budget["maximumGestureNs"]) <= MAX_STAGE_NS
             and 0 < integer(budget["maximumCommands"]) <= MAX_COMMANDS,
             "stimulus exceeds original time/command bounds")
     require(isinstance(schedule, list) and 1 <= len(schedule) <= MAX_COMMANDS
@@ -580,10 +592,11 @@ def publish_owner(driver, data):
 
 class ObservationWorker:
     """One bounded asynchronous read-only native observer; never publishes input."""
-    def __init__(self, folder, hard_deadline):
+    def __init__(self, folder, hard_deadline, maximum_requests=MAX_OBSERVATIONS):
         self.request = folder / "mechanism-snapshot-request.txt"
         self.snapshot = folder / "mechanism-snapshot.json"
         self.hard_deadline = hard_deadline
+        self.maximum_requests = maximum_requests
         self.inbox = queue.Queue(maxsize=8)
         self.stop_event = threading.Event()
         self.fatal = None
@@ -610,7 +623,7 @@ class ObservationWorker:
                 previous = int(raw)
             if self.snapshot.exists():
                 previous = max(previous, integer(transport.read_json(self.snapshot, transport.planner.SNAPSHOT_LIMIT)[0]["nonce"]))
-            for index in range(MAX_OBSERVATIONS):
+            for index in range(self.maximum_requests):
                 if self.stop_event.is_set() or time.perf_counter_ns() >= self.hard_deadline:
                     return
                 started = time.perf_counter_ns()
@@ -691,8 +704,10 @@ class ReloadStimulus:
         self.outstanding_motion = None
         self.neutral_motion_supported = False
         self.started = time.perf_counter_ns()
-        self.hard_deadline = self.started + 10 * NS
-        self.deadline = self.hard_deadline - 400_000_000
+        duration_ns = invocation_duration_ns(args.family, args.stage)
+        maximum_requests = (duration_ns + PERIOD_NS - 1) // PERIOD_NS
+        self.hard_deadline = self.started + duration_ns
+        self.deadline = self.hard_deadline - CLEANUP_RESERVE_NS
         self.stage_deadline = self.deadline
         self.commands = self.last_write = 0
         self.last_commit = None
@@ -729,8 +744,8 @@ class ReloadStimulus:
         self.artifacts = DeferredArtifacts(transport.Artifacts(self.run))
         self.artifacts.save("invocation.json", {"schema": "bc2vr.reload-stimulus-invocation.v1", "host": self.host,
             "family": args.family, "stage": args.stage, "rootAuthorizedOrdinaryInput": True,
-            "maximumDurationNs": 10 * NS, "maximumCommands": MAX_COMMANDS, "maximumArtifactBytes": MAX_BYTES,
-            "maximumObservationRequests": MAX_OBSERVATIONS, "maximumDecodedObservationBytes": 4 * MAX_BYTES,
+            "maximumDurationNs": duration_ns, "maximumCommands": MAX_COMMANDS, "maximumArtifactBytes": MAX_BYTES,
+            "maximumObservationRequests": maximum_requests, "maximumDecodedObservationBytes": 4 * MAX_BYTES,
             "maximumDiagnosticMetadataBytes": MAX_BYTES, "maximumDiagnosticRecords": MAX_DIAGNOSTIC_RECORDS,
             "diagnosticFlush": "after owned cleanup and observer stop; no live decisions afterward",
             "driverSha256": transport.digest(Path(__file__).read_bytes()),
@@ -770,7 +785,7 @@ class ReloadStimulus:
         self.profiles, raw = transport.read_json(profiles, 8 * MAX_BYTES)
         self.artifacts.save("profile-source.json", {"path": str(profiles), "sha256": transport.digest(raw), "bytes": len(raw)})
         self.artifacts.save("initial-state.json", self.state)
-        self.observer = ObservationWorker(self.folder, self.deadline)
+        self.observer = ObservationWorker(self.folder, self.deadline, maximum_requests=maximum_requests)
 
     def bounds(self):
         require(time.perf_counter_ns() < min(self.deadline, self.stage_deadline), "original stimulus/gesture deadline")
@@ -1795,7 +1810,7 @@ class ReloadStimulus:
         """One shared owner/observer/invocation clock for every retained stage."""
         self.fixed_reload = True
         pickup, previous = None, None
-        for _ in range(5):
+        for _ in range(MAX_FIXED_RELOAD_STAGES):
             snapshot, _, plan = self.fresh(prepare=True, pickup=pickup, fixed_reload=True,
                                            after_ns=self.last_commit or 0)
             stage = plan["stage"]

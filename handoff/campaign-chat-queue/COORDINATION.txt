@@ -12,34 +12,31 @@ Ownership and ready/blocked tasks: COORDINATOR-STATE.txt (local scheduling recor
 External CHAT25/26/32 worktrees remain untouched; finished25/26 source is integrated.
 
 INSTALLED RUNTIME
-Normal0.1.85 is installed and Worker-validated; fallback0.1.84, retained0.1.83/0.1.77/0.1.76.
-Compiled native/launcher source:52c0a119a6760ceb22237441e8963d84b23229c5.
+Normal0.1.86 is installed and Worker-validated; fallback0.1.85, earlier versions retained.
+Compiled native/launcher source:3adca03f65d25c017e117c1beef82bcd0a9bccbf.
 Normal checks passed364x86/361x64; frozen normal artifacts were used for delivery.
 Settings, asset cache and stable desktop shortcut are preserved.
 No public release or new headset acceptance. Shared x86 build outputs are private.
-Receipt: reports/coordinator-20261108-feedback721/normal85/run01/installation.json.
+Receipt: reports/coordinator-20261108-feedback721/normal86/run02/installation.json.
 Native82 custody-gap recovery and audio-worker shutdown fixes are included.
 Native83's additional passive lock diagnostic is not a player-facing reload fix.
 
 CURRENT SOURCE BATCH
-coordinator-20261112-timed-trigger uses one shared pinned runtime timer for ordinary
-preparation/post-reload shots; command ACK and native Fire remain separate.
-965 implementation,966 contract review,967 host harness,969 phase-clock repair.
-ROOT corrected prior-batch ACK parsing and bounded transient host-state reads.
-Host968/03 timed high/release/drain/restore passed; later non-pulse state read failed
-and forced host cleanup. Overall failed trace retained; no whole-host pass claimed.
-Normal83/06 reached underbarrel selection and fired; preparation timing refused.
-It closed/restored normally. Neutral-motion source is integrated and reused.
-Handoff: handoff/integrations/coordinator-20261112-timed-trigger/README.txt.
-Actual push status: reports/coordinator-20261108-feedback721/timed-trigger/source-push.json.
-That timed-trigger record is historical. Native84 adds guided single-round insertion and spent-case ejection; complete game reload/fire/switch remains open.
+Native86 includes the scoped snapshot1175 publication recovery. Shared metadata
+accounting and retained Close readiness are integrated; normal builds/WARP reused
+only at their matching source closures. Actual86/01 reached native completed reload
+step4 with1/6ammo and firing unblocked. The driver timed out before normal release;
+cleanup acknowledged, failed result preserved. Postreload firing remains open.
+The session retired normally and restored profiles/settings.
+Handoff: handoff/integrations/coordinator-20261112-underbarrel/README.txt.
+Source push: reports/coordinator-20261108-feedback721/normal86/run02/source-push.json.
 
 NEXT ACCEPTANCE
 Work by shared mechanism and bulk profiles; complete representative reload/fire/switch.
 Do not add per-run wrapper chains or repeat passed angle sweeps and native builds.
-Earlier private83/03 Open completed with retained grip; Insert/Close/postreload shot remain open.
-Private83/06 stopped on neutral ACK timing before selection; normal closure/restoration passed.
-Old private83 packets bind installed77/76 and cannot authorize sessions after83 activation.
+Tool-only work corrects the complete-route driver budget and adds bounded ordinary
+campaign movement; these changes do not require native rebuilds or reinstallation.
+Current knife Draw/Held/Return and real objective/vehicle access are next.
 Knife damage/visibility, C4 progression, vehicle routes, cutscenes/optics and FPS remain open.
 Steam32 lacks the executable; do not repeat that blocked investigation.
 Earlier evidence remains in linked integration handoffs and Git history.

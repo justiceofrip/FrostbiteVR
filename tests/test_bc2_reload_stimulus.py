@@ -123,6 +123,13 @@ class ScheduleDriver(m.ReloadStimulus):
 class StimulusTests(unittest.TestCase):
     @unittest.skipUnless(os.name == "nt", "startup receipts require local Windows drive paths")
     def test_real_constructor_and_main_reach_fresh_boundary_without_input(self):
+        self.constructor_main("feed", "OpenCover")
+
+    @unittest.skipUnless(os.name == "nt", "startup receipts require local Windows drive paths")
+    def test_fixed_reload_constructor_allocates_one_bounded_sequence_clock(self):
+        self.constructor_main("fixed", "Reload")
+
+    def constructor_main(self, family, stage):
         # Keep construction, dispatch, receipts, ownership and fresh() real.
         # Only the process/Win32 and observer boundaries are offline substitutes.
         clock = Clock()
@@ -187,8 +194,8 @@ class StimulusTests(unittest.TestCase):
                     patch.object(m, "ObservationWorker", return_value=observer) as observer_factory, \
                     patch.object(m.ctypes, "WinDLL", side_effect=AssertionError("unexpected native access")), \
                     patch("sys.stdout", stdout):
-                code = m.main(["--run", str(run), "--profiles", str(profiles), "--family", "feed",
-                    "--stage", "OpenCover", "--root-authorized-ordinary-input"])
+                code = m.main(["--run", str(run), "--profiles", str(profiles), "--family", family,
+                    "--stage", stage, "--root-authorized-ordinary-input"])
             result = json.loads(stdout.getvalue())
             self.assertEqual(code, 2)
             self.assertEqual(result["error"], "fresh typed stimulus boundary absent within original budget")
@@ -197,8 +204,9 @@ class StimulusTests(unittest.TestCase):
             self.assertEqual(result["commands"], 0)
             self.assertEqual(result["plans"], [])
             self.assertEqual(result["boundaries"], {})
-            self.assertEqual(result["pendingBoundary"], dict(family="feed", stage="OpenCover",
-                id="stage_admission", startedNs=1_000_000_000, deadlineNs=1_000_000_000+m.RECEIVE_NS,
+            self.assertEqual(result["pendingBoundary"], dict(family=family, stage=stage,
+                id="fixed_capture_readiness" if family == "fixed" else "stage_admission",
+                startedNs=1_000_000_000, deadlineNs=1_000_000_000+m.RECEIVE_NS,
                 lastPending=None))
             self.assertTrue(result["observationIncomplete"])
             self.assertTrue(result["observerStopped"])
@@ -215,12 +223,19 @@ class StimulusTests(unittest.TestCase):
             self.assertGreater(owner.check.call_count, 1)
             owner.api.CloseHandle.assert_called_once_with(1)
             owner.close.assert_called_once_with()
-            observer_factory.assert_called_once_with(folder, clock.now - m.RECEIVE_NS + 10*m.NS - 400_000_000)
+            duration = m.invocation_duration_ns(family, stage)
+            requests = (duration + m.PERIOD_NS - 1) // m.PERIOD_NS
+            observer_factory.assert_called_once_with(folder,
+                clock.now - m.RECEIVE_NS + duration - m.CLEANUP_RESERVE_NS, maximum_requests=requests)
             observer.close.assert_called_once_with()
             artifacts = Path(result["artifactDirectory"])
             self.assertEqual(json.loads((artifacts / "result.json").read_text()), result)
             self.assertEqual({path.name for path in artifacts.iterdir()},
                              {"invocation.json", "profile-source.json", "initial-state.json", "result.json"})
+            invocation = json.loads((artifacts / "invocation.json").read_bytes())
+            self.assertEqual(invocation["maximumDurationNs"], duration)
+            self.assertEqual(invocation["maximumObservationRequests"], requests)
+            self.assertEqual(invocation["maximumDecodedObservationBytes"], 4*m.MAX_BYTES)
 
     def test_actual170_neutral_control_shape_and_owned_grip(self):
         self.assertTrue(m.neutral_controls(CONTROLS))
@@ -682,6 +697,50 @@ class StimulusTests(unittest.TestCase):
         self.assertIn("stimulus-05.json", artifacts.persisted)
         self.assertEqual((run / "result.json").read_bytes(), original)
 
+    @unittest.skipUnless(os.environ.get("BC2_RELOAD_DEADLINE_REPLAY"), "retained full-Reload deadline optional")
+    def test_retained_global_deadline_failure_and_release_fit_unchanged_archive_caps(self):
+        # Inspect immutable saved bytes only. Neither the failed result nor its
+        # already acknowledged cleanup release becomes a successful live run.
+        run = Path(os.environ["BC2_RELOAD_DEADLINE_REPLAY"])
+        original = (run / "result.json").read_bytes()
+        result = json.loads(original)
+        self.assertEqual(result["error"], "original acknowledgement/read deadline exceeded")
+        self.assertFalse(result["stimulusCompleted"])
+        self.assertTrue(result["boundaries"]["fixed_step_complete"]["observed"])
+        events = [json.loads(row) for row in (run / "events.jsonl").read_bytes().splitlines()]
+        failure = next(e for e in events if e["type"] == "command_publication_trace" and e["failure"])
+        self.assertEqual(failure["publicationOutcome"], "not_published")
+        self.assertEqual(failure["failure"]["phase"], "initial.session_read_decode")
+        self.assertIsNone(failure["originalAckDeadlineNs"])
+        self.assertEqual(failure["originalHardDeadlineNs"]-failure["originalActionDeadlineNs"], m.CLEANUP_RESERVE_NS)
+        self.assertGreaterEqual(failure["finishedNs"], failure["originalActionDeadlineNs"])
+        self.assertLess(failure["finishedNs"], failure["originalHardDeadlineNs"])
+        artifacts = Artifacts()
+        plans = [json.loads(p.read_bytes()) for p in sorted(run.glob("stimulus-*.json"))]
+        self.assertEqual([p["stage"] for p in plans], ["Open", "EjectSpent", "Pickup", "Insert", "Close"])
+        self.assertEqual(sum(p["durationNs"] for p in plans), 5_440_000_000)
+        for path in run.glob("*.json"):
+            artifacts.save(path.name, json.loads(path.read_bytes()))
+        for path in run.glob("observation-*.json.gz"):
+            artifacts.snapshot(path.name, m.gzip.decompress(path.read_bytes()))
+        for event in events:
+            artifacts.event(event)
+        # Reserve even a duplicate release pair beyond the saved complete
+        # cleanup pair; the relevant9.7s episode still fits the original caps.
+        released = next(e for e in events if e["type"] == "command_commit" and e["cleanup"])
+        artifacts.event(released)
+        artifacts.event(next(e for e in events if e["type"] == "command_request"
+                             and e["targetSequence"] == released["sequence"]))
+        disk_bytes = sum(len(m.gzip.compress(value, mtime=0)) if kind == "snapshot"
+                         else len(m.transport.json_bytes(value)) for kind, _, value, _ in artifacts.records)
+        self.assertLess(disk_bytes, m.MAX_BYTES-12288)
+        self.assertLess(artifacts.raw_bytes, 4*m.MAX_BYTES)
+        self.assertLess(artifacts.metadata_bytes, m.MAX_BYTES)
+        artifacts.raw_bytes = 4*m.MAX_BYTES
+        with self.assertRaisesRegex(m.Refusal, "decoded observation budget"):
+            artifacts.snapshot("genuine-overflow.gz", b"x")
+        self.assertEqual((run / "result.json").read_bytes(), original)
+
     def test_flush_failure_keeps_first_error_and_continues_preserving_later_raw(self):
         artifacts = Artifacts()
         artifacts.snapshot("one.gz", b"first")
@@ -712,6 +771,7 @@ class StimulusTests(unittest.TestCase):
                 worker.inbox = queue.Queue(maxsize=8)
                 worker.fatal = worker.terminal = None
                 worker.hard_deadline = clock.now+10*m.NS
+                worker.maximum_requests = m.MAX_OBSERVATIONS
                 h = types.SimpleNamespace(stopped=False, raw=b"", publishes=[])
                 def wait(seconds):
                     clock.sleep(seconds)
@@ -748,6 +808,44 @@ class StimulusTests(unittest.TestCase):
                     self.assertIsNotNone(worker.terminal)
                     self.assertEqual(item["requestOwned"], failure != "foreign_during_read")
                     self.assertEqual(item["responseOwned"], failure != "foreign_response")
+
+    def test_full_reload_observer_keeps_request_deadlines_and_finite_cap(self):
+        for stop_at_deadline in (False, True):
+            with self.subTest(stop_at_deadline=stop_at_deadline):
+                clock = Clock()
+                maximum = (m.FIXED_RELOAD_NS + m.PERIOD_NS - 1) // m.PERIOD_NS
+                worker = m.ObservationWorker.__new__(m.ObservationWorker)
+                worker.maximum_requests = maximum
+                worker.hard_deadline = clock.now + (m.FIXED_RELOAD_NS-m.CLEANUP_RESERVE_NS
+                                                  if stop_at_deadline else 2*m.FIXED_RELOAD_NS)
+                worker.request, worker.snapshot = Mock(), Mock()
+                worker.request.exists.return_value = False
+                worker.snapshot.exists.side_effect = [False] + [True]*maximum
+                worker.fatal = worker.terminal = None
+                worker.stop_event = types.SimpleNamespace(is_set=lambda: False, wait=clock.sleep)
+                emitted, request = [], [b""]
+                worker.emit = emitted.append
+                def response(*args):
+                    snapshot = dict(nonce=request[0].decode().strip())
+                    return snapshot, json.dumps(snapshot).encode()
+                with patch.object(m, "time", clock), \
+                        patch.object(m.transport, "atomic", side_effect=lambda path, raw: request.__setitem__(0, raw)), \
+                        patch.object(m.transport, "read_bytes", side_effect=lambda *args: request[0]), \
+                        patch.object(m.transport, "read_json", side_effect=response):
+                    worker._run()
+                snapshots = [item for item in emitted if item["kind"] == "snapshot"]
+                self.assertGreater(len(snapshots), m.MAX_OBSERVATIONS)
+                self.assertLessEqual(len(snapshots), maximum)
+                self.assertIsNone(worker.fatal)
+                self.assertTrue(all(item["requestNs"] < worker.hard_deadline for item in snapshots))
+                self.assertTrue(all(item["deadlineNs"] == min(worker.hard_deadline,
+                    item["requestNs"]+m.RECEIVE_NS) for item in snapshots))
+                if stop_at_deadline:
+                    self.assertGreaterEqual(clock.now, worker.hard_deadline)
+                    self.assertLess(len(snapshots), maximum)
+                else:
+                    self.assertEqual(len(snapshots), maximum)
+                    self.assertEqual(emitted[-1]["reason"], "bounded observer request cap")
 
     def test_queued_or_receive_expiry_never_supplies_fresh_boundary(self):
         for expiry in ("queued", "received"):
@@ -1946,6 +2044,150 @@ class StimulusTests(unittest.TestCase):
                     driver.send(driver.stimulus["schedule"][-1])
                 self.assertEqual(h.owners[-1]["pending"], False)
                 self.assertEqual(h.owners[-1]["commandSha256"], m.transport.digest(h.published[-1]))
+
+    @contextmanager
+    def five_stage_clock_driver(self, clock, fault=None, *, legacy_budget=False):
+        # Actual normal86 plan sizes/timing, with synthetic poses and native
+        # boundaries. Dispatch, schedule, neutral motion, command ownership and
+        # ACK deadlines execute together; this is not a native receipt replay.
+        stages = [("Open", 23, 17), ("EjectSpent", 10, None), ("Pickup", 35, 33),
+                  ("Insert", 34, None), ("Close", 39, 33)]
+        with self.ack_driver(clock, archive_ns=0) as h:
+            d, started = h.driver, clock.now
+            d.args = types.SimpleNamespace(family="fixed", stage="Reload", target="secondary", pickup_first=False)
+            duration = m.MAX_STAGE_NS if legacy_budget else m.invocation_duration_ns("fixed", "Reload")
+            d.hard_deadline = started + duration
+            d.deadline = d.stage_deadline = d.hard_deadline - m.CLEANUP_RESERVE_NS
+            d.started, d.plans, d.boundaries = started, [], {}
+            d.target_observed = False
+            d.neutral_motion_supported = True
+            d.geometry = types.SimpleNamespace(source_deadline=lambda s, family: s["validUntilNs"],
+                                              neutral_motion=lambda p: p["testMotion"])
+            d.observations = Mock()
+            h.publish_observations = False
+            h.state_read_ns = 100_000_000
+            h.state["handR"].update(pos=[.2, 1.3, -.35], ypr=[0., 0., 0.], followsHead=False)
+            d.initial_sim = copy.deepcopy(h.state)
+            d.state = copy.deepcopy(h.state)
+            h.stage_deadlines = []
+
+            def gate(identifier, index, held):
+                return dict(id=identifier, afterSample=index, holdGrip=held, requiresFreshSnapshot=True,
+                            timeoutNs=2*m.NS if identifier != "fixed_tilt_current" else m.RECEIVE_NS)
+
+            def fresh(*, boundary=None, after_ns=0, pickup=None, prepare=False, **kwargs):
+                until = min(d.deadline, d.stage_deadline,
+                            clock.now + (boundary["timeoutNs"] if boundary else m.RECEIVE_NS))
+                clock.sleep(.15)  # Fresh response at the existing100ms request cadence.
+                d.bounds()
+                m.require(clock.now < until, "original fresh boundary deadline")
+                snapshot = dict(nonce=str(clock.now), validUntilNs=clock.now+60_000_000,
+                                fixedContainer=dict(profile=dict(kind=3)))
+                if boundary is not None:
+                    h.stage_deadlines.append(d.stage_deadline)
+                    if fault == "cap" and d.args.stage == "Close" and boundary["id"] == "fixed_acquired":
+                        d.artifacts.raw_bytes = 4*m.MAX_BYTES
+                        d.artifacts.snapshot("genuine-overflow.gz", b"x")
+                    if fault in ("stage", "overall") and d.args.stage == "Close":
+                        clock.now = d.stage_deadline if fault == "stage" else d.deadline
+                        d.bounds()
+                    ejected = d.args.stage == "EjectSpent" and d.stimulus["tiltExpectedSample"]["atNs"] == 360_000_000
+                    if boundary["id"] != "neutral_motion_contact":
+                        d.boundaries[boundary["id"]] = dict(gate=dict(caseEjected=ejected))
+                    if kwargs.get("neutral_readiness") is not None:
+                        d.mapping = snapshot
+                    return snapshot, clock.now
+                stage, count, neutral_end = stages[len(d.plans)]
+                continued = stage == "Insert"
+                rows = []
+                origin = h.state["handR" if stage == "EjectSpent" else "handL"]["pos"][0]
+                for index in range(count):
+                    held = continued and index < count-1 or neutral_end is not None and index > neutral_end
+                    row = sample(index*40_000_000, "move", int(held), origin+index*.001)
+                    if stage == "EjectSpent":
+                        row.update(hand="r", aimPositionMeters=row["positionMeters"],
+                                   aimYawPitchRollDegrees=row["yawPitchRollDegrees"])
+                        row["commands"] = [line.replace("hand l ", "hand r ") for line in row["commands"]]
+                    rows.append(row)
+                if stage == "EjectSpent":
+                    rows[0]["commands"].insert(0, "hand r follow off")
+                    gates = [gate("fixed_tilt_current", 0, False), gate("fixed_case_ejected", count-1, False)]
+                elif stage == "Insert":
+                    gates = [gate("fixed_aligned", count-3, True), gate("fixed_inserted", count-1, False)]
+                else:
+                    rows[0]["commands"] = m.LEFT_POSE_SETUP + rows[0]["commands"]
+                    gates = [gate("fixed_held", count-1, True)] if stage == "Pickup" else [
+                        gate("fixed_acquired", neutral_end+1, True), gate("fixed_step_complete", count-1, True)]
+                motion = None if neutral_end is None else dict(firstSample=0, lastSample=neutral_end,
+                    durationNs=neutral_end*40_000_000, durationMs=neutral_end*40)
+                value = dict(schema="bc2vr.reload-stimulus.v1", family="fixed", stage=stage,
+                    nativeAcceptance=False, headsetAcceptance=False, continuesHeldCustody=continued,
+                    source=dict(validUntilNs=snapshot["validUntilNs"]), durationNs=rows[-1]["atNs"],
+                    budget=dict(totalNs=10*m.NS, maximumGestureNs=10*m.NS, maximumCommands=512, gestureStartSample=0),
+                    schedule=rows, boundaries=gates, finishGrip=rows[-1]["grip"], testMotion=motion,
+                    geometryEvidence=dict(schedule=copy.deepcopy(rows), selection={}), mapping=dict(mechanismSelection={}))
+                if fault == "source" and stage == "Close":
+                    value["source"]["validUntilNs"] = clock.now
+                return snapshot, clock.now, value
+
+            original_publish = m.transport.atomic.side_effect
+            def publish(path, raw, **kwargs):
+                original_publish(path, raw, **kwargs)
+                for line in raw.decode().splitlines():
+                    if line.startswith("hand r grip pose "):
+                        pose = list(map(float, line.split()[4:]))
+                        h.state["handR"].update(pos=pose[:3], ypr=pose[3:])
+
+            def state_read(state):
+                if getattr(d, "outstanding_motion", None) and not d.pending_command:
+                    row = d.stimulus["schedule"][d.stimulus["testMotion"]["lastSample"]]
+                    h.state["handL"].update(pos=row["positionMeters"], ypr=row["yawPitchRollDegrees"])
+                    h.state["frame"] += 1
+                    h.state["endFrames"] += 1
+                    state = copy.deepcopy(h.state)
+                return state
+
+            d.fresh, h.alter_state = fresh, state_read
+            d.motion_guard = lambda until: d.bounds()
+            if fault == "ack":
+                h.alter_ack = lambda raw: b"unacknowledged\n" if d.args.stage == "Close" else raw
+            lease = types.SimpleNamespace(close=Mock())
+            with patch.object(m, "MotionInputLease", return_value=lease), \
+                    patch.object(m.transport, "atomic", side_effect=publish):
+                yield h
+
+    def test_five_stage_reload_fits_aggregate_clock_with_real_ack_delays(self):
+        clock = Clock()
+        with self.five_stage_clock_driver(clock) as h:
+            d = h.driver
+            original = d.deadline, d.hard_deadline
+            d.run_stimulus()
+            self.assertEqual([p["stage"] for p in d.plans], ["Open", "EjectSpent", "Pickup", "Insert", "Close"])
+            self.assertTrue(all(p["stimulusCompleted"] and p["boundaryChecksPassed"] for p in d.plans))
+            self.assertGreater(clock.now-d.started, 10*m.NS)
+            self.assertLess(clock.now, d.deadline)
+            self.assertEqual((d.deadline, d.hard_deadline), original)
+            self.assertFalse(d.held_left or d.pending_command)
+            self.assertLess(d.commands, m.MAX_COMMANDS)
+            self.assertTrue(all(ack == requested+m.ACK_NS for requested, _, ack in h.publication_deadlines))
+            self.assertTrue(all(publication <= ack for _, publication, ack in h.publication_deadlines))
+            d.artifacts.flush()  # The existing journal ceilings still fit.
+
+    def test_five_stage_reload_preserves_original_expiries_and_refusal(self):
+        for fault in ("source", "ack", "stage", "overall", "legacy", "cap"):
+            clock = Clock()
+            with self.subTest(fault=fault), self.five_stage_clock_driver(clock, fault, legacy_budget=fault == "legacy") as h:
+                d = h.driver
+                original = d.deadline, d.hard_deadline
+                with self.assertRaisesRegex(m.Refusal, "deadline|expired|decoded observation budget"):
+                    d.run_stimulus()
+                self.assertEqual((d.deadline, d.hard_deadline), original)
+                self.assertFalse(d.plans[-1].get("stimulusCompleted", False))
+                self.assertFalse(any(e.get("cleanup") for e in d.artifacts.events))
+                if fault == "cap":
+                    self.assertEqual(d.cleanup(), "ordinary owned left-grip release acknowledged")
+                    self.assertFalse(d.held_left or d.pending_command)
+                    self.assertEqual((d.deadline, d.hard_deadline), original)
 
     def test_fixed_completion_pending_unverified_or_pre_ack_cannot_release(self):
         for stage in ("Open", "Close"):
