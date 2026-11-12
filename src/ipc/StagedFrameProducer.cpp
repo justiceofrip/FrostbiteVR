@@ -1,4 +1,5 @@
 #include "fvr/ipc/StagedFrameProducer.h"
+#include "fvr/graphics/SceneDepthImportPolicy.h"
 namespace fvr::ipc {
 bool StagedFrameProducer::Connect(const std::wstring& token,bool twoSourceSlots,bool thirdSource)noexcept {
     if(!CloseGraphics()||generation_==UINT64_MAX)return false;
@@ -80,7 +81,10 @@ ChannelResult StagedFrameProducer::Submit(const FrameLease& lease,const graphics
         if(pipelineFaulted_||!PipelineMatches(lease))return ChannelResult::Invalid;auto& slot=pipelineSlots_[lease.sourceSlot];
         if(slot.step!=Step::Rendering||slot.ownsSource||ticket.frameId!=slot.lease.native.frameId||descriptor.sharing!=graphics::TextureSharing::LegacyFenced||
             !runtime::PairMatchesFrame(slot.lease.requirements,slot.lease.tracking,descriptor,ticket)||
-            (depth&&(depth->samples!=1||depth->quality||!graphics::SceneDepthMatches(*depth,descriptor,ticket))))return ChannelResult::Invalid;
+            (depth&&!graphics::PipelineSceneDepthMatches(*depth,descriptor,ticket)))return ChannelResult::Invalid;
+        if(depth)for(const auto& other:PipelineSlots())if(other.ownsSource&&!other.callbackComplete&&!graphics::SceneDepthAbsent(other.sceneDepth)&&
+            (depth->samples!=other.sceneDepth.samples||depth->quality!=other.sceneDepth.quality||depth->format!=other.sceneDepth.format))
+            return ChannelResult::Invalid;
         slot.descriptor=descriptor;slot.ticket=ticket;slot.sceneDepth=depth?*depth:graphics::SceneDepthFrame{};
         slot.ownsSource=true;slot.step=Step::Publishing;return ChannelResult::Ok;
     }

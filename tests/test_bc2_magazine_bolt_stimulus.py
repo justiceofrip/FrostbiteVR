@@ -7,6 +7,7 @@ import importlib.util
 from pathlib import Path
 import unittest
 import tempfile
+from types import SimpleNamespace
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -164,6 +165,53 @@ class MagazineBoltTests(unittest.TestCase):
             driver.command = mock.Mock()
             driver.cleanup_owned()
             driver.command.assert_not_called()
+
+    def test_completed_bolt_neutral_handoff_enters_shared_holster(self):
+        driver, clock, sent, current = handoff_driver()
+        holster = load("bc2_holster_core")
+        before, _ = current()
+        self.assertFalse(holster.neutral(before["input"]))
+        with mock.patch.object(d.time, "perf_counter_ns", side_effect=lambda: clock[0]):
+            driver.run_neutral_handoff()
+        self.assertEqual(sent, [["grip l 0"], ["grip r 0"]])
+        self.assertTrue(driver.neutral_handoff_completed)
+        self.assertFalse(driver.held_left or driver.held_right or driver.pending_command)
+        self.assertEqual(driver.deadline, NOW + 9_700_000_000)
+        after, now = current()
+        holster.holster_proof(after, now)
+        consumer = holster.OrdinaryHolsterDriver.__new__(holster.OrdinaryHolsterDriver)
+        consumer.current = lambda: (after, now)
+        consumer.args = SimpleNamespace(stow_asset=after["equipment"]["asset"],
+            stow_config=after["selected"]["configurationPath"], stow_slot=1,
+            target_asset="other", target_config="other/config", target_slot=2)
+        # Run the real consumer through every initial admission predicate to
+        # the first ordinary stow reach. No fake success or native draw follows.
+        consumer.reach = mock.Mock(side_effect=StopIteration("admitted ordinary stow reach"))
+        with self.assertRaisesRegex(StopIteration, "admitted ordinary stow reach"):
+            consumer.run_holster()
+        consumer.reach.assert_called_once_with(slot=1)
+        self.assertEqual(consumer.phase, "stow_reach")
+
+    def test_neutral_handoff_refuses_lost_custody_without_speculative_cleanup(self):
+        for failure, expected in (("owner", []), ("expired", []),
+                                  ("expired_at_publication", []), ("writer", []),
+                                  ("right_after_left", [["grip l 0"]]),
+                                  ("foreign_left_after_left", [["grip l 0"]]),
+                                  ("pending_ack", [["grip l 0"]])):
+            with self.subTest(failure=failure):
+                driver, clock, sent, _ = handoff_driver(failure)
+                with mock.patch.object(d.time, "perf_counter_ns", side_effect=lambda: clock[0]):
+                    with self.assertRaises(g.Refusal):
+                        driver.run_neutral_handoff()
+                    before_cleanup = copy.deepcopy(sent)
+                    driver.cleanup_owned()
+                self.assertEqual(sent, expected)
+                self.assertEqual(sent, before_cleanup)
+                self.assertFalse(driver.neutral_handoff_completed)
+                self.assertTrue(driver.held_right)
+                self.assertIsNone(driver.handoff_phase)
+                self.assertIsNotNone(driver.debt["readyReceipt"])
+                self.assertTrue(driver.bolt_cycle_completed)
 
     def test_every_motion_sample_has_an_original_deadline_and_expiry_reacquires(self):
         driver, clock, published, renewed = motion_driver()
@@ -499,6 +547,105 @@ def completion_fixture(kind="settled"):
     b["completion"][kind] = event
     b["native"].update(held=None, phase=5)
     return s, debt, event
+
+
+def handoff_driver(failure=None):
+    """Assemble real handoff/publication predicates against synthetic ACKs."""
+    baseline, debt, ready = completion_fixture()
+    debt["readyReceipt"] = copy.deepcopy(ready)
+    gun = copy.deepcopy(baseline["bolt"]["rightClaim"]["token"])
+    support = dict(copy.deepcopy(gun), id=92, hand=0, kind=2, prerequisiteClaim=gun["id"])
+    driver = d.MagazineBoltDriver.__new__(d.MagazineBoltDriver)
+    driver.family, driver.debt, driver.motion_reference = "bolt", debt, None
+    driver.anchor = g.owner_key(baseline)
+    driver.preserved = copy.deepcopy(baseline["input"])
+    driver.handoff_guard = driver.handoff_phase = None
+    driver.neutral_handoff_completed = False
+    driver.bolt_cycle_completed = True
+    driver.pending_command = driver.unsafe_owner = driver.held_trigger = False
+    driver.held_left = driver.held_right = True
+    driver.held_buttons = set()
+    driver.deadline = driver.stage_deadline = NOW+9_700_000_000
+    driver.hard_deadline = NOW+10*g.NS
+    driver.last_write, driver.last_commit, driver.motion_started = NOW-20_000_000, None, None
+    driver.artifacts = mock.Mock()
+    driver.boundaries = [dict(name="right_gun_and_support_returned",
+                             result=dict(gun=gun, support=support, ready=ready))]
+    controls = {k: False for k in ("a", "b", "x", "y", "menu", "clickL", "clickR", "restL", "restR")}
+    controls.update(trigL=0, trigR=0, gripL=1, gripR=1, stickL=[0, 0], stickR=[0, 0])
+    pose = dict(pos=[0, 0, 0], ypr=[0, 0, 0], followsHead=False)
+    driver.state = dict(head=copy.deepcopy(pose), handL=copy.deepcopy(pose),
+                        handR=copy.deepcopy(pose), controls=controls)
+    driver.read_state = lambda: copy.deepcopy(driver.state)
+    def ownership(state):
+        if failure == "writer":
+            driver.unsafe_owner = True
+            raise g.Refusal("synthetic competing writer")
+    driver.ownership = ownership
+    clock, sent = [NOW+10], []
+
+    def current():
+        s = copy.deepcopy(baseline)
+        now, seq = clock[0], 21 + len(sent)
+        ev = s["input_evidence"]
+        ev.update(sequence=seq, observedNs=now-1000, deadlineNs=now+80_000_000, nowNs=now-1,
+                  released=[driver.state["controls"]["gripL"] == 0, driver.state["controls"]["gripR"] == 0])
+        s.update(observed_ns=now-1, valid_until_ns=now+60_000_000,
+                 native_deadline_ns=now+80_000_000, shot_input_generation=seq)
+        s["input"].update(generation=seq, predictedNs=now)
+        s["selected"].update(sequence=seq, observedNs=now-1000, deadlineNs=now+80_000_000)
+        for side, hand in enumerate(s["input"]["hands"]):
+            pressed = driver.state["controls"]["gripL" if side == 0 else "gripR"]
+            hand.update(held=pressed, squeeze=pressed)
+        b = s["bolt"]
+        b.update(capturedNs=now-1, custody=3, custodyCurrent=True,
+                 rightClaim=dict(token=copy.deepcopy(gun), inputSequence=seq, deadlineNs=now+70_000_000),
+                 leftClaim=(None if ev["released"][0] else
+                     dict(token=copy.deepcopy(support), inputSequence=seq, deadlineNs=now+70_000_000)))
+        b["gunClaim"] = copy.deepcopy(b["rightClaim"])
+        if failure == "owner":
+            s["equipment"]["asset"] = "foreign"
+        if failure == "expired":
+            s["valid_until_ns"] = now-1
+        if sent and failure == "right_after_left":
+            b["rightClaim"]["token"]["id"] += 1
+        if sent and failure == "foreign_left_after_left":
+            b["leftClaim"] = dict(token=dict(support, id=999), inputSequence=seq, deadlineNs=now+70_000_000)
+        neutral = all(hand["squeeze"] == 0 for hand in s["input"]["hands"])
+        s["bodyHolster"] = dict(available=True, nativeOwner=copy.deepcopy(s["owner"]),
+            inputEvidence=copy.deepcopy(ev), sampledNs=now-1, validUntilNs=now+60_000_000,
+            nativeTick=seq, physicalGun=copy.deepcopy(gun["item"]),
+            inputSequenceRelation="same", inputMatchesSnapshot=True,
+            input=copy.deepcopy(s["input"]), neutralTrackedInput=neutral,
+            leftClaim=copy.deepcopy(b["leftClaim"]), rightClaim=copy.deepcopy(b["rightClaim"]),
+            selectedSlot=dict(slot=1, item=copy.deepcopy(gun["item"])), phase=1,
+            actualEmpty=False, blockWeaponActions=False, allowAutomaticGunHold=True, inventoryEvaluation=1)
+        return s, now
+
+    def fresh():
+        s, now = current()
+        driver.admit_snapshot(s, now, s["nonce"])
+        driver.latest_snapshot = s
+        return s, b"", now
+
+    def send(lines, expected=None, cleanup=False, source_deadline=None):
+        if failure == "expired_at_publication":
+            clock[0] = driver.latest_snapshot["valid_until_ns"]
+        driver.validate_publication(lines, expected, cleanup)
+        g.require(clock[0] < source_deadline, "original release source expired")
+        sent.append(lines)
+        if failure == "pending_ack":
+            driver.pending_command = True
+            raise g.Refusal("synthetic ACK missing")
+        driver.state["controls"] = copy.deepcopy(expected["controls"])
+        driver.check_target(driver.state, expected)
+        driver.last_write = clock[0]
+        clock[0] += 5_000_000
+        driver.last_commit = clock[0]
+        driver.remember_controls(lines)
+
+    driver.fresh, driver.send = fresh, send
+    return driver, clock, sent, current
 
 
 def motion_driver(change_claim=False):

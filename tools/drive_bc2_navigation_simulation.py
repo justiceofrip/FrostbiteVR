@@ -7,7 +7,10 @@ poses remain unchanged. holdMs bounds the entire pulse, including both ACKs;
 normal zero reserves the shared 250 ms publication/ACK window plus two bounded
 25 ms pump/preparation intervals. Pulses without an active budget are refused
 before input. Each of at most four pulses ends with acknowledged numeric zeros
-for both sticks. There are no buttons, triggers or hand claims.
+for both sticks. Pulses over 500 ms, up to 2000 ms, additionally require a current
+native observation throughout the hold; its loss permits only owned zero release.
+The shared ten-second invocation limit remains. There are no buttons, triggers
+or hand claims.
 No launch, capture, objective-entry, native movement or headset claim is made.
 """
 import argparse
@@ -62,8 +65,8 @@ def plan(value):
                 and {"left", "right", "holdMs"} <= set(row), "unknown or missing navigation fields")
         vector(row["left"], 2, 1)
         vector(row["right"], 2, 1)
-        require(type(row["holdMs"]) is int and 100 <= row["holdMs"] <= 500,
-                "pulse must be 100..500 ms, including command and zero acknowledgement")
+        require(type(row["holdMs"]) is int and 100 <= row["holdMs"] <= 2000,
+                "pulse must be 100..2000 ms, including command and zero acknowledgement")
         if "lookDegrees" in row:
             look = vector(row["lookDegrees"], 2, 45)
             require(abs(look[1]) <= 30, "pitch step exceeds 30 degrees")
@@ -121,6 +124,7 @@ class NavigationDriver(t.Driver):
         self.cleanup_mode = False
         self.releasing_sticks = False
         self.action_deadline = None
+        self.sustained_navigation = False
         self.authorized_lines = None
         self.command_fault = False
         self.normal_stop_required = False
@@ -293,6 +297,8 @@ class NavigationDriver(t.Driver):
         deadline = min(self.deadline, self.stage_deadline)
         if self.action_deadline is not None:
             deadline = min(deadline, self.action_deadline)
+        if self.sustained_navigation and not self.releasing_sticks:
+            deadline = min(deadline, time.perf_counter_ns() + PERIOD)
         return t.read_until(deadline, self._pump)
 
     def _pump(self):
@@ -321,12 +327,16 @@ class NavigationDriver(t.Driver):
             received = self.receive_snapshot()
             if received:
                 self.accept_snapshot(*received)
-            # A published pulse keeps its original deadline and exact command
-            # custody while the next diagnostic is pending. Re-admitting the
-            # cached frame here confuses observation age with new input: it can
-            # abort ACK settlement before the response budget has elapsed.
-            # Every received replacement and every new input publication still
-            # pass current native admission; no cached lease is extended.
+            if self.sustained_navigation:
+                # Longer holds need replacement native evidence before the
+                # preceding observation expires, even during an unsettled ACK.
+                # A pending request never renews that lease. Failure retains
+                # exact command custody for the existing zero-only cleanup.
+                need_observation(time.perf_counter_ns() < self.snapshot_source_deadline(self.latest_snapshot),
+                                 "sustained navigation lost current native observation")
+            # Short pulses retain their original ACK/hold behavior while the
+            # next diagnostic is pending. Every received replacement and every
+            # new publication still pass current native admission.
             if self.pending_nonce is None and now - self.last_request >= PERIOD:
                 self.request_snapshot()
 
@@ -429,6 +439,7 @@ class NavigationDriver(t.Driver):
                                        started + row["holdMs"]*1_000_000)
             active_deadline = self.action_deadline - RELEASE_RESERVE
             require(started < active_deadline, "pulse has no active budget after full zero publication/ACK reserve")
+            self.sustained_navigation = row["holdMs"] > 500
             # An initial publication/ACK or diagnostic refresh cannot consume
             # the reserved zero window. A late initial ACK stays a failure and
             # uses the existing exact-owner cleanup path.
@@ -451,6 +462,7 @@ class NavigationDriver(t.Driver):
             self.publish_navigation(ZERO, [[0, 0], [0, 0]], release=True)
             require(neutral_controls(self.state["controls"]), "zero ACK lacks neutral committed controls")
             self.action_deadline = None
+            self.sustained_navigation = False
             self.stage_deadline = previous_stage_deadline
             self.episodes.append(dict(startedNs=started, neutralCommittedNs=self.last_commit,
                                       commandsAcknowledged=True, nativeMovement=False, objectiveEntry=False))

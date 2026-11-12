@@ -281,7 +281,7 @@ void MakePipelinePair(const ipc::FrameLease& lease,graphics::TextureDescriptor& 
     const std::array<std::uint64_t,2> colors{base+1,base+2};
     std::memcpy(descriptor.session.data(),colors.data(),sizeof(colors));ticket.session=descriptor.session;ticket.sequence=lease.native.frameId;
     depth.color=ticket;depth.flags=graphics::SceneDepthCanonicalClip;depth.width=descriptor.width;depth.height=descriptor.height;
-    depth.samples=1;depth.format=44;depth.adapterLow=descriptor.adapterLow;depth.adapterHigh=descriptor.adapterHigh;depth.resourceGeneration=1;
+    depth.samples=8;depth.quality=1;depth.format=44;depth.adapterLow=descriptor.adapterLow;depth.adapterHigh=descriptor.adapterHigh;depth.resourceGeneration=1;
     depth.resources={{{base+3,base+4},{base+5,base+6}}};
 }
 int PipelineMappedOwnership(){
@@ -297,8 +297,8 @@ int PipelineMappedOwnership(){
     graphics::TextureDescriptor da{},db{},out{};graphics::PairTicket ta{},tb{},got{};graphics::SceneDepthFrame za{},zb{},depth{};
     MakePipelinePair(a,da,ta,za);
     const graphics::SceneDepthFrame absent{};CHECK(producer.Submit(a,da,ta,&absent)==ipc::ChannelResult::Invalid);
-    auto bad=za;bad.samples=8;CHECK(producer.Submit(a,da,ta,&bad)==ipc::ChannelResult::Invalid);
-    bad=za;bad.quality=1;CHECK(producer.Submit(a,da,ta,&bad)==ipc::ChannelResult::Invalid);
+    auto bad=za;bad.samples=16;CHECK(producer.Submit(a,da,ta,&bad)==ipc::ChannelResult::Invalid);
+    bad=za;bad.samples=1;bad.quality=1;CHECK(producer.Submit(a,da,ta,&bad)==ipc::ChannelResult::Invalid);
     bad=za;++bad.color.trackingGeneration;CHECK(producer.Submit(a,da,ta,&bad)==ipc::ChannelResult::Invalid);
     std::array<graphics::BodyPropEye,2> props{};
     for(auto& eye:props)eye.ammo={1,1000000000,1100000000,1,2,tracking.spaceGeneration,24,111,30};
@@ -323,7 +323,7 @@ int PipelineMappedOwnership(){
     CHECK(WaitForSingleObject(held,1000)==WAIT_OBJECT_0);
     graphics::BodyPropFrame body{};runtime::SourceSlotIdentity slot{};
     CHECK(host.ReadSourceSlot(ta,slot)&&slot.channelSession==first.channelSession&&slot.slot==0);
-    CHECK(host.ReadSceneDepth(da,ta,depth)&&depth.resources==za.resources);
+    CHECK(host.ReadSceneDepth(da,ta,depth)&&depth.resources==za.resources&&depth.samples==8&&depth.quality==1);
     CHECK(host.ReadBodyProps(ta,body)&&body.eyes[0].ammo.loaded==24);
     CHECK(!host.ReadSourceSlot(tb,slot));
     auto wrong=ta;++wrong.sequence;CHECK(host.Feedback(wrong,true)==ipc::ChannelResult::Invalid);
@@ -531,8 +531,8 @@ int PipelineOptionalAliases(bool lookahead=false){
         MakePipelinePair(lease,da,ta,za);
         const graphics::SceneDepthFrame empty{};
         CHECK(native.PublishPipeline(a,da,ta,nullptr,&empty)==ipc::ChannelResult::Invalid);
-        auto bad=za;bad.samples=8;CHECK(native.PublishPipeline(a,da,ta,nullptr,&bad)==ipc::ChannelResult::Invalid);
-        bad=za;bad.quality=1;CHECK(native.PublishPipeline(a,da,ta,nullptr,&bad)==ipc::ChannelResult::Invalid);
+        auto bad=za;bad.samples=16;CHECK(native.PublishPipeline(a,da,ta,nullptr,&bad)==ipc::ChannelResult::Invalid);
+        bad=za;bad.samples=1;bad.quality=1;CHECK(native.PublishPipeline(a,da,ta,nullptr,&bad)==ipc::ChannelResult::Invalid);
         bad=za;bad.resources[1][1]=0;CHECK(native.PublishPipeline(a,da,ta,nullptr,&bad)==ipc::ChannelResult::Invalid);
         CHECK(native.PublishPipeline(a,da,ta,nullptr,firstHasDepth?&za:nullptr)==ipc::ChannelResult::Ok);
         if(!lookahead)CHECK(host.PollRequest(out,got)==ipc::ChannelResult::Ok);

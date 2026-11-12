@@ -108,6 +108,7 @@ int MotionCalibrationCases(){
 }
 struct StagedMotionFixture {
     Fixture f;ChestKnifeMotionCalibration calibration;InputFrame input;
+    KnifeRecognitionCoordinator projection;
     math::Matrix4 measured=private_knife::RightHandInKnife;
     private_knife::StockKnifeMotionSourceRevocation source;
     private_knife::KnifeAttackGate attacks;
@@ -137,7 +138,7 @@ struct StagedMotionFixture {
         // The production gather projection, then the same BeforePrepare order:
         // revoke first, resolve native consumption, and only then run policy.
         PrepareChestKnifeMotionSource(calibration,f.knife,identity,render?std::optional(measured):std::nullopt,
-            input,nativeReady&&s.mechanicsSettled,s);
+            input,nativeReady&&s.mechanicsSettled,s,&projection);
         source.Advance(s,f.knife.NeedsNativeCleanup());
         if(attacks.Pending()){
             const auto pending=*attacks.Pending();
@@ -168,6 +169,8 @@ int StagedMotionSourceCases(){
         same.f.s.source.nowNs+=ms;CHECK(!same.Gather(false));
         CHECK(same.f.knife.Phase()==KnifePhase::AttackStaged&&!same.f.knife.RecognitionReady(same.f.s.source));
         CHECK(same.f.s.nativeAttackReady&&!same.f.s.motionTrackingReady);
+        CHECK(same.projection.projection==KnifeMotionProjectionReason::Ready&&same.projection.calibrationContinuous);
+        CHECK(same.projection.attackReady&&!same.projection.trackingReady);
         CHECK(same.f.s.tip==tip&&same.f.s.direction==direction&&same.source.Current(same.stagedStamp));
         CHECK(same.f.knife.CanCommit(original,same.f.s,same.f.hands));
         CHECK(same.f.hands.Current(InteractionHand::Right)->token==originalHold.token);
@@ -209,6 +212,45 @@ int StagedMotionSourceCases(){
         }
     }
     std::puts("Staged knife source: unchanged zero-trigger jab consumes once; render/geometry/source/readiness loss and expiry revoke; accepted siblings drain.");
+    return 0;
+}
+int MotionProjectionObservationCases(){
+    StagedMotionFixture f;CHECK(f.f.Held());CHECK(!f.Gather(true));
+    CHECK(f.projection.calibration==KnifeMotionCalibrationReason::Initial&&!f.projection.calibrationContinuous);
+    CHECK(f.projection.projection==KnifeMotionProjectionReason::Ready&&f.projection.trackingReady&&f.projection.attackReady);
+    for(unsigned n=0;n<20;++n)CHECK(!f.Gather(true));
+    CHECK(f.f.knife.RecognitionReady(f.f.s.source));
+    const auto held=*f.f.hands.Current(InteractionHand::Right);
+    CHECK(!f.Gather(true,false)); // Missing measurement carries only the original live hand lease.
+    CHECK(f.projection.calibration==KnifeMotionCalibrationReason::Continuous&&f.projection.calibrationContinuous);
+    CHECK(f.projection.trackingReady&&!f.projection.attackReady&&f.f.knife.RecognitionReady(f.f.s.source));
+    CHECK(f.f.hands.Current(InteractionHand::Right)->deadlineNs==held.deadlineNs);
+    CHECK(!f.Gather(true,true,false));
+    CHECK(f.projection.projection==KnifeMotionProjectionReason::Ready&&f.projection.trackingReady&&!f.projection.attackReady);
+    CHECK(f.f.knife.RecognitionReady(f.f.s.source));
+    f.input.hands[1].gripTracked=false;CHECK(!f.Gather(true));
+    CHECK(f.projection.projection==KnifeMotionProjectionReason::Geometry&&!f.projection.trackingReady&&!f.projection.attackReady);
+    CHECK(!f.f.knife.RecognitionReady(f.f.s.source));
+    f.input.hands[1].gripTracked=true;CHECK(!f.Gather(true));
+    CHECK(f.projection.calibration==KnifeMotionCalibrationReason::Initial&&!f.projection.calibrationContinuous);
+    auto invalid=f.measured;invalid.values[3][0]=.01f;
+    PrepareChestKnifeMotionSource(f.calibration,f.f.knife,
+        ChestKnifeMotionIdentity{{0x10000,0x20000,0x30000,42,2,3,4},*f.f.knife.Hold(),{42,1},7,8,1,9,1.f},
+        invalid,f.input,true,f.f.s,&f.projection);
+    CHECK(f.projection.calibration==KnifeMotionCalibrationReason::MeasurementInvalid&&f.projection.projection==KnifeMotionProjectionReason::Calibration);
+    CHECK(!f.projection.trackingReady&&!f.projection.attackReady);
+    PrepareChestKnifeMotionSource(f.calibration,f.f.knife,std::nullopt,std::nullopt,f.input,true,f.f.s,&f.projection);
+    CHECK(f.projection.calibration==KnifeMotionCalibrationReason::IdentityMissing&&f.projection.projection==KnifeMotionProjectionReason::Calibration);
+    CHECK(!f.Gather(true));
+    // Valid orientation change starts settling again; the observation does not
+    // reuse the old calibration or convert geometry into attack authority.
+    f.measured.values={{{1,0,0,0},{0,1,0,0},{0,0,1,0},{0,0,0,1}}};CHECK(!f.Gather(true));
+    CHECK(f.projection.calibration==KnifeMotionCalibrationReason::MeasurementChanged&&!f.projection.calibrationContinuous);
+    CHECK(!f.f.knife.RecognitionReady(f.f.s.source));
+    Fixture stowed;ChestKnifeMotionCalibration calibration;KnifeRecognitionCoordinator observation;
+    PrepareChestKnifeMotionSource(calibration,stowed.knife,std::nullopt,std::nullopt,f.input,true,stowed.s,&observation);
+    CHECK(observation.projection==KnifeMotionProjectionReason::Phase&&!observation.trackingReady&&!observation.attackReady);
+    std::puts("Normal knife projection observation: readiness versus tracking, geometry/calibration/phase resets, original hand deadline preserved.");
     return 0;
 }
 int ReturnObservationCases(){
@@ -451,6 +493,7 @@ int main(){
     CHECK(!MotionRenderSeparationCases());
     CHECK(!MotionCalibrationCases());
     CHECK(!StagedMotionSourceCases());
+    CHECK(!MotionProjectionObservationCases());
     CHECK(!knife_read_diagnostic_cases::Cases());
     CHECK(!knife_inspection_cases::Cases());
     {

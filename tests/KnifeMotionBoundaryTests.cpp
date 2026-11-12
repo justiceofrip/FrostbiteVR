@@ -194,6 +194,46 @@ int RecognitionObservationCases(){
     for(unsigned n=1;n<KnifeRecognitionDiagnostic::Capacity+2;++n){row.prerequisites=n;bounded->Record(row);}
     CHECK(bounded->Kept()==KnifeRecognitionDiagnostic::Capacity&&bounded->Seen()==KnifeRecognitionDiagnostic::Capacity+2&&bounded->Dropped()==2);
     std::ostringstream full;bounded->Report(full);CHECK(full.str().find("\"deadline_ns\":"+std::to_string(source.deadlineNs))!=std::string::npos);
+    // Normal diagnostics follow only explicit snapshot windows. Toggling the
+    // observer cannot grant attack admission or change the gesture outcome.
+    auto normal=std::make_unique<KnifeRecognitionDiagnostic>();Fixture sampled;
+    sampled.knife.ObserveRecognition(normal.get());CHECK(sampled.Held()&&sampled.Rest());CHECK(normal->Kept()==0);
+    normal->Window(true);CHECK(normal->Enabled());
+    KnifeRecognitionCoordinator projection;projection.bodyOperation=17;projection.nativeLifetime=9;
+    projection.identityGate=KnifeMotionIdentityGate::None;projection.calibration=KnifeMotionCalibrationReason::Continuous;
+    projection.projection=KnifeMotionProjectionReason::Ready;projection.calibrationContinuous=projection.trackingReady=true;
+    normal->Coordinator(projection);sampled.s.motionTrackingReady=true;sampled.s.nativeAttackReady=false;
+    CHECK(!sampled.Stab());const auto unavailableSource=sampled.s.source;
+    CHECK(sampled.knife.Phase()==KnifePhase::Held&&!sampled.knife.RecognitionReady(sampled.s.source));
+    CHECK(sampled.Rest());const auto recorded=normal->Kept();CHECK(recorded>8);
+    normal->Window(false);CHECK(!normal->Enabled());sampled.s.nativeAttackReady=true;
+    CHECK(sampled.Stab());CHECK(normal->Kept()==recorded);
+    std::ostringstream sampledReport;normal->Report(sampledReport);
+    CHECK(sampledReport.str().find("\"decision\":18")!=std::string::npos); // Completed motion, native attack unavailable.
+    CHECK(sampledReport.str().find("\"body_operation\":17")!=std::string::npos);
+    CHECK(sampledReport.str().find("\"tracking_ready\":1,\"attack_ready\":0")!=std::string::npos);
+    CHECK(sampledReport.str().find("\"observed_ns\":"+std::to_string(unavailableSource.observedNs))!=std::string::npos);
+    CHECK(sampledReport.str().find("\"active\":0,\"snapshot_window\":1")!=std::string::npos);
+    // Same-packet loss is retained even though policy does not advance. Plain
+    // duplicate callbacks add no observations, and return staging is covered.
+    auto duplicate=std::make_unique<KnifeRecognitionDiagnostic>();duplicate->Window(true);duplicate->Coordinator(projection);
+    row={};row.phaseBefore=row.phaseAfter=4;row.source=source;row.gate=KnifeRecognitionGate::Motion;
+    row.motion.after=MeleeStrokePhase::Ready;duplicate->Record(row);
+    row.gate=KnifeRecognitionGate::Duplicate;duplicate->Record(row);CHECK(duplicate->Kept()==1);
+    projection.calibrationContinuous=projection.trackingReady=false;projection.calibration=KnifeMotionCalibrationReason::IdentityMissing;
+    projection.identityGate=KnifeMotionIdentityGate::NativeView;duplicate->Coordinator(projection);
+    row.motion.after=MeleeStrokePhase::Unavailable;duplicate->Record(row);CHECK(duplicate->Kept()==2);
+    row.phaseBefore=4;row.phaseAfter=7;row.command=3;row.gate=KnifeRecognitionGate::ReturnWanted;
+    ++row.source.sequence;duplicate->Record(row);CHECK(duplicate->Kept()==3);
+    duplicate->NativeGate(source,4,{42,1},11);std::ostringstream nativeGate;duplicate->Report(nativeGate);
+    CHECK(nativeGate.str().find("\"knife\":42,\"knife_generation\":1,\"claim\":11")!=std::string::npos);
+    auto rolling=std::make_unique<KnifeRecognitionDiagnostic>();rolling->Window(true);
+    row={};row.phaseBefore=row.phaseAfter=4;row.source=source;row.gate=KnifeRecognitionGate::Motion;
+    for(unsigned n=1;n<=KnifeRecognitionDiagnostic::Capacity+2;++n){row.source.sequence=n;rolling->Record(row);}
+    CHECK(rolling->Kept()==KnifeRecognitionDiagnostic::Capacity&&rolling->Seen()==KnifeRecognitionDiagnostic::Capacity+2&&rolling->Dropped()==2);
+    std::ostringstream tail;rolling->Report(tail);
+    CHECK(tail.str().find("\"rows\":[{\"input\":3,")!=std::string::npos);
+    CHECK(tail.str().find("\"input\":"+std::to_string(KnifeRecognitionDiagnostic::Capacity+2)+",")!=std::string::npos);
     std::puts("Knife recognition diagnostics PASS: exact current readiness, native/recognizer reset distinction, actual metrics/intent, bounded immutable rows.");return 0;
 }
 int KnifeAudioObservationCases(){

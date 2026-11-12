@@ -19,6 +19,8 @@ Bc2ChestKnifeCoordinator::Bc2ChestKnifeCoordinator()noexcept {
 }
 bool Bc2ChestKnifeCoordinator::TickIdleHeldGun(const BodyDrawSample& s,const Bc2BodyHolster& body,
     HandInteraction& hands,std::uint64_t& intent)noexcept {
+    recognition_.Window(liveObservation_.Requested(s.hand.nowNs));
+    policy_.ObserveRecognition(recognition_.Enabled()?&recognition_:nullptr);
 #ifdef FVR_BC2_CHEST_KNIFE_PROBE
     return false; // The probe publishes a full witness for each gather.
 #else
@@ -39,6 +41,10 @@ bool Bc2ChestKnifeCoordinator::TickIdleHeldGun(const BodyDrawSample& s,const Bc2
 #endif
 }
 void Bc2ChestKnifeCoordinator::Missing(std::int64_t now,HandInteraction& hands)noexcept {
+    recognition_.Window(liveObservation_.Requested(now));
+    policy_.ObserveRecognition(recognition_.Enabled()?&recognition_:nullptr);
+    KnifeRecognitionCoordinator projection;projection.bodyOperation=bodyOperation_;projection.gatherMissing=true;
+    recognition_.Coordinator(projection);
     motionCalibration_.Reset();policy_.InvalidateMotion();
     ChestKnifeLiveObservation failure;failure.phase=policy_.Phase();failure.bodyOperation=bodyOperation_;
     failure.draws=draws_;failure.returns=returns_;if(anchor_)failure.originalOwner=anchor_->original.client.owner;
@@ -47,11 +53,15 @@ void Bc2ChestKnifeCoordinator::Missing(std::int64_t now,HandInteraction& hands)n
     currentHoldObservation_.Reject(failure,now,"gather_missing");
     rendering_.reset();PrepareChestKnifeMissing(now,hands,policy_,[&](const KnifeSample& sample,ChestKnifeCustody& policy)noexcept{
         const bool okay=chestKnifeNative::BeforePrepare(sample,policy);
-        if(!okay)recognition_.NativeGate(sample.source,unsigned(policy.Phase()));return okay;});
+        if(!okay)recognition_.NativeGate(sample.source,unsigned(policy.Phase()),
+            policy.Hold()?policy.Hold()->item:sample.knife,policy.Hold()?policy.Hold()->id:0);return okay;});
 }
 void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDrawSample& s,BodyHolsterSample post,
     const BodyHolsterResult& bodyResult,const std::optional<ChestKnifeRenderReceipt>& rendered,bool mechanics,
     Bc2BodyInventory& inventory,Bc2BodyHolster& body,HandInteraction& hands,std::uint64_t& intent,const std::optional<math::Matrix4>& currentBody)noexcept {
+    recognition_.Window(liveObservation_.Requested(s.hand.nowNs));
+    policy_.ObserveRecognition(recognition_.Enabled()?&recognition_:nullptr);
+    KnifeRecognitionCoordinator projection;
     // A worker may not reuse the preceding gather while current gates change.
     liveObservation_.Begin();currentHoldObservation_.Begin();
     rendering_.reset();chestKnifeNative::ObserveLifetime(s.owner);chestKnifeNative::AcknowledgeNoEffectRehide(body);
@@ -92,9 +102,13 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
     if(native){
         nativeOwned_=native->owned;sample.knifeSelected=s.owner.weapon==knife;
         for(auto selected:native->snapshot.selected.current)sample.knifeSelected&=selected==native->anchor.knifeSlot;
-        sample.mechanicsSettled=mechanics&&native->healthy&&(!nativeOwned_||body.TemporaryToolOperation()==bodyOperation_)&&
-            private_knife::KnifeSentinel(native->snapshot)&&
-            Ready(sample.knifeSelected?native->snapshot.knife:native->snapshot.original,nativeReadiness);
+        projection.mechanicsGate=[&](){using Gate=KnifeMotionMechanicsGate;
+            if(!mechanics)return Gate::OtherMechanics;if(!native->healthy)return Gate::NativeHealth;
+            if(nativeOwned_&&body.TemporaryToolOperation()!=bodyOperation_)return Gate::BodyOperation;
+            if(!private_knife::KnifeSentinel(native->snapshot))return Gate::KnifeSentinel;
+            if(!Ready(sample.knifeSelected?native->snapshot.knife:native->snapshot.original,nativeReadiness))return Gate::Readiness;
+            return Gate::None;}();
+        sample.mechanicsSettled=projection.mechanicsGate==KnifeMotionMechanicsGate::None;
         const bool nativeHoldCurrent=native->healthy&&sample.knifeSelected&&nativeOwned_&&bodyOperation_&&
             body.TemporaryToolOperation()==bodyOperation_;
         measuredKnifeHold=nativeHoldCurrent&&rendered&&
@@ -107,7 +121,7 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
         else if(!rendered){
             const auto retained=ChestKnifeRetainedStockContact(policy_,hands,sample,
                 native->stockTriggerEnabled&&!native->attackBridgeEnabled,nativeHoldCurrent);
-            if(retained){sample.trackedKnifeOwned=true;sample.heldContact=*retained;}
+            if(retained){sample.trackedKnifeOwned=true;sample.heldContact=*retained;projection.retainedContact=true;}
         }
         const bool existingHoldCurrent=!policy_.NeedsInitialHeldPose()&&ChestKnifeRenderPoseCustody(policy_,hands,s.hand);
         sample.stockTriggerReady=existingHoldCurrent&&native->stockTriggerEnabled&&!native->attackBridgeEnabled&&
@@ -116,17 +130,27 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
         // current native/input proofs. Missing render contact remains bounded
         // by the existing stock fallback's ORIGINAL hand deadline above.
         const auto held=hands.Current(InteractionHand::Right);
-        if(existingHoldCurrent&&held&&nativeHoldCurrent&&native->motionEnabled&&sample.mechanicsSettled&&
-           !policy_.NeedsNativeCleanup()&&sample.trackedKnifeOwned&&
-           sample.holdInputCurrent&&KnifeActionInputCurrent(sample)&&sample.fireSuppressed&&
-           GameplayOwnsInput(sample.menu,s.hand.nowNs)&&sample.gripHeld[1]&&
-           s.hand.focused&&s.hand.tracked[0]&&s.hand.tracked[1]&&!s.hand.released[1]&&
-           s.hand.observedNs>0&&s.hand.nowNs>=s.hand.observedNs&&s.hand.deadlineNs>s.hand.nowNs&&
-           s.hand.deadlineNs-s.hand.observedNs<=100000000&&hands.HasRecordedEvidence(s.hand,InteractionHand::Right)&&
-           s.input.generation==s.hand.sequence&&s.input.spaceGeneration==s.hand.owner.space&&s.input.trackingBasisGeneration&&
-           native->currentHoldWork.known&&native->currentHoldWork.lifetime&&
-           native->currentHoldWork.bodyOperation==bodyOperation_&&
-           native->snapshot.selectedOwner==s.owner){
+        // Same predicates and evaluation order as motion admission. Retain
+        // only its first failure; observing it cannot supply missing authority.
+        projection.identityGate=[&](){using Gate=KnifeMotionIdentityGate;
+            if(!existingHoldCurrent)return Gate::ExistingHold;if(!held)return Gate::RightClaim;
+            if(!nativeHoldCurrent)return Gate::NativeHold;if(!native->motionEnabled)return Gate::MotionDisabled;
+            if(!sample.mechanicsSettled)return Gate::Mechanics;if(policy_.NeedsNativeCleanup())return Gate::NativeCleanup;
+            if(!sample.trackedKnifeOwned)return Gate::TrackedKnife;if(!sample.holdInputCurrent)return Gate::HoldInput;
+            if(!KnifeActionInputCurrent(sample))return Gate::ActionInput;if(!sample.fireSuppressed)return Gate::Suppression;
+            if(!GameplayOwnsInput(sample.menu,s.hand.nowNs))return Gate::Menu;if(!sample.gripHeld[1])return Gate::Grip;
+            if(!s.hand.focused)return Gate::Focus;if(!s.hand.tracked[0])return Gate::LeftTracking;
+            if(!s.hand.tracked[1])return Gate::RightTracking;if(s.hand.released[1])return Gate::Release;
+            if(s.hand.observedNs<=0||s.hand.nowNs<s.hand.observedNs)return Gate::SourceTime;
+            if(s.hand.deadlineNs<=s.hand.nowNs||s.hand.deadlineNs-s.hand.observedNs>100000000)return Gate::SourceDeadline;
+            if(!hands.HasRecordedEvidence(s.hand,InteractionHand::Right))return Gate::Evidence;
+            if(s.input.generation!=s.hand.sequence)return Gate::InputSequence;
+            if(s.input.spaceGeneration!=s.hand.owner.space)return Gate::Space;
+            if(!s.input.trackingBasisGeneration)return Gate::TrackingBasis;
+            if(!native->currentHoldWork.known||!native->currentHoldWork.lifetime)return Gate::NativeLifetime;
+            if(native->currentHoldWork.bodyOperation!=bodyOperation_)return Gate::BodyOperation;
+            if(native->snapshot.selectedOwner!=s.owner)return Gate::SelectedOwner;return Gate::None;}();
+        if(projection.identityGate==KnifeMotionIdentityGate::None){
             motionIdentity=ChestKnifeMotionIdentity{s.owner,held->token,*key,bodyOperation_,native->currentHoldWork.lifetime,
                 sample.menu.epoch,s.input.trackingBasisGeneration,s.input.worldUnitsPerMeter};
         }
@@ -136,7 +160,14 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
     PrepareChestKnifeMotionSource(motionCalibration_,policy_,motionIdentity,
         measuredKnifeHold?std::optional(rendered->wristInGrip):std::nullopt,s.input,
         native&&native->motionEnabled&&sample.mechanicsSettled&&
-            (!native->attackBridgeEnabled||attackGeometry.has_value()),sample);
+            (!native->attackBridgeEnabled||attackGeometry.has_value()),sample,recognition_.Enabled()?&projection:nullptr);
+    projection.bodyOperation=bodyOperation_;projection.nativeLifetime=native?native->currentHoldWork.lifetime:0;
+    projection.menuEpoch=sample.menu.epoch;projection.trackingBasis=s.input.trackingBasisGeneration;
+    projection.nativeInspection=unsigned(nativeInspection);projection.readinessReason=unsigned(nativeReadiness.reason);
+    projection.measuredRender=measuredKnifeHold;
+    if(rendered){projection.renderInput=rendered->source.input.sequence;
+        projection.renderObservedNs=rendered->source.input.observedNs;projection.renderDeadlineNs=rendered->source.input.deadlineNs;}
+    recognition_.Coordinator(projection);
     // Copy only facts already obtained by this gather. Diagnostics cannot
     // provide a render receipt, native view, claim or current input authority.
     const auto diagnostic=[&](){ChestKnifeLiveObservation v;v.owner=s.owner;v.input=s.hand;v.phase=policy_.Phase();
@@ -151,7 +182,7 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
         motionCalibration_.Reset();policy_.InvalidateMotion();
         liveObservation_.Reject(diagnostic(),s.hand.nowNs,"producer_prerequisite","before_prepare");
         currentHoldObservation_.Reject(diagnostic(),s.hand.nowNs,"before_prepare");
-        recognition_.NativeGate(sample.source,unsigned(policy_.Phase()));return;
+        recognition_.NativeGate(sample.source,unsigned(policy_.Phase()),sample.knife,policy_.Hold()?policy_.Hold()->id:0);return;
     }
     std::optional<chestKnifeNative::ReturnCompletion> completedReturn;
     if(const auto receipt=chestKnifeNative::Observe(s.owner,body,bodyResult.freeRight,s.hand.nowNs,&completedReturn)){

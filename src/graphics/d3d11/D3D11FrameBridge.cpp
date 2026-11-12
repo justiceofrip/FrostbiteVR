@@ -468,11 +468,11 @@ bool D3D11FrameBridge::InitializePipeline(const ipc::FrameLease& lease)noexcept 
            allocatedNative_.deviceEpoch!=lease.native.deviceEpoch)return Fail(20,E_INVALIDARG);
         return true;
     }
-    // Six images per source, two same-context capture images and one existing
-    // desktop-left mirror. This bounds logical payload, not physical VRAM.
+    // Depth is lazy: reserve at least 1x until the first descriptor binds the
+    // exact sample shape for ALL slots. Three other images are capture/mirror.
     if(!r.width||!r.height||r.width>16384||r.height>16384||
        (r.format!=28&&r.format!=29&&r.format!=87&&r.format!=91))return Fail(21,E_INVALIDARG);
-    const auto bytes=std::uint64_t(r.width)*r.height*4*pipelineEvidence_.LogicalTextureCount();
+    const auto bytes=PipelineTextureBytes(r.width,r.height,pipelineSourceCount_,1);
     if(bytes>pipelineEvidence_.LogicalByteLimit())return Fail(21,E_OUTOFMEMORY);
     pipelineEvidence_.logicalReservationBytes=bytes;
     if(!CheckPipelineBudget(r,bytes,true))return false;
@@ -512,10 +512,9 @@ bool D3D11FrameBridge::PreparePipeline(const ipc::FrameLease& lease,RestoredPubl
         if(pipelineCaptureSlot_!=PipelineInvalidSlot)return Fail(20,E_UNEXPECTED);
         if(!Valid(s.color.Descriptor())){
             if(epoch_==UINT64_MAX)return Fail(21,E_UNEXPECTED);
-            // Recheck six replacement images, including the depth set that is
-            // allocated lazily at its first copy. Retired generations may still
-            // occupy physical memory; a logical topology cap does not bound it.
-            if(!CheckPipelineBudget(allocated_,std::uint64_t(allocated_.width)*allocated_.height*4*6,false))return false;
+            // CurrentUsage includes retained old/imported generations. Admit
+            // the full NEW color pair; depth gets its own check at allocation.
+            if(!CheckPipelineBudget(allocated_,std::uint64_t(allocated_.width)*allocated_.height*4*2,false))return false;
             if(s.color.Create(device_.Get(),allocated_.width,allocated_.height,DXGI_FORMAT(allocated_.format),++epoch_,TextureSharing::LegacyFenced)!=TransferResult::Ok)
                 return Fail(21,s.color.LastError(),s.color.LastOperation());
             ++s.generations;
@@ -536,20 +535,38 @@ bool D3D11FrameBridge::BeginPipelineDepth(const ipc::FrameLease& lease,bool reve
 bool D3D11FrameBridge::CapturePipelineDepth(unsigned eye,unsigned stage,ID3D11Texture2D* source,const ipc::FrameLease& lease)noexcept {
     if(!PreparePipeline(lease))return false;auto& s=pipeline_[lease.sourceSlot];
     if(!source||eye>1||stage>1||!s.depthActive)return false;
-    D3D11_TEXTURE2D_DESC d{};source->GetDesc(&d);
-    // No resource allocation/copy is allowed for an unproved AA or shape.
-    if(d.Width!=allocated_.width||d.Height!=allocated_.height||d.SampleDesc.Count!=1||d.SampleDesc.Quality||
-       d.Format!=DXGI_FORMAT_R24G8_TYPELESS||d.MipLevels!=1||d.ArraySize!=1)return Fail(22,E_INVALIDARG);
-    // Color-only pairs can precede the first depth allocation by many frames.
-    // Recheck the actual validated 1x quartet at that boundary, not just startup.
-    if(!s.depthAllocationAdmitted&&
-       !CheckPipelineBudget(allocated_,std::uint64_t(d.Width)*d.Height*4*4,false))return false;
+    D3D11_TEXTURE2D_DESC d{};source->GetDesc(&d);Microsoft::WRL::ComPtr<ID3D11Device> owner;source->GetDevice(&owner);
+    const auto recordRejection=[&](const char* reason){auto& f=pipelineEvidence_.firstDepthRejection;
+        if(!f.present)f={true,TimingKey(lease),d,lease.sourceSlot,eye,stage,reason,TimingQpc()};};
+    const auto reject=[&](const char* reason,HRESULT code=E_INVALIDARG){recordRejection(reason);return Fail(22,code);};
+    if(owner.Get()!=device_.Get())return reject("device");
+    if(d.Width!=allocated_.width||d.Height!=allocated_.height||d.Format!=DXGI_FORMAT_R24G8_TYPELESS||
+       d.MipLevels!=1||d.ArraySize!=1||d.Usage!=D3D11_USAGE_DEFAULT||d.CPUAccessFlags)return reject("descriptor");
+    if(!PipelineDepthSamples(d.SampleDesc.Count,d.SampleDesc.Quality))return reject("samples");
+    if(s.depthMask!=((1u<<(eye*2+stage))-1))return reject("capture_order");
+    const bool firstShape=!pipelineEvidence_.depthSamples;
+    if(!firstShape&&(d.SampleDesc.Count!=pipelineEvidence_.depthSamples||d.SampleDesc.Quality!=pipelineEvidence_.depthQuality))
+        return reject("pipeline_shape");
+    if(!s.depthAllocationAdmitted){
+        UINT levels=0;const auto result=device_->CheckMultisampleQualityLevels(DXGI_FORMAT_D24_UNORM_S8_UINT,d.SampleDesc.Count,&levels);
+        const bool standard=d.SampleDesc.Count>1&&(d.SampleDesc.Quality==D3D11_STANDARD_MULTISAMPLE_PATTERN||
+            d.SampleDesc.Quality==D3D11_CENTER_MULTISAMPLE_PATTERN);
+        if(FAILED(result)||!levels||(!standard&&d.SampleDesc.Quality>=levels))return reject("quality");
+        const auto reservation=PipelineTextureBytes(d.Width,d.Height,pipelineSourceCount_,d.SampleDesc.Count);
+        if(reservation>pipelineEvidence_.LogicalByteLimit()){recordRejection("logical_budget");return Fail(21,E_OUTOFMEMORY);}
+        // First shape admits all still-lazy quartets. Later allocations/replacements
+        // recheck one exact quartet, with old resources still in CurrentUsage.
+        const auto bytes=std::uint64_t(d.Width)*d.Height*4*4*d.SampleDesc.Count*(firstShape?pipelineSourceCount_:1);
+        if(!CheckPipelineBudget(allocated_,bytes,false)){recordRejection("local_budget");return false;}
+        pipelineEvidence_.logicalReservationBytes=reservation;
+        pipelineEvidence_.depthSamples=d.SampleDesc.Count;pipelineEvidence_.depthQuality=d.SampleDesc.Quality;
+    }
     const auto token=fvr::diagnostics::privateGpu::recorder.Begin(
         fvr::diagnostics::privateGpu::Kind::DepthCopy,GpuTimingKey(lease),eye,stage,context_.Get());
     const bool copied=s.depth.Capture(eye,stage,source);fvr::diagnostics::privateGpu::recorder.End(token,copied);
-    if(!copied)return Fail(22,E_FAIL);
+    if(!copied)return reject("copy_or_allocation",E_FAIL);
     s.depthAllocationAdmitted=true;s.depthMask|=1u<<(eye*2+stage);++s.depthCopies;
-    pipelineTiming_[lease.sourceSlot].Depth(TimingKey(lease),eye,stage,1,0,unsigned(d.Format),TimingQpc());return true;
+    pipelineTiming_[lease.sourceSlot].Depth(TimingKey(lease),eye,stage,d.SampleDesc.Count,d.SampleDesc.Quality,unsigned(d.Format),TimingQpc());return true;
 }
 bool D3D11FrameBridge::CapturePipelineEye(unsigned eye,ID3D11Texture2D* source,const ipc::FrameLease& lease)noexcept {
     if(!PreparePipeline(lease))return false;auto& s=pipeline_[lease.sourceSlot];
@@ -629,7 +646,8 @@ void D3D11FrameBridge::PumpPipelineSlot(unsigned index)noexcept {
         s.depthFrame={};
         if(s.depthActive&&s.depthMask==15){
             if(!s.depth.Seal(s.color.Descriptor(),s.ticket,s.reversed,s.depthFrame)||
-               s.depthFrame.samples!=1||s.depthFrame.quality){Fail(22,E_FAIL);return;}
+               !PipelineSceneDepthMatches(s.depthFrame,s.color.Descriptor(),s.ticket)||
+               s.depthFrame.samples!=pipelineEvidence_.depthSamples||s.depthFrame.quality!=pipelineEvidence_.depthQuality){Fail(22,E_FAIL);return;}
         }else{
             // Optional absence includes an incomplete first-person depth pass.
             // Cancel discards metadata only and RETAINS allocated images. Any

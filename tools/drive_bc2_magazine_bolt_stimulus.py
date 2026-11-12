@@ -63,6 +63,10 @@ class MagazineBoltDriver(transport.Driver):
         self.preparation = None
         self.preparation_mode = args.mode == "prep-shot-bolt"
         self.motion_reference = None
+        self.handoff_guard = None
+        self.handoff_phase = None
+        self.neutral_handoff_completed = False
+        self.bolt_cycle_completed = False
         controls_allowed(self.state["controls"])
         require(self.state["controls"]["trigR"] == 0, "trigger must be released at invocation")
         # Settled writer ownership authorizes continuation of actual controls;
@@ -126,6 +130,10 @@ class MagazineBoltDriver(transport.Driver):
             if expected.get("sample") is not None and self.motion_reference is not None:
                 geometry.movement_continuation(self.motion_reference, self.latest_snapshot,
                                                now, self.family, self.debt)
+            if getattr(self, "handoff_phase", None) is not None:
+                control = "grip l 0" if self.handoff_phase == "support" else "grip r 0"
+                require(lines == [control], "neutral handoff permits only its owned release")
+                self.handoff_snapshot(self.latest_snapshot, now, self.handoff_phase)
         if expected.get("fire"):
             if getattr(self, "preparation_mode", False):
                 current = geometry.preparation_baseline(self.latest_snapshot, time.perf_counter_ns())
@@ -519,7 +527,83 @@ class MagazineBoltDriver(transport.Driver):
                     "normal support/gun return has not settled")
             return dict(gun=root, support=left, ready=geometry.ready(s, n, self.debt))
         self.boundary("right_gun_and_support_returned", returned)
+        self.bolt_cycle_completed = True
         self.stage_deadline = self.deadline
+
+    def handoff_snapshot(self, snapshot, now, phase):
+        guard = self.handoff_guard
+        require(guard is not None and geometry.owner_key(snapshot) == guard["owner"],
+                "neutral handoff equipment owner changed")
+        b = geometry.bolt(snapshot, now, raw=False)
+        native = b["native"]
+        require(native["identity"] == self.debt["identity"]
+                and integer(native["cycle"]) == integer(self.debt["debt"]["cycle"])
+                and integer(native["shot"]) == integer(self.debt["debt"]["shot"])
+                and geometry.counts(native["counts"]) == self.debt["counts"]
+                and integer(native["phase"]) == 5
+                and b["held"] is None and b["recovery"] is None and native["held"] is None
+                and b["mechanismClaim"] is None and b["blocksFire"] is False
+                and snapshot["weapon_actions_blocked"] is False,
+                "neutral handoff requires the completed unchanged bolt")
+        if phase == "support":
+            require(geometry.claim(b, 0, 2, now, guard["gun"]["item"]) == guard["support"],
+                    "neutral handoff support custody changed")
+        else:
+            if b["leftClaim"] is not None:
+                require(b["leftClaim"]["token"] == guard["support"],
+                        "neutral handoff left custody changed")
+                raise geometry.Pending("neutral handoff support release pending")
+            geometry.wait_for(b["input"]["released"][0] is True,
+                              "neutral handoff left input release pending")
+        if phase != "neutral":
+            require(geometry.claim(b, 1, 1, now, guard["gun"]["item"]) == guard["gun"],
+                    "neutral handoff right gun custody changed")
+        return dict(phase=phase, sameCompletedDebt=True)
+
+    def run_neutral_handoff(self):
+        # This is an optional successful-operation transition, never failure
+        # cleanup. Preserve the original invocation and source/ACK deadlines.
+        require(self.family == "bolt" and self.debt is not None
+                and self.debt.get("readyReceipt") is not None
+                and not (self.pending_command or self.unsafe_owner),
+                "neutral handoff requires a settled completed bolt invocation")
+        returned = next((b["result"] for b in reversed(self.boundaries)
+                         if b["name"] == "right_gun_and_support_returned"), None)
+        require(returned is not None and returned["support"]["prerequisiteClaim"] == returned["gun"]["id"],
+                "neutral handoff lacks this invocation's returned gun/support")
+        holster = geometry.shared("bc2_holster_core")
+        self.handoff_guard = dict(owner=copy.deepcopy(self.anchor),
+                                  gun=returned["gun"], support=returned["support"])
+        try:
+            s, _, _ = self.boundary("before_neutral_handoff", lambda s, n:
+                                    self.handoff_snapshot(s, n, "support"))
+            self.handoff_phase = "support"
+            self.command(control="grip l", value=0, source=self.snapshot_source_deadline(s))
+            self.handoff_phase = None
+            s, _, _ = self.boundary("neutral_handoff_support_released", lambda s, n:
+                                    self.handoff_snapshot(s, n, "gun"))
+            self.handoff_phase = "gun"
+            self.command(control="grip r", value=0, source=self.snapshot_source_deadline(s))
+            self.handoff_phase = None
+
+            def neutral(s, n):
+                self.handoff_snapshot(s, n, "neutral")
+                h = holster.holster_proof(s, n)
+                holster.OrdinaryHolsterDriver.require_held(self, s)
+                geometry.wait_for(h["neutralTrackedInput"] is True and holster.neutral(s["input"]),
+                                  "neutral handoff fresh neutral input pending")
+                require(h["physicalGun"] == returned["gun"]["item"]
+                        and ordinary.neutral_controls(self.state["controls"])
+                        and integer(h["inputEvidence"]["observedNs"]) >= self.last_write
+                        and not (self.pending_command or self.unsafe_owner),
+                        "neutral handoff lacks acknowledged same-gun neutral observation")
+                return dict(neutral=True, gun=h["rightClaim"]["token"],
+                            completedDebtRetained=True, holsterEntryObserved=True)
+
+            self.boundary("neutral_handoff_completed", neutral)
+            self.neutral_handoff_completed = True
+        finally:
+            self.handoff_phase = None
 
     def cleanup_owned(self):
         if self.pending_command or self.unsafe_owner:
@@ -542,15 +626,21 @@ def main(argv=None):
     parser.add_argument("--mode", choices=("magazine", "prep-shot-bolt", "shot-bolt", "bolt"), required=True)
     parser.add_argument("--fire-clearance", type=Path)
     parser.add_argument("--magazine-result", type=Path)
+    parser.add_argument("--neutral-handoff", action="store_true",
+                        help="after a completed bolt return, release owned grips and observe neutral holster entry")
     parser.add_argument("--root-authorized-ordinary-input", action="store_true")
     args = parser.parse_args(argv)
     result = dict(schema="bc2vr.magazine-bolt-stimulus-result.v1", status="refused",
                   stimulusCompleted=False, nativeAcceptance=False, headsetAcceptance=False,
                   shotAllThreeCopiesVerified=False, mode=args.mode,
+                  boltCycleCompleted=False,
+                  neutralHandoffRequested=args.neutral_handoff, neutralHandoffCompleted=False,
                   preparationOnly=args.mode == "prep-shot-bolt", preparationCompleted=False)
     driver, code = None, 2
     try:
         require(args.root_authorized_ordinary_input, "ROOT ordinary-input authorization required")
+        require(not args.neutral_handoff or args.mode != "magazine",
+                "neutral handoff requires a bolt completion mode")
         driver = MagazineBoltDriver.__new__(MagazineBoltDriver)
         driver.__init__(args)
         if args.mode == "magazine":
@@ -563,6 +653,8 @@ def main(argv=None):
             driver.run_bolt()
             if args.mode == "prep-shot-bolt":
                 driver.finish_preparation()
+            if args.neutral_handoff:
+                driver.run_neutral_handoff()
         result.update(status="ordinary_preparation_completed" if args.mode == "prep-shot-bolt"
                       else "ordinary_stimulus_completed", stimulusCompleted=True,
                       preparationCompleted=args.mode == "prep-shot-bolt")
@@ -581,6 +673,8 @@ def main(argv=None):
                           pendingCommand=getattr(driver, "pending_command", False),
                           boundaries=getattr(driver, "boundaries", []),
                           retainedDebt=getattr(driver, "debt", None),
+                          boltCycleCompleted=getattr(driver, "bolt_cycle_completed", False),
+                          neutralHandoffCompleted=getattr(driver, "neutral_handoff_completed", False),
                           retainedGunRoot=getattr(driver, "gun_root", None))
             try:
                 driver.close()

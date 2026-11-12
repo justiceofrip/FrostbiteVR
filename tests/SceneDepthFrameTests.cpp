@@ -47,11 +47,11 @@ int Delivery(){ipc::RemoteFrameProvider host;CHECK(host.Create());ipc::FrameChan
     CHECK(producer.Publish(descriptor,ticket,nullptr,&depth)==ipc::ChannelResult::Ok);CHECK(host.TryGetCompletedPair(req,input,rendered,gotDescriptor,got));CHECK(host.ReadSceneDepth(gotDescriptor,got,observed));
     producer.Close();CHECK(!host.ReadSceneDepth(gotDescriptor,got,observed));return 0;
 }
-int DepthImportCacheCases(){
+int DepthImportCacheCases(unsigned samples,unsigned quality){
     SceneDepthImportPolicy cache;SceneDepthImportPolicy::Selection selected;
-    auto a=Descriptor();auto ta=Ticket(a);auto da=MakeDepth(a,ta);da.samples=1;
+    auto a=Descriptor();auto ta=Ticket(a);auto da=MakeDepth(a,ta);da.samples=samples;da.quality=quality;
     auto b=a;b.resourceEpoch=3;const std::array<std::uint64_t,2> ids{21,22};std::memcpy(b.session.data(),ids.data(),16);
-    auto tb=Ticket(b);auto db=MakeDepth(b,tb);db.samples=1;db.resources={{{201,202},{203,204}}};
+    auto tb=Ticket(b);auto db=MakeDepth(b,tb);db.samples=samples;db.quality=quality;db.resources={{{201,202},{203,204}}};
     CHECK(cache.Select(da,a,ta,0,2,selected)&&selected.openSources&&selected.createLocal&&selected.resetImports);
     CHECK(cache.Commit(selected));
     CHECK(!cache.Select(da,a,ta,0,2,selected)); // Duplicate does not queue a second depth copy.
@@ -64,8 +64,8 @@ int DepthImportCacheCases(){
     CHECK(!cache.Select(db,b,tb,1,2,selected));
     ++tb.sequence;++tb.frameId;db.color=tb;
     auto wrong=db;wrong.color=ta;CHECK(!cache.Select(wrong,b,tb,1,2,selected));
-    wrong=db;wrong.samples=8;CHECK(!cache.Select(wrong,b,tb,1,2,selected));
-    wrong=db;wrong.quality=1;CHECK(!cache.Select(wrong,b,tb,1,2,selected));
+    wrong=db;wrong.samples=samples==8?1:8;CHECK(!cache.Select(wrong,b,tb,1,2,selected));
+    wrong=db;++wrong.quality;CHECK(!cache.Select(wrong,b,tb,1,2,selected));
     wrong=db;wrong.resources[0][0]=da.resources[0][0];CHECK(!cache.Select(wrong,b,tb,1,2,selected));
     wrong=db;wrong.resources[0][0]=LegacyResourceIds(a)[0];CHECK(!cache.Select(wrong,b,tb,1,2,selected));
     wrong=db;--wrong.resourceGeneration;CHECK(!cache.Select(wrong,b,tb,1,2,selected));
@@ -80,7 +80,26 @@ int DepthImportCacheCases(){
     ++ta.sequence;da.color=ta;++da.resourceGeneration;
     CHECK(legacy.Select(da,a,ta,0,1,selected)&&selected.openSources&&!selected.createLocal);
     CHECK(!legacy.Select(da,a,ta,1,1,selected));
+    // The same exact shape can back all three imports and one local quartet.
+    SceneDepthImportPolicy three;
+    for(unsigned slot=0;slot<3;++slot){auto descriptor=a;descriptor.resourceEpoch+=slot;
+        const std::array<std::uint64_t,2> colors{501+100*slot,502+100*slot};std::memcpy(descriptor.session.data(),colors.data(),16);
+        auto ticket=Ticket(descriptor);auto depth=MakeDepth(descriptor,ticket);depth.samples=samples;depth.quality=quality;
+        depth.resources={{{503+100*slot,504+100*slot},{505+100*slot,506+100*slot}}};
+        CHECK(three.Select(depth,descriptor,ticket,slot,3,selected)&&selected.createLocal==(slot==0)&&three.Commit(selected));
+    }
     return 0;
+}
+
+int PipelineDepthBudgetCases(){
+    CHECK(PipelineTextureBytes(1024,768,3,8)==315ull*1024*1024);
+    CHECK(PipelineTextureBytes(1024,768,3,1)==63ull*1024*1024);
+    CHECK(PipelineTextureBytes(1024,768,2,8)==213ull*1024*1024);
+    CHECK(PipelineTextureBytes(1920,1080,3,8)>768ull*1024*1024);
+    CHECK(PipelineTextureBytes(1920,1080,2,8)>512ull*1024*1024);
+    CHECK(PipelineTextureBytes(UINT32_MAX,UINT32_MAX,3,8)==UINT64_MAX);
+    for(unsigned samples:{0u,3u,16u,32u})CHECK(!PipelineDepthSamples(samples,0));
+    CHECK(!PipelineDepthSamples(1,1)&&PipelineDepthSamples(8,1));return 0;
 }
 
 int LegacyDepthAllocationCases(){
@@ -200,4 +219,6 @@ int DeferredDepthAdmissionCases(){
     return 0;
 }
 
-int main(){if(DeferredDepthAdmissionCases()||DepthImportCacheCases()||LegacyDepthAllocationCases())return 1;if(Shape()||Delivery())return 1;std::cout<<"SceneDepthFrame: exact attachment and bounded pre-world-copy admission passed; no GPU/native proof\n";}
+int main(){for(unsigned samples:{1u,2u,4u,8u})if(DepthImportCacheCases(samples,0))return 1;
+    if(DepthImportCacheCases(8,1)||PipelineDepthBudgetCases()||DeferredDepthAdmissionCases()||LegacyDepthAllocationCases())return 1;
+    if(Shape()||Delivery())return 1;std::cout<<"SceneDepthFrame: exact attachment and bounded pre-world-copy admission passed; no GPU/native proof\n";}

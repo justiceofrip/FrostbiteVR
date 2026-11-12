@@ -21,13 +21,17 @@ struct ChestKnifeMotionIdentity {
 class ChestKnifeMotionCalibration {
 public:
     const math::Matrix4* Update(const std::optional<ChestKnifeMotionIdentity>& identity,
-        const std::optional<math::Matrix4>& measured,bool& continuous)noexcept {
+        const std::optional<math::Matrix4>& measured,bool& continuous,
+        interaction::KnifeMotionCalibrationReason* observation=nullptr)noexcept {
+        using Reason=interaction::KnifeMotionCalibrationReason;
+        const auto reason=[&](Reason value){if(observation)*observation=value;};
         continuous=identity_&&identity&&*identity_==*identity;
+        reason(continuous?Reason::Continuous:identity_?Reason::IdentityChanged:Reason::Initial);
         if(!continuous)Reset();
-        if(!identity)return nullptr;
+        if(!identity){reason(Reason::IdentityMissing);return nullptr;}
         if(measured){
             if(measured->values[3]!=std::array<float,4>{0,0,0,1}||!interaction::InverseRigid(*measured)){
-                Reset();continuous=false;return nullptr;
+                Reset();continuous=false;reason(Reason::MeasurementInvalid);return nullptr;
             }
             if(rotation_){
                 // Allow only floating-point composition noise. Always retain
@@ -35,10 +39,11 @@ public:
                 bool same=true;
                 for(unsigned r=0;r<3;++r)for(unsigned c=0;c<3;++c)
                     same&=std::abs(rotation_->values[r][c]-measured->values[r][c])<=1.e-4f;
-                if(!same){Reset();continuous=false;}
+                if(!same){Reset();continuous=false;reason(Reason::MeasurementChanged);}
             }
             if(!rotation_){identity_=identity;rotation_=measured;}
         }
+        if(!rotation_&&observation&&*observation==Reason::Initial)reason(Reason::MeasurementMissing);
         return rotation_?&*rotation_:nullptr;
     }
     void Reset()noexcept{identity_.reset();rotation_.reset();}
@@ -52,11 +57,16 @@ private:
 inline void PrepareChestKnifeMotionSource(ChestKnifeMotionCalibration& calibration,
     interaction::ChestKnifeCustody& policy,std::optional<ChestKnifeMotionIdentity> identity,
     const std::optional<math::Matrix4>& measured,const interaction::InputFrame& input,
-    bool nativeAttackReady,interaction::KnifeSample& sample)noexcept {
+    bool nativeAttackReady,interaction::KnifeSample& sample,
+    interaction::KnifeRecognitionCoordinator* observation=nullptr)noexcept {
+    using Reason=interaction::KnifeMotionProjectionReason;
     const auto phase=policy.Phase();
-    if(phase!=interaction::KnifePhase::Held&&phase!=interaction::KnifePhase::AttackStaged)identity.reset();
+    const bool phaseAllowed=phase==interaction::KnifePhase::Held||phase==interaction::KnifePhase::AttackStaged;
+    if(!phaseAllowed)identity.reset();
     bool continuous=false;
-    const auto wrist=calibration.Update(identity,measured,continuous);
+    const auto wrist=calibration.Update(identity,measured,continuous,observation?&observation->calibration:nullptr);
+    if(observation){observation->calibrationContinuous=continuous;
+        observation->projection=!phaseAllowed?Reason::Phase:!wrist?Reason::Calibration:Reason::Geometry;}
     if(!continuous)policy.InvalidateMotion();
     // Calibration carries no pose or lease: derive every point from this
     // gather's original grip and require its measured receipt for admission.
@@ -66,7 +76,9 @@ inline void PrepareChestKnifeMotionSource(ChestKnifeMotionCalibration& calibrati
         sample.tip=motion->tip;sample.direction=motion->direction;
         sample.motionTrackingReady=phase==interaction::KnifePhase::Held;
         sample.nativeAttackReady=measured.has_value()&&nativeAttackReady;
+        if(observation)observation->projection=Reason::Ready;
     }else {calibration.Reset();policy.InvalidateMotion();}
+    if(observation){observation->trackingReady=sample.motionTrackingReady;observation->attackReady=sample.nativeAttackReady;}
 }
 // Actual gather coordinator. Owns no transport, hand allocator or inventory.
 // Tick follows current suppression + TickHolster, before Tracking publication.

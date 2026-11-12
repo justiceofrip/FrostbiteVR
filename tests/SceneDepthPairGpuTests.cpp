@@ -10,8 +10,10 @@
 #include "Test.h"
 #include "../src/games/bc2/Bc2ProcessRetainedFrameBridge.h"
 #include <cstdlib>
+#include <cmath>
 #include <Windows.h>
 #include <d3d11.h>
+#include <d3dcompiler.h>
 #include <wrl/client.h>
 #include <array>
 #include <iostream>
@@ -667,7 +669,53 @@ int RunOrderedComposition(unsigned samples,bool reversed){using namespace fvr;
 }
 
 // Real two-device v9 resources. No game, simulation, XR session or desktop Present.
-int RunTwoSlotBridge(bool exportOverlap=false,bool thirdSource=false){using namespace fvr;
+// Test-only per-sample depth pattern and readback. No resolve: each sample is
+// written differently and read by its exact Texture2DMS index into a buffer.
+struct PipelineDepthProbe {
+ ComPtr<ID3D11VertexShader> vertex;ComPtr<ID3D11PixelShader> pixel;ComPtr<ID3D11ComputeShader> readback;
+ ComPtr<ID3D11Buffer> constants,values,staging;ComPtr<ID3D11UnorderedAccessView> output;
+ ComPtr<ID3D11DepthStencilState> depthState;ComPtr<ID3D11RasterizerState> raster;
+ bool Initialize(ID3D11Device* native,ID3D11Device* host){
+  const char* vs="float4 main(uint i:SV_VertexID):SV_Position{return float4(i==2?3:-1,i==1?3:-1,0,1);}";
+  const char* ps="cbuffer P:register(b0){float base;float3 pad;} float main(uint s:SV_SampleIndex):SV_Depth{return base+float(s)*.001;}";
+  const char* cs="Texture2DMS<float> source:register(t0);RWStructuredBuffer<float> values:register(u0);[numthreads(8,1,1)] void main(uint3 id:SV_DispatchThreadID){uint w,h,n;source.GetDimensions(w,h,n);if(id.x<n)values[id.x]=source.Load(int2(16,16),id.x);}";
+  const auto compile=[](const char* source,const char* profile,ComPtr<ID3DBlob>& code){return SUCCEEDED(D3DCompile(source,std::strlen(source),nullptr,nullptr,nullptr,"main",profile,0,0,&code,nullptr));};
+  ComPtr<ID3DBlob> code;
+  if(!compile(vs,"vs_5_0",code)||FAILED(native->CreateVertexShader(code->GetBufferPointer(),code->GetBufferSize(),nullptr,&vertex)))return false;
+  code.Reset();if(!compile(ps,"ps_5_0",code)||FAILED(native->CreatePixelShader(code->GetBufferPointer(),code->GetBufferSize(),nullptr,&pixel)))return false;
+  code.Reset();if(!compile(cs,"cs_5_0",code)||FAILED(host->CreateComputeShader(code->GetBufferPointer(),code->GetBufferSize(),nullptr,&readback)))return false;
+  D3D11_BUFFER_DESC desc{};desc.ByteWidth=16;desc.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
+  if(FAILED(native->CreateBuffer(&desc,nullptr,&constants)))return false;
+  desc.ByteWidth=8*sizeof(float);desc.BindFlags=D3D11_BIND_UNORDERED_ACCESS;desc.MiscFlags=D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;desc.StructureByteStride=sizeof(float);
+  if(FAILED(host->CreateBuffer(&desc,nullptr,&values))||FAILED(host->CreateUnorderedAccessView(values.Get(),nullptr,&output)))return false;
+  desc.BindFlags=desc.MiscFlags=desc.StructureByteStride=0;desc.Usage=D3D11_USAGE_STAGING;desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
+  if(FAILED(host->CreateBuffer(&desc,nullptr,&staging)))return false;
+  D3D11_DEPTH_STENCIL_DESC ds{};ds.DepthEnable=true;ds.DepthWriteMask=D3D11_DEPTH_WRITE_MASK_ALL;ds.DepthFunc=D3D11_COMPARISON_ALWAYS;
+  D3D11_RASTERIZER_DESC rs{};rs.FillMode=D3D11_FILL_SOLID;rs.CullMode=D3D11_CULL_NONE;rs.DepthClipEnable=true;rs.MultisampleEnable=true;
+  return SUCCEEDED(native->CreateDepthStencilState(&ds,&depthState))&&SUCCEEDED(native->CreateRasterizerState(&rs,&raster));
+ }
+ void Write(ID3D11DeviceContext* context,ID3D11DepthStencilView* target,float value){
+  const float params[4]{value,0,0,0};context->UpdateSubresource(constants.Get(),0,nullptr,params,0,0);
+  D3D11_VIEWPORT viewport{0,0,32,32,0,1};context->RSSetViewports(1,&viewport);context->RSSetState(raster.Get());
+  context->IASetInputLayout(nullptr);context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+  context->VSSetShader(vertex.Get(),nullptr,0);context->PSSetShader(pixel.Get(),nullptr,0);
+  auto* cb=constants.Get();context->PSSetConstantBuffers(0,1,&cb);context->OMSetDepthStencilState(depthState.Get(),0);
+  context->OMSetBlendState(nullptr,nullptr,UINT_MAX);context->OMSetRenderTargets(0,nullptr,target);context->Draw(3,0);
+  context->OMSetRenderTargets(0,nullptr,nullptr);
+ }
+ bool Read(ID3D11DeviceContext* context,ID3D11ShaderResourceView* source,unsigned samples,float expected){
+  auto* uav=output.Get();context->CSSetShader(readback.Get(),nullptr,0);context->CSSetShaderResources(0,1,&source);
+  context->CSSetUnorderedAccessViews(0,1,&uav,nullptr);context->Dispatch(1,1,1);
+  ID3D11ShaderResourceView* empty=nullptr;ID3D11UnorderedAccessView* noOutput=nullptr;
+  context->CSSetShaderResources(0,1,&empty);context->CSSetUnorderedAccessViews(0,1,&noOutput,nullptr);
+  context->CopyResource(staging.Get(),values.Get());D3D11_MAPPED_SUBRESOURCE map{};
+  if(FAILED(context->Map(staging.Get(),0,D3D11_MAP_READ,0,&map)))return false;
+  bool okay=true;const auto* data=static_cast<const float*>(map.pData);
+  for(unsigned sample=0;sample<samples;++sample)if(std::abs(data[sample]-(expected+.001f*sample))>.000001f)okay=false;
+  context->Unmap(staging.Get(),0);return okay;
+ }
+};
+int RunTwoSlotBridge(bool exportOverlap=false,bool thirdSource=false,unsigned samples=1){using namespace fvr;
  CHECK(!thirdSource||exportOverlap);const unsigned sourceSlots=thirdSource?3u:2u;
  const wchar_t* name=L"FVR_PRIVATE_TWO_SOURCE_SLOTS";wchar_t saved[32768]{};
  const auto length=GetEnvironmentVariableW(name,saved,unsigned(std::size(saved)));CHECK(length<std::size(saved));
@@ -689,12 +737,14 @@ int RunTwoSlotBridge(bool exportOverlap=false,bool thirdSource=false){using name
  ComPtr<IDXGISwapChain> chain;CHECK(SUCCEEDED(factory->CreateSwapChain(nativeDevice.Get(),&swap,&chain)));
  Color desktop;CHECK(SUCCEEDED(chain->GetBuffer(0,IID_PPV_ARGS(&desktop.texture))));
  std::array<Color,2> native,copied;for(unsigned eye=0;eye<2;++eye)CHECK(MakeColor(nativeDevice.Get(),native[eye])&&MakeColor(hostDevice.Get(),copied[eye]));
- D3D11_TEXTURE2D_DESC depthDesc{};depthDesc.Width=depthDesc.Height=32;depthDesc.MipLevels=depthDesc.ArraySize=depthDesc.SampleDesc.Count=1;
+ D3D11_TEXTURE2D_DESC depthDesc{};depthDesc.Width=depthDesc.Height=32;depthDesc.MipLevels=depthDesc.ArraySize=1;depthDesc.SampleDesc.Count=samples;
  depthDesc.Format=DXGI_FORMAT_R24G8_TYPELESS;depthDesc.BindFlags=D3D11_BIND_DEPTH_STENCIL;
  ComPtr<ID3D11Texture2D> depthTexture;ComPtr<ID3D11DepthStencilView> depthTarget;
  CHECK(SUCCEEDED(nativeDevice->CreateTexture2D(&depthDesc,nullptr,&depthTexture)));
- D3D11_DEPTH_STENCIL_VIEW_DESC dsv{};dsv.Format=DXGI_FORMAT_D24_UNORM_S8_UINT;dsv.ViewDimension=D3D11_DSV_DIMENSION_TEXTURE2D;
+ D3D11_DEPTH_STENCIL_VIEW_DESC dsv{};dsv.Format=DXGI_FORMAT_D24_UNORM_S8_UINT;
+ dsv.ViewDimension=samples==1?D3D11_DSV_DIMENSION_TEXTURE2D:D3D11_DSV_DIMENSION_TEXTURE2DMS;
  CHECK(SUCCEEDED(nativeDevice->CreateDepthStencilView(depthTexture.Get(),&dsv,&depthTarget)));
+ PipelineDepthProbe sampleProbe;if(samples>1)CHECK(sampleProbe.Initialize(nativeDevice.Get(),hostDevice.Get()));
  std::array<D3D11PairConsumer,3> readers;D3D11SceneDepthConsumer depths;CHECK(depths.Initialize(hostDevice.Get()));
  ipc::RemoteFrameProvider host;CHECK(host.Create(true,exportOverlap,exportOverlap,thirdSource)&&host.SourceSlotCount()==sourceSlots&&host.SetRequestLifetime(200));
  CHECK(host.LookaheadEnabled()==exportOverlap&&host.ExportOverlapEnabled()==exportOverlap);
@@ -749,6 +799,7 @@ int RunTwoSlotBridge(bool exportOverlap=false,bool thirdSource=false){using name
     if(!exportOverlap&&(step==1||(step==2&&(eye||stage))))continue;
     const float value=.10f+.15f*float(step)+.01f*float(eye*2+stage);
     nativeContext->ClearDepthStencilView(depthTarget.Get(),D3D11_CLEAR_DEPTH,value,0);
+    if(samples>1)sampleProbe.Write(nativeContext.Get(),depthTarget.Get(),value);
     if(step==0&&!eye&&!stage){
      if(!admission.BeforeWorldCopy(key,beginDepth)||admissionAttempts!=2||depthBegins!=1||
         !D3D11FrameBridgeTestAccess::Prepared(bridge,lease))return false;
@@ -774,7 +825,15 @@ int RunTwoSlotBridge(bool exportOverlap=false,bool thirdSource=false){using name
   if(!host.ReadSourceSlot(t,identity)||identity.slotCount!=sourceSlots||identity.slot>=sourceSlots||identity.depthPresent!=expectedDepth)return false;
   const bool hasDepth=host.ReadSceneDepth(d,t,frame);
   if(expectedDepth){
-   if(!hasDepth||frame.samples!=1||frame.quality||!depths.CopyBeforeColor(frame,d,t,identity.slot,sourceSlots)||!depths.Views(t,views))return false;
+   if(!hasDepth||frame.samples!=samples||frame.quality)return false;
+   auto alias=frame;alias.resources[1][1]=alias.resources[0][0];
+   if(depths.CopyBeforeColor(alias,d,t,identity.slot,sourceSlots))return false;
+   if(step==0){D3D11SceneDepthConsumer rejected; if(!rejected.Initialize(hostDevice.Get()))return false;
+    auto unsupported=frame;unsupported.samples=16;if(rejected.CopyBeforeColor(unsupported,d,t,identity.slot,sourceSlots))return false;
+    unsupported=frame;++unsupported.quality;if(rejected.CopyBeforeColor(unsupported,d,t,identity.slot,sourceSlots))return false;
+    if(rejected.ImportStatistics().localCreates)return false;
+   }
+   if(!depths.CopyBeforeColor(frame,d,t,identity.slot,sourceSlots)||!depths.Views(t,views))return false;
   }else if(hasDepth||!SceneDepthAbsent(frame)||depths.Views(t,views))return false;
   auto& reader=readers[identity.slot];
   // Open is intentionally explicit here; the separate host cache test owns hit accounting.
@@ -783,6 +842,8 @@ int RunTwoSlotBridge(bool exportOverlap=false,bool thirdSource=false){using name
   for(unsigned eye=0;eye<2;++eye){if(Pixel(hostDevice.Get(),hostContext.Get(),copied[eye])!=pixels[(step+eye)%3])return false;
    for(unsigned stage=0;expectedDepth&&stage<2;++stage){ComPtr<ID3D11Resource> resource;views.eyes[eye][stage]->GetResource(&resource);ComPtr<ID3D11Texture2D> local;
     if(FAILED(resource.As(&local)))return false;D3D11_TEXTURE2D_DESC shape{};local->GetDesc(&shape);
+    if(shape.SampleDesc.Count!=samples||shape.SampleDesc.Quality)return false;
+    if(samples>1){if(!sampleProbe.Read(hostContext.Get(),views.eyes[eye][stage],samples,.10f+.15f*float(step)+.01f*float(eye*2+stage)))return false;continue;}
     shape.BindFlags=shape.MiscFlags=0;shape.Usage=D3D11_USAGE_STAGING;shape.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
     ComPtr<ID3D11Texture2D> staging;if(FAILED(hostDevice->CreateTexture2D(&shape,nullptr,&staging)))return false;
     hostContext->CopyResource(staging.Get(),local.Get());D3D11_MAPPED_SUBRESOURCE map{};
@@ -844,21 +905,23 @@ int RunTwoSlotBridge(bool exportOverlap=false,bool thirdSource=false){using name
   CHECK(completed==6&&!bridge.SlotTimingSnapshot(3,timing));
   host.Suspend();bridge.CloseGraphics();host.Close();const auto evidence=bridge.PipelineSnapshot(true);
   CHECK(evidence.configured&&evidence.available&&evidence.exportOverlap&&evidence.allocationAdmitted&&evidence.sourceSlots==3);
-  CHECK(evidence.LogicalTextureCount()==21&&evidence.LogicalByteLimit()==768ull*1024*1024&&evidence.logicalReservationBytes==32u*32u*4u*21u);
+  CHECK(evidence.LogicalTextureCount()==21&&evidence.LogicalByteLimit()==768ull*1024*1024&&evidence.logicalReservationBytes==PipelineTextureBytes(32,32,3,samples));
+  CHECK(evidence.depthSamples==samples&&!evidence.depthQuality&&!evidence.firstDepthRejection.present);
   CHECK(evidence.rejectedFeedback==0&&evidence.budgetChecks==(evidence.budgetAvailable?6u:0u));
   CHECK(evidence.slots[a.sourceSlot].generations==1&&evidence.slots[b.sourceSlot].generations==1&&evidence.slots[c.sourceSlot].generations==2);
   std::array<std::uint64_t,18> resources{};unsigned resourceCount=0;
   const std::array<ipc::FrameLease,3> lastLeases{d,e,f};
   for(const auto& lease:lastLeases){const auto& slot=evidence.slots[lease.sourceSlot];const auto& proof=slot.lastPublication;
    CHECK(slot.eyeCopies==4&&slot.depthCopies==8&&proof.present&&proof.key.request==lease.requestId&&proof.ticket.frameId==lease.native.frameId);
-   CHECK(SceneDepthMatches(proof.depth,proof.color,proof.ticket)&&proof.depth.samples==1&&proof.depth.quality==0&&proof.observedQpc>0);
+   CHECK(SceneDepthMatches(proof.depth,proof.color,proof.ticket)&&proof.depth.samples==samples&&proof.depth.quality==0&&proof.observedQpc>0);
    for(const auto id:LegacyResourceIds(proof.color))resources[resourceCount++]=id;
    for(const auto& eye:proof.depth.resources)for(const auto id:eye)resources[resourceCount++]=id;
   }
   CHECK(resourceCount==resources.size());for(unsigned i=0;i<resourceCount;++i){CHECK(resources[i]);for(unsigned j=0;j<i;++j)CHECK(resources[i]!=resources[j]);}
   CHECK(!bridge.PipelineSnapshot(false).slots[2].lastPublication.present);
   std::ostringstream json;evidence.Write(json);CHECK(json.str().find("fvr.native-three-source-slots.v1")!=std::string::npos&&json.str().find("\"source_slots\":3")!=std::string::npos);
-  std::cout<<"Three native source slots GPU: held A/B/C, exact original poses/color/depth, ABC-to-A reuse, third-generation retirement and mirror passed\n";
+  CHECK(depths.ImportStatistics().sourceOpens==16&&depths.ImportStatistics().localCreates==4);
+  std::cout<<"Three native source slots GPU samples="<<samples<<": held A/B/C, exact original poses/color/every depth sample, ABC-to-A reuse, third-generation retirement and mirror passed\n";
   return 0;
  }
  if(exportOverlap){
@@ -902,7 +965,9 @@ int RunTwoSlotBridge(bool exportOverlap=false,bool thirdSource=false){using name
    CHECK(evidence.exportOverlap&&evidence.rejectedFeedback==0&&evidence.captureReleaseDeclined==0);
   CHECK(!released||evidence.captureReleases>0);
   CHECK(evidence.slots[0].eyeCopies+evidence.slots[1].eyeCopies==4&&evidence.slots[0].depthCopies+evidence.slots[1].depthCopies==8);
-  std::cout<<"Export-overlap GPU: original A color/depth after B capture overwrite, exact poses/ACK, pre-publication capture release="<<released<<", real-query fast path allowed\n";
+  CHECK(evidence.logicalReservationBytes==PipelineTextureBytes(32,32,2,samples)&&evidence.depthSamples==samples);
+  CHECK(depths.ImportStatistics().sourceOpens==8&&depths.ImportStatistics().localCreates==4);
+  std::cout<<"Export-overlap GPU samples="<<samples<<": original A color/depth after B capture overwrite, exact poses/ACK, pre-publication capture release="<<released<<", real-query fast path allowed\n";
   return 0;
  }
  CHECK(!host.TryGetCompletedPair(req,input,rendered,descriptor,ticket));
@@ -949,44 +1014,61 @@ int RunTwoSlotBridge(bool exportOverlap=false,bool thirdSource=false){using name
  CHECK(bridge.SlotTimingSnapshot(1,timing)&&timing.unmatched==0&&completed0+timing.completed==5);
  host.Suspend();bridge.CloseGraphics();host.Close();
  const auto evidence=bridge.PipelineSnapshot(true);
- CHECK(evidence.configured&&evidence.available&&evidence.allocationAdmitted&&evidence.logicalReservationBytes==32u*32u*4u*15u);
+ CHECK(evidence.configured&&evidence.available&&evidence.allocationAdmitted&&evidence.logicalReservationBytes==PipelineTextureBytes(32,32,2,samples));
+ CHECK(evidence.depthSamples==samples&&!evidence.firstDepthRejection.present);
  CHECK(evidence.rejectedFeedback==0&&evidence.slots[a.sourceSlot].generations==1&&evidence.slots[b.sourceSlot].generations==2);
  const auto& aProof=evidence.slots[a.sourceSlot].lastPublication;const auto& bProof=evidence.slots[b.sourceSlot].lastPublication;
  CHECK(aProof.present&&bProof.present&&aProof.key.request==c.requestId&&bProof.key.request==d.requestId);
  CHECK(aProof.ticket.frameId==c.native.frameId&&bProof.ticket.frameId==d.native.frameId);
  CHECK(SceneDepthAbsent(aProof.depth)&&SceneDepthMatches(bProof.depth,bProof.color,bProof.ticket));
- CHECK(bProof.depth.samples==1&&LegacyResourceIds(aProof.color)!=LegacyResourceIds(bProof.color));
+ CHECK(bProof.depth.samples==samples&&LegacyResourceIds(aProof.color)!=LegacyResourceIds(bProof.color));
  CHECK(aProof.observedQpc>0&&bProof.observedQpc>0&&!bridge.PipelineSnapshot(false).slots[0].lastPublication.present);
  CHECK(evidence.budgetChecks==(evidence.budgetAvailable?4u:0u)); // Initial + first A depth + B color recreation + first B depth.
  CHECK(evidence.slots[0].eyeCopies+evidence.slots[1].eyeCopies==8&&evidence.slots[0].depthCopies+evidence.slots[1].depthCopies==9);
  // Each rejection is a separate channel lifetime. Never reuse failed sources.
  CHECK(SetEnvironmentVariableW(name,L"1"));
- for(unsigned fault=0;fault<3;++fault){
+ for(unsigned fault=0;fault<6;++fault){
   ipc::RemoteFrameProvider rejectedHost;CHECK(rejectedHost.Create(true));auto rejectedStorage=std::make_unique<D3D11FrameBridge>();auto& rejected=*rejectedStorage;
   CHECK(rejected.ConnectGraphics(nativeDevice.Get(),rejectedHost.Token(),FrameSharingPreference::LegacyIpc));
   auto requested=req;if(fault==0)requested.width=requested.height=4096; // Channel rejects above its source-set cap before bridge allocation.
+  if(fault==4){requested.width=1920;requested.height=1080;}
   CHECK(!rejectedHost.TryGetCompletedPair(requested,input,rendered,descriptor,ticket));ipc::FrameLease lease;
   if(fault==0){CHECK(!rejected.TryBegin({19,1,1},lease)&&!rejected.Fatal());}
   else {
    CHECK(rejected.TryBegin({19,1,1},lease));
    CHECK(rejected.BeginDepthCapture(lease,false));
-   if(fault==1){auto multisample=depthDesc;multisample.SampleDesc.Count=2;ComPtr<ID3D11Texture2D> source;
-    CHECK(SUCCEEDED(nativeDevice->CreateTexture2D(&multisample,nullptr,&source)));
+   if(fault==1){auto unsupported=depthDesc;unsupported.ArraySize=2;ComPtr<ID3D11Texture2D> source;
+    CHECK(SUCCEEDED(nativeDevice->CreateTexture2D(&unsupported,nullptr,&source)));
     CHECK(!rejected.CaptureDepth(0,0,source.Get(),lease)&&rejected.FailureStage()==22);
-   }else{
+   }else if(fault==2){
     bool foreignAccepted=true;std::thread foreign([&]{foreignAccepted=rejected.CaptureEye(0,native[0].texture.Get(),lease);});foreign.join();
     CHECK(!foreignAccepted&&rejected.CapturedEyes()==0&&!rejected.Fatal());
     CHECK(!rejected.CaptureEye(0,copied[0].texture.Get(),lease)&&rejected.FailureStage()==22); // Wrong device.
+   }else if(fault==3){ComPtr<ID3D11Texture2D> source;CHECK(SUCCEEDED(hostDevice->CreateTexture2D(&depthDesc,nullptr,&source)));
+    CHECK(!rejected.CaptureDepth(0,0,source.Get(),lease)&&rejected.FailureStage()==22);
+   }else if(fault==4){auto oversized=depthDesc;oversized.Width=requested.width;oversized.Height=requested.height;oversized.SampleDesc.Count=8;
+    ComPtr<ID3D11Texture2D> source;CHECK(SUCCEEDED(nativeDevice->CreateTexture2D(&oversized,nullptr,&source)));
+    CHECK(!rejected.CaptureDepth(0,0,source.Get(),lease)&&rejected.FailureStage()==21);
+   }else{CHECK(rejected.CaptureDepth(0,0,depthTexture.Get(),lease));
+    auto changed=depthDesc;changed.SampleDesc.Count=samples==1?8:1;ComPtr<ID3D11Texture2D> source;
+    CHECK(SUCCEEDED(nativeDevice->CreateTexture2D(&changed,nullptr,&source)));
+    CHECK(!rejected.CaptureDepth(0,1,source.Get(),lease)&&rejected.FailureStage()==22);
    }
   }
   if(fault!=0)rejected.Cancel(lease);rejected.PumpGraphics();rejectedHost.Suspend();rejected.CloseGraphics();rejectedHost.Close();
   const auto rejectedProof=rejected.PipelineSnapshot(true);
-  CHECK(rejected.Published()==0&&rejected.CapturedEyes()==0&&rejectedProof.slots[0].depthCopies+rejectedProof.slots[1].depthCopies==0);
+  CHECK(rejected.Published()==0&&rejected.CapturedEyes()==0&&rejectedProof.slots[0].depthCopies+rejectedProof.slots[1].depthCopies==(fault==5?1u:0u));
   if(fault==0)CHECK(!rejectedProof.allocationAdmitted&&rejectedProof.slots[0].generations==0&&rejectedProof.slots[1].generations==0);
+  if(fault==1||fault>=3){const auto& failure=rejectedProof.firstDepthRejection;
+   CHECK(failure.present&&failure.key.request==lease.requestId&&failure.key.frame==lease.native.frameId&&failure.observedQpc>0);
+   CHECK(std::string_view(failure.reason)==(fault==1?"descriptor":fault==3?"device":fault==4?"logical_budget":"pipeline_shape"));
+   CHECK(failure.descriptor.SampleDesc.Count==(fault==4?8u:fault==5?(samples==1?8u:1u):samples));
+  }
  }
  CHECK(SetEnvironmentVariableW(name,length?saved:nullptr));
  CHECK(!IsWindowVisible(window.value));
- std::cout<<"Two native source slots GPU: full/absent/partial-omitted/full depth, held A/B color, exact ACK/retirement, generation replacement and mirror passed\n";
+ CHECK(depths.ImportStatistics().sourceOpens==8&&depths.ImportStatistics().localCreates==4);
+ std::cout<<"Two native source slots GPU samples="<<samples<<": full/absent/partial-omitted/full depth, held A/B color, exact ACK/retirement, generation replacement and mirror passed\n";
  return 0;
 }
 
@@ -1272,7 +1354,9 @@ int main(int argc,char** argv){
 
  if(argc==2&&std::string_view(argv[1])=="--shutdown-lifetime"){for(unsigned slots:{1u,2u,3u})if(RunShutdownLifetime(slots))return 1;return 0;}
 if(argc==2&&std::string_view(argv[1])=="--legacy-depth-cache"){for(unsigned samples:{1u,2u,4u,8u})if(Run(samples))return 1;return 0;}
- if(RunTwoSlotBridge()||RunTwoSlotBridge(true)||RunTwoSlotBridge(true,true))return 1;if(RunBridgeWorldTransition(false)||RunBridgeWorldTransition(true))return 1;if(RunAsyncCopy())return 1;for(unsigned samples:{1u,8u})for(bool reversed:{false,true})if(RunOrderedComposition(samples,reversed))return 1;for(unsigned samples:{1u,2u,4u,8u})if(Run(samples))return 1;if(RunBridge()||RunEarlyAdmission())return 1;
+ if(argc==2&&std::string_view(argv[1])=="--pipeline-depth"){for(unsigned samples:{1u,8u})if(RunTwoSlotBridge(false,false,samples)||RunTwoSlotBridge(true,false,samples)||RunTwoSlotBridge(true,true,samples))return 1;return 0;}
+ for(unsigned samples:{1u,8u})if(RunTwoSlotBridge(false,false,samples)||RunTwoSlotBridge(true,false,samples)||RunTwoSlotBridge(true,true,samples))return 1;
+ if(RunBridgeWorldTransition(false)||RunBridgeWorldTransition(true))return 1;if(RunAsyncCopy())return 1;for(unsigned samples:{1u,8u})for(bool reversed:{false,true})if(RunOrderedComposition(samples,reversed))return 1;for(unsigned samples:{1u,2u,4u,8u})if(Run(samples))return 1;if(RunBridge()||RunEarlyAdmission())return 1;
  if(RunBridgeMirror(FrameSharingPreference::Automatic,1))return 1;
  if(RunBridgeMirror(FrameSharingPreference::LegacyRelay,2))return 1;
  return RunBridgeMirror(FrameSharingPreference::LegacyIpc,3);}

@@ -1,5 +1,6 @@
 #include "fvr/ipc/FramePipelineChannel.h"
 #include "fvr/ipc/FeedbackChannel.h"
+#include "fvr/graphics/SceneDepthImportPolicy.h"
 #include <Windows.h>
 #include <objbase.h>
 #include <cstring>
@@ -336,7 +337,7 @@ ChannelResult FramePipelineChannel::MarkCaptureReleased(const PipelineSlotKey& k
 ChannelResult FramePipelineChannel::Publish(const PipelineSlotKey& key,const graphics::TextureDescriptor& d,const graphics::PairTicket& t,
     const graphics::BodyPropFrame* props,const graphics::SceneDepthFrame* depth)noexcept {
     if(!state_||state_->host)return ChannelResult::Closed;
-    if(depth&&(depth->samples!=1||depth->quality||!graphics::SceneDepthMatches(*depth,d,t)))return ChannelResult::Invalid;
+    if(depth&&!graphics::PipelineSceneDepthMatches(*depth,d,t))return ChannelResult::Invalid;
     auto& s=*state_;State::Lock lock(s);if(!lock)return s.fault?ChannelResult::Closed:ChannelResult::Busy;if(!s.Peer())return ChannelResult::Closed;
     if(key.slot>=s.sourceCount)return ChannelResult::Invalid;
     // Defensive cross-slot resource proof. The bridge must enforce this BEFORE
@@ -348,6 +349,8 @@ ChannelResult FramePipelineChannel::Publish(const PipelineSlotKey& key,const gra
     for(unsigned other=0;other<s.sourceCount;++other)if(other!=key.slot&&s.shared->pipeline.slots[other].hasSource){
         const auto oldColors=graphics::LegacyResourceIds(s.shared->pipeline.slots[other].frame.descriptor);
         const auto& z=s.shared->depth[other];
+        if(depth&&!graphics::SceneDepthAbsent(z)&&
+           (depth->samples!=z.samples||depth->quality!=z.quality||depth->format!=z.format))return ChannelResult::Invalid;
         const std::array<std::uint64_t,6> held{oldColors[0],oldColors[1],z.resources[0][0],z.resources[0][1],z.resources[1][0],z.resources[1][1]};
         for(auto id:resources)if(id)for(auto old:held)if(old&&id==old)return ChannelResult::Invalid;
     }
@@ -402,14 +405,13 @@ bool FramePipelineChannel::ReadBodyProps(const graphics::PairTicket& t,graphics:
 }
 bool FramePipelineChannel::ReadSceneDepth(const graphics::TextureDescriptor& d,const graphics::PairTicket& t,graphics::SceneDepthFrame& out)noexcept {
     out={};if(!state_||!state_->host)return false;const auto& s=*state_;
-    if(!s.Delivered(t)||s.deliveredDepth.samples!=1||s.deliveredDepth.quality||!graphics::SceneDepthMatches(s.deliveredDepth,d,t))return false;out=s.deliveredDepth;return true;
+    if(!s.Delivered(t)||!graphics::PipelineSceneDepthMatches(s.deliveredDepth,d,t))return false;out=s.deliveredDepth;return true;
 }
 bool FramePipelineChannel::ReadSourceSlot(const graphics::PairTicket& t,runtime::SourceSlotIdentity& out)noexcept {
     out={};if(!state_||!state_->host)return false;const auto& s=*state_;
     if(!s.Delivered(t))return false;
     const bool absent=graphics::SceneDepthAbsent(s.deliveredDepth);
-    if(!absent&&(s.deliveredDepth.samples!=1||s.deliveredDepth.quality||
-        !graphics::SceneDepthMatches(s.deliveredDepth,s.deliveredDescriptor,t)))return false;
+    if(!absent&&!graphics::PipelineSceneDepthMatches(s.deliveredDepth,s.deliveredDescriptor,t))return false;
     out={s.session,s.deliveredKey.request,s.deliveredKey.slot,s.sourceCount,!absent};return true;
 }
 ChannelResult FramePipelineChannel::PublishInput(const interaction::InputFrame& input)noexcept {

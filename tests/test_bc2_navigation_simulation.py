@@ -730,9 +730,78 @@ class NavigationTests(unittest.TestCase):
         self.assertIn("explicit ROOT", result["error"])
         self.assertEqual(self.calls, [])
         with self.assertRaises(self.m.Refusal):
-            self.m.plan([dict(left=[0, 1], right=[0, 0], holdMs=501)])
+            self.m.plan([dict(left=[0, 1], right=[0, 0], holdMs=2001)])
         with self.assertRaises(self.m.Refusal):
             self.m.plan([dict(left=[0, 1], right=[0, 0], holdMs=150, commands=["trigger r 1"])])
+
+    def test_sustained_pulses_require_current_native_observation_and_original_total_budget(self):
+        for scenario in ("current", "missing", "native_focus_loss", "total_budget"):
+            with self.subTest(scenario=scenario):
+                if scenario != "current":
+                    self.setUp()  # Each assembled CLI owns a fresh isolated session.
+                self.rows = [dict(left=[0, .3], right=[0, 0], holdMs=2000) for _ in range(4)]
+                self.m.plan(self.rows)
+                with self.assertRaises(self.m.Refusal):
+                    self.m.plan(self.rows + [self.rows[0]])
+                if scenario == "missing":
+                    self.omit_response_from = 3
+                elif scenario == "native_focus_loss":
+                    self.snapshot_mutation = lambda sample, driver: (
+                        sample["input"].update(focused=False) if driver.snapshot_index >= 3 else None)
+                elif scenario == "total_budget":
+                    # Time already spent constructing this invocation belongs
+                    # to its original ten seconds, not a fresh per-pulse clock.
+                    self.read_delay = lambda path, driver: (
+                        7_000_000_000 if path.name == "run-manifest.json" else 0)
+                code, result = self.assembled()
+                driver = self.driver
+                self.assertEqual(driver.hard_deadline - driver.started, 10 * self.m.t.NS)
+                self.assertLess(self.clock.now, driver.hard_deadline)
+                self.assertFalse(result["normalStopRequired"])
+                self.assertFalse(result["pendingCommand"])
+                self.assertEqual(result["sticks"], [[0, 0], [0, 0]])
+                self.assertEqual(self.calls[-1], self.m.ZERO)
+                self.assertFalse(result["nativeAcceptance"])
+                events = [json.loads(line) for line in
+                          (Path(result["artifactDirectory"]) / "events.jsonl").read_text().splitlines()]
+                commits = [event for event in events if event["type"] == "command_commit"]
+                if scenario == "current":
+                    self.assertEqual((code, result.get("error")), (0, None))
+                    self.assertEqual(len(result["episodes"]), 4)
+                    self.assertEqual(len(self.calls), 8)
+                    self.assertGreater(len(self.samples), 200)
+                    self.assertTrue(all(not event["cleanup"] for event in commits))
+                    for episode in result["episodes"]:
+                        elapsed = episode["neutralCommittedNs"] - episode["startedNs"]
+                        self.assertGreater(elapsed, 1_600_000_000)
+                        self.assertLess(elapsed, 2_000_000_000)
+                        held = [sample for sample in self.samples
+                                if episode["startedNs"] <= sample["observed_ns"] < episode["neutralCommittedNs"]]
+                        self.assertGreater(len(held), 50)
+                        self.assertTrue(all(next_sample["observed_ns"] < driver.snapshot_source_deadline(sample)
+                                            for sample, next_sample in zip(held, held[1:])))
+                    for window, commit in zip(self.publication_windows, commits):
+                        if window["release"]:
+                            self.assertEqual(window["deadlineNs"] - commit["requestedNs"], self.m.COMMAND_WINDOW)
+                            self.assertLessEqual(window["deadlineNs"], window["pulseDeadlineNs"])
+                else:
+                    self.assertEqual(code, 2)
+                    self.assertTrue(commits[-1]["cleanup"])
+                    if scenario == "total_budget":
+                        self.assertIn("no active budget", result["error"])
+                        self.assertLess(len(result["episodes"]), 4)
+                        self.assertGreater(self.clock.now - driver.started, 9_000_000_000)
+                    else:
+                        self.assertEqual(result["episodes"], [])
+                        self.assertEqual(len(self.calls), 2)
+                        if scenario == "missing":
+                            self.assertIn("lost current native observation", result["error"])
+                            lost_at = driver.snapshot_source_deadline(driver.latest_snapshot)
+                        else:
+                            self.assertIn("invalid input focus/head/time", result["error"])
+                            lost_at = self.samples[-1]["observed_ns"]
+                        self.assertLess(commits[-1]["requestedNs"] - lost_at, self.m.PERIOD)
+                        self.assertLess(commits[-1]["committedNs"] - commits[0]["requestedNs"], 150_000_000)
 
     def test_recorded_genuine_empty_assembled_movement_preserves_fire_block(self):
         self.replay_empty = True

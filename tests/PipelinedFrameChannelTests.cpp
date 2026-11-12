@@ -33,7 +33,7 @@ graphics::BodyPropFrame Props(const graphics::PairTicket& t){
 graphics::SceneDepthFrame Depth(const graphics::TextureDescriptor& d,const graphics::PairTicket& t){
     graphics::SceneDepthFrame depth{};depth.color=t;depth.flags=graphics::SceneDepthCanonicalClip;
     depth.width=d.width;depth.height=d.height;depth.adapterLow=d.adapterLow;depth.adapterHigh=d.adapterHigh;
-    depth.format=44;depth.samples=1;depth.resourceGeneration=t.frameId;
+    depth.format=44;depth.samples=8;depth.quality=1;depth.resourceGeneration=t.frameId;
     depth.resources={{{101,102},{103,104}}};return depth;
 }
 struct Fixture {
@@ -71,7 +71,7 @@ int ConsecutiveProviderTicks(){
             CHECK(!runtime::PairMatchesFrame(requirements,current,d,ticket));
             graphics::BodyPropFrame props;graphics::SceneDepthFrame depth;
             CHECK(host.ReadBodyProps(ticket,props)&&props.trackingGeneration==expected.generation);
-            CHECK(host.ReadSceneDepth(d,ticket,depth)&&depth.color.trackingGeneration==expected.generation);
+            CHECK(host.ReadSceneDepth(d,ticket,depth)&&depth.color.trackingGeneration==expected.generation&&depth.samples==8&&depth.quality==1);
             // Merely queuing the successor does not free the delivered pixels.
             ipc::FrameRequest blocked;CHECK(producer.TryTake(blocked)==Result::Busy);
             CHECK(producer.PollOutcome()==ipc::Outcome::Pending);
@@ -555,18 +555,22 @@ int ThreeSourceCapacityAndRetirement(){
         CHECK(producer.MarkCaptureReleased({ck.request,UINT32_MAX,0})==Result::Invalid);
         runtime::SourceSlotIdentity source{};CHECK(host.ReadSourceSlot(at,source)&&source.slot==ak.slot&&source.slotCount==3);
         CHECK(host.PollRequest(out,got)==Result::Busy);
-        PipelinePair(c,ck,cd,ct);CHECK(producer.PublishPipeline(ck,cd,ct,nullptr,nullptr)==Result::Ok);
+        PipelinePair(c,ck,cd,ct);auto cDepth=Depth(cd,ct);cDepth.resources={{{600,601},{602,603}}};
+        CHECK(producer.PublishPipeline(ck,cd,ct,nullptr,&cDepth)==Result::Ok);
         CHECK(host.PollRequest(out,got)==Result::Busy); // Out-of-order ready C cannot bypass B/A.
         PipelinePair(b,bk,bd,bt);
         auto alias=bd;alias.session=cd.session;auto aliasTicket=bt;aliasTicket.session=cd.session;
         CHECK(producer.PublishPipeline(bk,alias,aliasTicket,nullptr,nullptr)==Result::Invalid); // Check other slot2, not only A.
         auto depth=Depth(bd,bt);depth.resources={{{500,501},{502,503}}};
+        auto mismatched=depth;mismatched.samples=4;CHECK(producer.PublishPipeline(bk,bd,bt,nullptr,&mismatched)==Result::Invalid);
+        mismatched=depth;++mismatched.quality;CHECK(producer.PublishPipeline(bk,bd,bt,nullptr,&mismatched)==Result::Invalid);
         const auto colors=graphics::LegacyResourceIds(cd);auto aliasDepth=depth;aliasDepth.resources[0][0]=colors[0];
         CHECK(producer.PublishPipeline(bk,bd,bt,nullptr,&aliasDepth)==Result::Invalid);
         CHECK(producer.PublishPipeline(bk,bd,bt,nullptr,&depth)==Result::Ok);
         auto wrong=at;++wrong.sequence;CHECK(host.Feedback(wrong,true)==Result::Invalid);
         CHECK(host.Feedback(at,true)==Result::Ok);ipc::PipelineRetirement retired{};
         CHECK(host.PollRequest(out,got)==Result::Ok&&!std::memcmp(&got,&bt,sizeof(bt)));
+        graphics::SceneDepthFrame observedDepth;CHECK(host.ReadSceneDepth(out,got,observedDepth)&&observedDepth.samples==8&&observedDepth.quality==1);
         CHECK(host.SubmitLookaheadRequest(Requirements(),Tracking(3),200)==Result::Ok); // One unassigned immutable D.
         CHECK(producer.TryTakePipeline(d,dk)==Result::Busy); // Logical A ACK is insufficient for physical reuse.
         CHECK(producer.ClaimPipelineRetirement(ak,retired)==Result::Ok&&retired.outcome==ipc::Outcome::Consumed);

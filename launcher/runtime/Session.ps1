@@ -14,6 +14,28 @@ $null=Set-FvrLauncherStorage (Split-Path (Split-Path $options.state_root -Parent
 $state=@{schema='bc2vr.session.v1';state='starting';phase='Starting BC2 and waiting for its main menu…';version=$options.version;source_sha256=$options.source_sha256;started_utc=[DateTime]::UtcNow.ToString('o');game=$null;host=$null;trace=$null;error=$null;supervisor=(Get-Bc2ProcessIdentity (Get-Process -Id $PID))}
 $stateFile=Join-Path $folder 'session.json';$stopFile=Join-Path $folder 'stop.request'
 $pipelineEnvironment=@{};$pipelineOriginal=@{};$pipelineApplied=$false
+function Assert-PrivateSourcePipelineConfiguration {
+    $settings=Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'BFBC2/settings.ini'
+    $proof=@{settings_path=$settings;supported_msaa=@('0','1','2','3');configured_msaa=$null;compatible=$false;native_samples_verified=$false}
+    $state.private_source_pipeline.configuration=$proof
+    try {$lines=Get-Content -LiteralPath $settings -ErrorAction Stop}
+    catch {throw "Private source pipeline requires readable BC2 graphics settings with MSAA=0, 1, 2 or 3. Could not read $settings. BC2 has not been started."}
+    $graphics=$false;$sections=0;$values=@()
+    foreach($line in $lines){
+        if($line -match '^\s*\[([^\]]+)\]\s*$'){
+            $graphics=$Matches[1] -ieq 'Graphics';if($graphics){$sections++};continue
+        }
+        if($graphics -and $line -match '^\s*MSAA\s*=\s*(.*?)\s*$'){$values+=,$Matches[1]}
+    }
+    $proof.graphics_sections=$sections;$proof.msaa_entries=$values.Count
+    if($values.Count -eq 1){$proof.configured_msaa=$values[0]}
+    # The native, wire and host pipeline preserve exact 1/2/4/8x depth samples.
+    # A settings check is an early compatibility gate, never native sample proof.
+    if($sections -ne 1 -or $values.Count -ne 1 -or $values[0] -cnotmatch '^[0-3]$'){
+        throw "Private source pipeline requires exactly one [Graphics] MSAA=0, 1, 2 or 3 setting in $settings. Disable the private source pipeline option to keep an unsupported graphics configuration. BC2 has not been started."
+    }
+    $proof.compatible=$true
+}
 function Enable-PrivateSourcePipeline {
     if(-not $options.ContainsKey('private_source_pipeline')){return}
     if($options.private_source_pipeline -isnot [bool]){throw 'Private source pipeline option must be a boolean.'}
@@ -21,9 +43,10 @@ function Enable-PrivateSourcePipeline {
     $copyBudget=[Environment]::GetEnvironmentVariable('FVR_PRIVATE_HOST_COPY_SERVICE_MS','Process')
     if($copyBudget -notin @($null,'','0')){throw 'Private source pipeline requires the separate host copy service disabled.'}
     $script:pipelineEnvironment=@{FVR_PRIVATE_TWO_SOURCE_SLOTS='1';FVR_PRIVATE_THREE_SOURCE_SLOTS='1';FVR_PRIVATE_SOURCE_LOOKAHEAD='1';FVR_PRIVATE_EXPORT_OVERLAP='1'}
+    $state.private_source_pipeline=@{requested=$true;environment=$pipelineEnvironment.Clone();applied=$false;children=@{};restored=$false;native_enablement_claimed=$false}
+    Assert-PrivateSourcePipelineConfiguration
     $prior=[Environment]::GetEnvironmentVariables('Process')
     foreach($key in $pipelineEnvironment.Keys){$pipelineOriginal[$key]=@{present=$prior.Contains($key);value=[Environment]::GetEnvironmentVariable($key,'Process')}}
-    $state.private_source_pipeline=@{requested=$true;environment=$pipelineEnvironment.Clone();applied=$false;children=@{};restored=$false;native_enablement_claimed=$false}
     # Session is a dedicated child, reached only after Entry's headset probe.
     # Existing game creation and child launch helpers inherit this exact map.
     $script:pipelineApplied=$true
@@ -42,7 +65,10 @@ function Assert-PrivateSourcePipelineChild([string]$Name) {
 }
 function Restore-PrivateSourcePipeline {
     if(-not $pipelineApplied){return}
-    foreach($key in $pipelineOriginal.Keys){[Environment]::SetEnvironmentVariable($key,$pipelineOriginal[$key].value,'Process')}
+    foreach($key in $pipelineOriginal.Keys){
+        if($pipelineOriginal[$key].present){[Environment]::SetEnvironmentVariable($key,$pipelineOriginal[$key].value,'Process')}
+        else {[Environment]::SetEnvironmentVariable($key,[NullString]::Value,'Process')}
+    }
     $after=[Environment]::GetEnvironmentVariables('Process');$restored=$true
     foreach($key in $pipelineOriginal.Keys){
         if($after.Contains($key) -ne $pipelineOriginal[$key].present -or [Environment]::GetEnvironmentVariable($key,'Process') -cne $pipelineOriginal[$key].value){$restored=$false}

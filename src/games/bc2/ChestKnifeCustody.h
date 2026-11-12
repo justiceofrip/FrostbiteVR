@@ -113,7 +113,8 @@ public:
                 unsigned(s.knifeSelected)<<5|unsigned(s.trackedKnifeOwned)<<6|unsigned(s.nativeAttackReady)<<7|
                 unsigned(s.mechanicsSettled)<<8|unsigned(s.gripHeld[unsigned(hand_)])<<9|
                 unsigned(Contact(s.heldContact,s.source))<<10|unsigned(held&&claim_&&held->token==*claim_)<<11|
-                unsigned(returnWanted_)<<12|unsigned(mayAcquireHold_)<<13|unsigned(HoldInputCurrent(s))<<14;
+                unsigned(returnWanted_)<<12|unsigned(mayAcquireHold_)<<13|unsigned(HoldInputCurrent(s))<<14|
+                unsigned(s.motionTrackingReady)<<15|unsigned(KnifeActionInputCurrent(s))<<16;
         }
         const bool stockTriggerRequest=PrepareStockTrigger(s,hands);
         const auto result=PrepareCore(s,hands,observation,stockTriggerRequest);

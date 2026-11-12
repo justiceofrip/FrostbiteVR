@@ -4,6 +4,7 @@
 #include "fvr/graphics/D3D11SceneDepthPair.h"
 #include "fvr/graphics/D3D11DesktopMirror.h"
 #include "fvr/graphics/FrameBridgeDiagnostics.h"
+#include "fvr/graphics/SceneDepthImportPolicy.h"
 #include "fvr/graphics/D3D11RenderQueueLimit.h"
 #include "fvr/ipc/StagedFrameProducer.h"
 #include <wrl/client.h>
@@ -46,11 +47,17 @@ struct PipelineGraphicsSnapshot {
         std::uint64_t generations=0,eyeCopies=0,depthCopies=0,exports=0,submissions=0,consumed=0,discarded=0,cancellations=0;
         Publication lastPublication{};
     };
+    struct DepthRejection {
+        bool present=false;FrameBridgeTimingKey key{};D3D11_TEXTURE2D_DESC descriptor{};
+        unsigned slot=0,eye=0,stage=0;const char* reason="none";std::int64_t observedQpc=0;
+    };
     std::array<Slot,Capacity> slots{};
     unsigned sourceSlots=2;
     unsigned LogicalTextureCount()const noexcept{return 3+6*sourceSlots;}
     std::uint64_t LogicalByteLimit()const noexcept{return (sourceSlots==3?768ull:512ull)*1024*1024;}
     bool configured=false,available=false,allocationAdmitted=false,budgetAvailable=false,exportOverlap=false;
+    unsigned depthSamples=0,depthQuality=0;
+    DepthRejection firstDepthRejection{};
     std::uint64_t logicalReservationBytes=0,budgetBytes=0,usageBytes=0,budgetChecks=0,graphicsDeferrals=0,rejectedFeedback=0;
     std::uint64_t captureReleaseAttempts=0,captureReleases=0,captureReleaseBusy=0,captureReleaseDeclined=0;
     void Write(std::ostream& out)const {
@@ -59,12 +66,25 @@ struct PipelineGraphicsSnapshot {
            <<",\"available\":"<<(available?"true":"false")<<",\"allocation_admitted\":"<<(allocationAdmitted?"true":"false")
            <<",\"source_slots\":"<<sourceSlots<<",\"logical_texture_count\":"<<LogicalTextureCount()
            <<",\"logical_byte_limit\":"<<LogicalByteLimit()<<",\"logical_reservation_bytes\":"<<logicalReservationBytes
+           <<",\"depth_samples\":"<<depthSamples<<",\"depth_quality\":"<<depthQuality
+           <<",\"reservation_scope\":\"native_logical_payload_excludes_host_local_depth_and_driver_overhead\""
            <<",\"physical_allocation_measured\":false,\"local_budget_available\":"<<(budgetAvailable?"true":"false")
            <<",\"local_budget_bytes\":"<<budgetBytes<<",\"local_usage_before_allocation_bytes\":"<<usageBytes<<",\"local_budget_checks\":"<<budgetChecks
            <<",\"required_budget_headroom_bytes\":67108864,\"graphics_deferrals\":"<<graphicsDeferrals
            <<",\"rejected_feedback\":"<<rejectedFeedback<<",\"export_overlap\":"<<(exportOverlap?"true":"false")
            <<",\"capture_release_attempts\":"<<captureReleaseAttempts<<",\"capture_releases\":"<<captureReleases
-           <<",\"capture_release_busy\":"<<captureReleaseBusy<<",\"capture_release_declined\":"<<captureReleaseDeclined<<",\"slots\":[";
+           <<",\"capture_release_busy\":"<<captureReleaseBusy<<",\"capture_release_declined\":"<<captureReleaseDeclined
+           <<",\"first_depth_rejection\":";
+        const auto& f=firstDepthRejection;const auto& d=f.descriptor;const auto& failedKey=f.key;
+        if(!f.present)out<<"null";else out<<"{\"reason\":\""<<f.reason<<"\",\"qpc\":"<<f.observedQpc
+           <<",\"channel\":"<<failedKey.channel<<",\"request\":"<<failedKey.request<<",\"owner\":"<<failedKey.owner<<",\"device\":"<<failedKey.device
+           <<",\"frame\":"<<failedKey.frame<<",\"tracking\":"<<failedKey.tracking<<",\"space\":"<<failedKey.space<<",\"predicted_ns\":"<<failedKey.predictedNs
+           <<",\"slot\":"<<f.slot<<",\"eye\":"<<f.eye<<",\"stage\":"<<f.stage
+           <<",\"width\":"<<d.Width<<",\"height\":"<<d.Height<<",\"format\":"<<unsigned(d.Format)
+           <<",\"samples\":"<<d.SampleDesc.Count<<",\"quality\":"<<d.SampleDesc.Quality
+           <<",\"mips\":"<<d.MipLevels<<",\"array_size\":"<<d.ArraySize
+           <<",\"usage\":"<<unsigned(d.Usage)<<",\"cpu_access\":"<<d.CPUAccessFlags<<"}";
+        out<<",\"slots\":[";
         for(unsigned i=0;i<sourceSlots&&i<slots.size();++i){const auto& s=slots[i];if(i)out<<',';
             out<<"{\"slot\":"<<i<<",\"generations\":"<<s.generations<<",\"eye_copies\":"<<s.eyeCopies
                <<",\"depth_copies\":"<<s.depthCopies<<",\"exports\":"<<s.exports<<",\"submissions\":"<<s.submissions

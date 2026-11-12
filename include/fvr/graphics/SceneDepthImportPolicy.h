@@ -2,6 +2,19 @@
 #include "fvr/graphics/SceneDepthFrame.h"
 
 namespace fvr::graphics {
+// Private source pipelines preserve every depth sample. Device support for the
+// exact quality is checked before allocation; the wire cannot establish it.
+inline bool PipelineDepthSamples(std::uint32_t samples,std::uint32_t quality)noexcept {
+    return (samples==1&&!quality)||samples==2||samples==4||samples==8;
+}
+inline std::uint64_t PipelineTextureBytes(std::uint32_t width,std::uint32_t height,
+    unsigned sources,unsigned samples)noexcept {
+    if(!width||!height||width>16384||height>16384||(sources!=2&&sources!=3)||!PipelineDepthSamples(samples,0))return UINT64_MAX;
+    return std::uint64_t(width)*height*4*(3+2*sources+4*sources*samples);
+}
+inline bool PipelineSceneDepthMatches(const SceneDepthFrame& frame,const TextureDescriptor& descriptor,const PairTicket& ticket)noexcept {
+    return PipelineDepthSamples(frame.samples,frame.quality)&&SceneDepthMatches(frame,descriptor,ticket);
+}
 // Source imports have up to three identities, but there is only one local depth target
 // quartet. Caller must serialize this with the sole host color-copy lease.
 class SceneDepthImportPolicy {
@@ -12,7 +25,7 @@ public:
     bool Select(const SceneDepthFrame& frame,const TextureDescriptor& descriptor,const PairTicket& ticket,
         unsigned slot,unsigned count,Selection& out)const noexcept {
         out={};if(count<1||count>Capacity||slot>=count||!SceneDepthMatches(frame,descriptor,ticket)||
-            (count>1&&(frame.samples!=1||frame.quality)))return false;
+            (count>1&&!PipelineDepthSamples(frame.samples,frame.quality)))return false;
         const bool reset=count_!=count;const auto& old=opened_[slot];
         if(!reset&&valid_[slot]&&old.color.session==ticket.session&&old.color.resourceEpoch==ticket.resourceEpoch&&
             ticket.sequence<=old.color.sequence)return false;
