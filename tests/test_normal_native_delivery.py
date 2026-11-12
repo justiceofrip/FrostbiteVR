@@ -315,6 +315,66 @@ class OfflineReleaseTests(unittest.TestCase):
         self.assertFalse(self.release['native_retirement_proven'])
         self.assertEqual(batch.load(self.session_pin['path'])['status'], 'failed')
 
+    def test_reused_pid_with_later_birth_releases_original_only(self):
+        row = self.observation['processes'][0]
+        for path in (row['identity']['path'], str(self.root / 'unrelated.exe')):
+            for started in (self.now - timedelta(minutes=1), self.now):
+                with self.subTest(path=path, started=started):
+                    row['replacement_process'] = dict(pid=row['identity']['pid'], path=path,
+                        start_utc=started.isoformat().replace('+00:00', 'Z'))
+                    self.bind()
+                    self.verify()
+                    self.assertEqual(row['identity'], self.session['processes'][0]['identity'])
+                    self.assertFalse(self.release['normal_game_close'])
+                    self.assertFalse(self.release['native_retirement_proven'])
+                    self.assertEqual(batch.load(self.session_pin['path'])['status'], 'failed')
+
+    def test_same_older_or_future_replacement_birth_refuses(self):
+        row = self.observation['processes'][0]
+        original = row['identity']['start_utc']
+        for started in (original, original.replace('+00:00', 'Z'),
+                        (self.now - timedelta(minutes=6)).isoformat(),
+                        (self.now + timedelta(microseconds=1)).isoformat()):
+            with self.subTest(started=started):
+                row['replacement_process'] = dict(row['identity'], start_utc=started)
+                self.bind()
+                with self.assertRaisesRegex(ValueError, 'Replacement process birth'):
+                    self.verify()
+
+    def test_malformed_or_forged_replacement_identity_refuses(self):
+        row = self.observation['processes'][0]
+        valid = dict(row['identity'], start_utc=(self.now - timedelta(minutes=1)).isoformat())
+        invalid = [[], '', False, {}, dict(valid, extra=True)]
+        invalid.extend({key: value for key, value in valid.items() if key != missing} for missing in valid)
+        invalid.extend(dict(valid, pid=value) for value in (99, 0, True, '1', 1.0, None))
+        invalid.extend(dict(valid, path=value) for value in ('', 'relative.exe', None, 123, []))
+        invalid.extend(dict(valid, start_utc=value) for value in ('', 'invalid', None, 123, [],
+            (self.now - timedelta(minutes=1)).replace(tzinfo=None).isoformat(),
+            (self.now - timedelta(minutes=1)).astimezone(timezone(timedelta(hours=1))).isoformat()))
+        for replacement in invalid:
+            with self.subTest(replacement=replacement):
+                row['replacement_process'] = replacement
+                self.bind()
+                with self.assertRaises(ValueError):
+                    self.verify()
+
+    def test_pid_reuse_does_not_relax_original_absence_or_resource_gates(self):
+        original = copy.deepcopy(self.observation)
+        for mode in ('identity', 'present', 'exit_code', 'owned_busy', 'build_busy'):
+            with self.subTest(mode=mode):
+                self.observation = copy.deepcopy(original)
+                row = self.observation['processes'][0]
+                row['replacement_process'] = dict(row['identity'],
+                    start_utc=(self.now - timedelta(minutes=1)).isoformat())
+                if mode == 'identity': row['identity']['path'] = str(self.root / 'wrong.exe')
+                elif mode == 'present': row['absent'] = False
+                elif mode == 'exit_code': row['observed_exit_code'] = 1
+                elif mode == 'owned_busy': self.observation['all_owned_processes_absent'] = False
+                else: self.observation['shared_build_processes_absent'] = False
+                self.bind()
+                with self.assertRaises(ValueError):
+                    self.verify()
+
     def test_fabricated_session_success_refuses(self):
         for field in ('normal_game_close', 'native_retirement_proven'):
             with self.subTest(field=field):

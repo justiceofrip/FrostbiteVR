@@ -162,6 +162,7 @@ def verify_owner_release(c, now=None):
     for field in ('exact_three_profiles_restored', 'launcher_active_settings_preserved'):
         need(session[field] is True and release[field] is True, 'Exact session restoration required')
     def utc(value):
+        need(isinstance(value, str) and value, 'UTC observation time required')
         parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
         need(parsed.utcoffset() == timedelta(0), 'UTC observation time required')
         return parsed
@@ -182,12 +183,22 @@ def verify_owner_release(c, now=None):
     for name, row in actual.items():
         prior = expected[name]
         identity = row['identity']
-        need(identity == prior['identity'] and set(identity) == {'pid', 'start_utc', 'path'} and
-             type(identity['pid']) is int and identity['pid'] > 0 and Path(identity['path']).is_absolute(),
+        need(isinstance(identity, dict) and identity == prior['identity'] and
+             set(identity) == {'pid', 'start_utc', 'path'} and type(identity['pid']) is int and identity['pid'] > 0 and
+             isinstance(identity['path'], str) and identity['path'] and Path(identity['path']).is_absolute(),
              'Exact recorded process identity required: ' + name)
-        need(utc(identity['start_utc']) < observed and row['absent'] is True and row['replacement_process'] is None and
+        started = utc(identity['start_utc'])
+        need(started < observed and row['absent'] is True and
              prior['exited'] is True and prior['exit_code'] == row['observed_exit_code'] == 0,
              'Session process has not released resources: ' + name)
+        replacement = row['replacement_process']
+        if replacement is not None:
+            need(isinstance(replacement, dict) and set(replacement) == {'pid', 'start_utc', 'path'} and
+                 type(replacement['pid']) is int and replacement['pid'] == identity['pid'] and
+                 isinstance(replacement['path'], str) and replacement['path'] and Path(replacement['path']).is_absolute(),
+                 'Exact replacement process identity required: ' + name)
+            need(started < utc(replacement['start_utc']) <= observed,
+                 'Replacement process birth must follow original and not exceed observation: ' + name)
     originals_path = checked(release['session_originals'])
     need(originals_path == session_path.parent / 'originals.json', 'Same-session original restoration pins required')
     originals = load(originals_path)
