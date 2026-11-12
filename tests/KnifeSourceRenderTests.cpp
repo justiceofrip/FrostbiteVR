@@ -4,12 +4,213 @@
 #include "Bc2ChestKnifeRendering.h"
 #include "Bc2ChestKnifeLiveObservation.h"
 #include "Bc2ChestKnifeCurrentHoldObservation.h"
+#include "Bc2ChestKnifeCoordinator.h"
+#include "Bc2ChestKnifeStockHold.h"
+#include "Bc2KnifeStockMotionSource.h"
 #include <cstdio>
 #include <sstream>
 #include <limits>
 using namespace fvr;using namespace fvr::bc2;using namespace fvr::interaction;
 #include "KnifeCustodyFixture.inc"
 namespace {
+std::optional<KnifeCommand> MotionGapFrame(Fixture& f,std::int64_t elapsed=10*ms){
+    ++f.s.source.sequence;f.s.source.observedNs+=elapsed;f.s.source.nowNs=f.s.source.observedNs;
+    f.s.source.deadlineNs=f.s.source.nowNs+100*ms;f.s.claimIntent=f.s.source.sequence;
+    f.s.menu.deadlineNs=f.s.source.deadlineNs;++f.s.menu.sequence;f.hands.Update(f.s.source);
+    f.s.nativeAttackReady=false;f.s.motionTrackingReady=true;f.s.trackedKnifeOwned=false;f.s.heldContact={};
+    if(const auto retained=ChestKnifeRetainedStockContact(f.knife,f.hands,f.s,true,true)){
+        f.s.trackedKnifeOwned=true;f.s.heldContact=*retained;
+    }
+    return f.knife.Prepare(f.s,f.hands);
+}
+int MotionRenderSeparationCases(){
+    // Test-owned physical geometry stays current while the actual stock hold
+    // fallback carries only its pre-existing lease through missing rendering.
+    Fixture settled;CHECK(settled.Held());CHECK(settled.Rest(11));
+    const auto held=*settled.hands.Current(InteractionHand::Right);
+    CHECK(!MotionGapFrame(settled));CHECK(settled.knife.RecognitionReady(settled.s.source));
+    CHECK(settled.hands.Current(InteractionHand::Right)->token==held.token);
+    CHECK(settled.hands.Current(InteractionHand::Right)->deadlineNs==held.deadlineNs);
+    settled.s.nativeAttackReady=true;const auto jab=settled.Stab();
+    CHECK(jab&&jab->stroke&&!jab->stockTriggerHold&&settled.s.stockTrigger==0);
+    CHECK(settled.knife.CanCommit(*jab,settled.s,settled.hands));
+    auto unavailable=settled.s;unavailable.nativeAttackReady=false;
+    CHECK(!settled.knife.CanCommit(*jab,unavailable,settled.hands));
+    unavailable=settled.s;unavailable.motionTrackingReady=false;unavailable.trackedKnifeOwned=false;
+    CHECK(!settled.knife.CanCommit(*jab,unavailable,settled.hands));
+
+    Fixture travelling;CHECK(travelling.Held()&&travelling.Rest());
+    travelling.s.tip.z=.024f;CHECK(!travelling.Step());
+    travelling.s.tip.z=.048f;CHECK(!MotionGapFrame(travelling));
+    travelling.s.nativeAttackReady=true;travelling.s.tip.z=.072f;
+    const auto completed=travelling.Step();CHECK(completed&&completed->stroke);
+    CHECK(completed->source.sequence==travelling.s.source.sequence&&completed->source.deadlineNs==travelling.s.source.deadlineNs);
+
+    Fixture spent;CHECK(spent.Held()&&spent.Rest());
+    const auto deadline=spent.hands.Current(InteractionHand::Right)->deadlineNs;
+    for(unsigned n=0;n<7;++n){spent.s.tip.z+=.012f;CHECK(!MotionGapFrame(spent));
+        CHECK(spent.hands.Current(InteractionHand::Right)->deadlineNs==deadline);}
+    CHECK(spent.knife.Phase()==KnifePhase::Held&&!spent.knife.RecognitionReady(spent.s.source));
+    spent.s.nativeAttackReady=true;CHECK(!spent.knife.Prepare(spent.s,spent.hands));
+    CHECK(!spent.Step()&&!spent.Stab()); // Neither recovery nor more forward motion replays the missed attack.
+    CHECK(spent.Rest());CHECK(spent.Stab()); // A new settled stroke remains available.
+
+    for(unsigned fault=0;fault<10;++fault){Fixture f;CHECK(f.Held()&&f.Rest());f.s.tip.z=.024f;CHECK(!f.Step());
+        if(fault==0)f.s.source.focused=false;
+        if(fault==1)f.s.source.tracked[1]=false;
+        if(fault==2)++f.s.source.owner.actor;
+        if(fault==3)++f.s.source.owner.actorGeneration;
+        if(fault==4)++f.s.source.owner.equipGeneration;
+        if(fault==5)++f.s.source.owner.space;
+        if(fault==6)f.s.knife.generation++;
+        if(fault==7)f.s.onFoot=false;
+        if(fault==8)f.s.mechanicsSettled=false;
+        f.s.tip.z=.048f;CHECK(!MotionGapFrame(f,fault==9?80*ms:10*ms));
+        f.s.nativeAttackReady=true;f.s.source.focused=true;f.s.source.tracked[1]=true;
+        f.s.onFoot=f.s.mechanicsSettled=true;f.s.tip.z=.072f;CHECK(!f.Step());
+    }
+    Fixture expired;CHECK(expired.Held()&&expired.Rest());
+    CHECK(!MotionGapFrame(expired,100*ms));CHECK(!expired.hands.Current(InteractionHand::Right));
+    expired.s.nativeAttackReady=true;CHECK(!expired.Stab());CHECK(!expired.hands.Current(InteractionHand::Right));
+    return 0;
+}
+int MotionCalibrationCases(){
+    Fixture f;CHECK(f.Held());
+    ChestKnifeMotionIdentity identity{{0x10000,0x20000,0x30000,42,2,3,4},*f.knife.Hold(),{42,1},7,8,1,9,1.f};
+    math::Matrix4 measured;measured.values={{{1,0,0,0},{0,1,0,0},{0,0,1,0},{0,0,0,1}}};
+    bool continuous=false;ChestKnifeMotionCalibration calibration;
+    CHECK(!calibration.Update(identity,std::nullopt,continuous)&&!continuous);
+    const auto first=calibration.Update(identity,measured,continuous);CHECK(first&&!continuous&&first->values==measured.values);
+    const auto missing=calibration.Update(identity,std::nullopt,continuous);CHECK(missing&&continuous&&missing->values==measured.values);
+    auto noise=measured;noise.values[0][1]=.00001f;noise.values[1][0]=-.00001f;
+    const auto unchanged=calibration.Update(identity,noise,continuous);CHECK(unchanged&&continuous&&unchanged->values==measured.values);
+    auto changed=measured;const float angle=.01f;
+    changed.values[0][0]=changed.values[1][1]=std::cos(angle);
+    changed.values[0][1]=std::sin(angle);changed.values[1][0]=-std::sin(angle);
+    const auto reset=calibration.Update(identity,changed,continuous);CHECK(reset&&!continuous&&reset->values==changed.values);
+    auto invalid=measured;invalid.values[3][0]=.01f;
+    CHECK(!calibration.Update(identity,invalid,continuous)&&!continuous);
+    CHECK(!calibration.Update(identity,std::nullopt,continuous)); // An invalid measurement cannot fall back to older geometry.
+    for(unsigned fault=0;fault<12;++fault){
+        CHECK(calibration.Update(identity,measured,continuous));auto next=identity;
+        if(fault==0)++next.owner.actorGeneration;if(fault==1)++next.owner.equipGeneration;
+        if(fault==2)++next.owner.space;if(fault==3)++next.knife.generation;if(fault==4)++next.hold.id;
+        if(fault==5)++next.bodyOperation;if(fault==6)++next.nativeLifetime;if(fault==7)++next.trackingBasis;
+        if(fault==8)next.worldUnitsPerMeter=2;if(fault==9)++next.menuEpoch;
+        if(fault==10)++next.owner.weapon;if(fault==11)++next.owner.soldier;
+        CHECK(!calibration.Update(next,std::nullopt,continuous)&&!continuous);
+        CHECK(calibration.Update(next,measured,continuous)&&!continuous);
+    }
+    CHECK(!calibration.Update(std::nullopt,std::nullopt,continuous)&&!continuous);
+    CHECK(!calibration.Update(identity,std::nullopt,continuous));
+    std::puts("Physical knife sampling: fixed measured calibration, exact identity resets, bounded missing render contact, no deferred/replayed attack.");
+    return 0;
+}
+struct StagedMotionFixture {
+    Fixture f;ChestKnifeMotionCalibration calibration;InputFrame input;
+    math::Matrix4 measured=private_knife::RightHandInKnife;
+    private_knife::StockKnifeMotionSourceRevocation source;
+    private_knife::KnifeAttackGate attacks;
+    std::optional<KnifeCommand> command;std::uint64_t stagedStamp=0;
+    StagedMotionFixture(){
+        measured.values[3]={0,0,0,1};input.focused=input.headValid=true;
+        input.trackingBasisGeneration=9;input.hands[1].gripTracked=true;
+        f.s.holdInputCurrent=f.s.actionInputCurrent=true;
+    }
+    std::optional<KnifeCommand> Gather(bool advance,bool render=true,bool nativeReady=true){
+        auto& s=f.s;
+        if(advance){++s.source.sequence;s.source.observedNs+=10*ms;s.source.nowNs=s.source.observedNs;
+            s.source.deadlineNs=s.source.nowNs+100*ms;s.claimIntent=s.source.sequence;
+            s.menu.deadlineNs=s.source.deadlineNs;++s.menu.sequence;}
+        f.hands.Update(s.source);
+        s.trackedKnifeOwned=render;s.heldContact={};
+        if(render)s.heldContact={{103,1},s.source.sequence,s.source.deadlineNs,true};
+        else if(const auto contact=ChestKnifeRetainedStockContact(f.knife,f.hands,s,true,true)){
+            s.trackedKnifeOwned=true;s.heldContact=*contact;
+        }
+        input.generation=s.source.sequence;input.spaceGeneration=s.source.owner.space;
+        input.predictedNs=s.source.observedNs;input.menu=s.menu;
+        std::optional<ChestKnifeMotionIdentity> identity;
+        if(ChestKnifeRenderPoseCustody(f.knife,f.hands,s.source)&&
+           f.hands.HasRecordedEvidence(s.source,InteractionHand::Right)&&!f.knife.NeedsNativeCleanup())
+            identity=ChestKnifeMotionIdentity{{0x10000,0x20000,0x30000,42,2,3,4},*f.knife.Hold(),{42,1},7,8,1,9,1.f};
+        // The production gather projection, then the same BeforePrepare order:
+        // revoke first, resolve native consumption, and only then run policy.
+        PrepareChestKnifeMotionSource(calibration,f.knife,identity,render?std::optional(measured):std::nullopt,
+            input,nativeReady&&s.mechanicsSettled,s);
+        source.Advance(s,f.knife.NeedsNativeCleanup());
+        if(attacks.Pending()){
+            const auto pending=*attacks.Pending();
+            if(const auto result=attacks.ResolveBeforeSource(s.source.sequence,s.source.observedNs,s.source.nowNs))
+                f.knife.Committed(pending,*result);
+        }
+        return f.knife.Prepare(s,f.hands);
+    }
+    bool StageJab(){
+        if(!f.Held())return false;
+        for(unsigned n=0;n<20;++n)if(Gather(true))return false;
+        if(!f.knife.RecognitionReady(f.s.source))return false;
+        const auto axis=f.s.direction;
+        for(unsigned n=0;n<8&&!command;++n){
+            auto& p=input.hands[1].grip.position;p.x+=axis.x*.012f;p.y+=axis.y*.012f;p.z-=axis.z*.012f;
+            command=Gather(true);
+        }
+        if(!command||!command->stroke||command->stockTriggerHold||f.s.stockTrigger!=0||
+           !f.knife.CanCommit(*command,f.s,f.hands)||!attacks.Stage(*command,f.s.source.nowNs))return false;
+        stagedStamp=source.Stamp();return true;
+    }
+};
+int StagedMotionSourceCases(){
+    StagedMotionFixture same;CHECK(same.StageJab());
+    const auto original=*same.command;const auto originalHold=*same.f.hands.Current(InteractionHand::Right);
+    const auto tip=same.f.s.tip,direction=same.f.s.direction;
+    for(unsigned n=0;n<3;++n){
+        same.f.s.source.nowNs+=ms;CHECK(!same.Gather(false));
+        CHECK(same.f.knife.Phase()==KnifePhase::AttackStaged&&!same.f.knife.RecognitionReady(same.f.s.source));
+        CHECK(same.f.s.nativeAttackReady&&!same.f.s.motionTrackingReady);
+        CHECK(same.f.s.tip==tip&&same.f.s.direction==direction&&same.source.Current(same.stagedStamp));
+        CHECK(same.f.knife.CanCommit(original,same.f.s,same.f.hands));
+        CHECK(same.f.hands.Current(InteractionHand::Right)->token==originalHold.token);
+        CHECK(same.f.hands.Current(InteractionHand::Right)->deadlineNs==originalHold.deadlineNs);
+    }
+    CHECK(same.attacks.Pending()->source.sequence==original.source.sequence);
+    CHECK(same.attacks.Pending()->source.observedNs==original.source.observedNs);
+    CHECK(same.attacks.Pending()->source.deadlineNs==original.source.deadlineNs);
+    CHECK(same.attacks.Consume(1,same.f.s.source.nowNs,same.source.Current(same.stagedStamp)));
+    CHECK(!same.attacks.Consume(1,same.f.s.source.nowNs,true));
+    CHECK(!same.Gather(false)&&same.f.knife.Phase()==KnifePhase::Attacking);
+    // A later source loss cannot cancel or replay a consumed branch. Its
+    // original sibling still drains once, without renewing the command lease.
+    same.f.s.source.nowNs=original.source.deadlineNs;CHECK(!same.Gather(false,false));
+    CHECK(!same.source.Current(same.stagedStamp));
+    CHECK(!same.attacks.Consume(1,same.f.s.source.nowNs,false));
+    CHECK(same.attacks.Consume(2,same.f.s.source.nowNs,false));
+    CHECK(!same.attacks.Consume(2,same.f.s.source.nowNs,false));
+    CHECK(same.attacks.Pending()->source.deadlineNs==original.source.deadlineNs);
+
+    for(unsigned fault=0;fault<6;++fault){
+        StagedMotionFixture lost;CHECK(lost.StageJab());
+        const auto pending=*lost.command;
+        if(fault==1)lost.input.hands[1].grip.position.x+=.001f; // Same packet, changed physical geometry.
+        if(fault==3)lost.f.s.source.nowNs=pending.source.deadlineNs;
+        if(fault==4)++lost.f.s.source.deadlineNs; // No deadline renewal on an immutable source.
+        CHECK(!lost.Gather(fault==2,fault!=0,fault!=5));
+        CHECK(!lost.source.Current(lost.stagedStamp));
+        CHECK(!lost.attacks.Consume(1,lost.f.s.source.nowNs,lost.source.Current(lost.stagedStamp)));
+        if(fault==2||fault==3)CHECK(!lost.attacks.Pending());
+        else {
+            CHECK(lost.attacks.Pending()->source.sequence==pending.source.sequence);
+            CHECK(lost.attacks.Pending()->source.deadlineNs==pending.source.deadlineNs);
+            lost.input.hands[1].grip.position.x-=fault==1?.001f:0;
+            lost.f.s.source.deadlineNs=pending.source.deadlineNs;
+            CHECK(!lost.Gather(false)); // Recovery cannot revive this old stage.
+            CHECK(!lost.source.Current(lost.stagedStamp));
+            CHECK(!lost.attacks.Consume(1,lost.f.s.source.nowNs,lost.source.Current(lost.stagedStamp)));
+        }
+    }
+    std::puts("Staged knife source: unchanged zero-trigger jab consumes once; render/geometry/source/readiness loss and expiry revoke; accepted siblings drain.");
+    return 0;
+}
 int ReturnObservationCases(){
     Fixture f;f.s.source.owner.actor=(std::uint64_t(0x30000)<<32)|0x20000;
     const auto draw=f.Draw();CHECK(draw);f.knife.Committed(*draw,KnifeCommit::Accepted);
@@ -247,6 +448,9 @@ int LiveObservationCases(){
 #include "KnifeNativeReadDiagnosticCases.inc"
 #include "KnifeInspectionCases.inc"
 int main(){
+    CHECK(!MotionRenderSeparationCases());
+    CHECK(!MotionCalibrationCases());
+    CHECK(!StagedMotionSourceCases());
     CHECK(!knife_read_diagnostic_cases::Cases());
     CHECK(!knife_inspection_cases::Cases());
     {

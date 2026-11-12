@@ -24,6 +24,10 @@ struct MeleeStrokeSample {
     // Exact native adapter readiness, including deployment, pending attack,
     // menu and scene gates. Gesture recognition cannot supply this authority.
     bool attackAvailable=false;
+    // Independent adapter proof of current physical sampling. This permits
+    // quiet/travel observation without attack admission, never an intent.
+    // Default false preserves callers that use attackAvailable for both gates.
+    bool trackingAvailable=false;
 };
 struct MeleeStrokeIntent {
     std::uint64_t serial=0;
@@ -34,7 +38,7 @@ struct MeleeStrokeIntent {
 };
 enum class MeleeStrokePhase:unsigned {Unavailable,Settling,Ready,Travelling,Spent};
 enum class MeleeStrokeDecision:unsigned {None,Invalid,Initial,Order,Duplicate,DuplicateChanged,
-    SampleGap,StepLimit,SpeedLimit,Settling,Ready,Slow,Alignment,StrokeLimit,Direction,Travel,Intent,SerialLimit};
+    SampleGap,StepLimit,SpeedLimit,Settling,Ready,Slow,Alignment,StrokeLimit,Direction,Travel,Intent,SerialLimit,AttackUnavailable};
 // Optional observation of the existing decision. No extra pose/native reads.
 struct MeleeStrokeObservation {
     MeleeStrokeDecision decision=MeleeStrokeDecision::None;
@@ -52,7 +56,7 @@ struct MeleeStrokeResult {
 
 // Gesture recognition only. Reuses the actual shared GunHold; never claims a
 // second hand or owns native attack completion. The adapter retains any emitted
-// transaction independently and supplies attackAvailable=false until it settles.
+// transaction independently and disables physical sampling until it settles.
 class MeleeStroke {
 public:
     explicit MeleeStroke(MeleeStrokeConfig config={}):config_(config){}
@@ -72,7 +76,7 @@ public:
         lastNow_=s.source.nowNs;
         if(s.source.sequence==previous_->source.sequence){
             if(s.source.observedNs!=previous_->source.observedNs||s.source.deadlineNs!=previous_->source.deadlineNs||
-               s.tip!=previous_->tip||s.direction!=previous_->direction||s.attackAvailable!=previous_->attackAvailable)
+               s.tip!=previous_->tip||s.direction!=previous_->direction)
                 Invalidate();
             return finish(phase_==MeleeStrokePhase::Unavailable?MeleeStrokeDecision::DuplicateChanged:MeleeStrokeDecision::Duplicate); // No progress.
         }
@@ -113,8 +117,12 @@ public:
             const auto displacement=Sub(s.tip,start_);
             if(observation)observation->travel=Dot(displacement,axis_);
             if(Dot(displacement,axis_)>=config_.minimumTravel){
-                if(serial_==UINT64_MAX){Invalidate();return finish(MeleeStrokeDecision::SerialLimit);}
                 phase_=MeleeStrokePhase::Spent;quietNs_=now;
+                // A completed physical stroke is consumed even when current
+                // attack admission is absent. Readiness recovery cannot replay
+                // it or defer an intent onto a later source/deadline.
+                if(!s.attackAvailable)return finish(MeleeStrokeDecision::AttackUnavailable);
+                if(serial_==UINT64_MAX){Invalidate();return finish(MeleeStrokeDecision::SerialLimit);}
                 (void)finish(MeleeStrokeDecision::Intent);
                 return {phase_,MeleeStrokeIntent{++serial_,s.hold,s.source.sequence,now,s.source.deadlineNs,start_,s.tip,axis_}};
             }
@@ -146,7 +154,7 @@ private:
     }
     static bool Valid(const MeleeStrokeSample& s,const HandInteraction& hands,unsigned* invalid=nullptr)noexcept {
         const auto fail=[&](unsigned reason){if(invalid)*invalid=reason;return false;};
-        if(!s.attackAvailable)return fail(2);
+        if(!s.attackAvailable&&!s.trackingAvailable)return fail(2);
         if(s.hold.kind!=HandClaimKind::GunHold)return fail(3);
         if(s.hold.owner!=s.source.owner)return fail(4);
         if(!s.source.sequence)return fail(5);

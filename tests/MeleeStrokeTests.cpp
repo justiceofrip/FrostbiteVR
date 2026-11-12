@@ -102,6 +102,53 @@ int EitherHandAndFreshCustody(){
     f.Step({0,0,f.s.tip.z+.07f});CHECK(f.emitted==1); // A new hold must settle again.
     f.Rest();f.Stab();CHECK(f.emitted==2);return 0;
 }
+int PhysicalSamplingWithoutAttackReadiness(){
+    Fixture settled;settled.s.trackingAvailable=true;settled.Rest(11);
+    settled.s.attackAvailable=false;settled.Step(settled.s.tip);
+    CHECK(settled.gesture.Phase()==MeleeStrokePhase::Ready); // The original 120 ms quiet interval survives.
+    settled.s.attackAvailable=true;settled.Stab();CHECK(settled.emitted==1);
+    Fixture travel;travel.s.trackingAvailable=true;travel.Rest();
+    travel.Step({0,0,.024f});travel.s.attackAvailable=false;travel.Step({0,0,.048f});
+    CHECK(travel.gesture.Phase()==MeleeStrokePhase::Travelling&&!travel.emitted);
+    travel.s.attackAvailable=true;const auto command=travel.Step({0,0,.072f});
+    CHECK(command.intent&&command.intent->sourceSequence==travel.s.source.sequence);
+    CHECK(command.intent->deadlineNs==travel.s.source.deadlineNs&&travel.emitted==1);
+    return 0;
+}
+int UnavailableAttackConsumesStroke(){
+    Fixture f;f.s.trackingAvailable=true;f.Rest();f.s.attackAvailable=false;
+    f.Stab();CHECK(!f.emitted&&f.gesture.Phase()==MeleeStrokePhase::Spent);
+    f.s.attackAvailable=true;
+    CHECK(!f.gesture.Update(f.s,f.hands).intent); // Same source cannot replay at render recovery.
+    f.Stab();CHECK(!f.emitted&&f.gesture.Phase()==MeleeStrokePhase::Spent);
+    f.Rest(17);CHECK(!f.emitted&&f.gesture.Phase()==MeleeStrokePhase::Spent);
+    f.Rest(1);CHECK(f.gesture.Phase()==MeleeStrokePhase::Ready);
+    f.Stab();CHECK(f.emitted==1);return 0;
+}
+int ReadinessChangesNeverSupplyPhysicalEvidence(){
+    Fixture duplicate;duplicate.s.trackingAvailable=true;duplicate.Rest(11);
+    duplicate.s.attackAvailable=false;
+    for(unsigned n=0;n<50;++n)CHECK(!duplicate.gesture.Update(duplicate.s,duplicate.hands).intent);
+    CHECK(duplicate.gesture.Phase()==MeleeStrokePhase::Settling);
+    duplicate.s.attackAvailable=true;duplicate.Step(duplicate.s.tip);
+    CHECK(duplicate.gesture.Phase()==MeleeStrokePhase::Ready);
+    for(unsigned fault=0;fault<8;++fault){Fixture f;f.s.trackingAvailable=true;f.Rest();f.Step({0,0,.024f});
+        f.s.attackAvailable=false;
+        if(fault==0)f.s.trackingAvailable=false;
+        if(fault==1)f.s.source.focused=false;
+        if(fault==2)f.s.source.tracked[1]=false;
+        if(fault==3)f.s.source.released[1]=true;
+        if(fault==4)++f.s.source.owner.space;
+        if(fault==5)++f.s.source.owner.equipGeneration;
+        if(fault==6)++f.s.source.owner.actorGeneration;
+        f.Step({0,0,.048f},fault==7?80*ms:10*ms);
+        f.s.attackAvailable=true;f.s.trackingAvailable=true;f.s.source.focused=true;
+        f.s.source.tracked[1]=true;f.s.source.released[1]=false;
+        f.Step({0,0,.072f});CHECK(!f.emitted); // No partial stroke crosses physical/source loss.
+    }
+    return 0;
+}
 }
 int main(){return OneIntentAndNativeBusy()||DrawMotionCannotStab()||DeceleratingJabAndAbortedStroke()||RestAndDirection()||PacketAndPoseBoundaries()||
-    DuplicatesAndNoForgedCustody()||IntentProvenance()||InvalidConfiguration()||EitherHandAndFreshCustody();}
+    DuplicatesAndNoForgedCustody()||IntentProvenance()||InvalidConfiguration()||EitherHandAndFreshCustody()||
+    PhysicalSamplingWithoutAttackReadiness()||UnavailableAttackConsumesStroke()||ReadinessChangesNeverSupplyPhysicalEvidence();}

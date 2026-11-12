@@ -32,12 +32,14 @@ bool Bc2ChestKnifeCoordinator::TickIdleHeldGun(const BodyDrawSample& s,const Bc2
     if(!chestKnifeNative::TryIdleHeldGun(idle))return false;
     InvalidateLiveObservation();
     rendering_.reset();
+    motionCalibration_.Reset();policy_.InvalidateMotion();
     idle.claimIntent=++intent;
     policy_.Prepare(idle,hands);
     return true;
 #endif
 }
 void Bc2ChestKnifeCoordinator::Missing(std::int64_t now,HandInteraction& hands)noexcept {
+    motionCalibration_.Reset();policy_.InvalidateMotion();
     ChestKnifeLiveObservation failure;failure.phase=policy_.Phase();failure.bodyOperation=bodyOperation_;
     failure.draws=draws_;failure.returns=returns_;if(anchor_)failure.originalOwner=anchor_->original.client.owner;
     // There is no current hand source in this path; zero fields remain unknown.
@@ -65,6 +67,7 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
     chestKnifeNative::InspectReason nativeInspection=chestKnifeNative::InspectReason::NotAttempted;
     const auto native=key?chestKnifeNative::Inspect(s.owner,knife,s.hand.sequence,s.hand.nowNs,&nativeInspection):std::nullopt;
     std::optional<selectedKnife::Geometry> attackGeometry;
+    std::optional<ChestKnifeMotionIdentity> motionIdentity;
     bool measuredKnifeHold=false;
     KnifeSample sample;sample.source=s.hand;sample.menu=s.input.menu;
     if(key)sample.knife={key->id,key->generation};
@@ -109,17 +112,31 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
         const bool existingHoldCurrent=!policy_.NeedsInitialHeldPose()&&ChestKnifeRenderPoseCustody(policy_,hands,s.hand);
         sample.stockTriggerReady=existingHoldCurrent&&native->stockTriggerEnabled&&!native->attackBridgeEnabled&&
             sample.trackedKnifeOwned&&sample.mechanicsSettled;
-        // Raw original grip in one fixed tracking epoch, never rendered/head
-        // motion. Native and shared hand admission are checked again at Stage.
-        if(measuredKnifeHold&&s.input.hands[1].gripTracked)
-        if(const auto motion=private_knife::KnifeMotionFromTrackedGrip(s.input,rendered->wristInGrip)){
-            sample.tip=motion->tip;sample.direction=motion->direction;
-            if(native->attackBridgeEnabled&&currentBody)
-                attackGeometry=selectedKnife::MapTrackedGeometry(s.input,rendered->wristInGrip,*currentBody);
-            sample.nativeAttackReady=existingHoldCurrent&&native->motionEnabled&&measuredKnifeHold&&sample.mechanicsSettled&&
-                (!native->attackBridgeEnabled||attackGeometry.has_value());
+        // Continue physical observation only through the same live hold and
+        // current native/input proofs. Missing render contact remains bounded
+        // by the existing stock fallback's ORIGINAL hand deadline above.
+        const auto held=hands.Current(InteractionHand::Right);
+        if(existingHoldCurrent&&held&&nativeHoldCurrent&&native->motionEnabled&&sample.mechanicsSettled&&
+           !policy_.NeedsNativeCleanup()&&sample.trackedKnifeOwned&&
+           sample.holdInputCurrent&&KnifeActionInputCurrent(sample)&&sample.fireSuppressed&&
+           GameplayOwnsInput(sample.menu,s.hand.nowNs)&&sample.gripHeld[1]&&
+           s.hand.focused&&s.hand.tracked[0]&&s.hand.tracked[1]&&!s.hand.released[1]&&
+           s.hand.observedNs>0&&s.hand.nowNs>=s.hand.observedNs&&s.hand.deadlineNs>s.hand.nowNs&&
+           s.hand.deadlineNs-s.hand.observedNs<=100000000&&hands.HasRecordedEvidence(s.hand,InteractionHand::Right)&&
+           s.input.generation==s.hand.sequence&&s.input.spaceGeneration==s.hand.owner.space&&s.input.trackingBasisGeneration&&
+           native->currentHoldWork.known&&native->currentHoldWork.lifetime&&
+           native->currentHoldWork.bodyOperation==bodyOperation_&&
+           native->snapshot.selectedOwner==s.owner){
+            motionIdentity=ChestKnifeMotionIdentity{s.owner,held->token,*key,bodyOperation_,native->currentHoldWork.lifetime,
+                sample.menu.epoch,s.input.trackingBasisGeneration,s.input.worldUnitsPerMeter};
         }
     }else ++readGaps_;
+    if(motionIdentity&&measuredKnifeHold&&native->attackBridgeEnabled&&currentBody)
+        attackGeometry=selectedKnife::MapTrackedGeometry(s.input,rendered->wristInGrip,*currentBody);
+    PrepareChestKnifeMotionSource(motionCalibration_,policy_,motionIdentity,
+        measuredKnifeHold?std::optional(rendered->wristInGrip):std::nullopt,s.input,
+        native&&native->motionEnabled&&sample.mechanicsSettled&&
+            (!native->attackBridgeEnabled||attackGeometry.has_value()),sample);
     // Copy only facts already obtained by this gather. Diagnostics cannot
     // provide a render receipt, native view, claim or current input authority.
     const auto diagnostic=[&](){ChestKnifeLiveObservation v;v.owner=s.owner;v.input=s.hand;v.phase=policy_.Phase();
@@ -131,6 +148,7 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
             v.readiness=nativeReadiness;}
         v.mechanicsSettled=sample.mechanicsSettled;return v;};
     if(!chestKnifeNative::BeforePrepare(sample,policy_)){
+        motionCalibration_.Reset();policy_.InvalidateMotion();
         liveObservation_.Reject(diagnostic(),s.hand.nowNs,"producer_prerequisite","before_prepare");
         currentHoldObservation_.Reject(diagnostic(),s.hand.nowNs,"before_prepare");
         recognition_.NativeGate(sample.source,unsigned(policy_.Phase()));return;

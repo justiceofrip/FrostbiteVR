@@ -1,0 +1,7 @@
+Physical knife motion continuity, November12,2026; ROOT coordinator.
+Actual87/07 drew/held/returned the same knife and completed a zero-trigger120mm/120ms simulated jab, but emitted no native Attack. Draw1/Return2 and zero attack masks/receipts exclude an intervening staged attack. The measured blade axis was correct.
+A specific render-receipt absence92.135ms before motion could reset the120ms physical settling interval while the hand stayed held. Per-sample recognition was not retained, so this is a supported failure mechanism, not proof of the episode's sole cause. Audit1041 retains the exact evidence.
+Candidate1042 separates physical observation from attack readiness. It retains only a verified constant blade calibration under the exact live owner/hand/item/body/native/menu/tracking identity, with the original contact deadline. Native/source/render attack gates remain mandatory.
+Physical strokes completed without current attack admission are spent, never queued for later replay. Actual focus, tracking, native, identity, calibration or time-gap loss still resets recognition.
+Independent1044 review found that initial candidate1042 cleared geometry during AttackStaged and could revoke a still-current jab before consumption. Correction1046 preserves staged-source authority independently of physical recognition; no native Stage gate is relaxed.
+ROOT focused checks, combined normal builds and installation are pending. This file describes the source candidate; installed87 is unchanged. Actual jab damage and headset reliability remain open.

@@ -30,6 +30,9 @@ struct KnifeSample {
     // or release-return. This is independently checked at the native boundary.
     bool actionInputCurrent=false;
     bool knifeSelected=false,trackedKnifeOwned=false,nativeAttackReady=false;
+    // Fresh physical grip + constant measured blade relation, separately
+    // admitted by the adapter. Does not supply native attack readiness.
+    bool motionTrackingReady=false;
     MeleePoint tip{},direction{0,0,1};
     // Separate default-off stock request; never supplies tracked geometry.
     bool stockTriggerReady=false,stockTriggerInputCurrent=false;
@@ -77,6 +80,9 @@ public:
     // Caller first updates the existing shared arbiter with this original input.
     // A native read miss is not an actor-lifetime replacement.
     void ObserveRecognition(KnifeRecognitionDiagnostic* diagnostic)noexcept{recognition_=diagnostic;}
+    // A physical calibration/source loss clears only recognition. Submitted
+    // native work keeps its original completion and cleanup owner.
+    void InvalidateMotion()noexcept{motion_.Invalidate();}
     bool RecognitionReady(const HandInteractionSample& source)const noexcept {
         return phase_==KnifePhase::Held&&!returnWanted_&&motion_.ReadyFor(source);
     }
@@ -282,7 +288,8 @@ private:
             if(command){command->stockTriggerHold=*claim_;staged_=command;}return command;
         }
         if(!KnifeActionInputCurrent(s)){gate(KnifeRecognitionGate::Admission);return {};}
-        MeleeStrokeSample stroke{f,*claim_,s.tip,s.direction,s.nativeAttackReady&&s.mechanicsSettled};
+        MeleeStrokeSample stroke{f,*claim_,s.tip,s.direction,s.nativeAttackReady&&s.mechanicsSettled,
+            s.motionTrackingReady&&s.mechanicsSettled};
         gate(KnifeRecognitionGate::Motion);
         const auto motion=motion_.Update(stroke,hands,observation?&observation->motion:nullptr);
         if(!motion.intent)return {};
