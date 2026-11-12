@@ -680,7 +680,10 @@ int InsertFixedWithOfflineReceipt(Fixture& f,bool freshPickupGap=false){
                 CHECK(f.result.ammoOwnsHand&&f.result.tracking.hand->token==held->token&&f.calls==calls);
                 CHECK(f.result.tracking.hand->inputSequence==retained.inputSequence&&f.result.tracking.hand->deadlineNs==retained.deadlineNs);
                 const auto rawItem=Multiply(feed_interaction_detail::Inverse(motion.placement.sourceFromGrip),delayed.weaponFromWrist);
-                const auto& guidance=f.equipment->interaction.insertionGuidance;
+                // BC2 applies single-round guidance after reading the registered profile.
+                const auto kind=f.equipment->interaction.kind;
+                const auto guidance=kind==FixedContainerKind::SingleRoundBreech||kind==FixedContainerKind::SingleRoundMuzzle?
+                    FeedPlacementGuidance{.06f,.14f,.02f}:f.equipment->interaction.insertionGuidance;
                 const auto& destination=motion.placement.weaponFromDestination;
                 if(guidance==FeedPlacementGuidance{}||
                    feed_interaction_detail::Distance(rawItem,destination)>guidance.captureRadiusMeters)
