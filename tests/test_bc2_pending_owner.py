@@ -44,21 +44,22 @@ class PendingOwnerTests(unittest.TestCase):
                           lambda: record.path.unlink(), lambda: os.replace(other, record.path)):
             with self.subTest(operation=operation), self.assertRaises(OSError):
                 operation()
-        self.assertEqual(record.read(), b'exact-host-sequence-sentinel-hash')
+        self.assertEqual(record.validate(b'exact-host-sequence-sentinel-hash', d.time.perf_counter_ns() + d.NS),
+                         b'exact-host-sequence-sentinel-hash')
         record.close()
         self.assertEqual(record.path.read_bytes(), b'exact-host-sequence-sentinel-hash')
 
-    def test_read_uses_existing_handle_without_opening_owner_path(self):
+    def test_validation_uses_metadata_without_reopening_owner_payload(self):
         record = self.record()
         with patch.object(Path, 'open', side_effect=AssertionError('owner reopen')):
-            self.assertEqual(record.read(), b'owner')
-            self.assertEqual(record.read(), b'owner')
+            self.assertEqual(record.validate(b'owner', d.time.perf_counter_ns() + d.NS), b'owner')
+            self.assertEqual(record.validate(b'owner', d.time.perf_counter_ns() + d.NS), b'owner')
 
     def test_handle_path_mismatch_is_refused(self):
         record = self.record()
         record.path = self.directory / 'another-owner.json'
         with self.assertRaisesRegex(d.REFUSAL, 'HANDLE path changed'):
-            record.read()
+            record.validate(b'owner', d.time.perf_counter_ns() + d.NS)
 
     def test_parent_rename_cannot_admit_stale_handle_at_original_path(self):
         nested = self.directory / 'run'
@@ -69,12 +70,12 @@ class PendingOwnerTests(unittest.TestCase):
         try:
             nested.rename(moved)
         except OSError:
-            self.assertEqual(record.read(), b'exact')
+            self.assertEqual(record.validate(b'exact', d.time.perf_counter_ns() + d.NS), b'exact')
         else:
             nested.mkdir()
             record.path.write_bytes(b'foreign')
             with self.assertRaisesRegex(d.REFUSAL, 'HANDLE path changed'):
-                record.read()
+                record.validate(b'exact', d.time.perf_counter_ns() + d.NS)
 
     def test_failed_owner_rename_cleans_exact_temporary_and_preserves_predecessor(self):
         path = self.directory / 'live-driver-owner.json'
@@ -92,14 +93,14 @@ class PendingOwnerTests(unittest.TestCase):
         original_deadlines = v.deadline, v.stage_deadline, v.hard_deadline
         deadline = h.now + 100 * MS
         observed = []
-        real_read = d.PendingOwner.read
-        def read(record):
-            raw = real_read(record)
+        real_validate = d.PendingOwner.validate
+        def validate(record, expected_bytes, deadline_ns):
+            raw = real_validate(record, expected_bytes, deadline_ns)
             observed.append(raw)
             with self.assertRaises(OSError):
                 record.path.write_bytes(b'foreign')
             return raw
-        with patch.object(d.PendingOwner, 'read', read):
+        with patch.object(d.PendingOwner, 'validate', validate):
             v.send(['grip l 1'], source_deadline=deadline)
         self.assertEqual(len(observed), 1)
         pending = json.loads(observed[0])
@@ -116,7 +117,7 @@ class PendingOwnerTests(unittest.TestCase):
     def test_same_handle_bytes_mismatch_refuses_without_command_or_unsafe_rollback(self):
         h = self.harness()
         v = h.driver
-        with patch.object(d.PendingOwner, 'read', return_value=b'wrong-host-or-command'), \
+        with patch.object(d.PendingOwner, 'validate', return_value=b'wrong-host-or-command'), \
                 self.assertRaisesRegex(d.REFUSAL, 'owner record replaced'):
             v.send(['grip l 1'], source_deadline=h.now + 100 * MS)
         self.assertTrue(v.unsafe_owner)
@@ -128,12 +129,13 @@ class PendingOwnerTests(unittest.TestCase):
         v = h.driver
         deadline = h.now + 100 * MS
         original = v.sequence, v.sentinel, v.command_hash, v.commands
-        real_read = d.PendingOwner.read
-        def delay(record):
-            raw = real_read(record)
+        real_validate = d.PendingOwner.validate
+        def delay(record, expected_bytes, deadline_ns):
+            raw = real_validate(record, expected_bytes, deadline_ns)
             h.now = deadline
+            d.require_read_time(deadline_ns)
             return raw
-        with patch.object(d.PendingOwner, 'read', delay), self.assertRaises(d.ReadDeadlineExceeded):
+        with patch.object(d.PendingOwner, 'validate', delay), self.assertRaises(d.ReadDeadlineExceeded):
             v.send(['grip l 1'], source_deadline=deadline)
         self.assertEqual(original, (v.sequence, v.sentinel, v.command_hash, v.commands))
         self.assertEqual(h.command_writes, [])
@@ -145,16 +147,17 @@ class PendingOwnerTests(unittest.TestCase):
         h = self.harness()
         v = h.driver
         deadline = h.now + 100 * MS
-        real_read = d.PendingOwner.read
+        real_validate = d.PendingOwner.validate
         delayed = False
-        def delay_once(record):
+        def delay_once(record, expected_bytes, deadline_ns):
             nonlocal delayed
-            raw = real_read(record)
+            raw = real_validate(record, expected_bytes, deadline_ns)
             if not delayed:
                 delayed = True
                 h.now = deadline
+            d.require_read_time(deadline_ns)
             return raw
-        with patch.object(d.PendingOwner, 'read', delay_once), self.assertRaises(d.ReadDeadlineExceeded):
+        with patch.object(d.PendingOwner, 'validate', delay_once), self.assertRaises(d.ReadDeadlineExceeded):
             v.send(['grip l 1'], source_deadline=deadline)
         v._receive_timing.freeze(v.pending_command, v.sequence)
         self.assertEqual(v.release_after_failure(), 'ordinary owned controller release acknowledged')
@@ -169,15 +172,15 @@ class PendingOwnerTests(unittest.TestCase):
             with self.subTest(change=change):
                 h = self.harness()
                 v = h.driver
-                real_read = d.PendingOwner.read
-                def interfere(record):
-                    raw = real_read(record)
+                real_validate = d.PendingOwner.validate
+                def interfere(record, expected_bytes, deadline_ns):
+                    raw = real_validate(record, expected_bytes, deadline_ns)
                     if change == 'session':
                         v.read_state = lambda: d.require(False, 'linked native session changed')
                     else:
                         h.files[v.command_path] = b'other-writer'
                     return raw
-                with patch.object(d.PendingOwner, 'read', interfere), self.assertRaises(d.REFUSAL):
+                with patch.object(d.PendingOwner, 'validate', interfere), self.assertRaises(d.REFUSAL):
                     v.send(['grip l 1'], source_deadline=h.now + 100 * MS)
                 self.assertTrue(v.unsafe_owner)
                 self.assertEqual(h.command_writes, [])

@@ -821,9 +821,29 @@ class StimulusTests(unittest.TestCase):
             return m.transport.json_bytes(session)
 
         def save_owner(pending):
+            driver.dispose_publication_owner()
             h.owner_record = driver.owner_bytes(pending)
             h.owners.append(dict(pending=pending, sequence=driver.sequence, sentinel=driver.sentinel,
                                  commandSha256=driver.command_hash, atNs=clock.now))
+            if pending:
+                driver._publication_owner = MemoryOwner(h.owner_record)
+
+        class MemoryOwner:
+            def __init__(self, raw):
+                self.raw, self.stream = raw, self
+                self.temporary = driver.run / "live-driver-owner.json.tmp"
+
+            def validate(self, expected_bytes, deadline_ns):
+                # Model sealed bytes and the current pathname identity together.
+                # Actual Windows metadata custody is covered separately.
+                if clock.now >= deadline_ns:
+                    raise m.transport.ReadDeadlineExceeded("original acknowledgement/read deadline exceeded")
+                m.require(self.stream is not None and self.raw == expected_bytes == h.owner_record,
+                          "command owner record replaced before publication")
+                return self.raw
+
+            def close(self):
+                self.stream = None
 
         save = driver.artifacts.sink.save
         def archive(name, value, final=False):

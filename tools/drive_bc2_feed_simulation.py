@@ -325,18 +325,49 @@ def delete_prepared_command(stream):
         raise ctypes.WinError(ctypes.get_last_error())
 
 
+class SealedOwnerStream:
+    """Retain file custody without exposing payload reads or further writes."""
+    def __init__(self, stream):
+        self._stream = stream
+
+    def fileno(self):
+        return self._stream.fileno()
+
+    def close(self):
+        self._stream.close()
+
+
+def owner_file_identity(api, handle):
+    class FileIdInfo(ctypes.Structure):
+        _fields_ = [("VolumeSerialNumber", ctypes.c_ulonglong), ("FileId", ctypes.c_ubyte * 16)]
+    api.GetFileInformationByHandleEx.argtypes = (wintypes.HANDLE, ctypes.c_int,
+                                                 ctypes.c_void_p, wintypes.DWORD)
+    api.GetFileInformationByHandleEx.restype = wintypes.BOOL
+    info = FileIdInfo()
+    if not api.GetFileInformationByHandleEx(handle, 18, ctypes.byref(info), ctypes.sizeof(info)):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return info.VolumeSerialNumber, bytes(info.FileId)
+
+
 class PendingOwner:
     """Keep the exact published owner record immutable until command handoff."""
     def __init__(self, driver, path, raw):
         self.path = local_path(path)
-        require(len(raw) <= 8192, "oversized command owner record")
+        require(isinstance(raw, bytes) and len(raw) <= 8192, "oversized command owner record")
         self.temporary = self.path.with_name(self.path.name + "." + uuid.uuid4().hex + ".tmp")
         self.stream, self.owned = None, False
+        self._raw = self._identity = self._path_handle = None
         try:
             self.stream = open_prepared_command(self.temporary, readable=True)
             self.owned = True
-            self.stream.write(raw)
+            require(self.stream.write(raw) == len(raw), "incomplete command owner write")
             self.stream.flush()
+            self.stream.seek(0)
+            require(self.stream.read(8193) == raw, "command owner write verification failed")
+            self._raw = raw
+            self.stream = SealedOwnerStream(self.stream)
+            self._api, handle = prepared_file_api(self.stream)
+            self._identity = owner_file_identity(self._api, handle)
             rename = prepare_command_rename(self.stream, self.path)
             local_path(self.path)
             rename(self.stream, self.path)
@@ -345,34 +376,76 @@ class PendingOwner:
             driver.dispose_prepared_command(self)
             raise
 
-    def read(self):
-        # Share=0 prevents content changes and file replacement. Check the live
-        # HANDLE name as well: retaining a file alone must not admit a renamed
-        # ancestor and a replacement directory at the original run path.
-        local_path(self.path)
+    def validate(self, expected_bytes, deadline_ns):
+        """Join sealed bytes, the live HANDLE, and the current pathname identity.
+
+        Metadata-only pathname opens coexist with exclusive data custody. A
+        retained name alone is insufficient proof against file replacement.
+        Every check consumes the caller's original budget; no payload is reread.
+        """
+        def checked(function, *args):
+            require_read_time(deadline_ns)
+            value = function(*args)
+            require_read_time(deadline_ns)
+            return value
+        require_read_time(deadline_ns)
+        require(self.stream is not None and self._raw is not None and self._identity is not None
+                and self._path_handle is None, "pending owner HANDLE custody unavailable")
+        require(expected_bytes == self._raw, "command owner record replaced before publication")
+        checked(local_path, self.path)
         api, handle = prepared_file_api(self.stream)
+        require(checked(owner_file_identity, api, handle) == self._identity,
+                "pending owner HANDLE identity changed")
         api.GetFinalPathNameByHandleW.argtypes = (wintypes.HANDLE, wintypes.LPWSTR,
                                                 wintypes.DWORD, wintypes.DWORD)
         api.GetFinalPathNameByHandleW.restype = wintypes.DWORD
         name = ctypes.create_unicode_buffer(32768)
-        length = api.GetFinalPathNameByHandleW(handle, name, len(name), 0)
+        length = checked(api.GetFinalPathNameByHandleW, handle, name, len(name), 0)
         if not length:
             raise ctypes.WinError(ctypes.get_last_error())
         require(length < len(name) and name.value.startswith("\\\\?\\")
                 and same_path(name.value[4:], self.path), "pending owner HANDLE path changed")
-        require(os.fstat(self.stream.fileno()).st_size <= 8192, "oversized command owner record")
-        self.stream.seek(0)
-        raw = self.stream.read(8193)
-        require(len(raw) <= 8192, "command owner record grew beyond bound")
-        return raw
+        api.CreateFileW.argtypes = (wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                                   ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE)
+        api.CreateFileW.restype = wintypes.HANDLE
+        api.CloseHandle.argtypes = (wintypes.HANDLE,)
+        api.CloseHandle.restype = wintypes.BOOL
+        require_read_time(deadline_ns)
+        # Access=0 requests metadata only; share READ|WRITE|DELETE accommodates
+        # the retained data HANDLE. OPEN_REPARSE_POINT never follows a final link.
+        path_handle = api.CreateFileW(str(self.path), 0, 7, None, 3, 0x00200000, None)
+        if path_handle in (None, wintypes.HANDLE(-1).value):
+            require_read_time(deadline_ns)
+            raise ctypes.WinError(ctypes.get_last_error())
+        self._path_handle = path_handle
+        try:
+            require_read_time(deadline_ns)
+            require(checked(owner_file_identity, api, path_handle) == self._identity,
+                    "pending owner pathname identity changed")
+        finally:
+            # Close even after expiry. Retain a failed close for bounded driver
+            # disposal; never overwrite it with another validation HANDLE.
+            self.close_path_handle()
+        require_read_time(deadline_ns)
+        return self._raw
+
+    def close_path_handle(self):
+        if self._path_handle is not None:
+            self._api.CloseHandle.argtypes = (wintypes.HANDLE,)
+            self._api.CloseHandle.restype = wintypes.BOOL
+            if not self._api.CloseHandle(self._path_handle):
+                raise ctypes.WinError(ctypes.get_last_error())
+            self._path_handle = None
 
     def close(self):
+        self.close_path_handle()
         if self.owned:
             delete_prepared_command(self.stream)
             self.owned = False
         if self.stream is not None:
             self.stream.close()
             self.stream = None
+        self._raw = self._identity = None
 
 
 class PreparedCommand:
@@ -980,12 +1053,13 @@ class Driver:
             finally:
                 _snapshot_json_timing.reset(token)
 
-    def read_publication_owner(self):
+    def read_publication_owner(self, expected_bytes, deadline_ns):
         with self.receive_timing_scope("publish_owner_read") as trace:
             token = _owner_read_timing.set(trace)
             try:
                 record = getattr(self, "_publication_owner", None)
-                return record.read() if record is not None else read_bytes(self.run / "live-driver-owner.json", 8192)
+                require(record is not None, "pending owner HANDLE custody unavailable")
+                return record.validate(expected_bytes, deadline_ns)
             finally:
                 _owner_read_timing.reset(token)
 
@@ -1194,7 +1268,7 @@ class Driver:
         if record is not None and record.stream is None:
             self._publication_owner = None
 
-    def save_owner(self, pending):
+    def save_owner(self, pending, *, settled_writer=None):
         self.dispose_publication_owner()
         require(getattr(self, "_publication_owner", None) is None,
                 "pending owner HANDLE did not close")
@@ -1202,7 +1276,7 @@ class Driver:
             self._publication_owner = PendingOwner(self, self.run / "live-driver-owner.json",
                                                    self.owner_bytes(True))
         else:
-            atomic(self.run / "live-driver-owner.json", self.owner_bytes(False))
+            (settled_writer or atomic)(self.run / "live-driver-owner.json", self.owner_bytes(False))
 
     def bounds(self, now):
         require(now < self.deadline, "ten-second driver deadline reached")
@@ -1720,7 +1794,7 @@ class Driver:
             if self.last_commit is not None and not cleanup:
                 self.bounds(time.perf_counter_ns())
             try:
-                require(self.read_publication_owner() == pending_owner,
+                require(self.read_publication_owner(pending_owner, publication_deadline) == pending_owner,
                         "command owner record replaced before publication")
                 current = self.receive_timing_call("publish_state_read", read_until,
                     publication_deadline, self.read_state)
@@ -1748,7 +1822,7 @@ class Driver:
             self.pending_command = False
             if not self.unsafe_owner:
                 try:
-                    require(self.read_publication_owner() == pending_owner,
+                    require(self.read_publication_owner(pending_owner, self.hard_deadline) == pending_owner,
                             "unpublished owner record replaced")
                     restored = self.read_state()
                     self.ownership(restored)

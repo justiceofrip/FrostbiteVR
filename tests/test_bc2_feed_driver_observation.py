@@ -66,10 +66,20 @@ class MemoryPendingOwner:
     def __init__(self, driver, path, raw):
         self.path = self.temporary = path
         self.stream = self
+        self.raw = raw
         d.atomic(path, raw)
 
     def read(self):
         return d.read_bytes(self.path, 8192)
+
+    def validate(self, expected_bytes, deadline_ns):
+        d.require(self.stream is not None and expected_bytes == self.raw,
+                  "command owner record replaced before publication")
+        # The in-memory read models current pathname identity; production
+        # validates metadata against the sealed HANDLE without rereading bytes.
+        observed = d.read_until(deadline_ns, self.read)
+        d.require(observed == self.raw, "command owner record replaced before publication")
+        return self.raw
 
     def close(self):
         self.stream = None

@@ -561,6 +561,8 @@ class ObservationWorker:
 class ReloadStimulus:
     acquire_lock = transport.Driver.acquire_lock
     check_target = staticmethod(transport.Driver.check_target)
+    dispose_prepared_command = transport.Driver.dispose_prepared_command
+    dispose_publication_owner = transport.Driver.dispose_publication_owner
 
     def __init__(self, args):
         require(os.name == "nt", "ordinary XR stimulus requires Windows")
@@ -693,7 +695,17 @@ class ReloadStimulus:
             "sentinel": self.sentinel, "commandSha256": self.command_hash, "artifactDirectory": str(self.artifacts.directory)})
 
     def save_owner(self, pending):
-        publish_owner(self, self.owner_bytes(pending))
+        require(os.name == "nt" and self.lock not in (None, wintypes.HANDLE(-1).value),
+                "owner publication requires exclusive live-driver.lock")
+        transport.Driver.save_owner(self, pending, settled_writer=lambda path, raw: publish_owner(self, raw))
+
+    def validate_pending_owner(self, expected_bytes, deadline_ns):
+        record = getattr(self, "_publication_owner", None)
+        require(record is not None, "pending owner HANDLE custody unavailable")
+        try:
+            return record.validate(expected_bytes, deadline_ns)
+        except transport.ReadDeadlineExceeded as error:
+            raise ReadDeadline(str(error)) from error
 
     def ownership(self, state, deadline_ns=None, expected=None):
         sequence, sentinel, command_hash = expected or (self.sequence, self.sentinel, self.command_hash)
@@ -993,6 +1005,7 @@ class ReloadStimulus:
             trace.finish()
             self._last_publication_trace = trace
         finally:
+            self.dispose_publication_owner()
             self._publication_trace = None
 
     def _send(self, sample=None, *, cleanup=False, release_only=False):
@@ -1068,7 +1081,7 @@ class ReloadStimulus:
                 raise
             try:
                 publication.phase("pending_owner_read")
-                require(deadline_bytes(self.run / "live-driver-owner.json", 8192, publication_deadline) == pending_owner,
+                require(self.validate_pending_owner(pending_owner, publication_deadline) == pending_owner,
                         "command owner record replaced before publication")
                 self.ownership(self.read_state(cleanup, publication_deadline), publication_deadline, expected=previous_owner)
             except ReadDeadline as error:
@@ -1101,7 +1114,7 @@ class ReloadStimulus:
             if not self.unsafe_owner:
                 try:
                     publication.phase("pending_owner_read")
-                    require(deadline_bytes(self.run / "live-driver-owner.json", 8192, self.hard_deadline) == pending_owner,
+                    require(self.validate_pending_owner(pending_owner, self.hard_deadline) == pending_owner,
                             "unpublished owner record replaced")
                     self.ownership(self.read_state(True, self.hard_deadline), self.hard_deadline)
                     publication.outcome = "not_published"
@@ -1119,6 +1132,7 @@ class ReloadStimulus:
             self.first_sample_pending = False
         self.last_write = published
         self.commands += len(batch)
+        self.dispose_publication_owner()
         trace = AckReadTrace(written, published, until, dict(sequence=target, sentinel=sentinel,
                             commandSha256=self.command_hash, commands=batch), cleanup)
         self._ack_trace = trace
@@ -1321,6 +1335,9 @@ class ReloadStimulus:
         return "ordinary owned left-grip release acknowledged"
 
     def close(self):
+        self.dispose_publication_owner()
+        for record in tuple(getattr(self, "_prepared_cleanup_pending", ())):
+            self.dispose_prepared_command(record)
         joined = self.observer is None or self.observer.close()
         try:
             if getattr(self, "artifacts", None) is not None:
@@ -1374,6 +1391,11 @@ class ReloadStimulus:
             value["observerStopped"] = observer_stopped
             self.artifacts.event(value, cleanup=trace.cleanup)
         self._publication_failures, self._last_publication_trace = [], None
+        errors = getattr(self, "_prepared_cleanup_errors", None)
+        if errors:
+            self.artifacts.save("prepared-command-cleanup-failure.json", dict(
+                schema="bc2vr.prepared-command-cleanup-failure.v1", errors=list(errors),
+                retainedTemporaryCount=len(getattr(self, "_prepared_cleanup_pending", ()))))
 
 
 def main(argv=None):

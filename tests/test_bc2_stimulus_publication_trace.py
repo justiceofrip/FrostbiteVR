@@ -89,6 +89,7 @@ class PublicationTraceTests(unittest.TestCase):
                 previous = d.sequence, d.sentinel, d.command_hash
                 requested, delayed = clock.now, False
                 read, state = m.transport.read_bytes.side_effect, m.sim_state.side_effect
+                validate_owner = d.validate_pending_owner
 
                 def stall():
                     nonlocal delayed
@@ -97,8 +98,7 @@ class PublicationTraceTests(unittest.TestCase):
                         clock.now += 40 * MS
 
                 def read_bytes(path, maximum):
-                    target = {"owner_record": d.run / "live-driver-owner.json",
-                              "session": d.session_path, "command": d.command_path}.get(operation)
+                    target = {"session": d.session_path, "command": d.command_path}.get(operation)
                     if path == target:
                         stall()
                     return read(path, maximum)
@@ -108,9 +108,18 @@ class PublicationTraceTests(unittest.TestCase):
                         stall()
                     return state(*args)
 
+                def validate_pending_owner(expected_bytes, deadline_ns):
+                    # Owner payload reads are gone; stall the sealed metadata
+                    # validation that now occupies the same publication phase.
+                    if operation == "owner_record":
+                        stall()
+                    return validate_owner(expected_bytes, deadline_ns)
+
                 d.owner.check.side_effect = stall if operation == "owner_check" else None
                 with patch.object(m.transport, "read_bytes", side_effect=read_bytes), \
-                        patch.object(m, "sim_state", side_effect=read_state), self.assertRaises(m.ReadDeadline):
+                        patch.object(m, "sim_state", side_effect=read_state), \
+                        patch.object(d, "validate_pending_owner", side_effect=validate_pending_owner), \
+                        self.assertRaises(m.ReadDeadline):
                     d.send(fixtures.sample(0, "neutral", 0, .1))
                 self.assert_unpublished(h, previous)
                 report = d._publication_failures[0].report()
