@@ -1,0 +1,9 @@
+Controlled source-pipeline launch, November12,2026; ROOT coordinator.
+Current87/06 profiling found the normal launcher uses one source slot; existing three-source/lookahead/export-overlap options were not selected. Native binaries are unchanged.
+Entry and the game-simulation runner now accept explicit -PrivateSourcePipeline, default off. Entry probes OpenXR before the dedicated Session process enables the four existing flags for game/host/native children.
+Session verifies the selected environment at each child boundary, records child identities, and restores prior process values during cleanup. Existing native channel, adapter and memory-budget gates remain. Copy-service selection is separate and stays disabled.
+Focused assembled checks: Entry35, Session617, runner2066 passed. Existing sandbox storage refusals and one corrected empty-variable test predicate remain recorded; production source did not change for the latter.
+Source/test hashes and logs: coordinator WT/reports/coordinator-20261108-feedback1038/handoff.json. ROOT reviewed the six-file diff. No repeated native build is needed for these script changes.
+Current87/06 evidence: ordinary GPU1.077ms mean; tracked pair4.047ms mean; four complete export-to-next-left intervals39.153-50.075ms, pooled ordinary coverage9.10%. Exact consumed-ticket joins were overwritten; late depth8x is not the historical1x configuration.
+Retained87/06 logs moved losslessly to ROOT721/closed-runtime-archive87-06; archive-execution87-06/restore-map.json preserves exact original paths and hashes. Selected attribution remains in agent1038/attribution.json.
+This enables a controlled current-candidate comparison during needed campaign work. Actual current activation, performance improvement and headset acceptance are not yet established; normal player defaults remain unchanged.

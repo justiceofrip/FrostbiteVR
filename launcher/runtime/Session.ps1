@@ -13,6 +13,43 @@ if([IO.Path]::GetFullPath($OptionsPath) -ne (Join-Path $folder 'options.json')){
 $null=Set-FvrLauncherStorage (Split-Path (Split-Path $options.state_root -Parent) -Parent)
 $state=@{schema='bc2vr.session.v1';state='starting';phase='Starting BC2 and waiting for its main menu…';version=$options.version;source_sha256=$options.source_sha256;started_utc=[DateTime]::UtcNow.ToString('o');game=$null;host=$null;trace=$null;error=$null;supervisor=(Get-Bc2ProcessIdentity (Get-Process -Id $PID))}
 $stateFile=Join-Path $folder 'session.json';$stopFile=Join-Path $folder 'stop.request'
+$pipelineEnvironment=@{};$pipelineOriginal=@{};$pipelineApplied=$false
+function Enable-PrivateSourcePipeline {
+    if(-not $options.ContainsKey('private_source_pipeline')){return}
+    if($options.private_source_pipeline -isnot [bool]){throw 'Private source pipeline option must be a boolean.'}
+    if(-not $options.private_source_pipeline){return}
+    $copyBudget=[Environment]::GetEnvironmentVariable('FVR_PRIVATE_HOST_COPY_SERVICE_MS','Process')
+    if($copyBudget -notin @($null,'','0')){throw 'Private source pipeline requires the separate host copy service disabled.'}
+    $script:pipelineEnvironment=@{FVR_PRIVATE_TWO_SOURCE_SLOTS='1';FVR_PRIVATE_THREE_SOURCE_SLOTS='1';FVR_PRIVATE_SOURCE_LOOKAHEAD='1';FVR_PRIVATE_EXPORT_OVERLAP='1'}
+    $prior=[Environment]::GetEnvironmentVariables('Process')
+    foreach($key in $pipelineEnvironment.Keys){$pipelineOriginal[$key]=@{present=$prior.Contains($key);value=[Environment]::GetEnvironmentVariable($key,'Process')}}
+    $state.private_source_pipeline=@{requested=$true;environment=$pipelineEnvironment.Clone();applied=$false;children=@{};restored=$false;native_enablement_claimed=$false}
+    # Session is a dedicated child, reached only after Entry's headset probe.
+    # Existing game creation and child launch helpers inherit this exact map.
+    $script:pipelineApplied=$true
+    foreach($key in $pipelineEnvironment.Keys){[Environment]::SetEnvironmentVariable($key,$pipelineEnvironment[$key],'Process')}
+    $state.private_source_pipeline.applied=$true
+}
+function Assert-PrivateSourcePipelineChild([string]$Name) {
+    if(-not $pipelineApplied){return}
+    $actual=@{}
+    foreach($key in $pipelineEnvironment.Keys){
+        $actual[$key]=[Environment]::GetEnvironmentVariable($key,'Process')
+        if($actual[$key] -cne $pipelineEnvironment[$key]){throw "Private source pipeline child environment changed: $Name / $key"}
+    }
+    if([Environment]::GetEnvironmentVariable('FVR_PRIVATE_HOST_COPY_SERVICE_MS','Process') -notin @($null,'','0')){throw 'Private source pipeline host copy service changed.'}
+    $state.private_source_pipeline.children[$Name]=@{environment=$actual;inheritance='session_process_environment';verified_before_launch=$true;started=$false;identity=$null}
+}
+function Restore-PrivateSourcePipeline {
+    if(-not $pipelineApplied){return}
+    foreach($key in $pipelineOriginal.Keys){[Environment]::SetEnvironmentVariable($key,$pipelineOriginal[$key].value,'Process')}
+    $after=[Environment]::GetEnvironmentVariables('Process');$restored=$true
+    foreach($key in $pipelineOriginal.Keys){
+        if($after.Contains($key) -ne $pipelineOriginal[$key].present -or [Environment]::GetEnvironmentVariable($key,'Process') -cne $pipelineOriginal[$key].value){$restored=$false}
+    }
+    $state.private_source_pipeline.restored=$restored
+    if(-not $restored){throw 'Private source pipeline process environment restoration differs.'}
+}
 $hostProcess=$null;$game=$null;$trace=$null;$resolutionProcess=$null
 $resolutionLease=$null;$resolutionAttempted=$false;$resolutionReleaseProcess=$null
 $setupProcess=$null;$setupAttempted=$false;$setupCompleted=$false;$preAttachSpecification=$null
@@ -206,9 +243,13 @@ try {
     [string[]]$menuCompatibilityArguments=if($admission.experimental_steam){@('--experimental-steam')}else{@()}
     if(Get-Process BFBC2Game,BC2XrHost,BC2NativeTrace,BC2NativeIpcProbe -ErrorAction SilentlyContinue){throw 'BC2 or a VR helper started concurrently; launch cancelled.'}
     if(-not(Test-Bc2AssetCache $options.cache $config.asset_recipe_sha256 $options.game_sha256)){throw 'Prepared assets changed before launch.'}
+    Enable-PrivateSourcePipeline
+    Assert-PrivateSourcePipelineChild 'game'
+    if($pipelineApplied){Save-State}
     # Audio settings are attached only to this new game process, never to the
     # machine/user environment or a guessed already-running game.
     $game=Start-Bc2GraphicsGame $exe $config
+    if($pipelineApplied){$state.private_source_pipeline.children.game.started=$true;$state.private_source_pipeline.children.game.identity=$state.game}
     $creation=$game.StartTime.ToUniversalTime().ToFileTimeUtc().ToString()
     & $options.python -B (Join-Path $PSScriptRoot 'tools/wait_main_menu.py') --pid $game.Id --creation-filetime $creation --exe $exe --expected-sha256 $options.game_sha256 --output (Join-Path $folder 'menu-ready.json') @menuCompatibilityArguments *> (Join-Path $folder 'menu-ready.log')
     if($LASTEXITCODE){
@@ -301,7 +342,9 @@ try {
     $channel=Join-Path $folder 'channel.txt';$ready=Join-Path $folder 'ready.json'
     $state.phase='Connecting the headset through '+$options.xr_label+'…';Save-State
     $hostArgs=@('--ipc','--until-game-exit',[string]$game.Id,'--request-lifetime','150','--eye-width',[string]$menuReady.width,'--eye-height',[string]$menuReady.height,'--channel-file',$channel,'--ready-file',$ready,'--stop-file',$stopFile,'--loader',(Join-Path $PSScriptRoot 'bin/openxr_loader.dll'),'--body-props-cache',(Join-Path $options.cache 'body-ammo-assets.fvrprop'),'--controllers','--roomscale','--world-units-per-meter','1')
+    Assert-PrivateSourcePipelineChild 'host'
     $hostProcess=Start-Bc2Child (Join-Path $PSScriptRoot 'bin/BC2XrHost.exe') $hostArgs $folder 'host' @{XR_RUNTIME_JSON=$options.xr_manifest}
+    if($pipelineApplied){$state.private_source_pipeline.children.host.started=$true;$state.private_source_pipeline.children.host.identity=Get-Bc2ProcessIdentity $hostProcess}
     $state.host=Get-Bc2ProcessIdentity $hostProcess;Save-State
     $deadline=[DateTime]::UtcNow.AddSeconds(30);$requirements=$null
     while([DateTime]::UtcNow -lt $deadline -and -not $hostProcess.HasExited){
@@ -322,7 +365,9 @@ try {
     if($options.ContainsKey('qualify_chest_knife') -and $options.qualify_chest_knife -is [bool] -and $options.qualify_chest_knife){
         $nativeArguments+='--qualify-chest-knife'
     }else{$nativeArguments+='--chest-holster-if-supported'}
+    Assert-PrivateSourcePipelineChild 'native'
     $trace=Start-Bc2Child (Join-Path $PSScriptRoot 'bin/BC2NativeTrace.exe') $nativeArguments $folder 'native'
+    if($pipelineApplied){$state.private_source_pipeline.children.native.started=$true;$state.private_source_pipeline.children.native.identity=Get-Bc2ProcessIdentity $trace}
     $state.trace=Get-Bc2ProcessIdentity $trace;$state.phase='Attaching VR and waiting for the native connection. Keep the headset connected…';Save-State
     $attachDeadline=[DateTime]::UtcNow.AddSeconds(35);$attached=$false
     while([DateTime]::UtcNow -lt $attachDeadline){
@@ -371,6 +416,9 @@ try {
     Write-Error -Message $sessionFailure.Exception.Message -ErrorAction Continue
 }
 finally {
+    # Children retain their own inherited maps. Restore before any cleanup call
+    # can throw, and keep a failed restoration visible in the final receipt.
+    try {Restore-PrivateSourcePipeline}catch{$state.state='failed';$state.error+=" $($_.Exception.Message)"}
     try {Stop-OwnedHost}catch{$state.state='failed';$state.error+=" Headset host cleanup failed: $($_.Exception.Message)"}
     # Native bootstrap must drain its hooks after the host exits. Do not kill a
     # bootstrap attached to a live game; retain exact ownership on a slow exit.

@@ -6,7 +6,8 @@ $repo=Split-Path $PSScriptRoot -Parent
 . (Join-Path $repo 'launcher/Launcher.Core.ps1')
 . (Join-Path $repo 'tools/StorageBudget.ps1')
 $root=Join-Path $repo ('test-temp/session-start-'+[guid]::NewGuid().ToString('N'))
-$saved=@{};foreach($key in @('TEMP','TMP','TMPDIR','PYTHONDONTWRITEBYTECODE')){$saved[$key]=[Environment]::GetEnvironmentVariable($key,'Process')}
+$pipelineKeys=@('FVR_PRIVATE_TWO_SOURCE_SLOTS','FVR_PRIVATE_THREE_SOURCE_SLOTS','FVR_PRIVATE_SOURCE_LOOKAHEAD','FVR_PRIVATE_EXPORT_OVERLAP')
+$saved=@{};foreach($key in @('TEMP','TMP','TMPDIR','PYTHONDONTWRITEBYTECODE','FVR_PRIVATE_HOST_COPY_SERVICE_MS')+$pipelineKeys){$saved[$key]=[Environment]::GetEnvironmentVariable($key,'Process')}
 $script:checks=0;$passed=$false
 function Check([bool]$Good,[string]$Name){if(-not $Good){throw "FAILED: $Name"};$script:checks++;Write-Host "PASS $Name"}
 try {
@@ -21,6 +22,12 @@ try {
     [IO.File]::WriteAllText((Join-Path $bin 'BC2ResolutionBootstrap.dll'),'fixture resolution data; never loaded')
     $fake=@'
 $script:activationUnverified=$false
+function Fixture-PipelineEnvironment {
+    $present=[Environment]::GetEnvironmentVariables('Process');$map=@{}
+    foreach($key in @('FVR_PRIVATE_TWO_SOURCE_SLOTS','FVR_PRIVATE_THREE_SOURCE_SLOTS','FVR_PRIVATE_SOURCE_LOOKAHEAD','FVR_PRIVATE_EXPORT_OVERLAP')){$map[$key]=@{present=$present.Contains($key);value=[Environment]::GetEnvironmentVariable($key,'Process')}}
+    return $map
+}
+$script:fixturePipelineBefore=Fixture-PipelineEnvironment
 function Assert-Bc2RuntimeSpace($Root){}
 function Get-Bc2RuntimeConfig {return Read-FvrJson (Join-Path $PSScriptRoot 'fixture.json')}
 function Test-Bc2AssetCache($Cache,$Recipe,$Hash){return $true}
@@ -66,6 +73,7 @@ function Invoke-FixturePython {
 }
 function Start-Bc2Child($File,$Arguments,$Folder,$LogName,$Environment=@{}){
     $cfg=Get-Bc2RuntimeConfig
+    if($cfg.pipeline){Write-FvrJson (Join-Path $Folder ($LogName+'-pipeline.json')) (Fixture-PipelineEnvironment)}
     [IO.File]::AppendAllText((Join-Path $Folder 'boundary-order.txt'),$LogName+"`n")
     if($LogName -eq 'resolution'){
         if([IO.Path]::GetFileName($File) -ne 'BC2NativeResolution.exe'){throw 'Wrong resolution helper'}
@@ -169,6 +177,9 @@ function Write-FvrJson($Path,$Value){
     [IO.File]::WriteAllText($Path,$text)
     if([IO.Path]::GetFileName($Path) -eq 'session.json'){
         [IO.File]::AppendAllText((Join-Path (Split-Path $Path -Parent) 'state-history.txt'),$Value.state+"`n")
+        if($Value.ContainsKey('ended_utc')){
+            [IO.File]::WriteAllText((Join-Path (Split-Path $Path -Parent) 'pipeline-restoration.json'),(@{before=$script:fixturePipelineBefore;after=(Fixture-PipelineEnvironment)}|ConvertTo-Json -Depth 8))
+        }
     }
 }
 '@
@@ -180,6 +191,7 @@ $script:graphicsCreated=$false
 $script:graphicsArmChecks=0
 function Start-Bc2GraphicsGame([string]$Exe,$RuntimeConfig){
     [IO.File]::AppendAllText((Join-Path $folder 'boundary-order.txt'),"graphics-start`n")
+    if($RuntimeConfig.pipeline){Write-FvrJson (Join-Path $folder 'game-pipeline.json') (Fixture-PipelineEnvironment)}
     if($Exe -cne (Join-Path $options.game_path 'BFBC2Game.exe') -or
        $RuntimeConfig.version -cne $options.version -or $RuntimeConfig.source_sha256 -cne $options.source_sha256){
         throw 'Graphics startup did not receive the admitted executable and runtime identity.'
@@ -194,6 +206,7 @@ function Start-Bc2GraphicsGame([string]$Exe,$RuntimeConfig){
     $state.graphics_creation=@{schema='bc2vr.graphics-creation.v1';resumed=($RuntimeConfig.scenario -ne 'graphics_suspended_failure');policy='clear_singlethreaded';lifetime='game_process';device_flags_verification='native_adapter_required';status=@{armed=1;attach_error=0}}
     Save-State
     if(-not $state.graphics_creation.resumed){throw 'Fixture graphics startup failed while the owned child was suspended.'}
+    if($RuntimeConfig.scenario -eq 'child_changed'){[Environment]::SetEnvironmentVariable('FVR_PRIVATE_SOURCE_LOOKAHEAD','0','Process')}
     return $script:fakeGame
 }
 function Assert-Bc2GraphicsArmed {
@@ -219,26 +232,52 @@ function Complete-Bc2GraphicsCreation {
 }
 '@
     [IO.File]::WriteAllText((Join-Path $runtime 'GraphicsCreation.ps1'),$fakeGraphics)
-    foreach($scenario in @('success','activation_success','activation_exit','activation_exit_zero','activation_exit_unknown','activation_live_unverified','activation_access_unavailable',
+    foreach($case in @('success','activation_success','activation_exit','activation_exit_zero','activation_exit_unknown','activation_live_unverified','activation_access_unavailable',
         'graphics_start_failure','graphics_suspended_failure','graphics_unarmed','graphics_attach_unarmed','graphics_cleanup_failure',
         'native_failure','bad_host_size','wrong_renderer','normal_game_close','game_close_exit_unknown','game_process_fault','stop_after_attach_game_fault','native_game_exit_live','native_exception_game_gone','native_exception_game_live',
         'invalid_plan','resolution_failure','resolution_hook_live','resolution_callback_live','resolution_timeout','wrong_native_size','wrong_native_pid','renderer_did_not_resize','changed_xr_recommendation','stop_during_resolution',
         'missing_setup_report','wrong_guard_token','wrong_guard_supervisor','stale_guard_game','stale_guard_supervisor','guard_not_armed','missing_guard_proof',
-        'stop_after_attach','native_cleanup_timeout','wrong_release_token','release_not_drained','release_timeout','missing_release_report','never_installed','game_exits_during_release','false_game_exited')){
-        $install=Join-Path $root $scenario;$stateRoot=Join-Path $install 'data/runtime';$run=Join-Path $stateRoot 'sessions/current'
+        'stop_after_attach','native_cleanup_timeout','wrong_release_token','release_not_drained','release_timeout','missing_release_report','never_installed','game_exits_during_release','false_game_exited',
+        'pipeline_success','pipeline_graphics_start_failure','pipeline_stop_after_attach','pipeline_wrong_boolean','pipeline_copy_service','pipeline_child_changed')){
+        $pipelineCase=$case.StartsWith('pipeline_');$scenario=if($pipelineCase){$case.Substring(9)}else{$case}
+        foreach($key in $pipelineKeys+@('FVR_PRIVATE_HOST_COPY_SERVICE_MS')){[Environment]::SetEnvironmentVariable($key,$saved[$key],'Process')}
+        if($pipelineCase){
+            [Environment]::SetEnvironmentVariable($pipelineKeys[0],'old-two','Process');[Environment]::SetEnvironmentVariable($pipelineKeys[1],$null,'Process')
+            [Environment]::SetEnvironmentVariable($pipelineKeys[2],'','Process');[Environment]::SetEnvironmentVariable($pipelineKeys[3],'0','Process')
+            [Environment]::SetEnvironmentVariable('FVR_PRIVATE_HOST_COPY_SERVICE_MS',$(if($scenario -eq 'copy_service'){'1'}else{'0'}),'Process')
+        }
+        $install=Join-Path $root $case;$stateRoot=Join-Path $install 'data/runtime';$run=Join-Path $stateRoot 'sessions/current'
         $game=Join-Path $install 'game';$cache=Join-Path $stateRoot 'cache'
         foreach($p in @($run,$game,$cache)){[IO.Directory]::CreateDirectory($p)|Out-Null}
         $exe=Join-Path $game 'BFBC2Game.exe';[IO.File]::WriteAllText($exe,'fixture data; never executed')
         [IO.File]::WriteAllText((Join-Path $cache 'body-ammo-assets.fvrprop'),'fixture data')
         $hash=(Get-FileHash -LiteralPath $exe).Hash.ToLowerInvariant()
-        Write-FvrJson (Join-Path $runtime 'fixture.json') @{scenario=$scenario;version='0.1.6';source_sha256=('a'*64);game_sha256=@($hash);asset_recipe_sha256=('b'*64)}
+        Write-FvrJson (Join-Path $runtime 'fixture.json') @{scenario=$scenario;pipeline=$pipelineCase;version='0.1.6';source_sha256=('a'*64);game_sha256=@($hash);asset_recipe_sha256=('b'*64)}
         $options=Join-Path $run 'options.json'
         $plan=@{schema='bc2vr.render-plan.v1';width=2784;height=3024;recommended_width=2784;recommended_height=3024;max_width=8192;max_height=8192;source='openxr_recommendation';native_source_verified=$false}
         if($scenario -eq 'invalid_plan'){$plan.width=1920}
-        Write-FvrJson $options @{state_root=$stateRoot;relative_folder='sessions/current';game_path=$game;game_sha256=$hash;cache=$cache;python='Invoke-FixturePython';activate_window=($scenario -like 'activation_*');version='0.1.6';source_sha256=('a'*64);xr_manifest='fixture-openxr.json';xr_label='Virtual Desktop fixture';render_plan=$plan}
+        $sessionOptions=@{state_root=$stateRoot;relative_folder='sessions/current';game_path=$game;game_sha256=$hash;cache=$cache;python='Invoke-FixturePython';activate_window=($scenario -like 'activation_*');version='0.1.6';source_sha256=('a'*64);xr_manifest='fixture-openxr.json';xr_label='Virtual Desktop fixture';render_plan=$plan}
+        if($pipelineCase){$sessionOptions.private_source_pipeline=if($scenario -eq 'wrong_boolean'){'true'}else{$true}}
+        Write-FvrJson $options $sessionOptions
         & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -NonInteractive -File (Join-Path $runtime 'Session.ps1') -OptionsPath $options *> (Join-Path $run 'coordinator.log')
         $code=$LASTEXITCODE
         $state=Read-FvrJson (Join-Path $run 'session.json');$history=Get-Content -LiteralPath (Join-Path $run 'state-history.txt')
+        $restoration=Read-FvrJson (Join-Path $run 'pipeline-restoration.json')
+        foreach($key in $pipelineKeys){Check ($restoration.before[$key].present -eq $restoration.after[$key].present -and $restoration.before[$key].value -ceq $restoration.after[$key].value) ($case+' exact environment restoration '+$key)}
+        if($pipelineCase){
+            if($scenario -in @('wrong_boolean','copy_service')){
+                Check ($code -ne 0 -and $state.state -ceq 'failed' -and -not(Test-Path -LiteralPath (Join-Path $run 'game-created.txt')) -and -not $state.ContainsKey('private_source_pipeline')) ($case+' rejects before environment activation/game')
+                continue
+            }
+            Check ($state.private_source_pipeline.requested -and $state.private_source_pipeline.applied -and $state.private_source_pipeline.restored -and -not $state.private_source_pipeline.native_enablement_claimed) ($case+' records request/application/restoration without claiming native activation')
+            foreach($child in $state.private_source_pipeline.children.Keys){
+                $actual=Read-FvrJson (Join-Path $run ($child+'-pipeline.json'))
+                foreach($key in $pipelineKeys){Check ($actual[$key].value -ceq '1' -and $state.private_source_pipeline.children[$child].environment[$key] -ceq '1') ($case+' exact child map '+$child+'/'+$key)}
+                Check ($state.private_source_pipeline.children[$child].verified_before_launch) ($case+' prelaunch map verified '+$child)
+            }
+            if($scenario -eq 'success'){Check ($state.private_source_pipeline.children.Count -eq 3 -and $state.private_source_pipeline.children.game.identity.pid -eq 100 -and $state.private_source_pipeline.children.host.identity.pid -eq 200 -and $state.private_source_pipeline.children.native.identity.pid -eq 300) 'pipeline exact game/host/native identity receipts'}
+            if($scenario -eq 'child_changed'){Check ($code -ne 0 -and $state.error.Contains('child environment changed') -and -not(Test-Path -LiteralPath (Join-Path $run 'host-arguments.json'))) 'pipeline drift rejects before host and restores original map'}
+        }else{Check (-not $state.ContainsKey('private_source_pipeline')) ($case+' default session never activates private pipeline')}
         $order=@(Get-Content -LiteralPath (Join-Path $run 'boundary-order.txt'))
         Check ($order[-1] -ceq 'graphics-cleanup' -and @($order|Where-Object {$_ -ceq 'graphics-cleanup'}).Count -eq 1) ($scenario+' completes the graphics boundary once after other cleanup')
         if($scenario -notin @('invalid_plan','graphics_start_failure')){

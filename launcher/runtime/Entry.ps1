@@ -3,8 +3,9 @@
 param([ValidateSet('Validate','Launch','Stop')][string]$Action,
       [Parameter(Mandatory)][string]$SettingsPath,[Parameter(Mandatory)][string]$StateRoot,
       [switch]$Fresh,[ValidateSet('MainMenu','Campaign')][string]$StartAt='MainMenu',[switch]$ActivateGameWindow,
-      [switch]$QualifyChestKnife,[string]$PreAttachSetupSpec,[string]$PreAttachSetupSpecSha256,[string]$PrivateSessionBinding,[string]$PrivateSessionBindingSha256)
+      [switch]$QualifyChestKnife,[switch]$PrivateSourcePipeline,[string]$PreAttachSetupSpec,[string]$PreAttachSetupSpecSha256,[string]$PrivateSessionBinding,[string]$PrivateSessionBindingSha256)
 $ErrorActionPreference='Stop'
+if($PrivateSourcePipeline -and $Action -ne 'Launch'){throw 'Private source pipeline requires Launch.'}
 . (Join-Path $PSScriptRoot '../app/Launcher.Core.ps1')
 . (Join-Path $PSScriptRoot 'Runtime.Core.ps1')
 . (Join-Path $PSScriptRoot 'Dependencies.ps1')
@@ -102,6 +103,9 @@ if($privateAdmission){
         private_artifacts_receipt=$privateAdmission.specification.private_artifacts_receipt}
 }
 if($QualifyChestKnife){$options.qualify_chest_knife=$true}
+# The probe has already completed. Only the dedicated supervisor may activate
+# this option; inheriting the three-source flag into --probe would be invalid.
+if($PrivateSourcePipeline){$options.private_source_pipeline=$true}
 if($preAttachSetup){$options.pre_attach_setup=$preAttachSetup}
 $optionsFile=Join-Path $folder 'options.json';Write-FvrJson $optionsFile $options
 $supervisor=Start-Bc2Child (Join-Path $PSHOME 'pwsh.exe') @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot 'Session.ps1'),'-OptionsPath',$optionsFile) $folder 'supervisor'

@@ -7,7 +7,8 @@ $repo=Split-Path $PSScriptRoot -Parent
 . (Join-Path $repo 'launcher/Launcher.Core.ps1')
 . (Join-Path $repo 'tools/StorageBudget.ps1')
 $root=Join-Path $repo ('test-temp/portable-restart-'+[guid]::NewGuid().ToString('N'))
-$saved=@{};foreach($key in @('TEMP','TMP','TMPDIR','PYTHONDONTWRITEBYTECODE')){$saved[$key]=[Environment]::GetEnvironmentVariable($key,'Process')}
+$pipelineKeys=@('FVR_PRIVATE_TWO_SOURCE_SLOTS','FVR_PRIVATE_THREE_SOURCE_SLOTS','FVR_PRIVATE_SOURCE_LOOKAHEAD','FVR_PRIVATE_EXPORT_OVERLAP')
+$saved=@{};foreach($key in @('TEMP','TMP','TMPDIR','PYTHONDONTWRITEBYTECODE')+$pipelineKeys){$saved[$key]=[Environment]::GetEnvironmentVariable($key,'Process')}
 $checks=[Collections.Generic.List[string]]::new();$passed=$false
 function Check([bool]$Good,[string]$Name){if(-not $Good){throw "FAILED: $Name"};$checks.Add($Name);Write-Host "PASS $Name"}
 $boundary=@'
@@ -56,6 +57,11 @@ function Get-Process {param([string[]]$Name,[int]$Id,$ErrorAction)
 function Start-Process {throw 'Fixture forbids real process launch'}
 function Start-Bc2Child($File,$Arguments,$Folder,$LogName,$Environment=@{}) {
     if($LogName -ne 'supervisor'){throw 'Unexpected external helper'}
+    $launchOptions=Read-FvrJson $Arguments[[Array]::IndexOf($Arguments,'-OptionsPath')+1]
+    if($script:scenario -eq 'pipeline_launch'){
+        if($launchOptions.private_source_pipeline -isnot [bool] -or -not $launchOptions.private_source_pipeline){throw 'Pipeline opt-in lost before session.'}
+    }elseif($launchOptions.ContainsKey('private_source_pipeline')){throw 'Default Entry must not request the private pipeline.'}
+    foreach($key in @('FVR_PRIVATE_TWO_SOURCE_SLOTS','FVR_PRIVATE_THREE_SOURCE_SLOTS','FVR_PRIVATE_SOURCE_LOOKAHEAD','FVR_PRIVATE_EXPORT_OVERLAP')){if([Environment]::GetEnvironmentVariable($key,'Process') -notin @($null,'')){throw 'Entry activated pipeline before dedicated Session.'}}
     Event 'new_supervisor'
     Write-FvrJson (Join-Path $Folder 'session.json') @{state='running';phase='fixture connected'}
     return (New-ProcessFixture 50000 (Join-Path $PSScriptRoot 'fixture-new-supervisor.exe'))
@@ -64,12 +70,16 @@ function Start-Bc2Child($File,$Arguments,$Folder,$LogName,$Environment=@{}) {
 $startup=@'
 function Test-Bc2GameInstallation {return @{exe=(Join-Path $PSScriptRoot 'game/BFBC2Game.exe');sha256=('c'*64)}}
 function Get-Bc2OpenXrSelection {return @{manifest='fixture-runtime.json';label='fixture only'}}
-function Invoke-Bc2OpenXrPreflight {Event 'preflight';return @{instance_created=$true;system_available=$true;eye_width=2784;eye_height=3024;recommended_eye_width=2784;recommended_eye_height=3024;max_eye_width=8192;max_eye_height=8192}}
+function Invoke-Bc2OpenXrPreflight {
+    foreach($key in @('FVR_PRIVATE_TWO_SOURCE_SLOTS','FVR_PRIVATE_THREE_SOURCE_SLOTS','FVR_PRIVATE_SOURCE_LOOKAHEAD','FVR_PRIVATE_EXPORT_OVERLAP')){if([Environment]::GetEnvironmentVariable($key,'Process') -notin @($null,'')){throw 'Pipeline flags reached the non-IPC probe.'}}
+    Event 'preflight';return @{instance_created=$true;system_available=$true;eye_width=2784;eye_height=3024;recommended_eye_width=2784;recommended_eye_height=3024;max_eye_width=8192;max_eye_height=8192}
+}
 '@
 $dependencies=@'
 function Get-Bc2PreparationFfmpeg {Event 'dependency';return 'fixture-decoder-never-executed'}
 '@
 try {
+    foreach($key in $pipelineKeys){[Environment]::SetEnvironmentVariable($key,$null,'Process')}
     $budget=Assert-FvrStorageBudget -RepositoryRoot $repo -OutputPath $root -Operation Session -PlannedBytes 2MB -RawCaptureBytes 0
     if($null -eq $budget.generated.allocated_bytes){throw 'Complete storage admission required'}
     $null=Set-FvrLauncherStorage $root
@@ -80,7 +90,7 @@ try {
     [IO.File]::AppendAllText((Join-Path $runtime 'Runtime.Core.ps1'),"`n"+$boundary)
     [IO.File]::WriteAllText((Join-Path $runtime 'Startup.ps1'),$startup)
     [IO.File]::WriteAllText((Join-Path $runtime 'Dependencies.ps1'),$dependencies)
-    foreach($scenario in @('retained','restart','wrong_game','multiple_games','close_refused','game_appears','stale','active_running','active_failed','active_ended','active_mismatch','active_reused_pid','active_wrong_path','active_exited')){
+    foreach($scenario in @('retained','restart','wrong_game','multiple_games','close_refused','game_appears','stale','active_running','active_failed','active_ended','active_mismatch','active_reused_pid','active_wrong_path','active_exited','pipeline_launch','pipeline_validate')){
         [IO.File]::WriteAllText((Join-Path $runtime 'scenario.txt'),$scenario)
         [IO.File]::WriteAllText((Join-Path $runtime 'events.txt'),'')
         $install=Join-Path $root $scenario;$state=Join-Path $install 'data/runtime'
@@ -96,11 +106,20 @@ try {
         $settingsHash=(Get-FileHash -LiteralPath $settings).Hash
         $args=@('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',(Join-Path $runtime 'Entry.ps1'),'-Action','Launch','-SettingsPath',$settings,'-StateRoot',$state)
         if($scenario -in @('restart','wrong_game','close_refused')){$args+='-Fresh'}
+        if($scenario -like 'pipeline_*'){$args+='-PrivateSourcePipeline'}
+        if($scenario -eq 'pipeline_validate'){$args[[Array]::IndexOf($args,'-Action')+1]='Validate'}
         & (Join-Path $PSHOME 'pwsh.exe') @args *> (Join-Path $install 'result.log')
         $code=$LASTEXITCODE;$text=Get-Content -Raw -LiteralPath (Join-Path $install 'result.log')
         $events=@(Get-Content -LiteralPath (Join-Path $runtime 'events.txt'))
         Write-FvrJson (Join-Path $install 'events.json') $events
-        if($scenario -in @('retained','wrong_game','multiple_games')){
+        if($scenario -eq 'pipeline_launch'){
+            Check ($code -eq 0 -and ($events -join ',') -ceq 'preflight,dependency,new_supervisor') 'explicit pipeline option reaches session only after clean real Entry probe path'
+            $active=Read-FvrJson (Join-Path $state 'active-session.json')
+            $launched=Read-FvrJson (Join-Path (Join-Path $state $active.relative_folder) 'options.json')
+            Check ($launched.private_source_pipeline -is [bool] -and $launched.private_source_pipeline) 'pipeline selection is serialized as a typed session option'
+        }elseif($scenario -eq 'pipeline_validate'){
+            Check ($code -ne 0 -and $text.Contains('requires Launch') -and $events.Count -eq 0) 'pipeline opt-in is refused for non-launch actions before probe'
+        }elseif($scenario -in @('retained','wrong_game','multiple_games')){
             Check ($code -ne 0 -and 'preflight' -notin $events -and 'new_supervisor' -notin $events -and 'normal_close' -notin $events) ($scenario+' rejected before XR/preparation without closing a game')
             if($scenario -eq 'retained'){Check ($text.Contains('Restart BC2 before launch') -and $text.Contains('reinstalling BC2VR is unnecessary')) 'retained-game retry gives the recovery action, not a reinstall'}
         }elseif($scenario -eq 'restart'){
