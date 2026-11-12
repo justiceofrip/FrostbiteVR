@@ -183,7 +183,7 @@ class StimulusTests(unittest.TestCase):
             stdout = io.StringIO()
             with patch.object(m, "time", clock), \
                     patch.object(m.transport, "WindowsOwner", return_value=owner) as owner_factory, \
-                    patch.object(m, "sim_state", side_effect=lambda path, deadline: m.transport.read_json(path)[0]), \
+                    patch.object(m, "sim_state", side_effect=lambda path, deadline: json.loads(path.read_bytes())), \
                     patch.object(m, "ObservationWorker", return_value=observer) as observer_factory, \
                     patch.object(m.ctypes, "WinDLL", side_effect=AssertionError("unexpected native access")), \
                     patch("sys.stdout", stdout):

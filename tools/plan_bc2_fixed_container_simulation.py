@@ -160,7 +160,7 @@ def extension(snapshot, now, *, completion=None):
         if previous["stage"] == "Insert":
             require_insertion_observation(previous, snapshot, now, acquired)
         else:
-            require_physical_completion(previous, snapshot, now)
+            require_physical_completion(previous, snapshot, now, acquired=acquired)
     return x
 
 
@@ -333,14 +333,29 @@ def require_acquired(previous, acquired, snapshot):
             "physical completion needs newer original input/revision after acquisition")
 
 
-def require_physical_completion(previous, snapshot, now):
+def require_physical_completion(previous, snapshot, now, *, acquired=None):
     x, stage = snapshot["fixedContainer"], previous["stage"]
     t, v = x["tracking"], ammo(snapshot, now, idle=True)
     require(stage in ("Open", "Close") and integer(t["step"]) == (2 if stage == "Open" else 4)
-            and t["hand"] is None and x["leftClaim"] is None and t["target"] is None
             and t["carried"] is False and t["carriedSupply"] is None and t["pending"] is False and x["pendingRequest"] is None
             and v["snapshot"]["counts"] == previous["baseline"]["counts"],
             "physical opening/closure has not completed")
+    # The native recognizer advances its step at the endpoint but may keep
+    # that exact mechanism grip magnetized until the player releases it.
+    # Observe completion before authorizing the ordinary release; never demand
+    # that the native adapter disconnect the hand first.
+    if any(value is not None for value in (t["hand"], x["leftClaim"], t["target"])):
+        require_acquired(previous, acquired, snapshot)
+        raw = x["raw"]
+        require(raw["admittedAtTick"] is True and t["target"] is not None
+                and integer(t["targetStep"]) == STEP[stage]
+                and t["hand"] == x["leftClaim"] and raw["grip"] is True and t["grip"] is True
+                and finite(snapshot["input"]["hands"][0]["squeeze"]) >= .7
+                and raw["input"]["released"][0] is False and x["input"]["released"][0] is False,
+                "completed endpoint lacks its continuously held original mechanism")
+        require(claim(t["hand"], raw["input"], now, 0, 4) == acquired["claimToken"],
+                "completed endpoint mechanism claim changed")
+        frame.rigid(t["target"])
     require(((x["lastCompletion"] or {}).get("outcome", {}).get("request", {}).get("intent", {}).get("id", 0))
             == previous["baseline"]["lastCompletedRequest"], "physical completion observed another ammunition transaction")
     if stage == "Close":
@@ -449,7 +464,7 @@ def check_gate(previous, snapshot, gate, now_ns, expected_nonce, *, acquired=Non
             require_insertion_observation(previous, snapshot, now, acquired)
     else:
         require(gate == "fixed_step_complete", "not a physical completion gate")
-        require_physical_completion(previous, snapshot, now)
+        require_physical_completion(previous, snapshot, now, acquired=acquired)
     result = dict(gate=gate, observed=True, snapshotNonce=snapshot["nonce"], observedNs=snapshot["observed_ns"],
                 inputObservedNs=x["raw"]["input"]["observedNs"], sourceValidUntilNs=snapshot["valid_until_ns"],
                 claimToken=token, completionOnly=completion is not None, nativeAcceptance=False, headsetAcceptance=False)

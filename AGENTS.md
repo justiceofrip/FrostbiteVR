@@ -47,6 +47,14 @@ acceptance (definitions in CURRENT.md). A mock receipt, static profile,
 capability count, final ammo count or passing unit test does not prove native
 success. Keep failed episodes; a later pass does not rewrite an earlier failure.
 
+- Organize weapon work by shared mechanism and check registered profiles in bulk.
+  Complete the reload/fire/switch behavior for the family; a named gun is an
+  evidence sample, not a separate implementation project.
+- Repair existing shared test drivers instead of adding chains of per-run
+  wrappers. Exercise the assembled command/dependency path offline before a
+  game launch; import and parser checks alone do not establish launch readiness.
+  Keep an observation timeout separate from a demonstrated gameplay failure.
+
 ## Storage (local development policy)
 
 - C: is the small OS drive. Keep installs, updates, generated files, logs and

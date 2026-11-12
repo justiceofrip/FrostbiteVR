@@ -4,6 +4,11 @@ Run: python -B -m unittest discover -s tests -p test_bc2_feed_postrelease_observ
 Only filesystem, simulator state, and time use the existing in-memory transport.
 """
 import copy
+import gzip
+import hashlib
+import json
+import os
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
@@ -408,7 +413,7 @@ class FeedPostreloadShotTests(unittest.TestCase):
     def ready(now=NS, nonce=1):
         profiles, s = released_fixture(now, nonce)
         s["weapon_actions_blocked"] = s["feed"]["blocksFire"] = False
-        s["feed"]["coverRadians"] = 0.
+        s["feed"].update(coverRadians=0., operation=d.planner.STAGES["CloseCover"])
         s["feedObservation"]["latest_tick"].update(gate_failed=False, submit_refused=False)
         mapping = {k: copy.deepcopy(s[k]) for k in ("owner", "equipment", "rig", "physical_equipment_generation")}
         mapping["selected"] = {k: s["selected"][k] for k in
@@ -422,7 +427,12 @@ class FeedPostreloadShotTests(unittest.TestCase):
                   lambda s: s["feed"].update(mechanismClaim={}),
                   lambda s: s["feed"].update(mechanismInput=s["input_evidence"]),
                   lambda s: s["feed"].update(lifetime=9),
-                  lambda s: s["feed"].update(coverRadians=.01),
+                  lambda s: s["feed"].update(operation=d.planner.STAGES["OpenCover"]),
+                  lambda s: s["feed"].update(coverRadians=float("nan")),
+                  lambda s: s["feed"].update(blocksFire=True),
+                  lambda s: s["feedObservation"]["latest_tick"].update(pending=True),
+                  lambda s: s["feedObservation"]["latest_tick"].update(gate_failed=True),
+                  lambda s: s["feedObservation"]["latest_tick"].update(submit_refused=True),
                   lambda s: s.update(weapon_actions_blocked=True),
                   lambda s: s["input"]["hands"][1].update(trigger=1),
                   lambda s: s["owner"].update(equipGeneration=99),
@@ -437,6 +447,37 @@ class FeedPostreloadShotTests(unittest.TestCase):
         original = copy.deepcopy(s)
         d.post_reload_ready(profiles, s, NS, closure, neutral=True)
         self.assertEqual(s, original)
+
+    def test_native_completed_close_preserves_measured_presentation_angle(self):
+        profiles, s, closure = self.ready()
+        s["feed"]["coverRadians"] = .00116634369
+        before = copy.deepcopy(s)
+        d.post_reload_ready(profiles, s, NS, closure, neutral=True)
+        self.assertEqual(s, before)
+
+    @unittest.skipUnless(os.environ.get("BC2_FEED_CLOSED_REPLAY"), "retained actual79/07 required")
+    def test_actual79_07_completed_close_allows_existing_postshot_admission(self):
+        run = Path(os.environ["BC2_FEED_CLOSED_REPLAY"])
+        artifact = run / "live-driver-db772c2661ad4282b87885594983e298"
+        pins = {
+            run / "profiles.json": "803d4b31bea21b7ee186bef800d7ccd6a7bf3c1e1e94a34425685df336119971",
+            run / "continuation-CloseCover.json": "c7cd0cfb8cef5567004375eaec826d07424dda3164e4c0b0b9e2c67d1d572eb1",
+            artifact / "stimulus-01.json": "3cbf086d41391b41ebc903d5ed5d11d493571b2cf2d0fd5c9229eae489375980",
+            artifact / "observation-017.json.gz": "d55e8fae93f76cd7f2fc17eac19e7060a817d31ccd142f96da260c248c4d0ea0",
+        }
+        for p, digest in pins.items():
+            self.assertEqual(hashlib.sha256(p.read_bytes()).hexdigest(), digest)
+        profiles = json.loads((run / "profiles.json").read_bytes())
+        result = json.loads((run / "continuation-CloseCover.json").read_bytes())["driver_result"]
+        plan = json.loads((artifact / "stimulus-01.json").read_bytes())
+        s = json.loads(gzip.decompress((artifact / "observation-017.json.gz").read_bytes()))
+        closure = dict(mapping=plan["mapping"], lifetime=result["boundaries"]["feed_released"]["lifetime"])
+        before = copy.deepcopy(s)
+        self.assertEqual(s["feed"]["operation"], d.planner.STAGES["CloseCover"])
+        self.assertFalse(s["feed"]["blocksFire"])
+        self.assertGreater(s["feed"]["coverRadians"], .001)
+        d.post_reload_ready(profiles, s, s["observed_ns"]+1, closure, neutral=False)
+        self.assertEqual(s, before)
 
     @staticmethod
     def native(rounds=1):

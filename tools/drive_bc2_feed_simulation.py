@@ -749,9 +749,13 @@ def post_reload_ready(profiles, snapshot, now, closure, *, neutral, after_shot=F
             and all(snapshot["selected"][k] == v for k, v in mapping["selected"].items()),
             "post-reload owner/configuration changed")
     f = snapshot["feed"]
+    if f is not None:
+        # This is retained presentation geometry, not the native closed state.
+        # Applied(CloseCover) records Closed without snapping the measured angle.
+        planner.finite(f["coverRadians"])
     require(f is not None and f["lifetime"] == closure["lifetime"]
             and f["blocksFire"] is False and snapshot["weapon_actions_blocked"] is False
-            and abs(planner.finite(f["coverRadians"])) <= .001
+            and integer(f["operation"]) == planner.STAGES["CloseCover"]
             and integer(f["carriedPartsMask"]) == 0 and f["supplyObject"] is None,
             "post-reload requires closed cover and exact empty carried custody")
     tick = snapshot["feedObservation"]["latest_tick"]
@@ -1773,9 +1777,30 @@ class Driver:
         trace = getattr(self, "_receive_timing", None)
         if trace is not None:
             trace.phase("ack_gap", published)
+        # A neutral approach has already published its only authorized pose.
+        # Settle that exact batch before observing a late snapshot: an OS read
+        # may consume the response window while the independent original ACK
+        # deadline remains live. No held input, capture or new command gets this
+        # ordering, and no deadline or native source lease is extended.
+        neutral_approach_ack = (
+            not cleanup and capture is None and not final_release and self.monitor
+            and self.snapshot_readiness_scope() == "neutral_approach"
+            and not (self.unsafe_owner or self.held_left or self.held_right
+                     or self.held_trigger or self.held_buttons)
+            and expected is not None
+            and expected.get("phase") in ("neutral", "approach", "neutral_at_contact")
+            and expected.get("grip") == 0 and lines == expected.get("commands")
+            and len(lines) == 2 and lines[1] == "grip l 0"
+            and lines[0] == "hand l grip pose " + " ".join(
+                f"{v:.9f}" for v in expected["positionMeters"] + expected["yawPitchRollDegrees"])
+            and before["controls"] and all(
+                all(component == 0 for component in value) if isinstance(value, list) else value == 0
+                for value in before["controls"].values()))
         ack, settled = None, None
         for _ in range(1200):
-            if not cleanup:
+            if neutral_approach_ack:
+                self.bounds(time.perf_counter_ns())
+            elif not cleanup:
                 self.pump()
             require(time.perf_counter_ns() < until, "command acknowledgement/commit deadline exceeded")
             state = self.receive_timing_call("ack_state_read", read_until, until, self.read_state)
@@ -1819,6 +1844,11 @@ class Driver:
         self.artifacts.event({"type": "command_commit", "requestedNs": written, "writtenNs": published, "committedNs": committed,
                               "ack": ack[1], "state": sim_summary(settled), "cleanup": cleanup}, cleanup=cleanup)
         self.remember_controls(lines)
+        if neutral_approach_ack:
+            # Pending ownership is now settled within its unchanged deadline.
+            # Existing neutral observation discards late/stale responses and
+            # reacquires current native evidence before any following command.
+            self.pump()
         return settled
 
     def remember_controls(self, lines):
