@@ -588,6 +588,100 @@ class StimulusTests(unittest.TestCase):
                 self.assertEqual(artifacts.events, [dict(type="original_gap")])
                 self.assertEqual(artifacts.persisted, {})
 
+    def test_journal_scalar_reservations_bound_json_without_serializing(self):
+        values = ["ordinary ASCII metadata", 'quote" and backslash\\',
+                  "".join(map(chr, range(128))), "\u00e9\u6f22\U0001f680", "\ud800",
+                  None, True, False, 0, -1, 2**2048, -(2**2048), 1.7976931348623157e308,
+                  {"source": {"nonce": "1794510692106244900", "validUntilNs": 636008731406300},
+                   "commands": ["hand l grip pose -0.123456789 1.234567890 0.000000000"]}]
+        values.extend(map(chr, range(128)))
+        for value in values:
+            with self.subTest(value=repr(value)[:80]):
+                encoded = m.transport.json_bytes(value).rstrip(b"\n")
+                with patch.object(m.json, "dumps", side_effect=AssertionError("live serialization")):
+                    reserved = m.DeferredArtifacts.bound(value)
+                self.assertGreaterEqual(reserved, len(encoded))
+        self.assertEqual(m.DeferredArtifacts.bound("ordinary ASCII metadata"), 25)
+        artifacts = Artifacts()
+        artifacts.save("within.json", "x" * (m.MAX_BYTES - 2))
+        self.assertEqual(artifacts.metadata_bytes, m.MAX_BYTES)
+        with self.assertRaisesRegex(m.Refusal, "diagnostic metadata budget"):
+            artifacts.event({"type": "genuine_overflow"})
+        self.assertEqual(len(artifacts.records), 1)
+
+    @unittest.skipUnless(os.environ.get("BC2_RELOAD_METADATA_REPLAY"), "retained full-Reload metadata optional")
+    def test_retained_five_stage_reload_metadata_at_transport_limits(self):
+        # Read-only archive accounting, never a replay of native actions or a
+        # completed Reload verdict. The retained failure remains a failure.
+        run = Path(os.environ["BC2_RELOAD_METADATA_REPLAY"])
+        original = (run / "result.json").read_bytes()
+        result = json.loads(original)
+        self.assertEqual(result["error"], "diagnostic metadata budget")
+        self.assertFalse(result["stimulusCompleted"])
+        self.assertEqual([p["stage"] for p in result["plans"]],
+                         ["Open", "EjectSpent", "Pickup", "Insert", "Close"])
+        self.assertTrue(all(p["boundaryChecksPassed"] for p in result["plans"][:4]))
+        artifacts, snapshots = Artifacts(), []
+        for path in sorted(run.glob("*.json")):
+            if path.name != "result.json":
+                artifacts.save(path.name, json.loads(path.read_bytes()))
+        for path in sorted(run.glob("observation-*.json.gz")):
+            raw = m.gzip.decompress(path.read_bytes())
+            artifacts.snapshot(path.name, raw)
+            snapshots.append(json.loads(raw))
+        events = [json.loads(row) for row in (run / "events.jsonl").read_bytes().splitlines()]
+        for event in events:
+            artifacts.event(event)
+
+        source = result["plans"][-1]["source"]
+        snapshot = next(s for s in snapshots if str(s["nonce"]) == str(source["nonce"]))
+        close = fixtures.g.build_stimulus("fixed", None, snapshot, source["evaluatedAtNs"], "Close",
+            step_ms=artifacts.saved["stimulus-04.json"]["stepNs"] // 1_000_000)
+        self.assertEqual(len(close["schedule"]), result["plans"][-1]["samples"])
+        clock = Clock()
+        clock.now = source["evaluatedAtNs"]
+        driver = ScheduleDriver(clock)
+        driver.artifacts, driver.fixed_reload = artifacts, True
+        driver.plans = copy.deepcopy(result["plans"][:4])
+        save = artifacts.save
+        class ArchiveOnly(Exception):
+            pass
+        def stop_after_archive(name, value, final=False):
+            save(name, value, final)
+            raise ArchiveOnly()
+        with patch.object(artifacts, "save", side_effect=stop_after_archive), patch.object(m, "time", clock):
+            with self.assertRaises(ArchiveOnly):
+                driver.execute(close)
+        self.assertEqual(driver.sent, [])
+        self.assertEqual(artifacts.saved["stimulus-05.json"]["source"], close["source"])
+        self.assertNotIn("stimulusCompleted", driver.plans[-1])
+
+        # A batch consumes at least two of the existing 512 commands. Reserve
+        # the largest retained event shape for every possible batch and all
+        # 100 observations, plus four boundary summaries per stage. This is
+        # deliberately larger than the actual five-stage command schedule.
+        for kind, count in (("command_request", m.MAX_COMMANDS // 2),
+                            ("command_commit", m.MAX_COMMANDS // 2),
+                            ("native_observation", m.MAX_OBSERVATIONS),
+                            ("fresh_stimulus_boundary", 5 * 4)):
+            rows = [e for e in events if e["type"] == kind]
+            largest = max(rows, key=m.DeferredArtifacts.bound)
+            for _ in range(count - len(rows)):
+                artifacts.event(copy.deepcopy(largest))
+        self.assertLess(artifacts.metadata_bytes, m.MAX_BYTES)
+        encoded = sum(len(m.transport.json_bytes(value)) for kind, _, value, _ in artifacts.records
+                      if kind != "snapshot")
+        self.assertLess(encoded, artifacts.metadata_bytes)
+        disk_bytes = encoded + sum(len(m.gzip.compress(value, mtime=0))
+                                  for kind, _, value, _ in artifacts.records if kind == "snapshot")
+        self.assertLess(disk_bytes, m.MAX_BYTES - 12288)
+        remaining = m.MAX_BYTES - artifacts.metadata_bytes
+        with self.assertRaisesRegex(m.Refusal, "diagnostic metadata budget"):
+            artifacts.save("overflow.json", "x" * remaining)
+        artifacts.flush()
+        self.assertIn("stimulus-05.json", artifacts.persisted)
+        self.assertEqual((run / "result.json").read_bytes(), original)
+
     def test_flush_failure_keeps_first_error_and_continues_preserving_later_raw(self):
         artifacts = Artifacts()
         artifacts.snapshot("one.gz", b"first")
@@ -1467,6 +1561,165 @@ class StimulusTests(unittest.TestCase):
             self.assertEqual(event["deadlineNs"], start+160_000_000+m.RECEIVE_NS)
             ready = next(e for e in d.artifacts.events if e["type"] == "fixed_capture_ready")
             self.assertEqual(ready["finishedNs"], start+300_000_000)
+
+    def retained_close_deliveries(self, start):
+        deliveries = self.fixed_capture_deliveries(start)
+        ready = deliveries[1]["snapshot"]
+        ready["fixedContainer"]["tracking"].update(step=3, lifetime=1, revision=60260, blocksFire=True)
+        ready["fixedContainer"]["view"]["snapshot"]["counts"].update(loaded=1, reserve=6)
+        # Sanitized normal85/04 f117 observation000 shape. Accepted native gate
+        # rows are compact publications: they contain no retained step or view.
+        for index, delivery in enumerate(deliveries):
+            s, now = delivery["snapshot"], delivery["receivedNs"]
+            s["weapon_actions_blocked"] = True
+            binding = copy.deepcopy(ready["fixedContainer"]["view"]["binding"])
+            binding.update(observedNs=now-2_000_000, deadlineNs=now+70_000_000)
+            source = s["input_evidence"]
+            proof = dict(binding=binding, handOwner=copy.deepcopy(source["owner"]), lifetime=1,
+                         revision=60253 if index == 0 else 60260, inputSequence=source["sequence"],
+                         observedNs=source["observedNs"], deadlineNs=source["deadlineNs"],
+                         blocksFire=True, closedVerified=False)
+            window = dict(windowEpoch=4, windowBeginNs=now-1_000_000, windowEndNs=now+m.NS)
+            s["fixedGateAdmission"] = dict(schema="fvr.bc2.fixed-gate-observation.v1", available=True,
+                **window, latest=dict(**window, refusal="accepted", beginNs=now-500_000,
+                                     endNs=now-400_000, publication=proof))
+            for name in ("feedGateAdmission", "shellPump", "magazine", "bolt"):
+                s[name] = dict(available=False)
+            gun = copy.deepcopy(ready["fixedContainer"]["tracking"]["gun"])
+            gun.update(inputSequence=source["sequence"], deadlineNs=source["deadlineNs"])
+            s["bodyHolster"] = dict(available=True, nativeOwner=copy.deepcopy(s["owner"]),
+                inputMatchesSnapshot=True, blockWeaponActions=False, leftClaim=None,
+                physicalGun=copy.deepcopy(gun["token"]["item"]), rightClaim=gun)
+            delivery["raw"] = json.dumps(s).encode()
+        return deliveries
+
+    def test_retained_close_capture_reaches_typed_close_before_first_input(self):
+        for stage in ("Close", "Reload"):
+            with self.subTest(stage=stage):
+                clock = Clock()
+                deliveries = self.retained_close_deliveries(clock.now)
+                original = copy.deepcopy(deliveries)
+                with self.fixed_capture_driver(clock, deliveries) as h:
+                    d = h.driver
+                    d.args.stage = stage
+                    fresh = d.fresh
+                    class FirstBoundary(Exception):
+                        pass
+                    def stop_at_boundary(**kwargs):
+                        if kwargs.get("boundary") is not None:
+                            raise FirstBoundary()
+                        result = fresh(**kwargs)
+                        self.assertEqual(h.published, [])
+                        self.assertEqual(result[2]["stage"], "Close")
+                        self.assertEqual(result[0]["fixedContainer"]["tracking"]["step"], 3)
+                        h.publish_observations = False
+                        return result
+                    d.fresh = stop_at_boundary
+                    with self.assertRaises(FirstBoundary):
+                        d.run_stimulus()
+                    self.assertTrue(h.published)
+                    self.assertEqual(d.plans[0]["stage"], "Close")
+                    self.assertEqual(d.mapping["nonce"], 102)
+                    self.assertEqual(h.publication_deadlines[0][1], d.initial_mapping_deadline)
+                    self.assertEqual(d.initial_mapping_deadline,
+                                     fixtures.g.source_deadline(deliveries[1]["snapshot"], "fixed"))
+                    self.assertEqual(d.boundaries, {})
+                    self.assertEqual(deliveries, original)
+
+    def test_retained_close_capture_refusals_never_authorize_input(self):
+        faults = ("owner", "context", "input", "expired", "unaccepted", "missing_gate", "lifetime",
+                  "closed", "feed", "holster", "gun", "stage", "followup_owner", "followup_lifetime",
+                  "followup_context", "followup_gate_lifetime", "followup_step", "followup_pending", "followup_raw", "followup_block",
+                  "followup_absent", "no_followup")
+        for fault in faults:
+            with self.subTest(fault=fault):
+                clock = Clock()
+                deliveries = self.retained_close_deliveries(clock.now)
+                first, second = [row["snapshot"] for row in deliveries]
+                proof = first["fixedGateAdmission"]["latest"]["publication"]
+                x = second["fixedContainer"]
+                if fault == "owner": proof["binding"]["owner"]["weapon"] += 1
+                elif fault == "context": proof["binding"]["context"]["resource"]["actorGeneration"] += 1
+                elif fault == "input": proof["inputSequence"] -= 1
+                elif fault == "expired": proof["deadlineNs"] = deliveries[0]["receivedNs"]
+                elif fault == "unaccepted": first["fixedGateAdmission"]["latest"]["refusal"] = "resource_lock"
+                elif fault == "missing_gate": first.pop("fixedGateAdmission")
+                elif fault == "lifetime": proof["lifetime"] = 0
+                elif fault == "closed": proof["closedVerified"] = True
+                elif fault == "feed": first["feedGateAdmission"]["available"] = True
+                elif fault == "holster": first["bodyHolster"]["blockWeaponActions"] = True
+                elif fault == "gun": first["bodyHolster"]["rightClaim"]["token"]["item"]["generation"] += 1
+                elif fault == "followup_owner": second["owner"]["weapon"] += 1
+                elif fault == "followup_lifetime": x["tracking"]["lifetime"] += 1
+                elif fault == "followup_context":
+                    x["view"]["binding"]["context"]["resource"]["weaponGeneration"] += 1
+                    x["view"]["snapshot"]["context"] = copy.deepcopy(x["view"]["binding"]["context"])
+                elif fault == "followup_gate_lifetime":
+                    second["fixedGateAdmission"]["latest"]["publication"]["lifetime"] += 1
+                elif fault == "followup_step": x["tracking"]["step"] = 2
+                elif fault == "followup_pending": x["tracking"]["pending"] = True
+                elif fault == "followup_raw": x["raw"]["admittedAtTick"] = False
+                elif fault == "followup_block": second["bodyHolster"]["blockWeaponActions"] = True
+                elif fault == "followup_absent": second["fixedContainer"] = copy.deepcopy(first["fixedContainer"])
+                elif fault == "no_followup": deliveries.pop()
+                for row in deliveries:
+                    row["raw"] = json.dumps(row["snapshot"]).encode()
+                with self.fixed_capture_driver(clock, deliveries) as h:
+                    h.driver.args.stage = "Open" if fault == "stage" else "Reload"
+                    with self.assertRaises((m.Refusal, fixtures.g.fixed.Refusal)):
+                        h.driver.run_stimulus()
+                    self.assertEqual(h.published, [])
+                    self.assertEqual(h.driver.commands, 0)
+                    self.assertEqual(h.driver.plans, [])
+                    self.assertLessEqual(clock.now, 1_410_000_000)
+                    if fault == "no_followup":
+                        self.assertTrue(h.driver.observation_incomplete)
+                        self.assertEqual(h.driver.pending_boundary["deadlineNs"], 1_410_000_000)
+
+    @unittest.skipUnless(os.environ.get("BC2_FIXED_CLOSE_REPLAY"), "pinned normal85/04 evidence required")
+    def test_actual_retained_close_waits_passively_and_original_complete_copy_plans_close(self):
+        root = Path(os.environ["BC2_FIXED_CLOSE_REPLAY"])
+        close = root / "live-driver-f1171c7020354f1e9e8a2902ccd1ddf8"
+        reload = root / "live-driver-8f7c83785cbe402eb087bfb721b58694"
+        paths = ((close / "observation-000.json.gz", "a2167ed624acf521123413c9d5ee7636b65132ff4820fb4813d008fb444b8dc5"),
+                 (reload / "observation-060.json.gz", "bbb1578e6afe0ea32bba7af8add258f0f9ff91b94ea729030a59f8ae83b70e2f"))
+        snapshots = []
+        for path, digest in paths:
+            raw = path.read_bytes()
+            self.assertEqual(m.transport.digest(raw), digest)
+            snapshots.append(json.loads(m.gzip.decompress(raw)))
+        pending, complete = snapshots
+        original = json.loads((close / "result.json").read_bytes())
+        received = next(json.loads(line) for line in (close / "events.jsonl").read_bytes().splitlines()
+                        if json.loads(line).get("type") == "native_observation")
+        self.assertEqual(original["commands"], 0)
+        self.assertEqual(original["error"], "weapon actions blocked without an admitted retained mechanism")
+        clock = Clock()
+        clock.now = original["pendingBoundary"]["startedNs"]
+        delivery = {k: received[k] for k in ("index", "requestNs", "deadlineNs", "receivedNs",
+            "ownershipCheckedNs", "requestNonce", "requestOwned", "responseOwned", "drainedNs")}
+        delivery.update(kind="snapshot", snapshot=pending, raw=m.gzip.decompress(paths[0][0].read_bytes()))
+        with self.fixed_capture_driver(clock, [delivery]) as h:
+            h.driver.args.stage = "Close"
+            with self.assertRaisesRegex(m.Refusal, "fresh typed stimulus boundary absent within original budget"):
+                h.driver.run_stimulus()
+            self.assertEqual(h.published, [])
+            self.assertEqual(h.driver.commands, 0)
+            self.assertEqual(h.driver.plans, [])
+            self.assertTrue(h.driver.observation_incomplete)
+            event = next(e for e in h.driver.artifacts.events if e["type"] == "boundary_pending")
+            self.assertEqual(event["reason"], "initial fixed-container capture pending")
+            self.assertEqual(event["deadlineNs"], received["receivedNs"]+m.RECEIVE_NS)
+        # The older complete recording is checked at its own original time.
+        # It is never substituted as a fresh follow-up to the later Close run.
+        evaluated = next(json.loads(line)["drainedNs"] for line in (reload / "events.jsonl").read_bytes().splitlines()
+                         if json.loads(line).get("index") == 60)
+        plan = fixtures.g.build_stimulus("fixed", None, complete, evaluated, "Close", step_ms=40)
+        proof = pending["fixedGateAdmission"]["latest"]["publication"]
+        self.assertEqual(complete["owner"], pending["owner"])
+        self.assertEqual(complete["fixedContainer"]["tracking"]["lifetime"], proof["lifetime"])
+        self.assertEqual(plan["stage"], "Close")
+        self.assertFalse(plan["nativeAcceptance"])
 
     def test_fixed_capture_followup_preserves_gates_and_never_retries_absence(self):
         for fault, message in (("owner", "owner/equipment/rig changed"),

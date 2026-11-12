@@ -4257,10 +4257,12 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             }
             if(!failedStage){p.status="published";p.stage="published";p.error=0;p.completedNs=mechanismSnapshotNow();return;}
             if(p.attempts==1){p.firstStage=failedStage;p.firstError=error;}
-            // Only known transient sharing/locking errors get one later worker
-            // attempt. Never sleep here, resample, renew a lease or delete an
+            // Sharing/locking failures and ReplaceFile's 1175 (both names
+            // retained, unlike 1176/1177) permit one later worker attempt after
+            // pending cleanup. Never sleep, resample, renew a lease or delete an
             // unowned pre-existing pending file. All other outcomes are terminal.
-            if(p.attempts==1&&!p.cleanupError&&(error==ERROR_SHARING_VIOLATION||error==ERROR_LOCK_VIOLATION)){
+            const bool replaceRetained=std::strcmp(failedStage,"replace_final")==0&&error==ERROR_UNABLE_TO_REMOVE_REPLACED;
+            if(p.attempts==1&&!p.cleanupError&&(error==ERROR_SHARING_VIOLATION||error==ERROR_LOCK_VIOLATION||replaceRetained)){
                 p.status="pending_retry";p.stage=failedStage;p.error=error;return;
             }
             failMechanismSnapshot(failedStage,error);

@@ -37,9 +37,11 @@ class SnapshotPublicationTests(unittest.TestCase):
         return path, value
 
     def test_terminal_publication_failure_refuses_without_refresh_or_input(self):
-        for stage, error, attempts in (("replace_final", 32, 2), ("write_pending", 112, 1),
+        for stage, error, attempts in (("replace_final", 32, 2), ("replace_final", 1175, 1),
+                                       ("replace_final", 1175, 2), ("replace_final", 1176, 1),
+                                       ("replace_final", 1177, 1), ("write_pending", 112, 1),
                                        ("create_pending", 80, 1), ("payload_size", 0, 0)):
-            with self.subTest(stage=stage):
+            with self.subTest(stage=stage, error=error, attempts=attempts):
                 h = memory.Harness(self)
                 v = h.driver
                 original = copy.deepcopy(v.latest_snapshot)

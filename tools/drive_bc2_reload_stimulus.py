@@ -252,11 +252,23 @@ class DeferredArtifacts:
     def bound(value, depth=0):
         # Conservative JSON byte reservation, without rendering the diagnostic.
         require(depth < 64, "diagnostic nesting budget")
-        if isinstance(value, (bytes, str)):
-            return len(value) * (1 if isinstance(value, bytes) else 6) + 2
+        if isinstance(value, str):
+            # Most metadata is ASCII: reserving six bytes for every ordinary
+            # character exhausted the journal before a five-stage Reload's
+            # Close archive. Only JSON escapes need that allowance. Non-ASCII
+            # includes astral characters, which ensure_ascii emits as two \uXXXX
+            # escapes. Keep serialization and compression outside live leases.
+            return (len(value) + 5 * len(re.findall(r'[\x00-\x1f\x7f"\\]', value)) + 2
+                    if value.isascii() else 12 * len(value) + 2)
+        if isinstance(value, bytes):
+            return len(value) + 2
         if value is None or isinstance(value, bool):
             return 5
-        if isinstance(value, (int, float)):
+        if isinstance(value, int):
+            # Preserve the normal scalar allowance; also bound arbitrary-size
+            # integers without converting them to text in the live journal.
+            return max(64, value.bit_length() * 30103 // 100000 + 2)
+        if isinstance(value, float):
             return 64
         if isinstance(value, dict):
             return 2 + sum(DeferredArtifacts.bound(k, depth+1) + DeferredArtifacts.bound(v, depth+1) + 2
@@ -1104,6 +1116,61 @@ class ReloadStimulus:
                 "neutral observation simulator input changed")
         require(neutral_controls(state["controls"]), "neutral observation contains active input")
 
+    def retained_close_capture(self, snapshot, now):
+        """Identify a retained Fire block for one passive capture, never input."""
+        fixed = self.geometry.fixed
+        require(self.args.stage in ("Close", "Reload"), "retained fixed capture requires Close")
+        gate = snapshot.get("fixedGateAdmission")
+        require(isinstance(gate, dict) and gate.get("schema") == "fvr.bc2.fixed-gate-observation.v1"
+                and gate.get("available") is True and isinstance(gate.get("latest"), dict),
+                "missing retained fixed gate observation")
+        row = gate["latest"]
+        require(row.get("refusal") == "accepted" and isinstance(row.get("publication"), dict)
+                and integer(row["windowEpoch"]) == integer(gate["windowEpoch"]) > 0
+                and integer(row["windowBeginNs"]) == integer(gate["windowBeginNs"])
+                and 0 < integer(row["windowBeginNs"]) <= integer(row["beginNs"])
+                    <= integer(row["endNs"]) <= now < integer(row["windowEndNs"])
+                    <= integer(gate["windowEndNs"]), "retained fixed gate is not current and accepted")
+        proof, source, owner = row["publication"], snapshot["input_evidence"], snapshot["owner"]
+        fixed.window(proof, now, False)
+        binding = proof["binding"]
+        fixed.window(binding, now, False)
+        context, resource = binding["context"], binding["context"]["resource"]
+        require(binding["owner"] == owner and proof["handOwner"] == source["owner"]
+                and integer(resource["actor"]) == integer(owner["soldier"])
+                and integer(resource["actorGeneration"]) == integer(owner["actorGeneration"])
+                and integer(resource["weapon"]) == integer(owner["weapon"])
+                and integer(resource["weaponGeneration"]) > 0
+                and integer(context["equipGeneration"]) == integer(owner["equipGeneration"])
+                and integer(context["space"]) == integer(owner["space"])
+                and integer(binding["inventory"]) == integer(snapshot["selected"]["inventory"])
+                and integer(binding["data"]) == integer(snapshot["equipment"]["data"])
+                and integer(binding["persistence"]) == integer(snapshot["equipment"]["persistence"])
+                and integer(binding["switching"]) > 0,
+                "retained fixed gate owner/context/binding changed")
+        require(integer(proof["inputSequence"]) == integer(source["sequence"])
+                and all(integer(proof[k]) == integer(source[k]) for k in ("observedNs", "deadlineNs"))
+                and integer(proof["observedNs"]) <= integer(row["beginNs"])
+                and integer(binding["observedNs"]) <= integer(row["beginNs"])
+                and integer(proof["lifetime"]) > 0 and integer(proof["revision"]) > 0
+                and proof["blocksFire"] is True and proof["closedVerified"] is False,
+                "retained fixed gate input/lifetime/block mismatch")
+        holster = snapshot.get("bodyHolster", {})
+        require(snapshot.get("feed") is None
+                and all(isinstance(snapshot.get(k), dict) and snapshot[k].get("available") is False
+                        for k in ("feedGateAdmission", "shellPump", "magazine", "bolt"))
+                and holster.get("available") is True and holster.get("blockWeaponActions") is False
+                and holster.get("nativeOwner") == owner and holster.get("inputMatchesSnapshot") is True
+                and holster.get("leftClaim") is None,
+                "competing weapon block during retained fixed capture")
+        gun = fixed.claim(holster.get("rightClaim"), source, now, 1, 1)
+        require(gun["item"] == holster["physicalGun"]
+                and integer(gun["item"]["generation"]) == integer(snapshot["physical_equipment_generation"])
+                and integer(gun["item"]["id"]) in (integer(owner["weapon"]), integer(binding["persistence"]))
+                and integer(gun["prerequisiteClaim"]) == 0,
+                "retained fixed capture lost right GunHold")
+        return True
+
     def fresh(self, *, boundary=None, after_ns=0, pickup=None, prepare=False, deadline_ns=None, fixed_reload=False,
               neutral_readiness=None):
         require(not prepare or boundary is None, "stimulus preparation requires initial stage admission")
@@ -1126,6 +1193,7 @@ class ReloadStimulus:
             "deadlineNs": until, "lastPending": None}
         used = set()
         capture_reference = None
+        retained_close = None
         while time.perf_counter_ns() < until:
             try:
                 if neutral_readiness is None:
@@ -1194,10 +1262,9 @@ class ReloadStimulus:
                                     and not self.held_left and not self.pending_command and not self.unsafe_owner,
                                     "fixed capture pending outside initial unheld observation")
                             frame = self.geometry.fixed.frame
-                            frame.admit_frame(snapshot, now, key)
+                            frame.admit_frame(snapshot, now, key, mechanism_admission=self.retained_close_capture)
                             require(x.get("schema") == self.geometry.fixed.OBSERVATION_SCHEMA
                                     and x.get("view") is None and snapshot.get("feed") is None
-                                    and snapshot["weapon_actions_blocked"] is False
                                     and snapshot["input_evidence"]["released"] == [True, False]
                                     and snapshot["input"]["hands"][0]["squeeze"] == 0
                                     and all(frame.finite(h["trigger"]) == frame.finite(h["stickX"])
@@ -1207,6 +1274,8 @@ class ReloadStimulus:
                             require(capture_readiness and capture_reference is None,
                                     "fixed capture still absent after original follow-up receive")
                             capture_reference = snapshot
+                            if snapshot["weapon_actions_blocked"] is True:
+                                retained_close = snapshot["fixedGateAdmission"]["latest"]["publication"]
                             probe_until = until
                             until = min(self.deadline, self.stage_deadline, item["receivedNs"] + RECEIVE_NS)
                             if deadline_ns is not None:
@@ -1222,6 +1291,25 @@ class ReloadStimulus:
                                         and integer(snapshot["input_evidence"]["sequence"])
                                             > integer(capture_reference["input_evidence"]["sequence"]),
                                         "fixed capture follow-up did not advance native input")
+                            if retained_close is not None:
+                                fixed = self.geometry.fixed
+                                admitted = fixed.admit(snapshot, now, key)
+                                self.retained_close_capture(snapshot, now)
+                                view = fixed.ammo(snapshot, now, idle=True)
+                                tracking = admitted["tracking"]
+                                current_gate = snapshot["fixedGateAdmission"]["latest"]["publication"]
+                                require(integer(tracking["step"]) == 3
+                                        and integer(tracking["lifetime"]) == integer(retained_close["lifetime"])
+                                            == integer(current_gate["lifetime"])
+                                        and integer(tracking["revision"]) >= integer(retained_close["revision"])
+                                        and fixed.binding_key(view["binding"]) == fixed.binding_key(retained_close["binding"])
+                                            == fixed.binding_key(current_gate["binding"])
+                                        and tracking["blocksFire"] is True and tracking["carried"] is False
+                                        and tracking["grip"] is False and tracking["hand"] is None
+                                        and admitted["leftClaim"] is None
+                                        and snapshot["input_evidence"]["released"] == [True, False]
+                                        and snapshot["input"]["hands"][0]["squeeze"] == 0,
+                                        "retained fixed capture did not preserve exact unheld Close")
                             self.artifacts.event({"type": "fixed_capture_ready", "nonce": snapshot["nonce"],
                                 "startedNs": started, "finishedNs": now, "deadlineNs": until})
                             capture_readiness = False
@@ -1711,7 +1799,7 @@ class ReloadStimulus:
             snapshot, _, plan = self.fresh(prepare=True, pickup=pickup, fixed_reload=True,
                                            after_ns=self.last_commit or 0)
             stage = plan["stage"]
-            allowed = {None: ("Open", "EjectSpent", "Pickup"), "Open": ("EjectSpent", "Pickup"),
+            allowed = {None: ("Open", "EjectSpent", "Pickup", "Close"), "Open": ("EjectSpent", "Pickup"),
                        "EjectSpent": ("Pickup",), "Pickup": ("Insert",), "Insert": ("Close",)}
             require(stage in allowed.get(previous, ()), "fixed Reload observed an unexpected stage transition")
             self.args.stage, self.mapping = stage, snapshot
