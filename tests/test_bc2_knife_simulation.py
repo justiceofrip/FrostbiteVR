@@ -253,6 +253,9 @@ class KnifeTests(unittest.TestCase):
             checked_utc=datetime.datetime.now(datetime.timezone.utc).isoformat()))
         self.calls, self.prepared, self.snapshots = [], [], []
         self.held_mutation = None
+        self.held_request_hook = None
+        self.held_requests = []
+        self.jab_publications = []
         self.motion = None
         self.motion_fault = None
         self.owner_during_motion = []
@@ -414,6 +417,8 @@ class KnifeTests(unittest.TestCase):
             if stow_publication_expiry and not isinstance(driver, m.KnifeDriver):
                 self.original_stow_deadline = deadline_ns
                 self.clock.now = max(self.clock.now, deadline_ns)
+            if isinstance(driver, m.KnifeDriver) and driver.phase == 'jab' and driver.gate is not None:
+                self.jab_publications.append(dict(source=copy.deepcopy(driver.gate[0]), deadlineNs=deadline_ns))
             if replace_at_publication and isinstance(driver, m.KnifeDriver) and driver.phase == 'jab':
                 self.assertTrue(driver.pending_command)
                 self.assertIsNotNone(driver.gate)
@@ -445,6 +450,11 @@ class KnifeTests(unittest.TestCase):
                 s = knife_snapshot(m, driver.baseline, now, driver.pending_nonce, self.state if jab else None)
                 if self.held_mutation:
                     self.held_mutation(s)
+                if self.held_request_hook:
+                    self.held_request_hook(driver, s)
+                self.held_requests.append(dict(snapshot=copy.deepcopy(s), commands=len(self.calls),
+                    deadlineNs=driver.deadline, stageDeadlineNs=driver.stage_deadline,
+                    afterNs=self.held_requests[0]['afterNs'] if self.held_requests else driver.last_commit))
             else:
                 is_knife = isinstance(driver, m.KnifeDriver)
                 s = body_snapshot(m, now, driver.pending_nonce, self.state,
@@ -510,9 +520,8 @@ class KnifeTests(unittest.TestCase):
                 # Keep real preparation, send, publication revalidation, ACK and
                 # rollback. Only the native source and simulator are synthetic;
                 # Windows file handles below belong to this temporary fixture.
-                if replace_at_publication or stow_publication_expiry:
-                    self.publication_refusals = []
-                    stack.enter_context(patch.object(m.t, 'replace_command', replace))
+                self.publication_refusals = []
+                stack.enter_context(patch.object(m.t, 'replace_command', replace))
             else:
                 stack.enter_context(patch.object(m.t.Driver, 'send', lambda driver, *a, **kw: self.fake_send(driver, *a, **kw)))
                 stack.enter_context(patch.object(m.t.Driver, 'prepare_next_command', prepare))
@@ -702,6 +711,151 @@ class KnifeTests(unittest.TestCase):
         self.assertEqual(commands.count(['grip r 1']), 1)
         self.assertEqual(commands.count(['grip r 0']), 1)
         self.assertFalse(any(lines[0].startswith('shot ') or len(lines) == 2 for lines in commands))
+
+    @staticmethod
+    def unavailable(snapshot):
+        snapshot['chestKnife'] = dict(observationOnly=True, available=False,
+            observedNs=snapshot['observed_ns'], reason='observation_unavailable')
+
+    def prejab_gap(self, following=None, *, absent_count=1):
+        def respond(driver, snapshot):
+            index = len(self.held_requests)
+            if 1 <= index <= absent_count:
+                self.unavailable(snapshot)
+            elif index > absent_count and following is not None:
+                following(driver, snapshot)
+        self.held_request_hook = respond
+
+    def assert_no_jab_once_released(self, result):
+        self.assertEqual(result['status'], 'refused', result)
+        self.assertEqual(self.jab_publications, [])
+        commands = [lines for name, lines, _ in self.calls if name == 'KnifeDriver']
+        self.assertEqual(commands.count(['grip r 1']), 1)
+        self.assertEqual(commands.count(['grip r 0']), 1)
+        self.assertFalse(any(lines[0].startswith('hand r to grip ') for lines in commands))
+
+    def test_prejab_absence_rejoins_fresh_held_once_without_input_or_lease_renewal(self):
+        self.prejab_gap(lambda driver, s: s['chestKnife'].update(continuity=2), absent_count=2)
+        code, result = self.run_assembled(jab=True, real_transport=True)
+        self.assertEqual(code, 0, result)
+        self.assertEqual(result['jabSteps'], 1)
+        self.assertEqual(len(self.held_requests), 4)
+        initial, missing_a, missing_b, fresh = [row['snapshot'] for row in self.held_requests]
+        self.assertLess(initial['chestKnife']['validUntilNs'], fresh['observed_ns'])
+        self.assertEqual(len({row['commands'] for row in self.held_requests[1:]}), 1)
+        self.assertEqual(len({row['deadlineNs'] for row in self.held_requests}), 1)
+        self.assertEqual(len({row['stageDeadlineNs'] for row in self.held_requests}), 1)
+        retained = [json.loads(path.read_text()) for path in
+                    Path(result['artifactDirectory']).glob('snapshot-*.json')]
+        for snapshot in (missing_a, missing_b):
+            self.assertIn(snapshot, retained)
+        self.assertEqual(len(self.jab_publications), 1)
+        publication = self.jab_publications[0]
+        self.assertEqual(publication['source'], fresh)
+        self.assertEqual(publication['deadlineNs'], fresh['chestKnife']['validUntilNs'])
+        commands = [lines for name, lines, _ in self.calls if name == 'KnifeDriver']
+        self.assertEqual(sum(lines[0].startswith('hand r to grip ') for lines in commands), 1)
+        self.assertEqual(commands.count(['grip r 1']), 1)
+        self.assertEqual(commands.count(['grip r 0']), 1)
+
+    def test_prejab_explicit_rejection_after_absence_is_terminal(self):
+        def reject(driver, snapshot):
+            self.unavailable(snapshot)
+            snapshot['chestKnife']['reason'] = 'current_hold_lost'
+        self.prejab_gap(reject)
+        code, result = self.run_assembled(jab=True, real_transport=True)
+        self.assertEqual(code, 2, result)
+        self.assertIn('Explicit Held rejection', result['error'])
+        self.assertEqual(len(self.held_requests), 3)
+        self.assert_no_jab_once_released(result)
+
+    def test_prejab_negative_current_gate_after_absence_is_terminal(self):
+        self.prejab_gap(lambda driver, s: s['chestKnife'].update(nativeHealthy=False))
+        code, result = self.run_assembled(jab=True, real_transport=True)
+        self.assertEqual(code, 2, result)
+        self.assertIn('knife gate lost: nativeHealthy', result['error'])
+        self.assertEqual(len(self.held_requests), 3)
+        self.assert_no_jab_once_released(result)
+
+    def test_prejab_fresh_different_owned_epoch_after_absence_is_terminal(self):
+        def changed(driver, snapshot):
+            k = snapshot['chestKnife']
+            k['owner']['equipGeneration'] += 1
+            k['render']['owner'] = copy.deepcopy(k['owner'])
+        self.prejab_gap(changed)
+        code, result = self.run_assembled(jab=True, real_transport=True)
+        self.assertEqual(code, 2, result)
+        self.assertIn('original owned knife/operation/claim', result['error'])
+        self.assertEqual(len(self.held_requests), 3)
+        self.assert_no_jab_once_released(result)
+
+    def check_held_observation_budget(self, budget=None):
+        self.prejab_gap(absent_count=1000)
+        original_init = self.m.KnifeDriver.__init__
+        def initialize(driver, *args):
+            original_init(driver, *args)
+            if budget is not None:
+                setattr(driver, budget, driver.started + 4*self.m.NS)
+        with patch.object(self.m.KnifeDriver, '__init__', initialize):
+            code, result = self.run_assembled(jab=True, real_transport=True)
+        self.assertEqual(code, 2, result)
+        self.assertIn('original bounded observation window', result['error'])
+        self.assertGreater(len(self.held_requests), 2)
+        self.assertEqual(len({row['commands'] for row in self.held_requests[1:]}), 1)
+        self.assertEqual(len({row['deadlineNs'] for row in self.held_requests}), 1)
+        self.assertEqual(len({row['stageDeadlineNs'] for row in self.held_requests}), 1)
+        last = self.held_requests[-1]
+        cutoff = min(last['afterNs']+3*self.m.NS,
+            last['deadlineNs']-3*self.m.NS, last['stageDeadlineNs']-3*self.m.NS)
+        self.assertLess(last['snapshot']['observed_ns']+self.m.t.SNAPSHOT_TIMEOUT, cutoff)
+        self.assertLess(self.clock.now, min(last['deadlineNs'], last['stageDeadlineNs']))
+        self.assert_no_jab_once_released(result)
+
+    def test_prejab_absence_cannot_restart_original_held_observation_window(self):
+        self.check_held_observation_budget()
+
+    def test_prejab_absence_preserves_original_invocation_jab_and_return_budget(self):
+        self.check_held_observation_budget('deadline')
+
+    def test_prejab_absence_preserves_original_stage_jab_and_return_budget(self):
+        self.check_held_observation_budget('stage_deadline')
+
+    def test_prejab_absence_with_foreign_control_is_terminal(self):
+        def changed(driver, snapshot):
+            if len(self.held_requests) == 1:
+                self.unavailable(snapshot)
+                self.state['controls']['gripR'] = 0
+                self.write(driver.state_path, self.state)
+        self.held_request_hook = changed
+        code, result = self.run_assembled(jab=True, real_transport=True)
+        self.assertEqual(code, 2, result)
+        self.assertIn('Held observation controls changed', result['error'])
+        self.assertEqual(len(self.held_requests), 2)
+        self.assert_no_jab_once_released(result)
+
+    def test_prejab_absence_with_foreign_command_owner_cannot_publish_or_release(self):
+        def changed(driver, snapshot):
+            if len(self.held_requests) == 1:
+                self.unavailable(snapshot)
+                driver.command_path.write_bytes(b'note foreign controller\n')
+        self.held_request_hook = changed
+        code, result = self.run_assembled(jab=True, real_transport=True)
+        self.assertEqual(code, 2, result)
+        self.assertIn('command file replaced', result['error'])
+        self.assertEqual(len(self.held_requests), 2)
+        self.assertEqual(self.jab_publications, [])
+        self.assertFalse(any(cleanup for name, _, cleanup in self.calls if name == 'KnifeDriver'))
+
+    def test_recovered_held_expiry_at_publication_never_reobserves_or_reissues_jab(self):
+        self.prejab_gap()
+        code, result = self.run_assembled(jab=True, replace_at_publication='expire')
+        self.assertEqual(code, 2, result)
+        self.assertIn('deadline', result['error'].lower())
+        self.assertEqual(len(self.held_requests), 3)
+        self.assertEqual(len(self.jab_publications), 1)
+        self.assertEqual(self.jab_publications[0]['source'], self.held_requests[-1]['snapshot'])
+        self.assertFalse(any(lines[0].startswith('hand r to grip ') for _, lines, _ in self.calls))
+        self.assertIsNone(result['outstandingMotion'])
 
     def test_replaced_jab_source_at_real_publication_rolls_back_and_refuses_cleanup(self):
         code, result = self.run_assembled(jab=True, replace_at_publication=True)
@@ -894,6 +1048,48 @@ class KnifeTests(unittest.TestCase):
                     m.held(current, baseline, now, after, episode)
         with self.assertRaises(Exception):
             m.held(original, baseline, now+100_000_000, after, episode)
+
+    def test_fresh_held_rejoins_exact_item_operation_claim_and_original_source_stamps(self):
+        m = self.m
+        baseline = body_snapshot(m, self.clock.now, 1, self.state, is_empty=True)
+        selection = m.native_selection(baseline, self.clock.now)
+        now = self.clock.now + 200_000_000
+        episode = dict(startedNs=self.clock.now-10_000_000, deadlineNs=now+m.NS,
+            stageDeadlineNs=now+m.NS, drawWrittenNs=self.clock.now+10_000_000,
+            drawAcknowledgedNs=self.clock.now+20_000_000, nativeSelection=selection)
+        after = self.clock.now+30_000_000
+        previous = knife_snapshot(m, baseline, now-10_000_000, 2)['chestKnife']
+        fresh = knife_snapshot(m, baseline, now, 3)
+        fresh['chestKnife']['continuity'] += 1
+        self.assertGreater(m.held(fresh, baseline, now, after, episode, previous), now)
+
+        def operation(k):
+            k['bodyOperation'] += 1
+            k['render']['bodyOperation'] = k['bodyOperation']
+
+        def source(k, sequence, observed):
+            k['nativeSequence'] = k['hold']['inputSequence'] = sequence
+            for ev in (k['inputEvidence'], k['render']['inputEvidence']):
+                ev.update(sequence=sequence, observedNs=observed)
+
+        changes = (
+            ('item', lambda k: k['knife'].update(generation=k['knife']['generation']+1)),
+            ('operation', operation),
+            ('claim', lambda k: k['hold'].update(id=k['hold']['id']+1)),
+            ('contact', lambda k: k['hold']['contact'].update(id=k['hold']['contact']['id']+1)),
+            ('renewed input', lambda k: source(k, previous['inputEvidence']['sequence'],
+                                             k['inputEvidence']['observedNs'])),
+            ('older input', lambda k: source(k, previous['inputEvidence']['sequence']-1,
+                                           previous['inputEvidence']['observedNs']-1_000_000)))
+        for label, change in changes:
+            with self.subTest(label=label):
+                current = copy.deepcopy(fresh)
+                change(current['chestKnife'])
+                # Each is otherwise a positive current proof. The original
+                # admitted identity/source binding makes the rejoin refuse.
+                self.assertGreater(m.held(current, baseline, now, after, episode), now)
+                with self.assertRaises(m.Refusal):
+                    m.held(current, baseline, now, after, episode, previous)
 
 
 if __name__ == '__main__':

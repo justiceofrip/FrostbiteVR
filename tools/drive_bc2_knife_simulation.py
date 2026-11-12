@@ -189,7 +189,7 @@ def returned_owners(baseline, held, native, physical):
     return native, physical
 
 
-def held(snapshot, baseline, now, after_ns, episode):
+def held(snapshot, baseline, now, after_ns, episode, previous=None):
     need, number = require, integer
     need(snapshot.get('schema') == 'fvr.bc2.live-mechanism-snapshot.v1'
          and number(snapshot['nonce']) > 0 and 0 < number(snapshot['observed_ns']) <= now,
@@ -262,6 +262,18 @@ def held(snapshot, baseline, now, after_ns, episode):
     until = min(ev['deadlineNs'], menu['deadlineNs'], hold['deadlineNs'], render['inputEvidence']['deadlineNs'])
     need(k['validUntilNs'] == until and snapshot['observed_ns'] <= k['observedNs'] <= now < until,
          'independent Held lease expired or extended')
+    if previous is not None:
+        need(all(k[key] == previous[key] for key in
+                 ('owner', 'originalOwner', 'originalGun', 'knife', 'bodyOperation'))
+             and all(hold[key] == previous['hold'][key] for key in
+                     ('owner', 'id', 'hand', 'kind', 'item', 'contact', 'prerequisiteClaim')),
+             'fresh Held differs from the original owned knife/operation/claim')
+        for old, current in ((previous['inputEvidence'], ev),
+                             (previous['render']['inputEvidence'], render['inputEvidence'])):
+            same_stamps(old, current)
+            need(current['sequence'] >= old['sequence'], 'fresh Held source went backwards')
+        # Publication continuity may change across an absent observation. Only
+        # the fresh positive proof authorizes input; the old proof binds identity.
     # No firearm mapping, aim, native shot authority or synthetic valid frame.
     # Pose actions still require the exact current claim and publication lease.
     return until
@@ -277,16 +289,19 @@ class KnifeTransport(t.Driver):
         return state
 
     def pump(self):
-        # No background request/reacquisition. One response per explicit stage;
-        # unavailable/expired responses are retained and cancel permanently.
+        # No background request/reacquisition. Explicit Held readiness alone may
+        # observe absence again; expired or rejected authority stays terminal.
         self.bounds(time.perf_counter_ns())
 
-    def current(self, validator):
+    def current(self, validator, *, observation_deadline=None):
         self.attempt.check()
         require(self.pending_nonce is None, "previous observation still pending")
         self.ownership(self.read_state())
+        deadline = min(self.deadline, self.stage_deadline,
+                       observation_deadline if observation_deadline is not None else self.deadline)
+        require(time.perf_counter_ns() < deadline, "original observation window exhausted before request")
         self.request_snapshot()
-        until = min(self.deadline, self.stage_deadline, self.last_request + t.SNAPSHOT_TIMEOUT)
+        until = min(deadline, self.last_request + t.SNAPSHOT_TIMEOUT)
         for _ in range(800):
             now = time.perf_counter_ns()
             self.bounds(now)
@@ -877,8 +892,8 @@ class KnifeDriver(KnifeTransport):
             self.outstanding_motion = old
             raise
 
-    def execute_jab(self, after):
-        current = self.held_now(after)
+    def execute_jab(self, after, previous):
+        current = self.held_now(after, previous)
         preserved(self.baseline, current[0])
         plan = measured_jab(current[0], time.perf_counter_ns())
         reviewed = self.args.jab_direction_local
@@ -888,7 +903,8 @@ class KnifeDriver(KnifeTransport):
         self.ownership(state)
         motion_backend.ReloadStimulus.check_target(state, dict(hand='r', positionMeters=plan['origin'],
             yawPitchRollDegrees=plan['yawPitchRollDegrees']))
-        require(time.perf_counter_ns()+JAB_MS*MS+motion_backend.RECEIVE_NS+NS < self.deadline,
+        require(time.perf_counter_ns()+JAB_MS*MS+motion_backend.RECEIVE_NS+NS
+                < min(self.deadline, self.stage_deadline),
                 'single jab and Return reserve exhausted')
         self.outstanding_motion = dict(plan, runtimeSha256=self.manifest['runtime_library']['sha256'],
             basis={key: copy.deepcopy(state[key]) for key in ('head', 'handL')},
@@ -899,7 +915,7 @@ class KnifeDriver(KnifeTransport):
         self._jab_before_publication = (self.last_write, *before)
         try:
             self.action('jab', self.allowed_jab_lines, current,
-                lambda s, n: held(s, self.baseline, n, after, self.episode))
+                lambda s, n: held(s, self.baseline, n, after, self.episode, previous))
         except BaseException:
             if (self.sequence, self.sentinel, self.command_hash) == before:
                 self.outstanding_motion = None  # No published runtime motion to cancel.
@@ -957,34 +973,38 @@ class KnifeDriver(KnifeTransport):
         self.artifacts.save('zero-trigger-jab.json', proof)
         return proof
 
-    def held_now(self, after):
-        return self.current(lambda s, now: held(s, self.baseline, now, after, self.episode))
-
-    def initial_held(self, after):
-        cutoff = min(after + 3*NS, self.deadline - 3*NS)
-        while time.perf_counter_ns() + t.SNAPSHOT_TIMEOUT < cutoff:
+    def held_now(self, after, previous=None):
+        reserve = max(3*NS, JAB_MS*MS+motion_backend.RECEIVE_NS+NS)
+        cutoff = min(after + 3*NS, self.deadline - reserve, self.stage_deadline - reserve)
+        controls = copy.deepcopy(self.state['controls'])
+        while max(time.perf_counter_ns(), self.last_request + t.SNAPSHOT_PERIOD) + t.SNAPSHOT_TIMEOUT < cutoff:
             self.pause_until(self.last_request + t.SNAPSHOT_PERIOD)
             admitted = []
 
             def observe(s, now):
+                state = self.read_state()
+                self.ownership(state)
+                require(state['controls'] == controls, 'Held observation controls changed')
+                now = time.perf_counter_ns()
+                require(now < cutoff, 'original Held observation window exhausted')
                 require(s.get('schema') == 'fvr.bc2.live-mechanism-snapshot.v1'
                         and 0 < s['observed_ns'] <= now and now - s['observed_ns'] < 100*MS,
-                        'Initial Held diagnostic lacks current response identity')
+                        'Held diagnostic lacks current response identity')
                 k = s.get('chestKnife')
                 if isinstance(k, dict) and k.get('available') is True:
-                    held(s, self.baseline, now, after, self.episode)
+                    held(s, self.baseline, now, after, self.episode, previous)
                     admitted.append(True)
                     return
                 require(isinstance(k, dict) and k.get('observationOnly') is True
                         and k.get('available') is False and k.get('reason') == 'observation_unavailable',
-                        'Explicit initial Held rejection is terminal')
+                        'Explicit Held rejection is terminal')
                 require(s.get('valid') is True or (s.get('valid') is False
                     and s.get('invalid_reason') == 'selected_configuration_or_rig_missing_changed_or_expired'
                     and s.get('chestKnifeObservationBasis') == 'independent_owned_body'),
                     'Unexpected native observation failure')
                 # Explicit absence grants no input and never renews the window.
 
-            source = self.current(observe)
+            source = self.current(observe, observation_deadline=cutoff)
             if admitted:
                 return source
         raise Refusal('Strict mode4 Held unavailable in original bounded observation window')
@@ -1022,12 +1042,12 @@ class KnifeDriver(KnifeTransport):
         self.action('neutral', ['trigger r 0'])
         after = self.last_commit
         self.pause_until(after + 180*MS)
-        observed = self.initial_held(after)
+        observed = self.held_now(after)
         self.artifacts.save('strict-held-mode4.json', observed[1])
         held_capture = self.knife_capture('held')
         jab = None
         if self.args.jab or self.args.jab_direction_local is not None:
-            jab = self.execute_jab(after)
+            jab = self.execute_jab(after, observed[0]['chestKnife'])
             self.pause_until(time.perf_counter_ns() + 180*MS)
         self.gate = None
         release = self.release_after_failure()
