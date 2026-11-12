@@ -5,6 +5,9 @@ param(
     [Parameter(Mandatory,ParameterSetName='Plan')][string]$BatchConfig,
     [Parameter(Mandatory,ParameterSetName='Plan')][string]$BatchConfigSha256,
     [Parameter(Mandatory,ParameterSetName='Plan')][string]$InstallRoot,
+    [Parameter(Mandatory,ParameterSetName='Plan')][string]$ExpectedCurrentVersion,
+    [Parameter(Mandatory,ParameterSetName='Plan')][string]$ExpectedFallbackVersion,
+    [Parameter(Mandatory,ParameterSetName='Plan')][string]$StageRoot,
     [Parameter(Mandatory,ParameterSetName='Plan')][string]$LauncherCommit,
     [Parameter(Mandatory,ParameterSetName='Plan')][string]$ReviewedLauncherPins,
     [Parameter(Mandatory,ParameterSetName='Plan')][string]$ReviewedLauncherPinsSha256,
@@ -43,7 +46,7 @@ $reviewedGuard=@($review.files|Where-Object path -CEQ 'launcher/runtime/PrivateS
 Assert-Stage ($guardPin.sha256 -ceq $reviewedGuard.sha256 -and $guardPin.bytes -eq $reviewedGuard.bytes) 'accepted753 guard has not been integrated exactly'
 . $guardPath
 if($Plan){
-    New-PrivateStageDecision $configPin $InstallRoot $LauncherCommit $review $reviewPin -MaxGeneratedBytes $MaxGeneratedBytes|ConvertTo-Json -Depth 60
+    New-PrivateStageDecision $configPin $InstallRoot $LauncherCommit $review $reviewPin -MaxGeneratedBytes $MaxGeneratedBytes -ExpectedCurrentVersion $ExpectedCurrentVersion -ExpectedFallbackVersion $ExpectedFallbackVersion -StageRoot $StageRoot|ConvertTo-Json -Depth 60
 }else{
     Invoke-PrivateStage $decisionPin $review -RootAccept:$RootAccept|ConvertTo-Json -Depth 60
 }

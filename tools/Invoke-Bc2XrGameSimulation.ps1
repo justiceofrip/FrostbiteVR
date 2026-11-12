@@ -14,6 +14,8 @@ param(
     [ValidateRange(1,12)][int]$CaptureCount=4,
     [ValidateRange(64,1024)][int]$CaptureWidth=1024,
     [ValidateRange(64,768)][int]$CaptureHeight=768,
+    [ValidateRange(1,[long]::MaxValue)][long]$MaxGeneratedBytes=40GB,
+    [string]$GeneratedBudgetReason,
     [switch]$MechanismSnapshots,
     [switch]$PrivateGpuOrderedPresent,
     [switch]$ProfileAttribution,
@@ -49,7 +51,7 @@ $rawBytes=512MB+$simRawBytes;$plannedBytes=$rawBytes+128MB;$rawLimitBytes=660MB
 $capturePlan=@{maximum_compositions=$CaptureCount;width=$CaptureWidth;height=$CaptureHeight;eyes=2;image_streams=2;bytes_per_pixel=4;metadata_bytes_per_composition=64KB;raw_bytes=$simRawBytes;layers=$false;periodic=$false}
 $receipt=[ordered]@{schema='fvr.xr-game-simulation.v1';status='failed';evidence_level='actual_game_simulated_runtime';
     actual_game_started=$false;native_running_observed=$false;reload_success_claimed=$false;headset_accepted=$false;
-    limits=@{host_seconds=$Seconds;outer_seconds=$TimeoutSeconds;planned_bytes=$plannedBytes;raw_budget_bytes=$rawBytes;raw_budget_limit_bytes=$rawLimitBytes;raw_budget_reason='Readable menu/mechanism captures: native eight bounded images plus at most twelve 1024x768 stereo/SBS compositions.';native_maximum_raw_images=8;sim_compositions=$CaptureCount;sim_capture_width=$CaptureWidth;sim_capture_height=$CaptureHeight;render_width=1024;render_height=768;tape_max_frames=30000};
+    limits=@{host_seconds=$Seconds;outer_seconds=$TimeoutSeconds;max_generated_bytes=$MaxGeneratedBytes;generated_budget_reason=$GeneratedBudgetReason;planned_bytes=$plannedBytes;raw_budget_bytes=$rawBytes;raw_budget_limit_bytes=$rawLimitBytes;raw_budget_reason='Readable menu/mechanism captures: native eight bounded images plus at most twelve 1024x768 stereo/SBS compositions.';native_maximum_raw_images=8;sim_compositions=$CaptureCount;sim_capture_width=$CaptureWidth;sim_capture_height=$CaptureHeight;render_width=1024;render_height=768;tape_max_frames=30000};
     capture_plan=$capturePlan;mechanism_snapshots=$mechanismMarker;private_gpu_ordered_present=$privatePresentation;profile_attribution=$attributionProfile;
     failures=$failures;forced_termination_by_wrapper=$false}
 function Require([bool]$Condition,[string]$Message){if(-not $Condition){throw $Message}}
@@ -371,14 +373,16 @@ try{
     . (Join-Path $sourceRoot 'tools/StorageBudget.ps1')
     $RepositoryRoot=Full $RepositoryRoot;$InstallRoot=Full $InstallRoot;$OutputDir=Full $OutputDir;$ProfileDirectory=Full $ProfileDirectory
     AssertObservationLimits $Seconds $TimeoutSeconds ([bool]$ExtendedObservation)
+    Require ($MaxGeneratedBytes -le 40GB -or -not [string]::IsNullOrWhiteSpace($GeneratedBudgetReason)) 'MaxGeneratedBytes above 40 GiB requires an explicit GeneratedBudgetReason.'
     $receipt.limits.extended_observation=[bool]$ExtendedObservation
     Require ([IO.Path]::GetPathRoot($RepositoryRoot) -ieq 'G:\' -and [IO.Path]::GetPathRoot($InstallRoot) -ieq 'G:\') 'Local development repository/install must remain on G:.'
     Require ($OutputDir.StartsWith((Join-Path $RepositoryRoot 'reports')+'\',[StringComparison]::OrdinalIgnoreCase)) 'Use a fresh output under RepositoryRoot/reports.'
     Require (-not(Test-Path -LiteralPath $OutputDir)) 'Existing output refused; preserve all prior episodes.'
     $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
     try{Require (-not [Security.Principal.WindowsPrincipal]::new($identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) 'Elevated Windows token refused; OpenXR environment overrides require a normal token.'}finally{$identity.Dispose()}
-    $budget=Assert-FvrStorageBudget -RepositoryRoot $RepositoryRoot -OutputPath $OutputDir -Operation Session -PlannedBytes $plannedBytes -RawCaptureBytes $rawBytes -MaxRawCaptureBytes $rawLimitBytes -AdditionalRoots @($InstallRoot,$sourceRoot,(Join-Path (Split-Path -Parent $RepositoryRoot) 'bc2vr-task-worktrees'))
+    $budget=Assert-FvrStorageBudget -RepositoryRoot $RepositoryRoot -OutputPath $OutputDir -Operation Session -PlannedBytes $plannedBytes -RawCaptureBytes $rawBytes -MaxRawCaptureBytes $rawLimitBytes -MaxGeneratedBytes $MaxGeneratedBytes -AdditionalRoots @($InstallRoot,$sourceRoot,(Join-Path (Split-Path -Parent $RepositoryRoot) 'bc2vr-task-worktrees'))
     $budget|Add-Member -NotePropertyName raw_budget_reason -NotePropertyValue $receipt.limits.raw_budget_reason
+    $budget|Add-Member -NotePropertyName generated_budget_reason -NotePropertyValue $GeneratedBudgetReason
     $null=[IO.Directory]::CreateDirectory($OutputDir);$outputReady=$true;Save 'storage.json' $budget
     Save 'run-manifest.json' @{schema='fvr.xr-game-run.v1';output_directory=$OutputDir;version=$Version;source_sha256=$ExpectedSourceSha256;artifact_binding_path=(Join-Path $OutputDir 'artifact-binding.json');limits=$receipt.limits;capture_plan=$capturePlan;mechanism_snapshots=$mechanismMarker;profile_attribution=$attributionProfile;startup_receipt=(Join-Path $OutputDir 'sim-startup.json');command_authority='Runner owns startup. Root may send acknowledged batches only after sim-startup.json has status ready and exact retained host identity.'}
     NoOtherProcesses -BeforeLaunch
@@ -711,7 +715,7 @@ finally{
             $refusal=[IO.Path]::GetFullPath($OutputDir)+'.refused-'+[guid]::NewGuid().ToString('N')+'.json'
             $reportPrefix=Join-Path ([IO.Path]::GetFullPath($RepositoryRoot)) 'reports'
             if($refusal.StartsWith($reportPrefix+'\',[StringComparison]::OrdinalIgnoreCase) -and [IO.Directory]::Exists([IO.Path]::GetDirectoryName($refusal))){
-                [IO.File]::WriteAllText($refusal,(@{schema='fvr.xr-game-simulation-refusal.v1';failures=@($failures);game_started=$false}|ConvertTo-Json),$utf8)
+                [IO.File]::WriteAllText($refusal,(@{schema='fvr.xr-game-simulation-refusal.v1';failures=@($failures);game_started=$false;limits=$receipt.limits}|ConvertTo-Json),$utf8)
             }
         }catch{Write-Warning ('Could not preserve refusal receipt: '+$_.Exception.Message)}
     }

@@ -15,6 +15,11 @@ and operation sequence can explicitly request -ExtendedObservation with at most
 420s host/540s outer. The outer deadline still reserves at least60s for cleanup.
 This changes only the session envelope; action deadlines, capture/tape budgets,
 source admission, native retirement and restoration requirements stay in force.
+MaxGeneratedBytes defaults to40GiB. A larger explicit ceiling also requires
+GeneratedBudgetReason; the runner records both and passes the ceiling to the same
+fresh complete storage guard. The15GiB floor, counted roots and capture reserve
+remain unchanged. Do not copy the runner merely to change an authorized ceiling.
+
 CaptureWidth/CaptureHeight default to 1024x768 and are bounded to 64..1024 by
 64..768. CaptureCount defaults to four and is bounded to 1..12. Admission counts
 512 MiB for the eight bounded native images, plus count x width x height x
