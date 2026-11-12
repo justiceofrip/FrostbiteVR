@@ -134,7 +134,7 @@ def verify_updated_host_binary(c, baseline, binary):
 
 
 def verify_owner_release(c, now=None):
-    """Offline resource release preserves a failed session; it is not gameplay acceptance."""
+    """Offline resource release preserves the session outcome; it is not gameplay acceptance."""
     need(c['owners_relinquished'] is True, 'ROOT must verify shared owners relinquished')
     need(c['owner_evidence'], 'Actual owner-closure evidence required')
     for row in c['owner_evidence']:
@@ -143,8 +143,6 @@ def verify_owner_release(c, now=None):
         need(c['closure_and_restoration_verified'] is True,
              'ROOT must verify shared-owner closure and restoration')
         return
-    need(c['closure_and_restoration_verified'] is False,
-         'Offline resource release must not assert normal session closure')
     release = load(checked(c['offline_resource_release']))
     need(c['offline_resource_release'] in c['owner_evidence'], 'Offline release absent from owner evidence')
     need(release['schema'] == 'fvr.root-offline-resource-release.v1' and release['root_accepted'] is True and
@@ -153,12 +151,24 @@ def verify_owner_release(c, now=None):
     need(release['source_commit'] == c['source_commit'] and release['run'] == c['run'] and
          release['root_leases'] == c['root_leases'], 'Offline release source/run/leases differ')
     checked(release['root_leases'])
-    need(release['last_session'] in c['owner_evidence'], 'Failed session absent from owner evidence')
+    need(release['last_session'] in c['owner_evidence'], 'Last session absent from owner evidence')
     session_path = checked(release['last_session'])
     session = load(session_path)
-    need(session['status'] == 'failed', 'Offline release must preserve the failed session')
+    need(session['status'] in ('failed', 'observed_and_closed'),
+         'Offline release requires a failed or observed_and_closed session')
     for field in ('status', 'normal_game_close', 'native_retirement_proven'):
         need(release[field] == session[field], 'Offline release relabels session outcome: ' + field)
+    if session['status'] == 'failed':
+        need(c['closure_and_restoration_verified'] is False,
+             'Offline resource release must not assert normal session closure')
+    else:
+        need(c['closure_and_restoration_verified'] is True,
+             'ROOT must verify closed-session closure and restoration')
+        need(session.get('failures') == [] and release.get('failures') == [],
+             'Closed-session resource release requires no session or review failures')
+        for field in ('normal_game_close', 'native_retirement_proven'):
+            need(session[field] is True and release[field] is True,
+                 'Closed-session resource release requires normal closure and retirement: ' + field)
     for field in ('exact_three_profiles_restored', 'launcher_active_settings_preserved'):
         need(session[field] is True and release[field] is True, 'Exact session restoration required')
     def utc(value):
