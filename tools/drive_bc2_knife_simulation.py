@@ -1,7 +1,7 @@
 """ROOT only: ordinary stow, genuine Empty, strict mode4 knife Draw and Return.
 
-An optional reviewed LOCAL unit vector permits exactly one 75mm zero-trigger
-jab. Ordinary current run/install/source/command ownership stays with the shared
+An optional jab follows the current measured blade axis for 120mm in 120ms.
+Ordinary current run/install/source/command ownership stays with the shared
 transport. No launch, installation, retries, target or damage acceptance.
 """
 import argparse
@@ -33,14 +33,17 @@ t, p = h80.transport, h80.frame
 require, integer, Refusal = t.require, t.integer, t.REFUSAL
 readiness = load('knife_shared_readiness', Path(__file__).with_name('bc2_draw_readiness_driver.py'))
 policy = load('knife_shared_admission', Path(__file__).with_name('bc2_draw_admission.py'))
+motion_backend = load('knife_shared_motion', Path(__file__).with_name('drive_bc2_reload_stimulus.py'))
 NS, MS = t.NS, 1_000_000
 ACTOR, REFERENCE = h80.ACTOR, h80.REFERENCE
 KNIFE_RIG = 0xa7f219a1426216ab
+JAB_DISTANCE, JAB_MS = .120, 120
 DEPENDENCIES = ('tools/drive_bc2_knife_simulation.py', 'tools/drive_bc2_holster_prepared.py',
     'tools/bc2_holster_core.py', 'tools/bc2_holster_snapshot_transport.py',
     'tools/drive_bc2_feed_simulation.py', 'tools/plan_bc2_feed_simulation.py',
-    'tools/bc2_draw_readiness_driver.py', 'tools/bc2_draw_admission.py',
-    'include/fvr/interaction/BodyAnchors.h')
+    'tools/bc2_draw_readiness_driver.py', 'tools/bc2_draw_admission.py', 'tools/drive_bc2_reload_stimulus.py',
+    'include/fvr/interaction/BodyAnchors.h', 'include/fvr/interaction/MeleeStroke.h',
+    'src/games/bc2/KnifeGeometry.h', 'src/games/bc2/Bc2KnifeMotionGeometry.h')
 
 def empty(snapshot, now):
     h = h80.holster_proof(snapshot, now)
@@ -383,13 +386,67 @@ def check_continuous(admission):
         t.check_pin(row, 1024 * 1024)
 
 
-def jab_points(origin, direction):
-    require(len(origin) == len(direction) == 3 and all(
-        type(v) in (float, int) and math.isfinite(v) for v in list(origin) + list(direction)),
-        'Finite LOCAL position/direction required')
+def unit_direction(direction):
+    require(len(direction) == 3 and all(type(v) in (float, int) and math.isfinite(v) for v in direction),
+            'Finite LOCAL direction required')
     require(abs(math.sqrt(sum(v*v for v in direction)) - 1) < .001,
             'ROOT direction must already be unit length')
-    return [[origin[j] + step * .025 * direction[j] for j in range(3)] for step in (1, 2, 3)]
+    return direction
+
+
+def measured_jab(snapshot, now):
+    """Current rendered knife rotation, joined to the strict Held input.
+
+    Authored RightHandInKnife * placedKnife recovers the tracked right wrist;
+    its rotation is unchanged by arm reach solving. Transforming the measured
+    blade rotation back through body/reference therefore matches native
+    KnifeMotionFromTrackedGrip, without substituting the left wrist or camera.
+    """
+    k, inp = snapshot['chestKnife'], snapshot['input']
+    p.admit_frame(snapshot, now, integer(snapshot['nonce']), mechanism_admission=lambda s, n: True)
+    same_stamps(snapshot['input_evidence'], k['inputEvidence'])
+    require(snapshot['owner'] == k['owner']
+            and all(snapshot['input_evidence'][key] == k['inputEvidence'][key]
+                    for key in ('owner', 'sequence', 'observedNs', 'deadlineNs', 'focused', 'tracked', 'released'))
+            and inp['generation'] == k['render']['inputEvidence']['sequence']
+            and snapshot['rig']['fingerprint'] == k['render']['rigFingerprint'] == KNIFE_RIG
+            and snapshot['selected']['configurationPath'] == 'Objects/Weapons/Handheld/Knife/Knife'
+            and snapshot['selected']['matchedMeshPath'] == 'Objects/Weapons/Handheld/Knife/Knife_Mesh'
+            and snapshot['equipment']['asset'] == 'KNV-1'
+            and inp['trackingBasisGeneration'] == k['trackingBasisGeneration'],
+            'jab geometry is not the current rendered Held knife')
+    for hand, controls in zip(inp['hands'], k['controls']):
+        require(all(hand[key] == controls[key] for key in controls), 'jab geometry/input controls differ')
+    weapon = p.rigid(snapshot['mapping']['weaponWorldMeters'])
+    body = p.rigid(snapshot['mapping']['trackingBodyWorldMeters'])
+    reference = p.from_pose(inp['referenceHead'])
+    # Remove translations before composition, including large world positions.
+    for matrix in (weapon, body, reference):
+        matrix[3] = [0., 0., 0., 1.]
+    knife = p.multiply(p.multiply(weapon, p.inverse(body)), reference)
+    axis = [-knife[2][0], -knife[2][1], knife[2][2]]  # authored -Z; LH -> OpenXR LOCAL
+    length = math.sqrt(sum(v*v for v in axis))
+    require(.999 <= length <= 1.001, 'measured blade axis is not rigid')
+    direction = unit_direction([v/length for v in axis])
+    grip = inp['hands'][1]['grip']
+    endpoint = [p.finite(v) + JAB_DISTANCE*d for v, d in zip(grip['position'], direction)]
+    require(all(math.dist(point, inp['head']['position']) <= 1.5 for point in (grip['position'], endpoint)),
+            'jab leaves native head-relative reach')
+    return dict(backend='xr-sim.hand-to-grip.smoothstep.v1', durationMs=JAB_MS,
+        distanceMeters=JAB_DISTANCE, directionLocal=direction, directionIsMeasuredBladeAxis=True,
+        origin=copy.deepcopy(grip['position']), endpoint=endpoint,
+        yawPitchRollDegrees=p.quaternion_ypr(grip['orientation']),
+        sourceNonce=snapshot['nonce'], sourceInput=inp['generation'],
+        hold=copy.deepcopy(k['hold']), knife=copy.deepcopy(k['knife']), bodyOperation=k['bodyOperation'],
+        nativeMeleeStroke=dict(minimumSpeed=.65, minimumTravel=.06, maximumSpeed=8.,
+            maximumStep=.30, minimumAlignment=.65, settleNs=120*MS, maximumSampleGapNs=75*MS,
+            maximumStrokeNs=350*MS, rearmNs=180*MS), peakSpeedMetersPerSecond=1.5)
+
+
+def motion_line(position, ypr, duration_ms):
+    require(duration_ms in (0, JAB_MS) and len(position) == len(ypr) == 3
+            and all(math.isfinite(v) for v in position+ypr), 'invalid bounded knife motion')
+    return 'hand r to grip ' + ' '.join(f'{v:.9f}' for v in position+ypr) + ' ' + str(duration_ms)
 
 
 def neutral_trigger_lines(lines):
@@ -437,7 +494,7 @@ def preflight(args):
             and args.root_reviewed_normal_mode4_and_knife_idle,
             'Explicit ROOT ordinary-input/current stereo/normal mode4/knife-idle review required')
     if args.jab_direction_local is not None:
-        jab_points([0., 0., 0.], args.jab_direction_local)
+        unit_direction(args.jab_direction_local)
     dependencies = dependency_pins()
     require(dependencies == IMPORTED_PINS
             and dependency_sha256(dependencies) == args.dependencies_sha256,
@@ -448,6 +505,13 @@ def preflight(args):
             and t.same_path(manifest['output_directory'], run)
             and manifest['version'] == args.version and manifest['source_sha256'] == args.source_sha256
             and 'private_campaign' not in manifest, 'Expected ordinary run/source/version differs')
+    jab_pins = []
+    if getattr(args, 'jab', False) or args.jab_direction_local is not None:
+        runtime_pin = manifest['runtime_library']
+        require(runtime_pin['sha256'] == motion_backend.NEUTRAL_MOTION_RUNTIME_SHA256,
+                'continuous jab requires the pinned xr-sim runtime')
+        t.check_pin(runtime_pin)
+        jab_pins = [runtime_pin]
     binding_path = run / 'artifact-binding.json'
     require(t.same_path(manifest['artifact_binding_path'], binding_path), 'Artifact binding is not this run')
     binding, _ = t.read_json(binding_path)
@@ -495,7 +559,7 @@ def preflight(args):
     paths = [run / name for name in ('run-manifest.json', 'artifact-binding.json',
                                     'session-link.json', 'sim-startup.json')]
     paths += [t.local_path(link['options']), active_path, runtime_path, package_path]
-    return dict(continuousPins=dependencies + [pin(path) for path in paths], world=world,
+    return dict(continuousPins=dependencies + jab_pins + [pin(path) for path in paths], world=world,
                 storage=storage, host=link['host'], version=args.version, sourceSha256=args.source_sha256)
 
 
@@ -575,6 +639,10 @@ class KnifeDriver(KnifeTransport):
         self.baseline = self.frozen_sim = None
         self.release_attempted = False
         self.allowed_jab_lines = None
+        self.outstanding_motion = None
+        self._motion_owner_bytes = None
+        self._jab_before_publication = None
+        self.allowed_cancel_lines = None
         args.stage = args.profiles = args.capture = args.menu_batches = None
         args.pickup_first = False
         super().__init__(args)
@@ -597,11 +665,70 @@ class KnifeDriver(KnifeTransport):
         if initial is not None:
             require(all(state[key] == initial[key] for key in ('head', 'handL')),
                     'Head/left hand changed during knife episode')
+        motion = self.outstanding_motion
+        if motion is not None:
+            require(all(state[key] == motion['basis'][key] for key in ('head', 'handL')),
+                    'jab changed head/left hand')
+            controls = dict(state['controls'])
+            if self.allowed_cancel_lines is not None and controls['gripR'] == 0:
+                controls['gripR'] = 1
+            require(controls == motion['controls'], 'jab controls changed')
+            hand = state['handR']
+            current = p.from_pose(dict(position=hand['pos'], orientation=p.ypr_quaternion(hand['ypr'])))
+            origin = p.from_pose(dict(position=motion['origin'],
+                orientation=p.ypr_quaternion(motion['yawPitchRollDegrees'])))
+            require(hand['valid'] is True and hand['followsHead'] is False
+                    and p.pose_error(current, origin)[1] <= .001, 'jab hand tracking/orientation changed')
+            delta = [a-b for a, b in zip(hand['pos'], motion['origin'])]
+            travel = sum(a*b for a, b in zip(delta, motion['directionLocal']))
+            perpendicular = math.sqrt(sum((v-travel*d)**2 for v, d in zip(delta, motion['directionLocal'])))
+            require(-.0002 <= travel <= JAB_DISTANCE+.0002 and perpendicular <= .0002,
+                    'jab hand left the admitted straight segment')
         return state
+
+    def owner_bytes(self, pending):
+        raw = super().owner_bytes(pending)
+        if self.outstanding_motion is None:
+            return raw
+        value = json.loads(raw)
+        value.update(pending=True, outstandingMotion=self.outstanding_motion)
+        return t.json_bytes(value)
+
+    def ownership(self, state, expected=None):
+        before = self._jab_before_publication
+        published_jab = (self.phase == 'jab' and self.gate is not None and self.outstanding_motion is not None
+            and before is not None and self.last_write != before[0]
+            and (self.sequence, self.sentinel, self.command_hash) != before[1:])
+        if not published_jab:
+            return super().ownership(state, expected)
+        # Shared send updates last_write only after the admitted atomic rename.
+        # The one bounded stroke is now published: keep exact source bytes and
+        # command custody, but an aged initiating lease is not an ACK failure.
+        # The pre-rename callback still takes the ordinary fresh Held path.
+        t.Driver.ownership(self, state, expected)
+        snapshot, raw, _ = self.gate
+        current, current_raw = t.read_json(self.snapshot_path, p.SNAPSHOT_LIMIT)
+        require(current_raw == raw and current == snapshot, 'admitted jab snapshot replaced after publication')
+
+    def save_owner(self, pending, *, settled_writer=None):
+        # Shared pending-ACK cleanup also calls this method. Rejoin the exact
+        # retained motion owner before it can overwrite/settle that record.
+        if self._motion_owner_bytes is not None:
+            self.dispose_publication_owner()
+            if t.read_bytes(self.run/'live-driver-owner.json', 8192) != self._motion_owner_bytes:
+                self.unsafe_owner = True
+                raise Refusal('outstanding jab owner record replaced before settlement')
+        super().save_owner(pending, settled_writer=settled_writer)
+        self._motion_owner_bytes = self.owner_bytes(pending) if self.outstanding_motion is not None else None
 
     def validate_publication(self, lines, expected, cleanup):
         neutral_trigger_lines(lines)
-        if self.phase.startswith('jab-') and not cleanup:
+        if cleanup and self.outstanding_motion is not None:
+            require(lines == self.allowed_cancel_lines and self.held_right and not self.held_trigger
+                    and not self.pending_command and not self.unsafe_owner,
+                    'outstanding jab requires exact owned cancellation and release')
+            return
+        if self.phase == 'jab' and not cleanup:
             self.attempt.check()
             self.bounds(time.perf_counter_ns())
             require(lines == self.allowed_jab_lines and self.gate is not None and self.held_right
@@ -620,7 +747,129 @@ class KnifeDriver(KnifeTransport):
         if self.release_attempted:
             return 'already attempted; no second release'
         self.release_attempted = True
+        if self.outstanding_motion is not None:
+            self.monitor = False
+            self.gate = self.frozen_sim = None
+            if self.pending_command and not self.unsafe_owner:
+                self.settle_pending_for_release()
+            if self.pending_command or self.unsafe_owner or not self.held_right:
+                return 'not attempted: no settled owned held controller'
+            require(time.perf_counter_ns()+250*MS < self.hard_deadline, 'jab cancellation reserve exhausted')
+            state = self.motion_state(self.hard_deadline)
+            self.allowed_cancel_lines = [motion_line(state['handR']['pos'],
+                self.outstanding_motion['yawPitchRollDegrees'], 0), 'grip r 0']
+            self.prepare_next_command(self.allowed_cancel_lines)
+            try:
+                self.send(self.allowed_cancel_lines, cleanup=True)
+            finally:
+                self.discard_prepared_command()
+            require(not self.pending_command and not self.held_right, 'jab cancellation release was not acknowledged')
+            motion_backend.ReloadStimulus.check_target(self.state, dict(hand='r',
+                positionMeters=state['handR']['pos'],
+                yawPitchRollDegrees=self.outstanding_motion['yawPitchRollDegrees']))
+            self.clear_motion()
+            self.artifacts.event(dict(type='knife_motion_cancelled', acknowledgedNs=self.last_commit,
+                                      originalActionRemainsRefused=True), cleanup=True)
+            return 'owned interpolation cancellation and grip release acknowledged'
         return t.Driver.release_after_failure(self)
+
+    def motion_state(self, until):
+        state = t.read_until(until, self.read_state)
+        t.read_until(until, self.ownership, state)
+        if t.read_until(until, t.read_bytes, self.run/'live-driver-owner.json', 8192) != self.owner_bytes(False):
+            self.unsafe_owner = True
+            raise Refusal('outstanding jab owner record replaced')
+        require(state['captureSeq'] == self.capture_sequence, 'unexpected capture during jab')
+        return state
+
+    def clear_motion(self):
+        old = self.outstanding_motion
+        self.outstanding_motion = None
+        try:
+            self.save_owner(False)
+        except BaseException:
+            self.outstanding_motion = old
+            raise
+
+    def execute_jab(self, after):
+        current = self.held_now(after)
+        preserved(self.baseline, current[0])
+        plan = measured_jab(current[0], time.perf_counter_ns())
+        reviewed = self.args.jab_direction_local
+        require(reviewed is None or math.dist(reviewed, plan['directionLocal']) <= .001,
+                'reviewed direction differs from the currently measured blade axis')
+        state = self.read_state()
+        self.ownership(state)
+        motion_backend.ReloadStimulus.check_target(state, dict(hand='r', positionMeters=plan['origin'],
+            yawPitchRollDegrees=plan['yawPitchRollDegrees']))
+        require(time.perf_counter_ns()+JAB_MS*MS+motion_backend.RECEIVE_NS+NS < self.deadline,
+                'single jab and Return reserve exhausted')
+        self.outstanding_motion = dict(plan, runtimeSha256=self.manifest['runtime_library']['sha256'],
+            basis={key: copy.deepcopy(state[key]) for key in ('head', 'handL')},
+            controls=copy.deepcopy(state['controls']))
+        self.frozen_sim = None
+        self.allowed_jab_lines = [motion_line(plan['endpoint'], plan['yawPitchRollDegrees'], JAB_MS)]
+        before = self.sequence, self.sentinel, self.command_hash
+        self._jab_before_publication = (self.last_write, *before)
+        try:
+            self.action('jab', self.allowed_jab_lines, current,
+                lambda s, n: held(s, self.baseline, n, after, self.episode))
+        except BaseException:
+            if (self.sequence, self.sentinel, self.command_hash) == before:
+                self.outstanding_motion = None  # No published runtime motion to cancel.
+                if not self.unsafe_owner:
+                    self.save_owner(False)
+            raise
+        # Reuse the shared motion custody primitive. ACK is parsing, not arrival;
+        # wait from ACK conservatively, then require a later completed frame.
+        finish = self.last_commit + JAB_MS*MS
+        until = min(self.deadline, self.stage_deadline, finish+motion_backend.RECEIVE_NS)
+        require(finish < until, 'jab exceeds original deadline')
+        lease = motion_backend.MotionInputLease(self, until)
+        def check_lease():
+            try:
+                lease.check(until)
+            except motion_backend.transport.ReadDeadlineExceeded:
+                raise
+            except BaseException:
+                self.unsafe_owner = True
+                raise
+        try:
+            while time.perf_counter_ns() < finish:
+                self.bounds(time.perf_counter_ns())
+                self.owner.check()
+                require(not (self.folder/'stop.request').exists(), 'normal stop during jab')
+                check_lease()
+                time.sleep(.005)
+            first = self.motion_state(until)
+            while True:
+                self.bounds(time.perf_counter_ns())
+                check_lease()
+                time.sleep(.005)
+                state = self.motion_state(until)
+                if integer(state['frame']) > integer(first['frame']) and integer(state['endFrames']) > integer(first['endFrames']):
+                    break
+            motion_backend.ReloadStimulus.check_target(state, dict(hand='r', positionMeters=plan['endpoint'],
+                yawPitchRollDegrees=plan['yawPitchRollDegrees']))
+            require(time.perf_counter_ns() < until, 'original jab endpoint deadline')
+        except BaseException:
+            # A replaced sealed pathname never grants cancellation authority.
+            try:
+                self.motion_state(until)
+            except BaseException:
+                if time.perf_counter_ns() < until:
+                    self.unsafe_owner = True
+            raise
+        finally:
+            lease.close()
+        self.state = state
+        proof = dict(plan, writtenNs=self.last_write, acknowledgedNs=self.last_commit,
+            endpointNs=time.perf_counter_ns(), endpointFrame=state['frame'], endpointEndFrames=state['endFrames'],
+            triggerPressed=False, nativeRecognition='requires retired attack receipts/masks', damage='unknown')
+        self.clear_motion()
+        self.frozen_sim = copy.deepcopy(state)
+        self.artifacts.save('zero-trigger-jab.json', proof)
+        return proof
 
     def held_now(self, after):
         return self.current(lambda s, now: held(s, self.baseline, now, after, self.episode))
@@ -690,30 +939,10 @@ class KnifeDriver(KnifeTransport):
         observed = self.initial_held(after)
         self.artifacts.save('strict-held-mode4.json', observed[1])
         held_capture = self.knife_capture('held')
-        direction = self.args.jab_direction_local
-        steps, jab_start = [], None
-        if direction is not None:
-            for i, position in enumerate(jab_points(pose['position'], direction), 1):
-                if jab_start is not None:
-                    self.pause_until(self.last_commit + 40*MS)
-                current = self.held_now(after)
-                now = time.perf_counter_ns()
-                if jab_start is None:
-                    jab_start = now
-                require(now - jab_start < 300*MS and now + NS < self.deadline,
-                        'One jab window or Return reserve exhausted')
-                self.frozen_sim = None
-                self.allowed_jab_lines = lines_at(position)
-                self.action('jab-' + str(i), self.allowed_jab_lines, current,
-                    lambda s, n: held(s, self.baseline, n, after, self.episode))
-                self.frozen_sim = copy.deepcopy(self.state)
-                steps.append(dict(step=i, position=position, writtenNs=self.last_write,
-                                  acknowledgedNs=self.last_commit))
-                after = self.last_commit
-            self.artifacts.save('zero-trigger-jab.json', dict(directionLocal=direction,
-                directionIsMeasuredBladeAxis=False, triggerPressed=False, steps=steps,
-                nativeRecognition='unresolved', damage='unknown'))
-            self.pause_until(self.last_commit + 180*MS)
+        jab = None
+        if self.args.jab or self.args.jab_direction_local is not None:
+            jab = self.execute_jab(after)
+            self.pause_until(time.perf_counter_ns() + 180*MS)
         self.gate = None
         release = self.release_after_failure()
         require(not self.held_right and not self.pending_command, 'Owned release was not acknowledged')
@@ -744,8 +973,9 @@ class KnifeDriver(KnifeTransport):
                 break
         require(found_empty, 'Owned release lacks fresh original-owner Empty within original deadline')
         return_capture = self.knife_capture('returned')
-        return dict(status='strict_held_and_fresh_return_empty', jabSteps=len(steps), triggerPressed=False,
-            nativeRecognition='requires retired attack masks/receipts' if steps else 'jab not requested',
+        return dict(status='strict_held_and_fresh_return_empty', jabSteps=int(jab is not None), jab=jab,
+            triggerPressed=False,
+            nativeRecognition='requires retired attack masks/receipts' if jab else 'jab not requested',
             nativeReturn='fresh Empty only; exact Return history audit pending', damage='unknown',
             rootVisualReview='pending', release=release, captures=[held_capture, return_capture],
             nativeAcceptance=False, headsetAcceptance=False)
@@ -758,7 +988,8 @@ def finish(driver, result):
         if getattr(driver, 'artifacts', None):
             result.update(durationNs=time.perf_counter_ns()-driver.started, commands=driver.commands,
                 pendingCommand=driver.pending_command, rightGripHeld=driver.held_right,
-                triggerHeld=driver.held_trigger, artifactDirectory=str(driver.artifacts.directory))
+                triggerHeld=driver.held_trigger, outstandingMotion=getattr(driver, 'outstanding_motion', None),
+                artifactDirectory=str(driver.artifacts.directory))
             driver.artifacts.save('knife-result.json', result, final=True)
     finally:
         driver.close()
@@ -770,7 +1001,9 @@ def main(argv=None):
     for name in ('run', 'version', 'source-sha256', 'dependencies-sha256', 'world-capture', 'storage-receipt',
                  'stow-asset', 'stow-config', 'target-asset', 'target-config'):
         parser.add_argument('--' + name)
-    parser.add_argument('--jab-direction-local', type=float, nargs=3)
+    parser.add_argument('--jab', action='store_true', help='One current measured-axis120mm/120ms zero-trigger jab')
+    parser.add_argument('--jab-direction-local', type=float, nargs=3,
+        help='Optional reviewed-axis assertion; actual direction always comes from current Held geometry')
     for name in ('root-ordinary-input', 'root-reviewed-both-world-eyes',
                  'root-reviewed-normal-mode4-and-knife-idle'):
         parser.add_argument('--' + name, action='store_true')

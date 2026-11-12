@@ -1,11 +1,13 @@
 """ROOT-only bounded ordinary on-foot navigation through the shared xr-sim driver.
 
 --navigation FILE (inside --run) is a reviewed JSON list, e.g.
-[{"left":[0,0.5],"right":[0,0],"holdMs":150,"lookDegrees":[10,0]}].
+[{"left":[0,0.5],"right":[0,0],"holdMs":400,"lookDegrees":[10,0]}].
 lookDegrees is a relative yaw/pitch change; head position, roll and controller
 poses remain unchanged. holdMs bounds the entire pulse, including both ACKs;
-normal zero publication reserves the last 80 ms. Each of at most four pulses ends with acknowledged
-numeric zeros for both sticks. There are no buttons, triggers or hand claims.
+normal zero reserves the shared 250 ms publication/ACK window plus two bounded
+25 ms pump/preparation intervals. Pulses without an active budget are refused
+before input. Each of at most four pulses ends with acknowledged numeric zeros
+for both sticks. There are no buttons, triggers or hand claims.
 No launch, capture, objective-entry, native movement or headset claim is made.
 """
 import argparse
@@ -31,6 +33,10 @@ holster = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(holster)
 ZERO = ["stick l 0 0", "stick r 0 0"]
 PERIOD = 25_000_000
+# Driver._send gives a moving command 250 ms from its request timestamp for
+# publication and ACK together. Keep that complete window inside holdMs.
+COMMAND_WINDOW = 250_000_000
+RELEASE_RESERVE = COMMAND_WINDOW + 2 * PERIOD
 
 
 class ObservationLost(Refusal):
@@ -274,7 +280,22 @@ class NavigationDriver(t.Driver):
                                  for k in ("grip", "aim")), "native controller pose changed")
         require(now < self.snapshot_source_deadline(snapshot), "original navigation source lease expired")
 
+    def bounds(self, now):
+        super().bounds(now)
+        if self.releasing_sticks and not self.cleanup_mode and not self.pending_command:
+            # Shared _send calls this with its exact command-request timestamp,
+            # before any owner/command write. Preparation may not clip the full
+            # normal zero window, even if an OS read or scheduler stalls.
+            require(now + COMMAND_WINDOW <= self.action_deadline,
+                    "insufficient original pulse budget for full zero publication/ACK window")
+
     def pump(self):
+        deadline = min(self.deadline, self.stage_deadline)
+        if self.action_deadline is not None:
+            deadline = min(deadline, self.action_deadline)
+        return t.read_until(deadline, self._pump)
+
+    def _pump(self):
         now = time.perf_counter_ns()
         self.bounds(now)
         if self.action_deadline is not None:
@@ -320,7 +341,12 @@ class NavigationDriver(t.Driver):
 
     def pause_until(self, deadline):
         if not self.releasing_sticks:
-            return super().pause_until(deadline)
+            return t.read_until(min(self.deadline, self.stage_deadline), super().pause_until, deadline)
+        if not self.cleanup_mode:
+            return t.read_until(self.action_deadline - COMMAND_WINDOW, self.pause_release_until, deadline)
+        return self.pause_release_until(deadline)
+
+    def pause_release_until(self, deadline):
         # A pending diagnostic refresh may gate the next movement, but cannot
         # delay exact owned zeros. Preserve its state and original clocks while
         # enforcing ordinary command spacing and this pulse's existing bounds.
@@ -399,17 +425,26 @@ class NavigationDriver(t.Driver):
                       for hand, values in zip(("l", "r"), sticks)]
             started = time.perf_counter_ns()
             previous_stage_deadline = self.stage_deadline
-            self.action_deadline = min(self.deadline-300_000_000, started + row["holdMs"]*1_000_000)
-            self.stage_deadline = min(previous_stage_deadline, self.action_deadline)
+            self.action_deadline = min(previous_stage_deadline, self.deadline-300_000_000,
+                                       started + row["holdMs"]*1_000_000)
+            active_deadline = self.action_deadline - RELEASE_RESERVE
+            require(started < active_deadline, "pulse has no active budget after full zero publication/ACK reserve")
+            # An initial publication/ACK or diagnostic refresh cannot consume
+            # the reserved zero window. A late initial ACK stays a failure and
+            # uses the existing exact-owner cleanup path.
+            self.stage_deadline = active_deadline
             self.motion_started = started
             self.publish_navigation(lines, sticks)
             self.expected_head = self.next_head
-            # Include ACK latency in the original pulse clock. Stop normal
-            # holding before the deadline so numeric-zero publication has its
-            # own existing shared acknowledgement budget, without renewal.
-            while time.perf_counter_ns() + 80_000_000 < self.action_deadline:
-                self.pump()
-                time.sleep(.001)
+            self.stage_deadline = self.action_deadline
+            # A last hold pump gets at most one 25 ms interval; release
+            # preparation gets the next. Neither can spend the 250 ms shared
+            # command window or wait out a pending diagnostic refresh.
+            while (now := time.perf_counter_ns()) < active_deadline:
+                t.read_until(min(now + PERIOD, active_deadline + PERIOD), self.pump)
+                remaining = active_deadline - time.perf_counter_ns()
+                if remaining > 0:
+                    time.sleep(min(.001, remaining / t.NS))
             # Exact owned zeros retire this pulse; they do not need a new
             # native observation. Keep the original normal pulse/ACK bounds
             # (cleanup=False), including when a diagnostic is still pending.

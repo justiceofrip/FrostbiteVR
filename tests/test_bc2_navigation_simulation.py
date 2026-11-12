@@ -44,6 +44,17 @@ RECORDED_NAVIGATION_TIMING = dict(
     thirdRequestNs=641193166731300, failureNs=641193233703300)
 
 
+# Actual87/04 f35da40c865049ae87c7706f98720232 failed normal zero timing.
+# events.jsonl SHA256 22e96245cf968b5cab2c3e44d3a94b808341167032fc8db60ae5bd4b91354fdb;
+# receive-timing-failure.json SHA256 43b1a41841e1d237be4e66f6e584fcdd4e47b01f2a42239c8fe183fe923f244d.
+# The later zero ACK has no commit timestamp: its regression delay is synthetic.
+RECORDED_ZERO_TIMING = dict(
+    nonzeroRequestedNs=642353953328600, nonzeroPublishedNs=642353964878500,
+    nonzeroCommittedNs=642354026059900, zeroRequestedNs=642354376735900,
+    pulseDeadlineNs=642354442933500, zeroPreparationNs=3_750_700,
+    lastPumpOvershootNs=13_802_400)
+
+
 # Admission projection of actual86/02 da9146dcd773411eb7e108a7675f1e4d
 # snapshot-001.json.gz (SHA256 43f8dcdaa90526ef0151c9bcc2c6d341690b88cf2d44a3ffe712c4300814b5d4).
 # Replay below changes only the synthetic clock, nonce and simulated input;
@@ -520,7 +531,7 @@ class NavigationTests(unittest.TestCase):
         self.write(self.folder / "options.json", dict(source_sha256=self.source, version=self.version,
             activate_window=False, xr_manifest=str(self.root / "runtime.json")))
         (self.folder / "mechanism-snapshot.enable").write_bytes(b"1\n")
-        self.rows = [dict(left=[0, .5], right=[0, 0], holdMs=180, lookDegrees=[10, 0])]
+        self.rows = [dict(left=[0, .5], right=[0, 0], holdMs=400, lookDegrees=[10, 0])]
         self.calls, self.samples, self.owner_records = [], [], []
         self.driver = None
         self.snapshot_mutation = None
@@ -537,6 +548,8 @@ class NavigationTests(unittest.TestCase):
         self.response_delay = lambda driver: 0
         self.omit_response_from = None
         self.snapshot_read_delay = 0
+        self.read_delay = lambda path, driver: 0
+        self.publication_windows = []
         self.cached_expiry_phases = set()
 
     def write(self, path, value):
@@ -649,6 +662,9 @@ class NavigationTests(unittest.TestCase):
                 self.snapshot(driver)
 
         def publish(path, raw, deadline_ns, validate):
+            self.publication_windows.append(dict(deadlineNs=deadline_ns,
+                pulseDeadlineNs=self.driver.action_deadline, release=self.driver.releasing_sticks,
+                cleanup=self.driver.cleanup_mode))
             self.clock.now += (self.publication_delay(self.driver) if callable(self.publication_delay)
                                else self.publication_delay)
             if self.cleanup_failure and self.driver.cleanup_mode:
@@ -658,6 +674,8 @@ class NavigationTests(unittest.TestCase):
             return original_publish(path, raw, deadline_ns, validate)
 
         def read(path, maximum):
+            if self.driver is not None:
+                self.clock.now += self.read_delay(path, self.driver)
             deliver_snapshot()
             raw = original_read(path, maximum)
             if (self.snapshot_read_delay and self.driver is not None and self.driver.snapshot_index == 2
@@ -684,7 +702,7 @@ class NavigationTests(unittest.TestCase):
         return code, json.loads(output.getvalue().strip().splitlines()[-1])
 
     def test_real_assembled_head_stick_zero_and_second_episode(self):
-        self.rows.append(dict(left=[.25, 0], right=[.1, 0], holdMs=160))
+        self.rows.append(dict(left=[.25, 0], right=[.1, 0], holdMs=400))
         code, result = self.assembled()
         self.assertEqual((code, result.get("error")), (0, None))
         self.assertEqual(len(self.calls), 4)
@@ -826,6 +844,118 @@ class NavigationTests(unittest.TestCase):
         self.assertLess(result["episodes"][0]["neutralCommittedNs"]-result["episodes"][0]["startedNs"],
                         self.rows[0]["holdMs"]*1_000_000)
 
+    def test_saved_zero_timing_keeps_full_shared_window_after_pump_and_preparation(self):
+        recorded = RECORDED_ZERO_TIMING
+        self.rows = [dict(left=[0, -.6], right=[0, 0], holdMs=500)]
+        self.publication_delay = recorded["nonzeroPublishedNs"] - recorded["nonzeroRequestedNs"]
+        self.ack_delay = lambda driver: (90_000_000 if driver.releasing_sticks else
+            recorded["nonzeroCommittedNs"] - recorded["nonzeroPublishedNs"])
+        self.response_delay = lambda driver: 240_000_000 if driver.snapshot_index >= 3 else 0
+        delays = set()
+
+        def delayed_read(path, driver):
+            if path.name != "state.json" or driver.action_deadline is None or driver.pending_command:
+                return 0
+            if driver.releasing_sticks and "preparation" not in delays:
+                delays.add("preparation")
+                return recorded["zeroPreparationNs"]
+            if (not driver.releasing_sticks and driver.stage_deadline == driver.action_deadline
+                    and self.clock.now >= driver.action_deadline - self.m.RELEASE_RESERVE - 2_000_000
+                    and "hold" not in delays):
+                delays.add("hold")
+                return recorded["lastPumpOvershootNs"]
+            return 0
+        self.read_delay = delayed_read
+        code, result = self.assembled()
+        self.assertEqual((code, result.get("error")), (0, None))
+        self.assertEqual(delays, {"hold", "preparation"})
+        events = [json.loads(line) for line in
+                  (Path(result["artifactDirectory"]) / "events.jsonl").read_text().splitlines()]
+        commits = [event for event in events if event["type"] == "command_commit"]
+        self.assertEqual(len(commits), 2)
+        self.assertTrue(all(not event["cleanup"] for event in commits))
+        zero = commits[-1]
+        window = self.publication_windows[-1]
+        self.assertEqual(window["deadlineNs"] - zero["requestedNs"], 250_000_000)
+        self.assertLessEqual(window["deadlineNs"], window["pulseDeadlineNs"])
+        self.assertGreater(zero["committedNs"] - zero["requestedNs"],
+                           recorded["pulseDeadlineNs"] - recorded["zeroRequestedNs"])
+        self.assertLess(zero["committedNs"], window["pulseDeadlineNs"])
+        self.assertIsNotNone(self.driver.pending_nonce)
+        self.assertEqual(self.calls, [["stick l 0 -0.6", "stick r 0 0"], self.m.ZERO])
+        self.assertFalse(result["normalStopRequired"])
+
+    def test_short_pulse_refuses_before_nonzero_when_full_zero_reserve_cannot_fit(self):
+        self.rows = [dict(left=[0, .5], right=[0, 0], holdMs=100)]
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertIn("no active budget", result["error"])
+        self.assertEqual(self.calls, [])
+        self.assertEqual(result["release"], "no navigation input published")
+        self.assertEqual(result["episodes"], [])
+        self.assertFalse(result["normalStopRequired"])
+
+    def test_hold_pump_cannot_spend_zero_reserve_and_cleanup_stays_owned(self):
+        delayed = []
+        def delayed_read(path, driver):
+            if (path.name == "state.json" and driver.action_deadline is not None
+                    and driver.stage_deadline == driver.action_deadline
+                    and not driver.releasing_sticks and not driver.pending_command and not delayed):
+                delayed.append(True)
+                return self.m.PERIOD + 1_000_000
+            return 0
+        self.read_delay = delayed_read
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertTrue(delayed)
+        self.assertIn("original acknowledgement/read deadline exceeded", result["error"])
+        self.assertEqual(self.calls[-1], self.m.ZERO)
+        self.assertEqual(len(self.calls), 2)
+        self.assertEqual(result["episodes"], [])
+        self.assertFalse(result["normalStopRequired"])
+        self.assertTrue(self.publication_windows[-1]["cleanup"])
+
+    def test_slow_zero_preparation_refuses_clipped_window_then_cleans_up(self):
+        delayed = []
+        def delayed_read(path, driver):
+            if (path.name == "state.json" and driver.releasing_sticks and not driver.cleanup_mode
+                    and not driver.pending_command and not delayed):
+                delayed.append(True)
+                return 60_000_000
+            return 0
+        self.read_delay = delayed_read
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertTrue(delayed)
+        self.assertRegex(result["error"], "deadline|full zero publication/ACK window")
+        self.assertEqual(self.calls[-1], self.m.ZERO)
+        self.assertEqual(len(self.calls), 2)
+        self.assertTrue(self.publication_windows[-1]["cleanup"])
+        self.assertEqual(result["episodes"], [])
+        self.assertFalse(result["normalStopRequired"])
+
+    def test_stall_after_release_pause_refuses_before_command_request(self):
+        reads = []
+        def delayed_read(path, driver):
+            if (path.name == "state.json" and driver.releasing_sticks and not driver.cleanup_mode
+                    and not driver.pending_command):
+                reads.append(True)
+                # First read is the bounded pause pump. The second is shared
+                # _send's ownership read before its exact request timestamp.
+                if len(reads) == 2:
+                    return 60_000_000
+            return 0
+        self.read_delay = delayed_read
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertEqual(len(reads), 2)
+        self.assertIn("full zero publication/ACK window", result["error"])
+        self.assertEqual(len(self.calls), 2)
+        self.assertEqual(self.calls[-1], self.m.ZERO)
+        self.assertTrue(self.publication_windows[-1]["cleanup"])
+        self.assertEqual(result["episodes"], [])
+        self.assertFalse(result["normalStopRequired"])
+
     def test_recorded_pending_response_crosses_cached_expiry_in_ack_hold_and_normal_zero(self):
         recorded = RECORDED_NAVIGATION_TIMING
         self.rows = [dict(left=[0, -.3], right=[0, 0], holdMs=400)]
@@ -861,14 +991,14 @@ class NavigationTests(unittest.TestCase):
 
     def test_missing_response_retains_request_budget_then_releases_without_new_input(self):
         self.rows = [dict(left=[0, .3], right=[0, 0], holdMs=400),
-                     dict(left=[.3, 0], right=[0, 0], holdMs=180)]
+                     dict(left=[.3, 0], right=[0, 0], holdMs=400)]
         self.omit_response_from = 3
         code, result = self.assembled()
         self.assertEqual(code, 2)
         self.assertIn("snapshot response not received within request budget", result["error"])
-        self.assertEqual(len(self.calls), 2)
+        self.assertEqual(len(self.calls), 3)
         self.assertEqual(self.calls[-1], self.m.ZERO)
-        self.assertEqual(result["episodes"], [])
+        self.assertEqual(len(result["episodes"]), 1)
         self.assertFalse(result["normalStopRequired"])
         events = [json.loads(line) for line in
                   (Path(result["artifactDirectory"]) / "events.jsonl").read_text().splitlines()]
@@ -878,7 +1008,7 @@ class NavigationTests(unittest.TestCase):
 
     def test_expired_response_refresh_cannot_delay_owned_normal_zero(self):
         self.rows = [dict(left=[0, .3], right=[0, 0], holdMs=400)]
-        self.response_delay = lambda driver: 240_000_000 if driver.snapshot_index >= 3 else 0
+        self.response_delay = lambda driver: 60_000_000 if driver.snapshot_index >= 3 else 0
 
         def expired_original(sample, driver):
             if driver.snapshot_index != 3:
@@ -910,7 +1040,7 @@ class NavigationTests(unittest.TestCase):
 
     def test_normal_zero_ack_cannot_extend_original_pulse_deadline(self):
         self.ack_delay = lambda driver: (
-            90_000_000 if driver.releasing_sticks and not driver.cleanup_mode else 0)
+            290_000_000 if driver.releasing_sticks and not driver.cleanup_mode else 0)
         code, result = self.assembled()
         self.assertEqual(code, 2)
         self.assertRegex(result["error"], "deadline|maximumGestureNs")
@@ -920,8 +1050,8 @@ class NavigationTests(unittest.TestCase):
         self.assertFalse(result["normalStopRequired"])
 
     def test_missing_response_after_normal_zero_cannot_admit_next_pulse(self):
-        self.rows = [dict(left=[0, .3], right=[0, 0], holdMs=180),
-                     dict(left=[.3, 0], right=[0, 0], holdMs=180)]
+        self.rows = [dict(left=[0, .3], right=[0, 0], holdMs=400),
+                     dict(left=[.3, 0], right=[0, 0], holdMs=400)]
         self.omit_response_from = 3
         code, result = self.assembled()
         self.assertEqual(code, 2)
@@ -932,7 +1062,7 @@ class NavigationTests(unittest.TestCase):
         self.assertFalse(result["normalStopRequired"])
 
     def test_next_nonzero_publication_still_requires_current_source(self):
-        self.rows.append(dict(left=[.3, 0], right=[0, 0], holdMs=180))
+        self.rows.append(dict(left=[.3, 0], right=[0, 0], holdMs=400))
         self.publication_delay = lambda driver: (
             90_000_000 if len(self.calls) >= 2 and not driver.releasing_sticks else 0)
         code, result = self.assembled()
@@ -943,7 +1073,7 @@ class NavigationTests(unittest.TestCase):
         self.assertEqual(self.calls[-1], self.m.ZERO)
 
     def test_head_only_publication_still_requires_current_source(self):
-        self.rows = [dict(left=[0, 0], right=[0, 0], holdMs=180, lookDegrees=[10, 0])]
+        self.rows = [dict(left=[0, 0], right=[0, 0], holdMs=400, lookDegrees=[10, 0])]
         self.publication_delay = 90_000_000
         code, result = self.assembled()
         self.assertEqual(code, 2)
@@ -951,7 +1081,7 @@ class NavigationTests(unittest.TestCase):
         self.assertEqual(self.calls, [])
 
     def assert_delayed_native_loss_releases(self, mutation, message):
-        self.rows = [dict(left=[0, .3], right=[0, 0], holdMs=400)]
+        self.rows = [dict(left=[0, .3], right=[0, 0], holdMs=500)]
         self.response_delay = lambda driver: 120_000_000 if driver.snapshot_index >= 3 else 0
         self.snapshot_mutation = lambda sample, driver: mutation(sample) if driver.snapshot_index >= 3 else None
         code, result = self.assembled()
@@ -974,7 +1104,7 @@ class NavigationTests(unittest.TestCase):
             lambda s: s["input"]["menu"].update(epoch=8), "tracking/head/menu epoch changed")
 
     def test_actor_loss_releases_owned_sticks_and_refuses_next_episode(self):
-        self.rows.append(dict(left=[1, 0], right=[0, 0], holdMs=150))
+        self.rows.append(dict(left=[1, 0], right=[0, 0], holdMs=400))
         def mutation(s, driver):
             if self.calls:
                 s["owner"]["actorGeneration"] += 1
@@ -1119,8 +1249,10 @@ class NavigationTests(unittest.TestCase):
         self.assertTrue(result["normalStopRequired"])
 
     def test_four_pulses_retain_original_large_responses_within_shared_disk_bound(self):
-        self.rows = [dict(left=[0, .25], right=[0, 0], holdMs=400) for _ in range(4)]
-        self.snapshot_mutation = lambda s, driver: s.update(observationPadding="x"*24_000)
+        # Earlier zero scheduling produces fewer diagnostics. Keep the original
+        # aggregate compression/cap assertion with still-legal larger samples.
+        self.rows = [dict(left=[0, .25], right=[0, 0], holdMs=500) for _ in range(4)]
+        self.snapshot_mutation = lambda s, driver: s.update(observationPadding="x"*48_000)
         code, result = self.assembled()
         self.assertEqual((code, result.get("error")), (0, None))
         paths = sorted(Path(result["artifactDirectory"]).glob("snapshot-*.json.gz"))
