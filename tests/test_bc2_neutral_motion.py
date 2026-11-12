@@ -350,6 +350,101 @@ class NeutralTransportTests(unittest.TestCase):
             self.assertEqual(d.owner.check.call_count, 10)
             self.assertEqual(d.supervisor_owner.check.call_count, 10)
 
+    @contextmanager
+    def readiness_runtime(self, *, change=None, late=False, limit=None):
+        source = f.complete(f.xf.snapshot(kind=3))
+        plan = g.build_stimulus("fixed", None, source, f.NOW, "Open")
+        source_deadline = g.source_deadline
+        with self.runtime(plan) as (clock, h):
+            d = h.driver
+            d.mapping = source
+            d.observations = types.MethodType(m.ReloadStimulus.observations, d)
+            h.publish_observations = False
+            h.deliveries = []
+            frame = m.sim_state.side_effect
+
+            def read(path, until, trace=None):
+                result = frame(path, until, trace)
+                if h.deliveries and clock.now >= h.deliveries[0]["receivedNs"]:
+                    d.observer.inbox.put(h.deliveries.pop(0))
+                if change and hasattr(h, "settled_ns") and clock.now >= h.settled_ns+100_000_000:
+                    change(d, h, result)
+                return result
+
+            def fresh(**kwargs):
+                h.settled_ns = clock.now
+                if limit is not None:
+                    setattr(d, limit, clock.now+200_000_000)
+                endpoint = plan["schedule"][g.neutral_motion(plan)["lastSample"]]
+                # The first native copy precedes settlement. The final copy
+                # arrives after both the old endpoint limit and a fresh250ms
+                # wait, but within its own unchanged250ms response budget.
+                for nonce, observed, received, requested in (
+                        (201, -1, 20_000_000, -50_000_000),
+                        (202, 280_000_000, 290_000_000, 39_000_000 if late else 90_000_000)):
+                    snapshot = f.xf.refresh(source, clock.now+observed, nonce)
+                    f.xf.set_local(snapshot, f.sf.emitted_local(source, endpoint))
+                    h.deliveries.append(dict(kind="snapshot", index=nonce, snapshot=snapshot,
+                        raw=json.dumps(snapshot).encode(), requestNs=clock.now+requested,
+                        deadlineNs=clock.now+requested+m.RECEIVE_NS, receivedNs=clock.now+received,
+                        ownershipCheckedNs=clock.now+received, requestOwned=True, responseOwned=True))
+                return m.ReloadStimulus.fresh(d, **kwargs)
+
+            d.fresh = fresh
+            with patch.object(m, "sim_state", side_effect=read), \
+                    patch.object(g, "source_deadline", side_effect=source_deadline):
+                yield clock, h
+
+    def test_settled_neutral_endpoint_waits_for_fresh_evidence_before_acquisition(self):
+        with self.readiness_runtime() as (clock, h):
+            d = h.driver
+            limits = d.deadline, d.stage_deadline
+            motion = g.neutral_motion(d.stimulus)
+            d.execute_neutral_motion(motion)
+            self.assertEqual(len(h.published), 1)
+            self.assertFalse(d.held_left)
+            event = next(e for e in d.artifacts.events if e["type"] == "neutral_motion_endpoint")
+            self.assertGreater(clock.now, event["originalDeadlineNs"])
+            self.assertEqual(int(event["contactNonce"]), 202)
+            self.assertEqual((d.deadline, d.stage_deadline), limits)
+            self.assertEqual(d.initial_mapping_deadline, g.source_deadline(d.observed[-1]["snapshot"], "fixed"))
+            d.send(d.stimulus["schedule"][motion["lastSample"]+1])
+            self.assertTrue(d.held_left)
+            self.assertEqual(len(h.published), 2)
+
+    def test_neutral_readiness_refuses_changed_owner_pose_or_command(self):
+        changes = {
+            "owner": (lambda d, h, state: state.update(cmdSeq=d.sequence+1), "another writer"),
+            "pose": (lambda d, h, state: state["handL"]["pos"].__setitem__(0, 99.), "simulator input changed"),
+            "command": (lambda d, h, state: setattr(d, "last_write", d.last_write+1), "command identity changed"),
+        }
+        for name, (change, reason) in changes.items():
+            with self.subTest(change=name), self.readiness_runtime(change=change) as (clock, h):
+                d = h.driver
+                with self.assertRaisesRegex(m.Refusal, reason):
+                    d.execute_neutral_motion(g.neutral_motion(d.stimulus))
+                self.assertFalse(d.held_left)
+                self.assertIsNotNone(d.outstanding_motion)
+                self.assertEqual(len(h.published), 1)
+
+    def test_neutral_readiness_preserves_response_and_stage_driver_deadlines(self):
+        for limit, late in (("stage_deadline", False), ("deadline", False), ("stage_deadline", True)):
+            with self.subTest(limit=limit, late=late), self.readiness_runtime(late=late,
+                    limit=None if late else limit) as (clock, h):
+                d = h.driver
+                if late:
+                    d.stage_deadline = clock.now+2*m.NS
+                with self.assertRaisesRegex(m.Refusal, "deadline|original budget"):
+                    d.execute_neutral_motion(g.neutral_motion(d.stimulus))
+                self.assertFalse(d.held_left)
+                self.assertEqual(len(h.published), 1)
+                self.assertIsNotNone(d.outstanding_motion)
+                if late:
+                    self.assertFalse(d.observed[-1]["current"])
+                    self.assertEqual(d.observed[-1]["deadlineNs"], h.settled_ns+289_000_000)
+                else:
+                    self.assertEqual(clock.now, getattr(d, limit))
+
     def test_motion_owner_loss_blocks_cancellation_without_clearing_uncertainty(self):
         with self.runtime() as (clock, h):
             d = h.driver

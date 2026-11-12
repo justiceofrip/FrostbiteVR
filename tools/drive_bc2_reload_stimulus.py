@@ -1062,14 +1062,25 @@ class ReloadStimulus:
                 if integer(state["frame"]) > integer(first["frame"]) and integer(state["endFrames"]) > integer(first["endFrames"]):
                     break
             self.check_target(state, rows[end])
+            require(time.perf_counter_ns() < until, "original neutral endpoint deadline")
             self.state, self.last_commit = state, time.perf_counter_ns()
+            # Endpoint settlement ends the interpolation clock. Observation can
+            # now wait under the unchanged stage/driver limits, with no input
+            # publication or renewal of any individual response/source lease.
+            readiness = dict(state=copy.deepcopy(state), deadlineNs=min(self.deadline, self.stage_deadline),
+                commandIdentity=(self.sequence, self.sentinel, self.command_hash, self.last_write, self.last_commit))
+            self.artifacts.event(dict(type="neutral_motion_settled", endpointNs=self.last_commit,
+                frame=state["frame"], endFrames=state["endFrames"], originalDeadlineNs=until,
+                observationDeadlineNs=readiness["deadlineNs"], commandAuthority=False))
             boundary = next((g for g in self.stimulus["boundaries"] if g["afterSample"] == end), None)
             if boundary is None:
                 boundary = dict(id="neutral_motion_contact", timeoutNs=RECEIVE_NS)
-            snapshot, _ = self.fresh(boundary=boundary, after_ns=self.last_commit, deadline_ns=until)
+            snapshot, _ = self.fresh(boundary=boundary, after_ns=self.last_commit,
+                deadline_ns=readiness["deadlineNs"], neutral_readiness=readiness)
             self.artifacts.event(dict(type="neutral_motion_endpoint", motion=motion,
                 frame=state["frame"], endFrames=state["endFrames"], endpointNs=self.last_commit,
-                contactNonce=snapshot["nonce"], originalDeadlineNs=until, nativeAcceptance=False))
+                contactNonce=snapshot["nonce"], originalDeadlineNs=until,
+                observationDeadlineNs=readiness["deadlineNs"], nativeAcceptance=False))
             # Acquisition must still publish inside this contact's original
             # source lifetime; completion does not renew a source or stage.
             self.initial_mapping_deadline = self.geometry.source_deadline(snapshot, self.args.family)
@@ -1081,11 +1092,28 @@ class ReloadStimulus:
         self.save_owner(False)
         return rows[end]
 
-    def fresh(self, *, boundary=None, after_ns=0, pickup=None, prepare=False, deadline_ns=None, fixed_reload=False):
+    def check_neutral_readiness(self, readiness, until):
+        self.motion_guard(until)
+        state = self.guard(deadline_ns=until)
+        require(not (self.pending_command or self.unsafe_owner or self.held_left)
+                and self.outstanding_motion is not None,
+                "neutral observation scope/held/pending authority changed")
+        require((self.sequence, self.sentinel, self.command_hash, self.last_write, self.last_commit)
+                == readiness["commandIdentity"], "neutral observation command identity changed")
+        require(all(state[key] == readiness["state"][key] for key in ("head", "handL", "handR", "controls")),
+                "neutral observation simulator input changed")
+        require(neutral_controls(state["controls"]), "neutral observation contains active input")
+
+    def fresh(self, *, boundary=None, after_ns=0, pickup=None, prepare=False, deadline_ns=None, fixed_reload=False,
+              neutral_readiness=None):
         require(not prepare or boundary is None, "stimulus preparation requires initial stage admission")
         timeout = integer(boundary["timeoutNs"]) if boundary else RECEIVE_NS
         started = time.perf_counter_ns()
         until = min(self.deadline, self.stage_deadline, started + timeout)
+        if neutral_readiness is not None:
+            require(boundary is not None and after_ns == self.last_commit,
+                    "neutral observation requires the settled endpoint boundary")
+            until = min(self.deadline, self.stage_deadline, neutral_readiness["deadlineNs"])
         if deadline_ns is not None:
             until = min(until, deadline_ns)
         capture_readiness = (boundary is None and self.args.family == "fixed"
@@ -1100,7 +1128,10 @@ class ReloadStimulus:
         capture_reference = None
         while time.perf_counter_ns() < until:
             try:
-                self.guard(deadline_ns=until)
+                if neutral_readiness is None:
+                    self.guard(deadline_ns=until)
+                else:
+                    self.check_neutral_readiness(neutral_readiness, until)
             except ReadDeadline:
                 self.observation_incomplete = True
                 raise
@@ -1137,6 +1168,13 @@ class ReloadStimulus:
                         if (integer(raw.get("sequence", 0)) <= integer(prior_raw.get("rawInputSequence", 0))
                                 or integer(raw.get("observedNs", 0)) <= integer(prior_raw.get("inputObservedNs", 0))):
                             continue
+                if neutral_readiness is not None:
+                    transport.stable_snapshot(self.mapping, snapshot)
+                    require(snapshot["input"]["hands"][0]["squeeze"] == 0
+                            and all(hand[key] == self.mapping["input"]["hands"][i][key]
+                                    for i, hand in enumerate(snapshot["input"]["hands"])
+                                    for key in ("squeeze", "trigger", "held", "stickX", "stickY")),
+                            "neutral observation response input changed")
                 if boundary is None:
                     try:
                         if capture_reference is not None:

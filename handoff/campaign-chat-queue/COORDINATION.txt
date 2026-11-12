@@ -12,12 +12,12 @@ Ownership and ready/blocked tasks: COORDINATOR-STATE.txt (local scheduling recor
 External CHAT25/26/32 worktrees remain untouched; finished25/26 source is integrated.
 
 INSTALLED RUNTIME
-Normal0.1.84 is installed and Worker-validated; fallback0.1.83, retained0.1.77/0.1.76.
-Compiled native/launcher source:08042d78fa6b9819506b191a1709e1b739672ebf.
+Normal0.1.85 is installed and Worker-validated; fallback0.1.84, retained0.1.83/0.1.77/0.1.76.
+Compiled native/launcher source:52c0a119a6760ceb22237441e8963d84b23229c5.
 Normal checks passed364x86/361x64; frozen normal artifacts were used for delivery.
 Settings, asset cache and stable desktop shortcut are preserved.
 No public release or new headset acceptance. Shared x86 build outputs are private.
-Receipt: reports/coordinator-20261108-feedback721/normal84/run02/installation.json.
+Receipt: reports/coordinator-20261108-feedback721/normal85/run01/installation.json.
 Native82 custody-gap recovery and audio-worker shutdown fixes are included.
 Native83's additional passive lock diagnostic is not a player-facing reload fix.
 
