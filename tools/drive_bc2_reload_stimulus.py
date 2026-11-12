@@ -720,6 +720,52 @@ class ReloadStimulus:
             self.observation_incomplete = True
             raise
 
+    def sight_completion_mapping(self, snapshot):
+        """Observe the exact selected family without requiring a new grasp.
+
+        A native selection can retain its family while publishing no contact
+        geometry. This path can only end an already contacted, held gesture;
+        it never admits acquisition or another pose on the selected weapon.
+        """
+        require(self.args.family == "sight" and self.args.stage == "SightFlip"
+                and self.stimulus is not None and self.stimulus["family"] == "sight"
+                and (self.held_left or self.target_observed)
+                and self.boundaries.get("sight_contact", {}).get("selectionState") == "source",
+                "sight completion requires the original contacted held gesture")
+        sight = snapshot["sight"]
+        require(snapshot.get("valid") is True and sight.get("status") == "geometry_unavailable"
+                and sight.get("contact") is None and sight.get("preferredByDistance") is None,
+                "sight completion requires explicit absent contact geometry")
+        require(integer(sight["generation"]) == integer(snapshot["input"]["generation"])
+                and integer(sight["deadlineQpc"]) == integer(snapshot["native_deadline_qpc"])
+                and integer(sight["deadlineNs"]) == integer(snapshot["native_deadline_ns"]),
+                "sight completion publication/input lease mismatch")
+        # Common body mapping plus the ORIGINAL observed family, without
+        # changing status or supplying any replacement contact/rig evidence.
+        mapped = self.geometry._mapping(snapshot, "feed")
+        mapped["family"] = sight["family"]
+        transition = self.geometry._sight_state(self.stimulus["mapping"], mapped, self.args.target)
+        require(transition == "target", "absent sight geometry is not an exact target transition")
+        return transition
+
+    def sight_completion_boundary(self, snapshot, boundary_id, now):
+        require(boundary_id == "sight_selected", "absent sight geometry is completion-only")
+        self.sight_completion_mapping(snapshot)
+        nonce = integer(snapshot["nonce"])
+        require(now < self.geometry.source_deadline(snapshot, "sight"), "stimulus boundary source expired")
+        self.geometry.feed.admit_frame(snapshot, now, nonce)
+        require(all(float(h["trigger"]) == 0 for h in snapshot["input"]["hands"]), "sight trigger is active")
+        require(nonce != integer(self.stimulus["source"]["nonce"])
+                and integer(snapshot["observed_ns"]) > integer(self.stimulus["source"]["evaluatedAtNs"]),
+                "boundary needs a new original snapshot")
+        require(self.last_commit is not None and 0 < self.last_write
+                and max(self.last_write, self.last_commit) <= integer(snapshot["input_evidence"]["observedNs"]),
+                "sight completion predates its settled ordinary command")
+        return dict(boundary=boundary_id, observed=True, snapshotNonce=snapshot["nonce"],
+                    observedNs=snapshot["observed_ns"], sourceValidUntilNs=self.geometry.source_deadline(snapshot, "sight"),
+                    selectionState="target", completionOnly=True, sightGeometryUnavailable=True,
+                    nativeReceiptProof=False, nativeAcceptance=False, headsetAcceptance=False)
+
     def _observations(self, *, deadline_ns=None, diagnostic_only=False):
         if self.observer is None:
             return
@@ -777,7 +823,12 @@ class ReloadStimulus:
             # observed owner/reference drift actionable even if delivery is late.
             if self.mapping is not None and snapshot.get("valid") is True:
                 require(integer(snapshot["observed_ns"]) >= integer(self.mapping["observed_ns"]), "observation time regressed")
-                transition = self.geometry.same_mapping(self.mapping, snapshot, self.args.family, self.args.stage, target=self.args.target)
+                if self.args.family == "sight" and snapshot.get("sight", {}).get("status") == "geometry_unavailable":
+                    transition = self.sight_completion_mapping(snapshot)
+                    self.completion_only_observed = True
+                    event["sightCompletionOnly"] = True
+                else:
+                    transition = self.geometry.same_mapping(self.mapping, snapshot, self.args.family, self.args.stage, target=self.args.target)
                 if transition == "incomplete":
                     item["current"] = event["currentAtReceive"] = False
                     event["mappingReferenceMissing"] = True
@@ -903,8 +954,11 @@ class ReloadStimulus:
                     self.pending_boundary = None
                     return (snapshot, now, plan) if prepare else (snapshot, now)
                 try:
-                    summary = self.geometry.check_boundary(self.stimulus, snapshot, boundary["id"], now,
-                        command_written_ns=self.last_write, prior=self.boundaries, profiles=self.profiles)
+                    if self.args.family == "sight" and snapshot.get("sight", {}).get("status") == "geometry_unavailable":
+                        summary = self.sight_completion_boundary(snapshot, boundary["id"], now)
+                    else:
+                        summary = self.geometry.check_boundary(self.stimulus, snapshot, boundary["id"], now,
+                            command_written_ns=self.last_write, prior=self.boundaries, profiles=self.profiles)
                 except self.geometry.BoundaryPending as pending:
                     self.pending_boundary["lastPending"] = {"nonce": snapshot["nonce"], "reason": str(pending)}
                     self.artifacts.event({"type": "boundary_pending", "id": boundary["id"], "nonce": snapshot["nonce"],
@@ -956,6 +1010,8 @@ class ReloadStimulus:
                 time.sleep(.001)
         else:
             self.pause_until(max(self.last_write + WRITE_GAP_NS, time.perf_counter_ns()))
+        require(cleanup or release_only or not getattr(self, "completion_only_observed", False),
+                "completion-only observation cannot authorize another controller pose")
         action_deadline = self.hard_deadline if cleanup else min(self.deadline, self.stage_deadline)
         publication.action_deadline = action_deadline
         publication.source_deadline = self.initial_mapping_deadline if not cleanup and self.first_sample_pending else None

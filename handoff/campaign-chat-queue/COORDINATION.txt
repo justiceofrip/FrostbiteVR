@@ -22,15 +22,17 @@ Native82 custody-gap recovery and audio-worker shutdown fixes are included.
 Native83's additional passive lock diagnostic is not a player-facing reload fix.
 
 CURRENT SOURCE BATCH
-coordinator-20261112-publication-review adds deferred prepublication timing,
-a tracked stereo-review recorder and synthetic staging-link cleanup.
-949/951 completed; scoped checks passed and ROOT reviewed the combination.
-Earlier941/shared-entry source is integrated/pushed; native83 remains unchanged.
-Actual normal83/02 reached campaign, drew LMG and completed Open/Detach.
-Attach stopped before publishing its first pickup command; no complete reload/shot.
-Normal close/native retirement/profiles/settings restoration passed.
-Handoff: handoff/integrations/coordinator-20261112-publication-review/README.txt.
-Actual push status: reports/coordinator-20261108-feedback721/publication-review/source-push.json.
+coordinator-20261112-sight-completion corrects exact selected-family observation
+when native sight contact geometry disappears after selection. No new pose or
+next-stage authority is inferred; only completion and ordinary release remain.
+952 completed/retired; saved normal83/03 replay and affected checks passed.
+953 cost review retired: no measured attribution or native repair for02 failure.
+Earlier941/shared-entry/publication-review source is integrated/pushed.
+Normal83/02 pickup publication and03 selection observation failures are preserved.
+Both closed normally with native retirement/profiles/settings restoration.
+Handoff: handoff/integrations/coordinator-20261112-sight-completion/README.txt.
+Actual push status: reports/coordinator-20261108-feedback721/sight-completion/source-push.json.
+Native83 remains installed unchanged; no complete reload/fire/switch claim.
 
 NEXT ACCEPTANCE
 Work by shared mechanism and bulk profiles; complete representative reload/fire/switch.
