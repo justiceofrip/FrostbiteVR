@@ -4,6 +4,7 @@
 #include <sstream>
 #include "Bc2PhysicalFixedContainer.h"
 #include "Bc2BodyAmmo.h"
+#include "fvr/interaction/SpentCaseEjection.h"
 using namespace fvr::bc2;using namespace fvr::interaction;
 namespace {
 using Matrix=fvr::math::Matrix4;
@@ -418,6 +419,61 @@ int LinearPartsFollowTheirOwnMeasuredTravel(){
         }
     }
     CHECK(independent>0);return 0;
+}
+int UnderbarrelContactGuidanceAcrossBothFamilies(){
+    unsigned breeches=0,muzzles=0;
+    for(const auto& e:generated::UnderbarrelFixedContainerEquipment){
+        Fixture f(&e,0,2);const auto& insertion=e.interaction.geometry[2].motion;
+        const bool breech=e.interaction.kind==FixedContainerKind::SingleRoundBreech;
+        if(breech){++breeches;
+            // A round at the closed breech cannot acquire insertion custody.
+            f.Send(At(insertion,1),false);f.Send(At(insertion,1),true,true);
+            CHECK(!f.result.ammoOwnsHand&&f.calls==0&&f.result.tracking.step==FixedContainerStep::Open);
+            f.Send(At(insertion,1),false);f.Hinge(0);
+        }else{++muzzles;CHECK(e.interaction.kind==FixedContainerKind::SingleRoundMuzzle);}
+        f.Send(At(insertion,0),false);f.Send(At(insertion,0),true,true);f.Send(At(insertion,0),true);
+        CHECK(f.result.ammoOwnsHand&&f.result.tracking.hand);const auto token=f.result.tracking.hand->token;
+        auto turn=Identity();const float angle=breech?1.1f:-1.1f;
+        turn.values[0][0]=turn.values[1][1]=std::cos(angle);turn.values[0][1]=std::sin(angle);turn.values[1][0]=-std::sin(angle);
+        const auto distance=feed_interaction_detail::Distance(insertion.placement.weaponFromSource,insertion.placement.weaponFromDestination);
+        std::array<double,3> outward{};
+        for(unsigned n=0;n<3;++n)outward[n]=(insertion.placement.weaponFromSource.values[3][n]-insertion.placement.weaponFromDestination.values[3][n])/distance;
+        auto approach=Multiply(turn,insertion.placement.weaponFromDestination);
+        for(unsigned n=0;n<3;++n)approach.values[3][n]+=float(outward[n]*.09);
+        // This deliberately rotated object follows the player's hand into the
+        // measured target's contact volume; no authored insertion axis is used.
+        for(unsigned n=1;n<=50;++n){const auto object=reload_insertion_detail::BlendRigid(insertion.placement.weaponFromSource,approach,n/50.);
+            f.Send(Multiply(insertion.placement.sourceFromGrip,object),true);}
+        CHECK(f.result.ammoOwnsHand&&f.result.tracking.hand->token==token&&f.calls==0);
+        auto captured=approach;for(unsigned n=0;n<3;++n)captured.values[3][n]-=float(outward[n]*.035);
+        const auto captureWrist=Multiply(insertion.placement.sourceFromGrip,captured);
+        f.Send(captureWrist,true);
+        for(unsigned n=0;n<9;++n)f.Send(captureWrist,true);
+        CHECK(f.calls==0&&f.result.ammoOwnsHand&&f.result.tracking.hand->token==token);
+        CHECK(f.result.tracking.target&&feed_interaction_detail::Distance(*f.result.tracking.target,insertion.placement.weaponFromDestination)>.04);
+        f.missingRaw=true;f.Send(captureWrist,true);
+        CHECK(f.result.ammoOwnsHand&&f.hands.Current(InteractionHand::Left)->token==token&&f.calls==0);
+        CHECK(!f.result.tracking.target&&f.result.tracking.carried);
+        f.missingRaw=false;f.Send(captureWrist,true);
+        auto withdrawn=captured;for(unsigned n=0;n<3;++n)withdrawn.values[3][n]+=float(outward[n]*.04);
+        f.Send(Multiply(insertion.placement.sourceFromGrip,withdrawn),true);
+        CHECK(f.result.ammoOwnsHand&&f.result.tracking.hand->token==token&&f.calls==0);
+        CHECK(f.result.tracking.target&&feed_interaction_detail::Distance(*f.result.tracking.target,insertion.placement.weaponFromDestination)>.08);
+        f.Send(captureWrist,true); // Pull-away requires a new contact and inward movement.
+        auto seated=captured;for(unsigned n=0;n<3;++n)seated.values[3][n]-=float(outward[n]*.025);
+        const auto seatWrist=Multiply(insertion.placement.sourceFromGrip,seated);
+        for(unsigned n=0;n<9;++n)f.Send(seatWrist,true);
+        CHECK(f.calls==0&&f.result.tracking.target);
+        CHECK(feed_interaction_detail::Distance(*f.result.tracking.target,insertion.placement.weaponFromDestination)<.00001);
+        CHECK(feed_interaction_detail::Angle(*f.result.tracking.target,insertion.placement.weaponFromDestination)<.001);
+        CHECK(f.result.tracking.hand->token==token);
+        f.Send(seatWrist,false);CHECK(f.calls==1&&f.submitted&&f.submitted->preparedCommand);
+        CHECK((f.submitted->preparedCommand->before==AmmunitionCounts{0,2,1}));
+        CHECK((f.submitted->preparedCommand->after==AmmunitionCounts{1,1,1}));
+        CHECK((f.service.View()->snapshot.counts==AmmunitionCounts{0,2,1}));
+        f.Send(seatWrist,false);CHECK(f.calls==1); // A queued request cannot duplicate the transfer.
+    }
+    CHECK(breeches&&muzzles&&breeches+muzzles==generated::UnderbarrelFixedContainerEquipment.size());return 0;
 }
 int MeasuredUnderbarrelLoadsOneRoundAndCloses(){
     unsigned linkedCases=0,nativeItemCases=0;
@@ -1579,7 +1635,13 @@ int BindingGapResetsDwellAndPreservesCommittedStep(){
     return 0;
 }
 }
+// The spent-case checks share this fixture and native-resource service mock.
+#include "Bc2SpentCaseChecks.inc"
 int main(){
+    if(SpentCaseConsumptionDoesNotInventOrTransferRounds()||SpentCaseTiltNeedsFreshNeutralOpenPackets()||
+       SpentCaseMeasuredAnchorAndBoundedFall()||SpentCaseRetainedRenderingRejectsDifferentCase()||
+       SpentCaseOpeningFamiliesEjectBeforeExactInsertion())return 1;
+    if(UnderbarrelContactGuidanceAcrossBothFamilies())return 1;
     if(BeforeUnavailablePreservesReleasedOpenBlocker()||BeforeUnavailablePreservesPendingAndAmmoBlockers()||
        RecoveryFailurePreservesCommittedOpenBlocker()||RetiredOwnerDoesNotExportOpenBlocker())return 1;
     if(BindingGapReservationsAcrossMechanicalRegistry()||BindingGapRequiresNewContactAndExpires()||

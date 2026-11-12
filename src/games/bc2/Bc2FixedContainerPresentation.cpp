@@ -20,6 +20,17 @@ bool FixedContainerRigMatches(const FixedContainerEquipmentProfile& e,const RigS
        std::count(rig.names.begin(),rig.names.end(),p.bone)!=1)return false;
     return true;
 }
+std::optional<math::Matrix4> FixedContainerSpentCasePose(const FixedContainerEquipmentProfile& e,
+    std::span<const math::Matrix4> parts)noexcept {
+    if(!KnownFixedContainerEquipment(&e)||e.interaction.kind!=FixedContainerKind::SingleRoundBreech||
+       parts.size()!=e.parts.size())return {};
+    std::optional<math::Matrix4> out;
+    for(unsigned n=0;n<e.parts.size();++n)if(e.parts[n].bone==e.supplyRoot){
+        if(out||!e.parts[n].supplyPart||!InverseRigid(parts[n])||!InverseRigid(e.parts[n].centerInBone))return {};
+        out=Multiply(e.parts[n].centerInBone,parts[n]);
+    }
+    return out;
+}
 bool FixedContainerTrackingRetained(const Bc2FixedContainerTracking& a,const Bc2FixedContainerTracking& b,std::int64_t now)noexcept {
     if(bool(a.source.family)!=bool(b.source.family))return false;
     if(a.source.family){const auto& x=a.source.family->mode;const auto& y=b.source.family->mode;
@@ -30,6 +41,8 @@ bool FixedContainerTrackingRetained(const Bc2FixedContainerTracking& a,const Bc2
        a.source.binding.context!=b.source.binding.context||a.source.binding.owner!=b.source.binding.owner||a.lifetime!=b.lifetime||
        a.revision>b.revision||a.step!=b.step||a.targetStep!=b.targetStep||a.blocksFire!=b.blocksFire||
        a.carried!=b.carried||a.pending!=b.pending||a.gun.token!=b.gun.token||a.partCount!=b.partCount||
+       a.spentCasePresent!=b.spentCasePresent||a.spentCaseEpoch!=b.spentCaseEpoch||a.spentCaseEjectedNs!=b.spentCaseEjectedNs||
+       !feed_interaction_detail::Same(a.spentCaseEjectionWorldMeters,b.spentCaseEjectionWorldMeters)||
        (a.source.ammunition.counts.loaded>0)!=(b.source.ammunition.counts.loaded>0)||
        a.source.binding.inventory!=b.source.binding.inventory||a.source.binding.switching!=b.source.binding.switching||
        a.source.binding.data!=b.source.binding.data||a.source.binding.persistence!=b.source.binding.persistence||
@@ -57,6 +70,17 @@ Bc2FixedContainerPresentation BuildFixedContainerPresentation(const Bc2FixedCont
        rig.identity.soldier!=t.source.binding.owner.soldier||rig.identity.weak!=t.source.binding.owner.weak||
        !std::isfinite(units)||units<=0||units>1000||!InverseRigid(placed))return out;
     const auto& e=*t.source.equipment;
+    if(e.interaction.kind==FixedContainerKind::SingleRoundBreech&&t.spentCaseEpoch){
+        if(t.spentCasePresent&&t.source.ammunition.counts.loaded==0&&t.step==FixedContainerStep::EjectSpent){
+            if(const auto local=FixedContainerSpentCasePose(e,std::span(t.parts).first(t.partCount)))
+                out.spentCaseWorld=World(*local,placed,units,true);
+        }else if(!t.spentCasePresent&&t.spentCaseEjectionWorldMeters){
+            // Freeze age to the source input, not either eye's render clock.
+            if(const auto fallen=graphics::SpentCaseFallWorld(*t.spentCaseEjectionWorldMeters,
+                t.spentCaseEjectedNs,t.input.observedNs))
+                out.spentCaseWorld=World(*fallen,reload_insertion_detail::Identity(),units,true);
+        }
+    }
     unsigned supplyIndex=0;
     for(unsigned n=0;n<e.parts.size();++n){const auto& p=e.parts[n];
         if(!InverseRigid(t.parts[n]))return {};
@@ -87,10 +111,10 @@ std::vector<graphics::BodyPropInstance> FixedContainerHostInstances(const Bc2Fix
     if(!FixedContainerTrackingRetained(before,current,now))return {};
     const auto presentation=BuildFixedContainerPresentation(before,rig,placed,units,now);if(!presentation.valid)return {};
     const auto& e=*before.source.equipment;std::vector<graphics::BodyPropInstance> out;
-    for(const auto& part:presentation.supply){
-        graphics::BodyPropInstance instance{MakeBodyAmmoGeometryKey(e.asset,e.mesh,part.bone,e.rigFingerprint),part.world,0,INT64_MAX};
+    const auto append=[&](graphics::RigidPropGeometryKey geometry,const math::Matrix4& world,unsigned ordinal){
+        graphics::BodyPropInstance instance{geometry,world,0,INT64_MAX};
         instance.actorGeneration=before.input.owner.actorGeneration;
-        instance.equipmentGeneration=graphics::BodyPropWireEpoch(graphics::BodyPropSourceKind::Ammo,before.input.owner.equipGeneration,part.ordinal);
+        instance.equipmentGeneration=graphics::BodyPropWireEpoch(graphics::BodyPropSourceKind::Ammo,before.input.owner.equipGeneration,ordinal);
         instance.spaceGeneration=before.input.owner.space;
         for(const auto* t:{&before,&current}){
             instance.observedNs=(std::max)({instance.observedNs,t->input.observedNs,t->source.binding.observedNs,t->source.ammunition.observedNs});
@@ -101,20 +125,23 @@ std::vector<graphics::BodyPropInstance> FixedContainerHostInstances(const Bc2Fix
             }
             if(t->hand)instance.deadlineNs=(std::min)(instance.deadlineNs,t->hand->deadlineNs);
         }
-        if(!graphics::BodyPropFresh(instance,now))return {};out.push_back(instance);
-    }
+        if(!graphics::BodyPropFresh(instance,now))return false;out.push_back(instance);return true;
+    };
+    for(const auto& part:presentation.supply)
+        if(!append(MakeBodyAmmoGeometryKey(e.asset,e.mesh,part.bone,e.rigFingerprint),part.world,part.ordinal))return {};
+    if(presentation.spentCaseWorld&&!append(graphics::SpentCaseGeometry,*presentation.spentCaseWorld,6))return {};
     return out;
 }
 std::optional<FixedContainerRenderSource> BuildFixedContainerRenderSource(const Bc2FixedContainerTracking& tracking,
     const RigSnapshot& rig,const math::Matrix4& placed,float units,std::int64_t now){
     const auto instances=FixedContainerHostInstances(tracking,tracking,rig,placed,units,now);
-    if(instances.empty()||instances.size()>4)return {};
+    if(instances.empty()||instances.size()>5)return {};
     return FixedContainerRenderSource{std::make_shared<const Bc2FixedContainerTracking>(tracking),instances};
 }
 std::vector<graphics::BodyPropInstance> RetainFixedContainerHostInstances(const FixedContainerRenderSource& a,
     const FixedContainerRenderSource& b,std::int64_t now){
     if(!a.tracking||!b.tracking||!FixedContainerTrackingRetained(*a.tracking,*b.tracking,now)||
-       a.instances.empty()||a.instances.size()>4||a.instances.size()!=b.instances.size())return {};
+       a.instances.empty()||a.instances.size()>5||a.instances.size()!=b.instances.size())return {};
     auto out=a.instances;
     for(unsigned n=0;n<out.size();++n){auto& p=out[n];const auto& q=b.instances[n];
         if(!graphics::SameBodyPropSource(p,q)||!graphics::BodyPropFresh(p,now)||!graphics::BodyPropFresh(q,now))return {};

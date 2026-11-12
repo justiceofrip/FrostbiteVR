@@ -1,6 +1,10 @@
 """Deterministic shared preparation tests; synthetic evidence grants no acceptance."""
 import copy
+from contextlib import ExitStack
+import hashlib
 import importlib.util
+import json
+import os
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -358,5 +362,172 @@ class FixedPreparationTests(unittest.TestCase):
                     p.write_bytes(d.transport.json_bytes(review))
                 with self.assertRaises((d.transport.REFUSAL,d.clearance_geometry.Refusal)):v.prepare(p)
                 self.assertEqual(sent,[])
+
+class TimedPreparationObservationTests(unittest.TestCase):
+    """Assembled prepare/send/ACK/passive read path, with simulated runtime IO."""
+    def timed_driver(self, folder, mutate=None):
+        import test_bc2_timed_trigger as timed
+        self.enterContext(patch.object(timed, 'd', d.transport))
+        self.enterContext(patch.object(timed.transport_tests, 'd', d.transport))
+        h = timed.RuntimeHarness(self, ack_ms=88)
+        v = h.driver
+        v.__class__ = d.PreparationDriver
+        del v.validate_publication
+        v.run, v.manifest = folder, dict(source_sha256='source')
+        v.active_plan = v.demand_reference = v.demand_started = None
+        v.demand_finished = False
+        before = snapshot()
+        before['input']['hands'][1]['squeeze'] = 0.
+        h.publish(before)
+        captures = []
+        for eye in ('left', 'right'):
+            path = folder/(eye+'.png')
+            raw = eye.encode(); path.write_bytes(raw); h.files[path] = raw
+            captures.append(dict(eye=eye, path=str(path), bytes=len(raw), sha256=d.transport.digest(raw)))
+        clearance = dict(schema='bc2vr.root-fire-clearance.v1', rootReviewedVisibleCorridor=True,
+            host=v.host, owner=before['owner'], configurationPath=before['selected']['configurationPath'],
+            rig=before['rig'], reviewedNs=h.now-1, referenceHead=before['input']['referenceHead'],
+            rightAim=before['input']['hands'][1]['aim'], captures=captures,
+            **{key: copy.deepcopy(h.state[key]) for key in ('head', 'handL', 'handR', 'controls')})
+        path = folder/'clearance.json'
+        h.json_files[path], h.files[path] = clearance, d.transport.json_bytes(clearance)
+        observed = []
+        def respond():
+            if h.response_due is not None and h.now >= h.response_due:
+                s = fixture.fixed.refresh(before, h.now, int(h.files[v.request_path]))
+                if v.commands:
+                    if not observed:
+                        s['fixedContainer'].update(view=None, viewFresh=False)
+                    else:
+                        s['fixedContainer']['view']['snapshot']['counts']['loaded'] = 0
+                        if mutate is not None:
+                            mutate(s, v)
+                    observed.append(copy.deepcopy(s))
+                h.publish(s); h.response_due = None
+        h.on_sleep = respond
+        return h, path, observed
+
+    def scoped_harness(self):
+        stack = ExitStack()
+        original = self.enterContext
+        self.enterContext = stack.enter_context
+        stack.callback(setattr, self, 'enterContext', original)
+        return stack
+
+    def test_timed_preparation_missing_then_empty_uses_real_shared_observer(self):
+        with tempfile.TemporaryDirectory() as temp:
+            h, path, observed = self.timed_driver(Path(temp))
+            v = h.driver
+            result = v.prepare(path)
+            self.assertEqual(h.batches(), [[d.transport.TIMED_TRIGGER_COMMAND]])
+            self.assertEqual(v.commands, 2)
+            self.assertEqual(len(observed), 2)
+            self.assertIsNone(observed[0]['fixedContainer']['view'])
+            self.assertEqual(result['afterCounts'], dict(loaded=0, reserve=7, capacity=1))
+            self.assertEqual(v.reference['fixedContainer']['view']['snapshot']['counts']['loaded'], 1)
+            self.assertEqual(v.stage_deadline, result['releaseCommittedNs']+d.NS)
+            self.assertEqual(v.selected_release_observed_ns(), result['releaseCommittedNs'])
+            held = [e for e in v.artifacts.events if e['type']=='selected_ammo_post_shot_unpublished']
+            self.assertEqual(len(held), 1); self.assertFalse(held[0]['commandAuthority'])
+            self.assertFalse(result['nativeShotObserved'] or result['nativeAcceptance'])
+            with self.assertRaisesRegex(d.transport.REFUSAL, 'already attempted'):
+                v.fresh_available()
+
+    def test_timed_replacement_still_rejects_binding_identity_lifetime_and_pre_release_input(self):
+        mutations = (
+            lambda s,v:s['fixedContainer']['view']['binding'].update(switching=999),
+            lambda s,v:s['fixedContainer']['view']['identity'].update(serverItem=999),
+            lambda s,v:s['fixedContainer']['tracking'].update(lifetime=999),
+            lambda s,v:s['fixedContainer']['view']['snapshot']['counts'].update(reserve=6),
+            lambda s,v:s['fixedContainer']['view']['binding'].update(deadlineNs=s['observed_ns']),
+            lambda s,v:s['input_evidence'].update(observedNs=v.selected_release_observed_ns()-1),
+        )
+        for mutate in mutations:
+            with self.subTest(mutate=mutate), tempfile.TemporaryDirectory() as temp, self.scoped_harness():
+                h, path, _ = self.timed_driver(Path(temp), mutate)
+                with self.assertRaises((d.transport.REFUSAL, d.fixed.Refusal)):
+                    h.driver.prepare(path)
+                self.assertEqual(h.batches(), [[d.transport.TIMED_TRIGGER_COMMAND]])
+                self.assertEqual(h.driver.commands, 2)
+
+    def test_timed_observer_requires_completed_pulse_and_exact_settled_command_owner(self):
+        for field, value in (('selected_timed_release', None), ('timed_trigger', {'pending':True}),
+                ('commands',4), ('sequence',999), ('last_write',0), ('last_commit',0),
+                ('pending_batch',['trigger r 0']), ('timed_trigger_supported',False),
+                ('_single_trigger_used',False), ('held_trigger',True), ('pending_command',True)):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as temp, self.scoped_harness():
+                h, path, _ = self.timed_driver(Path(temp))
+                v=h.driver; v.prepare(path)
+                setattr(v, field, value)
+                with self.assertRaises(d.transport.REFUSAL):
+                    v.check_post_shot_observation_owner()
+                self.assertEqual(h.batches(), [[d.transport.TIMED_TRIGGER_COMMAND]])
+
+    def test_timed_pulse_failure_retains_timer_without_observer_authority(self):
+        with tempfile.TemporaryDirectory() as temp:
+            h, path, observed = self.timed_driver(Path(temp))
+            h.timer_ms = 400
+            with self.assertRaises(d.transport.REFUSAL):
+                h.driver.prepare(path)
+            self.assertIsNone(getattr(h.driver,'selected_timed_release',None))
+            self.assertIsNotNone(h.driver.timed_trigger)
+            with self.assertRaises(d.transport.REFUSAL):
+                h.driver.check_post_shot_observation_owner()
+            self.assertEqual(observed,[])
+            self.assertEqual(h.batches(),[[d.transport.TIMED_TRIGGER_COMMAND]])
+
+    @unittest.skipUnless(os.environ.get('BC2_FIXED_PREPARATION_REPLAY'),
+                         'optional retained normal83/07 timed preparation replay')
+    def test_actual_normal83_07_absence_is_diagnostic_then_original_observation_expires(self):
+        folder = Path(os.environ['BC2_FIXED_PREPARATION_REPLAY'])
+        pins = {
+            'snapshot-002.json':'1ff1c759818d1fb35a82604f8c4cc82dc8d6a63862fd1479689a37e4a85899c7',
+            'snapshot-003.json':'58cf164fdca643ab21d93528754d8ce91e7601f0bc1ecc89dd3dfc442d19a1f9',
+            'events.jsonl':'ff8552198b6405c331011907af2074a4a3cf38c378a344a6523db078e30a1223',
+            'request-003-timing.json':'c268976bbec61536fb28bc0e389a558344b0c2293ba98464f4f8e95c9a51306e',
+            'receive-timing-failure.json':'16e09460bd0c4be6764ed1cb1d81bfdd6797d6fbf9df376acb7993506b6bc4e5',
+        }
+        blobs = {name:(folder/name).read_bytes() for name in pins}
+        self.assertEqual({name:hashlib.sha256(raw).hexdigest() for name,raw in blobs.items()},pins)
+        before, absent = [json.loads(blobs[name]) for name in ('snapshot-002.json','snapshot-003.json')]
+        events = [json.loads(line) for line in blobs['events.jsonl'].splitlines()]
+        request, = [e for e in events if e['type']=='command_request']
+        commit, = [e for e in events if e['type']=='command_commit']
+        neutral, = [e for e in events if e['type']=='timed_trigger_neutral_observed']
+        self.assertEqual(request['commands'][0],d.transport.TIMED_TRIGGER_COMMAND)
+        self.assertEqual(neutral['runtimeSha256'],d.transport.TIMED_TRIGGER_RUNTIME_SHA256)
+        self.assertIsNone(absent['fixedContainer']['view'])
+        with tempfile.TemporaryDirectory() as temp:
+            h, _, _ = self.timed_driver(Path(temp)); v=h.driver
+            h.on_sleep = None
+            h.now = json.loads(blobs['receive-timing-failure.json'])['firstPhaseError']['atNs']
+            self.enterContext(patch.object(d.time,'sleep',lambda seconds:setattr(h,'now',h.now+round(seconds*d.NS))))
+            h.state = copy.deepcopy(neutral['neutralState']); v.state=copy.deepcopy(h.state)
+            v.reference = v.latest_snapshot = before
+            v.demand_finished, v.demand_started, v.commands = True, before['observed_ns'], 2
+            v.deadline = neutral['driverDeadlineNs']; v.hard_deadline = v.deadline
+            v.stage_deadline = neutral['neutralObservedNs']+d.NS
+            v.last_write, v.last_commit = commit['writtenNs'],commit['committedNs']
+            v.sequence,v.sentinel,v.capture_sequence = h.state['cmdSeq'],h.state['lastCmd'],h.state['captureSeq']
+            v.pending_batch = request['commands']; v._single_trigger_used = True
+            # Reconstitute only the successful transport completion from this
+            # retained ACK/natural-neutral event; never invent an ammo result.
+            v.selected_timed_release = (v.sequence,v.last_write,v.last_commit,neutral['neutralObservedNs'])
+            h.files[v.command_path] = ('\n'.join(v.pending_batch)+'\n').encode()
+            v.command_hash = d.transport.digest(h.files[v.command_path])
+            timing = json.loads(blobs['request-003-timing.json'])
+            v.last_request,v.pending_nonce,v.snapshot_index = timing['requestStartedNs'],int(absent['nonce']),3
+            v.request_bytes = (str(v.pending_nonce)+'\n').encode(); h.files[v.request_path]=v.request_bytes
+            h.publish(absent); h.files[v.snapshot_path]=blobs['snapshot-003.json']; h.response_after=None
+            clocks = v.deadline,v.hard_deadline,v.stage_deadline,v.demand_started
+            with self.assertRaisesRegex(d.transport.REFUSAL,'post-stage receipt observation timed out'):
+                v.fresh_available()
+            self.assertEqual(v.artifacts.saved['snapshot-003.json'],blobs['snapshot-003.json'])
+            self.assertEqual((v.deadline,v.hard_deadline,v.stage_deadline,v.demand_started),clocks)
+            self.assertIs(v.reference,before); self.assertIsNone(v.latest_snapshot)
+            self.assertEqual(h.command_writes,[])
+            held = [e for e in v.artifacts.events if e['type']=='selected_ammo_post_shot_unpublished']
+            self.assertEqual(len(held),1); self.assertFalse(held[0]['commandAuthority'])
+
 
 if __name__=='__main__':unittest.main()

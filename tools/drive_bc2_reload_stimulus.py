@@ -6,6 +6,7 @@ the installed mod independently validates every real input frame and operation.
 This runner starts no process, captures no image and changes no native state.
 """
 import argparse
+import copy
 from collections import deque
 import ctypes
 from ctypes import wintypes
@@ -319,6 +320,19 @@ def ordinary_commands(sample, allow_setup=False):
     coordinates = " ".join(f"{v:.9f}" for v in position + angles)
     supplied = sample.get("commands")
     require(isinstance(supplied, list), "missing ordinary command rows")
+    if sample.get("hand") == "r":
+        require(sample["grip"] == 0, "spent-case right tilt requires neutral left grip")
+        aim = sample.get("aimPositionMeters", []) + sample.get("aimYawPitchRollDegrees", [])
+        require(len(aim) == 6 and all(type(v) in (int, float) and math.isfinite(v) for v in aim)
+                and all(abs(v) <= 10 for v in aim[:3]) and all(abs(v) <= 360 for v in aim[3:]),
+                "invalid bounded right aim pose")
+        setup = supplied[:1] == ["hand r follow off"]
+        require(not setup or allow_setup, "right pose setup only allowed on first sample")
+        lines = (["hand r follow off"] if setup else []) + ["hand r grip pose " + coordinates,
+                 "hand r aim pose " + " ".join(f"{v:.9f}" for v in aim), "grip l 0"]
+        require(supplied == lines, "unallowlisted spent-case right command")
+        return lines
+    require(sample.get("hand", "l") == "l", "unsupported ordinary hand")
     setup = supplied[:2] == LEFT_POSE_SETUP
     require(not setup or allow_setup, "left pose setup only allowed on first sample")
     tail = supplied[2:] if setup else supplied
@@ -434,7 +448,11 @@ def validate_stimulus(value, continuation=False):
             and 0 <= integer(budget["gestureStartSample"]) < len(schedule), "invalid stimulus schedule")
     previous = -1
     require(value.get("continuesHeldCustody", False) is continuation, "held continuation contract differs")
-    require((schedule[0]["commands"][:2] == LEFT_POSE_SETUP) is (not continuation),
+    tilt = value.get("family") == "fixed" and value.get("stage") == "EjectSpent"
+    require(all((s.get("hand") == "r") is tilt for s in schedule), "right pose is restricted to spent-case tilt")
+    require(not tilt or not continuation and schedule[0]["commands"][:1] == ["hand r follow off"],
+            "spent-case tilt requires initial right setup and neutral left input")
+    require(tilt or (schedule[0]["commands"][:2] == LEFT_POSE_SETUP) is (not continuation),
             "initial pose setup required; held continuation must preserve established configuration")
     require(schedule[0]["grip"] == (1 if continuation else 0), "initial/continued grip state differs")
     for index, sample in enumerate(schedule):
@@ -638,7 +656,18 @@ class ObservationWorker:
 
 class ReloadStimulus:
     acquire_lock = transport.Driver.acquire_lock
-    check_target = staticmethod(transport.Driver.check_target)
+    @staticmethod
+    def check_target(state, target):
+        if target.get("hand") != "r":
+            return transport.Driver.check_target(state, target)
+        require(state["controls"]["gripL"] == 0 and state["handR"]["followsHead"] is False,
+                "spent-case right pose/neutral left input did not commit")
+        a = transport.planner.from_pose(dict(position=state["handR"]["pos"],
+            orientation=transport.planner.ypr_quaternion(state["handR"]["ypr"])))
+        b = transport.planner.from_pose(dict(position=target["positionMeters"],
+            orientation=transport.planner.ypr_quaternion(target["yawPitchRollDegrees"])))
+        distance, angle = transport.planner.pose_error(a, b)
+        require(distance <= .0002 and angle <= .001, "spent-case right controller pose did not commit")
     dispose_prepared_command = transport.Driver.dispose_prepared_command
     dispose_publication_owner = transport.Driver.dispose_publication_owner
 
@@ -774,7 +803,17 @@ class ReloadStimulus:
                 and state["sessionState"] == "FOCUSED" and state["paceMode"] == "free"
                 and all(state[key]["valid"] is True for key in ("head", "handL", "handR")), "focus/tracking/session changed")
         if hasattr(self, "initial_sim"):
-            require(all(state[key] == self.initial_sim[key] for key in ("head", "handR")), "head/right-hand basis changed")
+            tilt = self.args.family == "fixed" and self.args.stage == "EjectSpent"
+            untouched = getattr(self, "tilt_left_state", self.initial_sim["handL"]) if tilt else getattr(self, "right_rest_state", self.initial_sim["handR"])
+            require(state["head"] == self.initial_sim["head"] and state["handL" if tilt else "handR"] == untouched,
+                    "head/untouched-hand basis changed")
+            if tilt:
+                applying = self.pending_command and integer(state["cmdSeq"]) == self.sequence
+                target = getattr(self, "pending_right_sample", None) if applying else getattr(self, "settled_right_sample", None)
+                if target is None:
+                    require(state["handR"] == self.initial_sim["handR"], "unrequested right-hand pose change")
+                else:
+                    self.check_target(state, target)
             require(neutral_controls(state["controls"], True), "unrequested controller input")
             require(integer(state["captureSeq"]) == self.capture_sequence, "unrequested capture")
         return state
@@ -1036,7 +1075,7 @@ class ReloadStimulus:
         self.save_owner(False)
         return rows[end]
 
-    def fresh(self, *, boundary=None, after_ns=0, pickup=None, prepare=False, deadline_ns=None):
+    def fresh(self, *, boundary=None, after_ns=0, pickup=None, prepare=False, deadline_ns=None, fixed_reload=False):
         require(not prepare or boundary is None, "stimulus preparation requires initial stage admission")
         timeout = integer(boundary["timeoutNs"]) if boundary else RECEIVE_NS
         started = time.perf_counter_ns()
@@ -1068,6 +1107,11 @@ class ReloadStimulus:
                 now = time.perf_counter_ns()
                 if not item["current"] or now >= self.geometry.source_deadline(snapshot, self.args.family):
                     continue
+                if fixed_reload and self.last_commit is not None:
+                    raw = snapshot.get("fixedContainer", {}).get("raw", {}).get("input", {})
+                    if (integer(snapshot["input_evidence"]["observedNs"]) < self.last_commit
+                            or integer(raw.get("observedNs", 0)) < self.last_commit):
+                        continue
                 if boundary is not None:
                     require(self.last_commit is not None, "fresh boundary requires settled command")
                     # Publishing the command file precedes host application. A
@@ -1076,6 +1120,14 @@ class ReloadStimulus:
                     # budget and require input observed after the settled ACK.
                     if integer(snapshot["input_evidence"]["observedNs"]) < max(self.last_write, self.last_commit):
                         continue
+                    if self.args.family == "fixed" and self.args.stage == "EjectSpent":
+                        raw = snapshot.get("fixedContainer", {}).get("raw", {}).get("input", {})
+                        if integer(raw.get("observedNs", 0)) < max(self.last_write, self.last_commit):
+                            continue
+                        prior_raw = self.boundaries.get("fixed_tilt_current", {}).get("gate", {})
+                        if (integer(raw.get("sequence", 0)) <= integer(prior_raw.get("rawInputSequence", 0))
+                                or integer(raw.get("observedNs", 0)) <= integer(prior_raw.get("inputObservedNs", 0))):
+                            continue
                 if boundary is None:
                     try:
                         if capture_reference is not None:
@@ -1110,7 +1162,13 @@ class ReloadStimulus:
                         if prepare:
                             # Building includes typed stage admission. Keep its
                             # plan local to this fresh snapshot and original lease.
-                            plan = self.geometry.build_stimulus(self.args.family, self.profiles, snapshot, now, self.args.stage,
+                            stage = self.args.stage
+                            if fixed_reload:
+                                require(self.args.family == "fixed", "fixed reload dispatch requires fixed family")
+                                step = integer(snapshot["fixedContainer"]["tracking"]["step"])
+                                require(step in (0, 1, 2, 3), "fixed Reload requires an observed unfinished loader")
+                                stage = "Insert" if pickup is not None else {0: "Open", 1: "EjectSpent", 2: "Pickup", 3: "Close"}[step]
+                            plan = self.geometry.build_stimulus(self.args.family, self.profiles, snapshot, now, stage,
                                 step_ms=self.args.step_ms, pickup=pickup, target=self.args.target)
                         else:
                             self.geometry.admit_boundary(self.args.family, self.profiles, snapshot, now, self.args.stage,
@@ -1185,6 +1243,10 @@ class ReloadStimulus:
                 and self.first_sample_pending and getattr(self, "neutral_motion_supported", False),
                 "interpolation requires fresh unheld supported source")
         lines = ["grip l 0"] if cleanup or release_only else ordinary_commands(sample, self.first_sample_pending)
+        if sample is not None and sample.get("hand") == "r":
+            require(self.args.family == "fixed" and self.args.stage == "EjectSpent" and not cleanup and not release_only
+                    and not self.held_left and motion is None, "right input requires the admitted spent-case stage")
+            self.pending_right_sample = sample
         if motion is not None:
             # Exported aim derives from grip + the existing zero trim. There is
             # one runtime slot per hand, so never queue a second to-aim command.
@@ -1356,6 +1418,8 @@ class ReloadStimulus:
         self.pending_command = False
         self.state = state
         self.held_left = False if cleanup or release_only else sample["grip"] == 1
+        if sample is not None and sample.get("hand") == "r":
+            self.settled_right_sample = sample
         if cancel_motion:
             self.outstanding_motion = None
         elif motion is not None:
@@ -1440,13 +1504,30 @@ class ReloadStimulus:
         continuation = self.held_left
         require(not continuation or self.pose_setup_established, "held continuation lacks established left pose configuration")
         self.stimulus = validate_stimulus(stimulus, continuation)
+        if stimulus["stage"] == "EjectSpent":
+            self.tilt_left_state = copy.deepcopy(self.state["handL"])
         require(self.commands + sum(len(ordinary_commands(s, i == 0)) + 1 for i, s in enumerate(stimulus["schedule"])) + 2 <= MAX_COMMANDS,
                 "complete next stimulus and cleanup exceed remaining command budget")
         self.boundaries = {}
         self.completion_only_observed = False
         self.plans.append({"family": stimulus["family"], "stage": stimulus["stage"], "source": stimulus["source"],
                            "samples": len(stimulus["schedule"]), "nativeAcceptance": False})
-        self.artifacts.save(f"stimulus-{len(self.plans):02}.json", stimulus)
+        artifact = stimulus
+        if getattr(self, "fixed_reload", False):
+            # Five stages retain the same journal ceiling. Store their exact
+            # shared schedule once, with an explicit reference for offline
+            # reconstruction, instead of archiving identical command rows twice.
+            original_rows = stimulus["geometryEvidence"]["schedule"]
+            require([{k: v for k, v in row.items() if k != "commands"} for row in original_rows]
+                    == [{k: v for k, v in row.items() if k != "commands"} for row in stimulus["schedule"]],
+                    "fixed Reload geometry/stimulus schedules diverged")
+            artifact = copy.deepcopy(stimulus)
+            artifact["geometryEvidence"].pop("schedule")
+            artifact["geometryEvidence"]["scheduleJsonPointer"] = "/schedule"
+            artifact["geometryEvidence"]["scheduleCommandOverrides"] = {
+                str(i): row["commands"] for i, row in enumerate(original_rows)
+                if row["commands"] != stimulus["schedule"][i]["commands"]}
+        self.artifacts.save(f"stimulus-{len(self.plans):02}.json", artifact)
         start = time.perf_counter_ns()
         require(start < integer(stimulus["source"]["validUntilNs"]), "initial mapping expired before ordinary input")
         self.initial_mapping_deadline = integer(stimulus["source"]["validUntilNs"])
@@ -1488,10 +1569,26 @@ class ReloadStimulus:
                 self.artifacts.event({"type": "passive_pose_dwell", "sample": index, "untilNs": due,
                                       "retainedCommandSequence": self.sequence})
             else:
+                if stimulus["stage"] == "EjectSpent":
+                    stimulus["tiltExpectedSample"] = sample
+                    # Each pose retains the last freshly admitted raw packet's
+                    # original lease through owner checks and publication.
+                    self.first_sample_pending = True
                 self.send(sample)
                 anchor_at, anchor_commit = at, self.last_commit
+            if stimulus["stage"] == "EjectSpent":
+                boundary = next(g for g in stimulus["boundaries"] if g["id"] == "fixed_tilt_current")
+                tilt_snapshot, _ = self.fresh(boundary=boundary, after_ns=self.last_write)
+                self.initial_mapping_deadline = self.geometry.source_deadline(tilt_snapshot, "fixed")
+                current = self.boundaries["fixed_tilt_current"]
+                if current["gate"]["caseEjected"]:
+                    # Same-case Insert/epoch/event was observed, so stop poses.
+                    self.boundaries["fixed_case_ejected"] = dict(current, boundary="fixed_case_ejected")
+                    break
             for boundary in stimulus["boundaries"]:
                 if boundary["afterSample"] == index:
+                    if stimulus["stage"] == "EjectSpent" and boundary["id"] == "fixed_tilt_current":
+                        continue
                     require(bool(boundary["holdGrip"]) == self.held_left, "boundary grip differs")
                     span = integer(boundary.get("minimumObservationSpanNs", 0))
                     self.pause_until(self.last_commit + span)
@@ -1503,10 +1600,14 @@ class ReloadStimulus:
         if stimulus["finishGrip"] == 1 and stimulus["stage"] not in ("SupplyPickup", "ShellPickup", "Pickup"):
             self.send(release_only=True)
         self.stage_deadline = self.deadline
+        if stimulus["stage"] == "EjectSpent":
+            self.right_rest_state = copy.deepcopy(self.state["handR"])
         self.plans[-1].update(stimulusCompleted=True, boundaryChecksPassed=len(self.boundaries) == len(stimulus["boundaries"]))
         return stimulus
 
     def run_stimulus(self):
+        if self.args.family == "fixed" and self.args.stage == "Reload":
+            return self.run_fixed_reload()
         pickup = None
         original_stage = self.args.stage
         if self.args.pickup_first:
@@ -1525,6 +1626,26 @@ class ReloadStimulus:
             self.mapping = snapshot
             self.execute(plan)
         require(not self.held_left, "standalone stimulus may not leave held custody; paired workflow required")
+
+    def run_fixed_reload(self):
+        """One shared owner/observer/invocation clock for every retained stage."""
+        self.fixed_reload = True
+        pickup, previous = None, None
+        for _ in range(5):
+            snapshot, _, plan = self.fresh(prepare=True, pickup=pickup, fixed_reload=True,
+                                           after_ns=self.last_commit or 0)
+            stage = plan["stage"]
+            allowed = {None: ("Open", "EjectSpent", "Pickup"), "Open": ("EjectSpent", "Pickup"),
+                       "EjectSpent": ("Pickup",), "Pickup": ("Insert",), "Insert": ("Close",)}
+            require(stage in allowed.get(previous, ()), "fixed Reload observed an unexpected stage transition")
+            self.args.stage, self.mapping = stage, snapshot
+            self.execute(plan)
+            if stage == "Close" or stage == "Insert" and integer(snapshot["fixedContainer"]["profile"]["kind"]) == 4:
+                require(not self.held_left, "completed fixed Reload retained left custody")
+                return
+            pickup = plan if stage == "Pickup" else None
+            previous = stage
+        raise Refusal("fixed Reload exceeded bounded stage count")
 
     def cleanup(self):
         if getattr(self, "motion_lease", None) is not None:

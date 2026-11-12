@@ -61,12 +61,19 @@ inline std::optional<interaction::HandInteractionKey> FixedContainerHandItem(con
     const WeaponModeFamilyProfile* family=nullptr;
     for(const auto& candidate:WeaponModeFamilies)if(m.family==&candidate){family=&candidate;break;}
     if(!family||!WeaponModeFamilyEligible(*family)||proof.owner!=b.owner||!m.selectedSecondary||
-       proof.observedNs<=0||proof.observedNs>now||proof.deadlineNs<=now||proof.deadlineNs-proof.observedNs>500000000||
+       proof.observedNs<=0||proof.observedNs>now||proof.deadlineNs<=now||proof.deadlineNs-proof.observedNs>WeaponModeCacheMaxAgeNs||
        m.inventory!=b.inventory||!m.persistent||m.persistent!=b.persistence||m.persistent==b.owner.weapon||
        !m.targetWeapon||m.targetWeapon==b.owner.weapon||m.targetWeapon==m.persistent||m.targetSlot>=9||
        !m.action||m.action!=m.primaryAction||family->secondaryConfiguration!=e->configurationPath||
        family->secondaryAsset!=e->asset||family->persistentId.empty())return {};
     return interaction::HandInteractionKey{m.persistent,hand.equipGeneration};
+}
+// An absent or invalid family is diagnostic absence, not a new source lease.
+// Serialization must retain this original deadline once the proof is used.
+inline std::optional<std::int64_t> FixedContainerFamilyDeadline(const FixedContainerBodyAmmo& f,
+    const interaction::HandInteractionOwner& hand,std::int64_t now)noexcept {
+    if(!f.family||!FixedContainerHandItem(f,hand,now))return {};
+    return f.family->deadlineNs;
 }
 inline std::optional<interaction::AmmoSupplySource> FixedContainerBodySource(const FixedContainerBodyAmmo& f,
     const interaction::HandInteractionSample& input,std::int64_t now)noexcept {

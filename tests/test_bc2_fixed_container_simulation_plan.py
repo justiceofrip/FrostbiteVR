@@ -86,7 +86,8 @@ def snapshot(kind=4, motion_kind="Hinge"):
         deadlineNs=NOW+70_000_000, counts=dict(loaded=0, reserve=7, capacity=1), coherentIdleVerified=True)
     t = dict(enabled=True, current=True, blocksFire=False, carried=False, pending=False, step=0 if kind == 3 else 2,
         lifetime=400, revision=10, gun=claim(source, 1, 1, dict(id=14, generation=18), dict(id=1, generation=14), 200),
-        hand=None, target=None, carriedSupply=None, pouchContact=False, grip=False)
+        hand=None, target=None, carriedSupply=None, pouchContact=False, grip=False,
+        spentCasePresent=False, spentCaseEpoch=0, spentCaseEjectedNs=0, spentCaseEjectionWorldMeters=None)
     raw = dict(valid=True, current=True, admittedAtTick=True, ownerMatches=True, rigMatches=True, profileMatches=True,
         rigFingerprint=profile["rigFingerprint"], input=copy.deepcopy(source), weaponFromWrist=f.identity(),
         weaponWorldMeters=copy.deepcopy(s["mapping"]["weaponWorldMeters"]), grip=False, pouchContact=False)
@@ -172,7 +173,8 @@ def physical_completed(acquired, stage, now=NOW+500_000_000, sequence=120):
     # while Release clears its claim, target and admittedAtTick gesture bit.
     s = refresh(acquired, now, sequence)
     x, t = s["fixedContainer"], s["fixedContainer"]["tracking"]
-    t.update(step=2 if stage == "Open" else 4, hand=None, target=None, carried=False, carriedSupply=None, pending=False)
+    t.update(step=(1 if t["spentCasePresent"] else 2) if stage == "Open" else 4,
+             hand=None, target=None, carried=False, carriedSupply=None, pending=False)
     t["blocksFire"] = s["weapon_actions_blocked"] = t["step"] != 4
     x["leftClaim"] = None
     x["raw"]["admittedAtTick"] = False

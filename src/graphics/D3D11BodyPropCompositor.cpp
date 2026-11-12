@@ -3,6 +3,7 @@
 #include "fvr/graphics/D3D11SceneDepthPair.h"
 #include "fvr/graphics/VehicleReticleAsset.h"
 #include "fvr/graphics/VehicleReticle.h"
+#include "fvr/graphics/SpentCaseAsset.h"
 #include <Windows.h>
 #include <d3d11.h>
 #include <wrl/client.h>
@@ -24,6 +25,7 @@ struct D3D11BodyPropCompositor::Impl {
     std::array<RigidPropGeometryKey,MaxBodyProps> uploaded{};
     std::shared_ptr<const BodyPropCatalog> catalog;
     BodyPropAsset reticle=MakeVehicleReticleAsset();
+    BodyPropAsset spentCase=MakeSpentCaseAsset();
     BodyPropComposeStats stats{};
 };
 D3D11BodyPropCompositor::D3D11BodyPropCompositor():impl_(std::make_unique<Impl>()){}
@@ -95,7 +97,7 @@ bool D3D11BodyPropCompositor::Compose(const BodyPropFrame& frame,const PairTicke
             }else if(!sceneDepth&&missingDepth==BodyPropMissingDepthPolicy::VehicleReticleOnly){
                 ++p.stats.depthOmittedInstances;continue;
             }
-            const BodyPropAsset* asset=reticle?&p.reticle:nullptr;
+            const BodyPropAsset* asset=reticle?&p.reticle:a.geometry==SpentCaseGeometry?&p.spentCase:nullptr;
             if(!asset)for(const auto& candidate:*p.catalog)if(candidate.key==a.geometry){asset=&candidate;break;}
             if(!asset){++p.stats.missing;continue;}
             if(p.uploaded[slot]!=asset->key){if(!p.renderers[slot]->Upload(asset->key,asset->sections)){++p.stats.failures;return false;}p.uploaded[slot]=asset->key;}

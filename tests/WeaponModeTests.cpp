@@ -79,6 +79,23 @@ struct Fixture {
 };
 }
 int main(){
+    // A fixed consumer can reach the last live cache milliseconds with a fresh
+    // 100 ms raw packet. Require a real native reread before publishing that
+    // frame, while keeping the original 500 ms observation boundary exact.
+    constexpr std::int64_t familyObserved=1000000000;
+    constexpr auto familyDeadline=familyObserved+bc2::WeaponModeCacheMaxAgeNs;
+    CHECK(bc2::WeaponModeCacheLeaseCovers(familyObserved,familyObserved,familyObserved+100000000));
+    CHECK(bc2::WeaponModeCacheLeaseCovers(familyObserved,familyDeadline-100000000,familyDeadline));
+    CHECK(!bc2::WeaponModeCacheLeaseCovers(familyObserved,familyDeadline-100000000,familyDeadline+1));
+    CHECK(!bc2::WeaponModeCacheLeaseCovers(familyObserved,familyDeadline-9354300,familyDeadline+90645700));
+    CHECK(bc2::WeaponModeCacheLeaseCovers(familyObserved,familyDeadline-1,familyDeadline));
+    CHECK(!bc2::WeaponModeCacheLeaseCovers(familyObserved,familyDeadline,familyDeadline));
+    CHECK(!bc2::WeaponModeCacheLeaseCovers(familyObserved,familyDeadline,familyDeadline+1));
+    CHECK(!bc2::WeaponModeCacheLeaseCovers(0,familyObserved,familyDeadline));
+    CHECK(!bc2::WeaponModeCacheLeaseCovers(familyObserved,familyObserved-1,familyDeadline));
+    CHECK(!bc2::WeaponModeCacheLeaseCovers(familyObserved,familyObserved,0));
+    CHECK(!bc2::WeaponModeCacheLeaseCovers(familyObserved,familyObserved,INT64_MAX));
+    CHECK(bc2::WeaponModeCacheLeaseCovers(INT64_MAX-500000000,INT64_MAX-1,INT64_MAX));
     // Every enrolled exact pair uses the same owner/link/reciprocal-route reader.
     // Shared asset labels and measured geometry never substitute for those checks.
     for(const auto& profile:bc2::WeaponModeFamilies){

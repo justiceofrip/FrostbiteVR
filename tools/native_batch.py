@@ -4,6 +4,7 @@ Invoke through Invoke-NativeBatch.ps1 so every
 write/build has fresh storage admission. This does not install or launch BC2.
 """
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 import argparse
 import hashlib
 import importlib.util
@@ -75,6 +76,129 @@ def git(root, *args):
     return subprocess.check_output(['git', '-C', str(root), *args], text=True).strip()
 
 
+def verify_host_source(c, baseline, proof, root):
+    """Default to the installed closure; a changed closure needs a pinned ROOT review."""
+    host = load(checked(c['host_source_receipt']))
+    old = load(checked(baseline['host_source_receipt']))
+    need(old['source_sha256'] == baseline['host_source_sha256'], 'Baseline host source digest differs')
+    need(host == proof.source_receipt(root, roots=('src/xr/OpenXrHost.cpp',)),
+         'Host dependency closure changed')
+    if 'host_source_update' not in c:
+        need(c['host_source_receipt'] == baseline['host_source_receipt'],
+             'This route retains the installed host closure; explicit host_source_update review required')
+        return host
+    review = load(checked(c['host_source_update']))
+    need(review['schema'] == 'fvr.normal-host-source-update.v1' and review['root_accepted'] is True,
+         'Explicit ROOT host source update review required')
+    need(review['source_commit'] == c['source_commit'] and review['source_sha256'] == c['source_sha256'],
+         'Host review final source differs')
+    need(review['baseline_receipt'] == c['baseline_receipt'] and
+         review['previous_host_source_receipt'] == baseline['host_source_receipt'] and
+         review['host_source_receipt'] == c['host_source_receipt'], 'Host review receipt pins differ')
+    installed = load(checked(review['installed_normal_receipt']))
+    need(installed['normal'] is True and installed['full_normal_builds'] is True and
+         installed['host_source_receipt'] == baseline['host_source_receipt'] and
+         installed['host_source_sha256'] == old['source_sha256'] and
+         review['previous_host_binary'] == installed['binaries']['host'], 'Installed normal host binding differs')
+    checked(review['previous_host_binary'])
+    need(review['full_normal_builds_required'] is True and review['native_capability_grants_changed'] is False and
+         c['operation_records_changed'] is False and c['normal_feature_grants_changed'] is False,
+         'Host update requires full normal builds without capability grant changes')
+    need(old['source_sha256'] != host['source_sha256'], 'Host update must change the source closure')
+    # Recipe/build wiring changes need their own review, not a graphics-source exemption.
+    for field in set(old) | set(host):
+        if field not in ('files', 'source_sha256'):
+            need(old.get(field) == host.get(field), 'Host closure metadata changed: ' + field)
+    before = {row['path']: row['sha256'] for row in old['files']}
+    after = {row['path']: row['sha256'] for row in host['files']}
+    need(len(before) == len(old['files']) and len(after) == len(host['files']), 'Duplicate host source file')
+    changes = [dict(relative_path=p, before_sha256=before.get(p), sha256=after.get(p))
+               for p in sorted(before.keys() | after.keys()) if before.get(p) != after.get(p)]
+    need(changes and review['changed_files'] == changes, 'Exact changed host closure file review required')
+    candidates = {row['relative_path']: row['sha256'] for row in c['candidate_files']}
+    need(len(candidates) == len(c['candidate_files']), 'Duplicate candidate file review')
+    for row in changes:
+        need(row['sha256'] is not None, 'Host source deletion requires separate review')
+        need(candidates.get(row['relative_path']) == row['sha256'], 'Host update missing from candidate file review')
+    return host
+
+
+def verify_updated_host_binary(c, baseline, binary):
+    if 'host_source_update' in c:
+        old = baseline['binaries']['host']
+        checked(old)
+        installed = load(checked(c['host_source_update']))['previous_host_binary']
+        checked(installed)
+        need(binary['sha256'] not in (old['sha256'], installed['sha256']),
+             'Changed host source requires a freshly built host binary')
+
+
+def verify_owner_release(c, now=None):
+    """Offline resource release preserves a failed session; it is not gameplay acceptance."""
+    need(c['owners_relinquished'] is True, 'ROOT must verify shared owners relinquished')
+    need(c['owner_evidence'], 'Actual owner-closure evidence required')
+    for row in c['owner_evidence']:
+        checked(row)
+    if 'offline_resource_release' not in c:
+        need(c['closure_and_restoration_verified'] is True,
+             'ROOT must verify shared-owner closure and restoration')
+        return
+    need(c['closure_and_restoration_verified'] is False,
+         'Offline resource release must not assert normal session closure')
+    release = load(checked(c['offline_resource_release']))
+    need(c['offline_resource_release'] in c['owner_evidence'], 'Offline release absent from owner evidence')
+    need(release['schema'] == 'fvr.root-offline-resource-release.v1' and release['root_accepted'] is True and
+         release['offline_build_only'] is True and release['gameplay_accepted'] is False and
+         release['headset_accepted'] is False, 'ROOT offline-only resource review required')
+    need(release['source_commit'] == c['source_commit'] and release['run'] == c['run'] and
+         release['root_leases'] == c['root_leases'], 'Offline release source/run/leases differ')
+    checked(release['root_leases'])
+    need(release['last_session'] in c['owner_evidence'], 'Failed session absent from owner evidence')
+    session_path = checked(release['last_session'])
+    session = load(session_path)
+    need(session['status'] == 'failed', 'Offline release must preserve the failed session')
+    for field in ('status', 'normal_game_close', 'native_retirement_proven'):
+        need(release[field] == session[field], 'Offline release relabels session outcome: ' + field)
+    for field in ('exact_three_profiles_restored', 'launcher_active_settings_preserved'):
+        need(session[field] is True and release[field] is True, 'Exact session restoration required')
+    def utc(value):
+        parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        need(parsed.utcoffset() == timedelta(0), 'UTC observation time required')
+        return parsed
+    observed, expires = utc(release['checked_utc']), utc(release['expires_utc'])
+    now = now or datetime.now(timezone.utc)
+    need(observed <= now < expires and timedelta(0) < expires - observed <= timedelta(hours=24),
+         'Fresh ROOT offline release required (maximum 24 hours)')
+    need(observed.timestamp() >= session_path.stat().st_mtime, 'Offline observation predates session result')
+    observation = load(checked(release['process_observation']))
+    need(observation['checked_utc'] == release['checked_utc'] and
+         observation['all_owned_processes_absent'] is True and observation['shared_build_processes_absent'] is True,
+         'Fresh exact process/resource absence observation required')
+    expected = {row['name']: row for row in session['processes']}
+    actual = {row['name']: row for row in observation['processes']}
+    need(expected and len(expected) == len(session['processes']) and
+         len(actual) == len(observation['processes']) and actual.keys() == expected.keys(),
+         'Exact complete session process observation required')
+    for name, row in actual.items():
+        prior = expected[name]
+        identity = row['identity']
+        need(identity == prior['identity'] and set(identity) == {'pid', 'start_utc', 'path'} and
+             type(identity['pid']) is int and identity['pid'] > 0 and Path(identity['path']).is_absolute(),
+             'Exact recorded process identity required: ' + name)
+        need(utc(identity['start_utc']) < observed and row['absent'] is True and row['replacement_process'] is None and
+             prior['exited'] is True and prior['exit_code'] == row['observed_exit_code'] == 0,
+             'Session process has not released resources: ' + name)
+    originals_path = checked(release['session_originals'])
+    need(originals_path == session_path.parent / 'originals.json', 'Same-session original restoration pins required')
+    originals = load(originals_path)
+    need(len(originals['profiles']) == 3 and len(originals['launcher']) == 2, 'Three profiles and two launcher files required')
+    expected_files = [row['original'] for key in ('profiles', 'launcher') for row in originals[key]]
+    need(len({row['path'] for row in expected_files}) == 5 and release['restoration'] == expected_files,
+         'Exact original profile/settings restoration pins required')
+    for row in release['restoration']:
+        checked(row)
+
+
 def context(path, digest):
     need(pin(path)['sha256'] == digest, 'Configuration hash differs')
     c = load(path)
@@ -88,11 +212,7 @@ def context(path, digest):
     for checkout in (root, Path(c['task_checkout'])):
         need(git(checkout, 'rev-parse', 'HEAD') == c['source_commit'], 'Checkout source differs')
         need(not git(checkout, 'status', '--porcelain', '--untracked-files=no'), 'Tracked checkout is dirty')
-    need(c['owners_relinquished'] is True and c['closure_and_restoration_verified'] is True,
-         'ROOT must verify shared-owner closure and restoration')
-    need(c['owner_evidence'], 'Actual owner-closure evidence required')
-    for row in c['owner_evidence']:
-        checked(row)
+    verify_owner_release(c)
     leases = load(checked(c['root_leases']))
     for name in ('COORDINATOR', 'INTEGRATION'):
         lease = leases[name]
@@ -124,9 +244,7 @@ def context(path, digest):
     need(Path(c['source_recipe']['path']).resolve() == root / 'tools/bc2_native_operation_receipts.py',
          'Source recipe must be the final repository recipe')
     operation = proof.verify_source(root, checked(c['source_receipt']), c['source_sha256'], header)
-    host = load(checked(c['host_source_receipt']))
-    need(host == proof.source_receipt(root, roots=('src/xr/OpenXrHost.cpp',)), 'Host dependency closure changed')
-    need(c['host_source_receipt'] == baseline['host_source_receipt'], 'This route retains the installed host closure')
+    host = verify_host_source(c, baseline, proof, root)
     need(c['candidate_files'], 'Explicit applied candidate file review required')
     changed = set(git(root, 'diff', '--name-only', baseline['built_source_commit'], c['source_commit']).splitlines())
     paths = {row['relative_path'] for row in c['candidate_files']}
@@ -324,9 +442,11 @@ def main():
         files = [pin(p) for p in sorted(directory.iterdir()) if p.is_file()]
         # Bind actual outputs now; Freeze rejects build-tree changes between tests and copying.
         files += [pin(p) for row in freeze_rows(root) if row[1] == arch for p in row[2:]]
+        if arch == 'x64':
+            verify_updated_host_binary(c, baseline, pin(root / 'build/x64/BC2XrHost.exe'))
         save(directory / 'receipt.json', dict(schema='fvr.native-batch-normal.v1', config=config_pin,
              architecture=arch, source_commit=c['source_commit'], source_sha256=c['source_sha256'],
-             normal=True, suites=names, flags=actual_flags, files=files))
+             host_source_receipt=c['host_source_receipt'], normal=True, suites=names, flags=actual_flags, files=files))
         return
     retained_normal_files = []
     if a.mode == 'freeze':
@@ -353,6 +473,8 @@ def main():
     records, files = [], [pin(p) for p in sorted(directory.iterdir()) if p.is_file()]
     files.extend(retained_normal_files)
     for key, arch, binary, pdb in freeze_rows(root, a.mode == 'verify-private'):
+        if key == 'host':
+            verify_updated_host_binary(c, baseline, pin(binary))
         pe, symbols = audit.pe_identity(binary, arch), audit.pdb_identity(pdb, audit.pe_identity(binary, arch)['image_size'])
         need((pe['guid'], pe['age']) == (symbols['guid'], symbols['age']), 'PE/PDB mismatch: ' + key)
         pair = dict(key=key, architecture=arch, pe=pe, symbols=symbols)
@@ -366,6 +488,7 @@ def main():
         records.append(pair)
     save(directory / 'receipt.json', dict(schema='fvr.native-batch-artifacts.v1', config=config_pin,
          source_commit=c['source_commit'], source_sha256=c['source_sha256'], normal=a.mode == 'freeze',
+         host_source_receipt=c['host_source_receipt'],
          private_campaign_provisioning=a.mode == 'verify-private', runtime_default_enabled=False,
          prerequisite_receipts=normal_receipts, artifacts=records, files=files,
          reused_private_focused_evidence=c['reused_private_focused_evidence'] if a.mode == 'verify-private' else [],

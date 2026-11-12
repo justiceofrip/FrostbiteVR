@@ -3075,6 +3075,10 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
         if(o.view&&AmmoResourceViewFresh(*o.view,now))
             until=std::min({until,o.view->binding.deadlineNs,o.view->snapshot.deadlineNs});
         if(o.raw.valid&&feed_presentation_detail::Window(o.raw.input,now))until=std::min(until,o.raw.input.deadlineNs);
+        // Fresh ammunition cannot extend the joined physical family's lease.
+        const auto& t=o.tracking;
+        if(t.source.equipment==fixedEquipment&&t.source.binding.owner==m.owner&&t.input.owner==m.inputEvidence.owner)
+            if(const auto familyUntil=FixedContainerFamilyDeadline(t.source,t.input.owner,now))until=std::min(until,*familyUntil);
     }
     std::ostringstream json;json.imbue(std::locale::classic());json<<std::setprecision(9)<<std::boolalpha;
     const auto text=[&](std::string_view s){json<<'"';for(const unsigned char c:s){

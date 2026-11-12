@@ -247,9 +247,12 @@ class FixedContainerDriver(shared.PumpDriver):
     def reload(self):
         snapshot, _, _ = self.fresh_available()
         step = integer(snapshot["fixedContainer"]["tracking"]["step"])
+        require(step != 1, "spent-case EjectSpent requires the shared drive_bc2_reload_stimulus.py --family fixed --stage Reload path")
         require(step in (0, 2), "reload starts only from actual unopened/insert-ready empty loader")
         if step == 0:
             self.stage("Open", initial_snapshot=snapshot)
+            require(integer(self.latest_snapshot["fixedContainer"]["tracking"]["step"]) != 1,
+                    "opening exposed spent-case debt; continue with shared drive_bc2_reload_stimulus.py --family fixed --stage Reload")
         pickup = self.stage("Pickup", initial_snapshot=snapshot if step == 2 else None)
         self.stage("Insert", pickup)
         if integer(self.latest_snapshot["fixedContainer"]["profile"]["kind"]) == 3:
@@ -299,12 +302,35 @@ class SelectedAmmoDriver(FixedContainerDriver):
                       and x.get('view') is None)
                      or (x.get('available') is True and 'view' in x and x['view'] is None)))
 
+    def single_trigger_pulse(self, pulse_ns=100_000_000, source_deadline=None):
+        delivery = super().single_trigger_pulse(pulse_ns, source_deadline)
+        if 'pulseTransport' in delivery:
+            # Set only after the pinned runtime's ACK and natural-neutral proof
+            # complete. A two-line press alone never authorizes observation.
+            self.selected_timed_release = (self.sequence, self.last_write,
+                                           self.last_commit, delivery['releaseCommittedNs'])
+        return delivery
+
+    def selected_release_observed_ns(self):
+        timed = getattr(self, 'selected_timed_release', None)
+        return timed[3] if timed is not None else self.last_write
+
     def check_post_shot_observation_owner(self):
-        require(self.active_plan is None and self.demand_finished and self.commands == 4
+        timed = getattr(self, 'selected_timed_release', None)
+        numeric_release = (self.commands == 4 and timed is None
+                           and self.pending_batch == ['trigger r 0', self.sentinel])
+        timed_release = (timed is not None and self.commands == 2
+                         and getattr(self, 'timed_trigger_supported', False)
+                         and getattr(self, '_single_trigger_used', False)
+                         and timed[:3] == (self.sequence, self.last_write, self.last_commit)
+                         and self.last_commit is not None and self.last_commit <= timed[3]
+                         and self.pending_batch == [transport.TIMED_TRIGGER_COMMAND, self.sentinel])
+        require(self.active_plan is None and self.demand_finished and (numeric_release or timed_release)
                 and self.motion_started is None and not self.pending_command and not self.unsafe_owner
                 and not (self.held_left or self.held_right or self.held_trigger or self.held_buttons)
+                and getattr(self, 'timed_trigger', None) is None
                 and self.last_commit is not None and self.last_commit >= self.last_write
-                and self.pending_batch == ['trigger r 0', self.sentinel],
+                and self.selected_release_observed_ns() <= time.perf_counter_ns(),
                 'Selected ammunition observation requires one acknowledged ordinary shot/release')
         self.bounds(time.perf_counter_ns())
         state = self.read_state()
@@ -370,7 +396,7 @@ class SelectedAmmoDriver(FixedContainerDriver):
                 'Selected ammunition observation GunHold root changed')
 
     def fresh_available(self):
-        if self.commands != 4 or not self.demand_finished:
+        if self.commands == 0 or not self.demand_finished:
             return super().fresh_available()
         require(not getattr(self, 'post_shot_observation_started', False),
                 'Selected ammunition post-shot observation already attempted')
@@ -397,7 +423,7 @@ class SelectedAmmoDriver(FixedContainerDriver):
                         and now < self.snapshot_source_deadline(snapshot),
                         'Selected ammunition observation consumed original response/source deadline')
                 self.admit_selected_frame(snapshot, now, integer(snapshot['nonce']))
-                require(integer(snapshot['input_evidence']['observedNs']) >= self.last_write
+                require(integer(snapshot['input_evidence']['observedNs']) >= self.selected_release_observed_ns()
                         and integer(snapshot['shot_input_generation']) > integer(self.reference['shot_input_generation'])
                         and all(h['squeeze'] == h['trigger'] == h['held'] == h['stickX'] == h['stickY'] == 0
                                 for h in snapshot['input']['hands']),

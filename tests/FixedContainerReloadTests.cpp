@@ -16,7 +16,7 @@ struct Fixture {
     AmmoResourceContext context{{1,2,3,4},5,6};FeedKey mechanism{7,8},binding{9,10};
     FeedSupplyKey supply{{11,12},{}};
     bool heldClaim=false;
-    Fixture(FixedContainerKind kind=FixedContainerKind::Cylinder,int loaded=2,int reserve=4){
+    Fixture(FixedContainerKind kind=FixedContainerKind::Cylinder,int loaded=2,int reserve=4,bool guided=false){
         profile.kind=kind;profile.id=20;profile.revision=21;profile.ammunitionKind=22;
         profile.capacity=kind==FixedContainerKind::SingleRoundBreech||kind==FixedContainerKind::SingleRoundMuzzle?
             1:kind==FixedContainerKind::Cylinder?6:8;
@@ -36,6 +36,7 @@ struct Fixture {
             m.kind=FeedMotionKind::FreePlacement;m.placement.weaponFromSource=Identity();
             m.placement.weaponFromDestination=Identity();m.placement.weaponFromDestination.values[3][0]=.1f;
             m.placement.sourceFromGrip=Identity();}
+        if(guided){profile.insertionGuidance={.06f,.14f,.02f};profile.geometry[2].motion.retainWhileGripped=true;}
         x.ammunition={context,1,1000,2000,{loaded,reserve,profile.capacity},true};
         x.input={{1,2,5,6},1,1000,2000,1000,true,{true,true},{false,false}};
         x.held=true;x.weaponFromContact=Identity();x.interaction.hand={44,1};x.interaction.trackingGeneration=1;
@@ -223,6 +224,71 @@ int MuzzleRequiresOnlyMeasuredInsertionAndRejectsClipOrBreechPolicy(){
         empty.x.finishLoading=true;const auto stopped=empty.Run();
         CHECK(stopped.status==Status::NoAmmunition&&stopped.step==Step::Insert&&!stopped.dispatch);
         CHECK(!empty.reload->Pending()&&empty.ledger.Snapshot().counts==counts);
+    }return 0;
+}
+FixedContainerResult GuidedPose(Fixture& f,float progress,float angle,bool grip=true){
+    f.Tick(progress,grip);auto& pose=f.x.interaction.contact.weaponFromHandContact;
+    const auto c=std::cos(angle),s=std::sin(angle);
+    pose.values[0][0]=pose.values[1][1]=c;pose.values[0][1]=s;pose.values[1][0]=-s;
+    if(!grip){f.x.input.released[0]=true;const auto r=f.reload->Update(f.x,f.hands);f.heldClaim=false;return r;}
+    f.Renew();return f.reload->Update(f.x,f.hands);
+}
+int GuidedFixedRoundsRequireFreshInwardTravelAndRelease(){
+    for(const auto kind:{FixedContainerKind::SingleRoundBreech,FixedContainerKind::SingleRoundMuzzle}){
+        Fixture f(kind,0,2,true);CHECK(fixed_container_detail::Profile(f.profile));
+        if(kind==FixedContainerKind::SingleRoundBreech){CHECK(f.reload->Step()==Step::Open&&f.Acquire());CHECK(f.Finish().step==Step::Insert);}
+        CHECK(f.Acquire());const auto token=f.claim;
+        // A natural wrist can be far outside the old exact alignment cone.
+        for(unsigned n=1;n<=7;++n)CHECK(!GuidedPose(f,.2f,float(n)*.2f).dispatch);
+        const auto captured=GuidedPose(f,.5f,1.4f);CHECK(captured.interaction.target&&!captured.dispatch);
+        for(unsigned n=0;n<8;++n){const auto held=GuidedPose(f,.5f,1.4f+float(n)*.1f);
+            CHECK(held.interaction.status==FeedInteractionStatus::Moving&&!held.dispatch);
+            CHECK(feed_interaction_detail::Distance(*held.interaction.target,f.profile.geometry[2].motion.placement.weaponFromDestination)>.04);}
+        CHECK(!f.reload->Pending()&&f.hands.Current(InteractionHand::Left)->token==token);
+        CHECK(GuidedPose(f,.6f,2.1f).interaction.status==FeedInteractionStatus::Moving);
+        for(unsigned n=0;n<4;++n){const auto held=GuidedPose(f,.7f,2.1f);
+            CHECK(held.interaction.status==FeedInteractionStatus::Endpoint&&!held.dispatch);
+            CHECK(held.interaction.target->values==f.profile.geometry[2].motion.placement.weaponFromDestination.values);}
+        CHECK(!f.reload->Update(f.x,f.hands).dispatch); // Duplicate pose cannot dispatch.
+        const auto sent=GuidedPose(f,.7f,2.1f,false);CHECK(sent.dispatch&&f.reload->Pending()==sent.dispatch);
+        CHECK((sent.dispatch->ammunition.before==AmmunitionCounts{0,2,1}));
+        CHECK((sent.dispatch->ammunition.after==AmmunitionCounts{1,1,1}));
+        CHECK(!f.Run().dispatch&&f.Complete(*sent.dispatch));
+        CHECK(f.reload->Step()==(kind==FixedContainerKind::SingleRoundBreech?Step::Close:Step::Complete));
+    }return 0;
+}
+int GuidedFixedRoundsWithdrawWithoutDroppingCustody(){
+    for(const auto kind:{FixedContainerKind::SingleRoundBreech,FixedContainerKind::SingleRoundMuzzle}){
+        Fixture f(kind,0,2,true);
+        if(kind==FixedContainerKind::SingleRoundBreech){CHECK(f.Acquire());CHECK(f.Finish().step==Step::Insert);}
+        CHECK(f.Acquire());const auto token=f.claim;
+        GuidedPose(f,.2f,0);GuidedPose(f,.5f,0);GuidedPose(f,.7f,0);
+        for(unsigned n=0;n<4;++n)GuidedPose(f,.7f,0);
+        const auto withdrawn=GuidedPose(f,.4f,0);
+        CHECK(withdrawn.interaction.status==FeedInteractionStatus::Moving&&!withdrawn.dispatch);
+        CHECK(f.hands.Current(InteractionHand::Left)->token==token&&!f.reload->Pending());
+        CHECK(!GuidedPose(f,.4f,0,false).dispatch);
+        CHECK((f.ledger.Snapshot().counts==AmmunitionCounts{0,2,1}));
+    }
+    Fixture early(FixedContainerKind::SingleRoundMuzzle,0,2,true);CHECK(early.Acquire());
+    GuidedPose(early,.2f,0);GuidedPose(early,.5f,0);
+    for(unsigned n=0;n<8;++n)GuidedPose(early,.5f,0);
+    CHECK(!GuidedPose(early,.5f,0,false).dispatch&&!early.reload->Pending());
+    auto invalid=early.profile;invalid.kind=FixedContainerKind::EnBlocClip;CHECK(!fixed_container_detail::Profile(invalid));
+    invalid=early.profile;invalid.insertionGuidance.inwardTravelMeters=0;CHECK(!fixed_container_detail::Profile(invalid));
+    invalid=early.profile;invalid.insertionGuidance.retentionRadiusMeters=.01f;CHECK(!fixed_container_detail::Profile(invalid));
+    return 0;
+}
+int GuidedFixedRoundSafetyCannotCompleteContact(){
+    for(const bool foreign:{false,true}){
+        Fixture f(FixedContainerKind::SingleRoundMuzzle,0,2,true);CHECK(f.Acquire());
+        GuidedPose(f,.2f,0);GuidedPose(f,.5f,0);GuidedPose(f,.7f,0);
+        for(unsigned n=0;n<4;++n)GuidedPose(f,.7f,0);
+        f.Tick(.7f,false);f.x.input.released[0]=true;
+        if(foreign)++f.x.input.owner.equipGeneration;else f.x.input.tracked[0]=false;
+        const auto lost=f.reload->Update(f.x,f.hands);CHECK(!lost.dispatch&&!f.reload->Pending());
+        CHECK((f.ledger.Snapshot().counts==AmmunitionCounts{0,2,1}));
+        CHECK(!f.hands.Current(InteractionHand::Left)&&f.reload->Step()==Step::Insert);
     }return 0;
 }
 int MuzzlePartialInsertionAndPendingStowRequireExactReceipt(){
@@ -549,6 +615,9 @@ int FreshArmedInsertionKeepsExactSourceAndNeutral(){
 }
 
 int main(){if(FixedPolicyRejectionDiagnostics())return 1;
+    CHECK(GuidedFixedRoundsRequireFreshInwardTravelAndRelease()==0);
+    CHECK(GuidedFixedRoundsWithdrawWithoutDroppingCustody()==0);
+    CHECK(GuidedFixedRoundSafetyCannotCompleteContact()==0);
     CHECK(FreshArmedInsertionKeepsExactSourceAndNeutral()==0);
     CHECK(HeldContactGapRetainsOnlyCustody()==0);
     CHECK(HeldContactGapRejectsExpiredOrForeignClaims()==0);

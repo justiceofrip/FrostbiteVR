@@ -1,4 +1,5 @@
 #include "Bc2PhysicalFixedContainer.h"
+#include "fvr/interaction/SpentCaseEjection.h"
 #include <algorithm>
 #include <iomanip>
 #include <limits>
@@ -21,6 +22,16 @@ bool Near(const math::Matrix4& a,const math::Matrix4& b,const FixedContainerGeom
     return feed_mechanism_detail::Pose(a)&&feed_mechanism_detail::Pose(b)&&
         feed_interaction_detail::Distance(a,b)<=(std::max)(g.contact.radiusMeters,g.motion.acquisitionRadiusMeters)&&
         (g.contact.orientation==FeedContactOrientation::Acquired||feed_interaction_detail::Angle(a,b)<=g.contact.maxAngleRadians);
+}
+FixedContainerProfile Profile(const FixedContainerEquipmentProfile& e)noexcept {
+    auto p=FixedContainerInteractionProfile(e);
+    if(p.kind==FixedContainerKind::SingleRoundBreech||p.kind==FixedContainerKind::SingleRoundMuzzle){
+        // Verified destination and authored grip stay exact. This is contact
+        // assistance for the carried round, not a guessed native bore rail.
+        p.insertionGuidance={.06f,.14f,.02f};
+        p.geometry[unsigned(FixedContainerStep::Insert)].motion.retainWhileGripped=true;
+    }
+    return p;
 }
 }
 struct Bc2PhysicalFixedContainer::Slot {
@@ -46,6 +57,14 @@ struct Bc2PhysicalFixedContainer::Slot {
     std::optional<FixedContainerRequest> physicalRequest;
     std::optional<Bc2FixedContainerCompletionObservation> lastCompletion;
     std::optional<Bc2FixedContainerReleaseObservation> lastRelease;
+    std::optional<SpentCaseEjection> spentCase;
+    void PublishSpentCase(Bc2FixedContainerTracking& t)const noexcept {
+        if(!spentCase)return;
+        t.spentCasePresent=spentCase->Present();t.spentCaseEpoch=spentCase->Epoch();
+        if(const auto& e=spentCase->Ejected()){
+            t.spentCaseEjectionWorldMeters=e->worldMeters;t.spentCaseEjectedNs=e->observedNs;
+        }
+    }
 };
 Bc2PhysicalFixedContainer::Bc2PhysicalFixedContainer(bool enabled,Bc2PhysicalFixedContainerApi api)noexcept:enabled_(enabled),api_(api){}
 Bc2PhysicalFixedContainer::~Bc2PhysicalFixedContainer()=default;
@@ -53,6 +72,7 @@ void Bc2PhysicalFixedContainer::Cancel(const HandInteractionSample& input,HandIn
     if(!active_)return;
     if(active_->hand){(void)hands.Release(input,active_->hand->token,cause);active_->hand.reset();}
     if(active_->policy)active_->policy->Suspend();
+    if(active_->spentCase)active_->spentCase->Suspend();
     if(active_->releaseWait&&active_->lastRelease&&!active_->lastRelease->policyUpdated){
         active_->lastRelease->input=input;active_->lastRelease->stage=Bc2FixedContainerReleaseStage::Cancelled;
     }
@@ -87,6 +107,33 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
     const auto cause=[&](HandReleaseSite site)noexcept {
         return HandReleaseCause{site,static_cast<std::uint8_t>(rejection)};
     };
+    // Passive consumption observation needs the exact selected native resource,
+    // not a manual-reload hand claim. Record full->empty before cancellation or
+    // missing GunHold can stop physical work; this grants no interaction lease.
+    std::optional<AmmoResourceView> view;
+    Slot* slot=nullptr;
+    if(enabled_&&api_.read&&e&&e==FindFixedContainerEquipment(s.configurationPath,s.mesh,s.rigFingerprint)&&s.input.nowNs>0){
+        view=api_.read(api_.context,s.nativeOwner,s.input.nowNs);
+        if(view&&view->binding.owner==s.nativeOwner&&AmmoResourceViewFresh(*view,s.input.nowNs)&&
+           e->interaction.kind==FixedContainerKind::SingleRoundBreech&&view->snapshot.counts.capacity==1&&e->parts.size()<=16){
+            for(auto& item:slots_)if(item&&item->binding.context.resource==view->binding.context.resource){slot=item.get();break;}
+            if(!slot)for(auto& item:slots_)if(!item){
+                try{item=std::make_unique<Slot>();}catch(...){break;}
+                slot=item.get();slot->equipment=e;slot->binding=view->binding;slot->handOwner=s.input.owner;
+                slot->spentCase.emplace(view->binding.context.resource);
+                for(unsigned n=0;n<e->parts.size();++n)slot->parts[n]=e->parts[n].weaponFromClosed;
+                break;
+            }
+            if(slot&&slot->equipment==e&&slot->spentCase){
+                const bool inFlight=slot->request||slot->physicalRequest||view->command||
+                    view->phase!=AmmunitionLedgerPhase::Ready||view->requestState==AmmoResourceRequestState::Queued||
+                    view->requestState==AmmoResourceRequestState::Dispatched||view->requestState==AmmoResourceRequestState::Uncertain;
+                (void)slot->spentCase->Observe(view->snapshot,s.input.nowNs,inFlight);
+                observedSlot=slot;
+            }
+        }
+    }
+    if(s.observation)s.observation->view=view;
     if(rejected(!enabled_,FixedContainerReleaseRejection::Disabled)||
        rejected(!api_.read,FixedContainerReleaseRejection::ReadUnavailable)||
        rejected(!api_.withLedger,FixedContainerReleaseRejection::LedgerUnavailable)||
@@ -100,8 +147,6 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
        rejected(!Fresh(s.input,s.input.nowNs),FixedContainerReleaseRejection::InputNotFresh)){
         Cancel(s.input,hands,cause(HandReleaseSite::FixedAdmission));return out;
     }
-    const auto view=api_.read(api_.context,s.nativeOwner,s.input.nowNs);
-    if(s.observation)s.observation->view=view;
     const auto physical=view?FixedContainerHandItem({e,view->binding,view->snapshot,s.family},s.input.owner,s.input.nowNs):std::nullopt;
     if(rejected(!view,FixedContainerReleaseRejection::ViewMissing)||
        rejected(view->binding.owner!=s.nativeOwner,FixedContainerReleaseRejection::ViewOwner)||
@@ -116,8 +161,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
        rejected(gun->token.owner!=s.input.owner,FixedContainerReleaseRejection::GunOwner)||
        rejected(gun->inputSequence!=s.input.sequence,FixedContainerReleaseRejection::GunInput)||
        rejected(gun->deadlineNs<=s.input.nowNs,FixedContainerReleaseRejection::GunExpired)){Cancel(s.input,hands,cause(HandReleaseSite::FixedGunHold));return out;}
-    Slot* slot=nullptr;
-    for(auto& item:slots_)if(item&&item->binding.context.resource==view->binding.context.resource){slot=item.get();break;}
+    if(!slot)for(auto& item:slots_)if(item&&item->binding.context.resource==view->binding.context.resource){slot=item.get();break;}
     if(slot&&slot->equipment!=e){Cancel(s.input,hands,{HandReleaseSite::FixedProfileChanged});return out;}
     if(!slot){
         for(auto& item:slots_)if(!item){
@@ -267,6 +311,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
     }
     if(beforePublication!=FixedContainerGateResult::Published&&
        !(beforePublication==FixedContainerGateResult::Busy&&continueHeld(beforeGate))){
+        if(slot->spentCase)slot->spentCase->Suspend();
         if(releaseAttempt)releaseAttempt->stage=Bc2FixedContainerReleaseStage::GateUnavailable;
         slot->releaseWait.reset();
         slot->acceptedGate.reset();slot->supportNeutral.reset();out.blocksFire=priorBlocked;
@@ -286,7 +331,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
         }
         auto contact=slot->target;
         if(contact&&slot->handFromContact)contact=Multiply(*slot->handFromContact,*contact);
-        const auto profile=FixedContainerInteractionProfile(*e);
+        const auto profile=Profile(*e);
         const bool captured=reservation.captureInput&&rawFresh&&raw.grip&&!raw.input.released[0]&&contact&&
             Near(raw.weaponFromWrist,*contact,profile.geometry[unsigned(slot->targetStep)])&&
             raw.recoverySequence==reservation.captureInput&&raw.input.sequence>=reservation.captureInput&&
@@ -330,6 +375,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
         t.hand=t.enabled?slot->hand:std::nullopt;t.lifetime=slot->lifetime;t.revision=slot->revision;
         t.blocksFire=out.blocksFire=slot->policy->BlocksFire();t.step=slot->policy->Step();t.targetStep=slot->targetStep;
         t.parts=slot->parts;t.partCount=unsigned(e->parts.size());t.grip=s.grip;
+        slot->PublishSpentCase(t);
         if(t.enabled){t.target=slot->target;
             if(t.target&&slot->handFromContact)t.target=Multiply(*slot->handFromContact,*t.target);}
         out.mechanismOwnsHand=t.enabled;out.status=FixedContainerStatus::Suspended;
@@ -348,7 +394,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
     Work work{this,slot,&s,&*view,&terminal,&hands,&intent,rawFresh,beforePublication==FixedContainerGateResult::Published,cause(HandReleaseSite::FixedRaw),&result,&dispatch,&releaseEvidence,releaseAttempt};
     const bool updated=api_.withLedger(api_.context,view->binding,s.input.owner,&work,[](void* opaque,AmmunitionLedger& ledger)noexcept {
         auto& w=*static_cast<Work*>(opaque);auto& self=*w.self;auto& z=*w.slot;const auto& x=*w.sample;const auto& v=*w.view;auto& h=*w.hands;
-        const auto profile=FixedContainerInteractionProfile(*z.equipment);const auto now=x.input.nowNs;
+        const auto profile=Profile(*z.equipment);const auto now=x.input.nowNs;
         if(z.ledger&&z.ledger!=&ledger)return false;
         if(!z.policy){
             try{z.policy=std::make_unique<FixedContainerReload>(profile,v.binding.context,FeedKey{profile.id,z.lifetime},
@@ -382,6 +428,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
             z.binding.data==v.binding.data&&z.binding.persistence==v.binding.persistence&&z.handOwner==x.input.owner;
         if(z.binding.context!=v.binding.context||z.handOwner!=x.input.owner){
             if(!z.policy->RebindContext(v.snapshot,x.input.owner,now,x.weapon))return false;
+            if(z.spentCase)z.spentCase->Suspend();
             z.hand.reset();z.target.reset();z.handFromContact.reset();z.completedHold=false;z.handOwner=x.input.owner;z.recoveryPrepared=false;z.supportNeutral.reset();
         }
         z.binding=v.binding;
@@ -392,6 +439,8 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
                 FeedKey{profile.id,profile.revision},z.supply,z.lifetime,ledger,true,x.input.owner,x.weapon);}catch(...){return false;}
             if(!z.policy->Bind(v.snapshot,now))return false;z.lastRaw=0;z.restart=false;z.seedNeutral=true;z.supportNeutral.reset();
         }
+        if(z.spentCase&&z.policy->Step()==FixedContainerStep::Open)
+            (void)z.policy->SetSpentCasePresent(z.spentCase->Present());
         if(z.completedHold&&(!z.hand||!x.grip||x.input.released[0]||!h.Current(InteractionHand::Left)||
            h.Current(InteractionHand::Left)->token!=z.hand->token)){
             if(z.hand){(void)h.Release(x.input,z.hand->token,{HandReleaseSite::FixedGrip});z.hand.reset();}
@@ -400,6 +449,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
         if(!w.rawFresh||x.raw.input.sequence<=z.lastRaw){
             if(w.releaseAttempt)w.releaseAttempt->stage=w.rawFresh?Bc2FixedContainerReleaseStage::DuplicateRaw:Bc2FixedContainerReleaseStage::RawRejected;
             if(!w.rawFresh){
+                if(z.spentCase)z.spentCase->Suspend();
                 z.releaseWait.reset();
                 z.target.reset();z.handFromContact.reset();z.completedHold=false;z.recoveryPrepared=false;z.supportNeutral.reset();
                 // The current native view, owner and GunHold were admitted
@@ -437,6 +487,26 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
             // Only a fresh actual neutral may arm the next operation below.
         }
         auto step=z.policy->Step();if(step==FixedContainerStep::Complete)return true;
+        if(step==FixedContainerStep::EjectSpent&&profile.kind==FixedContainerKind::SingleRoundBreech){
+            // This stage deliberately bypasses absent generated geometry[1].
+            // The case's +Z outward axis and tilt are explicit mod policy.
+            w.result->step=step;w.result->status=FixedContainerStatus::NeedNeutral;
+            const auto local=FixedContainerSpentCasePose(*z.equipment,std::span(z.parts).first(z.equipment->parts.size()));
+            const auto held=h.Current(InteractionHand::Left),gun=h.Current(InteractionHand::Right);
+            const bool hands=gun&&gun->token.kind==HandClaimKind::GunHold&&gun->token.item==x.weapon&&
+                gun->token.owner==x.input.owner&&gun->inputSequence==x.input.sequence&&gun->deadlineNs>now&&
+                h.HasRecordedEvidence(r.input,InteractionHand::Left)&&!held&&!z.hand;
+            if(z.spentCase&&local&&w.allowAcquire){
+                const SpentCaseTiltSample tilt{v.binding.context,original,x.input,Multiply(*local,r.weaponWorldMeters),
+                    true,!r.grip&&!x.grip,hands};
+                if(const auto event=z.spentCase->Tilt(tilt);event&&z.policy->CompleteSpentEjection(v.snapshot,original,x.input,h)){
+                    (void)z.spentCase->Commit(*event,now);z.seedNeutral=true;z.target.reset();z.handFromContact.reset();
+                    z.supportNeutral.reset();z.recoveryPrepared=false;z.targetStep=FixedContainerStep::Insert;
+                    w.result->step=FixedContainerStep::Insert;w.result->status=FixedContainerStatus::PhysicalStep;
+                }
+            }else if(z.spentCase)z.spentCase->Suspend();
+            z.lastRaw=original.sequence;return true;
+        }
         const auto index=unsigned(step);const auto& g=profile.geometry[index];auto motion=g.motion;
         auto expected=Contact(motion);
         const auto recovery=z.policy->RecoveryMotion();
@@ -605,6 +675,7 @@ Bc2PhysicalFixedContainerResult Bc2PhysicalFixedContainer::Tick(const Bc2Physica
     if(slot->releaseWait)t.hand.reset(); // Retained release evidence is not a live hand claim.
     t.blocksFire=out.blocksFire;t.carried=slot->carried;t.pending=bool(slot->request);t.step=slot->policy->Step();t.targetStep=slot->targetStep;
     t.lifetime=slot->lifetime;t.revision=slot->revision;t.target=slot->target;t.carriedSupply=slot->carriedSupply;t.parts=slot->parts;t.partCount=unsigned(e->parts.size());
+    slot->PublishSpentCase(t);
     if(t.target&&t.targetStep!=FixedContainerStep::Insert&&slot->handFromContact)
         t.target=Multiply(*slot->handFromContact,*t.target);
     t.grip=s.grip;t.gripPressed=s.gripPressed;
@@ -699,9 +770,11 @@ void WriteFixedContainerObservation(std::ostream& out,const Bc2FixedContainerObs
             out<<",\"replacement\":";identity(a.replacement);out<<",\"pending\":";if(a.pending)command(*a.pending);else out<<"null";
             out<<",\"retiredItems\":"<<a.retiredItems<<",\"nativeDispatched\":"<<a.nativeDispatched<<'}';}out<<'}';};
     out<<"true,\"observationOnly\":true,\"retainedEventsAreHistorical\":true,\"owner\":";nativeOwner(o.owner);out<<",\"input\":";evidence(o.input);
-    const auto& p=e->interaction;
+    const auto& p=e->interaction;const auto guidance=Profile(*e).insertionGuidance;
     out<<",\"status\":"<<unsigned(o.status)<<",\"profile\":{\"id\":"<<p.id<<",\"revision\":"<<p.revision<<",\"kind\":"<<unsigned(p.kind)
         <<",\"ammunitionKind\":"<<p.ammunitionKind<<",\"capacity\":"<<p.capacity<<",\"roundsPerInsertion\":"<<p.roundsPerInsertion<<",\"maxAgeNs\":"<<p.maxAgeNs
+        <<",\"insertionGuidance\":{\"captureRadiusMeters\":"<<guidance.captureRadiusMeters
+        <<",\"retentionRadiusMeters\":"<<guidance.retentionRadiusMeters<<",\"inwardTravelMeters\":"<<guidance.inwardTravelMeters<<'}'
         <<",\"configurationPath\":";text(e->configurationPath);out<<",\"meshPath\":";text(e->mesh);out<<",\"rigFingerprint\":"<<e->rigFingerprint<<",\"geometry\":[";
     for(unsigned n=0;n<p.geometry.size();++n){if(n)out<<',';
         if(((p.kind==FixedContainerKind::SingleRoundMuzzle||p.kind==FixedContainerKind::EnBlocClip)&&n!=2)||
@@ -721,6 +794,14 @@ void WriteFixedContainerObservation(std::ostream& out,const Bc2FixedContainerObs
         <<",\"carried\":"<<t.carried<<",\"pending\":"<<t.pending<<",\"step\":"<<unsigned(t.step)<<",\"targetStep\":"<<unsigned(t.targetStep)
         <<",\"lifetime\":"<<t.lifetime<<",\"revision\":"<<t.revision<<",\"gun\":";claim(t.gun);out<<",\"hand\":";if(t.hand)claim(*t.hand);else out<<"null";
     out<<",\"target\":";if(t.target)matrix(*t.target);else out<<"null";out<<",\"carriedSupply\":";if(t.carriedSupply)matrix(*t.carriedSupply);else out<<"null";
+    out<<",\"spentCasePresent\":"<<t.spentCasePresent<<",\"spentCaseEpoch\":"<<t.spentCaseEpoch
+        <<",\"spentCaseEjectedNs\":"<<t.spentCaseEjectedNs<<",\"spentCaseEjectionWorldMeters\":";
+    if(t.spentCaseEjectionWorldMeters)matrix(*t.spentCaseEjectionWorldMeters);else out<<"null";
+    out<<",\"spentCasePoseWeaponMeters\":";
+    const auto casePose=t.partCount<=t.parts.size()?FixedContainerSpentCasePose(*e,std::span(t.parts).first(t.partCount)):std::nullopt;
+    if(casePose)matrix(*casePose);else out<<"null";
+    out<<",\"spentCasePolicy\":{\"modOwned\":true,\"outwardAxis\":[0,0,1],\"maximumWorldUpDot\":"<<SpentCaseTiltUpDotLimit
+        <<",\"dwellNs\":"<<SpentCaseTiltDwellNs<<",\"maxInputGapNs\":"<<SpentCaseTiltMaxInputGapNs<<'}';
     out<<",\"pouchContact\":"<<t.pouchContact<<",\"grip\":"<<t.grip<<",\"gripPressed\":"<<t.gripPressed<<"},\"leftClaim\":";if(o.leftClaim)claim(*o.leftClaim);else out<<"null";
     const bool rawCurrent=r.valid&&r.nativeOwner==o.owner&&r.rig==rig&&r.equipment==e&&r.input.owner==o.input.owner&&
         r.input.sequence<=o.input.sequence&&r.input.observedNs<=o.input.observedNs&&Fresh(r.input,now)&&

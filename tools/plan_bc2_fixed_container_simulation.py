@@ -4,6 +4,7 @@ Uses the shared frame algebra/admission. Plans never execute commands or renew
 leases. Actual custody and exact native receipts are mandatory at stop gates.
 """
 import argparse
+import copy
 import hashlib
 import importlib.util
 import json
@@ -17,10 +18,10 @@ _spec = importlib.util.spec_from_file_location("fixed_frame", Path(__file__).wit
 frame = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(frame)
 Refusal, require, integer, finite = frame.Refusal, frame.require, frame.integer, frame.finite
-STAGES = ("Open", "Pickup", "Insert", "Close")
+STAGES = ("Open", "EjectSpent", "Pickup", "Insert", "Close")
 SCHEMA = "bc2vr.fixed-container-simulation-plan.v1"
 OBSERVATION_SCHEMA = "bc2vr.fixed-container-observation.v1"
-STEP = {"Open": 0, "Pickup": 2, "Insert": 2, "Close": 3}
+STEP = {"Open": 0, "EjectSpent": 1, "Pickup": 2, "Insert": 2, "Close": 3}
 
 
 def window(value, now, sequence=True):
@@ -134,7 +135,7 @@ def extension(snapshot, now, *, completion=None):
             and integer(p["ammunitionKind"]) > 0 and 0 < integer(p["maxAgeNs"]) <= 100_000_000,
             "adapter supports measured single-round breech/muzzle profiles only")
     require(t["enabled"] is True and t["current"] is True and integer(t["lifetime"]) > 0 and integer(t["revision"]) > 0
-            and integer(t["step"]) in (0, 2, 3, 4), "missing retained fixed-container lifetime/step")
+            and integer(t["step"]) in (0, 1, 2, 3, 4), "missing retained fixed-container lifetime/step")
     require(all(raw[k] is True for k in ("valid", "current", "ownerMatches", "rigMatches", "profileMatches"))
             and integer(raw["rigFingerprint"]) == integer(p["rigFingerprint"]), "missing original raw fixed-container contact")
     frame.evidence(raw["input"], snapshot["owner"], integer(snapshot["physical_equipment_generation"]), now)
@@ -268,10 +269,102 @@ def held(snapshot, now, kind):
     return token
 
 
+def case_state(snapshot):
+    t = snapshot["fixedContainer"]["tracking"]
+    names = ("spentCasePresent", "spentCaseEpoch", "spentCaseEjectedNs", "spentCaseEjectionWorldMeters")
+    require(all(name in t for name in names), "missing published fixed-container spent-case state")
+    require(type(t["spentCasePresent"]) is bool and integer(t["spentCaseEpoch"]) >= 0
+            and integer(t["spentCaseEjectedNs"]) >= 0
+            and (not t["spentCasePresent"] or integer(t["spentCaseEpoch"]) > 0),
+            "invalid published spent-case state")
+    return {name: copy.deepcopy(t[name]) for name in names}
+
+
+def case_geometry(snapshot):
+    t = snapshot["fixedContainer"]["tracking"]
+    require(t.get("spentCasePoseWeaponMeters") is not None and isinstance(t.get("spentCasePolicy"), dict),
+            "missing published spentCasePoseWeaponMeters/spentCasePolicy")
+    policy = t["spentCasePolicy"]
+    require(policy.get("modOwned") is True and policy.get("outwardAxis") == [0, 0, 1]
+            and finite(policy["maximumWorldUpDot"]) == -.5
+            and integer(policy["dwellNs"]) == 100_000_000
+            and integer(policy["maxInputGapNs"]) == 100_000_000,
+            "unsupported published mod spent-case tilt policy")
+    return frame.rigid(t["spentCasePoseWeaponMeters"]), policy
+
+
+def tilt_mapping(snapshot):
+    """Observe the rigid right grip/weapon relationship; no invented bore axis."""
+    inp, mapping = snapshot["input"], snapshot["mapping"]
+    right = frame.from_pose(inp["hands"][1]["grip"])
+    world = frame.multiply(frame.multiply(right, frame.inverse(frame.from_pose(inp["referenceHead"]))),
+                           frame.rigid(mapping["trackingBodyWorldMeters"]))
+    kept = preserved(snapshot)
+    kept.pop("trackingBodyFromWeapon")
+    kept["right"] = {k: v for k, v in inp["hands"][1].items() if k not in ("grip", "aim")}
+    kept["left"] = inp["hands"][0]
+    return dict(preserve=kept, weaponFromRight=frame.multiply(frame.rigid(mapping["weaponWorldMeters"]), frame.inverse(world)),
+                aimFromGrip=frame.multiply(frame.from_pose(inp["hands"][1]["aim"]), frame.inverse(right)))
+
+
+def require_tilt_mapping(before, after):
+    require(frame.preserved_equal(before["preserve"], after["preserve"],
+            pose_keys=("head", "referenceHead"), hand_keys=("left",)),
+            "spent-case tilt changed head/left hand/controls/reference")
+    for name in ("weaponFromRight", "aimFromGrip"):
+        d, a = frame.pose_error(frame.rigid(before[name]), frame.rigid(after[name]))
+        require(d <= .002 and a <= .005, "spent-case tilt changed measured right/weapon mapping")
+
+
+def case_neutral(snapshot):
+    x = snapshot["fixedContainer"]
+    t = x["tracking"]
+    require(x["leftClaim"] is None and t["hand"] is None and t["target"] is None
+            and t["carried"] is False and t["carriedSupply"] is None and t["grip"] is False
+            and x["raw"]["grip"] is False and snapshot["input"]["hands"][0]["squeeze"] == 0
+            and all(e["released"][0] is True for e in (x["raw"]["input"], x["input"], snapshot["input_evidence"])),
+            "spent-case tilt requires fresh neutral unclaimed left input")
+    d, a = frame.pose_error(frame.rigid(x["raw"]["weaponWorldMeters"]), frame.rigid(snapshot["mapping"]["weaponWorldMeters"]))
+    require(d <= .002 and a <= .005, "spent-case raw weapon frame differs from current right mapping")
+
+
+def require_case_observation(previous, snapshot, now, *, complete=False):
+    x, baseline = snapshot["fixedContainer"], previous["baseline"]
+    t, raw = x["tracking"], x["raw"]["input"]
+    case_neutral(snapshot)
+    state = case_state(snapshot)
+    pose, policy = case_geometry(snapshot)
+    d, a = frame.pose_error(pose, previous["casePoseWeaponMeters"])
+    require(d <= .002 and a <= .005 and policy == previous["casePolicy"], "published case frame/policy changed")
+    require(integer(raw["sequence"]) > integer(baseline["rawInputSequence"])
+            and integer(raw["observedNs"]) > integer(baseline["rawObservedNs"]),
+            "spent-case tilt requires advancing original raw input")
+    require(ammo(snapshot, now, idle=True)["snapshot"]["counts"] == baseline["counts"]
+            and ((x["lastCompletion"] or {}).get("outcome", {}).get("request", {}).get("intent", {}).get("id", 0))
+                == baseline["lastCompletedRequest"], "spent-case tilt changed ammunition/transaction")
+    require(state["spentCaseEpoch"] == baseline["case"]["spentCaseEpoch"], "spent-case epoch changed")
+    if integer(t["step"]) == 1:
+        require(state == baseline["case"], "spent-case debt/event changed before completion")
+        require(not complete, "mod spent-case ejection not yet observed")
+        return False
+    require(integer(t["step"]) == 2 and state["spentCasePresent"] is False
+            and integer(baseline["rawObservedNs"]) < integer(state["spentCaseEjectedNs"]) <= integer(raw["observedNs"])
+            and integer(state["spentCaseEjectedNs"]) > integer(baseline["case"]["spentCaseEjectedNs"]),
+            "missing new same-case Insert/ejection observation")
+    ejected = frame.rigid(state["spentCaseEjectionWorldMeters"])
+    require(ejected[2][1] <= finite(policy["maximumWorldUpDot"]), "case ejection frame lacks authored downward tilt")
+    require(t["blocksFire"] is True and snapshot["weapon_actions_blocked"] is True,
+            "case ejection unexpectedly cleared insertion interlock")
+    return True
+
+
 def require_reobserved(previous, snapshot):
     x = snapshot["fixedContainer"]
     require(previous["schema"] == SCHEMA and previous["selection"] == selection(snapshot), "owner/profile changed; replan")
-    require_preserved(previous["preserve"], preserved(snapshot))
+    if previous["stage"] == "EjectSpent":
+        require_tilt_mapping(previous["tiltMapping"], tilt_mapping(snapshot))
+    else:
+        require_preserved(previous["preserve"], preserved(snapshot))
     baseline, t = previous["baseline"], x["tracking"]
     require(integer(snapshot["nonce"]) != integer(previous["snapshotNonce"])
             and integer(snapshot["observed_ns"]) > integer(previous["evaluatedAtNs"])
@@ -336,10 +429,13 @@ def require_acquired(previous, acquired, snapshot):
 def require_physical_completion(previous, snapshot, now, *, acquired=None):
     x, stage = snapshot["fixedContainer"], previous["stage"]
     t, v = x["tracking"], ammo(snapshot, now, idle=True)
-    require(stage in ("Open", "Close") and integer(t["step"]) == (2 if stage == "Open" else 4)
+    next_step = (1 if previous["baseline"]["case"]["spentCasePresent"] else 2) if stage == "Open" else 4
+    require(stage in ("Open", "Close") and integer(t["step"]) == next_step
             and t["carried"] is False and t["carriedSupply"] is None and t["pending"] is False and x["pendingRequest"] is None
             and v["snapshot"]["counts"] == previous["baseline"]["counts"],
             "physical opening/closure has not completed")
+    if stage == "Open":
+        require(case_state(snapshot) == previous["baseline"]["case"], "opening changed retained spent-case state")
     # The native recognizer advances its step at the endpoint but may keep
     # that exact mechanism grip magnetized until the player releases it.
     # Observe completion before authorizing the ordinary release; never demand
@@ -458,6 +554,8 @@ def check_gate(previous, snapshot, gate, now_ns, expected_nonce, *, acquired=Non
                 require(error[0] <= finite(motion["policy"]["pathToleranceMeters"])*.8
                         and error[1] <= finite(motion["policy"]["orientationToleranceRadians"])*.8,
                         "actual carried round is outside destination")
+    elif gate in ("fixed_tilt_current", "fixed_case_ejected"):
+        ejected = require_case_observation(previous, snapshot, now, complete=gate == "fixed_case_ejected")
     elif gate == "fixed_inserted":
         require_inserted(previous, snapshot, now)
         if completion is not None:
@@ -468,11 +566,99 @@ def check_gate(previous, snapshot, gate, now_ns, expected_nonce, *, acquired=Non
     result = dict(gate=gate, observed=True, snapshotNonce=snapshot["nonce"], observedNs=snapshot["observed_ns"],
                 inputObservedNs=x["raw"]["input"]["observedNs"], sourceValidUntilNs=snapshot["valid_until_ns"],
                 claimToken=token, completionOnly=completion is not None, nativeAcceptance=False, headsetAcceptance=False)
+    if stage == "EjectSpent":
+        result.update(caseEjected=ejected, caseEpoch=t["spentCaseEpoch"], rawInputSequence=x["raw"]["input"]["sequence"],
+                      modCaseObservation=True, nativeAmmunitionTransaction=False)
     if gate in ("fixed_acquired", "fixed_aligned"):
         result["completionPrerequisite"] = dict(planSourceNonce=previous["snapshotNonce"], planEvaluatedAtNs=previous["evaluatedAtNs"],
             stage=stage, lifetime=t["lifetime"], revision=t["revision"], inputSequence=snapshot["input"]["generation"],
             rawInputSequence=x["raw"]["input"]["sequence"], gunToken=t["gun"]["token"])
     return result
+
+
+def plan_case_tilt(snapshot, now, step_ns):
+    x, inp, m = snapshot["fixedContainer"], snapshot["input"], snapshot["mapping"]
+    t, v = x["tracking"], ammo(snapshot, now, idle=True)
+    case_neutral(snapshot)
+    state, (local, case_policy) = case_state(snapshot), case_geometry(snapshot)
+    require(state["spentCasePresent"] and v["snapshot"]["counts"]["loaded"] == 0
+            and t["blocksFire"] is True and snapshot["weapon_actions_blocked"] is True,
+            "EjectSpent requires actual open breech with retained spent-case debt")
+    require(25_000_000 <= step_ns <= integer(case_policy["maxInputGapNs"])//2,
+            "unbounded spent-case sample period")
+    source_policy = x["profile"]["geometry"][2]["motion"]["policy"]
+    policy = copy.deepcopy(source_policy)
+    policy.update(maxStepRadians=min(finite(source_policy["maxStepRadians"]), .12),
+                  endpointDwellNs=integer(case_policy["dwellNs"]), maxInputGapNs=integer(case_policy["maxInputGapNs"]))
+    require(0 < policy["maxStepRadians"] <= .12 and 0 < integer(policy["maximumGestureNs"]) <= 10_000_000_000,
+            "unbounded spent-case tilt policy")
+    reference, body = frame.from_pose(inp["referenceHead"]), frame.rigid(m["trackingBodyWorldMeters"])
+    grip = frame.from_pose(inp["hands"][1]["grip"])
+    world_grip = frame.multiply(frame.multiply(grip, frame.inverse(reference)), body)
+    case_world = frame.multiply(local, frame.rigid(x["raw"]["weaponWorldMeters"]))
+    # Rotate the observed mod-authored +Z toward gravity, around the fixed
+    # controller origin. No native barrel/ejector direction is inferred.
+    outward = case_world[2][:3]
+    dot = max(-1., min(1., -outward[1]))
+    if dot < -.999999:
+        quaternion = [1., 0., 0., 0.]
+    else:
+        quaternion = frame.normalize([outward[2], 0., -outward[0], 1.+dot])
+    # from_pose consumes XR handedness, while this quaternion was solved in
+    # the published row-vector game world.
+    delta = frame.from_pose(dict(position=[0., 0., 0.],
+                                 orientation=[-quaternion[0], -quaternion[1], quaternion[2], quaternion[3]]))
+    # Clear the published threshold by 0.15, without turning farther toward
+    # gravity than this ordinary input demonstration needs.
+    toward_down = math.acos(dot)
+    fraction = max(0., toward_down-math.acos(.65))/toward_down if toward_down > .00001 else 0.
+    delta = frame.blend(frame.identity(), delta, fraction)
+    target_world = frame.multiply(world_grip, delta)
+    target_world[3][:3] = world_grip[3][:3]
+    target = frame.multiply(frame.multiply(target_world, frame.inverse(body)), reference)
+    aim_relative = frame.multiply(frame.from_pose(inp["hands"][1]["aim"]), frame.inverse(grip))
+    distance, angle = frame.pose_error(grip, target)
+    require(distance <= .00001, "spent-case tilt would translate right controller")
+    count = max(1, math.ceil(angle/(policy["maxStepRadians"]*.7)))
+    require(count <= 64, "spent-case tilt exceeds bounded ordinary samples")
+    schedule = []
+    previous = grip
+    for index in range(count+1):
+        right = frame.blend(grip, target, index/count)
+        pose, aim = frame.to_pose(right), frame.to_pose(frame.multiply(aim_relative, right))
+        values = [float(f"{n:.9f}") for n in pose["position"]+frame.quaternion_ypr(pose["orientation"])]
+        aim_values = [float(f"{n:.9f}") for n in aim["position"]+frame.quaternion_ypr(aim["orientation"])]
+        emitted = frame.from_pose(dict(position=values[:3], orientation=frame.ypr_quaternion(values[3:])))
+        d, a = frame.pose_error(emitted, right)
+        step_distance, step_angle = frame.pose_error(previous, emitted)
+        require(d <= .0002 and a <= .001 and step_distance <= .0002 and step_angle < policy["maxStepRadians"],
+                "formatted spent-case command exceeds original bounded tilt")
+        previous = emitted
+        commands = ["hand r grip pose "+" ".join(f"{n:.9f}" for n in values),
+                    "hand r aim pose "+" ".join(f"{n:.9f}" for n in aim_values), "grip l 0"]
+        if index == 0:
+            commands.insert(0, "hand r follow off")
+        schedule.append(dict(atNs=index*step_ns, phase="case_tilt", hand="r", grip=0,
+            positionMeters=values[:3], yawPitchRollDegrees=values[3:],
+            aimPositionMeters=aim_values[:3], aimYawPitchRollDegrees=aim_values[3:], commands=commands))
+    require(schedule[-1]["atNs"]+case_policy["dwellNs"] < integer(policy["maximumGestureNs"]),
+            "spent-case tilt exceeds original gesture budget")
+    leases = [snapshot["valid_until_ns"], snapshot["native_deadline_ns"], x["input"]["deadlineNs"],
+              x["raw"]["input"]["deadlineNs"], v["snapshot"]["deadlineNs"], v["binding"]["deadlineNs"], t["gun"]["deadlineNs"]]
+    if x.get("physicalFamily") is not None:
+        leases.append(x["physicalFamily"]["deadlineNs"])
+    baseline = dict(lifetime=t["lifetime"], revision=t["revision"], supply=x["supply"], binding=binding_key(v["binding"]),
+        nativeIdentity=v["identity"], gun=t["gun"]["token"], counts=v["snapshot"]["counts"], ammoSequence=v["snapshot"]["sequence"],
+        case=state, rawInputSequence=x["raw"]["input"]["sequence"], rawObservedNs=x["raw"]["input"]["observedNs"],
+        lastCompletedRequest=((x["lastCompletion"] or {}).get("outcome", {}).get("request", {}).get("intent", {}).get("id", 0)))
+    gates = [dict(id=name, afterSample=index, holdGrip=0, timeoutNs=250_000_000 if index == 0 else 2_000_000_000,
+             minimumObservationSpanNs=0, requiresFreshSnapshot=True) for name, index in
+             (("fixed_tilt_current", 0), ("fixed_case_ejected", len(schedule)-1))]
+    return dict(schema=SCHEMA, offlineOnly=True, executionAuthorized=False, nativeAcceptance=False, headsetAcceptance=False,
+        stage="EjectSpent", snapshotNonce=snapshot["nonce"], sourceInputSequence=inp["generation"], evaluatedAtNs=now,
+        sourceValidUntilNs=min(integer(value) for value in leases), originalLeases=leases, selection=selection(snapshot),
+        preserve=preserved(snapshot), tiltMapping=tilt_mapping(snapshot), casePoseWeaponMeters=local, casePolicy=case_policy,
+        baseline=baseline, policy=policy, durationNs=schedule[-1]["atNs"], receiptGates=gates, schedule=schedule)
 
 
 def plan(snapshot, stage, now_ns, expected_nonce, step_ns=40_000_000, pickup_plan=None):
@@ -482,6 +668,9 @@ def plan(snapshot, stage, now_ns, expected_nonce, step_ns=40_000_000, pickup_pla
     p, t, v = x["profile"], x["tracking"], ammo(snapshot, now, idle=True)
     require(integer(t["step"]) == STEP[stage], "stage does not match actual retained loader step")
     require(integer(p["kind"]) == 3 or stage in ("Pickup", "Insert"), "muzzle profile has no opening/closing stage")
+    if stage == "EjectSpent":
+        require(pickup_plan is None, "spent-case ejection cannot consume a pickup")
+        return plan_case_tilt(snapshot, now, step_ns)
     geometry = p["geometry"][STEP[stage]]
     motion, policy = geometry["motion"], geometry["motion"]["policy"]
     require(motion["measured"] is True and motion["returnToStart"] is False, "unsupported/unmeasured production motion")
@@ -529,6 +718,8 @@ def plan(snapshot, stage, now_ns, expected_nonce, step_ns=40_000_000, pickup_pla
                     gun=t["gun"]["token"],
                     counts=v["snapshot"]["counts"], ammoSequence=v["snapshot"]["sequence"],
                     lastCompletedRequest=((x["lastCompletion"] or {}).get("outcome", {}).get("request", {}).get("intent", {}).get("id", 0)))
+    if stage == "Open":
+        baseline["case"] = case_state(snapshot)
     if stage == "Insert":
         require(pickup_plan is not None and pickup_plan["stage"] == "Pickup", "insertion requires this invocation's actual pickup")
         check_gate(pickup_plan, snapshot, "fixed_held", now, expected_nonce)

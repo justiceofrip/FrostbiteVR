@@ -132,7 +132,7 @@ def _feed_neutral(snapshot):
             and snapshot["input"]["hands"][0]["squeeze"] == 0, "feed contact is not neutral and unclaimed")
 
 
-def _mapping(snapshot, family):
+def _mapping(snapshot, family, stage=None):
     inp, m = snapshot["input"], snapshot["mapping"]
     result = {k: copy.deepcopy(snapshot[k]) for k in ("owner", "equipment", "rig", "physical_equipment_generation")}
     result["selected"] = {k: copy.deepcopy(snapshot["selected"][k]) for k in
@@ -147,10 +147,18 @@ def _mapping(snapshot, family):
     if family == "sight":
         require(snapshot.get("sight", {}).get("status") == "available", "current sight family unavailable")
         result["family"] = copy.deepcopy(snapshot["sight"]["family"])
+    if family == "fixed" and stage == "EjectSpent":
+        result["tilt"] = fixed.tilt_mapping(snapshot)
     return result
 
 
 def _same(before, after, *, observation_only=False):
+    if "tilt" in before or "tilt" in after:
+        omitted = ("tilt", "preserve", "weaponFromBody", "calibration")
+        require({k: v for k, v in before.items() if k not in omitted}
+                == {k: v for k, v in after.items() if k not in omitted}, "spent-case owner/selection/profile changed")
+        fixed.require_tilt_mapping(before["tilt"], after["tilt"])
+        return "source"
     identity = [{k: v for k, v in mapping.items() if k not in ("weaponFromBody", "calibration", "family", "preserve")}
                 for mapping in (before, after)]
     old, new = (value.get("mechanismSelection", {}) for value in identity)
@@ -210,7 +218,7 @@ def _sight_state(before, after, target):
 def same_mapping(before, after, family, stage, target="secondary"):
     require(stage in STAGES[_family(family)], "unknown mapping stage")
     require(before.get("valid") is True and after.get("valid") is True, "invalid observation is not mapping or transition evidence")
-    a, b = _mapping(before, family), _mapping(after, family)
+    a, b = _mapping(before, family, stage), _mapping(after, family, stage)
     if family == "sight":
         return _sight_state(a, b, target)
     return _same(a, b, observation_only=True)
@@ -355,6 +363,9 @@ def build_stimulus(family, profiles, snapshot, now_ns, stage, *, step_ms=None, p
             "legacy geometry must remain explicitly non-authorizing")
     schedule = []
     for row in geometry["schedule"]:
+        if family == "fixed" and stage == "EjectSpent":
+            schedule.append(copy.deepcopy(row))
+            continue
         # Reconstruct only permitted controller data; do not execute legacy command text.
         values = [feed.finite(v) for v in row["positionMeters"] + row["yawPitchRollDegrees"]]
         require(len(values) == 6 and all(abs(v) <= 10 for v in values[:3]) and all(abs(v) <= 360 for v in values[3:])
@@ -366,7 +377,7 @@ def build_stimulus(family, profiles, snapshot, now_ns, stage, *, step_ms=None, p
         commands.append(f"grip l {row['grip']}")
         schedule.append(dict(atNs=integer(row["atNs"]), phase=row["phase"], grip=row["grip"],
                              positionMeters=values[:3], yawPitchRollDegrees=values[3:], commands=commands))
-    if pickup is None:
+    if pickup is None and stage != "EjectSpent":
         schedule[0]["commands"] = LEFT_POSE_SETUP + schedule[0]["commands"]
     require(0 < len(schedule) <= 512 and all(b["atNs"] > a["atNs"] for a, b in zip(schedule, schedule[1:])), "invalid bounded schedule")
     require(sum(len(row["commands"])+1 for row in schedule)+5 <= 512,
@@ -399,7 +410,7 @@ def build_stimulus(family, profiles, snapshot, now_ns, stage, *, step_ms=None, p
     return dict(schema=SCHEMA, ordinaryInputOnly=True, rootAuthorizationRequired=True,
         nativeAcceptance=False, headsetAcceptance=False, family=family, stage=stage, target=target if family == "sight" else None,
         source=dict(nonce=snapshot["nonce"], evaluatedAtNs=now, validUntilNs=min(source_deadline(snapshot, family), integer(geometry["sourceValidUntilNs"]))),
-        mapping=_mapping(snapshot, family), schedule=schedule, policy=policy, durationNs=schedule[-1]["atNs"],
+        mapping=_mapping(snapshot, family, stage), schedule=schedule, policy=policy, durationNs=schedule[-1]["atNs"],
         budget=dict(totalNs=10_000_000_000, gestureStartSample=start, maximumGestureNs=maximum,
                     endpointDwellNs=integer(policy.get("endpointDwellNs", policy.get("detentHoldNs", 0))), maximumCommands=512),
         boundaries=boundaries, finishGrip=schedule[-1]["grip"], stepNs=step, continuesHeldCustody=pickup is not None,
@@ -452,6 +463,8 @@ def _receipt_gate(module, plan, snapshot, boundary, now, nonce, *, acquired=None
             x, baseline = snapshot["fixedContainer"], plan["baseline"]
             tracking, view = x["tracking"], x["view"]
             unchanged_ammo = view["snapshot"]["counts"] == baseline["counts"]
+            if reason == "mod spent-case ejection not yet observed" and boundary == "fixed_case_ejected":
+                raise BoundaryPending(reason) from error
             if (reason == "shared ammunition transaction is pending or ambiguous"
                     and boundary == "fixed_inserted" and x["pendingRequest"] is not None):
                 fixed.pending_request(snapshot)  # Typed original request still must validate.
@@ -500,13 +513,28 @@ def check_boundary(stimulus, snapshot, boundary_id, now_ns, *, command_written_n
             and integer(snapshot["observed_ns"]) > integer(stimulus["source"]["evaluatedAtNs"]), "boundary needs a new original snapshot")
     if command_written_ns is not None:
         require(0 < integer(command_written_ns) <= integer(snapshot["input_evidence"]["observedNs"]), "boundary predates its ordinary command")
-    mapped = _mapping(snapshot, family)
+    mapped = _mapping(snapshot, family, stage)
     state = _sight_state(stimulus["mapping"], mapped, stimulus["target"]) if family == "sight" else "source"
     if family != "sight":
         _same(stimulus["mapping"], mapped)
     result = dict(boundary=boundary_id, observed=True, snapshotNonce=snapshot["nonce"], observedNs=snapshot["observed_ns"],
                   sourceValidUntilNs=source_deadline(snapshot, family), nativeReceiptProof=False, nativeAcceptance=False, headsetAcceptance=False)
     if family in ("pump", "fixed"):
+        if family == "fixed" and stage == "EjectSpent":
+            expected = stimulus.get("tiltExpectedSample")
+            require(expected is not None, "spent-case boundary lacks its submitted right pose")
+            hand = snapshot["input"]["hands"][1]
+            for name, pos, angles in (("grip", "positionMeters", "yawPitchRollDegrees"),
+                                      ("aim", "aimPositionMeters", "aimYawPitchRollDegrees")):
+                target = feed.from_pose(dict(position=expected[pos], orientation=feed.ypr_quaternion(expected[angles])))
+                d, a = feed.pose_error(feed.from_pose(hand[name]), target)
+                require(d <= .002 and a <= .005, "native spent-case right pose differs from submitted sample")
+            old = (prior or {}).get("fixed_tilt_current", {}).get("gate")
+            raw = snapshot["fixedContainer"]["raw"]["input"]
+            if old is not None:
+                require(integer(raw["sequence"]) > integer(old["rawInputSequence"])
+                        and integer(raw["observedNs"]) > integer(old["inputObservedNs"]),
+                        "spent-case boundary reused original raw input")
         # No claim yet is a pending acquisition only if there is no competing
         # claim and the exact already-admitted native stage/ammunition persists.
         if family == "fixed" and boundary_id in ("fixed_acquired", "fixed_held"):

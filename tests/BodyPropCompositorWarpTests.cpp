@@ -2,6 +2,7 @@
 #include "fvr/graphics/D3D11BodyPropCompositor.h"
 #include "fvr/graphics/D3D11SceneDepthPair.h"
 #include "fvr/graphics/VehicleReticle.h"
+#include "fvr/graphics/SpentCaseAsset.h"
 #include "Test.h"
 #include <Windows.h>
 #include <d3d11.h>
@@ -156,6 +157,28 @@ int main(){ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;D3D_F
         for(auto& i:images){const auto middle=Pixel(device.Get(),context.Get(),i.Get());const auto glyph=Pixel(device.Get(),context.Get(),i.Get(),40,32);
             CHECK(hidden?(middle[0]<5&&middle[2]>250):(middle[0]>200&&middle[2]<5));CHECK(glyph[0]>200&&glyph[1]>200);}
     }
+    // The synthetic hollow case uses ordinary world depth in both eyes. It
+    // never receives the sight reticle's missing-depth exception.
+    {
+        const auto asset=MakeSpentCaseAsset();CHECK(asset.key==SpentCaseGeometry&&asset.sections.size()==1);
+        CHECK(asset.sections[0].mesh.vertices.size()==24*8*3);
+        auto world=Identity();for(unsigned n=0;n<3;++n)world.values[n][n]=8;
+        world.values[3][2]=1;
+        for(unsigned mode=0;mode<3;++mode){
+            for(unsigned eye=0;eye<2;++eye){auto& e=frame.eyes[eye];e.count=1;e.view=Identity();
+                e.instances[0]={SpentCaseGeometry,world,1000000000,1100000000,1,
+                    BodyPropWireEpoch(BodyPropSourceKind::Ammo,1,6),2};
+                context->ClearRenderTargetView(rt[eye].Get(),blue);}
+            for(unsigned i=0;i<4;++i)context->ClearDepthStencilView(dsv[i].Get(),D3D11_CLEAR_DEPTH,mode==1&&i==3?.1f:1.f,0);
+            ++frame.frameId;++ticket.frameId;
+            const bool composed=compositor.Compose(frame,ticket,{images[0].Get(),images[1].Get()},Clock,
+                mode==2?nullptr:&layers,BodyPropMissingDepthPolicy::VehicleReticleOnly);
+            CHECK(composed==(mode!=2));
+            for(unsigned eye=0;eye<2;++eye){const auto p=Pixel(device.Get(),context.Get(),images[eye].Get());
+                const bool hidden=mode==2||(mode==1&&eye==1);
+                CHECK(hidden?(p[0]<5&&p[2]>250):(p[0]>30&&p[1]>15&&p[0]>p[2]));}
+        }
+    }
     // Synthetic full-resolution sight line at the observed display scale. The
     // old .10 half-stroke covers no pixel centers at the initial phase, despite
     // a successful draw. Sweep quarter-pixel phases and require visible area in
@@ -199,5 +222,5 @@ int main(){ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;D3D_F
         }
         CHECK(fullCompositor.Statistics().overlayOnlyPairs==16&&fullCompositor.Statistics().instances==32);
     }
-    std::cout<<"BodyPropCompositor WARP: self-depth, expiry, both native layers, distinct eyes, atomic failures, depth-loss reticle and full-resolution subpixel coverage passed\n";
+    std::cout<<"BodyPropCompositor WARP: self-depth, expiry, both native layers, distinct eyes, atomic failures, synthetic spent-case depth, depth-loss reticle and full-resolution subpixel coverage passed\n";
 }

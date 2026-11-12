@@ -18,6 +18,14 @@ struct WeaponModeCommand {
     // Body selection commands without a linked mode family leave this zero.
     std::uint32_t primaryAction=0;
 };
+inline constexpr std::int64_t WeaponModeCacheMaxAgeNs=500000000;
+// The current raw-input lease must fit inside the original native observation.
+// This only schedules a real source reread; it never renews the cached proof.
+inline constexpr bool WeaponModeCacheLeaseCovers(std::int64_t observedNs,std::int64_t nowNs,
+    std::int64_t inputDeadlineNs)noexcept {
+    return observedNs>0&&observedNs<=nowNs&&inputDeadlineNs>nowNs&&
+        inputDeadlineNs-observedNs<=WeaponModeCacheMaxAgeNs;
+}
 // Optional, bounded observation of the resolver's original reads. Unreached
 // fields retain defaults; none of these fields grant command admission.
 struct WeaponModeItemObservation {

@@ -1,5 +1,6 @@
 #pragma once
 #include "fvr/interaction/FeedReload.h"
+#include "fvr/interaction/ReloadInsertion.h"
 #include <limits>
 
 namespace fvr::interaction {
@@ -9,6 +10,13 @@ struct FeedPlacementGeometry {
     // canonical METRES. No default source, destination, or grip is usable.
     // sourceFromGrip * weaponFromSource is the source anatomical contact.
     math::Matrix4 weaponFromSource{},weaponFromDestination{},sourceFromGrip{};
+};
+// Optional mod-owned object guidance around a verified placement destination.
+// The approach direction comes from the acquired object/contact, never from an
+// assumed bore axis. Zero disables this policy for existing feed operations.
+struct FeedPlacementGuidance {
+    float captureRadiusMeters=0,retentionRadiusMeters=0,inwardTravelMeters=0;
+    bool operator==(const FeedPlacementGuidance&)const=default;
 };
 // An adapter must explicitly supply measured geometry for each operation. No
 // weapon name, default rail, or default hinge establishes physical eligibility.
@@ -218,7 +226,8 @@ inline FeedContactResult EvaluateFeedInteractionContact(const FeedMechanismProfi
 }
 class FeedInteraction {
 public:
-    explicit FeedInteraction(std::uint64_t lifetime=0)noexcept:lifetime_(lifetime){}
+    explicit FeedInteraction(std::uint64_t lifetime=0,FeedPlacementGuidance guidance={})noexcept:
+        lifetime_(lifetime),placementGuidance_(guidance){}
     FeedInteraction(const FeedInteraction&)=delete;
     FeedInteraction& operator=(const FeedInteraction&)=delete;
     void Interrupt()noexcept {Drop();}
@@ -277,6 +286,12 @@ public:
         if(profile.profileId!=candidate.profileId||profile.profileRevision!=candidate.profileRevision||index>=profile.operations.size()||
            profile.operations[index].operation!=candidate.operation||!Motion(profile.operations[index]))return fail(FeedInteractionStatus::InvalidProfile);
         const auto& motion=profile.operations[index];const auto& contact=sample.contact;
+        const bool guidedPlacement=placementGuidance_.captureRadiusMeters>0&&motion.kind==FeedMotionKind::FreePlacement;
+        if(guidedPlacement&&(!std::isfinite(placementGuidance_.captureRadiusMeters)||
+           !std::isfinite(placementGuidance_.retentionRadiusMeters)||!std::isfinite(placementGuidance_.inwardTravelMeters)||
+           placementGuidance_.captureRadiusMeters>.1f||placementGuidance_.retentionRadiusMeters<placementGuidance_.captureRadiusMeters||
+           placementGuidance_.retentionRadiusMeters>.25f||placementGuidance_.inwardTravelMeters<=motion.pathToleranceMeters||
+           placementGuidance_.inwardTravelMeters>=placementGuidance_.captureRadiusMeters))return fail(FeedInteractionStatus::InvalidProfile);
         if(sample.weaponWorld&&!feed_mechanism_detail::Pose(*sample.weaponWorld))return fail(FeedInteractionStatus::InvalidInput);
         if(motion.kind==FeedMotionKind::FreePlacement&&
            ((moving_&&sample.weaponWorld.has_value()!=movingWorld_)||
@@ -381,7 +396,7 @@ public:
             out.status=FeedInteractionStatus::Acquired;
             out.target=placement?source:start;out.progress=placement?0:travel_/motion.travel;
             out.targetKind=placement?FeedInteractionTargetKind::Object:FeedInteractionTargetKind::Contact;
-            if(placement)carried_=*out.target;
+            if(placement)carried_=rawCarried_=*out.target;
             return out;
         }
         const bool placement=motion.kind==FeedMotionKind::FreePlacement;
@@ -392,9 +407,11 @@ public:
             // endpoint dwell. Rebase from this real packet so a held hand can
             // continue naturally, without a release/reacquisition ritual.
             endpoint_=0;placementDwelled_=recoveryDwelled_=false;
+            placementContact_.reset();
             previous_=contact.weaponFromHandContact;
             if(placement){
                 grabbed_=feed_interaction_detail::Multiply(carried_,Inverse(contact.weaponFromHandContact));
+                rawCarried_=carried_;
                 out.target=carried_;out.targetKind=FeedInteractionTargetKind::Object;
             }else {
                 auto local=feed_interaction_detail::Multiply(contact.weaponFromHandContact,Inverse(motion.weaponFromMotion));
@@ -418,13 +435,17 @@ public:
             out.target=feed_interaction_detail::Multiply(grabbed_,contact.weaponFromHandContact);
             out.targetKind=FeedInteractionTargetKind::Object;
             if(!feed_mechanism_detail::Pose(*out.target))return fail(FeedInteractionStatus::OffPath);
-            if(Distance(carried_,*out.target)>motion.maxStepMeters||Angle(carried_,*out.target)>motion.maxStepRadians){
+            const auto& previousItem=guidedPlacement?rawCarried_:carried_;
+            if(Distance(previousItem,*out.target)>motion.maxStepMeters||Angle(previousItem,*out.target)>motion.maxStepRadians){
                 if(motion.retainWhileGripped&&sample.grip)return retain();
                 return fail(FeedInteractionStatus::MotionJump);
             }
+            rawCarried_=*out.target;
+            if(guidedPlacement)out.target=GuidePlacement(motion,contact.weaponFromHandContact,*out.target,sample.grip);
             moved_=moved_||Distance(carried_,*out.target)>1e-6||Angle(carried_,*out.target)>1e-6;
             previous_=contact.weaponFromHandContact;carried_=*out.target;
-            const bool aligned=Distance(carried_,motion.placement.weaponFromDestination)<=motion.pathToleranceMeters&&
+            const bool aligned=(!guidedPlacement||(placementContact_&&placementContact_->seated))&&
+                Distance(carried_,motion.placement.weaponFromDestination)<=motion.pathToleranceMeters&&
                 Angle(carried_,motion.placement.weaponFromDestination)<=motion.orientationToleranceRadians;
             // No hysteresis outside the measured destination. A fresh held
             // observation must establish dwell before a fresh release edge.
@@ -491,6 +512,43 @@ public:
 private:
     friend class FeedReloadSession;
     friend class FixedContainerReload;
+    struct PlacementContact {
+        math::Matrix4 item{},wrist{};
+        std::array<double,3> inward{};
+        double seatedInward=0;
+        bool seated=false;
+    };
+    math::Matrix4 GuidePlacement(const FeedMotionProfile& motion,const math::Matrix4& wrist,
+        const math::Matrix4& rawItem,bool grip)noexcept {
+        using namespace feed_interaction_detail;
+        const auto& destination=motion.placement.weaponFromDestination;
+        if(!placementContact_){
+            const auto distance=Distance(rawItem,destination);
+            // Acquiring at the endpoint (or releasing nearby) earns no seat.
+            // A later real approach must supply a nonzero contact direction.
+            if(!grip||distance<=1e-5||distance>placementGuidance_.captureRadiusMeters)return rawItem;
+            PlacementContact captured{rawItem,wrist};
+            for(unsigned n=0;n<3;++n)captured.inward[n]=(destination.values[3][n]-rawItem.values[3][n])/distance;
+            placementContact_=captured;return rawItem;
+        }
+        auto& captured=*placementContact_;
+        double inward=0,displacementSquared=0;
+        for(unsigned n=0;n<3;++n){const double delta=double(wrist.values[3][n])-captured.wrist.values[3][n];
+            inward+=delta*captured.inward[n];displacementSquared+=delta*delta;}
+        const double travel=placementGuidance_.inwardTravelMeters;
+        // Withdrawal cancels contact assistance, not the held ammunition.
+        // Seat retention tolerates small wrist drift but a deliberate pull
+        // back (> one insertion stroke) always requires a new approach.
+        if(inward<-travel||displacementSquared>double(placementGuidance_.retentionRadiusMeters)*placementGuidance_.retentionRadiusMeters||
+           (captured.seated&&inward<captured.seatedInward-travel)){
+            placementContact_.reset();endpoint_=0;placementDwelled_=false;return rawItem;
+        }
+        if(grip&&!captured.seated&&inward+1e-6>=travel){captured.seated=true;captured.seatedInward=inward;}
+        const double progress=captured.seated?1.:std::clamp(inward/travel,0.,1.);
+        // Rotation aligns the owned round; wrist rotation by itself supplies
+        // zero insertion travel. Raw pose/deadline/jump checks ran above.
+        return reload_insertion_detail::BlendRigid(captured.item,destination,progress);
+    }
     void MigrateContext(const FeedOwner& before,const FeedOwner& after)noexcept {
         Drop();
         if(recovery_&&recovery_->candidate_.owner==before&&proofId_!=std::numeric_limits<std::uint64_t>::max()){
@@ -506,7 +564,7 @@ private:
         proof.travel_=travel_;proof.returning_=returning_;proof.weaponWorld_=weaponWorld;recovery_=proof;
     }
     void Drop()noexcept {bound_=moving_=returning_=placementDwelled_=recoveringActive_=recoveryDwelled_=moved_=false;
-        endpoint_=started_=0;recoveryStart_.reset();}
+        endpoint_=started_=0;recoveryStart_.reset();placementContact_.reset();}
     bool stream_=false,bound_=false,moving_=false,returning_=false,lastGrip_=false;
     bool placementDwelled_=false;
     bool hasRejected_=false;FeedInteractionSample rejected_{};
@@ -515,9 +573,11 @@ private:
     std::int64_t lastNow_=0,lastObserved_=0,started_=0,endpoint_=0;
     FeedPhysicalCandidate candidate_{};FeedMotionProfile motion_{};FeedMechanismProfile mechanism_{};
     FeedMechanismSnapshot lastNativeSnapshot_{},recoverySnapshot_{};
-    math::Matrix4 grabbed_{},previous_{},lastRaw_{},carried_{};
+    math::Matrix4 grabbed_{},previous_{},lastRaw_{},carried_{},rawCarried_{};
     std::array<float,3> hingeOffset_{};
     const std::uint64_t lifetime_=0;
+    const FeedPlacementGuidance placementGuidance_{};
+    std::optional<PlacementContact> placementContact_;
     std::uint64_t proofId_=0,recoveryInput_=0;
     std::int64_t recoveryObserved_=0;
     double travel_=0;

@@ -18,6 +18,7 @@ struct FixedContainerProfile {
     // Root supplies exact authored geometry plus explicitly identified mod
     // policy. No role, hinge, grip, capacity or chamber is inferred here.
     std::array<FixedContainerGeometry,4> geometry{};
+    FeedPlacementGuidance insertionGuidance{}; // Explicit single-round mod policy; zero preserves exact placement.
 };
 struct FixedContainerReleaseEvidence {
     HandClaim before{}; // Captured immediately before the central safety Update.
@@ -76,6 +77,15 @@ inline bool Profile(const FixedContainerProfile& p)noexcept {
        p.roundsPerInsertion<=0||p.roundsPerInsertion>p.capacity||p.maxAgeNs<=0||p.maxAgeNs>100000000)return false;
     if((p.kind==FixedContainerKind::SingleRoundBreech||p.kind==FixedContainerKind::SingleRoundMuzzle)&&
        (p.capacity!=1||p.roundsPerInsertion!=1))return false;
+    if(p.insertionGuidance!=FeedPlacementGuidance{}){
+        const auto& g=p.insertionGuidance;const auto& m=p.geometry[2].motion;
+        if((p.kind!=FixedContainerKind::SingleRoundBreech&&p.kind!=FixedContainerKind::SingleRoundMuzzle)||
+           m.kind!=FeedMotionKind::FreePlacement||!std::isfinite(g.captureRadiusMeters)||
+           !std::isfinite(g.retentionRadiusMeters)||!std::isfinite(g.inwardTravelMeters)||
+           g.captureRadiusMeters<=0||g.captureRadiusMeters>.1f||g.retentionRadiusMeters<g.captureRadiusMeters||
+           g.retentionRadiusMeters>.25f||g.inwardTravelMeters<=m.pathToleranceMeters||
+           g.inwardTravelMeters>=g.captureRadiusMeters)return false;
+    }
     for(unsigned i=0;i<p.geometry.size();++i){
         if((p.kind==FixedContainerKind::EnBlocClip||p.kind==FixedContainerKind::SingleRoundMuzzle)&&
            i!=static_cast<unsigned>(FixedContainerStep::Insert))continue;
@@ -96,8 +106,8 @@ inline bool Profile(const FixedContainerProfile& p)noexcept {
 // Open/eject/close update mod-owned physical state only. EjectSpent never
 // removes live rounds. Insert emits one exact ledger command; only Complete
 // can accept its native effect. Pending work survives tracking loss and stow.
-// SingleRoundBreech presents the spent case automatically on opening as mod
-// policy, with no eject gesture, live-round removal or native ammunition write.
+// SingleRoundBreech waits for mod-owned spent-case ejection when the adapter
+// retained a consumed round. Empty initial chambers do not invent a case.
 // SingleRoundMuzzle uses only measured insertion into a fixed tube. No clip,
 // opening, closing or eject gesture is implied; its exact receipt completes it.
 class FixedContainerReload {
@@ -107,7 +117,8 @@ public:
         AmmunitionLedger& ledger,bool externalAdmission=false,
         std::optional<HandInteractionOwner> handOwner={},std::optional<HandInteractionKey> handItem={})noexcept:
         profile_(profile),context_(context),mechanism_(mechanism),binding_(binding),supply_(supply),
-        lifetime_(lifetime),ledger_(ledger),externalAdmission_(externalAdmission),handOwner_(handOwner),handItem_(handItem),gesture_(lifetime),
+        lifetime_(lifetime),ledger_(ledger),externalAdmission_(externalAdmission),handOwner_(handOwner),handItem_(handItem),
+        gesture_(lifetime,profile.insertionGuidance),
         step_(profile.kind==FixedContainerKind::EnBlocClip||profile.kind==FixedContainerKind::SingleRoundMuzzle?
             FixedContainerStep::Insert:FixedContainerStep::Open){}
     FixedContainerReload(const FixedContainerReload&)=delete;
@@ -122,6 +133,34 @@ public:
     }
     [[nodiscard]] FixedContainerStep Step()const noexcept{return step_;}
     [[nodiscard]] const auto& Pending()const noexcept{return pending_;}
+    [[nodiscard]] bool SetSpentCasePresent(bool present)noexcept {
+        if(!bound_||profile_.kind!=FixedContainerKind::SingleRoundBreech||pending_||step_!=FixedContainerStep::Open)return false;
+        spentCasePresent_=present;return true;
+    }
+    // Only the adapter's separately recognized mod tilt event calls this.
+    // Generated geometry[1] is absent for breeches and must never be projected
+    // as a measured extraction gesture. No ledger command is emitted here.
+    [[nodiscard]] bool CompleteSpentEjection(const AmmunitionSnapshot& a,const HandInteractionSample& raw,
+        const HandInteractionSample& safety,const HandInteraction& hands)noexcept {
+        const auto now=safety.nowNs;const auto owner=HandOwner();
+        const auto fresh=[now](const HandInteractionSample& i){return i.sequence&&i.focused&&i.tracked[0]&&i.tracked[1]&&
+            !i.released[1]&&i.observedNs>0&&i.observedNs<=now&&now<i.deadlineNs&&i.deadlineNs-i.observedNs<=100000000;};
+        const auto gun=hands.Current(InteractionHand::Right);
+        const auto item=handItem_.value_or(HandInteractionKey{context_.resource.weapon,
+            handOwner_?owner.equipGeneration:context_.resource.weaponGeneration});
+        if(!bound_||profile_.kind!=FixedContainerKind::SingleRoundBreech||!spentCasePresent_||
+           step_!=FixedContainerStep::EjectSpent||pending_||!Snapshot(a,now)||a.counts.loaded!=0||
+           ledger_.Phase()!=AmmunitionLedgerPhase::Ready||ledger_.Pending()||ledger_.WellEmpty()||
+           ledger_.Snapshot().context!=context_||ledger_.Snapshot().counts!=a.counts||a.sequence<lastSnapshot_||
+           raw.sequence<=lastInput_||now<lastNow_||raw.nowNs!=now||raw.owner!=owner||safety.owner!=owner||
+           !fresh(raw)||!fresh(safety)||raw.sequence>safety.sequence||raw.observedNs>safety.observedNs||
+           !hands.HasRecordedEvidence(raw,InteractionHand::Left)||hands.Current(InteractionHand::Left)||
+           !gun||gun->token.kind!=HandClaimKind::GunHold||gun->token.owner!=owner||gun->token.item!=item||
+           gun->inputSequence!=safety.sequence||gun->deadlineNs<=now)return false;
+        spentCasePresent_=false;step_=FixedContainerStep::Insert;RetireCompletedMotion();
+        lastSnapshot_=a.sequence;lastInput_=raw.sequence;lastInputDeadline_=raw.deadlineNs;lastNow_=now;
+        return true;
+    }
     // A mechanical interlock only. Root must separately establish native fire
     // readiness; an inactive native bolt never creates an extra chamber.
     [[nodiscard]] bool BlocksFire()const noexcept {
@@ -157,7 +196,7 @@ public:
         // Missing publication earns no motion/dwell, but does not erase fresh
         // established contact. Expiry clears dwell; the next actual geometry
         // still checks its original source lease, gap, travel and lifetime.
-        if(input.nowNs>=lastInputDeadline_){gesture_.endpoint_=0;gesture_.placementDwelled_=false;}
+        if(input.nowNs>=lastInputDeadline_){gesture_.endpoint_=0;gesture_.placementDwelled_=false;gesture_.placementContact_.reset();}
         return renewed.claim;
     }
     [[nodiscard]] bool RebindContext(const AmmunitionSnapshot& snapshot,const HandInteractionOwner& hand,std::int64_t now,
@@ -255,6 +294,9 @@ public:
         }
         if(pending_){out.status=FixedContainerStatus::AwaitingReceipt;return out;}
         if(step_==FixedContainerStep::Complete){out.status=FixedContainerStatus::Complete;return out;}
+        if(profile_.kind==FixedContainerKind::SingleRoundBreech&&step_==FixedContainerStep::EjectSpent){
+            out.status=FixedContainerStatus::NeedNeutral;return out;
+        }
         const auto& a=x.ammunition;const auto& c=x.interaction.contact;
         if(!Snapshot(a,x.input.nowNs)||ledger_.Phase()!=AmmunitionLedgerPhase::Ready||ledger_.WellEmpty()||
            ledger_.Snapshot().context!=context_||ledger_.Snapshot().counts!=a.counts||
@@ -267,7 +309,7 @@ public:
            !feed_mechanism_detail::Pose(x.weaponFromContact))return stop(FixedContainerStatus::Invalid,FixedContainerRejection::Admission);
         // Resumed geometry cannot inherit dwell after its prior source lease
         // expired, even if no missing-publication tick observed that expiry.
-        if(continuedInsertion&&x.input.nowNs>=lastInputDeadline_){gesture_.endpoint_=0;gesture_.placementDwelled_=false;}
+        if(continuedInsertion&&x.input.nowNs>=lastInputDeadline_){gesture_.endpoint_=0;gesture_.placementDwelled_=false;gesture_.placementContact_.reset();}
         lastSnapshot_=a.sequence;lastInput_=x.input.sequence;lastInputDeadline_=x.input.deadlineNs;lastNow_=x.input.nowNs;
         if(!handUpdate.inputValid||!x.held||!x.input.focused||!safety.focused||!safety.tracked[0]||!safety.tracked[1]||
            !x.interaction.focused||!c.tracked||!x.input.tracked[0]||!x.input.tracked[1])
@@ -313,7 +355,7 @@ public:
             pending_=FixedContainerRequest{FeedReloadRequest{completion.id,lifetime_,binding_,completion,x.input.nowNs},supply_,*command};
             out.dispatch=pending_;out.status=externalAdmission_?FixedContainerStatus::NativeQueued:FixedContainerStatus::NativeDispatched;return out;
         }
-        if(step_==FixedContainerStep::Open)step_=profile_.kind==FixedContainerKind::SingleRoundBreech?
+        if(step_==FixedContainerStep::Open)step_=profile_.kind==FixedContainerKind::SingleRoundBreech&&!spentCasePresent_?
             FixedContainerStep::Insert:FixedContainerStep::EjectSpent;
         else if(step_==FixedContainerStep::EjectSpent)step_=FixedContainerStep::Insert;
         else if(step_==FixedContainerStep::Close)step_=FixedContainerStep::Complete;
@@ -491,7 +533,7 @@ private:
     std::optional<HandInteractionKey> handItem_;
     FeedInteraction gesture_;
     FixedContainerStep step_;
-    bool bound_=false,mechanismTouched_=false;
+    bool bound_=false,mechanismTouched_=false,spentCasePresent_=false;
     std::uint64_t lastSnapshot_=0,lastInput_=0;
     std::int64_t lastNow_=0,lastInputDeadline_=0;
     std::optional<HandClaimToken> gestureClaim_,armedInsertionClaim_;

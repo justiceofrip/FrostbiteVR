@@ -2704,11 +2704,16 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     const bool observeFamily=rigPublication::WeaponModeObservationRequested(HandNanos(clock.QuadPart));
     const auto nowFamily=GetTickCount64();const auto data=U32(owner.weapon+4);
     const ReloadStateOwner familyCurrent{owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
-    if(familySoldier!=owner.soldier||familyWeak!=owner.weak||familyWeapon!=owner.weapon||familyData!=data||familyEquipment!=owner.equipment||familyEpoch!=rigEpoch||familyOwner!=familyCurrent||nowFamily-familyChecked>=500){
+    const auto familyNowNs=HandNanos(clock.QuadPart),familyInputDeadlineNs=HandNanos(inputDeadline);
+    const bool familyInputNeedsRefresh=physicalFixedContainer&&familyBinding&&familyBinding->selectedSecondary&&
+        familyNowNs>0&&familyInputDeadlineNs>familyNowNs&&
+        !WeaponModeCacheLeaseCovers(familyObservedNs,familyNowNs,familyInputDeadlineNs);
+    if(familySoldier!=owner.soldier||familyWeak!=owner.weak||familyWeapon!=owner.weapon||familyData!=data||familyEquipment!=owner.equipment||familyEpoch!=rigEpoch||familyOwner!=familyCurrent||nowFamily-familyChecked>=500||familyInputNeedsRefresh){
         familySoldier=owner.soldier;familyWeak=owner.weak;familyWeapon=owner.weapon;familyData=data;familyEpoch=rigEpoch;familyChecked=nowFamily;familyEquipment=owner.equipment;
         const WeaponModeMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t size){return Read(at,dst,size);},[](void*,unsigned at,const char* expected){return Type(at,expected);}};
-        // Explicit snapshot demand observes this original periodic resolver call;
-        // it never forces a reread or changes its candidate/dispatch admission.
+        // Snapshot demand only observes the periodic/source-required native read.
+        // The fixed consumer refreshes when its raw input outlives the old lease;
+        // neither diagnostic demand nor cached pose age can trigger this read.
         std::shared_ptr<rigPublication::WeaponModeObservation> observation;
         if(observeFamily)try{observation=std::make_shared<rigPublication::WeaponModeObservation>();}catch(...){}
         if(observation){observation->owner={owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
@@ -2716,7 +2721,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         familyBinding=ResolveWeaponMode(memory,owner.soldier,owner.weapon,observation?&observation->resolution:nullptr);
         // Keep the original resolver lease when joining physical loader custody
         // to the separately fresh selected native ammunition resource.
-        familyOwner=familyCurrent;familyObservedNs=HandNanos(clock.QuadPart);
+        familyOwner=familyCurrent;familyObservedNs=familyNowNs;
         familyObservation=std::move(observation);
     }
     const auto itemProfile=(asset!="40mmgl"||familyBinding)?itemProfileCandidate:nullptr;
@@ -2908,7 +2913,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     if(physicalFixedContainer){
         Bc2PhysicalFixedContainerSample sample;sample.nativeOwner=magazineOwner;sample.input=handSample;sample.weapon=handItem;
         if(familyBinding)sample.family=FixedContainerBodyAmmo::FamilyBinding{
-            familyOwner,*familyBinding,familyObservedNs,familyObservedNs+500000000};
+            familyOwner,*familyBinding,familyObservedNs,familyObservedNs+WeaponModeCacheMaxAgeNs};
         sample.observation=fixedContainerObservation?&*fixedContainerObservation:nullptr;
         sample.geometrySequence=input.generation;sample.trackingEpoch=input.spaceGeneration;
         sample.grip=input.hands[0].squeeze>=.7f;sample.gripPressed=sample.grip&&!fixedContainerGripHeld;

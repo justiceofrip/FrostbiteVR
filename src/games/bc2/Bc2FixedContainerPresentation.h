@@ -2,6 +2,7 @@
 #include "Bc2FixedContainerEquipment.h"
 #include "Bc2Rig.h"
 #include "fvr/graphics/BodyPropFrame.h"
+#include "fvr/graphics/SpentCase.h"
 #include <memory>
 
 namespace fvr::bc2 {
@@ -29,6 +30,11 @@ struct Bc2FixedContainerTracking {
     std::optional<math::Matrix4> target,carriedSupply;
     // Persistent mod-owned transforms. They do not renew controller authority.
     std::array<math::Matrix4,16> parts{};unsigned partCount=0;
+    // Stable-weapon mod state, never ammunition or native mesh authority.
+    bool spentCasePresent=false;
+    std::uint64_t spentCaseEpoch=0;
+    std::optional<math::Matrix4> spentCaseEjectionWorldMeters;
+    std::int64_t spentCaseEjectedNs=0;
 };
 inline bool FixedContainerTrackingSourceFresh(const Bc2FixedContainerTracking& t,std::int64_t now)noexcept {
     using namespace interaction;
@@ -53,6 +59,10 @@ inline bool FixedContainerRawCaptureFresh(const Bc2FixedContainerTracking& t,std
 }
 bool FixedContainerTrackingRetained(const Bc2FixedContainerTracking&,const Bc2FixedContainerTracking&,std::int64_t now)noexcept;
 bool FixedContainerRigMatches(const FixedContainerEquipmentProfile&,const RigSnapshot&)noexcept;
+// Measured supply-root center; orientation and +Z outward direction are mod
+// presentation choices. No native spent-case or extraction semantics implied.
+std::optional<math::Matrix4> FixedContainerSpentCasePose(const FixedContainerEquipmentProfile&,
+    std::span<const math::Matrix4> parts)noexcept;
 Bc2FixedContainerRawContact BuildFixedContainerRawContact(const Bc2FixedContainerTracking&,const RigSnapshot&,
     const math::Matrix4& rawWrist,const math::Matrix4& placedWeapon,float units,std::int64_t now)noexcept;
 struct FixedContainerRenderedPart {std::string_view bone;math::Matrix4 world{};unsigned ordinal=0;};
@@ -65,6 +75,7 @@ struct Bc2FixedContainerPresentation {
     // both retained loaded rounds and the separately carried compound supply.
     std::vector<std::uint32_t> hiddenSupplyBones;
     std::vector<FixedContainerRenderedPart> supply;
+    std::optional<math::Matrix4> spentCaseWorld;
 };
 Bc2FixedContainerPresentation BuildFixedContainerPresentation(const Bc2FixedContainerTracking&,const RigSnapshot&,
     const math::Matrix4& placedWeapon,float units,std::int64_t now)noexcept;

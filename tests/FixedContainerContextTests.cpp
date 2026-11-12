@@ -1,4 +1,5 @@
 #include "fvr/interaction/FixedContainerReload.h"
+#include "Bc2FixedContainerEquipment.h"
 #include "Test.h"
 #include <memory>
 using namespace fvr::interaction;
@@ -131,6 +132,50 @@ int RetainedInsertCompletionLeavesCylinderOpenAndCountsConserved(){
     CHECK(f.policy->CompleteAfterContextChange(*queued,receipt,f.x.ammunition,f.x.input.nowNs));
     CHECK((f.ledger.Snapshot().counts==AmmunitionCounts{3,3,6}));return 0;
 }
+int LinkedFamilyPublicationKeepsOriginalDeadline(){
+    using namespace fvr::bc2;
+    const auto& equipment=generated::UnderbarrelFixedContainerEquipment.front();
+    const WeaponModeFamilyProfile* family=nullptr;
+    for(const auto& candidate:WeaponModeFamilies)if(WeaponModeFamilyEligible(candidate)&&
+        candidate.secondaryConfiguration==equipment.configurationPath&&candidate.secondaryAsset==equipment.asset){family=&candidate;break;}
+    CHECK(family);
+    constexpr std::int64_t observed=621189804163200,deadline=observed+WeaponModeCacheMaxAgeNs;
+    constexpr auto now=deadline-125900,serialized=deadline+380800;
+    const ReloadStateOwner owner{0x10000,0x20000,0x30000,0x40000,1,2,3};
+    const HandInteractionOwner hand{(std::uint64_t(owner.weak)<<32)|owner.soldier,owner.actorGeneration,71,owner.space};
+    FixedContainerBodyAmmo source;source.equipment=&equipment;
+    source.binding={owner,{{owner.soldier,owner.actorGeneration,owner.weapon,1},owner.equipGeneration,owner.space},
+        0x50000,0x60000,0x70000,0x80000,now,now+100000000};
+    source.ammunition={source.binding.context,1,now,now+100000000,{0,7,equipment.interaction.capacity},true};
+    source.family=FixedContainerBodyAmmo::FamilyBinding{owner,{25,0x90000,0,source.binding.inventory,
+        source.binding.persistence,family,true,25},observed,deadline};
+    const auto original=FixedContainerFamilyDeadline(source,hand,now);
+    CHECK(original&&*original==deadline&&serialized>=*original);
+    CHECK(AmmoResourceBindingFresh(source.binding,owner,serialized)); // Fresh ammo cannot extend family authority.
+    CHECK(FixedContainerFamilyDeadline(source,hand,deadline-1)==original);
+    CHECK(!FixedContainerFamilyDeadline(source,hand,deadline));
+    CHECK(!FixedContainerFamilyDeadline(source,hand,serialized));
+    const HandInteractionSample input{hand,1,now,now+100000000,now,true,{true,true},{false,false}};
+    const auto body=FixedContainerBodySource(source,input,now);
+    CHECK(body&&body->deadlineNs==deadline&&source.family->observedNs==observed&&source.family->deadlineNs==deadline);
+    for(unsigned fault=0;fault<9;++fault){
+        auto bad=source;
+        switch(fault){
+        case 0:bad.family.reset();break;
+        case 1:++bad.family->owner.weapon;break;
+        case 2:++bad.family->mode.inventory;break;
+        case 3:++bad.family->mode.persistent;break;
+        case 4:bad.family->mode.family=nullptr;break;
+        case 5:bad.family->mode.selectedSecondary=false;break;
+        case 6:++bad.family->deadlineNs;break; // A widened 500 ms lease is invalid.
+        case 7:bad.family->mode.targetSlot=9;break;
+        case 8:bad.equipment=&generated::FixedContainerEquipment.front();break;
+        }
+        CHECK(!FixedContainerFamilyDeadline(bad,hand,now));
+    }
+    auto wrongHand=hand;++wrongHand.space;CHECK(!FixedContainerFamilyDeadline(source,wrongHand,now));
+    return 0;
+}
 }
 int main(){return MigrationPreservesRecoveryAndRequiresNewHandContact()||MigrationCannotAcquireWithHeldGripOrMissedCurrentContact()||
-    RetainedInsertCompletionLeavesCylinderOpenAndCountsConserved();}
+    RetainedInsertCompletionLeavesCylinderOpenAndCountsConserved()||LinkedFamilyPublicationKeepsOriginalDeadline();}
