@@ -32,6 +32,418 @@ def load(name, path):
 fixtures = load("navigation_native_fixture", ROOT / "tests/test_bc2_holster_shared_entry.py")
 
 
+# Admission projection of actual86/02 da9146dcd773411eb7e108a7675f1e4d
+# snapshot-001.json.gz (SHA256 43f8dcdaa90526ef0151c9bcc2c6d341690b88cf2d44a3ffe712c4300814b5d4).
+# Replay below changes only the synthetic clock, nonce and simulated input;
+# the original independent holster/outer sequence and lease relationships stay.
+RECORDED_EMPTY = json.loads(r'''
+{
+  "schema": "fvr.bc2.live-mechanism-snapshot.v1",
+  "valid": true,
+  "nonce": "1794513515487785900",
+  "observed_ns": 638831968158400,
+  "valid_until_ns": 638832033593000,
+  "native_deadline_ns": 638832033593000,
+  "shot_input_generation": 17678,
+  "physical_equipment_generation": 6,
+  "weapon_actions_blocked": true,
+  "owner": {
+    "player": 1192238816,
+    "soldier": 1192226816,
+    "weak": 116786824,
+    "weapon": 126919920,
+    "actorGeneration": 1,
+    "equipGeneration": 5,
+    "space": 2
+  },
+  "equipment": {
+    "weapon": 126919920,
+    "data": 475548192,
+    "persistence": 134985184,
+    "asset": "XM8_sp_s"
+  },
+  "rig": {
+    "soldier": 1192226816,
+    "weak": 116786824,
+    "animation": 1157341152,
+    "skeleton": 109900976,
+    "pose": 1183117984,
+    "worldHeader": 1157280512,
+    "worldMatrices": 1157280528,
+    "skinMatrices": 1157289936,
+    "evaluatedMatrices": 1157299360,
+    "count": 147,
+    "nativeIk": true,
+    "fingerprint": 12101763329092097707
+  },
+  "selected": {
+    "sequence": 17675,
+    "observedNs": 638831873021200,
+    "deadlineNs": 638832073021200,
+    "configurationPath": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8_Scoped",
+    "configurationPathPointer": 122280704,
+    "configurationPathVerified": true,
+    "inventory": 1192188704,
+    "selectedSlot": 0,
+    "soleConfiguredArray": 126265520,
+    "matchedMeshPath": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh",
+    "meshes": [
+      {
+        "address": 121637376,
+        "typeInfo": 29324564,
+        "namePointer": 130042880,
+        "path": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh"
+      },
+      {
+        "address": 123622336,
+        "typeInfo": 29324564,
+        "namePointer": 123678672,
+        "path": "Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh"
+      }
+    ]
+  },
+  "input": {
+    "generation": 17678,
+    "spaceGeneration": 2,
+    "predictedNs": 638831935441638,
+    "focused": true,
+    "headValid": true,
+    "floorRelative": true,
+    "worldUnitsPerMeter": 1,
+    "trackingBasisGeneration": 2,
+    "referenceHead": {
+      "position": [
+        0,
+        1.60000002,
+        0
+      ],
+      "orientation": [
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "head": {
+      "position": [
+        0,
+        1.60000002,
+        0
+      ],
+      "orientation": [
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "hands": [
+      {
+        "grip": {
+          "position": [
+            -0.200000003,
+            1.29999995,
+            -0.349999994
+          ],
+          "orientation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "aim": {
+          "position": [
+            -0.200000003,
+            1.29999995,
+            -0.349999994
+          ],
+          "orientation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "gripTracked": true,
+        "aimTracked": true,
+        "active": 127,
+        "held": 0,
+        "touchActive": 1,
+        "touched": 0,
+        "stickX": 0,
+        "stickY": 0,
+        "trigger": 0,
+        "squeeze": 0
+      },
+      {
+        "grip": {
+          "position": [
+            0.119999997,
+            1.35000002,
+            -0.150000006
+          ],
+          "orientation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "aim": {
+          "position": [
+            0.119999997,
+            1.35000002,
+            -0.150000006
+          ],
+          "orientation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "gripTracked": true,
+        "aimTracked": true,
+        "active": 63,
+        "held": 0,
+        "touchActive": 1,
+        "touched": 0,
+        "stickX": 0,
+        "stickY": 0,
+        "trigger": 0,
+        "squeeze": 0
+      }
+    ],
+    "menu": {
+      "owner": 1,
+      "sequence": 39256,
+      "epoch": 6,
+      "deadlineNs": 638832031523400
+    }
+  },
+  "input_evidence": {
+    "owner": {
+      "actor": 501595590875934720,
+      "actorGeneration": 1,
+      "equipGeneration": 6,
+      "space": 2
+    },
+    "sequence": 17678,
+    "observedNs": 638831933593000,
+    "deadlineNs": 638832033593000,
+    "nowNs": 638831947230500,
+    "focused": true,
+    "tracked": [
+      true,
+      true
+    ],
+    "released": [
+      true,
+      true
+    ]
+  },
+  "bodyHolster": {
+    "available": true,
+    "observedNs": 638831967962400,
+    "probeRead": {
+      "enabled": true,
+      "samplePresent": true,
+      "reason": null,
+      "sampledNs": 638831966664600,
+      "inputObservedNs": 638831950085000,
+      "inputDeadlineNs": 638832050085000,
+      "inputNowNs": 638831961117000,
+      "inputSequence": 17679,
+      "trialStartNs": 0,
+      "trialDeadlineNs": 0
+    },
+    "sampledNs": 638831966664600,
+    "validUntilNs": 638832033593000,
+    "phase": 3,
+    "actualEmpty": true,
+    "nativeTick": 25170,
+    "request": 4,
+    "nativeOwner": {
+      "player": 1192238816,
+      "soldier": 1192226816,
+      "weak": 116786824,
+      "weapon": 126919920,
+      "actorGeneration": 1,
+      "equipGeneration": 5,
+      "space": 2
+    },
+    "inputEvidence": {
+      "owner": {
+        "actor": 501595590875934720,
+        "actorGeneration": 1,
+        "equipGeneration": 6,
+        "space": 2
+      },
+      "sequence": 17679,
+      "observedNs": 638831950085000,
+      "deadlineNs": 638832050085000,
+      "nowNs": 638831961117000,
+      "focused": true,
+      "tracked": [
+        true,
+        true
+      ],
+      "released": [
+        true,
+        true
+      ]
+    },
+    "physicalGun": {
+      "id": 134985184,
+      "generation": 6
+    },
+    "inputMatchesSnapshot": false,
+    "inputSequenceRelation": "newer",
+    "neutralTrackedInput": true,
+    "input": {
+      "generation": 17679,
+      "spaceGeneration": 2,
+      "focused": true,
+      "headValid": true,
+      "hands": [
+        {
+          "gripTracked": true,
+          "aimTracked": true,
+          "held": 0,
+          "squeeze": 0,
+          "trigger": 0,
+          "stickX": 0,
+          "stickY": 0
+        },
+        {
+          "gripTracked": true,
+          "aimTracked": true,
+          "held": 0,
+          "squeeze": 0,
+          "trigger": 0,
+          "stickX": 0,
+          "stickY": 0
+        }
+      ]
+    },
+    "selectedSlot": {
+      "slot": 2,
+      "item": {
+        "id": 126919920,
+        "generation": 1
+      }
+    },
+    "leftClaim": null,
+    "rightClaim": null,
+    "inventoryEvaluation": 1,
+    "emptyHands": true,
+    "blockWeaponActions": true,
+    "allowAutomaticGunHold": false,
+    "freeRightCurrent": true,
+    "freeRight": {
+      "authorizationDeadlineNs": 0,
+      "inputEvidence": {
+        "owner": {
+          "actor": 501595590875934720,
+          "actorGeneration": 1,
+          "equipGeneration": 6,
+          "space": 2
+        },
+        "sequence": 17679,
+        "observedNs": 638831950085000,
+        "deadlineNs": 638832050085000,
+        "nowNs": 638831961117000,
+        "focused": true,
+        "tracked": [
+          true,
+          true
+        ],
+        "released": [
+          true,
+          true
+        ]
+      },
+      "visibility": {
+        "nativeOwner": {
+          "player": 1192238816,
+          "soldier": 1192226816,
+          "weak": 116786824,
+          "weapon": 126919920,
+          "actorGeneration": 1,
+          "equipGeneration": 5,
+          "space": 2
+        },
+        "request": 4,
+        "inputSequence": 17678,
+        "physicalEquipGeneration": 6,
+        "drawSerial": 25167,
+        "observedNs": 638831959507400,
+        "deadlineNs": 638832033593000,
+        "verifiedCopyMask": 3,
+        "hidden": true,
+        "submittedVisibilityVerified": false
+      },
+      "suppression": {
+        "owner": {
+          "player": 1192238816,
+          "soldier": 1192226816,
+          "weak": 116786824,
+          "weapon": 126919920,
+          "actorGeneration": 1,
+          "equipGeneration": 5,
+          "space": 2
+        },
+        "inputEvidence": {
+          "owner": {
+            "actor": 501595590875934720,
+            "actorGeneration": 1,
+            "equipGeneration": 6,
+            "space": 2
+          },
+          "sequence": 17679,
+          "observedNs": 638831950085000,
+          "deadlineNs": 638832050085000,
+          "nowNs": 638831960954300,
+          "focused": true,
+          "tracked": [
+            true,
+            true
+          ],
+          "released": [
+            true,
+            true
+          ]
+        },
+        "request": 4,
+        "nativeTick": 25170,
+        "cache": 124669440,
+        "equipmentDispatched": false
+      }
+    }
+  },
+  "feed": null
+}
+''')
+
+
+def recorded_empty_snapshot(now, nonce):
+    offset = now - RECORDED_EMPTY["observed_ns"]
+
+    def replay(value, key=""):
+        if isinstance(value, dict):
+            return {k: replay(v, k) for k, v in value.items()}
+        if isinstance(value, list):
+            return [replay(v) for v in value]
+        if type(value) is int and value > 0 and (key.endswith("Ns") or key.endswith("_ns")):
+            return value + offset
+        return value
+
+    result = replay(RECORDED_EMPTY)
+    result["nonce"] = str(nonce)
+    return result
+
+
 class Clock:
     def __init__(self):
         self.now = 2_000_000_000
@@ -50,7 +462,8 @@ class NavigationTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix="navigation-offline-")
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        for name in ("drive_bc2_navigation_simulation.py", "drive_bc2_feed_simulation.py", "plan_bc2_feed_simulation.py"):
+        for name in ("drive_bc2_navigation_simulation.py", "drive_bc2_feed_simulation.py",
+                     "plan_bc2_feed_simulation.py", "bc2_holster_core.py"):
             target = self.root / "tools" / name
             target.parent.mkdir(exist_ok=True)
             shutil.copyfile(ROOT / "tools" / name, target)
@@ -108,6 +521,7 @@ class NavigationTests(unittest.TestCase):
         self.omit_later_frame = False
         self.held_owner_records = []
         self.bad_ack_once = False
+        self.replay_empty = False
 
     def write(self, path, value):
         path.write_text(json.dumps(value), encoding="utf-8")
@@ -120,8 +534,10 @@ class NavigationTests(unittest.TestCase):
 
     def snapshot(self, driver):
         now = self.clock.tick()
-        s = fixtures.outer_snapshot(now, driver.pending_nonce, now // 10_000, "held")
-        s["input"]["menu"] = dict(owner=1, sequence=now // 10_000, epoch=7, deadlineNs=now+70_000_000)
+        s = (recorded_empty_snapshot(now, driver.pending_nonce) if self.replay_empty
+             else fixtures.outer_snapshot(now, driver.pending_nonce, now // 10_000, "held"))
+        if not self.replay_empty:
+            s["input"]["menu"] = dict(owner=1, sequence=now // 10_000, epoch=7, deadlineNs=now+70_000_000)
         s["input"]["head"] = dict(position=self.state["head"]["pos"][:],
             orientation=self.m.p.ypr_quaternion(self.state["head"]["ypr"]))
         for index, hand in enumerate(("handL", "handR")):
@@ -130,6 +546,11 @@ class NavigationTests(unittest.TestCase):
             s["input"]["hands"][index].update(grip=copy.deepcopy(pose), aim=copy.deepcopy(pose),
                 held=0, squeeze=0, trigger=0, stickX=self.state["controls"]["stickL" if index == 0 else "stickR"][0],
                 stickY=self.state["controls"]["stickL" if index == 0 else "stickR"][1])
+        if self.replay_empty:
+            h = s["bodyHolster"]
+            for hand, current in zip(h["input"]["hands"], s["input"]["hands"]):
+                hand.update({key: current[key] for key in hand})
+            h["neutralTrackedInput"] = self.m.holster.neutral(h["input"])
         if self.snapshot_mutation:
             self.snapshot_mutation(s, driver)
         self.samples.append(copy.deepcopy(s))
@@ -254,6 +675,108 @@ class NavigationTests(unittest.TestCase):
             self.m.plan([dict(left=[0, 1], right=[0, 0], holdMs=501)])
         with self.assertRaises(self.m.Refusal):
             self.m.plan([dict(left=[0, 1], right=[0, 0], holdMs=150, commands=["trigger r 1"])])
+
+    def test_recorded_genuine_empty_assembled_movement_preserves_fire_block(self):
+        self.replay_empty = True
+        original = copy.deepcopy(RECORDED_EMPTY)
+        # Exercise the real callback against the untouched native projection at
+        # its original observation time before replaying the assembled command.
+        self.m.p.admit_frame(RECORDED_EMPTY, RECORDED_EMPTY["observed_ns"],
+            int(RECORDED_EMPTY["nonce"]), mechanism_admission=self.m.empty_movement_admission)
+        self.assertEqual(RECORDED_EMPTY, original)
+        code, result = self.assembled()
+        self.assertEqual((code, result.get("error")), (0, None))
+        self.assertEqual(len(self.calls), 2)
+        self.assertEqual(self.calls[-1], self.m.ZERO)
+        self.assertTrue(all(s["weapon_actions_blocked"] is True for s in self.samples))
+        self.assertTrue(all(s["bodyHolster"]["inputSequenceRelation"] == "newer" for s in self.samples))
+        self.assertTrue(any(not s["bodyHolster"]["neutralTrackedInput"] for s in self.samples))
+        self.assertTrue(all(s["bodyHolster"]["leftClaim"] is None
+                            and s["bodyHolster"]["rightClaim"] is None for s in self.samples))
+        self.assertFalse(result["nativeAcceptance"])
+        self.assertFalse(result["normalStopRequired"])
+
+    def test_blocked_without_current_empty_refuses_before_input(self):
+        self.replay_empty = True
+        def mutation(s, driver):
+            s["bodyHolster"].update(actualEmpty=False, phase=1)
+        self.snapshot_mutation = mutation
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertIn("without an admitted retained mechanism", result["error"])
+        self.assertEqual(self.calls, [])
+
+    def test_stale_recorded_empty_refuses_before_input(self):
+        self.replay_empty = True
+        self.snapshot_mutation = lambda s, driver: s["bodyHolster"].update(validUntilNs=self.clock.now-1)
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertIn("holster observation lease", result["error"])
+        self.assertEqual(self.calls, [])
+
+    def test_lost_empty_proof_releases_owned_sticks(self):
+        self.replay_empty = True
+        def mutation(s, driver):
+            if self.calls:
+                s["bodyHolster"]["freeRightCurrent"] = False
+        self.snapshot_mutation = mutation
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertIn("genuine Empty proof", result["error"])
+        self.assertEqual(len(self.calls), 2)
+        self.assertEqual(self.calls[-1], self.m.ZERO)
+        self.assertFalse(result["normalStopRequired"])
+
+    def test_empty_original_lease_caps_publication(self):
+        self.replay_empty = True
+        self.snapshot_mutation = lambda s, driver: s["bodyHolster"].update(validUntilNs=self.clock.now+5_000_000)
+        self.publication_delay = 8_000_000
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertEqual(self.calls, [])
+        self.assertRegex(result["error"], "deadline|lease")
+
+    def test_empty_proof_rejects_unjoined_stale_or_nonempty_observations(self):
+        now = RECORDED_EMPTY["observed_ns"]
+        mutations = (
+            lambda s: s["bodyHolster"].update(available=False),
+            lambda s: s["bodyHolster"].update(actualEmpty=False),
+            lambda s: s["bodyHolster"].update(phase=1),
+            lambda s: s["bodyHolster"].update(emptyHands=False),
+            lambda s: s["bodyHolster"].update(rightClaim={}),
+            lambda s: s["bodyHolster"].update(blockWeaponActions=False),
+            lambda s: s["bodyHolster"].update(allowAutomaticGunHold=True),
+            lambda s: s["bodyHolster"]["nativeOwner"].update(actorGeneration=2),
+            lambda s: s["bodyHolster"]["inputEvidence"]["owner"].update(equipGeneration=7),
+            lambda s: s["bodyHolster"]["inputEvidence"].update(deadlineNs=now-1),
+            lambda s: s["bodyHolster"]["input"].update(generation=17678),
+            lambda s: s["bodyHolster"].update(inputSequenceRelation="same"),
+            lambda s: s["bodyHolster"].update(neutralTrackedInput=False),
+            lambda s: s["bodyHolster"]["freeRight"]["visibility"].update(deadlineNs=now-1),
+            lambda s: s["bodyHolster"]["freeRight"]["suppression"].update(nativeTick=25169),
+            lambda s: s["bodyHolster"]["freeRight"]["suppression"].update(equipmentDispatched=True),
+            lambda s: s["bodyHolster"]["freeRight"].update(authorizationDeadlineNs=now-1),
+            lambda s: s["input"]["menu"].update(owner=3),
+            lambda s: s["input"]["menu"].update(deadlineNs=now-1),
+            lambda s: s["input"].update(focused=False),
+            lambda s: s["input"]["hands"][1].update(gripTracked=False),
+            lambda s: s["input"]["hands"][1].update(trigger=.1),
+        )
+        driver = self.m.NavigationDriver.__new__(self.m.NavigationDriver)
+        driver.navigation_reference = None
+        for index, mutate in enumerate(mutations):
+            with self.subTest(index=index):
+                sample = copy.deepcopy(RECORDED_EMPTY)
+                mutate(sample)
+                with self.assertRaises(Exception):
+                    driver.admit_snapshot(sample, now, int(sample["nonce"]))
+        for key, value in (("trigger", .1), ("squeeze", .1), ("held", 1), ("gripTracked", False)):
+            with self.subTest(holster_input=key):
+                sample = copy.deepcopy(RECORDED_EMPTY)
+                sample["bodyHolster"]["input"]["hands"][1][key] = value
+                sample["bodyHolster"]["neutralTrackedInput"] = False
+                with self.assertRaises(self.m.ObservationLost):
+                    driver.admit_snapshot(sample, now, int(sample["nonce"]))
 
     def test_delayed_ack_consumes_original_pulse_and_explicit_zero(self):
         self.ack_delay = 35_000_000

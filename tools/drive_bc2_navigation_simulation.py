@@ -25,6 +25,10 @@ _spec = importlib.util.spec_from_file_location(
 t = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(t)
 p, require, Refusal = t.planner, t.require, t.REFUSAL
+_spec = importlib.util.spec_from_file_location(
+    "bc2_navigation_holster", Path(__file__).with_name("bc2_holster_core.py"))
+holster = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(holster)
 ZERO = ["stick l 0 0", "stick r 0 0"]
 PERIOD = 25_000_000
 
@@ -64,6 +68,23 @@ def neutral_controls(controls):
     return bool(controls) and all(
         all(x == 0 for x in value) if isinstance(value, list) else value == 0
         for value in controls.values())
+
+
+def empty_movement_admission(snapshot, now):
+    """Observe current genuine Empty; confer no weapon or mechanism authority."""
+    h = snapshot.get("bodyHolster")
+    if not isinstance(h, dict) or h.get("actualEmpty") is not True:
+        return False
+    # This joins the original independent holster, visibility and suppression
+    # leases to the current actor/physical item. A Fire block alone is no proof.
+    h = holster.holster_proof(snapshot, now)
+    need_observation(all(hand["gripTracked"] is True and hand["aimTracked"] is True
+                         and hand["held"] == hand["squeeze"] == hand["trigger"] == 0
+                         for hand in h["input"]["hands"]),
+                     "Empty navigation requires neutral tracked buttons/triggers/grips")
+    # neutralTrackedInput includes sticks, so it correctly becomes false during
+    # movement. holster_proof still verifies that flag against consumed input.
+    return True
 
 
 class NavigationArtifacts(t.Artifacts):
@@ -121,6 +142,7 @@ class NavigationDriver(t.Driver):
             driverSha256=t.digest(Path(__file__).read_bytes()),
             transportSha256=t.digest(Path(t.__file__).read_bytes()),
             plannerSha256=t.digest(Path(p.__file__).read_bytes()),
+            holsterPolicySha256=t.digest(Path(holster.__file__).read_bytes()),
             rootAuthorizedOrdinaryNavigation=True, version=args.version,
             sourceSha256=args.source_sha256, nativeAcceptance=False, objectiveEntry=False,
             snapshotArtifactEncoding="gzip-original-bytes", maximumDecodedSnapshotBytes=8*1024*1024))
@@ -214,12 +236,16 @@ class NavigationDriver(t.Driver):
         return None
 
     def snapshot_source_deadline(self, snapshot):
-        return min(super().snapshot_source_deadline(snapshot),
-                   t.integer(snapshot["native_deadline_ns"]),
-                   t.integer(snapshot["input"]["menu"]["deadlineNs"]))
+        deadline = min(super().snapshot_source_deadline(snapshot),
+                       t.integer(snapshot["native_deadline_ns"]),
+                       t.integer(snapshot["input"]["menu"]["deadlineNs"]))
+        if (snapshot["weapon_actions_blocked"] is True
+                and (snapshot.get("bodyHolster") or {}).get("actualEmpty") is True):
+            deadline = min(deadline, t.integer(snapshot["bodyHolster"]["validUntilNs"]))
+        return deadline
 
     def admit_snapshot(self, snapshot, now, nonce):
-        p.admit_frame(snapshot, now, nonce)
+        p.admit_frame(snapshot, now, nonce, mechanism_admission=empty_movement_admission)
         inp = snapshot["input"]
         menu = inp["menu"]
         # Gameplay=1 is the native menu owner. Valid body/shot publication is

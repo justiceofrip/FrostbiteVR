@@ -1,4 +1,5 @@
 #include "Bc2ChestKnifeNative.h"
+#include "Bc2ChestKnifeInspection.h"
 #include "Bc2ChestKnifeProbeConfig.h"
 #include "KnifeNativeCode.h"
 #include "Bc2KnifeAttackGate.h"
@@ -58,7 +59,7 @@ struct Service {
     pk::OriginalKnifeSource sourceIdentity;
     pk::StockKnifeSourceRevocation stockTriggerSource;std::uint64_t stagedStockTriggerRevocation=0;
     pk::StockKnifeMotionSourceRevocation stockMotionSource;std::uint64_t stagedStockMotionRevocation=0;
-    std::uint64_t stagedEpoch=0,bodyOperation=0,nativeLifetime=0,observationSequence=0;
+    std::uint64_t stagedEpoch=0,bodyOperation=0,nativeLifetime=0,observationSequence=0,inspectionOperation=1;
     std::optional<KnifeCommand> outstanding;
     std::uint64_t currentHoldDrawSerial=0;bool currentHoldDrawOnly=false; // Passive per-Draw provenance.
     ReturnPendingReason lastReturnReason=ReturnPendingReason::NotObserved;std::int64_t lastReturnObservedNs=0;
@@ -86,6 +87,12 @@ struct Service {
     std::array<std::atomic<std::uint64_t>,3> copySerial{},copyInput{},copyObservedNs{},copyContext{},copyCaller{};
     std::array<std::atomic<std::uint64_t>,3> copyReturnedNs{},copyOriginalUnchanged{},copyPostReadKnown{},copyHashBefore{},copyHashAfter{};
 } service;
+void InspectionChanged()noexcept {AdvanceInspectionOperation(service.inspectionOperation);}
+InspectionStamp InspectionSource()noexcept {
+    return {service.inspectionOperation,service.sourceEpoch.load(std::memory_order_acquire),
+        service.poseRevocation.load(std::memory_order_acquire),service.stockTriggerSource.Stamp(),service.stockMotionSource.Stamp(),
+        service.enabled.load(std::memory_order_acquire),service.closing.load(std::memory_order_acquire)};
+}
 // First cause since the ordinary draw reset. No native read, clock, logging or
 // retry. Diagnostic does not clear the existing conservative incomplete latch.
 bool ObservationGap(unsigned reason,unsigned branch=3)noexcept {
@@ -250,7 +257,7 @@ OriginalFiringToken Enter(void*,const OriginalFiringUpdate& call)noexcept {
     const auto input=DecodeReloadUpdateContext(context);if(!input){++service.gaps;ObservationGap(3,branch-1);return token;}
     token.words[0]=service.nativeLifetime;token.words[1]=branch;token.words[2]=Word<unsigned>(state.data(),0x3c);
     token.words[3]=input->fireRequested?1:0;
-    if(service.attackNative&&branch==3&&input->inputFlags)service.bridge.Fail(service.attackNative->key);
+    if(service.attackNative&&branch==3&&input->inputFlags){InspectionChanged();service.bridge.Fail(service.attackNative->key);}
     if(service.attacks.Pending())token.words[6]=service.attacks.Pending()->serial;
     token.words[4]=std::uint32_t(Word<int>(state.data(),0x7c));token.words[5]=std::uint32_t(Word<int>(state.data(),0x80));return token;
 }
@@ -260,6 +267,7 @@ void AbortUpdate(void*,const OriginalFiringUpdate&,const OriginalFiringToken& to
         // A delayed unwind may belong to an actor already retired on another thread.
         std::lock_guard lock(service.gate);
         if(service.owned&&token.words[0]==service.nativeLifetime){
+            InspectionChanged();
             ++service.gaps;ObservationGap(4,unsigned(token.words[1]-1));
             if(token.words[6]&&service.attacks.Pending()&&service.attacks.Pending()->serial==token.words[6]){
                 const auto branch=unsigned(token.words[1]-1);
@@ -320,10 +328,10 @@ void Leave(void*,const OriginalFiringUpdate& call,const OriginalFiringToken& tok
                 service.sentinelChanged|=std::uint32_t(token.words[4])!=UINT32_MAX||std::uint32_t(token.words[5])!=UINT32_MAX||
                     Word<int>(state.data(),0x7c)!=-1||Word<int>(state.data(),0x80)!=-1;
                 const bool expected=service.attacks.ExpectedObservation(branch,token.words[6]);
-                if(expected)service.attacks.Observe(branch,unsigned(token.words[2]),current,next);
+                if(expected){InspectionChanged();service.attacks.Observe(branch,unsigned(token.words[2]),current,next);}
                 const bool busy=token.words[2]==5||token.words[2]==6||current==5||current==6||next==5||next==6;
                 const unsigned rejected=(service.fireSeen?1u:0u)|((busy&&!expected)?2u:0u)|(service.sentinelChanged?4u:0u);
-                if(rejected){RecordCallback(service.firstRejectedCallback,rejected,branch,call,token,state,selected);service.bad.store(true);}
+                if(rejected){InspectionChanged();RecordCallback(service.firstRejectedCallback,rejected,branch,call,token,state,selected);service.bad.store(true);}
                 else if(busy&&branch==0&&expected)RecordCallback(service.firstPredictionActivity,0,branch,call,token,state,selected);
             }
         }
@@ -341,6 +349,7 @@ int __fastcall Choose(void* self,void*,void* input){
         const std::array<unsigned,2> inventories{anchor.original.links.clientInventory,anchor.original.links.inventory};
         const unsigned branch=unsigned(self)==inventories[0]?0:unsigned(self)==inventories[1]?1:2;
         if(branch>=2)return original;
+        InspectionChanged();
         unsigned reason=CloseOkay;const auto snapshot=CloseSnapshot(reason);
         if(!snapshot){++service.closeReadGaps;RecordClose(1,branch,reason);return original;}
         reason=!pk::KnifeCloseConsumerReady(*snapshot,branch)?CloseNotIdle:
@@ -359,6 +368,7 @@ int __fastcall Choose(void* self,void*,void* input){
     const unsigned from=drawing?a.original.client.selectedSlot:a.knifeSlot,to=drawing?a.knifeSlot:a.original.client.selectedSlot;
     if(selected.current[branch]!=from||(!drawing&&selected.previous[branch]!=to))return original;
     const auto now=Now();if(!service.commands.Choose(branch,now,SourceCurrent(command,now)))return original;
+    InspectionChanged();
     service.deployGuard.store(service.stagedGuard,std::memory_order_release);service.owned=true;++service.chooserOverrides;return int(to);
 }
 // Denial belongs to the already accepted native tool operation. An unknown
@@ -412,6 +422,7 @@ std::optional<std::array<std::byte,0x30>> AttackInput(void*,const OriginalFiring
     const auto now=Now();
     if(service.attackBridgeEnabled&&(!service.attackNative||!service.bridge.Same(service.attackNative->key)))return {};
     if(!service.attacks.Consume(branch-1,now,SourceCurrent(*service.attacks.Pending(),now)))return {};
+    InspectionChanged();
     if(service.attackBridgeEnabled&&!service.bridge.Consume(service.attackNative->key,branch-1))service.bridge.Fail(service.attackNative->key);
     token.words[0]=service.nativeLifetime;token.words[1]=branch;token.words[2]=2;token.words[3]=2;
     token.words[4]=token.words[5]=UINT32_MAX;token.words[6]=service.attacks.Pending()->serial;
@@ -462,24 +473,41 @@ bool TrackedAttackRequested()noexcept{return service.enabled.load(std::memory_or
 void Start()noexcept{if(service.installed)service.enabled.store(true,std::memory_order_release);}
 std::optional<View> Inspect(const ReloadStateOwner& current,unsigned knifeWeapon,std::uint64_t sequence,std::int64_t now,InspectReason* diagnostic)noexcept {
     const auto reason=[&](InspectReason r){if(diagnostic)*diagnostic=r;};
-    std::unique_lock lock(service.gate,std::try_to_lock);reason(InspectReason::Busy);if(!lock.owns_lock())return {};
-    reason(InspectReason::Disabled);if(!service.enabled.load())return {};
-    auto anchor=service.anchor;if(!anchor)anchor=pk::MakeAnchor(service.memory,service.state,service.server,service.base,current,knifeWeapon,sequence,now);
-    reason(InspectReason::Anchor);if(!anchor)return {};
-    reason(InspectReason::KnifeIdentity);if(anchor->knifeWeapon!=knifeWeapon)return {};
-    const auto snapshot=pk::Read(service.memory,service.state,service.server,service.base,*anchor,current,sequence,now);
-    reason(InspectReason::NativeRead);if(!snapshot)return {};
-    reason(InspectReason::Flags);if(!Flags(*anchor))return {};
-    reason(InspectReason::Available);
-    return View{*anchor,*snapshot,service.owned,!service.bad.load(),!service.ownedObservationGap.load(),service.motionEnabled&&(!service.attackBridgeEnabled||service.attackHooksAvailable.load()),service.attackBridgeEnabled,service.stockTriggerEnabled,service.firstObservationGap.load(),
-        {service.nativeLifetime,service.bodyOperation,service.currentHoldDrawSerial,true,service.currentHoldDrawOnly,
-         bool(service.outstanding),bool(service.commands.Pending()),bool(service.attacks.Pending()),service.returnReady,
-         service.closing.load(std::memory_order_acquire),bool(service.attackNative),bool(service.bridge.Pending())}};
+    struct Capture {std::optional<pk::Anchor> anchor;InspectionStamp stamp;std::uint64_t lifetime=0,operation=0;bool owned=false;};
+    reason(InspectReason::Busy);
+    return InspectOutsideGate<Capture,View>(service.gate,[&]()->std::optional<Capture>{
+        if(!service.enabled.load(std::memory_order_acquire)){reason(InspectReason::Disabled);return {};}
+        return Capture{service.anchor,InspectionSource(),service.nativeLifetime,service.bodyOperation,service.owned};
+    },[&](const Capture& captured)->std::optional<View>{
+        // Bindings and reader callbacks are immutable after Install. Native
+        // actor/item bookends remain the existing typed reader's responsibility.
+        auto anchor=captured.anchor;if(!anchor)anchor=pk::MakeAnchor(service.memory,service.state,service.server,service.base,current,knifeWeapon,sequence,now);
+        reason(InspectReason::Anchor);if(!anchor)return {};
+        reason(InspectReason::KnifeIdentity);if(anchor->knifeWeapon!=knifeWeapon)return {};
+        const auto snapshot=pk::Read(service.memory,service.state,service.server,service.base,*anchor,current,sequence,now);
+        reason(InspectReason::NativeRead);if(!snapshot)return {};
+        reason(InspectReason::Flags);if(!Flags(*anchor))return {};
+        reason(InspectReason::Busy);View view;view.anchor=*anchor;view.snapshot=*snapshot;return view;
+    },[&](const Capture& captured,View& view){
+        if(!InspectionStillCurrent(captured.stamp,InspectionSource())||captured.lifetime!=service.nativeLifetime||
+           captured.operation!=service.bodyOperation||captured.owned!=service.owned||bool(captured.anchor)!=bool(service.anchor)||
+           (captured.anchor&&!SameAnchor(*captured.anchor,*service.anchor)))return false;
+        // Callback observations may advance during the read. Publish their
+        // CURRENT conservative health/gap, never the pre-read values.
+        view.owned=service.owned;view.healthy=!service.bad.load();view.observationComplete=!service.ownedObservationGap.load();
+        view.motionEnabled=service.motionEnabled&&(!service.attackBridgeEnabled||service.attackHooksAvailable.load());
+        view.attackBridgeEnabled=service.attackBridgeEnabled;view.stockTriggerEnabled=service.stockTriggerEnabled;view.firstObservationGap=service.firstObservationGap.load();
+        view.currentHoldWork={service.nativeLifetime,service.bodyOperation,service.currentHoldDrawSerial,true,service.currentHoldDrawOnly,
+            bool(service.outstanding),bool(service.commands.Pending()),bool(service.attacks.Pending()),service.returnReady,
+            service.closing.load(std::memory_order_acquire),bool(service.attackNative),bool(service.bridge.Pending())};
+        reason(InspectReason::Available);return true;
+    });
 }
 void AcknowledgeNoEffectRehide(const Bc2BodyHolster& body)noexcept {
     std::unique_lock lock(service.gate,std::try_to_lock);
     if(lock.owns_lock()&&!service.owned&&!service.outstanding&&service.returnReady&&
        body.LastTemporaryToolReturn()==service.bodyOperation&&!body.TemporaryToolActive()){
+        InspectionChanged();
         service.returnReady=false;service.anchor.reset();service.stagedGuard.reset();
     }
 }
@@ -491,6 +519,7 @@ bool TryIdleHeldGun(const KnifeSample& source)noexcept {
     if(!lock.owns_lock()||!service.enabled.load()||service.closing.load()||(service.motionEnabled&&!service.stockTriggerEnabled)||
        service.attackBridgeEnabled||service.bad||service.anchor||service.owned||service.outstanding||
        service.commands.Pending()||service.returnReady)return false;
+    InspectionChanged();
     SourceAdvanced(source.source);
     service.source=source;
     return true;
@@ -510,6 +539,7 @@ bool BeforePrepare(const KnifeSample& source,ChestKnifeCustody& policy)noexcept 
         !source.holdInputCurrent||!KnifeActionInputCurrent(source)||!source.gripHeld[1]||
         !GameplayOwnsInput(source.menu,source.source.nowNs)))service.poseRevocation.fetch_add(1,std::memory_order_acq_rel);
     std::unique_lock lock(service.gate,std::try_to_lock);if(!lock.owns_lock()||service.closing.load(std::memory_order_acquire))return false;
+    InspectionChanged();
     if(service.outstanding){const auto result=service.outstanding->kind==KnifeCommandKind::Attack?
         service.attacks.ResolveBeforeSource(source.source.sequence,source.source.observedNs,source.source.nowNs):
         service.commands.ResolveBeforeSource(source.source.sequence,source.source.observedNs,source.source.nowNs);
@@ -521,6 +551,7 @@ bool Stage(const KnifeCommand& command,const KnifeSample& source,const HandInter
     const std::optional<math::Matrix4>& attackGeometry,float units,std::int64_t geometryDeadlineNs)noexcept {
     std::unique_lock lock(service.gate,std::try_to_lock);
     // A later attempted action cannot revive this Draw's passive-only provenance.
+    if(lock.owns_lock())InspectionChanged();
     if(lock.owns_lock()&&command.kind!=KnifeCommandKind::Draw)service.currentHoldDrawOnly=false;
     const auto reject=[&](){policy.Committed(command,KnifeCommit::RejectedNoEffect);return false;};
     if(!lock.owns_lock()||service.closing.load(std::memory_order_acquire)||!service.enabled.load()||service.bad||!bodyOperation||
@@ -570,6 +601,7 @@ std::optional<KnifeReceipt> Observe(const ReloadStateOwner& current,const Bc2Bod
     if(completed)completed->reset();
     std::unique_lock lock(service.gate,std::try_to_lock);
     if(!lock.owns_lock()||!service.enabled.load()||!service.anchor||!service.outstanding)return {};
+    InspectionChanged();
     const auto command=*service.outstanding;const bool drawing=command.kind==KnifeCommandKind::Draw,attacking=command.kind==KnifeCommandKind::Attack;
     const auto pending=[&](ReturnPendingReason reason){
         if(!drawing&&!attacking){service.lastReturnReason=reason;service.lastReturnObservedNs=now;}
@@ -649,6 +681,7 @@ std::optional<std::uint64_t> ReturnNeedsRehide()noexcept {
 void ObserveLifetime(const ReloadStateOwner& current)noexcept {
     if(!current.player||!current.soldier||!current.weak||!current.actorGeneration)return;
     std::unique_lock lock(service.gate,std::try_to_lock);if(!lock.owns_lock()||!service.anchor||SameActor(current,service.anchor->original.client.owner))return;
+    InspectionChanged();
     service.sourceEpoch.fetch_add(1);service.commands.LifetimeEnded();service.attacks.LifetimeEnded();service.bridge.LifetimeEnded();service.attackNative.reset();service.outstanding.reset();service.anchor.reset();
     service.owned=service.returnReady=false;service.bad.store(false);service.deployGuard.store({},std::memory_order_release);++service.nativeLifetime;
 }
@@ -663,6 +696,7 @@ SessionCloseStatus PollSessionClose()noexcept {
     if(!service.installed)return SessionCloseStatus::Complete;
     if(!service.closing.load(std::memory_order_acquire))return SessionCloseStatus::Unresolved;
     std::unique_lock lock(service.gate,std::try_to_lock);if(!lock.owns_lock())return SessionCloseStatus::Pending;
+    InspectionChanged();
     const auto now=Now();
     if(service.close.Phase()==pk::KnifeClosePhase::Unrequested){
         // Do not race an already-entered chooser/firing callback. No new action
@@ -710,6 +744,7 @@ SessionCloseStatus PollSessionClose()noexcept {
 bool Stop()noexcept {
     {std::unique_lock lock(service.gate,std::try_to_lock);
         if(!lock.owns_lock()||service.owned||(service.commands.Pending()&&service.commands.Accepted()))return false;
+        InspectionChanged();
         // Unconsumed stages can no longer reach a native chooser after stop.
         service.sourceEpoch.fetch_add(1,std::memory_order_acq_rel);service.commands.LifetimeEnded();service.attacks.LifetimeEnded();service.outstanding.reset();
         service.enabled.store(false,std::memory_order_release);

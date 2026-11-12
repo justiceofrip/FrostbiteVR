@@ -4,7 +4,7 @@ Navigation accepts1-4 reviewed100-500ms stick pulses and bounded head yaw/pitch,
 Current same-owner Playing/source/input evidence admits each pulse; explicit zero ACK and neutral committed controls end it.
 Competing-writer ambiguity requires normal Stop; loss of observation permits only proven owned zero-stick cleanup.
 Native snapshots are retained losslessly under existing1MiB disk limit and an explicit8MiB decoded ceiling.
-20 assembled navigation tests pass using installed86Python under the normal Windows token; no actual movement/objective claim follows.
+26 assembled navigation tests pass using installed86Python under the normal Windows token; genuineEmpty uses existing current holster proofs without Fire authority. No actual movement/objective claim follows.
 Fixed Reload aggregate ceiling52.15s includes five original10s stage bounds, admissions and cleanup. Single stages are unchanged.
 Original source/input/request/ACK deadlines,512command/1MiB metadata+disk/4MiB decoded limits remain enforced independently.
 79 reload tests pass with4 optional skips;79 adjacent checks pass with21 optional skips.
