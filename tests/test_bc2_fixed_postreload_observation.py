@@ -4,6 +4,7 @@ Fixtures exercise shared ownership, native receipt identity and release boundari
 No game execution or native/headset acceptance is inferred.
 """
 import copy
+from contextlib import contextmanager
 import importlib.util
 from pathlib import Path
 import tempfile
@@ -13,6 +14,7 @@ from unittest.mock import patch
 import test_bc2_feed_postrelease_observation as feed_tests
 import test_bc2_feed_driver_observation as transport_tests
 import test_bc2_fixed_container_simulation_plan as fixed_tests
+import test_bc2_fixed_spent_case_stimulus as spent_tests
 
 d = feed_tests.d
 ROOT = Path(__file__).resolve().parents[1]
@@ -70,6 +72,34 @@ def fixed_fixture(alternate=False):
 
 
 class FixedPostreloadTests(unittest.TestCase):
+    def combined(self, kind=3, spent=True):
+        def observe(snapshot, driver, sensor):
+            x = snapshot['fixedContainer']
+            x['physicalFamily'] = dict(owner=copy.deepcopy(snapshot['owner']),
+                observedNs=snapshot['observed_ns'], deadlineNs=snapshot['valid_until_ns'], current=True,
+                physicalItem=snapshot['equipment']['persistence'], inventory=snapshot['selected']['inventory'],
+                selectedSecondary=True, targetWeapon=15, targetSlot=0, action=25, primaryAction=25,
+                configurationPath=snapshot['selected']['configurationPath'], asset=snapshot['equipment']['asset'],
+                persistentId='synthetic-xm8')
+            x['tracking']['gun']['token']['item']['id'] = snapshot['equipment']['persistence']
+            if driver.stimulus and driver.stimulus['stage'] == 'Close':
+                x['lastCompletion'] = copy.deepcopy(sensor.source['fixedContainer']['lastCompletion'])
+        driver, _, error = spent_tests.SpentCaseTests().assembled(reload=True, kind=kind, spent=spent, mutate=observe)
+        self.assertIsNone(error, str(error))
+        result = dict(schema='bc2vr.reload-stimulus-result.v1', status='ordinary_stimulus_completed',
+            stimulusCompleted=True, boundaryChecksPassed=True, observerStopped=True, observationIncomplete=False,
+            leftGripHeld=driver.held_left, pendingCommand=driver.pending_command,
+            plans=driver.plans, boundaries=driver.boundaries)
+        plans = [driver.artifacts.saved[f'stimulus-{i:02}.json'] for i in range(1, len(driver.plans)+1)]
+        snapshot = copy.deepcopy(driver.observed[-1]['snapshot'])
+        x = snapshot['fixedContainer']
+        x['tracking'].update(hand=None, target=None, grip=False)
+        x['leftClaim'], x['raw']['grip'] = None, False
+        for ev in (snapshot['input_evidence'], x['input'], x['raw']['input']):
+            ev['released'][0] = True
+        snapshot['input']['hands'][0]['squeeze'] = 0.
+        return plans, result, snapshot
+
     def ready(self):
         plan, result, snapshot = fixed_fixture()
         return snapshot, d.fixed_post_reload_closure(plan, result)
@@ -133,13 +163,15 @@ class FixedPostreloadTests(unittest.TestCase):
         with self.assertRaises(d.REFUSAL):
             d.post_reload_ready(None, s, NS+1200*MS, closure, neutral=True)
 
-    def native(self):
+    def native(self, closure=None):
         flow, boundary = feed_tests.FeedPostreloadShotTests.native()
-        _, closure = self.ready()
+        if closure is None:
+            _, closure = self.ready()
         baseline = closure['fixedPlan']['baseline']
+        counts = d.fixed_post_reload_counts(closure)
         identity = baseline['nativeIdentity']
         boundary.update(schema='bc2vr.fixed-post-reload-pulse.v1', owner=identity['owner'], closure=closure,
-                        beforeCounts=baseline['counts'], afterCounts=dict(baseline['counts'], loaded=0))
+                        beforeCounts=counts, afterCounts=dict(counts, loaded=0))
         for k in ('neutralWrittenNs', 'pressWrittenNs', 'releaseWrittenNs', 'releaseCommittedNs', 'observationEndNs'):
             boundary[k] += 2*NS
         for row in flow['records']:
@@ -148,7 +180,7 @@ class FixedPostreloadTests(unittest.TestCase):
             for key in ('before', 'after'):
                 r = row[key]
                 r['loaded'] -= 199
-                r['reserve'] = baseline['counts']['reserve']
+                r['reserve'] = counts['reserve']
                 r['firing'] = identity['firing'][r['branch']]
                 for field, name in (('player', 'player'), ('soldier', 'soldier'), ('weak', 'weak'), ('weapon', 'weapon'),
                                     ('actor_generation', 'actorGeneration'), ('equip_generation', 'equipGeneration'), ('space', 'space')):
@@ -178,8 +210,8 @@ class FixedPostreloadTests(unittest.TestCase):
             with self.subTest(fault=fault), self.assertRaises(d.REFUSAL):
                 d.audit_post_reload_shot(flow, boundary)
 
-    def test_one_fixed_pulse_rearms_releases_and_refuses_another_attempt(self):
-        plan, result, snapshot = fixed_fixture()
+    @contextmanager
+    def pulse_driver(self, plans, result, snapshot):
         with tempfile.TemporaryDirectory() as temp:
             v = d.Driver.__new__(d.Driver)
             v.run, v.artifacts = Path(temp), transport_tests.MemoryArtifacts()
@@ -187,18 +219,22 @@ class FixedPostreloadTests(unittest.TestCase):
             v.host, v.manifest = dict(pid=7), dict(source_sha256='source')
             v.pending_command = v.unsafe_owner = v.held_left = v.held_right = v.held_trigger = False
             v.held_buttons, v.reference = set(), None
-            v.deadline = v.stage_deadline = 10*NS
+            clock, commands, generation = [snapshot['observed_ns']+200*MS], [], [snapshot['shot_input_generation']]
+            v.deadline = v.stage_deadline = clock[0]+10*NS
             v.profiles = None
-            clock, commands, generation = [NS+1200*MS], [], [150]
-            sources = {v.run / 'live-driver-owner.json': dict(artifactDirectory=str(path.parent)),
-                       path: result, path.parent / 'stimulus-01.json': plan}
+            path.parent.mkdir()
+            sources = {v.run / 'live-driver-owner.json': dict(artifactDirectory=str(path.parent)), path: result}
+            sources.update({path.parent / f'stimulus-{i:02}.json': plan for i, plan in enumerate(plans, 1)})
+            for filename, value in sources.items():
+                filename.write_bytes(d.json_bytes(value))
             def fresh():
                 clock[0] += 20*MS
                 generation[0] += 1
                 current = renew(snapshot, clock[0], generation[0])
                 if getattr(v, 'post_reload_phase', None) == 'observe':
                     current['fixedContainer']['view']['snapshot']['counts']['loaded'] = 0
-                    current['fixedContainer']['tracking'].update(step=0, blocksFire=True)
+                    current['fixedContainer']['tracking'].update(
+                        step=2 if current['fixedContainer']['profile']['kind'] == 4 else 0, blocksFire=True)
                     current['weapon_actions_blocked'] = True
                 v.admit_snapshot(current, clock[0], current['nonce'])
                 v.latest_snapshot = current
@@ -216,16 +252,81 @@ class FixedPostreloadTests(unittest.TestCase):
             v.fresh, v.send = fresh, send
             v.pause_until = lambda until: clock.__setitem__(0, max(clock[0], until))
             with patch.object(d, 'child', side_effect=lambda root, p: p), \
-                 patch.object(d, 'read_json', side_effect=lambda p, *a: (copy.deepcopy(sources[p]), b'{}')), \
                  patch.object(d.time, 'perf_counter_ns', side_effect=lambda: clock[0]):
-                boundary = v.post_reload_shot(path)
-                self.assertEqual(commands, [['grip l 0', 'trigger r 0'], ['trigger r 1'], ['trigger r 0']])
-                self.assertEqual(boundary['schema'], 'bc2vr.fixed-post-reload-pulse.v1')
-                self.assertEqual(boundary['afterCounts'], dict(loaded=0, reserve=6, capacity=1))
-                self.assertFalse(v.held_trigger)
-                with self.assertRaises(FileExistsError):
+                yield v, path, commands
+
+    def assert_pulse(self, plans, result, snapshot):
+        original = copy.deepcopy((plans, result, snapshot))
+        with self.pulse_driver(plans, result, snapshot) as (v, path, commands):
+            boundary = v.post_reload_shot(path)
+            self.assertEqual(commands, [['grip l 0', 'trigger r 0'], ['trigger r 1'], ['trigger r 0']])
+            self.assertEqual(boundary['schema'], 'bc2vr.fixed-post-reload-pulse.v1')
+            self.assertEqual(boundary['afterCounts'], dict(loaded=0, reserve=6, capacity=1))
+            expected = copy.deepcopy(plans[-1]['geometryEvidence'])
+            if 'selectionJsonPointer' in expected:
+                expected['selection'] = plans[-1]['mapping']['mechanismSelection']
+            self.assertEqual(boundary['closure']['fixedPlan'], expected)
+            self.assertEqual(boundary['closeResultSha256'], d.digest(path.read_bytes()))
+            self.assertEqual(v.artifacts.saved['close-cover-binding.json']['planSha256'],
+                             d.digest((path.parent / f'stimulus-{len(plans):02}.json').read_bytes()))
+            flow, native = self.native(boundary['closure'])
+            self.assertEqual(d.audit_post_reload_shot(flow, native)['roundsObserved'], 1)
+            self.assertFalse(v.held_trigger)
+            with self.assertRaises(FileExistsError):
+                v.post_reload_shot(path)
+            self.assertEqual(len(commands), 3)
+        self.assertEqual((plans, result, snapshot), original)
+
+    def test_one_fixed_pulse_rearms_releases_and_refuses_another_attempt(self):
+        plan, result, snapshot = fixed_fixture()
+        self.assert_pulse([plan], result, snapshot)
+
+    def test_assembled_combined_reload_uses_original_final_stimulus(self):
+        for kind, spent in ((3, True), (3, False), (4, False)):
+            with self.subTest(kind=kind, spent=spent):
+                plans, result, snapshot = self.combined(kind, spent)
+                self.assertEqual(plans[-1]['stage'], 'Insert' if kind == 4 else 'Close')
+                self.assertEqual(plans[-1]['geometryEvidence']['scheduleJsonPointer'], '/schedule')
+                self.assert_pulse(plans, result, snapshot)
+
+    def test_combined_incomplete_reordered_wrong_source_or_owner_refuse_before_input(self):
+        original = self.combined()
+        faults = (
+            lambda p, r, s: r.update(status='refused'),
+            lambda p, r, s: r['plans'][1].update(boundaryChecksPassed=False),
+            lambda p, r, s: r['plans'][1].update(stage='Pickup'),
+            lambda p, r, s: r['plans'][-1]['source'].update(nonce=999),
+            lambda p, r, s: p[-1].update(stage='Open'),
+            lambda p, r, s: p[-1]['geometryEvidence'].update(selectionJsonPointer='/wrong'),
+            lambda p, r, s: p[-1]['geometryEvidence'].update(selection=p[-1]['mapping']['mechanismSelection']),
+            lambda p, r, s: p[0]['mapping']['owner'].update(weapon=999),
+            lambda p, r, s: p[1]['geometryEvidence']['baseline'].update(lifetime=999),
+            lambda p, r, s: r['boundaries']['fixed_acquired']['gate']['completionPrerequisite'].update(planSourceNonce=999),
+            lambda p, r, s: r['boundaries']['fixed_step_complete']['gate'].update(sourceValidUntilNs=1),
+            lambda p, r, s: s['fixedContainer']['lastCompletion']['outcome']['receipt'].update(copiesVerified=False))
+        for fault in faults:
+            plans, result, snapshot = copy.deepcopy(original)
+            fault(plans, result, snapshot)
+            with self.subTest(fault=fault), self.pulse_driver(plans, result, snapshot) as (v, path, commands):
+                with self.assertRaises(d.REFUSAL):
                     v.post_reload_shot(path)
-                self.assertEqual(len(commands), 3)
+                self.assertEqual(commands, [])
+
+    def test_muzzle_terminal_insert_requires_native_closed_receipt_and_alignment(self):
+        original = self.combined(4, False)
+        faults = (
+            lambda p, r, s: s['fixedContainer']['tracking'].update(step=3),
+            lambda p, r, s: s['fixedContainer']['tracking'].update(blocksFire=True),
+            lambda p, r, s: r['boundaries']['fixed_aligned']['gate']['completionPrerequisite'].update(planSourceNonce=999),
+            lambda p, r, s: s['fixedContainer']['lastCompletion']['outcome']['receipt'].update(authorityVerified=False),
+            lambda p, r, s: s['fixedContainer']['lastCompletion'].update(acceptedNs=s['observed_ns']+NS))
+        for fault in faults:
+            plans, result, snapshot = copy.deepcopy(original)
+            fault(plans, result, snapshot)
+            with self.subTest(fault=fault), self.pulse_driver(plans, result, snapshot) as (v, path, commands):
+                with self.assertRaises(d.REFUSAL):
+                    v.post_reload_shot(path)
+                self.assertEqual(commands, [])
 
 
 if __name__ == '__main__':

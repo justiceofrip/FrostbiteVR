@@ -1516,7 +1516,8 @@ class ReloadStimulus:
         if getattr(self, "fixed_reload", False):
             # Five stages retain the same journal ceiling. Store their exact
             # shared schedule once, with an explicit reference for offline
-            # reconstruction, instead of archiving identical command rows twice.
+            # reconstruction, instead of archiving identical command rows or
+            # exact owner/profile selections twice.
             original_rows = stimulus["geometryEvidence"]["schedule"]
             require([{k: v for k, v in row.items() if k != "commands"} for row in original_rows]
                     == [{k: v for k, v in row.items() if k != "commands"} for row in stimulus["schedule"]],
@@ -1527,6 +1528,10 @@ class ReloadStimulus:
             artifact["geometryEvidence"]["scheduleCommandOverrides"] = {
                 str(i): row["commands"] for i, row in enumerate(original_rows)
                 if row["commands"] != stimulus["schedule"][i]["commands"]}
+            require(artifact["geometryEvidence"]["selection"] == artifact["mapping"]["mechanismSelection"],
+                    "fixed Reload geometry/stimulus selections diverged")
+            artifact["geometryEvidence"].pop("selection")
+            artifact["geometryEvidence"]["selectionJsonPointer"] = "/mapping/mechanismSelection"
         self.artifacts.save(f"stimulus-{len(self.plans):02}.json", artifact)
         start = time.perf_counter_ns()
         require(start < integer(stimulus["source"]["validUntilNs"]), "initial mapping expired before ordinary input")

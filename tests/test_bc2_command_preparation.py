@@ -23,6 +23,7 @@ class PreparedHarness(memory.Harness):
         super().__init__(testcase)
         self.driver.monitor = False
         self.operations, self.prepare_delay, self.validation_delay = [], 0, 0
+        self.owner_reads = []
         outer = self
 
         class Stream:
@@ -66,9 +67,10 @@ class PreparedHarness(memory.Harness):
         self.real_owner_read = self.driver.read_publication_owner
         self.driver.read_publication_owner = self.read_owner
 
-    def read_owner(self):
+    def read_owner(self, expected_bytes, deadline_ns):
         self.operations.append("fresh_owner")
-        return self.real_owner_read()
+        self.owner_reads.append((expected_bytes, deadline_ns))
+        return self.real_owner_read(expected_bytes, deadline_ns)
 
     def prepare(self):
         self.driver.prepare_next_command(["grip l 1"])
@@ -95,6 +97,7 @@ class CommandPreparationTests(unittest.TestCase):
         v.accept_snapshot(*v.receive_snapshot())
         source_deadline = fresh["native_deadline_ns"]
         v.send(["grip l 1"], source_deadline=source_deadline)
+        self.assertEqual(h.owner_reads, [(v.owner_bytes(True), source_deadline)])
         self.assertEqual(h.command_writes, [(fresh["observed_ns"], prepared.raw)])
         self.assertEqual(v.artifacts.saved["snapshot-001.json"], d.json_bytes(fresh))
         self.assertEqual(v.reference, source)
@@ -137,7 +140,7 @@ class CommandPreparationTests(unittest.TestCase):
                 if failure == "source":
                     until = h.now
                 elif failure == "owner":
-                    h.driver.read_publication_owner = lambda: b"foreign"
+                    h.driver.read_publication_owner = lambda expected_bytes, deadline_ns: b"foreign"
                 else:
                     h.validation_delay = 6 * MS
                 with self.assertRaises(d.REFUSAL):
@@ -162,9 +165,11 @@ class CommandPreparationTests(unittest.TestCase):
             rename(source, target)
 
         prepared.rename = once_denied
-        h.driver.send(["grip l 1"], source_deadline=h.now + 10 * MS)
+        source_deadline = h.now + 10 * MS
+        h.driver.send(["grip l 1"], source_deadline=source_deadline)
         self.assertEqual(len(attempts), 2)
         self.assertEqual(h.operations.count("fresh_owner"), 2)
+        self.assertEqual(h.owner_reads, [(h.driver.owner_bytes(True), source_deadline)] * 2)
         self.assertEqual(h.operations.count("prepare_open"), 1)
         self.assertEqual(len(h.command_writes), 1)
         with self.assertRaisesRegex(d.REFUSAL, "changed or consumed"):

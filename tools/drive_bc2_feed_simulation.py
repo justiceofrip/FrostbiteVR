@@ -705,7 +705,7 @@ def receive_timed(name):
 
 
 def fixed_post_reload_planner():
-    # Load only for a fixed Close; ordinary feed execution remains unchanged.
+    # Load only for a fixed terminal stage; ordinary feed execution is unchanged.
     global _fixed_post_reload_planner
     if "_fixed_post_reload_planner" not in globals():
         spec = importlib.util.spec_from_file_location(
@@ -718,41 +718,108 @@ def fixed_post_reload_planner():
 def fixed_post_reload_closure(plan, closed):
     fixed = fixed_post_reload_planner()
     geometry = plan["geometryEvidence"]
-    acquired = closed["boundaries"]["fixed_acquired"]["gate"]
-    complete = closed["boundaries"]["fixed_step_complete"]["gate"]
     baseline, selection = geometry["baseline"], geometry["selection"]
     profile, family = selection["profile"], selection["physicalFamily"]
-    require(geometry["schema"] == fixed.SCHEMA and geometry["stage"] == "Close"
+    insertion = integer(profile["kind"]) == 4
+    stage = "Insert" if insertion else "Close"
+    acquisition_gate = "fixed_aligned" if insertion else "fixed_acquired"
+    completion_gate = "fixed_inserted" if insertion else "fixed_step_complete"
+    require(geometry["schema"] == fixed.SCHEMA and geometry["stage"] == plan["stage"] == stage
             and plan["mapping"]["mechanismSelection"] == selection
             and all(plan["mapping"][k] == selection[k] for k in ("owner", "equipment", "rig"))
             and plan["mapping"]["physical_equipment_generation"] == selection["physical"]
-            and integer(profile["kind"]) == 3 and integer(profile["capacity"]) == 1
+            and integer(profile["kind"]) in (3, 4) and integer(profile["capacity"]) == 1
             and isinstance(family, dict) and family["selectedSecondary"] is True
-            and baseline["counts"]["loaded"] == baseline["counts"]["capacity"] == 1
-            and integer(baseline["lastCompletedRequest"]) > 0,
-            "fixed shot requires a completed single-round selected-secondary breech reload")
+            and baseline["counts"]["capacity"] == 1
+            and baseline["counts"]["loaded"] == (0 if insertion else 1)
+            and (integer(baseline["counts"]["reserve"]) > 0 if insertion else
+                 integer(baseline["lastCompletedRequest"]) > 0),
+            "fixed shot requires a completed single-round selected-secondary reload")
+    acquired = closed["boundaries"][acquisition_gate]["gate"]
+    complete = closed["boundaries"][completion_gate]["gate"]
     proof = acquired["completionPrerequisite"]
-    require(acquired["gate"] == "fixed_acquired" and acquired["observed"] is True
-            and complete["gate"] == "fixed_step_complete" and complete["observed"] is True
+    require(acquired["gate"] == acquisition_gate and acquired["observed"] is True
+            and complete["gate"] == completion_gate and complete["observed"] is True
             and complete["completionOnly"] is True
-            and proof["stage"] == "Close" and proof["planSourceNonce"] == geometry["snapshotNonce"]
+            and proof["stage"] == stage and proof["planSourceNonce"] == geometry["snapshotNonce"]
             and proof["planEvaluatedAtNs"] == geometry["evaluatedAtNs"]
             and proof["lifetime"] == baseline["lifetime"] and proof["gunToken"] == baseline["gun"]
+            and acquired["inputObservedNs"] <= acquired["observedNs"] < acquired["sourceValidUntilNs"]
             and geometry["evaluatedAtNs"] < acquired["observedNs"] < complete["observedNs"]
-            < complete["sourceValidUntilNs"], "fixed Close lacks its own acquired/completed boundary")
+            < complete["sourceValidUntilNs"], "fixed terminal stage lacks its own acquired/completed boundary")
     return dict(family="fixed", mapping=plan["mapping"], lifetime=baseline["lifetime"],
                 fixedPlan=geometry, acquired=acquired, completed=complete)
+
+
+def fixed_post_reload_counts(closure):
+    geometry = closure["fixedPlan"]
+    counts = geometry["baseline"]["counts"]
+    return (dict(counts, loaded=1, reserve=counts["reserve"]-1)
+            if geometry["stage"] == "Insert" else counts)
+
+
+def post_reload_terminal_plan(path, closed):
+    """Bind the original final stimulus of the completed same-owner result."""
+    plans = closed["plans"]
+    stages = [(p["family"], p["stage"]) for p in plans]
+    if stages == [("feed", "CloseCover")]:
+        combined = False
+    else:
+        require(1 <= len(plans) <= 5 and all(family == "fixed" for family, _ in stages),
+                "post-reload requires a completed closing stimulus")
+        names = tuple(stage for _, stage in stages)
+        require(names in (("Close",), ("Insert",), ("Pickup", "Insert"),
+                          ("Pickup", "Insert", "Close"), ("EjectSpent", "Pickup", "Insert", "Close"),
+                          ("Open", "Pickup", "Insert", "Close"),
+                          ("Open", "EjectSpent", "Pickup", "Insert", "Close")),
+                "post-reload fixed stages do not end in a completed reload")
+        combined = len(plans) > 1
+    first, previous_time = None, None
+    for index, summary in enumerate(plans, 1):
+        plan, raw = read_json(path.parent / f"stimulus-{index:02}.json", MAX_BYTES)
+        require(plan["schema"] == "bc2vr.reload-stimulus.v1"
+                and (plan["family"], plan["stage"]) == stages[index-1],
+                "original closing plan differs from its completed result")
+        if plan["family"] == "fixed" and "selectionJsonPointer" in plan["geometryEvidence"]:
+            geometry = plan["geometryEvidence"]
+            require(geometry["selectionJsonPointer"] == "/mapping/mechanismSelection" and "selection" not in geometry,
+                    "fixed reload selection reference is invalid or ambiguous")
+            # Resolve only this exact local reference; preserve the original raw
+            # artifact hash and all original proof/lease fields.
+            plan = dict(plan, geometryEvidence=dict(geometry, selection=plan["mapping"]["mechanismSelection"]))
+        if combined:
+            geometry, mapping = plan["geometryEvidence"], plan["mapping"]
+            baseline = geometry["baseline"]
+            require(summary["stimulusCompleted"] is True and summary["boundaryChecksPassed"] is True
+                    and summary["source"] == plan["source"]
+                    and geometry["stage"] == plan["stage"]
+                    and geometry["snapshotNonce"] == plan["source"]["nonce"]
+                    and geometry["evaluatedAtNs"] == plan["source"]["evaluatedAtNs"]
+                    and mapping["mechanismSelection"] == geometry["selection"],
+                    "combined reload stage/source did not complete")
+            current_time = integer(plan["source"]["evaluatedAtNs"])
+            require(current_time < integer(plan["source"]["validUntilNs"])
+                    and (previous_time is None or previous_time < current_time),
+                    "combined reload original stage observations are not ordered/valid")
+            identity = ({k: mapping[k] for k in ("owner", "equipment", "rig", "physical_equipment_generation",
+                                                "selected", "mechanismSelection")},
+                        {k: baseline[k] for k in ("lifetime", "supply", "binding", "nativeIdentity", "gun")})
+            require(first is None or identity == first, "combined reload changed its exact owner or ammunition lineage")
+            first, previous_time = identity, current_time
+    return plan, raw
 
 
 def fixed_post_reload_ready(snapshot, now, closure, *, neutral, after_shot):
     fixed = fixed_post_reload_planner()
     geometry, acquired = closure["fixedPlan"], closure["acquired"]
     baseline = geometry["baseline"]
+    insertion = geometry["stage"] == "Insert"
+    completed_counts = fixed_post_reload_counts(closure)
     try:
         if not after_shot:
-            # The saved Close/acquisition is historical context only. Every
+            # The saved terminal acquisition is historical context only. Every
             # command decision consumes a new original current observation.
-            fixed.check_gate(geometry, snapshot, "fixed_step_complete", now,
+            fixed.check_gate(geometry, snapshot, "fixed_inserted" if insertion else "fixed_step_complete", now,
                              integer(snapshot["nonce"]), acquired=acquired)
         else:
             # A fired empty breech may owe Open. This is selected-ammunition
@@ -770,12 +837,13 @@ def fixed_post_reload_ready(snapshot, now, closure, *, neutral, after_shot):
         gun = fixed.claim(t["gun"], x["input"], now, 1, 1)
         require(gun == baseline["gun"] and gun["item"] == fixed.physical_item(snapshot, now)
                 and t["enabled"] is True and t["current"] is True
-                and t["step"] in ((0, 4) if after_shot else (4,))
+                and t["step"] in ((2 if insertion else 0, 4) if after_shot else (4,))
                 and snapshot.get("feed") is None and snapshot["weapon_actions_blocked"] == t["blocksFire"]
+                and (after_shot or t["blocksFire"] is False)
                 and t["hand"] is None and x["leftClaim"] is None and t["target"] is None
                 and t["carried"] is False and t["carriedSupply"] is None,
                 "fixed post-shot root/custody or retained step changed")
-        expected = dict(baseline["counts"], loaded=0 if after_shot else 1)
+        expected = dict(completed_counts, loaded=0 if after_shot else 1)
         require(view["snapshot"]["counts"] == expected,
                 "fixed post-shot chamber/reserve differs from the completed reload")
         event = x["lastCompletion"]
@@ -784,24 +852,27 @@ def fixed_post_reload_ready(snapshot, now, closure, *, neutral, after_shot):
         fixed.request_proof(request, view)
         require(event["lifetime"] == baseline["lifetime"] and event["supply"] == baseline["supply"]
                 and out["state"] == 3 and out["nativeDispatched"] is True and out["actorRetirement"] is None
-                and request["intent"]["id"] == baseline["lastCompletedRequest"]
+                and (integer(request["intent"]["id"]) > integer(baseline["lastCompletedRequest"]) if insertion else
+                     request["intent"]["id"] == baseline["lastCompletedRequest"])
                 and request["preparedCommand"] == receipt["command"]
                 and receipt["authorityVerified"] is True and receipt["copiesVerified"] is True
                 and integer(receipt["authorityInvocation"]) > 0
                 and receipt["after"] == request["preparedCommand"]["after"]
-                    == event["postSnapshot"]["counts"] == baseline["counts"]
+                    == event["postSnapshot"]["counts"] == completed_counts
                 and receipt["before"] == request["preparedCommand"]["before"]
+                and (not insertion or receipt["before"] == baseline["counts"])
                 and event["postSnapshot"]["coherentIdleVerified"] is True
                 and event["postSnapshot"]["context"] == view["binding"]["context"]
                 and integer(request["preparedCommand"]["requestedNs"]) <= integer(receipt["beganNs"])
                     <= integer(receipt["completedNs"]) <= integer(out["resolvedNs"])
-                    <= integer(event["acceptedNs"]) <= integer(geometry["evaluatedAtNs"])
+                    <= integer(event["acceptedNs"]) <= integer(closure["completed"]["observedNs"] if insertion else geometry["evaluatedAtNs"])
+                and (not insertion or integer(acquired["observedNs"]) < integer(request["preparedCommand"]["requestedNs"]))
                 and integer(receipt["completedNs"]) <= integer(event["postSnapshot"]["observedNs"])
                     <= integer(event["acceptedNs"]) < integer(event["postSnapshot"]["deadlineNs"])
                 and integer(event["postSnapshot"]["sequence"]) > integer(request["preparedCommand"]["sourceSequence"]),
                 "fixed post-shot lost its exact completed insertion receipt")
         require(integer(snapshot["observed_ns"]) > integer(closure["completed"]["observedNs"]),
-                "fixed shot requires a new observation after Close")
+                "fixed shot requires a new observation after reload completion")
         if neutral:
             require(x["input"]["released"][0] is True and snapshot["input"]["hands"][0]["squeeze"] == 0
                     and all(h[k] == 0 for h in snapshot["input"]["hands"]
@@ -927,11 +998,12 @@ def audit_post_reload_shot(flow, boundary):
     fixed_baseline = (boundary["preparation"] if preparation else
                       boundary["closure"]["fixedPlan"]["baseline"] if fixed_shot else None)
     if fixed_shot:
+        completed_counts = fixed_baseline["counts"] if preparation else fixed_post_reload_counts(boundary["closure"])
         require((preparation or boundary["closure"]["family"] == "fixed")
-                and boundary["beforeCounts"] == fixed_baseline["counts"]
-                and boundary["afterCounts"] == dict(fixed_baseline["counts"], loaded=0)
+                and boundary["beforeCounts"] == completed_counts
+                and boundary["afterCounts"] == dict(completed_counts, loaded=0)
                 and boundary["beforeCounts"]["loaded"] == boundary["beforeCounts"]["capacity"] == 1,
-                "fixed pulse lost its completed Close ammunition boundary")
+                "fixed pulse lost its completed reload ammunition boundary")
     source = boundary["owner"]
     owner = {key: source[value] for key, value in
              (("player", "player"), ("soldier", "soldier"), ("weak", "weak"), ("weapon", "weapon"),
@@ -983,7 +1055,7 @@ def audit_post_reload_shot(flow, boundary):
             require(boundary["owner"] == identity["owner"]
                     and shot["firing"] == identity["firing"][n]
                     and (old["loaded"], new["loaded"], old["reserve"])
-                        == (1, 0, fixed_baseline["counts"]["reserve"]),
+                        == (1, 0, completed_counts["reserve"]),
                     "native shot does not belong to the reloaded fixed ammunition")
             if n == 2:
                 require(all(shot[k] == identity[v] for k, v in
@@ -2354,13 +2426,9 @@ class Driver:
                 and closed["observerStopped"] is True and closed["observationIncomplete"] is False
                 and closed.get("error") is None and closed.get("observationFailure") is None
                 and closed.get("diagnosticFailure") is None
-                and closed["leftGripHeld"] is False and closed["pendingCommand"] is False
-                and [(p["family"], p["stage"]) for p in closed["plans"]] in ([("feed", "CloseCover")], [("fixed", "Close")]),
+                and closed["leftGripHeld"] is False and closed["pendingCommand"] is False,
                 "post-reload requires a completed released closing stimulus")
-        plan, plan_raw = read_json(path.parent / "stimulus-01.json", MAX_BYTES)
-        require(plan["schema"] == "bc2vr.reload-stimulus.v1"
-                and [(plan["family"], plan["stage"])] == [(p["family"], p["stage"]) for p in closed["plans"]],
-                "original closing plan differs from its completed result")
+        plan, plan_raw = post_reload_terminal_plan(path, closed)
         if plan["family"] == "fixed":
             closure = fixed_post_reload_closure(plan, closed)
         else:
@@ -2538,7 +2606,7 @@ def main(argv=None):
     mode.add_argument("--stage", choices=[*planner.STAGES, "SupplyPickup"])
     mode.add_argument("--capture", help="one explicit named composition within runner budget")
     mode.add_argument("--menu-batches", type=Path, help="bounded JSON batches inside exact run directory")
-    mode.add_argument("--post-reload-shot", type=Path, help="preceding feed CloseCover or fixed Close result.json; one pulse, native proof pending")
+    mode.add_argument("--post-reload-shot", type=Path, help="preceding completed feed CloseCover or fixed reload result.json; one pulse, native proof pending")
     mode.add_argument("--audit-post-reload-shot", type=Path, help="saved post-reload-shot.json; read-only drained native audit")
     parser.add_argument("--root-authorized-ordinary-input", action="store_true")
     parser.add_argument("--profiles", type=Path, help="production profile export copied inside exact run directory")

@@ -672,14 +672,29 @@ int InsertFixedWithOfflineReceipt(Fixture& f,bool freshPickupGap=false){
             f.Prepare(At(motion,progress),!release);const auto next=f.sample.raw;f.Consume(&delayed);
             CHECK(f.observation.rawAdmitted&&f.sample.input.sequence==delayed.input.sequence+2);
             CHECK(f.observation.raw.input.observedNs==delayed.input.observedNs&&
-                  f.observation.raw.input.deadlineNs==delayed.input.deadlineNs);
+                  f.observation.raw.input.deadlineNs==delayed.input.deadlineNs&&
+                  f.observation.raw.weaponFromWrist.values==delayed.weaponFromWrist.values);
             CHECK(f.observation.supply==supply&&f.result.tracking.lifetime==lifetime&&f.service.View()->snapshot.counts==before);
             if(!release){
                 CHECK(f.result.status==FixedContainerStatus::Gesture&&f.result.tracking.target&&journal.count==0);
                 CHECK(f.result.ammoOwnsHand&&f.result.tracking.hand->token==held->token&&f.calls==calls);
                 CHECK(f.result.tracking.hand->inputSequence==retained.inputSequence&&f.result.tracking.hand->deadlineNs==retained.deadlineNs);
-                const auto expected=Multiply(feed_interaction_detail::Inverse(motion.placement.sourceFromGrip),delayed.weaponFromWrist);
-                CHECK(feed_interaction_detail::Distance(*f.result.tracking.target,expected)<.00001);
+                const auto rawItem=Multiply(feed_interaction_detail::Inverse(motion.placement.sourceFromGrip),delayed.weaponFromWrist);
+                const auto& guidance=f.equipment->interaction.insertionGuidance;
+                const auto& destination=motion.placement.weaponFromDestination;
+                if(guidance==FeedPlacementGuidance{}||
+                   feed_interaction_detail::Distance(rawItem,destination)>guidance.captureRadiusMeters)
+                    CHECK(feed_interaction_detail::Distance(*f.result.tracking.target,rawItem)<.00001);
+                else {
+                    // Contact assistance may move the displayed round away
+                    // from rawItem. The original delayed wrist above remains
+                    // the geometry authority through every missing-frame gap.
+                    CHECK(feed_interaction_detail::Distance(*f.result.tracking.target,destination)<=guidance.captureRadiusMeters+.00001);
+                    if(n>=32){
+                        CHECK(feed_interaction_detail::Distance(*f.result.tracking.target,destination)<.00001);
+                        CHECK(feed_interaction_detail::Angle(*f.result.tracking.target,destination)<.001);
+                    }
+                }
             }else{
                 CHECK(f.submitted&&f.submitted->sourceProof&&f.submitted->sourceProof->inputSequence==delayed.input.sequence);
                 CHECK(f.submitted->intent.observedNs==delayed.input.observedNs&&f.submitted->intent.deadlineNs==delayed.input.deadlineNs);
