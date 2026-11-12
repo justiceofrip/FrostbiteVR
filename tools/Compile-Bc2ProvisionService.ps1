@@ -146,9 +146,10 @@ function Get-SourcePins {
         }
     }
     $pins=@($seen | Sort-Object | ForEach-Object {File-Pin $_})
+    $relativePaths=@($pins | ForEach-Object {Relative-Source $_.path})
+    $null=Git-Read $wt (@('--literal-pathspecs','ls-files','--error-unmatch','--')+$relativePaths)
     foreach($pin in $pins){
         $relative=Relative-Source $pin.path
-        $null=Git-Read $wt @('ls-files','--error-unmatch','--',$relative)
         $canonical=File-Pin (Join-Path $repo $relative)
         if($canonical.sha256 -cne $pin.sha256 -or $canonical.bytes -ne $pin.bytes){throw "Canonical/task dependency differs: $relative"}
     }
