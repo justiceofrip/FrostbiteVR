@@ -1,5 +1,6 @@
 #pragma once
 #include "Bc2ChestKnifeNative.h"
+#include "Bc2ChestKnifeStockHold.h"
 #include "Bc2ChestKnifeRendering.h"
 #include "Bc2ChestKnifeProbeWitness.h"
 #include "Bc2ChestKnifeLiveObservation.h"
@@ -216,6 +217,9 @@ inline void PrepareChestKnifeMotionSource(ChestKnifeMotionCalibration& calibrati
 class Bc2ChestKnifeCoordinator {
 public:
     Bc2ChestKnifeCoordinator()noexcept;
+    std::optional<interaction::HandInteractionResult> UpdatePhysicalHold(const ReloadStateOwner&,
+        const interaction::InputFrame&,const interaction::HandInteractionSample&,const Bc2BodyInventory&,const Bc2BodyHolster&,
+        interaction::HandInteraction&,bool cancelling)noexcept;
     bool TickIdleHeldGun(const BodyDrawSample&,const Bc2BodyHolster&,
         interaction::HandInteraction&,std::uint64_t& sharedIntent)noexcept;
     void Tick(const WeaponModeMemory&,const BodyDrawSample&,BodyHolsterSample,
@@ -243,6 +247,7 @@ private:
     ChestKnifePendingMotion pendingMotion_;
     interaction::KnifeRecognitionDiagnostic recognition_;
     std::optional<private_knife::Anchor> anchor_;
+    std::optional<ChestKnifePhysicalHold> physicalHold_;
     std::optional<ChestKnifeRenderSource> rendering_;
     std::uint64_t bodyOperation_=0,draws_=0,returns_=0,rejected_=0,readGaps_=0;
     bool nativeOwned_=false;

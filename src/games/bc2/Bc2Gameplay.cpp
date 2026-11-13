@@ -1161,7 +1161,14 @@ void ObserveHandOwnership(const Owner& owner,const interaction::InputFrame& inpu
     // reach the same atomic root continuation before the ordinary expiry pass.
     const auto custodyLifecycle=ordinaryBoltSample&&physicalBolt&&!ordinaryBoltEarlyTick?
         physicalBolt->UpdateGunHold(*ordinaryBoltSample,handOwnership):std::nullopt;
-    handLifecycle=custodyLifecycle?*custodyLifecycle:
+    std::optional<interaction::HandInteractionResult> knifeLifecycle;
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    if(!custodyLifecycle&&chestKnife&&bodyInventory&&bodyHolster&&owner.foot)
+        knifeLifecycle=chestKnife->UpdatePhysicalHold(
+            {owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration},
+            input,handSample,*bodyInventory,*bodyHolster,handOwnership,cancelling);
+#endif
+    handLifecycle=custodyLifecycle?*custodyLifecycle:knifeLifecycle?*knifeLifecycle:
         nativeGunHeld&&previousRight&&previousRight->token.kind==interaction::HandClaimKind::GunHold&&
         previousRight->token.item==handItem?
         handOwnership.UpdateAndRenewGunHold(handSample,previousRight->token,grip).lifecycle:handOwnership.Update(handSample);

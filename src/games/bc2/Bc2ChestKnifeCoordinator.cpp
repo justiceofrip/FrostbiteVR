@@ -17,6 +17,22 @@ Bc2ChestKnifeCoordinator::Bc2ChestKnifeCoordinator()noexcept {
     recognition_.Enable();policy_.ObserveRecognition(&recognition_);
 #endif
 }
+std::optional<HandInteractionResult> Bc2ChestKnifeCoordinator::UpdatePhysicalHold(const ReloadStateOwner& owner,
+    const InputFrame& input,const HandInteractionSample& source,const Bc2BodyInventory& inventory,const Bc2BodyHolster& body,
+    HandInteraction& hands,bool cancelling)noexcept {
+    if(cancelling||!nativeOwned_||!physicalHold_||!bodyOperation_||!body.TemporaryToolActive()||
+       body.TemporaryToolOperation()!=bodyOperation_||physicalHold_->bodyOperation!=bodyOperation_||
+       !ChestKnifePhysicalHoldInputCurrent(policy_,hands,source,input,*physicalHold_))return {};
+    const auto held=hands.Current(InteractionHand::Right);const auto key=inventory.ItemKey(owner.weapon);
+    if(!held||source.sequence<=held->inputSequence||!key||
+       key->id!=physicalHold_->token.item.id||key->generation!=physicalHold_->token.item.generation)return {};
+    // This existing typed reader must run before generic expiry. Tick obtains
+    // its own later observation for action/render admission after holster work.
+    const auto native=chestKnifeNative::Inspect(owner,unsigned(physicalHold_->token.item.id),source.sequence,source.nowNs);
+    const auto contact=native?ChestKnifePhysicalHoldContact(policy_,hands,source,input,*physicalHold_,owner,*native):std::nullopt;
+    if(!contact)return {};
+    return hands.UpdateAndRenewGunHold(source,physicalHold_->token,*contact).lifecycle;
+}
 bool Bc2ChestKnifeCoordinator::TickIdleHeldGun(const BodyDrawSample& s,const Bc2BodyHolster& body,
     HandInteraction& hands,std::uint64_t& intent)noexcept {
     recognition_.Window(liveObservation_.Requested(s.hand.nowNs));
@@ -117,7 +133,15 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
             rendered->rigFingerprint==ChestKnifeGripProfiles()[0].rigFingerprint&&
             ChestKnifeRenderCurrent(rendered->source,s.owner,s.hand,s.hand.nowNs);
         sample.trackedKnifeOwned=measuredKnifeHold;
-        if(measuredKnifeHold)sample.heldContact={{0x4243324b47524950ull,key->generation},s.hand.sequence,
+        const auto physicalContact=nativeHoldCurrent&&physicalHold_&&physicalHold_->bodyOperation==bodyOperation_&&
+            physicalHold_->token.item==sample.knife&&sample.holdInputCurrent&&sample.fireSuppressed?
+            ChestKnifeRenewedPhysicalHoldContact(policy_,hands,s.hand,s.input,*physicalHold_,s.owner,*native):std::nullopt;
+        // Only a hold already continued from this exact current input can use
+        // its semantic contact. An older measured receipt must not shorten it
+        // again; initial acquisition still needs the measured contact below.
+        if(physicalContact){
+            sample.trackedKnifeOwned=true;sample.heldContact=*physicalContact;
+        }else if(measuredKnifeHold)sample.heldContact={{0x4243324b47524950ull,key->generation},s.hand.sequence,
             (std::min)(s.hand.deadlineNs,rendered->source.input.deadlineNs),true};
         else if(!rendered){
             const auto retained=ChestKnifeRetainedStockContact(policy_,hands,sample,
@@ -131,8 +155,8 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
             chestKnifeNative::RecoverCurrentHold(*native,sample,policy_,hands);
         sample.stockTriggerReady&=chestKnifeNative::ObservationSourceReady(*native,policy_.Phase());
         // Continue physical observation only through the same live hold and
-        // current native/input proofs. Missing render contact remains bounded
-        // by the existing stock fallback's ORIGINAL hand deadline above.
+        // current native/input proofs. Physical contact cannot supply the
+        // measured receipt required independently by pose and jab admission.
         const auto held=hands.Current(InteractionHand::Right);
         // Same predicates and evaluation order as motion admission. Retain
         // only its first failure; observing it cannot supply missing authority.
@@ -281,6 +305,11 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
     }
     repeatedMotion_.Reset();
     const auto motionHold=hands.Current(InteractionHand::Right);
+    if(measuredKnifeHold&&native&&native->currentHoldWork.known&&native->currentHoldWork.lifetime&&
+       native->currentHoldWork.bodyOperation==bodyOperation_&&policy_.Hold()&&motionHold&&
+       motionHold->token==*policy_.Hold()&&motionHold->token.kind==HandClaimKind::GunHold&&
+       (!physicalHold_||physicalHold_->token!=motionHold->token))
+        physicalHold_=ChestKnifePhysicalHold{motionHold->token,bodyOperation_,native->currentHoldWork.lifetime};
     if(!command&&motionIdentity&&native&&native->currentObservationReady&&
        sample.nativeAttackReady&&sample.motionTrackingReady&&
        policy_.Phase()==KnifePhase::Held&&!policy_.NeedsNativeCleanup()&&motionHold&&motionHold->token==motionIdentity->hold)
