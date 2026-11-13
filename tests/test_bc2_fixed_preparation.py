@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -15,7 +16,11 @@ ROOT=Path(__file__).resolve().parents[1]
 
 def load(name,path):
     spec=importlib.util.spec_from_file_location(name,path)
-    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);return module
+    module=importlib.util.module_from_spec(spec)
+    # Resolve shared fixture dependencies from this checkout under embedded Python.
+    with patch.object(sys,'path',[str(ROOT/'tests'),*sys.path]):
+        spec.loader.exec_module(module)
+    return module
 
 d=load('prepare_fixed_tests',ROOT/'tools/prepare_bc2_fixed_chamber.py')
 fixture=load('prepare_fixed_fixtures',ROOT/'tests/test_bc2_selected_shot_readiness.py')
@@ -269,7 +274,7 @@ class FixedPreparationTests(unittest.TestCase):
         self.assertEqual(d.baseline(s,NOW,require_reserve=False)['counts']['reserve'],0)
 
     def test_post_insert_publication_still_consumes_current_receipt_and_review(self):
-        with tempfile.TemporaryDirectory() as temp,patch.object(d.time,'perf_counter_ns',return_value=NOW):
+        with tempfile.TemporaryDirectory() as temp:
             v,p,_,_=self.pulse_driver(Path(temp));s=snapshot()
             s['fixedContainer']['view']['snapshot']['counts']['reserve']=0
             v.latest_snapshot=s;v.preparation=d.baseline(s,NOW,require_reserve=False)
@@ -305,68 +310,58 @@ class FixedPreparationTests(unittest.TestCase):
                 d.transport.audit_post_reload_shot(flow,b)
 
     def pulse_driver(self,folder,*,late=False,wrong_after=False):
-        driver=d.PreparationDriver.__new__(d.PreparationDriver)
-        before=snapshot();after=fixture.fixed.refresh(before,NOW+170_000_000,2)
-        after['fixedContainer']['view']['snapshot']['counts'].update(loaded=0,reserve=6 if wrong_after else 7)
-        after['input_evidence']['observedNs']=NOW+60_000_000
-        after['observed_ns']=NOW+170_000_000
-        captures=[]
-        for eye in ('left','right'):
-            path=folder/(eye+'.png');path.write_bytes(eye.encode())
-            captures.append(dict(eye=eye,path=str(path),bytes=path.stat().st_size,sha256=d.transport.digest(path.read_bytes())))
-        state=dict(head={},handR={},handL={},controls={'trigR':0.,'gripL':0.,'gripR':0.})
-        clearance=dict(schema='bc2vr.root-fire-clearance.v1',rootReviewedVisibleCorridor=True,
-            host={'pid':1},owner=before['owner'],configurationPath=before['selected']['configurationPath'],
-            rig=before['rig'],reviewedNs=NOW-1,referenceHead=before['input']['referenceHead'],
-            rightAim=before['input']['hands'][1]['aim'],captures=captures,**state)
-        path=folder/'clearance.json';path.write_bytes(d.transport.json_bytes(clearance))
-        saved={};sent=[];driver.run=folder;driver.host={'pid':1};driver.state=state
-        driver.manifest={'source_sha256':'a'*64};driver.deadline=NOW+10*d.NS
-        driver.artifacts=SimpleNamespace(directory=folder/'artifact',save=lambda name,value:saved.__setitem__(name,value))
-        values=iter([(before,b'',NOW),(after,b'',NOW+170_000_000)])
-        driver.fresh_available=lambda:next(values)
-        def send(lines):
-            sent.extend(lines)
-            driver.last_write=NOW+(10_000_000 if len(sent)==1 else 120_000_001 if late else 50_000_000)
-            driver.last_commit=driver.last_write+10_000_000
-        driver.send=send;driver.pause_until=lambda until:None
-        return driver,path,sent,saved
+        def mutate(s,v):
+            if wrong_after:
+                s['fixedContainer']['view']['snapshot']['counts']['reserve']=6
+        # Reuse the assembled prepare/send/ACK/passive observation fixture.
+        # Only the synthetic runtime timer or native count observation changes.
+        runtime,path,_=TimedPreparationObservationTests.timed_driver(self,folder,mutate)
+        if late:
+            runtime.timer_ms=400
+        return runtime.driver,path,runtime,runtime.driver.artifacts.saved
 
     def test_one_bounded_pulse_and_permanent_same_owner_attempt(self):
-        with tempfile.TemporaryDirectory() as temp,patch.object(d.time,'perf_counter_ns',return_value=NOW):
-            folder=Path(temp);v,p,sent,saved=self.pulse_driver(folder)
-            # Pure fixture keeps leases original atNOW; postshot stamp is separately checked.
-            with patch.object(v,'fresh_available',side_effect=v.fresh_available):
-                result=v.prepare(p)
-            self.assertEqual(sent,['trigger r 1','trigger r 0'])
+        with tempfile.TemporaryDirectory() as temp:
+            folder=Path(temp);v,p,runtime,saved=self.pulse_driver(folder)
+            result=v.prepare(p)
+            self.assertEqual(runtime.batches(),[[d.transport.TIMED_TRIGGER_COMMAND]])
+            self.assertIsNone(result['releaseWrittenNs'])
+            self.assertIsNone(v.timed_trigger)
+            self.assertFalse(v.held_trigger or v.pending_command)
             self.assertTrue(result['preparationOnly']);self.assertNotIn('closure',result)
-            second,p,sent2,_=self.pulse_driver(folder)
+            second,p,runtime2,_=self.pulse_driver(folder)
             with self.assertRaises(FileExistsError):second.prepare(p)
-            self.assertEqual(sent2,[])
+            self.assertEqual(runtime2.batches(),[])
 
     def test_late_release_or_uncertain_after_never_repeats_press(self):
         for late,wrong in ((True,False),(False,True)):
-            with self.subTest(late=late),tempfile.TemporaryDirectory() as temp,patch.object(d.time,'perf_counter_ns',return_value=NOW):
-                v,p,sent,_=self.pulse_driver(Path(temp),late=late,wrong_after=wrong)
+            with self.subTest(late=late),tempfile.TemporaryDirectory() as temp:
+                v,p,runtime,_=self.pulse_driver(Path(temp),late=late,wrong_after=wrong)
                 with self.assertRaises(d.transport.REFUSAL):v.prepare(p)
-                self.assertEqual(sent,['trigger r 1','trigger r 0'])
+                self.assertEqual(runtime.batches(),[[d.transport.TIMED_TRIGGER_COMMAND]])
+                self.assertEqual(v.held_trigger,late)
+                self.assertEqual(v.timed_trigger is not None,late)
+                with self.assertRaisesRegex(d.transport.REFUSAL,'already used'):
+                    v.single_trigger_pulse()
+                self.assertEqual(runtime.batches(),[[d.transport.TIMED_TRIGGER_COMMAND]])
 
     def test_current_review_capture_hash_and_aim_are_not_optional(self):
         for change in ('hash','aim'):
-            with self.subTest(change=change),tempfile.TemporaryDirectory() as temp,patch.object(d.time,'perf_counter_ns',return_value=NOW):
-                v,p,sent,_=self.pulse_driver(Path(temp))
+            with self.subTest(change=change),tempfile.TemporaryDirectory() as temp:
+                v,p,runtime,_=self.pulse_driver(Path(temp))
                 if change=='hash':(Path(temp)/'right.png').write_bytes(b'changed')
                 else:
                     review,_=d.transport.read_json(p)
                     review['handR']={'changed':True}
-                    p.write_bytes(d.transport.json_bytes(review))
+                    runtime.json_files[p]=review
+                    runtime.files[p]=d.transport.json_bytes(review)
                 with self.assertRaises((d.transport.REFUSAL,d.clearance_geometry.Refusal)):v.prepare(p)
-                self.assertEqual(sent,[])
+                self.assertEqual(runtime.batches(),[])
 
 class TimedPreparationObservationTests(unittest.TestCase):
     """Assembled prepare/send/ACK/passive read path, with simulated runtime IO."""
     def timed_driver(self, folder, mutate=None, missing=None):
-        import test_bc2_timed_trigger as timed
+        timed=load('fixed_preparation_timed_fixture',ROOT/'tests/test_bc2_timed_trigger.py')
         self.enterContext(patch.object(timed, 'd', d.transport))
         self.enterContext(patch.object(timed.transport_tests, 'd', d.transport))
         h = timed.RuntimeHarness(self, ack_ms=88)

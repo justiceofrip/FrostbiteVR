@@ -4,11 +4,13 @@ Runs against production helpers and command/publication code. The geometry case
 reads the actual authored M95 header; its native join is a synthetic assertion.
 """
 import copy
+from contextlib import contextmanager, ExitStack
 import importlib.util
 import io
 import json
 from pathlib import Path
 import re
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -22,7 +24,10 @@ REPOSITORY = next(p for p in Path(__file__).resolve().parents
 def load(name, path):
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # Some shared fixtures import one another; isolate their dependency lookup
+    # to this checkout even under embedded Python's empty script search path.
+    with mock.patch.object(sys, "path", [str(ROOT / "tests"), *sys.path]):
+        spec.loader.exec_module(module)
     return module
 
 
@@ -67,51 +72,60 @@ def permission(s, state, folder):
         rightAim=s["input"]["hands"][1]["aim"], captures=captures, **copy.deepcopy(state))
 
 
+@contextmanager
 def driver_fixture(folder, mutation=None, clearance_mutation=None):
-    driver = d.MagazineBoltDriver.__new__(d.MagazineBoltDriver)
-    s = fixture()
-    if mutation:
-        mutation(s)
-    state = dict(head={}, handL={}, handR={}, controls=dict(gripL=0, gripR=1, trigR=0))
-    driver.args = SimpleNamespace(fire_clearance=folder / "clearance.json", magazine_result=None,
-                                  mode="prep-shot-bolt")
-    allowed = permission(s, state, folder)
-    if clearance_mutation:
-        clearance_mutation(allowed)
-    driver.args.fire_clearance.write_bytes(d.transport.json_bytes(allowed))
-    driver.run, driver.artifacts, driver.host = folder, SimpleNamespace(directory=folder / "artifacts"), {"pid": 1}
-    driver.state, driver.latest_snapshot = state, s
-    driver.family, driver.preparation_mode = "bolt", True
-    driver.anchor, driver.motion_reference = None, None
-    driver.preparation, driver.debt = None, None
-    driver.motion_started = None
-    driver.commands = 0
-    driver.boundaries = []
-    driver.deadline = driver.stage_deadline = NOW+10*g.NS
-    driver.last_write = NOW-25_000_000
-    driver.held_trigger = driver.pending_command = driver.unsafe_owner = False
-    driver.read_state = lambda: copy.deepcopy(driver.state)
-    driver.ownership = lambda state: None
-    clock, sent = [NOW], []
+    """Real boundaries/publication/ACK/cleanup, with synthetic runtime IO."""
+    timed = load("magazine_preparation_timed_fixture", ROOT / "tests/test_bc2_timed_trigger.py")
+    with ExitStack() as stack:
+        stack.enter_context(mock.patch.object(timed, "d", d.transport))
+        stack.enter_context(mock.patch.object(timed.transport_tests, "d", d.transport))
+        runtime = timed.RuntimeHarness(SimpleNamespace(enterContext=stack.enter_context))
+        runtime.now = runtime.origin = NOW
+        driver = runtime.driver
+        driver.__class__ = d.MagazineBoltDriver
+        del driver.validate_publication
+        s = fixture()
+        if mutation:
+            mutation(s)
+        runtime.state["controls"]["gripR"] = 1
+        driver.held_right = True  # Matches the existing native GunHold and settled input.
+        driver.args = SimpleNamespace(fire_clearance=folder / "clearance.json", magazine_result=None,
+                                      mode="prep-shot-bolt")
+        state = {key: copy.deepcopy(runtime.state[key]) for key in ("head", "handL", "handR", "controls")}
+        allowed = permission(s, state, folder)
+        allowed["host"] = copy.deepcopy(driver.host)
+        if clearance_mutation:
+            clearance_mutation(allowed)
+        raw = d.transport.json_bytes(allowed)
+        driver.args.fire_clearance.write_bytes(raw)
+        runtime.json_files[driver.args.fire_clearance] = allowed
+        runtime.files[driver.args.fire_clearance] = raw
+        driver.run, driver.artifacts.directory = folder, folder / "artifacts"
+        driver.initial_sim = copy.deepcopy(runtime.state)
+        driver.family, driver.preparation_mode = "bolt", True
+        driver.anchor = driver.preserved = driver.motion_reference = None
+        driver.preparation = driver.debt = None
+        driver.boundaries = []
+        driver.last_write = NOW-25_000_000
 
-    def boundary(name, predicate):
-        current = s if name == "before_preparation_shot" else postshot(s, driver.preparation)
-        driver.latest_snapshot = current
-        value = predicate(current, clock[0])
-        driver.boundaries.append(dict(name=name, result=value))
-        return current, clock[0], value
+        def fresh():
+            current = copy.deepcopy(s) if driver.preparation is None else postshot(s, driver.preparation)
+            # A new producer observation follows natural timer release; original
+            # source/claim deadlines remain unchanged throughout this short pulse.
+            sequence = 21+driver.commands
+            current["input_evidence"].update(sequence=sequence, observedNs=runtime.now, nowNs=runtime.now)
+            current.update(observed_ns=runtime.now, shot_input_generation=sequence)
+            current["input"].update(generation=sequence, predictedNs=runtime.now)
+            current["selected"].update(sequence=sequence, observedNs=runtime.now)
+            for family in ("magazine", "bolt"):
+                current[family]["capturedNs"] = runtime.now
+                current[family]["rightClaim"]["inputSequence"] = sequence
+            driver.admit_snapshot(current, runtime.now, current["nonce"])
+            driver.latest_snapshot = current
+            return current, b"", runtime.now
 
-    def send(lines, expected, cleanup=False, source_deadline=None):
-        driver.validate_publication(lines, expected, cleanup)
-        g.require(source_deadline is None or clock[0] < source_deadline, "source expired")
-        sent.extend(lines)
-        driver.last_write = clock[0]
-        driver.state["controls"] = copy.deepcopy(expected["controls"])
-        driver.held_trigger = bool(driver.state["controls"]["trigR"])
-        clock[0] += 25_000_000
-
-    driver.boundary, driver.send = boundary, send
-    return driver, s, clock, sent
+        driver.fresh = fresh
+        yield driver, s, runtime
 
 
 class PreparationTests(unittest.TestCase):
@@ -171,8 +185,11 @@ class PreparationTests(unittest.TestCase):
                 g.preparation_baseline(s, NOW)
 
     def test_held_ammunition_pending_transfer_and_cycle_are_refused(self):
+        def mismatched_original(s):
+            old.attached_original(s)
+            s["magazine"]["originalPhysical"]["rounds"] -= 1
         mutations = (lambda s: s["magazine"]["resource"].update(originalState=1),
-                     lambda s: s["magazine"].update(originalPhysical={}),
+                     mismatched_original,
                      lambda s: s["magazine"].update(carriedReplacement={}),
                      lambda s: s["magazine"].update(reservation={}),
                      lambda s: s["magazine"].update(pendingRequest={}),
@@ -273,12 +290,17 @@ class PreparationTests(unittest.TestCase):
                 g.preparation_complete(changed, NOW+5, base, debt)
 
     def test_one_pulse_uses_production_command_publication_and_actual_debt(self):
-        with tempfile.TemporaryDirectory() as folder:
-            driver, s, clock, sent = driver_fixture(Path(folder))
-            with mock.patch.object(d.time, "perf_counter_ns", side_effect=lambda: clock[0]):
-                driver.run_preparation_shot()
-            self.assertEqual(sent, ["trigger r 1", "trigger r 0"])
+        with tempfile.TemporaryDirectory() as folder, driver_fixture(Path(folder)) as (driver, s, runtime):
+            driver.run_preparation_shot()
+            self.assertEqual(runtime.batches(), [[d.transport.TIMED_TRIGGER_COMMAND]])
+            self.assertEqual(driver.commands, 2)
             self.assertFalse(driver.held_trigger)
+            self.assertTrue(driver.held_right)
+            self.assertIsNone(driver.timed_trigger)
+            proof = driver.shot_pulse["pulseTransport"]
+            self.assertEqual(proof["expectedNeutralControls"]["gripR"], 1)
+            self.assertEqual(proof["runtimeSha256"], d.transport.TIMED_TRIGGER_RUNTIME_SHA256)
+            self.assertIsNone(driver.shot_pulse["releaseWrittenNs"])
             self.assertEqual(driver.debt["counts"], dict(loaded=6, reserve=30, capacity=7))
             self.assertEqual([b["name"] for b in driver.boundaries],
                              ["before_preparation_shot", "preparation_shot_created_owed_bolt", "preparation_shot_counts"])
@@ -286,87 +308,86 @@ class PreparationTests(unittest.TestCase):
             self.assertEqual(list(Path(folder).glob("magazine-shot-attempt-*.json")), [])
 
     def test_nonfull_preflight_sends_no_input(self):
-        with tempfile.TemporaryDirectory() as folder:
-            driver, s, clock, sent = driver_fixture(Path(folder),
-                mutation=lambda s: s["magazine"]["resource"]["snapshot"]["counts"].update(loaded=6))
-            with mock.patch.object(d.time, "perf_counter_ns", side_effect=lambda: clock[0]):
-                with self.assertRaisesRegex(g.Refusal, "full magazine"):
-                    driver.run_preparation_shot()
-            self.assertEqual(sent, [])
+        with tempfile.TemporaryDirectory() as folder, driver_fixture(Path(folder),
+                mutation=lambda s: s["magazine"]["resource"]["snapshot"]["counts"].update(loaded=6)) as (driver, s, runtime):
+            with self.assertRaisesRegex(g.Refusal, "full magazine"):
+                driver.run_preparation_shot()
+            self.assertEqual(runtime.batches(), [])
 
     def test_refused_clearance_consumes_attempt_without_input_or_retry(self):
         with tempfile.TemporaryDirectory() as folder:
             folder = Path(folder)
-            driver, s, clock, sent = driver_fixture(folder,
-                clearance_mutation=lambda p: p.update(rootReviewedVisibleCorridor=False))
-            with mock.patch.object(d.time, "perf_counter_ns", side_effect=lambda: clock[0]):
+            with driver_fixture(folder,
+                    clearance_mutation=lambda p: p.update(rootReviewedVisibleCorridor=False)) as (driver, s, runtime):
                 with self.assertRaisesRegex(g.Refusal, "corridor"):
                     driver.run_preparation_shot()
-                driver2, _, _, sent2 = driver_fixture(folder)
+                self.assertEqual(runtime.batches(), [])
+            with driver_fixture(folder) as (driver2, _, runtime2):
                 with self.assertRaises(FileExistsError):
                     driver2.run_preparation_shot()
-            self.assertEqual(sent+sent2, [])
+                self.assertEqual(runtime2.batches(), [])
 
     def test_changed_capture_pin_and_owner_clearance_refuse_before_press(self):
         for mutation in (lambda p: p["captures"][0].update(sha256="0"*64),
                          lambda p: p["owner"].update(weapon=999),
                          lambda p: p["controls"].update(gripR=0)):
-            with tempfile.TemporaryDirectory() as folder:
-                driver, s, clock, sent = driver_fixture(Path(folder), clearance_mutation=mutation)
-                with mock.patch.object(d.time, "perf_counter_ns", side_effect=lambda: clock[0]):
-                    with self.assertRaises((g.Refusal, d.transport.REFUSAL)):
-                        driver.run_preparation_shot()
-                self.assertEqual(sent, [])
+            with tempfile.TemporaryDirectory() as folder, driver_fixture(Path(folder),
+                    clearance_mutation=mutation) as (driver, s, runtime):
+                with self.assertRaises((g.Refusal, d.transport.REFUSAL)):
+                    driver.run_preparation_shot()
+                self.assertEqual(runtime.batches(), [])
 
     def test_expired_source_after_pin_work_refuses_no_input(self):
-        with tempfile.TemporaryDirectory() as folder:
-            driver, s, clock, sent = driver_fixture(Path(folder))
+        with tempfile.TemporaryDirectory() as folder, driver_fixture(Path(folder)) as (driver, s, runtime):
             original = d.transport.check_pin
             def slow_pin(pin):
                 original(pin)
-                clock[0] += 40_000_000
-            with mock.patch.object(d.time, "perf_counter_ns", side_effect=lambda: clock[0]), \
-                    mock.patch.object(d.transport, "check_pin", side_effect=slow_pin):
+                runtime.now += 40_000_000
+            with mock.patch.object(d.transport, "check_pin", side_effect=slow_pin):
                 with self.assertRaises(g.Refusal):
                     driver.run_preparation_shot()
-            self.assertEqual(sent, [])
+            self.assertEqual(runtime.batches(), [])
 
     def test_preparation_source_includes_shorter_magazine_lease(self):
-        with tempfile.TemporaryDirectory() as folder:
-            driver, s, _, _ = driver_fixture(Path(folder))
+        with tempfile.TemporaryDirectory() as folder, driver_fixture(Path(folder)) as (driver, s, _):
             s["magazine"]["resource"]["binding"]["deadlineNs"] = NOW+3
             self.assertEqual(driver.snapshot_source_deadline(s), NOW+3)
 
     def test_uncertain_shot_stops_after_single_release_and_retains_debt(self):
-        with tempfile.TemporaryDirectory() as folder:
-            driver, s, clock, sent = driver_fixture(Path(folder))
+        with tempfile.TemporaryDirectory() as folder, driver_fixture(Path(folder)) as (driver, s, runtime):
             original = driver.boundary
             def boundary(name, predicate):
                 if name == "preparation_shot_counts":
                     raise g.Refusal("uncertain three-copy shot")
                 return original(name, predicate)
             driver.boundary = boundary
-            with mock.patch.object(d.time, "perf_counter_ns", side_effect=lambda: clock[0]):
-                with self.assertRaisesRegex(g.Refusal, "uncertain"):
-                    driver.run_preparation_shot()
+            with self.assertRaisesRegex(g.Refusal, "uncertain"):
+                driver.run_preparation_shot()
             self.assertIsNotNone(driver.debt)
-            self.assertEqual(sent, ["trigger r 1", "trigger r 0"])
-
-    def test_overlong_pulse_releases_and_refuses_without_debt_or_retry(self):
-        with tempfile.TemporaryDirectory() as folder:
-            driver, s, clock, sent = driver_fixture(Path(folder))
-            original = driver.command
-            def command(**kwargs):
-                original(**kwargs)
-                if kwargs["value"] == 0:
-                    driver.last_write = driver.preparation["pressedNs"]+100_000_001
-            driver.command = command
-            with mock.patch.object(d.time, "perf_counter_ns", side_effect=lambda: clock[0]):
-                with self.assertRaisesRegex(g.Refusal, "exceeded100ms"):
-                    driver.run_preparation_shot()
-            self.assertEqual(sent, ["trigger r 1", "trigger r 0"])
             self.assertFalse(driver.held_trigger)
+            self.assertTrue(driver.held_right)
+            self.assertEqual(runtime.batches(), [[d.transport.TIMED_TRIGGER_COMMAND]])
+            self.assertIn("owed debt retained", driver.cleanup_owned())
+            self.assertIsNotNone(driver.debt)
+            self.assertEqual(runtime.batches(), [[d.transport.TIMED_TRIGGER_COMMAND]])
+
+    def test_missing_timed_release_refuses_then_cleans_up_without_debt_or_retry(self):
+        with tempfile.TemporaryDirectory() as folder, driver_fixture(Path(folder)) as (driver, s, runtime):
+            runtime.timer_ms = 400
+            with self.assertRaises(d.transport.REFUSAL):
+                driver.run_preparation_shot()
+            self.assertEqual(runtime.batches(), [[d.transport.TIMED_TRIGGER_COMMAND]])
+            self.assertTrue(driver.held_trigger)
+            self.assertIsNotNone(driver.timed_trigger)
+            self.assertIn("runtime timer custody retained", driver.cleanup_owned())
+            self.assertEqual(runtime.batches(), [[d.transport.TIMED_TRIGGER_COMMAND], ["trigger r 0"]])
+            self.assertFalse(driver.held_trigger)
+            self.assertTrue(driver.held_right)
+            self.assertIsNotNone(driver.timed_trigger)
             self.assertIsNone(driver.debt)
+            with self.assertRaisesRegex(d.transport.REFUSAL, "already used"):
+                driver.single_trigger_pulse()
+            self.assertEqual(runtime.batches(), [[d.transport.TIMED_TRIGGER_COMMAND], ["trigger r 0"]])
 
     def test_cli_composes_bolt_then_final_check_and_distinct_preparation_result(self):
         calls = []
