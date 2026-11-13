@@ -1,19 +1,17 @@
 Private 0.1.103 - November 13, 2026
-Installed and setup-validated; source pushed to existing coordinator/checkpoint refs. Fallback102 and prior versions including99 retained. No public release or new headset acceptance.
+Installed/setup-validated; source pushed to existing coordinator/checkpoint refs. Fallback102 and prior101/99 retained. Public release waits for local headset acceptance.
 
-Reported headset99 bugs:
-- Shared removal accepts measured outward clearance.101 adds belt-grip approach, departure after pickup and same-object regrasp without a second debit.
-- Accepted discarded empty originals fall/hide.102 restores an unfinished, explicitly released EMPTY original to its still-attached position without changing ammo/native state.
-- Sole-Fire with proven Empty retains hidden-firearm presentation; grip-only M8 causality remains unproved.
-- Chest acquisition accepts bounded grip approach. Actual102/02 exposed hold expiry against an old rendering sample; 103 installs the reviewed current-native-custody continuation; acquisition/jab still require measured rendering.
+Reported headset99 fixes and latest actual results:
+- LMG: shared removal clearance, real belt-grip approach and same-object custody/regrasp. Actual103/03 completed lid-open, old-box removal, replacement pickup/attachment, belt seating and lid closure. All three native ammo copies changed0/687 to200/487; firing unblocked.
+- Old empty box: accepted discarded empties fall/hide.102 also restores an interrupted, explicitly released empty original to its still-attached position;48 profile/cadence cases pass. That interrupted route was not separately recreated in103.
+- Chest knife:103 separates current physical hold from delayed render samples. Actual103/02 exercised that continuation, with native Draw1/Return1 and no expiry loss; both-eye images show held then returned knife. No new jab requested.
+- Empty hands: grip-away and soleFire retained Empty/hidden rifle. Images show no M8 during held grip and after trigger; one native transition during the pulse also retained hide proof. Transient flashes/all headset angles remain unconfirmed.
 
-Normal364x86/361x64 PASS; unchanged Services34/source63/hostWARP reused. Feed regressions include192 pickup/regrasp/skipped-render cycles and48 interrupted-release cases across24 profiles. These are offline checks.
-Installed compiled source8278235b1b53f35876f933384a26f3f194e57fb1; closuref7df341aee62a8d879a9ab17f6eeabf090a3c3ab9365614668baa2dfbd1cecaf.
-Delivery: reports/coordinator-20261108-feedback721/normal103/run01/installation.json; config52/run35 frozen receipt. Pushed tool HEAD2f479a2 repairs the combined pickup/attachment diagnostic limit;11 focused checks pass, no native rebuild needed for that tool change.
+Normal364x86/361x64 and focusedKnifeHeldInput PASS. Unchanged Services34/source63/hostWARP reused. Feed family regressions retain192 pickup/regrasp cycles and48 interrupted-release cases across24 profiles.
+Compiled8278235b1b53f35876f933384a26f3f194e57fb1; closuref7df341aee62a8d879a9ab17f6eeabf090a3c3ab9365614668baa2dfbd1cecaf. Delivery normal103/run01/installation.json; config52/run35 frozen receipt under reports/coordinator-20261108-feedback721.
+Shared holster neutral-publication correction5fcdf05 passes15 shared-entry/22 snapshot/9 draw-readiness checks.103/01 failure is preserved. Combined pickup/attachment diagnostic limit repair retains its11 passed checks.
+103/03 optional shot refused0commands: ROOT supplied legacy --stage output to a helper requiring a unified stimulus result. No repeated closing/forced shot; documentation corrected. Earlier91/02 firing proof remains scoped history.
+Both successful103 sessions retired normally with exact profiles/settings restoration. Detailed reload_flow window ended before later stages; current branch counts/cover gate and finite guard records support the scoped reload result.
 
-Actual102/01: accepted removal/no old box visible; real200-unit replacement acquired under one object/claim. Combined attachment observation hit its diagnostic limit before accepted attachment. No full reload claimed.
-Actual102/02: native Draw1, GunHold4, then expiry2.3882ms after old render deadline while tracked grip remained held; cleanup returned knife. No jab/empty-trigger sent. Both sessions retired normally with exact profiles/settings restoration.
-Actual103/01 stopped during neutral holster approach before knife input (late diagnostic publication); normal close/native retirement/restoration passed. Shared neutral-observation handling is corrected;15 shared-entry,22 snapshot-readiness and9 draw-readiness checks pass.
-Next checks after that tool correction: full LMG reload/fire, chest pickup, then independent Empty grip-away/trigger observations when genuine Empty is proved. No per-gun sweep.
-Logging enabled. User99 recording protected. Closed automated recordings archived losslessly with restore maps; failed82/04 retains its failure classification. No evidence deleted.
-Full bolt-magazine gameplay, front-loading underbarrels and broader campaign acceptance remain open. Public update waits for the local headset result.
+Local test card: one available belt-fed LMG, full reload/fire; chest grip to draw knife then release; separately check empty-hand grip/trigger for unwanted rifle display. No per-gun sweep. Log collection remains enabled; user99 recording protected.
+Full bolt-magazine gameplay, front-loading underbarrels and broader campaign acceptance remain open. Closed assistant recordings archived losslessly with restore maps; no evidence deleted.

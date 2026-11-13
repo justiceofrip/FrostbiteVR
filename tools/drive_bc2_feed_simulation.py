@@ -4,6 +4,8 @@ The runner must already own a live session and have published startup readiness.
 Example: python -B tools/drive_bc2_feed_simulation.py --run G:/.../run01
   --profiles G:/.../run01/profiles.json --stage OpenCover
 Use --stage AttachContainer --pickup-first for a continuous chest pickup/attach.
+--post-reload-shot requires a completed result from drive_bc2_reload_stimulus.py
+(feed CloseCover or supported fixed reload), not this driver's --stage result.
 --capture NAME is explicit and consumes the runner's pre-admitted capture budget.
 --menu-batches FILE accepts [{"commands":[...],"holdMs":0}] for bounded right-hand
 menu input only. No process launch, desktop input, native writes or clock rewrites.
@@ -2646,7 +2648,8 @@ class Driver:
                 and closed.get("error") is None and closed.get("observationFailure") is None
                 and closed.get("diagnosticFailure") is None
                 and closed["leftGripHeld"] is False and closed["pendingCommand"] is False,
-                "post-reload requires a completed released closing stimulus")
+                "post-reload requires a completed released bc2vr.reload-stimulus-result.v1 "
+                "from drive_bc2_reload_stimulus.py; this driver's --stage result is not accepted")
         plan, plan_raw = post_reload_terminal_plan(path, closed)
         if plan["family"] == "fixed":
             closure = fixed_post_reload_closure(plan, closed)
@@ -2901,7 +2904,10 @@ def main(argv=None):
     mode.add_argument("--stage", choices=[*planner.STAGES, "SupplyPickup"])
     mode.add_argument("--capture", help="one explicit named composition within runner budget")
     mode.add_argument("--menu-batches", type=Path, help="bounded JSON batches inside exact run directory")
-    mode.add_argument("--post-reload-shot", type=Path, help="preceding completed feed CloseCover or fixed reload result.json; one pulse, native proof pending")
+    mode.add_argument("--post-reload-shot", type=Path,
+                      help="preceding completed result.json from drive_bc2_reload_stimulus.py "
+                           "(feed CloseCover or supported fixed reload); this driver's --stage result is not accepted; "
+                           "one pulse, native proof pending")
     mode.add_argument("--audit-post-reload-shot", type=Path, help="saved post-reload-shot.json; read-only drained native audit")
     parser.add_argument("--root-authorized-ordinary-input", action="store_true")
     parser.add_argument("--profiles", type=Path, help="production profile export copied inside exact run directory")
