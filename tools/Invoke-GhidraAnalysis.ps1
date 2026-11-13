@@ -91,7 +91,7 @@ $normalized=@(foreach($address in $queryValues){
 })
 if(@($normalized | Select-Object -Unique).Count -ne $normalized.Count){throw 'Addresses must be distinct.'}
 if($memberSearch){
-    if(@($normalized | Where-Object {[Convert]::ToUInt64($_.Substring(2),16) -gt 0xffffffff}).Count){throw 'Member offsets must fit an unsigned 32-bit value.'}
+    if(@($normalized | Where-Object {[Convert]::ToUInt64($_.Substring(2),16) -gt 4294967295L}).Count){throw 'Member offsets must fit an unsigned 32-bit value.'}
     $range=@(foreach($address in @($SearchStartAddress,$SearchEndAddress)){
         if($address -notmatch '^(?:0[xX])?([0-9a-fA-F]{1,16})$'){throw 'Search range requires hexadecimal virtual addresses.'}
         [Convert]::ToUInt64($matches[1],16)
