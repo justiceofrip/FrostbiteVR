@@ -1,4 +1,4 @@
-"""Execute the runner's real continuation/backup/restore blocks with inert owners.
+"""Execute the runner's real continuation/seed/backup/restore blocks with inert owners.
 
 No runner entry, launcher, game or input is invoked. These are deterministic
 provenance and lifecycle checks, not evidence of campaign checkpoint progress.
@@ -23,7 +23,7 @@ $ErrorActionPreference='Stop'
 $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $Root 'tools/Invoke-Bc2XrGameSimulation.ps1'),[ref]$tokens,[ref]$errors)
 if($errors.Count){throw ($errors|Out-String)}
-foreach($name in 'Require','Full','Pin','Json','Backup','SameCampaignPin','GetCampaignContinuation','PrepareCampaignContinuation'){
+foreach($name in 'Require','Full','Pin','Json','Backup','SameCampaignPin','GetCampaignContinuation','PrepareCampaignContinuation','GetKnownCampaignSeedIdentity','GetCampaignSeed','PrepareCampaignSeed','PrepareCampaignProfile'){
     $fn=$ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq $name}.GetNewClosure(),$true)
     if(-not $fn){throw "Missing production function $name"}
     . ([scriptblock]::Create($fn.Extent.Text))
@@ -35,8 +35,9 @@ $main=@($ast.EndBlock.Statements|Where-Object {$_ -is [Management.Automation.Lan
 if($main.Count -ne 1){throw 'Expected one runner lifecycle'}
 $steps=@($main[0].Body.Statements)
 $indices=@(for($i=0;$i -lt $steps.Count;$i++){if($steps[$i].Extent.Text.StartsWith('if($ContinueCampaignFromRun){')){$i}})
-if($indices.Count -ne 2){throw 'Expected admission and staging in the production lifecycle'}
-$prepare=[scriptblock]::Create(($steps[$indices[0]..$indices[1]].Extent.Text -join "`n"))
+$seedIndices=@(for($i=0;$i -lt $steps.Count;$i++){if($steps[$i].Extent.Text.StartsWith('if($CampaignSeedFile){')){$i}})
+if($indices.Count -ne 2 -or $seedIndices.Count -ne 2){throw 'Expected separate continuation/seed admission and staging in the production lifecycle'}
+$prepare=[scriptblock]::Create(($steps[$indices[0]..$seedIndices[1]].Extent.Text -join "`n"))
 $launchGuard=@($steps|Where-Object {$_.Extent.Text.StartsWith('foreach($row in $profiles+$launcherFiles){')})
 if($launchGuard.Count -ne 1){throw 'Missing prepared/original launch guard'}
 $launchGuard=[scriptblock]::Create($launchGuard[0].Extent.Text)
@@ -45,7 +46,8 @@ $cleanup=$main[0].Finally.Find({param($n) $n -is [Management.Automation.Language
 if(-not $cleanup){throw 'Missing production profile cleanup'}
 $source=$ast.Extent.Text
 if(-not ($source.IndexOf("Save 'originals.json'") -lt $steps[$indices[1]].Extent.StartOffset -and
-    $steps[$indices[1]].Extent.EndOffset -lt $source.IndexOf('$entry.Start()') -and
+    $source.IndexOf("Save 'originals.json'") -lt $steps[$seedIndices[1]].Extent.StartOffset -and
+    $steps[$seedIndices[1]].Extent.EndOffset -lt $source.IndexOf('$entry.Start()') -and
     $source.IndexOf('$entry.Start()') -lt $cleanup.Extent.StartOffset -and
     $cleanup.Extent.Text.IndexOf("Save 'profile-after.json'") -lt $cleanup.Extent.Text.IndexOf('[IO.File]::WriteAllBytes'))){throw 'Backup/stage/start/retain/restore order changed'}
 $cleanup=[scriptblock]::Create($cleanup.Extent.Text)
@@ -64,24 +66,54 @@ function Save([string]$Name,$Value){
         if($Case -ceq 'changed_after_admission'){[IO.File]::AppendAllText($Value.source.path,'changed')}
         if($Case -ceq 'proof_changed_after_admission'){[IO.File]::AppendAllText($Value.proof['result.json'].path,' ')}
     }
+    if($Name -ceq 'campaign-seed.json' -and $Value.status -ceq 'admitted'){
+        if($Case -ceq 'seed_changed_after_admission'){[IO.File]::AppendAllText($Value.source.path,'changed')}
+        if($Case -ceq 'seed_pin_changed_after_admission'){$Value.source.sha256='0'*64}
+    }
 }
 $RepositoryRoot=$Fixture;$OutputDir=Join-Path $Fixture 'reports/new-run'
 $ProfileDirectory=Join-Path $Fixture 'profiles';$InstallRoot=Join-Path $Fixture 'install'
 $ContinueCampaignFromRun=Join-Path $Fixture 'reports/prior-run'
 if($Case -ceq 'default'){$ContinueCampaignFromRun=''}
 if($Case -ceq 'foreign_directory'){$ContinueCampaignFromRun=Join-Path $Fixture 'foreign-run'}
-$preAttachSpec=if($Case -ceq 'conflicting_seed'){@{campaign_seed=@{}}}else{$null}
+$preAttachSpec=if($Case -in @('conflicting_seed','seed_conflicting_preattach')){@{campaign_seed=@{}}}else{$null}
 $gamePin=Pin (Join-Path $Fixture 'game/BFBC2Game.exe')
+$CampaignSeedFile=''
+$fixtureSeedPath=Join-Path $Fixture 'seed/GameSettings.bin'
+$knownSeedIdentity=GetKnownCampaignSeedIdentity
+# Preserve/check the real immutable descriptor; only the inert fixture identity
+# provider is replaced. Admission, staging, backups, and restoration run unchanged.
+$knownSeedRejectedFixture=$false
+try{$null=GetCampaignSeed $fixtureSeedPath $gamePin}catch{$knownSeedRejectedFixture=$true}
+Require $knownSeedRejectedFixture 'Production known-seed identity accepted inert data.'
+$fixtureSeedIdentity=Pin $fixtureSeedPath
+function GetKnownCampaignSeedIdentity {return $fixtureSeedIdentity}
+if($Case.StartsWith('seed_')){
+    $CampaignSeedFile=$fixtureSeedPath
+    if($Case -cne 'seed_conflicting_continuation'){$ContinueCampaignFromRun=''}
+    if($Case -ceq 'seed_wrong_size'){[IO.File]::AppendAllText($fixtureSeedPath,'changed')}
+    if($Case -ceq 'seed_wrong_hash'){
+        $seedBytes=[IO.File]::ReadAllBytes($fixtureSeedPath);$seedBytes[0]=$seedBytes[0] -bxor 1
+        [IO.File]::WriteAllBytes($fixtureSeedPath,$seedBytes)
+    }
+    if($Case -ceq 'seed_missing'){[IO.File]::Delete($fixtureSeedPath)}
+    if($Case -ceq 'seed_relative'){$CampaignSeedFile='seed/GameSettings.bin'}
+    if($Case -ceq 'seed_copy'){
+        $CampaignSeedFile=Join-Path $Fixture 'seed-copy.bin'
+        [IO.File]::Copy($fixtureSeedPath,$CampaignSeedFile,$false)
+    }
+}
 $profiles=@();$launcherFiles=@();$preparedProfileHashes=@{};$receipt=@{}
 $failures=[Collections.Generic.List[string]]::new();$owned=@{};$session=$null;$restored=$false
 $caught=$null;$staged=@{}
 try{
     . $prepare
+    if($Case -ceq 'seed_prepared_changed'){[IO.File]::AppendAllText((Join-Path $ProfileDirectory 'GameSettings.bin'),'changed')}
     . $launchGuard
     foreach($name in 'GameSettings.bin','GameSettings.ini','settings.ini'){$staged[$name]=(Pin (Join-Path $ProfileDirectory $name)).sha256}
-    if($Case -ceq 'later_failure'){throw 'Deliberate post-staging failure'}
+    if($Case -in @('later_failure','seed_later_failure')){throw 'Deliberate post-staging failure'}
 }catch{$caught=$_.Exception.Message}finally{. $cleanup}
-@{error=$caught;staged=$staged;restored=$restored;failures=@($failures);events=@($events);receipt=$receipt;prepared=$preparedProfileHashes}|ConvertTo-Json -Depth 40 -Compress
+@{error=$caught;staged=$staged;restored=$restored;failures=@($failures);events=@($events);receipt=$receipt;prepared=$preparedProfileHashes;known_seed_identity=$knownSeedIdentity;known_seed_rejected_fixture=$knownSeedRejectedFixture}|ConvertTo-Json -Depth 40 -Compress
 """
 
 
@@ -102,10 +134,12 @@ class CampaignContinuationTests(unittest.TestCase):
             prior = base / "reports/prior-run"
             current = base / "reports/new-run"
             for folder in (prior / "profile-before", prior / "profile-after", current,
-                           base / "profiles", base / "install/data", base / "game"):
+                           base / "profiles", base / "install/data", base / "game", base / "seed"):
                 folder.mkdir(parents=True, exist_ok=True)
             game = base / "game/BFBC2Game.exe"
             game.write_bytes(b"inert game identity fixture")
+            seed_bytes = b"inert historical SP03 seed fixture"
+            (base / "seed/GameSettings.bin").write_bytes(seed_bytes)
             originals, after, expected = [], [], {}
             for name in NAMES:
                 profile = base / "profiles" / name
@@ -143,7 +177,7 @@ class CampaignContinuationTests(unittest.TestCase):
                 mutate(files, prior, base)
             for name, value in files.items():
                 write_json(prior / name, value)
-            source_hash = pin(prior / "profile-after/GameSettings.bin")["sha256"]
+            source_hash = hashlib.sha256(seed_bytes).hexdigest() if case.startswith("seed_") else pin(prior / "profile-after/GameSettings.bin")["sha256"]
             if case == "tampered_binary":
                 (prior / "profile-after/GameSettings.bin").write_bytes(b"tampered")
             if case == "missing_proof":
@@ -177,6 +211,10 @@ class CampaignContinuationTests(unittest.TestCase):
                                       if (current / "profile-after/GameSettings.bin").exists() else None)
             if (current / "campaign-continuation.json").exists():
                 answer["continuation"] = json.loads((current / "campaign-continuation.json").read_text())
+            if (current / "campaign-seed.json").exists():
+                answer["seed"] = json.loads((current / "campaign-seed.json").read_text())
+            if case.startswith("seed_") and case not in ("seed_changed_after_admission", "seed_wrong_hash", "seed_wrong_size", "seed_missing"):
+                self.assertEqual((base / "seed/GameSettings.bin").read_bytes(), seed_bytes)
             return answer
 
     def test_stage_only_binary_after_backup_and_retain_before_exact_restore(self):
@@ -204,6 +242,55 @@ class CampaignContinuationTests(unittest.TestCase):
         self.assertIn("post-staging", failed["error"])
         self.assertTrue(failed["restored"])
         self.assertEqual(failed["after_binary"], b"retained session GameSettings.bin")
+
+    def test_seed_stages_only_binary_and_retains_before_exact_restore(self):
+        for case in ("seed_valid", "seed_copy", "seed_later_failure"):
+            with self.subTest(case=case):
+                answer = self.replay(case)
+                if case == "seed_later_failure":
+                    self.assertIn("post-staging", answer["error"])
+                else:
+                    self.assertIsNone(answer["error"])
+                self.assertTrue(answer["restored"])
+                self.assertEqual(answer["known_seed_identity"], dict(
+                    bytes=117657,
+                    sha256="b2a9f98f0c0609b4bf793760634754e8c616f7095d07249c7fe2b4cb74083988"))
+                self.assertTrue(answer["known_seed_rejected_fixture"])
+                self.assertEqual(answer["staged"][NAMES[0]], answer["source_hash"])
+                for name in NAMES[1:]:
+                    self.assertEqual(answer["staged"][name], answer["expected"][name])
+                self.assertEqual(answer["after_binary"], b"inert historical SP03 seed fixture")
+                self.assertEqual(list(answer["prepared"].values()), [answer["source_hash"]])
+                seed = answer["seed"]
+                self.assertEqual(seed, answer["receipt"]["campaign_seed"])
+                self.assertEqual(seed["schema"], "fvr.campaign-seed.v1")
+                self.assertEqual(seed["seed_label"], "known_historical_sp03_seed_scene303_start01")
+                self.assertEqual(seed["status"], "staged")
+                self.assertEqual(seed["source"]["sha256"], seed["staged"]["sha256"])
+                self.assertEqual(seed["source"]["bytes"], seed["staged"]["bytes"])
+                self.assertFalse(seed["checkpoint_progress_claimed"])
+                self.assertFalse(seed["current_seat_claimed"])
+                self.assertNotIn("continuation", answer)
+                events = answer["events"]
+                staged_at = len(events) - 1 - events[::-1].index("campaign-seed.json")
+                self.assertLess(events.index("originals.json"), staged_at)
+                self.assertLess(staged_at, events.index("profile-after.json"))
+
+    def test_seed_refuses_tamper_missing_relative_and_conflicting_modes(self):
+        for case in ("seed_wrong_size", "seed_wrong_hash", "seed_missing", "seed_relative",
+                     "seed_changed_after_admission", "seed_pin_changed_after_admission",
+                     "seed_conflicting_continuation", "seed_conflicting_preattach"):
+            with self.subTest(case=case):
+                answer = self.replay(case)
+                self.assertIsNotNone(answer["error"])
+                self.assertEqual(answer["prepared"], {})
+                self.assertNotEqual(answer.get("seed", {}).get("status"), "staged")
+
+    def test_seed_launch_guard_refuses_changed_prepared_binary_and_restores(self):
+        answer = self.replay("seed_prepared_changed")
+        self.assertIn("Prepared/original file changed", answer["error"])
+        self.assertTrue(answer["restored"])
+        self.assertEqual(answer["after_binary"], b"inert historical SP03 seed fixturechanged")
 
     def test_refuse_bad_evidence_without_staging(self):
         mutations = {

@@ -24,6 +24,7 @@ param(
     [string]$PreAttachSetupSpec,
     [string]$PreAttachSetupSpecSha256,
     [string]$ContinueCampaignFromRun,
+    [string]$CampaignSeedFile,
     [string]$PrivateSessionBinding,
     [string]$PrivateSessionBindingSha256,
     [switch]$ExtendedObservation
@@ -323,24 +324,44 @@ function GetCampaignContinuation([string]$Run,$Game){
     return @{schema='fvr.campaign-continuation.v1';status='admitted';run_directory=$Run;proof=$pins;source=$source;game=$Game;
         exact_original_restoration_required=$true;checkpoint_progress_claimed=$false}
 }
+function GetKnownCampaignSeedIdentity {
+    # Reviewed historical SP03 bytes; the caller supplies an explicit absolute path.
+    return @{bytes=117657;sha256='b2a9f98f0c0609b4bf793760634754e8c616f7095d07249c7fe2b4cb74083988'}
+}
+function GetCampaignSeed([string]$Path,$Game){
+    $source=Pin $Path;$known=GetKnownCampaignSeedIdentity
+    Require ($source.bytes -eq $known.bytes -and $source.sha256 -ceq $known.sha256) 'Reviewed historical SP03 campaign seed differs.'
+    return @{schema='fvr.campaign-seed.v1';status='admitted';seed_label='known_historical_sp03_seed_scene303_start01';source=$source;game=$Game;
+        exact_original_restoration_required=$true;checkpoint_progress_claimed=$false;current_seat_claimed=$false}
+}
+function PrepareCampaignSeed($Seed){
+    NoOtherProcesses -BeforeLaunch
+    $observed=GetCampaignSeed $Seed.source.path $Seed.game
+    SameCampaignPin $observed.source $Seed.source
+    PrepareCampaignProfile $Seed 'campaign-seed.json'
+}
 function PrepareCampaignContinuation($Continuation){
     NoOtherProcesses -BeforeLaunch
     foreach($pin in $Continuation.proof.Values){SameCampaignPin (Pin $pin.path) $pin}
-    SameCampaignPin (Pin $Continuation.source.path) $Continuation.source
+    PrepareCampaignProfile $Continuation 'campaign-continuation.json'
+}
+function PrepareCampaignProfile($Selection,[string]$ReceiptName){
+    NoOtherProcesses -BeforeLaunch
+    SameCampaignPin (Pin $Selection.source.path) $Selection.source
     $targets=@($profiles|Where-Object {[IO.Path]::GetFileName($_.original.path) -ceq 'GameSettings.bin'})
-    Require ($targets.Count -eq 1) 'Campaign continuation requires exactly one current original binary backup.'
+    Require ($targets.Count -eq 1) 'Campaign profile requires exactly one current original binary backup.'
     $target=$targets[0]
     SameCampaignPin (Pin $target.original.path) $target.original
     SameCampaignPin (Pin $target.backup.path) $target.backup
-    Require ($target.backup.sha256 -ceq $target.original.sha256 -and $target.backup.bytes -eq $target.original.bytes) 'Campaign continuation original backup differs.'
-    $bytes=[IO.File]::ReadAllBytes($Continuation.source.path)
-    Require ($bytes.LongLength -eq $Continuation.source.bytes -and [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant() -ceq $Continuation.source.sha256) 'Campaign continuation source changed before staging.'
+    Require ($target.backup.sha256 -ceq $target.original.sha256 -and $target.backup.bytes -eq $target.original.bytes) 'Campaign profile original backup differs.'
+    $bytes=[IO.File]::ReadAllBytes($Selection.source.path)
+    Require ($bytes.LongLength -eq $Selection.source.bytes -and [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant() -ceq $Selection.source.sha256) 'Campaign profile source changed before staging.'
     [IO.File]::WriteAllBytes($target.original.path,$bytes)
     $staged=Pin $target.original.path
-    Require ($staged.sha256 -ceq $Continuation.source.sha256 -and $staged.bytes -eq $Continuation.source.bytes) 'Campaign continuation staging differs.'
+    Require ($staged.sha256 -ceq $Selection.source.sha256 -and $staged.bytes -eq $Selection.source.bytes) 'Campaign profile staging differs.'
     $preparedProfileHashes[$target.original.path]=$staged.sha256
-    $Continuation.status='staged';$Continuation.staged=$staged;$Continuation.original=$target.original;$Continuation.backup=$target.backup
-    Save 'campaign-continuation.json' $Continuation
+    $Selection.status='staged';$Selection.staged=$staged;$Selection.original=$target.original;$Selection.backup=$target.backup
+    Save $ReceiptName $Selection
 }
 function Pe([string]$Path,[int]$Machine){
     $stream=[IO.File]::OpenRead($Path)
@@ -632,14 +653,21 @@ try{
         Save 'pre-attach-specification.json' @{specification=(Pin $PreAttachSetupSpec);admission_seconds=$preAttachSpec.maximum_seconds;outer_deadline_unchanged=$true}
     }
     if($ContinueCampaignFromRun){
+        Require (-not $CampaignSeedFile) 'ContinueCampaignFromRun and CampaignSeedFile cannot be combined.'
         Require (-not $preAttachSpec -or -not $preAttachSpec.ContainsKey('campaign_seed')) 'Campaign continuation and pre-attach campaign_seed cannot be combined.'
         $receipt.campaign_continuation=GetCampaignContinuation $ContinueCampaignFromRun $gamePin
         Save 'campaign-continuation.json' $receipt.campaign_continuation
+    }
+    if($CampaignSeedFile){
+        Require (-not $preAttachSpec -or -not $preAttachSpec.ContainsKey('campaign_seed')) 'CampaignSeedFile and pre-attach campaign_seed cannot be combined.'
+        $receipt.campaign_seed=GetCampaignSeed $CampaignSeedFile $gamePin
+        Save 'campaign-seed.json' $receipt.campaign_seed
     }
     foreach($name in 'GameSettings.bin','GameSettings.ini','settings.ini'){$profiles+=Backup (Join-Path $ProfileDirectory $name) ('profile-before/'+$name)}
     foreach($name in 'active.json','data/settings.json'){$launcherFiles+=Backup (Join-Path $InstallRoot $name) ('launcher-before/'+$name)}
     Save 'originals.json' @{profiles=$profiles;launcher=$launcherFiles}
     if($ContinueCampaignFromRun){PrepareCampaignContinuation $receipt.campaign_continuation}
+    if($CampaignSeedFile){PrepareCampaignSeed $receipt.campaign_seed}
     if($preAttachSpec -and $preAttachSpec.ContainsKey('campaign_seed')){
         $seed=$preAttachSpec.campaign_seed;$observedSeed=Pin $seed.path
         Require ($seed.sha256 -ceq 'b2a9f98f0c0609b4bf793760634754e8c616f7095d07249c7fe2b4cb74083988' -and $seed.bytes -eq 117657 -and $observedSeed.sha256 -ceq $seed.sha256 -and $observedSeed.bytes -eq $seed.bytes) 'Reviewed SP03 save seed changed.'
