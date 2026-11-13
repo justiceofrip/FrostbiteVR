@@ -2537,7 +2537,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         }
         auto plan=BuildVehicleInputPlan(inputProfile,{seat.identity,seat.fingerprint,true,nativePlaying},command,{reinterpret_cast<const std::byte*>(owner.cache),InputBytes});
         // Add only a held ChangeEntry request before the original player's restriction pass.
-        // A missing gather, input owner, seat, permission or device binding requires a release.
+        // A missing gather, input owner, seat, permission or proved request route requires a release.
         if(vehicleSeatCycleVerified) {
             const bool canUse=seatCycle::Admit(nativePlaying,seatCycle::Gate::Playing,seatRefusal) &&
                 seatCycle::Admit(controls.armedRight,seatCycle::Gate::Rearm,seatRefusal) &&

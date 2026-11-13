@@ -12,14 +12,14 @@ Ownership/ready/blocked tasks: COORDINATOR-STATE.txt (local scheduling record).
 External worktrees remain untouched; finished25/26/33 source is integrated. Steam32 lacks its executable.
 
 INSTALLED RUNTIME
-Private0.1.95 installed and setup-validated; fallback0.1.94, earlier versions retained.
-Compiled sourcef0f561a0f0bcbd90fcec7368762466c70b7f620a; nativeclosureaa6d8fa0a47d033573858afd30eeeb82454fdf4dd019bd19ac563ee268b727ed.
+Private0.1.96 installed and setup-validated; fallback0.1.95, earlier versions retained.
+Compiled sourceeee3ffa0883e419ca4c87b9880b09a97b1aeb7e5; nativeclosurebb77c2287ae7b3a25b6b6a20b3b5c5dea3785b52444aa423744037bdc8f611df.
 Normal checks364x86/361x64 and focused vehicle checks passed; unchanged hostWARP reused.
-Receipt: reports/coordinator-20261108-feedback721/normal95/run01/installation.json.
+Receipt: reports/coordinator-20261108-feedback721/normal96/run01/installation.json.
 Settings/cache/shortcut preserved. No public release or new physical-headset acceptance.
 
 CURRENT SOURCE
-Sourcef0f561a is pushed/remote-verified and installed95. Seat-observation, cyclic-yaw comparison and command-phase timing changes are included.
+Sourceeee3ffa is pushed/remote-verified and installed96. Exact binding-failure observations and bounded neutral GatherPending recovery are included, alongside95's yaw/timing changes.
 The navigation batch removes the developer tool's firearm-publication prerequisite for ordinary on-foot input, keeping original actor/input/menu deadlines and weapon admission unchanged.
 Handoff: handoff/integrations/coordinator-20261113-navigation/README.txt.
 

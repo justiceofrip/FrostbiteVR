@@ -46,7 +46,7 @@ struct BindingObservation {
     std::array<unsigned,unsigned(BindingField::Count)> values{};
     std::array<BindingAlternative,16> alternatives{};
     const char* refusal="none";
-    bool verified=false,reader=false,routeChecked=false,routePresent=false,returned=false,failedReadCalled=false;
+    bool verified=false,reader=false,routeChecked=false,routePresent=false,returned=false,failedReadCalled=false,unboundConcept=false;
     BindingObservation* Begin(bool proof,bool hasReader,unsigned routes) noexcept {
         const auto next=++calls;
         if(call && !returned)return nullptr;
@@ -63,6 +63,7 @@ struct BindingObservation {
            <<",\"failed_alternative_row\":"<<failedAlternativeRow
            <<",\"verified\":"<<verified<<",\"reader_present\":"<<reader<<",\"route_count\":"<<routeCount
            <<",\"route_checked\":"<<routeChecked<<",\"route_17_42_present\":"<<routePresent
+           <<",\"unbound_concept_route\":"<<unboundConcept
            <<",\"reads\":"<<reads<<",\"first_failed_read\":{\"present\":"<<(failedReadIndex!=0)
            <<",\"index\":"<<failedReadIndex<<",\"address\":"<<failedReadAddress<<",\"size\":"<<failedReadSize
            <<",\"called\":"<<failedReadCalled<<",\"success\":0},\"traversed\":"<<traversed<<",\"terminal_node\":"<<terminalNode;
@@ -148,10 +149,13 @@ bool Verify(const VehicleRouteMemory& m, unsigned image, Executable executable) 
         {0x180850,0xa,0x4ac1db82880f349bull}, {0x197070,0x19,0xbca108ab4f057a9full},
         {0x190570,0x24e,0xa37330173f7030c2ull}, {0x3cb530,0x1f,0xc7fcac042d462cc9ull},
         {0x3c33a0,0x34,0x9434ddc5b7a6a4a1ull}, {0x180690,0x46,0xc476d2942d992e49ull},
-        {0x3ed7a0,0x89,0x10b7df8652942f7cull}, {0x286417,0x61,0xf75b00e146fcbb13ull},
+        {0x3ed7a0,0x89,0x10b7df8652942f7cull}, // post-gather player permission mask
+        {0x286417,0x61,0xf75b00e146fcbb13ull},
         {0x131db0,0xdc,0x78a835d793179026ull}, {0x21c400,0x39,0x104a86ecb86d420cull},
-        {0x212970,0x86,0x2bd05e3ed2446007ull}, {0x1787cb,0x46,0x2ee064212d0f7c79ull},
-        {0x164870,0xeb,0x259e70bd8cbd87b6ull}, {0x2a75d0,0xd2,0xa56e7830e80c9e37ull},
+        {0x212970,0x86,0x2bd05e3ed2446007ull}, // native semantic cache read
+        {0x1787cb,0x46,0x2ee064212d0f7c79ull}, // ChangeEntry17 rising-edge dispatch
+        {0x164870,0xeb,0x259e70bd8cbd87b6ull}, // native next-entry search
+        {0x2a75d0,0xd2,0xa56e7830e80c9e37ull}, // native vehicle/entry eligibility
         {0x297cf0,0x156,0x43fb36e686ec68aaull}, {0x2979a0,0x20,0x83b9627b2db2fc11ull},
         {0x1610b0,0x85,0x57119ef2959a3e51ull}, {0xfb2e80,6,0x1c320354c69d55ebull}
     };
@@ -177,6 +181,8 @@ bool Verify(const VehicleRouteMemory& m, unsigned image, Executable executable) 
 struct Binding {
     unsigned player=0, router=0, device=0, map=0, table=0, tableEnd=0;
     unsigned actions=0, actionsEnd=0, row=0, key=0, keyboard=0;
+    bool unboundConcept=false;
+    bool CanRequest() const noexcept { return key!=0 || unboundConcept; }
     bool operator==(const Binding&) const = default;
 };
 inline std::optional<Binding> ReadBinding(const VehicleRouteMemory& m,
@@ -258,6 +264,18 @@ inline std::optional<Binding> ReadBinding(const VehicleRouteMemory& m,
         !equal(b.tableEnd-b.table,76u*16,"table_span") || !equal(word(b.device,0x20+4*42,BindingField::Override),0,"concept_override")) return {};
     const unsigned conceptRow=b.table+42*16;
     b.actions=word(conceptRow,0,BindingField::Actions); b.actionsEnd=word(conceptRow,4,BindingField::ActionsEnd);
+    // The fingerprinted 62eee0 consumes this keyboard map before GatherHook's
+    // semantic request. An empty concept row supplies no stock button; it is
+    // not a permission veto. After gather, 7ed7a0 applies player permissions,
+    // then 5787ff/61c400 consume ChangeEntry17's cache edge and 564870 performs
+    // the native next-entry search with 6a75d0/697cf0 eligibility. None of those
+    // consumers polls a keyboard binding. Admit only the proved empty vector;
+    // retain owner, route, device/map, permission, suppression and override checks.
+    if (!b.actions && !b.actionsEnd && ok) {
+        b.unboundConcept=true;
+        if(d){d->unboundConcept=true;d->returned=true;}
+        return b;
+    }
     if (!check(ptr(b.actions),"actions_pointer",b.actions) || !check(b.actionsEnd>b.actions,"actions_end_order",b.actionsEnd,b.actions) ||
         !check(b.actionsEnd-b.actions<=16*8,"actions_span_limit",b.actionsEnd-b.actions,16*8) ||
         !equal((b.actionsEnd-b.actions)%8,0,"actions_stride")) return {};
@@ -335,9 +353,9 @@ public:
         const bool continuous=valid_ && owner_==seat && (!held_ || !held || binding_==binding) &&
             space_==input.spaceGeneration && menu_==input.menu.epoch &&
             gather==gather_+1 && input.generation>=sequence_ && now>=lastNow_ && now<deadline_;
-        if (!eligible || now<=0 || deadline<=now || deadline-now>100000000 || (held && !binding.key) || !ValidSource(input)) {
+        if (!eligible || now<=0 || deadline<=now || deadline-now>100000000 || (held && !binding.CanRequest()) || !ValidSource(input)) {
             Admit(false,!eligible?Gate::Input:now<=0||deadline<=now||deadline-now>100000000?Gate::Deadline:
-                held&&!binding.key?Gate::Binding:Gate::Controller,first);
+                held&&!binding.CanRequest()?Gate::Binding:Gate::Controller,first);
             Reset(); owner_=seat;space_=input.spaceGeneration;sequence_=input.generation; return false;
         }
         if (!continuous) {if(held)Admit(false,owner_!=seat?Gate::Owner:Gate::Continuity,first);armed_=false;held_=false;}

@@ -253,6 +253,68 @@ int SeatCycleRequiresCurrentMappedKeyboardAndPermission() {
     CHECK(denied.reads.size()==20 && !fieldRead(BindingField::Override) && !fieldRead(BindingField::Actions));
     denied=m;denied.word(device+0x20+42*4,1);
     CHECK(sameReads(denied,s) && refused("concept_override") && observed.actual==1 && !fieldRead(BindingField::Actions));
+
+    // Actual96: a verified ChangeEntry17 -> concept42 route, permitted player,
+    // and successful reads of an empty keyboard alternative vector. VR supplies
+    // the semantic action after native gather; no keyboard row is manufactured.
+    auto unbound=m;unbound.word(record,0);unbound.word(record+4,0);
+    const auto unboundBytes=unbound.bytes;
+    CHECK(sameReads(unbound,s) && observed.returned && observed.unboundConcept && refused("none"));
+    CHECK(observed.reads==23 && !observed.failedReadIndex && observed.alternativeCount==0);
+    CHECK(fieldSuccess(BindingField::Actions) && fieldSuccess(BindingField::ActionsEnd));
+    CHECK(value(BindingField::Actions)==0 && value(BindingField::ActionsEnd)==0);
+    const auto semantic=ReadBinding(unbound.access(),s,true);
+    CHECK(semantic && semantic->CanRequest() && semantic->unboundConcept && !semantic->key && !semantic->row);
+    CHECK(ReadBinding(unbound.access(),s,true)==semantic && unbound.bytes==unboundBytes);
+    denied=unbound;denied.word(record+4,rows);
+    CHECK(sameReads(denied,s) && !observed.returned && !observed.unboundConcept && refused("actions_pointer"));
+    denied=unbound;denied.bytes.erase(record+4);
+    CHECK(sameReads(denied,s) && !observed.returned && !observed.unboundConcept && refused("memory_read"));
+    CHECK(observed.failedReadAddress==record+4 && observed.failedReadIndex==23);
+    denied=unbound;denied.bytes.erase(device+0x20+42*4);
+    CHECK(sameReads(denied,s) && !observed.returned && !observed.unboundConcept && refused("memory_read"));
+    denied=unbound;denied.word(p+0x160,0);
+    CHECK(sameReads(denied,s) && !observed.returned && observedGate==Gate::Permission);
+    denied=unbound;denied.word(s.identity.entry+0x198,r+4);
+    CHECK(sameReads(denied,s) && !observed.returned && observedGate==Gate::Owner);
+    denied=unbound;denied.word(0x1570ee4,4);
+    CHECK(sameReads(denied,s) && !observed.returned && observedGate==Gate::Permission);
+    denied=unbound;denied.word(device+0x20+42*4,1);
+    CHECK(sameReads(denied,s) && !observed.returned && refused("concept_override"));
+    CHECK(sameReads(unbound,s,false) && !observed.returned && unbound.reads.empty());
+
+    Button semanticButton;InputFrame input{};
+    input.spaceGeneration=2;input.menu.epoch=3;input.focused=input.headValid=true;
+    input.hands[1].gripTracked=true;input.hands[1].active=Primary|StickClick;
+    unsigned semanticTick=0;
+    const auto semanticSample=[&](unsigned generation,unsigned held,const Binding& current) {
+        input.generation=generation;input.hands[1].held=held;++semanticTick;
+        return semanticButton.Update(s.identity,current,input,semanticTick,semanticTick,semanticTick+10,true);
+    };
+    CHECK(!semanticSample(1,Primary,*semantic)); // A held at admission is not an edge.
+    CHECK(!semanticSample(2,0,{}));CHECK(semanticSample(3,Primary,*semantic));
+    std::array<std::byte,InputBytes> semanticCache{};
+    constexpr unsigned stockFlags=0x40000775;
+    std::memcpy(semanticCache.data()+0x98,&stockFlags,4);
+    const auto originalCache=semanticCache;
+    VehicleInputPlan semanticPlan;semanticPlan.status=VehicleInputPlanStatus::Ready;
+    VehicleInputOverride semanticPatch;
+    CHECK(semanticButton.Apply(semanticPatch,semanticCache,semanticPlan,stockFlags));
+    auto expectedCache=originalCache;const unsigned requestedFlags=stockFlags|InputBit;
+    std::memcpy(expectedCache.data()+0x98,&requestedFlags,4);
+    CHECK(semanticCache==expectedCache && semanticPlan.ownedFlags==InputBit);
+    CHECK(semanticPatch.Restore() && semanticCache==originalCache);
+    CHECK(semanticSample(3,Primary,*semantic)); // Repeated packet preserves the held request.
+    CHECK(!semanticSample(4,Primary,{}));CHECK(!semanticSample(5,Primary,*semantic));
+    CHECK(!semanticSample(6,0,{}));CHECK(semanticSample(7,Primary,*semantic));
+    ++s.identity.seatGeneration;
+    CHECK(!semanticSample(8,Primary,*semantic));CHECK(!semanticSample(9,Primary,*semantic));
+    CHECK(!semanticSample(10,0,{}));CHECK(semanticSample(11,Primary,*semantic));
+    const auto keyboardBinding=ReadBinding(m.access(),s,true);CHECK(keyboardBinding && !keyboardBinding->unboundConcept);
+    CHECK(!semanticSample(12,Primary,*keyboardBinding)); // A binding change also needs neutral.
+    CHECK(!semanticSample(13,0,{}));CHECK(semanticSample(14,Primary,*keyboardBinding));
+    CHECK(unbound.bytes==unboundBytes);
+
     denied=m;denied.word(record+4,rows+9);
     CHECK(sameReads(denied,s) && refused("actions_stride") && observed.actual==1 && observed.alternativeCount==0);
     denied=m;denied.word(rows+4,43);
@@ -298,6 +360,11 @@ int SeatCycleRequiresCurrentMappedKeyboardAndPermission() {
     CHECK(output.text.find("\"first_failed_predicate\":\"table_span\",\"actual\":1200,\"expected\":1216")!=std::string::npos);
     CHECK(output.text.find("\"concept_42_override\":{\"read\":0,\"success\":0,\"value\":0}")!=std::string::npos);
     CHECK(output.text.find("\"table_end\":{\"read\":1,\"success\":1,\"value\":263344}")!=std::string::npos);
+    BindingObservation semanticObserved;CHECK(ReadBinding(unbound.access(),s,true,nullptr,&semanticObserved));
+    output.text.clear();semanticObserved.Report(report);
+    CHECK(output.text.find("\"returned\":1")!=std::string::npos);
+    CHECK(output.text.find("\"unbound_concept_route\":1")!=std::string::npos);
+    CHECK(output.text.find("\"first_failed_predicate\":\"none\"")!=std::string::npos);
     s.routes[0]={17,76};CHECK(!ReadBinding(m.access(),s,true));
     return 0;
 }
