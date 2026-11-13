@@ -429,6 +429,8 @@ struct Bc2PhysicalFeed::State {
         math::Matrix4 pouchBasis{},chainBasis{};
         std::uint16_t carriedPartsMask=0;
         std::optional<OriginalDrop> originalDrop;
+        std::optional<Bc2FeedPose> originalExtractionOrigin;
+        bool originalExtractionRestart=false;
         bool gateFailed=false;
         bool refused=false,motionDirty=false,completedHold=false;
         FeedPhysicalOperation activeOperation=FeedPhysicalOperation::None;
@@ -616,6 +618,23 @@ struct Bc2PhysicalFeed::State {
         p.pouchCarryWeaponWorldMeters.values[3][1]-=fall;p.chainCarryWeaponWorldMeters.values[3][1]-=fall;
         if(elapsed==duration)p.hiddenPartsMask=drop.carriedPartsMask;
     }
+    static void ReleaseUnsubmittedOriginal(Equipment& e,const FeedEquipmentNativeView& view,
+        const HandInteractionSample& input)noexcept {
+        if(!e.originalExtractionOrigin||!e.carriedPartsMask||!e.session||e.pending||e.refused||e.gateFailed||
+           e.originalDrop||e.ammunitionSupply.Custody()||e.activeOperation!=FeedPhysicalOperation::DetachContainer||
+           e.container!=FeedContainerState::Attached||view.counts.loaded||!input.focused||
+           !input.tracked[0]||!input.tracked[1]||!input.released[0]||!Window(input,input.nowNs)||
+           !FeedEquipmentViewFresh(view,input.nowNs)||e.original.identity!=view.identity||!SameResource(e,view))return;
+        const auto prior=e.session->State();
+        if(prior.ammunition.pending||prior.ammunition.needsReconciliation||prior.session.reload.pending||
+           prior.ammunition.snapshot.counts!=view.counts)return;
+        // This empty original never left native custody. A real release that
+        // could not dispatch extraction cancels only its provisional carry;
+        // the open lid, resource, receipts and session watermarks stay owned.
+        e.pose=*e.originalExtractionOrigin;e.gestureStart=e.pose;e.carriedPartsMask=0;
+        e.originalExtractionRestart=true;e.motionDirty=true;e.handGrip.reset();
+        e.recoveryContact.reset();e.presentationSource.reset();e.neutral.reset();e.supportNeutral.reset();
+    }
     void PoseTarget(Equipment& e,const FeedInteractionResult& r,const math::Matrix4& weaponWorld)noexcept {
         if(!r.target)return;const auto& g=e.registration.geometry;const auto op=e.activeOperation;
         if(op==FeedPhysicalOperation::OpenCover||op==FeedPhysicalOperation::CloseCover){
@@ -623,6 +642,14 @@ struct Bc2PhysicalFeed::State {
             e.coverRadians=std::clamp(e.gestureCoverRadians+direction*float(r.progress)*g.coverTravelRadians,
                 (std::min)(0.f,g.coverTravelRadians),(std::max)(0.f,g.coverTravelRadians));return;}
         if(r.targetKind!=FeedInteractionTargetKind::Object)return;
+        if(op==FeedPhysicalOperation::DetachContainer&&e.container==FeedContainerState::Attached&&
+           !e.ammunitionSupply.Custody()&&!e.carriedPartsMask&&!e.originalExtractionOrigin)
+            e.originalExtractionOrigin=e.pose;
+        // An abandoned extraction's old recovery proof cannot relocate the
+        // restored box. Only new measured movement mints a usable proof again.
+        if(e.originalExtractionRestart&&(r.status==FeedInteractionStatus::Moving||r.status==FeedInteractionStatus::Endpoint)&&
+           (Distance(e.pose.weaponFromPouch,*r.target)>1e-5||Angle(e.pose.weaponFromPouch,*r.target)>1e-5))
+            e.originalExtractionRestart=false;
         const auto destination=op==FeedPhysicalOperation::DetachContainer?Bc2FeedPoseId::PouchWithdrawn:
             op==FeedPhysicalOperation::AttachContainer?Bc2FeedPoseId::PouchAttachedFeedUnseated:Bc2FeedPoseId::FeedSeated;
         const auto& end=g.poses[unsigned(destination)];const auto& motion=e.motions.operations[unsigned(op)];
@@ -881,6 +908,9 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         const auto accepted=old.session->Update(completed);
         if(accepted.receiptAccepted){state.diagnostics.receipts.fetch_add(1,std::memory_order_relaxed);
             const auto operation=receipt->command.authority.operation;
+            if(operation==FeedPhysicalOperation::DetachContainer&&receipt->acknowledgement.status==FeedReloadAcknowledgement::Applied){
+                old.originalExtractionOrigin.reset();old.originalExtractionRestart=false;
+            }
             if(operation==FeedPhysicalOperation::DetachContainer&&old.originalDrop){
                 if(receipt->acknowledgement.status==FeedReloadAcknowledgement::Applied)old.originalDrop->applied=true;
                 else old.originalDrop.reset();
@@ -1062,6 +1092,11 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         rawCheck(6,FeedEquipmentSameItem(*source->native,*view))&&rawCheck(7,source->native->counts==view->counts);
     const bool raw=rawContext&&rawCheck(8,hands.HasRecordedEvidence(source->input,InteractionHand::Left));
     const auto suspendRaw=[&](FeedSupplyLossSite site=FeedSupplyLossSite::TickSuspend){
+        // releaseWait exists only after a recorded, same-owner real release.
+        // If its original leases expire before raw geometry arrives, no
+        // completion can be issued. Do not retain a handless provisional box.
+        if(gun&&!s.cancel&&!s.grip&&e->releaseWait)
+            State::ReleaseUnsubmittedOriginal(*e,*view,s.input);
         suspend(FeedExit::GunOrRawUnverified,site);
         // Tracking recovery can leave the renderer on a rejected N-1 packet.
         // Record N's real released input for the body supply only, using N's
@@ -1283,6 +1318,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             captureMechanismLoss(*e,FeedSupplyLossSite::LifetimeReset,FeedExit::PolicyStatus);
             e->lifetime=lifetime;e->refill={FeedRefillState::Required,lifetime,0};e->refused=false;
             e->originalDrop.reset();
+            e->originalExtractionOrigin.reset();e->originalExtractionRestart=false;
             try{e->session=std::make_unique<FeedEquipmentSession>(profile,e->motions,FeedEquipmentOwner(s.owner),e->mechanism,e->supply,lifetime,
                 e->original.binding.context.resource);}catch(...){out.blocksFire=true;return finish(FeedExit::SessionUnavailable);}
             state.PublishGate(*e,s,hands);
@@ -1381,7 +1417,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             if(query.candidate){v.candidateOperation=unsigned(query.candidate->operation);v.candidatePart=unsigned(query.candidate->part);}}
         if(query.candidate){const auto op=query.candidate->operation;
             const auto recovery=e->session->RecoveryMotion();
-            const bool recoverable=recovery&&Same(recovery->Candidate(),*query.candidate);
+            const bool recoverable=recovery&&!e->originalExtractionRestart&&Same(recovery->Candidate(),*query.candidate);
             if(e->motionDirty&&recoverable){
                 auto held=recovery->WeaponFromHeld();std::optional<FeedRecoveryFrame> frame;
                 if(recovery->Kind()==FeedMotionKind::FreePlacement&&recovery->WeaponWorld()){
@@ -1515,6 +1551,10 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         if(!result.session.interaction.target&&!result.session.interaction.completion&&
            (result.session.interaction.status==FeedInteractionStatus::Interrupted||result.session.interaction.status==FeedInteractionStatus::OffPath||
             result.session.interaction.status==FeedInteractionStatus::MotionJump||result.session.interaction.status==FeedInteractionStatus::Expired))e->motionDirty=true;
+        if(!result.dispatch&&!result.session.interaction.completion&&!source->grip&&!s.grip&&
+           sourceInput.released[0]&&s.input.released[0]&&!s.cancel&&
+           result.session.interaction.status==FeedInteractionStatus::Interrupted)
+            State::ReleaseUnsubmittedOriginal(*e,*view,sourceInput);
         if(result.dispatch){
             // Only the actual neutral release completing an empty ORIGINAL
             // detach can seed a visual drop. Wait for its accepted receipt;

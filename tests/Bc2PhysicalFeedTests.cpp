@@ -3312,6 +3312,8 @@ int EmptyWeaponStillRetainsReplacementCustodyAndInterruptedOriginalPresentation(
             f.sample.input.tracked[0]=false;f.Tick(wrist(middle),true);
             CHECK(!f.result.ownsHand&&!f.submitted);
             f.sample.input.tracked[0]=true;f.Tick(wrist(middle),false);
+            CHECK(f.result.presentation&&f.result.presentation->carriedPartsMask);
+            CHECK(!NearPose(f.result.presentation->weaponFromPouch,start));
         }else {
             CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&f.Reconcile());
             CHECK(f.result.presentation->droppedOriginalAtNs>0);
@@ -3332,6 +3334,88 @@ int EmptyWeaponStillRetainsReplacementCustodyAndInterruptedOriginalPresentation(
         CHECK(f.result.presentation&&!f.result.presentation->hiddenPartsMask&&!f.result.presentation->droppedOriginalAtNs);
         CHECK(!f.submitted&&!f.result.pending&&f.native.counts==counts&&f.BlocksFire());
         CHECK(f.submits==(branch==0?1u:2u));
+    }
+    return 0;
+}
+int EveryEnrolledEmptyOriginalReleaseRestoresAttachedPresentation(){
+    using namespace feed_interaction_detail;unsigned cases=0;
+    for(const auto& registration:RegisteredBc2FeedProfiles())for(unsigned delayed=0;delayed<2;++delayed){
+        Fixture f(&registration);f.native.counts.loaded=0;CHECK(f.OpenCover()&&f.Reconcile());f.submitted.reset();
+        const auto attached=*f.result.presentation;const auto counts=f.native.counts;
+        const auto motion=f.PlacementMotion(FeedPhysicalOperation::DetachContainer);CHECK(motion);
+        const auto start=motion->placement.weaponFromSource;
+        const auto middle=reload_insertion_detail::BlendRigid(start,motion->placement.weaponFromDestination,.5);
+        const auto wrist=[&](const fvr::math::Matrix4& object){return feed_interaction_detail::Multiply(motion->placement.sourceFromGrip,object);};
+        f.delayedRender=delayed!=0;
+        f.Tick(wrist(start),false);f.Tick(wrist(start),false);f.Tick(wrist(start),true);f.Tick(wrist(start),true);
+        const auto held=f.hands.Current(InteractionHand::Left);CHECK(held&&f.result.ownsHand);
+        for(unsigned step=1;step<=20;++step)f.Tick(wrist(reload_insertion_detail::BlendRigid(start,middle,double(step)/20)),true);
+        f.Tick(wrist(middle),true);
+        CHECK(f.result.interactionStatus==FeedInteractionStatus::Moving&&f.result.presentation->carriedPartsMask);
+        CHECK(!f.submitted&&f.submits==1&&f.native.counts==counts);
+        // Actual101 stopped midway and acknowledged ordinary release before
+        // attempting the belt. No detach receipt or reserve object existed.
+        f.Tick(wrist(middle),false);if(delayed)f.Tick(wrist(middle),false);
+        CHECK(f.result.presentation&&!f.result.ownsHand&&!f.result.pending&&!f.submitted);
+        CHECK(!f.result.presentation->carriedPartsMask&&!f.result.presentation->droppedOriginalAtNs);
+        CHECK(NearPose(f.result.presentation->weaponFromPouch,attached.weaponFromPouch));
+        auto weapon=Turn(.37f);weapon.values[3]={1.2f,-.3f,.2f,1};f.placedWeapon=weapon;
+        for(unsigned tick=0;tick<80;++tick){
+            f.Tick(wrist(middle),false);const auto& p=f.result.presentation;CHECK(p);
+            CHECK(!p->carriedPartsMask&&!p->hiddenPartsMask&&!p->droppedOriginalAtNs&&!p->mechanismClaim&&!p->supplyObject);
+            CHECK(p->lifetime==attached.lifetime&&p->supply==attached.supply&&Near(p->coverRadians,attached.coverRadians));
+            CHECK(NearPose(p->weaponFromPouch,attached.weaponFromPouch));
+            for(unsigned chain=0;chain<p->chainCount;++chain)CHECK(NearPose(p->weaponFromChain[chain],attached.weaponFromChain[chain]));
+            const auto bases=Bc2FeedWorldBases(*p,weapon);CHECK(bases&&NearPose((*bases)[0],weapon));
+            CHECK(f.native.counts==counts&&f.submits==1&&f.BlocksFire()&&!f.result.pending);
+        }
+        // The next real grasp must use the restored gun-relative contact,
+        // never the abandoned floating recovery proof or a synthetic detach.
+        f.Tick(wrist(start),false);f.Tick(wrist(start),false);f.Tick(wrist(start),true);
+        if(delayed)f.Tick(wrist(start),true);
+        const auto fresh=f.hands.Current(InteractionHand::Left);
+        CHECK(fresh&&fresh->token!=held->token&&f.result.ownsHand&&f.result.interactionStatus==FeedInteractionStatus::Acquired);
+        for(unsigned step=1;step<=30;++step)f.Tick(wrist(reload_insertion_detail::BlendRigid(start,motion->placement.weaponFromDestination,double(step)/30)),true);
+        const auto end=wrist(motion->placement.weaponFromDestination);
+        for(unsigned step=0;step<f.DwellPackets();++step)f.Tick(end,true);
+        f.Tick(end,false);if(delayed)f.Tick(end,false);
+        CHECK(f.submitted&&f.submits==2&&f.submitted->command.request.id==2);
+        CHECK(f.submitted->command.authority.operation==FeedPhysicalOperation::DetachContainer&&f.native.counts==counts);
+        for(unsigned tick=0;tick<3;++tick){
+            f.Tick(end,false);CHECK(f.result.pending&&f.result.presentation->carriedPartsMask);
+            CHECK(!f.result.presentation->droppedOriginalAtNs); // No rollback or drop while pending.
+        }
+        CHECK(f.Callback());for(unsigned tick=0;tick<4;++tick)f.Tick(end,false);
+        CHECK(!f.result.pending&&f.result.presentation->droppedOriginalAtNs);
+        for(unsigned tick=0;tick<80;++tick)f.Tick(end,false);
+        CHECK(f.result.presentation->hiddenPartsMask==f.result.presentation->carriedPartsMask);
+        CHECK(f.native.counts==counts&&f.submits==2);++cases;
+    }
+    CHECK(cases==48);return 0;
+}
+int OriginalReleaseWaitExpiryPreservesLoadedCustody(){
+    using namespace feed_interaction_detail;
+    for(unsigned loaded:{0u,20u}){
+        Fixture f;f.native.counts.loaded=int(loaded);CHECK(f.OpenCover()&&f.Reconcile());f.submitted.reset();
+        const auto attached=*f.result.presentation;const auto counts=f.native.counts;
+        const auto motion=f.PlacementMotion(FeedPhysicalOperation::DetachContainer);CHECK(motion);
+        const auto start=motion->placement.weaponFromSource;
+        const auto middle=reload_insertion_detail::BlendRigid(start,motion->placement.weaponFromDestination,.5);
+        const auto wrist=[&](const fvr::math::Matrix4& object){return feed_interaction_detail::Multiply(motion->placement.sourceFromGrip,object);};
+        f.Tick(wrist(start),false);f.Tick(wrist(start),false);f.Tick(wrist(start),true);
+        for(unsigned step=1;step<=20;++step)f.Tick(wrist(reload_insertion_detail::BlendRigid(start,middle,double(step)/20)),true);
+        const auto carried=*f.result.presentation;const auto heldRaw=f.sample.raw;
+        f.PrepareTick(wrist(middle),false);f.Consume(&heldRaw);
+        CHECK(!f.result.ownsHand&&!f.submitted&&f.result.presentation->carriedPartsMask);
+        // The real release is recorded, but its render never arrives within
+        // the held packet's original lease. Expiry cannot dispatch extraction.
+        f.now+=100*Ms;f.PrepareTick(wrist(middle),false);f.Consume(&heldRaw);
+        CHECK(f.result.presentation&&!f.submitted&&!f.result.pending&&f.submits==1&&f.native.counts==counts);
+        CHECK(!f.result.presentation->hiddenPartsMask&&!f.result.presentation->droppedOriginalAtNs);
+        if(loaded){CHECK(f.result.presentation->carriedPartsMask==carried.carriedPartsMask);
+            CHECK(NearPose(f.result.presentation->weaponFromPouch,carried.weaponFromPouch));}
+        else {CHECK(!f.result.presentation->carriedPartsMask);
+            CHECK(NearPose(f.result.presentation->weaponFromPouch,attached.weaponFromPouch));}
     }
     return 0;
 }
@@ -3411,6 +3495,8 @@ int EveryEnrolledFeedCompletesAfterSkippedBeltPickupRender(){
     return 0;
 }
 int main(){
+    CHECK(OriginalReleaseWaitExpiryPreservesLoadedCustody()==0);
+    CHECK(EveryEnrolledEmptyOriginalReleaseRestoresAttachedPresentation()==0);
     CHECK(EveryEnrolledFeedCompletesAfterSkippedBeltPickupRender()==0);
     CHECK(EveryEnrolledFeedCompletesNaturalSupplyApproachAndRegrasp()==0);
     CHECK(DetachedContainerCanClearTheMountWithoutParkingAtAnInvisiblePose()==0);
@@ -3476,5 +3562,5 @@ int main(){
     CHECK(HeldMechanismLossRetainsFirstCauseAcrossSameGripReacquisition()==0);
     CHECK(MechanismReleaseWaitIsDistinctFromSuccessfulExplicitRelease()==0);
     CHECK(CompactAdmissionUsesSameImmutableMechanismLoss()==0);
-    std::puts("Bc2PhysicalFeedTests: 54 deterministic owner/arbiter/callback/presentation compositions; no game or headset acceptance");
+    std::puts("Bc2PhysicalFeedTests: 56 deterministic owner/arbiter/callback/presentation compositions; no game or headset acceptance");
 }
