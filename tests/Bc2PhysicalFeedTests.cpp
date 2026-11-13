@@ -771,6 +771,7 @@ int HeldSupplyLossRetainsPreclearReasonAndCustody(){
         RequestBc2PhysicalFeedAdmissionObservation(f.now);CHECK(f.PickSupply());
         CHECK(f.result.presentation&&f.result.presentation->supplyObject);
         const auto held=*f.result.presentation->supplyObject;
+        const auto lifetime=f.result.presentation->lifetime;const auto supply=f.result.presentation->supply;
         CHECK(held.claim.token.kind==HandClaimKind::AmmoObject&&held.units>0);
         const auto before=observe(),press=first(before),compactPress=first(observe(true));
         CHECK(loss(before)=="\"firstSupplyLoss\":null}");
@@ -789,6 +790,9 @@ int HeldSupplyLossRetainsPreclearReasonAndCustody(){
         CHECK(f.BlocksFire());
         const auto observed=observe(),retained=loss(observed);CHECK(retained!="\"firstSupplyLoss\":null}");
         CHECK(first(observed)==press&&observed.find("\"failedRetention\":null")!=std::string::npos);
+        failed=field(observed,"\"failedRetention\":",",\"retentionEntryPredicates\":");
+        mechanismLoss=field(observed,"\"firstMechanismLoss\":",",\"firstSupplyLoss\":");
+        CHECK(failed=="\"failedRetention\":null"&&mechanismLoss=="\"firstMechanismLoss\":null");
         const char* site=fault==4?"external_suspend":"tick_suspend";
         CHECK(retained.find(std::string("\"site\":\"")+site+'"')!=std::string::npos);
         const char* exit=fault==0?"view_unavailable":fault==3?"selection_or_input_unverified":
@@ -810,43 +814,36 @@ int HeldSupplyLossRetainsPreclearReasonAndCustody(){
         CHECK(loss(observe(true))==retained);
         CHECK(observe(true).size()+11702+4096<=32768);
         if(fault==0){
-            // Actual06's claim6 -> claim7 shape: continue the same physical
-            // squeeze after supply loss, recover the retained feed contact,
-            // then acquire a Mechanism claim while recognition needs neutral.
+            // Actual06's held squeeze previously took a Mechanism claim after
+            // losing AmmoObject. Reserve custody must now stay handless until
+            // a real released-to-held pickup reclaims that exact supply.
             f.missingCurrentView=false;f.SelectWeaponData(f.native.config.weaponData);
-            std::optional<HandClaim> mechanism;
-            for(unsigned step=0;step<6&&!mechanism;++step){
-                f.Tick(f.lastWrist,true);const auto current=f.hands.Current(InteractionHand::Left);
-                if(current&&current->token.kind==HandClaimKind::Mechanism)mechanism=current;
+            for(unsigned step=0;step<6;++step){
+                f.Tick(f.lastWrist,true);
+                CHECK(!f.hands.Current(InteractionHand::Left)&&!f.result.ownsHand&&!f.result.pending);
+                CHECK(!f.backend.Pending()&&f.submits==submits&&f.native.counts==counts);
                 CHECK(loss(observe())==retained&&!f.sample.input.released[0]);
+                CHECK(f.result.presentation&&f.result.presentation->lifetime==lifetime&&f.result.presentation->supply==supply);
+                CHECK(!f.result.presentation->supplyObject&&!f.result.bodyVisual&&f.BlocksFire());
             }
-            CHECK(mechanism&&mechanism->token.id!=held.claim.token.id);
-            CHECK(f.result.interactionStatus==FeedInteractionStatus::NeedNeutral);
-            CHECK(f.result.presentation&&f.result.presentation->lifetime==f.submitted->command.request.lifetime);
             f.busyGate=true;f.Tick(f.lastWrist,true);f.busyGate=false;
-            CHECK(loss(observe())==retained&&f.submits==submits&&!f.result.pending);
-            // Retain an independent missing-view Mechanism failure as well.
-            // Later default updates must preserve both original transitions.
+            CHECK(!f.hands.Current(InteractionHand::Left)&&loss(observe())==retained&&f.submits==submits&&!f.result.pending);
+            // Further missing-view and explicit suspension cannot turn the
+            // supply-only failure into a nonexistent mechanism-claim loss.
             f.missingCurrentView=true;f.sample.raw.valid=false;f.SelectWeaponData(f.selected->weaponData+1);f.Consume();
-            const auto both=observe();const auto at=both.find("\"failedRetention\":");
-            failed=both.substr(at,both.find(",\"retentionEntryPredicates\":",at)-at);
-            CHECK(failed!="\"failedRetention\":null"&&loss(both)==retained);
-            const auto mechanismAt=both.find("\"firstMechanismLoss\":");CHECK(mechanismAt!=std::string::npos);
-            mechanismLoss=both.substr(mechanismAt,both.find(",\"firstSupplyLoss\":",mechanismAt)-mechanismAt);
-            CHECK(mechanismLoss!="\"firstMechanismLoss\":null");
             f.physical.Suspend(f.sample.input,f.hands);f.Consume();
-            const auto unchanged=observe();const auto after=unchanged.find("\"failedRetention\":");
-            CHECK(unchanged.substr(after,unchanged.find(",\"retentionEntryPredicates\":",after)-after)==failed);
-            CHECK(loss(unchanged)==retained&&loss(observe(true))==retained);
-            const auto compact=observe(true);const auto compactAt=compact.find("\"firstMechanismLoss\":");
-            CHECK(compact.substr(compactAt,compact.find(",\"firstSupplyLoss\":",compactAt)-compactAt)==mechanismLoss);
+            for(const auto& unchanged:{observe(),observe(true)}){
+                CHECK(loss(unchanged)==retained);
+                CHECK(field(unchanged,"\"failedRetention\":",",\"retentionEntryPredicates\":")==failed);
+                CHECK(field(unchanged,"\"firstMechanismLoss\":",",\"firstSupplyLoss\":")==mechanismLoss);
+            }
             CHECK(observe(true).size()+11702+4096<=32768);
         }
-        // Supply-only and all-three-failure payloads retain the same first press
+        // Supply-only payloads retain the same first press
         // and complete first failures through later held/Suspend/neutral changes.
         f.missingCurrentView=false;f.sample.raw.valid=true;f.SelectWeaponData(f.native.config.weaponData);
         f.Tick(f.lastWrist,true);f.physical.Suspend(f.sample.input,f.hands);
-        const auto heldCompact=observe(true); // Suspend may add the first mechanism loss.
+        const auto heldCompact=observe(true); // No mechanism claim was acquired.
         CHECK(heldCompact.find("\"latestChange\":{\"omitted\":\"payload_limit\"}")!=std::string::npos);
         f.Tick(f.lastWrist,false);
         const auto neutral=observe(),compactNeutral=observe(true);
@@ -859,11 +856,9 @@ int HeldSupplyLossRetainsPreclearReasonAndCustody(){
         CHECK(neutralLatest.find("\"currentGrip\":false")!=std::string::npos);
         CHECK(neutralLatest.find("\"ownership\":{")!=std::string::npos&&neutralLatest.find("\"retention\":{")!=std::string::npos);
         CHECK(neutralLatest.find("\"omitted\":")==std::string::npos);
-        if(fault==0){
-            for(const auto* text:{&neutral,&compactNeutral}){
-                CHECK(field(*text,"\"failedRetention\":",",\"retentionEntryPredicates\":")==failed);
-                CHECK(field(*text,"\"firstMechanismLoss\":",",\"firstSupplyLoss\":")==mechanismLoss);
-            }
+        for(const auto* text:{&neutral,&compactNeutral}){
+            CHECK(field(*text,"\"failedRetention\":",",\"retentionEntryPredicates\":")==failed);
+            CHECK(field(*text,"\"firstMechanismLoss\":",",\"firstSupplyLoss\":")==mechanismLoss);
         }
         if(compactNeutral.size()+11702+4096>32768)
             std::fprintf(stderr,"Neutral feed admission fault %u: compact=%zu, held=%zu, total=%zu, limit=32768; firstPress=%zu, failedRetention=%zu, firstMechanismLoss=%zu, firstSupplyLoss=%zu, fullLatest=%zu\n",
