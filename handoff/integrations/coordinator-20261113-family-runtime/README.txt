@@ -18,6 +18,7 @@ Native92's pending-attack preservation was not exercised. Damage unknown, mode4 
 WT/reports/coordinator-20261113-feedback1097/{result.txt,scalars.json} retains exact native/source joins and failure chronology.
 Installed1099 skips unavailable sampling within original75ms and source/contact/hand bounds; predicts one fresh measured11876 Attack. Review1101 GO and focused/normal checks pass.
 Actual93/01 strictHeld/both-eye visible knife; driver0771fc02f7aa48a89e635f43fa261d94 refused beforejab: outer/render input19889 versus passiveHeld19890. No motion/attack claim.1105 identifies bounded driver join polling gap; native1099 path not exercised.
+1106 shared driver correction polls ordered live unequal publications inside the originaldeadline, requires exactthreewayjoinbeforemotion.51assembledtestsPASS36.998s, includingrecordedrace+contradictions+deadlineexhaustion. Nativebinaries unchanged; actualjab stillpending.
 Earlier91/04 recognized/staged Attack2 but consumed0. Its files moved losslessly with R/archive-execution91-04/restore-map.json; failure unchanged.
 
 Optional performance mode
@@ -35,3 +36,9 @@ Current scene remainsSP02 Save Before Tank; movement reaches courtyard. Shared j
 Actual93/01 closed414.420s; all7ownedprocesses0, normal/native retirement and originalprofiles/settings restored, failures[].
 1104 explicit known historicalSP03 seed staging reuses current backups/retained-after/exactrestore.6real runner lifecycle testsPASS; no native rebuild or newcheckpoint/seatclaim. Caller supplies exactseed117657B/b2a9f98f0c0609b4bf793760634754e8c616f7095d07249c7fe2b4cb74083988; no automatic save search or provisioning.
 Vehicle permits, C4objective, bolt magazine andfront-loading launcher acquisition remain unproved; reuse other registered-family passes.
+
+Vehicle transition93/02
+KnownSP03seed staged/restored through shared runner. ActualXexit b1358dc644b944ac9218056c35edd09d accepted atinput9248 (boatcontrolled1176529680/entry1176540320; action16/bit65536, held/semantic/commit/current/readback/nativeall1).9249 resolvescontrolled=soldier1155663840/entry1155674272,on_foot1 withsameplayer/soldier/weak; neutral9263. Actor/equip1->2.
+Freshonfootnavigation923fedcf014f4e05802934bb3e2ea601 andlaterpulses accepted. Ordinaryshoulderdraw e1531cab08574607aa1d47713e9ef17d; subsequentbodyphase1/actualEmptyfalse/SPAS12, both-eye post-vehicle-equipped shows8/24.
+Aseat0b6cd262e11344019ca244b41a207c74 ACKed butnoobservedentrychange; finitegathertrace doesnotretainitsrequest/reason, so seatacceptanceunknown.
+Closed392.661s: native retired, normalgameclose,exactprofiles/settingsrestore,failures[]. Noheadsetorwholevehiclefamilyclaim. WT/reports/coordinator-20261113-feedback1108 retainscompactaudit.

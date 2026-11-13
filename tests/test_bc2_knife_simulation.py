@@ -737,6 +737,23 @@ class KnifeTests(unittest.TestCase):
             rendered[field] -= 14_904_000
         k['validUntilNs'] = min(k['validUntilNs'], rendered['deadlineNs'])
 
+    @staticmethod
+    def passive_held_ahead(snapshot):
+        # Actual93/01 snapshot005: outer/render19889, passive Held19890,
+        # 16.1729ms apart. Rebase this publication race onto fixture ownership
+        # and clocks; no historical session files or live authority are used.
+        k = snapshot['chestKnife']
+        for source in (snapshot['input_evidence'], k['render']['inputEvidence']):
+            source['sequence'] -= 1
+            for field in ('observedNs', 'nowNs', 'deadlineNs'):
+                source[field] -= 16_172_900
+        snapshot['input']['generation'] -= 1
+        snapshot['shot_input_generation'] -= 1
+        snapshot['selected']['sequence'] -= 1
+        for field in ('valid_until_ns', 'native_deadline_ns'):
+            snapshot[field] -= 16_172_900
+        k['hold']['deadlineNs'] = k['validUntilNs'] = k['render']['inputEvidence']['deadlineNs']
+
     def assert_no_jab_once_released(self, result):
         self.assertEqual(result['status'], 'refused', result)
         self.assertEqual(self.jab_publications, [])
@@ -807,6 +824,100 @@ class KnifeTests(unittest.TestCase):
         self.assertIsNone(result['outstandingMotion'])
         self.assertFalse(result['pendingCommand'] or result['rightGripHeld'] or result['triggerHeld'])
         self.assertEqual(len(result['captures']), 2)
+
+    def test_prejab_newer_passive_held_rejoins_before_single_motion_and_return(self):
+        def respond(driver, snapshot):
+            # Retain Actual93/01 snapshot005's measured geometry in both the
+            # mismatched and coherent responses; only publication joins change.
+            snapshot['mapping'] = dict(weaponWorldMeters=[
+                [-.701164544, -.2398936, .671430469, 0],
+                [.51637435, .478503346, .710205138, 0],
+                [-.491655707, .844680488, -.211635068, 0],
+                [164.472122, 170.808823, 378.316132, 1]],
+                trackingBodyWorldMeters=[[-.567094207, 0, .823652923, 0], [0, 1, 0, 0],
+                    [-.823652923, 0, -.567094207, 0], [164.705704, 171.057602, 378.374451, 1]])
+            if len(self.held_requests) == 1:
+                self.passive_held_ahead(snapshot)
+        self.held_request_hook = respond
+        code, result = self.run_assembled(jab=True, real_transport=True)
+        self.assertEqual(code, 0, result)
+        self.assertEqual(result['jabSteps'], 1)
+        self.assertEqual(len(self.held_requests), 3)
+        _, mismatched, fresh = self.held_requests
+        self.assertEqual(mismatched['commands'], fresh['commands'])
+        self.assertEqual(len({row['deadlineNs'] for row in self.held_requests}), 1)
+        self.assertEqual(len({row['stageDeadlineNs'] for row in self.held_requests}), 1)
+        s = mismatched['snapshot']
+        outer, current = s['input_evidence'], s['chestKnife']['inputEvidence']
+        self.assertEqual(outer, s['chestKnife']['render']['inputEvidence'])
+        self.assertEqual(current['sequence'], outer['sequence']+1)
+        self.assertEqual(current['observedNs']-outer['observedNs'], 16_172_900)
+        self.assertEqual(current['deadlineNs']-outer['deadlineNs'], 16_172_900)
+        with self.assertRaisesRegex(Exception, 'current rendered Held knife'):
+            self.m.measured_jab(s, s['observed_ns'])
+        retained = [json.loads(path.read_text()) for path in
+                    Path(result['artifactDirectory']).glob('snapshot-*.json')]
+        self.assertIn(s, retained)
+        self.assertEqual(len(self.jab_publications), 1)
+        publication = self.jab_publications[0]
+        self.assertEqual(publication['source'], fresh['snapshot'])
+        self.assertEqual(publication['deadlineNs'], fresh['snapshot']['chestKnife']['validUntilNs'])
+        joined = fresh['snapshot']
+        self.assertEqual(joined['input']['generation'], joined['chestKnife']['inputEvidence']['sequence'])
+        self.assertEqual(joined['input']['generation'], joined['chestKnife']['render']['inputEvidence']['sequence'])
+        self.assertAlmostEqual(math.dist(result['jab']['origin'], result['jab']['endpoint']), .120)
+        commands = [lines for name, lines, _ in self.calls if name == 'KnifeDriver']
+        self.assertEqual(sum(lines[0].startswith('hand r to grip ') for lines in commands), 1)
+        self.assertEqual(commands.count(['grip r 0']), 1)
+        self.assertIsNone(result['outstandingMotion'])
+        self.assertFalse(result['pendingCommand'] or result['rightGripHeld'] or result['triggerHeld'])
+
+    def test_newer_passive_held_does_not_hide_contradictions(self):
+        baseline = body_snapshot(self.m, self.clock.now, 1, self.state, is_empty=True)
+        self.state['controls']['gripR'] = 1
+        original = knife_snapshot(self.m, baseline, self.clock.now, 2, self.state)
+        self.passive_held_ahead(original)
+        self.assertIsNone(self.m.measured_jab(original, self.clock.now, wait_for_render=True))
+        mutations = (
+            ('held expired', lambda s: s['chestKnife']['inputEvidence'].update(deadlineNs=self.clock.now)),
+            ('held unfocused', lambda s: s['chestKnife']['inputEvidence'].update(focused=False)),
+            ('held released', lambda s: s['chestKnife']['inputEvidence'].update(released=[True, True])),
+            ('held same-sequence clocks', lambda s: s['chestKnife']['inputEvidence'].update(
+                sequence=s['input']['generation'])),
+            ('held ordering', lambda s: s['chestKnife']['inputEvidence'].update(
+                sequence=s['input']['generation']-1,
+                observedNs=s['input_evidence']['observedNs']-1_000_000)),
+            ('outer ordering', lambda s: s['input_evidence'].update(
+                observedNs=s['chestKnife']['inputEvidence']['observedNs'])),
+            ('native owner', lambda s: s['chestKnife']['owner'].update(weapon=123)),
+            ('physical owner', lambda s: s['chestKnife']['inputEvidence']['owner'].update(space=99)),
+            ('render expired', lambda s: s['chestKnife']['render']['inputEvidence'].update(deadlineNs=self.clock.now)),
+            ('mesh', lambda s: s['selected'].update(matchedMeshPath='other')),
+            ('rig', lambda s: s['rig'].update(fingerprint=0)),
+            ('controls', lambda s: s['input']['hands'][1].update(trigger=.1)),
+            ('matrix', lambda s: s['mapping']['weaponWorldMeters'][0].__setitem__(0, 2.)),
+            ('reach', lambda s: s['input']['hands'][1]['grip'].update(position=[5., 5., 5.])))
+        for label, mutate in mutations:
+            with self.subTest(label=label):
+                changed = copy.deepcopy(original)
+                mutate(changed)
+                with self.assertRaises(Exception):
+                    self.m.measured_jab(changed, self.clock.now, wait_for_render=True)
+
+    def test_newer_passive_held_clock_contradiction_is_terminal_before_motion(self):
+        def respond(driver, snapshot):
+            if len(self.held_requests) >= 1:
+                self.passive_held_ahead(snapshot)
+            if len(self.held_requests) == 2:
+                current = snapshot['chestKnife']['inputEvidence']
+                snapshot['input_evidence'].update(observedNs=current['observedNs'],
+                    nowNs=current['nowNs'])
+        self.held_request_hook = respond
+        code, result = self.run_assembled(jab=True, real_transport=True)
+        self.assertEqual(code, 2, result)
+        self.assertEqual(len(self.held_requests), 3)
+        self.assertIn('input sequence/time ordering conflicts', result['error'])
+        self.assert_no_jab_once_released(result)
 
     def test_render_lag_does_not_hide_other_geometry_rejections(self):
         baseline = body_snapshot(self.m, self.clock.now, 1, self.state, is_empty=True)
@@ -897,9 +1008,10 @@ class KnifeTests(unittest.TestCase):
         self.assertEqual(len(self.held_requests), 3)
         self.assert_no_jab_once_released(result)
 
-    def check_held_observation_budget(self, budget=None, *, geometry=False):
-        if geometry:
-            self.held_request_hook = lambda driver, s: self.render_lag(s) if self.held_requests else None
+    def check_held_observation_budget(self, budget=None, *, geometry=False, publication_gap=None):
+        if geometry or publication_gap is not None:
+            gap = publication_gap or self.render_lag
+            self.held_request_hook = lambda driver, s: gap(s) if self.held_requests else None
         else:
             self.prejab_gap(absent_count=1000)
         original_init = self.m.KnifeDriver.__init__
@@ -939,6 +1051,15 @@ class KnifeTests(unittest.TestCase):
 
     def test_prejab_render_lag_preserves_original_stage_jab_and_return_budget(self):
         self.check_held_observation_budget('stage_deadline', geometry=True)
+
+    def test_prejab_newer_passive_held_cannot_restart_original_observation_window(self):
+        self.check_held_observation_budget(publication_gap=self.passive_held_ahead)
+
+    def test_prejab_newer_passive_held_preserves_original_invocation_jab_and_return_budget(self):
+        self.check_held_observation_budget('deadline', publication_gap=self.passive_held_ahead)
+
+    def test_prejab_newer_passive_held_preserves_original_stage_jab_and_return_budget(self):
+        self.check_held_observation_budget('stage_deadline', publication_gap=self.passive_held_ahead)
 
     def test_prejab_absence_with_foreign_control_is_terminal(self):
         def changed(driver, snapshot):

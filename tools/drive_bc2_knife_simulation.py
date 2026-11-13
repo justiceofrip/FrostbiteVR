@@ -522,24 +522,29 @@ def measured_jab(snapshot, now, *, wait_for_render=False):
     """
     k, inp = snapshot['chestKnife'], snapshot['input']
     p.admit_frame(snapshot, now, integer(snapshot['nonce']), mechanism_admission=lambda s, n: True)
-    same_stamps(snapshot['input_evidence'], k['inputEvidence'])
+    source, current = snapshot['input_evidence'], k['inputEvidence']
+    p.evidence(current, k['owner'], current['owner']['equipGeneration'], now)
+    same_stamps(source, current)
     require(snapshot['owner'] == k['owner']
-            and all(snapshot['input_evidence'][key] == k['inputEvidence'][key]
-                    for key in ('owner', 'sequence', 'observedNs', 'deadlineNs', 'focused', 'tracked', 'released'))
+            and all(source[key] == current[key]
+                    for key in ('owner', 'focused', 'tracked', 'released'))
             and snapshot['rig']['fingerprint'] == k['render']['rigFingerprint'] == KNIFE_RIG
             and snapshot['selected']['configurationPath'] == 'Objects/Weapons/Handheld/Knife/Knife'
             and snapshot['selected']['matchedMeshPath'] == 'Objects/Weapons/Handheld/Knife/Knife_Mesh'
             and snapshot['equipment']['asset'] == 'KNV-1'
             and inp['trackingBasisGeneration'] == k['trackingBasisGeneration'],
             'jab geometry is not the current rendered Held knife')
+    require(source['sequence'] <= current['sequence']
+            and source['observedNs'] <= current['observedNs'],
+            'jab mapping source is not live ordered Held input')
     rendered = k['render']['inputEvidence']
-    p.evidence(rendered, k['owner'], k['inputEvidence']['owner']['equipGeneration'], now)
-    same_stamps(rendered, snapshot['input_evidence'])
+    p.evidence(rendered, k['owner'], current['owner']['equipGeneration'], now)
+    same_stamps(rendered, source)
     require(rendered['released'][1] is False
             and rendered['sequence'] <= inp['generation']
-            and rendered['observedNs'] <= snapshot['input_evidence']['observedNs'],
+            and rendered['observedNs'] <= source['observedNs'],
             'jab render source is not live ordered Held input')
-    joined = inp['generation'] == rendered['sequence']
+    joined = inp['generation'] == rendered['sequence'] == current['sequence']
     for hand, controls in zip(inp['hands'], k['controls']):
         require(all(hand[key] == controls[key] for key in controls), 'jab geometry/input controls differ')
     weapon = p.rigid(snapshot['mapping']['weaponWorldMeters'])
@@ -558,9 +563,9 @@ def measured_jab(snapshot, now, *, wait_for_render=False):
     require(all(math.dist(point, inp['head']['position']) <= 1.5 for point in (grip['position'], endpoint)),
             'jab leaves native head-relative reach')
     # Native snapshots load passive Held and the rendered mapping separately.
-    # A live older render receipt is valid Held, but cannot authorize this
-    # mapping's jab. Validate every other geometry gate before observing again;
-    # never relabel the older receipt or extend its original input lease.
+    # Ordered live generations may differ, but only an exact three-way join
+    # authorizes a jab. Validate every other geometry gate before observing
+    # again; never relabel a receipt or extend its original input lease.
     if not joined:
         require(wait_for_render, 'jab geometry is not the current rendered Held knife')
         return None
