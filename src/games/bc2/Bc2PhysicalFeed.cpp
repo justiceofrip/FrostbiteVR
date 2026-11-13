@@ -417,6 +417,7 @@ struct Bc2PhysicalFeed::State {
         std::unique_ptr<FeedEquipmentSession> session;
         Bc2FeedAmmoSupply ammunitionSupply;
         bool supplyNeutral=false;
+        std::uint64_t supplyAcquiredClaim=0;
         std::optional<FeedEquipmentSubmission> pending;
         std::optional<HandClaimToken> claim;
         std::optional<HandClaim> observedMechanismClaim;
@@ -1146,7 +1147,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     captureSupplyLoss(*e,FeedSupplyLossSite::SupplyUpdate,FeedExit::Updated);
     if(!supplyPaired)e->ammunitionSupply.Suspend(s.input,hands);
     const bool acquiredSupply=supplyPaired&&e->ammunitionSupply.Update(supplyBody,s.input,s.bodyFromHand,s.grip,
-        e->container==FeedContainerState::Detached&&e->supplyNeutral&&!e->pending,hands,intent);
+        e->container==FeedContainerState::Detached&&!e->pending&&!s.cancel,hands,intent);
     if(!hadSupplyLoss&&e->ammunitionSupply.Held())supplyLoss.reset();
     if(acquiredSupply){
         e->originalDrop.reset();
@@ -1294,9 +1295,20 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         // until its pickup packet arrives; it cannot dispatch a refill.
         const bool pickupAwaitingRaw=needsSupply&&custody&&e->supplyNeutral&&!source->grip&&sourceInput.released[0]&&
             sourceInput.sequence<custody->object.claim.inputSequence&&sourceInput.owner==custody->object.identity.owner;
-        if(supplied&&source->grip)e->supplyNeutral=false;
+        if(supplied&&source->grip&&(!custody->acquisition||
+           custody->acquisition->Object().claim.token.id==e->supplyAcquiredClaim))e->supplyNeutral=false;
         const bool chestNeutral=needsSupply&&!e->ammunitionSupply.Custody()&&!source->grip&&sourceInput.released[0]&&
             available&&source->bodyFromHand&&Bc2FeedSupplyContact(*source->bodyFromHand);
+        // The real pickup already proved belt contact. Its render packet may
+        // be skipped while the player carries the box toward the gun; admit
+        // from the next current hand pose within the original pickup leases.
+        const bool pickupReady=needsSupply&&supplied&&supplyHand&&custody->acquisition&&source->grip&&
+            custody->acquisition->Object().claim.token.id!=e->supplyAcquiredClaim&&
+            sourceInput.sequence>=custody->acquisition->Sample().input.sequence&&
+            custody->acquisition->Object().claim.token==supplyHeld->claim.token&&
+            custody->acquisition->Sample().input.deadlineNs>now&&custody->acquisition->Sample().source.deadlineNs>now&&
+            source->bodyFromHand&&Bc2FeedSupplyContact(custody->acquisition->Sample().bodyFromHand);
+        std::optional<FeedSupplyAcquisition> pickupAdmission;
         // Follow a meaningful released approach within the broader supply
         // region before pickup. Rebase only against newer paired native and
         // input evidence: suspending on an identical native observation would
@@ -1311,12 +1323,15 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
                 ammunition.sequence>previous->ammunition.sequence&&ammunition.observedNs>previous->ammunition.observedNs&&
                 Distance(local,sample.snapshot.contacts[part].weaponFromContact)>profile.contacts[part].radiusMeters*.5;
         }
-        // Contact loss invalidates preparation; custody preserves the exact
-        // delayed pickup and prohibits rebasing an already carried object.
+        // Contact loss invalidates neutral preparation. A newly acquired or
+        // reclaimed object may prepare once from its real rendered pickup;
+        // an already admitted carry keeps its existing motion.
         if(needsSupply&&!custody&&!chestNeutral)e->supplyNeutral=false;
-        if(chestNeutral&&(!e->supplyNeutral||e->motionDirty||refreshChest)){
-            // Arm from the actual neutral chest/belt contact. A detached pouch
-            // is not moved by this preparation; the pickup edge moves it.
+        if((chestNeutral&&(!e->supplyNeutral||e->motionDirty||refreshChest))||
+           (pickupReady&&(!e->supplyNeutral||e->motionDirty))){
+            // Rebase from actual neutral contact or the opaque real pickup.
+            // Only pickup moves the representation. No held packet is turned
+            // into a released input to satisfy the feed session's neutral gate.
             FeedEquipmentSessionSample pause;pause.nowNs=now;(void)e->session->Update(pause);
             auto pose=e->registration.geometry.poses[unsigned(Bc2FeedPoseId::PouchAttachSource)];
             const auto& grip=e->registration.geometry.poses[unsigned(Bc2FeedPoseId::PouchWithdrawn)].sourceFromWrist;
@@ -1333,9 +1348,17 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
                         e->motions.operations[unsigned(FeedPhysicalOperation::AttachContainer)]=*motion;
                         e->motionDirty=false;e->supplyNeutral=true;e->recoveryContact.reset();
                         sample.snapshot=state.Snapshot(*e,ammunition,sourceInput);
+                        if(pickupReady){
+                            e->pose=pose;e->gestureStart=pose;e->pouchBasis=e->chainBasis=s.raw.weaponWorldMeters;
+                            e->carriedPartsMask=std::uint16_t(1|ChainMask(e->registration.geometry.chainCount));
+                        }
                     }
                 }
             }
+        }
+        if(pickupReady&&e->supplyNeutral&&!e->motionDirty){
+            pickupAdmission=FeedSupplyAcquisition{*custody->acquisition,FeedEquipmentOwner(s.owner),e->mechanism,e->supply,
+                custody->context.native.binding.context.resource,e->lifetime,profile.id,profile.revision};
         }
         const auto prior=e->session->State();
         bool recoveryEstablished=false;
@@ -1384,6 +1407,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             sourceInput.observedNs,true,available,local};
         sample.interaction.hand={1,sourceInput.owner.equipGeneration};sample.interaction.trackingGeneration=sourceInput.owner.space;
         sample.interaction.focused=s.input.focused;sample.interaction.grip=source->grip;
+        sample.interaction.supplyAcquisition=pickupAdmission;
         if(e->motions.operations[unsigned(e->activeOperation)].kind==FeedMotionKind::FreePlacement)
             sample.interaction.weaponWorld=source->contact->weaponWorld;
         sample.held=available&&(source->grip||sourceInput.released[0])&&!e->refused&&!e->gateFailed&&!e->motionDirty&&
@@ -1441,6 +1465,9 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         const bool alreadyCaptured=bool(mechanismLoss);
         captureMechanismLoss(*e,FeedSupplyLossSite::PolicyClear,FeedExit::PolicyStatus);
         const auto result=e->session->Update(sample);out.status=result.status;
+        if(pickupAdmission&&result.session.interaction.status==FeedInteractionStatus::Acquired&&
+           result.session.reload.status==FeedReloadStatus::AwaitingPhysicalCompletion)
+            e->supplyAcquiredClaim=pickupAdmission->pickup.Object().claim.token.id;
         if(!source->grip&&sourceInput.released[0]&&result.session.recognitionEnabled&&query.candidate&&
            result.session.interaction.status==FeedInteractionStatus::Armed)
             e->supportNeutral=State::SupportNeutral{sourceInput,query.candidate->operation};

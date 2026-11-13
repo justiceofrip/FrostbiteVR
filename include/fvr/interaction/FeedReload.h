@@ -1,5 +1,6 @@
 #pragma once
 #include "fvr/interaction/FeedMechanism.h"
+#include "fvr/interaction/AmmoSupply.h"
 #include <limits>
 
 namespace fvr::interaction {
@@ -40,6 +41,15 @@ struct FeedReloadBinding {
     bool verified=false;
     std::array<bool,10> operations{};
 };
+// Feed lifetime association for an opaque physical pickup. Its immutable source
+// ownerJoin, not these public routing fields, proves the hand/native owner pair.
+// The pickup retains its real input/source/claim; this is never a neutral sample.
+struct FeedSupplyAcquisition {
+    AmmoSupplyAcquisition pickup;
+    FeedOwner owner{};FeedKey mechanism{};FeedSupplyKey supply{};
+    AmmoResourceIdentity resource{};
+    std::uint64_t lifetime=0,profileId=0,profileRevision=0;
+};
 struct FeedReloadSample {
     FeedMechanismSnapshot snapshot{};
     FeedReloadBinding binding{};
@@ -49,6 +59,7 @@ struct FeedReloadSample {
     bool focused=false,tracked=false,held=false,neutral=false;
     std::optional<FeedPhysicalCompletion> completion{};
     std::optional<FeedReloadAck> acknowledgement{};
+    std::optional<FeedSupplyAcquisition> supplyAcquisition{};
 };
 enum class FeedReloadPhase:std::uint8_t {
     AwaitingNeutral,Ready,AwaitingAcknowledgement,AwaitingSnapshot,Suspended,Complete,Retired
@@ -75,6 +86,29 @@ struct FeedReloadResult {
 };
 
 namespace feed_reload_detail {
+inline bool SupplyAcquired(const FeedSupplyAcquisition& a,const FeedMechanismSnapshot& s,
+    FeedSupplyKey goal,std::uint64_t lifetime,std::int64_t now)noexcept {
+    const auto& sample=a.pickup.Sample();const auto& in=sample.input;const auto& object=a.pickup.Object();
+    return sample.source.ownerJoin&&sample.source.ownerJoin->hand==in.owner&&
+        sample.source.ownerJoin->native.resource==a.resource&&
+        feed_mechanism_detail::Context(s.owner,sample.source.ownerJoin->native)&&
+        a.owner==s.owner&&a.mechanism==s.mechanism&&a.supply==goal&&a.lifetime==lifetime&&
+        a.profileId==s.profileId&&a.profileRevision==s.profileRevision&&
+        a.resource.actor==s.owner.actor&&a.resource.actorGeneration==s.owner.actorGeneration&&
+        a.resource.weapon==s.owner.weapon&&a.resource.weaponGeneration&&
+        sample.source.identity==object.identity&&sample.source.identity.owner==in.owner&&
+        sample.source.identity.pool.generation==a.resource.weaponGeneration&&
+        sample.source.identity.trackingEpoch==in.owner.space&&
+        sample.source.identity.weapon.id==s.owner.weapon&&in.owner.actorGeneration==s.owner.actorGeneration&&
+        in.owner.space==s.owner.space&&sample.source.objectUnits==object.units&&
+        in.sequence<=s.inputSequence&&sample.geometrySequence==in.sequence&&sample.gripPressed&&!in.released[0]&&
+        in.focused&&in.tracked[0]&&in.tracked[1]&&in.observedNs<=now&&sample.source.observedNs<=s.observedNs&&
+        sample.source.sequence<=s.sequence&&
+        in.deadlineNs>now&&sample.source.deadlineNs>now&&sample.source.observedNs<=in.observedNs&&
+        object.claim.inputSequence==in.sequence&&object.claim.deadlineNs>now&&
+        object.claim.token.owner==in.owner&&object.claim.token.kind==HandClaimKind::AmmoObject&&
+        object.claim.token.hand==InteractionHand::Left&&object.claim.token.item==object.item;
+}
 // Controller input advances independently of the immutable native observation.
 // Excluding its sequence does not renew native time or change any native field.
 inline bool SameNativeSnapshot(const FeedMechanismSnapshot& a,const FeedMechanismSnapshot& b)noexcept {
@@ -162,7 +196,7 @@ private:
     std::uint64_t lifetime_=0,nextRequest_=0,lastCompletion_=0,accepted_=0;
     const AmmoResourceIdentity resource_{};
     std::uint64_t refillRequest_=0;
-    std::uint64_t lastInput_=0,resumeInput_=0,resumeSnapshot_=0;
+    std::uint64_t lastInput_=0,resumeInput_=0,resumeSnapshot_=0,lastSupplyClaim_=0;
     std::int64_t lastCallNs_=0,lastInputNs_=0;
     std::optional<FeedMechanismSnapshot> lastSnapshot_{};
     std::optional<FeedReloadRequest> pending_{},lastApplied_{};
@@ -317,14 +351,19 @@ inline FeedReloadResult FeedReload::Update(const FeedReloadSample& x)noexcept {
     if(completed_)return Result(FeedReloadStatus::Complete,next.status);
     if(!x.focused||!x.tracked||!x.held)return Result(FeedReloadStatus::Suspended,next.status);
     if(!freshInput)return Result(FeedReloadStatus::DuplicatePacket,next.status);
+    const bool supplyAcquired=x.supplyAcquisition&&next.candidate&&
+        next.candidate->operation==FeedPhysicalOperation::AttachContainer&&x.supplyAcquisition->resource==resource_&&
+        x.supplyAcquisition->pickup.Object().claim.token.id>lastSupplyClaim_&&
+        SupplyAcquired(*x.supplyAcquisition,s,goal_,lifetime_,x.nowNs);
     if(suspended_){
-        if(!x.neutral||x.completion||s.inputSequence<=resumeInput_||s.sequence<=resumeSnapshot_)
+        if((!x.neutral&&!supplyAcquired)||x.completion||s.inputSequence<=resumeInput_||s.sequence<=resumeSnapshot_)
             return Result(FeedReloadStatus::NeutralRequired,next.status);
         suspended_=false;
     }
     if(!next.candidate){armed_=false;return Result(next.status==FeedMechanismStatus::NoPhysicalStep?
         FeedReloadStatus::NoPhysicalStep:FeedReloadStatus::MechanismUnavailable,next.status);}
     if(!Binding(x.binding,next.candidate->operation)){Suspend();return Result(FeedReloadStatus::UnverifiedBinding,next.status);}
+    if(supplyAcquired&&!x.completion){armed_=true;lastSupplyClaim_=x.supplyAcquisition->pickup.Object().claim.token.id;}
     if(x.neutral){
         if(x.completion){armed_=false;return Result(FeedReloadStatus::InvalidCompletion,next.status);}
         armed_=true;auto r=Result(FeedReloadStatus::Armed,next.status);r.candidate=next.candidate;return r;

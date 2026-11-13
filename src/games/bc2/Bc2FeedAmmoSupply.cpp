@@ -15,6 +15,7 @@ std::optional<AmmoSupplySource> Bc2FeedBodySource(const Bc2FeedBodyAmmo& f,
     AmmoSupplySource source;
     source.identity={input.owner,{o.weapon,input.owner.equipGeneration},{row->key,row->mechanism.revision},
         {v.binding.inventory,v.binding.context.resource.weaponGeneration},input.owner.space};
+    source.ownerJoin=AmmoSupplyOwnerJoin{input.owner,v.binding.context};
     // Magazine is the portable multi-round pickup shape, never a native
     // magazine request. The typed feed command retains its own operation.
     source.family=ReloadInsertionFamily::Magazine;source.reserveUnits=unsigned(v.counts.reserve);
@@ -29,7 +30,7 @@ bool Bc2FeedBodyRetained(const Bc2FeedBodyAmmo& a,const Bc2FeedBodyAmmo& b)noexc
         (a.native.sequence!=b.native.sequence||a.native==b.native);
 }
 AmmoSupplyConfig Bc2FeedSupplyConfig()noexcept {
-    auto config=ChestAmmoSupply();config.itemNamespace=0x4243324645454441ull;return config;
+    auto config=ChestAmmoSupply();config.itemNamespace=0x4243324645454441ull;config.allowGripApproach=true;return config;
 }
 bool Bc2FeedSupplyContact(const math::Matrix4& pose)noexcept {
     if(!feed_mechanism_detail::Pose(pose))return false;const auto c=Bc2FeedSupplyConfig();
@@ -59,13 +60,20 @@ bool Bc2FeedAmmoSupply::Update(const Bc2FeedBodyAmmo& body,const HandInteraction
        rejected(input.released[1],FeedSupplyReleaseRejection::RightReleased)){Suspend(input,hands,{HandReleaseSite::FeedSupplyAdmission,static_cast<std::uint8_t>(rejection)});return false;}
     AmmoSupplySample sample;sample.input=input;sample.source=*source;sample.trackingEpoch=input.owner.space;
     sample.gripPressed=grip;if(pose){sample.bodyFromHand=*pose;sample.geometrySequence=input.sequence;}
-    if(acquire&&!custody_&&intent!=UINT64_MAX)sample.intent=++intent;
-    const auto result=acquire&&!custody_?pickup_.Update(sample,hands):pickup_.WaitHeld(sample,hands);
-    if(result.acquired&&result.held){custody_=Bc2FeedSupplyCustody{body,*source,*result.held,body,input.owner,{}};return true;}
+    const bool reclaim=custody_&&!pickup_.Held()&&Ready(body,input);
+    if(acquire&&(!custody_||reclaim)&&intent!=UINT64_MAX)sample.intent=++intent;
+    const auto result=acquire&&!custody_?pickup_.Update(sample,hands):
+        acquire&&reclaim?pickup_.UpdateRetained(sample,hands,custody_->object):pickup_.WaitHeld(sample,hands);
+    if(result.acquired&&result.held&&result.acquisition){
+        if(custody_){custody_->object=*result.held;custody_->acquisition=result.acquisition;}
+        else custody_=Bc2FeedSupplyCustody{body,*source,*result.held,body,input.owner,{},result.acquisition};
+        return true;
+    }
     return false;
 }
 void Bc2FeedAmmoSupply::Suspend(const HandInteractionSample& input,HandInteraction& hands,HandReleaseCause cause)noexcept {
     (void)pickup_.Cancel(input,hands,cause); // Typed reserve custody survives loss of pose/hand.
+    if(custody_)custody_->acquisition.reset();
 }
 bool Bc2FeedAmmoSupply::Ready(const Bc2FeedBodyAmmo& body,const HandInteractionSample& input)const noexcept {
     if(!custody_||custody_->pending)return false;const auto source=Bc2FeedBodySource(body,input,input.nowNs);
@@ -77,12 +85,15 @@ bool Bc2FeedAmmoSupply::Migrate(const FeedContextMigration& migration,const Bc2F
     if(!custody_)return true;if(custody_->pending||pickup_.Held())return false;
     const auto& previous=custody_->context;const auto& a=previous.native;const auto& b=body.native;
     const auto* row=FindBc2FeedRegistration(body.registrationKey);
-    if(!row||!Bc2FeedBodySource(body,input,input.nowNs)||previous.registrationKey!=body.registrationKey||
+    const auto source=Bc2FeedBodySource(body,input,input.nowNs);
+    if(!row||!source||previous.registrationKey!=body.registrationKey||
        previous.lifetime!=body.lifetime||previous.supply!=body.supply||a.binding.context.resource!=b.binding.context.resource||
        a.binding.inventory!=b.binding.inventory||a.binding.switching!=b.binding.switching||a.binding.data!=b.binding.data||
        a.binding.persistence!=b.binding.persistence||a.counts!=b.counts||
        !feed_mechanism_detail::Migration(migration,a.binding.context.resource,FeedEquipmentOwner(a.identity.owner),
-            FeedEquipmentOwner(b.identity.owner),input.nowNs,row->mechanism.maxAgeNs))return false;
+            FeedEquipmentOwner(b.identity.owner),input.nowNs,row->mechanism.maxAgeNs)||
+       !pickup_.MigrateRetained(custody_->object,source->identity))return false;
+    custody_->object.identity=source->identity;custody_->acquisition.reset();
     custody_->context=body;custody_->handOwner=input.owner;return true;
 }
 bool Bc2FeedAmmoSupply::Bind(const FeedAmmunitionCommand& command,const Bc2FeedBodyAmmo& body,

@@ -25,6 +25,7 @@ struct Bc2FeedSupplyCustody {
     // Pickup reserves representation, not native rounds. Release/tracking loss
     // relinquishes its hand only. An exact feed command then owns settlement.
     std::optional<interaction::FeedAmmunitionCommand> pending;
+    std::optional<interaction::AmmoSupplyAcquisition> acquisition;
 };
 enum class FeedSupplyReleaseRejection:std::uint8_t {
     Unknown,SourceUnavailable,GunMissing,GunKind,GunOwner,GunItem,GunInput,

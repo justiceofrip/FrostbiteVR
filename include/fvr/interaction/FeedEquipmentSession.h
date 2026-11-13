@@ -173,8 +173,13 @@ inline FeedEquipmentSessionResult FeedEquipmentSession::Update(const FeedEquipme
     }
     const auto evidence=EvaluateFeedMechanism(profile_,x.snapshot,goal_,x.nowNs);
     const bool changed=gestureAuthority_&&*gestureAuthority_!=x.authority;
+    const bool pickupJoined=!x.interaction.supplyAcquisition||
+        (feed_reload_detail::SupplyAcquired(*x.interaction.supplyAcquisition,x.snapshot,goal_,lifetime_,x.nowNs)&&
+         x.authority.operation==FeedPhysicalOperation::AttachContainer&&
+         x.authority.rounds==int(x.interaction.supplyAcquisition->pickup.Object().units)&&
+         x.interaction.supplyAcquisition->pickup.Sample().source.reserveUnits==unsigned(x.ammunition.counts.reserve));
     const bool preflight=joined&&active&&!retirementRequested_&&!wasPending&&!receiptRejected&&!x.acknowledgement&&
-        !changed&&evidence.candidate&&Binding(x.binding,x.authority,evidence.candidate->operation)&&
+        !changed&&pickupJoined&&evidence.candidate&&Binding(x.binding,x.authority,evidence.candidate->operation)&&
         ammunition_.CanDispatch(*evidence.candidate,x.authority,x.ammunition,x.nowNs);
 
     FeedReloadSessionSample physical;
@@ -212,7 +217,8 @@ inline FeedEquipmentSessionResult FeedEquipmentSession::Update(const FeedEquipme
         if(!dispatch)invariantMismatch_=true; // Never invent a rejection of a request that was not sent.
         sessionResult.reload.dispatch.reset();
     }
-    if(preflight&&sessionResult.interaction.status==FeedInteractionStatus::Armed)gestureAuthority_=x.authority;
+    if(preflight&&(sessionResult.interaction.status==FeedInteractionStatus::Armed||
+       (sessionResult.interaction.status==FeedInteractionStatus::Acquired&&x.interaction.supplyAcquisition)))gestureAuthority_=x.authority;
     else if(!preflight||sessionResult.interaction.completion||sessionResult.reload.suspended)gestureAuthority_.reset();
     auto out=State();out.session=sessionResult;out.dispatch=dispatch;out.receiptAccepted=receiptAccepted;
     if(joined&&!out.ammunition.pending&&!out.session.reload.pending&&!out.ammunition.needsReconciliation&&

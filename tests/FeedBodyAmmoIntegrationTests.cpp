@@ -126,7 +126,7 @@ int ExhaustionMissingGeometryAndForeignHandsCannotAcquire(){
 }
 int NoEntryAndVerifiedContextMigrationKeepTheExactPickup(){
     Fixture f(RegisteredBc2FeedProfiles().front());f.Step(false);CHECK(f.Step(true));
-    const auto item=f.supply.Custody()->object.item;const auto command=f.Command();
+    const auto original=*f.supply.Custody();const auto item=original.object.item;const auto command=f.Command();
     CHECK(f.supply.Bind(command,f.body,f.input,f.hands));
     FeedAmmunitionReceipt receipt;receipt.command=command;receipt.acknowledgement.request=command.request;
     receipt.acknowledgement.status=FeedReloadAcknowledgement::Rejected;receipt.authorityInvocation=98;
@@ -144,7 +144,113 @@ int NoEntryAndVerifiedContextMigrationKeepTheExactPickup(){
     CHECK(!f.supply.Ready(f.body,f.input));
     auto wrong=migration;++wrong.after.counts.reserve;CHECK(!f.supply.Migrate(wrong,f.body,f.input));
     CHECK(f.supply.Migrate(migration,f.body,f.input));CHECK(f.supply.Ready(f.body,f.input));
-    CHECK(f.supply.Custody()->object.item==item&&f.supply.Custody()->origin.native.identity==previous.identity);return 0;
+    CHECK(f.supply.Custody()->object.item==item&&f.supply.Custody()->origin.native==original.origin.native);
+    CHECK(f.supply.Custody()->source==original.source&&!f.supply.Custody()->acquisition);
+    // Retire the old gun claim with real current input, then acquire the new
+    // context's gun and approach from an actual outside neutral/press.
+    auto outside=f.chest;outside.values[3][0]+=1;
+    CHECK(!f.Step(false,true,outside));CHECK(!f.Step(false,true,outside));
+    CHECK(!f.Step(true,true,outside));CHECK(f.Step(true,true,f.chest));
+    CHECK(f.supply.Held()&&f.supply.Held()->item==item&&f.supply.Held()->units==original.object.units);
+    CHECK(f.supply.Held()->identity.owner==f.input.owner&&f.supply.Held()->identity.trackingEpoch==f.input.owner.space);
+    CHECK(f.supply.Held()->claim.token.id!=original.object.claim.token.id);
+    CHECK(f.supply.Custody()->origin.native==original.origin.native&&f.supply.Custody()->source==original.source);
+    CHECK(f.supply.Custody()->acquisition->Sample().source.ownerJoin->native==f.body.native.binding.context);
+    const auto attached=f.Command();CHECK(f.supply.Bind(attached,f.body,f.input,f.hands));
+    CHECK(attached.authority.rounds==int(original.object.units)&&attached.request.lifetime==original.origin.lifetime);
+    CHECK(attached.after.reserve==original.origin.native.counts.reserve-int(original.object.units));
+    receipt.command=attached;receipt.acknowledgement.request=attached.request;
+    receipt.acknowledgement.status=FeedReloadAcknowledgement::Applied;receipt.noTransferEntry=false;
+    receipt.completedNs=attached.request.requestedNs+1;receipt.post.counts=attached.after;
+    CHECK(f.supply.Complete(receipt));CHECK(!f.supply.Custody()&&!f.supply.Held());
+    CHECK(!f.supply.Complete(receipt));return 0;
+}
+int ImmutablePickupOwnerJoinRejectsForeignFeedActor(){
+    const auto& row=RegisteredBc2FeedProfiles().front();Fixture f(row);
+    auto outside=f.chest;outside.values[3][0]+=1;
+    CHECK(!f.Step(false,true,outside));CHECK(!f.Step(true,true,outside));CHECK(f.Step(true,true,f.chest));
+    const auto& pickup=*f.supply.Custody()->acquisition;
+    CHECK(pickup.Sample().source.ownerJoin);
+    CHECK(pickup.Sample().source.ownerJoin->hand==f.input.owner);
+    CHECK(pickup.Sample().source.ownerJoin->native==f.body.native.binding.context);
+    CHECK(f.input.owner.actor!=f.body.native.binding.context.resource.actor); // Different adapter identities are valid.
+    for(bool foreign:{false,true}){
+        FeedReloadSample x;auto& s=x.snapshot;
+        s.owner=FeedEquipmentOwner(f.body.native.identity.owner);s.mechanism={70,1};
+        s.profileId=row.mechanism.id;s.profileRevision=row.mechanism.revision;
+        s.sequence=f.body.native.sequence;s.inputSequence=f.input.sequence;s.observedNs=f.body.native.observedNs;
+        s.reconciled=true;s.cover=FeedCoverState::Open;s.latch=FeedLatchState::Absent;
+        s.container=FeedContainerState::Detached;s.feed=FeedSeatState::Unseated;s.cycle=FeedCycleState::NativeReady;
+        s.supply={f.body.supply,row.mechanism.ammunitionKind,FeedSupplyState::Usable};
+        s.refill={FeedRefillState::Required,f.body.lifetime,0};
+        for(unsigned n=0;n<s.contacts.size();++n)s.contacts[n]={row.mechanism.contacts[n].role,Identity()};
+        auto resource=f.body.native.binding.context.resource;
+        if(foreign){++s.owner.actor;++resource.actor;}
+        x.binding.key={71,1};x.binding.owner=s.owner;x.binding.mechanism=s.mechanism;
+        x.binding.profileId=s.profileId;x.binding.profileRevision=s.profileRevision;
+        x.binding.verified=true;x.binding.operations.fill(true);
+        x.focused=x.tracked=x.held=true;x.nowNs=f.input.nowNs;
+        // All public routing fields consistently name the target actor. The
+        // opaque pickup still belongs to its original, validated native actor.
+        x.supplyAcquisition=FeedSupplyAcquisition{pickup,s.owner,s.mechanism,f.body.supply,resource,
+            f.body.lifetime,s.profileId,s.profileRevision};
+        const auto query=EvaluateFeedMechanism(row.mechanism,s,f.body.supply,x.nowNs);
+        CHECK(query.candidate&&query.candidate->operation==FeedPhysicalOperation::AttachContainer);
+        CHECK(feed_reload_detail::SupplyAcquired(*x.supplyAcquisition,s,f.body.supply,f.body.lifetime,x.nowNs)==!foreign);
+        FeedReload reload(row.mechanism,s.owner,s.mechanism,f.body.supply,f.body.lifetime,resource);
+        const auto result=reload.Update(x);
+        CHECK(result.status==(foreign?FeedReloadStatus::NeutralRequired:FeedReloadStatus::AwaitingPhysicalCompletion));
+        CHECK(result.suspended==foreign&&!result.dispatch&&!result.pending);
+    }
+    return 0;
+}
+int NaturalApproachAndRegraspPreserveOneSupply(){
+    unsigned count=0;
+    for(const auto& row:RegisteredBc2FeedProfiles())for(bool alternate:{false,true}){
+        Fixture f(row);auto contact=f.chest;const auto config=Bc2FeedSupplyConfig();
+        if(alternate){CHECK(config.alternateContact);for(unsigned axis=0;axis<3;++axis)
+            contact.values[3][axis]=config.alternateContact->centerMeters[axis];}
+        auto outside=contact;outside.values[3][0]+=1;
+        const auto counts=f.body.native.counts;
+        CHECK(!f.Step(false,true,outside));CHECK(!f.Step(true,true,outside));
+        CHECK(f.Step(true,true,contact));CHECK(f.supply.Custody()&&f.supply.Held());
+        const auto original=*f.supply.Custody();CHECK(original.acquisition);
+        CHECK(original.acquisition->Sample().input.sequence==f.input.sequence);
+        CHECK(original.acquisition->Sample().gripPressed&&!original.acquisition->Sample().input.released[0]);
+        CHECK(original.acquisition->Object().item==original.object.item);
+        f.supply.Suspend(f.input,f.hands);CHECK(!f.supply.Held());
+        // Holding through tracking suspension cannot reacquire. Real neutral
+        // outside the belt starts a fresh bounded approach to the same item.
+        CHECK(!f.Step(true,true,contact));CHECK(!f.Step(false,true,outside));
+        CHECK(!f.Step(true,true,outside));CHECK(f.Step(true,true,contact));
+        CHECK(f.supply.Custody()->object.item==original.object.item&&f.supply.Held()->item==original.object.item);
+        CHECK(f.supply.Custody()->origin.native==original.origin.native);
+        CHECK(f.supply.Custody()->source==original.source&&f.supply.Custody()->object.units==original.object.units);
+        CHECK(f.supply.Held()->claim.token.id!=original.object.claim.token.id);
+        CHECK(f.body.native.counts==counts&&!f.supply.Custody()->pending);
+        CHECK(!f.Step(true,true,contact));CHECK(f.supply.Custody()->object.item==original.object.item);++count;
+    }
+    std::printf("Feed supply natural pickup/regrasp: %u enrolled contact cases; deterministic only\n",count);return 0;
+}
+int NaturalApproachRejectsBrokenContinuity(){
+    for(unsigned fault=0;fault<10;++fault){
+        Fixture f(RegisteredBc2FeedProfiles().front());auto outside=f.chest;outside.values[3][0]+=1;
+        CHECK(!f.Step(false,true,outside));CHECK(!f.Step(true,true,outside));const auto counts=f.body.native.counts;
+        if(fault==0)for(unsigned n=0;n<61;++n)CHECK(!f.Step(true,true,outside));
+        if(fault==1)f.input.observedNs+=BodyGripApproach::SampleGapNs;
+        if(fault==2){f.input.focused=false;CHECK(!f.Step(true,true,outside));f.input.focused=true;}
+        if(fault==3){f.input.tracked[0]=false;CHECK(!f.Step(true,true,outside));f.input.tracked[0]=true;}
+        if(fault==4)CHECK(!f.Step(true,false,outside));
+        if(fault==5){++f.input.owner.space;++f.body.native.identity.owner.space;
+            f.body.native.binding.owner=f.body.native.identity.owner;++f.body.native.binding.context.space;}
+        if(fault==6){++f.input.owner.equipGeneration;}
+        if(fault==7){CHECK(!f.supply.Update(f.body,f.input,std::nullopt,true,true,f.hands,f.intent));}
+        if(fault==8)++f.body.native.identity.owner.weapon;
+        if(fault==9)f.input.released[1]=true;
+        CHECK(!f.Step(true,true,f.chest));CHECK(!f.supply.Custody()&&!f.supply.Held());
+        CHECK(f.body.native.counts==counts);
+    }
+    return 0;
 }
 }
 int FeedSupplyReleaseCauseDiagnostics(){
@@ -170,6 +276,9 @@ int FeedSupplyReleaseCauseDiagnostics(){
 }
 
 int main(){if(FeedSupplyReleaseCauseDiagnostics())return 1;
+    CHECK(ImmutablePickupOwnerJoinRejectsForeignFeedActor()==0);
+    CHECK(NaturalApproachAndRegraspPreserveOneSupply()==0);
+    CHECK(NaturalApproachRejectsBrokenContinuity()==0);
     CHECK(EveryEnrolledPouchUsesExactSourceAndAuthoredGrasp()==0);
     CHECK(PickupClaimsCustodyAndOnlyExactReceiptConsumes()==0);
     CHECK(ExhaustionMissingGeometryAndForeignHandsCannotAcquire()==0);

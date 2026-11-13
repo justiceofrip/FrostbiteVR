@@ -30,6 +30,9 @@ bool AmmoSupply::ConfigValid()const noexcept {
 }
 bool AmmoSupply::SourceValid(const AmmoSupplySource& s,std::int64_t now)const noexcept {
     const auto& i=s.identity;
+    if(s.ownerJoin){const auto& j=*s.ownerJoin;const auto& c=j.native;const auto& r=c.resource;
+        if(j.hand!=i.owner||!r.actor||r.actorGeneration!=i.owner.actorGeneration||r.weapon!=i.weapon.id||
+           r.weaponGeneration!=i.pool.generation||!c.equipGeneration||c.space!=i.owner.space)return false;}
     return s.verified&&Owner(i.owner)&&Key(i.weapon)&&Key(i.profile)&&Key(i.pool)&&i.trackingEpoch&&
         i.weapon.id!=config_.itemNamespace&&s.sequence&&s.objectUnits&&
         ((s.family==ReloadInsertionFamily::SingleShell&&s.objectUnits==1)||s.family==ReloadInsertionFamily::Magazine)&&
@@ -43,8 +46,9 @@ bool AmmoSupply::Budget(const AmmoSupplySource& s,std::uint32_t units,HandIntera
 }
 AmmoSupplyResult AmmoSupply::Drop(const HandInteractionSample& s,HandInteraction& hands,AmmoSupplyReason why,HandReleaseCause cause)noexcept {
     auto out=Snapshot(why);cause.ammoReason=static_cast<std::uint8_t>(why);
-    if(held_){out.released=held_->item;hands.Release(s,held_->claim.token,cause);held_.reset();}
-    out.held.reset();armed_=false;return out;
+    if(held_){if(config_.allowGripApproach)released_=held_;
+        out.released=held_->item;hands.Release(s,held_->claim.token,cause);held_.reset();}
+    out.held.reset();armed_=false;approach_.Reset();return out;
 }
 AmmoSupplyResult AmmoSupply::Cancel(const HandInteractionSample& s,HandInteraction& hands,HandReleaseCause cause)noexcept {
     blocked_=true;return Drop(s,hands,AmmoSupplyReason::Explicit,cause);
@@ -76,7 +80,22 @@ AmmoSupplyResult AmmoSupply::RetainHeld(const HandInteractionSample& in,const Am
 AmmoSupplyResult AmmoSupply::UpdateCurrent(const AmmoSupplySample& s,HandInteraction& hands,bool allowAcquire)noexcept {
     return UpdateWithSource(s,hands,allowAcquire,false);
 }
-AmmoSupplyResult AmmoSupply::UpdateWithSource(const AmmoSupplySample& s,HandInteraction& hands,bool allowAcquire,bool sourceDeferred)noexcept {
+AmmoSupplyResult AmmoSupply::UpdateRetained(const AmmoSupplySample& s,HandInteraction& hands,const AmmoSupplyObject& retained)noexcept {
+    if(!config_.allowGripApproach||!released_||released_->item!=retained.item||released_->identity!=retained.identity||
+       released_->family!=retained.family||released_->units!=retained.units||pending_)return WaitHeld(s,hands);
+    return UpdateWithSource(s,hands,true,false,&retained);
+}
+bool AmmoSupply::MigrateRetained(const AmmoSupplyObject& retained,const AmmoSupplyIdentity& next)noexcept {
+    if(!config_.allowGripApproach||held_||pending_||!released_||released_->item!=retained.item||
+       released_->identity!=retained.identity||released_->family!=retained.family||released_->units!=retained.units)return false;
+    const auto& old=retained.identity;
+    if(!Owner(next.owner)||next.owner.actor!=old.owner.actor||next.owner.actorGeneration!=old.owner.actorGeneration||
+       next.weapon.id!=old.weapon.id||next.weapon.generation!=next.owner.equipGeneration||
+       next.profile!=old.profile||next.pool!=old.pool||next.trackingEpoch!=next.owner.space)return false;
+    released_->identity=next;armed_=false;approach_.Reset();return true;
+}
+AmmoSupplyResult AmmoSupply::UpdateWithSource(const AmmoSupplySample& s,HandInteraction& hands,bool allowAcquire,bool sourceDeferred,
+    const AmmoSupplyObject* retained)noexcept {
     const auto& in=s.input;
     const auto fail=[&](AmmoSupplyReason why){blocked_=true;return Drop(in,hands,why,{HandReleaseSite::AmmoSupplyUpdate});};
     if(!ConfigValid())return fail(AmmoSupplyReason::InvalidConfig);
@@ -98,7 +117,8 @@ AmmoSupplyResult AmmoSupply::UpdateWithSource(const AmmoSupplySample& s,HandInte
         return fail(AmmoSupplyReason::TrackingLost);
     if((!sourceDeferred&&!SourceValid(s.source,in.nowNs))||s.source.observedNs<terminalCutoffNs_||s.source.identity.owner!=in.owner||s.source.identity.trackingEpoch!=s.trackingEpoch)
         return fail(AmmoSupplyReason::InvalidSource);
-    const bool changed=source_.identity!=s.source.identity||source_.family!=s.source.family||source_.objectUnits!=s.source.objectUnits;
+    const bool changed=source_.identity!=s.source.identity||source_.family!=s.source.family||source_.objectUnits!=s.source.objectUnits||
+        source_.ownerJoin!=s.source.ownerJoin;
     if(!fresh&&changed)return fail(AmmoSupplyReason::SourceChanged);
     if(!changed&&(s.source.sequence<source_.sequence||s.source.observedNs<source_.observedNs||
         (s.source.sequence==source_.sequence&&s.source!=source_)))return fail(AmmoSupplyReason::InvalidSource);
@@ -108,6 +128,20 @@ AmmoSupplyResult AmmoSupply::UpdateWithSource(const AmmoSupplySample& s,HandInte
     auto out=Snapshot();
     if(changed||gap)out=Drop(in,hands,changed?AmmoSupplyReason::SourceChanged:AmmoSupplyReason::TrackingLost,{HandReleaseSite::AmmoSupplyUpdate});
     if(!sourceDeferred)source_=s.source;
+    const bool geometry=s.geometrySequence==in.sequence&&Rigid(s.bodyFromHand);
+    const auto inside=[&](const std::array<float,3>& center,float radius){
+        double distance2=0;for(unsigned i=0;i<3;++i){const double v=s.bodyFromHand.values[3][i]-center[i];distance2+=v*v;}
+        return distance2<=double(radius)*radius;};
+    const bool contact=geometry&&(inside(config_.pouchCenterMeters,config_.pouchRadiusMeters)||
+        (config_.alternateContact&&inside(config_.alternateContact->centerMeters,config_.alternateContact->radiusMeters)));
+    const auto gun=hands.Current(config_.hand==InteractionHand::Left?InteractionHand::Right:InteractionHand::Left);
+    const bool gunCurrent=gun&&gun->token.kind==HandClaimKind::GunHold&&gun->token.owner==in.owner&&
+        gun->token.item==source_.identity.weapon&&gun->inputSequence==in.sequence&&gun->deadlineNs>in.nowNs;
+    const bool approach=config_.allowGripApproach&&approach_.Update(in,source_.identity.weapon,source_.identity.profile.id,
+        gunCurrent?gun->token.id:0,armed_&&s.gripPressed,s.gripPressed&&!input_.released[h],
+        allowAcquire&&!sourceDeferred&&geometry&&gunCurrent&&!hands.Current(config_.hand)&&!changed&&!gap,
+        contact);
+    if(!allowAcquire)approach_.Reset();
     if(!s.gripPressed||input_.released[h]){
         if(held_)out=Drop(in,hands,AmmoSupplyReason::Released,{HandReleaseSite::AmmoSupplyUpdate});
         if(sourceDeferred)armed_=false;
@@ -132,22 +166,20 @@ AmmoSupplyResult AmmoSupply::UpdateWithSource(const AmmoSupplySample& s,HandInte
     if(!allowAcquire)return Snapshot();
     if(!fresh)return Snapshot(AmmoSupplyReason::NeedNeutral);
     const bool edge=armed_;armed_=false;
-    if(!edge)return Snapshot(AmmoSupplyReason::NeedNeutral);
-    if(s.geometrySequence!=in.sequence||!Rigid(s.bodyFromHand))return Snapshot(AmmoSupplyReason::InvalidInput);
-    const auto inside=[&](const std::array<float,3>& center,float radius){
-        double distance2=0;for(unsigned i=0;i<3;++i){const double v=s.bodyFromHand.values[3][i]-center[i];distance2+=v*v;}
-        return distance2<=double(radius)*radius;};
-    if(!inside(config_.pouchCenterMeters,config_.pouchRadiusMeters)&&
-       (!config_.alternateContact||!inside(config_.alternateContact->centerMeters,config_.alternateContact->radiusMeters)))
-        return Snapshot(AmmoSupplyReason::OutsidePouch);
+    if(!edge&&!approach)return Snapshot(AmmoSupplyReason::NeedNeutral);
+    if(!geometry)return Snapshot(AmmoSupplyReason::InvalidInput);
+    if(!contact)return Snapshot(AmmoSupplyReason::OutsidePouch);
     if(!Budget(source_,source_.objectUnits))return Snapshot(AmmoSupplyReason::ReserveExhausted);
-    if(nextItem_==std::numeric_limits<std::uint64_t>::max())return Snapshot(AmmoSupplyReason::CounterExhausted);
-    const HandInteractionKey item{config_.itemNamespace,++nextItem_};
+    if(retained&&(retained->identity!=source_.identity||retained->family!=source_.family||retained->units!=source_.objectUnits))
+        return Snapshot(AmmoSupplyReason::SourceChanged);
+    if(!retained&&nextItem_==std::numeric_limits<std::uint64_t>::max())return Snapshot(AmmoSupplyReason::CounterExhausted);
+    const HandInteractionKey item=retained?retained->item:HandInteractionKey{config_.itemNamespace,++nextItem_};
     const auto acquired=hands.Acquire(in,{in.owner,config_.hand,HandClaimKind::AmmoObject,item,
         {config_.pouch,in.sequence,in.deadlineNs,true},s.intent,0});
     if(!acquired.accepted||!acquired.claim)return Snapshot(AmmoSupplyReason::HandUnavailable);
     held_=AmmoSupplyObject{source_.identity,item,*acquired.claim,source_.family,source_.objectUnits};
-    out=Snapshot();out.acquired=item;return out;
+    released_.reset();approach_.Reset();out=Snapshot();out.acquired=item;
+    out.acquisition=AmmoSupplyAcquisition{s,*held_};return out;
 }
 std::optional<AmmoSupplyReservation> AmmoSupply::Reserve(const AmmoSupplySample& s,HandInteraction& hands,
     const ReloadInsertionSeat& seat,const ManualReloadRequest& request,std::uint64_t cycle)noexcept {

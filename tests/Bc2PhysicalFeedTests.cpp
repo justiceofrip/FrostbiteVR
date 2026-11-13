@@ -305,6 +305,32 @@ struct Fixture {
         const auto hand=hands.Current(InteractionHand::Left);
         return hand&&hand->token.kind==HandClaimKind::AmmoObject&&result.ownsHand;
     }
+    bool PickSupplyFromHeldApproach(bool skipPickupRender=false){
+        auto contact=Identity();const auto config=Bc2FeedSupplyConfig();
+        for(unsigned axis=0;axis<3;++axis)contact.values[3][axis]=config.pouchCenterMeters[axis];
+        auto outside=contact;outside.values[3][0]+=config.pouchRadiusMeters+.25f;
+        // The only neutral is physically outside both supply contacts. The
+        // player then squeezes while approaching and arrives already gripping.
+        sample.bodyFromHand=outside;Tick(outside,false);Tick(outside,true);
+        sample.bodyFromHand=contact;
+        if(skipPickupRender){
+            // The input really reaches the belt and acquires the box, but its
+            // own raw render is skipped. The next rendered hand has already
+            // left the belt; no held-at-belt catch-up packet is supplied.
+            const auto previous=awaitingRender?*awaitingRender:sample.raw;
+            PrepareTick(contact,true);Consume(&previous);
+            const auto acquired=hands.Current(InteractionHand::Left);
+            if(!acquired||acquired->token.kind!=HandClaimKind::AmmoObject)return false;
+            awaitingRender.reset();lastRendered.reset();sample.bodyFromHand=outside;
+            for(std::size_t n=0;n<nativeCadence.size()+3;++n)Tick(outside,true);
+        }else{
+            Tick(contact,true);
+            for(std::size_t n=0;n<nativeCadence.size()+(delayedRender?1u:0u);++n)Tick(contact,true);
+        }
+        const auto hand=hands.Current(InteractionHand::Left);
+        return hand&&hand->token.kind==HandClaimKind::AmmoObject&&result.ownsHand&&
+            (result.interactionStatus==FeedInteractionStatus::Acquired||result.interactionStatus==FeedInteractionStatus::Moving);
+    }
     std::optional<FeedMotionProfile> PlacementMotion(FeedPhysicalOperation op)const {
         if(!result.presentation)return {};
         const auto retained=result.presentation;auto pose=registration->geometry.poses[unsigned(Bc2FeedPoseId::Resting)];
@@ -2094,7 +2120,7 @@ int EveryEnrolledFeedCompletesAcrossGameplayPublicationLoss(){
     CHECK(completed==configurations*2*interruptions.size()&&completed==cycles+failed&&failed==0);
     CHECK(configurations==24&&cycles==configurations*2*interruptions.size()&&receipts==cycles*5);return 0;
 }
-int ChestPreparationSurvivesNeutralJitterButNotContactLoss(){
+int ChestPreparationSurvivesNeutralJitterAndOutsideNeutral(){
     for(bool loseContact:{false,true}){
         Fixture f;f.wristCalibration=Turn(2.29598f);
         CHECK(f.OpenCover()&&f.Reconcile());
@@ -2122,13 +2148,12 @@ int ChestPreparationSurvivesNeutralJitterButNotContactLoss(){
         }
         f.sample.bodyFromHand=chest;f.Tick(chest,true);
         const auto left=f.hands.Current(InteractionHand::Left);
-        if(loseContact)CHECK(!left&&!f.result.ownsHand);
-        else {
-            CHECK(left&&left->token.kind==HandClaimKind::AmmoObject&&f.result.ownsHand);
-            CHECK(f.result.interactionStatus==FeedInteractionStatus::Acquired);
-            CHECK(f.result.reloadStatus==FeedReloadStatus::AwaitingPhysicalCompletion);
-            CHECK(f.backend.Read(f.sample.owner,f.sample.input.nowNs)==admitted);
-        }
+        CHECK(left&&left->token.kind==HandClaimKind::AmmoObject&&f.result.ownsHand);
+        CHECK(f.result.interactionStatus==FeedInteractionStatus::Acquired);
+        CHECK(f.result.reloadStatus==FeedReloadStatus::AwaitingPhysicalCompletion);
+        // A real outside neutral may now precede arrival+press. The fresh
+        // paired source rebases that pickup without replaying a belt neutral.
+        if(!loseContact)CHECK(f.backend.Read(f.sample.owner,f.sample.input.nowNs)==admitted);
         CHECK(f.submits==2&&f.native.counts==before&&!f.result.pending&&f.BlocksFire());
     }
     return 0;
@@ -3315,7 +3340,81 @@ int EmptyWeaponStillRetainsReplacementCustodyAndInterruptedOriginalPresentation(
     }
     return 0;
 }
+int EveryEnrolledFeedCompletesNaturalSupplyApproachAndRegrasp(){
+    const std::array<std::vector<unsigned>,2> cadences{{{1},{1,0}}};unsigned cycles=0;
+    for(const auto& registration:RegisteredBc2FeedProfiles())for(unsigned recovery=0;recovery<3;++recovery)
+    for(unsigned cadence=0;cadence<cadences.size();++cadence){
+        Fixture f(&registration);f.native.counts.loaded=recovery?20:0;
+        f.nativeCadence=cadences[cadence];f.delayedRender=cadence!=0;f.captureCadenceTrace=true;
+        const auto before=f.native.counts;
+        const auto reconcile=[&](){if(!f.Callback())return false;
+            for(std::size_t n=0;n<f.nativeCadence.size()+3;++n)f.Tick(f.lastWrist,false);
+            return !f.backend.Pending()&&!f.result.pending;};
+        CHECK(f.OpenCover()&&reconcile());CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&reconcile());
+        f.submitted.reset();
+        const bool pickup=f.PickSupplyFromHeldApproach();
+        if(!pickup)f.PrintCadenceFailure(cadence,FeedPhysicalOperation::AttachContainer);
+        CHECK(pickup&&f.result.presentation&&f.result.presentation->supplyObject);
+        const auto original=*f.result.presentation->supplyObject;const auto lifetime=f.result.presentation->lifetime;
+        CHECK(f.native.counts==before&&f.submits==2&&!f.result.bodyVisual&&!f.result.pending);
+        if(recovery){
+            if(recovery==2){f.sample.input.tracked[0]=false;f.Tick(f.lastWrist,true);f.sample.input.tracked[0]=true;}
+            else f.Tick(f.lastWrist,false);
+            CHECK(!f.hands.Current(InteractionHand::Left)&&f.native.counts==before);
+            CHECK(f.PickSupplyFromHeldApproach());CHECK(f.result.presentation->supplyObject);
+            const auto& reclaimed=*f.result.presentation->supplyObject;
+            CHECK(reclaimed.item==original.item&&reclaimed.units==original.units&&reclaimed.identity==original.identity);
+            CHECK(reclaimed.claim.token.id!=original.claim.token.id&&f.result.presentation->lifetime==lifetime);
+            CHECK(f.submits==2&&!f.result.bodyVisual);
+        }
+        CHECK(f.Place(FeedPhysicalOperation::AttachContainer,false,true,true));
+        CHECK(f.submits==3&&f.native.counts==before&&f.submitted);
+        CHECK(f.submitted->command.authority.rounds==int(original.units));
+        CHECK(f.submitted->command.request.lifetime==lifetime);
+        const auto after=f.submitted->command.after;CHECK(reconcile()&&f.native.counts==after);
+        CHECK(f.Place(FeedPhysicalOperation::SeatFeed)&&reconcile());CHECK(f.Close()&&reconcile());
+        CHECK(f.submits==5&&!f.BlocksFire()&&f.native.counts==after);
+        CHECK(after.loaded==before.loaded+int(original.units)&&after.reserve==before.reserve-int(original.units));
+        for(std::uint64_t id=1;id<=5;++id){const auto receipt=f.backend.Receipt(lifetime,id);CHECK(receipt);
+            CHECK(receipt->command.authority.effect==FeedAmmunitionEffect::RefillLoaded?id==3:id!=3);}
+        ++cycles;
+    }
+    CHECK(cycles==144);
+    std::printf("Feed natural supply: %u full enrolled remove/grab/attach/seat/close cycles with exact mocked receipts\n",cycles);
+    return 0;
+}
+int EveryEnrolledFeedCompletesAfterSkippedBeltPickupRender(){
+    unsigned cycles=0;
+    for(const auto& registration:RegisteredBc2FeedProfiles())for(bool delayed:{false,true}){
+        Fixture f(&registration);f.native.counts.loaded=0;
+        f.nativeCadence=delayed?std::vector<unsigned>{1,0}:std::vector<unsigned>{1};
+        f.delayedRender=delayed;f.captureCadenceTrace=true;
+        const auto before=f.native.counts;
+        const auto reconcile=[&](){if(!f.Callback())return false;
+            for(std::size_t n=0;n<f.nativeCadence.size()+3;++n)f.Tick(f.lastWrist,false);
+            return !f.backend.Pending()&&!f.result.pending;};
+        CHECK(f.OpenCover()&&reconcile());CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&reconcile());
+        f.submitted.reset();const bool pickup=f.PickSupplyFromHeldApproach(true);
+        if(!pickup)f.PrintCadenceFailure(delayed?1u:0u,FeedPhysicalOperation::AttachContainer);
+        CHECK(pickup&&f.result.presentation&&f.result.presentation->supplyObject);
+        CHECK(f.sample.bodyFromHand&&!Bc2FeedSupplyContact(*f.sample.bodyFromHand));
+        const auto object=*f.result.presentation->supplyObject;const auto lifetime=f.result.presentation->lifetime;
+        CHECK(f.native.counts==before&&f.submits==2&&!f.result.pending);
+        CHECK(f.Place(FeedPhysicalOperation::AttachContainer,false,true,true));
+        CHECK(f.submits==3&&f.submitted&&f.submitted->command.authority.rounds==int(object.units));
+        CHECK(f.submitted->command.request.lifetime==lifetime);
+        const auto after=f.submitted->command.after;CHECK(reconcile());
+        CHECK(f.Place(FeedPhysicalOperation::SeatFeed)&&reconcile());CHECK(f.Close()&&reconcile());
+        CHECK(f.submits==5&&!f.BlocksFire()&&f.native.counts==after);
+        CHECK(after.loaded==int(object.units)&&after.reserve==before.reserve-int(object.units));++cycles;
+    }
+    CHECK(cycles==48);
+    std::printf("Feed skipped pickup render: %u full enrolled carry/attach cycles; original pickup leases and exact mocked receipts\n",cycles);
+    return 0;
+}
 int main(){
+    CHECK(EveryEnrolledFeedCompletesAfterSkippedBeltPickupRender()==0);
+    CHECK(EveryEnrolledFeedCompletesNaturalSupplyApproachAndRegrasp()==0);
     CHECK(DetachedContainerCanClearTheMountWithoutParkingAtAnInvisiblePose()==0);
     CHECK(DetachClearanceCannotReplaceDirectionDwellOrCurrentHandEvidence()==0);
     CHECK(EmptyWeaponStillRetainsReplacementCustodyAndInterruptedOriginalPresentation()==0);
@@ -3346,7 +3445,7 @@ int main(){
     CHECK(EveryEnrolledSupplyFreezesMotionJumpWithoutDroppingHeldGrasp()==0);
     CHECK(EveryEnrolledFeedCompletesWithIndependentPublicationClocks()==0);
     CHECK(EveryEnrolledFeedCompletesAcrossGameplayPublicationLoss()==0);
-    CHECK(ChestPreparationSurvivesNeutralJitterButNotContactLoss()==0);
+    CHECK(ChestPreparationSurvivesNeutralJitterAndOutsideNeutral()==0);
     CHECK(EveryEnrolledSupplyRefreshesNeutralApproachBeforePickup()==0);
     CHECK(DelayedReleasePreservesExactGestureWithinOriginalDeadlines()==0);
     CHECK(IndependentNativeClockExpiryAndMutationAreRejected()==0);

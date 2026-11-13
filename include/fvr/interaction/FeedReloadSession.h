@@ -122,7 +122,8 @@ inline FeedReloadSessionResult FeedReloadSession::Update(const FeedReloadSession
         // native work. Hand arbitration remains the adapter's handAvailable.
         physical.operationPermitted=true;
         out.interaction=interaction_.Update(mechanismProfile_,interactionProfile_,x.snapshot,goal_,physical,x.nowNs);
-        if(out.interaction.status==FeedInteractionStatus::Armed)gestureBinding_=x.binding;
+        if(out.interaction.status==FeedInteractionStatus::Armed||
+           (out.interaction.status==FeedInteractionStatus::Acquired&&x.interaction.supplyAcquisition))gestureBinding_=x.binding;
     }else {
         Interrupt();out.interaction.status=FeedInteractionStatus::Interrupted;
         out.interaction.evidence=evidence.status;
@@ -135,6 +136,8 @@ inline FeedReloadSessionResult FeedReloadSession::Update(const FeedReloadSession
     // tracking loss, duplicate packets and a completion receipt never are.
     native.neutral=out.recognitionEnabled&&out.interaction.status==FeedInteractionStatus::Armed&&
         !x.interaction.grip&&!out.interaction.completion;
+    if(out.recognitionEnabled&&out.interaction.status==FeedInteractionStatus::Acquired)
+        native.supplyAcquisition=x.interaction.supplyAcquisition;
     native.completion=out.interaction.completion;native.acknowledgement=x.acknowledgement;
     out.reload=reload_.Update(native); // Exactly one update for this observation.
     if(out.reload.dispatch)dispatchedBinding_=out.reload.dispatch->binding;

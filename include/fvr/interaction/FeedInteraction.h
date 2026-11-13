@@ -89,6 +89,7 @@ struct FeedInteractionSample {
     // Optional actual weapon-to-world raw frame, from contact's same input.
     // When supplied, interrupted free carry recovery requires a new raw frame.
     std::optional<math::Matrix4> weaponWorld{};
+    std::optional<FeedSupplyAcquisition> supplyAcquisition{};
 };
 enum class FeedInteractionStatus:std::uint8_t {
     NeedNeutral,Armed,Acquired,Moving,Endpoint,Returning,Completed,Duplicate,
@@ -351,6 +352,11 @@ public:
             if(!sample.grip){
                 bound_=true;candidate_=candidate;motion_=motion;mechanism_=mechanismProfile;
                 out.status=FeedInteractionStatus::Armed;return out;
+            }
+            if(!bound_&&sample.supplyAcquisition&&candidate.operation==FeedPhysicalOperation::AttachContainer&&
+               motion.kind==FeedMotionKind::FreePlacement&&
+               feed_reload_detail::SupplyAcquired(*sample.supplyAcquisition,snapshot,desired,lifetime_,nowNs)){
+                bound_=true;candidate_=candidate;motion_=motion;mechanism_=mechanismProfile;
             }
             if(!bound_){out.status=FeedInteractionStatus::NeedNeutral;return out;}
             // A missed press consumes neutral; sliding into contact while held

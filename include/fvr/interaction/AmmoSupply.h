@@ -1,5 +1,7 @@
 #pragma once
 #include "fvr/interaction/ReloadInsertion.h"
+#include "fvr/interaction/BodyGripApproach.h"
+#include "fvr/interaction/AmmunitionLedger.h"
 #include <optional>
 
 namespace fvr::interaction {
@@ -11,6 +13,14 @@ struct AmmoSupplyIdentity {
     std::uint64_t trackingEpoch=0;
     bool operator==(const AmmoSupplyIdentity&)const=default;
 };
+// The adapter validates its hand/native actor mapping before publishing this
+// join. Acquisition captures it with the original source, so a later feed
+// wrapper cannot relabel the pickup. No engine-specific actor encoding here.
+struct AmmoSupplyOwnerJoin {
+    HandInteractionOwner hand{};
+    AmmoResourceContext native{};
+    bool operator==(const AmmoSupplyOwnerJoin&)const=default;
+};
 struct AmmoSupplySource {
     AmmoSupplyIdentity identity{};
     ReloadInsertionFamily family=ReloadInsertionFamily::Unknown;
@@ -20,6 +30,7 @@ struct AmmoSupplySource {
     std::uint64_t sequence=0;
     std::int64_t observedNs=0,deadlineNs=0;
     bool verified=false;
+    std::optional<AmmoSupplyOwnerJoin> ownerJoin{};
     bool operator==(const AmmoSupplySource&)const=default;
 };
 struct AmmoSupplyContact {
@@ -38,6 +49,8 @@ struct AmmoSupplyConfig {
     // A second contact on the SAME provider: no new pool, item namespace,
     // reservation or claim. Both contacts use bodyFromHand's exact frame.
     std::optional<AmmoSupplyContact> alternateContact{};
+    // Opt-in body pickup: real neutral then press may precede pouch contact.
+    bool allowGripApproach=false;
 };
 struct AmmoSupplySample {
     HandInteractionSample input{}; // real current safety, shared with arbiter
@@ -54,6 +67,17 @@ struct AmmoSupplyObject {
     HandClaim claim{};
     ReloadInsertionFamily family=ReloadInsertionFamily::Unknown;
     std::uint32_t units=0;
+};
+// Only a successful arbiter acquisition mints this original, immutable proof.
+// Carry renewal does not restamp its input, source or claim deadlines.
+class AmmoSupplyAcquisition {
+public:
+    const AmmoSupplySample& Sample()const noexcept{return sample_;}
+    const AmmoSupplyObject& Object()const noexcept{return object_;}
+private:
+    friend class AmmoSupply;
+    AmmoSupplyAcquisition(const AmmoSupplySample& s,const AmmoSupplyObject& o)noexcept:sample_(s),object_(o){}
+    AmmoSupplySample sample_{};AmmoSupplyObject object_{};
 };
 struct AmmoSupplyReservation {
     AmmoSupplyIdentity identity{};
@@ -119,6 +143,7 @@ struct AmmoSupplyResult {
     AmmoSupplyReason reason=AmmoSupplyReason::None;
     std::optional<AmmoSupplyObject> held{};
     std::optional<HandInteractionKey> acquired{},released{};
+    std::optional<AmmoSupplyAcquisition> acquisition{};
 };
 struct AmmoSupplyResolution {
     bool accepted=false;
@@ -133,6 +158,12 @@ public:
     AmmoSupply(const AmmoSupply&)=delete;
     AmmoSupply& operator=(const AmmoSupply&)=delete;
     AmmoSupplyResult Update(const AmmoSupplySample&,HandInteraction&)noexcept;
+    // Reclaim only this provider's exact last released object. No new item or
+    // reserve credit is issued; the adapter must retain its custody separately.
+    AmmoSupplyResult UpdateRetained(const AmmoSupplySample&,HandInteraction&,const AmmoSupplyObject&)noexcept;
+    // Adapter-verified equip/space migration of this exact released item only.
+    // Original acquisition/source evidence is never rewritten or renewed.
+    bool MigrateRetained(const AmmoSupplyObject&,const AmmoSupplyIdentity&)noexcept;
     // Safety/ownership only: no acquisition or retained geometry evidence.
     AmmoSupplyResult WaitHeld(const AmmoSupplySample& s,HandInteraction& h)noexcept{return UpdateCurrent(s,h,false);}
     // A missing native publication cannot revoke an already carried object.
@@ -171,13 +202,16 @@ private:
     bool SourceValid(const AmmoSupplySource&,std::int64_t now)const noexcept;
     bool Budget(const AmmoSupplySource&,std::uint32_t units,HandInteractionKey item={})const noexcept;
     AmmoSupplyResult UpdateCurrent(const AmmoSupplySample&,HandInteraction&,bool allowAcquire=true)noexcept;
-    AmmoSupplyResult UpdateWithSource(const AmmoSupplySample&,HandInteraction&,bool allowAcquire,bool sourceDeferred)noexcept;
+    AmmoSupplyResult UpdateWithSource(const AmmoSupplySample&,HandInteraction&,bool allowAcquire,bool sourceDeferred,
+        const AmmoSupplyObject* retained=nullptr)noexcept;
     std::optional<AmmoSupplyReservation> ReserveCurrent(const HandInteractionSample&,HandInteraction&,
         const ReloadInsertionSeat&,const ManualReloadRequest&,std::uint64_t cycle)noexcept;
     AmmoSupplyResult Drop(const HandInteractionSample&,HandInteraction&,AmmoSupplyReason,HandReleaseCause)noexcept;
     AmmoSupplyResult Snapshot(AmmoSupplyReason reason=AmmoSupplyReason::None)const noexcept{return {reason,held_,{}, {}};}
     AmmoSupplyConfig config_{};
     std::optional<AmmoSupplyObject> held_{};
+    std::optional<AmmoSupplyObject> released_{};
+    BodyGripApproach approach_;
     std::optional<AmmoSupplyReservation> pending_{};
     AmmoSupplySource source_{},settled_{};
     HandInteractionSample input_{};
