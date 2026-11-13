@@ -12,14 +12,14 @@ Ownership/ready/blocked tasks: COORDINATOR-STATE.txt (local scheduling record).
 External worktrees remain untouched; finished25/26/33 source is integrated. Steam32 lacks its executable.
 
 INSTALLED RUNTIME
-Private0.1.98 installed and setup-validated; fallback0.1.97, earlier versions retained.
-Compiled source7c0e98762d82be0ce69a3fde11419dba98b2a658; nativeclosureafae63aa2a36b3d1b89eaa0362e422c4ff9093608d6a7c5dff32c26a74c99f60.
-Normal checks364x86/361x64 and focused pistol12groups passed; unchanged hostWARP reused.
-Receipt: reports/coordinator-20261108-feedback721/normal98/run02/installation.json.
-Settings/cache/shortcut preserved. No public release or new physical-headset acceptance.
+Private0.1.99 installed and setup-validated; fallback0.1.98, earlier versions retained.
+Compiled source1998a3568a1f25772191569f51ba952ff4492d5c; nativeclosure897e3239c2abcde5964fd9030e5d44629230c69d4159f74d2621a144daa51014.
+Normal checks364x86/361x64 and focused magazine-resource/physical-bolt checks passed; unchanged hostWARP reused.
+Receipt: reports/coordinator-20261108-feedback721/normal99/run02/installation.json.
+Settings/cache/shortcut preserved. User will test locally before public launcher posting; no public release or new headset acceptance.
 
 CURRENT SOURCE
-Source7c0e987 is pushed and installed98; it corrects pistol-slide sample-time presentation. Source-only fixes through8bf626a are pushed. The next tool batch rejects contradictory captured/native firing aim before recording clearance (17 focused checks) and fixes the pickup CLI's embedded-Python sibling import (15 checks plus unchanged prior exact-PE evidence). Actual11/13 held-grip preparation passed; full bolt reload remains open.12 failed before game startup; all profiles/settings restored. Native/profile binaries and experimental labels remain unchanged.
+Source1998a35 is pushed and installed99. Shared bolt control now distinguishes exact current-held attached magazine waiting from actual magazine manipulation, preserving the owed stroke without relaxing Fire/transfer/ownership guards. The shot driver uses the pinned runtime timer with exact retained grip. Actual98/15 cancellation and earlier failures remain preserved; full bolt reload remains open. Nativefocused checks and all normal suites pass; preparation fixtures were updated to the current composed path.
 The navigation batch removes the developer tool's firearm-publication prerequisite for ordinary on-foot input, keeping original actor/input/menu deadlines and weapon admission unchanged.
 Handoffs: handoff/integrations/coordinator-20261113-weapon-acquisition/README.txt and coordinator-20261113-navigation/README.txt.
 

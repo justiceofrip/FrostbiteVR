@@ -1,0 +1,12 @@
+Private 0.1.99 local headset test
+
+Confirm the launcher shows 0.1.99. Version 0.1.98 remains the fallback. Logging is retained; the runtime has launch headroom. No public update has been posted.
+
+Main new fix: an idle ammo update should no longer cancel a bolt-rifle stroke after firing. Actual-game completion on this fix is still unconfirmed.
+- If a bolt rifle is available: fire, operate the bolt, reload its partially used magazine, fire again, then holster/draw and fire.
+- LMG: open cover, remove old box, insert new box, pull belt across, close cover, fire; note any hand disconnect or lid flicker.
+- Use an available rifle/pistol and pump shotgun for a reload, fire and holster/swap check; note movement locking or missing ammunition.
+
+Use one available example per reload type. Front-loading underbarrels remain unfinished. Opening-breech reloads have an automated actual-game pass; headset reliability remains open.
+
+Report what failed and roughly where in the sequence. StopVR/close BC2 after the test so its final logs can be retained. Public posting waits for your local feedback.
