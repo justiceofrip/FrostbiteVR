@@ -1,6 +1,8 @@
 #include "Test.h"
 #include "Bc2MagazineResourceReload.h"
 #include "Bc2InputBinding.h"
+#include "Bc2M95BoltCalibration.h"
+#include "Bc2PumpActions.h"
 #include <cstring>
 #include <cstdio>
 #include <sstream>
@@ -95,6 +97,79 @@ struct Fixture {
     void Insert(){Send();Send(true,false,-.1f,true);for(float p:{-.075f,-.04f,0.f,.035f,.07f,.1f,.1f,.1f,.1f,.1f,.1f}){
         Send(true,false,p);if(result.interaction.phase==DetachableMagazinePhase::AwaitingSeat||result.interaction.phase==DetachableMagazinePhase::Complete)break;}}
 };
+// Real resource/hand/bolt consumers, with only the native cycle callbacks
+// synthesized. No synthetic completion or ammunition receipt is supplied.
+struct OwedBoltConsumer {
+    Bc2NativeCycleView native;unsigned controls=0,cancels=0,releases=0,acks=0;
+    std::shared_ptr<Bc2BoltCalibration> calibration=std::make_shared<Bc2BoltCalibration>(M95AuthoredBoltCalibration(1));
+    std::unique_ptr<Bc2PhysicalBolt> bolt;
+    OwedBoltConsumer(const Fixture& f,Bc2NativeCyclePhase phase){
+        calibration->nativeJoined=true;
+        native.phase=phase;native.native=f.native;native.cycle=native.shot=1;native.blocksFire=true;
+        native.loaded=f.counts.loaded;native.reserve=f.counts.reserve;native.capacity=f.counts.capacity;
+        Bc2PhysicalBoltApi api{this,
+            [](void* p,const Bc2NativeCycleControl& c)noexcept{auto& f=*static_cast<OwedBoltConsumer*>(p);
+                ++f.controls;if(c.release)++f.releases;return !c.release;},
+            [](void* p,std::int64_t)noexcept->std::optional<Bc2NativeCycleView>{return static_cast<OwedBoltConsumer*>(p)->native;},
+            [](void* p,const WeaponCycleReady&)noexcept{++static_cast<OwedBoltConsumer*>(p)->acks;return false;},
+            [](void* p)noexcept{++static_cast<OwedBoltConsumer*>(p)->cancels;}};
+        bolt=std::make_unique<Bc2PhysicalBolt>(calibration,api);
+    }
+    Bc2PhysicalBoltResult Tick(Fixture& f,const MagazinePhysicalResult& magazine){
+        Bc2PhysicalBoltSample sample;sample.nativeOwner=f.native.owner;sample.input=f.s.input;sample.item=f.s.weapon;
+        sample.asset=f.s.asset;sample.mesh=calibration->mesh;sample.wristWorld={Pose(),Pose()};
+        sample.cancel=MagazineBlocksBoltControl(magazine,sample.nativeOwner,sample.input,sample.item,
+            f.hands.Current(InteractionHand::Right));
+        if(native.phase==Bc2NativeCyclePhase::Held)
+            native.held=WeaponCycleLease{sample.input.owner,sample.item,{calibration->profile.id,sample.item.generation},
+                1,1,sample.input.sequence,sample.input.observedNs,sample.input.deadlineNs,true};
+        return bolt->Tick(sample,f.hands,f.intent);
+    }
+};
+int OwedBoltSurvivesAttachedMagazineExpiry(){
+    const auto* profile=FindMagazineEquipment("M95_sp");
+    if(!profile||!profile->Ready()){
+        std::puts("Owed bolt/resource composition unavailable without enrolled M95 magazine geometry.");return 0;
+    }
+    for(const auto phase:{Bc2NativeCyclePhase::ShotObserved,Bc2NativeCyclePhase::Held}){
+        Fixture f(*profile,true);f.counts={4,45,5};f.Send();const auto original=*f.channel.Read(f.native.owner,f.now);
+        OwedBoltConsumer bolt(f,phase);const auto gun=f.gun->token;
+        // An active native bolt cannot publish IdleBoltMagazine. Let the real
+        // channel's attached view expire while current owner/input/hold renew.
+        f.publishNative=false;
+        for(unsigned tick=0;tick<16;++tick){
+            f.Send();const auto result=bolt.Tick(f,f.result);
+            CHECK(!bolt.cancels&&bolt.controls==tick+1&&result.blocksFire&&bolt.bolt->BlocksFire());
+            CHECK(bolt.native.phase==phase&&bolt.native.cycle==1&&bolt.native.shot==1&&
+                !bolt.releases&&!bolt.acks&&f.gun->token==gun&&f.calls==0);
+            if(tick>=4){
+                CHECK(!f.channel.Read(f.native.owner,f.now)&&f.result.idleAwaitingResource&&f.result.idleFireContinuity);
+                CHECK(f.result.blocksWeaponActions&&f.adapter->BlocksEquipment()&&!f.result.ownsLeftHand);
+                // A held trigger, release, and later press all retain the owed
+                // bolt's Fire gate. Idle waiting cannot pay or renew that debt.
+                ActionOutput out;out.active=true;out.held=tick%3?Fire:0;
+                ApplyMagazinePhysicalActions(out,profile,f.result);ApplyPumpActionGate(out,result.blocksFire);
+                CHECK(!out.held&&!out.pressed);
+                const auto& retained=f.service.View()->snapshot;
+                CHECK(retained.sequence==original.snapshot.sequence&&retained.observedNs==original.snapshot.observedNs&&
+                    retained.deadlineNs==original.snapshot.deadlineNs&&retained.counts==original.snapshot.counts);
+            }
+        }
+        // The same idle-wait output cannot authorize a different owner or an
+        // expired GunHold between the magazine and bolt consumers.
+        auto foreign=f.result;++foreign.tracking.owner.equipGeneration;bolt.Tick(f,foreign);CHECK(bolt.cancels==1);
+        f.hands.Release(f.s.input,f.gun->token);bolt.Tick(f,f.result);CHECK(bolt.cancels==2);
+    }
+    // Actual physical removal still blocks the bolt, including a native
+    // request awaiting its own completion rather than an idle publication.
+    Fixture active(*profile,true);active.counts={4,45,5};const auto length=profile->geometry->interaction.insertion.travelMeters;
+    active.Send(false,false,length);active.completeNative=false;active.Send(true,false,length);
+    CHECK(active.result.blocksWeaponActions&&!active.result.idleAwaitingResource&&active.calls==1);
+    OwedBoltConsumer blocked(active,Bc2NativeCyclePhase::ShotObserved);blocked.Tick(active,active.result);
+    CHECK(blocked.cancels==1&&!blocked.controls&&!blocked.releases&&!blocked.acks);
+    std::puts("Owed bolt/resource composition: real attached expiry preserves ShotObserved/Held control and Fire debt; foreign/missing hold and pending removal cancel (synthetic native boundary).");
+    return 0;
+}
 int IdleViewFailureSurvivesStartupCancellation(){
  Fixture f(Xm8MagazineEquipment(),true);
  f.s.input.focused=false;f.Send();f.s.input.focused=true;f.Send();
@@ -204,6 +279,7 @@ int IdleFireCannotUseRetiredOrPendingResource(){
         f.beforeTick=[state](Fixture& x){auto v=*x.service.View();v.requestState=state;x.channel.Publish(v);};
         f.Send();f.beforeTick={};f.forceReadReason=AmmoResourceReadReason::Busy;f.Send();
         CHECK(f.result.idleAwaitingResource&&!f.result.idleFireContinuity&&f.result.blocksWeaponActions&&f.adapter->BlocksEquipment()&&f.calls==0);
+        CHECK(MagazineBlocksBoltControl(f.result,f.native.owner,f.s.input,f.s.weapon,f.hands.Current(InteractionHand::Right)));
         ActionOutput out;out.held=out.pressed=Fire|AlternateFire|Reload|Use|NextWeapon|PreviousWeapon;
         ApplyMagazinePhysicalActions(out,f.profile,f.result);CHECK(out.held==0&&out.pressed==0);
     }
@@ -216,6 +292,7 @@ int IdleFireCannotUseRetiredOrPendingResource(){
         v.terminal->state=AmmoResourceRequestState::ActorRetired;f.channel.Publish(v);};
     retired.Send();retired.beforeTick={};retired.forceReadReason=AmmoResourceReadReason::Busy;retired.Send();
     CHECK(retired.result.idleAwaitingResource&&!retired.result.idleFireContinuity&&retired.result.blocksWeaponActions&&retired.adapter->BlocksEquipment()&&retired.calls==0);
+    CHECK(MagazineBlocksBoltControl(retired.result,retired.native.owner,retired.s.input,retired.s.weapon,retired.hands.Current(InteractionHand::Right)));
     ActionOutput out;out.held=out.pressed=Fire|AlternateFire|Reload|Use|NextWeapon|PreviousWeapon;
     ApplyMagazinePhysicalActions(out,retired.profile,retired.result);CHECK(out.held==0&&out.pressed==0);
     return 0;
@@ -926,5 +1003,5 @@ int HeldRemovalSurvivesRejectedExpiredAdmission(){
   }
  }CHECK(profiles>0);std::printf("Expired removal admission: held grab recovery and seven cancellation cases across %u enrolled profiles.\n",profiles);return 0;
 }
-int main(){if(IdleResourceGapKeepsFireLevel()||IdleFireCannotUseRetiredOrPendingResource())return 1;if(OriginalMagazineTrackingInterruption()||OriginalSuspensionRequiresFreshCustodyAndExactResource()||SuspendedPendingUnseatNeedsExactCompletionAndFreshPull()||OriginalMagazineMissingInputInterval()||SuspendedOriginalStillHonorsRealRelease())return 1;if(RetiredNativeActorReleasesOnlyOldPhysicalCustody())return 1;if(HeldRemovalSurvivesRejectedExpiredAdmission()||SupportContactDoesNotUnseatMagazine())return 1;if(IdleViewFailureSurvivesStartupCancellation()||LivePhysicalIntentOutlivesItsConstructionPublication()||ReplacementAndSeatActualPublicationExpiry()||ReplacementCustodyAcrossPublicationGaps()||ReplacementGapReleaseAndSafety()||RenderAdmissionDoesNotRenewAmmunition()||OriginalCustodySurvivesTypedPublicationGap()||PendingOriginalAndReleasedMagazineGaps()||ReturnOriginalAfterActualExpiry()||PendingDiscardAcrossExpiredPublication()||ActiveGapStillRejectsLifetimeAndTimeout()||IdleResourceGapBlocksAdmission()||IdleResourceGapRejectsLifetimeLoss()||CompletionBetweenInputPackets()||DeferredCompletionCannotRenewOrChangeOwner()||NamespaceProof()||SharedHandAdapter()||ReturnOriginal()||RestoreEmptyAfterSwitch()||SeatPublicationBoundary()||CancelledSeatSurvivesContextChanges()||TerminalDoesNotRequireNewMagazineSelection())return 1;
+int main(){if(OwedBoltSurvivesAttachedMagazineExpiry()||IdleResourceGapKeepsFireLevel()||IdleFireCannotUseRetiredOrPendingResource())return 1;if(OriginalMagazineTrackingInterruption()||OriginalSuspensionRequiresFreshCustodyAndExactResource()||SuspendedPendingUnseatNeedsExactCompletionAndFreshPull()||OriginalMagazineMissingInputInterval()||SuspendedOriginalStillHonorsRealRelease())return 1;if(RetiredNativeActorReleasesOnlyOldPhysicalCustody())return 1;if(HeldRemovalSurvivesRejectedExpiredAdmission()||SupportContactDoesNotUnseatMagazine())return 1;if(IdleViewFailureSurvivesStartupCancellation()||LivePhysicalIntentOutlivesItsConstructionPublication()||ReplacementAndSeatActualPublicationExpiry()||ReplacementGapReleaseAndSafety()||RenderAdmissionDoesNotRenewAmmunition()||OriginalCustodySurvivesTypedPublicationGap()||PendingOriginalAndReleasedMagazineGaps()||ReturnOriginalAfterActualExpiry()||PendingDiscardAcrossExpiredPublication()||ActiveGapStillRejectsLifetimeAndTimeout()||IdleResourceGapBlocksAdmission()||IdleResourceGapRejectsLifetimeLoss()||CompletionBetweenInputPackets()||DeferredCompletionCannotRenewOrChangeOwner()||NamespaceProof()||SharedHandAdapter()||ReturnOriginal()||RestoreEmptyAfterSwitch()||SeatPublicationBoundary()||CancelledSeatSurvivesContextChanges()||TerminalDoesNotRequireNewMagazineSelection())return 1;
     std::puts("BC2 resource hand adapter: measured XM8 rail, unequal native/physical identities, chest display, original return, refill and equip restoration passed (mock native Updates).");return 0;}

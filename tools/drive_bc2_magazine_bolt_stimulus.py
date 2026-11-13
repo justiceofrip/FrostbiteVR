@@ -159,6 +159,8 @@ class MagazineBoltDriver(transport.Driver):
                         "magazine capture must preserve the exact settled input")
                 self.admit_magazine_capture(self.latest_snapshot, now)
         if expected.get("fire"):
+            require(self.ordinary_gun_ready(self.latest_snapshot, time.perf_counter_ns()) == self.shot_gun,
+                    "firing changed its retained native gun claim")
             if getattr(self, "preparation_mode", False):
                 current = geometry.preparation_baseline(self.latest_snapshot, time.perf_counter_ns())
                 require(all(current[k] == self.preparation[k] for k in current
@@ -482,6 +484,21 @@ class MagazineBoltDriver(transport.Driver):
             time.sleep(.001)
         raise Refusal("capture metadata iteration bound")
 
+    def fire_pulse(self, snapshot, pulse):
+        self.shot_gun = self.ordinary_gun_ready(snapshot, time.perf_counter_ns())
+        target = {key: copy.deepcopy(self.state[key]) for key in ("head", "handL", "handR", "controls")}
+        target.update(commands=["trigger r 1"], fire=True)
+        target["controls"]["trigR"] = 1
+        self.motion_started = self.motion_started or time.perf_counter_ns()
+        self.shot_pulse = self.single_trigger_pulse(pulse, self.snapshot_source_deadline(snapshot),
+                                                  retained_grips={"gripR": 1}, expected=target)
+        return self.shot_pulse
+
+    def check_shot_gun(self, snapshot, now):
+        b = geometry.bolt(snapshot, now, self.debt)
+        require(geometry.claim(b, 1, 1, now, self.shot_gun["item"]) == self.shot_gun
+                and b["leftClaim"] is None, "shot changed its retained native gun claim")
+
     def run_preparation_shot(self):
         require(self.args.fire_clearance is not None and self.args.magazine_result is None,
                 "prep-shot-bolt requires ROOT corridor review and does not consume a magazine result")
@@ -503,15 +520,10 @@ class MagazineBoltDriver(transport.Driver):
             transport.check_pin(pin)
         pulse = geometry.fire_clearance(self.fire_permission, s, self.state, self.host,
                                         time.perf_counter_ns(), self.deadline)
-        self.stage_deadline = min(self.deadline, time.perf_counter_ns()+pulse)
-        self.command(control="trigger r", value=1, source=self.snapshot_source_deadline(s), fire=True)
-        self.preparation["pressedNs"] = self.last_write
-        self.stage_deadline = min(self.deadline, time.perf_counter_ns()+250_000_000)
-        self.command(control="trigger r", value=0)
-        require(self.last_write-self.preparation["pressedNs"] <= pulse,
-                "single preparation trigger pulse exceeded100ms; released; no retry")
+        self.preparation["pressedNs"] = self.fire_pulse(s, pulse)["pressWrittenNs"]
         self.stage_deadline = self.deadline
         s, now, self.debt = self.boundary("preparation_shot_created_owed_bolt", geometry.owed)
+        self.check_shot_gun(s, now)
         self.boundary("preparation_shot_counts", lambda s, n:
                       geometry.preparation_debt(s, n, self.preparation, self.debt))
 
@@ -555,14 +567,10 @@ class MagazineBoltDriver(transport.Driver):
             return dict(identity=b["native"]["identity"], shot=b["native"]["shot"])
         s, now, initial = self.boundary("before_ordinary_shot", before)
         pulse = geometry.fire_clearance(self.fire_permission, s, self.state, self.host, time.perf_counter_ns(), self.deadline)
-        self.stage_deadline = min(self.deadline, time.perf_counter_ns()+pulse)
-        self.command(control="trigger r", value=1, source=self.snapshot_source_deadline(s), fire=True)
-        pressed = self.last_write
-        self.stage_deadline = min(self.deadline, time.perf_counter_ns()+250_000_000)
-        self.command(control="trigger r", value=0)
-        require(self.last_write-pressed <= pulse, "single trigger pulse exceeded100ms; released; no retry")
+        self.fire_pulse(s, pulse)
         self.stage_deadline = self.deadline
         s, now, self.debt = self.boundary("shot_created_owed_bolt", geometry.owed)
+        self.check_shot_gun(s, now)
         require(self.debt["identity"] == initial["identity"]
                 and integer(self.debt["debt"]["shot"]) > integer(initial["shot"]),
                 "ordinary trigger did not produce a new same-owner bolt debt")
@@ -727,10 +735,26 @@ class MagazineBoltDriver(transport.Driver):
             self.handoff_phase = None
 
     def cleanup_owned(self):
+        if getattr(self, "timed_trigger", None) is not None and self.pending_command and not self.unsafe_owner:
+            # Read-only settlement of this exact timed batch uses the shared
+            # original cleanup bound. A late ACK never revives the failed shot.
+            self.settle_pending_for_release()
         if self.pending_command or self.unsafe_owner:
             return "retained: unsettled command or writer ownership; no speculative cleanup"
+        if getattr(self, "timed_trigger_cleanup", None) is not None and self.timed_trigger is None:
+            return "runtime trigger neutral observed during cleanup; grips retained; original shot remains refused"
+        timer = getattr(self, "timed_trigger", None)
+        if timer is not None:
+            if timer["numericRelease"] and not self.held_trigger:
+                return "owned trigger release acknowledged; runtime timer custody retained"
+            state = transport.read_until(self.hard_deadline, self.read_state)
+            self.ownership(state)
+            self.check_timed_trigger_state(state)
+            self.state, self.held_trigger = state, True
         if self.held_trigger:
             self.command(control="trigger r", value=0, cleanup=True)
+        if getattr(self, "timed_trigger", None) is not None:
+            return "owned trigger release acknowledged; runtime timer custody retained"
         if getattr(self, "bootstrap_incomplete", False) and self.held_right:
             # Only our acknowledged warmup squeeze is releasable here. The
             # canonical publisher still rejoins exact writer/state/ACK before
@@ -813,6 +837,9 @@ def main(argv=None):
                 code = 2
             result.update(commands=getattr(driver, "commands", 0),
                           pendingCommand=getattr(driver, "pending_command", False),
+                          timedTriggerPending=getattr(driver, "timed_trigger", None) is not None,
+                          triggerHeld=getattr(driver, "held_trigger", False),
+                          pulse=getattr(driver, "shot_pulse", None),
                           boundaries=getattr(driver, "boundaries", []),
                           retainedDebt=getattr(driver, "debt", None),
                           boltCycleCompleted=getattr(driver, "bolt_cycle_completed", False),

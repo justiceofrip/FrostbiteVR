@@ -89,6 +89,28 @@ inline bool MagazineBlocksSupport(const MagazinePhysicalResult& r,std::int64_t n
   r.tracking.cycle&&target&&target->role==interaction::MagazinePropRole::Attached&&
   !target->handTarget&&!target->handClaim.id&&MagazineTargetFresh(r.tracking,now));
 }
+// An owed bolt stops idle ammunition publication. Its resulting attached wait
+// must not cancel the cycle that is preventing that publication. Only the
+// resource consumer's debt-free classification can retain physical control;
+// pending/uncertain transfers and actual magazine custody still block it.
+inline bool MagazineBlocksBoltControl(const MagazinePhysicalResult& r,const ReloadStateOwner& owner,
+ const interaction::HandInteractionSample& input,interaction::HandInteractionKey weapon,
+ const std::optional<interaction::HandClaim>& gun)noexcept {
+ if(!r.blocksWeaponActions)return false;
+ const bool idle=r.idleAwaitingResource&&r.idleFireContinuity&&
+  r.interaction.phase==interaction::DetachableMagazinePhase::Attached&&
+  !r.ownsLeftHand&&!r.reloadHeld&&!r.tracking.target&&!r.tracking.resource&&
+  !r.interaction.prop&&!r.interaction.transaction.request&&r.tracking.owner==owner&&
+  MagazineFamilyFresh(r.tracking.family,owner,input.owner,weapon,input.nowNs)&&
+  input.focused&&input.tracked[0]&&input.tracked[1]&&!input.released[1]&&
+  input.sequence&&input.observedNs>0&&input.observedNs<=input.nowNs&&
+  input.nowNs<input.deadlineNs&&input.deadlineNs-input.observedNs<=100000000&&
+  gun&&gun->token.hand==interaction::InteractionHand::Right&&
+  gun->token.kind==interaction::HandClaimKind::GunHold&&!gun->token.prerequisiteClaim&&
+  gun->token.owner==input.owner&&gun->token.item==weapon&&
+  gun->inputSequence==input.sequence&&gun->deadlineNs>input.nowNs&&gun->deadlineNs<=input.deadlineNs;
+ return !idle;
+}
 inline void ApplyMagazinePhysicalActions(interaction::ActionOutput& out,const MagazineEquipmentProfile* profile,
  const MagazinePhysicalResult& magazine)noexcept {
  const bool ordinary=magazine.ordinaryReloadAllowed&&!magazine.blocksWeaponActions&&!magazine.reloadHeld;

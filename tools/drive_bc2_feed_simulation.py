@@ -1979,7 +1979,8 @@ class Driver:
                 "runtime trigger timer remains in custody; no new input permitted")
         timed = getattr(self, "_timed_trigger_arm", False)
         require(not timed or (lines == ["trigger r 1"] and not cleanup and prepared is None
-                and expected is None and capture is None and not final_release
+                and (expected is None or getattr(self, "_timed_trigger_retained_grips", None) is not None)
+                and capture is None and not final_release
                 and self.timed_trigger_supported), "invalid timed trigger publication")
         require(all(not line.startswith("trigger r pull") for line in lines),
                 "timed trigger requires the shared admitted single-shot path")
@@ -2040,15 +2041,21 @@ class Driver:
         previous_owner = self.sequence, self.sentinel, self.command_hash
         previous_timer = dict(self.timed_trigger) if getattr(self, "timed_trigger", None) is not None else None
         if timed:
-            require(before["controls"].get("trigR") == 0 and all(
-                    all(v == 0 for v in value) if isinstance(value, list) else value == 0
-                    for value in before["controls"].values()), "timed trigger requires exact neutral controls")
+            retained = getattr(self, "_timed_trigger_retained_grips", None) or {}
+            self.check_timed_trigger_baseline(before["controls"], retained)
+            if expected is not None:
+                require(expected.get("commands") == lines and expected.get("fire") is True
+                        and all(expected.get(key) == before[key] for key in ("head", "handL", "handR"))
+                        and expected.get("controls") == dict(before["controls"], trigR=1),
+                        "retained-grip trigger target differs from exact settled input")
             self.timed_trigger = dict(command=TIMED_TRIGGER_COMMAND, configuredMilliseconds=50,
                 runtimeSha256=TIMED_TRIGGER_RUNTIME_SHA256, beforeFrame=integer(before["frame"]),
                 beforeEndFrames=integer(before["endFrames"]), neutralControls=before["controls"],
                 basis={key: before[key] for key in ("head", "handL", "handR")},
                 sequence=target, sentinel=sentinel, commandSha256=digest(raw),
                 publicationStartedNs=written, ackFrame=None, numericRelease=False)
+            if retained:
+                self.timed_trigger["retainedGrips"] = dict(retained)
         elif lines == ["trigger r 0"] and getattr(self, "timed_trigger", None) is not None:
             self.timed_trigger["numericRelease"] = True
         self.sequence, self.sentinel, self.command_hash = target, sentinel, prepared.hash if prepared else digest(raw)
@@ -2072,6 +2079,9 @@ class Driver:
                     publication_deadline, self.read_state)
                 self.receive_timing_call("publish_command_read", self.ownership, current, previous_owner)
                 require(integer(current["captureSeq"]) == self.capture_sequence, "unrequested capture before publication")
+                if timed:
+                    require(all(current[key] == before[key] for key in ("head", "handL", "handR", "controls")),
+                            "runtime trigger input changed before publication")
                 if self.reference is not None and not cleanup:
                     require(all(current[key] == self.initial_sim[key] for key in ("head", "handR")),
                             "simulator head/right-hand basis changed before publication")
@@ -2164,7 +2174,9 @@ class Driver:
                         require(match[3] == " | ".join(batch), "acknowledgement batch text mismatch")
                         ack = (int(match[2]), ack_raw)
                 if ack and integer(state["frame"]) > ack[0] and integer(state["endFrames"]) > integer(before["endFrames"]):
-                    if expected:
+                    if timed:
+                        self.check_timed_trigger_state(state)
+                    elif expected:
                         self.check_target(state, expected)
                     if capture is None:
                         require(integer(state["captureSeq"]) == self.capture_sequence, "unexpected capture during command")
@@ -2219,6 +2231,35 @@ class Driver:
                 else:
                     self.held_buttons.discard(button)
 
+    @staticmethod
+    def timed_trigger_baseline_matches(controls, retained):
+        return (isinstance(retained, dict) and set(retained) <= {"gripL", "gripR"}
+                and all(type(value) is int and value == 1 for value in retained.values())
+                and controls.get("trigR") == 0
+                and all(controls.get(key) == value for key, value in retained.items())
+                and all(all(part == 0 for part in value) if isinstance(value, list) else value == 0
+                        for key, value in controls.items() if key not in retained))
+
+    def check_timed_trigger_baseline(self, controls, retained):
+        require(self.timed_trigger_baseline_matches(controls, retained),
+                "timed trigger requires exact neutral controls except authorized retained full grips")
+        require(not (self.pending_command or self.unsafe_owner or self.held_trigger or self.held_buttons)
+                and self.held_left == ("gripL" in retained) and self.held_right == ("gripR" in retained),
+                "runtime trigger retained grips do not match settled owned controls")
+
+    def check_timed_trigger_state(self, state):
+        timer = self.timed_trigger
+        require(integer(state["captureSeq"]) == self.capture_sequence
+                and all(state[k] == v for k, v in timer["basis"].items()),
+                "runtime trigger observation changed pose/capture")
+        controls = dict(state["controls"])
+        require(controls.get("trigR") in (0, 1), "runtime trigger control differs")
+        controls["trigR"] = 0
+        require(controls == timer["neutralControls"], "runtime trigger observation changed other controls")
+        retained = timer.get("retainedGrips", {})
+        require(self.held_left == ("gripL" in retained) and self.held_right == ("gripR" in retained)
+                and not self.held_buttons, "runtime trigger retained grip ownership changed")
+
     def observe_timed_trigger_neutral(self):
         """Observe natural expiry, without a zero command masking timer custody.
 
@@ -2237,13 +2278,7 @@ class Driver:
             self.ownership(state)
             observed = time.perf_counter_ns()
             self.bounds(observed)
-            require(integer(state["captureSeq"]) == self.capture_sequence
-                    and all(state[k] == v for k, v in timer["basis"].items()),
-                    "runtime trigger observation changed pose/capture")
-            controls = dict(state["controls"])
-            require(controls.get("trigR") in (0, 1), "runtime trigger control differs")
-            controls["trigR"] = 0
-            require(controls == timer["neutralControls"], "runtime trigger observation changed other controls")
+            self.check_timed_trigger_state(state)
             if (state["controls"]["trigR"] == 0
                     # Parsing can race the frame increment after pending input
                     # was committed. ACK+1 may still be the old neutral frame.
@@ -2274,19 +2309,35 @@ class Driver:
             time.sleep(.001)
         raise REFUSAL("runtime trigger neutral observation iteration bound")
 
-    def single_trigger_pulse(self, pulse_ns=100_000_000, source_deadline=None):
-        """One shared admitted shot; unknown runtimes retain the numeric path."""
+    def single_trigger_pulse(self, pulse_ns=100_000_000, source_deadline=None, *, retained_grips=None, expected=None):
+        """One shot; explicitly retained grips require the pinned runtime timer.
+
+        The default neutral route keeps its existing numeric fallback. A caller
+        retaining grips supplies its typed firing target and native admission;
+        this transport preserves exactly those already-owned controls.
+        """
         require(pulse_ns == 100_000_000 and not getattr(self, "_single_trigger_used", False)
                 and getattr(self, "timed_trigger", None) is None,
                 "single trigger attempt already used or unsupported original pulse bound")
         self._single_trigger_used = True  # refusal cannot grant another attempt
+        require(not (self.pending_command or self.unsafe_owner), "single trigger ownership is unsettled")
+        require(expected is None if retained_grips is None else
+                getattr(self, "timed_trigger_supported", False) and expected is not None,
+                "retained-grip shot requires the pinned runtime timer and typed target")
+        if retained_grips is not None:
+            self.check_timed_trigger_baseline(self.state["controls"], retained_grips)
         press_started, driver_deadline = time.perf_counter_ns(), self.deadline
         press_deadline = self.stage_deadline = min(driver_deadline, press_started + pulse_ns)
         self._timed_trigger_arm = getattr(self, "timed_trigger_supported", False)
+        self._timed_trigger_retained_grips = dict(retained_grips) if retained_grips is not None else None
         try:
-            self.send(["trigger r 1"], **({"source_deadline": source_deadline} if source_deadline is not None else {}))
+            options = {"source_deadline": source_deadline} if source_deadline is not None else {}
+            if expected is not None:
+                options["expected"] = expected
+            self.send(["trigger r 1"], **options)
         finally:
             self._timed_trigger_arm = False
+            self._timed_trigger_retained_grips = None
         press = self.last_write
         if getattr(self, "post_reload_phase", None) is not None:
             self.post_reload_phase = "release"
@@ -2713,9 +2764,10 @@ class Driver:
                 and integer(state["captureSeq"]) == self.capture_sequence
                 and all(state[key] == value for key, value in timer["basis"].items())
                 and state["controls"] == timer["neutralControls"]
-                and state["controls"] and all(
-                    all(part == 0 for part in value) if isinstance(value, list) else value == 0
-                    for value in state["controls"].values())):
+                and self.timed_trigger_baseline_matches(state["controls"], timer.get("retainedGrips", {}))
+                and self.held_left == ("gripL" in timer.get("retainedGrips", {}))
+                and self.held_right == ("gripR" in timer.get("retainedGrips", {}))
+                and not self.held_buttons):
             return
         # The prior save retained timer custody. Rejoin that exact current
         # owner record before clearing it, within the existing cleanup budget.
@@ -2741,6 +2793,7 @@ class Driver:
             self.timed_trigger, self.held_trigger = timer, True
             raise
         self.timed_trigger_cleanup = proof
+        self.state = state
 
     def settle_pending_for_release(self):
         """Observe only our exact pending batch before deciding release ownership."""

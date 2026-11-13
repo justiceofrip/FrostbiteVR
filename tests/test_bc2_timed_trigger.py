@@ -9,6 +9,7 @@ from unittest.mock import patch
 import test_bc2_feed_driver_observation as transport_tests
 import test_bc2_fixed_preparation as preparation_tests
 import test_bc2_fixed_postreload_observation as postreload_tests
+import test_bc2_magazine_bolt_stimulus as magazine_tests
 
 d = transport_tests.d
 MS, NS = 1_000_000, 1_000_000_000
@@ -83,6 +84,140 @@ class RuntimeHarness(transport_tests.Harness):
 
 
 class TimedTriggerTests(unittest.TestCase):
+    @staticmethod
+    def retained_target(h):
+        h.state['controls']['gripR'] = 1
+        h.published_state['controls']['gripR'] = 1
+        h.driver.held_right = True
+        target = copy.deepcopy({key: h.state[key] for key in ('head', 'handL', 'handR', 'controls')})
+        target.update(commands=['trigger r 1'], fire=True)
+        target['controls']['trigR'] = 1
+        return target
+
+    def test_retained_gun_timer_survives_delayed_ack_and_natural_neutral_read(self):
+        for ack_ms, state_ms in ((88, 0), (8, 50)):
+            with self.subTest(ack_ms=ack_ms, state_ms=state_ms):
+                h = RuntimeHarness(self, ack_ms=ack_ms, state_ms=state_ms)
+                target = self.retained_target(h)
+                v = h.driver
+                result = v.single_trigger_pulse(source_deadline=h.now+30*MS,
+                    retained_grips={'gripR': 1}, expected=target)
+                proof = result['pulseTransport']
+                self.assertEqual(h.batches(), [[d.TIMED_TRIGGER_COMMAND]])
+                self.assertEqual(proof['neutralState']['controls'], dict(target['controls'], trigR=0))
+                self.assertEqual(proof['expectedNeutralControls']['gripR'], 1)
+                self.assertEqual(proof['runtimeSha256'], d.TIMED_TRIGGER_RUNTIME_SHA256)
+                self.assertEqual(proof['pressDeadlineNs']-proof['pressStartedNs'], 100*MS)
+                self.assertEqual(proof['observationDeadlineNs'], proof['pressCommittedNs']+250*MS)
+                self.assertIsNone(result['releaseWrittenNs'])
+                self.assertIsNone(proof['physicalDurationNs'])
+                self.assertTrue(v.held_right)
+                self.assertFalse(v.pending_command or v.timed_trigger or v.held_trigger)
+                with self.assertRaisesRegex(d.REFUSAL, 'already used'):
+                    v.single_trigger_pulse(retained_grips={'gripR': 1}, expected=target)
+                self.assertEqual(len(h.batches()), 1)
+
+    def test_retained_grips_refuse_wrong_runtime_unsettled_or_unowned_controls(self):
+        for fault in ('runtime', 'pending', 'unsafe', 'claim', 'left', 'trigger', 'button', 'stick',
+                      'arbitrary', 'partial', 'target'):
+            with self.subTest(fault=fault):
+                h = RuntimeHarness(self, supported=fault != 'runtime')
+                target = self.retained_target(h)
+                v, retained = h.driver, {'gripR': 1}
+                if fault == 'pending':
+                    v.pending_command = True
+                elif fault == 'unsafe':
+                    v.unsafe_owner = True
+                elif fault == 'claim':
+                    v.held_right = False
+                elif fault in ('left', 'trigger', 'button', 'stick'):
+                    key = dict(left='gripL', trigger='trigR', button='buttons', stick='stickL')[fault]
+                    h.state['controls'][key] = [1, 0] if fault == 'stick' else 1
+                elif fault == 'arbitrary':
+                    retained['buttons'] = 1
+                elif fault == 'partial':
+                    retained['gripR'] = .5
+                elif fault == 'target':
+                    target['handR']['foreign'] = True
+                with self.assertRaises(d.REFUSAL):
+                    v.single_trigger_pulse(retained_grips=retained, expected=target)
+                self.assertEqual(h.batches(), [])
+                self.assertIsNone(v.timed_trigger)
+
+    def test_default_timer_route_still_refuses_a_retained_grip(self):
+        h = RuntimeHarness(self)
+        self.retained_target(h)
+        with self.assertRaises(d.REFUSAL):
+            h.driver.single_trigger_pulse()
+        self.assertEqual(h.batches(), [])
+
+    def test_retained_grip_or_pose_change_during_ack_cannot_settle(self):
+        for fault in ('grip', 'pose', 'claim', 'writer'):
+            with self.subTest(fault=fault):
+                h = RuntimeHarness(self, ack_ms=88)
+                target = self.retained_target(h)
+                def change():
+                    if fault == 'grip':
+                        h.state['controls']['gripR'] = 0
+                    elif fault == 'pose':
+                        h.state['handR']['foreign'] = True
+                    elif fault == 'claim':
+                        h.driver.held_right = False
+                    else:
+                        h.files[h.driver.command_path] = b'foreign\n'
+                h.on_sleep = change
+                with self.assertRaises(d.REFUSAL):
+                    h.driver.single_trigger_pulse(retained_grips={'gripR': 1}, expected=target)
+                self.assertTrue(h.driver.pending_command)
+                self.assertTrue(h.driver.timed_trigger)
+                self.assertEqual(h.batches(), [[d.TIMED_TRIGGER_COMMAND]])
+
+    def test_retained_grip_late_ack_leaves_pending_custody_but_runtime_releases(self):
+        h = RuntimeHarness(self, ack_ms=120)
+        target = self.retained_target(h)
+        with self.assertRaises(d.REFUSAL):
+            h.driver.single_trigger_pulse(retained_grips={'gripR': 1}, expected=target)
+        self.assertTrue(h.driver.pending_command and h.driver.timed_trigger)
+        self.assertEqual(h.state['controls']['trigR'], 0)
+        self.assertEqual(h.state['controls']['gripR'], 1)
+        self.assertTrue(json.loads(h.files[h.driver.run/'live-driver-owner.json'])['pending'])
+        self.assertEqual(h.batches(), [[d.TIMED_TRIGGER_COMMAND]])
+
+    def test_bolt_cleanup_settles_only_exact_late_timer_ack_and_neutral(self):
+        for fault in (None, 'pending', 'owner', 'grip'):
+            with self.subTest(fault=fault):
+                h = RuntimeHarness(self, ack_ms=300 if fault == 'pending' else 120)
+                target = self.retained_target(h)
+                v = h.driver
+                with self.assertRaises(d.REFUSAL):
+                    v.single_trigger_pulse(retained_grips={'gripR': 1}, expected=target)
+                if fault == 'owner':
+                    h.files[v.run/'live-driver-owner.json'] = b'foreign'
+                    with self.assertRaises(d.REFUSAL):
+                        magazine_tests.d.MagazineBoltDriver.cleanup_owned(v)
+                    self.assertTrue(v.pending_command and v.timed_trigger)
+                elif fault == 'grip':
+                    h.state['controls']['gripR'] = 0
+                    # The shared read-only cleanup rejects this as proof.
+                    v.settle_pending_for_release()
+                    self.assertTrue(v.timed_trigger)
+                    self.assertIsNone(getattr(v, 'timed_trigger_cleanup', None))
+                else:
+                    result = magazine_tests.d.MagazineBoltDriver.cleanup_owned(v)
+                    if fault == 'pending':
+                        self.assertIn('unsettled', result)
+                        self.assertTrue(v.pending_command and v.timed_trigger)
+                    else:
+                        self.assertIn('original shot remains refused', result)
+                        self.assertFalse(v.pending_command or v.timed_trigger or v.held_trigger)
+                        proof = v.timed_trigger_cleanup
+                        self.assertTrue(proof['originalActionRemainsRefused'])
+                        self.assertFalse(proof['commandAuthority'])
+                        self.assertEqual(proof['neutralState']['controls']['gripR'], 1)
+                        self.assertEqual(proof['cleanupDeadlineNs'], h.origin+200*MS)
+                self.assertTrue(v.held_right)
+                self.assertEqual(h.batches(), [[d.TIMED_TRIGGER_COMMAND]])
+
     def test_assembled_delayed_ack_uses_one_bounded_runtime_batch(self):
         h = RuntimeHarness(self, ack_ms=88)
         v = h.driver

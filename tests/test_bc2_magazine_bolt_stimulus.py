@@ -125,14 +125,14 @@ def removal_receipt(s, base):
     return after
 
 
-def owed(s):
+def owed(s, now=NOW):
     b = s["bolt"]
     held = dict(owner=b["input"]["owner"], item=s["magazine"]["weapon"], mechanism=dict(id=113, generation=8),
-        cycle=41, shot=42, sequence=43, observedNs=NOW-10_000_000, deadlineNs=NOW+80_000_000,
+        cycle=41, shot=42, sequence=43, observedNs=now-10_000_000, deadlineNs=now+80_000_000,
         held=True, advancing=dict(guardEpoch=44, updates=[45, 46, 47], counts=dict(loaded=2, reserve=30, capacity=7)))
     b.update(held=copy.deepcopy(held), blocksFire=True)
     b["native"].update(held=held, cycle=41, shot=42, counts=dict(loaded=2, reserve=30, capacity=7))
-    return g.owed(s, NOW)
+    return g.owed(s, now)
 
 
 def attached_original(s):
@@ -380,6 +380,32 @@ class MagazineBoltTests(unittest.TestCase):
             self.assertEqual(result["boundaries"][-1]["result"]["counts"]["loaded"], 3)
             self.assertEqual(episode["published"], ["grip r 1"])
 
+    def test_preparation_uses_runtime_timer_and_retains_exact_gun_claim(self):
+        with tempfile.TemporaryDirectory() as folder, held_bootstrap_episode(Path(folder), complete_shot=True) as episode:
+            self.assertTrue(episode["cli"]("prepare-hold")["holdPrepared"])
+            episode["capture"]()
+            clearance = episode["record"]()
+            driver = episode["prepare"](clearance)
+            self.assertEqual(driver.boundaries[-1]["name"], "preparation_shot_counts")
+            self.assertEqual(driver.boundaries[-1]["result"]["counts"]["loaded"], 6)
+            self.assertEqual(driver.shot_gun, driver.preparation["gun"])
+            self.assertEqual(driver.shot_pulse["pulseTransport"]["runtimeSha256"], d.transport.TIMED_TRIGGER_RUNTIME_SHA256)
+            self.assertIsNone(driver.shot_pulse["releaseWrittenNs"])
+            self.assertIsNone(driver.shot_pulse["pulseTransport"]["physicalDurationNs"])
+            self.assertTrue(driver.held_right)
+            self.assertFalse(driver.pending_command or driver.timed_trigger or driver.held_trigger)
+            self.assertEqual(episode["published"], ["grip r 1", "shot held-review", d.transport.TIMED_TRIGGER_COMMAND])
+
+    def test_postreload_refuses_unverified_timer_runtime_before_any_press(self):
+        with tempfile.TemporaryDirectory() as folder, magazine_capture_episode(Path(folder), failure="runtime") as episode:
+            result = episode["magazine"]()
+            clearance = episode["record"](result)
+            driver = episode["shot"](Path(result["artifactDirectory"])/"result.json", clearance)
+            with self.assertRaisesRegex(d.transport.REFUSAL, 'pinned runtime'):
+                driver.run_shot()
+            self.assertEqual(episode["published"], ["shot after-magazine"])
+            self.assertFalse(driver.pending_command or driver.held_trigger)
+
     def test_held_bootstrap_joins_independent_body_packets_with_original_leases(self):
         for delta in (-1, 1):
             with self.subTest(delta=delta), tempfile.TemporaryDirectory() as folder:
@@ -462,7 +488,14 @@ class MagazineBoltTests(unittest.TestCase):
                 shot.run_shot()
                 self.assertEqual(shot.boundaries[-1]["name"], "shot_created_owed_bolt")
                 self.assertFalse(shot.pending_command)
-                self.assertEqual(episode["published"], ["shot after-magazine", "trigger r 1", "trigger r 0"])
+                self.assertEqual(episode["published"], ["shot after-magazine", d.transport.TIMED_TRIGGER_COMMAND])
+                self.assertEqual(shot.shot_pulse["pulseTransport"]["expectedNeutralControls"]["gripR"], 1)
+                self.assertIsNone(shot.shot_pulse["releaseWrittenNs"])
+                self.assertTrue(shot.held_right)
+                self.assertFalse(shot.timed_trigger or shot.held_trigger)
+                with self.assertRaises(FileExistsError):
+                    shot.run_shot()
+                self.assertEqual(episode["published"].count(d.transport.TIMED_TRIGGER_COMMAND), 1)
 
     def test_magazine_capture_composition_refuses_foreign_owner_and_changed_review(self):
         for failure in ("owner", "image", "controls"):
@@ -1068,7 +1101,7 @@ def magazine_capture_episode(run, failure=None):
     folder = run / "native"
     (run / "sim/capture").mkdir(parents=True)
     folder.mkdir()
-    clock, published = [NOW+10], []
+    clock, published, timer_due = [NOW+10], [], [None]
 
     def write(path, value):
         path.write_bytes(d.transport.json_bytes(value))
@@ -1132,6 +1165,7 @@ def magazine_capture_episode(run, failure=None):
         driver.held_left = driver.held_trigger = False
         driver.held_right = True
         driver.held_buttons = set()
+        driver.timed_trigger, driver.timed_trigger_supported = None, failure != "runtime"
         driver.handoff_phase = driver.handoff_guard = None
         driver.neutral_handoff_completed = driver.bolt_cycle_completed = driver.preparation_mode = False
         driver.post_magazine_capture = driver.gun_root = driver.debt = None
@@ -1191,8 +1225,10 @@ def magazine_capture_episode(run, failure=None):
             for eye in ("left", "right"):
                 (run / "sim/capture" / (name+"_"+eye+".png")).write_bytes(b"synthetic image "+eye.encode())
         else:
-            g.require(lines[0] in ("trigger r 1", "trigger r 0"), "unexpected synthetic input")
-            current["controls"]["trigR"] = int(lines[0][-1])
+            g.require(lines[0] in (d.transport.TIMED_TRIGGER_COMMAND, "trigger r 0"), "unexpected synthetic input")
+            current["controls"]["trigR"] = int(lines[0] == d.transport.TIMED_TRIGGER_COMMAND)
+            if lines[0] == d.transport.TIMED_TRIGGER_COMMAND:
+                timer_due[0] = clock[0]+50_000_000
             fired[0] = True
         current["cmdSeq"] += len(lines)
         current["lastCmd"] = lines[-1]
@@ -1204,6 +1240,17 @@ def magazine_capture_episode(run, failure=None):
 
     def save_owner(driver, pending, **unused):
         (run / "live-driver-owner.json").write_bytes(driver.owner_bytes(pending))
+
+    def sleep(seconds):
+        clock[0] += int(seconds*g.NS)
+        if timer_due[0] is not None:
+            current = d.transport.read_json(run / "sim/state.json")[0]
+            current["frame"] += 1
+            current["endFrames"] += 1
+            if clock[0] >= timer_due[0]:
+                current["controls"]["trigR"] = 0
+                timer_due[0] = None
+            write(run / "sim/state.json", current)
 
     def magazine():
         with contextlib.redirect_stdout(io.StringIO()) as output:
@@ -1236,7 +1283,7 @@ def magazine_capture_episode(run, failure=None):
             (d.MagazineBoltDriver, "read_publication_owner", lambda driver, expected, until: (run / "live-driver-owner.json").read_bytes()),
             (d.transport, "publish_command", publish),
             (d.time, "perf_counter_ns", lambda: clock[0]),
-            (d.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0]+int(seconds*g.NS)))):
+            (d.time, "sleep", sleep)):
             stack.enter_context(mock.patch.object(target, name, value))
         yield dict(magazine=magazine, record=record, shot=shot, published=published,
                    write_state=lambda value: write(run / "sim/state.json", value),
@@ -1244,7 +1291,7 @@ def magazine_capture_episode(run, failure=None):
 
 
 @contextlib.contextmanager
-def held_bootstrap_episode(run, failure=None, full=True, body_sequence_delta=0):
+def held_bootstrap_episode(run, failure=None, full=True, body_sequence_delta=0, complete_shot=False):
     """Compose actual entry/transport/recorder consumers with synthetic producers.
 
     Requests, immutable response reads, nonce/source deadlines, full geometry
@@ -1394,6 +1441,13 @@ def held_bootstrap_episode(run, failure=None, full=True, body_sequence_delta=0):
             elif pressed and failure == "body_no_advance":
                 body_ev["sequence"] = observations[0]["bodyHolster"]["inputEvidence"]["sequence"]
                 h["input"]["generation"] = right["inputSequence"] = body_ev["sequence"]
+            if d.transport.TIMED_TRIGGER_COMMAND in published:
+                owed(s, now-1)
+                after = dict(x["resource"]["snapshot"]["counts"], loaded=6)
+                x["resource"]["snapshot"].update(counts=after, sequence=32)
+                b["native"]["counts"] = after
+                b["held"]["advancing"]["counts"] = after
+                b["native"]["held"]["advancing"]["counts"] = after
             if failure == "writer" or pressed and failure == "cleanup_writer":
                 (run / "sim/command.txt").write_bytes(b"note foreign writer\n")
             observations.append(copy.deepcopy(s))
@@ -1406,7 +1460,7 @@ def held_bootstrap_episode(run, failure=None, full=True, body_sequence_delta=0):
 
         def publish(path, raw, deadline_ns, validate):
             lines = raw.decode("ascii").splitlines()
-            if lines[0] == "trigger r 1":
+            if lines[0] == d.transport.TIMED_TRIGGER_COMMAND and not complete_shot:
                 validate()
                 raise RuntimeError("synthetic stop after preparation admission")
             if lines[0].startswith("hand "):
@@ -1452,6 +1506,12 @@ def held_bootstrap_episode(run, failure=None, full=True, body_sequence_delta=0):
         def save_owner(driver, pending, **unused):
             (run / "live-driver-owner.json").write_bytes(driver.owner_bytes(pending))
 
+        def prepare(clearance):
+            driver = d.MagazineBoltDriver(SimpleNamespace(mode="prep-shot-bolt", fire_clearance=clearance,
+                                                         magazine_result=None))
+            driver.run_preparation_shot()
+            return driver
+
         with contextlib.ExitStack() as stack:
             for target, name, value in (
                 (d.MagazineBoltDriver, "__init__", initialize),
@@ -1462,7 +1522,7 @@ def held_bootstrap_episode(run, failure=None, full=True, body_sequence_delta=0):
                 (d.transport.Driver, "read_publication_owner", lambda driver, expected, until: (run / "live-driver-owner.json").read_bytes()),
                 (d.transport, "atomic", atomic), (d.transport, "publish_command", publish)):
                 stack.enter_context(mock.patch.object(target, name, value))
-            yield dict(cli=cli, capture=capture, clock=clock, published=published, observations=observations,
+            yield dict(cli=cli, capture=capture, prepare=prepare, clock=clock, published=published, observations=observations,
                        record=lambda: episode["record"](dict(postMagazineCapture=dict(path=str(run / "sim/capture/held-review.json")))))
 
 

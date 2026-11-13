@@ -3261,7 +3261,9 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             const bool magazineHandoff=physicalBoltCustody==interaction::BoltCustodyPhase::Reloading||
                 physicalBoltCustody==interaction::BoltCustodyPhase::ReloadResumePending;
             ordinaryBoltSample->cancel=ordinaryBoltSample->cancel||!aimValid||!out.active||bodyDraw.pending||
-                (physicalReload&&physicalReload->BlocksEquipment())||(!magazineHandoff&&magazineResult.blocksWeaponActions);
+                (physicalReload&&physicalReload->BlocksEquipment())||(!magazineHandoff&&
+                    MagazineBlocksBoltControl(magazineResult,ordinaryBoltSample->nativeOwner,ordinaryBoltSample->input,
+                        ordinaryBoltSample->item,handOwnership.Current(interaction::InteractionHand::Right)));
             boltResult=physicalBolt->Tick(*ordinaryBoltSample,handOwnership,handIntent);
             ordinaryBoltObservation=CaptureLiveBolt(*ordinaryBoltSample,boltContact,boltResult,ordinaryBoltPlayer->References());
             ordinaryBoltPlayer->Observe(boltResult);
