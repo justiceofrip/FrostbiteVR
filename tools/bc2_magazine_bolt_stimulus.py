@@ -56,7 +56,7 @@ def same_input(a, b):
 def source_deadline(snapshot, family=None):
     deadlines = [integer(snapshot[k]) for k in ("valid_until_ns", "native_deadline_ns")]
     deadlines.append(integer(snapshot["input_evidence"]["deadlineNs"]))
-    if family is not None:
+    if family is not None and snapshot.get(family, {}).get("available") is True:
         x = snapshot[family]
         deadlines.append(integer(x["input"]["deadlineNs"]))
         raw = x.get("raw")
@@ -74,6 +74,91 @@ def source_deadline(snapshot, family=None):
             if r and r.get("current"):
                 deadlines.extend(integer(r[k]["deadlineNs"]) for k in ("binding", "snapshot"))
     return min(deadlines)
+
+
+def held_entry(snapshot, now, original=None, after_ns=0):
+    """Observe the ordinary Held warmup; unavailable mechanics grant no lease.
+
+    Mirrors Bc2BoltInputStartup's Current/heldGrip/Held distinction using the
+    exported body evidence. Body-slot and hand-item generations are independent.
+    """
+    frame.admit_frame(snapshot, now, integer(snapshot["nonce"]))
+    require(snapshot["weapon_actions_blocked"] is False, "held entry weapon actions blocked")
+    h = snapshot.get("bodyHolster")
+    wait_for(isinstance(h, dict) and h.get("available") is True, "held body observation pending")
+    ev, inp = h["inputEvidence"], snapshot["input"]
+    window(ev, now, 150_000_000)
+    require(h["nativeOwner"] == snapshot["owner"] and same_input(ev, snapshot["input_evidence"])
+            and h["inputMatchesSnapshot"] is True and h["inputSequenceRelation"] == "same"
+            and 0 < integer(h["sampledNs"]) <= now < integer(h["validUntilNs"])
+            <= min(integer(ev["deadlineNs"]), integer(h["sampledNs"])+150_000_000)
+            and integer(h["nativeTick"]) > 0, "held body owner/input/original lease differs")
+    require(integer(h["phase"]) == 1 and h["actualEmpty"] is False
+            and h["blockWeaponActions"] is False and h["allowAutomaticGunHold"] is True
+            and h["freeRightCurrent"] is False and h["freeRight"] is None
+            and h["leftClaim"] is None and h.get("queuedTarget") is None,
+            "ordinary held entry has foreign custody, Empty or pending body action")
+    gun = h["physicalGun"]
+    slot = h["selectedSlot"]
+    require(integer(gun["id"]) == integer(snapshot["owner"]["weapon"])
+            and integer(gun["generation"]) == integer(ev["owner"]["equipGeneration"])
+            and isinstance(slot, dict) and integer(slot["slot"]) > 0
+            and integer(slot["item"]["id"]) == integer(gun["id"])
+            and integer(slot["item"]["generation"]) > 0, "held physical/selected gun differs")
+    body_input = h["input"]
+    require(integer(body_input["generation"]) == integer(inp["generation"])
+            and integer(body_input["spaceGeneration"]) == integer(inp["spaceGeneration"])
+            and body_input["focused"] is True and body_input["headValid"] is True
+            and len(body_input["hands"]) == 2, "held body consumed input differs")
+    pressed = original is not None
+    for side, hand in enumerate(inp["hands"]):
+        require(hand["gripTracked"] is True and hand["aimTracked"] is True
+                and all(frame.finite(hand[k]) == 0 for k in ("trigger", "stickX", "stickY"))
+                and frame.finite(hand["squeeze"]) == (1 if pressed and side == 1 else 0)
+                and (pressed and side == 1 or integer(hand["held"]) == 0)
+                and all(body_input["hands"][side][k] == hand[k] for k in
+                        ("gripTracked", "aimTracked", "held", "squeeze", "trigger", "stickX", "stickY")),
+                "held entry requires tracked unchanged neutral controls except its right grip")
+    require(ev["released"] == [True, not pressed]
+            and h["neutralTrackedInput"] is (not pressed), "held entry release/neutral evidence differs")
+    right = h["rightClaim"]
+    if right is not None:
+        token = right["token"]
+        require(integer(token["id"]) > 0 and token["owner"] == ev["owner"]
+                and integer(token["hand"]) == 1 and integer(token["kind"]) == 1
+                and token["item"] == gun and integer(token["prerequisiteClaim"]) == 0
+                and integer(right["inputSequence"]) == integer(ev["sequence"])
+                and now < integer(right["deadlineNs"]) <= integer(ev["deadlineNs"]),
+                "held entry right custody is not an exact current GunHold")
+    for name in ("magazine", "bolt"):
+        value = snapshot.get(name, {})
+        if value.get("available") is True:
+            observation(snapshot, name, now)
+            require(value["leftClaim"] is None and value["rightClaim"] == right,
+                    "held entry mechanism custody differs from the body")
+    if original is not None:
+        require(owner_key(snapshot) == owner_key(original)
+                and all(h[k] == original["bodyHolster"][k] for k in ("physicalGun", "selectedSlot")),
+                "held entry selected/body lifetime changed")
+        for key in ("head", "referenceHead"):
+            require(frame.preserved_pose_equal(inp[key], original["input"][key]), "held entry head/reference changed")
+        for side in (0, 1):
+            for key in ("grip", "aim"):
+                require(frame.preserved_pose_equal(inp["hands"][side][key], original["input"]["hands"][side][key]),
+                        "held entry controller pose changed")
+        require(integer(ev["sequence"]) > integer(original["input_evidence"]["sequence"])
+                and integer(ev["observedNs"]) >= after_ns, "GunHold observation predates its ordinary grip")
+    return h
+
+
+def held_entry_deadline(snapshot):
+    h = snapshot.get("bodyHolster", {})
+    until = source_deadline(snapshot)
+    if h.get("available") is True:
+        until = min(until, integer(h["validUntilNs"]), integer(h["inputEvidence"]["deadlineNs"]))
+        if h["rightClaim"] is not None:
+            until = min(until, integer(h["rightClaim"]["deadlineNs"]))
+    return until
 
 
 def observation(snapshot, name, now, raw=False):

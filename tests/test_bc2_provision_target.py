@@ -471,53 +471,219 @@ class PinnedVariantTests(unittest.TestCase):
         memory.heap[0x800:0x800 + len(code)] = code
         return memory, selected, exact, table
 
-    def test_pinned_reader_unrelated_transient_region_stays_incomplete_with_diagnostics(self):
+    def assembled_retiring_region(self, failed_sweep=2, *, state="free", boundary=None,
+                                 boundary_change=None):
+        memory, selected, exact, table = self.assembled_reader()
+        transient, size = 0x3000000, 32768
+        observed = {"reads": 0, "retired": False, "layouts": 0, "queries": []}
+
+        def query(address):
+            if address == tool.BEGIN:
+                observed["layouts"] += 1
+                if observed["layouts"] == boundary:
+                    observed["retired"] = True
+                    if boundary_change is not None:
+                        boundary_change(memory)
+            if address < 0x2000000:
+                return memory.query(address)
+            if address < transient:
+                return (0x2000000, transient - 0x2000000, 0x10000, 0, 0)
+            if address < transient + size:
+                if not observed["retired"]:
+                    return (transient, size, 0x1000, 0x20000, 4)
+                observed["queries"].append(address)
+                if state == "query_failure":
+                    raise OSError("fixture retirement query failed")
+                if state == "wrong_extent":
+                    return (address + 1, size, 0x10000, 0, 0)
+                if state == "partial_free":
+                    if address < transient + size // 2:
+                        return (transient, size // 2, 0x10000, 0, 0)
+                    return (transient + size // 2, size // 2, 0x1000, 0x20000, 4)
+                if state == "endpoint_changed" and address == transient + size - 1:
+                    return (transient, size, 0x1000, 0x20000, 4)
+                region_state = {"committed": 0x1000, "reserved": 0x2000, "unknown": 0}.get(state, 0x10000)
+                if state == "reallocated_ineligible" and len(observed["queries"]) >= 3:
+                    region_state = 0x2000
+                # Match the actual later VirtualQueryEx evidence: end-byte
+                # queries may report the enclosing page as their BaseAddress.
+                base = address & ~0xfff
+                return (base, transient + size - base, region_state, 0, 1)
+            added = transient + size
+            if state == "added" and observed["retired"] and address < added + size:
+                return (added, size, 0x1000, 0x20000, 4)
+            return (address, tool.END - address, 0x10000, 0, 0)
+
+        original_read = memory.read
+
+        def read(address, count):
+            if address == transient:
+                observed["reads"] += 1
+                if boundary is None and observed["reads"] == failed_sweep:
+                    observed["retired"] = True
+                    raise OSError(299, "fixture allocation retired after layout")
+                return bytes(count)
+            return original_read(address, count)
+
+        selected.p.query = query
+        memory.read = read
+        return memory, selected, exact, table, observed
+
+    def test_pinned_reader_retired_scan_region_requires_whole_free_evidence(self):
         for failed_sweep in (1, 2):
             with self.subTest(failed_sweep=failed_sweep):
+                memory, selected, exact, table, observed = self.assembled_retiring_region(failed_sweep)
+                result, coverage = tool.discover(exact, table)
+                self.assertEqual(result["asset"]["address"], 0x11000)
+                self.assertEqual(coverage["passes"], 2)
+                self.assertEqual(observed["layouts"], 3)
+                self.assertEqual(observed["reads"], failed_sweep)  # No read retry.
+                self.assertEqual(selected.p.candidates, 2)
+                self.assertEqual(coverage["final_eligible_bytes"], len(memory.heap))
+                rows = coverage["observations"]
+                self.assertEqual(rows[failed_sweep - 1]["retired_unread_bytes"], 32768)
+                for row in rows:
+                    self.assertEqual(row["read_bytes"] + row["retired_unread_bytes"], row["layout_eligible_bytes"])
+                retirement, = coverage["retired_regions"]
+                self.assertEqual(retirement["phase"], "scan_chunk")
+                self.assertEqual(retirement["sweep"], failed_sweep)
+                self.assertEqual(retirement["last_confirmed_boundary"], 3)
+                self.assertEqual([q["address"] for q in retirement["free_queries"]], [0x3000000, 0x3007fff])
+                self.assertTrue(all(q["state"] == 0x10000 for q in retirement["free_queries"]))
+                failure = selected.p.read_failure
+                self.assertEqual(failure["stage"], "scan_chunk")
+                self.assertEqual(failure["sweep"], failed_sweep)
+                self.assertEqual(failure["address"], 0x3000000)
+                self.assertEqual(failure["requested_bytes"], 32768)
+                self.assertEqual(failure["errno"], 299)
+                self.assertEqual(failure["layout_region"], {
+                    "begin": 0x3000000, "end": 0x3008000,
+                    "state": 0x1000, "type": 0x20000, "protect": 4})
+                self.assertNotIn("candidate_address", failure)
+                self.assertTrue(failure["retirement_confirmed"])
+
+    def test_pinned_reader_retirement_between_observations_keeps_current_coverage(self):
+        for boundary in (2, 3):
+            with self.subTest(boundary=boundary):
+                memory, selected, exact, table, observed = self.assembled_retiring_region(boundary=boundary)
+                result, coverage = tool.discover(exact, table)
+                self.assertEqual(result["asset"]["address"], 0x11000)
+                self.assertEqual(selected.p.candidates, 2)
+                self.assertEqual(observed["reads"], boundary - 1)
+                self.assertEqual([row["read_bytes"] for row in coverage["observations"]],
+                                 [len(memory.heap) + 32768,
+                                  len(memory.heap) + (32768 if boundary == 3 else 0)])
+                self.assertTrue(all(row["retired_unread_bytes"] == 0 for row in coverage["observations"]))
+                retirement, = coverage["retired_regions"]
+                self.assertEqual(retirement["phase"], "layout_boundary")
+                self.assertEqual(retirement["sweep"], boundary)
+
+    def test_pinned_reader_uncertain_or_live_failed_region_remains_incomplete(self):
+        for state, reason in (("committed", "not wholly MEM_FREE"), ("reserved", "not wholly MEM_FREE"),
+                              ("unknown", "Unknown memory region state"),
+                              ("partial_free", "not wholly MEM_FREE"),
+                              ("query_failure", "fixture retirement query failed"),
+                              ("wrong_extent", "Malformed region extent"),
+                              ("endpoint_changed", "changed during MEM_FREE confirmation")):
+            with self.subTest(state=state):
+                _, selected, exact, table, observed = self.assembled_retiring_region(state=state)
+                with self.assertRaisesRegex((OSError, tool.Incomplete), reason):
+                    tool.discover(exact, table)
+                self.assertEqual(observed["reads"], 2)
+                self.assertEqual(selected.p.read_failure["errno"], 299)
+                self.assertFalse(selected.p.retired_regions)
+
+    def test_pinned_reader_retirement_cannot_hide_added_mapping_or_changed_candidate(self):
+        for change in ("added", "duplicate", "configuration", "absent"):
+            with self.subTest(change=change):
+                def mutate(memory):
+                    if change == "duplicate":
+                        memory.heap[0x1800:0x1854] = memory.heap[0x1000:0x1054]
+                    elif change == "configuration":
+                        memory.heap[0x4180] = 5
+                    elif change == "absent":
+                        struct.pack_into("<I", memory.heap, 0x1000, 0)
+
+                _, _, exact, table, _ = self.assembled_retiring_region(
+                    state="added" if change == "added" else "free", boundary=2, boundary_change=mutate)
+                reason = {"added": "added or changed a mapping", "duplicate": "Multiple exact typed",
+                          "configuration": "variant word mismatch", "absent": "Resource set changed"}[change]
+                with self.assertRaisesRegex(tool.Incomplete, reason):
+                    tool.discover(exact, table)
+
+    def test_pinned_reader_retired_range_must_stay_free_at_final_boundary(self):
+        _, selected, exact, table, observed = self.assembled_retiring_region(state="reallocated_ineligible")
+        with self.assertRaisesRegex(tool.Incomplete, "not wholly MEM_FREE"):
+            tool.discover(exact, table)
+        self.assertEqual(observed["reads"], 2)
+        self.assertEqual(len(selected.p.retired_regions), 1)
+        self.assertNotIn("last_confirmed_boundary", selected.p.retired_regions[0])
+
+    def test_pinned_reader_retirement_cannot_hide_changed_live_mapping(self):
+        _, selected, exact, table, observed = self.assembled_retiring_region(boundary=2)
+        original_query = selected.p.query
+
+        def query(address):
+            result = original_query(address)
+            if address == tool.BEGIN and observed["layouts"] >= 2:
+                return (*result[:4], 8)
+            return result
+
+        selected.p.query = query
+        with self.assertRaisesRegex(tool.Incomplete, "added or changed a mapping"):
+            tool.discover(exact, table)
+
+    def test_pinned_reader_selected_region_retirement_is_never_skipped(self):
+        for failure_stage in ("scan", "typed"):
+            with self.subTest(stage=failure_stage):
                 memory, selected, exact, table = self.assembled_reader()
-                transient, reads, retired = 0x3000000, 0, False
-
-                def query(address):
-                    if address < 0x2000000:
-                        return memory.query(address)
-                    if address < transient:
-                        return (0x2000000, transient - 0x2000000, 0x10000, 0, 0)
-                    if address < transient + 65536 and not retired:
-                        return (transient, 65536, 0x1000, 0x20000, 4)
-                    return (transient, tool.END - transient, 0x10000, 0, 0)
-
+                retired, heap_reads = False, 0
                 original_read = memory.read
 
+                def query(address):
+                    if retired and 0x10000 <= address < 0x15000:
+                        return (0x10000, 0x5000, 0x10000, 0, 1)
+                    return memory.query(address)
+
                 def read(address, size):
-                    nonlocal reads, retired
-                    if address == transient:
-                        reads += 1
-                        if reads == failed_sweep:
-                            # A valid earlier layout does not retain an unrelated
-                            # allocation while real typed candidates are read.
-                            retired = True
-                            raise OSError(299, "fixture allocation retired after layout")
-                        return bytes(size)
+                    nonlocal retired, heap_reads
+                    if address == 0x10000 and size == len(memory.heap):
+                        heap_reads += 1
+                    if (failure_stage == "scan" and heap_reads == 2 or
+                            failure_stage == "typed" and address == 0x12000):
+                        retired = True
+                        raise OSError(299, "fixture selected allocation retired")
                     return original_read(address, size)
 
                 selected.p.query = query
                 with mock.patch.object(memory, "read", side_effect=read):
-                    with self.assertRaisesRegex(tool.Incomplete,
-                            r"Unreadable scanned/typed region at 0x3000000 size=65536 \(scan_chunk\)"):
+                    reason = "Selected typed-chain region cannot retire" if failure_stage == "scan" else "Typed candidate validation failed"
+                    with self.assertRaisesRegex(tool.Incomplete, reason):
                         tool.discover(exact, table)
-                failure = selected.p.read_failure
-                self.assertEqual(failure["stage"], "scan_chunk")
-                self.assertEqual(failure["sweep"], failed_sweep)
-                self.assertEqual(failure["address"], transient)
-                self.assertEqual(failure["requested_bytes"], 65536)
-                self.assertEqual(failure["errno"], 299)
-                self.assertEqual(failure["layout_region"], {
-                    "begin": transient, "end": transient + 65536,
-                    "state": 0x1000, "type": 0x20000, "protect": 4})
-                self.assertNotIn("candidate_address", failure)
-                self.assertEqual(selected.p.candidates, failed_sweep)
-                self.assertEqual(reads, failed_sweep)
-                self.assertEqual(query(transient)[2], 0x10000)
+                self.assertFalse(selected.p.retired_regions)
+                self.assertEqual(selected.p.read_failure["stage"],
+                                 "scan_chunk" if failure_stage == "scan" else "selected_typed_chain")
+
+    def test_pinned_reader_retirement_preserves_query_and_time_caps(self):
+        for cap in ("queries", "time"):
+            with self.subTest(cap=cap):
+                _, selected, exact, table, observed = self.assembled_retiring_region()
+                original_query = selected.p.query
+
+                def query(address):
+                    result = original_query(address)
+                    if observed["retired"]:
+                        if cap == "queries":
+                            selected.p.max_regions = selected.p.queries
+                        else:
+                            selected.p.deadline = selected.p.clock()
+                    return result
+
+                selected.p.query = query
+                reason = "Region-query cap reached" if cap == "queries" else "Scan time cap reached"
+                with self.assertRaisesRegex(tool.Incomplete, reason):
+                    tool.discover(exact, table)
+                self.assertEqual(observed["reads"], 2)
 
     def test_pinned_reader_unallocated_initial_name_preserves_complete_selection(self):
         for targets in (0, 1, 2):

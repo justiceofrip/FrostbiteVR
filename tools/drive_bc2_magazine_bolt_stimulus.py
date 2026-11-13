@@ -1,7 +1,7 @@
 """ROOT-only ordinary magazine replacement and bolt continuation.
 
 Uses the installed normal observer and canonical session/command/ACK transport.
-Modes compose across settled owner records: prep-shot-bolt; magazine; shot-bolt; bolt.
+Modes compose across settled owner records: prepare-hold; prep-shot-bolt; magazine; shot-bolt; bolt.
 No process launch, fixture, ammo write, resource grant or acceptance verdict.
 """
 import argparse
@@ -69,6 +69,11 @@ class MagazineBoltDriver(transport.Driver):
         self.neutral_handoff_completed = False
         self.bolt_cycle_completed = False
         self.post_magazine_capture = None
+        self.bootstrap_phase = None
+        self.bootstrap_source = None
+        self.bootstrap_incomplete = False
+        self.bootstrap_attempted = False
+        self.hold_prepared = False
         controls_allowed(self.state["controls"])
         require(self.state["controls"]["trigR"] == 0, "trigger must be released at invocation")
         # Settled writer ownership authorizes continuation of actual controls;
@@ -98,7 +103,13 @@ class MagazineBoltDriver(transport.Driver):
             self.artifacts.save("receive-timing-failure.json", trace.report())
 
     def admit_snapshot(self, snapshot, now, nonce):
-        geometry.admit(snapshot, now, nonce, self.family)
+        if getattr(self, "bootstrap_phase", None) is not None:
+            require(integer(snapshot["nonce"]) == nonce, "held entry snapshot nonce differs")
+            geometry.held_entry(snapshot, now,
+                self.bootstrap_source if self.bootstrap_phase == "claim" else None,
+                self.last_write if self.bootstrap_phase == "claim" else 0)
+        else:
+            geometry.admit(snapshot, now, nonce, self.family)
         current = geometry.owner_key(snapshot)
         if self.anchor is not None:
             require(current == self.anchor, "exact selected native/rig owner changed")
@@ -110,8 +121,9 @@ class MagazineBoltDriver(transport.Driver):
         return True
 
     def snapshot_source_deadline(self, snapshot):
-        deadline = min(super().snapshot_source_deadline(snapshot), geometry.source_deadline(snapshot, self.family),
-                       integer(snapshot[self.family]["input"]["deadlineNs"]))
+        deadline = min(super().snapshot_source_deadline(snapshot), geometry.source_deadline(snapshot, self.family))
+        if getattr(self, "bootstrap_phase", None) is not None:
+            deadline = min(deadline, geometry.held_entry_deadline(snapshot))
         if getattr(self, "preparation_mode", False):
             deadline = min(deadline, geometry.source_deadline(snapshot, "magazine"))
         return deadline
@@ -129,6 +141,10 @@ class MagazineBoltDriver(transport.Driver):
             self.admit_snapshot(self.latest_snapshot, now, integer(self.latest_snapshot["nonce"]))
             require(now < self.snapshot_source_deadline(self.latest_snapshot),
                     "original source/claim lease expired before ordinary publication")
+            if getattr(self, "bootstrap_phase", None) is not None:
+                require(self.bootstrap_phase == "press" and lines == ["grip r 1"]
+                        and ordinary.neutral_controls(state["controls"]),
+                        "held entry permits only one ordinary right grip from neutral input")
             if expected.get("sample") is not None and self.motion_reference is not None:
                 geometry.movement_continuation(self.motion_reference, self.latest_snapshot,
                                                now, self.family, self.debt)
@@ -152,8 +168,8 @@ class MagazineBoltDriver(transport.Driver):
 
     @staticmethod
     def check_target(state, target):
-        if target.get("capture") is not None:
-            require(state["head"] == target["head"], "capture moved the reviewed head")
+        if "head" in target:
+            require(state["head"] == target["head"], "ordinary command moved the head")
         if "sample" in target:
             s = target["sample"]
             h, grip = ("handL", "gripL") if s["hand"] == 0 else ("handR", "gripR")
@@ -171,7 +187,7 @@ class MagazineBoltDriver(transport.Driver):
 
     def command(self, *, sample=None, control=None, value=None, source=None, cleanup=False, fire=False):
         require((sample is None) != (control is None), "one typed ordinary command action required")
-        target = dict(controls=copy.deepcopy(self.state["controls"]), fire=fire)
+        target = dict(controls=copy.deepcopy(self.state["controls"]), head=copy.deepcopy(self.state["head"]), fire=fire)
         if sample is not None:
             hand = integer(sample["hand"])
             require(hand in (0, 1) and sample["grip"] in (0, 1), "invalid hand sample")
@@ -209,13 +225,16 @@ class MagazineBoltDriver(transport.Driver):
         last = None
         try:
             while time.perf_counter_ns() < until:
-                s, _, now = self.fresh()
-                require(integer(s["input_evidence"]["observedNs"]) >= self.last_write,
-                        "boundary contact predates acknowledged input")
-                if self.anchor is None:
-                    self.anchor = geometry.owner_key(s)
-                    self.preserved = copy.deepcopy(s["input"])
                 try:
+                    # Unavailable captures are observations only. fresh() still
+                    # enforces each original response/source and writer bound;
+                    # no command or family admission follows a pending capture.
+                    s, _, now = self.fresh()
+                    require(integer(s["input_evidence"]["observedNs"]) >= self.last_write,
+                            "boundary contact predates acknowledged input")
+                    if self.anchor is None:
+                        self.anchor = geometry.owner_key(s)
+                        self.preserved = copy.deepcopy(s["input"])
                     result = predicate(s, now)
                 except geometry.Pending as pending:
                     last = str(pending)
@@ -277,14 +296,54 @@ class MagazineBoltDriver(transport.Driver):
         require(0 <= integer(duration) <= NS, "unbounded endpoint dwell")
         self.pause_until(self.last_commit + integer(duration))
 
-    def run_magazine(self):
-        if not self.held_right:
-            # Normal native GunHold can precede a controller squeeze. Observe
-            # that exact right-hand ownership before the real press; never
-            # press a mechanism under unknown left-hand custody.
-            s, _, _ = self.boundary("ordinary_right_gun_ready", lambda s, n:
-                geometry.claim(geometry.magazine(s, n, idle=True), 1, 1, n, s["magazine"]["weapon"]))
+    @staticmethod
+    def ordinary_gun_ready(snapshot, now):
+        x = geometry.magazine(snapshot, now, raw=True, idle=True)
+        b = geometry.bolt(snapshot, now, raw=True)
+        gun = geometry.claim(x, 1, 1, now, x["weapon"])
+        require(gun == geometry.claim(b, 1, 1, now, x["weapon"])
+                and integer(gun["prerequisiteClaim"]) == 0
+                and x["leftClaim"] is None and b["leftClaim"] is None,
+                "ordinary right gun family custody differs")
+        return copy.deepcopy(gun)
+
+    def ensure_gun_hold(self):
+        if self.held_right:
+            return
+        require(not getattr(self, "bootstrap_attempted", False), "ordinary grip bootstrap already attempted")
+        self.bootstrap_attempted = True
+        original_stage = self.stage_deadline
+        self.stage_deadline = min(self.deadline, original_stage, time.perf_counter_ns()+750_000_000)
+        self.bootstrap_phase = "press"
+        try:
+            s, _, _ = self.boundary("ordinary_held_neutral", lambda s, n: geometry.held_entry(s, n)["physicalGun"])
+            self.bootstrap_source = copy.deepcopy(s)
+            self.bootstrap_incomplete = True
             self.command(control="grip r", value=1, source=self.snapshot_source_deadline(s))
+            self.bootstrap_phase = "claim"
+
+            def held(s, n):
+                h = geometry.held_entry(s, n, self.bootstrap_source, self.last_write)
+                geometry.wait_for(h["rightClaim"] is not None, "ordinary right GunHold receipt pending")
+                return copy.deepcopy(h["rightClaim"]["token"])
+
+            _, _, gun = self.boundary("ordinary_right_gun_held", held)
+            # Leave root/body-only observation before full family admission.
+            self.bootstrap_phase = None
+            _, _, admitted = self.boundary("ordinary_right_gun_ready", self.ordinary_gun_ready)
+            require(admitted == gun, "ordinary family admission replaced the observed GunHold")
+            self.bootstrap_incomplete = False
+        finally:
+            self.bootstrap_phase = None
+            self.stage_deadline = original_stage
+
+    def run_prepare_hold(self):
+        self.ensure_gun_hold()
+        self.boundary("prepared_hold", self.ordinary_gun_ready)
+        self.hold_prepared = True
+
+    def run_magazine(self):
+        self.ensure_gun_hold()
         # Support release is an ordinary edge; no claim clearing or reset.
         if self.held_left:
             self.boundary("before_support_release", lambda s, n: geometry.claim(geometry.magazine(s, n), 0, 2, n))
@@ -423,6 +482,7 @@ class MagazineBoltDriver(transport.Driver):
     def run_preparation_shot(self):
         require(self.args.fire_clearance is not None and self.args.magazine_result is None,
                 "prep-shot-bolt requires ROOT corridor review and does not consume a magazine result")
+        self.ensure_gun_hold()
         s, now, self.preparation = self.boundary("before_preparation_shot", geometry.preparation_baseline)
         # One attempt per exact host/owner/native shot identity, including a
         # refused clearance or uncertain publication. This is evidence only.
@@ -668,6 +728,12 @@ class MagazineBoltDriver(transport.Driver):
             return "retained: unsettled command or writer ownership; no speculative cleanup"
         if self.held_trigger:
             self.command(control="trigger r", value=0, cleanup=True)
+        if getattr(self, "bootstrap_incomplete", False) and self.held_right:
+            # Only our acknowledged warmup squeeze is releasable here. The
+            # canonical publisher still rejoins exact writer/state/ACK before
+            # cleanup, and pending/foreign ownership above forbids speculation.
+            self.command(control="grip r", value=0, cleanup=True)
+            return "owned incomplete grip bootstrap released"
         # A release can discard an original magazine and its rounds, return a
         # replacement, or drop a gun. Only the admitted transaction path may
         # request those edges. Unknown or existing custody survives a refusal.
@@ -681,7 +747,7 @@ def counts_of(x):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=Path, required=True)
-    parser.add_argument("--mode", choices=("magazine", "prep-shot-bolt", "shot-bolt", "bolt"), required=True)
+    parser.add_argument("--mode", choices=("prepare-hold", "magazine", "prep-shot-bolt", "shot-bolt", "bolt"), required=True)
     parser.add_argument("--fire-clearance", type=Path)
     parser.add_argument("--magazine-result", type=Path)
     parser.add_argument("--capture-after-magazine", help="one budgeted stereo capture under the completed magazine writer")
@@ -698,13 +764,17 @@ def main(argv=None):
     driver, code = None, 2
     try:
         require(args.root_authorized_ordinary_input, "ROOT ordinary-input authorization required")
-        require(not args.neutral_handoff or args.mode != "magazine",
+        require(not args.neutral_handoff or args.mode not in ("magazine", "prepare-hold"),
                 "neutral handoff requires a bolt completion mode")
         require(not args.capture_after_magazine or args.mode == "magazine",
                 "post-magazine capture requires magazine mode")
+        require(args.mode != "prepare-hold" or (args.fire_clearance is None and args.magazine_result is None),
+                "prepare-hold only establishes ordinary custody before a separate capture/review")
         driver = MagazineBoltDriver.__new__(MagazineBoltDriver)
         driver.__init__(args)
-        if args.mode == "magazine":
+        if args.mode == "prepare-hold":
+            driver.run_prepare_hold()
+        elif args.mode == "magazine":
             driver.run_magazine()
             if args.capture_after_magazine:
                 driver.capture_after_magazine(args.capture_after_magazine)
@@ -718,7 +788,8 @@ def main(argv=None):
                 driver.finish_preparation()
             if args.neutral_handoff:
                 driver.run_neutral_handoff()
-        result.update(status="ordinary_preparation_completed" if args.mode == "prep-shot-bolt"
+        result.update(status="ordinary_hold_prepared" if args.mode == "prepare-hold" else
+                      "ordinary_preparation_completed" if args.mode == "prep-shot-bolt"
                       else "ordinary_stimulus_completed", stimulusCompleted=True,
                       preparationCompleted=args.mode == "prep-shot-bolt")
         code = 0
@@ -739,6 +810,7 @@ def main(argv=None):
                           boltCycleCompleted=getattr(driver, "bolt_cycle_completed", False),
                           neutralHandoffCompleted=getattr(driver, "neutral_handoff_completed", False),
                           postMagazineCapture=getattr(driver, "post_magazine_capture", None),
+                          holdPrepared=getattr(driver, "hold_prepared", False),
                           retainedGunRoot=getattr(driver, "gun_root", None))
             try:
                 driver.close()

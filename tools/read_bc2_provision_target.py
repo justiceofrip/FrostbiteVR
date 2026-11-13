@@ -22,6 +22,9 @@ import time
 SCHEMA = "fvr.bc2.readonly_provision_target.v1"
 BEGIN, END = 0x10000, 0x100000000
 DOMAIN = "MEM_PRIVATE or MEM_MAPPED; committed; PAGE_READONLY/READWRITE/WRITECOPY; no PAGE_GUARD"
+COMPLETENESS = ("two bounded observation sweeps of the declared domain, with recorded whole-region "
+                "MEM_FREE retirements excluded from unread coverage; exact selected typed sets agree; "
+                "no atomic or temporal global-uniqueness guarantee")
 
 
 class Incomplete(ValueError):
@@ -246,6 +249,9 @@ class BudgetedProcess:
         self.bytes_read = self.read_calls = self.candidates = self.queries = 0
         self.read_stage, self.read_context = "reader_initialization", {}
         self.read_failure = None
+        self.candidate_reads = None
+        self.selected_reads = set()
+        self.retired_regions = []
 
     def check(self):
         if self.clock() >= self.deadline:
@@ -268,13 +274,15 @@ class BudgetedProcess:
                                    ValueError("Expected " + str(size) + " bytes, received " + str(len(data))),
                                    received_bytes=len(data))
         self.check()
+        if self.candidate_reads is not None:
+            self.candidate_reads.add((address, address + size))
         return data
 
     def failed_read(self, address, size, reason, error, **details):
         # Preserve the failed request before any cleanup can lose its context.
         # A layout is an earlier observation, not a guarantee that an unrelated
-        # allocation remains readable. No unread bytes are counted as covered;
-        # do not retry, skip the region, or infer a negative resource match.
+        # allocation remains readable. Unread bytes are never counted as read;
+        # scan_pass alone may qualify a whole MEM_FREE retirement, without retry.
         self.read_failure = {**self.read_context, "stage": self.read_stage,
                              "address": address, "requested_bytes": size,
                              # The pinned Process.read discards its native
@@ -317,6 +325,49 @@ class BudgetedProcess:
                 result.append((begin, base + size, kind, protect))
             address = base + size
         return tuple(result)
+
+    def confirm_free(self, region):
+        begin, end, _, _ = region
+        if any(start < end and begin < stop for start, stop in self.selected_reads):
+            raise Incomplete("Selected typed-chain region cannot retire during observation")
+        # The first fresh query must cover the ENTIRE old region. An endpoint
+        # alone, a free prefix, reserve, changed protection or failed query is
+        # insufficient. Query the last byte again; Windows may round its base
+        # to a different page, so compare containment/state rather than tuples.
+        first = self.region(begin)
+        if first[2] != 0x10000 or first[0] + first[1] < end:
+            raise Incomplete("Disappeared scan region is not wholly MEM_FREE")
+        last = self.region(end - 1)
+        if last[2] != 0x10000:
+            raise Incomplete("Disappeared scan region changed during MEM_FREE confirmation")
+        return [dict(address=address, base=value[0], size=value[1], state=value[2],
+                     type=value[3], protect=value[4])
+                for address, value in ((begin, first), (end - 1, last))]
+
+    def retire(self, region, phase, sweep, failure=None):
+        if len(self.retired_regions) >= 64:
+            raise Incomplete("Retired-region record cap reached")
+        evidence = self.confirm_free(region)
+        self.retired_regions.append({"region": region, "phase": phase, "sweep": sweep,
+                                     "free_queries": evidence, "read_failure": failure})
+
+    def reconcile_layout(self, previous, current, sweep):
+        # Allow only removal of whole prior regions with fresh positive evidence.
+        # Added regions, resized/split survivors and protection/type changes
+        # invalidate the observation instead of starting another pass.
+        previous_set, current_set = set(previous), set(current)
+        if current_set - previous_set:
+            raise Incomplete("Mounted-resource region map added or changed a mapping")
+        retired = {tuple(row["region"]) for row in self.retired_regions}
+        for region in previous:
+            if region not in current_set and region not in retired:
+                self.retire(region, "layout_boundary", sweep)
+        for row in self.retired_regions:
+            region = tuple(row["region"])
+            if region in current_set:
+                raise Incomplete("Retired scan region reappeared in the eligible domain")
+            row["latest_free_queries"] = self.confirm_free(region)
+            row["last_confirmed_boundary"] = sweep
 
 
 class ExactReader:
@@ -418,7 +469,13 @@ class ExactReader:
 
     def stable(self, asset, table):
         self.p.read_context["candidate_address"] = asset
-        first, second = self.once(asset, table), self.once(asset, table)
+        self.p.candidate_reads = set()
+        try:
+            first, second = self.once(asset, table), self.once(asset, table)
+            if first is not None or second is not None:
+                self.p.selected_reads.update(self.p.candidate_reads)
+        finally:
+            self.p.candidate_reads = None
         if first != second:
             self.stage = "stable_recheck"
             raise Incomplete("Typed resource changed between reads")
@@ -427,6 +484,7 @@ class ExactReader:
 
 def scan_pass(reader, layout, table, sweep):
     selected = []
+    read_bytes = retired_unread_bytes = 0
     needle = struct.pack("<I", table)
     for begin, end, kind, protect in layout:
         for address in range(begin, end, 65536):
@@ -434,7 +492,24 @@ def scan_pass(reader, layout, table, sweep):
             reader.p.read_context = {"phase": "scan", "sweep": sweep,
                                      "layout_region": {"begin": begin, "end": end,
                                                        "state": 0x1000, "type": kind, "protect": protect}}
-            blob = reader.p.read(address, min(65536, end - address))
+            size = min(65536, end - address)
+            prior_failure = reader.p.read_failure
+            try:
+                blob = reader.p.read(address, size)
+            except Incomplete:
+                failure = reader.p.read_failure
+                # Only the observed whole-chunk ERROR_PARTIAL_COPY path can
+                # qualify retirement. Typed reads and budget/time failures
+                # never enter this branch, and no process read is retried.
+                if (failure is prior_failure or failure is None or
+                        failure["error_type"] != "OSError" or
+                        299 not in (failure["errno"], failure["winerror"])):
+                    raise
+                reader.p.retire((begin, end, kind, protect), "scan_chunk", sweep, dict(failure))
+                failure["retirement_confirmed"] = True
+                retired_unread_bytes += end - address
+                break
+            read_bytes += len(blob)
             cursor = 0
             while True:
                 pos = blob.find(needle, cursor)
@@ -455,23 +530,27 @@ def scan_pass(reader, layout, table, sweep):
                     selected.append(candidate)
                     if len(selected) > 1:
                         raise Incomplete("Multiple exact typed Asset to Data matches")
-    return selected
+    return selected, {"sweep": sweep, "layout_regions": len(layout),
+                      "layout_eligible_bytes": sum(end - begin for begin, end, _, _ in layout),
+                      "read_bytes": read_bytes, "retired_unread_bytes": retired_unread_bytes,
+                      "layout_sha256": digest(json.dumps(layout, separators=(",", ":")).encode())}
 
 
 def discover(reader, table):
-    # Two complete bounded sweeps; stable mappings and complete typed result must
-    # agree. This is still external observation, never an atomic game-tick claim.
+    # Two bounded sweeps with complete eligible coverage or recorded positive
+    # whole-region retirement. Selected typed results must still agree exactly.
     reader.p.read_context = {"phase": "before_scan"}
     reader.p.read_stage = "resource_verify"
     reader.reader.verify()
     first_layout = reader.p.layout()
-    first = scan_pass(reader, first_layout, table, 1)
+    first, first_coverage = scan_pass(reader, first_layout, table, 1)
     second_layout = reader.p.layout()
-    if first_layout != second_layout:
-        raise Incomplete("Mounted-resource region map changed")
-    second = scan_pass(reader, second_layout, table, 2)
-    if first != second or first_layout != reader.p.layout():
-        raise Incomplete("Resource set or region map changed across full scans")
+    reader.p.reconcile_layout(first_layout, second_layout, 2)
+    second, second_coverage = scan_pass(reader, second_layout, table, 2)
+    final_layout = reader.p.layout()
+    reader.p.reconcile_layout(second_layout, final_layout, 3)
+    if first != second:
+        raise Incomplete("Resource set changed across full scans")
     reader.p.read_context = {"phase": "after_scan"}
     reader.p.read_stage = "resource_verify"
     reader.reader.verify()
@@ -480,9 +559,10 @@ def discover(reader, table):
     if reader.stable(first[0]["asset"]["address"], table) != first[0]:
         raise Incomplete("Selected pair/config changed after full scans")
     reader.p.check()
-    return first[0], {"passes": 2, "regions_per_pass": len(first_layout),
-                      "eligible_bytes_per_pass": sum(end - begin for begin, end, _, _ in first_layout),
-                      "layout_sha256": digest(json.dumps(first_layout, separators=(",", ":")).encode())}
+    return first[0], {"passes": 2, "observations": [first_coverage, second_coverage],
+                      "retired_regions": reader.p.retired_regions,
+                      "final_eligible_regions": len(final_layout),
+                      "final_eligible_bytes": sum(end - begin for begin, end, _, _ in final_layout)}
 
 
 def publish(path, report):
@@ -525,7 +605,7 @@ def main(argv=None):
     variant = exact_variant(blobs, args.variant)
     report = {"schema": SCHEMA, "read_only": True, "process_access": 0x410,
               "accepted": False, "complete": False, "scan_domain": DOMAIN,
-              "completeness_scope": "two complete observation sweeps of the declared domain; no atomic or temporal global-uniqueness guarantee",
+              "completeness_scope": COMPLETENESS,
               "external_reads_are_not_atomic": True, "native_admitted": False,
               "native_functions_called": False, "inventory_modified": False,
               "fresh_equip_source_required": True, "source_input_lease_preserved_by_scan": False,
@@ -536,7 +616,8 @@ def main(argv=None):
                   "dependency_manifest_sha256": digest(Path(args.pins).read_bytes()),
                   "files": manifest["files"]},
               "bounds": {"max_read_bytes": args.max_read_mib * 1024 * 1024, "max_seconds": args.max_seconds,
-                         "max_candidates": 4096, "max_region_queries": 65536, "max_snapshot_bytes": 131072}}
+                         "max_candidates": 4096, "max_region_queries": 65536,
+                         "max_retired_regions": 64, "max_snapshot_bytes": 131072}}
     process = bounded = None
     try:
         source = read_source(args.session_dir)
@@ -578,6 +659,8 @@ def main(argv=None):
         if bounded is not None:
             if bounded.read_failure is not None:
                 report["read_failure"] = bounded.read_failure
+            if bounded.retired_regions and "coverage" not in report:
+                report["retired_regions"] = bounded.retired_regions
             report["scan"] = {"bytes_read_including_typed_reads": bounded.bytes_read,
                               "read_calls": bounded.read_calls, "asset_candidates": bounded.candidates,
                               "region_queries": bounded.queries, "elapsed_seconds": bounded.clock() - bounded.started}

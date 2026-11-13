@@ -133,6 +133,64 @@ def owed(s):
 
 
 class MagazineBoltTests(unittest.TestCase):
+    def test_held_bootstrap_cli_capture_review_and_preparation_admission(self):
+        # Real CLI, snapshot request/receive, command publication and text ACK.
+        # Only native/XR production and OS process/lock I/O are synthetic.
+        with tempfile.TemporaryDirectory() as folder, held_bootstrap_episode(Path(folder)) as episode:
+            result = episode["cli"]("prepare-hold")
+            self.assertEqual(result["status"], "ordinary_hold_prepared", result)
+            self.assertTrue(result["holdPrepared"])
+            self.assertFalse(result["pendingCommand"])
+            self.assertEqual(episode["published"], ["grip r 1"])
+            self.assertEqual([r["name"] for r in result["boundaries"]],
+                ["ordinary_held_neutral", "ordinary_right_gun_held", "ordinary_right_gun_ready", "prepared_hold"])
+            self.assertFalse(episode["observations"][0]["bolt"]["available"])
+            self.assertNotIn("input", episode["observations"][0]["bolt"])
+            self.assertGreater(episode["observations"][1]["input_evidence"]["sequence"],
+                               episode["observations"][0]["input_evidence"]["sequence"])
+            capture = episode["capture"]()
+            self.assertEqual(capture["status"], "commands_acknowledged", capture)
+            clearance = episode["record"]()
+            self.assertEqual(json.loads(clearance.read_text())["controls"]["gripR"], 1)
+            prepared = episode["cli"]("prep-shot-bolt", clearance)
+            # Stop at the synthetic native input boundary AFTER the real full
+            # preparation and unchanged firing-clearance admission, before Fire.
+            self.assertIn("synthetic stop after preparation admission", prepared["error"])
+            self.assertEqual(prepared["boundaries"][-1]["name"], "before_preparation_shot")
+            self.assertEqual(prepared["boundaries"][-1]["result"]["counts"]["loaded"], 7)
+            self.assertEqual(episode["published"], ["grip r 1", "shot held-review"])
+
+    def test_held_bootstrap_composes_with_real_partial_magazine_admission(self):
+        with tempfile.TemporaryDirectory() as folder, held_bootstrap_episode(Path(folder), full=False) as episode:
+            result = episode["cli"]("magazine")
+            self.assertIn("synthetic stop after magazine admission", result["error"])
+            self.assertEqual(result["boundaries"][-1]["name"], "partial_settled")
+            self.assertEqual(result["boundaries"][-1]["result"]["counts"]["loaded"], 3)
+            self.assertEqual(episode["published"], ["grip r 1"])
+
+    def test_held_bootstrap_refuses_foreign_nonheld_stale_or_active_entry(self):
+        for failure in ("empty", "owner", "left", "right", "free_right", "expired", "source", "trigger", "writer"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as folder:
+                with held_bootstrap_episode(Path(folder), failure=failure) as episode:
+                    result = episode["cli"]("prepare-hold")
+                    self.assertEqual(result["status"], "refused", result)
+                    self.assertFalse(result["holdPrepared"])
+                    self.assertEqual(episode["published"], [])
+                    self.assertNotIn("KeyError", result.get("error", ""))
+
+    def test_held_bootstrap_waits_without_input_retry_and_releases_only_owned_ack(self):
+        for failure in ("no_hold", "unavailable", "changed_pose", "foreign_claim", "wrong_ack", "ack_head", "cleanup_writer"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as folder:
+                with held_bootstrap_episode(Path(folder), failure=failure) as episode:
+                    result = episode["cli"]("prepare-hold")
+                    self.assertEqual(result["status"], "refused", result)
+                    self.assertFalse(result["holdPrepared"])
+                    self.assertEqual(episode["published"].count("grip r 1"), 1)
+                    self.assertFalse(any(line.startswith(("trigger", "hand", "shot")) for line in episode["published"]))
+                    unsafe = failure in ("wrong_ack", "ack_head", "cleanup_writer")
+                    self.assertEqual(episode["published"], ["grip r 1"] if unsafe else ["grip r 1", "grip r 0"])
+                    self.assertLess(episode["clock"][0]-NOW, g.NS)
+
     def test_magazine_capture_result_records_clearance_and_enters_shot(self):
         # Exercise the composed entry/result/recorder/shot path. The synthetic
         # native tail must pass the real receipt and release predicates; no
@@ -928,7 +986,174 @@ def magazine_capture_episode(run, failure=None):
             (d.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0]+int(seconds*g.NS)))):
             stack.enter_context(mock.patch.object(target, name, value))
         yield dict(magazine=magazine, record=record, shot=shot, published=published,
-                   write_state=lambda value: write(run / "sim/state.json", value))
+                   write_state=lambda value: write(run / "sim/state.json", value),
+                   initialize=initialize, publish=publish, clock=clock, folder=folder, write=write)
+
+
+@contextlib.contextmanager
+def held_bootstrap_episode(run, failure=None, full=True):
+    """Compose actual entry/transport/recorder consumers with synthetic producers.
+
+    Requests, immutable response reads, nonce/source deadlines, full geometry
+    admission, command-owner checks and ACK parsing all use production methods.
+    A controlled publisher stop qualifies the following preparation/magazine
+    admission only; it never fabricates successful native Fire or reload work.
+    """
+    real_magazine = d.MagazineBoltDriver.run_magazine
+    with magazine_capture_episode(run) as episode:
+        clock, folder, write = episode["clock"], episode["folder"], episode["write"]
+        published, observations, drivers = episode["published"], [], []
+        state = d.transport.read_json(run / "sim/state.json")[0]
+        state["controls"]["gripR"] = 0
+        episode["write_state"](state)
+
+        def initialize(driver, args):
+            episode["initialize"](driver, args)
+            driver.anchor = driver.preserved = None
+            driver.bootstrap_phase = driver.bootstrap_source = None
+            driver.bootstrap_incomplete = driver.hold_prepared = False
+            driver.preparation_mode = args.mode == "prep-shot-bolt"
+            driver.preparation = None
+            driver.held_right = bool(driver.state["controls"]["gripR"])
+            driver.configured_hands = set()
+            driver.request_path = folder / "mechanism-snapshot-request.txt"
+            driver.snapshot_path = folder / "mechanism-snapshot.json"
+            driver.last_request = driver.snapshot_index = driver.snapshot_refresh_requests = 0
+            driver.plans = []
+            if failure == "source":
+                driver.last_write = clock[0]-1
+            drivers.append(driver)
+
+        def response(nonce):
+            s = fixture()
+            now, seq = clock[0], 21+len(observations)
+            pressed = bool(d.transport.read_json(run / "sim/state.json")[0]["controls"]["gripR"])
+            ev = s["input_evidence"]
+            ev.update(sequence=seq, observedNs=now-1000, nowNs=now-1, deadlineNs=now+80_000_000,
+                      released=[True, not pressed])
+            s.update(nonce=nonce, observed_ns=now-1, valid_until_ns=now+60_000_000,
+                     native_deadline_ns=now+80_000_000, shot_input_generation=seq)
+            s["input"].update(generation=seq, predictedNs=now)
+            s["input"]["hands"][1]["squeeze"] = int(pressed)
+            s["selected"].update(sequence=seq, observedNs=now-1000, deadlineNs=now+80_000_000)
+            for name in ("magazine", "bolt"):
+                x = s[name]
+                x["capturedNs"] = now-1
+                x["rightClaim"].update(inputSequence=seq, deadlineNs=now+70_000_000)
+            x, b = s["magazine"], s["bolt"]
+            x["family"].update(observedNs=now-1000, deadlineNs=now+80_000_000)
+            for key in ("binding", "snapshot"):
+                x["resource"][key].update(observedNs=now-1000, deadlineNs=now+80_000_000)
+            x["raw"]["nativeMagazineAttached"] = True
+            x.update(originalPhysical=None, pendingRequest=None, submittedSeat=None)
+            x["resource"]["command"] = None
+            b["native"].update(phase=0, failure=0, heldSuspended=False, blocksFire=False)
+            if full:
+                x["resource"]["snapshot"]["counts"]["loaded"] = 7
+                b["native"]["counts"]["loaded"] = 7
+            right = copy.deepcopy(x["rightClaim"]) if pressed and failure not in ("no_hold", "cleanup_writer") else None
+            h = s["bodyHolster"] = dict(available=True, nativeOwner=copy.deepcopy(s["owner"]),
+                inputEvidence=copy.deepcopy(ev), sampledNs=now-1, validUntilNs=now+60_000_000,
+                nativeTick=seq, physicalGun=copy.deepcopy(x["weapon"]),
+                inputSequenceRelation="same", inputMatchesSnapshot=True,
+                input=copy.deepcopy(s["input"]), neutralTrackedInput=not pressed,
+                leftClaim=None, rightClaim=right,
+                selectedSlot=dict(slot=1, item=dict(x["weapon"], generation=17)), phase=1,
+                actualEmpty=False, blockWeaponActions=False, allowAutomaticGunHold=True,
+                freeRightCurrent=False, freeRight=None)
+            if not pressed or failure in ("no_hold", "unavailable", "cleanup_writer"):
+                for name in ("magazine", "bolt"):
+                    s[name] = dict(observationOnly=True, available=False, reason="capture_pending_or_not_requested")
+            if failure == "empty":
+                h.update(phase=3, actualEmpty=True)
+            elif failure == "owner":
+                h["nativeOwner"]["equipGeneration"] += 1
+            elif failure in ("left", "right"):
+                h[failure+"Claim"] = copy.deepcopy(x["rightClaim"])
+                h[failure+"Claim"]["token"]["kind"] = 4
+            elif failure == "free_right":
+                h["freeRight"] = dict(foreign=True)
+            elif failure == "trigger":
+                s["input"]["hands"][1]["trigger"] = 1
+            elif failure == "expired":
+                s["input_evidence"]["observedNs"] = now-200_000_000
+                s["valid_until_ns"] = now
+            elif failure == "source":
+                s["valid_until_ns"] = now+10_000_000
+            elif pressed and failure == "changed_pose":
+                s["input"]["hands"][1]["grip"] = dict(position=[.1, 0, 0], orientation=[0, 0, 0, 1])
+            elif pressed and failure == "foreign_claim":
+                h["rightClaim"]["token"]["kind"] = 4
+            if failure == "writer" or pressed and failure == "cleanup_writer":
+                (run / "sim/command.txt").write_bytes(b"note foreign writer\n")
+            observations.append(copy.deepcopy(s))
+            return s
+
+        def atomic(path, raw):
+            path.write_bytes(raw)
+            if path.name == "mechanism-snapshot-request.txt":
+                write(folder / "mechanism-snapshot.json", response(int(raw)))
+
+        def publish(path, raw, deadline_ns, validate):
+            lines = raw.decode("ascii").splitlines()
+            if lines[0] == "trigger r 1":
+                validate()
+                raise RuntimeError("synthetic stop after preparation admission")
+            if lines[0].startswith("hand "):
+                validate()
+                raise RuntimeError("synthetic stop after magazine admission")
+            if not lines[0].startswith("grip r "):
+                return episode["publish"](path, raw, deadline_ns, validate)
+            validate()
+            g.require(clock[0] < deadline_ns, "synthetic original publication clock expired")
+            path.write_bytes(raw)
+            published.extend(lines[:-1])
+            current = d.transport.read_json(run / "sim/state.json")[0]
+            current["controls"]["gripR"] = int(lines[0][-1])
+            current["cmdSeq"] += len(lines)
+            current["lastCmd"] = lines[-1]
+            current["frame"] += 2
+            current["endFrames"] += 2
+            if failure == "ack_head":
+                current["head"]["pos"][0] += .1
+            episode["write_state"](current)
+            text = " | ".join(lines) if failure != "wrong_ack" else "different command"
+            (run / "sim/ack.txt").write_text(
+                f"seq={current['cmdSeq']} frame={current['frame']-1} error=-\nlast={text}\n", encoding="utf-8")
+
+        def cli(mode, clearance=None):
+            args = ["--run", str(run), "--mode", mode, "--root-authorized-ordinary-input"]
+            if clearance is not None:
+                args += ["--fire-clearance", str(clearance)]
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                d.main(args)
+            return json.loads(output.getvalue())
+
+        def capture():
+            def initialize_capture(driver, args):
+                args.mode = "capture"
+                initialize(driver, args)
+                driver.artifacts = driver.artifacts.sink
+            with mock.patch.object(d.transport.Driver, "__init__", initialize_capture), \
+                    contextlib.redirect_stdout(io.StringIO()) as output:
+                d.transport.main(["--run", str(run), "--capture", "held-review"])
+            return json.loads(output.getvalue())
+
+        def save_owner(driver, pending, **unused):
+            (run / "live-driver-owner.json").write_bytes(driver.owner_bytes(pending))
+
+        with contextlib.ExitStack() as stack:
+            for target, name, value in (
+                (d.MagazineBoltDriver, "__init__", initialize),
+                (d.MagazineBoltDriver, "run_magazine", real_magazine),
+                (d.MagazineBoltDriver, "fresh", d.transport.Driver.fresh),
+                (d.transport.Driver, "read_state", lambda driver: d.transport.read_json(run / "sim/state.json")[0]),
+                (d.transport.Driver, "save_owner", save_owner),
+                (d.transport.Driver, "read_publication_owner", lambda driver, expected, until: (run / "live-driver-owner.json").read_bytes()),
+                (d.transport, "atomic", atomic), (d.transport, "publish_command", publish)):
+                stack.enter_context(mock.patch.object(target, name, value))
+            yield dict(cli=cli, capture=capture, clock=clock, published=published, observations=observations,
+                       record=lambda: episode["record"](dict(postMagazineCapture=dict(path=str(run / "sim/capture/held-review.json")))))
 
 
 if __name__ == "__main__":
