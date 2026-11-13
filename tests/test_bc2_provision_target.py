@@ -1,12 +1,173 @@
-"""Selected-asset refusal regression; no process or historical files required."""
+"""Pinned selector regressions; no game process required.
+
+Supply --reader-pins PATH to additionally assemble the retained reader against
+synthetic memory. Without those external dependencies that check is explicitly
+skipped; the portable tests alone do not establish retained-reader acceptance.
+"""
+import argparse
+import copy
+import hashlib
 import importlib.util
+import io
+import json
 from pathlib import Path
+import re
+import struct
+import sys
+import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("provision_target", ROOT / "tools/read_bc2_provision_target.py")
 tool = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(tool)
+READER_PINS = None
+
+
+class ResourceMemory:
+    """Small synthetic heap/image implementing the real reader's byte contract.
+
+    Reflection records, executable slices and configuration are fixture data,
+    not observations or copied game assets. Reader/reflection methods are real.
+    """
+    base = 0x400000
+
+    def __init__(self, path, name, observed):
+        self.heap = bytearray(0x5000)
+        self.blocks = {}
+        self.next_metadata = 0x1800000
+        self.heap[0x400c:0x4098] = bytes.fromhex(observed["fire_logic_hex"])
+        self.heap[0x4170:0x4194] = bytes.fromhex(observed["ammo_hex"])
+        for offset, value in ((0x1000, 0x1474554), (0x100c, 0x10100), (0x1050, 0x12000),
+                              (0x2000, 0x145f098), (0x200c, 0x10200), (0x2040, 0x10100),
+                              (0x2098, 0x13000), (0x3040, 0x14000)):
+            struct.pack_into("<I", self.heap, offset, value)
+        for offset, value in ((0x100, path), (0x200, name)):
+            encoded = value.encode("ascii") + b"\0"
+            self.heap[offset:offset + len(encoded)] = encoded
+
+        boolean = self.type_info("Boolean", 0, 1)
+        integer = self.type_info("Int32", 0, 4)
+        floating = self.type_info("Float32", 0, 4)
+        string = self.type_info("String", 0, 4)
+        logic_enum = self.type_info("FireLogicType", 0x179, 4,
+                                    [("fltAutomaticFire", 0, 2)])
+        reload_enum = self.type_info("ReloadType", 0x179, 4,
+                                     [("rtMagazine", 0, 1)])
+        bolt = self.type_info("BoltActionData", 0x29, 16, [
+            ("BoltActionTime", floating, 4), ("BoltActionDelay", floating, 8),
+            ("HoldBoltActionUntilZoomRelease", boolean, 12),
+            ("HoldBoltActionUntilFireRelease", boolean, 13)])
+        logic = self.type_info("FireLogicData", 0x29, 0x8c, [
+            ("ReloadType", reload_enum, 20), ("FireLogicType", logic_enum, 24),
+            ("BoltAction", bolt, 64)])
+        ammo = self.type_info("AmmoData", 0x29, 0x24, [("MagazineCapacity", integer, 20)])
+        asset = self.type_info("SoldierWeaponAsset", 0x35, 0x54,
+                              [("Name", string, 12), ("Object", integer, 0x50)], at=0x1c06e88)
+        data = self.type_info("SoldierWeaponData", 0x35, 0x9c, at=0x1bfca60)
+        firing = self.type_info("WeaponFiringData", 0x35, 0x44, [("PrimaryFire", integer, 0x40)])
+        primary = self.type_info("FiringFunctionData", 0x35, 0x194,
+                                [("FireLogic", logic, 12), ("Ammo", ammo, 0x170)])
+        for table, getter, info in ((0x1474554, 0x13d8050, asset),
+                                    (0x145f098, 0x139ecd0, data)):
+            self.blocks[table] = struct.pack("<3I", 0, 0, getter)
+            self.blocks[getter] = b"\xb8" + struct.pack("<I", info) + b"\xc3"
+        for offset, info in ((0x3000, firing), (0x4000, primary)):
+            getter = self.allocate(b"\xb8" + struct.pack("<I", info) + b"\xc3")
+            table = self.allocate(struct.pack("<3I", 0, 0, getter))
+            struct.pack_into("<I", self.heap, offset, table)
+        self.blocks[0x13a10ca] = bytes.fromhex("c7450098f04501")
+        self.blocks[0xb7c2f6] = bytes.fromhex("c70654454701")
+        # Canonical Inspector.inherited_field locates and compares this pattern.
+        self.blocks[self.base + 0x1000] = bytes.fromhex(
+            "8b44240456508bf1e8000000008b4c24108b44240c8b542414894e1033c9"
+            "380d00000000c70600000000894614894e1866894e1c66894e1e894e20895624")
+
+    def allocate(self, blob):
+        address = self.next_metadata
+        self.next_metadata += (len(blob) + 3) & ~3
+        self.blocks[address] = bytes(blob)
+        return address
+
+    def type_info(self, name, flags, size, fields=(), at=None):
+        records = b"".join(struct.pack("<6I", self.allocate(label.encode() + b"\0"),
+                                       0, kind, 0, offset, 0)
+                           for label, kind, offset in fields)
+        field_address = self.allocate(records) if records else 0
+        metadata = bytearray(28)
+        struct.pack_into("<IHH", metadata, 0, self.allocate(name.encode() + b"\0"), flags, size)
+        metadata[13] = len(fields)
+        struct.pack_into("<I", metadata, 24, field_address)
+        info = bytearray(40)
+        struct.pack_into("<I", info, 4, self.allocate(metadata))
+        address = self.allocate(info) if at is None else at
+        struct.pack_into("<I", info, 20, address)
+        struct.pack_into("<I", info, 36, field_address)
+        self.blocks[address] = bytes(info)
+        return address
+
+    def read(self, address, size):
+        if 0x10000 <= address and address + size <= 0x15000:
+            return bytes(self.heap[address - 0x10000:address - 0x10000 + size])
+        for start, blob in self.blocks.items():
+            if start <= address and address + size <= start + len(blob):
+                return blob[address - start:address - start + size]
+        raise ValueError("Unmapped fixture read at " + hex(address))
+
+    def query(self, address):
+        if address == 0x10000:
+            return (0x10000, len(self.heap), 0x1000, 0x20000, 4)
+        if address == 0x15000:
+            return (0x15000, self.base - 0x15000, 0x10000, 0, 0)
+        if address == self.base:
+            return (self.base, 0x2000000 - self.base, 0x1000, 0x1000000, 0x20)
+        return (0x2000000, tool.END - 0x2000000, 0x10000, 0, 0)
+
+
+class ResourceImage:
+    """Synthetic image boundary; all Inspector parsing remains canonical."""
+    base = ResourceMemory.base
+
+    def __init__(self, memory):
+        self.memory = memory
+
+    def section(self, rva, size=1):
+        if not 0 <= rva < rva + size <= 0x2000000 - self.base:
+            raise ValueError("Fixture image bounds")
+        return (0, 0x2000000 - self.base, 0, 0x2000000 - self.base, 0x60000020)
+
+    def read(self, rva, size):
+        self.section(rva, size)
+        return self.memory.read(self.base + rva, size)
+
+    def find(self, pattern):
+        regex = b"".join(b"." if byte == "??" else re.escape(bytes([int(byte, 16)]))
+                         for byte in pattern.split())
+        code = self.memory.blocks[self.base + 0x1000]
+        matches = list(re.finditer(regex, code, re.DOTALL))
+        if len(matches) != 1:
+            raise ValueError("Fixture signature must be unique")
+        return 0x1000 + matches[0].start()
+
+
+def retained_modules(pins):
+    """Verify and execute all real reader imports, with native calls forbidden."""
+    class NoNativeCalls:
+        def __getattr__(self, name):
+            def refused(*args, **kwargs):
+                raise AssertionError("Native API called by offline fixture: " + name)
+            return refused
+
+    keys = ("read_bc2", "capture_reload_state", "read_flynn_catalog",
+            "read_stock_sniper_resources", "read_weapon_resources")
+    # The historical import inserts a workstation path. Restore import state,
+    # and use only modules compiled from bytes checked by load_dependencies.
+    with mock.patch.dict(sys.modules), mock.patch.object(sys, "path", list(sys.path)), \
+            mock.patch.object(tool.c, "WinDLL", return_value=NoNativeCalls(), create=True):
+        for key in keys:
+            sys.modules.pop(key, None)
+        return tool.load_dependencies(pins)[2]
 
 
 class Reader:
@@ -55,5 +216,298 @@ class SelectedAssetTests(unittest.TestCase):
             reader.once(0x11000, 0x1474554)
 
 
+class PinnedVariantTests(unittest.TestCase):
+    """Use the production table, with explicitly authored in-memory test resources.
+
+    The synthetic source/target is only an external observation fixture. It does
+    not grant native admission or establish that these resources are mounted.
+    """
+    production = ROOT / "src/games/bc2/Bc2CampaignProvisioningVariants.h"
+    paths = {
+        0: ("M95_sp", "Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95"),
+        16: ("AEK971_sp", "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971"),
+        17: ("AEK971_sp_k", "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971_Kobra"),
+    }
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.directory = Path(self.temporary.name)
+        self.pins = self.directory / "source-pins.json"
+        self.selectors = self.directory / "selectors.json"
+        self.authored = {
+            "schema": "fvr.bc2.authored_resource_selectors.v1",
+            "selectors": [
+                {"name": name, "path": path.lower(),
+                 "configuration": {
+                     "missing_fields": [], "resource_sha256": str(number % 10) * 64,
+                     "fields": {key: {"value": value} for key, value in {
+                         "Ammo.MagazineCapacity": 5 if number == 0 else 30,
+                         "FireLogic.FireLogicType": "fltSingleFireWithBoltAction" if number == 0 else "fltAutomaticFire",
+                         "FireLogic.ReloadType": "rtMagazine",
+                         "FireLogic.BoltAction.BoltActionDelay": 0.0,
+                         "FireLogic.BoltAction.BoltActionTime": struct.unpack("<f", struct.pack("<f", 2.3))[0] if number == 0 else 0.0,
+                         "FireLogic.BoltAction.HoldBoltActionUntilFireRelease": number == 0,
+                         "FireLogic.BoltAction.HoldBoltActionUntilZoomRelease": False,
+                     }.items()}},
+                 "measured_family_geometry": {"fixture_only": True}}
+                for number, (name, path) in self.paths.items()
+            ],
+        }
+        self.repin()
+        self.source = {"identity": {"pid": 42, "creation": 1234, "session": 1234,
+                                    "executable": "fixture.exe", "executable_sha256": "a" * 64},
+                       "source_sequence": 3, "source_observed_ns": 900}
+
+    def repin(self):
+        self.selectors.write_text(json.dumps(self.authored), encoding="utf-8")
+        files = {}
+        for key, path in (("variants", self.production), ("selectors", self.selectors)):
+            blob = path.read_bytes()
+            files[key] = {"path": str(path), "bytes": len(blob), "sha256": hashlib.sha256(blob).hexdigest()}
+        self.pins.write_text(json.dumps({"schema": "fvr.bc2.provision-reader-pins.v1", "files": files}), encoding="utf-8")
+        self.manifest, self.blobs = tool.load_pins(self.pins)
+
+    def snapshot(self, variant=16):
+        name, path = self.paths[variant]
+        # Independent fixture bytes for the current M95/AEK native configurations.
+        values = {12: 0, 16: 0x3f400000, 20: 0, 24: 0x404ccccd, 32: 1,
+                  36: 2, 44: 0, 76: 8, 80: 0, 84: 0, 88: 0, 89: 0,
+                  140: 29, 384: 4, 388: 30}
+        if variant == 0:
+            values.update({16: 0x3f2b851f, 24: 0x40dccccd, 36: 1,
+                           80: 0x40133333, 89: 1, 384: 5, 388: 5})
+            del values[44]
+        primary = bytearray(0x194)
+        words = []
+        for offset, value in values.items():
+            size = 1 if offset in (88, 89) else 4
+            primary[offset:offset + size] = value.to_bytes(size, "little")
+            words.append({"primary_offset": offset, "bytes": size, "value": value})
+        return {"schema": tool.SCHEMA, "accepted": True, "complete": True, "variant": variant,
+                "source_before": copy.deepcopy(self.source), "source_after": copy.deepcopy(self.source),
+                "pinned_expected_metadata": {
+                    "name": name, "path": path, "authored_dbx_resource_sha256": str(variant % 10) * 64,
+                    "dependency_manifest_sha256": hashlib.sha256(self.pins.read_bytes()).hexdigest(),
+                    "files": copy.deepcopy(self.manifest["files"])},
+                "target": {"name": name, "path": path, "data": 0x12000,
+                           "asset": {"address": 0x11000, "object": 0x12000, "path": path},
+                           "observed_native": {"words": words, "fire_logic_hex": primary[12:0x98].hex(),
+                                               "ammo_hex": primary[0x170:0x194].hex()}}}
+
+    def test_current_production_aek_and_m95(self):
+        aek = tool.exact_variant(self.blobs, 16)
+        self.assertEqual((aek["name"], aek["path"]), self.paths[16])
+        self.assertIn((36, 4, 2), aek["words"])
+        self.assertIn((388, 4, 30), aek["words"])
+        self.assertEqual(tool.bound_target(self.snapshot(), self.source, 42, 16, pins=self.pins),
+                         (16, 0x11000, 0x12000))
+        self.assertEqual(tool.bound_target(self.snapshot(0), self.source, 42, pins=self.pins),
+                         (0, 0x11000, 0x12000))
+
+    def test_aek_exact_words_and_both_sweeps_with_reader_standin(self):
+        # Portable wrapper coverage only; the explicit assembled case below
+        # exercises the actual retained reader, reflection and authored fields.
+        snapshot = self.snapshot()
+        target = snapshot["target"]
+        target.update(firing_data=0x13000, primary_fire=0x14000)
+        target["asset"].update(name_offset=12, object_offset=0x50)
+        heap = bytearray(0x5000)
+        struct.pack_into("<I", heap, 0x1000, 0x1474554)
+        struct.pack_into("<I", heap, 0x100c, 0x15000)
+        struct.pack_into("<I", heap, 0x2000, 0x145f098)
+        heap[0x400c:0x4098] = bytes.fromhex(target["observed_native"]["fire_logic_hex"])
+        heap[0x4170:0x4194] = bytes.fromhex(target["observed_native"]["ammo_hex"])
+
+        class Memory:
+            base = 0x400000
+
+            def read(self, address, size):
+                return bytes(heap[address - 0x10000:address - 0x10000 + size])
+
+            def query(self, address):
+                if address == 0x10000:
+                    return (0x10000, len(heap), 0x1000, 0x20000, 4)
+                return (0x15000, tool.END - 0x15000, 0x10000, 0, 0)
+
+        class Selected(Reader):
+            def field(self, info, name):
+                return {"offset": {"Name": 12, "PrimaryFire": 0x40, "FireLogic": 12, "Ammo": 0x170}[name]}
+
+            def once(self, asset, table):
+                return copy.deepcopy(target)
+
+            def verify(self):
+                pass
+
+        memory = Memory()
+        selected = Selected(self.paths[16][1])
+        selected.p = tool.BudgetedProcess(memory, memory.query, 1024 * 1024, 30)
+        exact = tool.ExactReader(selected, tool.exact_variant(self.blobs, 16))
+        result, coverage = tool.discover(exact, 0x1474554)
+        self.assertEqual(result["name"], "AEK971_sp")
+        self.assertEqual(coverage["passes"], 2)
+        self.assertEqual(selected.p.candidates, 2)
+        # One changed magazine-capacity byte must invalidate the same selection.
+        heap[0x4184] = 5
+        with self.assertRaisesRegex(tool.Incomplete, "variant word mismatch"):
+            tool.discover(exact, 0x1474554)
+
+    def test_aek_both_sweeps_with_pinned_retained_reader(self):
+        if READER_PINS is None:
+            self.skipTest("Retained reader NOT exercised: supply --reader-pins PATH to the reviewed dependency manifest")
+        modules = retained_modules(READER_PINS)
+        variant = tool.exact_variant(self.blobs, 16)
+        row = variant["authored"]
+        memory = ResourceMemory(variant["path"], variant["name"], self.snapshot()["target"]["observed_native"])
+        bounded = tool.BudgetedProcess(memory, memory.query, 1024 * 1024, 30)
+        selected = modules["read_weapon_resources"].SelectedResourceReader(
+            bounded, ResourceImage(memory), {variant["path"].lower(): row})
+        table = modules["read_stock_sniper_resources"].ASSET_TABLE
+        # This is the unmodified real once/compare_config path, including actual
+        # Inspector parsing of fixture reflection records and native bytes.
+        observed = selected.once(0x11000, table)
+        self.assertEqual(observed["configuration"]["ammo"]["MagazineCapacity"], 30)
+        self.assertEqual(observed["measured_family_geometry"], {"fixture_only": True})
+        self.assertEqual(observed["authored_configuration_sha256"], "6" * 64)
+        exact = tool.ExactReader(selected, variant)
+        result, coverage = tool.discover(exact, table)
+        self.assertEqual((result["name"], result["path"]), self.paths[16])
+        self.assertEqual(coverage["passes"], 2)
+        self.assertEqual(bounded.candidates, 2)
+        self.assertEqual(result["observed_native"], self.snapshot()["target"]["observed_native"])
+
+        # Every field consumed by canonical compare_config must actually agree.
+        for key, field in row["configuration"]["fields"].items():
+            original = field["value"]
+            field["value"] = not original if isinstance(original, bool) else (
+                original + "_other" if isinstance(original, str) else original + 1)
+            try:
+                with self.subTest(field=key), self.assertRaisesRegex(
+                        ValueError, "Authored/native configuration differs: " + re.escape(key)):
+                    selected.once(0x11000, table)
+            finally:
+                field["value"] = original
+        for container, key in ((row["configuration"], "fields"), (row, "measured_family_geometry")):
+            original = container.pop(key)
+            try:
+                with self.subTest(missing=key), self.assertRaises(KeyError):
+                    selected.once(0x11000, table)
+            finally:
+                container[key] = original
+        # NumberOfMagazines is outside compare_config; production exact words
+        # must still reject its changed byte after the real retained read.
+        memory.heap[0x4180] = 5
+        with self.assertRaisesRegex(tool.Incomplete, "variant word mismatch"):
+            tool.discover(exact, table)
+
+    def test_unsupported_integer_or_name_never_selects(self):
+        for variant in (-1, 23, 0x100000000, True, "16", "AEK971_sp"):
+            with self.subTest(variant=variant), self.assertRaises(ValueError):
+                tool.exact_variant(self.blobs, variant)
+
+    def test_production_entry_requires_unique_complete_authored_selector(self):
+        for change in ("absent", "name", "path", "incomplete", "ambiguous"):
+            authored = copy.deepcopy(self.authored)
+            row = authored["selectors"][1]
+            if change == "absent":
+                authored["selectors"].remove(row)
+            elif change in ("name", "path"):
+                row[change] += "_other"
+            elif change == "incomplete":
+                row["configuration"]["missing_fields"] = ["Ammo.MagazineCapacity"]
+            else:
+                authored["selectors"].append(copy.deepcopy(row))
+            with self.subTest(change=change), self.assertRaisesRegex(ValueError, "authored selector absent"):
+                tool.exact_variant({**self.blobs, "selectors": json.dumps(authored).encode()}, 16)
+
+    def test_selected_snapshot_cannot_be_relabelled_as_another_variant(self):
+        snapshot = self.snapshot()
+        with self.assertRaises(ValueError):
+            tool.bound_target(snapshot, self.source, 42, 17, pins=self.pins)
+        # AEK's Kobra variant has the same native words but a different exact resource.
+        snapshot["variant"] = 17
+        snapshot["pinned_expected_metadata"] = self.snapshot(17)["pinned_expected_metadata"]
+        with self.assertRaisesRegex(ValueError, "production selector"):
+            tool.bound_target(snapshot, self.source, 42, 17, pins=self.pins)
+
+    def test_consumer_refuses_mismatched_metadata_resource_or_native_words(self):
+        for change in ("metadata", "data_path", "asset_path", "name", "word", "bytes", "byte_bounds", "pins"):
+            snapshot = self.snapshot()
+            target = snapshot["target"]
+            if change == "metadata":
+                snapshot["pinned_expected_metadata"]["name"] = "M95_sp"
+            elif change == "data_path":
+                target["path"] = self.paths[17][1]
+            elif change == "asset_path":
+                target["asset"]["path"] = self.paths[17][1]
+            elif change == "name":
+                target["name"] = self.paths[17][0]
+            elif change == "word":
+                target["observed_native"]["words"][-1]["value"] = 5
+            elif change == "bytes":
+                target["observed_native"]["ammo_hex"] = "00" * 0x24
+            elif change == "byte_bounds":
+                target["observed_native"]["ammo_hex"] += "00"
+            else:
+                snapshot["pinned_expected_metadata"]["dependency_manifest_sha256"] = "0" * 64
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                tool.bound_target(snapshot, self.source, 42, 16, pins=self.pins)
+
+    def test_changed_pinned_selector_refuses_without_import_or_fallback(self):
+        snapshot = self.snapshot()
+        self.selectors.write_text("{}", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "Pinned dependency changed"):
+            tool.bound_target(snapshot, self.source, 42, 16, pins=self.pins)
+
+    def test_unverified_production_table_refuses(self):
+        replaced = self.directory / "variants.h"
+        replaced.write_bytes(self.production.read_bytes().replace(b'"AEK971_sp"', b'"Arbitrary"'))
+        self.manifest["files"]["variants"]["path"] = str(replaced)
+        self.pins.write_text(json.dumps(self.manifest), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "Pinned dependency changed: variants"):
+            tool.load_pins(self.pins)
+
+    def test_consumer_retains_identity_sequence_completeness_and_address_gates(self):
+        for change in ("identity", "sequence", "complete", "accepted", "unaligned", "bounds", "relationship"):
+            snapshot, fresh = self.snapshot(), copy.deepcopy(self.source)
+            if change == "identity":
+                fresh["identity"]["session"] += 1
+            elif change == "sequence":
+                fresh["source_sequence"] -= 1
+            elif change in ("complete", "accepted"):
+                snapshot[change] = False
+            elif change == "unaligned":
+                snapshot["target"]["asset"]["address"] += 1
+            elif change == "bounds":
+                snapshot["target"]["asset"]["address"] = tool.END
+            else:
+                snapshot["target"]["asset"]["object"] += 4
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                tool.bound_target(snapshot, fresh, 42, 16, pins=self.pins)
+
+    def test_cli_default_and_explicit_variant_reach_source_gate(self):
+        for variant in (0, 16):
+            output = self.directory / (str(variant) + ".json")
+            args = ["--session-dir", str(self.directory), "--pid", "42", "--output", str(output),
+                    "--pins", str(self.pins)]
+            if variant:
+                args += ["--variant", str(variant)]
+            with self.subTest(variant=variant), \
+                    mock.patch.object(tool, "load_dependencies", return_value=(self.manifest, self.blobs, {})), \
+                    mock.patch.object(tool, "read_source", side_effect=tool.Incomplete("fixture source unavailable")), \
+                    mock.patch("sys.stdout", new_callable=io.StringIO):
+                self.assertEqual(tool.main(args), 3)
+            report = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(report["variant"], variant)
+            self.assertEqual(report["pinned_expected_metadata"]["name"], self.paths[variant][0])
+            self.assertEqual(report["refusal"], "fixture source unavailable")
+            self.assertFalse(report["accepted"])
+
+
 if __name__ == "__main__":
-    unittest.main()
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--reader-pins", type=Path)
+    options, remaining = parser.parse_known_args()
+    READER_PINS = options.reader_pins
+    unittest.main(argv=[sys.argv[0], *remaining])

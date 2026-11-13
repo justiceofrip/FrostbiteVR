@@ -318,7 +318,7 @@ bool PistolSlideTrackingFresh(const Tracking& input,const Bc2PhysicalPistolSlide
         input.controllerEvidence.sequence==input.input.generation&&
         input.controllerEvidence.owner.equipGeneration==input.equipmentGeneration&&
         input.controllerEvidence.deadlineNs<=ReloadNanos(input.deadline)&&
-        bc2_pistol_slide_presentation_detail::Packet(input.controllerEvidence,p.currentSafety)&&
+        Bc2PistolSlidePublicationSafetyFresh(p.currentSafety,input.controllerEvidence,now)&&
         input.nativeEquipment.weapon==p.owner.weapon&&input.nativeEquipment.data&&
         input.nativeEquipment.Asset()==p.selection.asset&&PistolSlidePresentationFresh(p,now);
 }

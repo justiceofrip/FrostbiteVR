@@ -31,6 +31,47 @@ Bc2PistolSlideSource Source(){
 bool Fresh(const Bc2PistolSlideSource& s,std::int64_t now=1020000000){
     return Bc2PistolSlideSourceFresh(s,s.input,s.gunClaim,s.mechanismClaim,s.rig,now);
 }
+int PublicationAcceptsOnlySamePacketWithinOriginalWindow(){
+    const auto source=Source();const auto safety=source.input;
+    // The slide freezes safety first; ordinary support handling then advances
+    // controllerEvidence.nowNs before PublishTracking validates the pair.
+    auto evidence=safety;evidence.nowNs+=2000000;
+    const auto publicationNow=evidence.nowNs+500000;
+    const auto admitted=[&](const HandInteractionSample& current,std::int64_t now){
+        return Bc2PistolSlidePublicationSafetyFresh(safety,current,now);};
+    CHECK(admitted(evidence,publicationNow));
+    CHECK(admitted(evidence,evidence.nowNs));
+    CHECK(admitted(safety,safety.nowNs));
+    CHECK(admitted(safety,publicationNow));
+    CHECK(Bc2PistolSlideSourceFresh(source,safety,source.gunClaim,source.mechanismClaim,source.rig,publicationNow));
+    auto bad=evidence;bad.nowNs=safety.nowNs-1;CHECK(!admitted(bad,publicationNow));
+    bad=evidence;bad.nowNs=publicationNow+1;CHECK(!admitted(bad,publicationNow));
+    CHECK(!admitted(safety,safety.nowNs-1));
+    CHECK(admitted(evidence,safety.deadlineNs-1));
+    CHECK(!admitted(evidence,safety.deadlineNs));
+    bad=evidence;bad.nowNs=safety.deadlineNs;CHECK(!admitted(bad,bad.nowNs));
+    bad=evidence;bad.nowNs=safety.deadlineNs+1;CHECK(!admitted(bad,bad.nowNs));
+    bad=evidence;++bad.owner.actor;CHECK(!admitted(bad,publicationNow));
+    bad=evidence;++bad.owner.actorGeneration;CHECK(!admitted(bad,publicationNow));
+    bad=evidence;++bad.owner.equipGeneration;CHECK(!admitted(bad,publicationNow));
+    bad=evidence;++bad.owner.space;CHECK(!admitted(bad,publicationNow));
+    bad=evidence;++bad.sequence;CHECK(!admitted(bad,publicationNow));
+    bad=evidence;--bad.sequence;CHECK(!admitted(bad,publicationNow));
+    bad=evidence;++bad.observedNs;CHECK(!admitted(bad,publicationNow));
+    bad=evidence;--bad.deadlineNs;CHECK(!admitted(bad,publicationNow));
+    // A still-valid newer packet cannot renew the original safety lease.
+    bad=evidence;++bad.sequence;bad.observedNs+=1000000;bad.deadlineNs+=1000000;
+    CHECK(!admitted(bad,publicationNow));
+    bad=evidence;++bad.deadlineNs;CHECK(!admitted(bad,publicationNow));
+    bad=evidence;bad.focused=false;CHECK(!admitted(bad,publicationNow));
+    for(unsigned hand=0;hand<2;++hand){
+        bad=evidence;bad.tracked[hand]=false;CHECK(!admitted(bad,publicationNow));
+        bad=evidence;bad.released[hand]=true;CHECK(!admitted(bad,publicationNow));
+    }
+    // Equal packets still require live safety evidence, not merely equality.
+    bad=evidence;bad.focused=false;
+    CHECK(!Bc2PistolSlidePublicationSafetyFresh(bad,bad,publicationNow));return 0;
+}
 int OriginalInputAndClaimsCannotBeRenewedByNewPackets(){
     const auto s=Source();CHECK(Fresh(s));auto current=s;
     ++current.input.sequence;current.input.observedNs+=10000000;current.input.deadlineNs+=10000000;
@@ -294,6 +335,7 @@ int SyntheticRowOwnsAxisWristTopologyAndBindingKey(){
 }
 }
 int main(){
+    CHECK(PublicationAcceptsOnlySamePacketWithinOriginalWindow()==0);
     CHECK(OriginalInputAndClaimsCannotBeRenewedByNewPackets()==0);
     CHECK(ActualGunAndMechanismOwnershipAreRequired()==0);
     CHECK(RawControllerBasisAndOffAxisMotionArePreserved()==0);
@@ -305,5 +347,5 @@ int main(){
     CHECK(TypedTargetCannotBorrowAnotherFeedClaimOrGeometry()==0);
     CHECK(SelectedConfigurationAndOriginalLeaseMustSurvive()==0);
     CHECK(SyntheticRowOwnsAxisWristTopologyAndBindingKey()==0);
-    std::puts("Bc2PistolSlidePresentationTests: 11 source/custody/selection/geometry/scale/leaf groups; synthetic fixture is not enrollment; no native/headset acceptance");
+    std::puts("Bc2PistolSlidePresentationTests: 12 publication/source/custody/selection/geometry/scale/leaf groups; synthetic fixture is not enrollment; no native/headset acceptance");
 }

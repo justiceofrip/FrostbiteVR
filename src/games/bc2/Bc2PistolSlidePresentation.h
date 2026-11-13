@@ -31,10 +31,6 @@ struct Bc2PistolSlideWorldFrames {
     math::Matrix4 slide{},authoredWrist{};
 };
 namespace bc2_pistol_slide_presentation_detail {
-inline bool Packet(const interaction::HandInteractionSample& a,const interaction::HandInteractionSample& b)noexcept {
-    return a.owner==b.owner&&a.sequence==b.sequence&&a.observedNs==b.observedNs&&a.deadlineNs==b.deadlineNs&&
-        a.nowNs==b.nowNs&&a.focused==b.focused&&a.tracked==b.tracked&&a.released==b.released;
-}
 template<std::size_t N> inline std::string_view Text(const std::array<char,N>& value)noexcept {
     const auto end=std::find(value.begin(),value.end(),'\0');
     return end==value.end()?std::string_view{}:std::string_view(value.data(),std::size_t(end-value.begin()));
@@ -91,6 +87,17 @@ inline std::optional<interaction::BoneWrite> LeafWrite(const RigSnapshot& rig,
 inline math::Matrix4 ScaleTranslation(math::Matrix4 frame,float units)noexcept {
     for(unsigned i=0;i<3;++i)frame.values[3][i]*=units;return frame;
 }
+}
+// Later processing of the same safety packet may advance its clock before
+// publication, but cannot change the packet, extend its lease or run ahead of now.
+[[nodiscard]] inline bool Bc2PistolSlidePublicationSafetyFresh(
+    const interaction::HandInteractionSample& original,const interaction::HandInteractionSample& current,
+    std::int64_t now)noexcept {
+    using namespace bc2_pistol_slide_presentation_detail;
+    return Window(original,now)&&Window(current,now)&&current.nowNs>=original.nowNs&&
+        current.owner==original.owner&&current.sequence==original.sequence&&
+        current.observedNs==original.observedNs&&current.deadlineNs==original.deadlineNs&&
+        current.focused==original.focused&&current.tracked==original.tracked&&current.released==original.released;
 }
 [[nodiscard]] inline bool Bc2PistolSlideSourceFresh(const Bc2PistolSlideSource& source,
     const interaction::HandInteractionSample& current,const interaction::HandClaim& currentGun,

@@ -32,7 +32,8 @@ def digest(blob):
     return hashlib.sha256(blob).hexdigest()
 
 
-def load_dependencies(manifest_path):
+def load_pins(manifest_path):
+    """Verify the caller's trusted manifest without executing reader modules."""
     manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
     if manifest.get("schema") != "fvr.bc2.provision-reader-pins.v1":
         raise ValueError("Dependency manifest schema")
@@ -43,6 +44,13 @@ def load_dependencies(manifest_path):
         if len(blob) != pin["bytes"] or digest(blob) != pin["sha256"]:
             raise ValueError("Pinned dependency changed: " + key)
         blobs[key] = blob
+    if not {"variants", "selectors"} <= blobs.keys():
+        raise ValueError("Pinned production variants and authored selectors required")
+    return manifest, blobs
+
+
+def load_dependencies(manifest_path):
+    manifest, blobs = load_pins(manifest_path)
     modules = {}
     for key in ("read_bc2", "capture_reload_state", "read_flynn_catalog",
                 "read_stock_sniper_resources", "read_weapon_resources"):
@@ -60,6 +68,8 @@ def load_dependencies(manifest_path):
 def exact_variant(blobs, variant):
     # Parse the pinned production initializer; there is no separately hand-written
     # configuration table. Fail if its deliberately narrow representation changes.
+    if type(variant) is not int or not 0 <= variant <= 0xffffffff:
+        raise ValueError("Unsigned production variant required")
     lines = [line for line in blobs["variants"].decode("utf-8").splitlines()
              if line.startswith("{" + str(variant) + ",")]
     if len(lines) != 1:
@@ -166,21 +176,46 @@ def verify_process(process, identity, expected_hash, expected_pid):
         raise Incomplete("Exact retained process/session identity changed")
 
 
-def bound_target(snapshot, fresh_source, pid, variant=0):
+def bound_target(snapshot, fresh_source, pid, variant=0, *, pins=None):
     """Consumer check immediately BEFORE asking the existing command to equip.
 
     Does not grant or extend the native source lease. Command/native SeatEntry
     still validate their own fresh source, target relationship and original arm.
+    The caller supplies the same reviewed pins used for scanning; snapshot paths
+    are never used as authority for loading a selector or production table.
     """
+    pins = Path(pins) if pins is not None else Path(__file__).with_name("source-pins.json")
+    manifest, blobs = load_pins(pins)
+    selected = exact_variant(blobs, variant)
     if (snapshot.get("schema") != SCHEMA or snapshot.get("accepted") is not True
             or snapshot.get("complete") is not True or snapshot.get("variant") != variant
-            or variant != 0 or fresh_source["identity"]["pid"] != pid
+            or type(snapshot.get("variant")) is not int or fresh_source["identity"]["pid"] != pid
             or snapshot["source_after"]["identity"] != fresh_source["identity"]
             or snapshot["source_before"]["identity"] != fresh_source["identity"]
             or fresh_source["source_sequence"] < snapshot["source_after"]["source_sequence"]
             or fresh_source["source_observed_ns"] < snapshot["source_after"]["source_observed_ns"]):
         raise ValueError("Target snapshot is not bound to this retained native source")
     target = snapshot["target"]
+    expected = snapshot.get("pinned_expected_metadata", {})
+    if (expected.get("name") != selected["name"] or expected.get("path") != selected["path"]
+            or expected.get("authored_dbx_resource_sha256") != selected["authored"]["configuration"]["resource_sha256"]
+            or expected.get("dependency_manifest_sha256") != digest(pins.read_bytes())
+            or expected.get("files") != manifest["files"]
+            or target.get("name") != selected["name"]
+            or target.get("path", "").lower() != selected["path"].lower()
+            or target["asset"].get("path", "").lower() != selected["path"].lower()):
+        raise ValueError("Target snapshot differs from the pinned production selector")
+    observed = target.get("observed_native", {})
+    if observed.get("words") != [dict(primary_offset=offset, bytes=size, value=value)
+                                 for offset, size, value in selected["words"]]:
+        raise ValueError("Target snapshot differs from the pinned production words")
+    logic, ammo = bytes.fromhex(observed.get("fire_logic_hex", "")), bytes.fromhex(observed.get("ammo_hex", ""))
+    if len(logic) != 0x8c or len(ammo) != 0x24:
+        raise ValueError("Target snapshot native configuration bounds")
+    for offset, size, value in selected["words"]:
+        block, origin = (logic, 0xc) if offset < 0x170 else (ammo, 0x170)
+        if int.from_bytes(block[offset - origin:offset - origin + size], "little") != value:
+            raise ValueError("Target snapshot native bytes differ from the pinned production words")
     asset, data = target["asset"]["address"], target["data"]
     if (not isinstance(asset, int) or not isinstance(data, int) or not BEGIN <= asset < END
             or not BEGIN <= data < END or asset % 4 or data % 4
@@ -385,7 +420,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--session-dir", type=Path, required=True)
     parser.add_argument("--pid", type=int, required=True)
-    parser.add_argument("--variant", type=int, default=0)
+    parser.add_argument("--variant", type=int, default=0,
+                        help="Exact production variant also present in the reviewed authored selectors (default: 0)")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--pins", type=Path, default=Path(__file__).with_name("source-pins.json"))
     parser.add_argument("--max-read-mib", type=int, default=4096)
@@ -393,8 +429,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if not 0 < args.pid <= 0xffffffff or not 1 <= args.max_read_mib <= 8192 or not 1 <= args.max_seconds <= 180:
         parser.error("Bounded PID/scan arguments required")
-    if args.variant != 0:
-        parser.error("This retained M95 seam supports only pinned variant 0")
+    if not 0 <= args.variant <= 0xffffffff:
+        parser.error("Unsigned production variant required")
     no_link_ancestors(args.output)
     if args.output.exists() or args.output.with_name(args.output.name + ".pending").exists():
         parser.error("Output/pending file exists; preserve the earlier observation")
