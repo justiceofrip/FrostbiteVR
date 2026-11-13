@@ -1,11 +1,11 @@
 # Current state — shared normal integration / public 0.1.15
 
-Updated November 12, 2026. This replaces old next-step instructions; prior evidence remains in
+Updated November 13, 2026. This replaces old next-step instructions; prior evidence remains in
 [history/](history/README.md) (search it by run number; never read a log whole).
 
 ## Active work
 
-Private **0.1.93** is installed and setup-validated, with0.1.92 as fallback and earlier retained versions preserved. Both normal architectures compiled source988b557 and passed364x86/361x64 checks; focused knife and rendering checks passed, and unchanged host WARP evidence was reused. Settings, cache and the desktop shortcut are preserved. Source is pushed; no public release or new headset acceptance follows. [Delivery and current family checks](../handoff/integrations/coordinator-20261113-family-runtime/README.txt).
+Private **0.1.94** is installed and setup-validated, with0.1.93 as fallback and earlier retained versions preserved. Both normal architectures compiled sourcef8f20d9 and passed364x86/361x64 checks; focused navigation checks passed, and unchanged host WARP evidence was reused. Settings, cache and the desktop shortcut are preserved. Source is pushed; no public release or new headset acceptance follows. [Delivery and navigation](../handoff/integrations/coordinator-20261113-navigation/README.txt), [retained family checks](../handoff/integrations/coordinator-20261113-family-runtime/README.txt).
 
 Optional performance mode is off by default. Actual92/01 verified1x native render/depth targets, all three source slots and visible gameplay at simulated1024x768; originalMSAA3, profiles and launcher settings were restored after normal game exit. This qualifies the settings lifecycle and native path, not headset resolution, FPS or physical allocation. Four native depth-eye rejections remain recorded. [Current evidence](../handoff/integrations/coordinator-20261113-family-runtime/README.txt).
 
@@ -27,7 +27,7 @@ Actual93/03 completed native Draw1 → Attack2 → Return3 from one measured120m
 
 Actual87/05 completed23 ordinary movement/head-turn pulses across eight invocations, all with acknowledged neutral release. Both-eye review shows the player leaving the house and walking into the courtyard. This establishes the campaign navigation path; C4 objectives and a mission-permitted vehicle seat have not yet been reached. Navigation41 and reload79 offline checks pass. Native input/source deadlines remain unchanged. [Scope and checks](../handoff/integrations/coordinator-20261112-campaign-tools/README.txt).
 
-Actual93/04 used the campaign runner for739 seconds and retained the first mission's beach checkpoint, then closed normally and restored profiles/settings. Scripted knife selection exposed a navigation-tool dependency on firearm publication. The new passive navigation observation separates those checks while preserving current player, input and menu deadlines; weapon validity and gameplay permissions remain unchanged. Its combined build and actual-game check are pending. C4 progression is still open. [Navigation batch](../handoff/integrations/coordinator-20261113-navigation/README.txt).
+Actual94/01 resumed the retained first-mission beach checkpoint and used the new navigation observation with the scripted knife selected; both-eye captures show movement from water onto shore. Root firearm snapshots were valid in this run, so the missing-firearm case remains qualified offline only. A180/-180degree tool comparison and later command-preparation expiry stopped further progress; controls released cleanly. The888-second session retired normally and restored profiles/settings. C4 remains open. [Navigation batch](../handoff/integrations/coordinator-20261113-navigation/README.txt).
 
 The chest knife accepts a deliberate physical jab while held, with no trigger press required; actual93/03 now confirms the native attack dispatch. The optional stock trigger attack remains. The jab uses BC2's original melee targeting; tracked blade-tip collision is disabled. Release grip to return the knife. Target damage, headset feel and visibility stability remain unproved. Earlier inventory allocation improvements remain included without an FPS-gain claim. [Jab implementation](../handoff/integrations/coordinator-20261107-native75/README.txt), [current native result](../handoff/integrations/coordinator-20261113-family-runtime/README.txt).
 

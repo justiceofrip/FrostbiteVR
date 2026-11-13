@@ -78,6 +78,17 @@ RECORDED_DIAGNOSTIC_TIMING = dict(
     neutralCommittedNs=654246267229200, commandAckNs=45_489_100)
 
 
+# Actual94/01 9008cd89094e4eae92c03ab82d0fa956, command seq83; events.jsonl
+# SHA256 05e445ef82a15bb6426d49ea0ef626ae855dabf48ed93e55fc79cdfeef08b439.
+# The exact requested/acknowledged head projection falsely failed settled
+# equality after two completed turns. Seq86 committed exact-zero cleanup.
+# Other cyclic representations below are synthetic, not new native evidence.
+RECORDED_YAW_WRAP = dict(
+    requestedNs=670831005973400, committedNs=670831101933900,
+    requestedHead=dict(pos=[0.0, 1.6, 0.0], ypr=[180.0, 0.0, 0.0], valid=True),
+    settledHead=dict(pos=[0.0, 1.6, 0.0], ypr=[-180.0, 0.0, 0.0], valid=True))
+
+
 # Admission projection of actual86/02 da9146dcd773411eb7e108a7675f1e4d
 # snapshot-001.json.gz (SHA256 43f8dcdaa90526ef0151c9bcc2c6d341690b88cf2d44a3ffe712c4300814b5d4).
 # Replay below changes only the synthetic clock, nonce and simulated input;
@@ -764,26 +775,72 @@ class NavigationTests(unittest.TestCase):
         return code, json.loads(output.getvalue().strip().splitlines()[-1])
 
     def test_real_assembled_head_stick_zero_and_second_episode(self):
-        self.rows.append(dict(left=[.25, 0], right=[.1, 0], holdMs=400))
-        code, result = self.assembled()
-        self.assertEqual((code, result.get("error")), (0, None))
-        self.assertEqual(len(self.calls), 4)
-        self.assertEqual(self.calls[1], self.m.ZERO)
-        self.assertEqual(self.calls[3], self.m.ZERO)
-        self.assertTrue(all(record["pending"] for record in self.owner_records))
-        self.assertTrue(self.held_owner_records)
-        self.assertTrue(all(record["pending"] and not record["navigation"]["neutralCommitted"]
-                            for record in self.held_owner_records))
-        owner = json.loads((self.run / "live-driver-owner.json").read_text())
-        self.assertFalse(owner["pending"])
-        self.assertTrue(owner["navigation"]["neutralCommitted"])
-        self.assertEqual(self.state["head"]["ypr"], [10, 0, 0])
-        for key in ("handL", "handR"):
-            self.assertEqual(self.state[key], self.initial_state[key])
-        self.assertEqual(self.state["head"]["pos"], self.initial_state["head"]["pos"])
-        self.assertFalse(result["nativeAcceptance"])
-        self.assertFalse(result["objectiveEntry"])
-        self.assertEqual(len(result["episodes"]), 2)
+        recorded = RECORDED_YAW_WRAP
+        cases = (("ordinary", 10, [10, 0, 0]),
+                 ("recorded180", recorded["requestedHead"]["ypr"][0], recorded["settledHead"]["ypr"]),
+                 ("negative180", -180, [180, 0, 0]),
+                 ("fullturn", 360, [0, 0, 0]),
+                 ("negative_fullturn", -360, [0, 0, 0]),
+                 ("changed_yaw", 180, [-179.99, 0, 0]),
+                 ("changed_yaw_at_seam", 180, [-179.99999999999997, 0, 0]),
+                 ("changed_pitch", 180, [-180, .01, 0]),
+                 ("changed_roll", 180, [-180, 0, .01]),
+                 ("changed_position", 180, [-180, 0, 0]))
+        for scenario, requested_yaw, settled_ypr in cases:
+            with self.subTest(scenario=scenario):
+                if scenario != "ordinary":
+                    self.setUp()  # Each assembled CLI owns a fresh isolated session.
+                requested = copy.deepcopy(recorded["requestedHead"])
+                requested["ypr"][0] = requested_yaw
+                settled = copy.deepcopy(recorded["settledHead"])
+                settled["ypr"] = settled_ypr[:]
+                if scenario == "changed_position":
+                    settled["pos"][0] += .01
+                look = 10 if scenario == "ordinary" else (45 if requested_yaw > 0 else -45)
+                self.state["head"] = copy.deepcopy(requested)
+                self.state["head"]["ypr"][0] -= look
+                self.initial_state = copy.deepcopy(self.state)
+                self.rows[0].update(holdMs=500, lookDegrees=[look, 0])
+                self.rows.append(dict(left=[.25, 0], right=[.1, 0], holdMs=500))
+                self.ack_delay = recorded["committedNs"] - recorded["requestedNs"]
+                self.state_mutation = lambda state, driver: state.update(head=copy.deepcopy(settled))
+                code, result = self.assembled()
+                self.assertEqual(self.calls[0][0], "head pose " + " ".join(
+                    str(v) for v in requested["pos"] + requested["ypr"]))
+                self.assertEqual(self.calls[-1], self.m.ZERO)
+                self.assertTrue(all(record["pending"] for record in self.owner_records))
+                owner = json.loads((self.run / "live-driver-owner.json").read_text())
+                self.assertFalse(owner["pending"])
+                self.assertTrue(owner["navigation"]["neutralCommitted"])
+                self.assertFalse(result["pendingCommand"])
+                self.assertFalse(result["normalStopRequired"])
+                self.assertTrue(self.m.neutral_controls(self.state["controls"]))
+                self.assertFalse(result["nativeAcceptance"])
+                self.assertFalse(result["objectiveEntry"])
+                events = [json.loads(line) for line in
+                          (Path(result["artifactDirectory"]) / "events.jsonl").read_text().splitlines()]
+                commits = [event for event in events if event["type"] == "command_commit"]
+                self.assertEqual(commits[0]["state"]["head"], settled)
+                if scenario.startswith("changed_"):
+                    self.assertEqual(code, 2)
+                    self.assertIn("head position/controller poses changed" if scenario == "changed_position"
+                                  else "settled navigation input changed", result["error"])
+                    self.assertEqual(len(self.calls), 2)
+                    self.assertEqual(result["episodes"], [])
+                    self.assertTrue(commits[-1]["cleanup"])
+                else:
+                    self.assertEqual((code, result.get("error")), (0, None))
+                    self.assertEqual(len(self.calls), 4)
+                    self.assertEqual(self.calls[1], self.m.ZERO)
+                    self.assertTrue(self.held_owner_records)
+                    self.assertTrue(all(record["pending"] and not record["navigation"]["neutralCommitted"]
+                                        for record in self.held_owner_records))
+                    self.assertEqual(self.state["head"], settled)
+                    for key in ("handL", "handR"):
+                        self.assertEqual(self.state[key], self.initial_state[key])
+                    self.assertEqual(self.state["head"]["pos"], self.initial_state["head"]["pos"])
+                    self.assertEqual(len(result["episodes"]), 2)
+                    self.assertTrue(all(not commit["cleanup"] for commit in commits))
 
     def test_no_shot_navigation_uses_original_native_input_and_acknowledged_zero(self):
         self.native_navigation = "no_shot"
@@ -1527,6 +1584,78 @@ class NavigationTests(unittest.TestCase):
         self.assertTrue(self.publication_windows[-1]["cleanup"])
         self.assertEqual(result["episodes"], [])
         self.assertFalse(result["normalStopRequired"])
+
+    def test_post_admission_stalls_are_attributed_without_extra_preflight_reads(self):
+        cases = (("state.json", 1, "command_pause"),
+                 ("state.json", 2, "command_state_read"),
+                 ("command.txt", 2, "command_ownership"),
+                 ("state.json", 3, "navigation_publication_state_read"))
+        for index, (target, ordinal, phase) in enumerate(cases):
+            with self.subTest(phase=phase):
+                if index:
+                    self.setUp()
+                self.native_navigation = "no_shot"
+                self.rows = [dict(left=[0, .3], right=[0, 0], holdMs=500),
+                             dict(left=[.3, 0], right=[0, 0], holdMs=500)]
+                reads = []
+
+                def delayed_read(path, driver):
+                    if (len(self.calls) == 2 and driver.authorized_lines is not None
+                            and not driver.cleanup_mode and not driver.releasing_sticks
+                            and not driver.pending_command):
+                        reads.append(path.name)
+                        if path.name == target and reads.count(target) == ordinal:
+                            return 110_000_000
+                    return 0
+
+                self.read_delay = delayed_read
+                code, result = self.assembled()
+                self.assertEqual(code, 2)
+                self.assertIn("original navigation source/menu lease", result["error"])
+                self.assertEqual(reads, ["session.json", "state.json", "live-driver-owner.json", "command.txt",
+                                         "session.json", "state.json", "command.txt", "session.json", "state.json"])
+                self.assertEqual(self.calls, [["stick l 0 0.3", "stick r 0 0"], self.m.ZERO, self.m.ZERO])
+                self.assertEqual(len(result["episodes"]), 1)
+                self.assertFalse(result["pendingCommand"])
+                self.assertFalse(result["normalStopRequired"])
+                self.assertEqual([window["cleanup"] for window in self.publication_windows], [False, False, True])
+                artifacts = Path(result["artifactDirectory"])
+                timing = json.loads((artifacts / "receive-timing-failure.json").read_text())
+                self.assertFalse(timing["pendingCommand"])
+                self.assertEqual(timing["transientReadRetries"], {})
+                self.assertGreaterEqual(timing["phaseNs"][phase]["maxNs"], 110_000_000)
+                for _, _, other in cases:
+                    if other != phase:
+                        self.assertLess(timing["phaseNs"][other]["maxNs"], 110_000_000)
+                events = [json.loads(line) for line in (artifacts / "events.jsonl").read_text().splitlines()]
+                refresh = [event for event in events if event["type"] == "snapshot_refresh_hold"]
+                self.assertEqual(len(refresh), 1)
+                self.assertEqual(refresh[0]["reason"], "navigation_input_not_new")
+                # The fixture's input sample is 2 ms older than its response.
+                # The immediate successor after zero therefore predates that
+                # publication and must refresh while neutral, before admission.
+                # Account for each request instead of treating this required
+                # native-input refresh as an extra command-preparation read.
+                self.assertEqual(len(self.snapshot_requests), 4)
+                self.assertEqual([sample["nonce"] for sample in self.samples], [
+                    self.driver.navigation_reference["nonce"],  # entry
+                    result["episodes"][0]["admissionNonce"],  # first pulse
+                    refresh[0]["nonce"],  # rejected neutral successor
+                    self.driver.latest_snapshot["nonce"]])  # second pulse admission
+                self.assertEqual(timing["nonce"], self.samples[-1]["nonce"])
+                zero_commit = next(event for event in events if event["type"] == "command_commit"
+                                   and event["committedNs"] == result["episodes"][0]["neutralCommittedNs"])
+                self.assertFalse(zero_commit["cleanup"])
+                self.assertEqual(refresh[0]["lastCommandWrittenNs"], zero_commit["writtenNs"])
+                self.assertLess(self.samples[2]["navigationObservation"]["inputObservedNs"],
+                                zero_commit["writtenNs"])
+                self.assertGreaterEqual(self.samples[3]["navigationObservation"]["inputObservedNs"],
+                                        zero_commit["writtenNs"])
+                self.assertTrue(all(request["actionDeadlineNs"] is None and not request["pendingCommand"]
+                                    and request["sticks"] == [0, 0, 0, 0] for request in self.snapshot_requests))
+                self.assertTrue(all(request["startedNs"] > zero_commit["committedNs"]
+                                    for request in self.snapshot_requests[2:]))
+                self.assertEqual(sum(event["type"] == "command_request" for event in events), 3)
 
     def test_recorded_source_can_expire_after_publication_without_new_diagnostic_authority(self):
         recorded = RECORDED_NAVIGATION_TIMING

@@ -571,6 +571,10 @@ interaction::ControllerActions actions;
 interaction::VehicleControllerActions vehicleActions;
 seatCycle::Button vehicleSeatButton;
 bool vehicleSeatCycleVerified=false;
+seatCycle::AttemptTrace vehicleSeatAttempts;
+std::atomic<bool> vehicleSeatObservationEnabled=false;
+// Aggregate only: callbacks refused before reading input cannot identify a new A.
+std::array<std::atomic<unsigned>,4> vehicleSeatCallbacks{};
 ContextInteractEvidence contextInteractEvidence;
 NavigationObservationPublication navigationObservation;
 std::atomic<unsigned> vehicleRouteRejects=0,vehicleUnsupported=0,vehicleDriveCommits=0,vehicleCameraViews=0;
@@ -2245,15 +2249,18 @@ void __fastcall GatherHook(void* self,void*,void* cache){
 #ifdef FVR_BC2_CAMPAIGN_PROVISIONING
     provisionGather.OriginalReturned();
 #endif
-    if(!enabled.load(std::memory_order_acquire)||!scope)return;
+    const bool observeSeat=navigationObservation.Enabled();
+    if(observeSeat)++vehicleSeatCallbacks[0];
+    if(!enabled.load(std::memory_order_acquire)||!scope){if(observeSeat)++vehicleSeatCallbacks[1];return;}
     if(reinterpret_cast<unsigned>(self)!=scope->owner.router||reinterpret_cast<unsigned>(cache)!=scope->owner.cache){
+        if(observeSeat)++vehicleSeatCallbacks[2];
         if(reinterpret_cast<unsigned>(self)==scope->owner.router)navigationObservation.Invalidate(NavigationObservationReason::OwnerUnavailable);
         if(!scope->used)++mismatches;return;
     }
     // Every verified local callback revokes the preceding value before any
     // refusal. Unrelated routers/caches never invalidate local observation.
     const auto navigationSerial=navigationObservation.BeginGather();
-    if(scope->used)return;
+    if(scope->used){if(observeSeat)++vehicleSeatCallbacks[3];return;}
 #ifdef FVR_BC2_CAMPAIGN_PROVISIONING
     if(scope->provisionExcluded){
         // No gestures, physical policy, lifetime loss or cancellation during
@@ -2320,6 +2327,13 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     if(!fresh||!input.focused||vehicleShotSpace!=input.spaceGeneration){vehicleShotObserver.Invalidate();boatReticle.Invalidate();}
     vehicleShotSpace=input.spaceGeneration;
     const auto& owner=scope->owner;
+    auto seatAttempt=vehicleSeatAttempts.Observe(observeSeat&&!owner.foot,
+        {owner.soldier,rigEpoch,epoch,owner.controlled,owner.entry,owner.router,owner.cache},cachedInput);
+    auto* seatRefusal=seatAttempt?&seatAttempt->first:nullptr;
+    if(seatAttempt){auto& r=*seatAttempt;r.player=owner.player;r.weak=owner.weak;r.gather=gatherSequence;
+        r.sampledNs=HandNanos(clock.QuadPart);r.deadlineNs=HandNanos(inputDeadline);r.fresh=fresh;r.verified=vehicleSeatCycleVerified;}
+    struct SaveSeatAttempt {const std::optional<seatCycle::Attempt>& row;
+        ~SaveSeatAttempt(){if(row)vehicleSeatAttempts.Publish(*row);}} saveSeatAttempt{seatAttempt};
     std::optional<NavigationObservation> navigation;
     if(navigationSerial){
         navigation.emplace();auto& n=*navigation;n.gatherSequence=gatherSequence;
@@ -2435,6 +2449,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     // Native gather encodes allowed float actions in low bits of +98.
     // Require movement and fire eligibility; menus/cutscenes must keep control.
     unsigned allowed=0;const bool allowedRead=Read(owner.cache+0x98,&allowed,sizeof(allowed));
+    if(seatAttempt)seatAttempt->permissions=allowed;
     const bool vehicleInteraction=!owner.foot&&Type(owner.controlled,"ClientVehicleEntity")&&(allowed&0x11u)==0x11u;
     bool nativePlaying=owner.foot?(allowed&0x103u)==0x103u:vehicleInteraction;
     if(navigation){
@@ -2454,7 +2469,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         const VehicleRouteMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t n){return Read(at,dst,n);},[](void*,unsigned at,const char* name){return Type(at,name);}};
         const VehicleRouteBinding binding{unsigned(image+profile.gameplay.managerVtable),unsigned(image+profile.gameplay.inputRouterVtable),unsigned(image+profile.cacheVtable),true};
         const auto routes=ReadVehicleRoutes(memory,binding,{owner.manager,owner.player,owner.soldier,owner.weak,rigEpoch,epoch});
-        if(routes.status!=VehicleRouteStatus::Okay){++vehicleRouteRejects;vehicleActions.Reset();PublishVehicleView({});return;}
+        if(routes.status!=VehicleRouteStatus::Okay){seatCycle::Admit(false,seatCycle::Gate::Routes,seatRefusal);++vehicleRouteRejects;vehicleActions.Reset();PublishVehicleView({});return;}
         const auto& seat=routes.snapshot;const auto data=U32(owner.controlled+12),entryData=U32(owner.entry+12);
         // Revalidate live consumers on every gather; static route equality alone
         // must not preserve driving/fire authority after native reassociation.
@@ -2494,10 +2509,14 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             !cachedVehicleProfile?VehicleCameraMode::Unavailable:
             boatHeadAim&&!cachedCampaignVehicle?VehicleCameraMode::PblHeadAim:VehicleCameraMode::NativeSeat);
         // The native component/config checks must not extend the original XR lease.
-        if(cachedCampaignVehicle&&!RevalidateCampaignVehicleProfile(memory,*cachedCampaignVehicle,seat))return;
+        if(cachedCampaignVehicle&&!RevalidateCampaignVehicleProfile(memory,*cachedCampaignVehicle,seat)){seatCycle::Admit(false,seatCycle::Gate::Capability,seatRefusal);return;}
         QueryPerformanceCounter(&clock);
-        Owner check{};if(!fresh||clock.QuadPart>=inputDeadline||!controls.active||!Resolve(check)||check!=owner||!Writable(owner.cache,InputBytes))return;
+        Owner check{};if(!seatCycle::Admit(fresh&&clock.QuadPart<inputDeadline,seatCycle::Gate::Freshness,seatRefusal)||
+            !seatCycle::Admit(controls.active,seatCycle::Gate::Controller,seatRefusal)||
+            !seatCycle::Admit(Resolve(check)&&check==owner,seatCycle::Gate::Owner,seatRefusal)||
+            !seatCycle::Admit(Writable(owner.cache,InputBytes),seatCycle::Gate::Cache,seatRefusal))return;
         if(!cachedVehicleProfile){
+            seatCycle::Admit(false,seatCycle::Gate::Capability,seatRefusal);
             ++vehicleUnsupported;
             // Preserve the previously supported exit, only when this actual
             // native router independently maps ChangeVehicle16 to concept36.
@@ -2520,24 +2539,33 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         // Add only a held ChangeEntry request before the original player's restriction pass.
         // A missing gather, input owner, seat, permission or device binding requires a release.
         if(vehicleSeatCycleVerified) {
-            const bool canUse=nativePlaying && controls.armedRight && !controls.axes.exit &&
-                interaction::ValidInput(input) && interaction::GameplayOwnsInput(input.menu,HandNanos(clock.QuadPart)) &&
-                !(allowed&(seatCycle::InputBit|seatCycle::ConflictingBits)) && plan.status==VehicleInputPlanStatus::Ready;
+            const bool canUse=seatCycle::Admit(nativePlaying,seatCycle::Gate::Playing,seatRefusal) &&
+                seatCycle::Admit(controls.armedRight,seatCycle::Gate::Rearm,seatRefusal) &&
+                seatCycle::Admit(!controls.axes.exit,seatCycle::Gate::Exit,seatRefusal) &&
+                seatCycle::Admit(interaction::ValidInput(input),seatCycle::Gate::Input,seatRefusal) &&
+                seatCycle::Admit(interaction::GameplayOwnsInput(input.menu,HandNanos(clock.QuadPart)),seatCycle::Gate::Menu,seatRefusal) &&
+                seatCycle::Admit(!(allowed&(seatCycle::InputBit|seatCycle::ConflictingBits)),seatCycle::Gate::Conflict,seatRefusal) &&
+                seatCycle::Admit(plan.status==VehicleInputPlanStatus::Ready,seatCycle::Gate::Plan,seatRefusal);
             const auto currentBinding=vehicleSeatButton.CheckBinding(input,canUse,[&]() -> seatCycle::Binding {
-                const auto current=seatCycle::ReadBinding(memory,seat,true);
-                if(current && seatCycle::ReadBinding(memory,seat,true)==current && Resolve(check) && check==owner)
+                if(seatAttempt)seatAttempt->bindingChecked=true;
+                const auto current=seatCycle::ReadBinding(memory,seat,true,seatRefusal);
+                if(seatCycle::Admit(bool(current),seatCycle::Gate::Binding,seatRefusal) &&
+                    seatCycle::Admit(seatCycle::ReadBinding(memory,seat,true,seatRefusal)==current,seatCycle::Gate::BindingChanged,seatRefusal) &&
+                    seatCycle::Admit(Resolve(check)&&check==owner,seatCycle::Gate::Owner,seatRefusal))
                     return *current;
                 return {};
-            });
+            },seatRefusal);
             QueryPerformanceCounter(&clock);
-            const bool usable=canUse && clock.QuadPart<inputDeadline &&
-                interaction::GameplayOwnsInput(input.menu,HandNanos(clock.QuadPart));
+            const bool usable=canUse && seatCycle::Admit(clock.QuadPart<inputDeadline,seatCycle::Gate::Deadline,seatRefusal) &&
+                seatCycle::Admit(interaction::GameplayOwnsInput(input.menu,HandNanos(clock.QuadPart)),seatCycle::Gate::Menu,seatRefusal);
             vehicleSeatButton.Update(seat.identity,currentBinding,input,gatherSequence,HandNanos(clock.QuadPart),
-                                     HandNanos(inputDeadline),usable);
+                                     HandNanos(inputDeadline),usable,seatRefusal);
             if(clock.QuadPart>=inputDeadline)return;
-        }
+        }else seatCycle::Admit(false,seatCycle::Gate::Verification,seatRefusal);
         VehicleInputOverride patch;
-        if(!vehicleSeatButton.Apply(patch,{reinterpret_cast<std::byte*>(owner.cache),InputBytes},plan,allowed)){++vehicleRouteRejects;return;}
+        const bool vehicleApplied=vehicleSeatButton.Apply(patch,{reinterpret_cast<std::byte*>(owner.cache),InputBytes},plan,allowed,seatRefusal);
+        if(seatAttempt)seatAttempt->requested=(plan.ownedFlags&seatCycle::InputBit)!=0;
+        if(!vehicleApplied){++vehicleRouteRejects;return;}
         patch.Commit();interact.committed=true;
         if(headAim.ready&&nativeBoatAim){
             ++boatAimCommits;if(command.axes[unsigned(VehicleAxis::Fire)]>0&&!(plan.deniedAxes&(1u<<unsigned(VehicleAxis::Fire))))++boatAimFireCommits;
@@ -2554,6 +2582,9 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         record.exitHeld=command.exitHeld;record.flagsWritten=allowed;
         for(unsigned n=0;n<plan.count;++n)if(plan.edits[n].offset==0x98)record.flagsWritten=plan.edits[n].after;
         record.flagsVerified=Read(owner.cache+0x98,&record.flagsObserved,4)&&record.flagsObserved==record.flagsWritten;
+        if(seatAttempt){auto& r=*seatAttempt;r.committed=true;
+            r.flagsWritten=record.flagsWritten;r.flagsObserved=record.flagsObserved;r.readback=record.flagsVerified;
+            if(r.requested)seatCycle::Admit(record.flagsVerified,seatCycle::Gate::Readback,seatRefusal);}
         bool readback=true;
         record.role=unsigned(inputProfile.role);
         if(cachedCampaignVehicle){record.consumerDriver=cachedCampaignVehicle->driver;record.consumerCamera=cachedCampaignVehicle->camera;record.consumerWeapons=cachedCampaignVehicle->weapons;}
@@ -5535,7 +5566,9 @@ bool EnableFireRouteTelemetry()noexcept {
     fireRouteTelemetryEnabled=true;return true;
 }
 bool EnableNavigationObservation()noexcept {
-    return !enabled.load(std::memory_order_acquire)&&hooks[0]&&navigationObservation.Enable();
+    const bool started=!enabled.load(std::memory_order_acquire)&&hooks[0]&&navigationObservation.Enable();
+    if(started)vehicleSeatObservationEnabled.store(true,std::memory_order_release);
+    return started;
 }
 NavigationObservation ReadNavigationObservation()noexcept {
     LARGE_INTEGER now{};QueryPerformanceCounter(&now);return navigationObservation.Read(HandNanos(now.QuadPart));
@@ -5686,6 +5719,12 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
         floats("axis_actions",row.actions);floats("axes_before",row.before);floats("axes_written",row.written);floats("axes_observed",row.observed);out<<'}';
     }
     out<<']';ReportVehicleCameraEvidence(out);ReportBoatAimEvidence(out);
+    out<<",\"vehicle_seat_cycle_verified\":"<<(vehicleSeatCycleVerified?"true":"false")
+       <<",\"vehicle_seat_observation_enabled\":"<<(vehicleSeatObservationEnabled.load()?"true":"false")
+       <<",\"vehicle_seat_callbacks\":{\"observed\":"<<vehicleSeatCallbacks[0].load()
+       <<",\"disabled_or_no_scope\":"<<vehicleSeatCallbacks[1].load()<<",\"owner_mismatch\":"<<vehicleSeatCallbacks[2].load()
+       <<",\"already_used\":"<<vehicleSeatCallbacks[3].load()<<'}';
+    out<<",\"vehicle_seat_attempts\":";vehicleSeatAttempts.Report(out);
     out<<",\"vehicle_shot_observation\":";vehicleShotObserver.Report(out,vehicleShotBinding.verified);
     {const auto reticle=boatReticle.Statistics();out<<",\"boat_reticle\":{\"source_binding\":"<<boatReticleBinding.verified
         <<",\"observations\":"<<reticle.observations<<",\"shot_witnesses\":"<<reticle.witnesses<<",\"rejected_sources\":"<<reticle.rejected<<",\"witness_retained\":"<<reticle.ready

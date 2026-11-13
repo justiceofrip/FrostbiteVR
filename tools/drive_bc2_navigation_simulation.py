@@ -123,6 +123,15 @@ def neutral_controls(controls):
         for value in controls.values())
 
 
+def canonical_head(head):
+    """Normalize cyclic yaw only; every other head field still compares exactly."""
+    head = copy.deepcopy(head)
+    # Remainder avoids rounding away small yaw changes at the wrap boundary.
+    yaw = math.remainder(p.finite(head["ypr"][0]), 360)
+    head["ypr"][0] = 180 if yaw == -180 else yaw
+    return head
+
+
 def empty_movement_admission(snapshot, now):
     """Observe current genuine Empty; confer no weapon or mechanism authority."""
     h = snapshot.get("bodyHolster")
@@ -308,7 +317,7 @@ class NavigationDriver(t.Driver):
         need_observation(any(self.buttons_match(state, button) for button in allowed_buttons),
                          "navigation action button state changed")
         if not self.pending_command:
-            need_observation(state["head"] == self.expected_head
+            need_observation(canonical_head(state["head"]) == canonical_head(self.expected_head)
                              and [state["controls"][k] for k in ("stickL", "stickR")] == self.sticks,
                              "settled navigation input changed")
 
@@ -519,7 +528,7 @@ class NavigationDriver(t.Driver):
                 "release must contain only numeric stick zeros and the exact owned button up")
         if not cleanup and not self.releasing_sticks:
             require(self.pending_nonce is None, "navigation publication requires completed native admission")
-            self.check_observation_state(self.read_state())
+            self.check_observation_state(self.receive_timing_call("navigation_publication_state_read", self.read_state))
             self.admit_snapshot(self.latest_snapshot, time.perf_counter_ns(),
                                 t.integer(self.latest_snapshot["nonce"]))
 

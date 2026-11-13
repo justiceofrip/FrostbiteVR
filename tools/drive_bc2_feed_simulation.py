@@ -47,6 +47,7 @@ MAX_RECEIVE_TIMING_SPANS = 24
 _snapshot_json_timing = ContextVar('snapshot_json_timing', default=None)
 _read_deadline_ns = ContextVar('read_deadline_ns', default=None)
 _owner_read_timing = ContextVar('owner_read_timing', default=None)
+_receive_read_timing = ContextVar('receive_read_timing', default=None)
 REFUSAL = planner.Refusal
 require = planner.require
 integer = planner.integer
@@ -224,6 +225,9 @@ def read_bytes(path, maximum):
                 raise
             if trace is not None:
                 trace.phase("publish_owner_retry_wait")
+            receive_trace = _receive_read_timing.get()
+            if receive_trace is not None:
+                receive_trace.read_retry()
             time.sleep(min(.001, remaining / NS))
     if trace is not None:
         trace.phase("publish_owner_read")
@@ -671,7 +675,7 @@ class ReceiveTiming:
     """Passive receive spans, using diagnostic267's first-plus-bounded-tail design.
 
     Detailed AckReadTrace remains in drive_bc2_reload_stimulus.py unchanged.
-    These spans locate shared Driver receive/ACK gaps; they grant no authority.
+    These spans locate shared Driver receive/prepublication/ACK gaps; they grant no authority.
     Counters/maxima include evicted spans. No JSON or disk I/O occurs here.
     """
     def __init__(self, requested_ns, published_ns, nonce, now):
@@ -683,6 +687,7 @@ class ReceiveTiming:
         self.requested_ns, self.published_ns, self.nonce = requested_ns, published_ns, nonce
         self.first, self.tail = None, deque(maxlen=MAX_RECEIVE_TIMING_SPANS - 1)
         self.count, self.phase_ns, self.last_error = 0, {}, None
+        self.transient_read_retries = {}
         self.last_nonce = None
         self.timeout_evaluated_ns = None
         self.publication_deadline_ns = None
@@ -709,6 +714,11 @@ class ReceiveTiming:
         self.name, self.at = name, now
         return previous
 
+    def read_retry(self):
+        # Aggregate only; no per-read rows, paths, timestamps or additional I/O.
+        if not self.frozen:
+            self.transient_read_retries[self.name] = self.transient_read_retries.get(self.name, 0) + 1
+
     def error(self, error):
         if not self.frozen and self.last_error is None:
             # First phase error since this request; it may be a tolerated partial
@@ -733,7 +743,7 @@ class ReceiveTiming:
                     frozenNs=self.at, pendingCommand=self.pending_command, sequence=self.sequence,
                     lastObservedResponseNonce=self.last_nonce, firstPhaseError=self.last_error,
                     spanCount=self.count, droppedSpans=self.count-len(rows),
-                    phaseNs=self.phase_ns, spans=rows)
+                    phaseNs=self.phase_ns, transientReadRetries=self.transient_read_retries, spans=rows)
 
 
 def receive_timed(name):
@@ -1255,12 +1265,14 @@ class Driver:
                 getattr(self, "last_request_published", None),
                 getattr(self, "pending_nonce", None), now)
         previous = trace.phase(name)
+        token = _receive_read_timing.set(trace)
         try:
             yield trace
         except BaseException as error:
             trace.error(error)
             raise
         finally:
+            _receive_read_timing.reset(token)
             trace.phase("between_calls" if previous == "before_first_poll" else previous)
 
     def receive_timing_call(self, name, function, *args):
@@ -1973,13 +1985,14 @@ class Driver:
                 "timed trigger requires the shared admitted single-shot path")
         require(self.commands + len(lines) + 1 <= MAX_COMMANDS, "512-command budget exhausted")
         if not cleanup:
-            self.pause_until(max(self.last_write + 25_000_000, time.perf_counter_ns()))
+            self.receive_timing_call("command_pause", self.pause_until,
+                                     max(self.last_write + 25_000_000, time.perf_counter_ns()))
         else:
             remaining = self.last_write + 25_000_000 - time.perf_counter_ns()
             if remaining > 0:
                 time.sleep(remaining / NS)
-        before = self.read_state()
-        self.ownership(before)
+        before = self.receive_timing_call("command_state_read", self.read_state)
+        self.receive_timing_call("command_ownership", self.ownership, before)
         require(integer(before["captureSeq"]) == self.capture_sequence, "unrequested capture occurred")
         if self.reference is not None and not cleanup:
             for key in ("head", "handR"):

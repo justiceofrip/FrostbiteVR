@@ -271,6 +271,78 @@ class Harness:
 
 
 class FeedDriverObservationTests(unittest.TestCase):
+    def test_prepublication_state_stall_is_observed_without_extra_operations(self):
+        h = Harness(self)
+        v = h.driver
+        v.monitor = False
+        original_read_state = v.read_state
+        original_owner = v.sequence, v.sentinel, v.command_hash, v.last_write, v.commands
+        source_deadline = h.now + 75 * MS
+
+        def delayed_state():
+            h.now += 95 * MS
+            return original_read_state()
+
+        with patch.object(v, "read_state", side_effect=delayed_state) as states, \
+                patch.object(v, "pump", wraps=v.pump) as pumps, \
+                patch.object(d, "read_bytes", wraps=d.read_bytes) as reads, \
+                patch.object(d.time, "sleep", wraps=h.sleep) as sleeps:
+            with self.assertRaisesRegex(d.REFUSAL, "source/claim lease expired"):
+                v.send(["grip l 1"], source_deadline=source_deadline)
+        states.assert_called_once_with()
+        pumps.assert_called_once_with()
+        reads.assert_called_once_with(v.command_path, 4096)
+        sleeps.assert_not_called()
+        self.assertEqual((v.sequence, v.sentinel, v.command_hash, v.last_write, v.commands), original_owner)
+        self.assertFalse(v.pending_command)
+        self.assertEqual(h.command_writes, [])
+        self.assertEqual(v.artifacts.events, [])
+        v._receive_timing.freeze(v.pending_command, v.sequence)
+        v.save_receive_timing_failure()
+        timing = v.artifacts.saved["receive-timing-failure.json"]
+        self.assertEqual(timing["phaseNs"]["command_state_read"]["totalNs"], 95 * MS)
+        self.assertIn("command_pause", timing["phaseNs"])
+        self.assertIn("command_ownership", timing["phaseNs"])
+        self.assertEqual(timing["transientReadRetries"], {})
+
+    def test_transient_read_retries_follow_phase_without_extra_reads_or_sleep(self):
+        v = d.Driver.__new__(d.Driver)
+        now, attempts, sleeps = [NS], [], []
+        original_open = Path.open
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "command.txt"
+            path.write_bytes(b"owned\n")
+
+            def open_stream(target, *args, **kwargs):
+                attempts.append(target)
+                if len(attempts) in (1, 2, 4, 6):
+                    raise FileNotFoundError("controlled transient read refusal")
+                return original_open(target, *args, **kwargs)
+
+            def sleep(seconds):
+                sleeps.append(seconds)
+                now[0] += round(seconds * NS)
+
+            with patch.object(d, "local_path", side_effect=lambda value: value), \
+                    patch.object(Path, "open", open_stream), \
+                    patch.object(d.time, "perf_counter_ns", side_effect=lambda: now[0]), \
+                    patch.object(d.time, "sleep", side_effect=sleep):
+                with v.receive_timing_scope("command_pause"):
+                    self.assertEqual(d.read_bytes(path, 4096), b"owned\n")
+                    self.assertEqual(v.receive_timing_call("command_state_read", d.read_bytes, path, 4096), b"owned\n")
+                self.assertIsNone(d._receive_read_timing.get())
+                v._receive_timing.freeze(False, 1)
+                before = copy.deepcopy(v._receive_timing.report())
+                with v.receive_timing_scope("cleanup_read"):
+                    self.assertEqual(d.read_bytes(path, 4096), b"owned\n")
+                self.assertEqual(v._receive_timing.report(), before)
+                self.assertIsNone(d._receive_read_timing.get())
+        self.assertEqual(attempts, [path] * 7)
+        self.assertEqual(sleeps, [.001] * 4)
+        self.assertEqual(before["transientReadRetries"], {"command_pause": 2, "command_state_read": 1})
+        self.assertEqual(before["phaseNs"]["command_pause"]["totalNs"], 2 * MS)
+        self.assertEqual(before["phaseNs"]["command_state_read"]["totalNs"], MS)
+
     def test_unpublished_read_expiry_rejoins_owner_for_release_only(self):
         for phase in ("before_state_read", "command_read"):
             with self.subTest(phase=phase):

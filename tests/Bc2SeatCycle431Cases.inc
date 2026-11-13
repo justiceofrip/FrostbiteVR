@@ -49,6 +49,24 @@ int SeatCycleRequestPreservesNativeControls() {
     CHECK(!gather(7,Primary,0,true) && get()==native && proofs==5);
     CHECK(gather(7,0) && gather(8,Primary) && gather(9,Primary) && get()==native && proofs==5);
     CHECK(gather(10,0) && gather(11,Primary) && get()==(native|InputBit) && proofs==6);
+
+    // Unrelated driving/neutral gathers cannot exhaust the opt-in A journal.
+    AttemptTrace trace;in.generation=100;right.held=0;
+    for(unsigned n=0;n<100;++n)CHECK(!trace.Observe(true,seat,in));
+    right.held=Primary;CHECK(!trace.Observe(false,seat,in));
+    auto attempt=trace.Observe(true,seat,in);CHECK(attempt);
+    attempt->gather=31;attempt->verified=false;
+    CHECK(!Admit(false,Gate::Verification,&attempt->first));
+    CHECK(!Admit(false,Gate::Binding,&attempt->first));
+    trace.Publish(*attempt);
+    for(unsigned n=0;n<100;++n){++in.generation;CHECK(!trace.Observe(true,seat,in));}
+    CHECK(trace.Count()==1 && trace.Row(0).input==100 && trace.Row(0).gather==31);
+    CHECK(trace.Row(0).first==Gate::Verification && !trace.Row(0).requested && !trace.Row(0).committed);
+    for(unsigned n=1;n<17;++n){
+        right.held=0;CHECK(!trace.Observe(true,seat,in));right.held=Primary;++in.generation;
+        auto row=trace.Observe(true,seat,in);CHECK(bool(row)==(n<16));if(row)trace.Publish(*row);
+    }
+    CHECK(trace.Count()==16 && trace.Dropped()==1 && trace.Row(0).first==Gate::Verification);
     return 0;
 }
 
@@ -86,6 +104,23 @@ int SeatCycleRequiresFreshNeutralAndDistinctButton() {
     CHECK(!sample(36,0));CHECK(sample(37,Primary));
     right.active=Primary|MenuClick;CHECK(!sample(37,Primary));
     right.active=Primary|StickClick;CHECK(!sample(38,Primary));
+
+    Button diagnostic;Gate first=Gate::None;unsigned bindingCalls=0;
+    in.generation=100;right.held=Primary;
+    CHECK(!diagnostic.CheckBinding(in,true,[&]{++bindingCalls;return binding;},&first).key);
+    CHECK(first==Gate::Rearm && bindingCalls==0);
+    CHECK(!diagnostic.Update(seat,{},in,100,100,110,true,&first) && first==Gate::Rearm);
+    right.held=0;++in.generation;CHECK(!diagnostic.Update(seat,{},in,101,101,111,true));
+    right.held=Primary;right.active=Primary|MenuClick;++in.generation;first=Gate::None;
+    CHECK(!diagnostic.CheckBinding(in,true,[&]{++bindingCalls;return binding;},&first).key);
+    CHECK(first==Gate::Controller && bindingCalls==0);
+    right.active=Primary|StickClick;first=Gate::None;
+    CHECK(diagnostic.CheckBinding(in,true,[&]{++bindingCalls;return binding;},&first)==binding);
+    CHECK(diagnostic.Update(seat,binding,in,102,102,112,true,&first) && first==Gate::None);
+    first=Gate::None;++in.generation;
+    CHECK(!diagnostic.Update(seat,binding,in,104,104,114,true,&first) && first==Gate::Continuity);
+    first=Gate::None;--in.generation;
+    CHECK(!diagnostic.Update(seat,binding,in,105,105,115,true,&first) && first==Gate::Replay);
     return 0;
 }
 
@@ -126,6 +161,14 @@ int SeatCycleRequiresCurrentMappedKeyboardAndPermission() {
         auto changed=m;changed.word(at,value);CHECK(!ReadBinding(changed.access(),s,true));
     }
     auto missing=m;missing.bytes.erase(key+16);CHECK(!ReadBinding(missing.access(),s,true));
+    auto denied=m;denied.word(p+0x160,0);Gate first=Gate::None;
+    CHECK(!ReadBinding(denied.access(),s,true,&first) && first==Gate::Permission);
+    denied=m;denied.word(p+0xc74,0);first=Gate::None;
+    CHECK(!ReadBinding(denied.access(),s,true,&first) && first==Gate::Owner);
+    denied=m;denied.word(0x1570ee4,4);first=Gate::None;
+    CHECK(!ReadBinding(denied.access(),s,true,&first) && first==Gate::Permission);
+    denied=m;denied.bytes.erase(p+0x160);first=Gate::None;
+    CHECK(!ReadBinding(denied.access(),s,true,&first) && first==Gate::Binding);
     s.routes[0]={17,76};CHECK(!ReadBinding(m.access(),s,true));
     return 0;
 }

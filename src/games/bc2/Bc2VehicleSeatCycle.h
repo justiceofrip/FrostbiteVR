@@ -4,12 +4,81 @@
 #include "fvr/interaction/ControllerInput.h"
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstring>
+#include <ostream>
 #include <utility>
 
 namespace fvr::bc2::seatCycle {
 constexpr unsigned InputBit = 1u << 17;
 constexpr unsigned ConflictingBits = (1u << 16) | (0xffu << 18);
+
+// Observation only; None means no refusal was observed, never a native seat change.
+enum class Gate {None,Verification,Routes,Capability,Freshness,Controller,Owner,Cache,
+    Playing,Rearm,Exit,Input,Menu,Conflict,Plan,Binding,Permission,BindingChanged,
+    Deadline,Replay,Continuity,Request,Apply,Readback};
+inline const char* GateName(Gate gate) noexcept {
+    constexpr const char* names[]{"none","verification","routes","capability","freshness","controller","owner","cache",
+        "playing","rearm","exit","input","menu","conflict","plan","binding","permission","binding_changed",
+        "deadline","replay","continuity","request","apply","readback"};
+    return names[unsigned(gate)];
+}
+inline bool Admit(bool accepted, Gate gate, Gate* first) noexcept {
+    if (!accepted && first && *first==Gate::None) *first=gate;
+    return accepted;
+}
+struct Attempt {
+    VehicleSeatIdentity owner{};
+    std::uint64_t input=0,space=0,menu=0;
+    unsigned gather=0,player=0,weak=0,active=0,held=0,leftHeld=0,permissions=0;
+    unsigned flagsWritten=0,flagsObserved=0;
+    std::int64_t sampledNs=0,deadlineNs=0;
+    Gate first=Gate::None;
+    bool verified=false,fresh=false,bindingChecked=false,requested=false,committed=false,readback=false;
+};
+class AttemptTrace {
+    // One verified input-thread producer; published rows never change. Neutral
+    // gathers and repeated holds consume no capacity, even after a refused A.
+    VehicleSeatIdentity owner_{};std::uint64_t space_=0;bool held_=false;
+    std::array<Attempt,16> rows_{};
+    std::atomic<unsigned> count_=0,dropped_=0;
+public:
+    std::optional<Attempt> Observe(bool enabled,const VehicleSeatIdentity& owner,
+        const interaction::InputFrame& input) noexcept {
+        if (!enabled) return {};
+        const bool held=(input.hands[1].held&interaction::Primary)!=0;
+        const bool start=held && (!held_ || owner!=owner_ || input.spaceGeneration!=space_);
+        held_=held;owner_=owner;space_=input.spaceGeneration;
+        if (!start || !input.generation) return {};
+        if (count_.load(std::memory_order_relaxed)==rows_.size()) {++dropped_;return {};}
+        Attempt row;row.owner=owner;row.input=input.generation;row.space=input.spaceGeneration;row.menu=input.menu.epoch;
+        row.active=input.hands[1].active;row.held=input.hands[1].held;row.leftHeld=input.hands[0].held;
+        return row;
+    }
+    void Publish(const Attempt& row) noexcept {
+        const auto n=count_.load(std::memory_order_relaxed);
+        if (n<rows_.size()) {rows_[n]=row;count_.store(n+1,std::memory_order_release);}
+    }
+    unsigned Count()const noexcept {return count_.load(std::memory_order_acquire);}
+    unsigned Dropped()const noexcept {return dropped_.load();}
+    const Attempt& Row(unsigned n)const noexcept {return rows_[n];}
+    void Report(std::ostream& out)const {
+        out<<"{\"capacity\":"<<rows_.size()<<",\"dropped_holds\":"<<Dropped()
+           <<",\"sampling\":\"first gather of each observed A hold; committed/readback describe the gather cache, not a seat change\",\"rows\":[";
+        for(unsigned n=0,count=Count();n<count;++n){const auto& r=rows_[n];if(n)out<<',';
+            out<<"{\"first_refusal\":\""<<GateName(r.first)<<"\",\"verified\":"<<r.verified
+               <<",\"input\":"<<r.input<<",\"gather\":"<<r.gather<<",\"space\":"<<r.space<<",\"menu_epoch\":"<<r.menu
+               <<",\"player\":"<<r.player<<",\"soldier\":"<<r.owner.actor<<",\"weak\":"<<r.weak
+               <<",\"actor_generation\":"<<r.owner.actorGeneration<<",\"seat_generation\":"<<r.owner.seatGeneration
+               <<",\"entity\":"<<r.owner.controlled<<",\"entry\":"<<r.owner.entry<<",\"router\":"<<r.owner.router<<",\"cache\":"<<r.owner.cache
+               <<",\"active\":"<<r.active<<",\"held\":"<<r.held<<",\"left_held\":"<<r.leftHeld
+               <<",\"sampled_ns\":"<<r.sampledNs<<",\"deadline_ns\":"<<r.deadlineNs<<",\"fresh\":"<<r.fresh
+               <<",\"permissions\":"<<r.permissions<<",\"binding_checked\":"<<r.bindingChecked<<",\"requested\":"<<r.requested
+               <<",\"cache_committed\":"<<r.committed<<",\"flags_written\":"<<r.flagsWritten<<",\"flags_observed\":"<<r.flagsObserved
+               <<",\"readback\":"<<r.readback<<'}';
+        }out<<"]}";
+    }
+};
 
 // Optional grant for the reviewed loaded x86 image. The absolute operands and
 // vtable addresses below deliberately restrict this grant to its preferred base.
@@ -56,7 +125,7 @@ struct Binding {
     bool operator==(const Binding&) const = default;
 };
 inline std::optional<Binding> ReadBinding(const VehicleRouteMemory& m,
-        const VehicleRouteSnapshot& seat, bool verified) noexcept {
+        const VehicleRouteSnapshot& seat, bool verified, Gate* first=nullptr) noexcept {
     if (!verified || !m.read || seat.count>seat.routes.size() || !seat.identity.entry ||
         !seat.player || !seat.identity.router ||
         std::find(seat.routes.begin(),seat.routes.begin()+seat.count,VehicleRoute{17,42}) ==
@@ -69,14 +138,19 @@ inline std::optional<Binding> ReadBinding(const VehicleRouteMemory& m,
         unsigned value{}; read(std::uint64_t(base)+offset,&value,4); return value;
     };
     const auto ptr=[](unsigned address){return address>=0x10000 && !(address&3u);};
-    if (word(seat.player,0xc74)!=seat.identity.cache ||
-        word(seat.identity.entry,0x198)!=seat.identity.router ||
-        !(word(seat.player,0x160)&(1u<<(17-11)))) return {};
+    if (word(seat.player,0xc74)!=seat.identity.cache || word(seat.identity.entry,0x198)!=seat.identity.router) {
+        Admit(false,ok?Gate::Owner:Gate::Binding,first);return {};
+    }
+    if (!(word(seat.player,0x160)&(1u<<(17-11)))) {
+        Admit(false,ok?Gate::Permission:Gate::Binding,first);return {};
+    }
     // The device tests each alternative's concept veto before polling it. Accept
     // the global allow flag or an empty suppression list; leave busier modes native.
     unsigned char unrestricted{};
     read(0x1570e9c,&unrestricted,1);
-    if (!unrestricted && word(0x1570ee0)!=word(0x1570ee4)) return {};
+    if (!unrestricted && word(0x1570ee0)!=word(0x1570ee4)) {
+        Admit(false,ok?Gate::Permission:Gate::Binding,first);return {};
+    }
     Binding b{};b.player=seat.player;b.router=seat.identity.router;
     const unsigned buckets=word(b.router,0x14), count=word(b.router,0x18);
     if (!ptr(buckets) || !count || count>256) return {};
@@ -128,39 +202,45 @@ inline bool Request(VehicleInputPlan& plan, unsigned flags) noexcept {
 class Button {
 public:
     template<class VerifyBinding>
-    Binding CheckBinding(const interaction::InputFrame& input, bool eligible, VerifyBinding verify) const noexcept {
-        if (!armed_ || !eligible || !ValidSource(input) || input.hands[1].held!=interaction::Primary)
+    Binding CheckBinding(const interaction::InputFrame& input, bool eligible, VerifyBinding verify, Gate* first=nullptr) const noexcept {
+        if (!Admit(armed_,Gate::Rearm,first) || !Admit(eligible,Gate::Input,first) ||
+            !Admit(ValidSource(input) && input.hands[1].held==interaction::Primary,Gate::Controller,first))
             return {};
         return verify();
     }
 
     bool Update(const VehicleSeatIdentity& seat, const Binding& binding,
                 const interaction::InputFrame& input, unsigned gather, std::int64_t now,
-                std::int64_t deadline, bool eligible) noexcept {
+                std::int64_t deadline, bool eligible, Gate* first=nullptr) noexcept {
         const auto& right=input.hands[1];
         const bool held=(right.held&interaction::Primary)!=0;
         if (owner_==seat && space_==input.spaceGeneration && input.generation<sequence_) {
+            Admit(false,Gate::Replay,first);
             Reset(); return false; // A replayed neutral packet cannot rearm a refused hold.
         }
         const bool continuous=valid_ && owner_==seat && (!held_ || !held || binding_==binding) &&
             space_==input.spaceGeneration && menu_==input.menu.epoch &&
             gather==gather_+1 && input.generation>=sequence_ && now>=lastNow_ && now<deadline_;
         if (!eligible || now<=0 || deadline<=now || deadline-now>100000000 || (held && !binding.key) || !ValidSource(input)) {
+            Admit(false,!eligible?Gate::Input:now<=0||deadline<=now||deadline-now>100000000?Gate::Deadline:
+                held&&!binding.key?Gate::Binding:Gate::Controller,first);
             Reset(); owner_=seat;space_=input.spaceGeneration;sequence_=input.generation; return false;
         }
-        if (!continuous) {armed_=false;held_=false;}
+        if (!continuous) {if(held)Admit(false,owner_!=seat?Gate::Owner:Gate::Continuity,first);armed_=false;held_=false;}
         if (input.generation!=sequence_) {
             if (!held) {armed_=true;held_=false;}
             else held_=armed_;
         } else if (!held && held_) {held_=false;armed_=false;}
         owner_=seat;binding_=binding;space_=input.spaceGeneration;menu_=input.menu.epoch;
         gather_=gather;sequence_=input.generation;lastNow_=now;deadline_=deadline;valid_=true;
+        if(held&&!held_)Admit(false,Gate::Rearm,first);
         return held_;
     }
 
-    bool Apply(VehicleInputOverride& patch, std::span<std::byte> cache, VehicleInputPlan& plan, unsigned flags) noexcept {
-        if (held_ && !Request(plan,flags)) Reset();
+    bool Apply(VehicleInputOverride& patch, std::span<std::byte> cache, VehicleInputPlan& plan, unsigned flags, Gate* first=nullptr) noexcept {
+        if (held_ && !Request(plan,flags)) {Admit(false,Gate::Request,first);Reset();}
         if (patch.Apply(cache,plan)) return true;
+        Admit(false,Gate::Apply,first);
         Reset();
         return false;
     }
