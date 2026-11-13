@@ -168,6 +168,47 @@ class MagazineBoltTests(unittest.TestCase):
             self.assertEqual(result["boundaries"][-1]["result"]["counts"]["loaded"], 3)
             self.assertEqual(episode["published"], ["grip r 1"])
 
+    def test_held_bootstrap_joins_independent_body_packets_with_original_leases(self):
+        for delta in (-1, 1):
+            with self.subTest(delta=delta), tempfile.TemporaryDirectory() as folder:
+                with held_bootstrap_episode(Path(folder), body_sequence_delta=delta) as episode:
+                    result = episode["cli"]("prepare-hold")
+                    self.assertEqual(result["status"], "ordinary_hold_prepared", result)
+                    self.assertEqual(episode["published"], ["grip r 1"])
+                    for s in episode["observations"]:
+                        h, outer = s["bodyHolster"], s["input_evidence"]
+                        self.assertEqual(h["inputEvidence"]["sequence"]-outer["sequence"], delta)
+                        self.assertEqual(h["input"]["generation"], h["inputEvidence"]["sequence"])
+                        self.assertLessEqual(g.held_entry_deadline(s), min(
+                            outer["deadlineNs"], h["inputEvidence"]["deadlineNs"], h["validUntilNs"]))
+                    held = episode["observations"][1]
+                    self.assertNotEqual(held["bodyHolster"]["rightClaim"], held["bolt"]["rightClaim"])
+                    self.assertEqual(held["bodyHolster"]["rightClaim"]["token"],
+                                     held["bolt"]["rightClaim"]["token"])
+
+    def test_held_bootstrap_independent_packets_still_require_exact_evidence(self):
+        for failure in ("body_owner", "body_expired", "body_order", "body_relation", "body_match",
+                        "body_generation", "body_extended", "body_controls", "body_same_clock"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as folder:
+                with held_bootstrap_episode(Path(folder), failure=failure, body_sequence_delta=1) as episode:
+                    result = episode["cli"]("prepare-hold")
+                    self.assertEqual(result["status"], "refused", result)
+                    self.assertEqual(episode["published"], [])
+                    self.assertNotIn("KeyError", result.get("error", ""))
+
+    def test_held_bootstrap_independent_claims_remain_bound_to_their_own_packets(self):
+        for failure in ("body_claim_sequence", "body_claim_deadline", "family_claim_sequence",
+                        "family_claim_deadline", "family_claim_token", "body_before_press", "body_no_advance"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as folder:
+                delta = -1 if failure == "body_before_press" else 2
+                with held_bootstrap_episode(Path(folder), failure=failure, body_sequence_delta=delta) as episode:
+                    result = episode["cli"]("prepare-hold")
+                    self.assertEqual(result["status"], "refused", result)
+                    self.assertEqual(episode["published"], ["grip r 1", "grip r 0"])
+                    if failure in ("body_before_press", "body_no_advance"):
+                        self.assertIn("GunHold observation predates its ordinary grip", result["error"])
+                    self.assertNotIn("KeyError", result.get("error", ""))
+
     def test_held_bootstrap_refuses_foreign_nonheld_stale_or_active_entry(self):
         for failure in ("empty", "owner", "left", "right", "free_right", "expired", "source", "trigger", "writer"):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as folder:
@@ -991,7 +1032,7 @@ def magazine_capture_episode(run, failure=None):
 
 
 @contextlib.contextmanager
-def held_bootstrap_episode(run, failure=None, full=True):
+def held_bootstrap_episode(run, failure=None, full=True, body_sequence_delta=0):
     """Compose actual entry/transport/recorder consumers with synthetic producers.
 
     Requests, immutable response reads, nonce/source deadlines, full geometry
@@ -1022,6 +1063,10 @@ def held_bootstrap_episode(run, failure=None, full=True):
             driver.plans = []
             if failure == "source":
                 driver.last_write = clock[0]-1
+            elif failure == "body_before_press":
+                # Let the real 25ms command spacing delay the press, keeping
+                # its pre-press 80ms body lease live at the next 100ms snapshot.
+                driver.last_write = clock[0]-1000
             drivers.append(driver)
 
         def response(nonce):
@@ -1061,6 +1106,19 @@ def held_bootstrap_episode(run, failure=None, full=True):
                 selectedSlot=dict(slot=1, item=dict(x["weapon"], generation=17)), phase=1,
                 actualEmpty=False, blockWeaponActions=False, allowAutomaticGunHold=True,
                 freeRightCurrent=False, freeRight=None)
+            body_ev = h["inputEvidence"]
+            if body_sequence_delta:
+                # Model the producer's independently sampled body packet. Its
+                # controls/owner agree, but no outer or body clock is replaced.
+                body_ev["sequence"] += body_sequence_delta
+                body_ev["observedNs"] += body_sequence_delta*100
+                body_ev["deadlineNs"] += body_sequence_delta*100
+                h["input"]["generation"] = body_ev["sequence"]
+                h["inputSequenceRelation"] = "newer" if body_sequence_delta > 0 else "older"
+                h["inputMatchesSnapshot"] = False
+                if right is not None:
+                    right["inputSequence"] = body_ev["sequence"]
+                    right["deadlineNs"] += body_sequence_delta*100
             if not pressed or failure in ("no_hold", "unavailable", "cleanup_writer"):
                 for name in ("magazine", "bolt"):
                     s[name] = dict(observationOnly=True, available=False, reason="capture_pending_or_not_requested")
@@ -1084,6 +1142,46 @@ def held_bootstrap_episode(run, failure=None, full=True):
                 s["input"]["hands"][1]["grip"] = dict(position=[.1, 0, 0], orientation=[0, 0, 0, 1])
             elif pressed and failure == "foreign_claim":
                 h["rightClaim"]["token"]["kind"] = 4
+            elif failure == "body_owner":
+                body_ev["owner"]["equipGeneration"] += 1
+            elif failure == "body_expired":
+                body_ev.update(observedNs=now-100_000_000, deadlineNs=now)
+            elif failure == "body_order":
+                body_ev["observedNs"] = ev["observedNs"]-100
+            elif failure == "body_relation":
+                h["inputSequenceRelation"] = "older"
+            elif failure == "body_match":
+                h["inputMatchesSnapshot"] = True
+            elif failure == "body_generation":
+                h["input"]["generation"] = ev["sequence"]
+            elif failure == "body_extended":
+                h["validUntilNs"] = body_ev["deadlineNs"]+1
+            elif failure == "body_controls":
+                h["input"]["hands"][0]["trigger"] = 1
+            elif failure == "body_same_clock":
+                body_ev["sequence"] = ev["sequence"]
+                h["input"].update(generation=ev["sequence"])
+                h.update(inputSequenceRelation="same", inputMatchesSnapshot=True)
+            elif pressed and failure == "body_claim_sequence":
+                right["inputSequence"] = ev["sequence"]
+            elif pressed and failure == "body_claim_deadline":
+                right["deadlineNs"] = body_ev["deadlineNs"]+1
+            elif pressed and failure == "family_claim_sequence":
+                b["rightClaim"]["inputSequence"] = body_ev["sequence"]
+            elif pressed and failure == "family_claim_deadline":
+                b["rightClaim"]["deadlineNs"] = ev["deadlineNs"]+1
+            elif pressed and failure == "family_claim_token":
+                b["rightClaim"]["token"]["id"] += 1
+            elif pressed and failure == "body_before_press":
+                # An older body packet can still be live but precede the owned
+                # press. Its current outer packet cannot authorize that claim.
+                body_ev["observedNs"] = drivers[-1].last_write-1
+                body_ev["deadlineNs"] = body_ev["observedNs"]+80_000_000
+                h["validUntilNs"] = min(h["validUntilNs"], body_ev["deadlineNs"])
+                right["deadlineNs"] = min(right["deadlineNs"], body_ev["deadlineNs"])
+            elif pressed and failure == "body_no_advance":
+                body_ev["sequence"] = observations[0]["bodyHolster"]["inputEvidence"]["sequence"]
+                h["input"]["generation"] = right["inputSequence"] = body_ev["sequence"]
             if failure == "writer" or pressed and failure == "cleanup_writer":
                 (run / "sim/command.txt").write_bytes(b"note foreign writer\n")
             observations.append(copy.deepcopy(s))
