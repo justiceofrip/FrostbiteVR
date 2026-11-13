@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param([Parameter(Mandatory)][string]$InstallRoot,
       [ValidateSet('Launch','Validate','Stop','Check','Update','Rollback','Feedback')][string]$Action,
-      [switch]$Fresh, [switch]$UseLocal, [switch]$Prerelease, [switch]$ActivateGameWindow, [switch]$QualifyChestKnife,
+      [switch]$Fresh, [switch]$UseLocal, [switch]$Prerelease, [switch]$ActivateGameWindow, [switch]$QualifyChestKnife, [switch]$PerformanceMode,
       [ValidateSet('MainMenu','Campaign')][string]$StartAt='MainMenu',
       [guid]$CommandId=[guid]::NewGuid())
 $ErrorActionPreference='Stop'
@@ -78,10 +78,10 @@ try {
         Status 'Previous version selected. Close and reopen the launcher.' 'restart_required'; exit 0
     }
     $localRoute=$null
-    $privateEntryArgs=@{}
+    $entryArgs=@{}
     if($QualifyChestKnife){
         if($Action -ne 'Launch' -or $UseLocal -or -not $package.runtime_entry){throw 'Chest knife qualification requires a packaged Launch.'}
-        $privateEntryArgs.QualifyChestKnife=$true
+        $entryArgs.QualifyChestKnife=$true
     }
     if ($Action -in @('Launch','Validate') -and (-not $package.runtime_entry -or $UseLocal)) {
         $localRoute=Get-FvrLocalLaunchRoute $settings.local_backend $StartAt -ActivateGameWindow:($Action -eq 'Launch' -and $ActivateGameWindow)
@@ -104,9 +104,13 @@ try {
         }
     }
     if ($package.runtime_entry -and -not $UseLocal) {
+        if($Action -eq 'Launch'){
+            $performanceRequested=if($PSBoundParameters.ContainsKey('PerformanceMode')){[bool]$PerformanceMode}else{$settings.vr_performance_mode -is [bool] -and $settings.vr_performance_mode}
+            if($performanceRequested){$entryArgs.PerformanceMode=$true}
+        }
         Status $(if($Action -eq 'Launch'){'Opening BC2 in VR…'}elseif($Action -eq 'Stop'){'Requesting VR shutdown…'}else{'Checking the installed runtime…'})
         $entry = Get-FvrChild $versionFolder $package.runtime_entry
-        & $entry -Action $Action -SettingsPath (Join-Path $data 'settings.json') -StateRoot (Join-Path $data 'runtime') -Fresh:$Fresh -StartAt $StartAt -ActivateGameWindow:($Action -eq 'Launch' -and $ActivateGameWindow) @privateEntryArgs 6>&1 | ForEach-Object {
+        & $entry -Action $Action -SettingsPath (Join-Path $data 'settings.json') -StateRoot (Join-Path $data 'runtime') -Fresh:$Fresh -StartAt $StartAt -ActivateGameWindow:($Action -eq 'Launch' -and $ActivateGameWindow) @entryArgs 6>&1 | ForEach-Object {
             if($Action -eq 'Stop' -and $_ -is [pscustomobject] -and $_.PSObject.Properties['schema'] -and $_.schema -eq 'bc2vr.stop-result.v1' -and $_.outcome -in @('requested','no_owned_session')){$stopResult=$_;Write-Output $_.message}
             elseif($_ -is [Management.Automation.InformationRecord] -and $_.MessageData.ToString().StartsWith('BC2VR: ')){Status $_.MessageData.ToString().Substring(7)}else{Write-Output $_}
         }

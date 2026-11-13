@@ -49,7 +49,7 @@ try {
     foreach($name in @('Launcher.ps1','Worker.ps1','Launcher.Core.ps1','Launcher.Feedback.ps1','Launcher.Storage.ps1','Launcher.Settings.ps1')){
         Copy-Item -LiteralPath (Join-Path $repo ('launcher/'+$name)) -Destination (Join-Path $stopVersion ('app/'+$name))
     }
-    foreach($name in @('Entry.ps1','Runtime.Core.ps1','Dependencies.ps1','Startup.ps1','Resolution.ps1')){
+    foreach($name in @('Entry.ps1','Runtime.Core.ps1','Dependencies.ps1','Startup.ps1','Resolution.ps1','GraphicsSettings.ps1')){
         Copy-Item -LiteralPath (Join-Path $repo ('launcher/runtime/'+$name)) -Destination (Join-Path $stopVersion ('runtime/'+$name))
     }
     $stopFiles=@(foreach($file in Get-ChildItem -LiteralPath $stopVersion -File -Recurse){@{path=[IO.Path]::GetRelativePath($stopVersion,$file.FullName).Replace('\','/');sha256=(Get-FileHash -LiteralPath $file.FullName).Hash.ToLowerInvariant()}})

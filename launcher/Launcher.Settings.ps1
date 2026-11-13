@@ -1,13 +1,15 @@
 #requires -Version 7.5
 # Requires Launcher.Core.ps1. Settings changes never start or inspect a game.
 function New-FvrLauncherSettings {
-    return @{schema='fvr.desktop.settings.v1';game_path='';local_backend=$null;steam_compatibility=$false}
+    return @{schema='fvr.desktop.settings.v1';game_path='';local_backend=$null;steam_compatibility=$false;vr_performance_mode=$false}
 }
 function ConvertFrom-FvrSettingsText([string]$Text) {
     $value=ConvertFrom-Json -InputObject $Text -AsHashtable -DateKind String
     if($value -isnot [Collections.IDictionary]){throw 'Settings must be a JSON object.'}
     if(-not $value.Contains('steam_compatibility')){$value.steam_compatibility=$false}
     elseif($value.steam_compatibility -isnot [bool]){throw 'Steam compatibility must be a JSON boolean (true or false).'}
+    if(-not $value.Contains('vr_performance_mode')){$value.vr_performance_mode=$false}
+    elseif($value.vr_performance_mode -isnot [bool]){throw 'VR performance mode must be a JSON boolean (true or false).'}
     foreach($key in @('game_path','local_backend')){if(-not $value.Contains($key)){$value[$key]=$(if($key -eq 'game_path'){''}else{$null})}}
     if(-not $value.Contains('schema')){$value.schema='fvr.desktop.settings.v1'}
     return $value
@@ -44,7 +46,7 @@ function Read-FvrLauncherSettingsLocked([string]$InstallRoot,[switch]$RefuseRepa
     $bytes=[IO.File]::ReadAllBytes($path)
     $text=[IO.File]::ReadAllText($path)
     try{$state.settings=ConvertFrom-FvrSettingsText $text;return $state}catch{}
-    if($RefuseRepair){throw 'Settings are damaged. Reopen the launcher to recover them before changing Steam compatibility. The original file was left unchanged.'}
+    if($RefuseRepair){throw 'Settings are damaged. Reopen the launcher to recover them before changing launch options. The original file was left unchanged.'}
     # Never globally escape backslashes: that could alter a valid local-backend
     # profile or conceal a second syntax error. Repair only one raw Windows
     # game_path value, and require the entire remaining document to parse.
@@ -123,6 +125,20 @@ function Save-FvrSteamCompatibility([string]$InstallRoot,[bool]$Enabled) {
         $null=[IO.Directory]::CreateDirectory((Split-Path $path -Parent))
         Write-FvrLauncherSettings $path $state.settings
         $state.notice='Steam compatibility saved.'
+        return $state
+    }finally{$lock.Dispose()}
+}
+function Save-FvrPerformanceMode([string]$InstallRoot,[bool]$Enabled) {
+    $lock=Enter-FvrLock $InstallRoot
+    try{
+        # Save only this choice against the latest settings; a toggle never
+        # repairs malformed settings or changes a currently running game.
+        $state=Read-FvrLauncherSettingsLocked $InstallRoot -RefuseRepair
+        $state.settings.vr_performance_mode=$Enabled
+        $path=Get-FvrChild $InstallRoot 'data/settings.json'
+        $null=[IO.Directory]::CreateDirectory((Split-Path $path -Parent))
+        Write-FvrLauncherSettings $path $state.settings
+        $state.notice='VR performance mode saved for your next launch.'
         return $state
     }finally{$lock.Dispose()}
 }

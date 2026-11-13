@@ -6,6 +6,7 @@ $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Startup.ps1')
 . (Join-Path $PSScriptRoot 'Resolution.ps1')
 . (Join-Path $PSScriptRoot 'GraphicsCreation.ps1')
+. (Join-Path $PSScriptRoot 'GraphicsSettings.ps1')
 $options=Read-FvrJson $OptionsPath
 $folder=Get-FvrChild $options.state_root $options.relative_folder
 Assert-FvrNoLinks $folder
@@ -13,7 +14,65 @@ if([IO.Path]::GetFullPath($OptionsPath) -ne (Join-Path $folder 'options.json')){
 $null=Set-FvrLauncherStorage (Split-Path (Split-Path $options.state_root -Parent) -Parent)
 $state=@{schema='bc2vr.session.v1';state='starting';phase='Starting BC2 and waiting for its main menu…';version=$options.version;source_sha256=$options.source_sha256;started_utc=[DateTime]::UtcNow.ToString('o');game=$null;host=$null;trace=$null;error=$null;supervisor=(Get-Bc2ProcessIdentity (Get-Process -Id $PID))}
 $stateFile=Join-Path $folder 'session.json';$stopFile=Join-Path $folder 'stop.request'
-$pipelineEnvironment=@{};$pipelineOriginal=@{};$pipelineApplied=$false
+$pipelineEnvironment=@{};$pipelineOriginal=@{};$pipelineApplied=$false;$pipelineEnvironmentTouched=$false
+$graphicsLeaseAttempted=$false;$graphicsLeasePrepared=$false;$graphicsLeaseBound=$false;$graphicsWatcher=$null
+function Assert-Bc2PerformanceAdmission {
+    if($options.ContainsKey('performance_mode') -and $options.performance_mode -isnot [bool]){throw 'VR performance mode option must be a boolean.'}
+    if($options.ContainsKey('private_source_pipeline') -and $options.private_source_pipeline -isnot [bool]){throw 'Private source pipeline option must be a boolean.'}
+    $requested=$options.ContainsKey('performance_mode') -and $options.performance_mode
+    $state.performance_mode=@{requested=[bool]$requested;enabled=$false;native_samples_verified=$false;resolution_changed=$false}
+    if(-not $requested){return}
+    if($options.ContainsKey('private_source_pipeline') -and $options.private_source_pipeline){throw 'VR performance mode and the private source-pipeline override cannot be combined.'}
+    Assert-Bc2ResolutionPlan $renderPlan
+    $requiredBytes=[long]$renderPlan.width*[long]$renderPlan.height*4*(3+2*3+4*3*1)
+    $state.performance_mode.logical_reservation_bytes=$requiredBytes;$state.performance_mode.logical_byte_limit=768MB
+    $state.performance_mode.assumed_depth_samples=1
+    if($requiredBytes -gt 768MB){throw 'VR performance mode exceeds the 768 MiB three-source budget at the headset recommended resolution. Disable performance mode to use the ordinary pipeline; no graphics settings were changed and BC2 has not been started.'}
+    if([Environment]::GetEnvironmentVariable('FVR_PRIVATE_HOST_COPY_SERVICE_MS','Process') -notin @($null,'','0')){throw 'VR performance mode requires the separate host copy service disabled. BC2 has not been started.'}
+    $settings=Get-Bc2GraphicsSettingsPath;Assert-FvrNoLinks $settings
+    if((Get-Item -LiteralPath $settings).Length -gt 1MB){throw 'VR performance mode graphics settings are oversized. BC2 has not been started.'}
+    $proof=Convert-Bc2GraphicsMsaa ([IO.File]::ReadAllBytes($settings))
+    $state.performance_mode.original_msaa=$proof.value
+}
+function Start-Bc2PerformanceLease {
+    if(-not $state.performance_mode.requested){return}
+    # Admission and all other prelaunch checks have completed. Even a partial
+    # prepare failure must enter cleanup; the durable helper retains conflicts.
+    $script:graphicsLeaseAttempted=$true
+    $state.performance_mode.lease=Start-Bc2GraphicsSettingsLease -StateRoot $options.state_root -GamePath $exe -Enabled $true
+    if($state.performance_mode.lease.status -cne 'prepared'){throw 'VR performance mode graphics preparation was not confirmed.'}
+    $script:graphicsLeasePrepared=$true
+    $script:graphicsWatcher=Start-Bc2GraphicsSettingsWatcher -StateRoot $options.state_root
+    if(-not $graphicsWatcher -or $graphicsWatcher.HasExited){throw 'Graphics settings recovery watcher did not remain available. BC2 has not been started.'}
+    $state.performance_mode.watcher=Get-Bc2ProcessIdentity $graphicsWatcher
+    $state.performance_mode.enabled=$true
+    $state.phase='VR performance mode: MSAA is temporarily disabled; settings restore after BC2 closes.'
+    Save-State
+}
+function Invoke-Bc2GraphicsSettingsGameCreated([hashtable]$Identity) {
+    if(-not $graphicsLeasePrepared){return}
+    if($graphicsLeaseBound){throw 'Graphics settings are already bound to a game.'}
+    # GraphicsCreation invokes this with its verified suspended child, before
+    # Resume can let BC2 read or rewrite the prepared settings.
+    $state.performance_mode.lease=Set-Bc2GraphicsSettingsGame -StateRoot $options.state_root -GameIdentity $Identity
+    if($state.performance_mode.lease.status -cne 'bound'){throw 'Graphics settings game ownership was not confirmed.'}
+    $script:graphicsLeaseBound=$true
+}
+function Complete-Bc2PerformanceLease {
+    if(-not $graphicsLeaseAttempted){return}
+    $result=Restore-Bc2GraphicsSettingsLease -StateRoot $options.state_root
+    $state.graphics_settings_restoration=$result
+    $state.graphics_settings_restore_pending=$result.status -notin @('none','restored')
+    if($state.graphics_settings_restore_pending){
+        $message='Temporary MSAA restoration is pending ('+$result.reason+'). BC2 remains open after Stop VR; restoration waits for normal game exit.'
+        if($result.reason -notin @('game_alive','relevant_game_alive','supervisor_alive','game_identity_unknown','supervisor_identity_unknown','lease_busy')){
+            $message='Graphics settings restoration is pending: '+$result.message+' The original backup and journal are retained.'
+            $state.state='failed';$state.error+=' '+$message
+        }
+        $state.phase+=' '+$message
+        $state.performance_mode.message=$message
+    }else{$state.performance_mode.message='Temporary graphics settings were restored after game exit.'}
+}
 function Assert-PrivateSourcePipelineConfiguration {
     $settings=Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'BFBC2/settings.ini'
     $proof=@{settings_path=$settings;supported_msaa=@('0','1','2','3');configured_msaa=$null;compatible=$false;native_samples_verified=$false}
@@ -37,34 +96,36 @@ function Assert-PrivateSourcePipelineConfiguration {
     $proof.compatible=$true
 }
 function Enable-PrivateSourcePipeline {
-    if(-not $options.ContainsKey('private_source_pipeline')){return}
-    if($options.private_source_pipeline -isnot [bool]){throw 'Private source pipeline option must be a boolean.'}
-    if(-not $options.private_source_pipeline){return}
-    $copyBudget=[Environment]::GetEnvironmentVariable('FVR_PRIVATE_HOST_COPY_SERVICE_MS','Process')
-    if($copyBudget -notin @($null,'','0')){throw 'Private source pipeline requires the separate host copy service disabled.'}
-    $script:pipelineEnvironment=@{FVR_PRIVATE_TWO_SOURCE_SLOTS='1';FVR_PRIVATE_THREE_SOURCE_SLOTS='1';FVR_PRIVATE_SOURCE_LOOKAHEAD='1';FVR_PRIVATE_EXPORT_OVERLAP='1'}
-    $state.private_source_pipeline=@{requested=$true;environment=$pipelineEnvironment.Clone();applied=$false;children=@{};restored=$false;native_enablement_claimed=$false}
-    Assert-PrivateSourcePipelineConfiguration
+    if($options.ContainsKey('private_source_pipeline') -and $options.private_source_pipeline -isnot [bool]){throw 'Private source pipeline option must be a boolean.'}
+    $privateRequested=$options.ContainsKey('private_source_pipeline') -and $options.private_source_pipeline
+    $enabled=$privateRequested -or $state.performance_mode.requested
+    if($enabled -and [Environment]::GetEnvironmentVariable('FVR_PRIVATE_HOST_COPY_SERVICE_MS','Process') -notin @($null,'','0')){throw 'Private source pipeline requires the separate host copy service disabled.'}
+    $value=if($enabled){'1'}else{'0'}
+    $script:pipelineEnvironment=@{FVR_PRIVATE_TWO_SOURCE_SLOTS=$value;FVR_PRIVATE_THREE_SOURCE_SLOTS=$value;FVR_PRIVATE_SOURCE_LOOKAHEAD=$value;FVR_PRIVATE_EXPORT_OVERLAP=$value}
+    $state.source_pipeline=@{selection=$(if($state.performance_mode.requested){'performance_mode'}elseif($privateRequested){'private_override'}else{'legacy'});requested=[bool]$enabled;environment=$pipelineEnvironment.Clone();applied=$false;children=@{};restored=$false;native_enablement_claimed=$false}
+    if($enabled){$state.private_source_pipeline=$state.source_pipeline}
+    if($privateRequested){Assert-PrivateSourcePipelineConfiguration}
+    elseif($state.performance_mode.requested){$state.source_pipeline.configuration=@{configured_msaa='0';compatible=$true;native_samples_verified=$false;source='temporary_graphics_settings_lease'}}
     $prior=[Environment]::GetEnvironmentVariables('Process')
     foreach($key in $pipelineEnvironment.Keys){$pipelineOriginal[$key]=@{present=$prior.Contains($key);value=[Environment]::GetEnvironmentVariable($key,'Process')}}
     # Session is a dedicated child, reached only after Entry's headset probe.
     # Existing game creation and child launch helpers inherit this exact map.
-    $script:pipelineApplied=$true
+    $script:pipelineEnvironmentTouched=$true;$script:pipelineApplied=[bool]$enabled
     foreach($key in $pipelineEnvironment.Keys){[Environment]::SetEnvironmentVariable($key,$pipelineEnvironment[$key],'Process')}
-    $state.private_source_pipeline.applied=$true
+    $state.source_pipeline.applied=$true
 }
 function Assert-PrivateSourcePipelineChild([string]$Name) {
-    if(-not $pipelineApplied){return}
+    if(-not $pipelineEnvironmentTouched){return}
     $actual=@{}
     foreach($key in $pipelineEnvironment.Keys){
         $actual[$key]=[Environment]::GetEnvironmentVariable($key,'Process')
         if($actual[$key] -cne $pipelineEnvironment[$key]){throw "Private source pipeline child environment changed: $Name / $key"}
     }
-    if([Environment]::GetEnvironmentVariable('FVR_PRIVATE_HOST_COPY_SERVICE_MS','Process') -notin @($null,'','0')){throw 'Private source pipeline host copy service changed.'}
-    $state.private_source_pipeline.children[$Name]=@{environment=$actual;inheritance='session_process_environment';verified_before_launch=$true;started=$false;identity=$null}
+    if($pipelineApplied -and [Environment]::GetEnvironmentVariable('FVR_PRIVATE_HOST_COPY_SERVICE_MS','Process') -notin @($null,'','0')){throw 'Private source pipeline host copy service changed.'}
+    $state.source_pipeline.children[$Name]=@{environment=$actual;inheritance='session_process_environment';verified_before_launch=$true;started=$false;identity=$null}
 }
 function Restore-PrivateSourcePipeline {
-    if(-not $pipelineApplied){return}
+    if(-not $pipelineEnvironmentTouched){return}
     foreach($key in $pipelineOriginal.Keys){
         if($pipelineOriginal[$key].present){[Environment]::SetEnvironmentVariable($key,$pipelineOriginal[$key].value,'Process')}
         else {[Environment]::SetEnvironmentVariable($key,[NullString]::Value,'Process')}
@@ -73,7 +134,7 @@ function Restore-PrivateSourcePipeline {
     foreach($key in $pipelineOriginal.Keys){
         if($after.Contains($key) -ne $pipelineOriginal[$key].present -or [Environment]::GetEnvironmentVariable($key,'Process') -cne $pipelineOriginal[$key].value){$restored=$false}
     }
-    $state.private_source_pipeline.restored=$restored
+    $state.source_pipeline.restored=$restored
     if(-not $restored){throw 'Private source pipeline process environment restoration differs.'}
 }
 $hostProcess=$null;$game=$null;$trace=$null;$resolutionProcess=$null
@@ -260,6 +321,9 @@ try {
     if(-not $options.ContainsKey('render_plan') -or $options.render_plan -isnot [hashtable]){throw 'The headset render plan is missing. BC2 has not been started.'}
     $renderPlan=$options.render_plan;Assert-Bc2ResolutionPlan $renderPlan
     $state.render_plan=$renderPlan
+    Assert-Bc2PerformanceAdmission
+    $state.graphics_settings_recovery=Restore-Bc2GraphicsSettingsLease -StateRoot $options.state_root
+    if($state.graphics_settings_recovery.status -notin @('none','restored')){throw ('Graphics settings restoration is pending ('+$state.graphics_settings_recovery.reason+'). Close BC2 normally before another launch. '+$(if($state.graphics_settings_recovery.ContainsKey('message')){$state.graphics_settings_recovery.message}))}
     Assert-Bc2RuntimeSpace $options.state_root
     $exe=Join-Path $options.game_path 'BFBC2Game.exe'
     if((Get-FileHash -LiteralPath $exe).Hash.ToLowerInvariant() -ne $options.game_sha256){throw 'BC2 executable changed before launch.'}
@@ -270,12 +334,14 @@ try {
     if(Get-Process BFBC2Game,BC2XrHost,BC2NativeTrace,BC2NativeIpcProbe -ErrorAction SilentlyContinue){throw 'BC2 or a VR helper started concurrently; launch cancelled.'}
     if(-not(Test-Bc2AssetCache $options.cache $config.asset_recipe_sha256 $options.game_sha256)){throw 'Prepared assets changed before launch.'}
     Enable-PrivateSourcePipeline
+    Start-Bc2PerformanceLease
     Assert-PrivateSourcePipelineChild 'game'
-    if($pipelineApplied){Save-State}
+    Save-State
     # Audio settings are attached only to this new game process, never to the
     # machine/user environment or a guessed already-running game.
     $game=Start-Bc2GraphicsGame $exe $config
-    if($pipelineApplied){$state.private_source_pipeline.children.game.started=$true;$state.private_source_pipeline.children.game.identity=$state.game}
+    if($graphicsLeasePrepared -and -not $graphicsLeaseBound){throw 'Graphics creation did not bind the performance settings lease before resume.'}
+    if($pipelineEnvironmentTouched){$state.source_pipeline.children.game.started=$true;$state.source_pipeline.children.game.identity=$state.game}
     $creation=$game.StartTime.ToUniversalTime().ToFileTimeUtc().ToString()
     & $options.python -B (Join-Path $PSScriptRoot 'tools/wait_main_menu.py') --pid $game.Id --creation-filetime $creation --exe $exe --expected-sha256 $options.game_sha256 --output (Join-Path $folder 'menu-ready.json') @menuCompatibilityArguments *> (Join-Path $folder 'menu-ready.log')
     if($LASTEXITCODE){
@@ -370,7 +436,7 @@ try {
     $hostArgs=@('--ipc','--until-game-exit',[string]$game.Id,'--request-lifetime','150','--eye-width',[string]$menuReady.width,'--eye-height',[string]$menuReady.height,'--channel-file',$channel,'--ready-file',$ready,'--stop-file',$stopFile,'--loader',(Join-Path $PSScriptRoot 'bin/openxr_loader.dll'),'--body-props-cache',(Join-Path $options.cache 'body-ammo-assets.fvrprop'),'--controllers','--roomscale','--world-units-per-meter','1')
     Assert-PrivateSourcePipelineChild 'host'
     $hostProcess=Start-Bc2Child (Join-Path $PSScriptRoot 'bin/BC2XrHost.exe') $hostArgs $folder 'host' @{XR_RUNTIME_JSON=$options.xr_manifest}
-    if($pipelineApplied){$state.private_source_pipeline.children.host.started=$true;$state.private_source_pipeline.children.host.identity=Get-Bc2ProcessIdentity $hostProcess}
+    if($pipelineEnvironmentTouched){$state.source_pipeline.children.host.started=$true;$state.source_pipeline.children.host.identity=Get-Bc2ProcessIdentity $hostProcess}
     $state.host=Get-Bc2ProcessIdentity $hostProcess;Save-State
     $deadline=[DateTime]::UtcNow.AddSeconds(30);$requirements=$null
     while([DateTime]::UtcNow -lt $deadline -and -not $hostProcess.HasExited){
@@ -393,7 +459,7 @@ try {
     }else{$nativeArguments+='--chest-holster-if-supported'}
     Assert-PrivateSourcePipelineChild 'native'
     $trace=Start-Bc2Child (Join-Path $PSScriptRoot 'bin/BC2NativeTrace.exe') $nativeArguments $folder 'native'
-    if($pipelineApplied){$state.private_source_pipeline.children.native.started=$true;$state.private_source_pipeline.children.native.identity=Get-Bc2ProcessIdentity $trace}
+    if($pipelineEnvironmentTouched){$state.source_pipeline.children.native.started=$true;$state.source_pipeline.children.native.identity=Get-Bc2ProcessIdentity $trace}
     $state.trace=Get-Bc2ProcessIdentity $trace;$state.phase='Attaching VR and waiting for the native connection. Keep the headset connected…';Save-State
     $attachDeadline=[DateTime]::UtcNow.AddSeconds(35);$attached=$false
     while([DateTime]::UtcNow -lt $attachDeadline){
@@ -466,6 +532,10 @@ finally {
         $state.error+=' BC2 remains open. Enable Restart BC2 before launch, or close BC2 normally and launch again. Reinstalling BC2VR is unnecessary.'
     }
     Save-NativeReportCompletion
+    try {Complete-Bc2PerformanceLease}catch{
+        $state.graphics_settings_restore_pending=$true;$state.state='failed'
+        $state.error+=' Graphics settings restoration is unconfirmed; the backup and journal are retained. '+$_.Exception.Message
+    }
     $state.ended_utc=[DateTime]::UtcNow.ToString('o');Save-State
     # A stop request can return from inside try. The failure exit belongs here
     # so that return cannot conceal a cleanup failure recorded by finally.

@@ -15,6 +15,7 @@
 #include "Bc2SelectedKnifeMotion.h"
 #include "Bc2SelectedKnifeNativeReader.h"
 #include "Bc2SelectedKnifeCode.h"
+#include <algorithm>
 #include <atomic>
 #include <mutex>
 #include <cmath>
@@ -60,6 +61,7 @@ struct Service {
     pk::OriginalKnifeSource sourceIdentity;
     pk::StockKnifeSourceRevocation stockTriggerSource;std::uint64_t stagedStockTriggerRevocation=0;
     pk::StockKnifeMotionSourceRevocation stockMotionSource;std::uint64_t stagedStockMotionRevocation=0;
+    PendingMotionAdmission pendingMotionAdmission{};
     std::uint64_t stagedEpoch=0,bodyOperation=0,nativeLifetime=0,observationSequence=0,inspectionOperation=1;
     std::optional<KnifeCommand> outstanding;
     std::uint64_t currentHoldDrawSerial=0;bool currentHoldDrawOnly=false; // Passive per-Draw provenance.
@@ -132,7 +134,9 @@ bool SourceCurrent(const KnifeCommand& c,std::int64_t now)noexcept {
     if(c.stockTriggerHold&&!service.attacks.Accepted()&&
        !service.stockTriggerSource.Current(service.stagedStockTriggerRevocation))return false;
     if(c.stroke&&!service.attackBridgeEnabled&&!service.attacks.Accepted()&&
-       !service.stockMotionSource.Current(service.stagedStockMotionRevocation))return false;
+       (!service.stockMotionSource.Current(service.stagedStockMotionRevocation)||
+        !PendingMotionCurrent(service.pendingMotionAdmission,c,service.nativeLifetime,service.bodyOperation,
+            service.sourceEpoch.load(std::memory_order_acquire),service.stagedStockMotionRevocation,now)))return false;
     if(service.closing.load(std::memory_order_acquire)||service.stagedEpoch!=service.sourceEpoch.load(std::memory_order_acquire)||
        !pk::DrawReturnGate::Fresh(c,now)||!SameCommandSource(c,service.source)||
        !GameplayOwnsInput(service.source.menu,now))return false;
@@ -579,7 +583,8 @@ bool TryIdleHeldGun(const KnifeSample& source)noexcept {
     service.source=source;
     return true;
 }
-bool BeforePrepare(const KnifeSample& source,ChestKnifeCustody& policy,BeforePrepareReason* diagnostic)noexcept {
+bool BeforePrepare(const KnifeSample& source,ChestKnifeCustody& policy,BeforePrepareReason* diagnostic,
+    const PendingMotionAdmission* unavailableMotion)noexcept {
     const auto reason=[&](BeforePrepareReason value){if(diagnostic)*diagnostic=value;};
     // Gather is the sole caller. Revoke first-boundary input authority before
     // waiting for the native gate; accepted native work is drained separately.
@@ -587,7 +592,14 @@ bool BeforePrepare(const KnifeSample& source,ChestKnifeCustody& policy,BeforePre
     // Stock authority may disappear on an identical controller packet, even
     // when the service lock is busy. Restoration cannot revive its old stage.
     if(service.stockTriggerEnabled)service.stockTriggerSource.Advance(source,policy.NeedsNativeCleanup());
-    if(service.motionEnabled&&!service.attackBridgeEnabled)service.stockMotionSource.Advance(source,policy.NeedsNativeCleanup());
+    bool preserveMotion=unavailableMotion&&service.enabled.load(std::memory_order_acquire)&&
+        !service.closing.load(std::memory_order_acquire)&&service.motionEnabled&&!service.attackBridgeEnabled&&
+        policy.Phase()==KnifePhase::AttackStaged&&!policy.NeedsNativeCleanup()&&
+        unavailableMotion->sourceEpoch==service.sourceEpoch.load(std::memory_order_acquire)&&
+        source.source.nowNs<unavailableMotion->deadlineNs&&
+        service.stockMotionSource.PreservePending(source,unavailableMotion->motionStamp);
+    if(service.motionEnabled&&!service.attackBridgeEnabled&&!preserveMotion)
+        service.stockMotionSource.Advance(source,policy.NeedsNativeCleanup());
     // A repeated input can lose its rendered grip/handout. Revoke the blade
     // before taking the service lock; this is not the draw/return source epoch.
     if(service.enabled.load(std::memory_order_acquire)&&service.attackBridgeEnabled&&
@@ -598,15 +610,26 @@ bool BeforePrepare(const KnifeSample& source,ChestKnifeCustody& policy,BeforePre
     if(service.closing.load(std::memory_order_acquire)){reason(BeforePrepareReason::Closing);return false;}
     if(!lock.owns_lock()){reason(BeforePrepareReason::Busy);return false;}
     InspectionChanged();
+    if(preserveMotion&&(!service.outstanding||!service.attacks.Pending()||
+       *unavailableMotion!=service.pendingMotionAdmission||service.attacks.Pending()->serial!=unavailableMotion->serial||
+       !PendingMotionCurrent(*unavailableMotion,*service.outstanding,service.nativeLifetime,service.bodyOperation,
+           service.sourceEpoch.load(std::memory_order_acquire),service.stagedStockMotionRevocation,source.source.nowNs))){
+        preserveMotion=false;service.stockMotionSource.Advance(source,policy.NeedsNativeCleanup());
+    }
     if(service.outstanding){const auto result=service.outstanding->kind==KnifeCommandKind::Attack?
         service.attacks.ResolveBeforeSource(source.source.sequence,source.source.observedNs,source.source.nowNs):
         service.commands.ResolveBeforeSource(source.source.sequence,source.source.observedNs,source.source.nowNs);
         if(result){policy.Committed(*service.outstanding,*result);if(*result==KnifeCommit::RejectedNoEffect){service.returnReady=service.outstanding->kind==KnifeCommandKind::Draw;service.outstanding.reset();service.bridge.LifetimeEnded();service.attackNative.reset();}}}
-    service.source=source;reason(BeforePrepareReason::Available);return true;
+    // Keep the admitted source only for this verified unavailable duplicate.
+    // The callback still checks its original lease and all live native gates.
+    if(!preserveMotion)service.source=source;
+    reason(BeforePrepareReason::Available);return true;
 }
 bool Stage(const KnifeCommand& command,const KnifeSample& source,const HandInteraction& hands,ChestKnifeCustody& policy,
     const pk::Anchor& anchor,const ReloadStateOwner& current,std::uint64_t bodyOperation,
-    const std::optional<math::Matrix4>& attackGeometry,float units,std::int64_t geometryDeadlineNs)noexcept {
+    const std::optional<math::Matrix4>& attackGeometry,float units,std::int64_t geometryDeadlineNs,
+    PendingMotionAdmission* admission)noexcept {
+    if(admission)*admission={};
     std::unique_lock lock(service.gate,std::try_to_lock);
     // A later attempted action cannot revive this Draw's passive-only provenance.
     if(lock.owns_lock())InspectionChanged();
@@ -653,9 +676,16 @@ bool Stage(const KnifeCommand& command,const KnifeSample& source,const HandInter
     service.source=source;service.stagedEpoch=service.sourceEpoch.load(std::memory_order_acquire);
     service.stagedStockTriggerRevocation=command.stockTriggerHold?service.stockTriggerSource.Stamp():0;
     service.stagedStockMotionRevocation=command.stroke&&!service.attackBridgeEnabled?service.stockMotionSource.Stamp():0;
+    service.pendingMotionAdmission={};
+    if(service.stagedStockMotionRevocation){
+        const auto held=hands.Current(command.hand); // CanCommit proved this exact live claim above.
+        service.pendingMotionAdmission={command.serial,service.nativeLifetime,bodyOperation,service.stagedEpoch,
+            service.stagedStockMotionRevocation,(std::min)({command.source.deadlineNs,source.heldContact.deadlineNs,held->deadlineNs})};
+    }
     service.outstanding=command;service.returnReady=false;
     if(drawing){service.currentHoldDrawSerial=command.serial;service.currentHoldDrawOnly=true;}
     if(command.kind==KnifeCommandKind::Return){service.lastReturnReason=ReturnPendingReason::NotObserved;service.lastReturnObservedNs=0;service.lastReturnReadiness={};service.lastReturnBad=false;service.lastReturnBadKnown=false;}
+    if(admission)*admission=service.pendingMotionAdmission;
     return true;
 }
 std::optional<KnifeReceipt> Observe(const ReloadStateOwner& current,const Bc2BodyHolster& body,
@@ -934,9 +964,9 @@ void AcknowledgeNoEffectRehide(const Bc2BodyHolster&)noexcept{}
 
 void SourceAdvanced(const interaction::HandInteractionSample&)noexcept{}
 bool TryIdleHeldGun(const interaction::KnifeSample&)noexcept{return false;}
-bool BeforePrepare(const interaction::KnifeSample&,interaction::ChestKnifeCustody&,BeforePrepareReason* diagnostic)noexcept{if(diagnostic)*diagnostic=BeforePrepareReason::Unsupported;return false;}
+bool BeforePrepare(const interaction::KnifeSample&,interaction::ChestKnifeCustody&,BeforePrepareReason* diagnostic,const PendingMotionAdmission*)noexcept{if(diagnostic)*diagnostic=BeforePrepareReason::Unsupported;return false;}
 bool Stage(const interaction::KnifeCommand&,const interaction::KnifeSample&,const interaction::HandInteraction&,interaction::ChestKnifeCustody&,
- const private_knife::Anchor&,const ReloadStateOwner&,std::uint64_t,const std::optional<math::Matrix4>&,float,std::int64_t)noexcept{return false;}
+ const private_knife::Anchor&,const ReloadStateOwner&,std::uint64_t,const std::optional<math::Matrix4>&,float,std::int64_t,PendingMotionAdmission* admission)noexcept{if(admission)*admission={};return false;}
 std::optional<interaction::KnifeReceipt> Observe(const ReloadStateOwner&,const Bc2BodyHolster&,const std::optional<BodyFreeRightEvidence>&,std::int64_t,std::optional<ReturnCompletion>* completed)noexcept{if(completed)completed->reset();return {};}
 std::optional<ReturnPendingObservation> ReadReturnPendingObservation()noexcept{return {};}
 std::optional<std::uint64_t> ReturnNeedsRehide()noexcept{return {};}

@@ -20,12 +20,14 @@ param(
     [switch]$PrivateGpuOrderedPresent,
     [switch]$ProfileAttribution,
     [switch]$PrivateSourcePipeline,
+    [switch]$PerformanceMode=$false,
     [string]$PreAttachSetupSpec,
     [string]$PreAttachSetupSpecSha256,
     [string]$PrivateSessionBinding,
     [string]$PrivateSessionBindingSha256,
     [switch]$ExtendedObservation
 )
+if($PerformanceMode -and $PrivateSourcePipeline){throw 'PerformanceMode and PrivateSourcePipeline are separate launch options; select only one.'}
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $sourceRoot=Split-Path -Parent $PSScriptRoot
@@ -41,6 +43,7 @@ $startup=$null;$preAttachSpec=$null;$preAttachProvisionRunner=$null;$preparedPro
 $mechanismMarker=@{requested=[bool]$MechanismSnapshots;status=$(if($MechanismSnapshots){'awaiting_session'}else{'not_requested'});native_enabled_claimed=$false}
 $privatePresentation=@{requested=[bool]$PrivateGpuOrderedPresent;environment_variable='FVR_PRIVATE_GPU_ORDERED_PRESENT';environment_value=$(if($PrivateGpuOrderedPresent){'1'}else{'0'});child_environment_verified=$false;other_fvr_bc2_environment_absent=$false;actual_host_enablement_claimed=$false}
 $sourcePipeline=@{requested=[bool]$PrivateSourcePipeline;activation_boundary='dedicated_session_after_entry_probe';entry_environment_enabled=$false;session_option_verified=$false;native_enablement_claimed=$false}
+$performanceSelection=@{requested=[bool]$PerformanceMode;session_option_verified=$false;session_enabled_observed=$false;native_samples_verified=$false;restoration_verified=$false;restoration_status='not_observed'}
 # Finite native attribution starts automatically at first verified infantry, including warmup.
 # This does not select a steady Insert window, rearm profiling or establish headset FPS.
 $attributionProfile=@{requested=[bool]$ProfileAttribution;environment=@{};
@@ -54,7 +57,7 @@ $capturePlan=@{maximum_compositions=$CaptureCount;width=$CaptureWidth;height=$Ca
 $receipt=[ordered]@{schema='fvr.xr-game-simulation.v1';status='failed';evidence_level='actual_game_simulated_runtime';
     actual_game_started=$false;native_running_observed=$false;reload_success_claimed=$false;headset_accepted=$false;
     limits=@{host_seconds=$Seconds;outer_seconds=$TimeoutSeconds;max_generated_bytes=$MaxGeneratedBytes;generated_budget_reason=$GeneratedBudgetReason;planned_bytes=$plannedBytes;raw_budget_bytes=$rawBytes;raw_budget_limit_bytes=$rawLimitBytes;raw_budget_reason='Readable menu/mechanism captures: native eight bounded images plus at most twelve 1024x768 stereo/SBS compositions.';native_maximum_raw_images=8;sim_compositions=$CaptureCount;sim_capture_width=$CaptureWidth;sim_capture_height=$CaptureHeight;render_width=1024;render_height=768;tape_max_frames=30000};
-    capture_plan=$capturePlan;mechanism_snapshots=$mechanismMarker;private_gpu_ordered_present=$privatePresentation;profile_attribution=$attributionProfile;private_source_pipeline=$sourcePipeline;
+    capture_plan=$capturePlan;mechanism_snapshots=$mechanismMarker;private_gpu_ordered_present=$privatePresentation;profile_attribution=$attributionProfile;private_source_pipeline=$sourcePipeline;performance_mode=$performanceSelection;
     failures=$failures;forced_termination_by_wrapper=$false}
 function Require([bool]$Condition,[string]$Message){if(-not $Condition){throw $Message}}
 function AssertObservationLimits([int]$HostSeconds,[int]$OuterSeconds,[bool]$Extended){
@@ -122,6 +125,75 @@ function Save([string]$Name,$Value){
 }
 function SameIdentity($Actual,$Expected){
     Require ($Actual.pid -eq $Expected.pid -and $Actual.start_utc -ceq $Expected.start_utc -and $Actual.path -ieq $Expected.path) 'Retained process identity differs.'
+}
+function AssertPerformanceOptions($Options){
+    if($Options.ContainsKey('performance_mode')){
+        Require ($Options.performance_mode -is [bool] -and $Options.performance_mode -eq [bool]$PerformanceMode) 'Performance mode session option differs.'
+    }else{Require (-not $PerformanceMode) 'Requested performance mode session option is missing.'}
+    $performanceSelection.session_option_verified=$true
+}
+function ObservePerformanceSession($Record){
+    if($Record.ContainsKey('performance_mode')){
+        $mode=$Record.performance_mode
+        Require ($mode -is [hashtable] -and $mode.requested -is [bool] -and $mode.requested -eq [bool]$PerformanceMode -and $mode.enabled -is [bool]) 'Performance mode session receipt differs.'
+        Require ($PerformanceMode -or -not $mode.enabled) 'Unrequested performance mode enablement.'
+        $performanceSelection.session=$mode
+        if($mode.enabled){$performanceSelection.session_enabled_observed=$true}
+    }elseif($PerformanceMode -and $Record.state -ceq 'running'){throw 'Running performance mode session receipt is missing.'}
+    foreach($key in 'graphics_settings_restoration','graphics_settings_restore_pending'){
+        if($Record.ContainsKey($key)){$performanceSelection[$key]=$Record[$key]}
+    }
+    if($Record.ContainsKey('private_source_pipeline')){
+        if($PerformanceMode){
+            $pipeline=$Record.private_source_pipeline
+            Require ($pipeline.selection -ceq 'performance_mode' -and $pipeline.requested -is [bool] -and $pipeline.requested) 'Performance mode source pipeline receipt differs.'
+            $performanceSelection.source_pipeline=$pipeline
+        }else{
+            Require ([bool]$PrivateSourcePipeline) 'Unrequested private source pipeline session receipt.'
+            $sourcePipeline.session=$Record.private_source_pipeline
+        }
+    }
+    if($PerformanceMode -and $Record.state -ceq 'running'){
+        Require ($Record.performance_mode.enabled -and $Record.performance_mode.lease.status -ceq 'bound' -and $Record.performance_mode.ContainsKey('watcher') -and $Record.ContainsKey('private_source_pipeline')) 'Running performance mode lacks its bound lease, watcher or pipeline receipt.'
+    }
+}
+function AssertPerformanceRestoration($Journal,$SettingsRow,[string]$CurrentMsaa){
+    Require ($Journal.schema -ceq 'bc2vr.graphics-settings-lease.v1' -and $Journal.state -ceq 'restored') 'Performance graphics lease restoration remains unconfirmed.'
+    SameIdentity $Journal.supervisor $owned.supervisor.identity
+    if($owned.ContainsKey('game')){SameIdentity $Journal.game $owned.game.identity}
+    Require ($Journal.settings_path -ieq $SettingsRow.original.path -and $Journal.original_sha256 -ceq $SettingsRow.original.sha256 -and $Journal.game_path -ieq $gameExe) 'Performance graphics lease differs from the original profile/game backup.'
+    Require ($CurrentMsaa -ceq $Journal.original_msaa) 'Performance graphics MSAA restoration differs.'
+    $performanceSelection.restoration_verified=$true;$performanceSelection.restoration_status='restored'
+}
+function CompletePerformanceRestoration {
+    $performanceSelection.restoration_status='awaiting_watcher_and_lease'
+    try{
+    foreach($name in $owned.Keys){if($name -cne 'graphics_watcher'){Require ($owned[$name].process.HasExited) 'Performance graphics restoration requires all game/session owners to exit.'}}
+    NoOtherProcesses -BeforeLaunch
+    if($session.performance_mode.ContainsKey('watcher')){
+        Require ($owned.ContainsKey('graphics_watcher')) 'Performance graphics watcher identity was not retained; preserve profiles.'
+        $watcher=$owned.graphics_watcher.process
+        $remaining=[Math]::Max(0,[Math]::Min(10000,[int](($TimeoutSeconds-$clock.Elapsed.TotalSeconds)*1000)))
+        Require ($watcher.HasExited -or $watcher.WaitForExit($remaining)) 'Performance graphics watcher remains live at the original deadline; preserve profiles.'
+        Require ($watcher.ExitCode -eq 0) 'Performance graphics watcher failed; preserve profiles and lease diagnostics.'
+    }else{Require (-not $performanceSelection.session_enabled_observed) 'Enabled performance mode has no watcher identity; preserve profiles.'}
+    # Read the installed lease contract only after its writer exits. Never ask
+    # the wrapper's profile restoration to stand in for durable lease recovery.
+    . (Join-Path $runtimeRoot 'GraphicsSettings.ps1')
+    $leasePaths=Get-Bc2GraphicsLeasePaths $stateRoot
+    $lease=Read-Bc2GraphicsLease $leasePaths
+    if(-not $lease){Require (-not $performanceSelection.session_enabled_observed) 'Performance graphics lease is missing.';$performanceSelection.restoration_status='not_started';return}
+    Require ($owned.ContainsKey('graphics_watcher')) 'Performance graphics watcher was not retained for this lease; preserve profiles.'
+    $settingsRows=@($profiles|Where-Object {[IO.Path]::GetFileName($_.original.path) -ceq 'settings.ini'})
+    Require ($settingsRows.Count -eq 1) 'Performance mode requires the original graphics profile backup.'
+    $current=Convert-Bc2GraphicsMsaa ([IO.File]::ReadAllBytes($settingsRows[0].original.path))
+    AssertPerformanceRestoration $lease $settingsRows[0] $current.value
+    }finally{
+        try{
+            $journalPath=Join-Path $stateRoot 'graphics-settings/lease.json'
+            if([IO.File]::Exists($journalPath)){Save 'performance-graphics-lease.json' (Json $journalPath 16KB)}
+        }catch{$performanceSelection.restoration_evidence_error=$_.Exception.Message}
+    }
 }
 function Bind([string]$Name,$Identity,[string]$ExpectedPath,[int]$ParentId){
     if(-not $Identity){return}
@@ -260,6 +332,7 @@ function ObserveSession {
         if($PrivateSourcePipeline){Require ($options.ContainsKey('private_source_pipeline') -and $options.private_source_pipeline -is [bool] -and $options.private_source_pipeline) 'Private source pipeline option differs.'}
         else{Require (-not $options.ContainsKey('private_source_pipeline')) 'Unrequested private source pipeline.'}
         $sourcePipeline.session_option_verified=$true
+        AssertPerformanceOptions $options
         if($preAttachSpec){
             Require ($options.ContainsKey('pre_attach_setup') -and $options.pre_attach_setup.path -ieq $PreAttachSetupSpec -and $options.pre_attach_setup.sha256 -ceq $PreAttachSetupSpecSha256) 'Pre-attach setup option differs.'
         }else{Require (-not $options.ContainsKey('pre_attach_setup')) 'Unrequested pre-attach setup.'}
@@ -280,9 +353,9 @@ function ObserveSession {
     $script:session=Json $record
     Require ($session.schema -ceq 'bc2vr.session.v1' -and $session.source_sha256 -ceq $ExpectedSourceSha256 -and $session.version -ceq $runtimeVersion) 'Session source identity differs.'
     SameIdentity $session.supervisor $owned.supervisor.identity
-    if($session.ContainsKey('private_source_pipeline')){
-        Require ([bool]$PrivateSourcePipeline) 'Unrequested private source pipeline session receipt.'
-        $sourcePipeline.session=$session.private_source_pipeline
+    ObservePerformanceSession $session
+    if($PerformanceMode -and $session.ContainsKey('performance_mode') -and $session.performance_mode.ContainsKey('watcher')){
+        Bind 'graphics_watcher' $session.performance_mode.watcher $pwsh $owned.supervisor.identity.pid
     }
     foreach($kind in 'game','host','trace','resolution_helper','resolution_release_helper','setup_helper'){
         if(-not $session.ContainsKey($kind) -or -not $session[$kind]){continue}
@@ -389,6 +462,7 @@ try{
     . (Join-Path $sourceRoot 'launcher/runtime/Resolution.ps1')
     . (Join-Path $sourceRoot 'tools/StorageBudget.ps1')
     $RepositoryRoot=Full $RepositoryRoot;$InstallRoot=Full $InstallRoot;$OutputDir=Full $OutputDir;$ProfileDirectory=Full $ProfileDirectory
+    if($PerformanceMode){Require ($ProfileDirectory -ieq [IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'BFBC2'))) 'Performance mode requires the normal launcher graphics profile directory.'}
     AssertObservationLimits $Seconds $TimeoutSeconds ([bool]$ExtendedObservation)
     Require ($MaxGeneratedBytes -le 40GB -or -not [string]::IsNullOrWhiteSpace($GeneratedBudgetReason)) 'MaxGeneratedBytes above 40 GiB requires an explicit GeneratedBudgetReason.'
     $receipt.limits.extended_observation=[bool]$ExtendedObservation
@@ -401,7 +475,7 @@ try{
     $budget|Add-Member -NotePropertyName raw_budget_reason -NotePropertyValue $receipt.limits.raw_budget_reason
     $budget|Add-Member -NotePropertyName generated_budget_reason -NotePropertyValue $GeneratedBudgetReason
     $null=[IO.Directory]::CreateDirectory($OutputDir);$outputReady=$true;Save 'storage.json' $budget
-    Save 'run-manifest.json' @{schema='fvr.xr-game-run.v1';output_directory=$OutputDir;version=$Version;source_sha256=$ExpectedSourceSha256;artifact_binding_path=(Join-Path $OutputDir 'artifact-binding.json');limits=$receipt.limits;capture_plan=$capturePlan;mechanism_snapshots=$mechanismMarker;profile_attribution=$attributionProfile;private_source_pipeline=$sourcePipeline;startup_receipt=(Join-Path $OutputDir 'sim-startup.json');command_authority='Runner owns startup. Root may send acknowledged batches only after sim-startup.json has status ready and exact retained host identity.'}
+    Save 'run-manifest.json' @{schema='fvr.xr-game-run.v1';output_directory=$OutputDir;version=$Version;source_sha256=$ExpectedSourceSha256;artifact_binding_path=(Join-Path $OutputDir 'artifact-binding.json');limits=$receipt.limits;capture_plan=$capturePlan;mechanism_snapshots=$mechanismMarker;profile_attribution=$attributionProfile;private_source_pipeline=$sourcePipeline;performance_mode=$performanceSelection;startup_receipt=(Join-Path $OutputDir 'sim-startup.json');command_authority='Runner owns startup. Root may send acknowledged batches only after sim-startup.json has status ready and exact retained host identity.'}
     NoOtherProcesses -BeforeLaunch
     $null=Assert-FvrVersion $Version
     $packageRoot=Get-FvrChild $InstallRoot ('versions/'+$Version)
@@ -531,9 +605,9 @@ try{
     foreach($key in 'TEMP','TMP','TMPDIR'){$psi.Environment[$key]=$scratch};$psi.Environment['PYTHONDONTWRITEBYTECODE']='1'
     $launchScript=Join-Path $OutputDir 'launch.ps1'
     # Literal paths are passed as arguments, never interpolated into shell code.
-    [IO.File]::WriteAllText($launchScript,"param(`$EntryPath,`$SettingsPath,`$StateRoot,`$Log,`$SetupSpec,`$SetupHash,`$PrivateBinding,`$PrivateHash,`$SourcePipeline)`n`$ErrorActionPreference='Stop'`ntry { `$setup=@{}; if(`$SetupSpec){`$setup.PreAttachSetupSpec=`$SetupSpec;`$setup.PreAttachSetupSpecSha256=`$SetupHash}; if(`$PrivateBinding){`$setup.PrivateSessionBinding=`$PrivateBinding;`$setup.PrivateSessionBindingSha256=`$PrivateHash}; if(`$SourcePipeline -ceq '1'){`$setup.PrivateSourcePipeline=`$true}elseif(`$SourcePipeline -cne '0'){throw 'Invalid private source pipeline launch selection.'}; & `$EntryPath -Action Launch -SettingsPath `$SettingsPath -StateRoot `$StateRoot -StartAt MainMenu @setup *>> `$Log } catch { [IO.File]::AppendAllText(`$Log,(`$_ | Out-String),[Text.UTF8Encoding]::new(`$false)); exit 1 }`n",$utf8)
-    foreach($arg in @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$launchScript,(Join-Path $runtimeRoot 'Entry.ps1'),$settingsPath,$stateRoot,(Join-Path $OutputDir 'entry.log'),([string]$PreAttachSetupSpec),([string]$PreAttachSetupSpecSha256),([string]$PrivateSessionBinding),([string]$PrivateSessionBindingSha256),$(if($PrivateSourcePipeline){'1'}else{'0'}))){$psi.ArgumentList.Add($arg)}
-    Save 'launch.json' @{executable=$pwsh;entry=(Join-Path $runtimeRoot 'Entry.ps1');action='Launch';start_at='MainMenu';activate_window=$false;environment=$environment;state_root=$stateRoot;capture_plan=$capturePlan;mechanism_snapshots_requested=[bool]$MechanismSnapshots;private_gpu_ordered_present=$privatePresentation;profile_attribution=$attributionProfile;private_source_pipeline=$sourcePipeline}
+    [IO.File]::WriteAllText($launchScript,"param(`$EntryPath,`$SettingsPath,`$StateRoot,`$Log,`$SetupSpec,`$SetupHash,`$PrivateBinding,`$PrivateHash,`$Performance,`$SourcePipeline)`n`$ErrorActionPreference='Stop'`ntry { `$setup=@{}; if(`$SetupSpec){`$setup.PreAttachSetupSpec=`$SetupSpec;`$setup.PreAttachSetupSpecSha256=`$SetupHash}; if(`$PrivateBinding){`$setup.PrivateSessionBinding=`$PrivateBinding;`$setup.PrivateSessionBindingSha256=`$PrivateHash}; if(`$Performance -ceq '1'){`$setup.PerformanceMode=`$true}elseif(`$Performance -cne '0'){throw 'Invalid performance mode launch selection.'}; if(`$SourcePipeline -ceq '1'){`$setup.PrivateSourcePipeline=`$true}elseif(`$SourcePipeline -cne '0'){throw 'Invalid private source pipeline launch selection.'}; & `$EntryPath -Action Launch -SettingsPath `$SettingsPath -StateRoot `$StateRoot -StartAt MainMenu @setup *>> `$Log } catch { [IO.File]::AppendAllText(`$Log,(`$_ | Out-String),[Text.UTF8Encoding]::new(`$false)); exit 1 }`n",$utf8)
+    foreach($arg in @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$launchScript,(Join-Path $runtimeRoot 'Entry.ps1'),$settingsPath,$stateRoot,(Join-Path $OutputDir 'entry.log'),([string]$PreAttachSetupSpec),([string]$PreAttachSetupSpecSha256),([string]$PrivateSessionBinding),([string]$PrivateSessionBindingSha256),$(if($PerformanceMode){'1'}else{'0'}),$(if($PrivateSourcePipeline){'1'}else{'0'}))){$psi.ArgumentList.Add($arg)}
+    Save 'launch.json' @{executable=$pwsh;entry=(Join-Path $runtimeRoot 'Entry.ps1');action='Launch';start_at='MainMenu';activate_window=$false;environment=$environment;state_root=$stateRoot;capture_plan=$capturePlan;mechanism_snapshots_requested=[bool]$MechanismSnapshots;private_gpu_ordered_present=$privatePresentation;profile_attribution=$attributionProfile;private_source_pipeline=$sourcePipeline;performance_mode=$performanceSelection}
     NoOtherProcesses -BeforeLaunch
     foreach($row in $profiles+$launcherFiles){$expected=if($preparedProfileHashes.ContainsKey($row.original.path)){$preparedProfileHashes[$row.original.path]}else{$row.original.sha256};Require ((Pin $row.original.path).sha256 -ceq $expected) 'Prepared/original file changed before launch.'}
     $launchUtc=[DateTime]::UtcNow;$clock.Start();$entry=[Diagnostics.Process]::new();$entry.StartInfo=$psi
@@ -677,6 +751,7 @@ finally{
     }
     if($outputReady){
         try{
+            if($session -and $session.ContainsKey('performance_mode') -and $session.performance_mode.requested){CompletePerformanceRestoration}
             foreach($value in $owned.Values){Require ($value.process.HasExited) 'A retained owned process is live; profiles remain backed up.'}
             NoOtherProcesses -BeforeLaunch
             foreach($row in $profiles){Require ((Pin $row.backup.path).sha256 -ceq $row.original.sha256) 'Original backup changed.'}

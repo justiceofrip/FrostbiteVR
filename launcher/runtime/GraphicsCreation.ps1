@@ -199,6 +199,9 @@ function Start-Bc2GraphicsGame([string]$Exe,$RuntimeConfig) {
     if($identity.path -ine $Exe -or [DateTimeOffset]::Parse($identity.start_utc).UtcDateTime.ToFileTimeUtc() -ne $ticket.targetCreated -or
        [Bc2Vr.GraphicsCreation.Bridge]::ParentPid([uint32]$pi.pid) -ne $PID){throw 'The game is not the graphics supervisor owned child.'}
     $state.game=$identity;$state.audio_environment_inherited=$true
+    # Session owns the optional MSAA lease. Bind the verified suspended child
+    # before it can read or rewrite settings; a failed bind must prevent Resume.
+    if($options.ContainsKey('performance_mode') -and $options.performance_mode -is [bool] -and $options.performance_mode){Invoke-Bc2GraphicsSettingsGameCreated $identity}
     $state.graphics_creation=@{schema='bc2vr.graphics-creation.v1';policy='clear_singlethreaded';lifetime='game_process';ticket=$ticket;primary_tid=$pi.tid;resumed=$false;collection_requested=$d.collect;device_flags_verification='native_adapter_required'}
     Save-State
     Assert-Bc2GraphicsReceipt (Read-FvrJson $stateFile) $identity $ticket $config.ownerCreated

@@ -43,6 +43,7 @@ $require=$ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDef
 . ([scriptblock]::Create($require.Extent.Text))
 $presentationInit=[scriptblock]::Create((Assignment $ast '$privatePresentation').Extent.Text)
 $pipelineInit=[scriptblock]::Create((Assignment $ast '$sourcePipeline').Extent.Text)
+$performanceInit=[scriptblock]::Create((Assignment $ast '$performanceSelection').Extent.Text)
 $profileInit=[scriptblock]::Create((Assignment $ast '$attributionProfile').Extent.Text)
 $profileIf=@($ast.EndBlock.Statements|Where-Object {$_ -is [Management.Automation.Language.IfStatementAst] -and $_.Extent.Text.StartsWith('if($ProfileAttribution)')})
 Check ($profileIf.Count -eq 1) 'one attribution metadata initializer'
@@ -62,8 +63,10 @@ function Run([string]$Name,[bool]$OptIn,[bool]$Ordered,[scriptblock]$Change={},[
     $before=SnapshotEnvironment
     $ProfileAttribution=[switch]$OptIn;$PrivateGpuOrderedPresent=[switch]$Ordered
     $PrivateSourcePipeline=[switch]$Pipeline
+    $PerformanceMode=[switch]$false
     . $presentationInit
     . $pipelineInit
+    . $performanceInit
     . $profileInit
     . $profileOptIn
     Check (-not $attributionProfile.child_environment_verified -and -not $attributionProfile.native_enablement_claimed) "$Name initially unverified"
@@ -138,13 +141,13 @@ Check ($null -ne $writeLaunch -and $null -ne $argumentLoop) 'production launch w
 $fixture=Join-Path (Split-Path $PSScriptRoot -Parent) ('test-temp/pipeline-forward-'+[guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($fixture)|Out-Null
 function Invoke-PipelineFixtureEntry {
-    param($Action,$SettingsPath,$StateRoot,$StartAt,[switch]$PrivateSourcePipeline)
+    param($Action,$SettingsPath,$StateRoot,$StartAt,[switch]$PrivateSourcePipeline,[switch]$PerformanceMode)
     $script:forwardedPipeline=[bool]$PrivateSourcePipeline
     Check ($Action -ceq 'Launch' -and $StartAt -ceq 'MainMenu') 'assembled pipeline wrapper preserves launch route'
 }
 try {
     foreach($selected in @($false,$true)){
-        $PrivateSourcePipeline=[switch]$selected;$psi=[Diagnostics.ProcessStartInfo]::new()
+        $PrivateSourcePipeline=[switch]$selected;$PerformanceMode=[switch]$false;$psi=[Diagnostics.ProcessStartInfo]::new()
         $launchScript=Join-Path $fixture 'launch.ps1';$runtimeRoot=$fixture;$settingsPath='fixture-settings';$stateRoot='fixture-state';$OutputDir=$fixture
         $PreAttachSetupSpec='';$PreAttachSetupSpecSha256='';$PrivateSessionBinding='';$PrivateSessionBindingSha256=''
         . ([scriptblock]::Create($argumentLoop.Extent.Text))

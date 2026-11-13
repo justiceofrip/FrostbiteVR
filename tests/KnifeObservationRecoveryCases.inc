@@ -125,8 +125,76 @@ int RetiredCompletionCases(){
     CHECK(h.view.observationRecovery.state.completedNs==completed&&NativeProofReady(h.view.observationRecovery));
     return 0;
 }
+int PendingContentionCases(){
+    // Actual91/04: recognition 4.0663ms after the original input, followed by
+    // CaptureBusy on that same packet 7.0815ms later. Stage's actual clock is
+    // not recorded; this assembly places Stage before that observed duplicate.
+    for(unsigned fault=0;fault<28;++fault){
+        Held h;CHECK(h.Init()&&h.Rest());const auto jab=h.Jab();CHECK(jab&&jab->stroke);
+        auto& s=h.f.s;s.source.nowNs+=4066300;
+        h.f.hands.Update(s.source);CHECK(h.f.knife.CanCommit(*jab,s,h.f.hands));
+        CHECK(!h.source.Advance(s)&&h.recovery.TakeReady(s.source.nowNs)&&h.attacks.Stage(*jab,s.source.nowNs));
+        const auto held=h.f.hands.Current(InteractionHand::Right);CHECK(held);
+        const auto identity=ChestKnifeMotionIdentity{h.view.snapshot.selectedOwner,held->token,{42,1},7,1,1,9,1.f};
+        const PendingMotionAdmission admission{jab->serial,1,7,11,h.source.Stamp(),
+            (std::min)({s.source.deadlineNs,s.heldContact.deadlineNs,held->deadlineNs})};
+        ChestKnifePendingMotion pending;
+        CHECK(pending.Remember(admission,identity,h.input,s,*held,h.view.currentHoldWork));
+        const auto nativeSource=s;auto duplicate=s;duplicate.source.nowNs+=7081500;
+        duplicate.onFoot=duplicate.mechanicsSettled=duplicate.knifeSelected=duplicate.trackedKnifeOwned=false;
+        duplicate.nativeAttackReady=duplicate.motionTrackingReady=false;duplicate.heldContact={};duplicate.tip={};duplicate.direction={0,0,1};
+        auto input=h.input;auto owner=identity.owner;auto inspection=fault==1?InspectReason::RejoinBusy:InspectReason::CaptureBusy;
+        std::uint64_t operation=7,lifetime=1,epoch=11;bool nativeSelection=true;
+        switch(fault){
+        case 2:inspection=InspectReason::NativeRead;break;case 3:inspection=InspectReason::RejoinChanged;break;
+        case 4:++owner.weapon;break;case 5:++operation;break;case 6:++lifetime;break;case 7:++epoch;break;
+        case 8:++duplicate.source.sequence;break;case 9:++duplicate.source.observedNs;break;
+        case 10:++duplicate.source.deadlineNs;break;case 11:input.hands[1].grip.position.x+=.001f;break;
+        case 12:duplicate.gripHeld[1]=false;break;case 13:duplicate.source.released[1]=true;break;
+        case 14:duplicate.source.focused=false;break;case 15:duplicate.source.tracked[1]=false;break;
+        case 16:++duplicate.menu.epoch;break;case 17:duplicate.fireSuppressed=false;break;
+        case 18:duplicate.holdInputCurrent=duplicate.controlsNeutral=false;break;
+        case 19:h.f.hands.Reset();break;case 20:duplicate.source.nowNs=admission.deadlineNs;break;
+        case 21:h.recovery.Unknown();break;
+        case 22:{auto lost=s;lost.gripHeld[1]=false;h.source.Advance(lost);h.source.Advance(s);break;}
+        case 23:pending.Reset();break;case 24:nativeSelection=false;break;
+        case 26:duplicate.source.nowNs=s.source.nowNs-1;break;case 27:duplicate.stockTrigger=.5f;break;
+        }
+        h.f.hands.Update(duplicate.source);
+        if(fault==0){
+            // Before this correction a busy observation alone erased the
+            // pending stamp despite unchanged packet, claim and native owner.
+            private_knife::StockKnifeMotionSourceRevocation oldSource;
+            CHECK(!oldSource.Advance(nativeSource));const auto oldStamp=oldSource.Stamp();
+            private_knife::KnifeAttackGate oldGate;CHECK(oldGate.Stage(*jab,s.source.nowNs));
+            CHECK(oldSource.Advance(duplicate)&&!oldGate.Consume(1,duplicate.source.nowNs,oldSource.Current(oldStamp)));
+        }
+        const auto proof=pending.Unavailable(inspection,owner,{42,1},operation,input,duplicate,h.f.knife,h.f.hands);
+        const bool preserve=proof&&h.source.PreservePending(duplicate,proof->motionStamp)&&
+            PendingMotionCurrent(*proof,*jab,lifetime,operation,epoch,admission.motionStamp,duplicate.source.nowNs);
+        if(!preserve)h.source.Advance(duplicate,h.f.knife.NeedsNativeCleanup());
+        const auto callbackNow=fault==25?admission.deadlineNs:duplicate.source.nowNs;
+        const bool current=nativeSelection&&!h.recovery.Read().blocked&&h.source.Current(admission.motionStamp)&&
+            PendingMotionCurrent(admission,*jab,lifetime,operation,epoch,admission.motionStamp,callbackNow)&&
+            private_knife::DrawReturnGate::Fresh(*jab,callbackNow)&&KnifeCommandInputCurrent(*jab,nativeSource);
+        if(fault<2){
+            CHECK(preserve&&h.attacks.Consume(1,callbackNow,current));
+            CHECK(!h.attacks.Consume(1,callbackNow,current));
+            CHECK(h.attacks.ResolveBeforeSource(s.source.sequence,s.source.observedNs,callbackNow)==KnifeCommit::Accepted);
+            h.f.knife.Committed(*jab,KnifeCommit::Accepted);
+            CHECK(!pending.Unavailable(inspection,owner,{42,1},operation,input,duplicate,h.f.knife,h.f.hands));
+            // Only the accepted sibling may drain past the original deadline.
+            CHECK(h.attacks.Consume(2,admission.deadlineNs+1,false));
+            for(unsigned branch=0;branch<3;++branch)h.attacks.Observe(branch,2,5,6);
+            CHECK(h.attacks.Complete(jab->serial,true,true)&&!h.attacks.Stage(*jab,callbackNow));
+            CHECK(h.f.hands.Current(InteractionHand::Right)->deadlineNs==held->deadlineNs);
+        }else CHECK(!h.attacks.Consume(1,callbackNow,current));
+    }
+    return 0;
+}
 int Cases(){
     CHECK(!RetiredCompletionCases());
+    CHECK(!PendingContentionCases());
     Held h;CHECK(h.Init()&&h.Rest());const auto claim=*h.f.knife.Hold();
     // Shared custody, measured motion and native attack gate: repeated idle
     // misses retain the claim, discard partial strokes and rearm from quiet.
@@ -184,7 +252,7 @@ int Cases(){
         }
         CHECK(!RecoveryHoldCurrent(x.view,x.f.s,x.f.knife,x.f.hands));
     }
-    std::puts("Knife observation recovery: repeated Held/jab/postattack, pending-source continuity, retired completion proof and ownership negatives PASS.");
+    std::puts("Knife observation recovery: repeated Held/jab/postattack, pending-source contention/expiry, retired completion proof and ownership negatives PASS.");
     return 0;
 }
 }

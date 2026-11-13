@@ -22,6 +22,18 @@ public:
     }
     std::uint64_t Stamp()const noexcept{return stamp_.load(std::memory_order_acquire);}
     bool Current(std::uint64_t stamp)const noexcept{return stamp&&stamp==Stamp();}
+    // Gather only. Caller separately proves an unchanged raw controller packet,
+    // live claim and successful pending Stage. Missing native observation fields
+    // are never copied back into a sample or used to admit another command.
+    bool PreservePending(const interaction::KnifeSample& s,std::uint64_t stamp)const noexcept {
+        if(!Current(stamp)||!last_||!CurrentEvidence(*last_))return false;
+        const auto& old=*last_;const auto& f=s.source;const auto& p=old.source;
+        return f.owner==p.owner&&f.sequence==p.sequence&&f.observedNs==p.observedNs&&f.deadlineNs==p.deadlineNs&&
+            f.focused==p.focused&&f.tracked==p.tracked&&f.released==p.released&&f.nowNs>=p.nowNs&&
+            f.nowNs<f.deadlineNs&&f.nowNs<old.heldContact.deadlineNs&&s.knife==old.knife&&s.menu==old.menu&&
+            interaction::GameplayOwnsInput(s.menu,f.nowNs)&&s.stockTrigger==old.stockTrigger&&
+            s.fireSuppressed&&s.holdInputCurrent&&interaction::KnifeActionInputCurrent(s)&&s.gripHeld[1]&&!f.released[1];
+    }
 private:
     static bool CurrentEvidence(const interaction::KnifeSample& s)noexcept {
         const auto& f=s.source;const auto& p=s.heldContact;

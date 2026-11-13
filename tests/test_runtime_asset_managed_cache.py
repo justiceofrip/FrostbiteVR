@@ -213,6 +213,8 @@ class EntryManagedCacheTests(ManagedCacheFixture):
             entry = runtime_dir / 'Entry.ps1'
             shutil.copyfile(entry_source, entry)
             shutil.copyfile(ROOT / 'launcher/runtime/Resolution.ps1', runtime_dir / 'Resolution.ps1')
+            (runtime_dir / 'GraphicsSettings.ps1').write_text(
+                "function Restore-Bc2GraphicsSettingsLease($StateRoot){return @{status='none';reason=$null}}")
             shutil.copyfile(ROOT / 'launcher/Launcher.Storage.ps1', app / 'Launcher.Storage.ps1')
             self.assertEqual(digest(entry), digest(entry_source))
             (app / 'Launcher.Core.ps1').write_text(r'''
@@ -334,6 +336,8 @@ function Test-Bc2AssetCache {throw 'MUST_NOT_CHECK_CACHE'}
                 (runtime_dir / 'Dependencies.ps1').write_text(
                     "function Get-Bc2PreparationFfmpeg {throw 'MUST_NOT_DOWNLOAD'}")
                 (runtime_dir / 'Resolution.ps1').write_text('')
+                (runtime_dir / 'GraphicsSettings.ps1').write_text(
+                    "function Restore-Bc2GraphicsSettingsLease {throw 'MUST_NOT_RECOVER_SETTINGS_BEFORE_PLACEMENT'}")
                 (runtime_dir / 'Startup.ps1').write_text(r'''
 function Test-Bc2GameInstallation($s,$c,$r){return @{exe=(Join-Path $s.game_path 'BFBC2Game.exe');sha256=('b'*64)}}
 function Get-Bc2OpenXrSelection {throw 'MUST_NOT_SELECT_XR'}

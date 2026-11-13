@@ -72,6 +72,8 @@ class PortablePackageTests(unittest.TestCase):
             for name in ('BC2NativeResolution.exe','BC2ResolutionBootstrap.dll','Bc2GraphicsCreation32.dll','Bc2GraphicsCreation64.dll'):
                 self.assertEqual((out/'bin'/name).read_bytes(),(root/name).read_bytes())
             for source,name in ((ROOT/'launcher/runtime/GraphicsCreation.ps1','GraphicsCreation.ps1'),
+                                (ROOT/'launcher/runtime/GraphicsSettings.ps1','GraphicsSettings.ps1'),
+                                (ROOT/'launcher/runtime/RestoreGraphicsSettings.ps1','RestoreGraphicsSettings.ps1'),
                                 (ROOT/'licenses/Detours-MIT.txt','licenses/Detours-MIT.txt'),
                                 (ROOT/'launcher/runtime/THIRD_PARTY_NOTICES.md','THIRD_PARTY_NOTICES.md')):
                 self.assertEqual((out/name).read_bytes(),source.read_bytes())
@@ -85,7 +87,7 @@ class PortablePackageTests(unittest.TestCase):
             manifest_paths=[entry['path'] for entry in runtime['files']]
             self.assertEqual(len(manifest_paths),len(set(manifest_paths)))
             self.assertEqual(set(manifest_paths),{p.relative_to(out).as_posix() for p in out.rglob('*') if p.is_file()}-{'runtime.json'})
-            for name in ('GraphicsCreation.ps1','bin/Bc2GraphicsCreation32.dll','bin/Bc2GraphicsCreation64.dll','licenses/Detours-MIT.txt','THIRD_PARTY_NOTICES.md'):
+            for name in ('GraphicsCreation.ps1','GraphicsSettings.ps1','RestoreGraphicsSettings.ps1','bin/Bc2GraphicsCreation32.dll','bin/Bc2GraphicsCreation64.dll','licenses/Detours-MIT.txt','THIRD_PARTY_NOTICES.md'):
                 self.assertEqual(manifest_paths.count(name),1)
                 self.assertRegex(next(entry['sha256'] for entry in runtime['files'] if entry['path']==name),r'^[a-f0-9]{64}$')
             self.assertFalse(any(name.startswith(('reports/','handoff/','private/')) or 'graphics-creation.json' in name for name in manifest_paths))

@@ -117,14 +117,30 @@ void SourceAdvanced(const interaction::HandInteractionSample&)noexcept;
 // Publish an ineligible source only when the draw-only service is idle.
 // A busy lock or any outstanding work requires the full gather.
 bool TryIdleHeldGun(const interaction::KnifeSample&)noexcept;
-bool BeforePrepare(const interaction::KnifeSample&,interaction::ChestKnifeCustody&,BeforePrepareReason* diagnostic=nullptr)noexcept;
+// Issued only by successful stock-motion Stage. It preserves that command's
+// original leases through an unchanged packet's unavailable observation.
+struct PendingMotionAdmission {
+    std::uint64_t serial=0,lifetime=0,bodyOperation=0,sourceEpoch=0,motionStamp=0;
+    std::int64_t deadlineNs=0;
+    bool operator==(const PendingMotionAdmission&)const=default;
+};
+inline bool PendingMotionCurrent(const PendingMotionAdmission& proof,const interaction::KnifeCommand& command,
+    std::uint64_t lifetime,std::uint64_t operation,std::uint64_t epoch,std::uint64_t stamp,std::int64_t now)noexcept {
+    return command.kind==interaction::KnifeCommandKind::Attack&&command.stroke&&!command.stockTriggerHold&&
+        proof.serial&&proof.serial==command.serial&&proof.lifetime&&proof.lifetime==lifetime&&
+        proof.bodyOperation&&proof.bodyOperation==operation&&proof.sourceEpoch&&proof.sourceEpoch==epoch&&
+        proof.motionStamp&&proof.motionStamp==stamp&&now>=command.source.observedNs&&
+        now<proof.deadlineNs&&proof.deadlineNs<=command.source.deadlineNs;
+}
+bool BeforePrepare(const interaction::KnifeSample&,interaction::ChestKnifeCustody&,BeforePrepareReason* diagnostic=nullptr,
+    const PendingMotionAdmission* unavailableMotion=nullptr)noexcept;
 // Proves real shared claims through policy.CanCommit and repeats actual native
 // identity/config/count admission. Chest draw body interval must already exist.
 bool Stage(const interaction::KnifeCommand&,const interaction::KnifeSample&,
     const interaction::HandInteraction&,interaction::ChestKnifeCustody&,
     const private_knife::Anchor&,const ReloadStateOwner& actualSelectedOwner,
     std::uint64_t bodyOperation,const std::optional<math::Matrix4>& attackGeometry=std::nullopt,
-    float worldUnitsPerMeter=1,std::int64_t geometryDeadlineNs=0)noexcept;
+    float worldUnitsPerMeter=1,std::int64_t geometryDeadlineNs=0,PendingMotionAdmission* admission=nullptr)noexcept;
 // Bounded historical diagnostics, never an action/lease or a new native reader.
 // Values are copied at successful ordinary Observe before originals reset.
 struct ReturnFreeRightProof {

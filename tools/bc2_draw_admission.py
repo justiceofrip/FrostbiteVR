@@ -5,7 +5,7 @@ Prime attempt and additional readiness request consumes the SAME observation
 budget; ordinary motion observations do not. ``start_draw`` attaches the existing
 absolute draw deadline once.
 ``assess`` runs only on a complete available Held source at Prime/baseline or a
-neutral stow_reach boundary. Empty, pressed transitions and target withdrawal
+neutral stow_reach (opt-in held_reach) boundary. Empty, pressed transitions and target withdrawal
 remain under their existing, different contracts.
 
 The required pure ``full_admission(snapshot, now_ns)`` callback must perform
@@ -128,6 +128,9 @@ class Context:
     # change of publication reason must never create a fresh hold budget.
     hold_started_ns: int = 0
     hold_replacements: int = 0
+    # Explicit direct Held draw: evaluation 0 is eligible only with auto=true
+    # and the same complete original binding/claim/neutral input proof.
+    held_swap: bool = False
 
 
 @dataclass(frozen=True)
@@ -192,7 +195,8 @@ def _neutral(inp):
 
 
 def _ack(context, snapshot, now_ns):
-    require(context.phase in ("prime", "baseline", "stow_reach"),
+    require(context.phase in (("prime", "baseline", "held_reach") if context.held_swap
+                             else ("prime", "baseline", "stow_reach")),
             "not a neutral source-side admission boundary")
     require(context.pending_command is False and context.grip_action_started is False
             and context.draw_armed is False, "pending command or grip action already started")
@@ -363,8 +367,8 @@ def assess(snapshot, now_ns, context, session, full_admission, observe_admission
         require(not session.hold_ack or session.hold_ack == ack,
                 "acknowledged pose or command changed during observation hold")
         evaluation, automatic = integer(h["inventoryEvaluation"]), h["allowAutomaticGunHold"]
-        ready = evaluation == 1 and automatic is True
-        unknown = evaluation == 0 and automatic is False
+        ready = automatic is True and (evaluation == 1 or (context.held_swap and evaluation == 0))
+        unknown = evaluation == 0 and automatic is False and not context.held_swap
         require(ready or unknown, "explicit unsupported/disabled or inconsistent inventory evaluation")
         d = snapshot["bodyInventory"]
         mapping_identity, binding = session.mapping_identity, None

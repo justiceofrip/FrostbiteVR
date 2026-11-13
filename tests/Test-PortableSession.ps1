@@ -23,6 +23,9 @@ try {
     foreach($p in @($app,$runtime,$bin)){[IO.Directory]::CreateDirectory($p)|Out-Null}
     foreach($name in @('Launcher.Core.ps1','Launcher.Storage.ps1')){Copy-Item -LiteralPath (Join-Path $repo ('launcher/'+$name)) -Destination $app}
     foreach($name in @('Session.ps1','Startup.ps1','Resolution.ps1')){Copy-Item -LiteralPath (Join-Path $repo ('launcher/runtime/'+$name)) -Destination $runtime}
+    # This existing suite never opts into performance mode. Its recovery
+    # boundary must remain inert to player settings; the lease suite owns I/O.
+    [IO.File]::WriteAllText((Join-Path $runtime 'GraphicsSettings.ps1'),"function Restore-Bc2GraphicsSettingsLease([string]`$StateRoot){return @{status='none';reason=`$null}}")
     [IO.File]::WriteAllText((Join-Path $bin 'BC2NativeProbe.dll'),'fixture data; never loaded')
     [IO.File]::WriteAllText((Join-Path $bin 'BC2ResolutionBootstrap.dll'),'fixture resolution data; never loaded')
     $fake=@'

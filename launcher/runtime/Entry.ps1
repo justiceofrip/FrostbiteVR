@@ -3,14 +3,17 @@
 param([ValidateSet('Validate','Launch','Stop')][string]$Action,
       [Parameter(Mandatory)][string]$SettingsPath,[Parameter(Mandatory)][string]$StateRoot,
       [switch]$Fresh,[ValidateSet('MainMenu','Campaign')][string]$StartAt='MainMenu',[switch]$ActivateGameWindow,
-      [switch]$QualifyChestKnife,[switch]$PrivateSourcePipeline,[string]$PreAttachSetupSpec,[string]$PreAttachSetupSpecSha256,[string]$PrivateSessionBinding,[string]$PrivateSessionBindingSha256)
+      [switch]$QualifyChestKnife,[switch]$PrivateSourcePipeline,[switch]$PerformanceMode=$false,[string]$PreAttachSetupSpec,[string]$PreAttachSetupSpecSha256,[string]$PrivateSessionBinding,[string]$PrivateSessionBindingSha256)
 $ErrorActionPreference='Stop'
 if($PrivateSourcePipeline -and $Action -ne 'Launch'){throw 'Private source pipeline requires Launch.'}
+if($PerformanceMode -and $Action -ne 'Launch'){throw 'VR performance mode requires Launch.'}
+if($PerformanceMode -and $PrivateSourcePipeline){throw 'VR performance mode and the private source-pipeline override are separate launch options. Select only one.'}
 . (Join-Path $PSScriptRoot '../app/Launcher.Core.ps1')
 . (Join-Path $PSScriptRoot 'Runtime.Core.ps1')
 . (Join-Path $PSScriptRoot 'Dependencies.ps1')
 . (Join-Path $PSScriptRoot 'Startup.ps1')
 . (Join-Path $PSScriptRoot 'Resolution.ps1')
+. (Join-Path $PSScriptRoot 'GraphicsSettings.ps1')
 $StateRoot=[IO.Path]::GetFullPath($StateRoot)
 $null=Set-FvrLauncherStorage (Split-Path (Split-Path $StateRoot -Parent) -Parent)
 $null=New-Item -ItemType Directory -Path $StateRoot -Force
@@ -18,8 +21,16 @@ $active=Get-Bc2Session $StateRoot
 if($Action -eq 'Stop'){
     if($active -and (Find-Bc2OwnedProcess $active.supervisor)){
         [IO.File]::WriteAllText((Join-Path $active.folder 'stop.request'),'Requested by launcher')
-        [pscustomobject]@{schema='bc2vr.stop-result.v1';outcome='requested';message='VR stop requested. BC2 and SteamVR remain open; headset shutdown is not yet confirmed.'}
-    }else{[pscustomobject]@{schema='bc2vr.stop-result.v1';outcome='no_owned_session';message='No owned BC2 VR session is running.'}}
+        $stopMessage='VR stop requested. BC2 and SteamVR remain open; headset shutdown is not yet confirmed.'
+        $prior=Get-Bc2SessionRecord $active
+        if($prior -and $prior.ContainsKey('performance_mode') -and $prior.performance_mode.requested){$stopMessage+=' Temporary MSAA restoration waits until BC2 closes normally.'}
+        [pscustomobject]@{schema='bc2vr.stop-result.v1';outcome='requested';message=$stopMessage}
+    }else{
+        $recovery=Restore-Bc2GraphicsSettingsLease -StateRoot $StateRoot
+        $stopMessage='No owned BC2 VR session is running.'
+        if($recovery.status -eq 'pending'){$stopMessage+=' Graphics settings restoration is pending ('+$recovery.reason+'). Close BC2 normally; retained settings will be checked again before another launch.'}
+        [pscustomobject]@{schema='bc2vr.stop-result.v1';outcome='no_owned_session';message=$stopMessage}
+    }
     return
 }
 $preAttachSetup=$null
@@ -67,11 +78,74 @@ if($active -and (Find-Bc2OwnedProcess $active.supervisor)){
 }
 if($StartAt -ne 'MainMenu'){throw 'The public launcher starts at the VR main menu. Select Resume Game there.'}
 if(Get-Process BC2XrHost,BC2NativeTrace,BC2NativeIpcProbe -ErrorAction SilentlyContinue){throw 'Another BC2 VR session is active. Stop it before launching.'}
+# Recovery applies to every later launch, including performance mode off. Never
+# let a pending lease silently become the player's ordinary graphics settings.
+$recovery=Restore-Bc2GraphicsSettingsLease -StateRoot $StateRoot
+if($Fresh -and $recovery.status -eq 'pending' -and $recovery.reason -eq 'game_alive'){
+    # Explicit Restart may close only the exact game bound to this validated
+    # lease. Hold its lock through normal closure so a changed journal cannot
+    # turn permission to restart one lifetime into permission for another.
+    $graphicsPaths=Get-Bc2GraphicsLeasePaths $StateRoot
+    $graphicsLock=Enter-Bc2GraphicsLease $graphicsPaths -Deadline ([DateTime]::UtcNow.AddSeconds(5))
+    $restartGame=$null
+    try {
+        $lease=Read-Bc2GraphicsLease $graphicsPaths
+        if(-not $lease -or $lease.state -cne 'bound' -or -not $lease.game -or $lease.game_path -ine $exe){throw 'Graphics restart lease is ambiguous; close BC2 normally before launching again.'}
+        $restartGame=Get-Bc2ExistingGame $exe $true
+        if(-not $restartGame){throw 'The leased BC2 game changed before restart; launch again after recovery.'}
+        $identity=Get-Bc2ProcessIdentity $restartGame -RequireLive $true
+        if($identity.pid -ne $lease.game.pid -or $identity.path -ine $lease.game.path -or
+           [DateTimeOffset]::Parse($identity.start_utc).UtcDateTime -ne [DateTimeOffset]::Parse($lease.game.start_utc).UtcDateTime){throw 'The leased BC2 game identity changed; no game was closed.'}
+        # A live-game block precedes settings inspection in ordinary recovery.
+        # Check for a conflict before asking the player-owned game to close.
+        Assert-FvrNoLinks $lease.settings_path
+        if((Get-Item -LiteralPath $lease.settings_path).Length -gt 1MB){throw 'Graphics settings are oversized; no game was closed.'}
+        $currentGraphics=[IO.File]::ReadAllBytes($lease.settings_path)
+        if((Get-Bc2GraphicsHash $currentGraphics) -cne $lease.original_sha256 -and $lease.original_sha256 -cne $lease.prepared_sha256){
+            $restorePlan=Convert-Bc2GraphicsMsaa $currentGraphics $lease.original_msaa
+            if($restorePlan.value -cne '0'){throw 'Graphics MSAA changed after preparation; no game was closed and the backup is retained.'}
+        }
+        if(-not $restartGame.CloseMainWindow() -or -not $restartGame.WaitForExit(8000)){throw 'BC2 did not exit normally. Close it yourself, then launch again.'}
+    } finally {
+        if($restartGame){$restartGame.Dispose()}
+        $graphicsLock.Dispose()
+    }
+    $recovery=Restore-Bc2GraphicsSettingsLease -StateRoot $StateRoot
+}
+Write-FvrJson (Join-Path $StateRoot 'graphics-settings-recovery.json') $recovery
+if($recovery.status -notin @('none','restored')){throw ('Graphics settings restoration is pending ('+$recovery.reason+'). Close BC2 normally before launching again. '+$(if($recovery.ContainsKey('message')){$recovery.message}))}
+if($PerformanceMode){
+    if([Environment]::GetEnvironmentVariable('FVR_PRIVATE_HOST_COPY_SERVICE_MS','Process') -notin @($null,'','0')){throw 'VR performance mode requires the separate host copy service disabled. BC2 has not been started.'}
+    $graphicsPath=Get-Bc2GraphicsSettingsPath;Assert-FvrNoLinks $graphicsPath
+    if((Get-Item -LiteralPath $graphicsPath).Length -gt 1MB){throw 'VR performance mode graphics settings are oversized. BC2 has not been started.'}
+    $null=Convert-Bc2GraphicsMsaa ([IO.File]::ReadAllBytes($graphicsPath))
+}
 # Reject an unchanged live game before opening another headset session. Repeat
 # the exact selection after preparation, which may take minutes on first use.
 $null=Get-Bc2ExistingGame $exe ([bool]$Fresh)
-$preflight=Invoke-Bc2OpenXrPreflight $PSScriptRoot $StateRoot $xr
+$probeOriginal=@{};$probePresent=[Environment]::GetEnvironmentVariables('Process')
+try {
+    # The probe always uses the ordinary protocol. A caller's diagnostic flags
+    # cannot select a source pipeline before the recommended size is known.
+    foreach($key in @('FVR_PRIVATE_TWO_SOURCE_SLOTS','FVR_PRIVATE_THREE_SOURCE_SLOTS','FVR_PRIVATE_SOURCE_LOOKAHEAD','FVR_PRIVATE_EXPORT_OVERLAP')){
+        $probeOriginal[$key]=@{present=$probePresent.Contains($key);value=[Environment]::GetEnvironmentVariable($key,'Process')}
+        [Environment]::SetEnvironmentVariable($key,'0','Process')
+    }
+    $preflight=Invoke-Bc2OpenXrPreflight $PSScriptRoot $StateRoot $xr
+} finally {
+    foreach($key in $probeOriginal.Keys){
+        if($probeOriginal[$key].present){[Environment]::SetEnvironmentVariable($key,$probeOriginal[$key].value,'Process')}
+        else {[Environment]::SetEnvironmentVariable($key,[NullString]::Value,'Process')}
+    }
+}
 $renderPlan=Get-Bc2ResolutionPlan $preflight
+if($PerformanceMode){
+    # SceneDepthImportPolicy::PipelineTextureBytes, N=3/S=1; the native
+    # descriptor, adapter budget and 64 MiB headroom checks remain authoritative.
+    $requiredBytes=[long]$renderPlan.width*[long]$renderPlan.height*4*(3+2*3+4*3*1)
+    if($requiredBytes -gt 768MB){throw 'VR performance mode exceeds the 768 MiB three-source budget at the headset recommended resolution. Disable performance mode to use the ordinary pipeline; no graphics settings were changed and BC2 has not been started.'}
+    Write-Information 'BC2VR: VR performance mode will temporarily disable MSAA; headset resolution stays unchanged. Settings restore after BC2 closes.' -InformationAction Continue
+}
 Write-Information 'BC2VR: Preparing local equipment and audio caches…' -InformationAction Continue
 $ffmpeg=Get-Bc2PreparationFfmpeg $StateRoot (Join-Path $PSScriptRoot 'config/ffmpeg-download.json') $cached Launch
 # A first download can take minutes; acquire process identities only afterward.
@@ -96,7 +170,7 @@ $relative='sessions/'+[DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss-fff')+'-'+[gu
 $folder=Get-FvrChild $StateRoot $relative;$null=New-Item -ItemType Directory -Path $folder
 # The owned report directory exists now; no supervisor/native startup can race publication.
 $privateMarkers=if($privateAdmission){New-Bc2PrivateMarkers $folder}else{$null}
-$options=@{schema='bc2vr.session-options.v1';state_root=$StateRoot;relative_folder=$relative;game_path=$settings.game_path;game_sha256=$gameHash;steam_compatibility=($installation.ContainsKey('experimental_steam') -and $installation.experimental_steam);cache=$cache;python=$python;activate_window=[bool]$ActivateGameWindow;version=$config.version;source_sha256=$config.source_sha256;xr_manifest=$xr.manifest;xr_label=$xr.label;render_plan=$renderPlan}
+$options=@{schema='bc2vr.session-options.v1';state_root=$StateRoot;relative_folder=$relative;game_path=$settings.game_path;game_sha256=$gameHash;steam_compatibility=($installation.ContainsKey('experimental_steam') -and $installation.experimental_steam);cache=$cache;python=$python;activate_window=[bool]$ActivateGameWindow;performance_mode=[bool]$PerformanceMode;version=$config.version;source_sha256=$config.source_sha256;xr_manifest=$xr.manifest;xr_label=$xr.label;render_plan=$renderPlan}
 if($privateAdmission){
     $options.private_campaign=@{binding=$privateAdmission.binding;markers=$privateMarkers;diagnostic_only=$true;
         source_commit=$privateAdmission.specification.source_commit;normal_artifacts_receipt=$privateAdmission.specification.normal_artifacts_receipt;

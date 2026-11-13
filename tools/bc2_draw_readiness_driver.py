@@ -207,11 +207,12 @@ def make_driver(base_class, binding_module, *, budget, clock=time.perf_counter_n
                 acknowledged_state=copy.deepcopy(self.state), current_state=current,
                 acknowledged_pose=copy.deepcopy(pose), pending_command=self.pending_command,
                 grip_action_started=self.held_right or getattr(self, "stow_ack", None) is not None,
-                draw_armed=self.draw_armed)
+                draw_armed=self.draw_armed, held_swap=getattr(self.args, "held_swap", False))
 
         def receive_snapshot(self):
             received = super().receive_snapshot()
-            if received is None or self.phase not in ("baseline", "stow_reach"):
+            source_phases = ("baseline", "held_reach") if getattr(self.args, "held_swap", False) else ("baseline", "stow_reach")
+            if received is None or self.phase not in source_phases:
                 return received
             snapshot, raw, _ = received
             now = clock()
@@ -257,15 +258,19 @@ def make_driver(base_class, binding_module, *, budget, clock=time.perf_counter_n
             policy.require(not budget.hold_started,
                            "command refused while shared observation hold is pending")
             source = self.publication_source
-            source_boundary = self.phase in ("baseline", "stow_reach") or (
-                self.phase == "stow_wait" and not self.held_right
-                and getattr(self, "stow_ack", None) is None)
+            held_swap = getattr(self.args, "held_swap", False)
+            source_boundary = (self.phase in ("baseline", "held_reach") or (
+                self.phase == "draw_wait" and not self.draw_armed and not self.held_right)) if held_swap else (
+                self.phase in ("baseline", "stow_reach") or (
+                    self.phase == "stow_wait" and not self.held_right
+                    and getattr(self, "stow_ack", None) is None))
             if source_boundary:
                 policy.require(source is self._readiness_ready
                                and policy.freeze(source) == self._readiness_record,
                                "command requires the unchanged latest fresh Ready source")
                 h = source["bodyHolster"]
-                policy.require(h["inventoryEvaluation"] == 1 and h["allowAutomaticGunHold"] is True,
+                policy.require(h["inventoryEvaluation"] in ((0, 1) if held_swap else (1,))
+                               and h["allowAutomaticGunHold"] is True,
                                "unknown eligibility cannot authorize an ordinary command")
                 self._full_admission(source, clock())
 

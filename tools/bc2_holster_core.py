@@ -192,6 +192,7 @@ def selection_state(before, after, expected, draw_armed, after_press_ns):
 class OrdinaryHolsterDriver(transport.Driver):
     def __init__(self, args):
         self.baseline = self.target_baseline = None
+        self.held_swap_ack = None
         self.expected = dict(asset=args.target_asset, configuration=args.target_config, slot=args.target_slot)
         self.phase, self.draw_armed, self.press_ns = "baseline", False, 0
         self.last_native = self.publication_source = None
@@ -202,6 +203,7 @@ class OrdinaryHolsterDriver(transport.Driver):
                 and transport.read_bytes(self.folder / "mechanism-snapshot.enable", 2) == b"1\n",
                 "snapshot opt-in was not established before native startup")
         self.artifacts.save("holster-invocation.json", dict(
+            heldSwap=getattr(args, "held_swap", False),
             maximumObservationHoldNs=HOLD_NS, maximumReplacementRequests=MAX_REPLACEMENTS,
             maximumStowCohortAdvance=1, maximumStowCohortTransitions=1,stowAsset=args.stow_asset, stowConfiguration=args.stow_config,
             stowSlot=args.stow_slot, target=self.expected, driverSha256=transport.digest(Path(__file__).read_bytes()),
@@ -320,6 +322,17 @@ class OrdinaryHolsterDriver(transport.Driver):
                 and snapshot["weapon_actions_blocked"] is False and h["allowAutomaticGunHold"] is True,
                 "ordinary Held/GunHold/unblocked state not observed")
 
+    def require_held_swap_source(self, snapshot):
+        self.require_held(snapshot)
+        h = snapshot["bodyHolster"]
+        require(integer(h["inventoryEvaluation"]) in (0, 1)
+                and h["emptyHands"] is False and h["leftClaim"] is None
+                and h["freeRightCurrent"] is False and h["freeRight"] is None,
+                "held swap requires current visible Held/GunHold source")
+        for name in ("pendingOperation", "pendingRequest", "visibility", "suppression", "ordinaryDrawCommand",
+                     "cancel", "reloadBusy", "interactionSuspended"):
+            require(not h.get(name), "explicit held swap blocker: " + name)
+
     def reach(self, slot=None, withdraw=None, grip=0):
         for _ in range(16):
             snapshot, now = self.current()
@@ -367,12 +380,16 @@ class OrdinaryHolsterDriver(transport.Driver):
         require(initial["equipment"]["asset"] == self.args.stow_asset
                 and initial["selected"]["configurationPath"] == self.args.stow_config
                 and integer(initial["bodyHolster"]["selectedSlot"]["slot"]) == self.args.stow_slot
-                and integer(initial["bodyHolster"]["inventoryEvaluation"]) == 1,
+                and integer(initial["bodyHolster"]["inventoryEvaluation"]) in (
+                    (0, 1) if getattr(self.args, "held_swap", False) else (1,)),
                 "selected source does not match exact intended stow asset/configuration/slot")
         require(self.args.stow_slot != self.args.target_slot
                 and (self.args.stow_asset, self.args.stow_config) != (self.args.target_asset, self.args.target_config),
                 "alternate draw requires distinct source and target")
         self.baseline = initial
+        if getattr(self.args, "held_swap", False):
+            self.run_held_swap(initial)
+            return
         self.phase = "stow_reach"
         at_stow = self.reach(slot=self.args.stow_slot)
         require(neutral(at_stow["input"]) and at_stow["bodyHolster"]["neutralTrackedInput"] is True,
@@ -395,6 +412,32 @@ class OrdinaryHolsterDriver(transport.Driver):
         self.press_ns, self.draw_armed = self.last_write, True
         selected = self.wait_state("target")
         self.save_observation("observed-target-held.json", selected)
+        self.withdraw_target(selected)
+
+    def run_held_swap(self, initial):
+        """Ordinary neutral rearm at the OTHER assigned shoulder, without Empty."""
+        self.require_held_swap_source(initial)
+        require(self.args.stow_slot in (1, 2) and self.args.target_slot in (1, 2),
+                "held swap requires two distinct assigned shoulder slots")
+        self.phase = "held_reach"
+        at_draw = self.reach(slot=self.args.target_slot)
+        self.require_held_swap_source(at_draw)
+        require(neutral(at_draw["input"]) and at_draw["bodyHolster"]["neutralTrackedInput"] is True,
+                "held swap press lacks fresh neutral rearm")
+        self.save_observation("observed-held-swap-rearm.json", at_draw)
+        self.phase = "draw_wait"
+        self.command(at_draw, self.right_pose, 1)
+        require(not self.pending_command and self.held_right
+                and 0 < self.last_write <= self.last_commit,
+                "held swap press was not acknowledged")
+        self.held_swap_ack = dict(snapshot=copy.deepcopy(at_draw), pose=copy.deepcopy(self.right_pose),
+            identity=self.command_identity(), writtenNs=self.last_write, committedNs=self.last_commit)
+        self.press_ns, self.draw_armed = self.last_write, True
+        selected = self.wait_state("target")
+        self.save_observation("observed-target-held.json", selected)
+        self.withdraw_target(selected)
+
+    def withdraw_target(self, selected):
         self.phase = "withdraw"
         # Return to the initial ordinary right pose. Refuse if it lies inside
         # any configured acquisition volume; releasing there could stow again.
@@ -518,8 +561,20 @@ class ObservationHolsterDriver(OrdinaryHolsterDriver):
                 and self.press_ns == self.last_write and 0 < self.last_write <= self.last_commit <= now,
                 "draw publication gap requires an acknowledged ordinary draw")
         anchor = self.holster_hold_anchor or self.last_native
-        require(anchor is not None, "draw publication gap lacks admitted Empty history")
-        self.require_empty(anchor)
+        require(anchor is not None, "draw publication gap lacks admitted rearm history")
+        if getattr(self.args, "held_swap", False):
+            ack = self.held_swap_ack
+            require(ack is not None and self.command_identity() == ack["identity"]
+                    and self.right_pose == ack["pose"] and anchor == ack["snapshot"]
+                    and self.press_ns == ack["writtenNs"] and self.last_commit == ack["committedNs"],
+                    "draw publication gap lacks acknowledged held swap rearm")
+            self.require_held_swap_source(anchor)
+            require(neutral(anchor["input"]) and anchor["bodyHolster"]["neutralTrackedInput"] is True,
+                    "held swap rearm history is not neutral")
+            require(resolve(anchor, ack["writtenNs"], self.slot_binding) == self.slot_binding,
+                    "held swap rearm history differs from complete binding")
+        else:
+            self.require_empty(anchor)
         require(selection_state(self.baseline, anchor, self.expected, False, 0) == "source"
                 and integer(anchor["observed_ns"]) <= self.press_ns,
                 "draw publication gap lacks the admitted source rearm")
@@ -954,10 +1009,24 @@ class HolsterDriver(BindingHolsterDriver):
         ObservationHolsterDriver.validate_publication(self, lines, expected, cleanup)
         if cleanup:
             return
+        if getattr(self.args, "held_swap", False):
+            require(not self.draw_armed or self.target_baseline is not None,
+                    "pending held swap selection permits observation only")
         require(self.slot_binding is not None, "ordinary input lacks observed slot binding")
         snapshot, now = self.publication_source, time.perf_counter_ns()
         if snapshot["owner"]["weapon"] != self.slot_binding["source"]["native"]["weapon"]:
             return  # binding admission still pins the exact armed target
+        if getattr(self.args, "held_swap", False):
+            self.require_held_swap_source(snapshot)
+            require(neutral(snapshot["input"]) and snapshot["bodyHolster"]["neutralTrackedInput"] is True,
+                    "held swap source command lacks fresh neutral input")
+            if expected["grip"] == 1:
+                require(self.phase == "draw_wait" and not self.draw_armed
+                        and self.held_swap_ack is None,
+                        "held swap permits one ordinary target shoulder press")
+                target = socket_pose(snapshot, self.args.target_slot)
+                require(frame.pose_error(frame.from_pose(expected["pose"]), frame.from_pose(target))[0] < .002,
+                        "held swap press is outside the assigned target shoulder")
         binding = self.stow_cohort_binding or self.slot_binding
         current = resolve(snapshot, now, binding)
         if current == binding:
@@ -987,16 +1056,20 @@ def main(argv=None, *, observed_binding=None, driver_class=None):
     parser.add_argument("--run", type=Path, required=True)
     for name in ("stow-asset", "stow-config", "target-asset", "target-config"):
         parser.add_argument("--" + name, required=True)
+    parser.add_argument("--held-swap", action="store_true",
+                        help="swap directly from Held at the other assigned shoulder; default uses genuine Empty")
     args = parser.parse_args(argv)
     args.observed_binding = copy.deepcopy(observed_binding)
     driver, code = None, 2
     result = dict(schema="bc2vr.live-holster-driver.v1", status="refused", nativeAcceptance=False,
-                  headsetAcceptance=False, evidence="fresh observed body/native mapping plus ordinary guarded XR draw")
+                  headsetAcceptance=False, heldSwap=args.held_swap,
+                  evidence="fresh observed body/native mapping plus ordinary guarded XR draw")
     try:
         driver = driver_class.__new__(driver_class)
         driver.__init__(args)
         driver.run_holster()
-        result["status"], code = "observed_empty_and_expected_target_released", 0
+        result["status"], code = ("observed_held_swap_and_expected_target_released" if args.held_swap
+                                  else "observed_empty_and_expected_target_released"), 0
     except (Exception, KeyboardInterrupt) as error:
         result["error"] = str(error)
         if driver is not None and getattr(driver, "artifacts", None):

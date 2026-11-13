@@ -69,9 +69,10 @@ public:
     }
     bool Same(const ReloadStateOwner& owner,interaction::BodyItemKey knife,std::uint64_t operation,
         const interaction::InputFrame& input,const interaction::KnifeSample& sample,
-        const interaction::ChestKnifeCustody& policy,const interaction::HandInteraction& hands)const noexcept {
+        const interaction::ChestKnifeCustody& policy,const interaction::HandInteraction& hands,
+        interaction::KnifePhase expectedPhase=interaction::KnifePhase::Held)const noexcept {
         using namespace interaction;const auto& f=sample.source;
-        if(!identity_||policy.Phase()!=KnifePhase::Held||policy.NeedsNativeCleanup()||!policy.Hold()||
+        if(!identity_||policy.Phase()!=expectedPhase||policy.NeedsNativeCleanup()||!policy.Hold()||
            owner!=identity_->owner||knife!=identity_->knife||operation!=identity_->bodyOperation||
            *policy.Hold()!=identity_->hold||!sample.holdInputCurrent||!KnifeActionInputCurrent(sample)||
            !sample.fireSuppressed||!sample.gripHeld[1]||f.released[1]||!f.focused||!f.tracked[0]||!f.tracked[1]||
@@ -117,6 +118,33 @@ private:
     std::optional<ChestKnifeMotionIdentity> identity_;
     interaction::InputFrame input_{};interaction::HandInteractionSample source_{};
     std::int64_t contactDeadline_=0,holdDeadline_=0,lastNow_=0;
+};
+// A distinct successful-Stage receipt: idle calibration retention cannot grant
+// pending attack authority. This never renews a hand, contact or input deadline.
+class ChestKnifePendingMotion {
+public:
+    bool Remember(const chestKnifeNative::PendingMotionAdmission& admission,const ChestKnifeMotionIdentity& identity,
+        const interaction::InputFrame& input,const interaction::KnifeSample& sample,const interaction::HandClaim& held,
+        const chestKnifeNative::CurrentHoldWorkObservation& work)noexcept {
+        Reset();
+        if(!admission.serial||admission.lifetime!=identity.nativeLifetime||admission.bodyOperation!=identity.bodyOperation||
+           !admission.sourceEpoch||!admission.motionStamp||admission.deadlineNs<=sample.source.nowNs||
+           admission.deadlineNs>sample.source.deadlineNs||admission.deadlineNs>sample.heldContact.deadlineNs||
+           admission.deadlineNs>held.deadlineNs||held.token!=identity.hold||!packet_.Remember(identity,input,sample,held,work))return false;
+        admission_=admission;return true;
+    }
+    const chestKnifeNative::PendingMotionAdmission* Unavailable(chestKnifeNative::InspectReason reason,
+        const ReloadStateOwner& owner,interaction::BodyItemKey knife,std::uint64_t operation,
+        const interaction::InputFrame& input,const interaction::KnifeSample& sample,
+        const interaction::ChestKnifeCustody& policy,const interaction::HandInteraction& hands)noexcept {
+        if(!admission_||!chestKnifeNative::InspectionLockMiss(reason)||sample.source.nowNs>=admission_->deadlineNs||
+           !packet_.Same(owner,knife,operation,input,sample,policy,hands,interaction::KnifePhase::AttackStaged))return nullptr;
+        packet_.Suspended(sample.source.nowNs);return &*admission_;
+    }
+    void Reset()noexcept{admission_.reset();packet_.Reset();}
+private:
+    ChestKnifeRepeatedMotion packet_;
+    std::optional<chestKnifeNative::PendingMotionAdmission> admission_;
 };
 // Gather's source projection also services the original unconsumed attack.
 // AttackStaged suspends recognition, but cannot erase current measured
@@ -176,6 +204,7 @@ private:
     interaction::ChestKnifeCustody policy_;
     ChestKnifeMotionCalibration motionCalibration_;
     ChestKnifeRepeatedMotion repeatedMotion_;
+    ChestKnifePendingMotion pendingMotion_;
     interaction::KnifeRecognitionDiagnostic recognition_;
     std::optional<private_knife::Anchor> anchor_;
     std::optional<ChestKnifeRenderSource> rendering_;

@@ -48,6 +48,8 @@ if(-not $SmokeTest){
    <Button x:Name="Launch" Content="LAUNCH BC2 IN VR" FontWeight="Bold" FontSize="17" Background="#E6A04A" Foreground="#161B1E" Padding="20,17" Margin="0,0,0,15" HorizontalAlignment="Stretch"/>
    <WrapPanel><CheckBox x:Name="Fresh" Content="Restart BC2 before launch"/><CheckBox x:Name="Local" Content="Use local checkpoint"/></WrapPanel>
    <CheckBox x:Name="SteamCompatibility" Content="Steam compatibility (experimental)" ToolTip="Enable for the Steam edition. Saved for your next launch."/>
+   <CheckBox x:Name="PerformanceMode" Content="VR performance mode" ToolTip="Saved for your next launch with the installed VR runtime." Margin="0,0,20,4"/>
+   <TextBlock Text="Temporarily disables MSAA anti-aliasing for lower rendering cost; edges may look less smooth. Your original setting is restored after BC2 closes." FontSize="12" Foreground="#99AAA1" TextWrapping="Wrap" Margin="20,0,0,12"/>
    <TextBlock Text="Choose Campaign from the menu in VR. Point with your right controller and select with its trigger. Hold X + Y on the left controller to open the pause menu; B goes back." FontSize="12" Foreground="#99AAA1" TextWrapping="Wrap" Margin="0,0,0,18"/>
   </StackPanel>
   <WrapPanel Grid.Row="3" Margin="0,0,0,10">
@@ -71,7 +73,7 @@ if(-not $SmokeTest){
 '@
 $window=[Windows.Markup.XamlReader]::Load([Xml.XmlNodeReader]::new($markup))
 $controls=@{}
-foreach($name in @('BuildLabel','GameFolder','ChooseGame','SettingsNotice','Launch','Fresh','Local','SteamCompatibility','Stop','Validate','Logs','Feedback','Status','Progress','Check','Update','Rollback','Prerelease')){$controls[$name]=$window.FindName($name)}
+foreach($name in @('BuildLabel','GameFolder','ChooseGame','SettingsNotice','Launch','Fresh','Local','SteamCompatibility','PerformanceMode','Stop','Validate','Logs','Feedback','Status','Progress','Check','Update','Rollback','Prerelease')){$controls[$name]=$window.FindName($name)}
 $script:job=$null;$script:reopenRequired=$false;$script:jobStarted=$null
 $script:command=$null;$script:commandHistory=@()
 $commandPath=Join-Path $data 'launcher-commands.json'
@@ -94,6 +96,7 @@ function Show-Settings {
     $controls.BuildLabel.Text="$runtimeLabel  •  Launcher $($active.current)"
     $controls.Local.IsChecked=[bool](-not $package.runtime_entry -and $script:hasLocalBackend)
     $controls.SteamCompatibility.IsChecked=($settings.steam_compatibility -is [bool] -and $settings.steam_compatibility)
+    $controls.PerformanceMode.IsChecked=($settings.vr_performance_mode -is [bool] -and $settings.vr_performance_mode)
     $controls.ChooseGame.Content=if($script:settingsState.needs_reset){'Reset and choose game folder…'}else{'Choose game folder…'}
     $controls.GameFolder.Text=if($settings.game_path -is [string] -and $settings.game_path){$settings.game_path}else{'No game folder selected'}
     $controls.SettingsNotice.Text=$script:settingsState.notice
@@ -112,6 +115,7 @@ function Set-Busy([bool]$Busy){
     $controls.Local.IsEnabled=-not $Busy -and [bool]($package.runtime_entry -and $script:hasLocalBackend)
     $controls.Fresh.IsEnabled=-not $Busy
     $controls.SteamCompatibility.IsEnabled=-not $Busy -and -not $script:reopenRequired -and -not $script:settingsState.read_only -and -not $script:settingsState.needs_reset
+    $controls.PerformanceMode.IsEnabled=-not $Busy -and -not $script:reopenRequired -and -not $script:settingsState.read_only -and -not $script:settingsState.needs_reset -and [bool]$package.runtime_entry -and -not $controls.Local.IsChecked
     $controls.Progress.IsIndeterminate=$Busy
 }
 function Begin-Action([string]$Action){
@@ -131,6 +135,7 @@ function Begin-Action([string]$Action){
         # Only the player's Launch click requests one initial game activation.
         # Validate, update, stop and automatic recovery never request focus.
         if($Action -eq 'Launch'){$start.ArgumentList.Add('-ActivateGameWindow')}
+        if($Action -eq 'Launch' -and $controls.PerformanceMode.IsChecked -and -not $controls.Local.IsChecked){$start.ArgumentList.Add('-PerformanceMode')}
         if($controls.Fresh.IsChecked){$start.ArgumentList.Add('-Fresh')}
         if($controls.Local.IsChecked){$start.ArgumentList.Add('-UseLocal')}
         if($controls.Prerelease.IsChecked){$start.ArgumentList.Add('-Prerelease')}
@@ -156,6 +161,18 @@ $controls.SteamCompatibility.Add_Click({
     }
     Show-Settings;Set-Busy $false
 })
+$controls.PerformanceMode.Add_Click({
+    if(-not $controls.PerformanceMode.IsEnabled){return}
+    try{
+        $script:settingsState=Save-FvrPerformanceMode -InstallRoot $InstallRoot -Enabled ([bool]$controls.PerformanceMode.IsChecked)
+    }catch{
+        $message=$_.Exception.Message
+        $script:settingsState=Read-FvrLauncherSettings -InstallRoot $InstallRoot -RefuseRepair
+        $script:settingsState.notice=$message
+    }
+    Show-Settings;Set-Busy $false
+})
+$controls.Local.Add_Click({Set-Busy ([bool]$script:job)})
 $controls.ChooseGame.Add_Click({
     try{
         $reset=[bool]$script:settingsState.needs_reset

@@ -77,7 +77,7 @@ try{
     Add-Type -AssemblyName PresentationFramework,PresentationCore,WindowsBase
     [xml]$markup=$markupMatch.Groups[1].Value
     $window=[Windows.Markup.XamlReader]::Load([Xml.XmlNodeReader]::new($markup))
-    $controls=@{};foreach($name in @('BuildLabel','GameFolder','ChooseGame','SettingsNotice','Launch','Fresh','Local','SteamCompatibility','Stop','Validate','Logs','Feedback','Status','Progress','Check','Update','Rollback','Prerelease')){$controls[$name]=$window.FindName($name)}
+    $controls=@{};foreach($name in @('BuildLabel','GameFolder','ChooseGame','SettingsNotice','Launch','Fresh','Local','SteamCompatibility','PerformanceMode','Stop','Validate','Logs','Feedback','Status','Progress','Check','Update','Rollback','Prerelease')){$controls[$name]=$window.FindName($name)}
     $actions=@('Launch','Stop','Validate','Check','Update','Rollback','Feedback')
     $package=@{runtime_entry='runtime/Entry.ps1'};$packageState=@{verified=$true;error=$null};$active=@{current='fixture'}
     $script:reopenRequired=$false;$script:job=$null;$script:settingsState=Read-FvrLauncherSettings $root

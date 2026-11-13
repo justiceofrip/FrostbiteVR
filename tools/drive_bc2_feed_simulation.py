@@ -914,8 +914,77 @@ def post_reload_ready(profiles, snapshot, now, closure, *, neutral, after_shot=F
                 "post-reload neutral rearm/claim release not observed")
 
 
-def post_reload_input_unmodified(row):
-    """A closed-feed filter can apply and exactly restore unchanged input words."""
+def post_reload_prepress_neutral(row, flow, boundary):
+    """Join one restored neutral lock-contention guard to its original callback."""
+    require(flow is not None and boundary is not None
+            and boundary["schema"] == "bc2vr.feed-post-reload-pulse.v1"
+            and integer(row["kind"]) == 0 and integer(row["depth"]) == 1
+            and integer(row["end_ns"]) < integer(boundary["pressWrittenNs"]),
+            "changed feed input is not a prepress neutral callback")
+    guard, before, after = row["feed_input"], row["before"], row["after"]
+    require(guard["original"] == [0, 0]
+            and guard["effective"] == guard["before_restore"] == [1, 0]
+            and all(type(v) is int for k in ("original", "effective", "before_restore") for v in guard[k])
+            and before["current"] == before["next"] == after["current"] == after["next"] == 2
+            and (before["loaded"], before["reserve"]) == (after["loaded"], after["reserve"]),
+            "prepress feed inhibition changed Fire, readiness or ammunition")
+    trace = flow.get("feed_guard_trace", {})
+    require(trace.get("schema") == "bc2.feed-guard-trace.v1"
+            and trace.get("enabled") == 1 and trace.get("rows_available") == 1,
+            "prepress feed inhibition lacks a drained guard trace")
+    matches = []
+    for candidate in [*(r for ring in ("changes", "counts", "refills")
+                         for r in trace.get(ring, {}).get("rows", [])), *trace.get("last", [])]:
+        if candidate.get("invocation") == row["native_invocation"] and candidate not in matches:
+            matches.append(candidate)
+    require(len(matches) == 1, "prepress feed inhibition lacks one exact trace join")
+    joined = matches[0]
+    require(integer(joined["serial"]) > 0 and integer(joined["invocation"]) > 0
+            and all(joined[k] == row[k] for k in ("thread", "depth", "caller", "context"))
+            and joined["firing"] == before["firing"] == after["firing"]
+            and joined["branch"] == before["branch"] == after["branch"]
+            and row["begin_ns"] <= integer(joined["begin_ns"]) <= integer(joined["end_ns"]) <= row["end_ns"],
+            "prepress feed trace belongs to another callback")
+    owner = boundary["owner"]
+    require(all(joined["owner"][k] == before[k] == after[k] == owner[v] for k, v in
+                (("player", "player"), ("soldier", "soldier"), ("weak", "weak"), ("weapon", "weapon"),
+                 ("actor_generation", "actorGeneration"), ("equip_generation", "equipGeneration"), ("space", "space")))
+            and boundary["closure"]["mapping"]["owner"] == owner
+            and joined["config"]["weapon_data"] == boundary["closure"]["mapping"]["equipment"]["data"]
+            and integer(joined["lease_revision"]) > 0
+            and 0 < integer(joined["lease_sequence"]) == before["snapshot_sequence"] == after["snapshot_sequence"]
+            and 0 < integer(joined["lease_observed_ns"]) <= row["begin_ns"]
+            and row["end_ns"] < integer(joined["lease_deadline_ns"]),
+            "prepress feed trace lost its owner/configuration/source lease")
+    require(all(integer(joined[k]) == value for k, value in
+                (("evaluated", 4095), ("passed", 4095), ("lease", 1), ("retained_scope_fallback", 0),
+                 ("lease_current_before", 1), ("lease_current_after", 1), ("lookup", 128),
+                 ("retained_lookup", 0), ("gate_lifetime", 0), ("gate_revision", 0),
+                 ("run_called", 1), ("run_admitted", 1), ("native_entered", 1), ("native_returned", 1),
+                 ("observation_stage", 0), ("client_failure", 0), ("server_failure", 0),
+                 ("input_known", 15), ("count_changed", 0), ("gap_count_changed", 0), ("refill_candidate", 0)))
+            and joined["guard"] == guard
+            and joined["input"] == [[0, 0], [1, 0], [1, 0], [0, 0]]
+            and all(type(v) is int for phase in joined["input"] for v in phase),
+            "prepress feed trace does not prove neutral lock contention and exact restoration")
+    for name, native in (("before", before), ("after", after)):
+        sample = joined[name]
+        require(integer(sample["read"]) == integer(sample["identity_matches"]) == 1
+                and sample["identity"] == joined["before"]["identity"]
+                and len(sample["identity"]) == 3 and all(integer(v) > 0 for v in sample["identity"])
+                and sample["identity"][1:] == [joined["config"]["firing_data"], joined["config"]["ammo_address"]]
+                and sample["state"] == [native[k] for k in ("current", "previous", "next")]
+                and sample["loaded"] == joined["guard_loaded"] == native["loaded"]
+                and sample["reserve"] == native["reserve"] and sample["flags_a8"] == native["flags_a8"],
+                "prepress feed trace changed firing identity, state or ammunition")
+    return dict(recordId=row["id"], traceSerial=joined["serial"], nativeInvocation=row["native_invocation"],
+                branch=before["branch"], beginNs=row["begin_ns"], endNs=row["end_ns"],
+                beforePressNs=boundary["pressWrittenNs"] - row["end_ns"],
+                owner=joined["owner"], reason="exactly restored prepress neutral lock-contention inhibition")
+
+
+def post_reload_input_unmodified(row, flow=None, boundary=None):
+    """Keep Fire unchanged; admit only separately proved prepress neutral inhibition."""
     require(row["transfer_path"] is None and row["hold_requested"] is False and row["hold_applied"] is False,
             "native shot boundary contains reload/hold overrides")
     # Native guard bool members are streamed as JSON integers, unlike hold flags.
@@ -928,8 +997,7 @@ def post_reload_input_unmodified(row):
     require(all(type(v) is int for v in flags), "invalid native feed guard flags")
     if flags == (0, 0, 0, 0):
         return
-    require(flags == (1, 1, 1, 0)
-            and guard["original"] == guard["effective"] == guard["before_restore"],
+    require(flags == (1, 1, 1, 0),
             "native feed guard changed input or did not restore exactly")
     for name in ("context_before", "context_after"):
         context = row[name]
@@ -942,6 +1010,8 @@ def post_reload_input_unmodified(row):
         require(guard["original"] == words and words[0] & 255 == 0
                 and words[1] in (0, 1) and context["input_flags"] == words[1],
                 "native feed guard changed or inhibited ordinary Fire input")
+    if not guard["original"] == guard["effective"] == guard["before_restore"]:
+        return post_reload_prepress_neutral(row, flow, boundary)
 
 
 def audit_post_reload_shot(flow, boundary):
@@ -1008,7 +1078,7 @@ def audit_post_reload_shot(flow, boundary):
     owner = {key: source[value] for key, value in
              (("player", "player"), ("soldier", "soldier"), ("weak", "weak"), ("weapon", "weapon"),
               ("actor_generation", "actorGeneration"), ("equip_generation", "equipGeneration"), ("space", "space"))}
-    copies, seen, window = {n: [] for n in range(3)}, set(), []
+    copies, seen, window, neutral_guards = {n: [] for n in range(3)}, set(), [], []
     for r in flow["records"]:
         if not (begin <= integer(r["begin_ns"]) <= finish):
             continue
@@ -1021,7 +1091,9 @@ def audit_post_reload_shot(flow, boundary):
                 and all(a.get(k) == v for k, v in owner.items())
                 and integer(r["begin_ns"]) <= integer(r["end_ns"]) <= finish,
                 "native shot observation has an unfinished/changed owner callback")
-        post_reload_input_unmodified(r)
+        neutral_guard = post_reload_input_unmodified(r, flow, boundary)
+        if neutral_guard is not None:
+            neutral_guards.append(neutral_guard)
         require(integer(r["id"]) > 0 and integer(r["id"]) not in seen,
                 "native shot record duplicated or invalid")
         seen.add(integer(r["id"]))
@@ -1102,6 +1174,12 @@ def audit_post_reload_shot(flow, boundary):
                            beginNs=rows[0]["begin_ns"], endNs=rows[-1]["end_ns"]))
     require(len(set(counts)) == 1 and len(set(firing)) == 3 and tokens[0] == tokens[1] == tokens[2],
             "native copies disagree on the observed Fire events")
+    for guard in neutral_guards:
+        trace_owner = guard.pop("owner")
+        server = copies[2][0]["before"]
+        require(trace_owner["firing"] == firing
+                and all(trace_owner[k] == server[k] for k in ("server_player", "server_soldier", "server_item")),
+                "prepress feed trace lost the three-copy native owner association")
     require(all(all(s.get(k) == v for k, v in owner.items())
                 for r in window for s in (r.get("before"), r.get("after"))
                 if isinstance(s, dict) and s.get("firing") in firing),
@@ -1110,10 +1188,14 @@ def audit_post_reload_shot(flow, boundary):
                 **({"preparationOnly": True, "reloadCompleted": False} if preparation else {}), nativeShotObserved=True,
                 loadedBefore=counts[0][0], loadedAfter=counts[0][1], reserve=counts[0][2],
                 roundsObserved=len(tokens[0]), events=events, observedBounds=bounds,
+                prepressNeutralInhibitions=neutral_guards,
                 completeWindow=False, nativeDropCounters=drops,
                 nativeAcceptance=False, headsetAcceptance=False,
                 evidence="Matched same-owner native Fire events and connected retained ammunition on all three copies; "
-                         "capture completeness and full reload acceptance are not established.")
+                         "capture completeness and full reload acceptance are not established. "
+                         "Native drop counters are session-global and cannot localize missing callbacks. "
+                         "Any admitted prepress neutral inhibition has an exact joined restoration; "
+                         "guard trace samples remain sequential diagnostic observations.")
 
 
 TIMED_TRIGGER_RUNTIME_SHA256 = "2c5eb913be5d4a6b86ed38e308b085985cd86e7454c149e91d5d629c3259d20a"

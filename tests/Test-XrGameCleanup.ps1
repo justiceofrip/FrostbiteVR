@@ -50,6 +50,7 @@ function Run([string]$Name,[scriptblock]$Change,[bool]$Allowed,[bool]$PreActivat
     & $Change $script:f
     $owned=@{game=@{process=$gameObject;identity=$identity};trace=@{process=$script:f.trace}}
     $session=@{trace=@{pid=51320};resolution_lease=@{pid=17088}}
+    $preAttachSpec=$null
     $folder='G:\fixture\session';$gameExe=$identity.path;$gamePin=@{sha256='original'}
     $clock=[Diagnostics.Stopwatch]::StartNew();$TimeoutSeconds=420
     $failures=[Collections.Generic.List[string]]::new();$nativeRetired=$false;$gameClosed=$false;$caught=$null
