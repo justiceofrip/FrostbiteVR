@@ -15,17 +15,24 @@ and operation sequence can explicitly request -ExtendedObservation with at most
 420s host/540s outer. The outer deadline still reserves at least60s for cleanup.
 This changes only the session envelope; action deadlines, capture/tape budgets,
 source admission, native retirement and restoration requirements stay in force.
+For a continuous campaign route, explicit -CampaignObservation instead permits
+at most1200s host/1320s outer and reserves120s for cleanup. It cannot be combined
+with ExtendedObservation. Its recorder cap is90000 frames, while ordinary and
+extended runs retain30000. There is no automatic mission navigation or longer
+controller-action deadline. ROOT may still stop early through stop.request.
 MaxGeneratedBytes defaults to40GiB. A larger explicit ceiling also requires
 GeneratedBudgetReason; the runner records both and passes the ceiling to the same
 fresh complete storage guard. The15GiB floor, counted roots and capture reserve
 remain unchanged. Do not copy the runner merely to change an authorized ceiling.
 
 CaptureWidth/CaptureHeight default to 1024x768 and are bounded to 64..1024 by
-64..768. CaptureCount defaults to four and is bounded to 1..12. Admission counts
+64..768. CaptureCount defaults to four and is bounded to 1..12 outside campaign
+mode, which permits at most30 within the same raw ceiling. Admission counts
 512 MiB for the eight bounded native images, plus count x width x height x
 4 bytes x 2 eyes x 2 streams (eye PNGs and mandatory SBS duplicate), plus 64 KiB
 metadata/PNG overhead per composition. Per-layer and periodic capture stay off.
-The explicit 660 MiB raw ceiling admits at most 656.75 MiB; planned output and
+The explicit 660 MiB raw ceiling admits the ordinary12 maximum-size captures
+or30 at640x480 (654.5 MiB including native images); planned output and
 the watchdog add 128 MiB for logs/tape/scratch. The readable menu/mechanism
 capture exception and exact estimate are saved in storage.json/run-manifest.json.
 Storage refusal remains final. The watchdog polls run plus normal-session output;

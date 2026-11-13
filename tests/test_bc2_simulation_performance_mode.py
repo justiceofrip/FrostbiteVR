@@ -160,6 +160,7 @@ ObservePerformanceSession $record
     def test_real_manifest_launch_and_result_separate_request_from_observation(self):
         result = self.invoke(r"""
 $Seconds=300;$TimeoutSeconds=420;$MaxGeneratedBytes=40GB;$GeneratedBudgetReason=''
+$ExtendedObservation=$false;$CampaignObservation=$false;$observationProfile=@{mode='standard'};$cleanupReserveSeconds=60;$tapeMaxFrames=30000
 $plannedBytes=1;$rawBytes=1;$rawLimitBytes=1;$CaptureCount=4;$CaptureWidth=1024;$CaptureHeight=768
 $capturePlan=@{maximum_compositions=4};$mechanismMarker=@{requested=$false};$privatePresentation=@{requested=$false};$attributionProfile=@{requested=$false}
 $failures=[Collections.Generic.List[string]]::new();$OutputDir=$v.folder;$Version='fixture-version';$ExpectedSourceSha256=('a'*64)

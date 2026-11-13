@@ -19,7 +19,7 @@ $cases=[Collections.Generic.List[object]]::new()
 $fixture=Join-Path $ScratchRoot ('startup-publication-'+[guid]::NewGuid().ToString('N'))
 $null=[IO.Directory]::CreateDirectory($fixture)
 $OutputDir=$fixture
-$TimeoutSeconds=480;$Seconds=420;$hostStartedAt=0.0
+$TimeoutSeconds=480;$Seconds=420;$hostStartedAt=0.0;$cleanupReserveSeconds=60
 $startup=@{sent_at_seconds=0.0}
 $clock=[Diagnostics.Stopwatch]::StartNew()
 $f=$null;$caught=$null

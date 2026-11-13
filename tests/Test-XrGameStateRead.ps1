@@ -45,7 +45,7 @@ function Reset([double]$Now=100){
     $script:clock=[pscustomobject]@{Elapsed=[pscustomobject]@{TotalSeconds=$Now};ElapsedMilliseconds=[long]($Now*1000)}
     $script:lastScan=-1000L;$script:OutputDir=$fixture;$script:folder=$null;$script:simDir=$fixture
     $script:plannedBytes=1MB;$script:hostStartedAt=90.0;$script:simObserved=$true;$script:stopReason=$null
-    $script:owned=@{host=@{identity=@{pid=7}}};$script:TimeoutSeconds=420;$script:Seconds=300
+    $script:owned=@{host=@{identity=@{pid=7}}};$script:TimeoutSeconds=420;$script:Seconds=300;$script:cleanupReserveSeconds=60
     $script:systemName='fixture';$script:profilePath='fixture-profile';$script:CaptureCount=4;$script:startup=$null
 }
 function Lock-State {$script:f.lock=[IO.File]::Open($statePath,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)}
@@ -127,10 +127,11 @@ public static class FvrStateReadTestIo {
         Reset;$f.injected=$item.exception;Attempt {$null=JsonInjected $statePath -SharingDeadlineSeconds 100.25}
         Check ($caught -and $f.reads -eq $item.reads -and $f.sleeps -eq $item.reads-1) ($item.name+' keeps refusal/retry classification')
     }
-    foreach($name in 'cleanup reserve','host duration','startup twenty seconds','handshake fifteen seconds'){
+    foreach($name in 'cleanup reserve','campaign cleanup reserve','host duration','startup twenty seconds','handshake fifteen seconds'){
         Reset
         switch($name){
             'cleanup reserve' {$clock.Elapsed.TotalSeconds=359.985;$clock.ElapsedMilliseconds=359985;$hostStartedAt=100.0}
+            'campaign cleanup reserve' {$TimeoutSeconds=1320;$Seconds=1200;$cleanupReserveSeconds=120;$clock.Elapsed.TotalSeconds=1199.985;$clock.ElapsedMilliseconds=1199985;$hostStartedAt=100.0}
             'host duration' {$hostStartedAt=85.015;$Seconds=15}
             'startup twenty seconds' {$simObserved=$false;$hostStartedAt=80.015}
             'handshake fifteen seconds' {$simObserved=$false;$startup=@{sent_at_seconds=85.015}}

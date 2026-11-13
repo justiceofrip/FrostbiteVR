@@ -61,6 +61,105 @@ class MemoryArtifacts:
         self.events.append(copy.deepcopy(event))
 
 
+class CaptureAdmissionTests(unittest.TestCase):
+    @staticmethod
+    def manifest(mode="standard", count=12, width=1024, height=768):
+        campaign, extended = mode == "campaign", mode == "extended"
+        sim_bytes = count * width * height * 16 + count * 65536
+        raw_bytes = 512 * 1024 * 1024 + sim_bytes
+        host, outer = (1200, 1320) if campaign else (420, 540) if extended else (300, 420)
+        return dict(
+            limits=dict(observation_mode=mode, campaign_observation=campaign, extended_observation=extended,
+                        host_seconds=host, outer_seconds=outer, cleanup_reserve_seconds=120 if campaign else 60,
+                        tape_max_frames=90000 if campaign else 30000, raw_budget_bytes=raw_bytes,
+                        raw_budget_limit_bytes=660 * 1024 * 1024, planned_bytes=raw_bytes + 128 * 1024 * 1024,
+                        native_maximum_raw_images=8, sim_compositions=count, sim_capture_width=width,
+                        sim_capture_height=height),
+            capture_plan=dict(maximum_compositions=count, width=width, height=height, eyes=2, image_streams=2,
+                              bytes_per_pixel=4, metadata_bytes_per_composition=65536, raw_bytes=sim_bytes,
+                              layers=False, periodic=False))
+
+    def test_standard_and_extended_existing_manifests_remain_admitted(self):
+        for mode in ("standard", "extended"):
+            for legacy in (False, True):
+                with self.subTest(mode=mode, legacy=legacy):
+                    manifest = self.manifest(mode)
+                    if legacy:
+                        for key in ("observation_mode", "campaign_observation", "cleanup_reserve_seconds"):
+                            del manifest["limits"][key]
+                    self.assertIs(d.admit_capture_plan(manifest), manifest["capture_plan"])
+
+    def test_campaign_thirty_captures_fit_the_unchanged_raw_ceiling(self):
+        manifest = self.manifest("campaign", 30, 640, 480)
+        self.assertIs(d.admit_capture_plan(manifest), manifest["capture_plan"])
+        self.assertEqual(manifest["limits"]["raw_budget_bytes"], 654.5 * 1024 * 1024)
+
+    def test_count_and_dimensions_cannot_bypass_mode_or_raw_ceiling(self):
+        for mode, count, width, height in (
+                ("standard", 13, 640, 480), ("extended", 13, 640, 480),
+                ("campaign", 31, 64, 64), ("campaign", 30, 1024, 768),
+                ("campaign", 0, 640, 480), ("campaign", 1, 63, 480),
+                ("campaign", 1, 640, 63), ("campaign", 1, 1025, 480),
+                ("campaign", 1, 640, 769)):
+            with self.subTest(mode=mode, count=count, width=width, height=height), self.assertRaises(d.REFUSAL):
+                d.admit_capture_plan(self.manifest(mode, count, width, height))
+
+    def test_campaign_requires_exact_manifest_opt_in_and_profile(self):
+        for key, value in (("campaign_observation", False), ("campaign_observation", "true"),
+                           ("campaign_observation", 1), ("extended_observation", True),
+                           ("observation_mode", "extended"), ("cleanup_reserve_seconds", 60),
+                           ("host_seconds", 1201), ("outer_seconds", 1321),
+                           ("outer_seconds", 1319), ("tape_max_frames", 30000)):
+            with self.subTest(key=key, value=value), self.assertRaises(d.REFUSAL):
+                manifest = self.manifest("campaign", 30, 640, 480)
+                manifest["limits"][key] = value
+                d.admit_capture_plan(manifest)
+        for key in ("campaign_observation", "observation_mode", "cleanup_reserve_seconds"):
+            with self.subTest(missing=key), self.assertRaises(d.REFUSAL):
+                manifest = self.manifest("campaign", 30, 640, 480)
+                del manifest["limits"][key]
+                d.admit_capture_plan(manifest)
+
+    def test_mode_label_alone_and_larger_default_tape_cap_are_refused(self):
+        for key, value in (("observation_mode", "campaign"), ("tape_max_frames", 90000)):
+            with self.subTest(key=key), self.assertRaises(d.REFUSAL):
+                manifest = self.manifest()
+                manifest["limits"][key] = value
+                d.admit_capture_plan(manifest)
+
+    def test_capture_accounting_and_limits_must_match_recomputed_bytes(self):
+        for section, key, value in (
+                ("capture_plan", "eyes", 1), ("capture_plan", "image_streams", 1),
+                ("capture_plan", "bytes_per_pixel", 3), ("capture_plan", "metadata_bytes_per_composition", 0),
+                ("capture_plan", "raw_bytes", 1), ("capture_plan", "layers", True),
+                ("capture_plan", "periodic", True), ("limits", "raw_budget_bytes", 1),
+                ("limits", "raw_budget_limit_bytes", 661 * 1024 * 1024),
+                ("limits", "planned_bytes", 1), ("limits", "native_maximum_raw_images", 0),
+                ("limits", "sim_compositions", 12), ("limits", "sim_capture_width", 1024),
+                ("limits", "sim_capture_height", 768)):
+            with self.subTest(section=section, key=key), self.assertRaises(d.REFUSAL):
+                manifest = self.manifest("campaign", 30, 640, 480)
+                manifest[section][key] = value
+                d.admit_capture_plan(manifest)
+
+    def test_last_campaign_capture_consumes_single_slot_and_then_refuses(self):
+        v = d.Driver.__new__(d.Driver)
+        v.capture_plan = d.admit_capture_plan(self.manifest("campaign", 30, 640, 480))
+        v.capture_sequence, v.run, v.artifacts = 29, Path("memory-run"), MemoryArtifacts()
+        commands = []
+        def send(lines, capture):
+            commands.append((lines, capture))
+            v.capture_sequence += 1
+        v.send, v.pump = send, lambda: None
+        with patch.object(Path, "exists", side_effect=lambda: bool(commands)), \
+                patch.object(d, "read_json", return_value=({"width": 640, "height": 480}, b"")):
+            v.capture("last")
+            with self.assertRaisesRegex(d.REFUSAL, "capture budget exhausted"):
+                v.capture("beyond")
+        self.assertEqual(commands, [(["shot last"], "last")])
+        self.assertEqual(v.artifacts.saved["capture.json"]["captureSeq"], 30)
+
+
 class MemoryPendingOwner:
     """Fake only the OS custody boundary; byte/owner validation stays real."""
     def __init__(self, driver, path, raw):

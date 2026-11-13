@@ -18,7 +18,9 @@ Native92's pending-attack preservation was not exercised. Damage unknown, mode4 
 WT/reports/coordinator-20261113-feedback1097/{result.txt,scalars.json} retains exact native/source joins and failure chronology.
 Installed1099 skips unavailable sampling within original75ms and source/contact/hand bounds; predicts one fresh measured11876 Attack. Review1101 GO and focused/normal checks pass.
 Actual93/01 strictHeld/both-eye visible knife; driver0771fc02f7aa48a89e635f43fa261d94 refused beforejab: outer/render input19889 versus passiveHeld19890. No motion/attack claim.1105 identifies bounded driver join polling gap; native1099 path not exercised.
-1106 shared driver correction polls ordered live unequal publications inside the originaldeadline, requires exactthreewayjoinbeforemotion.51assembledtestsPASS36.998s, includingrecordedrace+contradictions+deadlineexhaustion. Nativebinaries unchanged; actualjab stillpending.
+1106 shared driver correction polls ordered live unequal publications inside the originaldeadline, requires exactthreewayjoinbeforemotion.51assembledtestsPASS36.998s, includingrecordedrace+contradictions+deadlineexhaustion. Nativebinaries unchanged.
+Actual93/03 driver1c3f5d470e0c4b9cb3b4462f15800a45: measured120mm/120ms jab,triggerzero; strictHeld/freshReturnEmpty, both-eyeheld/removalreviewed. NativeDraw1 source7707; Attack2 source7762 observed666385535821700, receipt666386718349800; Return3 source7833 completion666387264005900. Attackreceipt1/completedmasks6/7, bothrequiredcontextcopiesexactlyrestored, native/policyReturnmatch, ammunitionunchanged.
+Recognitionring259seen/128kept/131dropped starts7777 afterattack7762; direct1099gapexercise notproved. Targetdamageunknown. Closed179.233s/native retirement/gameclose/exactprofiles/settingsrestore,failures[]. WT/reports/coordinator-20261113-feedback1111/{result.txt,scalars.json}.
 Earlier91/04 recognized/staged Attack2 but consumed0. Its files moved losslessly with R/archive-execution91-04/restore-map.json; failure unchanged.
 
 Optional performance mode
@@ -42,3 +44,8 @@ KnownSP03seed staged/restored through shared runner. ActualXexit b1358dc644b944a
 Freshonfootnavigation923fedcf014f4e05802934bb3e2ea601 andlaterpulses accepted. Ordinaryshoulderdraw e1531cab08574607aa1d47713e9ef17d; subsequentbodyphase1/actualEmptyfalse/SPAS12, both-eye post-vehicle-equipped shows8/24.
 Aseat0b6cd262e11344019ca244b41a207c74 ACKed butnoobservedentrychange; finitegathertrace doesnotretainitsrequest/reason, so seatacceptanceunknown.
 Closed392.661s: native retired, normalgameclose,exactprofiles/settingsrestore,failures[]. Noheadsetorwholevehiclefamilyclaim. WT/reports/coordinator-20261113-feedback1108 retainscompactaudit.
+
+Campaign route tooling1113
+ExplicitCampaignObservation1200s/1320s,120s cleanup,30captures and90000tape frames. Standard/Extended defaults retained;30x640x480+native images654.5MiB within unchanged660MiB raw ceiling. No input/source/action deadline relaxation or native rebuild.
+ROOT checks atR/campaign1113:24durationcases;160budgetchecks/20cases;1833attributionchecks;123cleanup;63startup;38state-read;29feed-driver,54navigation,51knife,8performance-mode testsPASS. Initialstartup missingScratchRoot thenmissingnewfixturevariable retained; ROOTfixedonlyfixtureinitialization and addedcampaigncleanup read-boundarycase, then63/38passed.
+Local recorder93/03 header/footer both30000,9847frames/nontruncated; newprofile requires exact90000 header/footer. Actual20-minute campaign mode not yet exercised. Firstmission menu route reuses1112 reviewed-label recipe, not historical wrapper authority.

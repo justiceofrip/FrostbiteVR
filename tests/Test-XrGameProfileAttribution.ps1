@@ -71,6 +71,7 @@ function Run([string]$Name,[bool]$OptIn,[bool]$Ordered,[scriptblock]$Change={},[
     . $profileOptIn
     Check (-not $attributionProfile.child_environment_verified -and -not $attributionProfile.native_enablement_claimed) "$Name initially unverified"
     $mechanismMarker=@{requested=$false};$Seconds=420;$TimeoutSeconds=540
+    $ExtendedObservation=$true;$CampaignObservation=$false;$observationProfile=@{mode='extended'};$cleanupReserveSeconds=60;$tapeMaxFrames=30000
     $MaxGeneratedBytes=40GB;$GeneratedBudgetReason='fixture only'
     $plannedBytes=1;$rawBytes=1;$rawLimitBytes=1;$CaptureCount=5;$CaptureWidth=640;$CaptureHeight=480
     $capturePlan=@{fixture=$true};$failures=[Collections.Generic.List[string]]::new()

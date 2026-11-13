@@ -9,9 +9,9 @@ param(
     [Parameter(Mandatory)][string]$LocalConfig,
     [Parameter(Mandatory)][ValidatePattern('^[a-f0-9]{64}$')][string]$ExpectedSourceSha256,
     [string]$ProfileDirectory=(Join-Path $env:USERPROFILE 'Documents/BFBC2'),
-    [ValidateRange(15,420)][int]$Seconds=300,
-    [ValidateRange(90,540)][int]$TimeoutSeconds=420,
-    [ValidateRange(1,12)][int]$CaptureCount=4,
+    [ValidateRange(15,1200)][int]$Seconds=300,
+    [ValidateRange(90,1320)][int]$TimeoutSeconds=420,
+    [ValidateRange(1,30)][int]$CaptureCount=4,
     [ValidateRange(64,1024)][int]$CaptureWidth=1024,
     [ValidateRange(64,768)][int]$CaptureHeight=768,
     [ValidateRange(1,[long]::MaxValue)][long]$MaxGeneratedBytes=40GB,
@@ -27,7 +27,8 @@ param(
     [string]$CampaignSeedFile,
     [string]$PrivateSessionBinding,
     [string]$PrivateSessionBindingSha256,
-    [switch]$ExtendedObservation
+    [switch]$ExtendedObservation,
+    [switch]$CampaignObservation
 )
 if($PerformanceMode -and $PrivateSourcePipeline){throw 'PerformanceMode and PrivateSourcePipeline are separate launch options; select only one.'}
 Set-StrictMode -Version Latest
@@ -52,21 +53,38 @@ $attributionProfile=@{requested=[bool]$ProfileAttribution;environment=@{};
     cpu_window_seconds=12;gpu_maximum_tracked_pairs=8;runtime_rearm=$false;steady_insert_window_guaranteed=$false;
     child_environment_verified=$false;unapproved_fvr_bc2_environment_absent=$false;native_enablement_claimed=$false}
 if($ProfileAttribution){$attributionProfile.environment=@{FVR_BC2_PRIVATE_CPU_ATTRIBUTION='12';FVR_PRIVATE_GPU_TIMING436='8'}}
-# Two eyes, with the mandatory SBS duplicate as a second image stream. Layers stay off.
-$simRawBytes=[long]$CaptureCount*$CaptureWidth*$CaptureHeight*4*2*2+$CaptureCount*64KB
-$rawBytes=512MB+$simRawBytes;$plannedBytes=$rawBytes+128MB;$rawLimitBytes=660MB
-$capturePlan=@{maximum_compositions=$CaptureCount;width=$CaptureWidth;height=$CaptureHeight;eyes=2;image_streams=2;bytes_per_pixel=4;metadata_bytes_per_composition=64KB;raw_bytes=$simRawBytes;layers=$false;periodic=$false}
+function Require([bool]$Condition,[string]$Message){if(-not $Condition){throw $Message}}
+function GetObservationProfile([bool]$Extended,[bool]$Campaign){
+    Require (-not ($Extended -and $Campaign)) 'ExtendedObservation and CampaignObservation are separate opt-ins; select only one.'
+    if($Campaign){return @{mode='campaign';maximum_host_seconds=1200;maximum_outer_seconds=1320;cleanup_reserve_seconds=120;maximum_compositions=30;tape_max_frames=90000}}
+    if($Extended){return @{mode='extended';maximum_host_seconds=420;maximum_outer_seconds=540;cleanup_reserve_seconds=60;maximum_compositions=12;tape_max_frames=30000}}
+    return @{mode='standard';maximum_host_seconds=300;maximum_outer_seconds=420;cleanup_reserve_seconds=60;maximum_compositions=12;tape_max_frames=30000}
+}
+function AssertObservationLimits([int]$HostSeconds,[int]$OuterSeconds,[bool]$Extended,[bool]$Campaign=$false){
+    $profile=GetObservationProfile $Extended $Campaign
+    Require ($HostSeconds -ge 15 -and $HostSeconds -le $profile.maximum_host_seconds -and $OuterSeconds -ge 90 -and $OuterSeconds -le $profile.maximum_outer_seconds) 'Observation duration exceeds the explicitly selected bounded profile.'
+    Require ($OuterSeconds -ge $HostSeconds+$profile.cleanup_reserve_seconds) "Outer deadline must reserve at least $($profile.cleanup_reserve_seconds) seconds beyond host duration."
+}
+function NewCapturePlan([int]$Count,[int]$Width,[int]$Height,[bool]$Campaign=$false){
+    $profile=GetObservationProfile $false $Campaign
+    Require ($Count -ge 1 -and $Count -le $profile.maximum_compositions -and $Width -ge 64 -and $Width -le 1024 -and $Height -ge 64 -and $Height -le 768) 'Capture dimensions/count exceed the explicitly selected bounded profile.'
+    # Two eyes, with the mandatory SBS duplicate as a second image stream. Layers stay off.
+    $bytes=[long]$Count*$Width*$Height*4*2*2+$Count*64KB
+    Require (512MB+$bytes -le 660MB) 'Capture plan exceeds the unchanged 660 MiB raw ceiling including native images.'
+    return @{maximum_compositions=$Count;width=$Width;height=$Height;eyes=2;image_streams=2;bytes_per_pixel=4;metadata_bytes_per_composition=64KB;raw_bytes=$bytes;layers=$false;periodic=$false}
+}
+function AssertTapeFooter($Footer,[int]$MaximumFrames){
+    Require ($Footer.r -ceq 'footer' -and $Footer.maxFrames -eq $MaximumFrames -and $Footer.truncated -is [bool] -and -not $Footer.truncated -and ($Footer.recordedFrames -is [int] -or $Footer.recordedFrames -is [long]) -and $Footer.recordedFrames -ge 0 -and $Footer.recordedFrames -lt $MaximumFrames) 'Recorder footer missing or frame cap/truncation observed.'
+}
+$observationProfile=GetObservationProfile ([bool]$ExtendedObservation) ([bool]$CampaignObservation)
+$cleanupReserveSeconds=$observationProfile.cleanup_reserve_seconds;$tapeMaxFrames=$observationProfile.tape_max_frames
+$capturePlan=NewCapturePlan $CaptureCount $CaptureWidth $CaptureHeight ([bool]$CampaignObservation)
+$rawBytes=512MB+$capturePlan.raw_bytes;$plannedBytes=$rawBytes+128MB;$rawLimitBytes=660MB
 $receipt=[ordered]@{schema='fvr.xr-game-simulation.v1';status='failed';evidence_level='actual_game_simulated_runtime';
     actual_game_started=$false;native_running_observed=$false;reload_success_claimed=$false;headset_accepted=$false;
-    limits=@{host_seconds=$Seconds;outer_seconds=$TimeoutSeconds;max_generated_bytes=$MaxGeneratedBytes;generated_budget_reason=$GeneratedBudgetReason;planned_bytes=$plannedBytes;raw_budget_bytes=$rawBytes;raw_budget_limit_bytes=$rawLimitBytes;raw_budget_reason='Readable menu/mechanism captures: native eight bounded images plus at most twelve 1024x768 stereo/SBS compositions.';native_maximum_raw_images=8;sim_compositions=$CaptureCount;sim_capture_width=$CaptureWidth;sim_capture_height=$CaptureHeight;render_width=1024;render_height=768;tape_max_frames=30000};
+    limits=@{host_seconds=$Seconds;outer_seconds=$TimeoutSeconds;observation_mode=$observationProfile.mode;extended_observation=[bool]$ExtendedObservation;campaign_observation=[bool]$CampaignObservation;cleanup_reserve_seconds=$cleanupReserveSeconds;max_generated_bytes=$MaxGeneratedBytes;generated_budget_reason=$GeneratedBudgetReason;planned_bytes=$plannedBytes;raw_budget_bytes=$rawBytes;raw_budget_limit_bytes=$rawLimitBytes;raw_budget_reason='Readable menu/mechanism captures: native eight bounded images plus explicitly admitted stereo/SBS compositions within 660 MiB.';native_maximum_raw_images=8;sim_compositions=$CaptureCount;sim_capture_width=$CaptureWidth;sim_capture_height=$CaptureHeight;render_width=1024;render_height=768;tape_max_frames=$tapeMaxFrames};
     capture_plan=$capturePlan;mechanism_snapshots=$mechanismMarker;private_gpu_ordered_present=$privatePresentation;profile_attribution=$attributionProfile;private_source_pipeline=$sourcePipeline;performance_mode=$performanceSelection;
     failures=$failures;forced_termination_by_wrapper=$false}
-function Require([bool]$Condition,[string]$Message){if(-not $Condition){throw $Message}}
-function AssertObservationLimits([int]$HostSeconds,[int]$OuterSeconds,[bool]$Extended){
-    Require ($HostSeconds -ge 15 -and $HostSeconds -le 420 -and $OuterSeconds -ge 90 -and $OuterSeconds -le 540) 'Observation duration exceeds the bounded runner limits.'
-    Require ($Extended -or ($HostSeconds -le 300 -and $OuterSeconds -le 420)) 'Durations beyond 300/420 seconds require explicit ExtendedObservation.'
-    Require ($OuterSeconds -ge $HostSeconds+60) 'Outer deadline must reserve at least 60 seconds beyond host duration.'
-}
 function Full([string]$Path){
     Require ([IO.Path]::IsPathFullyQualified($Path)) "Absolute path required: $Path"
     $full=[IO.Path]::GetFullPath($Path);Assert-FvrNoLinks $full;return $full
@@ -120,7 +138,7 @@ function Save([string]$Name,$Value){
     if($Name -cnotin @('sim-startup.json','session-link.json')){Write-FvrJson (Join-Path $OutputDir $Name) $Value;return}
     # Only these two handoff files are polled while startup replaces them.
     # Spend the existing bounded publisher wait inside every original clock.
-    $deadline=$TimeoutSeconds-60
+    $deadline=$TimeoutSeconds-$cleanupReserveSeconds
     if($null -ne $hostStartedAt){$deadline=[Math]::Min($deadline,[Math]::Min($hostStartedAt+$Seconds,$hostStartedAt+20))}
     if($startup){$deadline=[Math]::Min($deadline,$startup.sent_at_seconds+15)}
     Write-FvrJson (Join-Path $OutputDir $Name) $Value -RetrySessionPublication -PublicationDeadlineClock $clock -PublicationDeadlineSeconds $deadline
@@ -540,7 +558,7 @@ function ObserveBounds {
     if([IO.File]::Exists($statePath) -and $owned.ContainsKey('host')){
         # Spend at most 250 ms inside the existing stop/startup clocks. Never
         # cache a prior state or turn a missing/invalid read into an observation.
-        $readUntil=[Math]::Min($clock.Elapsed.TotalSeconds+0.25,$TimeoutSeconds-60)
+        $readUntil=[Math]::Min($clock.Elapsed.TotalSeconds+0.25,$TimeoutSeconds-$cleanupReserveSeconds)
         if($null -ne $hostStartedAt){$readUntil=[Math]::Min($readUntil,$hostStartedAt+$Seconds)}
         if(-not $simObserved -and -not $stopReason){
             if($null -ne $hostStartedAt){$readUntil=[Math]::Min($readUntil,$hostStartedAt+20)}
@@ -565,9 +583,8 @@ try{
     . (Join-Path $sourceRoot 'tools/StorageBudget.ps1')
     $RepositoryRoot=Full $RepositoryRoot;$InstallRoot=Full $InstallRoot;$OutputDir=Full $OutputDir;$ProfileDirectory=Full $ProfileDirectory
     if($PerformanceMode){Require ($ProfileDirectory -ieq [IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'BFBC2'))) 'Performance mode requires the normal launcher graphics profile directory.'}
-    AssertObservationLimits $Seconds $TimeoutSeconds ([bool]$ExtendedObservation)
+    AssertObservationLimits $Seconds $TimeoutSeconds ([bool]$ExtendedObservation) ([bool]$CampaignObservation)
     Require ($MaxGeneratedBytes -le 40GB -or -not [string]::IsNullOrWhiteSpace($GeneratedBudgetReason)) 'MaxGeneratedBytes above 40 GiB requires an explicit GeneratedBudgetReason.'
-    $receipt.limits.extended_observation=[bool]$ExtendedObservation
     Require ([IO.Path]::GetPathRoot($RepositoryRoot) -ieq 'G:\' -and [IO.Path]::GetPathRoot($InstallRoot) -ieq 'G:\') 'Local development repository/install must remain on G:.'
     Require ($OutputDir.StartsWith((Join-Path $RepositoryRoot 'reports')+'\',[StringComparison]::OrdinalIgnoreCase)) 'Use a fresh output under RepositoryRoot/reports.'
     Require (-not(Test-Path -LiteralPath $OutputDir)) 'Existing output refused; preserve all prior episodes.'
@@ -697,7 +714,7 @@ try{
         'hand l aimtrim 0 0','hand r aimtrim 0 0',('note startup-'+[guid]::NewGuid().ToString('N')))
     Require (($initialCommands -join ' | ').Length -lt 508) 'Startup batch exceeds simulator acknowledgement text bound.'
     Save 'initial-commands.json' @{commands=$initialCommands;capture_plan=$capturePlan;capture_authority='Root may request individually acknowledged named shots within capture_plan after the exact-host startup handshake; preserve each batch and acknowledgement.'}
-    $environment=@{XR_RUNTIME_JSON=$runtimeManifest;XR_API_LAYER_PATH=$tapeManifestDirectory;XR_ENABLE_API_LAYERS=$local.TapeLayerName;XRSIM_DIR=$simDir;XRSIM_HEADSET_CONFIG=$profilePath;XRTAPE_DIR=$tapeDir;XRTAPE_MAX_FRAMES='30000'}
+    $environment=@{XR_RUNTIME_JSON=$runtimeManifest;XR_API_LAYER_PATH=$tapeManifestDirectory;XR_ENABLE_API_LAYERS=$local.TapeLayerName;XRSIM_DIR=$simDir;XRSIM_HEADSET_CONFIG=$profilePath;XRTAPE_DIR=$tapeDir;XRTAPE_MAX_FRAMES=[string]$tapeMaxFrames}
     $psi=[Diagnostics.ProcessStartInfo]::new();$psi.FileName=$pwsh;$psi.WorkingDirectory=$OutputDir
     $psi.UseShellExecute=$false;$psi.CreateNoWindow=$true;$psi.WindowStyle=[Diagnostics.ProcessWindowStyle]::Hidden
     # No caller/global XR mutation: launcher descendants inherit this isolated map.
@@ -734,7 +751,7 @@ try{
         if($entry.HasExited -and $entry.ExitCode -ne 0){throw 'Owned Entry child failed; see entry.log.'}
         if($folder -and [IO.File]::Exists((Join-Path $folder 'stop.request'))){RequestStop 'Root or normal launcher requested stop.'}
         if($null -ne $hostStartedAt -and $clock.Elapsed.TotalSeconds-$hostStartedAt -ge $Seconds){RequestStop 'Host duration reached.'}
-        if($clock.Elapsed.TotalSeconds -ge $TimeoutSeconds-60){RequestStop 'Outer deadline cleanup reserve reached.'}
+        if($clock.Elapsed.TotalSeconds -ge $TimeoutSeconds-$cleanupReserveSeconds){RequestStop 'Outer deadline cleanup reserve reached.'}
         if($stopReason){RequestStop $stopReason}
         if($owned.ContainsKey('supervisor') -and $owned.supervisor.process.HasExited){break}
         if($entry.HasExited -and -not $folder){throw 'Launcher exited without a new owned session.'}
@@ -885,15 +902,15 @@ finally{
         try{
             $tapes=@();if(Test-Path -LiteralPath (Join-Path $OutputDir 'tape')){
                 foreach($file in Get-ChildItem -LiteralPath (Join-Path $OutputDir 'tape') -Filter '*.ndjson' -File){
-                    $row=@{path=$file.FullName;bytes=$file.Length;actual_host=$false;official_check='not_run_by_wrapper'}
+                    $row=@{path=$file.FullName;bytes=$file.Length;actual_host=$false;tape_max_frames=$tapeMaxFrames;official_check='not_run_by_wrapper'}
                     try{
                         $reader=[IO.File]::OpenText($file.FullName);try{$header=$reader.ReadLine()|ConvertFrom-Json -AsHashtable}finally{$reader.Dispose()}
                         $row.header=$header
-                        Require ($header.r -ceq 'header' -and $header.schema -eq 1 -and $header.pointerBits -eq 64 -and $header.layer -ceq 'XR_APILAYER_XRTAPE_recorder') 'Recorder header/schema/bitness differs.'
+                        Require ($header.r -ceq 'header' -and $header.schema -eq 1 -and $header.pointerBits -eq 64 -and $header.layer -ceq 'XR_APILAYER_XRTAPE_recorder' -and $header.maxFrames -eq $tapeMaxFrames) 'Recorder header/schema/bitness/frame cap differs.'
                         $row.actual_host=$owned.ContainsKey('host') -and $header.pid -eq $owned.host.identity.pid -and $header.exe -ieq $owned.host.identity.path
                         $footer=Get-Content -LiteralPath $file.FullName -Tail 1 -Encoding utf8|ConvertFrom-Json -AsHashtable
                         $row.footer=$footer
-                        Require ($footer.r -ceq 'footer' -and $footer.truncated -is [bool] -and -not $footer.truncated -and $footer.recordedFrames -lt 30000) 'Recorder footer missing or frame cap/truncation observed.'
+                        AssertTapeFooter $footer $tapeMaxFrames
                     }catch{$row.error=$_.Exception.Message;$failures.Add('Tape: '+$file.Name+': '+$_.Exception.Message)}
                     $tapes+=$row
                 }

@@ -74,6 +74,10 @@ function Run([string]$Name,[hashtable]$Extra,[string]$Outcome,[long]$ExpectedCei
     if($Outcome -ceq 'invalid_size'){
         Check ($errors.Count -gt 0 -and ($errors -join ' ') -match 'MaxGeneratedBytes') ($Name+' rejects invalid size at parameter binding')
         Check ($state.calls.Count -eq 0 -and -not [IO.Directory]::Exists($output) -and $refusals.Count -eq 0) ($Name+' cannot reach guard or create output')
+    }elseif($Outcome -ceq 'capture_refusal'){
+        $expectedFailure=if($Extra.ContainsKey('CampaignObservation') -and $Extra.CampaignObservation){'Capture plan exceeds the unchanged 660 MiB raw ceiling including native images.'}else{'Capture dimensions/count exceed the explicitly selected bounded profile.'}
+        Check ($errors.Count -gt 0 -and ($errors -join ' ').Contains($expectedFailure)) ($Name+' refuses the exact capture admission mismatch')
+        Check ($state.calls.Count -eq 0 -and $state.process_discovery_calls -eq 0 -and -not [IO.Directory]::Exists($output) -and $refusals.Count -eq 0) ($Name+' cannot reach guard, create output or discover processes')
     }else{
         Check ($errors.Count -gt 0 -and @($errors|Where-Object {$_ -notmatch 'Actual-game simulation incomplete; retain evidence at'}).Count -eq 0) ($Name+' retains intentional incomplete-run failure after full entry')
         if($Outcome -ceq 'reason_refusal' -or $Outcome -ceq 'storage_refusal'){
@@ -90,6 +94,13 @@ function Run([string]$Name,[hashtable]$Extra,[string]$Outcome,[long]$ExpectedCei
             $storage=[IO.File]::ReadAllText((Join-Path $output 'storage.json'))|ConvertFrom-Json -AsHashtable
             foreach($record in @($manifest.limits,$receipt.limits,$storage)){
                 Check ($record.max_generated_bytes -eq $ExpectedCeiling -and $record.generated_budget_reason -ceq $ExpectedReason) ($Name+' records exact ceiling and reason')
+            }
+            $campaign=$Extra.ContainsKey('CampaignObservation') -and [bool]$Extra.CampaignObservation
+            $extended=$Extra.ContainsKey('ExtendedObservation') -and [bool]$Extra.ExtendedObservation
+            $mode=if($campaign){'campaign'}elseif($extended){'extended'}else{'standard'}
+            foreach($record in @($manifest.limits,$receipt.limits)){
+                Check ($record.campaign_observation -eq $campaign -and $record.extended_observation -eq $extended -and $record.observation_mode -ceq $mode) ($Name+' records exact observation opt-ins')
+                Check ($record.cleanup_reserve_seconds -eq $(if($campaign){120}else{60}) -and $record.tape_max_frames -eq $(if($campaign){90000}else{30000})) ($Name+' records exact cleanup reserve and recorder cap')
             }
             Check ($receipt.failures.Count -eq 1 -and $receipt.failures[0] -ceq 'SYNTHETIC_STOP_AFTER_ADMISSION_MANIFEST' -and -not $receipt.actual_game_started -and $receipt.status -ceq 'failed') ($Name+' stops at synthetic dependency before game/package access')
         }
@@ -115,6 +126,11 @@ Run 'explicit-default' @{MaxGeneratedBytes=40GB} 'admitted'
 $reason='Explicit 57 GiB session budget; retain complete evidence inventory and 15 GiB free floor.'
 Run 'explicit-57' @{MaxGeneratedBytes=57GB;GeneratedBudgetReason=$reason} 'admitted' 57GB $reason
 Run 'bounded-captures' @{MaxGeneratedBytes=57GB;GeneratedBudgetReason=$reason;CaptureCount=12;CaptureWidth=1024;CaptureHeight=768} 'admitted' 57GB $reason
+Run 'extended-observation' @{ExtendedObservation=$true;Seconds=420;TimeoutSeconds=540;CaptureCount=12} 'admitted'
+Run 'campaign-captures' @{CampaignObservation=$true;Seconds=1200;TimeoutSeconds=1320;CaptureCount=30;CaptureWidth=640;CaptureHeight=480} 'admitted'
+Run 'campaign-oversized-captures' @{CampaignObservation=$true;Seconds=1200;TimeoutSeconds=1320;CaptureCount=30;CaptureWidth=1024;CaptureHeight=768} 'capture_refusal'
+Run 'unrequested-campaign-captures' @{CaptureCount=13;CaptureWidth=640;CaptureHeight=480} 'capture_refusal'
+Run 'extended-campaign-captures' @{ExtendedObservation=$true;Seconds=420;TimeoutSeconds=540;CaptureCount=13;CaptureWidth=640;CaptureHeight=480} 'capture_refusal'
 Run 'small-captures' @{CaptureCount=1;CaptureWidth=64;CaptureHeight=64} 'admitted'
 Run 'lower-ceiling' @{MaxGeneratedBytes=39GB} 'admitted' 39GB
 Run 'missing-reason' @{MaxGeneratedBytes=57GB} 'reason_refusal' 57GB

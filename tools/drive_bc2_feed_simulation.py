@@ -60,6 +60,48 @@ def json_bytes(value):
     return (json.dumps(value, separators=(",", ":"), allow_nan=False) + "\n").encode("utf-8")
 
 
+def admit_capture_plan(manifest):
+    """Recompute the runner's raw reserve; larger counts require its campaign opt-in."""
+    limits, plan = manifest.get("limits"), manifest.get("capture_plan")
+    require(isinstance(limits, dict) and isinstance(plan, dict), "missing pre-admitted capture budget")
+    campaign, extended = limits.get("campaign_observation", False), limits.get("extended_observation", False)
+    require(type(campaign) is bool and type(extended) is bool and not (campaign and extended),
+            "invalid observation opt-in")
+    mode = "campaign" if campaign else "extended" if extended else "standard"
+    # Older standard/extended manifests have no mode or cleanup field. Campaign
+    # requires both explicit fields; a count or mode label alone grants nothing.
+    require(limits.get("observation_mode", "extended" if extended else "standard") == mode,
+            "observation mode/opt-in mismatch")
+    reserve, tape_cap = (120, 90000) if campaign else (60, 30000)
+    host_max, outer_max = (1200, 1320) if campaign else (420, 540) if extended else (300, 420)
+    host, outer = integer(limits.get("host_seconds")), integer(limits.get("outer_seconds"))
+    require(15 <= host <= host_max and 90 <= outer <= outer_max and outer >= host + reserve
+            and integer(limits.get("cleanup_reserve_seconds", 60)) == reserve
+            and integer(limits.get("tape_max_frames")) == tape_cap, "invalid observation limits")
+    count, width, height = (integer(plan.get(key)) for key in ("maximum_compositions", "width", "height"))
+    require(plan.get("periodic") is False and plan.get("layers") is False
+            and 1 <= count <= (30 if campaign else 12)
+            and 64 <= width <= 1024 and 64 <= height <= 768,
+            "invalid pre-admitted capture budget")
+    require(integer(plan.get("eyes")) == 2 and integer(plan.get("image_streams")) == 2
+            and integer(plan.get("bytes_per_pixel")) == 4
+            and integer(plan.get("metadata_bytes_per_composition")) == 65536,
+            "capture stream/overhead budget differs")
+    sim_bytes = count * width * height * 4 * 2 * 2 + count * 65536
+    raw_bytes = 512 * 1024 * 1024 + sim_bytes
+    require(integer(plan.get("raw_bytes")) == sim_bytes
+            and integer(limits.get("raw_budget_bytes")) == raw_bytes
+            and integer(limits.get("raw_budget_limit_bytes")) == 660 * 1024 * 1024
+            and raw_bytes <= 660 * 1024 * 1024
+            and integer(limits.get("planned_bytes")) == raw_bytes + 128 * 1024 * 1024
+            and integer(limits.get("native_maximum_raw_images")) == 8
+            and integer(limits.get("sim_compositions")) == count
+            and integer(limits.get("sim_capture_width")) == width
+            and integer(limits.get("sim_capture_height")) == height,
+            "capture raw/storage budget differs or exceeds ceiling")
+    return plan
+
+
 def local_path(value):
     path = Path(value)
     require(path.is_absolute() and len(path.drive) == 2 and path.drive[1] == ":"
@@ -1356,11 +1398,8 @@ class Driver:
                 require(same_path(self.host["path"], pinned), "pinned host executable differs")
         # Capability belongs only to this checked runtime, never a version/name.
         self.timed_trigger_supported = self.manifest["runtime_library"]["sha256"] == TIMED_TRIGGER_RUNTIME_SHA256
-        self.capture_plan = self.manifest["capture_plan"]
-        require(self.capture_plan["periodic"] is False and self.capture_plan["layers"] is False
-                and 1 <= integer(self.capture_plan["maximum_compositions"]) <= 12
-                and 64 <= integer(self.capture_plan["width"]) <= 1024
-                and 64 <= integer(self.capture_plan["height"]) <= 768, "invalid pre-admitted capture budget")
+        self.capture_plan = admit_capture_plan(self.manifest)
+        require(self.link.get("capture_plan") == self.capture_plan, "session link capture plan differs")
         self.state = self.read_state()
         self.capture_sequence = integer(self.state["captureSeq"])
         self.command_hash = digest(read_bytes(self.command_path, 4096))

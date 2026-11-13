@@ -524,10 +524,18 @@ class NavigationTests(unittest.TestCase):
         pin = lambda name: dict(path=str(self.root / name), bytes=(self.root / name).stat().st_size,
                                 sha256=self.m.t.digest((self.root / name).read_bytes()))
         self.host = dict(pid=999, path=str(self.root / "host.exe"), start_utc="2026-01-01T00:00:00Z")
+        plan = dict(periodic=False, layers=False, maximum_compositions=3, width=640, height=480,
+                    eyes=2, image_streams=2, bytes_per_pixel=4, metadata_bytes_per_composition=65536,
+                    raw_bytes=3 * 640 * 480 * 16 + 3 * 65536)
+        raw_bytes = 512 * 1024 * 1024 + plan["raw_bytes"]
+        limits = dict(host_seconds=300, outer_seconds=420, extended_observation=False, tape_max_frames=30000,
+                      raw_budget_bytes=raw_bytes, raw_budget_limit_bytes=660 * 1024 * 1024,
+                      planned_bytes=raw_bytes + 128 * 1024 * 1024, native_maximum_raw_images=8,
+                      sim_compositions=3, sim_capture_width=640, sim_capture_height=480)
         self.manifest = dict(schema="fvr.xr-game-run.v1", output_directory=str(self.run),
             version=self.version, source_sha256=self.source, runtime_manifest=pin("runtime.json"),
             runtime_library=pin("xrsim.dll"), host_executable=pin("host.exe"),
-            capture_plan=dict(periodic=False, layers=False, maximum_compositions=3, width=640, height=480))
+            capture_plan=plan, limits=limits)
         self.write(self.run / "run-manifest.json", self.manifest)
         controls = {key: False for key in ("a", "b", "x", "y", "menu", "clickL", "clickR", "restL", "restR")}
         controls.update(trigL=0, trigR=0, gripL=0, gripR=0, stickL=[0, 0], stickR=[0, 0])
@@ -546,7 +554,7 @@ class NavigationTests(unittest.TestCase):
             sim_state=str(self.run / "sim/state.json"), command=str(self.run / "sim/command.txt"),
             session=str(self.folder / "session.json"), options=str(self.folder / "options.json"),
             stop_request=str(self.folder / "stop.request"), startup_receipt=str(self.run / "sim-startup.json"),
-            mechanism_snapshots=dict(requested=True))
+            mechanism_snapshots=dict(requested=True), capture_plan=plan)
         self.write(self.run / "session-link.json", self.link)
         self.session = dict(host=self.host, supervisor=self.link["supervisor"], source_sha256=self.source,
                             version=self.version, state="running")

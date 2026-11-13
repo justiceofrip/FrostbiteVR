@@ -206,11 +206,18 @@ class KnifeTests(unittest.TestCase):
         (self.root / 'xrsim.dll').write_bytes(b'fake-runtime')
         self.write(self.root / 'runtime-x64.json', dict(runtime='synthetic'))
         pins = self.m.pin
-        self.plan = dict(periodic=False, layers=False, maximum_compositions=3, width=640, height=480)
+        self.plan = dict(periodic=False, layers=False, maximum_compositions=3, width=640, height=480,
+                         eyes=2, image_streams=2, bytes_per_pixel=4, metadata_bytes_per_composition=65536,
+                         raw_bytes=3 * 640 * 480 * 16 + 3 * 65536)
+        raw_bytes = 512 * 1024 * 1024 + self.plan['raw_bytes']
+        limits = dict(host_seconds=300, outer_seconds=420, extended_observation=False, tape_max_frames=30000,
+                      raw_budget_bytes=raw_bytes, raw_budget_limit_bytes=660 * 1024 * 1024,
+                      planned_bytes=raw_bytes + 128 * 1024 * 1024, native_maximum_raw_images=8,
+                      sim_compositions=3, sim_capture_width=640, sim_capture_height=480)
         self.manifest = dict(schema='fvr.xr-game-run.v1', output_directory=str(self.run),
             version=self.version, source_sha256=self.source, artifact_binding_path=str(self.run / 'artifact-binding.json'),
             runtime_manifest=pins(self.root / 'runtime-x64.json'), runtime_library=pins(self.root / 'xrsim.dll'),
-            host_executable=pins(self.runtime / 'bin/BC2XrHost.exe'), capture_plan=self.plan)
+            host_executable=pins(self.runtime / 'bin/BC2XrHost.exe'), capture_plan=self.plan, limits=limits)
         self.write(self.run / 'run-manifest.json', self.manifest)
         self.binding = dict(version=self.version, source_sha256=self.source,
             runtime=pins(self.runtime / 'runtime.json'), package=pins(self.package / 'package.json'),
@@ -232,7 +239,7 @@ class KnifeTests(unittest.TestCase):
             sim_state=str(self.run / 'sim/state.json'), command=str(self.run / 'sim/command.txt'),
             session=str(self.folder / 'session.json'), options=str(self.folder / 'options.json'),
             stop_request=str(self.folder / 'stop.request'), startup_receipt=str(self.run / 'sim-startup.json'),
-            mechanism_snapshots=dict(requested=True))
+            mechanism_snapshots=dict(requested=True), capture_plan=self.plan)
         self.write(self.run / 'session-link.json', self.link)
         self.write(self.folder / 'session.json', dict(host=self.host, supervisor=self.link['supervisor'],
             source_sha256=self.source, version=self.version, state='running'))
