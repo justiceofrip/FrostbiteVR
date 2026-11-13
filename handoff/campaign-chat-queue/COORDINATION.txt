@@ -12,14 +12,14 @@ Ownership/ready/blocked tasks: COORDINATOR-STATE.txt (local scheduling record).
 External worktrees remain untouched; finished25/26/33 source is integrated. Steam32 lacks its executable.
 
 INSTALLED RUNTIME
-Private0.1.99 installed and setup-validated; fallback0.1.98, earlier versions retained.
-Compiled source1998a3568a1f25772191569f51ba952ff4492d5c; nativeclosure897e3239c2abcde5964fd9030e5d44629230c69d4159f74d2621a144daa51014.
-Normal checks364x86/361x64 and focused magazine-resource/physical-bolt checks passed; unchanged hostWARP reused.
-Receipt: reports/coordinator-20261108-feedback721/normal99/run02/installation.json.
-Settings/cache/shortcut preserved. User tested99: LMG replacement pickup, dropped-box hover, chest draw and empty-hand firearm display failed. Public posting remains on hold; repairs require a new candidate and local acceptance.
+Private0.1.100 installed and setup-validated; fallback0.1.99, earlier versions retained.
+Compiled source6e733ab510ccc6a127324e569d834913e95c4837; nativeclosure9dabaf9e6592a677f5e924627c3232e0668c10fa7ef99cf3d79115fe69c976a4.
+Normal checks364x86/361x64 and focused PhysicalFeed/FeedPresentation/BodyInventory/KnifeHeldInput checks passed; unchanged hostWARP reused.
+Receipt: reports/coordinator-20261108-feedback721/normal100/run01/installation.json.
+Settings/cache/shortcut and headset99 recording preserved. Public posting remains on hold;100 addresses the reported failures but awaits local headset acceptance.
 
 CURRENT SOURCE
-Source1998a35 is pushed and installed99. Shared bolt control now distinguishes exact current-held attached magazine waiting from actual magazine manipulation, preserving the owed stroke without relaxing Fire/transfer/ownership guards. The shot driver uses the pinned runtime timer with exact retained grip. Actual98/15 cancellation and earlier failures remain preserved; full bolt reload remains open. Nativefocused checks and all normal suites pass; preparation fixtures were updated to the current composed path.
+Source6e733ab is pushed and installed100. Shared LMG removal accepts measured outward clearance, empty discarded originals fall/hide, sole-Fire Empty presentation stays hidden, and chest-grip approach survives continuous current samples. Earlier bolt correction remains included; full bolt reload remains open. Headset99 and failed build attempts remain preserved. Handoff: handoff/integrations/coordinator-20261113-human-grabs/README.txt.
 The navigation batch removes the developer tool's firearm-publication prerequisite for ordinary on-foot input, keeping original actor/input/menu deadlines and weapon admission unchanged.
 Handoffs: handoff/integrations/coordinator-20261113-weapon-acquisition/README.txt and coordinator-20261113-navigation/README.txt.
 

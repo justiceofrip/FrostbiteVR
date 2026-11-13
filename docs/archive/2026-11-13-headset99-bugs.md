@@ -4,10 +4,10 @@ User session `20261113-134542-247-8333f896` is retained in the local launcher ru
 
 | Reported failure | Status |
 | --- | --- |
-| LMG replacement box on the belt does not grab. | Open; shared feed-supply acquisition correction in progress. |
-| Released old LMG box floats in the air. | Open; current presentation deliberately retains its last world position. |
-| Chest knife cannot be picked up. | Open; shared empty-hand and chest approach behavior under repair. |
-| Empty-hand grip/trigger displays the M8. | Open; Fire-only suspension clears hidden-firearm presentation without an equipment transition. |
+| LMG replacement box on the belt does not grab. | Private100 corrects the preceding removal gate; full headset reload remains open. |
+| Released old LMG box floats in the air. | Private100 makes explicitly discarded empty originals fall then hide; loaded originals remain recoverable. Awaiting headset confirmation. |
+| Chest knife cannot be picked up. | Private100 adds bounded grip approach with skipped-gather cancellation. Exact99 cause and new headset acceptance remain open. |
+| Empty-hand grip/trigger displays the M8. | Private100 retains proven hidden-firearm presentation during sole-Fire suspension. Grip-only causality remains unproved. |
 
 The LMG telemetry stays at DetachContainer: it records no removal endpoint/completion and never reaches AttachContainer. Source inspection found that discarding the old box required matching an authored destination position and rotation. The shared correction recognizes measured outward clearance, while retaining dwell, release and ownership checks. The recording lacks hand poses, so the exact failed movement remains unknown. Belt-pickup admission is unchanged in this batch; it was blocked upstream of that step.
 
