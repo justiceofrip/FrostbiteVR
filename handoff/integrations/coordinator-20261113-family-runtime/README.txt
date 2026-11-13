@@ -1,25 +1,34 @@
-Private91 source and installed delivery
-Source:668f4b9f611af84946ba25cb6db5c514239fd938; native closure5a5a6f1fb46effa26f503961b5cb5df757e1626839d3c1c2443dc8662f6d017b.
-R=reports/coordinator-20261108-feedback721 in the canonical FrostbiteVR checkout.
-R/batch84/config24.json and run14/normal-runtime/receipt.json: focused KnifeHeldInput/KnifeSourceRender PASS; normal364x86/361x64 PASS; unchanged host WARP reused.
-R/normal91/run01/installation.json: installed/validated/pushed true; published/headset false.90 fallback and earlier versions preserved.
+Private92 delivery and current family evidence
+R=G:/Unity/VRMMO/FrostbiteVR/reports/coordinator-20261108-feedback721.
+WT=G:/Unity/VRMMO/bc2vr-task-worktrees/campaign-coordinator-20261028-r1.
+Installed0.1.92 source3deca4121382b6ad7b9b64010a4e7ad390aee45b, nativeclosure4ed2c11d9471fdeabfa8d38a30aa91f54d88b06d35f8d23afb0df8b1b4eecbd1.
+R/batch84/config25.json; run15/normal-runtime/receipt.json: focused KnifeHeldInput/KnifeSourceRender PASS,364x86/361x64 PASS; unchangedhost WARP reused.
+R/normal92/run01/installation.json: installed/validated/pushed true; published/headset false.91fallback,90andearlier versions preserved.100runtime/107package paths include exactlytwo new graphics helpers.
 
-Actual91/02 belt-feed family
-All five ordinary stages completed, including supply pickup, with accepted-operation counter0->5 and no held/pending input at boundaries.
-R/normal91/xr-game02/live-driver-f11fb75db96a4014ba42f6820f876e13/post-reload-shot.json identifies the one subsequent ordinary shot.
-R/feed91-native-audit1085.json: records8090/8095/8099 share Fire token13656; each native copy200/487->199/487, reserve conserved.
-Record8053 is prepress neutral inhibition, exactly restored before press; the shared auditor now joins its trace rather than misreporting restoration failure.
-Four session-global record-lock drops limit capture completeness. No projectile-impact or headset reliability claim.
-Reverse switch refused before input because the test requested unsupported empty-hand QJU88 stow. The user deferred that feature; use ordinary held-weapon swapping for continuation.
-Earlier79/07 refill/same-claim lid and production24-profile bulk passes remain applicable; no new per-gun angle work.
+Belt-feed family
+REUSE91/02: all5stages counter0->5, nativepostshot200/487->199/487 across3copies under Firetoken13656. R/feed91-native-audit1085.json scopedPASS;4recorddrops, noimpact/headsetclaim.
+Actual92/01 heldswaps rifle->LMG->rifle: live-driver-11b2856f8cd5410fb4e5f9dfcc7caa32 and be9e9a9503b74323ac53eb68b5c9682e.
+Both observed exact expectedtarget/newlifetime and neutral release; rifle21/210 unchanged. Movement afterward reached the courtyard in both eyes. Reload was not repeated.
+Unsupported empty-hand QJU88 stow remains deferred; these ordinary swaps never require Empty.
 
-Actual91/04 knife
-R/normal91/xr-game04/live-driver-6c9a956723534ebe9187751590fbea91/result.json: strict Held, one measured-axis120mm/120ms jab, zero trigger, fresh ReturnEmpty.
-Both-eye captures show held knife and removal on release. Native Draw1/Return3 completed; jab input13694 recognized and staged Attack2.
-Attack copies/consumed/observed/receipts remain0. Same-input busy observation enters motion-source revocation; first callback denial ordering remains unproved.
-Damage remains unknown; normal mode4's separate attack-bridge telemetry is inactive. This is recognizer progress, not completed melee delivery.
-Audit: coordinator-worktree reports/coordinator-20261108-feedback1086/result.txt and scalars.json.
+Knife
+Actual92/01 driver-a2fe9fe4e576491d9504ba21f75c1f94: strict Held, one120mm/120ms zero-triggerjab, fresh ReturnEmpty; both-eye held/removal reviewed.
+Native Draw1/Return2 complete. Input11874 CaptureBusy/BeforePrepareBusy resets recognition after11873 travel.014731m; no Intent/Attack stage, lastAttackSerial0.
+Native92's pending-attack preservation was not exercised. Damage unknown, mode4 bridge telemetry inactive.
+WT/reports/coordinator-20261113-feedback1097/{result.txt,scalars.json} retains exact native/source joins and failure chronology.
+Candidate1099 skips unavailable sampling within original75ms and source/contact/hand bounds; predicts one fresh measured11876 Attack. Review1101 GO; compilation and actual delivery remain required.
+Earlier91/04 recognized/staged Attack2 but consumed0. Its files moved losslessly with R/archive-execution91-04/restore-map.json; failure unchanged.
 
-Both actual91/02 and91/04 closed normally with native retirement and original profiles/settings restored; result.json records exact boundaries.
-91/03 never started BC2 because the runtime evidence cap refused launch. Its failure remains; older automated80/01 was archived losslessly with its failure unchanged.
-Optional player-facing performance mode remains a source candidate, default off; tests/review and actual settings-restoration qualification are required before installation or performance claims.
+Optional performance mode
+DefaultOFF; temporaryMSAA0, recommendedresolution unchanged, originalsettings restored after exactgame exit. StopVR continues to leave BC2 open normally.
+Actual92/01: all256 retained target descriptors and3depth descriptors1x; three-source available/admitted,66,060,288 logicalbytes at simulated1024x768.
+Slots0/1/2 submitted5842/5833/5808;17483published,17482consumed,1discarded. Host17482pairs,0rejected;17480depthpairs,0hostdepthfailures.
+Preserve4native depth-eye rejections. No physicalallocation, headsetresolution orFPSclaim.
+Exactgame85036/watcher41660 exited0; lease restored originalMSAA3/hash at2026-11-13T02:35:20.2153443Z. Sevenownedprocesses exited0, hooksdisabled/native retired, originalprofiles/settings/environment restored.
+Runtime pending/game_alive and native_samples_verified=false snapshots predate the independently verified closure/native descriptors.
+
+Campaign continuation
+Candidate1096 adds opt-in pinned preceding profile-after/GameSettings.bin; stages after originalbackup and retains exactrestoration.3focusedtests plus123existingcleanupchecksPASS; real92/01 admissionPASS.
+Actual92/02 used the candidate to stage/resume that binary; closed435.618s, native retired, originals/graphics/settings restored, failures[]. No new checkpoint proven.
+Current scene remainsSP02 Save Before Tank; movement reaches courtyard. Ordinary jump/use support is being added to the shared navigation driver for obstacles/interactions, not per-mission scripts.
+Vehicle permits, C4objective, bolt magazine andfront-loading launcher acquisition remain unproved; reuse other registered-family passes.

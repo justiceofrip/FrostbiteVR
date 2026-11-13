@@ -4,6 +4,7 @@ struct Held {
     Fixture f;ObservationRecovery recovery;ObservationRecoveryProof proof;View view;ChestKnifeMotionCalibration calibration;
     InputFrame input;fvr::math::Matrix4 measured;KnifeRecognitionCoordinator projection;
     private_knife::KnifeAttackGate attacks;private_knife::StockKnifeMotionSourceRevocation source;
+    ChestKnifeRepeatedMotion samples;bool skipped=false;unsigned preparations=0;
     bool Init(){
         f.s.source.owner.actor=(std::uint64_t(0x30000)<<32)|0x20000;
         f.s.holdInputCurrent=f.s.actionInputCurrent=f.s.stockTriggerInputCurrent=true;
@@ -22,26 +23,61 @@ struct Held {
         view.observationRecovery=RefreshObservationRecoveryProof(proof,recovery.Read(),1,7);
         view.currentObservationReady=view.observationRecovery.state.ready;
     }
-    std::optional<KnifeCommand> Gather(bool advance=true){
+    std::optional<KnifeCommand> Gather(bool advance=true,InspectReason inspection=InspectReason::Available,
+        bool measuredCurrent=true,BeforePrepareReason preparation=BeforePrepareReason::Available,std::int64_t renderDeadline=0){
         auto& s=f.s;
         if(advance){++s.source.sequence;s.source.observedNs+=10*ms;s.source.nowNs=s.source.observedNs;
             s.source.deadlineNs=s.source.nowNs+100*ms;s.claimIntent=s.source.sequence;
             s.menu.deadlineNs=s.source.deadlineNs;++s.menu.sequence;}
-        f.hands.Update(s.source);s.heldContact={{103,1},s.source.sequence,s.source.deadlineNs,true};NativeView();
+        f.hands.Update(s.source);NativeView();skipped=false;projection={};
+        const bool native=inspection==InspectReason::Available;
+        s.onFoot=native;s.knifeSelected=native&&view.snapshot.selected.current==std::array<unsigned,3>{7,7,7};
+        s.mechanicsSettled=native&&view.healthy&&InspectReady(view.snapshot.knife).reason==ReadyReason::Ready;
+        s.trackedKnifeOwned=native&&measuredCurrent&&view.owned&&view.healthy&&s.knifeSelected;
+        s.heldContact=s.trackedKnifeOwned?HandContactProof{{103,1},s.source.sequence,
+            renderDeadline?(std::min)(renderDeadline,s.source.deadlineNs):s.source.deadlineNs,true}:HandContactProof{};
+        if(native&&!measuredCurrent){
+            const auto contact=ChestKnifeRetainedStockContact(f.knife,f.hands,s,true,view.owned&&s.knifeSelected);
+            if(contact){s.heldContact=*contact;s.trackedKnifeOwned=true;}
+        }
         const auto captured=view.observationRecovery.state;
         if(RecoveryHoldCurrent(view,s,f.knife,f.hands)&&recovery.Rejoin(captured,s.source.observedNs)){
             proof=RefreshObservationRecoveryProof({captured,1,7,s.source.sequence,s.source.observedNs,s.source.nowNs},recovery.Read(),1,7);
             view.observationRecovery=proof;
             view.currentObservationReady=view.observationRecovery.state.ready;
         }
-        const bool ready=ObservationSourceReady(view,f.knife.Phase());s.stockTriggerReady=ready;
+        const bool ready=native&&ObservationSourceReady(view,f.knife.Phase());s.stockTriggerReady=ready;
         input.generation=s.source.sequence;input.spaceGeneration=s.source.owner.space;
         input.predictedNs=s.source.observedNs;input.menu=s.menu;
-        const ChestKnifeMotionIdentity identity{view.snapshot.selectedOwner,*f.knife.Hold(),{42,1},7,1,1,9,1.f,
-            view.observationRecovery.state.epoch,view.observationRecovery.state.revision};
-        PrepareChestKnifeMotionSource(calibration,f.knife,identity,measured,input,ready,s,&projection);
-        if(!ready){calibration.Reset();f.knife.InvalidateMotion();s.nativeAttackReady=s.motionTrackingReady=false;}
-        source.Advance(s,f.knife.NeedsNativeCleanup());return f.knife.Prepare(s,f.hands);
+        std::optional<ChestKnifeMotionIdentity> identity;
+        if(native&&view.owned&&s.knifeSelected&&s.trackedKnifeOwned&&s.mechanicsSettled&&
+           ChestKnifeRenderPoseCustody(f.knife,f.hands,s.source)&&f.knife.Hold())
+            identity=ChestKnifeMotionIdentity{view.snapshot.selectedOwner,*f.knife.Hold(),{42,1},7,view.currentHoldWork.lifetime,
+                s.menu.epoch,input.trackingBasisGeneration,input.worldUnitsPerMeter,
+                view.observationRecovery.state.epoch,view.observationRecovery.state.revision};
+        const bool bounded=samples.AcrossSamples(view.snapshot.selectedOwner,{42,1},7,input,s,f.knife,f.hands);
+        if(samples.HasSampleGap()&&!bounded){calibration.Reset();f.knife.InvalidateMotion();samples.Reset();}
+        const bool unavailable=!native&&InspectionLockMiss(inspection)&&bounded;
+        const bool measurementMissing=native&&bounded&&!measuredCurrent&&samples.SameNative(identity)&&
+            view.currentObservationReady&&CurrentHoldWorkSettled(view.currentHoldWork);
+        s.motionTrackingReady=s.nativeAttackReady=false;
+        if(!unavailable&&!measurementMissing)PrepareChestKnifeMotionSource(calibration,f.knife,identity,
+            measuredCurrent?std::optional(measured):std::nullopt,input,ready,s,&projection);
+        if(native&&!ready){calibration.Reset();f.knife.InvalidateMotion();samples.Reset();s.nativeAttackReady=s.motionTrackingReady=false;}
+        source.Advance(s,f.knife.NeedsNativeCleanup());
+        if(preparation!=BeforePrepareReason::Available||unavailable||measurementMissing){
+            const bool keep=bounded&&((measurementMissing&&(preparation==BeforePrepareReason::Available||preparation==BeforePrepareReason::Busy))||
+                samples.TemporaryMiss(inspection,preparation,identity,projection.calibrationContinuous,
+                    native&&view.currentObservationReady&&CurrentHoldWorkSettled(view.currentHoldWork)));
+            if(keep){samples.SkipSample(input,s);skipped=true;}
+            else {calibration.Reset();f.knife.InvalidateMotion();samples.Reset();}
+            return {};
+        }
+        ++preparations;const auto command=f.knife.Prepare(s,f.hands);samples.Reset();
+        const auto held=f.hands.Current(InteractionHand::Right);
+        if(!command&&identity&&ready&&s.nativeAttackReady&&s.motionTrackingReady&&f.knife.Phase()==KnifePhase::Held&&held)
+            samples.Remember(*identity,input,s,*held,view.currentHoldWork);
+        return command;
     }
     bool Rest(){for(unsigned n=0;n<20;++n)if(Gather())return false;return f.knife.RecognitionReady(f.s.source);}
     std::optional<KnifeCommand> Jab(){
@@ -192,9 +228,132 @@ int PendingContentionCases(){
     }
     return 0;
 }
+void GapSource(Held& h,std::uint64_t sequence,std::int64_t observed,std::int64_t now,float travel){
+    auto& s=h.f.s;if(s.source.sequence!=sequence)++s.menu.sequence;
+    s.source.sequence=sequence;s.source.observedNs=observed;s.source.nowNs=now;
+    s.source.deadlineNs=observed+100*ms;s.menu.deadlineNs=s.source.deadlineNs;s.claimIntent=sequence;
+    const auto axis=private_knife::KnifeMotionFromGrip({},h.measured)->direction;
+    h.input.hands[1].grip.position={axis.x*travel,axis.y*travel,-axis.z*travel};
+}
+bool PrimeSampleGap(Held& h){
+    h.f.s.source.sequence=11847;h.f.s.source.observedNs=h.f.s.source.nowNs=662412615658900;
+    h.f.s.source.deadlineNs=h.f.s.source.nowNs+100*ms;
+    if(!h.Init())return false;
+    for(unsigned n=0;n<20;++n){const auto t=662412855658900ll-(20-n)*10*ms;
+        GapSource(h,11851+n,t,t,0);if(h.Gather(false))return false;}
+    // Actual92/01 original source clocks and retained fixed-space travel. The
+    // axis is the fixture's measured blade axis; angles/thresholds are unchanged.
+    struct Point {std::uint64_t input;std::int64_t observed,now,renderDeadline;float travel;};
+    constexpr Point points[]{
+        {11871,662412855658900,662412856847300,662412940859100,0},
+        {11871,662412855658900,662412863191600,662412955658900,0},
+        {11872,662412871185500,662412877333600,662412955658900,.005160125f},
+        {11872,662412871185500,662412882330100,662412971185500,.005160125f},
+        {11873,662412886368400,662412888012400,662412971185500,.019887443f},
+        {11873,662412886368400,662412893849400,662412986368400,.019887443f}};
+    for(const auto& p:points){GapSource(h,p.input,p.observed,p.now,p.travel);
+        if(h.Gather(false,InspectReason::Available,true,BeforePrepareReason::Available,p.renderDeadline))return false;}
+    return h.f.knife.Phase()==KnifePhase::Held;
+}
+int SampleGapCases(){
+    Held h;CHECK(PrimeSampleGap(h));const auto held=*h.f.hands.Current(InteractionHand::Right);
+    CHECK(!h.samples.AcrossSamples(h.view.snapshot.selectedOwner,{42,1},8,h.input,h.f.s,h.f.knife,h.f.hands));
+    CHECK(!h.samples.AcrossSamples(h.view.snapshot.selectedOwner,{42,2},7,h.input,h.f.s,h.f.knife,h.f.hands));
+    const auto count=h.preparations;const auto stamp=h.source.Stamp();
+    // Missing11874 and its duplicate never reach policy or renew contact. The
+    // production native source revoker still receives their unavailable source.
+    GapSource(h,11874,662412902380400,662412907902900,.04f);
+    CHECK(!h.Gather(false,InspectReason::CaptureBusy,false,BeforePrepareReason::Busy)&&h.skipped);
+    CHECK(!h.source.Current(stamp)&&h.preparations==count);
+    GapSource(h,11874,662412902380400,662412913918600,.04f);
+    CHECK(!h.Gather(false,InspectReason::CaptureBusy,false)&&h.skipped);
+    GapSource(h,11875,662412917129600,662412920487100,.063005759f);
+    CHECK(!h.Gather(false,InspectReason::Available,false)&&h.skipped&&h.preparations==count);
+    CHECK(h.f.hands.Current(InteractionHand::Right)->deadlineNs==held.deadlineNs);
+    CHECK(h.f.hands.Current(InteractionHand::Right)->inputSequence==11873);
+    CHECK(!h.f.s.nativeAttackReady&&!h.f.s.motionTrackingReady&&ChestKnifeRenderPoseCustody(h.f.knife,h.f.hands,h.f.s.source));
+    // A current measured11875 has .0578456m from the original11872 start,
+    // below the unchanged .06m threshold. It is not a replay of skipped11874.
+    GapSource(h,11875,662412917129600,662412926758400,.063005759f);
+    CHECK(!h.Gather(false)&&!h.skipped&&h.projection.calibrationContinuous);
+    const auto resumed=*h.f.hands.Current(InteractionHand::Right);CHECK(resumed.token==held.token&&resumed.inputSequence==11875);
+    GapSource(h,11875,662412917129600,662412933227500,.063005759f);
+    CHECK(!h.Gather(false,InspectReason::CaptureBusy,false,BeforePrepareReason::Busy)&&h.skipped);
+    GapSource(h,11876,662412932722500,662412939561800,.086193388f);
+    CHECK(!h.Gather(false,InspectReason::Available,false)&&h.skipped);
+    CHECK(h.f.hands.Current(InteractionHand::Right)->deadlineNs==resumed.deadlineNs);
+    GapSource(h,11876,662412932722500,662412945560600,.086193388f);
+    const auto jab=h.Gather(false);CHECK(jab&&jab->stroke&&!jab->stockTriggerHold&&!h.skipped);
+    CHECK(jab->source.sequence==11876&&jab->source.observedNs==662412932722500&&jab->source.deadlineNs==662413032722500);
+    CHECK(jab->stroke->sourceSequence==11876&&h.f.knife.CanCommit(*jab,h.f.s,h.f.hands));
+    CHECK(h.Finish(*jab)); // Shared native Stage/consumer path, including1088 duplicate preservation.
+    for(auto inspection:{InspectReason::RejoinBusy,InspectReason::Available}){Held x;CHECK(PrimeSampleGap(x));
+        GapSource(x,11874,662412902380400,662412907902900,.04f);
+        CHECK(!x.Gather(false,inspection,inspection==InspectReason::Available,BeforePrepareReason::Busy)&&x.skipped);
+        GapSource(x,11875,662412917129600,662412926758400,.063005759f);CHECK(!x.Gather(false));
+        GapSource(x,11876,662412932722500,662412945560600,.086193388f);CHECK(x.Gather(false));
+    }
+    for(unsigned fault=0;fault<2;++fault){Held x;CHECK(PrimeSampleGap(x));
+        GapSource(x,11874,662412902380400,662412907902900,.04f);
+        CHECK(!x.Gather(false,InspectReason::CaptureBusy,false,BeforePrepareReason::Busy)&&x.skipped);
+        x.f.s.source.nowNs=662412913918600;
+        if(fault==0)x.input.hands[1].grip.position.x+=.001f;else ++x.f.s.source.deadlineNs;
+        CHECK(!x.Gather(false,InspectReason::CaptureBusy,false)&&!x.skipped&&!x.samples.HasSampleGap());
+    }
+
+    // Local contradictions during an unavailable observation reset the same
+    // stroke, including clock/lease expiry and both tracking generations.
+    for(unsigned fault=0;fault<23;++fault){Held x;CHECK(PrimeSampleGap(x));
+        GapSource(x,11874,662412902380400,662412907902900,.04f);
+        auto inspection=InspectReason::CaptureBusy;auto preparation=BeforePrepareReason::Busy;auto& s=x.f.s;
+        switch(fault){
+        case 0:inspection=InspectReason::NativeRead;break;case 1:inspection=InspectReason::RejoinChanged;break;
+        case 2:preparation=BeforePrepareReason::Closing;break;case 3:preparation=BeforePrepareReason::Unsupported;break;
+        case 4:s.gripHeld[1]=false;s.source.released[1]=true;break;case 5:s.source.focused=false;break;
+        case 6:s.source.tracked[0]=false;break;case 7:s.source.tracked[1]=false;break;
+        case 8:++s.source.owner.actorGeneration;break;case 9:++s.source.owner.equipGeneration;break;
+        case 10:++s.source.owner.space;break;case 11:++x.input.trackingBasisGeneration;break;
+        case 12:x.input.worldUnitsPerMeter=2;break;case 13:s.holdInputCurrent=s.controlsNeutral=false;break;
+        case 14:s.actionInputCurrent=s.controlsNeutral=false;break;case 15:s.fireSuppressed=false;break;
+        case 16:++s.menu.epoch;break;case 17:x.f.hands.Reset();break;
+        case 18:++x.view.snapshot.selectedOwner.weapon;break;case 19:x.input.hands[1].gripTracked=false;break;
+        case 20:s.source.nowNs=662412893849399;break;
+        case 21:s.source.observedNs=s.source.nowNs=662412961368401;s.source.deadlineNs=s.source.nowNs+100*ms;break;
+        case 22:s.source.nowNs=662412971185500;break;
+        }
+        CHECK(!x.Gather(false,inspection,false,preparation)&&!x.skipped&&!x.samples.HasSampleGap());
+        GapSource(x,11875,662412917129600,662412926758400,.063005759f);CHECK(!x.Gather(false));
+        GapSource(x,11876,662412932722500,662412945560600,.086193388f);CHECK(!x.Gather(false));
+    }
+    // A later native/measurement contradiction cannot turn an earlier valid
+    // skip into authority. Lifetime/recovery changes reset calibration normally.
+    for(unsigned fault=0;fault<8;++fault){Held x;CHECK(PrimeSampleGap(x));
+        const auto axis=private_knife::KnifeMotionFromGrip({},x.measured)->direction;
+        GapSource(x,11874,662412902380400,662412907902900,.04f);
+        CHECK(!x.Gather(false,InspectReason::CaptureBusy,false,BeforePrepareReason::Busy)&&x.skipped);
+        switch(fault){
+        case 0:++x.view.currentHoldWork.lifetime;break;case 1:x.view.owned=false;break;
+        case 2:x.view.healthy=false;break;case 3:x.view.snapshot.selected.current[1]=0;break;
+        case 4:x.recovery.Unknown();break;case 5:x.view.snapshot.knife.server.currentState=5;break;
+        case 6:x.measured.values[0][0]=2;break;case 7:x.measured.values[0][0]=x.measured.values[1][1]=-1;break;
+        }
+        // Keep the original physical axis even for changed/invalid calibration;
+        // these packets never borrow a past native view.
+        x.f.s.source.sequence=11875;x.f.s.source.observedNs=662412917129600;x.f.s.source.nowNs=662412926758400;
+        x.f.s.source.deadlineNs=662413017129600;x.f.s.menu.deadlineNs=x.f.s.source.deadlineNs;++x.f.s.menu.sequence;
+        x.input.hands[1].grip.position={axis.x*.063005759f,axis.y*.063005759f,-axis.z*.063005759f};
+        CHECK(!x.Gather(false)&&!x.skipped);
+        x.f.s.source.sequence=11876;x.f.s.source.observedNs=662412932722500;x.f.s.source.nowNs=662412945560600;
+        x.f.s.source.deadlineNs=662413032722500;x.f.s.menu.deadlineNs=x.f.s.source.deadlineNs;++x.f.s.menu.sequence;
+        x.input.hands[1].grip.position={axis.x*.086193388f,axis.y*.086193388f,-axis.z*.086193388f};
+        CHECK(!x.Gather(false));
+    }
+    return 0;
+}
 int Cases(){
     CHECK(!RetiredCompletionCases());
     CHECK(!PendingContentionCases());
+    CHECK(!SampleGapCases());
     Held h;CHECK(h.Init()&&h.Rest());const auto claim=*h.f.knife.Hold();
     // Shared custody, measured motion and native attack gate: repeated idle
     // misses retain the claim, discard partial strokes and rearm from quiet.
@@ -252,7 +411,7 @@ int Cases(){
         }
         CHECK(!RecoveryHoldCurrent(x.view,x.f.s,x.f.knife,x.f.hands));
     }
-    std::puts("Knife observation recovery: repeated Held/jab/postattack, pending-source contention/expiry, retired completion proof and ownership negatives PASS.");
+    std::puts("Knife observation recovery: Held/jab, bounded native92 sample gaps, pending-source contention/expiry, retired completion and ownership negatives PASS.");
     return 0;
 }
 }

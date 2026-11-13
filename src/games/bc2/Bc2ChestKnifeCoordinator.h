@@ -52,10 +52,10 @@ private:
     std::optional<ChestKnifeMotionIdentity> identity_;
     std::optional<math::Matrix4> rotation_;
 };
-// Retains only the identity of the last fully admitted physical packet. This
-// can suppress a duplicate callback's reset, never supply geometry, native
-// proof, a hand renewal or a command. A new unavailable packet cannot bridge
-// an unobserved stroke into a later attack.
+// Retains the last fully admitted packet and original leases. Contention or a
+// missing current measurement may skip sampling inside the recognizer's SAME
+// sample-gap limit. No skipped packet supplies geometry, renews custody or
+// grants attack authority; resumption still needs current native/pose proofs.
 class ChestKnifeRepeatedMotion {
 public:
     bool Remember(const ChestKnifeMotionIdentity& identity,const interaction::InputFrame& input,
@@ -88,6 +88,40 @@ public:
     bool SameNative(const std::optional<ChestKnifeMotionIdentity>& identity)const noexcept {
         return identity_&&identity&&*identity_==*identity;
     }
+    bool AcrossSamples(const ReloadStateOwner& owner,interaction::BodyItemKey knife,std::uint64_t operation,
+        const interaction::InputFrame& input,const interaction::KnifeSample& sample,
+        const interaction::ChestKnifeCustody& policy,const interaction::HandInteraction& hands)const noexcept {
+        using namespace interaction;const auto& f=sample.source;
+        if(!identity_||policy.Phase()!=KnifePhase::Held||policy.NeedsNativeCleanup()||!policy.Hold()||
+           *policy.Hold()!=identity_->hold||owner!=identity_->owner||knife!=identity_->knife||operation!=identity_->bodyOperation||
+           !sample.holdInputCurrent||!KnifeActionInputCurrent(sample)||!sample.fireSuppressed||!sample.gripHeld[1]||
+           f.released[1]||!f.focused||!f.tracked[0]||!f.tracked[1]||f.owner!=source_.owner||
+           f.sequence<source_.sequence||f.observedNs<source_.observedNs||f.nowNs<lastNow_||f.nowNs<f.observedNs||
+           f.deadlineNs<=f.nowNs||f.deadlineNs-f.observedNs>100000000||source_.deadlineNs<=f.nowNs||
+           contactDeadline_<=f.nowNs||holdDeadline_<=f.nowNs||
+           f.observedNs-source_.observedNs>MeleeStrokeConfig{}.maximumSampleGapNs||
+           !GameplayOwnsInput(sample.menu,f.nowNs)||sample.menu.epoch!=identity_->menuEpoch||sample.menu!=input.menu||
+           !ValidInput(input)||!input.focused||!input.headValid||!input.hands[1].gripTracked||
+           input.generation!=f.sequence||input.spaceGeneration!=f.owner.space||
+           input.trackingBasisGeneration!=identity_->trackingBasis||input.worldUnitsPerMeter!=identity_->worldUnitsPerMeter||
+           input.floorRelative!=input_.floorRelative||hands.Current(InteractionHand::Left)||
+           !hands.HasRecordedEvidence(f,InteractionHand::Right))return false;
+        const auto held=hands.Current(InteractionHand::Right);
+        if(!held||held->token!=identity_->hold||held->deadlineNs!=holdDeadline_||held->inputSequence!=source_.sequence)return false;
+        if(skipped_){
+            const auto& last=skipped_->source;
+            if(f.sequence<last.sequence||f.observedNs<last.observedNs||
+               (f.sequence>last.sequence&&f.observedNs==last.observedNs))return false;
+            if(f.sequence==last.sequence&&(f.observedNs!=last.observedNs||f.deadlineNs!=last.deadlineNs||
+               f.focused!=last.focused||f.tracked!=last.tracked||f.released!=last.released||!SameInput(input,skipped_->input)))return false;
+        }
+        return f.sequence==source_.sequence?
+            Same(owner,knife,operation,input,sample,policy,hands):f.observedNs>source_.observedNs;
+    }
+    bool HasSampleGap()const noexcept{return skipped_.has_value();}
+    void SkipSample(const interaction::InputFrame& input,const interaction::KnifeSample& sample)noexcept {
+        skipped_=SkippedPacket{input,sample.source};lastNow_=sample.source.nowNs;
+    }
     bool TemporaryMiss(chestKnifeNative::InspectReason inspection,chestKnifeNative::BeforePrepareReason preparation,
         const std::optional<ChestKnifeMotionIdentity>& current,bool continuous,bool nativeIdle)const noexcept {
         using namespace chestKnifeNative;
@@ -97,7 +131,7 @@ public:
             nativeIdle&&continuous&&SameNative(current);
     }
     void Suspended(std::int64_t now)noexcept{lastNow_=now;}
-    void Reset()noexcept{identity_.reset();}
+    void Reset()noexcept{identity_.reset();skipped_.reset();}
 private:
     static bool SamePose(const math::Pose& a,const math::Pose& b)noexcept {
         return a.position.x==b.position.x&&a.position.y==b.position.y&&a.position.z==b.position.z&&
@@ -116,6 +150,8 @@ private:
         }return true;
     }
     std::optional<ChestKnifeMotionIdentity> identity_;
+    struct SkippedPacket {interaction::InputFrame input;interaction::HandInteractionSample source;};
+    std::optional<SkippedPacket> skipped_;
     interaction::InputFrame input_{};interaction::HandInteractionSample source_{};
     std::int64_t contactDeadline_=0,holdDeadline_=0,lastNow_=0;
 };

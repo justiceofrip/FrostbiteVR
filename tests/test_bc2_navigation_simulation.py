@@ -596,7 +596,8 @@ class NavigationTests(unittest.TestCase):
             pose = dict(position=self.state[hand]["pos"][:],
                         orientation=self.m.p.ypr_quaternion(self.state[hand]["ypr"]))
             s["input"]["hands"][index].update(grip=copy.deepcopy(pose), aim=copy.deepcopy(pose),
-                held=0, squeeze=0, trigger=0, stickX=self.state["controls"]["stickL" if index == 0 else "stickR"][0],
+                held=8 if self.state["controls"]["x" if index == 0 else "a"] else 0,
+                squeeze=0, trigger=0, stickX=self.state["controls"]["stickL" if index == 0 else "stickR"][0],
                 stickY=self.state["controls"]["stickL" if index == 0 else "stickR"][1])
         if self.replay_empty:
             h = s["bodyHolster"]
@@ -618,7 +619,7 @@ class NavigationTests(unittest.TestCase):
 
         def simulate():
             nonlocal current, pending_ack
-            if self.driver is not None and any(any(v) for v in self.driver.sticks):
+            if self.driver is not None and (any(any(v) for v in self.driver.sticks) or self.driver.action_button):
                 self.held_owner_records.append(json.loads(self.driver.owner_bytes(False)))
             sample = getattr(self.driver, "latest_snapshot", None)
             if sample and self.clock.now >= sample["valid_until_ns"]:
@@ -641,6 +642,8 @@ class NavigationTests(unittest.TestCase):
                     elif words[:2] == ["head", "pose"]:
                         numbers = list(map(float, words[2:]))
                         self.state["head"].update(pos=numbers[:3], ypr=numbers[3:])
+                    elif words[0] == "btn" and words[1] in ("a", "x") and words[2] in ("down", "up"):
+                        self.state["controls"][words[1]] = words[2] == "down"
                     else:
                         raise AssertionError("unexpected simulator input: " + line)
                 self.state.update(cmdSeq=self.state["cmdSeq"]+len(batch), lastCmd=batch[-1],
@@ -759,6 +762,157 @@ class NavigationTests(unittest.TestCase):
             self.m.plan([dict(left=[0, 1], right=[0, 0], holdMs=2001)])
         with self.assertRaises(self.m.Refusal):
             self.m.plan([dict(left=[0, 1], right=[0, 0], holdMs=150, commands=["trigger r 1"])])
+
+    def test_actions_press_once_per_row_and_release_with_neutral_ack(self):
+        self.rows = [dict(left=[0, .5], right=[0, 0], holdMs=1500, action="jump"),
+                     dict(left=[0, 0], right=[0, 0], holdMs=1500, action="use")]
+        code, result = self.assembled()
+        self.assertEqual((code, result.get("error")), (0, None))
+        self.assertEqual(len(result["episodes"]), 6)
+        self.assertEqual(self.calls[0], ["stick l 0 0.5", "stick r 0 0", "btn a down"])
+        self.assertEqual(self.calls[1], self.m.ZERO + ["btn a up"])
+        self.assertEqual(self.calls[6], self.m.ZERO + ["btn x down"])
+        self.assertEqual(self.calls[7], self.m.ZERO + ["btn x up"])
+        self.assertEqual([line for batch in self.calls for line in batch if line.startswith("btn ")],
+                         ["btn a down", "btn a up", "btn x down", "btn x up"])
+        self.assertEqual([episode["action"] for episode in result["episodes"]],
+                         ["jump", None, None, "use", None, None])
+        self.assertTrue(any(record["navigation"]["actionButton"] == "x"
+                            and record["navigation"]["sticks"] == [[0, 0], [0, 0]]
+                            for record in self.held_owner_records))
+        self.assertTrue(all(record["pending"] and not record["navigation"]["neutralCommitted"]
+                            for record in self.held_owner_records))
+        self.assertTrue(self.m.neutral_controls(self.state["controls"]))
+        self.assertIsNone(result["actionButton"])
+        self.assertIsNone(result["pendingActionButton"])
+        self.assertFalse(result["nativeAcceptance"])
+        self.assertFalse(result["vehicleEntry"])
+        self.assertTrue(all(not episode["nativeAction"] and not episode["vehicleEntry"]
+                            for episode in result["episodes"]))
+        events = [json.loads(line) for line in
+                  (Path(result["artifactDirectory"]) / "events.jsonl").read_text().splitlines()]
+        commits = [event for event in events if event["type"] == "command_commit"]
+        for window, commit in zip(self.publication_windows, commits):
+            if window["release"]:
+                self.assertEqual(window["deadlineNs"] - commit["requestedNs"], self.m.COMMAND_WINDOW)
+                self.assertLessEqual(window["deadlineNs"], window["pulseDeadlineNs"])
+        owner = json.loads((self.run / "live-driver-owner.json").read_text())
+        self.assertFalse(owner["pending"])
+        self.assertTrue(owner["navigation"]["neutralCommitted"])
+
+    def test_only_reviewed_actions_and_stationary_use_are_admitted(self):
+        for action in ("fire", "reload", "a", "x", "", None, True, [], {}):
+            with self.subTest(action=action), self.assertRaises(self.m.Refusal):
+                self.m.plan([dict(left=[0, 0], right=[0, 0], holdMs=400, action=action)])
+        for left, right in (([0, .1], [0, 0]), ([0, 0], [.1, 0]), ([0, 0], [0, .1])):
+            with self.subTest(left=left, right=right), self.assertRaisesRegex(self.m.Refusal, "both sticks neutral"):
+                self.m.plan([dict(left=left, right=right, holdMs=400, action="use")])
+        self.rows[0]["action"] = "use"
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertIn("both sticks neutral", result["error"])
+        self.assertEqual(self.calls, [])
+
+    def test_action_readiness_loss_releases_only_the_exact_owned_button(self):
+        scenarios = [(action, loss) for action in ("jump", "use") for loss in ("focus", "handL", "handR")]
+        for index, (action, loss) in enumerate(scenarios):
+            with self.subTest(action=action, loss=loss):
+                if index:
+                    self.setUp()
+                self.rows = [dict(left=[0, .5] if action == "jump" else [0, 0],
+                                  right=[0, 0], holdMs=1000, action=action)]
+                self.state_mutation = (lambda state, driver: state.update(sessionState="VISIBLE")) if loss == "focus" else (
+                    lambda state, driver: state[loss].update(valid=False))
+                code, result = self.assembled()
+                button = self.m.ACTION_BUTTONS[action]
+                self.assertEqual(code, 2)
+                self.assertIn("focus/tracking lost", result["error"])
+                self.assertEqual(len(self.calls), 2)
+                self.assertEqual(self.calls[-1], self.m.ZERO + ["btn " + button + " up"])
+                self.assertEqual([line for batch in self.calls for line in batch if line.startswith("btn ")],
+                                 ["btn " + button + " down", "btn " + button + " up"])
+                self.assertTrue(self.publication_windows[-1]["cleanup"])
+                self.assertTrue(self.m.neutral_controls(self.state["controls"]))
+                self.assertIsNone(result["actionButton"])
+                self.assertFalse(result["pendingCommand"])
+                self.assertFalse(result["normalStopRequired"])
+                self.assertEqual(result["episodes"], [])
+
+    def test_pending_action_without_ack_keeps_custody_and_refuses_release(self):
+        self.rows = [dict(left=[0, 0], right=[0, 0], holdMs=400, action="use")]
+        self.suppress_ack = True
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertEqual(self.calls, [self.m.ZERO + ["btn x down"]])
+        self.assertTrue(result["pendingCommand"])
+        self.assertTrue(result["normalStopRequired"])
+        self.assertEqual(result["pendingActionButton"], "x")
+        self.assertTrue(self.state["controls"]["x"])
+        owner = json.loads((self.run / "live-driver-owner.json").read_text())
+        self.assertTrue(owner["pending"])
+        self.assertEqual(owner["navigation"]["pendingActionButton"], "x")
+
+    def test_foreign_owner_after_action_forbids_all_further_input(self):
+        self.rows = [dict(left=[0, 0], right=[0, 0], holdMs=400, action="use")]
+        self.state_mutation = lambda state, driver: self.write(
+            self.run / "live-driver-owner.json", dict(host=self.host, pending=False, foreign=True))
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertEqual(self.calls, [self.m.ZERO + ["btn x down"]])
+        self.assertTrue(result["normalStopRequired"])
+        self.assertTrue(self.state["controls"]["x"])
+
+    def test_pending_or_foreign_entry_owner_cannot_publish_action(self):
+        for index, scenario in enumerate(("pending", "foreign")):
+            with self.subTest(scenario=scenario):
+                if index:
+                    self.setUp()
+                self.rows = [dict(left=[0, 0], right=[0, 0], holdMs=400, action="use")]
+                self.write(self.run / "live-driver-owner.json", dict(host=self.host,
+                    pending=scenario == "pending", sequence=999, sentinel="note foreign",
+                    commandSha256="b" * 64))
+                code, result = self.assembled()
+                self.assertEqual(code, 2)
+                self.assertIn("unsettled command writer", result["error"])
+                self.assertEqual(self.calls, [])
+
+    def test_action_requires_neutral_buttons_at_entry(self):
+        self.rows = [dict(left=[0, 0], right=[0, 0], holdMs=400, action="use")]
+        self.state["controls"]["a"] = True
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertIn("neutral entry", result["error"])
+        self.assertEqual(self.calls, [])
+        self.assertTrue(self.state["controls"]["a"])
+
+    def test_use_cannot_continue_after_actor_equipment_or_on_foot_readiness_changes(self):
+        for index, transition in enumerate(("actor", "equipment", "on_foot")):
+            with self.subTest(transition=transition):
+                if index:
+                    self.setUp()
+                self.rows = [dict(left=[0, 0], right=[0, 0], holdMs=1500, action="use")]
+                def change_owner(sample, driver):
+                    if driver.snapshot_index >= 3:
+                        if transition == "actor":
+                            sample["owner"]["actorGeneration"] += 1
+                            sample["input_evidence"]["owner"]["actorGeneration"] += 1
+                        elif transition == "equipment":
+                            sample["physical_equipment_generation"] += 1
+                            sample["input_evidence"]["owner"]["equipGeneration"] += 1
+                        else:
+                            # Native on-foot publication is revoked on seat entry;
+                            # a button ACK supplies no replacement authority.
+                            sample["valid"] = False
+                self.snapshot_mutation = change_owner
+                code, result = self.assembled()
+                self.assertEqual(code, 2)
+                self.assertIn("native snapshot refused" if transition == "on_foot" else "lifetime changed",
+                              result["error"])
+                self.assertEqual(self.calls, [self.m.ZERO + ["btn x down"],
+                                             self.m.ZERO + ["btn x up"], self.m.ZERO])
+                self.assertEqual(len(result["episodes"]), 1)
+                self.assertFalse(result["normalStopRequired"])
+                self.assertFalse(result["vehicleEntry"])
 
     def test_subpulses_require_new_original_admission_neutral_and_original_total_budget(self):
         for scenario in ("current", "missing", "native_focus_loss", "total_budget"):

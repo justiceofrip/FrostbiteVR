@@ -16,9 +16,12 @@ the driver checks live simulator ownership/focus/tracking; ordinary native input
 freshness and Playing gates remain responsible for each consumed XR packet.
 Rows of 501..601 ms cannot fit two active pulses with full zero reserves and
 are refused before any input, as are rows of 300 ms or less.
-The shared ten-second invocation limit remains. There are no buttons, triggers
-or hand claims.
-No launch, capture, objective-entry, native movement or headset claim is made.
+Optional action "jump" presses right Primary (A), while "use" presses left
+Primary (X) and requires both sticks neutral. Only a row's first subpulse presses
+its action; its ordinary button-up shares the acknowledged neutral release.
+The shared ten-second invocation limit remains. There are no triggers or hand
+claims. No launch, capture, objective-entry, vehicle-entry, native action/movement
+or headset claim is made. A button ACK cannot authorize a new owner or seat.
 """
 import argparse
 import copy
@@ -42,6 +45,9 @@ _spec = importlib.util.spec_from_file_location(
 holster = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(holster)
 ZERO = ["stick l 0 0", "stick r 0 0"]
+# OpenXrInput binds right/left Primary to A/X; ControllerInput maps them to
+# Jump/Use. Keep this a closed semantic list, never an arbitrary button escape.
+ACTION_BUTTONS = {"jump": "a", "use": "x"}
 PERIOD = 25_000_000
 # Driver._send gives a moving command 250 ms from its request timestamp for
 # publication and ACK together. Keep that complete window inside holdMs.
@@ -68,12 +74,17 @@ def vector(value, count, cap):
 def plan(value):
     require(isinstance(value, list) and 1 <= len(value) <= 4, "one to four reviewed rows required")
     for row in value:
-        require(isinstance(row, dict) and set(row) <= {"left", "right", "holdMs", "lookDegrees"}
+        require(isinstance(row, dict) and set(row) <= {"left", "right", "holdMs", "lookDegrees", "action"}
                 and {"left", "right", "holdMs"} <= set(row), "unknown or missing navigation fields")
         vector(row["left"], 2, 1)
         vector(row["right"], 2, 1)
         require(type(row["holdMs"]) is int and 100 <= row["holdMs"] <= 2000,
                 "row must be 100..2000 ms, including command and zero acknowledgement")
+        if "action" in row:
+            require(isinstance(row["action"], str) and row["action"] in ACTION_BUTTONS,
+                    "navigation action must be jump or use")
+            require(row["action"] != "use" or not any(row["left"] + row["right"]),
+                    "Use requires both sticks neutral")
         if "lookDegrees" in row:
             look = vector(row["lookDegrees"], 2, 45)
             require(abs(look[1]) <= 30, "pitch step exceeds 30 degrees")
@@ -95,6 +106,8 @@ def pulse_schedule(rows):
                          left=row["left"][:], right=row["right"][:])
             if index == 0 and "lookDegrees" in row:
                 pulse["lookDegrees"] = row["lookDegrees"][:]
+            if index == 0 and "action" in row:
+                pulse["action"] = row["action"]
             schedule.append(pulse)
     return schedule
 
@@ -146,6 +159,8 @@ class NavigationDriver(t.Driver):
         self.entry_admitted = False
         self.sticks = [[0, 0], [0, 0]]
         self.pending_sticks = None
+        self.action_button = None
+        self.pending_action_button = None
         self.release_attempted = False
         self.cleanup_mode = False
         self.releasing_sticks = False
@@ -181,7 +196,7 @@ class NavigationDriver(t.Driver):
             plannerSha256=t.digest(Path(p.__file__).read_bytes()),
             holsterPolicySha256=t.digest(Path(holster.__file__).read_bytes()),
             rootAuthorizedOrdinaryNavigation=True, version=args.version,
-            sourceSha256=args.source_sha256, nativeAcceptance=False, objectiveEntry=False,
+            sourceSha256=args.source_sha256, nativeAcceptance=False, objectiveEntry=False, vehicleEntry=False,
             snapshotPolicy="neutral-boundaries-only", freshNativeAdmissionPerPulse=True,
             snapshotArtifactEncoding="gzip-original-bytes", maximumDecodedSnapshotBytes=8*1024*1024))
 
@@ -224,8 +239,14 @@ class NavigationDriver(t.Driver):
                          and state["head"]["pos"] == self.baseline_sim["head"]["pos"],
                          "navigation head position/controller poses changed")
         need_observation(all(v == self.baseline_sim["controls"][k]
-                             for k, v in state["controls"].items() if k not in ("stickL", "stickR")),
+                             for k, v in state["controls"].items()
+                             if k not in ("stickL", "stickR", *ACTION_BUTTONS.values())),
                          "non-navigation controller input changed")
+        allowed_buttons = [self.action_button]
+        if self.pending_command and self.pending_sticks is not None:
+            allowed_buttons.append(self.pending_action_button)
+        need_observation(any(self.buttons_match(state, button) for button in allowed_buttons),
+                         "navigation action button state changed")
         if not self.pending_command:
             need_observation(state["head"] == self.expected_head
                              and [state["controls"][k] for k in ("stickL", "stickR")] == self.sticks,
@@ -235,10 +256,19 @@ class NavigationDriver(t.Driver):
         value = json.loads(super().owner_bytes(pending))
         # Existing shared drivers understand pending and therefore cannot take
         # over a settled but still-held navigation pulse or an unverified zero.
-        value["pending"] = pending or self.pending_sticks is not None or any(any(v) for v in self.sticks)
+        value["pending"] = (pending or self.pending_sticks is not None
+                            or any(any(v) for v in self.sticks) or self.action_button is not None)
         value["navigation"] = dict(sticks=self.sticks, pendingSticks=self.pending_sticks,
+                                   actionButton=self.action_button, pendingActionButton=self.pending_action_button,
                                    neutralCommitted=not value["pending"])
         return t.json_bytes(value)
+
+    @staticmethod
+    def buttons_match(state, button):
+        return all(state["controls"].get(key) == (key == button) for key in ACTION_BUTTONS.values())
+
+    def neutral_lines(self):
+        return ZERO + (["btn " + self.action_button + " up"] if self.action_button else [])
 
     def check_owner_record(self):
         if not hasattr(self, "navigation_owner_record"):
@@ -262,8 +292,12 @@ class NavigationDriver(t.Driver):
             self.ownership(state)
             require([state["controls"][k] for k in ("stickL", "stickR")] == self.pending_sticks,
                     "acknowledged stick state differs from requested values")
+            require(self.buttons_match(state, self.pending_action_button),
+                    "acknowledged action button state differs from requested values")
             self.sticks = copy.deepcopy(self.pending_sticks)
+            self.action_button = self.pending_action_button
             self.pending_sticks = None
+            self.pending_action_button = None
             self.state = state
         result = super().save_owner(pending, **kwargs)
         self.navigation_owner_record = self.owner_bytes(pending)
@@ -356,9 +390,11 @@ class NavigationDriver(t.Driver):
         # The next pulse explicitly requests a new source after committed zero.
 
     def validate_publication(self, lines, expected, cleanup):
-        require(lines == (ZERO if cleanup else self.authorized_lines), "unreviewed navigation command")
+        require(lines == (self.neutral_lines() if cleanup else self.authorized_lines),
+                "unreviewed navigation command")
         require(not cleanup or self.release_attempted, "unowned navigation release")
-        require(not self.releasing_sticks or lines == ZERO, "release must contain only numeric stick zeros")
+        require(not self.releasing_sticks or lines == self.neutral_lines(),
+                "release must contain only numeric stick zeros and the exact owned button up")
         if not cleanup and not self.releasing_sticks:
             require(self.pending_nonce is None, "navigation publication requires completed native admission")
             self.check_observation_state(self.read_state())
@@ -392,19 +428,22 @@ class NavigationDriver(t.Driver):
                                 t.integer(self.latest_snapshot["nonce"]))
         return raw
 
-    def publish_navigation(self, lines, sticks, *, cleanup=False, release=False):
+    def publish_navigation(self, lines, sticks, *, button=None, cleanup=False, release=False):
         require(not self.releasing_sticks, "nested navigation release")
+        require(button is None or button in ACTION_BUTTONS.values(), "unreviewed navigation button")
         if release or cleanup:
-            require(lines == ZERO and sticks == [[0, 0], [0, 0]] and self.entry_admitted
+            require(lines == self.neutral_lines() and sticks == [[0, 0], [0, 0]]
+                    and button is None and self.entry_admitted
                     and not self.pending_command and not self.command_fault and not self.unsafe_owner,
-                    "numeric stick release requires exact settled command ownership")
+                    "navigation release requires exact settled command ownership")
         self.releasing_sticks = release or cleanup
         self.authorized_lines = lines[:]
         self.pending_sticks = copy.deepcopy(sticks)
+        self.pending_action_button = button
         try:
             result = super().send(lines, cleanup=cleanup,
                 source_deadline=None if self.releasing_sticks else self.snapshot_source_deadline(self.latest_snapshot))
-            require(self.pending_sticks is None and self.sticks == sticks,
+            require(self.pending_sticks is None and self.sticks == sticks and self.action_button == button,
                     "navigation custody did not settle")
             return result
         except BaseException as error:
@@ -429,7 +468,8 @@ class NavigationDriver(t.Driver):
         require(all(h["stickX"] == h["stickY"] == 0 for h in self.latest_snapshot["input"]["hands"]),
                 "native entry sticks are not neutral")
         for row in self.navigation_schedule:
-            require(self.pending_sticks is None and not self.pending_command and not any(any(v) for v in self.sticks),
+            require(self.pending_sticks is None and not self.pending_command
+                    and not any(any(v) for v in self.sticks) and self.action_button is None,
                     "previous navigation episode lacks committed neutral")
             # Obtain a new original source before each episode, never restamp.
             self.fresh()
@@ -451,6 +491,9 @@ class NavigationDriver(t.Driver):
             sticks = [row["left"], row["right"]]
             lines += ["stick " + hand + " " + " ".join(str(v) for v in values)
                       for hand, values in zip(("l", "r"), sticks)]
+            button = ACTION_BUTTONS.get(row.get("action"))
+            if button is not None:
+                lines.append("btn " + button + " down")
             started = time.perf_counter_ns()
             previous_stage_deadline = self.stage_deadline
             self.action_deadline = min(previous_stage_deadline, self.deadline-300_000_000,
@@ -462,7 +505,7 @@ class NavigationDriver(t.Driver):
             # uses the existing exact-owner cleanup path.
             self.stage_deadline = active_deadline
             self.motion_started = started
-            self.publish_navigation(lines, sticks)
+            self.publish_navigation(lines, sticks, button=button)
             command_committed = self.last_commit
             self.expected_head = self.next_head
             self.stage_deadline = self.action_deadline
@@ -478,7 +521,7 @@ class NavigationDriver(t.Driver):
             # native observation. Keep the original normal pulse/ACK bounds
             # (cleanup=False), including when a diagnostic is still pending.
             active_finished = time.perf_counter_ns()
-            self.publish_navigation(ZERO, [[0, 0], [0, 0]], release=True)
+            self.publish_navigation(self.neutral_lines(), [[0, 0], [0, 0]], release=True)
             require(neutral_controls(self.state["controls"]), "zero ACK lacks neutral committed controls")
             self.action_deadline = None
             self.stage_deadline = previous_stage_deadline
@@ -489,7 +532,9 @@ class NavigationDriver(t.Driver):
                                       commandCommittedNs=command_committed, neutralCommittedNs=self.last_commit,
                                       acknowledgedActiveNs=active_finished-command_committed,
                                       completedElapsedNs=self.last_commit-started,
-                                      commandsAcknowledged=True, nativeMovement=False, objectiveEntry=False))
+                                      action=row.get("action"), commandsAcknowledged=True,
+                                      nativeAction=False, nativeMovement=False, objectiveEntry=False,
+                                      vehicleEntry=False))
         self.monitor = False
         self.save_owner(False)
 
@@ -517,16 +562,19 @@ class NavigationDriver(t.Driver):
             state = self.read_state()
             self.ownership(state)
             self.unsafe_owner = False  # exact ownership independently rejoined
+            require(self.buttons_match(state, self.action_button),
+                    "owned navigation action button differs from settled state")
             self.sticks = [state["controls"][k][:] for k in ("stickL", "stickR")]
             self.pending_sticks = None
-            if self.last_write == 0 and not any(any(v) for v in self.sticks):
+            self.pending_action_button = None
+            if self.last_write == 0 and not any(any(v) for v in self.sticks) and self.action_button is None:
                 self.save_owner(False)
                 return "no navigation input published"
             require(time.perf_counter_ns()+250_000_000 < self.hard_deadline,
                     "bounded release reserve exhausted")
-            self.publish_navigation(ZERO, [[0, 0], [0, 0]], cleanup=True)
+            self.publish_navigation(self.neutral_lines(), [[0, 0], [0, 0]], cleanup=True)
             require(neutral_controls(self.state["controls"]), "release ACK lacks neutral committed controls")
-            return "ordinary zero-stick ACK and neutral committed state verified"
+            return "ordinary navigation release ACK and neutral committed state verified"
         except BaseException:
             self.normal_stop_required = True
             raise
@@ -542,7 +590,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     driver, code = None, 2
     result = dict(schema="bc2vr.ordinary-navigation.v1", status="refused", nativeAcceptance=False,
-                  headsetAcceptance=False, objectiveEntry=False, normalStopRequired=False)
+                  headsetAcceptance=False, objectiveEntry=False, vehicleEntry=False, normalStopRequired=False)
     try:
         require(args.root_authorized_ordinary_navigation, "explicit ROOT ordinary-navigation authorization required")
         require(re.fullmatch(r"[a-f0-9]{64}", args.source_sha256) is not None, "invalid reviewed source SHA256")
@@ -568,6 +616,7 @@ def main(argv=None):
             if getattr(driver, "artifacts", None):
                 result.update(episodes=driver.episodes, pendingCommand=driver.pending_command,
                               sticks=driver.sticks, pendingSticks=driver.pending_sticks,
+                              actionButton=driver.action_button, pendingActionButton=driver.pending_action_button,
                               plannedSubpulses=len(driver.navigation_schedule),
                               plannedDurationMs=sum(row["holdMs"] for row in driver.navigation_schedule),
                               completedElapsedNs=sum(row["completedElapsedNs"] for row in driver.episodes),

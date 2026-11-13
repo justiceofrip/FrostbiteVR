@@ -23,6 +23,7 @@ param(
     [switch]$PerformanceMode=$false,
     [string]$PreAttachSetupSpec,
     [string]$PreAttachSetupSpecSha256,
+    [string]$ContinueCampaignFromRun,
     [string]$PrivateSessionBinding,
     [string]$PrivateSessionBindingSha256,
     [switch]$ExtendedObservation
@@ -260,6 +261,86 @@ function Backup([string]$Path,[string]$Relative){
     [IO.File]::Copy($Path,$destination,$false);$backup=Pin $destination
     Require ($backup.sha256 -ceq $original.sha256 -and (Pin $Path).sha256 -ceq $original.sha256) 'Exact backup failed.'
     return @{original=$original;backup=$backup}
+}
+function SameCampaignPin($Actual,$Expected){
+    Require ($Expected.path -is [string] -and $Actual.path -ieq (Full $Expected.path) -and
+        ($Expected.bytes -is [int] -or $Expected.bytes -is [long]) -and $Actual.bytes -eq $Expected.bytes -and
+        $Expected.sha256 -is [string] -and $Expected.sha256 -cmatch '^[a-f0-9]{64}$' -and $Actual.sha256 -ceq $Expected.sha256) 'Campaign continuation file pin differs.'
+}
+function GetCampaignContinuation([string]$Run,$Game){
+    $Run=Full $Run
+    Require ($Run.StartsWith((Join-Path $RepositoryRoot 'reports')+'\',[StringComparison]::OrdinalIgnoreCase) -and $Run -ine $OutputDir) 'Campaign continuation requires a preceding owned runner directory.'
+    $proof=@{};$pins=@{}
+    foreach($name in 'run-manifest.json','result.json','artifact-binding.json','native-retirement.json','originals.json','profile-after.json'){
+        $path=Join-Path $Run $name;$pins[$name]=Pin $path
+        $proof[$name]=Json $path 4MB
+        SameCampaignPin (Pin $path) $pins[$name]
+    }
+    $manifest=$proof['run-manifest.json'];$result=$proof['result.json'];$retirement=$proof['native-retirement.json']
+    Require ($manifest.schema -ceq 'fvr.xr-game-run.v1' -and (Full $manifest.output_directory) -ieq $Run -and
+        (Full $manifest.artifact_binding_path) -ieq (Join-Path $Run 'artifact-binding.json')) 'Campaign continuation runner ownership differs.'
+    Require ($result.schema -ceq 'fvr.xr-game-simulation.v1' -and $result.status -ceq 'observed_and_closed' -and
+        $result.failures -is [array] -and $result.failures.Count -eq 0 -and
+        $result.forced_termination_by_wrapper -is [bool] -and -not $result.forced_termination_by_wrapper) 'Campaign continuation requires a successful closed run.'
+    foreach($key in 'actual_game_started','native_running_observed','simulator_host_observed','native_retirement_proven','exact_three_profiles_restored','normal_game_close','launcher_active_settings_preserved'){
+        Require ($result[$key] -is [bool] -and $result[$key]) ('Campaign continuation lacks proof: '+$key)
+    }
+    foreach($key in 'hooks_disabled','reload_flow_drained','native_retirement_proven'){
+        Require ($retirement[$key] -is [bool] -and $retirement[$key]) ('Campaign continuation retirement lacks proof: '+$key)
+    }
+    Require ($retirement.pre_activation_refusal -is [bool] -and -not $retirement.pre_activation_refusal) 'Campaign continuation cannot use a pre-activation refusal.'
+    SameCampaignPin $Game $proof['artifact-binding.json'].game
+    Require ($result.processes -is [array]) 'Campaign continuation process ownership is missing.'
+    foreach($name in 'entry','supervisor','game','host','trace'){
+        Require (@($result.processes|Where-Object {$_.name -ceq $name}).Count -eq 1) ('Campaign continuation process ownership differs: '+$name)
+    }
+    foreach($process in $result.processes){
+        Require ($process.exited -is [bool] -and $process.exited -and
+            ($process.exit_code -is [int] -or $process.exit_code -is [long]) -and $process.exit_code -eq 0 -and
+            ($process.identity.pid -is [int] -or $process.identity.pid -is [long]) -and $process.identity.pid -gt 0) 'Campaign continuation owner has not exited successfully.'
+        $null=Full $process.identity.path;$null=[DateTimeOffset]::Parse($process.identity.start_utc)
+        $live=Find-Bc2OwnedProcess $process.identity
+        if($live){$live.Dispose();throw 'Campaign continuation owner is still live.'}
+    }
+    $gameOwner=@($result.processes|Where-Object {$_.name -ceq 'game'})[0]
+    Require ($gameOwner.identity.path -ieq $Game.path -and $retirement.bootstrap.pid -eq $gameOwner.identity.pid -and
+        $retirement.bootstrap.probe_exit -eq 0 -and $retirement.bootstrap.remote_thread_exit_observed -is [bool] -and $retirement.bootstrap.remote_thread_exit_observed) 'Campaign continuation game retirement identity differs.'
+    $before=@($proof['originals.json'].profiles);$after=@($proof['profile-after.json'])
+    Require ($before.Count -eq 3 -and $after.Count -eq 3) 'Campaign continuation requires exactly three original and retained profiles.'
+    $source=$null
+    foreach($name in 'GameSettings.bin','GameSettings.ini','settings.ini'){
+        $old=@($before|Where-Object {[IO.Path]::GetFileName($_.original.path) -ceq $name})
+        $new=@($after|Where-Object {[IO.Path]::GetFileName($_.original.path) -ceq $name})
+        Require ($old.Count -eq 1 -and $new.Count -eq 1 -and $old[0].original.path -ieq $new[0].original.path -and
+            (Full $old[0].backup.path) -ieq (Join-Path $Run ('profile-before/'+$name)) -and
+            (Full $new[0].backup.path) -ieq (Join-Path $Run ('profile-after/'+$name))) 'Campaign continuation profile ownership differs.'
+        SameCampaignPin (Pin $old[0].backup.path) $old[0].backup
+        Require ($old[0].backup.sha256 -ceq $old[0].original.sha256 -and $old[0].backup.bytes -eq $old[0].original.bytes -and
+            $new[0].backup.sha256 -ceq $new[0].original.sha256 -and $new[0].backup.bytes -eq $new[0].original.bytes) 'Campaign continuation profile backup proof differs.'
+        if($name -ceq 'GameSettings.bin'){$source=Pin $new[0].backup.path;SameCampaignPin $source $new[0].backup}
+    }
+    Require ($source.bytes -gt 0) 'Campaign continuation binary is empty.'
+    return @{schema='fvr.campaign-continuation.v1';status='admitted';run_directory=$Run;proof=$pins;source=$source;game=$Game;
+        exact_original_restoration_required=$true;checkpoint_progress_claimed=$false}
+}
+function PrepareCampaignContinuation($Continuation){
+    NoOtherProcesses -BeforeLaunch
+    foreach($pin in $Continuation.proof.Values){SameCampaignPin (Pin $pin.path) $pin}
+    SameCampaignPin (Pin $Continuation.source.path) $Continuation.source
+    $targets=@($profiles|Where-Object {[IO.Path]::GetFileName($_.original.path) -ceq 'GameSettings.bin'})
+    Require ($targets.Count -eq 1) 'Campaign continuation requires exactly one current original binary backup.'
+    $target=$targets[0]
+    SameCampaignPin (Pin $target.original.path) $target.original
+    SameCampaignPin (Pin $target.backup.path) $target.backup
+    Require ($target.backup.sha256 -ceq $target.original.sha256 -and $target.backup.bytes -eq $target.original.bytes) 'Campaign continuation original backup differs.'
+    $bytes=[IO.File]::ReadAllBytes($Continuation.source.path)
+    Require ($bytes.LongLength -eq $Continuation.source.bytes -and [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant() -ceq $Continuation.source.sha256) 'Campaign continuation source changed before staging.'
+    [IO.File]::WriteAllBytes($target.original.path,$bytes)
+    $staged=Pin $target.original.path
+    Require ($staged.sha256 -ceq $Continuation.source.sha256 -and $staged.bytes -eq $Continuation.source.bytes) 'Campaign continuation staging differs.'
+    $preparedProfileHashes[$target.original.path]=$staged.sha256
+    $Continuation.status='staged';$Continuation.staged=$staged;$Continuation.original=$target.original;$Continuation.backup=$target.backup
+    Save 'campaign-continuation.json' $Continuation
 }
 function Pe([string]$Path,[int]$Machine){
     $stream=[IO.File]::OpenRead($Path)
@@ -550,9 +631,15 @@ try{
         Require ((Pin $preAttachProvisionRunner 256MB).sha256 -ceq $setupPlan.provisioning.runner.sha256) 'Provisioning runner changed.'
         Save 'pre-attach-specification.json' @{specification=(Pin $PreAttachSetupSpec);admission_seconds=$preAttachSpec.maximum_seconds;outer_deadline_unchanged=$true}
     }
+    if($ContinueCampaignFromRun){
+        Require (-not $preAttachSpec -or -not $preAttachSpec.ContainsKey('campaign_seed')) 'Campaign continuation and pre-attach campaign_seed cannot be combined.'
+        $receipt.campaign_continuation=GetCampaignContinuation $ContinueCampaignFromRun $gamePin
+        Save 'campaign-continuation.json' $receipt.campaign_continuation
+    }
     foreach($name in 'GameSettings.bin','GameSettings.ini','settings.ini'){$profiles+=Backup (Join-Path $ProfileDirectory $name) ('profile-before/'+$name)}
     foreach($name in 'active.json','data/settings.json'){$launcherFiles+=Backup (Join-Path $InstallRoot $name) ('launcher-before/'+$name)}
     Save 'originals.json' @{profiles=$profiles;launcher=$launcherFiles}
+    if($ContinueCampaignFromRun){PrepareCampaignContinuation $receipt.campaign_continuation}
     if($preAttachSpec -and $preAttachSpec.ContainsKey('campaign_seed')){
         $seed=$preAttachSpec.campaign_seed;$observedSeed=Pin $seed.path
         Require ($seed.sha256 -ceq 'b2a9f98f0c0609b4bf793760634754e8c616f7095d07249c7fe2b4cb74083988' -and $seed.bytes -eq 117657 -and $observedSeed.sha256 -ceq $seed.sha256 -and $observedSeed.bytes -eq $seed.bytes) 'Reviewed SP03 save seed changed.'

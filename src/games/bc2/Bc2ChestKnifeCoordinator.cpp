@@ -161,14 +161,25 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
     }else ++readGaps_;
     if(motionIdentity&&measuredKnifeHold&&native->attackBridgeEnabled&&currentBody)
         attackGeometry=selectedKnife::MapTrackedGeometry(s.input,rendered->wristInGrip,*currentBody);
-    const bool samePacket=mechanics&&nativeOwned_&&bodyOperation_&&body.TemporaryToolActive()&&
-        body.TemporaryToolOperation()==bodyOperation_&&key&&
+    const bool sameCustody=mechanics&&nativeOwned_&&bodyOperation_&&body.TemporaryToolActive()&&
+        body.TemporaryToolOperation()==bodyOperation_&&key;
+    const bool samePacket=sameCustody&&
         repeatedMotion_.Same(s.owner,*key,bodyOperation_,s.input,sample,policy_,hands);
+    const bool boundedSample=sameCustody&&
+        repeatedMotion_.AcrossSamples(s.owner,*key,bodyOperation_,s.input,sample,policy_,hands);
+    if(repeatedMotion_.HasSampleGap()&&!boundedSample){
+        motionCalibration_.Reset();policy_.InvalidateMotion();repeatedMotion_.Reset();
+    }
     const auto unavailableMotion=!native&&mechanics&&nativeOwned_&&bodyOperation_&&body.TemporaryToolActive()&&
         body.TemporaryToolOperation()==bodyOperation_&&key?
         pendingMotion_.Unavailable(nativeInspection,s.owner,*key,bodyOperation_,s.input,sample,policy_,hands):nullptr;
-    const bool inspectionSuspended=!native&&chestKnifeNative::InspectionLockMiss(nativeInspection)&&(samePacket||unavailableMotion);
-    if(!inspectionSuspended)PrepareChestKnifeMotionSource(motionCalibration_,policy_,motionIdentity,
+    const bool inspectionSuspended=!native&&chestKnifeNative::InspectionLockMiss(nativeInspection)&&(samePacket||boundedSample||unavailableMotion);
+    // A current native view can arrive before its measured render receipt.
+    // Skip that physical sample too, instead of consuming a completed stroke
+    // with attackAvailable=false. Original contact/claim leases are not renewed.
+    const bool measurementSuspended=native&&boundedSample&&!measuredKnifeHold&&repeatedMotion_.SameNative(motionIdentity)&&
+        native->currentObservationReady&&chestKnifeNative::CurrentHoldWorkSettled(native->currentHoldWork);
+    if(!inspectionSuspended&&!measurementSuspended)PrepareChestKnifeMotionSource(motionCalibration_,policy_,motionIdentity,
         measuredKnifeHold?std::optional(rendered->wristInGrip):std::nullopt,s.input,
         native&&chestKnifeNative::ObservationSourceReady(*native,policy_.Phase())&&native->motionEnabled&&sample.mechanicsSettled&&
             (!native->attackBridgeEnabled||attackGeometry.has_value()),sample,&projection);
@@ -196,22 +207,34 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
             v.selectedSlots=native->snapshot.selected.current;v.readinessKnife=sample.knifeSelected;
             v.readiness=nativeReadiness;}
         v.mechanicsSettled=sample.mechanicsSettled;return v;};
+    const auto publishRendering=[&](){
+        if(ChestKnifeRenderPoseCustody(policy_,hands,s.hand)&&native&&native->healthy&&nativeOwned_&&bodyOperation_&&
+           body.TemporaryToolOperation()==bodyOperation_&&sample.knifeSelected&&sample.holdInputCurrent&&sample.fireSuppressed&&
+           GameplayOwnsInput(sample.menu,s.hand.nowNs)&&sample.gripHeld[1]&&!s.hand.released[1]&&
+           s.hand.focused&&s.hand.tracked[1]&&s.hand.deadlineNs>s.hand.nowNs)
+            rendering_=ChestKnifeRenderSource{s.owner,s.hand,*key,bodyOperation_};
+    };
     chestKnifeNative::BeforePrepareReason beforePrepare=chestKnifeNative::BeforePrepareReason::NotAttempted;
     const bool prepared=chestKnifeNative::BeforePrepare(sample,policy_,&beforePrepare,unavailableMotion);
     projection.beforePrepare=unsigned(beforePrepare);
-    if(!prepared||inspectionSuspended){
-        // Only an unchanged admitted packet may keep recognition stationary or
-        // retain its pending Stage. This cannot run Observe/Prepare/Stage,
-        // renew custody, synthesize readiness or supply a native view.
-        const bool keep=samePacket&&policy_.Phase()==KnifePhase::Held&&!policy_.NeedsNativeCleanup()&&
-            repeatedMotion_.TemporaryMiss(nativeInspection,beforePrepare,motionIdentity,projection.calibrationContinuous,
-                native&&native->currentObservationReady&&chestKnifeNative::CurrentHoldWorkSettled(native->currentHoldWork));
-        if(keep||unavailableMotion){if(keep)repeatedMotion_.Suspended(s.hand.nowNs);projection.calibration=KnifeMotionCalibrationReason::DuplicateSuspended;
+    if(!prepared||inspectionSuspended||measurementSuspended){
+        // Keep recognition stationary only inside the existing packet/sample
+        // bounds. This cannot run Observe/Prepare/Stage, renew custody or turn
+        // retained calibration into a native-ready source.
+        const bool keep=(samePacket||boundedSample)&&policy_.Phase()==KnifePhase::Held&&!policy_.NeedsNativeCleanup()&&
+            ((measurementSuspended&&(beforePrepare==chestKnifeNative::BeforePrepareReason::Available||
+                beforePrepare==chestKnifeNative::BeforePrepareReason::Busy))||
+             repeatedMotion_.TemporaryMiss(nativeInspection,beforePrepare,motionIdentity,projection.calibrationContinuous,
+                native&&native->currentObservationReady&&chestKnifeNative::CurrentHoldWorkSettled(native->currentHoldWork)));
+        if(keep||unavailableMotion){if(keep)repeatedMotion_.SkipSample(s.input,sample);projection.calibration=KnifeMotionCalibrationReason::DuplicateSuspended;
             projection.calibrationContinuous=true;projection.projection=KnifeMotionProjectionReason::Suspended;}
         else {motionCalibration_.Reset();policy_.InvalidateMotion();repeatedMotion_.Reset();}
         projection.duplicateSuspended=keep||unavailableMotion;projection.trackingReady=projection.attackReady=false;
         recognition_.Coordinator(projection);
-        const auto missing=prepared?"native_view":"before_prepare";
+        // Current display-only custody must keep producing the missing measured
+        // receipt. It cannot renew a claim or make this skipped sample attackable.
+        if(keep&&measurementSuspended)publishRendering();
+        const auto missing=!prepared?"before_prepare":measurementSuspended?"render_receipt":"native_view";
         liveObservation_.Reject(diagnostic(),s.hand.nowNs,"producer_prerequisite",missing);
         currentHoldObservation_.Reject(diagnostic(),s.hand.nowNs,missing);
         recognition_.NativeGate(sample.source,unsigned(policy_.Phase()),sample.knife,policy_.Hold()?policy_.Hold()->id:0);return;
@@ -261,11 +284,7 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
        policy_.Phase()==KnifePhase::Held&&!policy_.NeedsNativeCleanup()&&motionHold&&motionHold->token==motionIdentity->hold)
         repeatedMotion_.Remember(*motionIdentity,s.input,sample,*motionHold,native->currentHoldWork);
     const bool poseCustody=ChestKnifePoseCustody(policy_,hands,s.hand);
-    const bool renderPoseCustody=ChestKnifeRenderPoseCustody(policy_,hands,s.hand);
-    if(renderPoseCustody&&native&&native->healthy&&nativeOwned_&&bodyOperation_&&body.TemporaryToolOperation()==bodyOperation_&&sample.knifeSelected&&
-       sample.holdInputCurrent&&sample.fireSuppressed&&GameplayOwnsInput(sample.menu,s.hand.nowNs)&&
-       sample.gripHeld[1]&&!s.hand.released[1]&&s.hand.focused&&s.hand.tracked[1]&&s.hand.deadlineNs>s.hand.nowNs)
-        rendering_=ChestKnifeRenderSource{s.owner,s.hand,*key,bodyOperation_};
+    publishRendering();
 #ifdef FVR_BC2_CHEST_KNIFE_PROBE
     ChestKnifeProbeWitness witness;
     witness.observedNs=std::uint64_t(s.hand.observedNs);witness.deadlineNs=std::uint64_t(s.hand.deadlineNs);
