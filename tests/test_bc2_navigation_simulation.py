@@ -96,6 +96,24 @@ RECORDED_GATHER_PENDING = dict(
         onFoot=True, nativePlaying=True, allowedRead=True, allowedMask=435, input=None))
 
 
+# Actual97/03 346c9a211af449cc9162a98d64590675, snapshot-001.json.gz
+# SHA256 6dcf67ffe21343f8081ded101f741a1ac6eaa339c008f56c0e95744fd6aea0d1.
+# Current() revoked the worker's available copy after its publication serial
+# changed. No input was published. Only the refusal/timing below is recorded;
+# the fresh coherent successors in the assembled regression are synthetic.
+RECORDED_OBSERVATION_CHANGED = dict(
+    observedNs=678667089788300, requestStartedNs=678666959610300,
+    navigation=dict(observationOnly=True, available=False, reason="observation_changed",
+        gatherSequence=7847, sampledNs=678667085143100,
+        inputObservedNs=678667074078600, inputDeadlineNs=678667174078600,
+        validUntilNs=678667171703100,
+        owner=dict(manager=134480704, player=1168935616, soldier=1174739472,
+                   weak=133633384, controlled=1174739472, entry=1174744064,
+                   router=111299664, cache=118689232,
+                   actorGeneration=1, inputEpoch=1, movementEpoch=1),
+        onFoot=True, nativePlaying=True, allowedRead=True, allowedMask=435, input=None))
+
+
 # Actual94/01 9008cd89094e4eae92c03ab82d0fa956, command seq83; events.jsonl
 # SHA256 05e445ef82a15bb6426d49ea0ef626ae855dabf48ed93e55fc79cdfeef08b439.
 # The exact requested/acknowledged head projection falsely failed settled
@@ -978,6 +996,124 @@ class NavigationTests(unittest.TestCase):
         self.assertEqual(self.driver.hard_deadline-self.driver.started, 10*self.m.t.NS)
         self.assertFalse(result["normalStopRequired"])
         self.assertFalse(result["nativeAcceptance"])
+
+    def test_recorded_observation_changed_reacquires_only_fresh_owned_sources(self):
+        self.native_navigation = "valid_weapon"
+        self.rows.append(dict(left=[0, .25], right=[0, 0], holdMs=400))
+        recorded = RECORDED_OBSERVATION_CHANGED
+        self.response_delay = lambda driver: (recorded["observedNs"]-recorded["requestStartedNs"]
+                                              if driver.snapshot_index == 1 else 0)
+        references = []
+        def changed(sample, driver):
+            references.append(copy.deepcopy(driver.navigation_reference))
+            sample["navigationObservation"]["owner"] = copy.deepcopy(recorded["navigation"]["owner"])
+            if driver.snapshot_index in (1, 3, 5):
+                nav = copy.deepcopy(recorded["navigation"])
+                offset = sample["observed_ns"]-recorded["observedNs"]
+                for key in ("sampledNs", "inputObservedNs", "inputDeadlineNs", "validUntilNs"):
+                    nav[key] += offset
+                sample["navigationObservation"] = nav
+        self.snapshot_mutation = changed
+        code, result = self.assembled()
+        self.assertEqual((code, result.get("error")), (0, None))
+        self.assertEqual(references[:2], [None, None])
+        self.assertEqual(self.driver.navigation_reference, self.samples[1])
+        self.assertEqual([episode["admissionNonce"] for episode in result["episodes"]],
+                         [self.samples[index]["nonce"] for index in (3, 5)])
+        saved = sorted(Path(result["artifactDirectory"]).glob("snapshot-*.json.gz"))
+        self.assertEqual([json.loads(gzip.decompress(path.read_bytes())) for path in saved], self.samples)
+        events = [json.loads(line) for line in
+                  (Path(result["artifactDirectory"]) / "events.jsonl").read_text().splitlines()]
+        refresh = [event for event in events if event["type"] == "snapshot_refresh_hold"]
+        self.assertEqual([event["nonce"] for event in refresh],
+                         [self.samples[index]["nonce"] for index in (0, 2, 4)])
+        self.assertTrue(all(event["reason"] == "navigation_observation_changed"
+                            and event["commandAuthority"] is False and event["sourceDeadlineNs"] is None
+                            and event["refreshRequest"] == 1 for event in refresh))
+        commits = [event for event in events if event["type"] == "command_commit"]
+        self.assertEqual([event["lastCommandWrittenNs"] for event in refresh],
+                         [0, 0, commits[1]["writtenNs"]])
+        for index, source_index in enumerate((3, 5)):
+            source = self.samples[source_index]
+            self.assertGreaterEqual(commits[index*2]["requestedNs"], source["observed_ns"])
+            self.assertLess(commits[index*2]["writtenNs"], self.driver.snapshot_source_deadline(source))
+        self.assertTrue(all(request["actionDeadlineNs"] is None and not request["pendingCommand"]
+                            and request["sticks"] == [0, 0, 0, 0] for request in self.snapshot_requests))
+        self.assertEqual(self.calls[1::2], [self.m.ZERO, self.m.ZERO])
+        self.assertEqual(self.driver.hard_deadline-self.driver.started, 10*self.m.t.NS)
+        self.assertFalse(result["normalStopRequired"])
+        self.assertFalse(result["nativeAcceptance"])
+
+    def test_observation_changed_preserves_owner_and_successor_refusals(self):
+        changes = (*self.m.NAVIGATION_OWNER, "successor_owner", "menu", "tracking",
+                   "owner_unavailable", "route_changed", "stale_input", "observation_busy", "nonnull_input")
+        for index, change in enumerate(changes):
+            with self.subTest(change=change):
+                if index:
+                    self.setUp()
+                self.native_navigation = "valid_weapon"
+                def changed(sample, driver):
+                    nav = sample["navigationObservation"]
+                    if driver.snapshot_index == 2:
+                        nav.update(available=False, reason="observation_changed")
+                        if change != "nonnull_input":
+                            nav["input"] = None
+                        if change in self.m.NAVIGATION_OWNER:
+                            nav["owner"][change] += 1
+                    elif driver.snapshot_index == 3:
+                        if change == "successor_owner":
+                            nav["owner"]["actorGeneration"] += 1
+                        elif change == "menu":
+                            nav["input"]["menu"]["epoch"] += 1
+                        elif change == "tracking":
+                            nav["input"]["trackingBasisGeneration"] += 1
+                        else:
+                            nav.update(available=False, reason=change, input=None)
+                self.snapshot_mutation = changed
+                code, result = self.assembled()
+                self.assertEqual(code, 2)
+                self.assertEqual(self.calls, [])
+                self.assertEqual(self.driver.navigation_reference, self.samples[0])
+                self.assertEqual(len(self.snapshot_requests),
+                                 2 if change in self.m.NAVIGATION_OWNER or change == "nonnull_input" else 3)
+                self.assertEqual(result["release"], "no navigation input published")
+                self.assertFalse(result["normalStopRequired"])
+
+    def test_observation_changed_repeated_or_stale_bytes_cannot_supply_authority(self):
+        for index, change in enumerate(("repeated_changed", "stale_source", "old_nonce", "empty_identity")):
+            with self.subTest(change=change):
+                if index:
+                    self.setUp()
+                self.native_navigation = "no_shot"
+                def changed(sample, driver):
+                    nav = sample["navigationObservation"]
+                    if change == "empty_identity":
+                        nav.update(available=False, reason="observation_changed", input=None,
+                                   owner=dict.fromkeys(self.m.NAVIGATION_OWNER, 0))
+                    elif driver.snapshot_index == 2 or (driver.snapshot_index > 2 and change == "repeated_changed"):
+                        nav.update(available=False, reason="observation_changed", input=None)
+                    elif driver.snapshot_index > 2:
+                        if change == "old_nonce":
+                            sample.clear()
+                            sample.update(copy.deepcopy(self.samples[0]))
+                        else:
+                            sample["navigationObservation"] = copy.deepcopy(self.samples[0]["navigationObservation"])
+                self.snapshot_mutation = changed
+                code, result = self.assembled()
+                self.assertEqual(code, 2)
+                self.assertEqual(self.calls, [])
+                self.assertEqual(result["release"], "no navigation input published")
+                self.assertEqual(self.driver.hard_deadline-self.driver.started, 10*self.m.t.NS)
+                self.assertLessEqual(self.driver.snapshot_refresh_requests, self.m.t.MAX_SNAPSHOT_REFRESHES)
+                self.assertEqual(self.driver.navigation_reference,
+                                 None if change == "empty_identity" else self.samples[0])
+                if change == "repeated_changed":
+                    self.assertIn("refresh budget exhausted", result["error"])
+                    self.assertEqual(len(self.snapshot_requests), 2+self.m.t.MAX_SNAPSHOT_REFRESHES)
+                elif change == "empty_identity":
+                    self.assertEqual(len(self.snapshot_requests), 1)
+                else:
+                    self.assertEqual(len(self.snapshot_requests), 3)
 
     def test_initial_gather_pending_without_identity_cannot_establish_reference(self):
         self.native_navigation = "no_shot"
