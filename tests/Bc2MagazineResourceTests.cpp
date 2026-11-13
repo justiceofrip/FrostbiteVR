@@ -117,7 +117,9 @@ struct OwedBoltConsumer {
     }
     Bc2PhysicalBoltResult Tick(Fixture& f,const MagazinePhysicalResult& magazine){
         Bc2PhysicalBoltSample sample;sample.nativeOwner=f.native.owner;sample.input=f.s.input;sample.item=f.s.weapon;
-        sample.asset=f.s.asset;sample.mesh=calibration->mesh;sample.wristWorld={Pose(),Pose()};
+        // Magazine geometry uses the short asset name; physical bolt admission
+        // uses the exact native configuration path, as ordinary player Prepare does.
+        sample.asset=f.profile->native->configuration.assetPath;sample.mesh=calibration->mesh;sample.wristWorld={Pose(),Pose()};
         sample.cancel=MagazineBlocksBoltControl(magazine,sample.nativeOwner,sample.input,sample.item,
             f.hands.Current(InteractionHand::Right));
         if(native.phase==Bc2NativeCyclePhase::Held)
@@ -134,11 +136,17 @@ int OwedBoltSurvivesAttachedMagazineExpiry(){
     for(const auto phase:{Bc2NativeCyclePhase::ShotObserved,Bc2NativeCyclePhase::Held}){
         Fixture f(*profile,true);f.counts={4,45,5};f.Send();const auto original=*f.channel.Read(f.native.owner,f.now);
         OwedBoltConsumer bolt(f,phase);const auto gun=f.gun->token;
+        CHECK(BoltCalibrationValid(*bolt.calibration)&&profile->native->configuration.assetPath==bolt.calibration->asset&&
+            profile->geometry->mesh==bolt.calibration->mesh);
         // An active native bolt cannot publish IdleBoltMagazine. Let the real
         // channel's attached view expire while current owner/input/hold renew.
         f.publishNative=false;
         for(unsigned tick=0;tick<16;++tick){
             f.Send();const auto result=bolt.Tick(f,f.result);
+            if(bolt.cancels||bolt.controls!=tick+1||!result.blocksFire||!bolt.bolt->BlocksFire())
+                std::printf("Owed bolt/resource failure: phase=%u tick=%u controls=%u cancels=%u resultFire=%u retainedFire=%u magazineBusy=%u idleWait=%u idleFire=%u\n",
+                    unsigned(phase),tick,bolt.controls,bolt.cancels,unsigned(result.blocksFire),unsigned(bolt.bolt->BlocksFire()),
+                    unsigned(f.result.blocksWeaponActions),unsigned(f.result.idleAwaitingResource),unsigned(f.result.idleFireContinuity));
             CHECK(!bolt.cancels&&bolt.controls==tick+1&&result.blocksFire&&bolt.bolt->BlocksFire());
             CHECK(bolt.native.phase==phase&&bolt.native.cycle==1&&bolt.native.shot==1&&
                 !bolt.releases&&!bolt.acks&&f.gun->token==gun&&f.calls==0);
