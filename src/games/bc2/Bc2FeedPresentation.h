@@ -4,6 +4,7 @@
 #include "Bc2Rig.h"
 #include "Bc2SightContact.h"
 #include "fvr/interaction/TrackedRig.h"
+#include <cstring>
 
 namespace fvr::bc2 {
 // Part order is pouch, cover, selected articulated chain, rigid cover companions.
@@ -55,10 +56,16 @@ inline std::uint16_t CarryMask(unsigned chainCount)noexcept {
     // Cover companions follow the current weapon, never carried feed custody.
     return chainCount&&chainCount<=MaxBc2FeedChainBones?std::uint16_t(((1u<<(chainCount+2))-1u)&~2u):0;
 }
+inline bool DropValid(const Bc2PhysicalFeedPresentation& p)noexcept {
+    return p.droppedOriginalAtNs>=0&&!(p.hiddenPartsMask&~p.carriedPartsMask)&&
+        !(p.hiddenPartsMask&~CarryMask(p.chainCount))&&(!p.hiddenPartsMask||p.droppedOriginalAtNs)&&
+        (!p.droppedOriginalAtNs||(p.carriedPartsMask==CarryMask(p.chainCount)&&
+            !p.mechanismClaim&&!p.mechanismInput&&!p.mechanismWristWorldMeters&&!p.supplyObject));
+}
 inline std::optional<Bc2FeedPartFrames> WorldBases(const Bc2FeedGeometry& geometry,
     const Bc2PhysicalFeedPresentation& p,const math::Matrix4& placedWeaponWorldMeters)noexcept {
     if(!geometry.chainCount||geometry.chainCount>MaxBc2FeedChainBones||geometry.coverCompanionCount>MaxBc2FeedCoverCompanions||
-       p.chainCount!=geometry.chainCount||p.carriedPartsMask&~CarryMask(p.chainCount))return {};
+       p.chainCount!=geometry.chainCount||p.carriedPartsMask&~CarryMask(p.chainCount)||!DropValid(p))return {};
     Bc2FeedPartFrames bases{};
     for(unsigned i=0;i<Bc2FeedPartCount(geometry);++i)bases[i]=placedWeaponWorldMeters;
     if(p.carriedPartsMask&1)bases[0]=p.pouchCarryWeaponWorldMeters;
@@ -105,7 +112,7 @@ inline bool Bc2FeedSourceFresh(const Bc2PhysicalFeedPresentation& p,const Reload
         current.owner.actorGeneration==owner.actorGeneration&&current.owner.space==owner.space&&current.owner.equipGeneration&&
         p.weapon.id==owner.weapon&&p.weapon.generation==current.owner.equipGeneration&&equipment.weapon==owner.weapon&&
         equipment.data&&equipment.Asset()==row->geometry.asset&&
-        interaction::feed_mechanism_detail::Supply(p.supply,true)&&!(p.carriedPartsMask&~CarryMask(p.chainCount))&&
+        interaction::feed_mechanism_detail::Supply(p.supply,true)&&!(p.carriedPartsMask&~CarryMask(p.chainCount))&&DropValid(p)&&
         interaction::feed_mechanism_detail::Pose(p.originalWeaponWorldMeters);
 }
 inline std::optional<math::Matrix4> Bc2FeedMechanismWristWorld(const Bc2PhysicalFeedPresentation& p,
@@ -190,7 +197,9 @@ inline bool Bc2FeedPresentationRetained(const Bc2PhysicalFeedPresentation& origi
        original.input.owner!=current.input.owner||current.input.sequence<original.input.sequence||
        Bc2FeedDisplayInput(current).sequence<Bc2FeedDisplayInput(original).sequence||
        original.weapon!=current.weapon||original.supply!=current.supply||original.lifetime!=current.lifetime||
-       current.revision<original.revision||original.carriedPartsMask!=current.carriedPartsMask)return false;
+       current.revision<original.revision||original.carriedPartsMask!=current.carriedPartsMask||
+       !feed_presentation_detail::DropValid(original)||!feed_presentation_detail::DropValid(current)||
+       original.hiddenPartsMask!=current.hiddenPartsMask||original.droppedOriginalAtNs!=current.droppedOriginalAtNs)return false;
     // The supply object carries hand authority. Persistent part geometry is
     // pinned by the supply, lifetime and carried-part identities above.
     return !posedHand||(bool(original.supplyObject)==bool(current.supplyObject)&&
@@ -295,5 +304,36 @@ inline std::optional<std::vector<interaction::BoneWrite>> BuildBc2FeedPartWrites
         }
     }
     return result;
+}
+// Apply only after ordinary rigid-pose validation, to the copied final skin
+// palette. Collapse all12 consumed scalars; preserve SIMD padding, exact
+// restoration bytes, and separately owned cover/weapon subtrees unchanged.
+inline bool HideBc2FeedPartsInPrivatePlan(const Bc2FeedPartBinding& binding,const RigSnapshot& rig,
+    std::uint16_t hiddenPartsMask,RigPosePlan& plan) {
+    if(!hiddenPartsMask)return true;
+    if(!binding.geometry||plan.identity!=rig.identity||rig.parents.empty()||rig.parents.size()>1024||
+       (hiddenPartsMask&~feed_presentation_detail::CarryMask(binding.geometry->chainCount)))return false;
+    const auto actual=feed_presentation_detail::Derive(rig,*binding.geometry);
+    if(!actual||actual->rig!=binding.rig||actual->parts!=binding.parts||actual->partCount!=binding.partCount)return false;
+    std::vector<std::size_t> hidden;
+    for(std::size_t bone=0;bone<rig.parents.size();++bone){
+        auto ancestor=std::int32_t(bone);unsigned depth=0;bool hide=false;
+        while(ancestor>=0){
+            if(std::size_t(ancestor)>=rig.parents.size()||++depth>rig.parents.size())return false;
+            unsigned role=0;for(;role<binding.partCount;++role)if(binding.parts[role]==std::uint32_t(ancestor))break;
+            if(role<binding.partCount){hide=(hiddenPartsMask&(1u<<role))!=0;break;}
+            if(std::uint32_t(ancestor)==rig.weaponBone)break;
+            ancestor=rig.parents[std::size_t(ancestor)];
+        }
+        if(!hide||std::find(rig.nativeHiddenLeaves.begin(),rig.nativeHiddenLeaves.end(),bone)!=rig.nativeHiddenLeaves.end())continue;
+        const auto edit=std::find_if(plan.edits.begin(),plan.edits.end(),[&](const auto& e){return e.index==bone;});
+        if(edit==plan.edits.end()||std::find_if(edit+1,plan.edits.end(),[&](const auto& e){return e.index==bone;})!=plan.edits.end())return false;
+        for(unsigned row=0;row<4;++row)for(unsigned col=0;col<3;++col){float value=0;
+            std::memcpy(&value,edit->after.data()+row*16+col*4,4);if(!std::isfinite(value))return false;}
+        hidden.push_back(std::size_t(edit-plan.edits.begin()));
+    }
+    if(hidden.empty())return false;
+    for(const auto index:hidden)for(unsigned row=0;row<4;++row)std::memset(plan.edits[index].after.data()+row*16,0,12);
+    return true;
 }
 }

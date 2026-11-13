@@ -1133,7 +1133,7 @@ int DetachedDwellKeepsOriginalCarryAndRequiresFreshSupply(){
         }
         f.PrepareTick(released,false);
         // Native/gameplay can consume several publications of one real input.
-        // None is a new hand claim or a reason to move the detached object.
+        // The visual fall grants no hand claim, motion or ammunition authority.
         for(unsigned publication=0;publication<3;++publication){
             f.Consume();
             CHECK(f.result.diagnostic.exit==Bc2PhysicalFeedExit::Updated&&f.result.selected);
@@ -1150,14 +1150,21 @@ int DetachedDwellKeepsOriginalCarryAndRequiresFreshSupply(){
     CHECK(retained->lifetime==detached->lifetime&&retained->supply==detached->supply&&retained->owner==detached->owner);
     CHECK(retained->coverRadians==detached->coverRadians&&retained->carriedPartsMask==detached->carriedPartsMask);
     CHECK(retained->weaponFromPouch.values==detached->weaponFromPouch.values);
-    CHECK(retained->pouchCarryWeaponWorldMeters.values==detached->pouchCarryWeaponWorldMeters.values);
-    CHECK(retained->chainCarryWeaponWorldMeters.values==detached->chainCarryWeaponWorldMeters.values);
+    CHECK(detached->droppedOriginalAtNs>0&&retained->droppedOriginalAtNs==detached->droppedOriginalAtNs);
+    CHECK(!detached->hiddenPartsMask&&retained->hiddenPartsMask==retained->carriedPartsMask);
+    CHECK(retained->pouchCarryWeaponWorldMeters.values[3][1]<detached->pouchCarryWeaponWorldMeters.values[3][1]);
+    CHECK(retained->chainCarryWeaponWorldMeters.values[3][1]<detached->chainCarryWeaponWorldMeters.values[3][1]);
+    for(unsigned row=0;row<4;++row)for(unsigned column=0;column<4;++column)if(row!=3||column!=1){
+        CHECK(retained->pouchCarryWeaponWorldMeters.values[row][column]==detached->pouchCarryWeaponWorldMeters.values[row][column]);
+        CHECK(retained->chainCarryWeaponWorldMeters.values[row][column]==detached->chainCarryWeaponWorldMeters.values[row][column]);
+    }
     for(unsigned bone=0;bone<retained->chainCount;++bone)
         CHECK(retained->weaponFromChain[bone].values==detached->weaponFromChain[bone].values);
     CHECK(!ReadBc2PhysicalFeedPresentation(f.sample.owner,retained->input.deadlineNs));
     // Pickup is still a new neutral/contact/grip claim. Refill remains exactly
     // one receipt-bound operation after the long detached interval.
     CHECK(f.Place(FeedPhysicalOperation::AttachContainer));
+    CHECK(!f.result.presentation->hiddenPartsMask&&!f.result.presentation->droppedOriginalAtNs);
     CHECK(f.submitted&&f.submitted->command.request.lifetime==detached->lifetime);
     CHECK(f.submitted->command.request.id==3&&f.submitted->command.authority.rounds==200);
     CHECK(f.native.counts==counts&&f.Reconcile());
@@ -1352,6 +1359,7 @@ int EveryEnrolledSupplyPresentsDelayedPickupOffsetAndDropsLostHand(){
                 bool(f.result.presentation&&f.result.presentation->mechanismClaim));
         CHECK(f.result.presentation&&!f.result.presentation->mechanismWristWorldMeters&&!f.result.presentation->mechanismClaim);
         CHECK(!f.result.ownsHand&&Near(f.result.presentation->coverRadians,cover)&&f.native.counts==counts);
+        CHECK(!f.result.presentation->hiddenPartsMask&&!f.result.presentation->droppedOriginalAtNs);
         CHECK(NearPose(feed_interaction_detail::Multiply(f.result.presentation->weaponFromPouch,
             f.result.presentation->pouchCarryWeaponWorldMeters),carriedWorld));
         CHECK(f.submits==2&&!f.submitted&&f.BlocksFire());
@@ -3196,7 +3204,121 @@ int OpenCoverDisplaySurvivesLongRawGapWithoutMotionAuthority(){
 }
 
 }
+int DetachedContainerCanClearTheMountWithoutParkingAtAnInvisiblePose(){
+    using namespace feed_interaction_detail;
+    unsigned cases=0;
+    for(const auto& registration:RegisteredBc2FeedProfiles()){
+        Fixture f(&registration);CHECK(f.OpenCover()&&f.Reconcile());f.submitted.reset();
+        const auto counts=f.native.counts;const auto motion=f.PlacementMotion(FeedPhysicalOperation::DetachContainer);CHECK(motion);
+        const auto wrist=[&](const fvr::math::Matrix4& object){return Multiply(motion->placement.sourceFromGrip,object);};
+        const auto start=motion->placement.weaponFromSource;
+        auto cleared=Multiply(Turn(.65f),start);
+        for(unsigned axis=0;axis<3;++axis)cleared.values[3][axis]=start.values[3][axis]+
+            1.4f*(motion->placement.weaponFromDestination.values[3][axis]-start.values[3][axis]);
+        CHECK(Angle(cleared,motion->placement.weaponFromDestination)>motion->orientationToleranceRadians);
+        f.Tick(wrist(start),false);f.Tick(wrist(start),false);f.Tick(wrist(start),true);
+        CHECK(f.result.interactionStatus==FeedInteractionStatus::Acquired);
+        for(unsigned step=1;step<=30;++step)f.Tick(wrist(reload_insertion_detail::BlendRigid(start,cleared,double(step)/30)),true);
+        for(unsigned step=0;step<f.DwellPackets();++step)f.Tick(wrist(cleared),true);
+        CHECK(f.result.interactionStatus==FeedInteractionStatus::Endpoint);
+        CHECK(!f.submitted&&f.native.counts==counts&&f.submits==1);
+        f.Tick(wrist(cleared),false);
+        CHECK(f.submitted&&f.submitted->command.authority.operation==FeedPhysicalOperation::DetachContainer);
+        CHECK(f.submitted->command.authority.effect==FeedAmmunitionEffect::PhysicalOnly&&f.native.counts==counts);
+        CHECK(f.Reconcile()&&f.result.presentation->operation==FeedPhysicalOperation::AttachContainer);
+        CHECK(!f.result.presentation->droppedOriginalAtNs&&!f.result.presentation->hiddenPartsMask);
+        CHECK(f.native.counts==counts&&f.submits==2);++cases;
+    }
+    CHECK(cases==24);return 0;
+}
+int DetachClearanceCannotReplaceDirectionDwellOrCurrentHandEvidence(){
+    using namespace feed_interaction_detail;
+    unsigned cases=0;
+    for(const auto& registration:RegisteredBc2FeedProfiles())for(unsigned branch=0;branch<7;++branch){
+        Fixture f(&registration);CHECK(f.OpenCover()&&f.Reconcile());f.submitted.reset();
+        const auto counts=f.native.counts;const auto motion=f.PlacementMotion(FeedPhysicalOperation::DetachContainer);CHECK(motion);
+        const auto wrist=[&](const fvr::math::Matrix4& object){return Multiply(motion->placement.sourceFromGrip,object);};
+        const auto start=motion->placement.weaponFromSource;
+        std::array<double,3> outward{};double lengthSquared=0;
+        for(unsigned axis=0;axis<3;++axis){outward[axis]=double(motion->placement.weaponFromDestination.values[3][axis])-start.values[3][axis];
+            lengthSquared+=outward[axis]*outward[axis];}
+        const auto length=std::sqrt(lengthSquared);CHECK(length>2*motion->pathToleranceMeters);
+        auto end=Multiply(Turn(.65f),start);
+        if(branch==0){ // A long sideways pull does not clear the mount.
+            std::array<double,3> sideways{-outward[1],outward[0],0};
+            if(std::hypot(sideways[0],sideways[1])<.001)sideways={-outward[2],0,outward[0]};
+            const auto norm=std::sqrt(sideways[0]*sideways[0]+sideways[1]*sideways[1]+sideways[2]*sideways[2]);
+            for(unsigned axis=0;axis<3;++axis)end.values[3][axis]+=float(sideways[axis]*length*1.4/norm);
+        }else if(branch!=2){ // Turning in place also cannot clear the mount.
+            const auto factor=branch==1?-1.4:branch==3?(length-motion->pathToleranceMeters+.0001)/length:1.4;
+            for(unsigned axis=0;axis<3;++axis)end.values[3][axis]+=float(outward[axis]*factor);
+        }
+        f.Tick(wrist(start),false);f.Tick(wrist(start),false);f.Tick(wrist(start),true);
+        CHECK(f.result.interactionStatus==FeedInteractionStatus::Acquired);
+        for(unsigned step=1;step<=30;++step)f.Tick(wrist(reload_insertion_detail::BlendRigid(start,end,double(step)/30)),true);
+        if(branch<3){
+            for(unsigned step=0;step<f.DwellPackets();++step)f.Tick(wrist(end),true);
+            CHECK(f.result.interactionStatus==FeedInteractionStatus::Moving);
+        }else if(branch>3){
+            for(unsigned step=0;step<f.DwellPackets();++step)f.Tick(wrist(end),true);
+            CHECK(f.result.interactionStatus==FeedInteractionStatus::Endpoint);
+        }else CHECK(f.result.interactionStatus==FeedInteractionStatus::Endpoint);
+        if(branch==4)f.sample.input.tracked[0]=false;
+        if(branch==6)f.now+=200*Ms;
+        f.Tick(wrist(end),false,branch==5);
+        CHECK(!f.submitted&&!f.result.pending&&f.submits==1&&f.native.counts==counts&&f.BlocksFire());
+        CHECK(f.result.interactionStatus!=FeedInteractionStatus::Completed);
+        // Replaying a release cannot turn an interrupted grasp into completion.
+        f.Consume();CHECK(!f.submitted&&!f.result.pending&&f.submits==1&&f.native.counts==counts);
+        ++cases;
+    }
+    CHECK(cases==168);return 0;
+}
+int EmptyWeaponStillRetainsReplacementCustodyAndInterruptedOriginalPresentation(){
+    using namespace feed_interaction_detail;
+    for(unsigned branch=0;branch<3;++branch){
+        Fixture f;f.native.counts.loaded=0;CHECK(f.OpenCover()&&f.Reconcile());
+        const auto counts=f.native.counts;f.submitted.reset();
+        if(branch==0){
+            // A tracking interruption of an unfinished extraction is not an
+            // explicit discard, even when the old container has no rounds.
+            const auto motion=f.PlacementMotion(FeedPhysicalOperation::DetachContainer);CHECK(motion);
+            const auto wrist=[&](const fvr::math::Matrix4& object){return Multiply(motion->placement.sourceFromGrip,object);};
+            const auto start=motion->placement.weaponFromSource;
+            const auto middle=reload_insertion_detail::BlendRigid(start,motion->placement.weaponFromDestination,.4);
+            f.Tick(wrist(start),false);f.Tick(wrist(start),false);f.Tick(wrist(start),true);
+            for(unsigned step=1;step<=15;++step)f.Tick(wrist(reload_insertion_detail::BlendRigid(start,middle,double(step)/15)),true);
+            CHECK(f.result.interactionStatus==FeedInteractionStatus::Moving);
+            f.sample.input.tracked[0]=false;f.Tick(wrist(middle),true);
+            CHECK(!f.result.ownsHand&&!f.submitted);
+            f.sample.input.tracked[0]=true;f.Tick(wrist(middle),false);
+        }else {
+            CHECK(f.Place(FeedPhysicalOperation::DetachContainer)&&f.Reconcile());
+            CHECK(f.result.presentation->droppedOriginalAtNs>0);
+            CHECK(f.PickSupply());CHECK(f.result.presentation->supplyObject);
+            const auto item=f.result.presentation->supplyObject->item;
+            CHECK(item.id&&item.generation&&!f.result.presentation->droppedOriginalAtNs);
+            f.submitted.reset();
+            if(branch==2){f.sample.input.tracked[0]=false;f.Tick(f.lastWrist,true);f.sample.input.tracked[0]=true;}
+            f.Tick(f.lastWrist,false);
+            // This representation owns reserve rounds despite loaded==0.
+            // Release or tracking loss must retain it, with no fresh belt copy.
+            for(unsigned tick=0;tick<80;++tick){
+                f.Tick(f.lastWrist,false);
+                CHECK(f.result.presentation&&!f.result.presentation->hiddenPartsMask&&!f.result.presentation->droppedOriginalAtNs);
+                CHECK(!f.result.presentation->supplyObject&&!f.result.bodyVisual);
+            }
+        }
+        CHECK(f.result.presentation&&!f.result.presentation->hiddenPartsMask&&!f.result.presentation->droppedOriginalAtNs);
+        CHECK(!f.submitted&&!f.result.pending&&f.native.counts==counts&&f.BlocksFire());
+        CHECK(f.submits==(branch==0?1u:2u));
+    }
+    return 0;
+}
 int main(){
+    CHECK(DetachedContainerCanClearTheMountWithoutParkingAtAnInvisiblePose()==0);
+    CHECK(DetachClearanceCannotReplaceDirectionDwellOrCurrentHandEvidence()==0);
+    CHECK(EmptyWeaponStillRetainsReplacementCustodyAndInterruptedOriginalPresentation()==0);
     CHECK(EveryEnrolledFeedKeepsNaturalHeldGraspsThroughCompletion()==0);
     CHECK(OpenCoverDisplaySurvivesLongRawGapWithoutMotionAuthority()==0);
     CHECK(ExactSelectedJoinAndPhysicalOwner()==0);

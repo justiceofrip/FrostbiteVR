@@ -2156,7 +2156,8 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
         if(partWrites){
             const auto ordinaryWrites=writes;
             merge(*partWrites);
-            if(const auto partsPlan=BuildRigPosePlan(*rig,writes)){
+            if(auto partsPlan=BuildRigPosePlan(*rig,writes);partsPlan&&
+               HideBc2FeedPartsInPrivatePlan(*feedBinding,*rig,input.feed->hiddenPartsMask,*partsPlan)){
                 feedBase=rig->nativeEvaluated;for(const auto& edit:plan->edits)feedBase[edit.index]=edit.after;
                 feedParts=rig->nativeEvaluated;for(const auto& edit:partsPlan->edits)feedParts[edit.index]=edit.after;
                 plan=partsPlan;feedAttached=true;
@@ -2174,7 +2175,8 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
                             if(poseHand(interaction::HandPoseRole::MechanismGrip,feedSolved->writes)){
                                 // Hand writes cannot replace the separately owned parts.
                                 merge(*partWrites);
-                                if(const auto heldPlan=BuildRigPosePlan(*rig,writes)){
+                                if(auto heldPlan=BuildRigPosePlan(*rig,writes);heldPlan&&
+                                   HideBc2FeedPartsInPrivatePlan(*feedBinding,*rig,input.feed->hiddenPartsMask,*heldPlan)){
                                     plan=heldPlan;feedHandPosed=true;solved->writes=writes;
                                     solved->targetError[0]=feedSolved->targetError[0];solved->reachClamped[0]=false;
                                     leftTarget=wrist;handPosed=true;handRole=interaction::HandPoseRole::MechanismGrip;

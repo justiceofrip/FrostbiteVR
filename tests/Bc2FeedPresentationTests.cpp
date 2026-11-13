@@ -361,6 +361,72 @@ int RegistrationAndChainIdentitySurvivePairRetention(){
     CHECK(!Bc2FeedPresentationRetained(p,bad,false,1020000000));
     bad=p;bad.carriedPartsMask=1u<<8;CHECK(!Bc2FeedWorldBases(bad,Identity()));return 0;
 }
+int ReleasedOriginalHideMaskInvalidatesPreparedPalettes(){
+    auto falling=Physical();falling.carriedPartsMask=feed_presentation_detail::CarryMask(falling.chainCount);
+    falling.pouchCarryWeaponWorldMeters=falling.chainCarryWeaponWorldMeters=Identity();
+    falling.droppedOriginalAtNs=falling.input.observedNs;
+    CHECK(Bc2FeedWorldBases(falling,Identity()));
+    CHECK(Bc2FeedSourceFresh(falling,falling.owner,falling.input,Equipment(),falling.rig,falling.input.nowNs));
+    auto hidden=falling;hidden.hiddenPartsMask=hidden.carriedPartsMask;++hidden.revision;
+    CHECK(Bc2FeedWorldBases(hidden,Identity()));
+    CHECK(!Bc2FeedPresentationRetained(falling,hidden,false,hidden.input.nowNs));
+    CHECK(Bc2FeedPresentationRetained(hidden,hidden,false,hidden.input.nowNs));
+    auto acquired=falling;acquired.droppedOriginalAtNs=0;Claim(acquired);
+    CHECK(!Bc2FeedPresentationRetained(hidden,acquired,false,hidden.input.nowNs));
+    for(unsigned fault=0;fault<5;++fault){auto bad=hidden;
+        if(fault==0)bad.hiddenPartsMask|=2;
+        if(fault==1)bad.hiddenPartsMask|=1u<<(bad.chainCount+2);
+        if(fault==2)bad.carriedPartsMask&=~1u;
+        if(fault==3)bad.droppedOriginalAtNs=0;
+        if(fault==4)Claim(bad);
+        CHECK(!Bc2FeedWorldBases(bad,Identity()));
+        CHECK(!Bc2FeedSourceFresh(bad,bad.owner,bad.input,Equipment(),bad.rig,bad.input.nowNs));
+        CHECK(!Bc2FeedPresentationRetained(hidden,bad,false,bad.input.nowNs));
+    }
+    return 0;
+}
+int PrivateDropHidesOnlyOwnedSubtreesAndRestoresNextPalette(){
+    IndependentPresentationFixture fixture;auto& g=fixture.geometry;auto& rig=fixture.rig;
+    // The separately owned cover can be nested below a hidden chain root;
+    // measured cover companions remain siblings under the weapon root.
+    g.coverBone.parent="first";g.coverBone.parentIndex=2;rig.parents[14]=2;rig.parents[16]=14;
+    g.coverCompanionCount=1;g.coverCompanions[0]={{"visibleSide","ownRoot",4,3},Identity()};
+    rig.names[4]="visibleSide";rig.parents[4]=3;rig.parents[5]=4;
+    rig.identity.evaluatedMatrices=0x30000;rig.nativeEvaluated.resize(rig.identity.count);
+    for(auto& bytes:rig.nativeEvaluated)bytes.fill(std::byte{0xa5});
+    const auto native=rig.nativeEvaluated;
+    const auto binding=feed_presentation_detail::Derive(rig,g);CHECK(binding);
+    const auto parts=ComposeBc2FeedPresentation({{1,2},{3,4}},g.poses[0]);CHECK(parts);
+    const auto frames=Bc2FeedPartWorldFrames(g,*parts,g.weaponFromHinge,Bases(),100);CHECK(frames);
+    auto writes=BuildBc2FeedPartWrites(*binding,rig,*frames);CHECK(writes);
+    writes->push_back({3,Identity()});writes->push_back({34,Identity()});
+    const auto ordinary=BuildRigPosePlan(rig,*writes);CHECK(ordinary);
+    auto hidden=*ordinary;const auto mask=feed_presentation_detail::CarryMask(g.chainCount);
+    CHECK(HideBc2FeedPartsInPrivatePlan(*binding,rig,mask,hidden));
+    const std::array<unsigned,8> hiddenBones{9,2,6,11,17,21,27,30};unsigned hiddenCount=0;
+    for(std::size_t i=0;i<hidden.edits.size();++i){const auto& edit=hidden.edits[i];const auto& normal=ordinary->edits[i];
+        CHECK(edit.index==normal.index&&edit.address==normal.address&&edit.before==normal.before);
+        const bool hide=std::find(hiddenBones.begin(),hiddenBones.end(),edit.index)!=hiddenBones.end();
+        if(!hide){CHECK(edit.after==normal.after);continue;}
+        ++hiddenCount;
+        for(unsigned row=0;row<4;++row){
+            for(unsigned byte=0;byte<12;++byte)CHECK(edit.after[row*16+byte]==std::byte{0});
+            for(unsigned byte=12;byte<16;++byte)CHECK(edit.after[row*16+byte]==normal.after[row*16+byte]);
+        }
+    }
+    CHECK(hiddenCount==hiddenBones.size()&&rig.nativeEvaluated==native);
+    auto restored=BuildRigPosePlan(rig,*writes);CHECK(restored);
+    CHECK(HideBc2FeedPartsInPrivatePlan(*binding,rig,0,*restored));
+    for(std::size_t i=0;i<restored->edits.size();++i)CHECK(restored->edits[i].after==ordinary->edits[i].after);
+    auto rejected=*ordinary;
+    CHECK(!HideBc2FeedPartsInPrivatePlan(*binding,rig,std::uint16_t(mask|2),rejected));
+    for(std::size_t i=0;i<rejected.edits.size();++i)CHECK(rejected.edits[i].after==ordinary->edits[i].after);
+    rejected.edits.erase(std::find_if(rejected.edits.begin(),rejected.edits.end(),[](const auto& edit){return edit.index==27;}));
+    const auto incomplete=rejected;
+    CHECK(!HideBc2FeedPartsInPrivatePlan(*binding,rig,mask,rejected));
+    for(std::size_t i=0;i<rejected.edits.size();++i)CHECK(rejected.edits[i].after==incomplete.edits[i].after);
+    return 0;
+}
 
 int MechanicalPoseSurvivesHandGapsUntilOwnershipExit(){
     auto opened=Physical();Claim(opened);
@@ -431,5 +497,7 @@ int main(){
     CHECK(IndependentSixBoneChainUsesOwnRolesAndCoverFrame()==0);
     CHECK(RigidCoverSiblingsKeepOwnTargetsAndNativeDescendants()==0);
     CHECK(RegistrationAndChainIdentitySurvivePairRetention()==0);
-    std::puts("Bc2FeedPresentationTests: 17 geometry/lease/selector/claim/carry groups; no native/headset acceptance");
+    CHECK(ReleasedOriginalHideMaskInvalidatesPreparedPalettes()==0);
+    CHECK(PrivateDropHidesOnlyOwnedSubtreesAndRestoresNextPalette()==0);
+    std::puts("Bc2FeedPresentationTests: 19 geometry/lease/selector/claim/carry/drop groups; no native/headset acceptance");
 }

@@ -47,6 +47,127 @@ int DrawStillNeedsNeutral(){
     f.Grip(false);CHECK(!f.Step());f.Grip(true);const auto draw=f.Step();
     CHECK(draw&&draw->kind==KnifeCommandKind::Draw&&f.knife.CanCommit(*draw,f.s,f.hands));return 0;
 }
+void AdvanceChestApproachSource(Fixture& f,bool contact,std::int64_t elapsed=10*ms){
+    auto& s=f.s;++s.source.sequence;s.source.observedNs+=elapsed;s.source.nowNs=s.source.observedNs;
+    s.source.deadlineNs=s.source.nowNs+100*ms;s.claimIntent=s.source.sequence;
+    s.menu.deadlineNs=s.source.deadlineNs;++s.menu.sequence;
+    s.chest[1]={{102,1},s.source.sequence,s.source.deadlineNs,contact};
+    f.hands.Update(s.source);
+}
+std::optional<KnifeCommand> ChestApproachStep(Fixture& f,bool contact,std::int64_t elapsed=10*ms){
+    AdvanceChestApproachSource(f,contact,elapsed);return f.knife.Prepare(f.s,f.hands);
+}
+int ChestDrawAcceptsBoundedGripApproach(){
+    Fixture f;CHECK(!f.Step());f.Grip(true);
+    CHECK(!ChestApproachStep(f,false)&&!f.knife.Hold());const auto pressed=f.s.source;
+    for(unsigned n=0;n<20;++n)CHECK(!ChestApproachStep(f,false)&&!f.knife.Hold());
+    const auto draw=ChestApproachStep(f,true);
+    CHECK(draw&&draw->kind==KnifeCommandKind::Draw&&f.knife.CanCommit(*draw,f.s,f.hands));
+    CHECK(draw->source.sequence==f.s.source.sequence&&draw->source.observedNs>pressed.deadlineNs&&
+        draw->source.deadlineNs==f.s.source.deadlineNs&&f.knife.Phase()==KnifePhase::DrawStaged);
+    CHECK(f.knife.Hold()->kind==HandClaimKind::BodyInventory);
+    f.knife.Committed(*draw,KnifeCommit::Accepted);CHECK(f.knife.Phase()==KnifePhase::Drawing);
+    CHECK(!ChestApproachStep(f,true)&&f.knife.Phase()==KnifePhase::Drawing);
+    auto receipt=f.Receipt(*draw);receipt.drawDidNotAttack=false;CHECK(!f.knife.Observe(receipt));
+    CHECK(f.knife.Observe(f.Receipt(*draw))&&f.knife.Phase()==KnifePhase::Held);
+    return 0;
+}
+int ChestDrawApproachRequiresContinuousAuthority(){
+    for(unsigned fault=0;fault<19;++fault){Fixture f;CHECK(!f.Step());f.Grip(true);
+        CHECK(!ChestApproachStep(f,false));
+        if(fault==0){for(unsigned n=0;n<11;++n)CHECK(!ChestApproachStep(f,false,50*ms));}
+        if(fault==2)++f.s.source.owner.equipGeneration;
+        if(fault==3)++f.s.knife.generation;
+        if(fault==4)++f.s.menu.epoch;
+        if(fault==5)f.s.fireSuppressed=false;
+        if(fault==6)f.s.emptyHands=false;
+        if(fault==7)f.s.mechanicsSettled=false;
+        if(fault==8){f.s.controlsNeutral=false;f.s.holdInputCurrent=true;}
+        if(fault==9)f.s.source.focused=false;
+        if(fault==10)f.s.source.tracked[1]=false;
+        if(fault==11)++f.s.source.owner.space;
+        if(fault==12)++f.s.source.owner.actorGeneration;
+        if(fault==13)f.s.gripHeld[0]=true;
+        if(fault==14)f.s.handSupported[1]=false;
+        if(fault==15)f.s.onFoot=false;
+        if(fault==16)f.s.menu.owner=InputMenuOwner::Menu;
+        if(fault==17)f.s.source.released[1]=true;
+        if(fault==18){const auto& s=f.s.source;
+            CHECK(f.hands.Acquire(s,{s.owner,InteractionHand::Right,HandClaimKind::BodyInventory,{81,1},
+                {{91,1},s.sequence,s.deadlineNs,true},++f.s.claimIntent,0}).claim);}
+        CHECK(!ChestApproachStep(f,true,fault==0?50*ms:fault==1?151*ms:10*ms));
+        CHECK(!f.knife.Hold());
+        if(fault==18){const auto foreign=f.hands.Current(InteractionHand::Right);CHECK(foreign&&foreign->token.item.id==81);
+            CHECK(f.hands.Release(f.s.source,foreign->token).accepted);}
+        else CHECK(!f.hands.Current(InteractionHand::Right));
+        // Restoring a gate while grip remains held cannot resurrect the press.
+        f.s.fireSuppressed=f.s.emptyHands=f.s.mechanicsSettled=f.s.controlsNeutral=f.s.onFoot=true;
+        f.s.source.focused=f.s.source.tracked[1]=f.s.handSupported[1]=true;
+        f.s.source.released[1]=false;f.s.gripHeld[0]=false;f.s.menu.owner=InputMenuOwner::Gameplay;
+        if(const auto left=f.hands.Current(InteractionHand::Left))CHECK(f.hands.Release(f.s.source,left->token).accepted);
+        CHECK(!ChestApproachStep(f,true)&&!f.knife.Hold());
+        f.Grip(false);CHECK(!ChestApproachStep(f,true));f.Grip(true);
+        const auto retry=ChestApproachStep(f,true);CHECK(retry&&retry->kind==KnifeCommandKind::Draw);
+    }
+    return 0;
+}
+int ChestDrawApproachCannotReusePacketsOrContact(){
+    Fixture duplicate;CHECK(!duplicate.Step());duplicate.Grip(true);CHECK(!ChestApproachStep(duplicate,false));
+    duplicate.s.chest[1].eligible=true;
+    CHECK(!duplicate.knife.Prepare(duplicate.s,duplicate.hands)&&!duplicate.knife.Hold());
+    ++duplicate.s.source.deadlineNs; // An altered duplicate cannot retain the approach.
+    CHECK(!duplicate.knife.Prepare(duplicate.s,duplicate.hands));
+    CHECK(!ChestApproachStep(duplicate,true)&&!duplicate.knife.Hold());
+    Fixture stale;CHECK(!stale.Step());stale.Grip(true);CHECK(!ChestApproachStep(stale,false));
+    auto oldContact=stale.s.chest[1];oldContact.eligible=true;
+    CHECK(!ChestApproachStep(stale,false));stale.s.chest[1]=oldContact;
+    CHECK(!stale.knife.Prepare(stale.s,stale.hands)&&!stale.knife.Hold());
+    const auto draw=ChestApproachStep(stale,true);CHECK(draw&&draw->kind==KnifeCommandKind::Draw);
+    Fixture release;CHECK(!release.Step());release.Grip(true);CHECK(!ChestApproachStep(release,false));
+    release.Grip(false);CHECK(!ChestApproachStep(release,true)&&!release.knife.Hold());
+    release.Grip(true);CHECK(ChestApproachStep(release,true));
+    Fixture held;held.Grip(true);CHECK(!held.Step());CHECK(!ChestApproachStep(held,true)&&!held.knife.Hold());
+    return 0;
+}
+int ChestDrawApproachStopsAtSkippedPreparation(){
+    // Ordinary stowed gathers lack attack geometry and invalidate motion; that
+    // route must leave a continuous draw approach usable.
+    Fixture continuous;CHECK(!continuous.Step());continuous.Grip(true);
+    CHECK(!ChestApproachStep(continuous,false));ChestKnifeMotionCalibration calibration;
+    PrepareChestKnifeMotionSource(calibration,continuous.knife,std::nullopt,std::nullopt,{},false,continuous.s);
+    CHECK(ChestApproachStep(continuous,true));
+    for(unsigned fault=0;fault<4;++fault){Fixture f;CHECK(!f.Step());f.Grip(true);
+        CHECK(!ChestApproachStep(f,false));const auto press=f.s.source;
+        if(fault==0)f.Grip(false);
+        if(fault==1){f.s.controlsNeutral=false;f.s.holdInputCurrent=true;}
+        if(fault==2)f.s.source.tracked[1]=false;
+        AdvanceChestApproachSource(f,false);
+        // Real gather ordering: the shared arbiter/source projection run, but
+        // native BeforePrepare(Busy) skips policy Prepare. Even unchanged held
+        // input (fault 3) cannot carry draw arming through that unknown gather.
+        PrepareChestKnifeMotionSource(calibration,f.knife,std::nullopt,std::nullopt,{},false,f.s);
+        f.knife.InvalidateDrawInput();f.knife.InvalidateMotion();
+        f.Grip(true);f.s.controlsNeutral=f.s.source.tracked[1]=true;
+        CHECK(!ChestApproachStep(f,true)&&!f.knife.Hold());
+        CHECK(f.s.source.observedNs-press.observedNs<BodyGripApproach::SampleGapNs);
+        f.Grip(false);CHECK(!ChestApproachStep(f,true));f.Grip(true);
+        const auto retry=ChestApproachStep(f,true);CHECK(retry&&retry->kind==KnifeCommandKind::Draw);
+    }
+    Fixture custody;const auto draw=custody.Draw();CHECK(draw);const auto claim=*custody.knife.Hold();
+    custody.knife.InvalidateDrawInput();
+    CHECK(custody.knife.Phase()==KnifePhase::DrawStaged&&custody.knife.Hold()==claim&&
+        custody.knife.CanCommit(*draw,custody.s,custody.hands));
+    custody.knife.Committed(*draw,KnifeCommit::Accepted);custody.knife.InvalidateDrawInput();
+    CHECK(custody.knife.Phase()==KnifePhase::Drawing&&custody.knife.Hold()==claim);
+    CHECK(custody.knife.Observe(custody.Receipt(*draw)));
+    custody.s.knifeSelected=custody.s.trackedKnifeOwned=true;custody.s.emptyHands=false;
+    CHECK(!custody.Step()&&custody.knife.Hold());const auto held=*custody.knife.Hold();
+    CHECK(held.kind==HandClaimKind::GunHold);custody.knife.InvalidateDrawInput();
+    CHECK(custody.knife.Phase()==KnifePhase::Held&&custody.knife.Hold()==held&&!custody.knife.NeedsNativeCleanup());
+    CHECK(!custody.Step());const auto renewed=custody.hands.Current(InteractionHand::Right);
+    CHECK(renewed&&renewed->token==held);
+    return 0;
+}
 int MissingAuthorityNeverBecomesHeldInput(){
     for(unsigned n=0;n<7;++n){Fixture f;CHECK(f.Held());const auto token=*f.knife.Hold();
         f.s.controlsNeutral=false;f.s.holdInputCurrent=true;
@@ -354,7 +475,7 @@ int StockTriggerPassiveReadiness(){
 #include "KnifeStockHoldCases.inc"
 #include "KnifeStockJabCases.inc"
 #include "KnifeObservationRecoveryCases.inc"
-int main(){CHECK(!knife_observation_recovery_cases::Cases());CHECK(!StockJabCases());CHECK(!StockHoldPublicationGapCases());CHECK(!StockTriggerPassiveReadiness());CHECK(!StockTriggerRevocationCases());CHECK(!StockTriggerCases());CHECK(!IdleGunNeedsANewEmptyHandNeutral());CHECK(!WalkingStrokeUsesSameNativeBoundaryPredicate());CHECK(!MovingHoldAndQuietRearm());CHECK(!DrawStillNeedsNeutral());
+int main(){CHECK(!ChestDrawApproachStopsAtSkippedPreparation());CHECK(!ChestDrawAcceptsBoundedGripApproach());CHECK(!ChestDrawApproachRequiresContinuousAuthority());CHECK(!ChestDrawApproachCannotReusePacketsOrContact());CHECK(!knife_observation_recovery_cases::Cases());CHECK(!StockJabCases());CHECK(!StockHoldPublicationGapCases());CHECK(!StockTriggerPassiveReadiness());CHECK(!StockTriggerRevocationCases());CHECK(!StockTriggerCases());CHECK(!IdleGunNeedsANewEmptyHandNeutral());CHECK(!WalkingStrokeUsesSameNativeBoundaryPredicate());CHECK(!MovingHoldAndQuietRearm());CHECK(!DrawStillNeedsNeutral());
     CHECK(!MissingAuthorityNeverBecomesHeldInput());CHECK(!RealRawInputSeparatesHoldAndIntent());
     CHECK(!FocusGapReturnsBeforeFreshChestDraw());CHECK(!DuplicateCannotWidenOrReacquire());
     std::puts("Eight knife held-input groups PASS: idle gun rearm, real custody/quiet intent, input negatives, focus-gap return then deliberate redraw, immutable duplicate lease.");}

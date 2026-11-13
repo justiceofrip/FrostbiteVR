@@ -111,9 +111,10 @@ struct HolsterRun {
             p->observedNs=v.input.observedNs;p->deadlineNs=v.input.deadlineNs;p->inputDeadlineNs=v.input.deadlineNs;
             s.visibility=bc2::WeaponVisibilityReceipt{v.nativeOwner,p->rig,v.request,v.input.sequence,v.input.owner.equipGeneration,100+nativeTick,r.s.hand.nowNs,p->deadlineNs,3,v.hide,p};}
         return s;}
-    void Tick(){auto s=Sample();if(const auto request=holster.Demand(s)){bc2::HolsterInputOverride patch;
+    void Tick(const std::function<void(bc2::BodyHolsterSample&)>& mutate={}){auto s=Sample();if(const auto request=holster.Demand(s)){bc2::HolsterInputOverride patch;
             if(patch.Apply(cache,*request,{this,[](void* c,const bc2::HolsterSuppressionRequest&)noexcept{return static_cast<HolsterRun*>(c)->allowReadback;}}))s.suppression=patch.Commit();
             if(s.suppression)++suppressions;}
+        if(mutate)mutate(s);
         out=r.adapter.TickHolster(r.f.Memory(),r.s,s,holster,r.hands,r.intent);}
     void Step(float grip=0){r.Advance(grip);Tick();}
     bool Empty(){Step(1);if(holster.Phase()!=bc2::BodyHolsterPhase::HidePending)return false;Step(1);Step(1);
@@ -857,6 +858,91 @@ int SharedLifecycleBoundary(){
 
 #include "Bc2PlayerHolsterChecks.inc"
 
+int EmptyHandsKeepPresentationDuringFireOnlyInput(){
+ using namespace bc2;using namespace interaction;
+ for(bool xm8:{false,true}){HolsterRun h(BodyInventoryHolsterAcceptance,xm8);CHECK(h.Empty());
+  const auto request=h.holster.RequestId(),intent=h.r.intent;const auto slot=h.r.adapter.AssignedSlot(Fixture::a);
+  h.r.s.input.hands[1].grip.position={.15f,1.2f,-.35f};
+  for(auto& hand:h.r.s.input.hands)hand.active|=Trigger;
+  for(unsigned n=0;n<10;++n){
+   // Grip alone, trigger alone, then both at a shoulder: none requests a draw.
+   const bool trigger=n>=2&&n<8;
+   h.r.s.input.hands[1].trigger=trigger?1.f:0.f;
+   SetBodyInteractionInput(h.r.s,true,true,true,trigger?Fire:0);
+   if(n==4)h.r.s.input.hands[1].grip.position={-.20f,1.58f,.18f};
+   if(n==8)h.r.s.input.hands[1].grip.position={.15f,1.2f,-.35f};
+   const float fire=trigger?1.f:0.f;std::memcpy(h.cache.data()+8+4*8,&fire,4);
+   h.Step(n%2?1.f:0.f);
+   float nativeFire=1;std::memcpy(&nativeFire,h.cache.data()+8+4*8,4);
+   CHECK(nativeFire==0&&h.out.phase==BodyHolsterPhase::Empty&&h.out.blockWeaponActions&&!h.out.allowAutomaticGunHold);
+   CHECK(h.out.visibility.enabled&&h.out.visibility.hide&&h.out.visibility.request==request&&h.out.freeRight);
+   CHECK(h.out.inventory.emptyHands&&!h.out.inventory.request&&!h.out.inventory.committedRequest&&!h.out.select&&!h.out.ordinaryDraw.command);
+   CHECK(!h.r.hands.Current(InteractionHand::Right)&&h.r.intent==intent&&h.r.adapter.AssignedSlot(Fixture::a)==slot);
+   if(trigger)CHECK(h.r.s.interaction==BodyInteractionState::Suspended&&!h.r.adapter.Display(h.r.s.hand.nowNs));
+  }
+  // Fire suspension consumed every grip/contact edge. A later neutral and new
+  // deliberate shoulder squeeze still uses the ordinary hide/show transaction.
+  h.Step(0);h.r.s.input.hands[1].grip.position={-.20f,1.58f,.18f};h.Step(1);
+  CHECK(h.out.select&&h.out.select->id==Fixture::a);h.Step(1);h.Step(1);
+  CHECK(h.out.phase==BodyHolsterPhase::Held&&h.r.hands.Current(InteractionHand::Right));
+ }
+ return 0;
+}
+int EmptyFirePresentationRequiresSoleAction(){
+ using namespace bc2;using namespace interaction;
+ for(unsigned reason=0;reason<12;++reason){HolsterRun h;CHECK(h.Empty());
+  const std::uint32_t extra[]={Use,NextWeapon,PreviousWeapon,Reload,AlternateFire,Sprint,Menu,Jump,Crouch};
+  SetBodyInteractionInput(h.r.s,reason!=9,reason!=10,reason!=11,Fire|(reason<9?extra[reason]:0));
+  CHECK(h.r.s.interaction==BodyInteractionState::Suspended&&!h.r.s.fireOnlyPresentationSuspension);
+  if(reason>=3&&reason<9)CHECK(h.r.s.cancelOnlyForFire); // Selected-tool provenance is unchanged.
+  h.r.s.input.hands[1].trigger=1;h.Step(1);
+  CHECK(h.out.phase==BodyHolsterPhase::Recovering&&!h.out.visibility.enabled&&!h.out.freeRight);
+  CHECK(h.out.blockWeaponActions&&!h.out.allowAutomaticGunHold&&!h.out.select&&!h.out.inventory.request&&!h.out.ordinaryDraw.command);
+  CHECK(!h.r.hands.Current(InteractionHand::Right));
+ }
+ return 0;
+}
+int EmptyFirePresentationRejectsLostProof(){
+ using namespace bc2;using namespace interaction;
+ for(unsigned fault=0;fault<27;++fault){HolsterRun h(BodyInventoryHolsterAcceptance,true);CHECK(h.Empty());
+  h.r.Advance(1);h.r.s.input.hands[1].trigger=1;SetBodyInteractionInput(h.r.s,true,true,true,Fire);
+  switch(fault){
+   case 0:h.r.s.cancel=true;break;
+   case 1:h.r.s.reloadBusy=true;break;
+   case 2:h.r.s.input.focused=false;break;
+   case 3:h.r.s.input.headValid=false;break;
+   case 4:h.r.s.hand.focused=false;break;
+   case 5:h.r.s.hand.tracked[0]=false;break;
+   case 6:h.r.s.hand.tracked[1]=false;break;
+   case 7:h.r.s.hand.deadlineNs=h.r.s.hand.nowNs;break;
+   case 8:++h.r.s.input.generation;break;
+   case 9:++h.r.s.input.spaceGeneration;break;
+   case 10:++h.r.s.owner.equipGeneration;break;
+   case 11:++h.r.s.hand.owner.equipGeneration;h.r.s.gun.generation=h.r.s.hand.owner.equipGeneration;break;
+   case 12:h.invalidMetadata=1;break;
+   case 13:h.r.f.Word(Fixture::bd+0x64,0x34567);break;
+   case 14:h.r.f.denyMap=true;break;
+   case 15:h.allowReadback=false;break;
+   case 22:h.invalidMetadata=4;break;
+   case 23:h.invalidMetadata=3;break;
+   case 24:h.r.s.hand.observedNs=h.r.s.hand.nowNs+1;break;
+   case 25:h.r.s.hand.nowNs=1;break;
+   case 26:++h.r.s.owner.actorGeneration;break;
+  }
+  h.Tick([&](BodyHolsterSample& sample){
+   if(fault==16)sample.visibility->verifiedCopyMask=1;
+   if(fault==17)sample.visibility.reset();
+   if(fault==18)++sample.visibility->nativeOwner.equipGeneration;
+   if(fault==19)++sample.suppression->nativeTick;
+   if(fault==20)++sample.suppression->cache;
+   if(fault==21)sample.visibility->deadlineNs=h.r.s.hand.nowNs;
+  });
+  CHECK(h.out.phase==BodyHolsterPhase::Recovering&&!h.out.visibility.enabled&&!h.out.freeRight);
+  CHECK(h.out.blockWeaponActions&&!h.out.allowAutomaticGunHold&&!h.out.select&&!h.out.inventory.request&&!h.out.ordinaryDraw.command);
+  CHECK(!h.r.hands.Current(InteractionHand::Right));
+ }
+ return 0;
+}
 int EmptyHandsSurviveInteractionSuspension(){
  using namespace bc2;using namespace interaction;
  for(unsigned reason=0;reason<8;++reason){HolsterRun h;CHECK(h.Empty());
@@ -919,6 +1005,7 @@ int EmptyHandsSurviveInteractionSuspension(){
 }
 
 int NativePumpDebtProtectsActualShoulderAndResourceLifetime(){
+ if(EmptyHandsKeepPresentationDuringFireOnlyInput()||EmptyFirePresentationRequiresSoleAction()||EmptyFirePresentationRejectsLostProof())return 1;
  if(EmptyHandsSurviveInteractionSuspension())return 1;
  using namespace bc2;using namespace interaction;
  const auto config=[] {const auto& d=SpasReloadDescriptor;ReloadObservedConfig c;

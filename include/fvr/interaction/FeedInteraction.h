@@ -444,11 +444,28 @@ public:
             if(guidedPlacement)out.target=GuidePlacement(motion,contact.weaponFromHandContact,*out.target,sample.grip);
             moved_=moved_||Distance(carried_,*out.target)>1e-6||Angle(carried_,*out.target)>1e-6;
             previous_=contact.weaponFromHandContact;carried_=*out.target;
-            const bool aligned=(!guidedPlacement||(placementContact_&&placementContact_->seated))&&
+            bool aligned=(!guidedPlacement||(placementContact_&&placementContact_->seated))&&
                 Distance(carried_,motion.placement.weaponFromDestination)<=motion.pathToleranceMeters&&
                 Angle(carried_,motion.placement.weaponFromDestination)<=motion.orientationToleranceRadians;
-            // No hysteresis outside the measured destination. A fresh held
-            // observation must establish dwell before a fresh release edge.
+            if(candidate.operation==FeedPhysicalOperation::DetachContainer){
+                // Removal clears a measured mount; the extracted container is
+                // free to rotate and travel farther. It need not be parked at
+                // the authored animation's final pose. Sideways/backwards
+                // movement cannot substitute for outward clearance.
+                double distanceSquared=0,projection=0;
+                for(unsigned axis=0;axis<3;++axis){
+                    const double outward=double(motion.placement.weaponFromDestination.values[3][axis])-
+                        motion.placement.weaponFromSource.values[3][axis];
+                    const double moved=double(carried_.values[3][axis])-motion.placement.weaponFromSource.values[3][axis];
+                    distanceSquared+=outward*outward;projection+=moved*outward;
+                }
+                const double distance=std::sqrt(distanceSquared);
+                aligned=distance>2*motion.pathToleranceMeters&&
+                    projection>=distance*(distance-motion.pathToleranceMeters);
+            }
+            // Crossing back inside the clearance plane (or leaving an
+            // insertion destination) resets dwell. A fresh held observation
+            // must establish dwell before a fresh release edge.
             if(!aligned){endpoint_=0;placementDwelled_=false;}
             if(sample.grip){
                 if(aligned&&!endpoint_)endpoint_=contact.observedNs;

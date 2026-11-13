@@ -100,6 +100,9 @@ struct BodyDrawSample {
     // Never set for lost tracking, reload, Use/equip, or invalid aiming.
     BodyInteractionState interaction=BodyInteractionState::Available;
     bool cancelOnlyForFire=false;
+    // Stricter presentation-only provenance: Fire is the sole action bit.
+    // Selected-tool cancellation above retains its existing conflict semantics.
+    bool fireOnlyPresentationSuspension=false;
 };
 struct BodyDrawResult {
     std::optional<WeaponModeCommand> command;

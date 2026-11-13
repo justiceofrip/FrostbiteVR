@@ -28,8 +28,13 @@ struct Bc2PhysicalFeedPresentation {
     unsigned chainCount=0;
     // Bits: pouch=1, cover=2, then active chain bones. Cover is always attached.
     // Carried parts use their retained original basis; attached parts use the
-    // current placed weapon. Neither release nor a pending receipt erases it.
+    // current placed weapon. Mechanical custody retains its original bases.
     std::uint16_t carriedPartsMask=0;
+    // Presentation only: an explicitly released, empty original falls for
+    // 750ms, then its pouch/chain are hidden in the private skin palette.
+    // Replacement custody and tracking suspension never start this lifecycle.
+    std::uint16_t hiddenPartsMask=0;
+    std::int64_t droppedOriginalAtNs=0;
     math::Matrix4 pouchCarryWeaponWorldMeters{},chainCarryWeaponWorldMeters{};
     math::Matrix4 originalWeaponWorldMeters{};
     std::optional<math::Matrix4> mechanismWristWorldMeters;

@@ -1,5 +1,6 @@
 #pragma once
 #include "fvr/interaction/MeleeStroke.h"
+#include "fvr/interaction/BodyGripApproach.h"
 #include "KnifeRecognitionDiagnostic.h"
 #include "fvr/interaction/InputMenuOwnership.h"
 
@@ -83,6 +84,9 @@ public:
     // A physical calibration/source loss clears only recognition. Submitted
     // native work keeps its original completion and cleanup owner.
     void InvalidateMotion()noexcept{motion_.Invalidate();}
+    // A skipped gather cannot retain a neutral arm or squeeze approach. This
+    // revokes only uncommitted draw input, never staged/native work or custody.
+    void InvalidateDrawInput()noexcept{drawApproach_.reset();armed_=false;}
     bool RecognitionReady(const HandInteractionSample& source)const noexcept {
         return phase_==KnifePhase::Held&&!returnWanted_&&motion_.ReadyFor(source);
     }
@@ -124,6 +128,21 @@ public:
     }
 private:
     struct StockTriggerSource {HandInteractionSample source;HandClaimToken hold;float trigger;};
+    struct DrawApproach {HandInteractionSample source;HandInteractionKey knife;std::uint64_t menuEpoch;std::int64_t startedNs;};
+    bool DrawApproachCurrent(const KnifeSample& s,const HandInteraction& hands)const noexcept {
+        const auto& p=*drawApproach_;const auto& f=s.source;
+        if(phase_!=KnifePhase::Stowed||!Fresh(s)||f.owner!=p.source.owner||s.knife!=p.knife||
+           s.menu.epoch!=p.menuEpoch||!GameplayOwnsInput(s.menu,f.nowNs)||!s.onFoot||!s.controlsNeutral||
+           !s.emptyHands||!s.fireSuppressed||!s.mechanicsSettled||!s.handSupported[1]||
+           s.gripHeld[0]||!s.gripHeld[1]||!f.released[0]||f.released[1]||
+           hands.Current(InteractionHand::Left)||hands.Current(InteractionHand::Right)||
+           f.sequence<p.source.sequence||f.observedNs<p.source.observedNs||f.nowNs<p.source.nowNs||
+           f.observedNs-p.source.observedNs>BodyGripApproach::SampleGapNs||
+           f.nowNs-p.startedNs>=BodyGripApproach::WindowNs)return false;
+        return f.sequence==p.source.sequence?
+            f.observedNs==p.source.observedNs&&f.deadlineNs==p.source.deadlineNs:
+            f.observedNs>p.source.observedNs;
+    }
     // Observe only the current drawn owner. A missing/changed source, conflict,
     // busy attack or held trigger at admission requires another neutral packet.
     bool PrepareStockTrigger(const KnifeSample& s,const HandInteraction& hands)noexcept {
@@ -173,6 +192,10 @@ private:
     std::optional<KnifeCommand> PrepareCore(const KnifeSample& s,HandInteraction& hands,KnifeRecognitionRecord* observation,bool stockTriggerRequest)noexcept {
         const auto gate=[&](KnifeRecognitionGate value){if(observation)observation->gate=value;};
         const auto& f=s.source;
+        if(drawApproach_){
+            if(!DrawApproachCurrent(s,hands))drawApproach_.reset();
+            else if(f.sequence==drawApproach_->source.sequence)drawApproach_->source.nowNs=f.nowNs;
+        }
         if(Fresh(s)&&f.observedNs>observed_&&actor_&&(actor_!=f.owner.actor||actorGeneration_!=f.owner.actorGeneration)){
             // Native adapter separately retires its old lifetime. No request is
             // transplanted to a new actor or reference space by this policy.
@@ -232,12 +255,23 @@ private:
         }
         if(phase_==KnifePhase::Stowed){
             if(s.controlsNeutral&&neutral){armed_=true;return {};}
-            const bool eligible=s.controlsNeutral&&armed_&&s.emptyHands&&s.fireSuppressed&&s.mechanicsSettled&&
+            const bool eligible=s.controlsNeutral&&s.emptyHands&&s.fireSuppressed&&s.mechanicsSettled&&
                 !hands.Current(InteractionHand::Left)&&!hands.Current(InteractionHand::Right)&&s.knife.id&&s.knife.generation;
-            armed_=false;
+            const bool pressed=armed_;armed_=false;
             if(!eligible||s.gripHeld[0]==s.gripHeld[1])return {};
             const unsigned h=s.gripHeld[0]?0:1;
-            if(!s.handSupported[h]||!Contact(s.chest[h],f))return {};
+            if(!s.handSupported[h])return {};
+            if(!Contact(s.chest[h],f)){
+                // As with body holsters, a deliberate squeeze may precede
+                // contact by at most 600ms. This retains gesture continuity,
+                // never a source lease, claim, native receipt or draw authority.
+                if(h==1&&pressed&&f.released[0]&&!f.released[1])
+                    drawApproach_=DrawApproach{f,s.knife,s.menu.epoch,f.observedNs};
+                else if(drawApproach_)drawApproach_->source=f;
+                return {};
+            }
+            const bool approached=h==1&&drawApproach_.has_value();drawApproach_.reset();
+            if(!pressed&&!approached)return {};
             hand_=static_cast<InteractionHand>(h);knife_=s.knife;
             auto acquired=hands.Acquire(f,{f.owner,hand_,HandClaimKind::BodyInventory,knife_,s.chest[h],s.claimIntent,0});
             if(!acquired.claim)return {};claim_=acquired.claim->token;
@@ -371,8 +405,9 @@ private:
     void Clear()noexcept {
         phase_=KnifePhase::NeedNeutral;actor_=actorGeneration_=space_=sequence_=menuEpoch_=0;observed_=0;knife_={};claim_.reset();
         staged_.reset();pending_.reset();motion_.Invalidate();nativeOwned_=returnWanted_=mayAcquireHold_=armed_=false;
-        stockTriggerSource_.reset();stockTriggerArmed_=false;
+        stockTriggerSource_.reset();stockTriggerArmed_=false;drawApproach_.reset();
     }
+    std::optional<DrawApproach> drawApproach_;
     std::optional<StockTriggerSource> stockTriggerSource_;bool stockTriggerArmed_=false;
     KnifeRecognitionDiagnostic* recognition_=nullptr;
     KnifePhase phase_=KnifePhase::NeedNeutral;InteractionHand hand_=InteractionHand::Right;HandInteractionKey knife_{};

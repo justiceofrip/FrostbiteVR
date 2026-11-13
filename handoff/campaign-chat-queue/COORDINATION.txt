@@ -16,7 +16,7 @@ Private0.1.99 installed and setup-validated; fallback0.1.98, earlier versions re
 Compiled source1998a3568a1f25772191569f51ba952ff4492d5c; nativeclosure897e3239c2abcde5964fd9030e5d44629230c69d4159f74d2621a144daa51014.
 Normal checks364x86/361x64 and focused magazine-resource/physical-bolt checks passed; unchanged hostWARP reused.
 Receipt: reports/coordinator-20261108-feedback721/normal99/run02/installation.json.
-Settings/cache/shortcut preserved. User will test locally before public launcher posting; no public release or new headset acceptance.
+Settings/cache/shortcut preserved. User tested99: LMG replacement pickup, dropped-box hover, chest draw and empty-hand firearm display failed. Public posting remains on hold; repairs require a new candidate and local acceptance.
 
 CURRENT SOURCE
 Source1998a35 is pushed and installed99. Shared bolt control now distinguishes exact current-held attached magazine waiting from actual magazine manipulation, preserving the owed stroke without relaxing Fire/transfer/ownership guards. The shot driver uses the pinned runtime timer with exact retained grip. Actual98/15 cancellation and earlier failures remain preserved; full bolt reload remains open. Nativefocused checks and all normal suites pass; preparation fixtures were updated to the current composed path.

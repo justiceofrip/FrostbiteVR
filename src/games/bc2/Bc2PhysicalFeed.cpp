@@ -396,6 +396,13 @@ struct Bc2PhysicalFeed::State {
         FeedInteractionTargetKind kind=FeedInteractionTargetKind::None;
         math::Matrix4 targetFromWrist{},weaponFromContact{};
     };
+    struct OriginalDrop {
+        Bc2FeedPose pose{};
+        math::Matrix4 pouchBasis{},chainBasis{};
+        std::int64_t releasedNs=0;
+        std::uint16_t carriedPartsMask=0;
+        bool applied=false;
+    };
     struct Equipment {
         explicit Equipment(const Bc2FeedRegistration& row)noexcept
             :registration(row),pose(row.geometry.poses[unsigned(Bc2FeedPoseId::Resting)]){}
@@ -420,6 +427,7 @@ struct Bc2PhysicalFeed::State {
         std::optional<FeedEquipmentGate> gate;
         math::Matrix4 pouchBasis{},chainBasis{};
         std::uint16_t carriedPartsMask=0;
+        std::optional<OriginalDrop> originalDrop;
         bool gateFailed=false;
         bool refused=false,motionDirty=false,completedHold=false;
         FeedPhysicalOperation activeOperation=FeedPhysicalOperation::None;
@@ -592,6 +600,20 @@ struct Bc2PhysicalFeed::State {
         if(e.carriedPartsMask&1)pose.weaponFromPouch=feed_interaction_detail::Multiply(feed_interaction_detail::Multiply(e.pose.weaponFromPouch,e.pouchBasis),inverse);
         if(e.carriedPartsMask&ChainMask(e.registration.geometry.chainCount))pose.weaponFromFeedRoot=feed_interaction_detail::Multiply(feed_interaction_detail::Multiply(e.pose.weaponFromFeedRoot,e.chainBasis),inverse);
         return pose;
+    }
+    static void PresentOriginalDrop(const Equipment& e,Bc2PhysicalFeedPresentation& p,std::int64_t now)noexcept {
+        p.hiddenPartsMask=0;p.droppedOriginalAtNs=0;
+        if(!e.originalDrop||!e.originalDrop->applied||e.container!=FeedContainerState::Detached)return;
+        const auto& drop=*e.originalDrop;
+        const auto parts=ComposeBc2FeedPresentation(e.supply,drop.pose);if(!parts)return;
+        constexpr std::int64_t duration=750000000;
+        const auto elapsed=std::clamp(now-drop.releasedNs,std::int64_t{0},duration);
+        const auto seconds=double(elapsed)*1e-9;const auto fall=float(4.905*seconds*seconds);
+        p.weaponFromPouch=parts->weaponFromPouch;p.weaponFromChain=parts->weaponFromChain;
+        p.carriedPartsMask=drop.carriedPartsMask;p.droppedOriginalAtNs=drop.releasedNs;
+        p.pouchCarryWeaponWorldMeters=drop.pouchBasis;p.chainCarryWeaponWorldMeters=drop.chainBasis;
+        p.pouchCarryWeaponWorldMeters.values[3][1]-=fall;p.chainCarryWeaponWorldMeters.values[3][1]-=fall;
+        if(elapsed==duration)p.hiddenPartsMask=drop.carriedPartsMask;
     }
     void PoseTarget(Equipment& e,const FeedInteractionResult& r,const math::Matrix4& weaponWorld)noexcept {
         if(!r.target)return;const auto& g=e.registration.geometry;const auto op=e.activeOperation;
@@ -775,6 +797,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
                         p->supply=slot->supply;p->weaponFromPouch=parts->weaponFromPouch;p->weaponFromChain=parts->weaponFromChain;
                         p->chainCount=parts->chainCount;p->coverRadians=slot->coverRadians;p->carriedPartsMask=slot->carriedPartsMask;
                         p->pouchCarryWeaponWorldMeters=slot->pouchBasis;p->chainCarryWeaponWorldMeters=slot->chainBasis;
+                        State::PresentOriginalDrop(*slot,*p,now);
                         math::Matrix4 identity{};for(unsigned i=0;i<4;++i)identity.values[i][i]=1;
                         p->weaponFromCoverHinge=feed_interaction_detail::Multiply(Along(identity,FeedMotionKind::Hinge,slot->coverRadians),g.weaponFromHinge);
                         p->operation=FeedPhysicalOperation::None;p->targetKind=FeedInteractionTargetKind::None;
@@ -856,6 +879,13 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         completed.snapshot=state.Snapshot(old,receipt->post,s.input);completed.binding=state.Binding(old);
         const auto accepted=old.session->Update(completed);
         if(accepted.receiptAccepted){state.diagnostics.receipts.fetch_add(1,std::memory_order_relaxed);
+            const auto operation=receipt->command.authority.operation;
+            if(operation==FeedPhysicalOperation::DetachContainer&&old.originalDrop){
+                if(receipt->acknowledgement.status==FeedReloadAcknowledgement::Applied)old.originalDrop->applied=true;
+                else old.originalDrop.reset();
+            }
+            if(operation==FeedPhysicalOperation::AttachContainer&&receipt->acknowledgement.status==FeedReloadAcknowledgement::Applied)
+                old.originalDrop.reset();
             if(receipt->command.authority.effect==FeedAmmunitionEffect::RefillLoaded)
                 (void)old.ammunitionSupply.Complete(*receipt);
             old.pending.reset();old.refused=false;old.motionDirty=true;old.recoveryContact.reset();old.presentationSource.reset();old.supportNeutral.reset();++old.revision;}
@@ -1119,6 +1149,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         e->container==FeedContainerState::Detached&&e->supplyNeutral&&!e->pending,hands,intent);
     if(!hadSupplyLoss&&e->ammunitionSupply.Held())supplyLoss.reset();
     if(acquiredSupply){
+        e->originalDrop.reset();
         // Move the acquired reserve representation from the chest grasp into
         // the existing articulated feed presentation. Loaded rounds stay in
         // their original native store until the exact refill receipt.
@@ -1237,6 +1268,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             const auto lifetime=Lifetime();if(!lifetime){out.blocksFire=true;return finish(FeedExit::LifetimeExhausted);}
             captureMechanismLoss(*e,FeedSupplyLossSite::LifetimeReset,FeedExit::PolicyStatus);
             e->lifetime=lifetime;e->refill={FeedRefillState::Required,lifetime,0};e->refused=false;
+            e->originalDrop.reset();
             try{e->session=std::make_unique<FeedEquipmentSession>(profile,e->motions,FeedEquipmentOwner(s.owner),e->mechanism,e->supply,lifetime,
                 e->original.binding.context.resource);}catch(...){out.blocksFire=true;return finish(FeedExit::SessionUnavailable);}
             state.PublishGate(*e,s,hands);
@@ -1441,6 +1473,16 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
            (result.session.interaction.status==FeedInteractionStatus::Interrupted||result.session.interaction.status==FeedInteractionStatus::OffPath||
             result.session.interaction.status==FeedInteractionStatus::MotionJump||result.session.interaction.status==FeedInteractionStatus::Expired))e->motionDirty=true;
         if(result.dispatch){
+            // Only the actual neutral release completing an empty ORIGINAL
+            // detach can seed a visual drop. Wait for its accepted receipt;
+            // suspension, replacement custody and partial originals retain
+            // their exact mechanical/custody geometry and ammunition.
+            if(result.dispatch->authority.operation==FeedPhysicalOperation::DetachContainer&&
+               !source->grip&&sourceInput.released[0]&&!s.grip&&s.input.released[0]&&
+               !source->native->counts.loaded&&!result.dispatch->before.counts.loaded&&
+               !e->ammunitionSupply.Custody())
+                e->originalDrop=State::OriginalDrop{e->pose,e->pouchBasis,e->chainBasis,
+                    sourceInput.observedNs,e->carriedPartsMask,false};
             e->completedHold=e->claim&&source->grip&&
                 (e->activeOperation==FeedPhysicalOperation::OpenCover||e->activeOperation==FeedPhysicalOperation::CloseCover);
             FeedEquipmentSubmission submission;submission.command=*result.dispatch;submission.source=*source->native;
@@ -1479,6 +1521,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         p->registrationKey=e->registration.key;p->chainCount=pose->chainCount;
         p->weaponFromPouch=pose->weaponFromPouch;p->weaponFromChain=pose->weaponFromChain;p->coverRadians=e->coverRadians;
         p->carriedPartsMask=e->carriedPartsMask;p->pouchCarryWeaponWorldMeters=e->pouchBasis;p->chainCarryWeaponWorldMeters=e->chainBasis;
+        State::PresentOriginalDrop(*e,*p,now);
         p->originalWeaponWorldMeters=s.raw.weaponWorldMeters;p->operation=e->activeOperation;
         if(e->claim){const auto claim=hands.Current(InteractionHand::Left);
             if(claim&&claim->token==*e->claim&&claim->inputSequence==sourceInput.sequence&&claim->deadlineNs>now){

@@ -42,6 +42,9 @@ struct BodyHolsterSample {
     // Temporary input/mechanism unavailability. Existing empty intent has no
     // pose/claim authority until exact carried identity is proved on resume.
     bool interactionSuspended=false;
+    // Sole Fire conflict with otherwise current input. Only an already proven
+    // exact Empty presentation may remain; no gesture, selection or new claim.
+    bool fireOnlySuspension=false;
     WeaponEquipmentIdentity equipment{};
     bool triggerNeutral=false; // Fresh actual source trigger state, never a masked action.
     std::optional<OrdinaryEquipmentPair> ordinaryPair;

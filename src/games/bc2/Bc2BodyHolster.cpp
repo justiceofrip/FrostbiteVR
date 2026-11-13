@@ -231,6 +231,27 @@ BodyHolsterResult Bc2BodyHolster::Tick(BodyInventory& policy,const BodyHolsterSa
         out.allowAutomaticGunHold=phase_==BodyHolsterPhase::Held&&Fresh(s)&&!s.cancel;Record(s,out,hands);return out;};
     const auto recover=[&](bool trackingGap=false){if(!trackingGap){emptyIntent_=false;rebindEmpty_=false;inputGapOwner_.reset();}pending_.reset();phase_=BodyHolsterPhase::Recovering;body.intent={};};
     if(s.interactionSuspended){
+        // A trigger on an empty hand does not draw the native-selected gun.
+        // Retain only this exact committed presentation, with the same fresh
+        // metadata, paired hide and suppression required by ordinary Empty.
+        if(s.fireOnlySuspension&&phase_==BodyHolsterPhase::Empty&&emptyIntent_&&!pending_&&
+           Fresh(s)&&!s.cancel&&!s.reloadBusy&&ProfileAccepted(s)&&s.nativeOwner==renderOwner_&&
+           s.hand.owner==physicalOwner_&&s.body.inventory.revision==revision_&&
+           s.carried&&s.carried==emptyCarried_&&s.body.inventory.selected&&
+           s.body.inventory.selected->id==s.nativeOwner.weapon){
+            const WeaponVisibilityRequest visible{true,true,render_,s.nativeOwner,s.hand,s.selected,diagnosticDeadline_};
+            const auto demand=Demand(s);
+            if(demand&&s.suppression&&HolsterSuppressionCurrent(*s.suppression,*demand)&&
+               s.visibility&&Receipt(*s.visibility,visible,s.hand.nowNs)){
+                hands.Update(s.hand);body.intent={};
+                body.inventory.presentation=BodyPresentation::EmptyHands;body.inventory.fireSuppressed=true;
+                out.inventory=policy.Update(body);out.inventoryEvaluation=BodyInventoryEvaluation::Evaluated;
+                out.visibility=visible;
+                if(!hands.Current(InteractionHand::Right))
+                    out.freeRight=BodyFreeRightEvidence{visible,*s.visibility,*s.suppression,s.hand,diagnosticDeadline_};
+                return finish();
+            }
+        }
         // The inventory coordinator already suspended portable requests.
         // Keep only prior committed empty intent, revalidated on resume;
         // suspension itself emits no pose, receipt, selection or hand claim.

@@ -41,6 +41,7 @@ bool Bc2ChestKnifeCoordinator::TickIdleHeldGun(const BodyDrawSample& s,const Bc2
 #endif
 }
 void Bc2ChestKnifeCoordinator::Missing(std::int64_t now,HandInteraction& hands)noexcept {
+    policy_.InvalidateDrawInput();
     recognition_.Window(liveObservation_.Requested(now));
     policy_.ObserveRecognition(recognition_.Enabled()?&recognition_:nullptr);
     KnifeRecognitionCoordinator projection;projection.bodyOperation=bodyOperation_;projection.gatherMissing=true;
@@ -218,6 +219,7 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
     const bool prepared=chestKnifeNative::BeforePrepare(sample,policy_,&beforePrepare,unavailableMotion);
     projection.beforePrepare=unsigned(beforePrepare);
     if(!prepared||inspectionSuspended||measurementSuspended){
+        policy_.InvalidateDrawInput();
         // Keep recognition stationary only inside the existing packet/sample
         // bounds. This cannot run Observe/Prepare/Stage, renew custody or turn
         // retained calibration into a native-ready source.

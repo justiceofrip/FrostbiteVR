@@ -566,8 +566,10 @@ BodyHolsterResult Bc2BodyInventory::TickHolster(const WeaponModeMemory& memory,c
         const auto metadata=ObserveSuspended(memory,source);BodyHolsterResult out;
         const bool samePhysicalItem=priorKey.id&&std::any_of(life_.begin(),life_.end(),[&](const Life& item){return item.key==priorKey;});
         // A temporarily unavailable gesture is not a request to draw the gun.
-        // Retire all pending/pose/receipt authority, retaining only a committed
-        // empty intent. Observation gaps may renew portable item generations;
+        // Ordinary suspension retires pending/pose/receipt authority, retaining
+        // only committed empty intent. The sole-Fire exception below supplies
+        // new current evidence, never the missing authority from a gap.
+        // Observation gaps may renew portable item generations;
         // CanRebindEmpty independently checks the complete native carried and
         // physical owner identity before fresh suppression/paired hide receipts.
         // Explicit cancellation revokes intent now; changed metadata fails that
@@ -577,7 +579,22 @@ BodyHolsterResult Bc2BodyInventory::TickHolster(const WeaponModeMemory& memory,c
         sample.cancel=source.cancel||sample.cancel;
         sample.interactionSuspended=true;sample.reloadBusy=source.reloadBusy;
         sample.hand=source.hand;sample.nativeOwner=source.owner;sample.gun=source.gun;
+        sample.fireOnlySuspension=source.interaction==BodyInteractionState::Suspended&&source.fireOnlyPresentationSuspension&&
+            !source.cancel&&!source.reloadBusy&&ValidBodyAnchors(config_)&&ValidInput(source.input)&&
+            source.input.focused&&source.input.headValid&&source.input.generation==source.hand.sequence&&
+            source.input.spaceGeneration==source.owner.space&&samePhysicalItem&&
+            source.hand.nowNs>0&&nativeProofNs_==source.hand.nowNs&&nativeBinding_&&
+            nativeBinding_->selectedOwner==source.owner&&nativeBinding_->physicalOwner==source.hand.owner&&sequence_!=UINT64_MAX;
+        if(sample.fireOnlySuspension){
+            // ObserveSuspended has just proved this exact carried inventory and
+            // retired every gesture. Pass fresh presentation evidence only.
+            sample.carried=nativeBinding_->carried;
+            sample.body.inventory={owner_,revision_,++sequence_,source.hand.nowNs,items_,priorKey};
+            sample.body.nowNs=source.hand.nowNs;sample.body.focused=source.hand.focused;
+            sample.body.handTracked=source.hand.tracked[1];sample.body.intent={};
+        }
         if(holster.Phase()!=BodyHolsterPhase::Held)out=evaluate();
+        if(out.inventoryEvaluation==BodyInventoryEvaluation::Evaluated)slots_=out.inventory.slots;
         out.ordinaryDraw=metadata;out.phase=holster.Phase();
         out.blockWeaponActions=pendingOperation||holster.BlocksActions()||!existingHold||!samePhysicalItem;out.allowAutomaticGunHold=false;
         return out;
