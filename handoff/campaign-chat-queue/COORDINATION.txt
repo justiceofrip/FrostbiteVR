@@ -12,14 +12,14 @@ Ownership/ready/blocked tasks: COORDINATOR-STATE.txt (local scheduling record).
 External worktrees remain untouched; finished25/26/33 source is integrated. Steam32 lacks its executable.
 
 INSTALLED RUNTIME
-Private0.1.96 installed and setup-validated; fallback0.1.95, earlier versions retained.
-Compiled sourceeee3ffa0883e419ca4c87b9880b09a97b1aeb7e5; nativeclosurebb77c2287ae7b3a25b6b6a20b3b5c5dea3785b52444aa423744037bdc8f611df.
+Private0.1.97 installed and setup-validated; fallback0.1.96, earlier versions retained.
+Compiled sourcef252d949bff5614f28f815df3896ba7b6fac2327; nativeclosure07ac8fcb48135dcac1879e3e17aab7f993dcea72f2f2df27b81b1bf53fd06076.
 Normal checks364x86/361x64 and focused vehicle checks passed; unchanged hostWARP reused.
-Receipt: reports/coordinator-20261108-feedback721/normal96/run01/installation.json.
+Receipt: reports/coordinator-20261108-feedback721/normal97/run02/installation.json.
 Settings/cache/shortcut preserved. No public release or new physical-headset acceptance.
 
 CURRENT SOURCE
-Sourceeee3ffa is pushed/remote-verified and installed96. Exact binding-failure observations and bounded neutral GatherPending recovery are included, alongside95's yaw/timing changes.
+Sourcef252d94 is pushed/remote-verified and installed97. The verified semantic ChangeEntry route admits an exactly unbound keyboard concept while retaining other binding/ownership/permission/restoration checks. Prior bounded diagnostics and neutral GatherPending recovery remain included.
 The navigation batch removes the developer tool's firearm-publication prerequisite for ordinary on-foot input, keeping original actor/input/menu deadlines and weapon admission unchanged.
 Handoff: handoff/integrations/coordinator-20261113-navigation/README.txt.
 
@@ -28,7 +28,7 @@ ACTUAL GAME EVIDENCE / NEXT
 93/02 completed boat exit, on-foot movement and shoulder weapon recovery; broader vehicle controls remain open.
 Reuse91/02 complete belt-feed reload and subsequent native shot,92/01 held-weapon swaps,87/08 complete opening-breech reload/fire/primary-return. Do not repeat passed routes for unrelated tool changes.
 94/01 resumed93/04 SP01 beach and moved water-to-shore with knife selected;888seconds/native retirement/exact restoration passed. C4objective not reached; diagnostic command expiry remains under investigation.
-95/01 one boat Ahold: nativeverified/freshinput/permissions/cache-readback passed; first refusal=binding, no seat request.183seconds/native retirement/exact restoration passed. Offline binding diagnosis is next; no unchanged retry.
+96/01 isolated the exact unbound keyboard concept;97 implements its supported semantic action. Actual97/01 remained at MainMenu after Resume and sent no seat command;251.745seconds/native retirement/exact restoration passed. The new menu failure is under bounded read-only diagnosis; repaired seat switching remains unproved.
 Bolt-rifle manual magazine route, front-loading underbarrel, C4 progression, broader vehicles, cutscenes/optics and headset performance remain open.
 Shared-mechanism/bulk-profile workflow; individual guns identify evidence samples, not separate implementation projects.
 Current exact evidence: handoff/integrations/coordinator-20261113-family-runtime/README.txt.
