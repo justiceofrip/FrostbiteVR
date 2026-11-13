@@ -9,13 +9,24 @@ void Bc2BoltPlayerCustody::Invalidate()noexcept {
 }
 void Bc2BoltPlayerCustody::Capture(const Bc2BoltPlayerInput& in)noexcept {
     using namespace reload_insertion_detail;
-    if(references_||debt_||retirementRequired_)return;
     const auto& r=in.contact;const auto& a=in.ammunition;const auto& n=in.native;
     const auto now=in.safety.nowNs;
-    const bool idle=a&&a->verified&&a->identity.owner==in.owner&&a->sequence&&a->allThreeIdle&&a->loaded>0&&
+    const bool returned=selectionReturn_&&n&&n->selectionReturn&&n->selectionReturn->handBound&&
+        n->selectionReturn->current==selectionReturn_->current&&n->selectionReturn->cycle==selectionReturn_->cycle&&
+        n->selectionReturn->shot==selectionReturn_->shot&&n->selectionReturn->callbackRevision==selectionReturn_->callbackRevision&&
+        n->retainedDebtOrigin&&n->debt&&n->native==selectionReturn_->current&&n->native.owner==in.owner&&
+        n->debt->owner==in.safety.owner&&n->debt->item==in.item&&
+        n->debt->mechanism==HandInteractionKey{calibration_->profile.id,in.item.generation}&&
+        n->debt->cycle==selectionReturn_->cycle&&n->debt->shot==selectionReturn_->shot&&
+        n->debt->guardEpoch==selectionReturn_->guardEpoch&&n->phase==Bc2NativeCyclePhase::Advancing&&
+        n->blocksFire&&!n->ready&&!n->releasePending&&a&&a->identity==n->native&&
+        a->loaded==n->debt->loaded&&a->reserve==n->debt->reserve&&a->capacity==n->debt->capacity&&
+        r.raw.input.observedNs>=selectionReturn_->observedNs;
+    if(references_||(debt_&&!returned)||retirementRequired_)return;
+    const bool idle=a&&a->verified&&a->identity.owner==in.owner&&a->sequence&&a->allThreeIdle&&(a->loaded>0||(returned&&a->loaded==0))&&
         a->loaded<=a->capacity&&a->reserve>=0&&weapon_cycle_detail::Window(a->observedNs,a->deadlineNs,now)&&
-        n&&!n->blocksFire&&!n->held&&!n->ready&&
-        (n->phase==Bc2NativeCyclePhase::Watching||n->phase==Bc2NativeCyclePhase::Complete);
+        n&&(returned||(!n->blocksFire&&!n->held&&!n->ready&&
+        (n->phase==Bc2NativeCyclePhase::Watching||n->phase==Bc2NativeCyclePhase::Complete)));
     if(!idle||!r.nativePartValid||!Rigid(r.nativePartInWeapon)||
        Distance(r.nativePartInWeapon,calibration_->profile.closedContact)>.005f||
        Angle(r.nativePartInWeapon,calibration_->profile.closedContact)>.02f){candidate_.reset();stableAt_=0;return;}
@@ -37,9 +48,15 @@ std::optional<Bc2PhysicalBoltSample> Bc2BoltPlayerCustody::Prepare(const Bc2Bolt
     auto in=incoming;
     const auto& s=in.safety;const auto* controls=in.controls;
     if(!calibration_||!BoltCalibrationValid(*calibration_)||!controls)return {};
+    const bool returned=!owner_.player&&in.native&&in.native->selectionReturn&&in.native->retainedDebtOrigin&&
+        in.native->selectionReturn->current==in.native->native&&in.native->native.owner==in.owner&&
+        in.native->selectionReturn->cycle==in.native->cycle&&in.native->selectionReturn->shot==in.native->shot&&
+        !in.native->releasePending&&!in.native->ready;
     if(in.native&&in.native->blocksFire)debt_=true;
     const bool identity=owner_==in.owner&&item_==in.item&&units_==controls->worldUnitsPerMeter;
-    if(!identity){Invalidate();recoveryReferences_.reset();leftCustody_.reset();owner_=in.owner;item_=in.item;units_=controls->worldUnitsPerMeter;selectedAt_=s.nowNs;}
+    if(!identity){Invalidate();recoveryReferences_.reset();leftCustody_.reset();selectionReturn_.reset();
+        if(returned){selectionReturn_=in.native->selectionReturn;retirementRequired_=false;}
+        owner_=in.owner;item_=in.item;units_=controls->worldUnitsPerMeter;selectedAt_=s.nowNs;}
     // Missing render publication is not a different gun. Established custody
     // can map CURRENT controllers through its immutable wrist mapping; it does
     // not reuse the old rendered pose. Before custody, cached raw remains bound
@@ -69,6 +86,15 @@ std::optional<Bc2PhysicalBoltSample> Bc2BoltPlayerCustody::Prepare(const Bc2Bolt
         Invalidate();lastNow_=std::max(lastNow_,s.nowNs);return {};
     }
     lastNow_=s.nowNs;
+    // A render gap before new custody starts does not turn this proven return
+    // into an unknown old actor. No cached pre-switch reference is restored.
+    if(selectionReturn_&&in.native&&in.native->selectionReturn&&
+       in.native->selectionReturn->callbackRevision==selectionReturn_->callbackRevision&&
+       in.native->selectionReturn->current==selectionReturn_->current&&in.owner==selectionReturn_->current.owner&&
+       !in.native->releasePending&&!in.native->ready&&!leftCustody_&&
+       (custody_==BoltCustodyPhase::Idle||custody_==BoltCustodyPhase::AwaitingCustody)){
+        retirementRequired_=false;recoveryReferences_.reset();
+    }
     const auto recovering=in.recovery&&in.recovery->native.owner==in.owner&&in.recovery->authority?
         in.recovery->authority:std::nullopt;
     const auto left=hands.Current(InteractionHand::Left);

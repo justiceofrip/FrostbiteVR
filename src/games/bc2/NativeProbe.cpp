@@ -3918,6 +3918,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         if(mechanismSnapshotsEnabled){
             (void)fvr::bc2::reloadFlowRuntime::EnableFeedGuardTrace();
             (void)fvr::bc2::gameplay::EnableNavigationObservation();
+            (void)fvr::bc2::gameplay::EnableQueuePhaseObservation(bytes,pe.image,imageBase,true,true);
         }
 
 #ifdef FVR_BC2_CAMPAIGN_PROVISIONING

@@ -36,6 +36,7 @@ bool Bc2NativeCycleService::EnableConcurrentBolt()noexcept {
     concurrentBoltEnabled_=true;return true;
 }
 bool Bc2NativeCycleService::BeginRecovery(std::int64_t now)noexcept {
+    if(recovery_.Parked())return true; // No controller packet can unpark native debt.
     if(Recovering()){
         // A submitted stroke keeps its original completion route. Before
         // submission, an interruption revokes advancing hand authority and
@@ -60,6 +61,7 @@ bool Bc2NativeCycleService::BeginRecovery(std::int64_t now)noexcept {
         Profile(mode_,config_)->Convergence(emptyCycle_)))return false;
     for(unsigned b=0;b<3;++b)if(openUpdate_[b]&&!candidate.BeginHold(b,openUpdate_[b],before_[b].nowNs,openDeadline_[b]))return false;
     recovery_=std::move(candidate);++guardEpoch_;phase_=Bc2NativeCyclePhase::Converging;
+    retainedDebtOrigin_=Bc2NativeCycleRetainedDebtOrigin{native_,recovery_.Debt()};
     // Retain issued held-lease identity only to identify an overtaken release.
     // Converging cannot call Release or publish held_, so this grants no pose,
     // motion or completion authority. Cancel/new cycle/rebase still clear it.
@@ -152,7 +154,7 @@ bool Bc2NativeCycleService::SubmitRecovery(const WeaponCycleIdleDebtRelease& rel
 }
 bool Bc2NativeCycleService::AcknowledgeRecovery(const WeaponCycleIdleDebtReady& ready,std::int64_t now)noexcept {
     if(!Recovering()||!recovery_.Acknowledge(ready,now))return false;
-    phase_=Bc2NativeCyclePhase::Complete;return true;
+    phase_=Bc2NativeCyclePhase::Complete;retainedDebtOrigin_.reset();return true;
 }
 bool Bc2NativeCycleService::Configure(Bc2NativeCycleMode mode)noexcept {
     if((mode!=Bc2NativeCycleMode::Spas&&mode!=Bc2NativeCycleMode::M95)||control_.input.sequence||native_.owner.player||
@@ -178,6 +180,8 @@ bool Bc2NativeCycleService::SelectionValid(const Bc2NativeCycleSelection& source
 }
 void Bc2NativeCycleService::ApplySelection(const Bc2NativeCycleSelection& source)noexcept {
     const auto& r=source.reserve;
+    retainedDebtOrigin_.reset();
+    selectionReturn_.reset();parkedSelection_={};
     mode_=source.mode;selectionRequired_=true;selection_=source;
     selectionSequence_=r.sequence;selectionTime_=source.nowNs;
     native_=r.identity;config_=source.config;loaded_=r.loaded;reserve_=r.reserve;capacity_=r.capacity;
@@ -189,6 +193,74 @@ bool Bc2NativeCycleService::Select(const Bc2NativeCycleSelection& source)noexcep
     if(!YieldForReload())return false;
     ApplySelection(source);
     return true;
+}
+bool Bc2NativeCycleService::PrepareSelection(const Bc2NativeCycleSelection& source,
+    const Bc2NativeCycleActorDrain& drain)noexcept {
+    const auto now=source.nowNs;
+    if(!SelectionValid(source)||mode_!=Bc2NativeCycleMode::Bolt||source.mode!=mode_||
+       !recovery_.Active()||!retainedDebtOrigin_||
+       source.reserve.identity!=native_||source.config!=config_||source.reserve.loaded!=loaded_||
+       source.reserve.reserve!=reserve_||source.reserve.capacity!=capacity_||release_||ready_||lastRecoveryRelease_||
+       recovery_.ReloadPause()||recovery_.ReloadCommand()||!drain.callbacksDrained||
+       drain.callbackRevision<=selectionDrainRevision_||drain.expected!=native_||drain.cycle!=cycle_||drain.shot!=shot_||
+       drain.observedNs<source.reserve.observedNs||!weapon_cycle_detail::Window(drain.observedNs,drain.deadlineNs,now)||
+       drain.deadlineNs-drain.observedNs>ContextFreshNs||drain.deadlineNs>source.reserve.deadlineNs||
+       std::any_of(openUpdate_.begin(),openUpdate_.end(),[](auto id){return id!=0;}))return false;
+    auto next=*this;
+    if(!next.BeginRecovery(now)||!next.retainedDebtOrigin_||!next.recovery_.ParkSelection(now))return false;
+    next.parkedSelection_=native_.owner;next.selectionDrainRevision_=drain.callbackRevision;
+    next.selectionIssued_=true; // Remains pending until an exact non-dispatch or actual away observation.
+    next.selectionSequence_=source.reserve.sequence;next.selectionTime_=now;
+    next.selectionReturn_.reset();next.held_.reset();next.issued_={};next.concurrentCycle_=false;
+    next.phase_=Bc2NativeCyclePhase::Converging;*this=std::move(next);return true;
+}
+bool Bc2NativeCycleService::SelectionNotDispatched(std::uint64_t revision)noexcept {
+    if(!revision||revision!=selectionDrainRevision_||!recovery_.Parked()||selectionReturn_||
+       parkedSelection_!=native_.owner)return false;
+    selectionIssued_=false;return true;
+}
+bool Bc2NativeCycleService::ParkSelection(const ReloadHoldIdentity& selected,
+    const Bc2NativeCycleActorDrain& drain,std::int64_t now)noexcept {
+    auto previous=selected.owner;previous.weapon=native_.owner.weapon;
+    previous.equipGeneration=native_.owner.equipGeneration;
+    if(mode_!=Bc2NativeCycleMode::Bolt||!recovery_.Active()||!retainedDebtOrigin_||
+       previous!=native_.owner||selected.owner.weapon==native_.owner.weapon||
+       selected.owner.equipGeneration<=native_.owner.equipGeneration||selected.serverPlayer!=native_.serverPlayer||
+       selected.serverSoldier!=native_.serverSoldier||selected.serverItem==native_.serverItem||
+       !drain.callbacksDrained||!drain.callbackRevision||drain.callbackRevision<=selectionDrainRevision_||
+       drain.expected!=native_||drain.cycle!=cycle_||drain.shot!=shot_||release_||ready_||
+       !weapon_cycle_detail::Window(drain.observedNs,drain.deadlineNs,now)||
+       drain.deadlineNs-drain.observedNs>ContextFreshNs||
+       std::any_of(openUpdate_.begin(),openUpdate_.end(),[](auto id){return id!=0;}))return false;
+    auto next=*this;
+    if(!next.BeginRecovery(now)||!next.retainedDebtOrigin_||!next.recovery_.ParkSelection(now))return false;
+    next.parkedSelection_=selected.owner;next.selectionDrainRevision_=drain.callbackRevision;
+    next.selectionReturn_.reset();next.held_.reset();next.issued_={};next.concurrentCycle_=false;
+    next.phase_=Bc2NativeCyclePhase::Converging;*this=std::move(next);return true;
+}
+bool Bc2NativeCycleService::ReturnSelection(const Bc2NativeCycleSelection& source,
+    const Bc2NativeCycleActorDrain& drain)noexcept {
+    auto previous=source.reserve.identity;previous.owner.equipGeneration=native_.owner.equipGeneration;
+    const auto now=source.nowNs;
+    const bool cancelled=!selectionIssued_&&source.reserve.identity==native_&&parkedSelection_==native_.owner;
+    if(!SelectionValid(source)||mode_!=Bc2NativeCycleMode::Bolt||source.mode!=mode_||
+       !recovery_.Parked()||!retainedDebtOrigin_||selectionReturn_||previous!=native_||source.config!=config_||
+       (parkedSelection_==native_.owner&&!cancelled)||
+       (!cancelled&&source.reserve.identity.owner.equipGeneration<=parkedSelection_.equipGeneration)||
+       source.reserve.loaded!=loaded_||source.reserve.reserve!=reserve_||source.reserve.capacity!=capacity_||
+       release_||ready_||lastRecoveryRelease_||recovery_.ReloadPause()||recovery_.ReloadCommand()||
+       !drain.callbacksDrained||drain.callbackRevision<=selectionDrainRevision_||drain.expected!=native_||
+       drain.cycle!=cycle_||drain.shot!=shot_||drain.observedNs<source.reserve.observedNs||
+       !weapon_cycle_detail::Window(drain.observedNs,drain.deadlineNs,now)||
+       drain.deadlineNs-drain.observedNs>ContextFreshNs||drain.deadlineNs>source.reserve.deadlineNs||
+       !recovery_.Drained()||std::any_of(openUpdate_.begin(),openUpdate_.end(),[](auto id){return id!=0;}))return false;
+    selectionReturn_=Bc2NativeCycleSelectionReturn{native_,source.reserve.identity,cycle_,shot_,
+        recovery_.Epoch(),drain.callbackRevision,now,false};
+    // Only the native binding is published here. The retained hand namespace
+    // must be rebound by a newer real Control packet before callbacks restart.
+    native_=source.reserve.identity;selection_=source;selectionRequired_=true;
+    selectionSequence_=source.reserve.sequence;selectionTime_=now;selectionDrainRevision_=drain.callbackRevision;
+    held_.reset();issued_={};return true;
 }
 std::optional<Bc2NativeCycleActorRetirement> Bc2NativeCycleService::SelectReplacementActor(
     const Bc2NativeCycleSelection& source,const Bc2NativeCycleActorDrain& drain)noexcept {
@@ -227,7 +299,7 @@ std::optional<Bc2NativeCycleActorRetirement> Bc2NativeCycleService::RetireForRep
     forwardReadyAt_={};preRestoredAt_={};preRewindAt_={};cycleState_={};tail_={};before_={};
     issued_={};issueAt_=0;firedMask_=heldMask_=readyMask_=0;failureInvocation_=0;
     began_=deadline_=suspendedAt_=suspendedUntil_=reloadPauseSpent_=0;emptyCycle_=false;
-    recovery_={};concurrentCycle_=false;lastRecoveryRelease_.reset();openHold_={};openDeadline_={};
+    recovery_={};retainedDebtOrigin_.reset();selectionReturn_.reset();parkedSelection_={};concurrentCycle_=false;lastRecoveryRelease_.reset();openHold_={};openDeadline_={};
     held_.reset();releaseSubmittedNs_=0;release_.reset();ready_.reset();ClearAcknowledgedReady();
     native_={};config_={};loaded_=reserve_=capacity_=0;
     selectionRequired_=true;selection_.reset();selectionSequence_=reserve.sequence;selectionTime_=now;
@@ -247,6 +319,15 @@ bool Bc2NativeCycleService::Mapping(const Bc2NativeCycleControl& c)const noexcep
 bool Bc2NativeCycleService::Control(const Bc2NativeCycleControl& c)noexcept {
     if(phase_==Bc2NativeCyclePhase::Cancelled)return false;
     if(selectionRequired_&&(!selection_||c.nativeOwner!=selection_->reserve.identity.owner))return false;
+    if(recovery_.Parked()){
+        if(!selectionReturn_||selectionReturn_->handBound||!Mapping(c)||c.release||c.nativeOwner!=native_.owner||
+           c.input.sequence<=control_.input.sequence||c.input.observedNs<=selectionReturn_->observedNs||
+           c.input.observedNs<=control_.input.observedNs||c.input.nowNs<control_.input.nowNs||
+           c.mechanism.id!=control_.mechanism.id||
+           !recovery_.RebaseSelection({native_,config_},c.input,c.item,c.mechanism))return false;
+        control_=c;selectionReturn_->handBound=true;concurrentCycle_=true;
+        phase_=Bc2NativeCyclePhase::Advancing;held_.reset();issued_={};return true;
+    }
     lastEvent_=0; // Controller admission is not a native invocation.
     if(suspendedAt_&&c.input.nowNs>=suspendedUntil_){Cancel(Bc2NativeCycleFailure::Expired);return false;}
     // Runtime owner checks can overtake a packet's original deadline. Reject
@@ -396,6 +477,7 @@ std::optional<Bc2NativeCycleCompletionWatch> Bc2NativeCycleService::HeldWatch(st
     return Bc2NativeCycleCompletionWatch{native_,config_,cycle_,suspendedAt_,suspendedUntil_,phase_==Bc2NativeCyclePhase::Held};
 }
 std::optional<Bc2NativeCycleCompletionWatch> Bc2NativeCycleService::ObservationWatch(std::int64_t now)const noexcept {
+    if(recovery_.Parked())return {};
     if(Recovering()&&!recovery_.Uncertain()&&now>=recovery_.Began()&&now<=INT64_MAX-100000000)
         return Bc2NativeCycleCompletionWatch{native_,config_,cycle_,recovery_.Began(),now+100000000,false};
     if(const auto completion=CompletionWatch(now))return completion;
@@ -582,7 +664,7 @@ void Bc2NativeCycleService::Finish(const Bc2NativeCycleDecision& d,const ReloadF
         const auto& after=*record.exit.boundary;
         if(phase_!=Bc2NativeCyclePhase::ShotObserved){
             if(cycle_==UINT64_MAX||shot_==UINT64_MAX||record.exit.nowNs>INT64_MAX-MaximumCycleNs){Cancel(Bc2NativeCycleFailure::Shot);return;}
-            recovery_={};concurrentCycle_=false;ClearAcknowledgedReady();++cycle_;++shot_;began_=record.exit.nowNs;deadline_=began_+MaximumCycleNs;
+            recovery_={};retainedDebtOrigin_.reset();selectionReturn_.reset();parkedSelection_={};concurrentCycle_=false;ClearAcknowledgedReady();++cycle_;++shot_;began_=record.exit.nowNs;deadline_=began_+MaximumCycleNs;
             emptyCycle_=emptyShot;reloadPauseSpent_=0;loaded_=after.loaded;reserve_=after.reserve;capacity_=in.capacities[d.branch];
             firedMask_=heldMask_=readyMask_=0;contexts_={};heldAt_={};finishedAt_={};restoredAt_={};restoredPrevious_={};preRestoredAt_={};preRewindAt_={};cycleState_={};tail_={};issued_={};held_.reset();ready_.reset();release_.reset();releaseSubmittedNs_=0;forwardReadyAt_={};
             phase_=Bc2NativeCyclePhase::ShotObserved;
@@ -900,6 +982,7 @@ void Bc2NativeCycleService::Cancel(Bc2NativeCycleFailure failure)noexcept {
     // Cleanup repeats cancellation after the first rejected native event. Keep
     // that first cause and invocation instead of reporting the later teardown.
     if(phase_==Bc2NativeCyclePhase::Cancelled)return;
+    retainedDebtOrigin_.reset();
     ClearAcknowledgedReady();
     if(recovery_.Active())recovery_.LoseGuard();
     suspendedAt_=suspendedUntil_=0;
@@ -929,7 +1012,7 @@ bool Bc2NativeCycleService::AcknowledgeReady(const WeaponCycleReady& ready,std::
        (now==0||now>=ready.observedNs)){
         acknowledgedReady_=ready;acknowledgedAt_=std::max(now,ready.observedNs);
     }
-    ready_.reset();return true;
+    ready_.reset();retainedDebtOrigin_.reset();return true;
 }
 Bc2NativeCycleView Bc2NativeCycleService::View(std::int64_t now)const noexcept {
     Bc2NativeCycleView out{phase_,failure_,native_,{},{},Active(phase_)||ready_.has_value(),loaded_,reserve_,capacity_,cycle_,shot_};
@@ -947,6 +1030,12 @@ Bc2NativeCycleView Bc2NativeCycleService::View(std::int64_t now)const noexcept {
     out.failureInvocation=failureInvocation_;out.heldSuspended=suspendedAt_!=0;
     out.heldSuspensions=heldSuspensions_;out.heldResumptions=heldResumptions_;
     out.trackingRebase=trackingRebase_;
+    if(recovery_.Active())out.debt=recovery_.Debt();
+    out.retainedDebtOrigin=retainedDebtOrigin_;
+    out.selectionParked=recovery_.Parked();out.selectionReturn=selectionReturn_;
+    out.releasePending=(release_&&(phase_!=Bc2NativeCyclePhase::Complete||ready_))||
+        (recovery_.Active()&&!recovery_.Acknowledged()&&lastRecoveryRelease_&&
+         lastRecoveryRelease_->cycle.cycle==cycle_&&lastRecoveryRelease_->cycle.shot==shot_);
     return out;
 }
 }

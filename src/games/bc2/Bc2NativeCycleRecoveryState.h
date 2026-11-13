@@ -170,6 +170,19 @@ public:
     const auto& ReloadCommand()const noexcept{return policy_.ReloadCommand();}
     const auto& LastReloadReceipt()const noexcept{return policy_.LastReloadReceipt();}
     const auto& Debt()const noexcept{return policy_.Debt();}
+    bool ParkSelection(std::int64_t now)noexcept {
+        if(!active_||Uncertain()||!Drained()||ready_||nativeReady_||!policy_.ParkSelection(scope_,now))return false;
+        currentIdle_={};progress_={};grant_.reset();return true;
+    }
+    bool RebaseSelection(const NativeCycleRecoveryScope& next,const interaction::HandInteractionSample& input,
+        interaction::HandInteractionKey item,interaction::HandInteractionKey mechanism)noexcept {
+        auto previous=next;previous.identity.owner.equipGeneration=scope_.identity.owner.equipGeneration;
+        if(!active_||Uncertain()||!Drained()||ready_||nativeReady_||previous!=scope_||
+           next.identity.owner.equipGeneration<scope_.identity.owner.equipGeneration||
+           !policy_.RebaseSelection(scope_,next,input.owner,item,mechanism,input.nowNs))return false;
+        scope_=next;debt_=policy_.Debt();began_=input.nowNs;currentIdle_={};progress_={};grant_.reset();return true;
+    }
+    bool Parked()const noexcept{return policy_.Parked();}
     bool RebaseTracking(const ReloadStateOwner& native,const interaction::HandInteractionSample& input)noexcept {
         auto previous=native;previous.space=scope_.identity.owner.space;
         auto next=scope_;next.identity.owner=native;

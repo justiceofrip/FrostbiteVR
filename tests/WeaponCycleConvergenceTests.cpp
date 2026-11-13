@@ -81,7 +81,34 @@ bool TrackingLossRetainsSubmittedOutcomeAndItsOriginalBounds(){
     auto changed=saved;changed.native.deadlineNs++;CHECK(!f.policy.Acknowledge(changed));
     CHECK(f.policy.Acknowledge(saved));return true;
 }
+bool ParkedSelectionInvalidatesEveryOldAuthority(){
+    Fixture f;CHECK(f.Round(120*Ms));CHECK(f.Round(140*Ms));
+    const auto grant=f.policy.ArmRecovery(f.scope,f.Neutral());CHECK(grant);
+    CHECK(f.Round(160*Ms));CHECK(f.Round(180*Ms));
+    const auto old=f.policy.RecoveryAuthority(f.scope,*grant,f.now);CHECK(old);
+    CHECK(f.policy.ParkSelection(f.scope,200*Ms));
+    CHECK(f.policy.Parked()&&f.policy.BlocksFire()&&!f.policy.Recovery(200*Ms));
+    CHECK(!f.policy.BeginHold(f.scope,0,1000,201*Ms,250*Ms));
+    CHECK(!f.policy.SubmitRecovered(f.scope,{*old,2,101,201*Ms,old->deadlineNs},202*Ms));
+    auto nextScope=f.scope;++nextScope.owners[0];
+    auto owner=f.debt.owner;++owner.equipGeneration;auto item=f.debt.item;item.generation=owner.equipGeneration;
+    auto mechanism=f.debt.mechanism;mechanism.generation=owner.equipGeneration;
+    auto wrong=owner;++wrong.actor;
+    CHECK(!f.policy.RebaseSelection(f.scope,nextScope,wrong,item,mechanism,60000*Ms));
+    const auto original=f.policy.Debt();
+    CHECK(f.policy.RebaseSelection(f.scope,nextScope,owner,item,mechanism,60000*Ms));
+    CHECK(f.policy.Debt().cycle==original.cycle&&f.policy.Debt().shot==original.shot&&
+          f.policy.Debt().guardEpoch==original.guardEpoch&&f.policy.Debt().loaded==original.loaded);
+    CHECK(!f.policy.RecoveryAuthority(nextScope,*grant,60000*Ms)&&!f.policy.Outcome());
+    f.scope=nextScope;f.debt=f.policy.Debt();
+    CHECK(f.Round(60010*Ms));CHECK(f.Round(60030*Ms));
+    const auto fresh=f.policy.ArmRecovery(f.scope,f.Neutral());CHECK(fresh&&fresh->nonce>grant->nonce);
+    CHECK(f.Round(60050*Ms));CHECK(f.Round(60070*Ms));
+    CHECK(f.policy.RecoveryAuthority(f.scope,*fresh,f.now));CHECK(f.policy.BlocksFire()&&!f.policy.Outcome());
+    return true;
+}
 bool IdleAfterLongInterruptionDoesNotEraseUnfinishedGesture(){
+    CHECK(ParkedSelectionInvalidatesEveryOldAuthority());
     Fixture f;f.policy.Interrupt(f.scope,60000*Ms);CHECK(f.Round(60010*Ms));CHECK(f.Round(60030*Ms));
     CHECK(f.policy.Recovery(f.now)&&!f.policy.Outcome()&&f.policy.BlocksFire());
     auto neutral=f.Neutral();const auto grant=f.policy.ArmRecovery(f.scope,neutral);CHECK(grant);

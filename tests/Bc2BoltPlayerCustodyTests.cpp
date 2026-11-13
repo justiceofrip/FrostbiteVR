@@ -201,7 +201,45 @@ int MappingRejectsStaleOrMismatchedFrame(){
         CHECK(!MapBoltTrackedWrists(f.raw,f.input,f.safety,f.frame));
     }return 0;
 }
+int ReturnedDebtRequiresNewVerifiedReferences(){
+    for(unsigned mutation=0;mutation<6;++mutation){
+        Setup f;auto calibration=std::make_shared<Bc2BoltCalibration>(M95AuthoredBoltCalibration(1));
+        calibration->nativeJoined=true;calibration->rigFingerprint=17;f.raw.nativePartInWeapon=calibration->profile.closedContact;
+        Bc2BoltPlayerCustody player(calibration);HandInteraction hands;std::uint64_t intent=0;
+        Bc2BoltPlayerInput in;in.owner=f.owner;in.item={f.owner.weapon,3};in.asset=calibration->asset;in.mesh=calibration->mesh;
+        Bc2NativeCycleView view;view.native.owner=f.owner;view.phase=Bc2NativeCyclePhase::Advancing;
+        view.blocksFire=true;view.cycle=7;view.shot=8;view.loaded=4;view.reserve=45;view.capacity=5;
+        view.debt=WeaponCycleDebt{f.safety.owner,in.item,{calibration->profile.id,3},7,8,9,4,45,5};
+        auto old=view.native;old.owner.equipGeneration-=2;
+        auto oldDebt=*view.debt;oldDebt.owner.equipGeneration-=2;oldDebt.item.generation-=2;oldDebt.mechanism.generation-=2;
+        view.retainedDebtOrigin=Bc2NativeCycleRetainedDebtOrigin{old,oldDebt};
+        view.selectionReturn=Bc2NativeCycleSelectionReturn{old,view.native,7,8,9,100,f.safety.nowNs,true};
+        Bc2AmmoReserveLease ammo;ammo.identity=view.native;ammo.verified=ammo.allThreeIdle=true;
+        ammo.capacity=5;ammo.loaded=4;ammo.reserve=45;
+        switch(mutation){
+        case 1:view.selectionReturn.reset();break;
+        case 2:++view.debt->guardEpoch;break;
+        case 3:++ammo.loaded;break;
+        case 4:view.releasePending=true;break;
+        case 5:view.selectionReturn->handBound=false;break;
+        }
+        in.native=view;
+        for(unsigned n=0;n<75;++n){
+            f.Next();f.raw.raw.input=f.safety;in.controls=&f.input;in.safety=f.safety;in.body=f.frame;in.contact=f.raw;
+            // The first post-selection rendering packet may not exist yet.
+            if(n==0)in.contact={};
+            ammo.sequence=f.safety.sequence;ammo.observedNs=f.safety.observedNs;ammo.deadlineNs=f.safety.deadlineNs;
+            in.ammunition=ammo;const auto sample=player.Prepare(in,hands,intent);
+            if(n&&mutation==0)CHECK(sample&&!sample->cancel&&!sample->custodyTransfer);
+            if(n<60)CHECK(!player.ReferencesReady());
+        }
+        CHECK(player.BlocksFire());CHECK(player.ReferencesReady()==(mutation==0));
+        CHECK(!hands.Current(left)&&!hands.Current(right));
+    }
+    return 0;
+}
 int StableReferencesFreezeAndRecenterInvalidates(){
+    CHECK(!ReturnedDebtRequiresNewVerifiedReferences());
     Setup f;auto calibration=std::make_shared<Bc2BoltCalibration>(M95AuthoredBoltCalibration(1));calibration->nativeJoined=true;calibration->rigFingerprint=17;
     f.raw.nativePartInWeapon=calibration->profile.closedContact;
     Bc2BoltPlayerCustody player(calibration);HandInteraction hands;std::uint64_t intent=0;

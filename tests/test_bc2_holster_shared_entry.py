@@ -731,5 +731,282 @@ class SharedEntryTests(unittest.TestCase):
         self.assertEqual(observed, [{"source": {"exact": "local-copy"}}, "closed"])
 
 
+class RetainedDebtEntryTests(unittest.TestCase):
+    """Optional path uses real shared predicates and synthetic producer facts."""
+    @classmethod
+    def setUpClass(cls):
+        def load(path, name):
+            spec = importlib.util.spec_from_file_location(name, path)
+            result = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(result)
+            return result
+        cls.entry = load(ROOT / "tools/drive_bc2_holster_prepared.py", "retained_entry")
+        cls.core = cls.entry.core
+        cls.fixtures = load(ROOT / "tests/test_bc2_magazine_bolt_stimulus.py", "retained_fixture")
+        cls.geometry = cls.fixtures.g
+
+    def source(self):
+        s = snapshot()
+        s["rig"]["fingerprint"] = 112
+        template, _ = self.fixtures.owed_handoff_fixture()
+        substitutions = [(template["owner"], s["owner"]),
+                         (template["input_evidence"], s["input_evidence"]),
+                         (template["input_evidence"]["owner"], s["input_evidence"]["owner"]),
+                         (template["magazine"]["weapon"], s["bodyHolster"]["physicalGun"])]
+        def convert(value):
+            for old, new in substitutions:
+                if value == old:
+                    return copy.deepcopy(new)
+            if isinstance(value, list):
+                return [convert(v) for v in value]
+            if isinstance(value, dict):
+                result = {k: convert(v) for k, v in value.items()}
+                for key in ("observedNs", "capturedNs"):
+                    if key in result:
+                        result[key] = NOW-1_000_000
+                if "deadlineNs" in result:
+                    result["deadlineNs"] = NOW+80_000_000
+                if "configurationPath" in result:
+                    result["configurationPath"] = s["selected"]["configurationPath"]
+                if "mesh" in result:
+                    result["mesh"] = s["selected"]["matchedMeshPath"]
+                return result
+            return value
+        for key in ("bolt", "magazine", "weapon_action_blocks"):
+            s[key] = convert(template[key])
+        s["magazine"]["originalPhysical"] = None
+        s["weapon_actions_blocked"] = True
+        s["bolt"]["rightClaim"] = copy.deepcopy(s["bodyHolster"]["rightClaim"])
+        proof = dict(debt=self.geometry.owed(s, NOW), source=self.geometry.owner_key(s))
+        return s, proof
+
+    def driver(self, s, proof):
+        d = self.core.HolsterDriver.__new__(self.core.HolsterDriver)
+        d.args = SimpleNamespace(held_swap=True, stow_asset=SOURCE[0], stow_config=SOURCE[1],
+            target_asset=TARGET[0], target_config=TARGET[1], stow_slot=2, target_slot=1)
+        d.retained_debt_proof, d.retained_debt_stage = proof, "owed_handoff"
+        d.retained_debt_selection = copy.deepcopy(proof["source"])
+        d.debt_geometry = self.geometry
+        d.baseline = d.target_baseline = d.last_native = None
+        d.phase, d.draw_armed, d.press_ns = "baseline", False, 0
+        d.slot_binding = self.core.resolve_slots(s, NOW, *SOURCE, *TARGET,
+                                               retained_debt=d.retained_debt_admission())
+        d.current = lambda: (s, NOW)
+        return d
+
+    def test_fresh_owed_source_enters_ordinary_mapped_swap_only(self):
+        s, proof = self.source()
+        d = self.driver(s, proof)
+        with patch.object(self.core.time, "perf_counter_ns", return_value=NOW):
+            d.admit_snapshot(s, NOW, s["nonce"])
+            d.require_held_swap_source(s)
+            d.reach = unittest.mock.Mock(side_effect=StopIteration("mapped owed reach"))
+            with self.assertRaisesRegex(StopIteration, "mapped owed reach"):
+                d.run_holster()
+            d.reach.assert_called_once_with(slot=1)
+        self.assertFalse(s["bodyHolster"]["blockWeaponActions"])
+        self.assertTrue(s["weapon_actions_blocked"])
+        self.assertNotIn("readyReceipt", proof["debt"])
+
+    def test_old_debt_never_authorizes_target_or_other_blocker(self):
+        s, proof = self.source()
+        for mutate in (
+                lambda x: x["weapon_action_blocks"].update(shellPump=True),
+                lambda x: x["bolt"]["native"].update(releasePending=True),
+                lambda x: x["bolt"].update(mechanismClaim={"foreign": True}),
+                lambda x: x["bodyHolster"].update(reloadBusy=True),
+                lambda x: x["bodyHolster"].update(leftClaim={"foreign": True}),
+                lambda x: x["owner"].update(equipGeneration=99)):
+            changed = copy.deepcopy(s)
+            mutate(changed)
+            d = self.driver(s, proof)
+            with patch.object(self.core.time, "perf_counter_ns", return_value=NOW), self.assertRaises(Exception):
+                d.admit_snapshot(changed, NOW, changed["nonce"])
+                d.require_held_swap_source(changed)
+        d = self.driver(s, proof)
+        target = target_snapshot(s, d.slot_binding)
+        self.assertFalse(d.owed_source(target, NOW))
+        target["weapon_actions_blocked"] = True
+        with patch.object(self.core.time, "perf_counter_ns", return_value=NOW), self.assertRaises(self.core.REFUSAL):
+            d.require_held(target)
+
+    def test_shared_cli_requires_explicit_retained_result_for_blocked_source(self):
+        s, proof = self.source()
+        d = self.driver(s, proof)
+        d.retained_debt_proof = None
+        with self.assertRaises(self.core.REFUSAL):
+            d.admit_snapshot(s, NOW, s["nonce"])
+        d.retained_debt_proof = proof
+        d.args.held_swap = False
+        with self.assertRaises(self.core.REFUSAL):
+            d.owed_source(s, NOW)
+
+    def assembled_main(self, *, explicit=True, held_swap=True, mutate_proof=None,
+                       mutate_source=None, mutate_publication=None, block_target=False):
+        """Run the public CLI/policy stack; substitute only host I/O boundaries."""
+        core, transport = self.core, self.core.transport
+        source, proof = self.source()
+        # Model a released hand away from all body sockets; this scenario must
+        # exercise withdrawal rather than intentionally refuse an unsafe rest.
+        for inp in (source["input"], source["bodyHolster"]["input"]):
+            for key in ("grip", "aim"):
+                inp["hands"][1][key]["position"] = [.5, 1.1, .4]
+        if mutate_proof is not None:
+            mutate_proof(proof)
+        if mutate_source is not None:
+            mutate_source(source)
+        clock, sent, drivers = [NOW], [], []
+        with tempfile.TemporaryDirectory(prefix="holster-owed-main-") as temporary:
+            run = Path(temporary)
+            shot = run / "shot"
+            shot.mkdir()
+            proof.update(schema="bc2vr.retained-bolt-debt.v1", host=dict(pid=1234),
+                         originArtifactDirectory=str(shot))
+            origin = dict(schema="bc2vr.magazine-bolt-stimulus-result.v1",
+                status="ordinary_owed_debt_handoff", stimulusCompleted=True,
+                boltCycleCompleted=False, nativeReady=False, neutralHandoffCompleted=True,
+                pendingCommand=False, timedTriggerPending=False, retainedDebtProof=proof,
+                retainedDebtStage="owed_handoff")
+            (shot / "result.json").write_bytes(transport.json_bytes(origin))
+            (run / "live-driver-owner.json").write_bytes(
+                transport.json_bytes(dict(artifactDirectory=str(shot))))
+            (run / "mechanism-snapshot.enable").write_bytes(b"1\n")
+
+            def initialize(driver, args):
+                drivers.append(driver)
+                driver.args, driver.run, driver.folder, driver.host = args, run, run, proof["host"]
+                driver.link = dict(mechanism_snapshots=dict(requested=True))
+                driver.artifacts = Artifacts(run)
+                driver.sequence, driver.sentinel, driver.commands = 42, "fixture-owned", 0
+                driver.last_write, driver.last_commit = NOW-10_000_000, NOW-9_000_000
+                driver.started = NOW
+                driver.deadline = driver.stage_deadline = NOW+9_000_000_000
+                driver.hard_deadline = NOW+10_000_000_000
+                driver.motion_started = driver.snapshot_refresh_started = None
+                driver.held_right = driver.held_left = driver.held_trigger = False
+                driver.pending_command = driver.unsafe_owner = False
+                driver.held_buttons = set()
+                driver.state = dict(cmdSeq=42, lastCmd=driver.sentinel, captureSeq=0,
+                                    head={}, handL={}, handR={}, controls={})
+                driver.read_state = lambda: copy.deepcopy(driver.state)
+                driver.command_path = run / "command.txt"
+                driver.command_path.write_bytes(b"fixture-owned\n")
+                driver.command_hash = transport.digest(driver.command_path.read_bytes())
+
+            def fresh(driver):
+                clock[0] += 3_000_000
+                delta = clock[0] - NOW
+                # New synthetic producer facts keep every original lease joined;
+                # the immutable predecessor proof is never restamped.
+                def advance(value):
+                    if isinstance(value, list):
+                        return [advance(v) for v in value]
+                    if isinstance(value, dict):
+                        return {k: v + delta if k in (
+                            "observed_ns", "valid_until_ns", "native_deadline_ns", "observedNs",
+                            "capturedNs", "deadlineNs", "nowNs", "sampledNs", "validUntilNs", "predictedNs"
+                        ) and isinstance(v, int) and v > 0 else advance(v) for k, v in value.items()}
+                    return value
+                current = advance(source)
+                if driver.draw_armed:
+                    current = target_snapshot(current, driver.slot_binding)
+                    current["weapon_actions_blocked"] = block_target
+                    for key in ("bolt", "magazine", "weapon_action_blocks"):
+                        current.pop(key)
+                current["nonce"] += len(sent) + 1
+                for inp in (current["input"], current["bodyHolster"]["input"]):
+                    if driver.right_pose is not None:
+                        for key in ("grip", "aim"):
+                            inp["hands"][1][key] = copy.deepcopy(driver.right_pose)
+                    inp["hands"][1].update(held=int(driver.held_right), squeeze=int(driver.held_right))
+                current["bodyHolster"]["neutralTrackedInput"] = not driver.held_right
+                driver.admit_snapshot(current, clock[0], current["nonce"])
+                driver.latest_snapshot = driver.last_native = current
+                return current, b"synthetic-producer", clock[0]
+
+            def send(driver, lines, expected=None, cleanup=False, source_deadline=None):
+                if not cleanup and mutate_publication is not None:
+                    mutate_publication(driver.publication_source, expected)
+                driver.validate_publication(lines, expected, cleanup)
+                if not cleanup:
+                    self.assertLess(clock[0], source_deadline)
+                sent.append((copy.deepcopy(lines), copy.deepcopy(expected), cleanup))
+                driver.sequence += 1
+                driver.commands += 1
+                driver.sentinel = "fixture-ack-" + str(driver.sequence)
+                driver.last_write = driver.last_commit = clock[0]
+                driver.command_path.write_bytes(("\n".join(lines) + "\n").encode())
+                driver.command_hash = transport.digest(driver.command_path.read_bytes())
+                driver.state.update(cmdSeq=driver.sequence, lastCmd=driver.sentinel)
+                driver.held_right = bool(expected["grip"]) if expected is not None else False
+
+            arguments = ["--run", str(run), "--stow-asset", SOURCE[0], "--stow-config", SOURCE[1],
+                         "--target-asset", TARGET[0], "--target-config", TARGET[1]]
+            if held_swap:
+                arguments.append("--held-swap")
+            if explicit:
+                arguments.extend(("--retained-debt-result", str(shot / "result.json")))
+            output = io.StringIO()
+            with patch.object(transport.Driver, "__init__", initialize), \
+                 patch.object(transport.Driver, "fresh", fresh), \
+                 patch.object(transport.Driver, "send", send), \
+                 patch.object(transport.Driver, "close"), \
+                 patch.object(core.time, "perf_counter_ns", side_effect=lambda: clock[0]), \
+                 redirect_stdout(output):
+                code = self.entry.main(arguments)
+            return code, json.loads(output.getvalue()), sent, drivers[0], proof
+
+    def test_prepared_main_completes_owed_away_through_binding_and_publication(self):
+        code, result, sent, driver, proof = self.assembled_main()
+        self.assertEqual(code, 0, result)
+        self.assertEqual(result["status"], "observed_held_swap_and_expected_target_released")
+        self.assertEqual(result["retainedDebtStage"], "away")
+        self.assertEqual(result["retainedDebtProof"], proof)
+        self.assertEqual(result["retainedDebtSelection"]["owner"]["weapon"],
+                         driver.slot_binding["target"]["native"]["weapon"])
+        self.assertFalse(result["rightGripHeld"] or result["pendingCommand"])
+        self.assertIn("observed-slot-binding.json", driver.artifacts.saved)
+        self.assertIn("observed-target-released.json", driver.artifacts.saved)
+        self.assertTrue(any(expected["grip"] == 1 for _, expected, _ in sent))
+        self.assertTrue(all(not cleanup for _, _, cleanup in sent))
+        self.assertEqual(sent[-1][0][-1], "grip r 0")
+
+    def test_prepared_main_refuses_missing_old_or_other_weapon_proof_before_input(self):
+        cases = (
+            dict(explicit=False), dict(held_swap=False),
+            dict(mutate_proof=lambda p: p["debt"].update(guardEpoch=p["debt"]["guardEpoch"]+1)),
+            dict(mutate_proof=lambda p: p["source"]["owner"].update(weapon=0x90000)),
+            dict(mutate_source=lambda s: s["weapon_action_blocks"].update(shellPump=True)),
+            dict(mutate_source=lambda s: s["bolt"]["native"].update(releasePending=True)),
+        )
+        for case in cases:
+            with self.subTest(case=case):
+                code, result, sent, _, _ = self.assembled_main(**case)
+                self.assertEqual(code, 2, result)
+                self.assertIn("error", result)
+                self.assertEqual(sent, [])
+
+    def test_prepared_main_revalidates_owed_mapping_and_blockers_before_publication(self):
+        for mutate in (
+                lambda s, e: s["bodyInventory"].update(cohort=99),
+                lambda s, e: s["weapon_action_blocks"].update(feed=True),
+                lambda s, e: s["bolt"]["native"].update(releasePending=True),
+                lambda s, e: s["bodyInventory"].update(deadlineNs=NOW),
+                lambda s, e: s["input_evidence"]["owner"].update(actorGeneration=99)):
+            with self.subTest(mutate=mutate):
+                code, result, sent, _, _ = self.assembled_main(mutate_publication=mutate)
+                self.assertEqual(code, 2, result)
+                self.assertIn("error", result)
+                self.assertEqual(sent, [])
+
+    def test_prepared_main_old_debt_does_not_admit_blocked_target(self):
+        code, result, sent, _, _ = self.assembled_main(block_target=True)
+        self.assertEqual(code, 2, result)
+        self.assertIn("error", result)
+        self.assertEqual(result["retainedDebtStage"], "owed_handoff")
+        self.assertTrue(any(expected and expected["grip"] == 1 for _, expected, _ in sent))
+        self.assertEqual(sent[-1], (["grip r 0"], None, True))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

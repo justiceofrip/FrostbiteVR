@@ -54,6 +54,7 @@ private:
     std::optional<std::array<math::Matrix4,2>> recoveryReferences_;
     std::optional<interaction::WeaponCycleLease> debtLease_;
     std::optional<interaction::HandClaimToken> leftCustody_;
+    std::optional<Bc2NativeCycleSelectionReturn> selectionReturn_;
     std::int64_t selectedAt_=0,stableAt_=0,lastNow_=0;
     std::uint64_t lastRaw_=0,submitted_=0,neutral_=0,returnPress_=0;
     interaction::BoltCustodyPhase custody_=interaction::BoltCustodyPhase::Idle;

@@ -146,6 +146,7 @@ struct ShotPublication {WeaponShotFrame frame;ShotGuard identity;std::optional<A
     std::shared_ptr<const BoltLiveObservation> boltObservation;
     std::shared_ptr<const WeaponModeObservation> sightResolution;
     std::shared_ptr<const Bc2FixedContainerObservation> fixedContainerObservation;
+    std::optional<WeaponActionBlocks> weaponActionBlocks;
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
     RigIdentity originRig{};bool originAttachmentReady=false,originOrdinaryPalette=false,originExitVisible=false;
     std::shared_ptr<const PublishedPose> originPalette; // Same immutable final palette, no copy or new deadline.
@@ -2620,7 +2621,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
         const ShotGuard identity{input.soldier,input.weak,input.weapon,input.ownerGeneration,input.input.spaceGeneration,input.input.generation,input.deadline,true,targets->tracked[0],0,input.weaponActionsBlocked,input.equipmentGeneration,input.nativeEquipment};
         preparedShot=std::make_shared<const ShotPublication>(ShotPublication{*pose->shot,identity,authored.binding,measuredSupport,authoredAim,sightSelection,
             input.input,input.selectedMeshes,handRoleReady&&handBinding?std::optional<math::Matrix4>{handBinding->wristToGrip}:std::nullopt,input.feed,
-            input.sightMode,input.sightModeObservedMs,input.shellPumpObservation,input.magazineObservation,input.boltObservation,input.sightResolution,input.fixedContainerObservation
+            input.sightMode,input.sightModeObservedMs,input.shellPumpObservation,input.magazineObservation,input.boltObservation,input.sightResolution,input.fixedContainerObservation,input.weaponActionBlocks
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
             ,rig->identity,!targets->weaponAttachmentPending,
             originAuthoredExit||bool(pose->shot->muzzlePartObservation),originAuthoredExit,pose
@@ -3130,6 +3131,13 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     json<<",\"meshes\": [";for(unsigned i=0;i<selected->states[0].count;++i){if(i)json<<',';const auto& mesh=selected->states[0].meshes[i];
         json<<"{\"address\":"<<mesh.address<<",\"typeInfo\":"<<mesh.typeInfo<<",\"namePointer\":"<<mesh.namePointer<<",\"path\":";text(feed_presentation_detail::Text(mesh.assetPath));json<<'}';}json<<"]}";
     json<<",\"input_evidence\":";evidence(m.inputEvidence);
+    json<<",\"weapon_action_blocks\":";
+    if(!source->weaponActionBlocks||source->weaponActionBlocks->Any()!=identity.weaponActionsBlocked)json<<"null";
+    else{const auto& blocks=*source->weaponActionBlocks;
+        json<<"{\"owner\":";owner(m.owner);json<<",\"input\":";evidence(m.inputEvidence);
+        json<<",\"bolt\":"<<blocks.bolt<<",\"bodyHolster\":"<<blocks.bodyHolster<<",\"magazine\":"<<blocks.magazine
+            <<",\"fixedContainer\":"<<blocks.fixedContainer<<",\"pistolSlide\":"<<blocks.pistolSlide
+            <<",\"feed\":"<<blocks.feed<<",\"shellPump\":"<<blocks.shellPump<<'}';}
     json<<",\"bodyHolster\":{\"available\":"<<holsterJoined<<",\"observedNs\":"<<holsterObservation.observedNs
         <<",\"probeRead\":{\"enabled\":"<<holsterObservation.enabled<<",\"samplePresent\":"<<bool(holster)<<",\"reason\":";
     if(holsterObservation.Available())json<<"null";else text(holsterObservation.rejectionReason);

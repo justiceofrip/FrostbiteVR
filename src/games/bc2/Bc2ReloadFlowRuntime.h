@@ -393,6 +393,9 @@ std::optional<ReloadCycleRetirement> RetireRequestCycle(const ReloadHoldIdentity
 // QPC-derived nanoseconds (same epoch as QueryPerformanceCounter), max250ms.
 OwnerPublicationResult PublishOwnerObserved(const ReloadStateSnapshot&,std::int64_t deadlineNs)noexcept;
 bool PublishOwner(const ReloadStateSnapshot&,std::int64_t deadlineNs)noexcept;
+// Pure current-owner policy: an unpaid cycle stays usable while its departure
+// waits. No parking or inferred selection-pulse cancellation is authorized.
+bool NativeCycleSelectionAllowed(const ReloadStateOwner&)noexcept;
 // Only a proved replacement native actor plus excluded/drained callbacks may
 // retire an old resource domain. Same-actor changes and input loss do nothing.
 bool RetireAmmoForReplacementActor(const ReloadStateOwner&)noexcept;

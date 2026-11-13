@@ -170,7 +170,85 @@ struct ConcurrentBoltFixture:RecoveryFixture {
     }
     void Progress(bool busy){Advance();for(unsigned b=0;b<3;++b)Idle(b,busy);}
 };
+Bc2NativeCycleSelection SelectionFor(ConcurrentBoltFixture& f,std::uint64_t sequence=100){
+    const auto v=f.service.View(f.clock);Bc2AmmoReserveLease r;
+    r.identity=f.input.identity;r.sequence=sequence;r.observedNs=f.clock;r.deadlineNs=f.clock+50000000;
+    r.loaded=v.loaded;r.reserve=v.reserve;r.capacity=v.capacity;r.verified=r.allThreeIdle=true;
+    return {Bc2NativeCycleMode::Bolt,r,f.input.config,f.clock};
+}
+Bc2NativeCycleActorDrain SelectionDrain(ConcurrentBoltFixture& f,std::uint64_t revision){
+    const auto v=f.service.View(f.clock);return {v.native,v.cycle,v.shot,revision,f.clock,f.clock+50000000,true};
+}
+int SelectionReturnRetainsDebt(){
+    for(bool empty:{false,true}){
+        ConcurrentBoltFixture f;CHECK(f.Start(empty));f.Rounds();
+        const auto before=f.service.View(f.clock);const auto stale=*before.held;
+        CHECK(!NativeCycleSelectionAllowed(before,before.native.owner));
+        auto otherOwner=before.native.owner;otherOwner.weapon+=0x1000;
+        CHECK(NativeCycleSelectionAllowed(before,otherOwner));
+        const auto refused=f.service.View(f.clock);
+        CHECK(!refused.selectionParked&&refused.held==before.held&&refused.debt==before.debt);
+        CHECK(f.service.PrepareSelection(SelectionFor(f),SelectionDrain(f,100)));
+        CHECK(f.service.View(f.clock).selectionParked&&!f.service.View(f.clock).held);
+        CHECK(!f.service.ObservationWatch(f.clock)&&!f.service.YieldForReload());
+        auto away=before.native;away.owner.weapon+=0x1000;++away.owner.equipGeneration;away.serverItem+=0x1000;
+        ++f.clock;CHECK(f.service.ParkSelection(away,SelectionDrain(f,102),f.clock));f.clock+=60000000000ll;
+        auto returned=SelectionFor(f,101);returned.reserve.identity.owner.equipGeneration+=2;
+        for(unsigned mutation=0;mutation<12;++mutation){
+            auto bad=returned;auto drain=SelectionDrain(f,104);
+            switch(mutation){
+            case 0:++bad.reserve.identity.owner.weak;break;
+            case 1:++bad.reserve.identity.firing[1];break;
+            case 2:++bad.reserve.identity.serverItem;break;
+            case 3:++bad.reserve.identity.serverSoldier;break;
+            case 4:--bad.reserve.loaded;break;
+            case 5:++bad.reserve.reserve;break;
+            case 6:++bad.config.weaponData;break;
+            case 7:bad.reserve.allThreeIdle=false;break;
+            case 8:drain.callbacksDrained=false;break;
+            case 9:drain.callbackRevision=100;break;
+            case 10:++drain.shot;break;
+            case 11:bad.reserve.deadlineNs=f.clock;break;
+            }
+            CHECK(!f.service.ReturnSelection(bad,drain));
+            CHECK(f.service.View(f.clock).debt==before.debt&&f.service.View(f.clock).retainedDebtOrigin==before.retainedDebtOrigin);
+        }
+        CHECK(f.service.ReturnSelection(returned,SelectionDrain(f,104)));
+        const auto pending=f.service.View(f.clock);
+        CHECK(pending.selectionParked&&pending.selectionReturn&&!pending.selectionReturn->handBound&&!pending.held&&!pending.ready);
+        CHECK(pending.retainedDebtOrigin==before.retainedDebtOrigin&&pending.debt==before.debt);
+        CHECK(!f.service.Control(f.control));
+        f.control.nativeOwner=returned.reserve.identity.owner;f.input.identity=returned.reserve.identity;
+        f.control.input.owner.equipGeneration+=2;f.control.item.generation+=2;f.control.mechanism.generation+=2;
+        CHECK(f.Advance());const auto rebound=f.service.View(f.clock);
+        CHECK(!rebound.selectionParked&&rebound.selectionReturn->handBound&&!rebound.held&&!rebound.ready&&rebound.blocksFire);
+        CHECK(rebound.phase==Bc2NativeCyclePhase::Advancing&&rebound.cycle==before.cycle&&rebound.shot==before.shot);
+        CHECK(rebound.debt->guardEpoch==before.debt->guardEpoch&&rebound.retainedDebtOrigin==before.retainedDebtOrigin);
+        CHECK(rebound.debt->owner==f.control.input.owner&&rebound.debt->item==f.control.item&&rebound.debt->mechanism==f.control.mechanism);
+        CHECK(rebound.loaded==before.loaded&&rebound.reserve==before.reserve&&rebound.capacity==before.capacity);
+        f.control.release=WeaponCycleRelease{stale,50,f.control.input.sequence,f.clock,f.clock+1000000};
+        CHECK(!f.service.Control(f.control));f.control.release.reset();f.Rounds();
+        const auto current=f.service.View(f.clock);CHECK(current.held&&current.held->advancing&&!current.ready&&current.blocksFire);
+        for(unsigned b=0;b<3;++b)CHECK(current.held->advancing->updates[b]>stale.advancing->updates[b]);
+        CHECK(f.Release());f.Rounds();const auto ready=f.service.View(f.clock).ready;CHECK(ready);
+        CHECK(ready->release.cycle.cycle==before.cycle&&ready->release.cycle.shot==before.shot);
+        CHECK(f.service.AcknowledgeReady(*ready,f.clock));CHECK(!f.service.View(f.clock).blocksFire);
+        CHECK(NativeCycleSelectionAllowed(f.service.View(f.clock),returned.reserve.identity.owner));
+    }
+    ConcurrentBoltFixture cancelled;CHECK(cancelled.Start());cancelled.Rounds();
+    const auto old=cancelled.service.View(cancelled.clock);
+    CHECK(cancelled.service.PrepareSelection(SelectionFor(cancelled),SelectionDrain(cancelled,100)));++cancelled.clock;
+    CHECK(!cancelled.service.ReturnSelection(SelectionFor(cancelled,101),SelectionDrain(cancelled,102)));
+    CHECK(!cancelled.service.SelectionNotDispatched(99));CHECK(cancelled.service.SelectionNotDispatched(100));
+    CHECK(cancelled.service.ReturnSelection(SelectionFor(cancelled,101),SelectionDrain(cancelled,102)));
+    CHECK(cancelled.Advance());CHECK(!cancelled.service.View(cancelled.clock).held);cancelled.Rounds();
+    CHECK(cancelled.service.View(cancelled.clock).held&&cancelled.service.View(cancelled.clock).debt==old.debt);
+    ConcurrentBoltFixture paid;CHECK(paid.Start());CHECK(paid.Release());
+    CHECK(!paid.service.PrepareSelection(SelectionFor(paid),SelectionDrain(paid,100)));
+    return 0;
+}
 int ConcurrentBoltRequiresFullGestureDespiteNativeIdle(){
+    CHECK(!SelectionReturnRetainsDebt());
     for(bool empty:{false,true}){ConcurrentBoltFixture f;CHECK(f.Start(empty));CHECK(!f.service.RecoveryView(f.clock));
     WeaponCycle policy;CHECK(policy.Begin(f.profile,*f.service.View(f.clock).held,f.clock));
     WeaponCycleResult result;
@@ -200,13 +278,18 @@ int ConcurrentBoltRequiresFullGestureDespiteNativeIdle(){
     return 0;
 }
 int ConcurrentReleaseWaitsForEveryFreshNativeBranch(){
-    ConcurrentBoltFixture f;CHECK(f.Start());CHECK(f.Release());
+    ConcurrentBoltFixture f;CHECK(f.Start());
+    const auto origin=f.service.View(f.clock).retainedDebtOrigin;
+    CHECK(origin&&!f.service.View(f.clock).releasePending);CHECK(f.Release());
+    CHECK(f.service.View(f.clock).releasePending);
     for(unsigned n=0;n<3;++n){f.Advance();f.Idle(0);f.Idle(1);f.Idle(2,true);}
     CHECK(!f.service.View(f.clock).ready&&f.service.View(f.clock).blocksFire);
     f.Rounds();CHECK(f.service.View(f.clock).ready);
     auto wrong=*f.service.View(f.clock).ready;++wrong.release.cycle.advancing->guardEpoch;
     CHECK(!f.service.AcknowledgeReady(wrong,f.clock));
-    CHECK(f.service.AcknowledgeReady(*f.service.View(f.clock).ready,f.clock));return 0;
+    CHECK(f.service.View(f.clock).retainedDebtOrigin==origin&&f.service.View(f.clock).releasePending);
+    CHECK(f.service.AcknowledgeReady(*f.service.View(f.clock).ready,f.clock));
+    CHECK(!f.service.View(f.clock).retainedDebtOrigin&&!f.service.View(f.clock).releasePending);return 0;
 }
 int ConcurrentAuthorityCannotBeForgedOrRefreshedByIdleTime(){
     for(unsigned mutation=0;mutation<5;++mutation){ConcurrentBoltFixture f;CHECK(f.Start());
@@ -239,14 +322,41 @@ int ConcurrentGuardFailureNeverPermitsFire(){
     }return 0;
 }
 int NativeIdleRequiresActualGesture(){for(bool m95:{false,true}){RecoveryFixture f(m95);CHECK(f.Held());CHECK(f.service.BeginRecovery(f.clock));
+    const auto origin=f.service.View(f.clock).retainedDebtOrigin;CHECK(origin&&!f.service.View(f.clock).releasePending);
     CHECK(f.service.View(f.clock).blocksFire&&!f.service.View(f.clock).held);CHECK(f.Grant());
     const auto view=f.service.RecoveryView(f.clock);CHECK(view&&view->authority&&!view->ready&&view->blocksFire);
     f.clock+=1000000;f.Advance();auto release=WeaponCycleIdleDebtRelease{*view->authority,1,f.control.input.sequence,
         f.control.input.observedNs,std::min(f.control.input.deadlineNs,view->authority->deadlineNs)};
     CHECK(f.service.SubmitRecovery(release,f.control.input));f.Rounds();const auto ready=f.service.RecoveryView(f.clock)->ready;
     CHECK(ready&&ready->release==release&&f.service.View(f.clock).blocksFire);
+    CHECK(f.service.View(f.clock).releasePending&&f.service.View(f.clock).retainedDebtOrigin==origin);
     CHECK(f.service.AcknowledgeRecovery(*ready,f.clock));CHECK(!f.service.View(f.clock).blocksFire);
+    CHECK(!f.service.View(f.clock).releasePending&&!f.service.View(f.clock).retainedDebtOrigin);
     }return 0;}
+int RetainedDebtOriginRequiresActualRecoveryAndCannotAuthorizeSelection(){
+    for(bool m95:{false,true}){
+        RecoveryFixture f(m95);CHECK(!f.service.View(f.clock).retainedDebtOrigin);
+        CHECK(!f.service.BeginRecovery(f.clock));CHECK(!f.service.View(f.clock).retainedDebtOrigin);
+        CHECK(f.Held());const auto held=f.service.View(f.clock);CHECK(!held.retainedDebtOrigin);
+        CHECK(f.service.BeginRecovery(f.clock));const auto view=f.service.View(f.clock);
+        CHECK(view.debt&&view.retainedDebtOrigin&&!view.releasePending);
+        const auto origin=*view.retainedDebtOrigin;
+        CHECK(origin.identity==held.native&&origin.debt==*view.debt);
+        CHECK(origin.debt.owner==f.control.input.owner&&origin.debt.item==f.control.item&&origin.debt.mechanism==f.control.mechanism);
+        CHECK(origin.debt.cycle==held.cycle&&origin.debt.shot==held.shot&&origin.debt.guardEpoch);
+        CHECK(origin.debt.loaded==held.loaded&&origin.debt.reserve==held.reserve&&origin.debt.capacity==held.capacity);
+        CHECK(f.service.BeginRecovery(f.clock));CHECK(f.service.View(f.clock).retainedDebtOrigin==origin);
+        Bc2AmmoReserveLease reserve;reserve.identity=held.native;++reserve.identity.owner.equipGeneration;
+        reserve.sequence=1;reserve.observedNs=f.clock;reserve.deadlineNs=f.clock+50000000;
+        reserve.loaded=held.loaded;reserve.reserve=held.reserve;reserve.capacity=held.capacity;
+        reserve.verified=reserve.allThreeIdle=true;
+        CHECK(!f.service.Select({f.service.Mode(),reserve,f.input.config,f.clock}));
+        CHECK(f.service.View(f.clock).retainedDebtOrigin==origin&&f.service.View(f.clock).blocksFire);
+        f.service.Cancel(Bc2NativeCycleFailure::Owner);
+        CHECK(!f.service.View(f.clock).retainedDebtOrigin&&f.service.View(f.clock).blocksFire);
+    }
+    return 0;
+}
 int LongTrackingLossRetainsDebt(){RecoveryFixture f;CHECK(f.Held());CHECK(f.service.BeginRecovery(f.clock));
     for(unsigned second=0;second<61;++second){f.clock+=1000000000;f.Rounds();CHECK(f.service.View(f.clock).blocksFire);}
     CHECK(f.service.ObservationWatch(f.clock));CHECK(!f.service.RecoveryView(f.clock)->authority);CHECK(f.Grant());return 0;}
@@ -985,4 +1095,5 @@ int PaidRecoveryPumpDoesNotRepeatPhysicalWork(){
 }
 }
 int main(){CHECK(!PaidRecoverySiblingIdleCompletesBeforeRestoreDelivery());CHECK(!PaidRecoverySiblingReceiptCannotHideChangedOrNewerWork());CHECK(!PaidRecoveryReplayReblocksUntilTwoFreshRounds());CHECK(!PaidConcurrentBoltReplayDoesNotPublishSecondReady());CHECK(!PaidRecoveryRejectsStaleOrChangedReplay());CHECK(!PaidRecoveryPauseRequiresFreshNativeEvidenceNotAnotherGesture());CHECK(!PaidRecoveryDrainsOriginalIdleOverlapWithoutBorrowingVotes());CHECK(!PaidRecoveryRejectsContradictoryOverlapOrStaleNormalEvidence());CHECK(!PaidRecoveryPumpDoesNotRepeatPhysicalWork());CHECK(!RecoveryConversionDefinitivelyRejectsOnlyTheUndeliveredHeldRelease());CHECK(!RecoveryReleaseDenialCannotBeBorrowedOrHideAcceptedWork());CHECK(!InputRejectionCapturesExactCauseOnceAndSurvivesActorRetirement());CHECK(!FreshControllerLossRetainsDebtWithoutAdmittingThePacket());CHECK(!ControllerLossCannotHideInvalidOwnerOrForgedRelease());CHECK(!ControllerExpiryAtAdmissionRetainsNativeDebt());CHECK(!ConcurrentBoltRequiresFullGestureDespiteNativeIdle());CHECK(!ConcurrentReleaseWaitsForEveryFreshNativeBranch());CHECK(!ConcurrentAuthorityCannotBeForgedOrRefreshedByIdleTime());CHECK(!ConcurrentInterruptionReturnsToNeutralRecoveryWithoutForgivingDebt());CHECK(!ConcurrentGuardFailureNeverPermitsFire());CHECK(!RecenterFromUnsuspendedHoldCreatesFreshObservation());CHECK(!RecenterPreservesShotAndInvalidatesOldAuthority());CHECK(!RecenterRejectsOtherOwnersOpenCallbacksAndPendingOutcomes());CHECK(!PumpRecenterNeedsNewNeutralAndFullStroke());CHECK(!QueuedNeutralAfterSameTickNativeUpdatesArmsWithoutRestamping());CHECK(!EmptyShotRecoveryRetainsZeroAndStillRequiresGesture());CHECK(!GuardedCommitsRequireOwnOpenParentAndConservedProjection());CHECK(!RestoreNeverVotesAndBusyRewindsRevokeOnlyUnsubmittedAuthority());CHECK(!ExactGuardedIdleRecordMutations());CHECK(!RealPumpAdapterTrackingLossRegrabThroughNativeService());CHECK(!NativeIdleRequiresActualGesture());CHECK(!LongTrackingLossRetainsDebt());CHECK(!MissingGuardAndConservationNeverRecover());
+    CHECK(!RetainedDebtOriginRequiresActualRecoveryAndCannotAuthorizeSelection());
     CHECK(!NativeBusyRevokesGrantButNotSubmittedReceipt());CHECK(!ExistingHoldDrainsBeforeConvergence());CHECK(!NoConversionOfNormalPendingOrStaleHold());return 0;}

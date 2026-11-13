@@ -135,6 +135,18 @@ def owed(s, now=NOW):
     return g.owed(s, now)
 
 
+def owed_handoff_fixture():
+    s = fixture()
+    debt = owed(s)
+    attached_original(s)
+    s["weapon_actions_blocked"] = True
+    s["bolt"]["native"].update(phase=8, failure=0, heldSuspended=False, blocksFire=True, releasePending=False)
+    s["bolt"]["native"]["retainedDebtOrigin"] = g.retained_debt_identity(debt)
+    s["weapon_action_blocks"] = dict(owner=copy.deepcopy(s["owner"]), input=s["input_evidence"],
+        bolt=True, bodyHolster=False, magazine=False, fixedContainer=False, pistolSlide=False, feed=False, shellPump=False)
+    return s, dict(debt=debt, source=g.owner_key(s))
+
+
 def attached_original(s):
     x = s["magazine"]
     r, p = x["resource"], x["profile"]["insertion"]
@@ -588,6 +600,161 @@ class MagazineBoltTests(unittest.TestCase):
         consumer.reach.assert_called_once_with(slot=1)
         self.assertEqual(consumer.phase, "stow_reach")
 
+    def test_owed_handoff_retains_exact_guarded_identity_without_ready(self):
+        s, proof = owed_handoff_fixture()
+        self.assertEqual(g.owed_handoff(s, NOW, proof), proof["debt"])
+        self.assertNotIn("readyReceipt", proof["debt"])
+        for mutate in (
+                lambda x: x["bolt"]["held"]["advancing"].update(guardEpoch=99),
+                lambda x: x["bolt"]["held"].update(shot=99),
+                lambda x: x["bolt"]["native"].update(cycle=99),
+                lambda x: x["bolt"]["native"]["counts"].update(loaded=1),
+                lambda x: x["bolt"]["native"].update(releasePending=True),
+                lambda x: x["bolt"]["native"].update(phase=3),
+                lambda x: x["bolt"].update(mechanismClaim={"foreign": True}),
+                lambda x: x["magazine"].update(requestPending=True),
+                lambda x: x["weapon_action_blocks"].update(feed=True),
+                lambda x: x["owner"].update(actorGeneration=99),
+                lambda x: x["equipment"].update(asset="foreign"),
+                lambda x: x["bolt"]["input"].update(deadlineNs=NOW),
+                lambda x: x.update(valid_until_ns=NOW)):
+            changed = copy.deepcopy(s)
+            mutate(changed)
+            with self.subTest(changed=changed["bolt"]["native"]), self.assertRaises(g.Refusal):
+                g.owed_handoff(changed, NOW, proof)
+        for path, reason in (("weapon_action_blocks", "weapon_action_blocks"),
+                             ("releasePending", "bolt.native.releasePending")):
+            changed = copy.deepcopy(s)
+            (changed if path == "weapon_action_blocks" else changed["bolt"]["native"]).pop(path)
+            with self.assertRaisesRegex(g.Refusal, "missing typed field: " + reason):
+                g.owed_handoff(changed, NOW, proof)
+
+    def test_returned_debt_requires_native_origin_and_fresh_current_lifetime(self):
+        s, proof = owed_handoff_fixture()
+        # Native producer supplies a fresh physical generation for the returned
+        # item and attests its immutable original debt; no old clock is renewed.
+        original = g.retained_debt_identity(proof["debt"])
+        s["owner"]["equipGeneration"] += 2
+        s["input_evidence"]["owner"]["equipGeneration"] += 2
+        s["physical_equipment_generation"] += 2
+        for key in ("held",):
+            s["bolt"][key]["owner"] = copy.deepcopy(s["input_evidence"]["owner"])
+            s["bolt"][key]["item"]["generation"] += 2
+            s["bolt"][key]["mechanism"]["generation"] += 2
+        s["bolt"]["native"]["held"] = copy.deepcopy(s["bolt"]["held"])
+        s["bolt"]["rightClaim"]["token"]["item"] = copy.deepcopy(s["bolt"]["held"]["item"])
+        s["magazine"]["weapon"] = copy.deepcopy(s["bolt"]["held"]["item"])
+        s["magazine"]["family"]["weapon"] = copy.deepcopy(s["magazine"]["weapon"])
+        attached_original(s)
+        s["weapon_action_blocks"]["owner"] = copy.deepcopy(s["owner"])
+        s["bolt"]["native"].pop("retainedDebtOrigin")
+        with self.assertRaisesRegex(g.Refusal, "bolt.native.retainedDebtOrigin"):
+            g.owed_handoff(s, NOW, proof, returned=True)
+        s["bolt"]["native"]["retainedDebtOrigin"] = original
+        fresh = g.owed_handoff(s, NOW, proof, returned=True)
+        self.assertNotEqual(fresh["identity"], proof["debt"]["identity"])
+        self.assertEqual(proof["debt"]["identity"], original["identity"])
+        for field in ("id", "generation"):
+            changed = copy.deepcopy(s)
+            changed["bolt"]["held"]["mechanism"][field] += 1
+            changed["bolt"]["native"]["held"] = copy.deepcopy(changed["bolt"]["held"])
+            with self.assertRaises(g.Refusal):
+                g.owed_handoff(changed, NOW, proof, returned=True)
+        for change in ("guardEpoch", "counts", "debt", "identity"):
+            changed = copy.deepcopy(s)
+            changed["bolt"]["native"]["retainedDebtOrigin"][change] = None
+            with self.assertRaises(g.Refusal):
+                g.owed_handoff(changed, NOW, proof, returned=True)
+        s["bolt"]["native"].update(phase=5, blocksFire=False, ready={"nativeReady": True})
+        with self.assertRaises(g.Refusal):
+            g.owed_handoff(s, NOW, proof, returned=True)
+
+    def test_shot_only_cli_releases_owned_grip_and_never_runs_bolt(self):
+        driver, clock, sent, current = handoff_driver(owed_debt=True)
+        driver.args = SimpleNamespace()
+        driver.__init__ = lambda args: setattr(driver, "args", args)
+        driver.run_shot = mock.Mock()
+        driver.run_bolt = mock.Mock(side_effect=AssertionError("stroke before return"))
+        driver.close = mock.Mock()
+        class Scenario:
+            def __new__(cls):
+                return driver
+        output = io.StringIO()
+        with mock.patch.object(d, "MagazineBoltDriver", Scenario), \
+                mock.patch.object(d.time, "perf_counter_ns", side_effect=lambda: clock[0]), \
+                contextlib.redirect_stdout(output):
+            code = d.main(["--run", "unused", "--mode", "shot-bolt", "--stop-after-shot",
+                           "--neutral-handoff", "--root-authorized-ordinary-input"])
+        self.assertEqual(code, 0, output.getvalue())
+        driver.run_shot.assert_called_once()
+        driver.run_bolt.assert_not_called()
+        self.assertEqual(sent, [["grip r 0"]])
+        result = json.loads(output.getvalue())
+        self.assertEqual(result["retainedDebtStage"], "owed_handoff")
+        self.assertFalse(result["nativeReady"] or result["boltCycleCompleted"])
+        self.assertTrue(result["neutralHandoffCompleted"])
+        after, now = current()
+        self.assertTrue(after["bolt"]["blocksFire"] and after["weapon_actions_blocked"])
+        self.assertEqual(g.owed_handoff(after, now, result["retainedDebtProof"])["debt"], driver.debt["debt"])
+
+    def test_owed_handoff_unknown_command_or_foreign_owner_keeps_debt(self):
+        for failure in ("owner", "expired", "writer", "pending_ack"):
+            driver, clock, sent, _ = handoff_driver(failure, owed_debt=True)
+            with mock.patch.object(d.time, "perf_counter_ns", side_effect=lambda: clock[0]):
+                with self.assertRaises(g.Refusal):
+                    driver.run_owed_handoff()
+                before = copy.deepcopy(sent)
+                driver.cleanup_owned()
+            self.assertEqual(before, sent)
+            self.assertFalse(driver.bolt_cycle_completed or driver.neutral_handoff_completed)
+            self.assertNotIn("readyReceipt", driver.debt)
+
+    def test_immutable_owed_result_binds_writer_and_return_before_real_bolt(self):
+        s, proof = owed_handoff_fixture()
+        with tempfile.TemporaryDirectory() as folder:
+            run = Path(folder)
+            shot, back = run / "shot", run / "back"
+            shot.mkdir()
+            back.mkdir()
+            proof.update(schema="bc2vr.retained-bolt-debt.v1", host=dict(pid=1234),
+                         originArtifactDirectory=str(shot))
+            origin = dict(schema="bc2vr.magazine-bolt-stimulus-result.v1",
+                status="ordinary_owed_debt_handoff", stimulusCompleted=True,
+                boltCycleCompleted=False, nativeReady=False, neutralHandoffCompleted=True,
+                pendingCommand=False, timedTriggerPending=False, retainedDebtProof=proof,
+                retainedDebtStage="owed_handoff")
+            returned = dict(schema="bc2vr.live-holster-driver.v1",
+                status="observed_held_swap_and_expected_target_released", pendingCommand=False,
+                heldSwap=True, rightGripHeld=False, retainedDebtStage="returned", retainedDebtProof=proof)
+            (shot / "result.json").write_bytes(d.transport.json_bytes(origin))
+            (back / "result.json").write_bytes(d.transport.json_bytes(returned))
+            previous = dict(artifactDirectory=str(back))
+            actual, stage, pin = g.load_retained_debt_result(d.transport, run, proof["host"], previous,
+                                                            back / "result.json")
+            self.assertEqual((actual, stage), (proof, "returned"))
+            self.assertEqual(pin["sha256"], d.transport.digest((back / "result.json").read_bytes()))
+            for host, owner in ((dict(pid=999), previous), (proof["host"], dict(artifactDirectory=str(shot)))):
+                with self.assertRaises(g.Refusal):
+                    g.load_retained_debt_result(d.transport, run, host, owner, back / "result.json")
+            driver = d.MagazineBoltDriver.__new__(d.MagazineBoltDriver)
+            driver.args = SimpleNamespace(retained_debt_result=back / "result.json")
+            driver.run, driver.host, driver.prior_owner = run, proof["host"], previous
+            driver.debt = None
+            driver.artifacts = mock.Mock()
+            driver.deadline = NOW+9_700_000_000
+            driver.boundary = lambda name, predicate: (s, NOW, predicate(s, NOW))
+            driver.move = mock.Mock(side_effect=StopIteration("real bolt support approach"))
+            with mock.patch.object(d.time, "perf_counter_ns", return_value=NOW), \
+                    self.assertRaisesRegex(StopIteration, "real bolt support approach"):
+                driver.run_bolt()
+            self.assertEqual(driver.debt["debt"], proof["debt"]["debt"])
+            driver.move.assert_called_once()
+            returned["retainedDebtProof"] = copy.deepcopy(proof)
+            returned["retainedDebtProof"]["debt"]["guardEpoch"] += 1
+            (back / "result.json").write_bytes(d.transport.json_bytes(returned))
+            with self.assertRaisesRegex(g.Refusal, "origin does not prove"):
+                g.load_retained_debt_result(d.transport, run, proof["host"], previous, back / "result.json")
+
     def test_neutral_handoff_refuses_lost_custody_without_speculative_cleanup(self):
         for failure, expected in (("owner", []), ("expired", []),
                                   ("expired_at_publication", []), ("writer", []),
@@ -945,10 +1112,13 @@ def completion_fixture(kind="settled"):
     return s, debt, event
 
 
-def handoff_driver(failure=None):
+def handoff_driver(failure=None, owed_debt=False):
     """Assemble real handoff/publication predicates against synthetic ACKs."""
     baseline, debt, ready = completion_fixture()
     debt["readyReceipt"] = copy.deepcopy(ready)
+    if owed_debt:
+        baseline, proof = owed_handoff_fixture()
+        debt = proof["debt"]
     gun = copy.deepcopy(baseline["bolt"]["rightClaim"]["token"])
     support = dict(copy.deepcopy(gun), id=92, hand=0, kind=2, prerequisiteClaim=gun["id"])
     driver = d.MagazineBoltDriver.__new__(d.MagazineBoltDriver)
@@ -957,18 +1127,26 @@ def handoff_driver(failure=None):
     driver.preserved = copy.deepcopy(baseline["input"])
     driver.handoff_guard = driver.handoff_phase = None
     driver.neutral_handoff_completed = False
-    driver.bolt_cycle_completed = True
+    driver.bolt_cycle_completed = not owed_debt
     driver.pending_command = driver.unsafe_owner = driver.held_trigger = False
-    driver.held_left = driver.held_right = True
+    driver.held_left, driver.held_right = not owed_debt, True
     driver.held_buttons = set()
     driver.deadline = driver.stage_deadline = NOW+9_700_000_000
     driver.hard_deadline = NOW+10*g.NS
     driver.last_write, driver.last_commit, driver.motion_started = NOW-20_000_000, None, None
+    if owed_debt:
+        driver.last_commit = NOW-10_000_000
     driver.artifacts = mock.Mock()
+    driver.artifacts.directory = Path("synthetic-shot-writer")
+    driver.host = dict(pid=1234)
+    driver.sequence, driver.sentinel, driver.command_hash = 1, "owned-shot", "synthetic-command-hash"
+    driver.shot_gun = copy.deepcopy(gun)
     driver.boundaries = [dict(name="right_gun_and_support_returned",
                              result=dict(gun=gun, support=support, ready=ready))]
     controls = {k: False for k in ("a", "b", "x", "y", "menu", "clickL", "clickR", "restL", "restR")}
     controls.update(trigL=0, trigR=0, gripL=1, gripR=1, stickL=[0, 0], stickR=[0, 0])
+    if owed_debt:
+        controls["gripL"] = 0
     pose = dict(pos=[0, 0, 0], ypr=[0, 0, 0], followsHead=False)
     driver.state = dict(head=copy.deepcopy(pose), handL=copy.deepcopy(pose),
                         handR=copy.deepcopy(pose), controls=controls)
@@ -994,6 +1172,10 @@ def handoff_driver(failure=None):
             pressed = driver.state["controls"]["gripL" if side == 0 else "gripR"]
             hand.update(held=pressed, squeeze=pressed)
         b = s["bolt"]
+        if owed_debt:
+            for held in (b["held"], b["native"]["held"]):
+                held.update(observedNs=now-1000, deadlineNs=now+80_000_000)
+            s["magazine"]["capturedNs"] = now-1
         b.update(capturedNs=now-1, custody=3, custodyCurrent=True,
                  rightClaim=dict(token=copy.deepcopy(gun), inputSequence=seq, deadlineNs=now+70_000_000),
                  leftClaim=(None if ev["released"][0] else

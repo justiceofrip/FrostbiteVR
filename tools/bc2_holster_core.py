@@ -15,6 +15,7 @@ import re
 import sys
 import time
 from types import SimpleNamespace
+from typing import NamedTuple
 
 sys.dont_write_bytecode = True
 CHECKOUT = Path(__file__).resolve().parents[1]
@@ -31,6 +32,22 @@ REFERENCE = ("spaceGeneration", "trackingBasisGeneration", "worldUnitsPerMeter",
              "floorRelative", "referenceHead", "head")
 HOLD_NS, MAX_REPLACEMENTS = 500_000_000, 2
 OBSERVATION_REASONS = frozenset(("pending_or_expired", "sample_missing", "sample_age_expired", "input_lease_expired"))
+
+
+class RetainedDebtAdmission(NamedTuple):
+    """Predecessor identity only; every use must re-admit the live owed source."""
+    proof: dict
+    stage: str
+    geometry: object
+
+
+def debt_geometry():
+    # Optional continuation adds no import dependency to the normal entry.
+    spec = importlib.util.spec_from_file_location("holster_debt_geometry",
+        Path(__file__).with_name("bc2_magazine_bolt_stimulus.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def neutral(inp):
@@ -199,6 +216,25 @@ class OrdinaryHolsterDriver(transport.Driver):
         self.right_pose = None
         args.stage, args.profiles, args.capture, args.menu_batches, args.pickup_first = None, None, None, None, False
         super().__init__(args)
+        self.retained_debt_proof = None
+        self.retained_debt_stage = None
+        self.retained_debt_selection = None
+        if getattr(args, "retained_debt_result", None) is not None:
+            require(getattr(args, "held_swap", False), "retained debt requires ordinary mapped held swap")
+            self.debt_geometry = debt_geometry()
+            previous, _ = transport.read_json(self.run / "live-driver-owner.json", 8192)
+            proof, stage, parent = self.debt_geometry.load_retained_debt_result(
+                transport, self.run, self.host, previous, args.retained_debt_result)
+            require(stage in ("owed_handoff", "away"), "retained debt already returned; continue the real bolt")
+            self.retained_debt_proof, self.retained_debt_stage = proof, stage
+            predecessor, _ = transport.read_json(Path(parent["path"]), transport.MAX_BYTES)
+            self.retained_debt_selection = (proof["source"] if stage == "owed_handoff"
+                                           else predecessor["retainedDebtSelection"])
+            if stage == "away":
+                require((args.target_asset, args.target_config) ==
+                        (proof["source"]["equipment"]["asset"], proof["source"]["selection"]["configurationPath"]),
+                        "owed return must select the original mapped weapon")
+            self.artifacts.save("retained-debt-binding.json", dict(proof=proof, predecessor=parent, stage=stage))
         require(self.link["mechanism_snapshots"]["requested"] is True
                 and transport.read_bytes(self.folder / "mechanism-snapshot.enable", 2) == b"1\n",
                 "snapshot opt-in was not established before native startup")
@@ -213,17 +249,43 @@ class OrdinaryHolsterDriver(transport.Driver):
 
     def snapshot_source_deadline(self, snapshot):
         h = snapshot.get("bodyHolster", {})
-        return source_deadline(snapshot) if h.get("available") is True else super().snapshot_source_deadline(snapshot)
+        deadline = source_deadline(snapshot) if h.get("available") is True else super().snapshot_source_deadline(snapshot)
+        proof = getattr(self, "retained_debt_proof", None)
+        if proof and snapshot.get("owner", {}).get("weapon") == proof["source"]["owner"]["weapon"]:
+            deadline = min(deadline, self.debt_geometry.source_deadline(snapshot, "bolt"))
+        return deadline
+
+    def owed_source(self, snapshot, now=None):
+        proof = getattr(self, "retained_debt_proof", None)
+        if proof is None or snapshot["owner"]["weapon"] != proof["source"]["owner"]["weapon"]:
+            return False
+        require(getattr(self.args, "held_swap", False), "owed source is exclusive to mapped held swap")
+        self.debt_geometry.owed_handoff(snapshot, time.perf_counter_ns() if now is None else now,
+            proof, returned=self.retained_debt_stage == "away")
+        require(snapshot["bodyHolster"]["rightClaim"] is not None
+                and snapshot["bodyHolster"]["rightClaim"]["token"] == snapshot["bolt"]["rightClaim"]["token"],
+                "owed bolt and mapped Held disagree on right gun custody")
+        return True
+
+    def retained_debt_admission(self):
+        proof = getattr(self, "retained_debt_proof", None)
+        if proof is None:
+            return None
+        require(getattr(self.args, "held_swap", False), "retained debt requires ordinary mapped held swap")
+        require(self.retained_debt_stage in ("owed_handoff", "away"), "invalid retained debt mapping stage")
+        return RetainedDebtAdmission(proof, self.retained_debt_stage, self.debt_geometry)
 
     def admit_snapshot(self, snapshot, now, nonce):
         h = holster_proof(snapshot, now)
+        owed = self.owed_source(snapshot, now)
         # A blocked transition may only be observed while holding the ordinary
         # stow/draw input; it never grants a new pose or a claim of Empty.
         allowed = h["actualEmpty"] is True or (
             self.phase in ("stow_wait", "draw_wait") and integer(h["phase"]) in (2, 4, 5)
             and h["blockWeaponActions"] is True)
-        frame.admit_frame(snapshot, now, nonce, mechanism_admission=lambda s, n: allowed)
-        require(h["blockWeaponActions"] == snapshot["weapon_actions_blocked"],
+        frame.admit_frame(snapshot, now, nonce, mechanism_admission=lambda s, n: allowed or owed)
+        require(h["blockWeaponActions"] == snapshot["weapon_actions_blocked"] or
+                (owed and h["blockWeaponActions"] is False and snapshot["weapon_actions_blocked"] is True),
                 "independent publications disagree on action block; no command authority")
         for inp in (snapshot["input"], h["input"]):
             require(all(hand["gripTracked"] is True and hand["aimTracked"] is True
@@ -278,7 +340,7 @@ class OrdinaryHolsterDriver(transport.Driver):
         source = self.publication_source
         require(source is not None, "command lacks original source")
         now = time.perf_counter_ns()
-        require(now < source_deadline(source), "original holster source expired before publication")
+        require(now < self.snapshot_source_deadline(source), "original holster source expired before publication")
         self.admit_snapshot(source, now, integer(source["nonce"]))
 
     @staticmethod
@@ -302,7 +364,7 @@ class OrdinaryHolsterDriver(transport.Driver):
         if self.motion_started is None:
             self.motion_started = time.perf_counter_ns()
         previous_sequence, previous_write = self.sequence, self.last_write
-        self.send(lines, expected=dict(pose=pose, grip=grip), source_deadline=source_deadline(snapshot))
+        self.send(lines, expected=dict(pose=pose, grip=grip), source_deadline=self.snapshot_source_deadline(snapshot))
         self.right_pose = pose
         # Only an acknowledged pre-press neutral move can wait for publication.
         # The source remains immutable history; a late reply is never reused.
@@ -336,7 +398,8 @@ class OrdinaryHolsterDriver(transport.Driver):
                     "neutral approach response differs from acknowledged right pose")
         # This is the unchanged observed native slot/configuration mapping,
         # not the old right-hand pose or a manufactured updated snapshot.
-        revalidate_pair(snapshot, integer(snapshot["observed_ns"]), self.slot_binding)
+        revalidate_pair(snapshot, integer(snapshot["observed_ns"]), self.slot_binding,
+                        retained_debt=self.retained_debt_admission())
 
     def save_observation(self, name, snapshot):
         # The complete immutable snapshot is already retained by transport.
@@ -351,15 +414,16 @@ class OrdinaryHolsterDriver(transport.Driver):
         if neutral_required:
             require(h["neutralTrackedInput"] is True and neutral(snapshot["input"]), "genuine Empty lacks fresh neutral rearm")
 
-    def require_held(self, snapshot):
+    def require_held(self, snapshot, now=None):
         h = snapshot["bodyHolster"]
+        owed = self.owed_source(snapshot, now) if hasattr(self, "owed_source") else False
         require(integer(h["phase"]) == 1 and h["rightClaim"] is not None
                 and h["actualEmpty"] is False and h["blockWeaponActions"] is False
-                and snapshot["weapon_actions_blocked"] is False and h["allowAutomaticGunHold"] is True,
+                and (snapshot["weapon_actions_blocked"] is False or owed) and h["allowAutomaticGunHold"] is True,
                 "ordinary Held/GunHold/unblocked state not observed")
 
-    def require_held_swap_source(self, snapshot):
-        self.require_held(snapshot)
+    def require_held_swap_source(self, snapshot, now=None):
+        self.require_held(snapshot, now)
         h = snapshot["bodyHolster"]
         require(integer(h["inventoryEvaluation"]) in (0, 1)
                 and h["emptyHands"] is False and h["leftClaim"] is None
@@ -411,6 +475,9 @@ class OrdinaryHolsterDriver(transport.Driver):
     def run_holster(self):
         initial, now = self.current()
         self.require_held(initial)
+        if getattr(self, "retained_debt_proof", None) is not None:
+            require(self.debt_geometry.owner_key(initial) == self.retained_debt_selection,
+                    "owed swap source differs from its immediately preceding neutral selection")
         require(neutral(initial["input"]) and initial["bodyHolster"]["neutralTrackedInput"] is True,
                 "initial source requires neutral tracked inputs")
         require(initial["equipment"]["asset"] == self.args.stow_asset
@@ -493,6 +560,9 @@ class OrdinaryHolsterDriver(transport.Driver):
         require(neutral(final["input"]) and final["bodyHolster"]["neutralTrackedInput"] is True,
                 "final ordinary release not consumed as neutral input")
         self.save_observation("observed-target-released.json", final)
+        if getattr(self, "retained_debt_proof", None) is not None:
+            self.retained_debt_selection = self.debt_geometry.owner_key(final)
+            self.retained_debt_stage = "away" if self.retained_debt_stage == "owed_handoff" else "returned"
 
 
 def pending_body(snapshot):
@@ -612,10 +682,11 @@ class ObservationHolsterDriver(OrdinaryHolsterDriver):
                     and self.right_pose == ack["pose"] and anchor == ack["snapshot"]
                     and self.press_ns == ack["writtenNs"] and self.last_commit == ack["committedNs"],
                     "draw publication gap lacks acknowledged held swap rearm")
-            self.require_held_swap_source(anchor)
+            self.require_held_swap_source(anchor, ack["writtenNs"])
             require(neutral(anchor["input"]) and anchor["bodyHolster"]["neutralTrackedInput"] is True,
                     "held swap rearm history is not neutral")
-            require(resolve(anchor, ack["writtenNs"], self.slot_binding) == self.slot_binding,
+            require(resolve(anchor, ack["writtenNs"], self.slot_binding,
+                            retained_debt=self.retained_debt_admission()) == self.slot_binding,
                     "held swap rearm history differs from complete binding")
         else:
             self.require_empty(anchor)
@@ -867,13 +938,20 @@ def selected_matches(snapshot, row):
     physical_identity(snapshot)
 
 
-def resolve_slots(snapshot, now, source_asset, source_config, target_asset, target_config):
+def resolve_slots(snapshot, now, source_asset, source_config, target_asset, target_config, *, retained_debt=None):
     # Execute every original outer/holster admission check with no constructor,
     # transport, history mutation or input publication. Empty remains admissible
     # solely for revalidating a pair after the driver's original Empty proof.
     admission = OrdinaryHolsterDriver.__new__(OrdinaryHolsterDriver)
     admission.baseline = admission.last_native = None
     admission.phase = "baseline"
+    if retained_debt is not None:
+        require(isinstance(retained_debt, RetainedDebtAdmission)
+                and retained_debt.stage in ("owed_handoff", "away"), "invalid retained debt mapping context")
+        admission.args = SimpleNamespace(held_swap=True)
+        admission.retained_debt_proof = retained_debt.proof
+        admission.retained_debt_stage = retained_debt.stage
+        admission.debt_geometry = retained_debt.geometry
     OrdinaryHolsterDriver.admit_snapshot(admission, snapshot, now, integer(snapshot["nonce"]))
     d, rows = mapping_rows(snapshot, now)
     require((source_asset, source_config) != (target_asset, target_config), "source and target must differ")
@@ -929,9 +1007,10 @@ def resolve_observer_artifact(result, run, now, source_asset, source_config, tar
     return resolve_slots(snapshot, evaluated, source_asset, source_config, target_asset, target_config)
 
 
-def revalidate_pair(snapshot, now, binding):
+def revalidate_pair(snapshot, now, binding, *, retained_debt=None):
     source, target = binding["source"], binding["target"]
-    current = resolve_slots(snapshot, now, source["asset"], source["configuration"], target["asset"], target["configuration"])
+    current = resolve_slots(snapshot, now, source["asset"], source["configuration"], target["asset"], target["configuration"],
+                            retained_debt=retained_debt)
     require(current == binding, "body/native assignment changed after initial binding")
 
 
@@ -948,7 +1027,8 @@ class BindingHolsterDriver(ObservationHolsterDriver):
             require(neutral(snapshot["input"]) and snapshot["bodyHolster"]["neutralTrackedInput"] is True,
                     "initial slot binding requires neutral tracked source")
             binding = resolve_slots(snapshot, now, self.args.stow_asset, self.args.stow_config,
-                                    self.args.target_asset, self.args.target_config)
+                                    self.args.target_asset, self.args.target_config,
+                                    retained_debt=self.retained_debt_admission())
             primed = getattr(self.args, "observed_binding", None)
             require(primed is None or binding == primed, "body/native binding changed after observer prime")
             self.slot_binding = binding
@@ -973,13 +1053,14 @@ class BindingHolsterDriver(ObservationHolsterDriver):
             # complete mapping. Transition-only observations need no guessed map.
             # After selection, original admission and selected_matches pin target.
             if self.publication_source["owner"]["weapon"] == self.slot_binding["source"]["native"]["weapon"]:
-                revalidate_pair(self.publication_source, time.perf_counter_ns(), self.slot_binding)
+                revalidate_pair(self.publication_source, time.perf_counter_ns(), self.slot_binding,
+                                retained_debt=self.retained_debt_admission())
 
 
-def resolve(snapshot, now, binding):
+def resolve(snapshot, now, binding, *, retained_debt=None):
     source, target = binding["source"], binding["target"]
     return resolve_slots(snapshot, now, source["asset"], source["configuration"],
-                                target["asset"], target["configuration"])
+                                target["asset"], target["configuration"], retained_debt=retained_debt)
 
 
 def admit_stow_cohort(before, after, now, binding, *, written_ns, committed_ns):
@@ -1072,7 +1153,7 @@ class HolsterDriver(BindingHolsterDriver):
                 require(frame.pose_error(frame.from_pose(expected["pose"]), frame.from_pose(target))[0] < .002,
                         "held swap press is outside the assigned target shoulder")
         binding = self.stow_cohort_binding or self.slot_binding
-        current = resolve(snapshot, now, binding)
+        current = resolve(snapshot, now, binding, retained_debt=self.retained_debt_admission())
         if current == binding:
             return
         require(self.stow_cohort_binding is None and self.stow_ack is not None
@@ -1102,11 +1183,14 @@ def main(argv=None, *, observed_binding=None, driver_class=None):
         parser.add_argument("--" + name, required=True)
     parser.add_argument("--held-swap", action="store_true",
                         help="swap directly from Held at the other assigned shoulder; default uses genuine Empty")
+    parser.add_argument("--retained-debt-result", type=Path,
+                        help="exact preceding owed handoff/away result for an ordinary mapped away/return")
     args = parser.parse_args(argv)
     args.observed_binding = copy.deepcopy(observed_binding)
     driver, code = None, 2
     result = dict(schema="bc2vr.live-holster-driver.v1", status="refused", nativeAcceptance=False,
                   headsetAcceptance=False, heldSwap=args.held_swap,
+                  retainedDebtProof=None, retainedDebtStage=None,
                   evidence="fresh observed body/native mapping plus ordinary guarded XR draw")
     try:
         driver = driver_class.__new__(driver_class)
@@ -1127,6 +1211,9 @@ def main(argv=None, *, observed_binding=None, driver_class=None):
                 result.update(durationNs=time.perf_counter_ns()-driver.started, commands=driver.commands,
                               phase=driver.phase, rightGripHeld=driver.held_right, pendingCommand=driver.pending_command,
                               artifactDirectory=str(driver.artifacts.directory), slotBinding=driver.slot_binding)
+                result.update(retainedDebtProof=getattr(driver, "retained_debt_proof", None),
+                              retainedDebtStage=getattr(driver, "retained_debt_stage", None),
+                              retainedDebtSelection=getattr(driver, "retained_debt_selection", None))
                 try:
                     driver.artifacts.save("result.json", result, final=True)
                 except Exception as error:

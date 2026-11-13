@@ -56,6 +56,19 @@ struct Bc2NativeCycleTrackingRebase {
     std::uint64_t cycle=0,shot=0,callbackRevision=0;
     std::int64_t observedNs=0;
 };
+// Copied once when native holds become guarded recovery debt. Historical
+// provenance only: selection, polling and controller input cannot create it.
+struct Bc2NativeCycleRetainedDebtOrigin {
+    ReloadHoldIdentity identity{};
+    interaction::WeaponCycleDebt debt{};
+    bool operator==(const Bc2NativeCycleRetainedDebtOrigin&)const noexcept=default;
+};
+struct Bc2NativeCycleSelectionReturn {
+    ReloadHoldIdentity previous{},current{};
+    std::uint64_t cycle=0,shot=0,guardEpoch=0,callbackRevision=0;
+    std::int64_t observedNs=0;
+    bool handBound=false;
+};
 struct Bc2NativeCycleView {
     Bc2NativeCyclePhase phase=Bc2NativeCyclePhase::Watching;
     Bc2NativeCycleFailure failure=Bc2NativeCycleFailure::None;
@@ -71,7 +84,17 @@ struct Bc2NativeCycleView {
     bool heldSuspended=false;
     std::uint64_t heldSuspensions=0,heldResumptions=0;
     std::optional<Bc2NativeCycleTrackingRebase> trackingRebase;
+    std::optional<interaction::WeaponCycleDebt> debt;
+    std::optional<Bc2NativeCycleRetainedDebtOrigin> retainedDebtOrigin;
+    bool releasePending=false;
+    bool selectionParked=false;
+    std::optional<Bc2NativeCycleSelectionReturn> selectionReturn;
 };
+// Until an issued selector has a verified retirement receipt, keep the current
+// unpaid cycle usable and refuse only its departure. This grants no authority.
+inline bool NativeCycleSelectionAllowed(const Bc2NativeCycleView& view,const ReloadStateOwner& owner)noexcept {
+    return view.native.owner!=owner||!view.blocksFire;
+}
 struct Bc2NativeCycleCompletionWatch {
     ReloadHoldIdentity identity{};ReloadObservedConfig config{};
     std::uint64_t cycle=0;
@@ -144,6 +167,10 @@ public:
     // Host must exclude new callback decisions and drain all original calls.
     // Never discards debt/Ready or resets sequence high-water marks.
     bool Select(const Bc2NativeCycleSelection&)noexcept;
+    bool PrepareSelection(const Bc2NativeCycleSelection&,const Bc2NativeCycleActorDrain&)noexcept;
+    bool SelectionNotDispatched(std::uint64_t drainRevision)noexcept;
+    bool ParkSelection(const ReloadHoldIdentity& selected,const Bc2NativeCycleActorDrain&,std::int64_t now)noexcept;
+    bool ReturnSelection(const Bc2NativeCycleSelection&,const Bc2NativeCycleActorDrain&)noexcept;
     // A real client/server actor replacement may retire old obligations after
     // callback drain. Same-actor equipment/tracking changes still use Select.
     std::optional<Bc2NativeCycleActorRetirement> SelectReplacementActor(
@@ -227,6 +254,10 @@ private:
     std::uint64_t selectionSequence_=0;std::int64_t selectionTime_=0;
     std::optional<Bc2NativeCycleActorRetirement> actorRetirement_;
     std::optional<Bc2NativeCycleTrackingRebase> trackingRebase_;
+    std::optional<Bc2NativeCycleSelectionReturn> selectionReturn_;
+    ReloadStateOwner parkedSelection_{};
+    std::uint64_t selectionDrainRevision_=0;
+    bool selectionIssued_=false;
     ReloadHoldIdentity native_{};ReloadObservedConfig config_{};
     Bc2NativeCyclePhase phase_=Bc2NativeCyclePhase::Watching;
     Bc2NativeCycleFailure failure_=Bc2NativeCycleFailure::None;
@@ -256,6 +287,7 @@ private:
     bool concurrentBoltEnabled_=false,concurrentCycle_=false;
     std::uint64_t guardEpoch_=0;
     Bc2NativeCycleRecoveryState recovery_{};
+    std::optional<Bc2NativeCycleRetainedDebtOrigin> retainedDebtOrigin_;
     std::uint64_t recoveryUpdates_=0,recoverySteps_=0,recoveryReleases_=0;
     std::optional<interaction::WeaponCycleIdleDebtRelease> lastRecoveryRelease_;
     std::array<bool,3> openHold_{};

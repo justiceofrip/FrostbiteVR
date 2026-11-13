@@ -3370,7 +3370,21 @@ bool EnableM95EmptyRecording()noexcept {
 bool YieldNativeCycleRouting()noexcept {
     if(!nativePumpCandidate)return true;
     bool accepted=false;
-    WithNativeCycle(NativeCycleAccess::Selection,[&]{accepted=!nativeCycle.ReloadPause()&&!nativeCycleReload.Active()&&nativeCycle.YieldForReload();
+    WithNativeCycle(NativeCycleAccess::Selection,[&]{
+        const auto view=nativeCycle.View(Now());
+        if(view.selectionParked){
+            OwnerCopyGate gate;
+            if(gate.held&&IsCurrent(published,Now())&&published.server){
+                auto same=published.snapshot.owner;same.weapon=view.native.owner.weapon;
+                same.equipGeneration=view.native.owner.equipGeneration;
+                // A different selected resource may perform its own reload.
+                // The parked bolt and its immutable debt are not yielded.
+                accepted=same==view.native.owner&&published.snapshot.owner.weapon!=view.native.owner.weapon&&
+                    published.snapshot.owner.equipGeneration>view.native.owner.equipGeneration;
+            }
+            return;
+        }
+        accepted=!nativeCycle.ReloadPause()&&!nativeCycleReload.Active()&&nativeCycle.YieldForReload();
         if(accepted)for(auto& target:nativeCycleTargets)target.store(0,std::memory_order_release);});
     return accepted;
 }
@@ -3739,6 +3753,27 @@ OwnerPublicationResult PublishOwnerObserved(const ReloadStateSnapshot& snapshot,
        deadline<=snapshot.observedNs||deadline-snapshot.observedNs>250000000){if(requestMode)RequestCancelAsync(5);return {Status::Rejected,Reason::DisabledOrInvalidSource};}
     std::optional<ReloadServerSnapshot> server;
     if(serverBinding){++serverPublishAttempts;server=ReadReloadServerState(memory,*serverBinding,binding.state,base,snapshot);if(!server)++serverPublishMisses;}
+#if defined(FVR_BC2_ORDINARY_MANUAL_CYCLES) && defined(FVR_BC2_MANUAL_CYCLE_CANDIDATE)
+    if(nativeCycleDispatcher&&server){
+        // A freshly verified different selection may park an unpaid bolt.
+        // This never reads the unequipped weapon or assigns its callbacks to
+        // the new gun. Failed/busy drains leave the existing policy intact.
+        const Lease selected{snapshot,deadline,ownerRevision.load(std::memory_order_acquire),server};
+        Active activeScope;ReloadInvocationExclusion entry(requestEntryGate,active,callbackRevision);
+        Gate routing(nativeCycleRoutingGate);
+        if(activeScope.requestEntryAllowed&&entry.Quiet()&&routing.held&&RequestOwnerEvidence(selected,Now()))
+            WithNativeCycle(NativeCycleAccess::Selection,[&]{
+                const auto at=Now();const auto old=nativeCycle.View(at);
+                if(old.native.owner.weapon==snapshot.owner.weapon||!entry.Quiet()||
+                   selected.revision!=ownerRevision.load(std::memory_order_acquire)||nativeCycleReload.Active())return;
+                const Bc2NativeCycleActorDrain drain{old.native,old.cycle,old.shot,
+                    callbackRevision.load(std::memory_order_acquire),at,
+                    std::min(deadline,at+Bc2NativeCycleService::ContextFreshNs),true};
+                if(nativeCycle.ParkSelection(RoundIdentity(selected),drain,at))
+                    for(auto& target:nativeCycleTargets)target.store(0,std::memory_order_release);
+            });
+    }
+#endif
     auto revision=ownerRevision.load(std::memory_order_acquire);
     OwnerCopyGate gate;const auto acquiredNow=Now();
     const bool knownServerFailure=requestMode&&!server;
@@ -4544,6 +4579,18 @@ bool RetireNativeCycleForReplacementActor(const ReloadStateOwner& owner)noexcept
     (void)owner;return true;
 #endif
 }
+bool NativeCycleSelectionAllowed(const ReloadStateOwner& owner)noexcept {
+#if defined(FVR_BC2_ORDINARY_MANUAL_CYCLES) && defined(FVR_BC2_MANUAL_CYCLE_CANDIDATE) && !defined(FVR_BC2_AMMO_MOVE_PROBE)
+    if(!nativeCycleDispatcher||!nativePumpCandidate)return true;
+    bool allowed=false;
+    WithNativeCycle(NativeCycleAccess::Observation,[&]{
+        allowed=::fvr::bc2::NativeCycleSelectionAllowed(nativeCycle.View(Now()),owner);
+    });
+    return allowed;
+#else
+    (void)owner;return true;
+#endif
+}
 bool SelectNativeCycleMode(Bc2NativeCycleMode mode,const ReloadStateOwner& owner)noexcept {
 #if defined(FVR_BC2_ORDINARY_MANUAL_CYCLES) && defined(FVR_BC2_MANUAL_CYCLE_CANDIDATE) && !defined(FVR_BC2_AMMO_MOVE_PROBE)
     if(!nativeCycleDispatcher||!nativePumpCandidate||!enabled.load(std::memory_order_acquire)||
@@ -4579,13 +4626,13 @@ bool SelectNativeCycleMode(Bc2NativeCycleMode mode,const ReloadStateOwner& owner
         auto candidate=nativeCycle;bool replaced=false;
         const auto now=Now();
         const Bc2NativeCycleSelection selection{mode,*evidence.lease,lease->snapshot.config,now};
+        const auto old=candidate.View(now);
+        const Bc2NativeCycleActorDrain drain{old.native,old.cycle,old.shot,
+            callbackRevision.load(std::memory_order_acquire),now,
+            std::min(evidence.lease->deadlineNs,now+Bc2NativeCycleService::ContextFreshNs),entry.Quiet()};
         const bool retainedReload=candidate.ReloadPause().has_value()||nativeCycleReload.Active();
         if(retainedReload&&!NativeCycleClientActorReplaced(candidate.View(now).native.owner,owner))return;
-        if(retainedReload||!candidate.Select(selection)){
-            const auto old=candidate.View(now);
-            const Bc2NativeCycleActorDrain drain{old.native,old.cycle,old.shot,
-                callbackRevision.load(std::memory_order_acquire),now,
-                std::min(evidence.lease->deadlineNs,now+Bc2NativeCycleService::ContextFreshNs),entry.Quiet()};
+        if(retainedReload||(!candidate.ReturnSelection(selection,drain)&&!candidate.Select(selection))){
             if(!candidate.SelectReplacementActor(selection,drain))return;
             replaced=true;
         }
@@ -5482,6 +5529,7 @@ namespace fvr::bc2::reloadFlowRuntime {
 bool EnableNativePumpCandidate()noexcept{return false;}
 bool EnableNativeCycleDispatcher()noexcept{return false;}
 bool SelectNativeCycleMode(Bc2NativeCycleMode,const ReloadStateOwner&)noexcept{return false;}
+bool NativeCycleSelectionAllowed(const ReloadStateOwner&)noexcept{return true;}
 bool EnableNativeBoltCandidate()noexcept{return false;}
 bool EnableNativeBoltRecording(unsigned)noexcept{return false;}
 bool EnableOrdinaryBoltInputRecording(unsigned)noexcept{return false;}

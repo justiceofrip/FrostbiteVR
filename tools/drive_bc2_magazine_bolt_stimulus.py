@@ -68,6 +68,8 @@ class MagazineBoltDriver(transport.Driver):
         self.handoff_phase = None
         self.neutral_handoff_completed = False
         self.bolt_cycle_completed = False
+        self.retained_debt_proof = None
+        self.retained_debt_stage = None
         self.post_magazine_capture = None
         self.bootstrap_phase = None
         self.bootstrap_source = None
@@ -577,7 +579,16 @@ class MagazineBoltDriver(transport.Driver):
 
     def run_bolt(self):
         if self.debt is None:
-            s, now, self.debt = self.boundary("existing_owed_bolt", geometry.owed)
+            if getattr(self.args, "retained_debt_result", None) is not None:
+                proof, stage, parent = geometry.load_retained_debt_result(transport, self.run, self.host,
+                    self.prior_owner, self.args.retained_debt_result)
+                require(stage == "returned", "bolt continuation requires the completed mapped return")
+                s, now, self.debt = self.boundary("returned_same_owed_bolt", lambda s, n:
+                    geometry.owed_handoff(s, n, proof, returned=True))
+                self.artifacts.save("retained-debt-rejoin.json", dict(proof=proof, predecessor=parent,
+                    currentDebt=self.debt, historicalEvidenceOnly=True))
+            else:
+                s, now, self.debt = self.boundary("existing_owed_bolt", geometry.owed)
         else:
             s, now, _ = self.boundary("same_owed_bolt", lambda s, n: geometry.bolt(s, n, self.debt)["custody"])
         b = geometry.bolt(s, now, self.debt)
@@ -665,6 +676,12 @@ class MagazineBoltDriver(transport.Driver):
                 "neutral handoff equipment owner changed")
         b = geometry.bolt(snapshot, now, raw=False)
         native = b["native"]
+        if guard.get("owed"):
+            geometry.owed_handoff(snapshot, now, guard["proof"])
+            if phase != "neutral":
+                require(geometry.claim(b, 1, 1, now, guard["gun"]["item"]) == guard["gun"],
+                        "owed handoff right gun custody changed")
+            return dict(phase=phase, sameOwedDebt=True, nativeReady=False)
         require(native["identity"] == self.debt["identity"]
                 and integer(native["cycle"]) == integer(self.debt["debt"]["cycle"])
                 and integer(native["shot"]) == integer(self.debt["debt"]["shot"])
@@ -734,6 +751,50 @@ class MagazineBoltDriver(transport.Driver):
         finally:
             self.handoff_phase = None
 
+    def run_owed_handoff(self):
+        require(self.debt is not None and not self.bolt_cycle_completed
+                and not (self.pending_command or self.unsafe_owner or self.held_trigger or self.held_left)
+                and getattr(self, "timed_trigger", None) is None and self.held_right,
+                "owed handoff requires this settled shot and its actual right grip only")
+        require(integer(self.sequence) > 0 and bool(self.sentinel) and bool(self.command_hash)
+                and 0 < integer(self.last_write) <= integer(self.last_commit),
+                "owed handoff lacks the actual acknowledged command owner")
+        s, now, current = self.boundary("before_owed_handoff", lambda s, n:
+            geometry.owed_handoff(s, n, dict(debt=self.debt, source=self.anchor)))
+        gun = geometry.claim(s["bolt"], 1, 1, now, current["debt"]["item"])
+        require(gun == self.shot_gun, "owed handoff gun differs from acknowledged shot")
+        proof = dict(schema="bc2vr.retained-bolt-debt.v1", host=copy.deepcopy(self.host),
+            originArtifactDirectory=str(self.artifacts.directory), source=copy.deepcopy(self.anchor),
+            debt=copy.deepcopy(self.debt), gun=copy.deepcopy(gun),
+            shotWriter=dict(sequence=self.sequence, sentinel=self.sentinel, commandHash=self.command_hash,
+                            writtenNs=self.last_write, committedNs=self.last_commit))
+        self.handoff_guard = dict(owner=copy.deepcopy(self.anchor), gun=copy.deepcopy(gun), owed=True, proof=proof)
+        try:
+            self.handoff_phase = "gun"
+            self.command(control="grip r", value=0, source=self.snapshot_source_deadline(s))
+            self.handoff_phase = None
+            holster = geometry.shared("bc2_holster_core")
+            def neutral(s, n):
+                self.handoff_snapshot(s, n, "neutral")
+                h = holster.holster_proof(s, n)
+                require(integer(h["phase"]) == 1 and h["actualEmpty"] is False
+                        and h["blockWeaponActions"] is False and h["allowAutomaticGunHold"] is True
+                        and h["rightClaim"] is not None and h["rightClaim"]["token"] == gun,
+                        "owed handoff lost its visible Held gun")
+                geometry.wait_for(h["neutralTrackedInput"] is True and holster.neutral(s["input"]),
+                                  "owed handoff fresh neutral input pending")
+                require(ordinary.neutral_controls(self.state["controls"])
+                        and integer(h["inputEvidence"]["observedNs"]) >= self.last_write
+                        and not (self.pending_command or self.unsafe_owner),
+                        "owed handoff lacks acknowledged neutral release")
+                return dict(neutral=True, owedDebtRetained=True, nativeReady=False, gun=gun)
+            self.boundary("owed_debt_neutral_handoff", neutral)
+            self.retained_debt_proof = copy.deepcopy(proof)
+            self.retained_debt_stage = "owed_handoff"
+            self.neutral_handoff_completed = True
+        finally:
+            self.handoff_phase = None
+
     def cleanup_owned(self):
         if getattr(self, "timed_trigger", None) is not None and self.pending_command and not self.unsafe_owner:
             # Read-only settlement of this exact timed batch uses the shared
@@ -777,6 +838,10 @@ def main(argv=None):
     parser.add_argument("--mode", choices=("prepare-hold", "magazine", "prep-shot-bolt", "shot-bolt", "bolt"), required=True)
     parser.add_argument("--fire-clearance", type=Path)
     parser.add_argument("--magazine-result", type=Path)
+    parser.add_argument("--retained-debt-result", type=Path,
+                        help="mode bolt: immediately preceding shared mapped return result")
+    parser.add_argument("--stop-after-shot", action="store_true",
+                        help="with --neutral-handoff: retain the genuine owed shot without running its bolt")
     parser.add_argument("--capture-after-magazine", help="one budgeted stereo capture under the completed magazine writer")
     parser.add_argument("--neutral-handoff", action="store_true",
                         help="after a completed bolt return, release owned grips and observe neutral holster entry")
@@ -786,6 +851,7 @@ def main(argv=None):
                   stimulusCompleted=False, nativeAcceptance=False, headsetAcceptance=False,
                   shotAllThreeCopiesVerified=False, mode=args.mode,
                   boltCycleCompleted=False,
+                  nativeReady=False, retainedDebtProof=None, retainedDebtStage=None,
                   neutralHandoffRequested=args.neutral_handoff, neutralHandoffCompleted=False,
                   preparationOnly=args.mode == "prep-shot-bolt", preparationCompleted=False,
                   commands=0, pendingCommand=False, boundaries=[], retainedDebt=None,
@@ -793,6 +859,10 @@ def main(argv=None):
     driver, code = None, 2
     try:
         require(args.root_authorized_ordinary_input, "ROOT ordinary-input authorization required")
+        require(not args.stop_after_shot or (args.mode in ("shot-bolt", "prep-shot-bolt") and args.neutral_handoff),
+                "stop-after-shot requires a firing mode and explicit neutral handoff")
+        require(args.retained_debt_result is None or args.mode == "bolt",
+                "retained debt result requires bolt continuation mode")
         require(not args.neutral_handoff or args.mode not in ("magazine", "prepare-hold"),
                 "neutral handoff requires a bolt completion mode")
         require(not args.capture_after_magazine or args.mode == "magazine",
@@ -815,15 +885,20 @@ def main(argv=None):
                 driver.run_shot()
             elif args.mode == "prep-shot-bolt":
                 driver.run_preparation_shot()
-            driver.run_bolt()
-            if args.mode == "prep-shot-bolt":
-                driver.finish_preparation()
-            if args.neutral_handoff:
-                driver.run_neutral_handoff()
+            if args.stop_after_shot:
+                driver.run_owed_handoff()
+            else:
+                driver.run_bolt()
+                if args.mode == "prep-shot-bolt":
+                    driver.finish_preparation()
+                if args.neutral_handoff:
+                    driver.run_neutral_handoff()
         result.update(status="ordinary_hold_prepared" if args.mode == "prepare-hold" else
                       "ordinary_preparation_completed" if args.mode == "prep-shot-bolt"
                       else "ordinary_stimulus_completed", stimulusCompleted=True,
-                      preparationCompleted=args.mode == "prep-shot-bolt")
+                      preparationCompleted=args.mode == "prep-shot-bolt" and not args.stop_after_shot)
+        if args.stop_after_shot:
+            result["status"] = "ordinary_owed_debt_handoff"
         code = 0
     except (Exception, KeyboardInterrupt) as error:
         result["error"] = str(error)
@@ -843,6 +918,9 @@ def main(argv=None):
                           boundaries=getattr(driver, "boundaries", []),
                           retainedDebt=getattr(driver, "debt", None),
                           boltCycleCompleted=getattr(driver, "bolt_cycle_completed", False),
+                          nativeReady=getattr(driver, "bolt_cycle_completed", False),
+                          retainedDebtProof=getattr(driver, "retained_debt_proof", None),
+                          retainedDebtStage=getattr(driver, "retained_debt_stage", None),
                           neutralHandoffCompleted=getattr(driver, "neutral_handoff_completed", False),
                           postMagazineCapture=getattr(driver, "post_magazine_capture", None),
                           holdPrepared=getattr(driver, "hold_prepared", False),

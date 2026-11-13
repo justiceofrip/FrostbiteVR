@@ -118,6 +118,10 @@ struct WeaponModeObservation {
     std::uint64_t inputGeneration=0,observedMs=0;
     WeaponModeResolution resolution{};
 };
+struct WeaponActionBlocks {
+    bool bolt=false,bodyHolster=false,magazine=false,fixedContainer=false,pistolSlide=false,feed=false,shellPump=false;
+    bool Any()const noexcept{return bolt||bodyHolster||magazine||fixedContainer||pistolSlide||feed||shellPump;}
+};
 struct Tracking {
     interaction::InputFrame input{};
     unsigned soldier=0,weak=0,weapon=0;
@@ -156,6 +160,8 @@ struct Tracking {
     std::optional<interaction::AmmoSupplyVisualSample> bodyMagazine;
     ReloadTracking reload{}; // Explicit mode; defaults off, immutable preview.
     bool weaponActionsBlocked=false;
+    // Same gameplay packet as controllerOwner/controllerEvidence below.
+    std::optional<WeaponActionBlocks> weaponActionBlocks;
     std::shared_ptr<const BodyFreeRightEvidence> freeRight; // Actual released claim + native suppression + accepted hide.
     std::uint64_t equipmentGeneration=0;
     WeaponEquipmentIdentity nativeEquipment{};

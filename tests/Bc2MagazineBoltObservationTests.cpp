@@ -101,6 +101,32 @@ int SerializationRefusesAbsent(){
     CHECK(native.str().find("\"copiesVerified\":true")!=std::string::npos);
     CHECK(native.str().find("\"completedNs\":1000000000")!=std::string::npos);return 0;
 }
+int NativeDebtSerializationPreservesAbsentAndOriginalEvidence(){
+    auto o=Bolt();Bc2NativeCycleView native;native.native.owner=o.owner;
+    native.native.firing={0x51000,0x52000,0x53000};native.native.serverPlayer=0x54000;
+    native.native.serverSoldier=0x55000;native.native.serverItem=0x56000;
+    native.blocksFire=true;native.phase=Bc2NativeCyclePhase::Advancing;
+    native.cycle=31;native.shot=32;native.loaded=4;native.reserve=45;native.capacity=5;
+    o.native=native;o.nativeReadNs=Now;
+    const auto encode=[&](){std::ostringstream stream;stream<<std::boolalpha;Json writer(stream);
+        const auto& c=*o.result.tracking.calibration;
+        writer.Bolt(&o,o.owner,o.input,{},c.rigFingerprint,c.configurationPath,c.mesh,Now);return stream.str();};
+    const auto absent=encode();CHECK(absent.find("\"available\":true")!=std::string::npos);
+    CHECK(absent.find("\"retainedDebtOrigin\":null")!=std::string::npos);
+    CHECK(absent.find("\"debt\":null,\"guardEpoch\":null")!=std::string::npos);
+    CHECK(absent.find("\"releasePending\":false")!=std::string::npos);
+    WeaponCycleDebt debt{o.input.owner,o.weapon,{67,17},31,32,33,4,45,5};
+    const Bc2NativeCycleRetainedDebtOrigin origin{native.native,debt};
+    o.native->retainedDebtOrigin=origin;o.native->debt=debt;o.native->releasePending=true;
+    const auto present=encode();CHECK(present.find("\"releasePending\":true")!=std::string::npos);
+    std::ostringstream expected;expected<<std::boolalpha;Json writer(expected);
+    expected<<"\"retainedDebtOrigin\":{\"identity\":";writer.Identity(origin.identity);
+    expected<<",\"debt\":";writer.DebtIdentity(origin.debt);
+    expected<<",\"guardEpoch\":33,\"counts\":";writer.Counts(origin.debt);expected<<'}';
+    CHECK(present.find(expected.str())!=std::string::npos);
+    CHECK(o.native->retainedDebtOrigin==origin&&o.native->debt==debt);
+    return 0;
+}
 int SnapshotBudget(){
     using live_snapshot::Compose;using live_snapshot::OmittedSightResolution;
     constexpr std::size_t Limit=live_snapshot::MaximumBytes;
@@ -151,5 +177,5 @@ int SnapshotBudget(){
     return 0;
 }
 }
-int main(){if(AbsenceAndClocks()||Custody()||Replacement()||ReceiptOwnership()||SerializationRefusesAbsent()||SnapshotBudget())return 1;
+int main(){if(AbsenceAndClocks()||Custody()||Replacement()||ReceiptOwnership()||SerializationRefusesAbsent()||NativeDebtSerializationPreservesAbsentAndOriginalEvidence()||SnapshotBudget())return 1;
     std::puts("Passive magazine/bolt observation contract regressions passed");}

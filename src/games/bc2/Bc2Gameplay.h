@@ -62,6 +62,10 @@ bool EnableFireRouteTelemetry()noexcept;
 void ReportFireRouteTelemetry(std::ostream&);
 // Existing mechanism-snapshot startup opt-in only; passive local Gather values.
 bool EnableNavigationObservation()noexcept;
+// Same startup-only mechanism marker. Read-only, one20s window; no enqueue grant.
+// The NativeProbe host must retain journal/module/trampoline for process lifetime.
+bool EnableQueuePhaseObservation(std::span<const std::byte>,const engine::PeImage&,
+    std::uintptr_t,bool explicitRequest=false,bool processRetainedProbe=false)noexcept;
 NavigationObservation ReadNavigationObservation()noexcept;
 NavigationObservationReason ReadNavigationObservationStatus(const NavigationObservation&)noexcept;
 // Explicit driver-only native head-aim/camera opt-in, after Install before Start.

@@ -69,7 +69,7 @@ public:
     }
     bool BeginHold(const Scope& scope,unsigned branch,std::uint64_t invocation,
         std::int64_t begin,std::int64_t deadline)noexcept {
-        if(!Bound(scope)||reloadPause_||phase_!=WeaponCycleConvergencePhase::Debt||branch>=3||holds_[branch]||
+        if(parked_||!Bound(scope)||reloadPause_||phase_!=WeaponCycleConvergencePhase::Debt||branch>=3||holds_[branch]||
            !invocation||invocation<=last_[branch]||begin<began_||deadline<=begin||deadline-begin>MaximumFreshNs)return false;
         holds_[branch]={invocation,begin,deadline};last_[branch]=invocation;
         ClearEvidence(begin);grant_.reset();return true;
@@ -85,7 +85,7 @@ public:
     }
     bool Submit(const Scope& scope,const WeaponCycleRelease& release,std::int64_t accepted)noexcept {
         if(release_){return Bound(scope)&&phase_!=WeaponCycleConvergencePhase::Uncertain&&*release_==WeaponCycleConvergenceRelease{release};}
-        if(!Bound(scope)||reloadPause_||phase_!=WeaponCycleConvergencePhase::Debt||!Matches(release.cycle)||
+        if(parked_||!Bound(scope)||reloadPause_||phase_!=WeaponCycleConvergencePhase::Debt||!Matches(release.cycle)||
            !weapon_cycle_detail::Lease(release.cycle,accepted)||!release.request||!release.inputSequence||
            !weapon_cycle_detail::Window(release.observedNs,release.deadlineNs,accepted)||
            release.deadlineNs>release.cycle.deadlineNs)return false;
@@ -99,7 +99,7 @@ public:
     }
     bool PrepareReload(const Scope& scope,const WeaponCycleReloadPause& pause,const AmmoResourceContext& resource,
         const WeaponCycleReloadDrain& drain,std::int64_t now)noexcept {
-        if(!Bound(scope)||phase_!=WeaponCycleConvergencePhase::Debt||reloadPause_||release_||outcome_||
+        if(parked_||!Bound(scope)||phase_!=WeaponCycleConvergencePhase::Debt||reloadPause_||release_||outcome_||
            pause.owner!=debt_.owner||pause.item!=debt_.item||pause.mechanism!=debt_.mechanism||
            pause.cycle!=debt_.cycle||pause.shot!=debt_.shot||!pause.pause||!pause.profile||!pause.revision||!pause.inputSequence||
            !std::isfinite(pause.travel)||pause.travel<=0||!std::isfinite(pause.rotation)||
@@ -167,20 +167,41 @@ public:
     const auto& ReloadCommand()const noexcept{return reloadCommand_;}
     const auto& LastReloadReceipt()const noexcept{return lastReloadReceipt_;}
     const WeaponCycleDebt& Debt()const noexcept{return debt_;}
+    // The adapter has excluded/drained callbacks and proved the weapon is no
+    // longer selected. Parking retains the obligation but grants no native or
+    // hand authority. Returning must prove the identical resource/counts again.
+    bool ParkSelection(const Scope& scope,std::int64_t now)noexcept {
+        if(!Bound(scope)||phase_!=WeaponCycleConvergencePhase::Debt||reloadPause_||release_||outcome_||
+           now<floor_||std::any_of(holds_.begin(),holds_.end(),[](const auto& h){return h.has_value();}))return false;
+        parked_=true;grant_.reset();issued_={};ClearEvidence(now);return true;
+    }
+    bool RebaseSelection(const Scope& scope,const Scope& replacement,HandInteractionOwner owner,
+        HandInteractionKey item,HandInteractionKey mechanism,std::int64_t now)noexcept {
+        auto previous=owner;previous.equipGeneration=debt_.owner.equipGeneration;
+        const bool cancelled=scope==replacement&&owner==debt_.owner&&item==debt_.item&&mechanism==debt_.mechanism;
+        if(!parked_||!Bound(scope)||phase_!=WeaponCycleConvergencePhase::Debt||reloadPause_||release_||outcome_||
+           debt_.ammunitionRebase||previous!=debt_.owner||(!cancelled&&owner.equipGeneration<=debt_.owner.equipGeneration)||
+           item.id!=debt_.item.id||item.generation!=owner.equipGeneration||
+           mechanism.id!=debt_.mechanism.id||mechanism.generation!=owner.equipGeneration||now<floor_||
+           std::any_of(holds_.begin(),holds_.end(),[](const auto& h){return h.has_value();}))return false;
+        scope_=replacement;debt_.owner=owner;debt_.item=item;debt_.mechanism=mechanism;
+        parked_=false;grant_.reset();issued_={};ClearEvidence(now);return true;
+    }
+    bool Parked()const noexcept{return parked_;}
     // Adapter verifies that only the tracking coordinate epoch changed and
     // excludes/drains native callbacks. Preserve the physical debt and callback
     // high-water marks, but invalidate every old pose/grant/idle observation.
     bool RebaseTracking(const Scope& scope,const Scope& replacement,
         HandInteractionOwner owner,std::int64_t now)noexcept {
         auto previous=owner;previous.space=debt_.owner.space;
-        if(!Bound(scope)||reloadPause_||phase_!=WeaponCycleConvergencePhase::Debt||release_||outcome_||
+        if(parked_||!Bound(scope)||reloadPause_||phase_!=WeaponCycleConvergencePhase::Debt||release_||outcome_||
            previous!=debt_.owner||owner.space<=debt_.owner.space||now<floor_||
            std::any_of(holds_.begin(),holds_.end(),[](const auto& h){return h.has_value();}))return false;
         scope_=replacement;debt_.owner=owner;grant_.reset();issued_={};ClearEvidence(now);return true;
     }
     std::optional<WeaponCycleRecoveryGrant> ArmRecovery(const Scope& scope,
         const HandInteractionSample& neutral,WeaponCycleHandAssignment hands={})noexcept {
-        if(!Bound(scope)||reloadCommand_||(reloadPause_&&!lastReloadReceipt_)||phase_!=WeaponCycleConvergencePhase::Debt||!Recovery(neutral.nowNs)||
+        if(parked_||!Bound(scope)||reloadCommand_||(reloadPause_&&!lastReloadReceipt_)||phase_!=WeaponCycleConvergencePhase::Debt||!Recovery(neutral.nowNs)||
            !weapon_cycle_detail::Hands(hands)||neutral.owner!=debt_.owner||!neutral.sequence||
            !neutral.focused||!neutral.tracked[0]||!neutral.tracked[1]||
            !neutral.released[weapon_cycle_detail::HandIndex(hands.mechanism)]||
@@ -214,7 +235,7 @@ public:
         release_=release;phase_=WeaponCycleConvergencePhase::Released;grant_.reset();ClearEvidence(accepted);return true;
     }
     bool ObserveIdle(const Scope& scope,const WeaponCycleIdleUpdate& receipt,std::int64_t now)noexcept {
-        if(!Bound(scope)||reloadCommand_||(phase_!=WeaponCycleConvergencePhase::Debt&&phase_!=WeaponCycleConvergencePhase::Released)||
+        if(parked_||!Bound(scope)||reloadCommand_||(phase_!=WeaponCycleConvergencePhase::Debt&&phase_!=WeaponCycleConvergencePhase::Released)||
            receipt.branch>=3||!receipt.invocation||receipt.invocation<=last_[receipt.branch]||
            receipt.guardEpoch!=debt_.guardEpoch||receipt.beginNs<floor_||receipt.endNs<=receipt.beginNs||
            receipt.endNs>now||receipt.deadlineNs<=now||receipt.deadlineNs-receipt.endNs>MaximumFreshNs||
@@ -331,6 +352,6 @@ private:
     std::uint64_t appliedCommand_=0,appliedAuthorityInvocation_=0;
     std::int64_t began_=0,floor_=0,firstDeadline_=0,firstRoundBeginNs_=0,idleEstablishedNs_=0,idleFirstBeginNs_=0;
     std::uint64_t nonce_=0;
-    bool acknowledged_=false;
+    bool acknowledged_=false,parked_=false;
 };
 }

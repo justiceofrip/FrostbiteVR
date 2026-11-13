@@ -48,6 +48,9 @@ public:
             <<",\"observedNs\":"<<b.observedNs<<",\"deadlineNs\":"<<b.deadlineNs<<'}';}
     void Identity(const ReloadHoldIdentity& v){out<<"{\"owner\":";Owner(v.owner);out<<",\"firing\":["<<v.firing[0]<<','<<v.firing[1]<<','<<v.firing[2]
         <<"],\"serverPlayer\":"<<v.serverPlayer<<",\"serverSoldier\":"<<v.serverSoldier<<",\"serverItem\":"<<v.serverItem<<'}';}
+    void DebtIdentity(const interaction::WeaponCycleDebt& v){out<<"{\"owner\":";HandOwner(v.owner);
+        out<<",\"item\":";Key(v.item);out<<",\"mechanism\":";Key(v.mechanism);
+        out<<",\"cycle\":"<<v.cycle<<",\"shot\":"<<v.shot<<'}';}
     void Request(const std::optional<AmmoResourceRequest>& v){if(!v){out<<"null";return;}const auto& r=*v;const auto& i=r.intent;
         out<<"{\"binding\":";Binding(r.binding);out<<",\"discard\":"<<r.discard<<",\"intent\":{\"context\":";Context(i.context);
         out<<",\"id\":"<<i.id<<",\"observedNs\":"<<i.observedNs<<",\"deadlineNs\":"<<i.deadlineNs<<",\"operation\":"<<unsigned(i.operation)
@@ -202,7 +205,13 @@ public:
         out<<",\"native\":";if(!o->native)out<<"null";else{const auto& n=*o->native;out<<"{\"readNs\":"<<o->nativeReadNs
             <<",\"countsFreshnessAvailable\":false,\"identity\":";Identity(n.native);out<<",\"phase\":"<<unsigned(n.phase)<<",\"failure\":"<<unsigned(n.failure)
             <<",\"cycle\":"<<n.cycle<<",\"shot\":"<<n.shot<<",\"blocksFire\":"<<n.blocksFire<<",\"heldSuspended\":"<<n.heldSuspended<<",\"counts\":";Counts(n);
-            out<<",\"held\":";if(n.held)Cycle(*n.held);else out<<"null";out<<",\"ready\":";if(n.ready)ReadyEvent(*n.ready);else out<<"null";out<<'}';}out<<'}';
+            out<<",\"held\":";if(n.held)Cycle(*n.held);else out<<"null";out<<",\"ready\":";if(n.ready)ReadyEvent(*n.ready);else out<<"null";
+            out<<",\"releasePending\":"<<n.releasePending<<",\"debt\":";if(n.debt)DebtIdentity(*n.debt);else out<<"null";
+            out<<",\"guardEpoch\":";if(n.debt)out<<n.debt->guardEpoch;else out<<"null";
+            out<<",\"retainedDebtOrigin\":";if(!n.retainedDebtOrigin)out<<"null";else{const auto& origin=*n.retainedDebtOrigin;
+                out<<"{\"identity\":";Identity(origin.identity);out<<",\"debt\":";DebtIdentity(origin.debt);
+                out<<",\"guardEpoch\":"<<origin.debt.guardEpoch<<",\"counts\":";Counts(origin.debt);out<<'}';}
+            out<<'}';}out<<'}';
     }
 };
 } // namespace fvr::bc2::live_magazine_bolt

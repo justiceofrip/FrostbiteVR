@@ -742,6 +742,129 @@ def owed(snapshot, now):
                 countsFreshnessAvailable=advancing is not None)
 
 
+def retained_debt_identity(debt):
+    """Immutable evidence only; it grants no input, hand or selection lease."""
+    require(debt.get("readyReceipt") is None and debt.get("countsFreshnessAvailable") is True
+            and integer(debt["guardEpoch"]) > 0, "retained debt requires an unfinished guarded shot")
+    return copy.deepcopy({k: debt[k] for k in ("identity", "debt", "guardEpoch", "counts")})
+
+
+def load_retained_debt_result(transport, run, host, prior_owner, path):
+    path = transport.child(run, path)
+    require(prior_owner is not None and transport.same_path(prior_owner["artifactDirectory"], path.parent),
+            "retained debt continuation must immediately follow its settled writer")
+    result, raw = transport.read_json(path, transport.MAX_BYTES)
+    require("error" not in result and result["pendingCommand"] is False
+            and result.get("timedTriggerPending", False) is False and result.get("triggerHeld", False) is False,
+            "retained debt predecessor has pending/failed input")
+    stage = result.get("retainedDebtStage")
+    require(stage in ("owed_handoff", "away", "returned"), "predecessor has no owed-debt transition")
+    proof = result["retainedDebtProof"]
+    require(proof["schema"] == "bc2vr.retained-bolt-debt.v1" and proof["host"] == host,
+            "retained debt proof host/schema differs")
+    retained_debt_identity(proof["debt"])
+    origin_path = transport.child(run, Path(proof["originArtifactDirectory"]) / "result.json")
+    origin, _ = transport.read_json(origin_path, transport.MAX_BYTES)
+    require(origin["schema"] == "bc2vr.magazine-bolt-stimulus-result.v1"
+            and origin["status"] == "ordinary_owed_debt_handoff" and origin["stimulusCompleted"] is True
+            and origin["boltCycleCompleted"] is False and origin["nativeReady"] is False
+            and origin["neutralHandoffCompleted"] is True and origin["pendingCommand"] is False
+            and origin["timedTriggerPending"] is False and "error" not in origin
+            and origin["retainedDebtProof"] == proof,
+            "origin does not prove this immutable unfinished shot handoff")
+    if stage != "owed_handoff":
+        require(result["schema"] == "bc2vr.live-holster-driver.v1"
+                and result["status"] == "observed_held_swap_and_expected_target_released"
+                and result["heldSwap"] is True and result["rightGripHeld"] is False,
+                "retained debt transition lacks completed ordinary neutral mapped swap")
+    return copy.deepcopy(proof), stage, dict(path=str(path), sha256=transport.digest(raw))
+
+
+def owed_handoff(snapshot, now, expected=None, *, returned=False):
+    """Admit a fresh untouched owed stroke, never a completed/recovery receipt."""
+    current = owed(snapshot, now)
+    identity = retained_debt_identity(current)
+    b, native = snapshot["bolt"], snapshot["bolt"]["native"]
+    require(type(native.get("releasePending")) is bool, "missing typed field: bolt.native.releasePending")
+    require(b["recovery"] is None and b["mechanismClaim"] is None
+            and integer(b["mechanismPhase"]) in (0, 1)
+            and native["releasePending"] is False
+            and native["ready"] is None and b["settled"] is None and b["recovered"] is None
+            and native.get("heldSuspended") is False and native.get("blocksFire") is True
+            and integer(native["phase"]) == 8 and integer(native["failure"]) == 0
+            and counts(native["counts"]) == current["counts"],
+            "owed handoff has pending, suspended, mechanical or completed cycle state")
+    origin = native.get("retainedDebtOrigin")
+    require(isinstance(origin, dict), "missing typed field: bolt.native.retainedDebtOrigin")
+    require(origin == (retained_debt_identity(expected["debt"]) if expected is not None else identity),
+            "native retained debt origin differs")
+    bolt(snapshot, now, current, raw=False)
+    magazine_state = magazine(snapshot, now, idle=True)
+    preparation_attached_magazine(magazine_state, now)
+    require(magazine_state["reloadHeld"] is False and magazine_state["ownsLeftHand"] is False
+            and magazine_state["blocksWeaponActions"] is False and magazine_state["requestPending"] is False
+            and integer(magazine_state["phase"]) == 0 and integer(magazine_state["cycle"]) == 0
+            and magazine_state["pendingRequest"] is None and magazine_state["submittedSeat"] is None
+            and magazine_state["resource"]["wellEmpty"] is False
+            and magazine_state["resource"]["command"] is None,
+            "owed handoff overlaps native pending/reload/original-magazine custody")
+    require(magazine_state["resource"]["identity"] == native["identity"]
+            and magazine_state["weapon"] == current["debt"]["item"],
+            "owed handoff magazine/native copies differ")
+    # An aggregate block alone cannot distinguish owed debt from another
+    # mechanism. Refuse old runtimes explicitly instead of guessing causes.
+    blocks = snapshot.get("weapon_action_blocks")
+    require(isinstance(blocks, dict), "missing typed field: weapon_action_blocks")
+    require(blocks.get("owner") == snapshot["owner"]
+            and same_input(blocks["input"], snapshot["input_evidence"]),
+            "weapon action blocker owner/input differs")
+    causes = ("bolt", "bodyHolster", "magazine", "fixedContainer", "pistolSlide", "feed", "shellPump")
+    require(all(type(blocks.get(k)) is bool for k in causes), "missing typed weapon_action_blocks cause")
+    require(blocks["bolt"] is True and all(blocks[k] is False for k in causes if k != "bolt")
+            and snapshot["weapon_actions_blocked"] is True, "owed bolt is not the sole weapon action block")
+    require(b["leftClaim"] is None and b["input"]["released"][0] is True,
+            "owed handoff left hand has foreign custody")
+    right = b["rightClaim"]
+    require(isinstance(right, dict) and right["token"]["owner"] == b["input"]["owner"]
+            and right["token"]["item"] == current["debt"]["item"]
+            and integer(right["token"]["hand"]) == 1 and integer(right["token"]["kind"]) == 1
+            and integer(right["token"]["prerequisiteClaim"]) == 0
+            and 0 < integer(right["inputSequence"]) <= integer(b["input"]["sequence"])
+            and now < integer(right["deadlineNs"]) <= integer(b["input"]["deadlineNs"]),
+            "owed handoff lacks fresh same-item right GunHold")
+    if expected is not None:
+        previous = retained_debt_identity(expected["debt"])
+        if returned and identity != previous:
+            origin = native.get("retainedDebtOrigin")
+            require(isinstance(origin, dict), "missing typed field: bolt.native.retainedDebtOrigin")
+            require(origin == previous, "native retained debt origin differs")
+            old_owner, new_owner = previous["identity"]["owner"], identity["identity"]["owner"]
+            require(all(new_owner[k] == old_owner[k] for k in old_owner if k != "equipGeneration")
+                    and integer(new_owner["equipGeneration"]) > integer(old_owner["equipGeneration"]),
+                    "returned debt actor/weapon/selection lifetime differs")
+            require(all(identity["identity"][k] == previous["identity"][k]
+                        for k in previous["identity"] if k != "owner")
+                    and all(identity["debt"][k] == previous["debt"][k] for k in ("cycle", "shot"))
+                    and identity["debt"]["mechanism"]["id"] == previous["debt"]["mechanism"]["id"]
+                    and identity["debt"]["mechanism"]["generation"] == identity["debt"]["item"]["generation"]
+                    and integer(identity["debt"]["item"]["id"]) == integer(previous["debt"]["item"]["id"])
+                    and identity["guardEpoch"] == previous["guardEpoch"] and identity["counts"] == previous["counts"],
+                    "returned native copies/cycle/shot/guard/counts differ")
+        else:
+            require(identity == previous, "retained owed identity/cycle/shot/guard/counts differ")
+        require(len(current["updates"]) == 3 and all(integer(a) >= integer(b) > 0
+                    for a, b in zip(current["updates"], expected["debt"]["updates"])),
+                "retained native copy updates regressed")
+        require(snapshot["equipment"] == expected["source"]["equipment"]
+                and all(snapshot["selected"][k] == expected["source"]["selection"][k]
+                        for k in ("configurationPath", "inventory", "selectedSlot", "matchedMeshPath")),
+                "retained debt weapon configuration/inventory differs")
+        if not returned:
+            require(owner_key(snapshot) == expected["source"], "owed handoff source lifetime changed")
+    require(now < source_deadline(snapshot, "bolt"), "owed handoff original source expired")
+    return current
+
+
 def custody(snapshot, now, debt, hand, previous=None):
     b = bolt(snapshot, now, debt)
     wait_for(b["custodyCurrent"] is True and b["gunClaim"] is not None
