@@ -726,6 +726,17 @@ class KnifeTests(unittest.TestCase):
                 following(driver, snapshot)
         self.held_request_hook = respond
 
+    @staticmethod
+    def render_lag(snapshot):
+        # Actual90/01 snapshot004: current input24612, render24611,
+        # 14.904ms apart. Keep each packet's original clocks and lease.
+        k = snapshot['chestKnife']
+        rendered = k['render']['inputEvidence']
+        rendered['sequence'] -= 1
+        for field in ('observedNs', 'nowNs', 'deadlineNs'):
+            rendered[field] -= 14_904_000
+        k['validUntilNs'] = min(k['validUntilNs'], rendered['deadlineNs'])
+
     def assert_no_jab_once_released(self, result):
         self.assertEqual(result['status'], 'refused', result)
         self.assertEqual(self.jab_publications, [])
@@ -758,6 +769,103 @@ class KnifeTests(unittest.TestCase):
         self.assertEqual(commands.count(['grip r 1']), 1)
         self.assertEqual(commands.count(['grip r 0']), 1)
 
+    def test_prejab_live_render_lag_rejoins_before_full_motion_and_return(self):
+        def respond(driver, snapshot):
+            # Actual90/01 snapshot004 geometry only; live ownership, packet
+            # clocks, controls and command admission belong to this fixture.
+            snapshot['mapping'] = dict(weaponWorldMeters=[
+                [-.699357808, -.252624929, .668639064, 0],
+                [.510820091, .477676094, .714763939, 0],
+                [-.499960542, .841430664, -.205020964, 0],
+                [164.472198, 170.809311, 378.316162, 1]],
+                trackingBodyWorldMeters=[[-.567094207, 0, .823652923, 0], [0, 1, 0, 0],
+                    [-.823652923, 0, -.567094207, 0], [164.705719, 171.057938, 378.374451, 1]])
+            if len(self.held_requests) == 1:
+                self.render_lag(snapshot)
+        self.held_request_hook = respond
+        code, result = self.run_assembled(jab=True, real_transport=True)
+        self.assertEqual(code, 0, result)
+        self.assertEqual(result['jabSteps'], 1)
+        self.assertEqual(len(self.held_requests), 3)
+        _, lagged, fresh = self.held_requests
+        self.assertEqual(lagged['commands'], fresh['commands'])
+        self.assertEqual(len({row['deadlineNs'] for row in self.held_requests}), 1)
+        self.assertEqual(len({row['stageDeadlineNs'] for row in self.held_requests}), 1)
+        self.assertEqual(len(self.jab_publications), 1)
+        publication = self.jab_publications[0]
+        self.assertEqual(publication['source'], fresh['snapshot'])
+        self.assertEqual(publication['deadlineNs'], fresh['snapshot']['chestKnife']['validUntilNs'])
+        lag = lagged['snapshot']
+        self.assertLess(lag['chestKnife']['render']['inputEvidence']['sequence'], lag['input']['generation'])
+        with self.assertRaisesRegex(Exception, 'current rendered Held knife'):
+            self.m.measured_jab(lag, lag['observed_ns'])
+        self.assertGreater(result['jab']['endpointNs'], result['jab']['acknowledgedNs']+120_000_000)
+        for actual, expected in zip(result['jab']['directionLocal'], [-.1146586283135119, -.8414307923634647, .5280602433585165]):
+            self.assertAlmostEqual(actual, expected, places=9)
+        self.assertAlmostEqual(math.dist(result['jab']['origin'], result['jab']['endpoint']), .120)
+        self.assertTrue(self.owner_during_motion)
+        self.assertIsNone(result['outstandingMotion'])
+        self.assertFalse(result['pendingCommand'] or result['rightGripHeld'] or result['triggerHeld'])
+        self.assertEqual(len(result['captures']), 2)
+
+    def test_render_lag_does_not_hide_other_geometry_rejections(self):
+        baseline = body_snapshot(self.m, self.clock.now, 1, self.state, is_empty=True)
+        self.state['controls']['gripR'] = 1
+        original = knife_snapshot(self.m, baseline, self.clock.now, 2, self.state)
+        self.render_lag(original)
+        self.assertIsNone(self.m.measured_jab(original, self.clock.now, wait_for_render=True))
+        mutations = (
+            ('geometry source', lambda s: s['input_evidence'].update(sequence=s['input']['generation']-1)),
+            ('native owner', lambda s: s['chestKnife']['owner'].update(weapon=123)),
+            ('render owner', lambda s: s['chestKnife']['render']['inputEvidence']['owner'].update(space=99)),
+            ('render expired', lambda s: s['chestKnife']['render']['inputEvidence'].update(deadlineNs=self.clock.now)),
+            ('render future', lambda s: s['chestKnife']['render']['inputEvidence'].update(sequence=s['input']['generation']+1)),
+            ('render clocks', lambda s: s['chestKnife']['render']['inputEvidence'].update(sequence=s['input']['generation'])),
+            ('mesh', lambda s: s['selected'].update(matchedMeshPath='other')),
+            ('rig', lambda s: s['rig'].update(fingerprint=0)),
+            ('controls', lambda s: s['input']['hands'][1].update(trigger=.1)),
+            ('matrix', lambda s: s['mapping']['weaponWorldMeters'][0].__setitem__(0, 2.)),
+            ('reach', lambda s: s['input']['hands'][1]['grip'].update(position=[5., 5., 5.])))
+        for label, mutate in mutations:
+            with self.subTest(label=label):
+                changed = copy.deepcopy(original)
+                mutate(changed)
+                with self.assertRaises(Exception):
+                    self.m.measured_jab(changed, self.clock.now, wait_for_render=True)
+
+    def test_render_lag_then_geometry_rejection_is_terminal_before_motion(self):
+        def respond(driver, snapshot):
+            if len(self.held_requests) >= 1:
+                self.render_lag(snapshot)
+            if len(self.held_requests) == 2:
+                snapshot['equipment']['asset'] = 'other'
+        self.held_request_hook = respond
+        code, result = self.run_assembled(jab=True, real_transport=True)
+        self.assertEqual(code, 2, result)
+        self.assertEqual(len(self.held_requests), 3)
+        self.assertIn('current rendered Held knife', result['error'])
+        self.assert_no_jab_once_released(result)
+
+    def test_rejoined_geometry_expiry_at_publication_cannot_reobserve_or_jab(self):
+        self.held_request_hook = lambda driver, s: self.render_lag(s) if len(self.held_requests) == 1 else None
+        code, result = self.run_assembled(jab=True, replace_at_publication='expire')
+        self.assertEqual(code, 2, result)
+        self.assertIn('deadline', result['error'].lower())
+        self.assertEqual(len(self.held_requests), 3)
+        self.assertEqual(len(self.publication_refusals), 1)
+        # The recorder sees the attempted replace before its deadline check;
+        # simulator commands below must still contain no published motion.
+        self.assertEqual(len(self.jab_publications), 1)
+        self.assertEqual(self.jab_publications[0]['source'], self.held_requests[-1]['snapshot'])
+        self.assertIsNone(result['outstandingMotion'])
+        self.assertFalse(any(lines[0].startswith('hand r to grip ') for _, lines, _ in self.calls))
+        # Expiry inside the shared pre-rename owner read cannot establish
+        # cleanup ownership either. Preserve its refusal and original bytes.
+        refusal = self.publication_refusals[0]
+        self.assertTrue(refusal['driver'].unsafe_owner)
+        self.assertEqual(result['release'], 'not attempted: no settled owned held controller')
+        self.assertEqual(refusal['driver'].command_path.read_bytes(), refusal['raw'])
+
     def test_prejab_explicit_rejection_after_absence_is_terminal(self):
         def reject(driver, snapshot):
             self.unavailable(snapshot)
@@ -789,8 +897,11 @@ class KnifeTests(unittest.TestCase):
         self.assertEqual(len(self.held_requests), 3)
         self.assert_no_jab_once_released(result)
 
-    def check_held_observation_budget(self, budget=None):
-        self.prejab_gap(absent_count=1000)
+    def check_held_observation_budget(self, budget=None, *, geometry=False):
+        if geometry:
+            self.held_request_hook = lambda driver, s: self.render_lag(s) if self.held_requests else None
+        else:
+            self.prejab_gap(absent_count=1000)
         original_init = self.m.KnifeDriver.__init__
         def initialize(driver, *args):
             original_init(driver, *args)
@@ -819,6 +930,15 @@ class KnifeTests(unittest.TestCase):
 
     def test_prejab_absence_preserves_original_stage_jab_and_return_budget(self):
         self.check_held_observation_budget('stage_deadline')
+
+    def test_prejab_render_lag_cannot_restart_original_observation_window(self):
+        self.check_held_observation_budget(geometry=True)
+
+    def test_prejab_render_lag_preserves_original_invocation_jab_and_return_budget(self):
+        self.check_held_observation_budget('deadline', geometry=True)
+
+    def test_prejab_render_lag_preserves_original_stage_jab_and_return_budget(self):
+        self.check_held_observation_budget('stage_deadline', geometry=True)
 
     def test_prejab_absence_with_foreign_control_is_terminal(self):
         def changed(driver, snapshot):
@@ -1014,6 +1134,50 @@ class KnifeTests(unittest.TestCase):
         s['input']['referenceHead']['orientation'] = q
         measured = m.measured_jab(s, self.clock.now)['directionLocal']
         self.assertLess(math.dist(measured, m.p.quat_rotate(q, original)), .000001)
+
+    def test_recovered_idle_callback_requires_current_full_held_proof(self):
+        m = self.m
+        baseline = body_snapshot(m, self.clock.now, 1, self.state, is_empty=True)
+        selection = m.native_selection(baseline, self.clock.now)
+        now = self.clock.now + 200_000_000
+        episode = dict(startedNs=self.clock.now-10_000_000, deadlineNs=now+m.NS,
+            stageDeadlineNs=now+m.NS, drawWrittenNs=self.clock.now+10_000_000,
+            drawAcknowledgedNs=self.clock.now+20_000_000, nativeSelection=selection)
+        after = self.clock.now+30_000_000
+        original = knife_snapshot(m, baseline, now, 2)
+        k = original['chestKnife']
+        ev = k['inputEvidence']
+        k.update(nativeObservationComplete=False, currentObservationReady=True,
+            observationRecovery=dict(epoch=1, revision=2, lifetime=1,
+                bodyOperation=k['bodyOperation'], input=ev['sequence'],
+                completedNs=ev['observedNs']-1_000_000, observedNs=ev['observedNs'],
+                nowNs=ev['nowNs'], ready=True, recovered=True,
+                pending=False, blocked=False, needsRejoin=False))
+        self.assertGreater(m.held(original, baseline, now, after, episode), now)
+        self.assertFalse(original['chestKnife']['nativeObservationComplete'])
+        mutations = [
+            lambda v: v.pop('observationRecovery'),
+            lambda v: v.update(currentObservationReady=False),
+            lambda v: v['hold'].update(id=0),
+            lambda v: v.update(selectedSlots=[7,0,7]),
+            lambda v: v['observationRecovery'].update(bodyOperation=99),
+            lambda v: v['observationRecovery'].update(input=ev['sequence']+1),
+            lambda v: v['observationRecovery'].update(completedNs=ev['observedNs']),
+            lambda v: v['observationRecovery'].update(observedNs=ev['observedNs']+1),
+            lambda v: v['observationRecovery'].update(nowNs=ev['nowNs']+1),
+        ]
+        for field in ('epoch', 'revision', 'lifetime', 'input'):
+            mutations.append(lambda v, key=field: v['observationRecovery'].update({key: 0}))
+        for field in ('pending', 'blocked', 'needsRejoin'):
+            mutations.append(lambda v, key=field: v['observationRecovery'].update({key: True}))
+        for field in ('ready', 'recovered'):
+            mutations.append(lambda v, key=field: v['observationRecovery'].update({key: False}))
+        for index, change in enumerate(mutations):
+            with self.subTest(refusal=index):
+                current = copy.deepcopy(original)
+                change(current['chestKnife'])
+                with self.assertRaises(Exception):
+                    m.held(current, baseline, now, after, episode)
 
     def test_strict_held_rejects_owner_claim_epoch_mode_and_expiry_changes(self):
         m = self.m

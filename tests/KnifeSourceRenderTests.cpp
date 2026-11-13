@@ -437,6 +437,23 @@ int LiveObservationCases(){
     auto jab=v;jab.motionEnabled=true;CHECK(ChestKnifeLiveRejection(jab,now).empty());
     std::ostringstream jabJson;WriteChestKnifeLiveObservation(jabJson,&jab,jab.owner,jab.input,jab.controls,now);
     CHECK(jabJson.str().find("\"motionEnabled\":true")!=std::string::npos);
+    {
+        auto recovered=jab;chestKnifeNative::ObservationRecovery recovery;recovery.IdleNow();
+        const auto epoch=recovery.Miss();CHECK(epoch);recovery.Returned(epoch,900000000,true);
+        const auto completed=recovery.Read();CHECK(recovery.Rejoin(completed,990000000));
+        recovered.nativeObservationComplete=false;recovered.firstObservationGap=1*4+1;
+        recovered.currentObservationReady=true;
+        recovered.observationRecovery={recovery.Read(),1,v.bodyOperation,19,990000000,995000000};
+        ChestKnifeLivePublication publication;publication.Request(now);
+        CHECK(publication.Publish(recovered,now));CHECK(publication.Read(now));
+        std::ostringstream json;WriteChestKnifeLiveObservation(json,&recovered,recovered.owner,recovered.input,recovered.controls,now);
+        CHECK(json.str().find("\"available\":true")!=std::string::npos);
+        CHECK(json.str().find("\"nativeObservationComplete\":false")!=std::string::npos);
+        CHECK(json.str().find("\"currentObservationReady\":true")!=std::string::npos);
+        CHECK(json.str().find("\"recovered\":true")!=std::string::npos);
+        recovered.observationRecovery.state.pending=true;
+        CHECK(!publication.Publish(recovered,now));CHECK(!publication.Read(now));
+    }
     CHECK(ChestKnifeLiveJoinRejection(v,v.owner,v.input,v.controls,now).empty());
     CHECK(ChestKnifeLiveDeadline(v)==v.input.deadlineNs);
     for(unsigned fault=0;fault<49;++fault){auto bad=v;

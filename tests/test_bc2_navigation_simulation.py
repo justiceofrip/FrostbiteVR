@@ -68,6 +68,16 @@ RECORDED_LONG_TIMING = dict(
     thirdRequestNs=650494724404300, commandAckNs=40_463_300)
 
 
+# Actual90/02 d4b9f6c38db247e8a98f0acce5463fc3: speculative request 006
+# began during pulse 2, remained pending through zero and timed out before
+# pulse 3. The retained matching response still described nonzero input.
+RECORDED_DIAGNOSTIC_TIMING = dict(
+    requestStartedNs=654246019842800, responseDeadlineNs=654246269842800,
+    timeoutEvaluatedNs=654246271531500, observedNs=654246213812000,
+    sourceDeadlineNs=654246300738200, menuDeadlineNs=654246293957900,
+    neutralCommittedNs=654246267229200, commandAckNs=45_489_100)
+
+
 # Admission projection of actual86/02 da9146dcd773411eb7e108a7675f1e4d
 # snapshot-001.json.gz (SHA256 43f8dcdaa90526ef0151c9bcc2c6d341690b88cf2d44a3ffe712c4300814b5d4).
 # Replay below changes only the synthetic clock, nonce and simulated input;
@@ -545,7 +555,7 @@ class NavigationTests(unittest.TestCase):
             activate_window=False, xr_manifest=str(self.root / "runtime.json")))
         (self.folder / "mechanism-snapshot.enable").write_bytes(b"1\n")
         self.rows = [dict(left=[0, .5], right=[0, 0], holdMs=400, lookDegrees=[10, 0])]
-        self.calls, self.samples, self.owner_records = [], [], []
+        self.calls, self.samples, self.owner_records, self.snapshot_requests = [], [], [], []
         self.driver = None
         self.snapshot_mutation = None
         self.state_mutation = None
@@ -596,8 +606,6 @@ class NavigationTests(unittest.TestCase):
         if self.snapshot_mutation:
             self.snapshot_mutation(s, driver)
         self.samples.append(copy.deepcopy(s))
-        if any(any(v) for v in driver.sticks):
-            self.held_owner_records.append(json.loads(driver.owner_bytes(False)))
         self.write(driver.snapshot_path, s)
 
     def assembled(self, args=None):
@@ -610,6 +618,8 @@ class NavigationTests(unittest.TestCase):
 
         def simulate():
             nonlocal current, pending_ack
+            if self.driver is not None and any(any(v) for v in self.driver.sticks):
+                self.held_owner_records.append(json.loads(self.driver.owner_bytes(False)))
             sample = getattr(self.driver, "latest_snapshot", None)
             if sample and self.clock.now >= sample["valid_until_ns"]:
                 self.cached_expiry_phases.add(
@@ -663,6 +673,9 @@ class NavigationTests(unittest.TestCase):
         def request(driver):
             nonlocal pending_snapshot
             original_request(driver)
+            self.snapshot_requests.append(dict(startedNs=driver.last_request,
+                actionDeadlineNs=driver.action_deadline, pendingCommand=driver.pending_command,
+                sticks=copy.deepcopy(self.state["controls"]["stickL"] + self.state["controls"]["stickR"])))
             if self.omit_response_from is None or driver.snapshot_index < self.omit_response_from:
                 pending_snapshot = (driver.last_request + self.response_delay(driver), driver)
                 deliver_snapshot()
@@ -748,7 +761,7 @@ class NavigationTests(unittest.TestCase):
             self.m.plan([dict(left=[0, 1], right=[0, 0], holdMs=150, commands=["trigger r 1"])])
 
     def test_subpulses_require_new_original_admission_neutral_and_original_total_budget(self):
-        for scenario in ("current", "missing", "native_focus_loss", "total_budget", "artifact_limit"):
+        for scenario in ("current", "missing", "native_focus_loss", "total_budget"):
             with self.subTest(scenario=scenario):
                 if scenario != "current":
                     self.setUp()  # Each assembled CLI owns a fresh isolated session.
@@ -773,10 +786,6 @@ class NavigationTests(unittest.TestCase):
                     # to its original ten seconds, not a fresh per-pulse clock.
                     self.read_delay = lambda path, driver: (
                         7_000_000_000 if path.name == "run-manifest.json" else 0)
-                elif scenario == "artifact_limit":
-                    # More original responses must refuse at the same disk cap,
-                    # not silently raise it to finish sixteen subpulses.
-                    self.response_delay = lambda driver: 0
                 code, result = self.assembled()
                 driver = self.driver
                 self.assertEqual(driver.hard_deadline - driver.started, 10 * self.m.t.NS)
@@ -831,19 +840,14 @@ class NavigationTests(unittest.TestCase):
                         self.assertRegex(result["error"], "no active budget|deadline|maximumGestureNs")
                         self.assertLess(len(result["episodes"]), 16)
                         self.assertGreater(self.clock.now - driver.started, 9_000_000_000)
-                    elif scenario == "artifact_limit":
-                        self.assertIn("artifact budget", result["error"])
-                        self.assertLess(len(result["episodes"]), 16)
-                        self.assertLess(sum(path.stat().st_size for path in
-                                            Path(result["artifactDirectory"]).iterdir()), self.m.t.MAX_BYTES)
                     else:
                         if scenario == "missing":
                             self.assertIn("snapshot response not received within request budget", result["error"])
                             self.assertEqual(len(result["episodes"]), 1)
                             self.assertEqual(sum(lines != self.m.ZERO for lines in self.calls), 1)
                         else:
-                            self.assertEqual(result["episodes"], [])
-                            self.assertEqual(len(self.calls), 2)
+                            self.assertEqual(len(result["episodes"]), 1)
+                            self.assertEqual(len(self.calls), 3)
                             self.assertIn("invalid input focus/head/time", result["error"])
                             self.assertLess(commits[-1]["requestedNs"] - self.samples[-1]["observed_ns"], self.m.PERIOD)
 
@@ -878,6 +882,47 @@ class NavigationTests(unittest.TestCase):
         self.assertIn("hold", self.cached_expiry_phases)
         self.assertFalse(result["nativeAcceptance"])
 
+    def test_recorded_diagnostic_timeout_cannot_be_created_during_a_pulse(self):
+        recorded = RECORDED_DIAGNOSTIC_TIMING
+        self.rows = [dict(left=[0, -.5], right=[0, 0], holdMs=1500),
+                     dict(left=[0, 0], right=[0, 0], holdMs=500, lookDegrees=[45, 0])]
+        self.ack_delay = recorded["commandAckNs"]
+        elapsed = recorded["timeoutEvaluatedNs"] - recorded["requestStartedNs"]
+        self.assertEqual(elapsed, 251_688_700)
+        self.assertEqual(recorded["responseDeadlineNs"] - recorded["requestStartedNs"], 250_000_000)
+        self.assertLess(recorded["neutralCommittedNs"], recorded["responseDeadlineNs"])
+        self.assertLess(recorded["timeoutEvaluatedNs"], recorded["menuDeadlineNs"])
+        # Replay the failing delay if a speculative request is attempted. Fresh
+        # neutral requests have the observed ordinary ~100 ms round trip.
+        self.response_delay = lambda driver: elapsed if driver.action_deadline is not None else 100_000_000
+        code, result = self.assembled()
+        self.assertEqual((code, result.get("error")), (0, None))
+        self.assertEqual(len(result["episodes"]), 4)
+        self.assertEqual(len(self.calls), 8)
+        self.assertEqual(len(self.snapshot_requests), 5)  # entry plus four admissions
+        self.assertTrue(all(request["actionDeadlineNs"] is None and not request["pendingCommand"]
+                            and request["sticks"] == [0, 0, 0, 0] for request in self.snapshot_requests))
+        for request, prior in zip(self.snapshot_requests[2:], result["episodes"]):
+            self.assertGreater(request["startedNs"], prior["neutralCommittedNs"])
+        self.assertIsNone(self.driver.pending_nonce)
+        self.assertFalse(result["normalStopRequired"])
+        self.assertFalse(result["nativeAcceptance"])
+
+    def test_recorded_timeout_at_neutral_boundary_still_refuses_without_retry(self):
+        recorded = RECORDED_DIAGNOSTIC_TIMING
+        self.rows = [dict(left=[0, -.5], right=[0, 0], holdMs=1500)]
+        self.response_delay = lambda driver: (
+            recorded["timeoutEvaluatedNs"] - recorded["requestStartedNs"] if driver.snapshot_index == 4 else 0)
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertIn("snapshot response not received within request budget", result["error"])
+        self.assertEqual(len(result["episodes"]), 2)
+        self.assertEqual(sum(lines != self.m.ZERO for lines in self.calls), 2)
+        self.assertEqual(len(self.snapshot_requests), 4)
+        self.assertEqual(self.calls[-1], self.m.ZERO)
+        self.assertEqual(result["sticks"], [[0, 0], [0, 0]])
+        self.assertFalse(result["normalStopRequired"])
+
     def test_subpulse_partition_preserves_budget_and_refuses_unusable_tail_before_input(self):
         for duration in (602, 750, 999, 1001, 1501, 1999, 2000):
             rows = [dict(left=[0, .3], right=[0, 0], holdMs=duration, lookDegrees=[10, 0])]
@@ -906,7 +951,7 @@ class NavigationTests(unittest.TestCase):
         self.assertEqual(self.calls[-1], self.m.ZERO)
         self.assertTrue(all(s["weapon_actions_blocked"] is True for s in self.samples))
         self.assertTrue(all(s["bodyHolster"]["inputSequenceRelation"] == "newer" for s in self.samples))
-        self.assertTrue(any(not s["bodyHolster"]["neutralTrackedInput"] for s in self.samples))
+        self.assertTrue(all(s["bodyHolster"]["neutralTrackedInput"] for s in self.samples))
         self.assertTrue(all(s["bodyHolster"]["leftClaim"] is None
                             and s["bodyHolster"]["rightClaim"] is None for s in self.samples))
         self.assertFalse(result["nativeAcceptance"])
@@ -932,6 +977,7 @@ class NavigationTests(unittest.TestCase):
 
     def test_lost_empty_proof_releases_owned_sticks(self):
         self.replay_empty = True
+        self.rows.append(dict(left=[.3, 0], right=[0, 0], holdMs=400))
         def mutation(s, driver):
             if self.calls:
                 s["bodyHolster"]["freeRightCurrent"] = False
@@ -939,7 +985,8 @@ class NavigationTests(unittest.TestCase):
         code, result = self.assembled()
         self.assertEqual(code, 2)
         self.assertIn("genuine Empty proof", result["error"])
-        self.assertEqual(len(self.calls), 2)
+        self.assertEqual(len(self.calls), 3)
+        self.assertEqual(len(result["episodes"]), 1)
         self.assertEqual(self.calls[-1], self.m.ZERO)
         self.assertFalse(result["normalStopRequired"])
 
@@ -1039,7 +1086,7 @@ class NavigationTests(unittest.TestCase):
         self.assertGreater(zero["committedNs"] - zero["requestedNs"],
                            recorded["pulseDeadlineNs"] - recorded["zeroRequestedNs"])
         self.assertLess(zero["committedNs"], window["pulseDeadlineNs"])
-        self.assertIsNotNone(self.driver.pending_nonce)
+        self.assertIsNone(self.driver.pending_nonce)
         self.assertEqual(self.calls, [["stick l 0 -0.6", "stick r 0 0"], self.m.ZERO])
         self.assertFalse(result["normalStopRequired"])
 
@@ -1114,7 +1161,7 @@ class NavigationTests(unittest.TestCase):
         self.assertEqual(result["episodes"], [])
         self.assertFalse(result["normalStopRequired"])
 
-    def test_recorded_pending_response_crosses_cached_expiry_in_ack_hold_and_normal_zero(self):
+    def test_recorded_source_can_expire_after_publication_without_new_diagnostic_authority(self):
         recorded = RECORDED_NAVIGATION_TIMING
         self.rows = [dict(left=[0, -.3], right=[0, 0], holdMs=400)]
         self.ack_delay = 65_000_000
@@ -1144,6 +1191,8 @@ class NavigationTests(unittest.TestCase):
         self.assertTrue(all(not event["cleanup"] for event in events if event["type"] == "command_commit"))
         original = json.loads(gzip.decompress((artifacts / "snapshot-002.json.gz").read_bytes()))
         self.assertEqual(original, self.samples[1])
+        self.assertEqual(len(self.snapshot_requests), 2)
+        self.assertIsNone(self.driver.pending_nonce)
         self.assertFalse(result["nativeAcceptance"])
         self.assertFalse(result["normalStopRequired"])
 
@@ -1164,7 +1213,7 @@ class NavigationTests(unittest.TestCase):
         self.assertEqual(timeout["responseDeadlineNs"] - timeout["requestStartedNs"], 250_000_000)
         self.assertGreaterEqual(timeout["elapsedNs"], 250_000_000)
 
-    def test_expired_response_refresh_cannot_delay_owned_normal_zero(self):
+    def test_owned_normal_zero_never_starts_a_diagnostic_refresh(self):
         self.rows = [dict(left=[0, .3], right=[0, 0], holdMs=400)]
         self.response_delay = lambda driver: 60_000_000 if driver.snapshot_index >= 3 else 0
 
@@ -1187,13 +1236,14 @@ class NavigationTests(unittest.TestCase):
         self.assertEqual((code, result.get("error")), (0, None))
         self.assertEqual(len(self.calls), 2)
         self.assertEqual(self.calls[-1], self.m.ZERO)
-        self.assertIsNotNone(self.driver.snapshot_refresh_started)
-        self.assertIsNotNone(self.driver.pending_nonce)
+        self.assertIsNone(self.driver.snapshot_refresh_started)
+        self.assertIsNone(self.driver.pending_nonce)
+        self.assertEqual(len(self.snapshot_requests), 2)
         self.assertLess(result["episodes"][0]["neutralCommittedNs"] - result["episodes"][0]["startedNs"],
                         400_000_000)
         events = [json.loads(line) for line in
                   (Path(result["artifactDirectory"]) / "events.jsonl").read_text().splitlines()]
-        self.assertTrue(any(event["type"] == "snapshot_refresh_hold" for event in events))
+        self.assertFalse(any(event["type"] == "snapshot_refresh_hold" for event in events))
         self.assertTrue(all(not event["cleanup"] for event in events if event["type"] == "command_commit"))
 
     def test_normal_zero_ack_cannot_extend_original_pulse_deadline(self):
@@ -1239,13 +1289,14 @@ class NavigationTests(unittest.TestCase):
         self.assertEqual(self.calls, [])
 
     def assert_delayed_native_loss_releases(self, mutation, message):
-        self.rows = [dict(left=[0, .3], right=[0, 0], holdMs=500)]
+        self.rows = [dict(left=[0, .3], right=[0, 0], holdMs=1000)]
         self.response_delay = lambda driver: 120_000_000 if driver.snapshot_index >= 3 else 0
         self.snapshot_mutation = lambda sample, driver: mutation(sample) if driver.snapshot_index >= 3 else None
         code, result = self.assembled()
         self.assertEqual(code, 2)
         self.assertIn(message, result["error"])
-        self.assertEqual(len(self.calls), 2)
+        self.assertEqual(len(self.calls), 3)
+        self.assertEqual(len(result["episodes"]), 1)
         self.assertEqual(self.calls[-1], self.m.ZERO)
         self.assertFalse(result["normalStopRequired"])
 
@@ -1272,10 +1323,12 @@ class NavigationTests(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("lifetime changed", result["error"])
         self.assertEqual(self.calls[-1], self.m.ZERO)
-        self.assertEqual(len(self.calls), 2)
+        self.assertEqual(len(self.calls), 3)
+        self.assertEqual(len(result["episodes"]), 1)
         self.assertFalse(result["normalStopRequired"])
 
     def test_source_expiry_fails_closed_without_restamping(self):
+        self.rows.append(dict(left=[.3, 0], right=[0, 0], holdMs=400))
         def mutation(s, driver):
             if self.calls:
                 s["valid_until_ns"] = s["input_evidence"]["deadlineNs"] = self.clock.now - 1
@@ -1353,6 +1406,7 @@ class NavigationTests(unittest.TestCase):
         self.assertEqual(self.state["controls"]["stickL"], [0, 1])
 
     def test_menu_loss_releases_without_claiming_playing(self):
+        self.rows.append(dict(left=[.3, 0], right=[0, 0], holdMs=400))
         def mutation(s, driver):
             if self.calls:
                 s["input"]["menu"]["owner"] = 3
@@ -1373,10 +1427,10 @@ class NavigationTests(unittest.TestCase):
         self.assertTrue(result["normalStopRequired"])
 
     def test_owner_record_replacement_forbids_zero(self):
-        def mutation(s, driver):
+        def mutation(state, driver):
             if self.calls:
                 self.write(self.run / "live-driver-owner.json", dict(host=self.host, pending=False, foreign=True))
-        self.snapshot_mutation = mutation
+        self.state_mutation = mutation
         code, result = self.assembled()
         self.assertEqual(code, 2)
         self.assertEqual(len(self.calls), 1)
@@ -1407,15 +1461,16 @@ class NavigationTests(unittest.TestCase):
         self.assertTrue(result["normalStopRequired"])
 
     def test_four_pulses_retain_original_large_responses_within_shared_disk_bound(self):
-        # Earlier zero scheduling produces fewer diagnostics. Keep the original
-        # aggregate compression/cap assertion with still-legal larger samples.
+        # Neutral-boundary requests retain every original response at the same
+        # per-response, decoded aggregate and shared disk limits.
         self.rows = [dict(left=[0, .25], right=[0, 0], holdMs=500) for _ in range(4)]
         self.snapshot_mutation = lambda s, driver: s.update(observationPadding="x"*48_000)
         code, result = self.assembled()
         self.assertEqual((code, result.get("error")), (0, None))
         paths = sorted(Path(result["artifactDirectory"]).glob("snapshot-*.json.gz"))
         restored = [gzip.decompress(path.read_bytes()) for path in paths]
-        self.assertGreater(sum(map(len, restored)), self.m.t.MAX_BYTES)
+        self.assertEqual(len(restored), 5)
+        self.assertGreater(sum(map(len, restored)), 4*sum(path.stat().st_size for path in paths))
         self.assertLess(sum(path.stat().st_size for path in Path(result["artifactDirectory"]).iterdir()), self.m.t.MAX_BYTES)
         self.assertEqual([json.loads(raw) for raw in restored], self.samples)
         self.assertEqual(len(self.calls), 8)

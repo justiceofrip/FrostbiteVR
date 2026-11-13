@@ -153,6 +153,8 @@ struct ChestKnifeLiveObservation {
     unsigned knifeSlot=0;
     interaction::KnifePhase phase=interaction::KnifePhase::NeedNeutral;
     bool nativeOwned=false,nativeHealthy=false,nativeObservationComplete=false;
+    bool currentObservationReady=false;
+    chestKnifeNative::ObservationRecoveryProof observationRecovery{};
     bool stockTriggerEnabled=false,motionEnabled=false,attackBridgeEnabled=false;
     bool held=false,stockTriggerReady=false,stockTriggerArmed=false,fireSuppressed=false,mechanicsSettled=false;
     // Diagnostic fields never participate in Held authority.
@@ -194,10 +196,18 @@ inline std::string_view ChestKnifeCurrentJoins(const ChestKnifeLiveObservation& 
        !v.nativeTick||!v.suppressionRequest)return "native_selection_or_suppression_not_joined";
     return {};
 }
+inline bool ChestKnifeCurrentNativeReady(const ChestKnifeLiveObservation& v)noexcept {
+    if(v.nativeObservationComplete)return true;
+    const auto& p=v.observationRecovery;const auto& s=p.state;
+    return v.currentObservationReady&&s.ready&&s.recovered&&!s.pending&&!s.blocked&&!s.needsRejoin&&
+        s.epoch&&s.revision&&p.lifetime&&p.bodyOperation==v.bodyOperation&&p.input&&p.input<=v.input.sequence&&
+        s.completedNs>0&&p.observedNs>s.completedNs&&p.observedNs<=v.input.observedNs&&
+        p.nowNs>=p.observedNs&&p.nowNs<=v.input.nowNs;
+}
 inline std::string_view ChestKnifeLiveRejection(const ChestKnifeLiveObservation& v,std::int64_t now)noexcept {
     if(!v.continuity||!v.bodyOperation||!v.draws||v.phase!=interaction::KnifePhase::Held||
        !v.held||!v.stockTriggerReady||!v.stockTriggerArmed||!v.fireSuppressed||!v.mechanicsSettled||
-       !v.nativeOwned||!v.nativeHealthy||!v.nativeObservationComplete||!v.stockTriggerEnabled||v.attackBridgeEnabled)
+       !v.nativeOwned||!v.nativeHealthy||!ChestKnifeCurrentNativeReady(v)||!v.stockTriggerEnabled||v.attackBridgeEnabled)
         return "held_stock_trigger_not_ready";
     return ChestKnifeCurrentJoins(v,now);
 }
@@ -250,7 +260,7 @@ inline std::string_view ChestKnifePublicationBranch(const ChestKnifeLiveObservat
     if(!v.stockTriggerReady)return "stock_trigger_ready";if(!v.stockTriggerArmed)return "stock_trigger_armed";
     if(!v.fireSuppressed)return "fire_suppressed";if(!v.mechanicsSettled)return "mechanics_settled";
     if(!v.nativeOwned)return "native_owned";if(!v.nativeHealthy)return "native_healthy";
-    if(!v.nativeObservationComplete)return "native_observation_complete";if(!v.stockTriggerEnabled)return "stock_trigger_enabled";
+    if(!ChestKnifeCurrentNativeReady(v))return "native_observation_complete";if(!v.stockTriggerEnabled)return "stock_trigger_enabled";
     if(v.attackBridgeEnabled)return "attack_bridge_enabled";
     return "join";
 }
@@ -351,7 +361,8 @@ inline void WriteChestKnifeLiveObservation(std::ostream& out,const ChestKnifeLiv
     out<<",\"originalOwner\":";nativeOwner(v.originalOwner);out<<",\"knife\":";key(v.knife);out<<",\"originalGun\":";key(v.originalGun);
     out<<",\"bodyOperation\":"<<v.bodyOperation<<",\"drawReceipts\":"<<v.draws<<",\"returnReceipts\":"<<v.returns
         <<",\"phase\":"<<unsigned(v.phase)<<",\"held\":true,\"stockTriggerReady\":true,\"stockTriggerArmed\":true"
-        <<",\"nativeOwned\":true,\"nativeHealthy\":true,\"nativeObservationComplete\":true,\"stockTriggerEnabled\":true"
+        <<",\"nativeOwned\":true,\"nativeHealthy\":true,\"nativeObservationComplete\":"<<(v.nativeObservationComplete?"true":"false")
+        <<",\"currentObservationReady\":"<<(v.currentObservationReady?"true":"false")<<",\"stockTriggerEnabled\":true"
         <<",\"motionEnabled\":"<<(v.motionEnabled?"true":"false")<<",\"attackBridgeEnabled\":false,\"fireSuppressed\":true,\"mechanicsSettled\":true,\"inputEvidence\":";evidence(f);
     out<<",\"menu\":{\"owner\":"<<unsigned(v.controls.menu.owner)<<",\"sequence\":"<<v.controls.menu.sequence<<",\"epoch\":"<<v.controls.menu.epoch
         <<",\"deadlineNs\":"<<v.controls.menu.deadlineNs<<"},\"trackingBasisGeneration\":"<<v.controls.trackingBasisGeneration<<",\"controls\":[";
@@ -362,7 +373,14 @@ inline void WriteChestKnifeLiveObservation(std::ostream& out,const ChestKnifeLiv
     out<<",\"render\":{\"owner\":";nativeOwner(r.owner);out<<",\"knife\":";key(r.knife);out<<",\"bodyOperation\":"<<r.bodyOperation
         <<",\"rigFingerprint\":"<<v.rendered.rigFingerprint<<",\"inputEvidence\":";evidence(r.input);out<<'}';
     out<<",\"nativeSequence\":"<<v.nativeSequence<<",\"nativeObservedNs\":"<<v.nativeObservedNs<<",\"knifeSlot\":"<<v.knifeSlot
-        <<",\"selectedSlots\":[7,7,7],\"nativeTick\":"<<v.nativeTick<<",\"suppressionRequest\":"<<v.suppressionRequest<<'}';
+        <<",\"selectedSlots\":[7,7,7],\"nativeTick\":"<<v.nativeTick<<",\"suppressionRequest\":"<<v.suppressionRequest;
+    const auto& p=v.observationRecovery;const auto& s=p.state;
+    out<<",\"observationRecovery\":{\"epoch\":"<<s.epoch<<",\"revision\":"<<s.revision
+        <<",\"ready\":"<<(s.ready?"true":"false")<<",\"recovered\":"<<(s.recovered?"true":"false")
+        <<",\"pending\":"<<(s.pending?"true":"false")<<",\"blocked\":"<<(s.blocked?"true":"false")
+        <<",\"needsRejoin\":"<<(s.needsRejoin?"true":"false")<<",\"completedNs\":"<<s.completedNs
+        <<",\"lifetime\":"<<p.lifetime<<",\"bodyOperation\":"<<p.bodyOperation<<",\"input\":"<<p.input
+        <<",\"observedNs\":"<<p.observedNs<<",\"nowNs\":"<<p.nowNs<<"}}";
 }
 // Serialize one optional section and recheck its retained observation afterward.
 // A concurrent gather, revocation or expiry removes only this section's proof;

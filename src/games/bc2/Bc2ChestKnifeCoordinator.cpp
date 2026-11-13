@@ -75,7 +75,7 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
         if(knife){knife=0;break;}knife=display->carried.items[n].weapon;}
     const auto key=knife?inventory.ItemKey(knife):std::nullopt;
     chestKnifeNative::InspectReason nativeInspection=chestKnifeNative::InspectReason::NotAttempted;
-    const auto native=key?chestKnifeNative::Inspect(s.owner,knife,s.hand.sequence,s.hand.nowNs,&nativeInspection):std::nullopt;
+    auto native=key?chestKnifeNative::Inspect(s.owner,knife,s.hand.sequence,s.hand.nowNs,&nativeInspection):std::nullopt;
     std::optional<selectedKnife::Geometry> attackGeometry;
     std::optional<ChestKnifeMotionIdentity> motionIdentity;
     bool measuredKnifeHold=false;
@@ -126,6 +126,9 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
         const bool existingHoldCurrent=!policy_.NeedsInitialHeldPose()&&ChestKnifeRenderPoseCustody(policy_,hands,s.hand);
         sample.stockTriggerReady=existingHoldCurrent&&native->stockTriggerEnabled&&!native->attackBridgeEnabled&&
             sample.trackedKnifeOwned&&sample.mechanicsSettled;
+        if(measuredKnifeHold&&existingHoldCurrent&&!native->currentObservationReady)
+            chestKnifeNative::RecoverCurrentHold(*native,sample,policy_,hands);
+        sample.stockTriggerReady&=chestKnifeNative::ObservationSourceReady(*native,policy_.Phase());
         // Continue physical observation only through the same live hold and
         // current native/input proofs. Missing render contact remains bounded
         // by the existing stock fallback's ORIGINAL hand deadline above.
@@ -152,7 +155,8 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
             if(native->snapshot.selectedOwner!=s.owner)return Gate::SelectedOwner;return Gate::None;}();
         if(projection.identityGate==KnifeMotionIdentityGate::None){
             motionIdentity=ChestKnifeMotionIdentity{s.owner,held->token,*key,bodyOperation_,native->currentHoldWork.lifetime,
-                sample.menu.epoch,s.input.trackingBasisGeneration,s.input.worldUnitsPerMeter};
+                sample.menu.epoch,s.input.trackingBasisGeneration,s.input.worldUnitsPerMeter,
+                native->observationRecovery.state.epoch,native->observationRecovery.state.revision};
         }
     }else ++readGaps_;
     if(motionIdentity&&measuredKnifeHold&&native->attackBridgeEnabled&&currentBody)
@@ -163,8 +167,14 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
     const bool inspectionSuspended=!native&&chestKnifeNative::InspectionLockMiss(nativeInspection)&&samePacket;
     if(!inspectionSuspended)PrepareChestKnifeMotionSource(motionCalibration_,policy_,motionIdentity,
         measuredKnifeHold?std::optional(rendered->wristInGrip):std::nullopt,s.input,
-        native&&native->motionEnabled&&sample.mechanicsSettled&&
+        native&&chestKnifeNative::ObservationSourceReady(*native,policy_.Phase())&&native->motionEnabled&&sample.mechanicsSettled&&
             (!native->attackBridgeEnabled||attackGeometry.has_value()),sample,&projection);
+    if(native&&!chestKnifeNative::ObservationSourceReady(*native,policy_.Phase())){
+        motionCalibration_.Reset();policy_.InvalidateMotion();repeatedMotion_.Reset();
+        sample.motionTrackingReady=sample.nativeAttackReady=false;
+        projection.calibrationContinuous=projection.trackingReady=projection.attackReady=false;
+        projection.projection=KnifeMotionProjectionReason::Suspended;
+    }
     projection.bodyOperation=bodyOperation_;projection.nativeLifetime=native?native->currentHoldWork.lifetime:0;
     projection.menuEpoch=sample.menu.epoch;projection.trackingBasis=s.input.trackingBasisGeneration;
     projection.nativeInspection=unsigned(nativeInspection);projection.readinessReason=unsigned(nativeReadiness.reason);
@@ -179,6 +189,7 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
         if(key)v.knife=*key;if(anchor_)v.originalOwner=anchor_->original.client.owner;
         if(native){v.originalOwner=native->anchor.original.client.owner;v.nativeOwned=native->owned;v.nativeHealthy=native->healthy;
             v.nativeObservationComplete=native->observationComplete;v.firstObservationGap=native->firstObservationGap;
+            v.currentObservationReady=native->currentObservationReady;v.observationRecovery=native->observationRecovery;
             v.selectedSlots=native->snapshot.selected.current;v.readinessKnife=sample.knifeSelected;
             v.readiness=nativeReadiness;}
         v.mechanicsSettled=sample.mechanicsSettled;return v;};
@@ -191,7 +202,7 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
         // it cannot run Observe/Prepare/Stage, renew custody or supply a view.
         const bool keep=samePacket&&policy_.Phase()==KnifePhase::Held&&!policy_.NeedsNativeCleanup()&&
             repeatedMotion_.TemporaryMiss(nativeInspection,beforePrepare,motionIdentity,projection.calibrationContinuous,
-                native&&native->observationComplete&&chestKnifeNative::CurrentHoldWorkSettled(native->currentHoldWork));
+                native&&native->currentObservationReady&&chestKnifeNative::CurrentHoldWorkSettled(native->currentHoldWork));
         if(keep){repeatedMotion_.Suspended(s.hand.nowNs);projection.calibration=KnifeMotionCalibrationReason::DuplicateSuspended;
             projection.calibrationContinuous=true;projection.projection=KnifeMotionProjectionReason::Suspended;}
         else {motionCalibration_.Reset();policy_.InvalidateMotion();repeatedMotion_.Reset();}
@@ -238,7 +249,7 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
     }
     repeatedMotion_.Reset();
     const auto motionHold=hands.Current(InteractionHand::Right);
-    if(!command&&motionIdentity&&native&&native->observationComplete&&
+    if(!command&&motionIdentity&&native&&native->currentObservationReady&&
        sample.nativeAttackReady&&sample.motionTrackingReady&&
        policy_.Phase()==KnifePhase::Held&&!policy_.NeedsNativeCleanup()&&motionHold&&motionHold->token==motionIdentity->hold)
         repeatedMotion_.Remember(*motionIdentity,s.input,sample,*motionHold,native->currentHoldWork);
@@ -282,6 +293,7 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
     observation.knifeSlot=native->anchor.knifeSlot;observation.selectedSlots=native->snapshot.selected.current;
     observation.phase=policy_.Phase();observation.nativeOwned=nativeOwned_;observation.nativeHealthy=native->healthy;
     observation.nativeObservationComplete=native->observationComplete;observation.stockTriggerEnabled=native->stockTriggerEnabled;
+    observation.currentObservationReady=native->currentObservationReady;observation.observationRecovery=native->observationRecovery;
     observation.motionEnabled=native->motionEnabled;observation.attackBridgeEnabled=native->attackBridgeEnabled;
     observation.held=poseCustody&&policy_.Hold()&&held->token==*policy_.Hold()&&measuredKnifeHold&&rendering_.has_value();
     observation.stockTriggerReady=sample.stockTriggerReady;observation.stockTriggerArmed=policy_.StockTriggerArmedFor(sample,hands);

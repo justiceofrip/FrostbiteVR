@@ -4,6 +4,7 @@
 #include "Bc2KnifeAttackGate.h"
 #include "Bc2KnifeStockTriggerSource.h"
 #include "Bc2ChestKnifeStockHold.h"
+#include "Bc2ChestKnifeCoordinator.h"
 #include "Bc2KnifeStockMotionSource.h"
 #include "NativeProbeConfig.h"
 #include <cstdio>
@@ -352,7 +353,8 @@ int StockTriggerPassiveReadiness(){
 }
 #include "KnifeStockHoldCases.inc"
 #include "KnifeStockJabCases.inc"
-int main(){CHECK(!StockJabCases());CHECK(!StockHoldPublicationGapCases());CHECK(!StockTriggerPassiveReadiness());CHECK(!StockTriggerRevocationCases());CHECK(!StockTriggerCases());CHECK(!IdleGunNeedsANewEmptyHandNeutral());CHECK(!WalkingStrokeUsesSameNativeBoundaryPredicate());CHECK(!MovingHoldAndQuietRearm());CHECK(!DrawStillNeedsNeutral());
+#include "KnifeObservationRecoveryCases.inc"
+int main(){CHECK(!knife_observation_recovery_cases::Cases());CHECK(!StockJabCases());CHECK(!StockHoldPublicationGapCases());CHECK(!StockTriggerPassiveReadiness());CHECK(!StockTriggerRevocationCases());CHECK(!StockTriggerCases());CHECK(!IdleGunNeedsANewEmptyHandNeutral());CHECK(!WalkingStrokeUsesSameNativeBoundaryPredicate());CHECK(!MovingHoldAndQuietRearm());CHECK(!DrawStillNeedsNeutral());
     CHECK(!MissingAuthorityNeverBecomesHeldInput());CHECK(!RealRawInputSeparatesHoldAndIntent());
     CHECK(!FocusGapReturnsBeforeFreshChestDraw());CHECK(!DuplicateCannotWidenOrReacquire());
     std::puts("Eight knife held-input groups PASS: idle gun rearm, real custody/quiet intent, input negatives, focus-gap return then deliberate redraw, immutable duplicate lease.");}

@@ -1,4 +1,5 @@
 #pragma once
+#include "Bc2ChestKnifeObservationRecovery.h"
 #include "KnifeNativeReader.h"
 #include "Bc2KnifeDrawReturnGate.h"
 #include "Bc2BodyHolster.h"
@@ -67,9 +68,43 @@ struct View {
     bool owned=false,healthy=false,observationComplete=false,motionEnabled=false,attackBridgeEnabled=false,stockTriggerEnabled=false;
     unsigned firstObservationGap=0; // Packed diagnostic: reason*4 + branch, never authority.
     CurrentHoldWorkObservation currentHoldWork{};
+    bool currentObservationReady=false;
+    ObservationRecoveryProof observationRecovery{};
 };
+inline bool ObservationSourceReady(const View& view,interaction::KnifePhase phase)noexcept {
+    if(view.currentObservationReady)return true;
+    const auto& s=view.observationRecovery.state;const auto& w=view.currentHoldWork;
+    return (phase==interaction::KnifePhase::AttackStaged||phase==interaction::KnifePhase::Attacking)&&
+        w.known&&w.lifetime&&w.bodyOperation&&w.outstanding&&w.attackPending&&!w.commandPending&&
+        !w.returnReady&&!w.closing&&s.epoch&&!s.pending&&!s.blocked&&!s.needsRejoin;
+}
+inline bool RecoveryHoldCurrent(const View& view,const interaction::KnifeSample& source,
+    const interaction::ChestKnifeCustody& policy,const interaction::HandInteraction& hands)noexcept {
+    using namespace interaction;
+    const auto& f=source.source;const auto& owner=view.snapshot.selectedOwner;
+    const auto held=hands.Current(InteractionHand::Right);
+    if(view.currentObservationReady||!view.owned||!view.healthy||!CurrentHoldWorkSettled(view.currentHoldWork)||
+       policy.Phase()!=KnifePhase::Held||policy.NeedsNativeCleanup()||!policy.Hold()||!held||held->token!=*policy.Hold()||
+       held->token.owner!=f.owner||held->token.item!=source.knife||!held->inputSequence||
+       held->inputSequence>f.sequence||held->deadlineNs<=f.nowNs||
+       !hands.HasRecordedEvidence(f,InteractionHand::Right)||hands.Current(InteractionHand::Left)||
+       !source.controlsNeutral||!source.holdInputCurrent||!KnifeActionInputCurrent(source)||!source.onFoot||
+       !source.trackedKnifeOwned||!source.knifeSelected||!source.fireSuppressed||!source.mechanicsSettled||
+       !source.gripHeld[1]||source.stockTrigger!=0||f.released[1]||!f.focused||!f.tracked[0]||!f.tracked[1]||
+       f.observedNs<=0||f.nowNs<f.observedNs||f.deadlineNs<=f.nowNs||f.deadlineNs-f.observedNs>100000000||
+       !GameplayOwnsInput(source.menu,f.nowNs)||view.snapshot.sequence!=f.sequence||view.snapshot.observedNs!=f.nowNs||
+       owner.weapon!=source.knife.id||f.owner.actor!=((std::uint64_t(owner.weak)<<32)|owner.soldier)||
+       owner.actorGeneration!=f.owner.actorGeneration||owner.space!=f.owner.space||
+       InspectReady(view.snapshot.knife).reason!=ReadyReason::Ready||!private_knife::KnifeSentinel(view.snapshot))return false;
+    for(auto slot:view.snapshot.selected.current)if(slot!=view.anchor.knifeSlot)return false;
+    return view.anchor.knifeSlot==7&&view.anchor.knifeWeapon==owner.weapon;
+}
 // Current coherent observation only; it creates no staged native action.
 std::optional<View> Inspect(const ReloadStateOwner&,unsigned knifeWeapon,std::uint64_t sequence,std::int64_t nowNs,InspectReason* diagnostic=nullptr)noexcept;
+// A fresh neutral current-hold join may end an idle callback gap. It never
+// changes historical completeness or accepts an attack/return transaction.
+bool RecoverCurrentHold(View&,const interaction::KnifeSample&,const interaction::ChestKnifeCustody&,
+    const interaction::HandInteraction&)noexcept;
 // No-effect draw cleanup after its exact new paired empty receipt.
 void AcknowledgeNoEffectRehide(const Bc2BodyHolster&)noexcept;
 

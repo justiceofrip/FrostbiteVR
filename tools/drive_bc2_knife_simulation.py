@@ -208,8 +208,25 @@ def held(snapshot, baseline, now, after_ns, episode, previous=None):
          and k.get('reason') is None and number(k['phase']) == 4,
          'independent current Held proof unavailable')
     for key in ('held', 'stockTriggerReady', 'stockTriggerArmed', 'nativeOwned', 'nativeHealthy',
-                'nativeObservationComplete', 'stockTriggerEnabled', 'fireSuppressed', 'mechanicsSettled'):
+                'stockTriggerEnabled', 'fireSuppressed', 'mechanicsSettled'):
         need(k[key] is True, 'knife gate lost: '+key)
+    need(type(k['nativeObservationComplete']) is bool, 'native observation history missing')
+    if 'currentObservationReady' in k:
+        need(k['currentObservationReady'] is True, 'current native observation is not ready')
+    if not k['nativeObservationComplete']:
+        recovery = k.get('observationRecovery')
+        need(k.get('currentObservationReady') is True and isinstance(recovery, dict),
+             'historical native gap lacks explicit current recovery')
+        need(all(recovery.get(key) is True for key in ('ready', 'recovered'))
+             and all(recovery.get(key) is False for key in ('pending', 'blocked', 'needsRejoin')),
+             'native recovery has unresolved callback work')
+        need(all(number(recovery[key]) > 0 for key in ('epoch', 'revision', 'lifetime', 'input'))
+             and recovery['bodyOperation'] == k['bodyOperation']
+             and recovery['input'] <= k['inputEvidence']['sequence']
+             and 0 < number(recovery['completedNs']) < number(recovery['observedNs'])
+             <= k['inputEvidence']['observedNs']
+             and recovery['observedNs'] <= number(recovery['nowNs']) <= k['inputEvidence']['nowNs'],
+             'native recovery does not join this current Held episode')
     need(k['motionEnabled'] is True and k['attackBridgeEnabled'] is False,
          'unexpected knife attack mode')
     owner, old = k['owner'], baseline['owner']
@@ -495,7 +512,7 @@ def unit_direction(direction):
     return direction
 
 
-def measured_jab(snapshot, now):
+def measured_jab(snapshot, now, *, wait_for_render=False):
     """Current rendered knife rotation, joined to the strict Held input.
 
     Authored RightHandInKnife * placedKnife recovers the tracked right wrist;
@@ -509,13 +526,20 @@ def measured_jab(snapshot, now):
     require(snapshot['owner'] == k['owner']
             and all(snapshot['input_evidence'][key] == k['inputEvidence'][key]
                     for key in ('owner', 'sequence', 'observedNs', 'deadlineNs', 'focused', 'tracked', 'released'))
-            and inp['generation'] == k['render']['inputEvidence']['sequence']
             and snapshot['rig']['fingerprint'] == k['render']['rigFingerprint'] == KNIFE_RIG
             and snapshot['selected']['configurationPath'] == 'Objects/Weapons/Handheld/Knife/Knife'
             and snapshot['selected']['matchedMeshPath'] == 'Objects/Weapons/Handheld/Knife/Knife_Mesh'
             and snapshot['equipment']['asset'] == 'KNV-1'
             and inp['trackingBasisGeneration'] == k['trackingBasisGeneration'],
             'jab geometry is not the current rendered Held knife')
+    rendered = k['render']['inputEvidence']
+    p.evidence(rendered, k['owner'], k['inputEvidence']['owner']['equipGeneration'], now)
+    same_stamps(rendered, snapshot['input_evidence'])
+    require(rendered['released'][1] is False
+            and rendered['sequence'] <= inp['generation']
+            and rendered['observedNs'] <= snapshot['input_evidence']['observedNs'],
+            'jab render source is not live ordered Held input')
+    joined = inp['generation'] == rendered['sequence']
     for hand, controls in zip(inp['hands'], k['controls']):
         require(all(hand[key] == controls[key] for key in controls), 'jab geometry/input controls differ')
     weapon = p.rigid(snapshot['mapping']['weaponWorldMeters'])
@@ -533,6 +557,13 @@ def measured_jab(snapshot, now):
     endpoint = [p.finite(v) + JAB_DISTANCE*d for v, d in zip(grip['position'], direction)]
     require(all(math.dist(point, inp['head']['position']) <= 1.5 for point in (grip['position'], endpoint)),
             'jab leaves native head-relative reach')
+    # Native snapshots load passive Held and the rendered mapping separately.
+    # A live older render receipt is valid Held, but cannot authorize this
+    # mapping's jab. Validate every other geometry gate before observing again;
+    # never relabel the older receipt or extend its original input lease.
+    if not joined:
+        require(wait_for_render, 'jab geometry is not the current rendered Held knife')
+        return None
     return dict(backend='xr-sim.hand-to-grip.smoothstep.v1', durationMs=JAB_MS,
         distanceMeters=JAB_DISTANCE, directionLocal=direction, directionIsMeasuredBladeAxis=True,
         origin=copy.deepcopy(grip['position']), endpoint=endpoint,
@@ -893,7 +924,7 @@ class KnifeDriver(KnifeTransport):
             raise
 
     def execute_jab(self, after, previous):
-        current = self.held_now(after, previous)
+        current = self.held_now(after, previous, geometry=True)
         preserved(self.baseline, current[0])
         plan = measured_jab(current[0], time.perf_counter_ns())
         reviewed = self.args.jab_direction_local
@@ -973,7 +1004,7 @@ class KnifeDriver(KnifeTransport):
         self.artifacts.save('zero-trigger-jab.json', proof)
         return proof
 
-    def held_now(self, after, previous=None):
+    def held_now(self, after, previous=None, *, geometry=False):
         reserve = max(3*NS, JAB_MS*MS+motion_backend.RECEIVE_NS+NS)
         cutoff = min(after + 3*NS, self.deadline - reserve, self.stage_deadline - reserve)
         controls = copy.deepcopy(self.state['controls'])
@@ -993,6 +1024,10 @@ class KnifeDriver(KnifeTransport):
                 k = s.get('chestKnife')
                 if isinstance(k, dict) and k.get('available') is True:
                     held(s, self.baseline, now, after, self.episode, previous)
+                    if geometry:
+                        preserved(self.baseline, s)
+                        if measured_jab(s, now, wait_for_render=True) is None:
+                            return
                     admitted.append(True)
                     return
                 require(isinstance(k, dict) and k.get('observationOnly') is True

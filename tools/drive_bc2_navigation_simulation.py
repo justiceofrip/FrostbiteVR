@@ -11,6 +11,9 @@ before input. Each of at most four rows expands into pulses of at most 500 ms,
 up to sixteen pulses total. Every pulse obtains new original native admission
 and ends with acknowledged numeric zeros for both sticks. Longer row budgets
 include a separate zero reserve per pulse; they do not promise continuous input.
+Native diagnostics are requested only at neutral boundaries. During a pulse,
+the driver checks live simulator ownership/focus/tracking; ordinary native input
+freshness and Playing gates remain responsible for each consumed XR packet.
 Rows of 501..601 ms cannot fit two active pulses with full zero reserves and
 are refused before any input, as are rows of 300 ms or less.
 The shared ten-second invocation limit remains. There are no buttons, triggers
@@ -179,6 +182,7 @@ class NavigationDriver(t.Driver):
             holsterPolicySha256=t.digest(Path(holster.__file__).read_bytes()),
             rootAuthorizedOrdinaryNavigation=True, version=args.version,
             sourceSha256=args.source_sha256, nativeAcceptance=False, objectiveEntry=False,
+            snapshotPolicy="neutral-boundaries-only", freshNativeAdmissionPerPulse=True,
             snapshotArtifactEncoding="gzip-original-bytes", maximumDecodedSnapshotBytes=8*1024*1024))
 
     def read_state(self):
@@ -344,22 +348,19 @@ class NavigationDriver(t.Driver):
             self.ownership(state)
         if not self.releasing_sticks:
             self.check_observation_state(state)
-        if self.monitor and not self.releasing_sticks:
-            received = self.receive_snapshot()
-            if received:
-                self.accept_snapshot(*received)
-            # Each bounded pulse retains the original ACK/hold behavior while
-            # a diagnostic is pending. Every received replacement and every
-            # new publication still pass current native admission. Continuation
-            # requires committed zeros and a newly requested original source.
-            if self.pending_nonce is None and now - self.last_request >= PERIOD:
-                self.request_snapshot()
+        # No speculative native diagnostic work belongs in the command/ACK or
+        # hold path. A request started here can spend its entire response budget
+        # while normal zero is committing, then poison fresh() for the next
+        # pulse. XR produces fresh packets while held; native GatherInput keeps
+        # its independent original input deadline and Playing/tracking gates.
+        # The next pulse explicitly requests a new source after committed zero.
 
     def validate_publication(self, lines, expected, cleanup):
         require(lines == (ZERO if cleanup else self.authorized_lines), "unreviewed navigation command")
         require(not cleanup or self.release_attempted, "unowned navigation release")
         require(not self.releasing_sticks or lines == ZERO, "release must contain only numeric stick zeros")
         if not cleanup and not self.releasing_sticks:
+            require(self.pending_nonce is None, "navigation publication requires completed native admission")
             self.check_observation_state(self.read_state())
             self.admit_snapshot(self.latest_snapshot, time.perf_counter_ns(),
                                 t.integer(self.latest_snapshot["nonce"]))
@@ -372,9 +373,8 @@ class NavigationDriver(t.Driver):
         return self.pause_release_until(deadline)
 
     def pause_release_until(self, deadline):
-        # A pending diagnostic refresh may gate the next movement, but cannot
-        # delay exact owned zeros. Preserve its state and original clocks while
-        # enforcing ordinary command spacing and this pulse's existing bounds.
+        # Exact owned zeros need no native diagnostic. Preserve ordinary command
+        # spacing and this pulse's existing bounds even during failure cleanup.
         for _ in range(6000):
             self.pump()
             if time.perf_counter_ns() >= deadline:
@@ -428,7 +428,6 @@ class NavigationDriver(t.Driver):
         self.navigation_reference = copy.deepcopy(self.latest_snapshot)
         require(all(h["stickX"] == h["stickY"] == 0 for h in self.latest_snapshot["input"]["hands"]),
                 "native entry sticks are not neutral")
-        self.monitor = True
         for row in self.navigation_schedule:
             require(self.pending_sticks is None and not self.pending_command and not any(any(v) for v in self.sticks),
                     "previous navigation episode lacks committed neutral")
@@ -436,7 +435,6 @@ class NavigationDriver(t.Driver):
             self.fresh()
             require(all(h["stickX"] == h["stickY"] == 0 for h in self.latest_snapshot["input"]["hands"]),
                     "native continuation sticks are not neutral")
-            self.monitor = True
             admission_nonce = self.latest_snapshot["nonce"]
             lines = []
             if "lookDegrees" in row:

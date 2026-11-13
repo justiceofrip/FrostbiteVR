@@ -16,6 +16,7 @@ struct ChestKnifeMotionIdentity {
     interaction::BodyItemKey knife{};
     std::uint64_t bodyOperation=0,nativeLifetime=0,menuEpoch=0;
     std::uint32_t trackingBasis=0;float worldUnitsPerMeter=0;
+    std::uint64_t observationEpoch=0,observationRevision=0;
     bool operator==(const ChestKnifeMotionIdentity&)const=default;
 };
 class ChestKnifeMotionCalibration {
