@@ -1,18 +1,32 @@
 #requires -Version 7.2
 # Offline, bounded Ghidra export. All generated data stays under build/ghidra.
-[CmdletBinding()]
+[CmdletBinding(DefaultParameterSetName='Functions')]
 param(
     [Parameter(Mandatory)][string]$Executable,
-    [Parameter(Mandatory)][ValidateCount(1,16)][string[]]$Addresses,
+    [Parameter(Mandatory,ParameterSetName='Functions')][ValidateCount(1,16)][string[]]$Addresses,
+    [Parameter(Mandatory,ParameterSetName='Members')][ValidateCount(1,4)][string[]]$MemberOffsets,
+    [Parameter(Mandatory,ParameterSetName='Members')][string]$SearchStartAddress,
+    [Parameter(Mandatory,ParameterSetName='Members')][string]$SearchEndAddress,
+    [Parameter(ParameterSetName='Members')][ValidateRange(1,5000000)][int]$MaxInstructions=5000000,
+    [Parameter(ParameterSetName='Members')][ValidateRange(1,1024)][int]$MaxMatches=256,
+    [Parameter(ParameterSetName='Members')][ValidateRange(1,256)][int]$MaxFunctions=128,
+    [Parameter(ParameterSetName='Members')][ValidateRange(1,120)][int]$SearchSeconds=60,
     [Parameter(Mandatory)][string]$OutputPath,
     [string]$GhidraHome,
-    [string]$JdkHome
+    [string]$JdkHome,
+    [ValidateRange(1,[long]::MaxValue)][long]$MaxGeneratedBytes=40GB,
+    [string]$GeneratedBudgetReason
 )
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 $repository=[IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $generated=[IO.Path]::GetFullPath((Join-Path $repository 'build/ghidra'))
-$exporter=Join-Path $PSScriptRoot 'ghidra/ExportBc2Functions.java'
+$memberSearch=$PSCmdlet.ParameterSetName -eq 'Members'
+$scriptName=if($memberSearch){'SearchBc2MemberReferences.java'}else{'ExportBc2Functions.java'}
+$exporter=Join-Path $PSScriptRoot ('ghidra/'+$scriptName)
+if($MaxGeneratedBytes -gt 40GB -and [string]::IsNullOrWhiteSpace($GeneratedBudgetReason)){
+    throw 'MaxGeneratedBytes above 40 GiB requires an explicit GeneratedBudgetReason.'
+}
 
 function Assert-UnlinkedPath([string]$Path) {
     $ancestor=[IO.Path]::GetFullPath($Path)
@@ -70,11 +84,20 @@ if(Test-Path -LiteralPath $OutputPath){throw "Refusing to overwrite output: $Out
 Assert-UnlinkedPath $generated
 Assert-UnlinkedPath $OutputPath
 if($PSScriptRoot.Contains(';')){throw 'Ghidra script paths cannot contain the script-list separator (;).'}
-$normalized=@(foreach($address in $Addresses){
+$queryValues=if($memberSearch){$MemberOffsets}else{$Addresses}
+$normalized=@(foreach($address in $queryValues){
     if($address -notmatch '^(?:0[xX])?([0-9a-fA-F]{1,16})$'){throw "Expected a hexadecimal virtual address, got: $address"}
     '0x'+([Convert]::ToUInt64($matches[1],16).ToString('x'))
 })
 if(@($normalized | Select-Object -Unique).Count -ne $normalized.Count){throw 'Addresses must be distinct.'}
+if($memberSearch){
+    if(@($normalized | Where-Object {[Convert]::ToUInt64($_.Substring(2),16) -gt 0xffffffff}).Count){throw 'Member offsets must fit an unsigned 32-bit value.'}
+    $range=@(foreach($address in @($SearchStartAddress,$SearchEndAddress)){
+        if($address -notmatch '^(?:0[xX])?([0-9a-fA-F]{1,16})$'){throw 'Search range requires hexadecimal virtual addresses.'}
+        [Convert]::ToUInt64($matches[1],16)
+    })
+    if($range[0] -gt $range[1]){throw 'Search range start must not exceed its inclusive end.'}
+}
 
 $savedEnvironment=@{}
 foreach($name in @('TEMP','TMP','TMPDIR','PYTHONDONTWRITEBYTECODE')){$savedEnvironment[$name]=[Environment]::GetEnvironmentVariable($name,'Process')}
@@ -86,13 +109,17 @@ try{
     $sha=(Get-FileHash -InputStream $source -Algorithm SHA256).Hash.ToLowerInvariant()
     $projectDirectory=Join-Path $generated ('projects/'+$sha)
     $manifestPath=Join-Path $projectDirectory 'analysis.json'
+    if($memberSearch -and -not (Test-Path -LiteralPath $manifestPath)){
+        throw 'Member search requires a completed cached analysis; it never imports or analyzes an executable.'
+    }
     # Disk reservation covers the project database and script cache, not the
     # separate in-memory Java heap. Allow 64x input size with a 1GiB floor.
     $planned=if(Test-Path -LiteralPath $manifestPath){512MB}else{[Math]::Max(1GB,$source.Length*64)}
     . (Join-Path $PSScriptRoot 'StorageBudget.ps1')
     $siblings=Split-Path -Parent $repository
     $additional=@('bc2vr-task-worktrees','BC2VR-Launcher' | ForEach-Object {Join-Path $siblings $_} | Where-Object {Test-Path -LiteralPath $_})
-    $admission=Assert-FvrStorageBudget -RepositoryRoot $repository -OutputPath $generated -Operation Session -PlannedBytes $planned -AdditionalRoots $additional
+    $admission=Assert-FvrStorageBudget -RepositoryRoot $repository -OutputPath $generated -Operation Session -PlannedBytes $planned -MaxGeneratedBytes $MaxGeneratedBytes -AdditionalRoots $additional
+    $admission|Add-Member -NotePropertyName generated_budget_reason -NotePropertyValue $GeneratedBudgetReason
     Assert-UnlinkedPath $projectDirectory
     $null=[IO.Directory]::CreateDirectory($projectDirectory)
     # Persistent zero-byte token; FileShare.None serializes every invocation for
@@ -132,7 +159,7 @@ try{
     else{$headlessArguments+=@('-import',$Executable,'-analysisTimeoutPerFile','1800')}
     $headlessArguments+=@('-max-cpu','2','-scriptPath',(Join-Path $PSScriptRoot 'ghidra'),
         '-log',(Join-Path $runDirectory 'ghidra.log'),'-scriptlog',(Join-Path $runDirectory 'scripts.log'),
-        '-postScript','ExportBc2Functions.java',$requestPath,$OutputPath)
+        '-postScript',$scriptName,$requestPath,$OutputPath)
     $javaArguments=$vmArguments+@('-cp',$utilityJar,'ghidra.Ghidra','ghidra.app.util.headless.AnalyzeHeadless')+$headlessArguments
     $request=[ordered]@{
         schema='bc2.ghidra-invocation.v1';tool_version='1.0';created_utc=[DateTime]::UtcNow.ToString('o')
@@ -146,6 +173,16 @@ try{
         java_executable=$java;java_arguments=$javaArguments;headless_arguments=$headlessArguments
         storage_admission=$admission
     }
+    if($memberSearch){
+        $request.schema='bc2.ghidra-member-invocation.v1';$request.tool_version='1.1'
+        $request.mode='cached_readonly_member_search'
+        $request.Remove('addresses')
+        $request.member_offsets=$normalized
+        $request.search_start_address='0x'+$range[0].ToString('x')
+        $request.search_end_address='0x'+$range[1].ToString('x')
+        $request.max_instructions=$MaxInstructions;$request.max_matches=$MaxMatches
+        $request.max_functions=$MaxFunctions;$request.search_seconds=$SearchSeconds
+    }
     Write-NewJson $requestPath $request
     $start=[Diagnostics.ProcessStartInfo]::new()
     $start.FileName=$java;$start.UseShellExecute=$false;$start.CreateNoWindow=$true
@@ -156,7 +193,7 @@ try{
     foreach($name in @('_JAVA_OPTIONS','JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS')){$null=$start.Environment.Remove($name)}
     $stdout=[IO.File]::Open((Join-Path $runDirectory 'stdout.log'),[IO.FileMode]::CreateNew)
     $stderr=[IO.File]::Open((Join-Path $runDirectory 'stderr.log'),[IO.FileMode]::CreateNew)
-    Write-Host "Ghidra $($request.installed_ghidra_version): $($request.mode), $($normalized.Count) address(es). Invocation: $requestPath"
+    Write-Host "Ghidra $($request.installed_ghidra_version): $($request.mode), $($normalized.Count) query value(s). Invocation: $requestPath"
     $process=[Diagnostics.Process]::new();$process.StartInfo=$start
     if(-not $process.Start()){throw 'Java failed to start.'}
     $started=$true
@@ -169,8 +206,12 @@ try{
     # Headless can return zero after a script error; require its complete result.
     if(-not (Test-Path -LiteralPath $OutputPath)){throw "Exporter produced no result. Preserved logs: $runDirectory"}
     $result=Get-Content -LiteralPath $OutputPath -Raw -Encoding utf8 | ConvertFrom-Json
-    if($result.schema -ne 'bc2.ghidra-functions.v1' -or $result.executable_sha256 -ne $sha -or
-       $result.ghidra_version -ne $request.installed_ghidra_version -or $result.status -ne 'export_complete' -or
+    if($result.executable_sha256 -ne $sha -or $result.ghidra_version -ne $request.installed_ghidra_version){throw "Mismatched Ghidra result: $OutputPath"}
+    if($memberSearch){
+        if($result.schema -ne 'bc2.ghidra-member-search.v1' -or $result.status -notin @('search_complete','search_truncated') -or
+           @($result.matches).Count -gt $MaxMatches -or @($result.functions).Count -gt $MaxFunctions -or
+           $result.instructions_examined -gt $MaxInstructions){throw "Incomplete or mismatched member search result: $OutputPath"}
+    }elseif($result.schema -ne 'bc2.ghidra-functions.v1' -or $result.status -ne 'export_complete' -or
        @($result.functions).Count -ne $normalized.Count){throw "Incomplete or mismatched Ghidra result: $OutputPath"}
     if(-not $cached){
         if(-not (Test-Path -LiteralPath $projectFile)){throw 'Ghidra did not save the analyzed project.'}
@@ -178,8 +219,14 @@ try{
             ghidra_version=$result.ghidra_version;jdk_version=$result.java_version;program_name=$result.program_name;
             completed_utc=[DateTime]::UtcNow.ToString('o');invocation_path=$requestPath;initial_output_path=$OutputPath}
     }
-    [pscustomobject]@{output_path=$OutputPath;invocation_path=$requestPath;executable_sha256=$sha;mode=$request.mode;
-        functions=@($result.functions | Select-Object requested_address,function_address,status)}
+    if($memberSearch){
+        [pscustomobject]@{output_path=$OutputPath;invocation_path=$requestPath;executable_sha256=$sha;mode=$request.mode;
+            status=$result.status;instructions_examined=$result.instructions_examined;matches=@($result.matches).Count;
+            functions=@($result.functions).Count;stop_reason=$result.stop_reason;next_scan_address=$result.next_scan_address}
+    }else{
+        [pscustomobject]@{output_path=$OutputPath;invocation_path=$requestPath;executable_sha256=$sha;mode=$request.mode;
+            functions=@($result.functions | Select-Object requested_address,function_address,status)}
+    }
 }finally{
     if($process){
         try{if($started -and -not $process.HasExited){$process.Kill($true);$process.WaitForExit()}}

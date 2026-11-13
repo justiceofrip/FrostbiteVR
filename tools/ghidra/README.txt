@@ -1,4 +1,4 @@
-BC2 offline Ghidra toolkit (wrapper/exporter version 1.0)
+BC2 offline Ghidra toolkit (wrapper/member search 1.1; function exporter 1.0)
 
 Prerequisites: PowerShell 7.2+, an official unpacked Ghidra distribution and its
 supported 64-bit JDK. The initial integration targets Ghidra 12.2 and JDK 25;
@@ -19,6 +19,30 @@ addresses must first be converted to preferred-image VAs. Paths may have spaces.
 Only 1..16 distinct addresses are accepted. OutputPath must be a NEW .json file
 under this checkout's build/ghidra; existing evidence is never overwritten.
 
+For candidate discovery when only a member displacement is known, use the
+separate MemberOffsets parameter set against an existing completed cache:
+  & ./tools/Invoke-GhidraAnalysis.ps1 -Executable 'G:\Games\BC2\BFBC2Game.exe' -MemberOffsets @('0x1ac','0x38c') -SearchStartAddress '0xc00000' -SearchEndAddress '0xc0ffff' -OutputPath "$PWD/build/ghidra/exports/member01.json"
+The inclusive range above is an example around a known queue insertion, not a
+claim about the consumer address. Choose the intended range from the exact PE.
+This mode never imports/analyzes or changes the program; it scans only existing
+instructions with -noanalysis -readOnly. It matches unsigned Scalar values in
+operands, including immediate additions and memory displacements. Each hit
+records instruction address/text, matching operand/index/type flags, scalar
+width/signed value, operand registers, and containing function when known.
+These are numeric candidates: unrelated constants/receivers can match, and
+computed offsets or unanalyzed instructions can be missed. No receiver type,
+read/write ownership, queue consumer, or thread safety is inferred.
+Search limits: 1..4 distinct 32-bit offsets, MaxInstructions1..5000000 (default
+5000000), MaxMatches1..1024 (256), MaxFunctions1..256 (128), SearchSeconds1..120
+(60). Limits count emitted instruction matches/unique containing functions;
+function-less hits remain included and consume the match budget. The result
+reports search_complete or search_truncated, stop_reason and next_scan_address.
+Resume a truncated search with that start, the same inclusive end and a NEW
+output; a function-limit stop reexamines the un-emitted matching instruction.
+Displayed text is capped at512 characters with explicit flags. There is no
+decompilation, recursive caller traversal, or synthesized disassembly in this
+mode. Export a selected candidate afterward using the original Addresses mode.
+
 The first call imports and analyzes one executable, storing a persistent project
 at build/ghidra/projects/<executable-SHA256>/bc2.gpr. It reserves at least 1 GiB
 (or 64 x executable size) for the database/cache through StorageBudget before
@@ -30,6 +54,10 @@ read-only with writes/deletion denied throughout hashing, analysis and export.
 A version/hash mismatch or unfinished project refuses reuse; the wrapper never
 silently rebuilds, migrates, deletes or replaces it. Inspect preserved logs and
 project before explicitly recovering an interrupted initial analysis.
+Both modes retain StorageBudget accounting across the existing generated roots.
+MaxGeneratedBytes defaults to40GiB; a larger explicit ceiling requires a
+GeneratedBudgetReason, which is retained in the admission receipt. This option
+does not change the512MiB cached reservation, free-space floor, or root set.
 
 The direct Java launch follows Ghidra's official support/launch.bat entrypoint:
   java.exe <installed VMARGS and VMARGS_WINDOWS> <storage overrides> -cp <GhidraHome>/Ghidra/Framework/Utility/lib/Utility.jar ghidra.Ghidra ghidra.app.util.headless.AnalyzeHeadless <project-directory> bc2 <mode arguments> -max-cpu 2 -scriptPath <repository>/tools/ghidra -log <run>/ghidra.log -scriptlog <run>/scripts.log -postScript ExportBc2Functions.java <run>/invocation.json <OutputPath>
@@ -69,3 +97,6 @@ https://github.com/NationalSecurityAgency/ghidra/blob/master/Ghidra/RuntimeScrip
 https://github.com/NationalSecurityAgency/ghidra/blob/master/Ghidra/RuntimeScripts/support/launch.properties
 https://ghidra.re/ghidra_docs/api/ghidra/app/decompiler/DecompInterface.html
 https://ghidra.re/ghidra_docs/api/ghidra/app/util/headless/HeadlessScript.html
+https://ghidra.re/ghidra_docs/api/ghidra/program/model/listing/Instruction.html
+https://ghidra.re/ghidra_docs/api/ghidra/program/model/listing/Listing.html
+https://ghidra.re/ghidra_docs/api/ghidra/program/model/scalar/Scalar.html
