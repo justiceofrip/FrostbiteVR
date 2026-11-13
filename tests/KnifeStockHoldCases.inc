@@ -107,11 +107,17 @@ int PhysicalKnifeHoldContinuationCases(){
         x.f.s.source.nowNs=old.deadlineNs;x.Current();CHECK(!x.Advance().renewed);
         ++x.f.s.source.sequence;x.f.s.source.observedNs=x.f.s.source.nowNs;
         x.f.s.source.deadlineNs=x.f.s.source.observedNs+100*ms;x.Current();CHECK(!x.Contact());}
-    {PhysicalKnifeHoldFixture x;CHECK(x.Held());x.f.Grip(false);CHECK(!x.f.Step());
+    // A release without action authority requests cleanup but cannot stage Return.
+    {PhysicalKnifeHoldFixture x;CHECK(x.Held());x.f.s.controlsNeutral=false;
+        x.f.Grip(false);CHECK(!x.f.Step());CHECK(!x.f.hands.Current(InteractionHand::Right));
         CHECK(x.f.knife.NeedsNativeCleanup());x.f.Grip(true);x.Current();CHECK(!x.Contact());}
-    {PhysicalKnifeHoldFixture x;CHECK(x.Held());x.f.Grip(false);CHECK(!x.f.Step());
+    // With current action authority, the same release stages Return immediately.
+    {PhysicalKnifeHoldFixture x;CHECK(x.Held());x.f.Grip(false);
         const auto returned=x.f.Step();CHECK(returned&&returned->kind==KnifeCommandKind::Return);
+        CHECK(x.f.knife.Phase()==KnifePhase::ReturnStaged&&!x.f.hands.Current(InteractionHand::Right));
+        CHECK(x.f.knife.CanCommit(*returned,x.f.s,x.f.hands));
         x.f.knife.Committed(*returned,KnifeCommit::Accepted);CHECK(x.f.knife.Observe(x.f.Receipt(*returned)));
+        CHECK(x.f.knife.Phase()==KnifePhase::NeedNeutral&&!x.f.knife.Hold());
         x.f.Grip(true);x.Current();CHECK(!x.Contact());}
     {PhysicalKnifeHoldFixture x;CHECK(x.Held());const auto other=x.f.hands.Transfer(x.f.s.source,x.custody.token,
         {x.f.s.source.owner,InteractionHand::Right,HandClaimKind::GunHold,{999,1},x.f.s.heldContact,x.f.s.claimIntent+1,0});
