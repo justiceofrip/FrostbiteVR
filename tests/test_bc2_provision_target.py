@@ -224,6 +224,43 @@ class SelectedAssetTests(unittest.TestCase):
             reader.once(0x11000, 0x1474554)
 
 
+class ReadFailureTests(unittest.TestCase):
+    def test_read_failure_preserves_request_error_and_caps_without_retry(self):
+        for error in (OSError(299, "fixture partial copy"), ValueError("fixture inaccessible")):
+            with self.subTest(error=type(error).__name__):
+                memory = mock.Mock(base=0x400000)
+                memory.read.side_effect = error
+                query = mock.Mock(side_effect=AssertionError("Unexpected diagnostic query"))
+                bounded = tool.BudgetedProcess(memory, query, 65536, 30)
+                bounded.read_stage = "scan_chunk"
+                bounded.read_context = {"phase": "scan", "sweep": 2}
+                with self.assertRaisesRegex(tool.Incomplete, r"at 0x23000 size=65536 \(scan_chunk\)"):
+                    bounded.read(0x23000, 65536)
+                self.assertEqual(bounded.read_failure, {
+                    "phase": "scan", "sweep": 2, "stage": "scan_chunk", "address": 0x23000,
+                    "requested_bytes": 65536, "received_bytes": None,
+                    "error_type": type(error).__name__, "error": str(error),
+                    "errno": getattr(error, "errno", None), "winerror": getattr(error, "winerror", None)})
+                memory.read.assert_called_once_with(0x23000, 65536)
+                query.assert_not_called()
+                self.assertEqual((bounded.read_calls, bounded.bytes_read, bounded.queries), (1, 65536, 0))
+                with self.assertRaisesRegex(tool.Incomplete, "byte cap reached"):
+                    bounded.read(0x23000, 1)
+                self.assertEqual(memory.read.call_count, 1)
+
+    def test_partial_read_remains_incomplete_with_received_size(self):
+        memory = mock.Mock(base=0x400000)
+        memory.read.return_value = b"abc"
+        bounded = tool.BudgetedProcess(memory, mock.Mock(), 65536, 30)
+        bounded.read_stage = "selected_typed_chain"
+        with self.assertRaisesRegex(tool.Incomplete, r"Partial.*at 0x11000 size=4.*received 3"):
+            bounded.read(0x11000, 4)
+        self.assertEqual(bounded.read_failure["received_bytes"], 3)
+        self.assertEqual(bounded.read_failure["requested_bytes"], 4)
+        self.assertEqual(bounded.read_failure["stage"], "selected_typed_chain")
+        memory.read.assert_called_once_with(0x11000, 4)
+
+
 class PinnedVariantTests(unittest.TestCase):
     """Use the production table, with explicitly authored in-memory test resources.
 
@@ -434,6 +471,54 @@ class PinnedVariantTests(unittest.TestCase):
         memory.heap[0x800:0x800 + len(code)] = code
         return memory, selected, exact, table
 
+    def test_pinned_reader_unrelated_transient_region_stays_incomplete_with_diagnostics(self):
+        for failed_sweep in (1, 2):
+            with self.subTest(failed_sweep=failed_sweep):
+                memory, selected, exact, table = self.assembled_reader()
+                transient, reads, retired = 0x3000000, 0, False
+
+                def query(address):
+                    if address < 0x2000000:
+                        return memory.query(address)
+                    if address < transient:
+                        return (0x2000000, transient - 0x2000000, 0x10000, 0, 0)
+                    if address < transient + 65536 and not retired:
+                        return (transient, 65536, 0x1000, 0x20000, 4)
+                    return (transient, tool.END - transient, 0x10000, 0, 0)
+
+                original_read = memory.read
+
+                def read(address, size):
+                    nonlocal reads, retired
+                    if address == transient:
+                        reads += 1
+                        if reads == failed_sweep:
+                            # A valid earlier layout does not retain an unrelated
+                            # allocation while real typed candidates are read.
+                            retired = True
+                            raise OSError(299, "fixture allocation retired after layout")
+                        return bytes(size)
+                    return original_read(address, size)
+
+                selected.p.query = query
+                with mock.patch.object(memory, "read", side_effect=read):
+                    with self.assertRaisesRegex(tool.Incomplete,
+                            r"Unreadable scanned/typed region at 0x3000000 size=65536 \(scan_chunk\)"):
+                        tool.discover(exact, table)
+                failure = selected.p.read_failure
+                self.assertEqual(failure["stage"], "scan_chunk")
+                self.assertEqual(failure["sweep"], failed_sweep)
+                self.assertEqual(failure["address"], transient)
+                self.assertEqual(failure["requested_bytes"], 65536)
+                self.assertEqual(failure["errno"], 299)
+                self.assertEqual(failure["layout_region"], {
+                    "begin": transient, "end": transient + 65536,
+                    "state": 0x1000, "type": 0x20000, "protect": 4})
+                self.assertNotIn("candidate_address", failure)
+                self.assertEqual(selected.p.candidates, failed_sweep)
+                self.assertEqual(reads, failed_sweep)
+                self.assertEqual(query(transient)[2], 0x10000)
+
     def test_pinned_reader_unallocated_initial_name_preserves_complete_selection(self):
         for targets in (0, 1, 2):
             with self.subTest(exact_targets=targets):
@@ -553,6 +638,11 @@ class PinnedVariantTests(unittest.TestCase):
                         r"0x10800 \(asset_selector\): Unreadable scanned/typed region"):
                     tool.discover(exact, table)
                 self.assertEqual(selected.p.candidates, 1)
+                self.assertEqual(selected.p.read_failure["stage"], "asset_selector")
+                self.assertEqual(selected.p.read_failure["candidate_address"], 0x10800)
+                self.assertEqual(selected.p.read_failure["address"], 0x15000)
+                self.assertEqual(selected.p.read_failure["requested_bytes"], 1)
+                self.assertEqual(selected.p.read_failure["sweep"], 1)
 
     def test_pinned_reader_exclusion_preserves_target_absence_and_uniqueness(self):
         for count in (0, 2):
@@ -692,6 +782,51 @@ class PinnedVariantTests(unittest.TestCase):
             self.assertEqual(report["pinned_expected_metadata"]["name"], self.paths[variant][0])
             self.assertEqual(report["refusal"], "fixture source unavailable")
             self.assertFalse(report["accepted"])
+
+    def test_cli_publishes_exact_read_failure_and_closes_process(self):
+        output = self.directory / "read-failure.json"
+        image = mock.Mock(data=b"fixture image")
+        expected = tool.digest(image.data)
+        source = copy.deepcopy(self.source)
+        source["identity"]["executable_sha256"] = expected
+        process = mock.Mock(base=0x400000)
+        process.read.side_effect = OSError(299, "fixture partial copy")
+
+        def query(address):
+            if address < 0x20000:
+                return (0x10000, 65536, 0x1000, 0x20000, 4)
+            return (0x20000, tool.END - 0x20000, 0x10000, 0, 0)
+
+        def selected_reader(bounded, *_):
+            return mock.Mock(p=bounded)
+
+        modules = {
+            "capture_reload_state": mock.Mock(Image=mock.Mock(return_value=image)),
+            "read_flynn_catalog": mock.Mock(EXPECTED=expected),
+            "read_bc2": mock.Mock(Process=mock.Mock(return_value=process)),
+            "read_weapon_resources": mock.Mock(SelectedResourceReader=selected_reader),
+            "read_stock_sniper_resources": mock.Mock(ASSET_TABLE=0x1474554)}
+        args = ["--session-dir", str(self.directory), "--pid", "42", "--output", str(output),
+                "--pins", str(self.pins)]
+        with mock.patch.object(tool, "load_dependencies", return_value=(self.manifest, self.blobs, modules)), \
+                mock.patch.object(tool, "read_source", return_value=source), \
+                mock.patch.object(tool, "verify_process"), \
+                mock.patch.object(tool, "WinQuery", return_value=query), \
+                mock.patch("sys.stdout", new_callable=io.StringIO):
+            self.assertEqual(tool.main(args), 3)
+        report = json.loads(output.read_text(encoding="utf-8"))
+        self.assertFalse(report["accepted"])
+        self.assertFalse(report["complete"])
+        self.assertNotIn("coverage", report)
+        self.assertNotIn("target", report)
+        self.assertEqual(report["read_failure"]["stage"], "scan_chunk")
+        self.assertEqual(report["read_failure"]["address"], 0x10000)
+        self.assertEqual(report["read_failure"]["requested_bytes"], 65536)
+        self.assertIsNone(report["read_failure"]["received_bytes"])
+        self.assertEqual(report["read_failure"]["errno"], 299)
+        self.assertEqual(report["read_failure"]["error"], str(process.read.side_effect))
+        process.read.assert_called_once_with(0x10000, 65536)
+        process.close.assert_called_once_with()
 
 
 if __name__ == "__main__":

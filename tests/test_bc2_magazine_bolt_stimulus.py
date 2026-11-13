@@ -4,6 +4,9 @@ Invented observation values test contracts only; no native/headset claim.
 """
 import copy
 import importlib.util
+import contextlib
+import io
+import json
 from pathlib import Path
 import unittest
 import tempfile
@@ -130,6 +133,55 @@ def owed(s):
 
 
 class MagazineBoltTests(unittest.TestCase):
+    def test_magazine_capture_result_records_clearance_and_enters_shot(self):
+        # Exercise the composed entry/result/recorder/shot path. The synthetic
+        # native tail must pass the real receipt and release predicates; no
+        # mock successful result or mocked firing-clearance admission is used.
+        with tempfile.TemporaryDirectory() as folder:
+            with magazine_capture_episode(Path(folder)) as episode:
+                result = episode["magazine"]()
+                self.assertEqual(result["status"], "ordinary_stimulus_completed")
+                self.assertEqual(result["boundaries"][-1]["name"], "magazine_released")
+                self.assertEqual(result["postMagazineCapture"]["captureSeq"], 1)
+                result_path = Path(result["artifactDirectory"]) / "result.json"
+                owner_before = (Path(folder) / "live-driver-owner.json").read_bytes()
+                clearance = episode["record"](result)
+                self.assertEqual((Path(folder) / "live-driver-owner.json").read_bytes(), owner_before)
+                shot = episode["shot"](result_path, clearance)
+                shot.run_shot()
+                self.assertEqual(shot.boundaries[-1]["name"], "shot_created_owed_bolt")
+                self.assertFalse(shot.pending_command)
+                self.assertEqual(episode["published"], ["shot after-magazine", "trigger r 1", "trigger r 0"])
+
+    def test_magazine_capture_composition_refuses_foreign_owner_and_changed_review(self):
+        for failure in ("owner", "image", "controls"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as folder:
+                with magazine_capture_episode(Path(folder)) as episode:
+                    result = episode["magazine"]()
+                    self.assertTrue(result["stimulusCompleted"])
+                    clearance = episode["record"](result)
+                    shot = episode["shot"](Path(result["artifactDirectory"]) / "result.json", clearance)
+                    if failure == "owner":
+                        shot.prior_owner["artifactDirectory"] = str(Path(folder) / "foreign")
+                    elif failure == "image":
+                        (Path(folder) / "sim/capture/after-magazine_left.png").write_bytes(b"changed")
+                    else:
+                        shot.state["controls"]["gripR"] = 0
+                        episode["write_state"](shot.state)
+                    with self.assertRaises((g.Refusal, d.transport.REFUSAL)):
+                        shot.run_shot()
+                    self.assertEqual(episode["published"], ["shot after-magazine"])
+
+    def test_magazine_capture_refuses_budget_expiry_and_changed_native_receipt(self):
+        for failure in ("budget", "source", "action", "receipt"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as folder:
+                with magazine_capture_episode(Path(folder), failure=failure) as episode:
+                    result = episode["magazine"]()
+                    self.assertEqual(result["status"], "refused")
+                    self.assertFalse(result["stimulusCompleted"])
+                    self.assertIsNone(result["postMagazineCapture"])
+                    self.assertEqual(episode["published"], [])
+
     def test_complete_snapshot_reader_bound_and_total_retention_are_distinct(self):
         self.assertEqual(d.transport.planner.SNAPSHOT_LIMIT, 65536)
         self.assertEqual(d.ordinary.MAX_BYTES, 1024 * 1024)
@@ -690,6 +742,193 @@ def motion_driver(change_claim=False):
         return s, b"", clock[0]
     driver.pause_until, driver.command, driver.fresh = pause, command, fresh
     return driver, clock, published, renewed
+
+
+@contextlib.contextmanager
+def magazine_capture_episode(run, failure=None):
+    """Synthetic terminal native observations + simulator I/O, real consumers.
+
+    This does not replay the magazine gesture or claim game acceptance. The
+    terminal refill is independently admitted by geometry.receipt before main
+    serializes its result. Only OS ownership I/O and simulator/native production
+    are substituted; publication, ACK, budget, closure and review checks run.
+    """
+    recorder = load("record_bc2_fire_clearance")
+    folder = run / "native"
+    (run / "sim/capture").mkdir(parents=True)
+    folder.mkdir()
+    clock, published = [NOW+10], []
+
+    def write(path, value):
+        path.write_bytes(d.transport.json_bytes(value))
+
+    pose = dict(pos=[0, 0, 0], ypr=[0, 0, 0], followsHead=False, valid=True)
+    controls = {k: False for k in ("a", "b", "x", "y", "menu", "clickL", "clickR", "restL", "restR")}
+    controls.update(trigL=0, trigR=0, gripL=0, gripR=1, stickL=[0, 0], stickR=[0, 0])
+    state = dict(pid=1, runtime="xr-sim", sessionRunning=True, sessionState="FOCUSED",
+        lastCmdError="", errors=0, head=pose, handL=copy.deepcopy(pose), handR=copy.deepcopy(pose),
+        controls=controls, captureSeq=0, frame=20, endFrames=19, cmdSeq=1, lastCmd="note initial")
+    write(run / "sim/state.json", state)
+    (run / "sim/command.txt").write_bytes(b"note initial\n")
+    host = dict(pid=1)
+    link = dict(host=host, supervisor=dict(pid=2), folder=str(folder),
+                session=str(folder / "session.json"), stop_request=str(folder / "stop.request"))
+    write(run / "session-link.json", link)
+    write(run / "run-manifest.json", dict(source_sha256="synthetic", version="test"))
+    write(folder / "session.json", dict(state="running", host=host, supervisor=link["supervisor"],
+                                         source_sha256="synthetic", version="test"))
+    native = fixture()
+    base = g.baseline(native, NOW)
+    empty = removal_receipt(native, base)
+    resource = native["magazine"]["resource"]
+    refill_base = dict(base, request=resource["request"])
+    after = dict(empty, loaded=7, reserve=23)
+    receipt, terminal = resource["receipt"], resource["terminal"]
+    receipt["command"].update(id=34, operation=2, before=empty, after=after)
+    receipt.update(before=empty, after=after)
+    terminal["request"]["intent"].update(id=16, operation=2)
+    terminal["receipt"] = copy.deepcopy(receipt)
+    resource.update(request=16, wellEmpty=False, originalState=2)
+    resource["snapshot"]["counts"] = after
+    native["bolt"]["native"]["counts"] = after
+    closure = g.receipt(native, clock[0], refill_base, 2, empty, after)
+    fired = [False]
+
+    def initialize(driver, args):
+        driver.args, driver.run, driver.folder, driver.host = args, run, folder, host
+        driver.family = "magazine" if args.mode == "magazine" else "bolt"
+        driver.state = d.transport.read_json(run / "sim/state.json")[0]
+        driver.initial_sim = copy.deepcopy(driver.state)
+        driver.command_path, driver.ack_path = run / "sim/command.txt", run / "sim/ack.txt"
+        driver.sequence, driver.sentinel = driver.state["cmdSeq"], driver.state["lastCmd"]
+        driver.command_hash = d.transport.digest(driver.command_path.read_bytes())
+        owner_path = run / "live-driver-owner.json"
+        driver.prior_owner = d.transport.read_json(owner_path)[0] if owner_path.exists() else None
+        driver.artifacts = d.Artifacts(d.transport.Artifacts(run))
+        driver.owner, driver.lock = None, None
+        driver.started = clock[0]
+        driver.deadline = driver.stage_deadline = clock[0] + 9_700_000_000
+        driver.hard_deadline = clock[0] + 10*g.NS
+        driver.last_write, driver.last_commit = NOW-25_000_000, None
+        driver.motion_started = NOW-1
+        driver.commands = 0
+        driver.capture_sequence = driver.state["captureSeq"]
+        driver.capture_plan = dict(maximum_compositions=2, width=64, height=64)
+        driver.anchor, driver.preserved = g.owner_key(native), copy.deepcopy(native["input"])
+        driver.latest_snapshot = driver.reference = driver.motion_reference = None
+        driver.snapshot_refresh_started = driver.snapshot_readiness = driver.pending_nonce = None
+        driver.monitor = driver.pending_command = driver.unsafe_owner = False
+        driver.held_left = driver.held_trigger = False
+        driver.held_right = True
+        driver.held_buttons = set()
+        driver.handoff_phase = driver.handoff_guard = None
+        driver.neutral_handoff_completed = driver.bolt_cycle_completed = driver.preparation_mode = False
+        driver.post_magazine_capture = driver.gun_root = driver.debt = None
+        driver.boundaries = []
+
+    def fresh(driver):
+        current = copy.deepcopy(native)
+        if fired[0]:
+            owed(current)
+        # Simulate a new producer/input observation after each acknowledged
+        # command. Preserve all original resource/transaction/receipt clocks.
+        now, sequence = clock[0], 21+len(published)
+        current["input_evidence"].update(sequence=sequence, observedNs=now, nowNs=now)
+        current.update(observed_ns=now, shot_input_generation=sequence)
+        current["input"].update(generation=sequence, predictedNs=now)
+        for name in ("magazine", "bolt"):
+            observed = current[name]
+            observed["capturedNs"] = now
+            observed["rightClaim"]["inputSequence"] = sequence
+        driver.admit_snapshot(current, clock[0], current["nonce"])
+        driver.latest_snapshot = current
+        write(folder / "mechanism-snapshot.json", current)
+        return current, b"", clock[0]
+
+    def terminal_magazine(driver):
+        # Real terminal predicates, followed by the real main capture/result path.
+        driver.boundaries = [dict(name="partial_settled", result=copy.deepcopy(base)),
+            dict(name="replacement_native_receipt", result=g.receipt(native, clock[0], refill_base, 2, empty, after))]
+        driver.boundary("magazine_released", lambda s, n: driver.magazine_released(s, n, base, after))
+        if failure == "budget":
+            driver.capture_sequence = driver.capture_plan["maximum_compositions"]
+        elif failure == "source":
+            native["valid_until_ns"] = clock[0]
+        elif failure == "action":
+            driver.deadline = clock[0]
+        elif failure == "receipt":
+            native["magazine"]["resource"]["receipt"]["authorityInvocation"] += 1
+
+    def publish(path, raw, deadline_ns, validate):
+        validate()
+        g.require(clock[0] < deadline_ns, "synthetic runtime publication expired")
+        path.write_bytes(raw)
+        lines = raw.decode("ascii").splitlines()
+        current = d.transport.read_json(run / "sim/state.json")[0]
+        published.extend(lines[:-1])
+        if lines[0].startswith("shot "):
+            name = lines[0][5:]
+            current["captureSeq"] += 1
+            current["lastCapture"] = str(run / "sim/capture" / name)
+            captured = dict(name=name, width=64, height=64, sessionState="FOCUSED",
+                frameIndex=current["frame"], displayTimeNs=clock[0]-1, head=current["head"],
+                controls=current["controls"], views=[dict(eye="left"), dict(eye="right")])
+            for side in ("L", "R"):
+                hand = current["hand"+side]
+                captured["hand"+side] = dict(valid=True, grip=hand["pos"], aimYpr=hand["ypr"])
+            write(run / "sim/capture" / (name+".json"), captured)
+            for eye in ("left", "right"):
+                (run / "sim/capture" / (name+"_"+eye+".png")).write_bytes(b"synthetic image "+eye.encode())
+        else:
+            g.require(lines[0] in ("trigger r 1", "trigger r 0"), "unexpected synthetic input")
+            current["controls"]["trigR"] = int(lines[0][-1])
+            fired[0] = True
+        current["cmdSeq"] += len(lines)
+        current["lastCmd"] = lines[-1]
+        current["frame"] += 2
+        current["endFrames"] += 2
+        write(run / "sim/state.json", current)
+        (run / "sim/ack.txt").write_text(
+            f"seq={current['cmdSeq']} frame={current['frame']-1} error=-\nlast={' | '.join(lines)}\n", encoding="utf-8")
+
+    def save_owner(driver, pending, **unused):
+        (run / "live-driver-owner.json").write_bytes(driver.owner_bytes(pending))
+
+    def magazine():
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            d.main(["--run", str(run), "--mode", "magazine", "--capture-after-magazine", "after-magazine",
+                    "--root-authorized-ordinary-input"])
+        return json.loads(output.getvalue())
+
+    def record(result):
+        metadata = Path(result["postMagazineCapture"]["path"])
+        output = run / "clearance.json"
+        args = ["--run", str(run), "--capture", str(metadata), "--output", str(output),
+                "--capture-sha256", recorder.pin(metadata)["sha256"], "--root-reviewed-both-eyes-clear-shot"]
+        for eye in ("left", "right"):
+            args += ["--"+eye+"-sha256", recorder.pin(metadata.with_name(metadata.stem+"_"+eye+".png"))["sha256"]]
+        with contextlib.redirect_stdout(io.StringIO()):
+            recorder.main(args)
+        return output
+
+    def shot(result_path, clearance):
+        return d.MagazineBoltDriver(SimpleNamespace(mode="shot-bolt", magazine_result=result_path,
+                                                   fire_clearance=clearance))
+
+    with contextlib.ExitStack() as stack:
+        for target, name, value in (
+            (d.MagazineBoltDriver, "__init__", initialize),
+            (d.MagazineBoltDriver, "run_magazine", terminal_magazine),
+            (d.MagazineBoltDriver, "fresh", fresh),
+            (d.MagazineBoltDriver, "read_state", lambda driver: d.transport.read_json(run / "sim/state.json")[0]),
+            (d.MagazineBoltDriver, "save_owner", save_owner),
+            (d.MagazineBoltDriver, "read_publication_owner", lambda driver, expected, until: (run / "live-driver-owner.json").read_bytes()),
+            (d.transport, "publish_command", publish),
+            (d.time, "perf_counter_ns", lambda: clock[0]),
+            (d.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0]+int(seconds*g.NS)))):
+            stack.enter_context(mock.patch.object(target, name, value))
+        yield dict(magazine=magazine, record=record, shot=shot, published=published,
+                   write_state=lambda value: write(run / "sim/state.json", value))
 
 
 if __name__ == "__main__":

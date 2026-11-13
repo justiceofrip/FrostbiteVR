@@ -10,6 +10,7 @@ import importlib.util
 import json
 import math
 from pathlib import Path
+import re
 import sys
 import time
 
@@ -67,6 +68,7 @@ class MagazineBoltDriver(transport.Driver):
         self.handoff_phase = None
         self.neutral_handoff_completed = False
         self.bolt_cycle_completed = False
+        self.post_magazine_capture = None
         controls_allowed(self.state["controls"])
         require(self.state["controls"]["trigR"] == 0, "trigger must be released at invocation")
         # Settled writer ownership authorizes continuation of actual controls;
@@ -134,6 +136,11 @@ class MagazineBoltDriver(transport.Driver):
                 control = "grip l 0" if self.handoff_phase == "support" else "grip r 0"
                 require(lines == [control], "neutral handoff permits only its owned release")
                 self.handoff_snapshot(self.latest_snapshot, now, self.handoff_phase)
+            if expected.get("capture") is not None:
+                require(lines == ["shot " + expected["capture"]]
+                        and all(expected[k] == state[k] for k in ("head", "handL", "handR", "controls")),
+                        "magazine capture must preserve the exact settled input")
+                self.admit_magazine_capture(self.latest_snapshot, now)
         if expected.get("fire"):
             if getattr(self, "preparation_mode", False):
                 current = geometry.preparation_baseline(self.latest_snapshot, time.perf_counter_ns())
@@ -145,6 +152,8 @@ class MagazineBoltDriver(transport.Driver):
 
     @staticmethod
     def check_target(state, target):
+        if target.get("capture") is not None:
+            require(state["head"] == target["head"], "capture moved the reviewed head")
         if "sample" in target:
             s = target["sample"]
             h, grip = ("handL", "gripL") if s["hand"] == 0 else ("handR", "gripR")
@@ -361,6 +370,55 @@ class MagazineBoltDriver(transport.Driver):
         require(geometry.claim(x, 1, 1, n) == base["gun"] and counts_of(x) == after,
                 "release changed gun custody/ammunition")
         return dict(released=True, retainedNativeReceipt=True)
+
+    def admit_magazine_capture(self, snapshot, now):
+        require(self.args.mode == "magazine" and self.boundaries
+                and self.boundaries[-1]["name"] == "magazine_released"
+                and not (self.pending_command or self.unsafe_owner or self.held_left or self.held_trigger),
+                "capture requires the settled magazine release")
+        base = next(b["result"] for b in self.boundaries if b["name"] == "partial_settled")
+        closure = next(b["result"] for b in self.boundaries if b["name"] == "replacement_native_receipt")
+        x = geometry.magazine(snapshot, now, idle=True)
+        require(x["resource"]["identity"] == closure["identity"]
+                and x["resource"]["receipt"] == closure["receipt"]
+                and x["resource"]["receiptJoined"] is True,
+                "magazine capture native refill changed")
+        self.magazine_released(snapshot, now, base, closure["receipt"]["after"])
+
+    def capture_after_magazine(self, name):
+        require(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,47}", name) is not None, "invalid capture tag")
+        require(self.capture_sequence < integer(self.capture_plan["maximum_compositions"]), "capture budget exhausted")
+        path = self.run / "sim" / "capture" / (name + ".json")
+        require(not path.exists(), "capture tag already exists")
+        snapshot, _, now = self.fresh()
+        self.admit_magazine_capture(snapshot, now)
+        target = {k: copy.deepcopy(self.state[k]) for k in ("head", "handL", "handR", "controls")}
+        target.update(commands=["shot " + name], capture=name)
+        # The canonical publisher retains this magazine artifact's ownership,
+        # original action/source/ACK clocks and pre-admitted capture budget.
+        self.send(target["commands"], expected=target, capture=name,
+                  source_deadline=self.snapshot_source_deadline(snapshot))
+        for _ in range(6000):
+            self.pump()
+            if path.exists():
+                value, _ = transport.read_json(path, 65536)
+                require(value["name"] == name and value["width"] == self.capture_plan["width"]
+                        and value["height"] == self.capture_plan["height"]
+                        and sorted(v["eye"] for v in value["views"]) == ["left", "right"],
+                        "actual stereo capture differs from the requested budgeted pair")
+                state = self.read_state()
+                self.ownership(state)
+                self.check_target(state, target)
+                require(integer(state["captureSeq"]) == self.capture_sequence
+                        and transport.same_path(state["lastCapture"], path.with_suffix("")),
+                        "current capture identity changed")
+                self.post_magazine_capture = dict(path=str(path), captureSeq=self.capture_sequence,
+                                                 width=value["width"], height=value["height"])
+                self.artifacts.save("capture.json", self.post_magazine_capture)
+                # Keep magazine_released as the terminal native boundary.
+                return
+            time.sleep(.001)
+        raise Refusal("capture metadata iteration bound")
 
     def run_preparation_shot(self):
         require(self.args.fire_clearance is not None and self.args.magazine_result is None,
@@ -626,6 +684,7 @@ def main(argv=None):
     parser.add_argument("--mode", choices=("magazine", "prep-shot-bolt", "shot-bolt", "bolt"), required=True)
     parser.add_argument("--fire-clearance", type=Path)
     parser.add_argument("--magazine-result", type=Path)
+    parser.add_argument("--capture-after-magazine", help="one budgeted stereo capture under the completed magazine writer")
     parser.add_argument("--neutral-handoff", action="store_true",
                         help="after a completed bolt return, release owned grips and observe neutral holster entry")
     parser.add_argument("--root-authorized-ordinary-input", action="store_true")
@@ -641,10 +700,14 @@ def main(argv=None):
         require(args.root_authorized_ordinary_input, "ROOT ordinary-input authorization required")
         require(not args.neutral_handoff or args.mode != "magazine",
                 "neutral handoff requires a bolt completion mode")
+        require(not args.capture_after_magazine or args.mode == "magazine",
+                "post-magazine capture requires magazine mode")
         driver = MagazineBoltDriver.__new__(MagazineBoltDriver)
         driver.__init__(args)
         if args.mode == "magazine":
             driver.run_magazine()
+            if args.capture_after_magazine:
+                driver.capture_after_magazine(args.capture_after_magazine)
         else:
             if args.mode == "shot-bolt":
                 driver.run_shot()
@@ -675,6 +738,7 @@ def main(argv=None):
                           retainedDebt=getattr(driver, "debt", None),
                           boltCycleCompleted=getattr(driver, "bolt_cycle_completed", False),
                           neutralHandoffCompleted=getattr(driver, "neutral_handoff_completed", False),
+                          postMagazineCapture=getattr(driver, "post_magazine_capture", None),
                           retainedGunRoot=getattr(driver, "gun_root", None))
             try:
                 driver.close()

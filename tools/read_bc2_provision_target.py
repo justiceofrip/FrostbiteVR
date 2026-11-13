@@ -244,6 +244,8 @@ class BudgetedProcess:
         self.clock, self.started = clock, clock()
         self.deadline = self.started + seconds
         self.bytes_read = self.read_calls = self.candidates = self.queries = 0
+        self.read_stage, self.read_context = "reader_initialization", {}
+        self.read_failure = None
 
     def check(self):
         if self.clock() >= self.deadline:
@@ -260,11 +262,29 @@ class BudgetedProcess:
         try:
             data = self.process.read(address, size)
         except (OSError, ValueError) as error:
-            raise Incomplete("Unreadable scanned/typed region") from error
+            raise self.failed_read(address, size, "Unreadable scanned/typed region", error) from error
         if len(data) != size:
-            raise Incomplete("Partial scanned/typed region read")
+            raise self.failed_read(address, size, "Partial scanned/typed region read",
+                                   ValueError("Expected " + str(size) + " bytes, received " + str(len(data))),
+                                   received_bytes=len(data))
         self.check()
         return data
+
+    def failed_read(self, address, size, reason, error, **details):
+        # Preserve the failed request before any cleanup can lose its context.
+        # A layout is an earlier observation, not a guarantee that an unrelated
+        # allocation remains readable. No unread bytes are counted as covered;
+        # do not retry, skip the region, or infer a negative resource match.
+        self.read_failure = {**self.read_context, "stage": self.read_stage,
+                             "address": address, "requested_bytes": size,
+                             # The pinned Process.read discards its native
+                             # transfer count on exceptions; do not invent it.
+                             "received_bytes": None,
+                             "error_type": type(error).__name__, "error": str(error)[:512],
+                             "errno": getattr(error, "errno", None),
+                             "winerror": getattr(error, "winerror", None), **details}
+        return Incomplete(reason + " at " + hex(address) + " size=" + str(size) +
+                          " (" + self.read_stage + "): " + type(error).__name__ + ": " + str(error)[:160])
 
     def u32(self, address):
         return struct.unpack("<I", self.read(address, 4))[0]
@@ -303,6 +323,14 @@ class ExactReader:
     def __init__(self, selected_reader, variant):
         self.reader, self.p, self.variant = selected_reader, selected_reader.p, variant
         self.stage = "asset_vtable"
+
+    @property
+    def stage(self):
+        return self._stage
+
+    @stage.setter
+    def stage(self, value):
+        self._stage = self.p.read_stage = value
 
     def unallocated_initial_name(self, asset, table, address):
         # A raw vtable word can be an instruction immediate in a code copy.
@@ -389,6 +417,7 @@ class ExactReader:
         return row
 
     def stable(self, asset, table):
+        self.p.read_context["candidate_address"] = asset
         first, second = self.once(asset, table), self.once(asset, table)
         if first != second:
             self.stage = "stable_recheck"
@@ -396,11 +425,15 @@ class ExactReader:
         return first
 
 
-def scan_pass(reader, layout, table):
+def scan_pass(reader, layout, table, sweep):
     selected = []
     needle = struct.pack("<I", table)
-    for begin, end, _, _ in layout:
+    for begin, end, kind, protect in layout:
         for address in range(begin, end, 65536):
+            reader.p.read_stage = "scan_chunk"
+            reader.p.read_context = {"phase": "scan", "sweep": sweep,
+                                     "layout_region": {"begin": begin, "end": end,
+                                                       "state": 0x1000, "type": kind, "protect": protect}}
             blob = reader.p.read(address, min(65536, end - address))
             cursor = 0
             while True:
@@ -428,15 +461,19 @@ def scan_pass(reader, layout, table):
 def discover(reader, table):
     # Two complete bounded sweeps; stable mappings and complete typed result must
     # agree. This is still external observation, never an atomic game-tick claim.
+    reader.p.read_context = {"phase": "before_scan"}
+    reader.p.read_stage = "resource_verify"
     reader.reader.verify()
     first_layout = reader.p.layout()
-    first = scan_pass(reader, first_layout, table)
+    first = scan_pass(reader, first_layout, table, 1)
     second_layout = reader.p.layout()
     if first_layout != second_layout:
         raise Incomplete("Mounted-resource region map changed")
-    second = scan_pass(reader, second_layout, table)
+    second = scan_pass(reader, second_layout, table, 2)
     if first != second or first_layout != reader.p.layout():
         raise Incomplete("Resource set or region map changed across full scans")
+    reader.p.read_context = {"phase": "after_scan"}
+    reader.p.read_stage = "resource_verify"
     reader.reader.verify()
     if len(first) != 1:
         raise Incomplete("No exact typed Asset to Data match")
@@ -526,6 +563,7 @@ def main(argv=None):
         verify_process(process, identity, expected, args.pid)
         if digest(Path(identity["executable"]).read_bytes()) != expected:
             raise Incomplete("Executable file changed during scan")
+        bounded.read_context = {"phase": "before_publication"}
         if exact_reader.stable(target["asset"]["address"], asset_table) != target:
             raise Incomplete("Selected pair/config changed before publication")
         verify_process(process, identity, expected, args.pid)
@@ -538,6 +576,8 @@ def main(argv=None):
         if process is not None:
             process.close()
         if bounded is not None:
+            if bounded.read_failure is not None:
+                report["read_failure"] = bounded.read_failure
             report["scan"] = {"bytes_read_including_typed_reads": bounded.bytes_read,
                               "read_calls": bounded.read_calls, "asset_candidates": bounded.candidates,
                               "region_queries": bounded.queries, "elapsed_seconds": bounded.clock() - bounded.started}
