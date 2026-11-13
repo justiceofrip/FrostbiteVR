@@ -4,9 +4,13 @@ No native writes, fixture imports, resource creation or timestamp renewal.
 All matrices are the normal producer's row-vector, metre transforms.
 """
 import copy
+from functools import lru_cache
+import hashlib
 import importlib.util
+import json
 import math
 from pathlib import Path
+import struct
 
 
 def shared(name):
@@ -24,6 +28,151 @@ frame = shared("plan_bc2_feed_simulation")
 require, integer, Refusal = frame.require, frame.integer, frame.Refusal
 mul, inv, rigid = frame.multiply, frame.inverse, frame.rigid
 NS = 1_000_000_000
+MAGAZINE_GEOMETRY_SOURCE = Path(__file__).resolve().parents[1] / "profiles/weapons45-magazines/geometry.json"
+MAGAZINE_ENROLLMENT_SOURCE = MAGAZINE_GEOMETRY_SOURCE.with_name("enrollment.json")
+MAGAZINE_GEOMETRY_SHA256 = "da8726c3d3aea6be16f38b6ce963ce225b9b362fb47b40e11ea07890aaa52fe9"
+MAGAZINE_ENROLLMENT_SHA256 = "e38a76a229f65da62ddeb7d80530b415d7a5adefe07ce78d7fd921a3cdb1817c"
+# Review1177 covers these exact 17 content/configuration rows. The broader
+# catalogue pin does not review every experimental family in that catalogue.
+MAGAZINE_CANDIDATE_REVIEW = frozenset((
+    "9e239280055daa5a7816e77dc2f77e214b89f89c45bfa95a2cfcb7845842b50e",
+    "c194ec433fd53a9de6910abf9ccc6dc9b90c1f1a051ee549839bdbdd252b65c1",
+    "96a262995d0d94287222562dba0dd5abbad439eceff31dc1603272f5ead1bdc4",
+    "74c47c6acea59713d1133ab493701844eb5a1fffbeb02293d496e5b72555f4c3",
+    "7cc70d91d87c0db680823ba8b749f244afe7821baefe35673b2a374b7352e60f",
+    "9a6d8ed2db0e479498bae148c898070a2dbc8857e0c5dc470bd8b87b28610a92",
+    "62b6a020c0cb0f1feb61ab8d5828cc2ae0ecc9153454deb516774e93e9f7ac17",
+    "83c3973aad51143c22aa5db42dcb89145cbc20ff38c53eb4bdb14a9f829785a8",
+    "e14fe1f6082d846f31c9d8bb7d642d2ee3401e355d52497c4646193b2937ff0b",
+    "930421e996f82378e6bd780e6464f712b42abec64264e1f03d656c611f530178",
+    "60d2c46bc3bb395dd6dabec9e240c5082827c650affacc795388b4515f81bf98",
+    "fa3de72294a5298169c20296370b65ad7e22d579512cbafa47bc8f1f76d306d6",
+    "2b5d116e03a3390928efd94d99fae20af61ee599a3418be2f40fcbf07b94d2b6",
+    "31f300ee9c2cb26d29dbbb18ab3ab25a77214f10be63cf874aa86b7dd602b4bf",
+    "6e477420b9b12d5629ce73ff11fa9e75c9d89fa4ac0127e69d444febb59f99d7",
+    "3af29bc7210da09ecf7e7e510875eb00bf3574cd077134364d72a26d33712245",
+    "ac80320b45fd06c1b7e8df8010c745704bf497d642b85c86bc2f2732d9e55639",
+))
+
+
+def generated_float(value):
+    """The shared header generator's nine-digit literal, stored as native float."""
+    return struct.unpack("<f", struct.pack("<f", float(format(frame.finite(value), ".9g"))))[0]
+
+
+@lru_cache(maxsize=1)
+def magazine_geometry_sources():
+    """Load reviewed source identities once, before an invocation's input clocks.
+
+    These pins review the installed experimental policy, not measured trajectory
+    or headset acceptance. Native Ready() permits such registered geometry.
+    """
+    documents = []
+    for path, digest in ((MAGAZINE_GEOMETRY_SOURCE, MAGAZINE_GEOMETRY_SHA256),
+                         (MAGAZINE_ENROLLMENT_SOURCE, MAGAZINE_ENROLLMENT_SHA256)):
+        raw = path.read_bytes()
+        require(len(raw) <= 8*1024*1024 and hashlib.sha256(raw).hexdigest() == digest,
+                "experimental magazine source review changed: " + path.name)
+        documents.append(json.loads(raw))
+    geometry, enrollment = documents
+    require(geometry["schema"] == "fvr.bc2.authored_magazine_geometry"
+            and geometry["schema_version"] == 1
+            and enrollment["schema"] == "fvr.bc2.magazines45.enrollment.v1"
+            and enrollment["source_complete"] is True, "experimental magazine source schema differs")
+    enrolled = {}
+    for registration in enrollment["profiles"]:
+        if "geometry_digest" not in registration:
+            # The pinned catalogue has one preserved existing enrollment with
+            # only its native ID/key. It supplies no experimental geometry.
+            require(registration.get("status") == "preserved_existing_enrollment"
+                    and set(registration) == {"key", "status", "native_id"},
+                    "native enrollment lacks an exact geometry join")
+            continue
+        digest = registration["geometry_digest"]
+        require(digest not in enrolled, "ambiguous native geometry enrollment")
+        enrolled[digest] = registration
+    result = {}
+    for row in geometry["profiles"]:
+        if row["profile_digest"] not in MAGAZINE_CANDIDATE_REVIEW:
+            continue
+        digest = hashlib.sha256(json.dumps({k: v for k, v in row.items() if k != "profile_digest"},
+            sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+        require(digest == row["profile_digest"], "experimental magazine profile digest differs")
+        registration = enrolled.get(digest)
+        require(registration is not None, "reviewed experimental geometry lacks native registration")
+        path = row["weapon"]["resource"][:-4]
+        require(row["weapon"]["resource"].endswith(".dbx")
+                and registration["identity"]["assetPath"] == path
+                and registration["identity"]["assetName"] == row["native_asset_name"]
+                and row["configured_mesh_path"] in registration["configured_meshes"]
+                and row["runtime_admitted"] is False and row["role_evidence"]["native_role_verified"] is False,
+                "experimental source/native registration join differs")
+        g, ux = row["geometry"], row["geometry"]["design"]["ux_defaults"]
+        matrix = lambda values: [[generated_float(v) for v in values[i:i+4]] for i in range(0, 16, 4)]
+        insertion = dict(id=int(digest[:16], 16) or 1, revision=1, orientation=0, approach=3,
+            itemFromHand=matrix(g["item_from_hand"]), itemFromInsertion=matrix(g["item_from_insertion"]),
+            weaponFromEntry=matrix(g["weapon_from_entry"]), travelDirection=[0., 0., 1.], pathCount=0, path=[])
+        for name, key in (("travelMeters", "travel_m"), ("captureDistanceMeters", "capture_m"),
+                         ("releaseDistanceMeters", "release_m"), ("postCaptureTravelMeters", "post_capture_travel_m"),
+                         ("seatToleranceMeters", "seat_tolerance_m"), ("captureAngleRadians", "capture_angle_rad"),
+                         ("releaseAngleRadians", "release_angle_rad"), ("maxStepMeters", "max_step_m"),
+                         ("maxStepRadians", "max_step_angle_rad")):
+            insertion[name] = generated_float(ux[key])
+        for name, key in (("alignmentNs", "alignment_ns"), ("seatDwellNs", "seat_dwell_ns"),
+                         ("maxSampleGapNs", "max_sample_gap_ns"), ("maxGuidedNs", "max_guided_ns")):
+            insertion[name] = integer(ux[key])
+        if "sampled_path" in g:
+            sampled = g["sampled_path"]
+            insertion.update(travelMeters=generated_float(sampled["travel_m"]), pathCount=len(sampled["points"]),
+                path=[dict(weaponFromItem=matrix(point["weapon_from_item"]), arcMeters=generated_float(point["arc_m"]))
+                      for point in sampled["points"]])
+        expected = dict(nativeId=int(registration["native_id"], 16), configurationPath=path,
+            mesh=row["configured_mesh_path"], rigFingerprint=int(row["rig_fingerprint"].split(":")[1], 16),
+            geometryVerified=False, experimentalGeometry=True, attachedItem=matrix(g["attached_item"]),
+            grabRadiusMeters=generated_float(.09), pullReleaseMeters=generated_float(.15),
+            pullMeters=generated_float(ux["pull_m"]), maxPullStepMeters=generated_float(ux["max_step_m"]), insertion=insertion)
+        require(path not in result, "ambiguous exact experimental configuration")
+        result[path] = (expected, dict(classification="exact_content_experimental_candidate",
+            geometryVerified=False, experimentalGeometry=True, nativeAcceptance=False, headsetAcceptance=False,
+            nativeInsertionTrajectoryVerified=False, sourceStatus=row["status"],
+            configurationPath=path, mesh=expected["mesh"], rigFingerprint=expected["rigFingerprint"],
+            nativeId=expected["nativeId"], insertionProfile=expected["insertion"]["id"],
+            sourceReview=dict(geometryPath=str(MAGAZINE_GEOMETRY_SOURCE), geometrySha256=MAGAZINE_GEOMETRY_SHA256,
+                enrollmentPath=str(MAGAZINE_ENROLLMENT_SOURCE), enrollmentSha256=MAGAZINE_ENROLLMENT_SHA256,
+                profileDigest=digest, nativeDescriptorDigest=registration["descriptor_digest"])))
+    require(len(result) == len(MAGAZINE_CANDIDATE_REVIEW), "experimental source review is incomplete")
+    return result
+
+
+def exact_generated_geometry(actual, expected):
+    if isinstance(expected, dict):
+        return isinstance(actual, dict) and actual.keys() == expected.keys() and all(
+            exact_generated_geometry(actual[k], v) for k, v in expected.items())
+    if isinstance(expected, list):
+        return isinstance(actual, list) and len(actual) == len(expected) and all(
+            exact_generated_geometry(a, b) for a, b in zip(actual, expected))
+    if isinstance(expected, float):
+        # At most one tenth of a micrometre for positions, with native JSON's
+        # float serialization precision. This is not a contact/motion tolerance.
+        return isinstance(actual, (float, int)) and not isinstance(actual, bool) and math.isfinite(actual) and abs(actual-expected) <= 1e-7
+    return type(actual) is type(expected) and actual == expected
+
+
+def magazine_geometry_evidence(snapshot):
+    p = snapshot["magazine"]["profile"]
+    require(p["configurationPath"] == snapshot["selected"]["configurationPath"]
+            and p["mesh"] == snapshot["selected"]["matchedMeshPath"]
+            and integer(p["rigFingerprint"]) == integer(snapshot["rig"]["fingerprint"]),
+            "magazine profile is not exact selected geometry")
+    if p["geometryVerified"] is True and p["experimentalGeometry"] is False:
+        return dict(classification="producer_verified_geometry", geometryVerified=True,
+                    experimentalGeometry=False, nativeAcceptance=False, headsetAcceptance=False)
+    require(p["geometryVerified"] is False and p["experimentalGeometry"] is True,
+            "magazine profile has unsupported geometry evidence flags")
+    source = magazine_geometry_sources().get(p["configurationPath"])
+    require(source is not None and exact_generated_geometry(p, source[0]),
+            "experimental magazine profile differs from exact source review")
+    return copy.deepcopy(source[1])
 
 
 class Pending(Refusal):
@@ -238,11 +387,7 @@ def counts(value):
 def magazine(snapshot, now, raw=False, idle=False):
     x = observation(snapshot, "magazine", now, raw)
     p, f, r = x["profile"], x["family"], x["resource"]
-    require(p["geometryVerified"] is True and p["experimentalGeometry"] is False
-            and p["configurationPath"] == snapshot["selected"]["configurationPath"]
-            and p["mesh"] == snapshot["selected"]["matchedMeshPath"]
-            and integer(p["rigFingerprint"]) == integer(snapshot["rig"]["fingerprint"]),
-            "magazine profile is not exact reviewed selected geometry")
+    magazine_geometry_evidence(snapshot)
     require(f["current"] is True and f["verified"] is True and f["owner"] == x["owner"]
             and f["weapon"] == x["weapon"], "magazine family owner differs")
     window(f, now)
@@ -289,15 +434,51 @@ def baseline(snapshot, now):
 def preparation_magazine(snapshot, now):
     """Observe attached, unencumbered ammunition; never grant a reload receipt."""
     x = magazine(snapshot, now, raw=True, idle=True)
+    preparation_attached_magazine(x, now)
+    return x
+
+
+def preparation_attached_magazine(x, now):
+    """Validate attached state after the caller's full magazine admission.
+
+    ResourceReload publishes an OriginalMagazine descriptor even while attached.
+    It describes the current original; it is not a held item or removal receipt.
+    """
+    r = x["resource"]
     require(x["resource"]["wellEmpty"] is False and x["raw"]["nativeMagazineAttached"] is True
-            and integer(x["phase"]) == 0
+            and integer(x["phase"]) == 0 and integer(x["cycle"]) == 0
+            and x["reloadHeld"] is False and x["ownsLeftHand"] is False
             and x["resource"]["command"] is None
             and integer(x["resource"]["originalState"]) in (0, 2, 3)
-            and all(x[k] is None for k in ("originalPhysical", "pendingRequest", "submittedSeat",
-                                           "carriedReplacement", "reservation"))
+            and all(x[k] is None for k in ("pendingRequest", "submittedSeat", "carriedReplacement", "reservation"))
             and integer(x["seatedRequest"]) == 0 and x["blocksWeaponActions"] is False,
             "preparation requires an attached magazine without held ammunition or pending transfer")
-    return x
+    original = x["originalPhysical"]
+    if original is not None:
+        source, insertion = r["snapshot"], x["profile"]["insertion"]
+        window(original, now)
+        require(original["owner"] == x["input"]["owner"] and original["weapon"] == x["weapon"]
+                and integer(original["item"]["id"]) > 0 and integer(original["item"]["generation"]) > 0
+                and integer(original["profile"]["id"]) == integer(insertion["id"])
+                and integer(original["profile"]["generation"]) == integer(insertion["revision"])
+                and integer(original["pool"]["id"]) == integer(r["identity"]["serverItem"])
+                and integer(original["pool"]["generation"]) == integer(x["owner"]["equipGeneration"])
+                and integer(original["trackingEpoch"]) == integer(x["input"]["owner"]["space"])
+                and integer(original["sourceSequence"]) == integer(source["sequence"])
+                and all(integer(original[k]) == integer(source[k]) for k in ("observedNs", "deadlineNs"))
+                and integer(original["rounds"]) == integer(source["counts"]["loaded"])
+                and integer(original["capacity"]) == integer(source["counts"]["capacity"]),
+                "attached original descriptor differs from its current owner/profile/native ammunition")
+
+
+def preparation_references(b):
+    references = b["originalGripReferences"]
+    wait_for(references is not None, "preparation retained ordinary support/return geometry pending")
+    require(references["geometryOnly"] is True and references["sourceInputClockAvailable"] is False
+            and len(references["wristInWeapon"]) == 2,
+            "preparation requires retained ordinary support/return geometry")
+    for wrist in references["wristInWeapon"]:
+        rigid(wrist)
 
 
 def preparation_baseline(snapshot, now):
@@ -320,13 +501,8 @@ def preparation_baseline(snapshot, now):
     else:
         support = claim(x, 0, 2, now, x["weapon"])
         require(support["prerequisiteClaim"] == gun["id"], "preparation support belongs to another gun")
-    p, references = b["calibration"], b["originalGripReferences"]
-    require(references is not None and references["geometryOnly"] is True
-            and references["sourceInputClockAvailable"] is False
-            and len(references["wristInWeapon"]) == 2,
-            "preparation requires retained ordinary support/return geometry")
-    for wrist in references["wristInWeapon"]:
-        rigid(wrist)
+    p = b["calibration"]
+    preparation_references(b)
     bolt_cycle_budget(p)
     require(0 < frame.finite(p["maxStepMeters"]), "preparation bolt step policy is not bounded")
     for travel, angle in ((0, 0), (p["strokeMeters"], p["unlockRadians"])):
@@ -670,11 +846,21 @@ def control(snapshot, family, hand, local, now):
 
 def insertion_items(profile):
     p = profile["insertion"]
-    require(integer(p["orientation"]) == 0 and integer(p["approach"]) == 0,
-            "magazine requires reviewed keyed axial insertion")
+    approach = integer(p["approach"])
+    require(integer(p["orientation"]) == 0 and approach in (0, 3),
+            "magazine requires reviewed keyed axial or rail-contact insertion")
+    # Native keyed magazines support AxialFront and RailContact. The latter
+    # retains its authored post-capture travel; no shell-only mode is admitted.
+    post_capture = frame.finite(p["postCaptureTravelMeters"])
+    travel = frame.finite(p["travelMeters"])
+    require((2*frame.finite(p["seatToleranceMeters"]) < post_capture < travel) if approach == 3
+            else post_capture == 0, "magazine post-capture travel differs from its insertion mode")
     n = integer(p["pathCount"])
+    require(n >= 0 and len(p["path"]) == n, "malformed exact insertion path")
     if n:
-        require(2 <= n <= 32 and len(p["path"]) == n, "malformed exact insertion path")
+        require(approach == 3 and 2 <= n <= 32 and frame.finite(p["path"][0]["arcMeters"]) == 0
+                and abs(frame.finite(p["path"][-1]["arcMeters"])-travel) < .00001,
+                "malformed exact insertion path")
         require(all(b["arcMeters"] > a["arcMeters"] for a, b in zip(p["path"], p["path"][1:])),
                 "insertion path arc order changed")
         return [rigid(row["weaponFromItem"]) for row in p["path"]]

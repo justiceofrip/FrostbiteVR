@@ -19,7 +19,7 @@ Receipt: reports/coordinator-20261108-feedback721/normal98/run02/installation.js
 Settings/cache/shortcut preserved. No public release or new physical-headset acceptance.
 
 CURRENT SOURCE
-Source7c0e987 is pushed and installed98; it corrects pistol-slide sample-time presentation. The subsequent source-only acquisition/driver batch throughacc2918 is pushed, with the next finder correction passing43 assembled checks. Native97's semantic ChangeEntry correction and bounded navigation recovery remain included.
+Source7c0e987 is pushed and installed98; it corrects pistol-slide sample-time presentation. Source-only fixes through1cdde0e are pushed; the next tool batch passes51 reload-driver,43 reader and15 pickup-identity checks, including retained game observations and exact executable evidence. Native97's semantic ChangeEntry correction and bounded navigation recovery remain included. Native/profile binaries and experimental labels remain unchanged.
 The navigation batch removes the developer tool's firearm-publication prerequisite for ordinary on-foot input, keeping original actor/input/menu deadlines and weapon admission unchanged.
 Handoffs: handoff/integrations/coordinator-20261113-weapon-acquisition/README.txt and coordinator-20261113-navigation/README.txt.
 

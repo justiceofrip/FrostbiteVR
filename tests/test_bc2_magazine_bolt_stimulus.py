@@ -5,8 +5,10 @@ Invented observation values test contracts only; no native/headset claim.
 import copy
 import importlib.util
 import contextlib
+import gzip
 import io
 import json
+import os
 from pathlib import Path
 import unittest
 import tempfile
@@ -61,6 +63,7 @@ def fixture():
                originalHandEvidence=inp, rawWristWorldMeters=f.identity(), weaponWorldMeters=f.identity())
     magazine = dict(observationOnly=True, available=True, retainedEventsAreHistorical=True, owner=owner,
         input=inp, capturedNs=NOW-1, weapon=weapon, resourceBackend=True, cancel=False, phase=0,
+        cycle=0, reloadHeld=False, ownsLeftHand=False,
         blocksWeaponActions=False, requestPending=False, leftClaim=None, rightClaim=claim, profile=profile,
         raw=raw, family=dict(owner=owner, weapon=weapon, inventory=107, verified=True, current=True,
                             observedNs=NOW-10_000_000, deadlineNs=NOW+80_000_000),
@@ -132,7 +135,215 @@ def owed(s):
     return g.owed(s, NOW)
 
 
+def attached_original(s):
+    x = s["magazine"]
+    r, p = x["resource"], x["profile"]["insertion"]
+    source = r["snapshot"]
+    x["raw"]["nativeMagazineAttached"] = True
+    x.update(pendingRequest=None, submittedSeat=None)
+    r["command"] = None
+    x["originalPhysical"] = dict(owner=copy.deepcopy(x["input"]["owner"]), weapon=copy.deepcopy(x["weapon"]),
+        item=dict(id=0x424332524d4147, generation=29), profile=dict(id=p["id"], generation=p["revision"]),
+        pool=dict(id=r["identity"]["serverItem"], generation=x["owner"]["equipGeneration"]),
+        trackingEpoch=x["input"]["owner"]["space"], sourceSequence=source["sequence"],
+        observedNs=source["observedNs"], deadlineNs=source["deadlineNs"],
+        rounds=source["counts"]["loaded"], capacity=source["counts"]["capacity"])
+
+
+class SavedMagazineBoltAdmissionTests(unittest.TestCase):
+    """Optional ROOT replay of the unmodified actual98/10 retained snapshots."""
+    @classmethod
+    def setUpClass(cls):
+        path = os.environ.get("BC2_MAGAZINE_BOLT_SAVED_CAPTURE")
+        if not path:
+            raise unittest.SkipTest("set BC2_MAGAZINE_BOLT_SAVED_CAPTURE to the retained actual98/10 directory")
+        cls.snapshots = [json.loads(gzip.decompress((Path(path)/name).read_bytes()))
+                         for name in ("snapshot-002.json.gz", "snapshot-003.json.gz")]
+
+    def test_actual10_exact_candidate_admission_preserves_original_evidence_labels(self):
+        for s in self.snapshots:
+            with self.subTest(sequence=s["input_evidence"]["sequence"]):
+                original = copy.deepcopy(s)
+                p = s["magazine"]["profile"]
+                self.assertEqual(p["configurationPath"], s["selected"]["configurationPath"])
+                self.assertEqual(p["mesh"], s["selected"]["matchedMeshPath"])
+                self.assertEqual(p["rigFingerprint"], s["rig"]["fingerprint"])
+                self.assertFalse(p["geometryVerified"])
+                self.assertTrue(p["experimentalGeometry"])
+                g.magazine(s, s["observed_ns"], raw=True, idle=True)
+                evidence = g.magazine_geometry_evidence(s)
+                self.assertEqual(evidence["classification"], "exact_content_experimental_candidate")
+                self.assertFalse(evidence["geometryVerified"])
+                self.assertTrue(evidence["experimentalGeometry"])
+                self.assertFalse(evidence["nativeAcceptance"])
+                self.assertFalse(evidence["headsetAcceptance"])
+                self.assertEqual(evidence["sourceReview"]["profileDigest"],
+                                 "74c47c6acea59713d1133ab493701844eb5a1fffbeb02293d496e5b72555f4c3")
+                self.assertEqual(s, original)
+                self.assertEqual(d.MagazineBoltDriver.ordinary_gun_ready(s, s["observed_ns"]),
+                                 s["magazine"]["rightClaim"]["token"])
+                with self.assertRaises(g.Pending):
+                    g.preparation_baseline(s, s["observed_ns"])
+
+    def test_actual10_candidate_rejects_changed_content_identity_and_geometry(self):
+        source = self.snapshots[0]
+        changes = (
+            lambda p: p.update(nativeId=p["nativeId"]+1),
+            lambda p: p.update(mesh=p["mesh"]+"changed"),
+            lambda p: p.update(rigFingerprint=p["rigFingerprint"]+1),
+            lambda p: p.update(configurationPath=p["configurationPath"]+"changed"),
+            lambda p: p.update(geometryVerified=True),
+            lambda p: p.update(experimentalGeometry=False),
+            lambda p: p["insertion"].update(id=p["insertion"]["id"]+1),
+            lambda p: p["insertion"].update(revision=2),
+            lambda p: p["insertion"].update(travelMeters=.101),
+            lambda p: p["insertion"].update(postCaptureTravelMeters=.036),
+            lambda p: p["insertion"].update(maxGuidedNs=p["insertion"]["maxGuidedNs"]+1),
+            lambda p: p["insertion"]["itemFromHand"][3].__setitem__(0, .001),
+            lambda p: p["attachedItem"][3].__setitem__(0, .001),
+            lambda p: p["insertion"].update(travelDirection=[1, 0, 0]),
+            lambda p: p.update(grabRadiusMeters=.1),
+        )
+        for index, change in enumerate(changes):
+            with self.subTest(index=index):
+                changed = copy.deepcopy(source)
+                change(changed["magazine"]["profile"])
+                with self.assertRaises(g.Refusal):
+                    g.magazine(changed, changed["observed_ns"], raw=True, idle=True)
+
+    def test_actual10_available_contracts_without_promoting_geometry(self):
+        for s in self.snapshots:
+            with self.subTest(sequence=s["input_evidence"]["sequence"]):
+                now = s["observed_ns"]
+                for family in ("magazine", "bolt"):
+                    g.admit(s, now, g.integer(s["nonce"]), family)
+                x = g.observation(s, "magazine", now, raw=True)
+                b = g.bolt(s, now, raw=True)
+                self.assertIsNotNone(x["originalPhysical"])
+                g.preparation_attached_magazine(x, now)
+                self.assertEqual(g.claim(x, 1, 1, now, x["weapon"]), g.claim(b, 1, 1, now, x["weapon"]))
+                self.assertEqual(g.counts(x["resource"]["snapshot"]["counts"]),
+                                 dict(loaded=5, reserve=45, capacity=5))
+                self.assertIsNone(b["originalGripReferences"])
+                with self.assertRaises(g.Pending):
+                    g.preparation_references(b)
+                self.assertEqual(g.bolt_cycle_budget(b["calibration"]), 10*g.NS)
+                self.assertEqual(x["profile"]["insertion"]["approach"], 3)
+                path = g.magazine_path(s, "insert")
+                self.assertEqual(len(path), 2)
+                g.insertion_outside(x["profile"])
+                for hand in (0, 1):
+                    g.control(s, "bolt", hand, b["calibration"]["closedContact"], now)
+                g.control(s, "magazine", 0, path[0], now)
+
+
 class MagazineBoltTests(unittest.TestCase):
+    def test_experimental_review_covers_all_seventeen_rows_without_granting_preserved_native_only_row(self):
+        sources = g.magazine_geometry_sources()
+        self.assertEqual(len(sources), 17)
+        self.assertEqual({evidence["sourceReview"]["profileDigest"] for _, evidence in sources.values()},
+                         g.MAGAZINE_CANDIDATE_REVIEW)
+        self.assertFalse(any(profile["nativeId"] == int("cc2291caf02e41d3", 16)
+                             for profile, _ in sources.values()))
+
+    def test_source_review_failure_precedes_driver_constructor_and_has_stable_result(self):
+        output = io.StringIO()
+        with mock.patch.object(g, "magazine_geometry_sources", side_effect=g.Refusal("source review changed")), \
+                mock.patch.object(d.MagazineBoltDriver, "__init__") as constructor, contextlib.redirect_stdout(output):
+            code = d.main(["--run", "unused", "--mode", "prepare-hold", "--root-authorized-ordinary-input"])
+        constructor.assert_not_called()
+        result = json.loads(output.getvalue())
+        self.assertEqual(code, 2)
+        self.assertEqual(result["commands"], 0)
+        self.assertFalse(result["pendingCommand"])
+        self.assertFalse(result["holdPrepared"])
+        self.assertIsNone(result["postMagazineCapture"])
+        self.assertIsNone(result["geometryEvidence"])
+
+    def test_changed_portable_geometry_source_is_refused_before_admission(self):
+        with tempfile.TemporaryDirectory() as folder:
+            changed = Path(folder)/"geometry.json"
+            changed.write_text("{}", encoding="utf-8")
+            try:
+                with mock.patch.object(g, "MAGAZINE_GEOMETRY_SOURCE", changed):
+                    g.magazine_geometry_sources.cache_clear()
+                    with self.assertRaisesRegex(g.Refusal, "source review changed"):
+                        g.magazine_geometry_sources()
+            finally:
+                g.magazine_geometry_sources.cache_clear()
+
+    def test_attached_original_descriptor_is_not_held_ammunition(self):
+        s = fixture()
+        attached_original(s)
+        self.assertIs(g.preparation_magazine(s, NOW), s["magazine"])
+        for field in ("owner", "weapon", "profile", "pool", "trackingEpoch", "sourceSequence",
+                      "observedNs", "deadlineNs", "rounds", "capacity", "item"):
+            with self.subTest(field=field):
+                changed = copy.deepcopy(s)
+                o = changed["magazine"]["originalPhysical"]
+                if isinstance(o[field], dict):
+                    key = "actor" if field == "owner" else "generation"
+                    o[field][key] = 0
+                else:
+                    o[field] += 1
+                with self.assertRaises(g.Refusal):
+                    g.preparation_magazine(changed, NOW)
+        for field, value in (("phase", 1), ("cycle", 1), ("reloadHeld", True), ("ownsLeftHand", True),
+                             ("pendingRequest", {}), ("submittedSeat", {}), ("carriedReplacement", {}),
+                             ("reservation", {}), ("seatedRequest", 1), ("blocksWeaponActions", True)):
+            with self.subTest(field=field):
+                changed = copy.deepcopy(s)
+                changed["magazine"][field] = value
+                with self.assertRaises(g.Refusal):
+                    g.preparation_magazine(changed, NOW)
+
+    def test_reference_warmup_waits_without_fabricating_or_accepting_malformed_geometry(self):
+        b = fixture()["bolt"]
+        g.preparation_references(b)
+        b["originalGripReferences"] = None
+        with self.assertRaises(g.Pending):
+            g.preparation_references(b)
+        self.assertIsNone(b["originalGripReferences"])
+        b["originalGripReferences"] = dict(geometryOnly=False, sourceInputClockAvailable=False,
+                                             wristInWeapon=[f.identity(), f.identity()])
+        with self.assertRaises(g.Refusal) as failure:
+            g.preparation_references(b)
+        self.assertNotIsInstance(failure.exception, g.Pending)
+
+    def test_keyed_rail_contact_keeps_authored_post_capture_travel_and_geometry_gate(self):
+        s = fixture()
+        p = s["magazine"]["profile"]["insertion"]
+        p.update(approach=3, postCaptureTravelMeters=.035)
+        self.assertEqual(g.magazine_path(s, "insert")[-1][3][2], .12)
+        for changes in (dict(approach=1), dict(approach=2), dict(orientation=1),
+                        dict(postCaptureTravelMeters=0), dict(postCaptureTravelMeters=.12)):
+            changed = copy.deepcopy(s)
+            changed["magazine"]["profile"]["insertion"].update(changes)
+            with self.assertRaises(g.Refusal):
+                g.magazine_path(changed, "insert")
+        s["magazine"]["profile"].update(geometryVerified=False, experimentalGeometry=True)
+        with self.assertRaisesRegex(g.Refusal, "exact source review"):
+            g.magazine(s, NOW)
+
+    def test_sampled_keyed_path_requires_native_rail_mode_and_exact_arc_extent(self):
+        s = fixture()
+        p = s["magazine"]["profile"]["insertion"]
+        p.update(approach=3, postCaptureTravelMeters=.035, pathCount=2,
+                 path=[dict(weaponFromItem=f.identity(), arcMeters=0),
+                       dict(weaponFromItem=copy.deepcopy(s["magazine"]["profile"]["attachedItem"]), arcMeters=.12)])
+        self.assertEqual(g.magazine_path(s, "insert")[-1][3][2], .12)
+        for failure in ("mode", "start", "end", "count"):
+            changed = copy.deepcopy(s)
+            p = changed["magazine"]["profile"]["insertion"]
+            if failure == "mode":
+                p.update(approach=0, postCaptureTravelMeters=0)
+            elif failure == "count":
+                p["pathCount"] = 0
+            else:
+                p["path"][0 if failure == "start" else -1]["arcMeters"] += .001
+            with self.assertRaises(g.Refusal):
+                g.magazine_path(changed, "insert")
+
     def test_held_bootstrap_cli_capture_review_and_preparation_admission(self):
         # Real CLI, snapshot request/receive, command publication and text ACK.
         # Only native/XR production and OS process/lock I/O are synthetic.
@@ -140,6 +351,7 @@ class MagazineBoltTests(unittest.TestCase):
             result = episode["cli"]("prepare-hold")
             self.assertEqual(result["status"], "ordinary_hold_prepared", result)
             self.assertTrue(result["holdPrepared"])
+            self.assertEqual(result["geometryEvidence"]["classification"], "producer_verified_geometry")
             self.assertFalse(result["pendingCommand"])
             self.assertEqual(episode["published"], ["grip r 1"])
             self.assertEqual([r["name"] for r in result["boundaries"]],

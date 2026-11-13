@@ -74,6 +74,7 @@ class MagazineBoltDriver(transport.Driver):
         self.bootstrap_incomplete = False
         self.bootstrap_attempted = False
         self.hold_prepared = False
+        self.geometry_evidence = None
         controls_allowed(self.state["controls"])
         require(self.state["controls"]["trigR"] == 0, "trigger must be released at invocation")
         # Settled writer ownership authorizes continuation of actual controls;
@@ -236,6 +237,8 @@ class MagazineBoltDriver(transport.Driver):
                         self.anchor = geometry.owner_key(s)
                         self.preserved = copy.deepcopy(s["input"])
                     result = predicate(s, now)
+                    if name in ("ordinary_right_gun_ready", "prepared_hold", "partial_settled", "before_preparation_shot"):
+                        self.geometry_evidence = geometry.magazine_geometry_evidence(s)
                 except geometry.Pending as pending:
                     last = str(pending)
                     continue
@@ -760,7 +763,9 @@ def main(argv=None):
                   shotAllThreeCopiesVerified=False, mode=args.mode,
                   boltCycleCompleted=False,
                   neutralHandoffRequested=args.neutral_handoff, neutralHandoffCompleted=False,
-                  preparationOnly=args.mode == "prep-shot-bolt", preparationCompleted=False)
+                  preparationOnly=args.mode == "prep-shot-bolt", preparationCompleted=False,
+                  commands=0, pendingCommand=False, boundaries=[], retainedDebt=None,
+                  postMagazineCapture=None, holdPrepared=False, retainedGunRoot=None, geometryEvidence=None)
     driver, code = None, 2
     try:
         require(args.root_authorized_ordinary_input, "ROOT ordinary-input authorization required")
@@ -770,6 +775,9 @@ def main(argv=None):
                 "post-magazine capture requires magazine mode")
         require(args.mode != "prepare-hold" or (args.fire_clearance is None and args.magazine_result is None),
                 "prepare-hold only establishes ordinary custody before a separate capture/review")
+        # Parse and hash immutable source review before the constructor starts
+        # the action clock or any original native observation lease exists.
+        geometry.magazine_geometry_sources()
         driver = MagazineBoltDriver.__new__(MagazineBoltDriver)
         driver.__init__(args)
         if args.mode == "prepare-hold":
@@ -811,6 +819,7 @@ def main(argv=None):
                           neutralHandoffCompleted=getattr(driver, "neutral_handoff_completed", False),
                           postMagazineCapture=getattr(driver, "post_magazine_capture", None),
                           holdPrepared=getattr(driver, "hold_prepared", False),
+                          geometryEvidence=getattr(driver, "geometry_evidence", None),
                           retainedGunRoot=getattr(driver, "gun_root", None))
             try:
                 driver.close()

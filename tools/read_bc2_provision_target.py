@@ -141,7 +141,8 @@ def no_link_ancestors(path):
             raise ValueError("Reparse path refused")
 
 
-def read_source(directory):
+def read_source(directory, *, include_bytes=False):
+    """Read one verified handle; optionally return (metadata, exact parsed bytes)."""
     path = Path(directory) / "campaign-provision-source.bin"
     no_link_ancestors(path)
     kernel = c.WinDLL("kernel32", use_last_error=True)
@@ -162,7 +163,9 @@ def read_source(directory):
                 or not kernel.GetFileSizeEx(handle, c.byref(size)) or size.value != 1264
                 or not kernel.ReadFile(handle, data, 1264, c.byref(count), None) or count.value != 1264):
             raise ValueError("Incomplete or linked source file")
-        return parse_source(data.raw)
+        blob = data.raw
+        metadata = parse_source(blob)
+        return (metadata, blob) if include_bytes else metadata
     finally:
         kernel.CloseHandle(handle)
 
