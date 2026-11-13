@@ -21,8 +21,7 @@ def canonical_holster_snapshot_driver(base, transport):
             return transport.Driver.receive_snapshot(self)
 
         def defer_invalid_snapshot(self, snapshot, now):
-            if (snapshot.get("valid") is False
-                    and snapshot.get("invalid_reason") == "no_shot_publication"):
+            if self.unavailable_draw_publication(snapshot):
                 # Canonical receive retained the original raw bytes, checked
                 # this exact time against the request deadline, and matched
                 # the nonce. Legacy raw is used only in its timeout branch;

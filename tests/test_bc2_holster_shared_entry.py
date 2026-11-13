@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 NOW = 2_000_000_000
 SOURCE = ("source", "source/config")
 TARGET = ("target", "target/config")
+DRAW_GAP = "selected_configuration_or_rig_missing_changed_or_expired"
 TOOLS = ("drive_bc2_holster_prepared.py", "bc2_holster_core.py",
          "bc2_holster_snapshot_transport.py", "drive_bc2_feed_simulation.py",
          "plan_bc2_feed_simulation.py")
@@ -46,7 +47,7 @@ def outer_snapshot(now, nonce, sequence, kind="empty"):
                     nowNs=now-1_000_000, focused=True, tracked=[True, True], released=[True, False])
     hands = [dict(grip=copy.deepcopy(pose), aim=copy.deepcopy(pose), gripTracked=True, aimTracked=True,
                   held=0, squeeze=0, trigger=0, stickX=0, stickY=0) for _ in range(2)]
-    if kind != "held":
+    if kind not in ("held", "empty_neutral"):
         hands[1].update(held=1, squeeze=1)
     inp = dict(generation=sequence, spaceGeneration=2, predictedNs=now, focused=True, headValid=True,
                floorRelative=True, worldUnitsPerMeter=1, trackingBasisGeneration=2,
@@ -55,7 +56,7 @@ def outer_snapshot(now, nonce, sequence, kind="empty"):
     h = dict(available=True, sampledNs=now-1_000_000, validUntilNs=deadline, phase=3,
              actualEmpty=True, nativeTick=sequence+100, request=2, nativeOwner=copy.deepcopy(owner),
              inputEvidence=copy.deepcopy(evidence), physicalGun=gun, inputMatchesSnapshot=True,
-             inputSequenceRelation="same", neutralTrackedInput=False, input=copy.deepcopy(inp),
+             inputSequenceRelation="same", neutralTrackedInput=kind == "empty_neutral", input=copy.deepcopy(inp),
              selectedSlot=dict(slot=1, item=dict(id=44, generation=1)), leftClaim=None, rightClaim=None,
              inventoryEvaluation=1, emptyHands=True, blockWeaponActions=True, allowAutomaticGunHold=False,
              freeRightCurrent=True)
@@ -112,8 +113,9 @@ def outer_snapshot(now, nonce, sequence, kind="empty"):
 
 
 def snapshot(source_body=2, target_body=1, source_native=0, target_native=7,
-             source_weapon=0x20000, target_weapon=0x30000, reverse=False):
-    s = outer_snapshot(NOW, 91, 10, "held")
+             source_weapon=0x20000, target_weapon=0x30000, reverse=False,
+             now=NOW, nonce=91, sequence=10, kind="held"):
+    s = outer_snapshot(now, nonce, sequence, kind)
     s["owner"]["weapon"] = source_weapon
     s["equipment"] = dict(weapon=source_weapon, data=source_weapon+0x1000, persistence=17, asset=SOURCE[0])
     selected = s["selected"]
@@ -122,7 +124,11 @@ def snapshot(source_body=2, target_body=1, source_native=0, target_native=7,
     h = s["bodyHolster"]
     h["nativeOwner"] = copy.deepcopy(s["owner"])
     h["physicalGun"]["id"] = source_weapon
-    h["rightClaim"]["token"]["item"] = copy.deepcopy(h["physicalGun"])
+    if h["rightClaim"] is not None:
+        h["rightClaim"]["token"]["item"] = copy.deepcopy(h["physicalGun"])
+    if h["freeRight"] is not None:
+        h["freeRight"]["visibility"]["nativeOwner"] = copy.deepcopy(s["owner"])
+        h["freeRight"]["suppression"]["owner"] = copy.deepcopy(s["owner"])
     h["selectedSlot"] = dict(slot=source_body, item=dict(id=source_weapon, generation=1))
     rows = []
     for index, (body_slot, native_slot, weapon, identity) in enumerate((
@@ -140,9 +146,9 @@ def snapshot(source_body=2, target_body=1, source_native=0, target_native=7,
     if reverse:
         rows.reverse()
     s["bodyInventory"] = dict(available=True, observationOnly=True, reason=None,
-        sampledNs=NOW, selectedOwner=copy.deepcopy(s["owner"]), physicalOwner=copy.deepcopy(h["inputEvidence"]["owner"]),
+        sampledNs=now, selectedOwner=copy.deepcopy(s["owner"]), physicalOwner=copy.deepcopy(h["inputEvidence"]["owner"]),
         physicalSelected=copy.deepcopy(h["selectedSlot"]["item"]), inputEvidence=copy.deepcopy(h["inputEvidence"]),
-        sequence=10, observedNs=selected["observedNs"], deadlineNs=selected["deadlineNs"],
+        sequence=sequence, observedNs=selected["observedNs"], deadlineNs=selected["deadlineNs"],
         inventory=selected["inventory"], switching=0x51000, revision=3, cohort=4,
         count=2, nativeCount=max(source_native, target_native)+1, slots=rows)
     return s
@@ -235,6 +241,141 @@ class SharedEntryTests(unittest.TestCase):
         d.artifacts = Artifacts(self.root)
         d.right_pose = copy.deepcopy(s["input"]["hands"][1]["grip"])
         return d
+
+    def draw_driver(self):
+        """Real prepared-entry MRO after an admitted neutral Empty and draw ACK."""
+        d = self.driver(snapshot(now=NOW-30_000_000))
+        rearm = snapshot(now=NOW-20_000_000, nonce=92, sequence=11, kind="empty_neutral")
+        d.admit_snapshot(rearm, rearm["observed_ns"], rearm["nonce"])
+        d.last_native = d.latest_snapshot = d.publication_source = rearm
+        d.phase, d.draw_armed, d.held_right, d.press_ns = "draw_wait", True, True, d.last_write
+        d.holster_hold_anchor = d.reference = None
+        d.request_path, d.snapshot_path = self.root / "request.txt", self.root / "response.json"
+        d.pending_nonce, d.snapshot_index = 93, 1
+        d.last_request, d.last_request_published = NOW-4_000_000, NOW-3_000_000
+        d.request_bytes = b"93\n"
+        d.request_path.write_bytes(d.request_bytes)
+        return d
+
+    def draw_response(self, d, now, *, invalid=True):
+        if invalid:
+            return outer_snapshot(now, d.pending_nonce, 12, "invalid:" + DRAW_GAP)
+        target = target_snapshot(snapshot(now=now, nonce=d.pending_nonce, sequence=12), d.slot_binding)
+        for inp in (target["input"], target["bodyHolster"]["input"]):
+            inp["hands"][1].update(held=1, squeeze=1)
+        target["bodyHolster"]["neutralTrackedInput"] = False
+        return target
+
+    def receive_draw_response(self, d, response, now):
+        raw = json.dumps(response, separators=(",", ":")).encode("utf-8")
+        d.snapshot_path.write_bytes(raw)
+        with patch.object(self.core.time, "perf_counter_ns", return_value=now):
+            received = d.receive_snapshot()
+            if received is not None:
+                d.accept_snapshot(*received)
+        return received, raw
+
+    def test_acknowledged_draw_holds_exact_unavailable_body_then_admits_fresh_target(self):
+        d = self.draw_driver()
+        identity, deadlines = d.command_identity(), (d.deadline, d.stage_deadline, d.hard_deadline)
+        gap = self.draw_response(d, NOW)
+        with patch.object(d, "send", side_effect=AssertionError("observation sent controller input")):
+            received, raw = self.receive_draw_response(d, gap, NOW)
+            self.assertIsNone(received)
+            self.assertEqual(d.artifacts.saved["snapshot-001.json"], raw)
+            self.assertEqual((d.holster_hold_started, d.holster_replacements), (NOW, 1))
+            self.assertIsNone(d.latest_snapshot)
+            self.assertIsNone(d.publication_source)
+            with patch.object(self.core.time, "perf_counter_ns", return_value=NOW):
+                with self.assertRaisesRegex(self.core.REFUSAL, "observation is pending"):
+                    d.validate_publication(["grip r 1"], None, False)
+            recovered = NOW + self.transport.SNAPSHOT_TIMEOUT - 1
+            target = self.draw_response(d, recovered, invalid=False)
+            received, _ = self.receive_draw_response(d, target, recovered)
+            self.assertEqual(received[0], target)
+            self.assertEqual(d.latest_snapshot, target)
+            d.require_held(target)
+            self.assertIsNone(d.holster_hold_started)
+            self.assertEqual(d.command_identity(), identity)
+            self.assertEqual((d.deadline, d.stage_deadline, d.hard_deadline), deadlines)
+            self.assertEqual([e["type"] for e in d.artifacts.events],
+                             ["holster_draw_publication_gap", "holster_observation_resumed"])
+
+    def test_draw_gap_exhaustion_keeps_original_budgets_and_owned_failure_release(self):
+        for exhausted in ("response", "replacements", "hold", "driver", "stage"):
+            with self.subTest(exhausted=exhausted):
+                d = self.draw_driver()
+                identity = d.command_identity()
+                self.receive_draw_response(d, self.draw_response(d, NOW), NOW)
+                now = NOW+100_000_000
+                if exhausted in ("replacements", "hold"):
+                    now = NOW+249_000_000
+                    self.receive_draw_response(d, self.draw_response(d, now), now)
+                    self.assertEqual(d.holster_replacements, 2)
+                    now = NOW+498_000_000
+                if exhausted == "response":
+                    now = NOW+self.transport.SNAPSHOT_TIMEOUT+1
+                    expected = "within request budget"
+                elif exhausted == "replacements":
+                    expected = "replacement request budget exhausted"
+                elif exhausted == "hold":
+                    now = NOW+self.core.HOLD_NS
+                    expected = "holster observation hold expired"
+                else:
+                    setattr(d, "deadline" if exhausted == "driver" else "stage_deadline", now)
+                    expected = "driver deadline" if exhausted == "driver" else "maximumGestureNs"
+                response = self.draw_response(d, now, invalid=exhausted == "replacements")
+                with patch.object(self.core.time, "perf_counter_ns", return_value=now):
+                    with self.assertRaisesRegex(self.core.REFUSAL, expected):
+                        if exhausted == "hold":
+                            d.bounds(now)
+                        else:
+                            self.receive_draw_response(d, response, now)
+                    self.assertIsNone(d.latest_snapshot)
+                    self.assertEqual(d.command_identity(), identity)
+                    sent = []
+                    def send(lines, **kwargs):
+                        d.validate_publication(lines, None, kwargs["cleanup"])
+                        sent.append(lines)
+                    with patch.object(d, "send", side_effect=send):
+                        self.assertEqual(d.release_after_failure(), "ordinary owned controller release acknowledged")
+                    self.assertEqual(sent, [["grip r 0"]])
+
+    def test_draw_gap_refuses_unacknowledged_owner_nonce_and_wrong_replacement(self):
+        for fault in ("phase", "pending", "press", "rearm", "body", "owner", "nonce", "target", "lifetime"):
+            with self.subTest(fault=fault):
+                d = self.draw_driver()
+                now = NOW
+                if fault in ("target", "lifetime"):
+                    self.receive_draw_response(d, self.draw_response(d, now), now)
+                    now += 20_000_000
+                response = self.draw_response(d, now, invalid=fault not in ("target", "lifetime"))
+                if fault == "phase":
+                    d.phase = "draw_rearm"
+                elif fault == "pending":
+                    d.pending_command = True
+                elif fault == "press":
+                    d.press_ns -= 1
+                elif fault == "rearm":
+                    d.last_native = d.baseline
+                elif fault == "body":
+                    response["bodyHolster"]["reason"] = "pending_or_expired"
+                elif fault == "owner":
+                    d.command_path.write_bytes(b"another-writer\n")
+                elif fault == "nonce":
+                    response["nonce"] += 1
+                elif fault == "target":
+                    response["equipment"]["asset"] = "foreign"
+                else:
+                    response["owner"]["equipGeneration"] = d.baseline["owner"]["equipGeneration"]
+                    response["bodyHolster"]["nativeOwner"] = copy.deepcopy(response["owner"])
+                with patch.object(d, "send", side_effect=AssertionError("refusal sent controller input")):
+                    with self.assertRaises(self.core.REFUSAL):
+                        self.receive_draw_response(d, response, now)
+                self.assertNotEqual(d.latest_snapshot, response)
+                if fault == "owner":
+                    self.assertTrue(d.unsafe_owner)
+                    self.assertIn("not attempted", d.release_after_failure())
 
     def test_only_tracked_siblings_import_and_public_cli_executes(self):
         self.assertEqual({p.name for p in self.tools.iterdir()}, set(TOOLS))

@@ -1,4 +1,4 @@
-"""Decode saved Control-refusal v1 evidence; no process, input or request writes."""
+"""Decode saved provisioning v1 evidence; no process, input or request writes."""
 import argparse
 import json
 from pathlib import Path
@@ -13,6 +13,56 @@ def _require(okay, message):
 def _header(data, size, magic):
     _require(len(data) == size, f"expected {size} bytes, got {len(data)}")
     _require(struct.unpack_from("<3I", data) == (magic, 1, size), "unsupported wire header")
+
+
+def _identity(blob):
+    _require(len(blob) == 1080, "process identity wire size")
+    pid, reserved, creation, session = struct.unpack_from("<IIQQ", blob)
+    units = struct.unpack("<512H", blob[56:])
+    _require(0 in units, "unterminated process path")
+    end = units.index(0)
+    _require(pid and not reserved and creation and session == creation and end
+             and not any(units[end:]), "process identity padding/session")
+    return dict(pid=pid, creation=creation, session=session,
+                executable=blob[56:56 + end * 2].decode("utf-16-le"),
+                executable_sha256=blob[24:56].hex())
+
+
+def decode_receipt(blob, expected_identity, job, nonce, operation):
+    """Validate a saved successful Observe/Equip receipt against its exact request.
+
+    ReloadStateOwner omits target weapon data and the returned server item, so
+    equal previous/current tuples are valid. Production verifies both target
+    data and server item before recording client/server convergence. This saved
+    receipt does not authorize a retry or establish later gameplay readiness.
+    """
+    _header(blob, 1272, 0x31524342)
+    status = struct.unpack_from("<I", blob, 12)[0]
+    process = _identity(blob[16:1096])
+    _require(process == expected_identity, "receipt process identity differs")
+    got_nonce, got_job, preflight, retirements, dispatch = struct.unpack_from("<5Q", blob, 1096)
+    observed, dispatched = struct.unpack_from("<2q", blob, 1136)
+    previous = struct.unpack_from("<4I3Q", blob, 1152)
+    current = struct.unpack_from("<4I3Q", blob, 1192)
+    (phase, calls, returned, thread, boundary, server, converged,
+     excluded, retired, reserved) = struct.unpack_from("<10I", blob, 1232)
+    _require(nonce and job and (got_nonce, got_job) == (nonce, job) and preflight >= 8
+             and observed > 0 and not boundary and not excluded and not reserved,
+             "receipt nonce/job/preflight/boundary/exclusion differs")
+    if operation == "observe":
+        _require(status == 1 and phase == 0 and calls == 0 and retirements == 0 and retired == 0,
+                 "Observe must be Ready/Preflight without any assignment or retirement")
+    else:
+        _require(operation == "equip" and status == 6 and phase == 3 and calls == 1 and retirements == 1
+                 and retired == server == converged == 1 and returned and thread and dispatch
+                 and dispatched > 0 and all(current),
+                 "Equip lacks one assignment, retirement or client/server convergence")
+    return dict(status=status, identity=process, nonce=nonce, job=job, preflight=preflight,
+                retirements=retirements, native_calls=calls, dispatch_sequence=dispatch,
+                dispatch_ns=dispatched, observed_ns=observed, previous=list(previous),
+                current=list(current), returned_item=returned, thread=thread, phase=phase,
+                input_excluded=bool(excluded), old_item_retired=bool(retired),
+                server_item_observed=bool(server), client_server_converged=bool(converged))
 
 
 def decode(control, request, receipt, admission):

@@ -545,16 +545,24 @@ class ObservationHolsterDriver(OrdinaryHolsterDriver):
                               "reason": snapshot["bodyHolster"]["reason"]})
         self.request_snapshot()
 
+    @staticmethod
+    def unavailable_draw_publication(snapshot):
+        # These exact unavailable-body envelopes carry no equipment or input
+        # authority. Only an already acknowledged draw may wait for a new,
+        # fully admitted publication through hold_draw_publication_gap.
+        return (snapshot.get("schema") == "fvr.bc2.live-mechanism-snapshot.v1"
+                and snapshot.get("valid") is False
+                and snapshot.get("invalid_reason") in (
+                    "no_shot_publication", "selected_configuration_or_rig_missing_changed_or_expired")
+                and snapshot.get("bodyHolster") == {"available": False, "reason": "snapshot_unavailable"})
+
     def hold_draw_publication_gap(self, snapshot, raw, now):
         """An unavailable publication proves nothing; retain only command ownership."""
         self.bounds(now)
         self.check_hold_owner()
         if now - self.last_request > transport.SNAPSHOT_TIMEOUT:
             self.snapshot_timeout(now, (snapshot, raw))
-        require(snapshot.get("schema") == "fvr.bc2.live-mechanism-snapshot.v1"
-                and snapshot.get("valid") is False
-                and snapshot.get("invalid_reason") == "no_shot_publication"
-                and snapshot.get("bodyHolster") == {"available": False, "reason": "snapshot_unavailable"},
+        require(self.unavailable_draw_publication(snapshot),
                 "draw publication gap is not the exact unavailable snapshot")
         require(self.phase == "draw_wait" and self.draw_armed and self.held_right
                 and self.target_baseline is None and self.baseline is not None
@@ -627,7 +635,7 @@ class ObservationHolsterDriver(OrdinaryHolsterDriver):
             return None
         self.artifacts.save(f"snapshot-{self.snapshot_index:03}.json", raw)
         if snapshot.get("valid") is not True:
-            if snapshot.get("valid") is False and snapshot.get("invalid_reason") == "no_shot_publication":
+            if self.unavailable_draw_publication(snapshot):
                 self.hold_draw_publication_gap(snapshot, raw, time.perf_counter_ns())
                 return None
             raise REFUSAL("native snapshot refused: " + str(snapshot.get("invalid_reason")))
