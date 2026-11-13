@@ -3210,9 +3210,9 @@ int DetachedContainerCanClearTheMountWithoutParkingAtAnInvisiblePose(){
     for(const auto& registration:RegisteredBc2FeedProfiles()){
         Fixture f(&registration);CHECK(f.OpenCover()&&f.Reconcile());f.submitted.reset();
         const auto counts=f.native.counts;const auto motion=f.PlacementMotion(FeedPhysicalOperation::DetachContainer);CHECK(motion);
-        const auto wrist=[&](const fvr::math::Matrix4& object){return Multiply(motion->placement.sourceFromGrip,object);};
+        const auto wrist=[&](const fvr::math::Matrix4& object){return feed_interaction_detail::Multiply(motion->placement.sourceFromGrip,object);};
         const auto start=motion->placement.weaponFromSource;
-        auto cleared=Multiply(Turn(.65f),start);
+        auto cleared=feed_interaction_detail::Multiply(Turn(.65f),start);
         for(unsigned axis=0;axis<3;++axis)cleared.values[3][axis]=start.values[3][axis]+
             1.4f*(motion->placement.weaponFromDestination.values[3][axis]-start.values[3][axis]);
         CHECK(Angle(cleared,motion->placement.weaponFromDestination)>motion->orientationToleranceRadians);
@@ -3237,13 +3237,13 @@ int DetachClearanceCannotReplaceDirectionDwellOrCurrentHandEvidence(){
     for(const auto& registration:RegisteredBc2FeedProfiles())for(unsigned branch=0;branch<7;++branch){
         Fixture f(&registration);CHECK(f.OpenCover()&&f.Reconcile());f.submitted.reset();
         const auto counts=f.native.counts;const auto motion=f.PlacementMotion(FeedPhysicalOperation::DetachContainer);CHECK(motion);
-        const auto wrist=[&](const fvr::math::Matrix4& object){return Multiply(motion->placement.sourceFromGrip,object);};
+        const auto wrist=[&](const fvr::math::Matrix4& object){return feed_interaction_detail::Multiply(motion->placement.sourceFromGrip,object);};
         const auto start=motion->placement.weaponFromSource;
         std::array<double,3> outward{};double lengthSquared=0;
         for(unsigned axis=0;axis<3;++axis){outward[axis]=double(motion->placement.weaponFromDestination.values[3][axis])-start.values[3][axis];
             lengthSquared+=outward[axis]*outward[axis];}
         const auto length=std::sqrt(lengthSquared);CHECK(length>2*motion->pathToleranceMeters);
-        auto end=Multiply(Turn(.65f),start);
+        auto end=feed_interaction_detail::Multiply(Turn(.65f),start);
         if(branch==0){ // A long sideways pull does not clear the mount.
             std::array<double,3> sideways{-outward[1],outward[0],0};
             if(std::hypot(sideways[0],sideways[1])<.001)sideways={-outward[2],0,outward[0]};
@@ -3283,7 +3283,7 @@ int EmptyWeaponStillRetainsReplacementCustodyAndInterruptedOriginalPresentation(
             // A tracking interruption of an unfinished extraction is not an
             // explicit discard, even when the old container has no rounds.
             const auto motion=f.PlacementMotion(FeedPhysicalOperation::DetachContainer);CHECK(motion);
-            const auto wrist=[&](const fvr::math::Matrix4& object){return Multiply(motion->placement.sourceFromGrip,object);};
+            const auto wrist=[&](const fvr::math::Matrix4& object){return feed_interaction_detail::Multiply(motion->placement.sourceFromGrip,object);};
             const auto start=motion->placement.weaponFromSource;
             const auto middle=reload_insertion_detail::BlendRigid(start,motion->placement.weaponFromDestination,.4);
             f.Tick(wrist(start),false);f.Tick(wrist(start),false);f.Tick(wrist(start),true);
