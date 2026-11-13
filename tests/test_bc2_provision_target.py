@@ -330,6 +330,15 @@ class PinnedVariantTests(unittest.TestCase):
             primary[offset:offset + size] = value.to_bytes(size, "little")
             words.append({"primary_offset": offset, "bytes": size, "value": value})
         return {"schema": tool.SCHEMA, "accepted": True, "complete": True, "variant": variant,
+                "completeness_scope": tool.COMPLETENESS,
+                "selected_pair_revalidated_before_publication": True,
+                "coverage": {"scope": tool.COVERAGE_SCOPE, "passes": 2,
+                    "global_uniqueness_proven": False, "current_address_space_complete": False,
+                    "selected_chain_revalidated": True,
+                    "observations": [{"sweep": sweep, "completed": True, "typed_matches": 1,
+                        "layout_regions": 1, "layout_eligible_bytes": 0x5000,
+                        "read_bytes": 0x5000, "retired_unread_bytes": 0, "layout_sha256": "a" * 64}
+                        for sweep in (1, 2)]},
                 "source_before": copy.deepcopy(self.source), "source_after": copy.deepcopy(self.source),
                 "pinned_expected_metadata": {
                     "name": name, "path": path, "authored_dbx_resource_sha256": str(variant % 10) * 64,
@@ -360,7 +369,10 @@ class PinnedVariantTests(unittest.TestCase):
         heap = bytearray(0x5000)
         struct.pack_into("<I", heap, 0x1000, 0x1474554)
         struct.pack_into("<I", heap, 0x100c, 0x10100)
+        struct.pack_into("<I", heap, 0x1050, 0x12000)
         struct.pack_into("<I", heap, 0x2000, 0x145f098)
+        struct.pack_into("<I", heap, 0x2098, 0x13000)
+        struct.pack_into("<I", heap, 0x3040, 0x14000)
         path = self.paths[16][1].encode("ascii") + b"\0"
         heap[0x100:0x100 + len(path)] = path
         heap[0x400c:0x4098] = bytes.fromhex(target["observed_native"]["fire_logic_hex"])
@@ -471,6 +483,172 @@ class PinnedVariantTests(unittest.TestCase):
         memory.heap[0x800:0x800 + len(code)] = code
         return memory, selected, exact, table
 
+    def assembled_changing_maps(self, layouts, on_boundary=None, read_error=None):
+        """Real retained reader, with each full query walk observing a new heap map."""
+        memory, selected, exact, table = self.assembled_reader()
+        observed = {"layouts": 0, "reads": []}
+        original_read = memory.read
+        extra_bytes = {}
+        for layout in layouts:
+            for begin, end, _, _ in layout:
+                extra_bytes.setdefault(begin, bytearray(end - begin))
+                if len(extra_bytes[begin]) < end - begin:
+                    extra_bytes[begin].extend(bytes(end - begin - len(extra_bytes[begin])))
+
+        def query(address):
+            if address == tool.BEGIN:
+                observed["layouts"] += 1
+                if on_boundary:
+                    on_boundary(observed["layouts"], memory, selected, extra_bytes)
+            if address < 0x2000000:
+                return memory.query(address)
+            layout = layouts[min(observed["layouts"] - 1, len(layouts) - 1)]
+            previous = 0x2000000
+            for begin, end, kind, protect in layout:
+                if address < begin:
+                    return (previous, begin - previous, 0x10000, 0, 0)
+                if address < end:
+                    return (begin, end - begin, 0x1000, kind, protect)
+                previous = end
+            return (previous, tool.END - previous, 0x10000, 0, 0)
+
+        def read(address, size):
+            if address >= 0x3000000:
+                observed["reads"].append((observed["layouts"], address, size))
+                if read_error:
+                    raise read_error
+                for begin, blob in extra_bytes.items():
+                    if begin <= address and address + size <= begin + len(blob):
+                        return bytes(blob[address - begin:address - begin + size])
+                raise ValueError("Unmapped changing-map fixture read")
+            return original_read(address, size)
+
+        selected.p.query = query
+        memory.read = read
+        return memory, selected, exact, table, observed
+
+    def test_pinned_reader_map_growth_resizing_and_churn_scan_each_declared_layout(self):
+        a = (0x3000000, 0x3008000, 0x20000, 4)
+        b = (0x3010000, 0x3018000, 0x40000, 2)
+        grown = (a[0], a[1] + 0x4000, a[2], a[3])
+        split = ((a[0], a[0] + 0x4000, a[2], 4), (a[0] + 0x4000, a[1], a[2], 8))
+        for name, layouts in (("growth", [(), (a,), (a, b)]),
+                              ("resize", [(a,), (grown,), (b,)]),
+                              ("split", [(a,), split, (b,)]),
+                              ("churn", [(a,), (b,), (a,)])):
+            with self.subTest(change=name):
+                memory, selected, exact, table, observed = self.assembled_changing_maps(layouts)
+                result, coverage = tool.discover(exact, table)
+                self.assertEqual(observed["layouts"], 3)
+                self.assertEqual(selected.p.candidates, 2)
+                self.assertEqual(result["asset"]["address"], 0x11000)
+                self.assertFalse(coverage["global_uniqueness_proven"])
+                self.assertFalse(coverage["current_address_space_complete"])
+                self.assertTrue(coverage["selected_chain_revalidated"])
+                for sweep, layout in enumerate(layouts[:2], 1):
+                    row = coverage["observations"][sweep - 1]
+                    expected_bytes = len(memory.heap) + sum(end - begin for begin, end, _, _ in layout)
+                    self.assertEqual(row["layout_eligible_bytes"], expected_bytes)
+                    self.assertEqual(row["read_bytes"], expected_bytes)
+                    self.assertEqual(row["retired_unread_bytes"], 0)
+                    self.assertTrue(row["completed"])
+                    self.assertEqual(row["typed_matches"], 1)
+                    self.assertEqual(sum(size for phase, _, size in observed["reads"] if phase == sweep),
+                                     expected_bytes - len(memory.heap))
+                self.assertTrue(all(phase <= 2 for phase, _, _ in observed["reads"]))
+                self.assertEqual([r["boundary"] for r in coverage["eligible_map_observations"]],
+                                 ["before", "between", "final"])
+                self.assertTrue(all(r["added_regions"] + r["removed_regions"] > 0
+                                    for r in coverage["eligible_map_differences"]))
+                snapshot = self.snapshot()
+                snapshot.update(target=result, coverage=coverage)
+                self.assertEqual(tool.bound_target(snapshot, self.source, 42, 16, pins=self.pins),
+                                 (16, 0x11000, 0x12000))
+
+    def test_pinned_reader_growth_cannot_hide_observed_duplicate_or_target_changes(self):
+        extra = (0x3000000, 0x3008000, 0x20000, 4)
+        for change, reason in (("duplicate", "Multiple exact typed"),
+                               ("header", "Resource set changed"),
+                               ("data", "Resource set changed"),
+                               ("native_word", "variant word mismatch"),
+                               ("configuration", "Resource set changed"),
+                               ("final_configuration", "Selected pair/config changed")):
+            with self.subTest(change=change):
+                def mutate(phase, memory, selected, extra_bytes):
+                    if phase != (3 if change == "final_configuration" else 2):
+                        return
+                    if change == "duplicate":
+                        extra_bytes[extra[0]][:0x54] = memory.heap[0x1000:0x1054]
+                    elif change == "header":
+                        memory.heap[0x300:0x380] = memory.heap[0x100:0x180]
+                        struct.pack_into("<I", memory.heap, 0x100c, 0x10300)
+                    elif change == "data":
+                        memory.heap[0x2500:0x259c] = memory.heap[0x2000:0x209c]
+                        struct.pack_into("<I", memory.heap, 0x1050, 0x12500)
+                    elif change == "native_word":
+                        memory.heap[0x4180] = 5
+                    else:
+                        memory.heap[0x4028] = 1  # Config byte outside the exact-word list.
+
+                _, _, exact, table, _ = self.assembled_changing_maps(
+                    [(), (extra,), (extra,)], on_boundary=mutate)
+                with self.assertRaisesRegex(tool.Incomplete, reason):
+                    tool.discover(exact, table)
+
+    def test_pinned_reader_final_growth_does_not_claim_unobserved_uniqueness(self):
+        extra = (0x3000000, 0x3008000, 0x20000, 4)
+
+        def add_final_duplicate(phase, memory, selected, extra_bytes):
+            if phase == 3:
+                extra_bytes[extra[0]][:0x54] = memory.heap[0x1000:0x1054]
+
+        _, _, exact, table, observed = self.assembled_changing_maps(
+            [(), (), (extra,)], on_boundary=add_final_duplicate)
+        _, coverage = tool.discover(exact, table)
+        self.assertFalse(observed["reads"])
+        self.assertEqual(coverage["eligible_map_differences"][1]["added_regions"], 1)
+        self.assertFalse(coverage["current_address_space_complete"])
+        self.assertFalse(coverage["global_uniqueness_proven"])
+
+    def test_pinned_reader_growth_requires_complete_reads_and_all_existing_budgets(self):
+        extra = (0x3000000, 0x3008000, 0x20000, 4)
+        for failure, reason in (("read", "Unreadable scanned/typed"),
+                                ("live_partial_copy", "not wholly MEM_FREE"),
+                                ("query", "Unknown memory region state"),
+                                ("queries", "Region-query cap"),
+                                ("bytes", "byte cap reached"),
+                                ("candidates", "candidate cap reached"),
+                                ("time", "time cap reached")):
+            with self.subTest(failure=failure):
+                def limit(phase, memory, selected, extra_bytes):
+                    if phase != 2:
+                        return
+                    if failure == "queries":
+                        selected.p.max_regions = selected.p.queries
+                    elif failure == "bytes":
+                        selected.p.max_bytes = selected.p.bytes_read + len(memory.heap) - 1
+                    elif failure == "candidates":
+                        selected.p.max_candidates = selected.p.candidates
+                    elif failure == "time":
+                        selected.p.deadline = selected.p.clock()
+
+                error = OSError(299 if failure == "live_partial_copy" else 5, "fixture live read error")
+                _, selected, exact, table, observed = self.assembled_changing_maps(
+                    [(), (extra,), (extra,)], on_boundary=limit,
+                    read_error=error if failure in ("read", "live_partial_copy") else None)
+                if failure == "query":
+                    query = selected.p.query
+
+                    def unknown(address):
+                        result = query(address)
+                        return (*result[:2], 0, *result[3:]) if address == extra[0] else result
+
+                    selected.p.query = unknown
+                with self.assertRaisesRegex(tool.Incomplete, reason):
+                    tool.discover(exact, table)
+                self.assertLess(observed["layouts"], 3)
+                self.assertFalse(selected.p.retired_regions)
+
     def assembled_retiring_region(self, failed_sweep=2, *, state="free", boundary=None,
                                  boundary_change=None):
         memory, selected, exact, table = self.assembled_reader()
@@ -505,6 +683,8 @@ class PinnedVariantTests(unittest.TestCase):
                 region_state = {"committed": 0x1000, "reserved": 0x2000, "unknown": 0}.get(state, 0x10000)
                 if state == "reallocated_ineligible" and len(observed["queries"]) >= 3:
                     region_state = 0x2000
+                if state == "reallocated_eligible" and len(observed["queries"]) >= 3:
+                    return (transient, size, 0x1000, 0x20000, 4)
                 # Match the actual later VirtualQueryEx evidence: end-byte
                 # queries may report the enclosing page as their BaseAddress.
                 base = address & ~0xfff
@@ -547,9 +727,10 @@ class PinnedVariantTests(unittest.TestCase):
                 retirement, = coverage["retired_regions"]
                 self.assertEqual(retirement["phase"], "scan_chunk")
                 self.assertEqual(retirement["sweep"], failed_sweep)
-                self.assertEqual(retirement["last_confirmed_boundary"], 3)
+                self.assertNotIn("last_confirmed_boundary", retirement)
                 self.assertEqual([q["address"] for q in retirement["free_queries"]], [0x3000000, 0x3007fff])
                 self.assertTrue(all(q["state"] == 0x10000 for q in retirement["free_queries"]))
+                self.assertTrue(all(q["observed_elapsed_seconds"] >= 0 for q in retirement["free_queries"]))
                 failure = selected.p.read_failure
                 self.assertEqual(failure["stage"], "scan_chunk")
                 self.assertEqual(failure["sweep"], failed_sweep)
@@ -562,7 +743,7 @@ class PinnedVariantTests(unittest.TestCase):
                 self.assertNotIn("candidate_address", failure)
                 self.assertTrue(failure["retirement_confirmed"])
 
-    def test_pinned_reader_retirement_between_observations_keeps_current_coverage(self):
+    def test_pinned_reader_retirement_between_observations_records_map_delta(self):
         for boundary in (2, 3):
             with self.subTest(boundary=boundary):
                 memory, selected, exact, table, observed = self.assembled_retiring_region(boundary=boundary)
@@ -574,9 +755,9 @@ class PinnedVariantTests(unittest.TestCase):
                                  [len(memory.heap) + 32768,
                                   len(memory.heap) + (32768 if boundary == 3 else 0)])
                 self.assertTrue(all(row["retired_unread_bytes"] == 0 for row in coverage["observations"]))
-                retirement, = coverage["retired_regions"]
-                self.assertEqual(retirement["phase"], "layout_boundary")
-                self.assertEqual(retirement["sweep"], boundary)
+                self.assertFalse(coverage["retired_regions"])  # No unread bytes needed exclusion.
+                self.assertEqual(coverage["eligible_map_differences"][boundary - 2]["removed_regions"], 1)
+                self.assertFalse(coverage["current_address_space_complete"])
 
     def test_pinned_reader_uncertain_or_live_failed_region_remains_incomplete(self):
         for state, reason in (("committed", "not wholly MEM_FREE"), ("reserved", "not wholly MEM_FREE"),
@@ -593,8 +774,8 @@ class PinnedVariantTests(unittest.TestCase):
                 self.assertEqual(selected.p.read_failure["errno"], 299)
                 self.assertFalse(selected.p.retired_regions)
 
-    def test_pinned_reader_retirement_cannot_hide_added_mapping_or_changed_candidate(self):
-        for change in ("added", "duplicate", "configuration", "absent"):
+    def test_pinned_reader_retirement_cannot_hide_changed_candidate(self):
+        for change in ("duplicate", "configuration", "absent"):
             with self.subTest(change=change):
                 def mutate(memory):
                     if change == "duplicate":
@@ -605,33 +786,94 @@ class PinnedVariantTests(unittest.TestCase):
                         struct.pack_into("<I", memory.heap, 0x1000, 0)
 
                 _, _, exact, table, _ = self.assembled_retiring_region(
-                    state="added" if change == "added" else "free", boundary=2, boundary_change=mutate)
-                reason = {"added": "added or changed a mapping", "duplicate": "Multiple exact typed",
+                    boundary=2, boundary_change=mutate)
+                reason = {"duplicate": "Multiple exact typed",
                           "configuration": "variant word mismatch", "absent": "Resource set changed"}[change]
                 with self.assertRaisesRegex(tool.Incomplete, reason):
                     tool.discover(exact, table)
 
-    def test_pinned_reader_retired_range_must_stay_free_at_final_boundary(self):
+    def test_pinned_reader_retirement_evidence_is_historical_when_range_is_reused(self):
         _, selected, exact, table, observed = self.assembled_retiring_region(state="reallocated_ineligible")
-        with self.assertRaisesRegex(tool.Incomplete, "not wholly MEM_FREE"):
-            tool.discover(exact, table)
+        result, coverage = tool.discover(exact, table)
+        self.assertEqual(result["asset"]["address"], 0x11000)
         self.assertEqual(observed["reads"], 2)
         self.assertEqual(len(selected.p.retired_regions), 1)
         self.assertNotIn("last_confirmed_boundary", selected.p.retired_regions[0])
+        self.assertEqual(coverage["observations"][1]["retired_unread_bytes"], 32768)
+        self.assertFalse(coverage["current_address_space_complete"])
 
-    def test_pinned_reader_retirement_cannot_hide_changed_live_mapping(self):
+    def test_pinned_reader_reallocated_retired_range_is_read_in_next_declared_pass(self):
+        _, _, exact, table, observed = self.assembled_retiring_region(
+            failed_sweep=1, state="reallocated_eligible")
+        _, coverage = tool.discover(exact, table)
+        self.assertEqual(observed["reads"], 2)
+        self.assertEqual(coverage["observations"][0]["retired_unread_bytes"], 32768)
+        self.assertEqual(coverage["observations"][1]["retired_unread_bytes"], 0)
+        self.assertEqual(coverage["observations"][1]["read_bytes"], 0x5000 + 32768)
+
+    def test_pinned_reader_readable_selected_mapping_change_is_not_object_retirement(self):
         _, selected, exact, table, observed = self.assembled_retiring_region(boundary=2)
         original_query = selected.p.query
 
         def query(address):
             result = original_query(address)
-            if address == tool.BEGIN and observed["layouts"] >= 2:
+            if 0x10000 <= address < 0x15000 and observed["layouts"] >= 2:
                 return (*result[:4], 8)
             return result
 
         selected.p.query = query
-        with self.assertRaisesRegex(tool.Incomplete, "added or changed a mapping"):
-            tool.discover(exact, table)
+        result, coverage = tool.discover(exact, table)
+        self.assertEqual(result["asset"]["address"], 0x11000)
+        self.assertTrue(coverage["selected_chain_revalidated"])
+
+    def test_pinned_reader_selected_containing_region_can_grow_and_split(self):
+        memory, selected, exact, table = self.assembled_reader()
+        layouts = 0
+        original_read = memory.read
+
+        def query(address):
+            nonlocal layouts
+            if address == tool.BEGIN:
+                layouts += 1
+                if layouts == 2:
+                    memory.heap.extend(bytes(0x1000))
+            if 0x10000 <= address < 0x16000 and layouts >= 2:
+                # The second scan covers a larger containing region; the final
+                # map splits it while all originally selected bytes remain live.
+                if layouts == 2:
+                    return (0x10000, 0x6000, 0x1000, 0x20000, 4)
+                begin, end = (0x10000, 0x12000) if address < 0x12000 else (0x12000, 0x16000)
+                return (begin, end - begin, 0x1000, 0x20000, 4)
+            return memory.query(address)
+
+        def read(address, size):
+            if 0x10000 <= address and address + size <= 0x10000 + len(memory.heap):
+                return bytes(memory.heap[address - 0x10000:address - 0x10000 + size])
+            return original_read(address, size)
+
+        selected.p.query = query
+        memory.read = read
+        result, coverage = tool.discover(exact, table)
+        self.assertEqual(result["asset"]["address"], 0x11000)
+        self.assertEqual([row["read_bytes"] for row in coverage["observations"]], [0x5000, 0x6000])
+        self.assertEqual(coverage["final_eligible_regions"], 2)
+
+    def test_pinned_reader_selected_range_access_change_refuses_even_if_fixture_reads_succeed(self):
+        for state, protect in ((0x10000, 0), (0x2000, 0), (0x1000, 1), (0x1000, 0x104)):
+            with self.subTest(state=state, protect=protect):
+                _, selected, exact, table, observed = self.assembled_changing_maps([(), (), ()])
+                original_query = selected.p.query
+
+                def query(address):
+                    result = original_query(address)
+                    if observed["layouts"] == 3 and 0x10000 <= address < 0x15000:
+                        return (*result[:2], state, result[3], protect)
+                    return result
+
+                selected.p.query = query
+                with self.assertRaisesRegex(tool.Incomplete,
+                        "not committed readable memory|Selected pair/config changed"):
+                    tool.discover(exact, table)
 
     def test_pinned_reader_selected_region_retirement_is_never_skipped(self):
         for failure_stage in ("scan", "typed"):
@@ -930,6 +1172,43 @@ class PinnedVariantTests(unittest.TestCase):
                 snapshot["target"]["asset"]["object"] += 4
             with self.subTest(change=change), self.assertRaises(ValueError):
                 tool.bound_target(snapshot, fresh, 42, 16, pins=self.pins)
+
+    def test_consumer_requires_honest_completed_declared_pass_accounting(self):
+        for change in ("missing", "scope", "global", "current", "one_pass", "unfinished",
+                       "unread", "fractional", "duplicates", "hash", "revalidation", "publication"):
+            snapshot = self.snapshot()
+            coverage = snapshot["coverage"]
+            if change == "missing":
+                del snapshot["coverage"]
+            elif change == "scope":
+                snapshot["completeness_scope"] = "complete current address space"
+            elif change in ("global", "current"):
+                coverage["global_uniqueness_proven" if change == "global" else "current_address_space_complete"] = True
+            elif change == "one_pass":
+                coverage["observations"].pop()
+            elif change == "unfinished":
+                coverage["observations"][1]["completed"] = False
+            elif change == "unread":
+                coverage["observations"][1]["read_bytes"] -= 4
+            elif change == "fractional":
+                coverage["observations"][0]["retired_unread_bytes"] = 0.0
+            elif change == "duplicates":
+                coverage["observations"][1]["typed_matches"] = 2
+            elif change == "hash":
+                coverage["observations"][0]["layout_sha256"] = ""
+            elif change == "revalidation":
+                coverage["selected_chain_revalidated"] = False
+            else:
+                snapshot["selected_pair_revalidated_before_publication"] = False
+            with self.subTest(change=change), self.assertRaisesRegex(ValueError, "declared-pass"):
+                tool.bound_target(snapshot, self.source, 42, 16, pins=self.pins)
+
+    def test_map_growth_keeps_existing_snapshot_output_cap(self):
+        output = self.directory / "oversized.json"
+        with self.assertRaisesRegex(ValueError, "Snapshot output bound"):
+            tool.publish(output, {"eligible_map_differences": "x" * 131072})
+        self.assertFalse(output.exists())
+        self.assertFalse(output.with_name(output.name + ".pending").exists())
 
     def test_cli_default_and_explicit_variant_reach_source_gate(self):
         for variant in (0, 16):

@@ -1,7 +1,7 @@
 """Private, bounded read-only mounted-resource discovery for retained provisioning.
 
-Frozen readers supply reflection/selector contracts. This wrapper supplies complete
-coverage, process/session binding, the exact native variant words, and refusal.
+Frozen readers supply reflection/selector contracts. This wrapper supplies bounded
+candidate discovery, process/session binding, exact native words, and refusal.
 It never writes game memory or provisioning IPC, invokes native code, or launches.
 """
 from __future__ import annotations
@@ -22,9 +22,17 @@ import time
 SCHEMA = "fvr.bc2.readonly_provision_target.v1"
 BEGIN, END = 0x10000, 0x100000000
 DOMAIN = "MEM_PRIVATE or MEM_MAPPED; committed; PAGE_READONLY/READWRITE/WRITECOPY; no PAGE_GUARD"
-COMPLETENESS = ("two bounded observation sweeps of the declared domain, with recorded whole-region "
-                "MEM_FREE retirements excluded from unread coverage; exact selected typed sets agree; "
-                "no atomic or temporal global-uniqueness guarantee")
+COMPLETENESS = ("two completed bounded observation sweeps, each of its own declared eligible layout; "
+                "unread bytes excluded only by timestamped nonselected whole-region MEM_FREE evidence; "
+                "one exact typed match per sweep and selected-chain revalidation; "
+                "no global/atomic uniqueness, current-all-address-space completeness "
+                "or unobserved-lifetime-reuse guarantee")
+COVERAGE_SCOPE = "two_declared_observation_passes"
+# Pinned Bc2CampaignProvisioningPolicy.h::provision_detail::ResourceOnce and
+# read_weapon_resources.py::SelectedResourceReader.once consume these headers.
+DATA_VTABLE = 0x145f098
+ASSET_NAME, ASSET_OBJECT = 0xc, 0x50
+DATA_NAME, DATA_PATH, DATA_FIRING, FIRING_PRIMARY = 0xc, 0x40, 0x98, 0x40
 
 
 class Incomplete(ValueError):
@@ -190,6 +198,27 @@ def bound_target(snapshot, fresh_source, pid, variant=0, *, pins=None):
     pins = Path(pins) if pins is not None else Path(__file__).with_name("source-pins.json")
     manifest, blobs = load_pins(pins)
     selected = exact_variant(blobs, variant)
+    coverage = snapshot.get("coverage", {})
+    observations = coverage.get("observations", [])
+    # 'complete' describes completed declared observations, never a timeless
+    # inventory of the running process. Do not accept the flag without its scope.
+    if (snapshot.get("completeness_scope") != COMPLETENESS
+            or snapshot.get("selected_pair_revalidated_before_publication") is not True
+            or coverage.get("scope") != COVERAGE_SCOPE or coverage.get("passes") != 2
+            or coverage.get("global_uniqueness_proven") is not False
+            or coverage.get("current_address_space_complete") is not False
+            or coverage.get("selected_chain_revalidated") is not True
+            or not isinstance(observations, list) or len(observations) != 2):
+        raise ValueError("Target snapshot lacks completed declared-pass coverage")
+    for sweep, row in enumerate(observations, 1):
+        if (not isinstance(row, dict) or row.get("sweep") != sweep
+                or row.get("completed") is not True or row.get("typed_matches") != 1
+                or any(type(row.get(key)) is not int or row[key] < 0 for key in
+                       ("layout_regions", "layout_eligible_bytes", "read_bytes", "retired_unread_bytes"))
+                or not row["layout_regions"] or not row["layout_eligible_bytes"]
+                or row["read_bytes"] + row["retired_unread_bytes"] != row["layout_eligible_bytes"]
+                or not re.fullmatch(r"[0-9a-f]{64}", row.get("layout_sha256", ""))):
+            raise ValueError("Target snapshot declared-pass accounting is incomplete")
     if (snapshot.get("schema") != SCHEMA or snapshot.get("accepted") is not True
             or snapshot.get("complete") is not True or snapshot.get("variant") != variant
             or type(snapshot.get("variant")) is not int or fresh_source["identity"]["pid"] != pid
@@ -252,6 +281,7 @@ class BudgetedProcess:
         self.candidate_reads = None
         self.selected_reads = set()
         self.retired_regions = []
+        self.map_observations, self.map_differences = [], []
 
     def check(self):
         if self.clock() >= self.deadline:
@@ -335,14 +365,16 @@ class BudgetedProcess:
         # insufficient. Query the last byte again; Windows may round its base
         # to a different page, so compare containment/state rather than tuples.
         first = self.region(begin)
+        first_elapsed = self.clock() - self.started
         if first[2] != 0x10000 or first[0] + first[1] < end:
             raise Incomplete("Disappeared scan region is not wholly MEM_FREE")
         last = self.region(end - 1)
         if last[2] != 0x10000:
             raise Incomplete("Disappeared scan region changed during MEM_FREE confirmation")
         return [dict(address=address, base=value[0], size=value[1], state=value[2],
-                     type=value[3], protect=value[4])
-                for address, value in ((begin, first), (end - 1, last))]
+                     type=value[3], protect=value[4], observed_elapsed_seconds=elapsed)
+                for address, value, elapsed in ((begin, first, first_elapsed),
+                                                (end - 1, last, self.clock() - self.started))]
 
     def retire(self, region, phase, sweep, failure=None):
         if len(self.retired_regions) >= 64:
@@ -351,23 +383,45 @@ class BudgetedProcess:
         self.retired_regions.append({"region": region, "phase": phase, "sweep": sweep,
                                      "free_queries": evidence, "read_failure": failure})
 
-    def reconcile_layout(self, previous, current, sweep):
-        # Allow only removal of whole prior regions with fresh positive evidence.
-        # Added regions, resized/split survivors and protection/type changes
-        # invalidate the observation instead of starting another pass.
+    def observe_layout(self, label, previous=None):
+        current = self.layout()
+        self.map_observations.append({"boundary": label,
+            "eligible_regions": len(current),
+            "eligible_bytes": sum(end - begin for begin, end, _, _ in current),
+            "layout_sha256": digest(json.dumps(current, separators=(",", ":")).encode()),
+            "observed_elapsed_seconds": self.clock() - self.started})
+        if previous is None:
+            return current
+        # Map deltas are observations, not target admission. Every pass scans
+        # its own declared layout; the final layout is enumerated, not scanned.
+        # A retirement explains an earlier unread range only at its query times.
         previous_set, current_set = set(previous), set(current)
-        if current_set - previous_set:
-            raise Incomplete("Mounted-resource region map added or changed a mapping")
-        retired = {tuple(row["region"]) for row in self.retired_regions}
-        for region in previous:
-            if region not in current_set and region not in retired:
-                self.retire(region, "layout_boundary", sweep)
-        for row in self.retired_regions:
-            region = tuple(row["region"])
-            if region in current_set:
-                raise Incomplete("Retired scan region reappeared in the eligible domain")
-            row["latest_free_queries"] = self.confirm_free(region)
-            row["last_confirmed_boundary"] = sweep
+        delta = {"boundary": label}
+        for key, values in (("removed", previous_set - current_set), ("added", current_set - previous_set)):
+            ordered = sorted(values)
+            delta[key + "_regions"] = len(ordered)
+            delta[key + "_sha256"] = digest(json.dumps(ordered, separators=(",", ":")).encode())
+            delta[key + "_details"] = ordered[:16]
+            delta[key + "_details_omitted"] = max(0, len(ordered) - 16)
+        self.map_differences.append(delta)
+        return current
+
+    def revalidate_selected_ranges(self):
+        # Selected-chain reads include headers, names, configuration and typed
+        # metadata. Region extent is not object identity: adjacent growth/splits
+        # are allowed if every selected byte stays committed and accessible.
+        # Successful typed reads establish readability; these queries detect
+        # observed retirement/access changes, not unobserved free/reuse (ABA).
+        covered = None
+        for begin, end in sorted(self.selected_reads | self.candidate_reads):
+            address = begin
+            while address < end:
+                if covered is None or not covered[0] <= address < covered[0] + covered[1]:
+                    covered = self.region(address)
+                    if (covered[2] != 0x1000 or covered[4] & 0x100
+                            or covered[4] & 0xff in (0, 1)):
+                        raise Incomplete("Selected typed-chain mapping is not committed readable memory")
+                address = min(end, covered[0] + covered[1])
 
 
 class ExactReader:
@@ -390,11 +444,11 @@ class ExactReader:
         region = self.p.region(address)
         if region[2] != 0x10000:
             return False
-        if self.p.u32(asset) != table or self.p.u32(asset + 0xc) != address:
+        if self.p.u32(asset) != table or self.p.u32(asset + ASSET_NAME) != address:
             raise Incomplete("Candidate header changed during Name qualification")
         if self.p.region(address) != region:
             raise Incomplete("Name region changed during candidate qualification")
-        if self.p.u32(asset) != table or self.p.u32(asset + 0xc) != address:
+        if self.p.u32(asset) != table or self.p.u32(asset + ASSET_NAME) != address:
             raise Incomplete("Candidate header changed during Name qualification")
         return True
 
@@ -422,7 +476,7 @@ class ExactReader:
         self.reader.inspector.types = {}
         info = self.reader.inspector.require_type(asset, "SoldierWeaponAsset")
         name = self.reader.field(info, "Name")
-        if name["offset"] != 0xc:
+        if name["offset"] != ASSET_NAME:
             raise Incomplete("Reflected Asset name offset differs from native selector")
         self.stage = "asset_name_allocation"
         name_address = self.p.u32(asset + name["offset"])
@@ -438,7 +492,7 @@ class ExactReader:
         self.stage = "selected_relationship"
         if not row["asset"] or row["asset"]["address"] != asset or row["asset"]["object"] != row["data"]:
             raise Incomplete("Asset to Data relationship invalid")
-        if self.p.u32(row["data"]) != 0x145f098:
+        if self.p.u32(row["data"]) != DATA_VTABLE:
             raise Incomplete("Data native vtable differs")
         # Existing reflection must agree with the offsets used by production
         # SelectExactProvisionResource, not just produce similarly named fields.
@@ -446,10 +500,10 @@ class ExactReader:
         inspector = self.reader.inspector
         firing = inspector.require_type(row["firing_data"], "WeaponFiringData")
         primary = inspector.require_type(row["primary_fire"], "FiringFunctionData")
-        expected_fields = ((firing, "PrimaryFire", 0x40), (primary, "FireLogic", 0xc), (primary, "Ammo", 0x170))
+        expected_fields = ((firing, "PrimaryFire", FIRING_PRIMARY), (primary, "FireLogic", 0xc), (primary, "Ammo", 0x170))
         if any(self.reader.field(info, name)["offset"] != offset for info, name, offset in expected_fields):
             raise Incomplete("Reflected configuration offsets differ from native selector")
-        if row["asset"]["name_offset"] != 0xc or row["asset"]["object_offset"] != 0x50:
+        if row["asset"]["name_offset"] != ASSET_NAME or row["asset"]["object_offset"] != ASSET_OBJECT:
             raise Incomplete("Reflected Asset offsets differ from native selector")
         logic = self.p.read(row["primary_fire"] + 0xc, 0x8c)
         ammo = self.p.read(row["primary_fire"] + 0x170, 0x24)
@@ -465,6 +519,16 @@ class ExactReader:
         row.pop("authored_configuration_sha256", None)
         row.pop("measured_family_geometry", None)
         row["observed_native"] = {"fire_logic_hex": logic.hex(), "ammo_hex": ammo.hex(), "words": observed}
+        self.stage = "selected_headers"
+        headers = {"asset": [self.p.u32(asset + offset) for offset in (0, ASSET_NAME, ASSET_OBJECT)],
+                   "data": [self.p.u32(row["data"] + offset) for offset in (0, DATA_NAME, DATA_PATH, DATA_FIRING)],
+                   "firing": [self.p.u32(row["firing_data"] + offset) for offset in (0, FIRING_PRIMARY)],
+                   "primary": self.p.u32(row["primary_fire"])}
+        if (headers["asset"] != [table, name_address, row["data"]]
+                or headers["data"][0] != DATA_VTABLE or headers["data"][3] != row["firing_data"]
+                or headers["firing"][1] != row["primary_fire"]):
+            raise Incomplete("Selected typed-chain header/relationship changed")
+        row["observed_headers"] = headers
         return row
 
     def stable(self, asset, table):
@@ -474,6 +538,8 @@ class ExactReader:
             first, second = self.once(asset, table), self.once(asset, table)
             if first is not None or second is not None:
                 self.p.selected_reads.update(self.p.candidate_reads)
+                self.stage = "selected_lifetime"
+                self.p.revalidate_selected_ranges()
         finally:
             self.p.candidate_reads = None
         if first != second:
@@ -530,25 +596,24 @@ def scan_pass(reader, layout, table, sweep):
                     selected.append(candidate)
                     if len(selected) > 1:
                         raise Incomplete("Multiple exact typed Asset to Data matches")
-    return selected, {"sweep": sweep, "layout_regions": len(layout),
+    return selected, {"sweep": sweep, "completed": True, "typed_matches": len(selected),
+                      "layout_regions": len(layout),
                       "layout_eligible_bytes": sum(end - begin for begin, end, _, _ in layout),
                       "read_bytes": read_bytes, "retired_unread_bytes": retired_unread_bytes,
                       "layout_sha256": digest(json.dumps(layout, separators=(",", ":")).encode())}
 
 
 def discover(reader, table):
-    # Two bounded sweeps with complete eligible coverage or recorded positive
-    # whole-region retirement. Selected typed results must still agree exactly.
+    # Two bounded sweeps of their own declared eligible layouts, with recorded
+    # positive whole-region retirement for unread bytes. Typed results must agree.
     reader.p.read_context = {"phase": "before_scan"}
     reader.p.read_stage = "resource_verify"
     reader.reader.verify()
-    first_layout = reader.p.layout()
+    first_layout = reader.p.observe_layout("before")
     first, first_coverage = scan_pass(reader, first_layout, table, 1)
-    second_layout = reader.p.layout()
-    reader.p.reconcile_layout(first_layout, second_layout, 2)
+    second_layout = reader.p.observe_layout("between", first_layout)
     second, second_coverage = scan_pass(reader, second_layout, table, 2)
-    final_layout = reader.p.layout()
-    reader.p.reconcile_layout(second_layout, final_layout, 3)
+    final_layout = reader.p.observe_layout("final", second_layout)
     if first != second:
         raise Incomplete("Resource set changed across full scans")
     reader.p.read_context = {"phase": "after_scan"}
@@ -559,7 +624,12 @@ def discover(reader, table):
     if reader.stable(first[0]["asset"]["address"], table) != first[0]:
         raise Incomplete("Selected pair/config changed after full scans")
     reader.p.check()
-    return first[0], {"passes": 2, "observations": [first_coverage, second_coverage],
+    return first[0], {"scope": COVERAGE_SCOPE, "passes": 2,
+                      "global_uniqueness_proven": False, "current_address_space_complete": False,
+                      "selected_chain_revalidated": True,
+                      "observations": [first_coverage, second_coverage],
+                      "eligible_map_observations": reader.p.map_observations,
+                      "eligible_map_differences": reader.p.map_differences,
                       "retired_regions": reader.p.retired_regions,
                       "final_eligible_regions": len(final_layout),
                       "final_eligible_bytes": sum(end - begin for begin, end, _, _ in final_layout)}
@@ -661,6 +731,9 @@ def main(argv=None):
                 report["read_failure"] = bounded.read_failure
             if bounded.retired_regions and "coverage" not in report:
                 report["retired_regions"] = bounded.retired_regions
+            if bounded.map_observations and "coverage" not in report:
+                report["eligible_map_observations"] = bounded.map_observations
+                report["eligible_map_differences"] = bounded.map_differences
             report["scan"] = {"bytes_read_including_typed_reads": bounded.bytes_read,
                               "read_calls": bounded.read_calls, "asset_candidates": bounded.candidates,
                               "region_queries": bounded.queries, "elapsed_seconds": bounded.clock() - bounded.started}

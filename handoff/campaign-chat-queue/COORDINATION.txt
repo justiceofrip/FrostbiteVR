@@ -12,16 +12,16 @@ Ownership/ready/blocked tasks: COORDINATOR-STATE.txt (local scheduling record).
 External worktrees remain untouched; finished25/26/33 source is integrated. Steam32 lacks its executable.
 
 INSTALLED RUNTIME
-Private0.1.97 installed and setup-validated; fallback0.1.96, earlier versions retained.
-Compiled sourcef252d949bff5614f28f815df3896ba7b6fac2327; nativeclosure07ac8fcb48135dcac1879e3e17aab7f993dcea72f2f2df27b81b1bf53fd06076.
-Normal checks364x86/361x64 and focused vehicle checks passed; unchanged hostWARP reused.
-Receipt: reports/coordinator-20261108-feedback721/normal97/run02/installation.json.
+Private0.1.98 installed and setup-validated; fallback0.1.97, earlier versions retained.
+Compiled source7c0e98762d82be0ce69a3fde11419dba98b2a658; nativeclosureafae63aa2a36b3d1b89eaa0362e422c4ff9093608d6a7c5dff32c26a74c99f60.
+Normal checks364x86/361x64 and focused pistol12groups passed; unchanged hostWARP reused.
+Receipt: reports/coordinator-20261108-feedback721/normal98/run02/installation.json.
 Settings/cache/shortcut preserved. No public release or new physical-headset acceptance.
 
 CURRENT SOURCE
-Sourcef252d94 is pushed/remote-verified and installed97. The verified semantic ChangeEntry route admits an exactly unbound keyboard concept while retaining other binding/ownership/permission/restoration checks. Prior bounded diagnostics and neutral GatherPending recovery remain included.
+Source7c0e987 is pushed and installed98; it corrects pistol-slide sample-time presentation. The subsequent source-only acquisition/driver batch throughacc2918 is pushed, with the next finder correction passing43 assembled checks. Native97's semantic ChangeEntry correction and bounded navigation recovery remain included.
 The navigation batch removes the developer tool's firearm-publication prerequisite for ordinary on-foot input, keeping original actor/input/menu deadlines and weapon admission unchanged.
-Handoff: handoff/integrations/coordinator-20261113-navigation/README.txt.
+Handoffs: handoff/integrations/coordinator-20261113-weapon-acquisition/README.txt and coordinator-20261113-navigation/README.txt.
 
 ACTUAL GAME EVIDENCE / NEXT
 93/03 completed native Draw/zero-trigger physical jab/Return; damage against target and headsetfeel remain open.
