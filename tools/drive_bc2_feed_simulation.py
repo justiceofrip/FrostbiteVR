@@ -613,8 +613,25 @@ class WindowsOwner:
             self.handle = None
 
 
+def feed_artifact_limit(args, manifest):
+    if args.stage == "AttachContainer" and args.pickup_first:
+        # Actual102 exhausted 1 MiB after 34 full responses in the continuous
+        # pickup/attach route. Its two stages share 2 MiB from the runner's
+        # existing 128 MiB diagnostic reserve, checked by admit_capture_plan.
+        # The runner's aggregate watchdog and every input/time bound remain.
+        admit_capture_plan(manifest)
+        return 2 * MAX_BYTES
+    return MAX_BYTES
+
+
 class Artifacts:
-    def __init__(self, run):
+    # Existing specialized stores retain the default without copying a budget.
+    maximum_bytes = MAX_BYTES
+
+    def __init__(self, run, maximum_bytes=MAX_BYTES):
+        require(type(maximum_bytes) is int and maximum_bytes in (MAX_BYTES, 2 * MAX_BYTES),
+                "unsupported driver artifact allowance")
+        self.maximum_bytes = maximum_bytes
         self.directory = run / ("live-driver-" + uuid.uuid4().hex)
         self.directory.mkdir()
         self.sizes = {}
@@ -624,16 +641,16 @@ class Artifacts:
             data = json_bytes(data)
         # Leave room for the small session-local request/command/owner files as
         # well as the refusal result. Capture pixels use the runner's own budget.
-        limit = MAX_BYTES - (4096 if final else 12288)
+        limit = self.maximum_bytes - (4096 if final else 12288)
         require(sum(self.sizes.values()) - self.sizes.get(name, 0) + len(data) <= limit,
-                "driver artifact budget would exceed 1 MiB")
+                f"driver artifact budget would exceed {self.maximum_bytes // MAX_BYTES} MiB")
         atomic(self.directory / name, data)
         self.sizes[name] = len(data)
 
     def event(self, value, cleanup=False):
         data = json_bytes(value)
         name = "events.jsonl"
-        require(sum(self.sizes.values()) + len(data) <= MAX_BYTES - (8192 if cleanup else 12288),
+        require(sum(self.sizes.values()) + len(data) <= self.maximum_bytes - (8192 if cleanup else 12288),
                 "driver artifact budget exhausted")
         with (self.directory / name).open("ab") as stream:
             stream.write(data)
@@ -1391,12 +1408,12 @@ class Driver:
         self.snapshot_path = self.folder / "mechanism-snapshot.json"
         self.owner = WindowsOwner(self.host)
         self.acquire_lock()
-        self.artifacts = Artifacts(self.run)
+        self.artifacts = Artifacts(self.run, feed_artifact_limit(args, self.manifest))
         self.artifacts.save("invocation.json", {"stage": args.stage, "pickup_first": args.pickup_first,
                             "pickup_approach": getattr(args, "pickup_approach", False),
                             "capture": args.capture, "menu_batches": str(args.menu_batches) if args.menu_batches else None,
                             "host": self.host, "startedNs": self.started, "maximumDurationNs": 10 * NS,
-                            "maximumCommands": MAX_COMMANDS, "maximumArtifactBytes": MAX_BYTES,
+                             "maximumCommands": MAX_COMMANDS, "maximumArtifactBytes": self.artifacts.maximum_bytes,
                             "driverSha256": digest(Path(__file__).read_bytes()),
                             "plannerSha256": digest(Path(planner.__file__).read_bytes())})
         options, _ = read_json(self.folder / "options.json")

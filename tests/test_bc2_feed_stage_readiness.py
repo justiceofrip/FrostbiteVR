@@ -6,9 +6,13 @@ snapshots model only the absent/present publication boundary, not native state.
 """
 import copy
 import os
+from pathlib import Path
+import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+import test_bc2_feed_driver_observation as observation_tests
 from test_bc2_feed_driver_observation import Harness, MS, NS, d
 from test_bc2_feed_simulation_plan import synthetic_snapshot, add_synthetic_custody, set_wrist, emitted_wrist
 
@@ -17,6 +21,94 @@ from test_bc2_feed_simulation_plan import synthetic_snapshot, add_synthetic_cust
 FIRST_OBSERVATION_NS = 53305757072100
 STATE12_NS = (53306595447200, 53306604553300, 53306593406100)
 IDLE_NS = (53308593884700, 53308603635700, 53308597121100)
+
+
+class FeedArtifactBudgetTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.run = Path(temporary.name)
+        paths = patch.object(d, "local_path", side_effect=Path)
+        paths.start()
+        self.addCleanup(paths.stop)
+
+    def test_only_combined_pickup_attach_uses_admitted_two_mib(self):
+        manifest = observation_tests.CaptureAdmissionTests.manifest("extended", 8, 640, 480)
+        for stage, pickup in (("AttachContainer", True), ("AttachContainer", False),
+                              ("SupplyPickup", False), ("OpenCover", False), (None, False)):
+            for approach in (False, True):
+                args = SimpleNamespace(stage=stage, pickup_first=pickup, pickup_approach=approach)
+                expected = 2 * d.MAX_BYTES if stage == "AttachContainer" and pickup else d.MAX_BYTES
+                self.assertEqual(d.feed_artifact_limit(args, manifest), expected)
+        args = SimpleNamespace(stage="AttachContainer", pickup_first=True)
+        for planned in (manifest["limits"]["planned_bytes"] - 1,
+                        manifest["limits"]["planned_bytes"] + 1):
+            invalid = copy.deepcopy(manifest)
+            invalid["limits"]["planned_bytes"] = planned
+            with self.assertRaisesRegex(d.REFUSAL, "capture raw/storage budget"):
+                d.feed_artifact_limit(args, invalid)
+        self.assertEqual(d.MAX_BYTES, 1024 * 1024)
+
+    def test_actual102_byte_shape_retains_raw_evidence_through_combined_route(self):
+        # Actual102/01: these 34 responses totaled 912,258 bytes. Other evidence
+        # before the failed write was 107,667 bytes; cleanup/timing/result later
+        # added 11,865 bytes. These are synthetic byte payloads, not native proof.
+        sizes = [27812, 28295, 28297, 28288, 28301, 29123, 29141, 29129, 29138,
+                 27983, 29145, 26275, 26176, 26189, 25055, 26184, 26191, 26160,
+                 26156, 26185, 26196, 26191, 25050, 26173, 26185, 26182, 26167,
+                 25040, 26152, 26167, 26162, 26167, 26161, 25042]
+        self.assertEqual(sum(sizes), 912258)
+        plain, combined = d.Artifacts(self.run), d.Artifacts(self.run, 2 * d.MAX_BYTES)
+        for store in (plain, combined):
+            store.save("measured-other-evidence.bin", b"x" * 107667)
+            for index, size in enumerate(sizes, 1):
+                store.save(f"snapshot-{index:03}.json", b" " * size)
+            self.assertEqual(sum(store.sizes.values()), 1019925)
+        with self.assertRaisesRegex(d.REFUSAL, "exceed 1 MiB"):
+            plain.save("snapshot-035.json", b" " * max(sizes))
+        self.assertFalse((plain.directory / "snapshot-035.json").exists())
+        # Budget one maximum-observed response per each of the 26+36 planned
+        # samples, plus their request/ACK metadata and all failed diagnostics.
+        for index in range(35, 63):
+            combined.save(f"snapshot-{index:03}.json", b" " * max(sizes))
+            combined.event(dict(type="continued_command_evidence", padding="x" * 1500))
+        for suffix in ("failure", "at-timeout", "late"):
+            raw = b'{"valid":false,"invalid_reason":"synthetic_expired"}\r\n'
+            combined.save(f"snapshot-063-{suffix}.json", raw)
+            self.assertEqual((combined.directory / f"snapshot-063-{suffix}.json").read_bytes(), raw)
+        for index in range(1, 63):
+            size = sizes[index - 1] if index <= len(sizes) else max(sizes)
+            self.assertEqual((combined.directory / f"snapshot-{index:03}.json").read_bytes(), b" " * size)
+        combined.save("receive-timing-failure.json", b" " * 5450, final=True)
+        combined.event(dict(type="ordinary_release_acknowledged"), cleanup=True)
+        combined.save("result.json", b" " * 4408, final=True)
+        self.assertLess(sum(combined.sizes.values()), 2 * d.MAX_BYTES - 12288)
+
+    def test_exact_normal_cleanup_and_final_limits_refuse_before_write(self):
+        for maximum in (d.MAX_BYTES, 2 * d.MAX_BYTES):
+            store = d.Artifacts(self.run, maximum)
+            normal_limit = maximum - 12288
+            # The per-file atomic limit stays 1 MiB even for the combined route.
+            store.save("first.bin", b"x" * min(d.MAX_BYTES, normal_limit))
+            if normal_limit > d.MAX_BYTES:
+                store.save("second.bin", b"x" * (normal_limit - d.MAX_BYTES))
+            previous = store.sizes.copy()
+            with self.assertRaisesRegex(d.REFUSAL, "artifact budget would exceed"):
+                store.save("over-normal.bin", b"x")
+            with self.assertRaisesRegex(d.REFUSAL, "artifact budget exhausted"):
+                store.event(dict(type="ordinary"))
+            self.assertEqual(store.sizes, previous)
+            cleanup = dict(padding="x" * (4096 - len(d.json_bytes(dict(padding="")))))
+            store.event(cleanup, cleanup=True)
+            self.assertEqual(sum(store.sizes.values()), maximum - 8192)
+            with self.assertRaisesRegex(d.REFUSAL, "artifact budget exhausted"):
+                store.event({}, cleanup=True)
+            store.save("result.json", b"x" * 4096, final=True)
+            self.assertEqual(sum(store.sizes.values()), maximum - 4096)
+            with self.assertRaisesRegex(d.REFUSAL, "artifact budget would exceed"):
+                store.save("over-final.bin", b"x", final=True)
+            self.assertFalse((store.directory / "over-normal.bin").exists())
+            self.assertFalse((store.directory / "over-final.bin").exists())
 
 
 class FeedStageReadinessTests(unittest.TestCase):
