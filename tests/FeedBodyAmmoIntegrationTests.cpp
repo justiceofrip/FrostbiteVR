@@ -179,8 +179,10 @@ int ImmutablePickupOwnerJoinRejectsForeignFeedActor(){
         s.owner=FeedEquipmentOwner(f.body.native.identity.owner);s.mechanism={70,1};
         s.profileId=row.mechanism.id;s.profileRevision=row.mechanism.revision;
         s.sequence=f.body.native.sequence;s.inputSequence=f.input.sequence;s.observedNs=f.body.native.observedNs;
-        s.reconciled=true;s.cover=FeedCoverState::Open;s.latch=FeedLatchState::Absent;
-        s.container=FeedContainerState::Detached;s.feed=FeedSeatState::Unseated;s.cycle=FeedCycleState::NativeReady;
+        s.reconciled=true;s.cover=row.mechanism.cover?FeedCoverState::Open:FeedCoverState::Absent;
+        s.latch=row.mechanism.latch?FeedLatchState::Released:FeedLatchState::Absent;
+        s.container=FeedContainerState::Detached;s.feed=FeedSeatState::Unseated;
+        s.cycle=row.mechanism.charge?FeedCycleState::NativeReady:FeedCycleState::Absent;
         s.supply={f.body.supply,row.mechanism.ammunitionKind,FeedSupplyState::Usable};
         s.refill={FeedRefillState::Required,f.body.lifetime,0};
         for(unsigned n=0;n<s.contacts.size();++n)s.contacts[n]={row.mechanism.contacts[n].role,Identity()};

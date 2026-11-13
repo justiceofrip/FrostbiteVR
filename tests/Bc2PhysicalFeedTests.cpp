@@ -3361,7 +3361,10 @@ int EveryEnrolledFeedCompletesNaturalSupplyApproachAndRegrasp(){
             if(recovery==2){f.sample.input.tracked[0]=false;f.Tick(f.lastWrist,true);f.sample.input.tracked[0]=true;}
             else f.Tick(f.lastWrist,false);
             CHECK(!f.hands.Current(InteractionHand::Left)&&f.native.counts==before);
-            CHECK(f.PickSupplyFromHeldApproach());CHECK(f.result.presentation->supplyObject);
+            const bool reclaimedSupply=f.PickSupplyFromHeldApproach();
+            if(!reclaimedSupply){std::fprintf(stderr,"Feed supply regrasp failed: recovery=%u\n",recovery);
+                f.PrintCadenceFailure(cadence,FeedPhysicalOperation::AttachContainer);}
+            CHECK(reclaimedSupply);CHECK(f.result.presentation->supplyObject);
             const auto& reclaimed=*f.result.presentation->supplyObject;
             CHECK(reclaimed.item==original.item&&reclaimed.units==original.units&&reclaimed.identity==original.identity);
             CHECK(reclaimed.claim.token.id!=original.claim.token.id&&f.result.presentation->lifetime==lifetime);

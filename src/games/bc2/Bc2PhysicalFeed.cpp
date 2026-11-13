@@ -1061,6 +1061,19 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         rawCheck(4,source->input.observedNs>=source->native->observedNs)&&rawCheck(5,FeedEquipmentViewFresh(*source->native,now))&&
         rawCheck(6,FeedEquipmentSameItem(*source->native,*view))&&rawCheck(7,source->native->counts==view->counts);
     const bool raw=rawContext&&rawCheck(8,hands.HasRecordedEvidence(source->input,InteractionHand::Left));
+    const auto suspendRaw=[&](FeedSupplyLossSite site=FeedSupplyLossSite::TickSuspend){
+        suspend(FeedExit::GunOrRawUnverified,site);
+        // Tracking recovery can leave the renderer on a rejected N-1 packet.
+        // Record N's real released input for the body supply only, using N's
+        // original native pair. This grants no pickup, raw pose or feed motion.
+        if(gun&&!s.cancel&&!s.grip&&s.input.released[0]&&
+           e->container==FeedContainerState::Detached&&!e->pending&&
+           currentPacket&&currentPacket->native&&currentPacket->native->observedNs<=s.input.observedNs){
+            const auto currentBody=state.BodyAmmo(*e,*currentPacket->native);
+            if(Bc2FeedBodyRetained(currentBody,state.BodyAmmo(*e,*view)))
+                (void)e->ammunitionSupply.Update(currentBody,s.input,s.bodyFromHand,false,false,hands,intent);
+        }
+    };
     if(!raw&&gun&&source&&source->native&&e->claim&&!e->releaseWait&&e->session&&
        (e->session->State().status==FeedEquipmentStatus::Ready||e->completedHold)&&(!e->pending||e->completedHold)&&
        !e->refused&&!e->gateFailed&&(!e->motionDirty||e->completedHold)&&
@@ -1120,10 +1133,10 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
                 e->ammunitionSupply.Suspend(s.input,hands);
                 out.blocksFire=e->Blocked();out.blocksEquipment=false;
                 return finish(FeedExit::GunOrRawUnverified);
-            }else {suspend(FeedExit::GunOrRawUnverified,FeedSupplyLossSite::ReleaseContinuationUnavailable);out.blocksFire=e->Blocked();return finish(FeedExit::GunOrRawUnverified);}
-        }else {suspend(FeedExit::GunOrRawUnverified,FeedSupplyLossSite::ReleaseContinuationUnverified);out.blocksFire=e->Blocked();return finish(FeedExit::GunOrRawUnverified);}
+            }else {suspendRaw(FeedSupplyLossSite::ReleaseContinuationUnavailable);out.blocksFire=e->Blocked();return finish(FeedExit::GunOrRawUnverified);}
+        }else {suspendRaw(FeedSupplyLossSite::ReleaseContinuationUnverified);out.blocksFire=e->Blocked();return finish(FeedExit::GunOrRawUnverified);}
     }
-    if(!gun||!raw){suspend(FeedExit::GunOrRawUnverified);out.blocksFire=e->Blocked();return finish(FeedExit::GunOrRawUnverified);}
+    if(!gun||!raw){suspendRaw();out.blocksFire=e->Blocked();return finish(FeedExit::GunOrRawUnverified);}
     auto sourceInput=source->input;sourceInput.nowNs=now;
     // The renderer solves the placed weapon again on each native publication,
     // even while controllerEvidence still names the same original packet.
@@ -1412,6 +1425,9 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             sample.interaction.weaponWorld=source->contact->weaponWorld;
         sample.held=available&&(source->grip||sourceInput.released[0])&&!e->refused&&!e->gateFailed&&!e->motionDirty&&
             (!needsSupply||supplied||pickupAwaitingRaw||(chestNeutral&&e->supplyNeutral));
+        // Retained reserve custody is not a current hand claim. Reclaim its
+        // exact AmmoObject before a held attachment can acquire feed geometry.
+        if(needsSupply&&supplied&&source->grip&&!supplyHand)sample.held=false;
         if(observation){auto& v=observation->decision;v.eligibilityEvaluated=true;v.available=available;v.heldBeforeOwnership=sample.held;
             v.needsSupply=needsSupply;v.supplied=supplied;v.pickupAwaitingRaw=pickupAwaitingRaw;v.chestNeutral=chestNeutral;v.supplyNeutral=e->supplyNeutral;
             v.refused=e->refused;v.gateFailed=e->gateFailed;v.motionDirty=e->motionDirty;v.nativePending=bool(e->pending);
