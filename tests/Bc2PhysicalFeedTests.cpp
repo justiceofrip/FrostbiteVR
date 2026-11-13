@@ -3407,9 +3407,19 @@ int OriginalReleaseWaitExpiryPreservesLoadedCustody(){
         const auto carried=*f.result.presentation;const auto heldRaw=f.sample.raw;
         f.PrepareTick(wrist(middle),false);f.Consume(&heldRaw);
         CHECK(!f.result.ownsHand&&!f.submitted&&f.result.presentation->carriedPartsMask);
+        const auto gun=f.hands.Current(InteractionHand::Right);CHECK(gun);
         // The real release is recorded, but its render never arrives within
         // the held packet's original lease. Expiry cannot dispatch extraction.
-        f.now+=100*Ms;f.PrepareTick(wrist(middle),false);f.Consume(&heldRaw);
+        // Continue real controller packets: a 110ms input gap would also lose
+        // GunHold, correctly forbidding restoration without current ownership.
+        for(unsigned tick=0;tick<10;++tick){
+            f.PrepareTick(wrist(middle),false);f.Consume(&heldRaw);
+            const auto currentGun=f.hands.Current(InteractionHand::Right);
+            CHECK(currentGun&&currentGun->token==gun->token&&currentGun->deadlineNs>f.sample.input.nowNs);
+            CHECK(f.sample.raw.inputEvidence.observedNs==heldRaw.inputEvidence.observedNs&&
+                f.sample.raw.inputEvidence.deadlineNs==heldRaw.inputEvidence.deadlineNs);
+        }
+        CHECK(f.sample.input.nowNs>=heldRaw.inputEvidence.deadlineNs);
         CHECK(f.result.presentation&&!f.submitted&&!f.result.pending&&f.submits==1&&f.native.counts==counts);
         CHECK(!f.result.presentation->hiddenPartsMask&&!f.result.presentation->droppedOriginalAtNs);
         if(loaded){CHECK(f.result.presentation->carriedPartsMask==carried.carriedPartsMask);
