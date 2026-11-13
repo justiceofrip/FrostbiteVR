@@ -116,11 +116,11 @@ class ResourceMemory:
         raise ValueError("Unmapped fixture read at " + hex(address))
 
     def query(self, address):
-        if address == 0x10000:
+        if 0x10000 <= address < 0x15000:
             return (0x10000, len(self.heap), 0x1000, 0x20000, 4)
-        if address == 0x15000:
+        if 0x15000 <= address < self.base:
             return (0x15000, self.base - 0x15000, 0x10000, 0, 0)
-        if address == self.base:
+        if self.base <= address < 0x2000000:
             return (self.base, 0x2000000 - self.base, 0x1000, 0x1000000, 0x20)
         return (0x2000000, tool.END - 0x2000000, 0x10000, 0, 0)
 
@@ -187,7 +187,14 @@ class Reader:
         return self.asset_path
 
     def u32(self, address):
-        return 0x20000
+        return 0x1474554 if address == 0x11000 else 0x20000
+
+    def read(self, address, size):
+        path = self.asset_path.encode("ascii") + b"\0"
+        return path[address - 0x20000:address - 0x20000 + size]
+
+    def region(self, address):
+        return (0x20000, 0x1000, 0x1000, 0x20000, 4)
 
     def once(self, asset, table):
         return self.result
@@ -205,10 +212,11 @@ class SelectedAssetTests(unittest.TestCase):
         reader = tool.ExactReader(Reader("Objects/Weapons/Other"), {"path": self.target})
         self.assertIsNone(reader.once(0x11000, 0x1474554))
 
-    def test_selector_change_during_read_refuses(self):
-        reader = tool.ExactReader(Reader("Objects/Weapons/Other", {}), {"path": self.target})
-        with self.assertRaisesRegex(tool.Incomplete, "selector changed"):
-            reader.once(0x11000, 0x1474554)
+    def test_positive_selector_mismatch_does_not_delegate(self):
+        selected = Reader("Objects/Weapons/Other")
+        reader = tool.ExactReader(selected, {"path": self.target})
+        with mock.patch.object(selected, "once", side_effect=AssertionError("Unselected delegate")):
+            self.assertIsNone(reader.once(0x11000, 0x1474554))
 
     def test_unverified_asset_name_offset_refuses(self):
         reader = tool.ExactReader(Reader(self.target, name_offset=16), {"path": self.target})
@@ -314,8 +322,10 @@ class PinnedVariantTests(unittest.TestCase):
         target["asset"].update(name_offset=12, object_offset=0x50)
         heap = bytearray(0x5000)
         struct.pack_into("<I", heap, 0x1000, 0x1474554)
-        struct.pack_into("<I", heap, 0x100c, 0x15000)
+        struct.pack_into("<I", heap, 0x100c, 0x10100)
         struct.pack_into("<I", heap, 0x2000, 0x145f098)
+        path = self.paths[16][1].encode("ascii") + b"\0"
+        heap[0x100:0x100 + len(path)] = path
         heap[0x400c:0x4098] = bytes.fromhex(target["observed_native"]["fire_logic_hex"])
         heap[0x4170:0x4194] = bytes.fromhex(target["observed_native"]["ammo_hex"])
 
@@ -326,7 +336,7 @@ class PinnedVariantTests(unittest.TestCase):
                 return bytes(heap[address - 0x10000:address - 0x10000 + size])
 
             def query(self, address):
-                if address == 0x10000:
+                if 0x10000 <= address < 0x15000:
                     return (0x10000, len(heap), 0x1000, 0x20000, 4)
                 return (0x15000, tool.END - 0x15000, 0x10000, 0, 0)
 
@@ -400,6 +410,185 @@ class PinnedVariantTests(unittest.TestCase):
         memory.heap[0x4180] = 5
         with self.assertRaisesRegex(tool.Incomplete, "variant word mismatch"):
             tool.discover(exact, table)
+
+    def assembled_reader(self):
+        if READER_PINS is None:
+            self.skipTest("Retained reader NOT exercised: supply --reader-pins PATH to the reviewed dependency manifest")
+        modules = retained_modules(READER_PINS)
+        variant = tool.exact_variant(self.blobs, 16)
+        memory = ResourceMemory(variant["path"], variant["name"], self.snapshot()["target"]["observed_native"])
+        bounded = tool.BudgetedProcess(memory, memory.query, 1024 * 1024, 30)
+        selected = modules["read_weapon_resources"].SelectedResourceReader(
+            bounded, ResourceImage(memory), {variant["path"].lower(): variant["authored"]})
+        return memory, selected, tool.ExactReader(selected, variant), modules["read_stock_sniper_resources"].ASSET_TABLE
+
+    def assembled_code_candidate(self):
+        memory, selected, exact, table = self.assembled_reader()
+        # Actual98/02 candidate +0..127 at 0x33f3b02c: a copy of executable
+        # code at 0x13d7fec, with initial Name/Object words both 0xcccccccc.
+        code = bytes.fromhex(
+            "544547018bc65ec20400cccccccccccccccccccc8b442408568bf18b4c240850518b"
+            "cee86c720200c706544547018bc65ec20800c70154454701e9a56a0200cccccccccc"
+            "8b4154c3cccccccccccccccccccccccc8b442404894154c20400ccccccccccccb888"
+            "6ec001c3cccccccccccccccccccc568b74240885f6741f8b4424")
+        memory.heap[0x800:0x800 + len(code)] = code
+        return memory, selected, exact, table
+
+    def test_pinned_reader_unallocated_initial_name_preserves_complete_selection(self):
+        for targets in (0, 1, 2):
+            with self.subTest(exact_targets=targets):
+                memory, selected, exact, table = self.assembled_code_candidate()
+                if targets == 0:
+                    struct.pack_into("<I", memory.heap, 0x1000, 0)
+                elif targets == 2:
+                    memory.heap[0x1800:0x1854] = memory.heap[0x1000:0x1054]
+                with mock.patch.object(memory, "read", wraps=memory.read) as reads, \
+                        mock.patch.object(selected.p, "query", wraps=memory.query) as queries:
+                    if targets == 1:
+                        result, coverage = tool.discover(exact, table)
+                        self.assertEqual(result["asset"]["address"], 0x11000)
+                        self.assertEqual(coverage["passes"], 2)
+                        self.assertEqual(selected.p.candidates, 4)
+                    else:
+                        reason = "No exact typed Asset" if targets == 0 else "Multiple exact typed Asset"
+                        with self.assertRaisesRegex(tool.Incomplete, reason):
+                            tool.discover(exact, table)
+                    self.assertEqual(selected.p.queries, queries.call_count)
+                    self.assertFalse(any(call.args[0] == 0xcccccccc for call in reads.call_args_list))
+
+    def test_pinned_reader_unallocated_name_header_mutation_stays_incomplete(self):
+        for offset in (0, 0xc):
+            for mutation_query in (1, 2):
+                with self.subTest(header_offset=offset, mutation_query=mutation_query):
+                    memory, selected, exact, table = self.assembled_code_candidate()
+                    count = 0
+
+                    def query(address):
+                        nonlocal count
+                        region = memory.query(address)
+                        if address == 0xcccccccc:
+                            count += 1
+                            if count == mutation_query:
+                                struct.pack_into("<I", memory.heap, 0x800 + offset, 0x10100)
+                        return region
+
+                    selected.p.query = query
+                    with self.assertRaisesRegex(tool.Incomplete, "Candidate header changed"):
+                        tool.discover(exact, table)
+
+    def test_pinned_reader_unknown_name_allocation_stays_incomplete(self):
+        for kind in ("query_failure", "wrong_extent", "zero_extent", "overflow_extent",
+                     "committed", "reserved", "unknown", "changed_region"):
+            with self.subTest(kind=kind):
+                memory, selected, exact, table = self.assembled_code_candidate()
+                count = 0
+
+                def query(address):
+                    nonlocal count
+                    region = memory.query(address)
+                    if address != 0xcccccccc:
+                        return region
+                    count += 1
+                    if kind == "query_failure":
+                        raise OSError("fixture query failed")
+                    if kind == "wrong_extent":
+                        return (address + 1, 0x1000, 0x10000, 0, 0)
+                    if kind == "zero_extent":
+                        return (address, 0, 0x10000, 0, 0)
+                    if kind == "overflow_extent":
+                        return (address, tool.END, 0x10000, 0, 0)
+                    state = {"committed": 0x1000, "reserved": 0x2000, "unknown": 0}.get(kind)
+                    if state is not None or kind == "changed_region" and count == 2:
+                        return (region[0], region[1], state if state is not None else 0x1000, 0x20000, 4)
+                    return region
+
+                selected.p.query = query
+                reason = ("fixture query failed" if kind == "query_failure" else
+                          "Malformed region extent" if kind.endswith("extent") else
+                          "Unknown memory region state" if kind == "unknown" else
+                          "Name region changed" if kind == "changed_region" else
+                          "Unreadable scanned/typed region")
+                with self.assertRaisesRegex(tool.Incomplete, reason):
+                    tool.discover(exact, table)
+
+    def test_pinned_reader_name_qualification_cannot_bypass_query_budget(self):
+        _, selected, exact, table = self.assembled_code_candidate()
+        selected.p.max_regions = 1
+        with self.assertRaisesRegex(tool.Incomplete, "Region-query cap reached"):
+            exact.stable(0x10800, table)
+        self.assertEqual(selected.p.queries, 1)
+
+    def test_pinned_reader_excludes_proven_non_target_before_malformed_suffix(self):
+        target = self.paths[16][1].encode("ascii")
+        for path in (b"Objects/Weapons/Handheld/Other/\xff\0", target + b"_Scoped\xff\0",
+                     b"Objects/Weapons/Handheld/\xff\0"):
+            with self.subTest(path=path):
+                memory, selected, exact, table = self.assembled_reader()
+                struct.pack_into("<I", memory.heap, 0x800, table)
+                struct.pack_into("<I", memory.heap, 0x80c, 0x10300)
+                memory.heap[0x300:0x300 + len(path)] = path
+                # Prove the unmodified retained parser would abort on this
+                # non-target candidate, before exercising the complete wrapper.
+                with self.assertRaisesRegex(ValueError, "Invalid ASCII metadata"):
+                    selected.once(0x10800, table)
+                mixed_case = target.swapcase() + b"\0"
+                memory.heap[0x100:0x100 + len(mixed_case)] = mixed_case
+                result, coverage = tool.discover(exact, table)
+                self.assertEqual(result["asset"]["address"], 0x11000)
+                self.assertEqual(result["path"].lower(), self.paths[16][1].lower())
+                self.assertEqual(coverage["passes"], 2)
+                self.assertEqual(selected.p.candidates, 4)
+
+    def test_pinned_reader_unknown_exact_prefix_stays_incomplete(self):
+        target = self.paths[16][1].encode("ascii")
+        # Neither a partially readable prefix nor all path bytes without a
+        # readable terminator proves exclusion or an exact selected path.
+        for prefix in (target[:16], target):
+            with self.subTest(prefix_bytes=len(prefix)):
+                memory, selected, exact, table = self.assembled_reader()
+                struct.pack_into("<I", memory.heap, 0x800, table)
+                struct.pack_into("<I", memory.heap, 0x80c, 0x15000 - len(prefix))
+                memory.heap[-len(prefix):] = prefix
+                with self.assertRaisesRegex(tool.Incomplete,
+                        r"0x10800 \(asset_selector\): Unreadable scanned/typed region"):
+                    tool.discover(exact, table)
+                self.assertEqual(selected.p.candidates, 1)
+
+    def test_pinned_reader_exclusion_preserves_target_absence_and_uniqueness(self):
+        for count in (0, 2):
+            with self.subTest(exact_targets=count):
+                memory, selected, exact, table = self.assembled_reader()
+                struct.pack_into("<I", memory.heap, 0x800, table)
+                struct.pack_into("<I", memory.heap, 0x80c, 0x10300)
+                path = b"Other/\xff\0"
+                memory.heap[0x300:0x300 + len(path)] = path
+                if count == 0:
+                    struct.pack_into("<I", memory.heap, 0x1000, 0)
+                    reason = "No exact typed Asset to Data match"
+                else:
+                    memory.heap[0x1800:0x1854] = memory.heap[0x1000:0x1054]
+                    reason = "Multiple exact typed Asset to Data matches"
+                with self.assertRaisesRegex(tool.Incomplete, reason):
+                    tool.discover(exact, table)
+                self.assertEqual(selected.p.candidates, 2 if count == 0 else 3)
+
+    def test_pinned_reader_selected_malformed_or_changed_data_stays_incomplete(self):
+        for malformed in (True, False):
+            with self.subTest(malformed_name=malformed):
+                memory, _, exact, table = self.assembled_reader()
+                if malformed:
+                    memory.heap[0x200] = 0xff
+                    reason = "Invalid ASCII metadata"
+                else:
+                    # An exact selected Asset cannot hide a changed Data path
+                    # behind the retained reader's ordinary unselected None.
+                    struct.pack_into("<I", memory.heap, 0x2040, 0x10300)
+                    other = b"Objects/Weapons/Other\0"
+                    memory.heap[0x300:0x300 + len(other)] = other
+                    reason = "Selected Asset has an invalid Data selector/path"
+                with self.assertRaisesRegex(tool.Incomplete,
+                        r"0x11000 \(selected_typed_chain\): " + reason):
+                    tool.discover(exact, table)
 
     def test_unsupported_integer_or_name_never_selects(self):
         for variant in (-1, 23, 0x100000000, True, "16", "AEK971_sp"):

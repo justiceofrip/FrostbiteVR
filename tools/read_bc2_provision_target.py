@@ -269,16 +269,26 @@ class BudgetedProcess:
     def u32(self, address):
         return struct.unpack("<I", self.read(address, 4))[0]
 
+    def region(self, address):
+        self.check()
+        if not BEGIN <= address < END:
+            raise Incomplete("Typed query bounds")
+        if self.queries >= self.max_regions:
+            raise Incomplete("Region-query cap reached")
+        self.queries += 1
+        region = self.query(address)
+        base, size, state, _, _ = region
+        if size <= 0 or not 0 <= base <= address < base + size <= END:
+            raise Incomplete("Malformed region extent")
+        if state not in (0x1000, 0x2000, 0x10000):
+            raise Incomplete("Unknown memory region state")
+        self.check()
+        return region
+
     def layout(self):
         address, result = BEGIN, []
         while address < END:
-            self.check()
-            if self.queries >= self.max_regions:
-                raise Incomplete("Region-query cap reached")
-            self.queries += 1
-            base, size, state, kind, protect = self.query(address)
-            if size <= 0 or base > address or base + size <= address or base + size > END:
-                raise Incomplete("Malformed region extent")
+            base, size, state, kind, protect = self.region(address)
             # Preserve the existing verified scanner's mounted-resource domain.
             if state == 0x1000 and kind in (0x20000, 0x40000) and protect & 0xff in (2, 4, 8) and not protect & 0x100:
                 begin = max(BEGIN, base)
@@ -292,31 +302,68 @@ class BudgetedProcess:
 class ExactReader:
     def __init__(self, selected_reader, variant):
         self.reader, self.p, self.variant = selected_reader, selected_reader.p, variant
+        self.stage = "asset_vtable"
+
+    def unallocated_initial_name(self, asset, table, address):
+        # A raw vtable word can be an instruction immediate in a code copy.
+        # Only positive MEM_FREE evidence excludes before selector consumption;
+        # committed unreadability, unknown state and failed queries never do.
+        region = self.p.region(address)
+        if region[2] != 0x10000:
+            return False
+        if self.p.u32(asset) != table or self.p.u32(asset + 0xc) != address:
+            raise Incomplete("Candidate header changed during Name qualification")
+        if self.p.region(address) != region:
+            raise Incomplete("Name region changed during candidate qualification")
+        if self.p.u32(asset) != table or self.p.u32(asset + 0xc) != address:
+            raise Incomplete("Candidate header changed during Name qualification")
+        return True
+
+    def matches_asset_path(self, address):
+        # A readable unequal byte proves this is not the exact selector. Do not
+        # parse unrelated suffixes as metadata, or turn unreadable bytes into a
+        # negative match. Include NUL so a longer sibling path cannot select.
+        expected = self.variant["path"].encode("ascii").lower() + b"\0"
+        for offset, wanted in enumerate(expected):
+            observed = self.p.read(address + offset, 1)[0]
+            if 65 <= observed <= 90:
+                observed += 32
+            if observed != wanted:
+                return False
+        return True
 
     def once(self, asset, table):
         # The retained reader may return None for a selected Asset whose Object
         # points at a different Data selector. Preserve that distinction before
         # delegation: malformed selected candidates make this sweep incomplete.
+        self.stage = "asset_vtable"
+        if self.p.u32(asset) != table:
+            raise Incomplete("Candidate table changed")
+        self.stage = "asset_reflection"
         self.reader.inspector.types = {}
         info = self.reader.inspector.require_type(asset, "SoldierWeaponAsset")
         name = self.reader.field(info, "Name")
         if name["offset"] != 0xc:
             raise Incomplete("Reflected Asset name offset differs from native selector")
-        asset_path = self.reader.inspector.text(self.p.u32(asset + name["offset"]))
-        selected_asset = asset_path.lower() == self.variant["path"].lower()
+        self.stage = "asset_name_allocation"
+        name_address = self.p.u32(asset + name["offset"])
+        if self.unallocated_initial_name(asset, table, name_address):
+            return None
+        self.stage = "asset_selector"
+        if not self.matches_asset_path(name_address):
+            return None
+        self.stage = "selected_typed_chain"
         row = self.reader.once(asset, table)
         if row is None:
-            if selected_asset:
-                raise Incomplete("Selected Asset has an invalid Data selector/path")
-            return None
-        if not selected_asset:
-            raise Incomplete("Asset selector changed between reads")
+            raise Incomplete("Selected Asset has an invalid Data selector/path")
+        self.stage = "selected_relationship"
         if not row["asset"] or row["asset"]["address"] != asset or row["asset"]["object"] != row["data"]:
             raise Incomplete("Asset to Data relationship invalid")
         if self.p.u32(row["data"]) != 0x145f098:
             raise Incomplete("Data native vtable differs")
         # Existing reflection must agree with the offsets used by production
         # SelectExactProvisionResource, not just produce similarly named fields.
+        self.stage = "selected_configuration"
         inspector = self.reader.inspector
         firing = inspector.require_type(row["firing_data"], "WeaponFiringData")
         primary = inspector.require_type(row["primary_fire"], "FiringFunctionData")
@@ -327,6 +374,7 @@ class ExactReader:
             raise Incomplete("Reflected Asset offsets differ from native selector")
         logic = self.p.read(row["primary_fire"] + 0xc, 0x8c)
         ammo = self.p.read(row["primary_fire"] + 0x170, 0x24)
+        self.stage = "exact_variant"
         observed = []
         for offset, size, expected in self.variant["words"]:
             block, origin = (logic, 0xc) if offset < 0x170 else (ammo, 0x170)
@@ -343,6 +391,7 @@ class ExactReader:
     def stable(self, asset, table):
         first, second = self.once(asset, table), self.once(asset, table)
         if first != second:
+            self.stage = "stable_recheck"
             raise Incomplete("Typed resource changed between reads")
         return first
 
@@ -367,7 +416,8 @@ def scan_pass(reader, layout, table):
                 try:
                     candidate = reader.stable(address + pos, table)
                 except (OSError, ValueError, KeyError, RecursionError) as error:
-                    raise Incomplete("Typed candidate validation failed: " + str(error)[:160]) from error
+                    raise Incomplete("Typed candidate validation failed at " + hex(address + pos) +
+                                     " (" + reader.stage + "): " + str(error)[:160]) from error
                 if candidate is not None:
                     selected.append(candidate)
                     if len(selected) > 1:
