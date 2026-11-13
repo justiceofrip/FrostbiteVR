@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import struct
@@ -330,9 +331,14 @@ def main():
     args = parser.parse_args()
     require(args.pid > 0 and 1 <= args.seconds <= 30, 'PID/time bounds')
     require(not args.output.exists(), 'Output must be new')
-    from read_bc2_provision_target import load_dependencies, read_source, verify_process
-    manifest, _, modules = load_dependencies(args.manifest)
-    source_reader = lambda: read_bound_source(args.source_directory, read_source)
+    # Embedded Python excludes the script directory from its isolated path.
+    # Load this checkout's sibling without accepting an ambient module or path.
+    spec = importlib.util.spec_from_file_location(
+        'pickup_provision_target', Path(__file__).resolve().with_name('read_bc2_provision_target.py'))
+    provision = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(provision)
+    manifest, _, modules = provision.load_dependencies(args.manifest)
+    source_reader = lambda: read_bound_source(args.source_directory, provision.read_source)
     source = source_reader()
     require(source['identity']['pid'] == args.pid, 'Requested PID differs from native source')
     flynn = modules['read_flynn_catalog']
@@ -341,7 +347,7 @@ def main():
     process = flynn.Process(args.pid, Path(source['identity']['executable']))
     try:
         try:
-            result = collect(process, image, flynn.Reader, source_reader, verify_process, args.seconds)
+            result = collect(process, image, flynn.Reader, source_reader, provision.verify_process, args.seconds)
         except (OSError, ValueError) as error:
             result = dict(schema=SCHEMA, executable_sha256=EXPECTED, read_only=True, process_access=0x410,
                           native_authority=False, diagnostic_complete=False, native_functions_called=False,

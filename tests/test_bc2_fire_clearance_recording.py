@@ -1,8 +1,11 @@
 """Synthetic recorder/consumer contracts; no native or headset acceptance."""
 import copy
+import gzip
+import hashlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -225,6 +228,42 @@ class FireClearanceRecordingTests(unittest.TestCase):
             self.save_fixture()
             self.refused("actual verified native|unnormalized OpenXR pose")
 
+    def test_contradictory_retained_aim_is_refused_before_output_or_command_changes(self):
+        self.state["handR"]["ypr"] = [50., 0., 0.]
+        self.capture["handR"]["aimYpr"] = [50., 0., 0.]
+        self.save_fixture()
+        argv = list(self.argv)
+        argv[argv.index("--capture-sha256") + 1] = self.record.pin(self.capture_path)["sha256"]
+        before = {p: p.read_bytes() for p in self.root.rglob("*") if p.is_file()}
+        self.refused("retained native right aim contradicts reviewed capture", argv)
+        self.assertEqual({p for p in self.root.rglob("*") if p.is_file()}, set(before))
+        for path, raw in before.items():
+            self.assertEqual(path.read_bytes(), raw)
+
+    def test_unchanged_retained_aim_accepts_rotation_sign_wrap_and_capture_precision(self):
+        frame = self.consumer().geometry.frame
+        cases = (([50., 0., 0.], [50., 0., 0.], 1),
+                 ([180., 0., 0.], [-180., 0., 0.], -1),
+                 ([12.34549, -23.45649, 34.56749], [12.345, -23.456, 34.567], -1))
+        for index, (native_ypr, captured_ypr, sign) in enumerate(cases):
+            with self.subTest(native_ypr=native_ypr):
+                self.snapshot["input"]["hands"][1]["aim"]["orientation"] = [
+                    sign * v for v in frame.ypr_quaternion(native_ypr)]
+                self.state["handR"]["ypr"] = captured_ypr
+                self.capture["handR"]["aimYpr"] = captured_ypr
+                self.capture["displayTimeNs"] = 2  # Retained, unchanged observation stays valid.
+                self.save_fixture()
+                argv = list(self.argv)
+                output = self.run / ("preserved-aim-" + str(index) + ".json")
+                argv[argv.index("--output") + 1] = str(output)
+                argv[argv.index("--capture-sha256") + 1] = self.record.pin(self.capture_path)["sha256"]
+                before = copy.deepcopy(self.snapshot)
+                self.assertEqual(self.invoke(argv), 0)
+                clearance = self.record.read(output)
+                self.assertEqual(clearance["rightAim"], before["input"]["hands"][1]["aim"])
+                self.assertEqual(clearance["provenance"]["observedNs"], 1)
+                self.assertEqual(self.record.read(Path(self.link["folder"]) / "mechanism-snapshot.json"), before)
+
     def test_current_consumer_refuses_changed_owner_config_rig_and_aim(self):
         self.invoke()
         clearance, geometry = self.record.read(self.output), self.consumer().geometry
@@ -290,6 +329,57 @@ class FireClearanceRecordingTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 self.invoke()
         self.assertEqual(self.output.read_bytes(), b"concurrent output")
+
+
+class SavedFireClearanceRecordingTests(unittest.TestCase):
+    """Optional replay of unchanged actual98/13 files; no live session access."""
+    @classmethod
+    def setUpClass(cls):
+        path = os.environ.get("BC2_FIRE_CLEARANCE_SAVED_RUN")
+        if not path:
+            raise unittest.SkipTest("set BC2_FIRE_CLEARANCE_SAVED_RUN to retained actual98/13")
+        cls.run_dir = Path(path)
+        cls.driver = recorder.load_driver({name: recorder.pin(ROOT / "tools" / name) for name in recorder.SOURCES})
+
+    def test_actual13_old_observation_contradicts_pair_and_fresh_aim_matches(self):
+        run = self.run_dir
+        clearance_path = run / "held-review-clearance.json"
+        capture_path = run / "sim/capture/held-review.json"
+        retained_path = run / "live-driver-e16c0f21065e49f886c2a5c5076cef9a/snapshot-004.json.gz"
+        action = run / "live-driver-0be9f002b50e465096629a7a66fed9c6"
+        paths = (clearance_path, capture_path, retained_path, action / "snapshot-002.json.gz",
+                 action / "initial-state.json", action / "invocation.json", action / "result.json")
+        original = {path: path.read_bytes() for path in paths}
+        clearance, capture = json.loads(original[clearance_path]), json.loads(original[capture_path])
+        retained_raw = gzip.decompress(original[retained_path])
+        retained = json.loads(retained_raw)
+        fresh = json.loads(gzip.decompress(original[action / "snapshot-002.json.gz"]))
+        state = json.loads(original[action / "initial-state.json"])
+        invocation = json.loads(original[action / "invocation.json"])
+        result = json.loads(original[action / "result.json"])
+        self.assertEqual(hashlib.sha256(retained_raw).hexdigest(), clearance["provenance"]["observation"]["sha256"])
+        self.assertEqual(hashlib.sha256(original[capture_path]).hexdigest(), clearance["provenance"]["metadata"]["sha256"])
+        self.assertEqual(retained["observed_ns"], 697195005107700)
+        self.assertEqual(capture["displayTimeNs"], 697212309674426)
+        self.assertEqual(clearance["rightAim"], retained["input"]["hands"][1]["aim"])
+        self.assertEqual(clearance["rightAim"]["orientation"], [0, 0, 0, 1])
+        self.assertEqual(fresh["input"]["hands"][1]["aim"]["orientation"], [0, .42261833, 0, .906307876])
+        self.assertEqual(capture["handR"]["aimYpr"], [50., 0., 0.])
+        geometry = self.driver.geometry
+        for key in ("head", "handR", "handL", "controls"):
+            self.assertEqual(clearance[key], state[key])
+        self.assertTrue(geometry.frame.preserved_pose_equal(clearance["referenceHead"], fresh["input"]["referenceHead"]))
+        with self.assertRaisesRegex(RuntimeError, "retained native right aim contradicts reviewed capture"):
+            recorder.reviewed_native_aim(retained, capture, geometry.frame)
+        recorder.reviewed_native_aim(fresh, capture, geometry.frame)
+        now = result["boundaries"][0]["evaluatedNs"]
+        deadline = invocation["startedNs"] + invocation["maximumDurationNs"] - self.driver.ordinary.CLEANUP_RESERVE_NS
+        with self.assertRaisesRegex(ValueError, "ROOT reviewed firing aim/head/reference changed"):
+            geometry.fire_clearance(clearance, fresh, state, clearance["host"], now, deadline)
+        self.assertEqual(result["commands"], 0)
+        self.assertEqual(result["status"], "refused")
+        for path, raw in original.items():
+            self.assertEqual(path.read_bytes(), raw)
 
 
 if __name__ == "__main__":

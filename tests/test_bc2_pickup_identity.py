@@ -4,12 +4,17 @@ Set FVR_BC2_PICKUP_TEST_EXE to run the optional exact local PE/code proof check.
 The synthetic graph checks the diagnostic, not native networking or lifetimes.
 """
 import copy
+import json
 import os
 from pathlib import Path
+import shutil
 import struct
+import subprocess
 import sys
+import tempfile
 import unittest
 from unittest import mock
+import uuid
 
 TOOLS = Path(__file__).resolve().parents[1] / 'tools'
 sys.path.insert(0, str(TOOLS))
@@ -174,6 +179,44 @@ class LookupTests(unittest.TestCase):
     def run_observation(self, process, src):
         memory = pickup.Memory(process)
         return pickup.observe(memory, Reflection(memory), src)
+
+    def test_isolated_cli_loads_exact_sibling_and_reaches_source_validation(self):
+        # Exercise the assembled entry point with no script/CWD/PYTHONPATH
+        # imports. Relative source refusal happens before any native API call.
+        temporary = Path(tempfile.gettempdir()).resolve()
+        directory = temporary / ('pickup-cli-' + uuid.uuid4().hex)
+        # Inherit normal test-folder ACLs under Windows sandbox tokens.
+        directory.mkdir()
+        self.assertEqual(directory.resolve().parent, temporary)
+        self.addCleanup(shutil.rmtree, directory)
+        files = {}
+        previous = None
+        for name in ('read_bc2', 'capture_reload_state', 'read_flynn_catalog',
+                     'read_stock_sniper_resources', 'read_weapon_resources', 'variants', 'selectors'):
+            blob = ('# Offline dependency fixture\n' +
+                    (f'import {previous}\n' if previous else '')).encode('utf-8')
+            path = directory / (name + '.py')
+            path.write_bytes(blob)
+            files[name] = dict(path=str(path), bytes=len(blob), sha256=pickup.sha(blob))
+            if name not in ('variants', 'selectors'):
+                previous = name
+        manifest = directory / 'pins.json'
+        manifest.write_text(json.dumps(dict(schema='fvr.bc2.provision-reader-pins.v1', files=files)),
+                            encoding='utf-8')
+        # A same-named working-directory module must never supply the reader.
+        (directory / 'read_bc2_provision_target.py').write_text(
+            "raise AssertionError('Ambient provision reader imported')\n", encoding='utf-8')
+        output = directory / 'unexpected-output.json'
+        result = subprocess.run(
+            [sys.executable, '-I', '-S', '-B', str(TOOLS / 'read_bc2_pickup_identity.py'),
+             '--pid', '42', '--source-directory', 'relative-offline-source',
+             '--manifest', str(manifest), '--output', str(output)],
+            cwd=directory, capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn('ValueError: Absolute path required', result.stderr)
+        self.assertNotIn('ModuleNotFoundError', result.stderr)
+        self.assertNotIn('Ambient provision reader imported', result.stderr)
+        self.assertFalse(output.exists())
 
     def test_bound_source_uses_one_verified_handle_observation(self):
         blob = source_blob()

@@ -113,6 +113,27 @@ def running_session(run, link, manifest):
             and session["version"] == manifest["version"], "linked running session identity changed")
 
 
+def reviewed_native_aim(snapshot, capture, frame):
+    """Reject a retained aim that contradicts the explicitly reviewed image pair.
+
+    Both orientations are OpenXR: shared ypr_quaternion implements xr-sim's
+    +Y yaw, +X pitch, -Z roll; from_pose converts both through the same frame.
+    Capture YPR has three decimals, so its three rounding errors sum to at
+    most .0015 degrees, plus the shared float32 quaternion precision bound.
+    Capture grip position is not aim position; compare orientation only here.
+    The action driver still requires fresh, exactly preserved native poses.
+    """
+    aim = snapshot["input"]["hands"][1]["aim"]
+    angles = capture["handR"]["aimYpr"]
+    require(len(angles) == 3, "reviewed right aim requires three angles")
+    reviewed = dict(position=aim["position"],
+                    orientation=frame.ypr_quaternion([frame.finite(v) for v in angles]))
+    angle = frame.pose_error(frame.from_pose(aim), frame.from_pose(reviewed))[1]
+    require(angle <= math.radians(.0015) + 4 * 2**-23,
+            "retained native right aim contradicts reviewed capture; "
+            "observe at the reviewed aim before recording clearance")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     for key in ("run", "capture", "output"):
@@ -167,6 +188,7 @@ def main(argv=None):
             "actual verified native producer observation required")
     for pose in (snapshot["input"]["referenceHead"], snapshot["input"]["hands"][1]["aim"]):
         geometry.frame.from_pose(pose)
+    reviewed_native_aim(snapshot, capture, geometry.frame)
     writer_path, command_path = run / "live-driver-owner.json", run / "sim/command.txt"
     writer_pin, writer, command_pin = pin(writer_path), read(writer_path), pin(command_path)
     require(writer["host"] == host and writer["pending"] is False
