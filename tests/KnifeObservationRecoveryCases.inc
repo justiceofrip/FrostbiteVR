@@ -50,16 +50,28 @@ struct Held {
             if(const auto c=Gather())return c;}return {};
     }
     bool Finish(const KnifeCommand& c){
-        if(!f.knife.CanCommit(c,f.s,f.hands)||!recovery.TakeReady(f.s.source.nowNs)||!attacks.Stage(c,f.s.source.nowNs))return false;
+        const auto failed=[](const char* step){std::fprintf(stderr,"Knife recovery Finish: %s\n",step);return false;};
+        if(!f.knife.CanCommit(c,f.s,f.hands))return failed("portable admission");
+        if(!recovery.TakeReady(f.s.source.nowNs))return failed("native recovery admission");
+        if(!attacks.Stage(c,f.s.source.nowNs))return failed("native attack stage");
         view.currentHoldWork.attackPending=view.currentHoldWork.outstanding=true;
         const auto staged=source.Stamp();
         // Actual same-packet gather before the first original consumer must
         // service the pending stage without revoking its unchanged source.
-        if(Gather(false)||!source.Current(staged)||!f.s.nativeAttackReady||!f.knife.CanCommit(c,f.s,f.hands))return false;
-        if(!attacks.Consume(1,c.source.nowNs,source.Current(staged))||!attacks.Consume(2,c.source.nowNs,true))return false;
-        f.knife.Committed(c,KnifeCommit::Accepted);
+        if(Gather(false))return failed("duplicate source produced a command");
+        if(!source.Current(staged))return failed("duplicate source revoked the stage");
+        if(!f.s.nativeAttackReady)return failed("duplicate source lost native readiness");
+        if(!f.knife.CanCommit(c,f.s,f.hands))return failed("duplicate source lost portable admission");
+        if(!attacks.Consume(1,c.source.nowNs,source.Current(staged)))return failed("client consumer");
+        if(!attacks.Consume(2,c.source.nowNs,true))return failed("server consumer");
+        // Match native BeforePrepare: deliver the accepted gate result before
+        // portable commitment and completion; consumption alone is not delivery.
+        const auto accepted=attacks.ResolveBeforeSource(f.s.source.sequence,f.s.source.observedNs,f.s.source.nowNs);
+        if(accepted!=KnifeCommit::Accepted)return failed("accepted result delivery");
+        f.knife.Committed(c,*accepted);
         for(unsigned n=0;n<3;++n)attacks.Observe(n,2,5,6);
-        if(!attacks.Complete(c.serial,true,true)||!f.knife.Observe(f.Receipt(c)))return false;
+        if(!attacks.Complete(c.serial,true,true))return failed("native completion");
+        if(!f.knife.Observe(f.Receipt(c)))return failed("portable receipt");
         view.currentHoldWork.attackPending=view.currentHoldWork.outstanding=false;view.currentHoldWork.drawOnly=false;
         recovery.IdleNow();return true;
     }
@@ -105,7 +117,8 @@ int RetiredCompletionCases(){
     Held h;CHECK(h.Init());const auto retired=h.recovery.Miss();
     h.recovery.Reset();h.recovery.IdleNow();const auto fresh=h.recovery.Miss();
     h.recovery.Returned(fresh,h.f.s.source.nowNs+1,true);CHECK(h.Rest());
-    const auto completed=h.proof.state.completedNs;const auto jab=h.Jab();CHECK(jab&&h.Finish(*jab));
+    const auto completed=h.proof.state.completedNs;const auto jab=h.Jab();
+    CHECK(jab);CHECK(jab->stroke&&!jab->stockTriggerHold&&h.f.s.stockTrigger==0);CHECK(h.Finish(*jab));
     const auto afterAttack=h.recovery.Read();CHECK(afterAttack.epoch!=h.proof.state.epoch&&afterAttack.ready);
     h.recovery.Returned(retired,h.f.s.source.nowNs+100*ms,true);
     CHECK(h.recovery.Read().stamp==afterAttack.stamp&&!h.Gather());
@@ -127,7 +140,7 @@ int Cases(){
         CHECK(!h.Gather()&&h.view.currentObservationReady&&!h.projection.calibrationContinuous);
         CHECK(*h.f.knife.Hold()==claim&&!h.f.knife.RecognitionReady(h.f.s.source));
         CHECK(h.Rest());const auto jab=h.Jab();CHECK(jab&&jab->stroke&&!jab->stockTriggerHold&&h.f.s.stockTrigger==0);
-        CHECK(h.Finish(*jab)&&h.Rest());
+        CHECK(h.Finish(*jab));CHECK(h.Rest());
         for(unsigned n=0;n<30;++n)CHECK(!h.Gather()&&*h.f.knife.Hold()==claim);
     }
     ObservationRecovery concurrent;concurrent.IdleNow();const auto one=concurrent.Miss(),two=concurrent.Miss();
