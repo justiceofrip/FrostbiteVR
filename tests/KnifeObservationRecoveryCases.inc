@@ -322,7 +322,19 @@ int SampleGapCases(){
         case 22:s.source.nowNs=662412971185500;break;
         }
         CHECK(!x.Gather(false,inspection,false,preparation)&&!x.skipped&&!x.samples.HasSampleGap());
-        GapSource(x,11875,662412917129600,662412926758400,.063005759f);CHECK(!x.Gather(false));
+        GapSource(x,11875,662412917129600,662412926758400,.063005759f);const auto command=x.Gather(false);
+        if(fault==4){
+            // The original release survives the unavailable observation. Its
+            // next fresh native sample must return the knife, never attack.
+            CHECK(command&&command->kind==KnifeCommandKind::Return&&!command->stroke&&!command->stockTriggerHold);
+            CHECK(x.f.knife.Phase()==KnifePhase::ReturnStaged&&x.f.knife.NeedsNativeCleanup());
+            CHECK(!x.f.knife.Hold()&&!x.f.hands.Current(InteractionHand::Right));
+            CHECK(x.f.knife.CanCommit(*command,x.f.s,x.f.hands));
+            x.f.knife.Committed(*command,KnifeCommit::Accepted);
+            CHECK(x.f.knife.Phase()==KnifePhase::Returning&&x.f.knife.NeedsNativeCleanup());
+            CHECK(x.f.knife.Observe(x.f.Receipt(*command)));
+            CHECK(x.f.knife.Phase()==KnifePhase::NeedNeutral&&!x.f.knife.NeedsNativeCleanup());
+        }else CHECK(!command);
         GapSource(x,11876,662412932722500,662412945560600,.086193388f);CHECK(!x.Gather(false));
     }
     // A later native/measurement contradiction cannot turn an earlier valid
