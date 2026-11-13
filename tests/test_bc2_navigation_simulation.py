@@ -78,6 +78,24 @@ RECORDED_DIAGNOSTIC_TIMING = dict(
     neutralCommittedNs=654246267229200, commandAckNs=45_489_100)
 
 
+# Actual95/02 52e6a7e6e9374590970eddacec0e980b, snapshot-002.json.gz
+# SHA256 eab226f1c32fb5d6d5ea5e1aa3bcd1b88d8e9da7a97afb64325af7b4175cec4f.
+# The valid weapon response carried this unavailable navigation section after
+# a valid same-owner entry observation. No input was published. A successful
+# successor below is synthetic; these retained fields do not prove game input.
+RECORDED_GATHER_PENDING = dict(
+    observedNs=673424943617100, requestStartedNs=673424881619400,
+    navigation=dict(observationOnly=True, available=False, reason="gather_pending",
+        gatherSequence=24888, sampledNs=673424938650500,
+        inputObservedNs=673424923477600, inputDeadlineNs=673425023477600,
+        validUntilNs=673425020835600,
+        owner=dict(manager=133825344, player=1171441040, soldier=1134923568,
+                   weak=120474520, controlled=1134923568, entry=1134928160,
+                   router=110282096, cache=117902800,
+                   actorGeneration=1, inputEpoch=1, movementEpoch=1),
+        onFoot=True, nativePlaying=True, allowedRead=True, allowedMask=435, input=None))
+
+
 # Actual94/01 9008cd89094e4eae92c03ab82d0fa956, command seq83; events.jsonl
 # SHA256 05e445ef82a15bb6426d49ea0ef626ae855dabf48ed93e55fc79cdfeef08b439.
 # The exact requested/acknowledged head projection falsely failed settled
@@ -910,6 +928,214 @@ class NavigationTests(unittest.TestCase):
         self.assertEqual(self.calls[-1], self.m.ZERO)
         self.assertFalse(result["normalStopRequired"])
 
+    def test_recorded_gather_pending_reacquires_only_at_owned_neutral_boundaries(self):
+        self.native_navigation = "valid_weapon"
+        self.rows.append(dict(left=[0, .25], right=[0, 0], holdMs=400))
+        recorded = RECORDED_GATHER_PENDING
+        self.response_delay = lambda driver: (recorded["observedNs"]-recorded["requestStartedNs"]
+                                              if driver.snapshot_index == 2 else 0)
+        def pending(sample, driver):
+            nav = sample["navigationObservation"]
+            nav["owner"] = copy.deepcopy(recorded["navigation"]["owner"])
+            if driver.snapshot_index == 2:
+                offset = sample["observed_ns"] - recorded["observedNs"]
+                nav = copy.deepcopy(recorded["navigation"])
+                for key in ("sampledNs", "inputObservedNs", "inputDeadlineNs", "validUntilNs"):
+                    nav[key] += offset
+                sample["navigationObservation"] = nav
+            elif driver.snapshot_index == 4:
+                nav.update(available=False, reason="gather_pending", input=None)
+        self.snapshot_mutation = pending
+        code, result = self.assembled()
+        self.assertEqual((code, result.get("error")), (0, None))
+        self.assertEqual(len(result["episodes"]), 2)
+        self.assertEqual([episode["admissionNonce"] for episode in result["episodes"]],
+                         [self.samples[index]["nonce"] for index in (2, 4)])
+        self.assertEqual(self.driver.navigation_reference, self.samples[0])
+        saved = sorted(Path(result["artifactDirectory"]).glob("snapshot-*.json.gz"))
+        self.assertEqual([json.loads(gzip.decompress(path.read_bytes())) for path in saved], self.samples)
+        self.assertTrue(self.samples[1]["valid"])
+        self.assertIsNone(self.samples[1]["navigationObservation"]["input"])
+        events = [json.loads(line) for line in
+                  (Path(result["artifactDirectory"]) / "events.jsonl").read_text().splitlines()]
+        refresh = [event for event in events if event["type"] == "snapshot_refresh_hold"]
+        self.assertEqual([event["nonce"] for event in refresh],
+                         [self.samples[index]["nonce"] for index in (1, 3)])
+        self.assertTrue(all(event["reason"] == "navigation_gather_pending"
+                            and event["commandAuthority"] is False and event["sourceDeadlineNs"] is None
+                            and event["refreshRequest"] == 1 for event in refresh))
+        self.assertEqual(refresh[0]["lastCommandWrittenNs"], 0)
+        commits = [event for event in events if event["type"] == "command_commit"]
+        self.assertEqual(refresh[1]["lastCommandWrittenNs"], commits[1]["writtenNs"])
+        for index, episode in enumerate(result["episodes"]):
+            source = self.samples[2+index*2]
+            self.assertGreaterEqual(commits[index*2]["requestedNs"], source["observed_ns"])
+            self.assertLess(commits[index*2]["writtenNs"], self.driver.snapshot_source_deadline(source))
+        self.assertTrue(all(request["actionDeadlineNs"] is None and not request["pendingCommand"]
+                            and request["sticks"] == [0, 0, 0, 0] for request in self.snapshot_requests))
+        self.assertEqual(self.calls[1::2], [self.m.ZERO, self.m.ZERO])
+        self.assertTrue(self.m.neutral_controls(self.state["controls"]))
+        self.assertEqual(self.driver.hard_deadline-self.driver.started, 10*self.m.t.NS)
+        self.assertFalse(result["normalStopRequired"])
+        self.assertFalse(result["nativeAcceptance"])
+
+    def test_initial_gather_pending_without_identity_cannot_establish_reference(self):
+        self.native_navigation = "no_shot"
+        references = []
+        def pending(sample, driver):
+            references.append(copy.deepcopy(driver.navigation_reference))
+            if driver.snapshot_index == 1:
+                nav = sample["navigationObservation"]
+                nav.update(available=False, reason="gather_pending", input=None,
+                           owner=dict.fromkeys(self.m.NAVIGATION_OWNER, 0), gatherSequence=0,
+                           sampledNs=0, inputObservedNs=0, inputDeadlineNs=0, validUntilNs=0,
+                           onFoot=False, nativePlaying=False, allowedRead=False, allowedMask=0)
+        self.snapshot_mutation = pending
+        code, result = self.assembled()
+        self.assertEqual((code, result.get("error")), (0, None))
+        self.assertEqual(references[:2], [None, None])
+        self.assertEqual(self.driver.navigation_reference, self.samples[1])
+        self.assertEqual(result["episodes"][0]["admissionNonce"], self.samples[2]["nonce"])
+        self.assertEqual(len(self.snapshot_requests), 3)
+        self.assertTrue(all(request["sticks"] == [0, 0, 0, 0] for request in self.snapshot_requests))
+
+    def test_gather_pending_refresh_keeps_shared_count_time_and_invocation_bounds(self):
+        for index, limit in enumerate(("requests", "500ms", "invocation")):
+            with self.subTest(limit=limit):
+                if index:
+                    self.setUp()
+                self.native_navigation = "no_shot"
+                def pending(sample, driver):
+                    if driver.snapshot_index >= 2:
+                        sample["navigationObservation"].update(available=False, reason="gather_pending", input=None)
+                self.snapshot_mutation = pending
+                if limit == "500ms":
+                    self.response_delay = lambda driver: 240_000_000 if driver.snapshot_index >= 3 else 0
+                delayed = []
+                if limit == "invocation":
+                    def read_delay(path, driver):
+                        if path.name == "state.json" and driver.navigation_reference is not None and not delayed:
+                            delayed.append(True)
+                            return driver.deadline-self.clock.now-50_000_000
+                        return 0
+                    self.read_delay = read_delay
+                code, result = self.assembled()
+                self.assertEqual(code, 2)
+                self.assertEqual(self.calls, [])
+                self.assertEqual(result["release"], "no navigation input published")
+                self.assertEqual(self.driver.hard_deadline-self.driver.started, 10*self.m.t.NS)
+                self.assertLessEqual(self.driver.snapshot_refresh_requests, self.m.t.MAX_SNAPSHOT_REFRESHES)
+                self.assertLessEqual(len(self.snapshot_requests), 2+self.m.t.MAX_SNAPSHOT_REFRESHES)
+                self.assertTrue(self.m.neutral_controls(self.state["controls"]))
+                if limit == "requests":
+                    self.assertIn("refresh budget exhausted", result["error"])
+                    self.assertEqual(self.driver.snapshot_refresh_requests, self.m.t.MAX_SNAPSHOT_REFRESHES)
+                elif limit == "500ms":
+                    self.assertIn("expired snapshot refresh budget exhausted", result["error"])
+                    self.assertGreaterEqual(self.clock.now-self.driver.snapshot_refresh_started,
+                                            self.m.t.SNAPSHOT_REFRESH_BUDGET)
+                else:
+                    self.assertTrue(delayed)
+                    self.assertRegex(result["error"], "deadline|maximumGestureNs")
+                    self.assertEqual(len(self.snapshot_requests), 2)
+
+    def test_gather_pending_rechecks_neutral_live_owner_and_tracking_before_refresh(self):
+        for index, change in enumerate(("active_pulse", "pending_sticks", "focus", "tracking", "command_owner")):
+            with self.subTest(change=change):
+                if index:
+                    self.setUp()
+                self.native_navigation = "no_shot"
+                def pending(sample, driver):
+                    if driver.snapshot_index == 2:
+                        sample["navigationObservation"].update(available=False, reason="gather_pending", input=None)
+                        if change == "active_pulse":
+                            driver.action_deadline = self.clock.now+400_000_000
+                        elif change == "pending_sticks":
+                            driver.pending_sticks = [[0, .5], [0, 0]]
+                        elif change == "focus":
+                            self.state["sessionState"] = "VISIBLE"
+                        elif change == "tracking":
+                            self.state["handL"]["valid"] = False
+                        else:
+                            (self.run / "live-driver-owner.json").write_bytes(b"{}")
+                self.snapshot_mutation = pending
+                code, result = self.assembled()
+                self.assertEqual(code, 2)
+                self.assertEqual(self.calls, [])
+                self.assertEqual(len(self.snapshot_requests), 2)
+                self.assertIsNone(self.driver.snapshot_refresh_started)
+                self.assertEqual(self.driver.snapshot_refresh_requests, 0)
+
+    def test_gather_pending_and_expired_delivery_share_the_same_refresh_budget(self):
+        self.native_navigation = "no_shot"
+        def pending(sample, driver):
+            if driver.snapshot_index in (2, 4):
+                sample["navigationObservation"].update(available=False, reason="gather_pending", input=None)
+        self.snapshot_mutation = pending
+        delayed = []
+        def read_delay(path, driver):
+            if path == getattr(driver, "snapshot_path", None) and driver.snapshot_index == 3 and not delayed:
+                delayed.append(True)
+                return 80_000_000
+            return 0
+        self.read_delay = read_delay
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertIn("refresh budget exhausted", result["error"])
+        self.assertTrue(delayed)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(len(self.snapshot_requests), 2+self.m.t.MAX_SNAPSHOT_REFRESHES)
+        self.assertEqual(self.driver.snapshot_refresh_requests, self.m.t.MAX_SNAPSHOT_REFRESHES)
+        self.assertEqual(self.driver.navigation_reference, self.samples[0])
+        self.assertEqual(result["release"], "no navigation input published")
+
+    def test_gather_pending_never_replaces_established_native_identity(self):
+        for index, change in enumerate((*self.m.NAVIGATION_OWNER, "successor_owner", "menu", "tracking", "missing")):
+            with self.subTest(change=change):
+                if index:
+                    self.setUp()
+                self.native_navigation = "no_shot"
+                def pending(sample, driver):
+                    nav = sample["navigationObservation"]
+                    if driver.snapshot_index == 2:
+                        nav.update(available=False, reason="gather_pending", input=None)
+                        if change in self.m.NAVIGATION_OWNER:
+                            nav["owner"][change] += 1
+                    elif driver.snapshot_index == 3:
+                        if change == "successor_owner":
+                            nav["owner"]["actorGeneration"] += 1
+                        elif change == "menu":
+                            nav["input"]["menu"]["epoch"] += 1
+                        elif change == "tracking":
+                            nav["input"]["trackingBasisGeneration"] += 1
+                        else:
+                            del sample["navigationObservation"]
+                self.snapshot_mutation = pending
+                code, result = self.assembled()
+                self.assertEqual(code, 2)
+                self.assertEqual(self.calls, [])
+                self.assertEqual(self.driver.navigation_reference, self.samples[0])
+                self.assertEqual(len(self.snapshot_requests), 2 if change in self.m.NAVIGATION_OWNER else 3)
+                self.assertEqual(result["release"], "no navigation input published")
+
+    def test_gather_pending_successor_with_definitive_refusal_is_not_retried(self):
+        for index, reason in enumerate(("owner_unavailable", "menu_unavailable", "hands_untracked", "stale_input")):
+            with self.subTest(reason=reason):
+                if index:
+                    self.setUp()
+                self.native_navigation = "valid_weapon"
+                def refusal(sample, driver):
+                    if driver.snapshot_index >= 2:
+                        sample["navigationObservation"].update(available=False, input=None,
+                            reason="gather_pending" if driver.snapshot_index == 2 else reason)
+                self.snapshot_mutation = refusal
+                code, result = self.assembled()
+                self.assertEqual(code, 2)
+                self.assertIn(reason, result["error"])
+                self.assertEqual(self.calls, [])
+                self.assertEqual(len(self.snapshot_requests), 3)
+                self.assertEqual(self.driver.snapshot_refresh_requests, 1)
+
     def test_passive_native_proof_rejects_stale_menu_vehicle_and_invalid_input_before_commands(self):
         mutations = {
             "stale": lambda n: n.update(inputObservedNs=self.clock.now-200_000_000,
@@ -944,7 +1170,11 @@ class NavigationTests(unittest.TestCase):
                 self.assertFalse(result["normalStopRequired"])
 
     def test_explicit_native_lock_drop_stop_and_pause_cannot_fall_back_to_valid_weapon(self):
-        for index, reason in enumerate(("observation_busy", "stopped", "input_pause", "route_changed")):
+        for index, reason in enumerate(("observation_busy", "stopped", "input_pause", "route_changed",
+                                        "disabled", "observation_changed", "owner_unavailable", "stale_input",
+                                        "invalid_input", "focus_loss", "head_untracked", "hands_untracked",
+                                        "not_on_foot", "native_inactive", "menu_unavailable",
+                                        "source_clock_changed", "menu_clock_changed")):
             with self.subTest(reason=reason):
                 if index:
                     self.setUp()
@@ -956,6 +1186,8 @@ class NavigationTests(unittest.TestCase):
                 self.assertIn(reason, result["error"])
                 self.assertEqual(self.calls, [])
                 self.assertTrue(self.samples[0]["valid"])
+                self.assertEqual(len(self.snapshot_requests), 1)
+                self.assertIsNone(self.driver.snapshot_refresh_started)
 
     def test_passive_actor_route_tracking_and_menu_continuity_refuse_next_pulse(self):
         for index, change in enumerate(("actorGeneration", "inputEpoch", "movementEpoch", "router", "cache", "entry",

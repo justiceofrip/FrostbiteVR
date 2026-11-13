@@ -27,6 +27,60 @@ inline bool Admit(bool accepted, Gate gate, Gate* first) noexcept {
     if (!accepted && first && *first==Gate::None) *first=gate;
     return accepted;
 }
+enum class BindingField {PlayerCache,EntryRouter,Permission,Unrestricted,SuppressionBegin,SuppressionEnd,
+    Buckets,BucketCount,Sentinel,InitialNode,NodeAction,NodeConcept,NodeNext,Device,Map,DeviceVtable,
+    MapVtable,Keyboard,Table,TableEnd,Override,Actions,ActionsEnd,Count};
+struct BindingAlternative {
+    unsigned row=0,readMask=0,successMask=0,actual=0,expected=0;
+    // key, row concept, key vtable, flags +12/+13, scan +16; absent bits mean not read.
+    std::array<unsigned,6> values{};
+    const char* refusal="none";
+};
+struct BindingObservation {
+    // Only existing reads are observed. A successful first proof may be replaced
+    // by the existing second proof; the first failed proof is never overwritten.
+    unsigned calls=0,call=0,routeCount=0,reads=0,traversed=0,terminalNode=0,alternativeCount=0;
+    unsigned actual=0,expected=0,failedReadSize=0,failedReadIndex=0,failedAlternativeRow=0;
+    std::uint64_t failedReadAddress=0;
+    unsigned readMask=0,successMask=0;
+    std::array<unsigned,unsigned(BindingField::Count)> values{};
+    std::array<BindingAlternative,16> alternatives{};
+    const char* refusal="none";
+    bool verified=false,reader=false,routeChecked=false,routePresent=false,returned=false,failedReadCalled=false;
+    BindingObservation* Begin(bool proof,bool hasReader,unsigned routes) noexcept {
+        const auto next=++calls;
+        if(call && !returned)return nullptr;
+        *this={};calls=call=next;verified=proof;reader=hasReader;routeCount=routes;
+        return this;
+    }
+    bool Check(bool accepted,const char* predicate,unsigned value=0,unsigned wanted=0) noexcept {
+        if(!accepted && !std::strcmp(refusal,"none")){refusal=predicate;actual=value;expected=wanted;}
+        return accepted;
+    }
+    void Report(std::ostream& out)const {
+        out<<"{\"calls\":"<<calls<<",\"captured_call\":"<<call<<",\"returned\":"<<returned
+           <<",\"first_failed_predicate\":\""<<refusal<<"\",\"actual\":"<<actual<<",\"expected\":"<<expected
+           <<",\"failed_alternative_row\":"<<failedAlternativeRow
+           <<",\"verified\":"<<verified<<",\"reader_present\":"<<reader<<",\"route_count\":"<<routeCount
+           <<",\"route_checked\":"<<routeChecked<<",\"route_17_42_present\":"<<routePresent
+           <<",\"reads\":"<<reads<<",\"first_failed_read\":{\"present\":"<<(failedReadIndex!=0)
+           <<",\"index\":"<<failedReadIndex<<",\"address\":"<<failedReadAddress<<",\"size\":"<<failedReadSize
+           <<",\"called\":"<<failedReadCalled<<",\"success\":0},\"traversed\":"<<traversed<<",\"terminal_node\":"<<terminalNode;
+        constexpr const char* names[]{"player_c74","entry_198","player_160","global_1570e9c","global_1570ee0","global_1570ee4",
+            "router_buckets","router_count","sentinel","initial_node","node_action","node_concept","node_next","device","map",
+            "device_vtable","map_vtable","keyboard","table","table_end","concept_42_override","actions","actions_end"};
+        for(unsigned i=0;i<values.size();++i)
+            out<<",\""<<names[i]<<"\":{\"read\":"<<((readMask>>i)&1)<<",\"success\":"<<((successMask>>i)&1)<<",\"value\":"<<values[i]<<'}';
+        out<<",\"alternatives\":[";
+        constexpr const char* alternativeNames[]{"key","row_concept","key_vtable","flags12","flags13","scan16"};
+        for(unsigned i=0;i<alternativeCount;++i){const auto& a=alternatives[i];if(i)out<<',';
+            out<<"{\"row\":"<<a.row<<",\"first_failed_predicate\":\""<<a.refusal<<"\",\"actual\":"<<a.actual<<",\"expected\":"<<a.expected
+               <<",\"read_mask\":"<<a.readMask<<",\"success_mask\":"<<a.successMask;
+            for(unsigned j=0;j<a.values.size();++j)out<<",\""<<alternativeNames[j]<<"\":"<<a.values[j];
+            out<<'}';
+        }out<<"]}";
+    }
+};
 struct Attempt {
     VehicleSeatIdentity owner{};
     std::uint64_t input=0,space=0,menu=0;
@@ -35,6 +89,7 @@ struct Attempt {
     std::int64_t sampledNs=0,deadlineNs=0;
     Gate first=Gate::None;
     bool verified=false,fresh=false,bindingChecked=false,requested=false,committed=false,readback=false;
+    BindingObservation binding{};
 };
 class AttemptTrace {
     // One verified input-thread producer; published rows never change. Neutral
@@ -75,7 +130,7 @@ public:
                <<",\"sampled_ns\":"<<r.sampledNs<<",\"deadline_ns\":"<<r.deadlineNs<<",\"fresh\":"<<r.fresh
                <<",\"permissions\":"<<r.permissions<<",\"binding_checked\":"<<r.bindingChecked<<",\"requested\":"<<r.requested
                <<",\"cache_committed\":"<<r.committed<<",\"flags_written\":"<<r.flagsWritten<<",\"flags_observed\":"<<r.flagsObserved
-               <<",\"readback\":"<<r.readback<<'}';
+               <<",\"readback\":"<<r.readback<<",\"binding\":";r.binding.Report(out);out<<'}';
         }out<<"]}";
     }
 };
@@ -125,59 +180,118 @@ struct Binding {
     bool operator==(const Binding&) const = default;
 };
 inline std::optional<Binding> ReadBinding(const VehicleRouteMemory& m,
-        const VehicleRouteSnapshot& seat, bool verified, Gate* first=nullptr) noexcept {
-    if (!verified || !m.read || seat.count>seat.routes.size() || !seat.identity.entry ||
-        !seat.player || !seat.identity.router ||
-        std::find(seat.routes.begin(),seat.routes.begin()+seat.count,VehicleRoute{17,42}) ==
-            seat.routes.begin()+seat.count) return {};
-    bool ok=true;
-    const auto read=[&](std::uint64_t at,void* dst,unsigned size) {
-        if (at<0x10000 || at+size>UINT32_MAX || !m.read(m.context,unsigned(at),dst,size)) ok=false;
+        const VehicleRouteSnapshot& seat, bool verified, Gate* first=nullptr,
+        BindingObservation* observation=nullptr) noexcept {
+    auto* d=observation?observation->Begin(verified,m.read!=nullptr,seat.count):nullptr;
+    const auto check=[&](bool accepted,const char* predicate,unsigned actual=0,unsigned expected=0) {
+        return d?d->Check(accepted,predicate,actual,expected):accepted;
     };
-    const auto word=[&](unsigned base,unsigned offset=0) {
-        unsigned value{}; read(std::uint64_t(base)+offset,&value,4); return value;
+    const auto equal=[&](unsigned actual,unsigned expected,const char* predicate) {
+        return check(actual==expected,predicate,actual,expected);
+    };
+    if (!check(verified,"verified",verified,1) || !check(m.read!=nullptr,"reader_present",m.read!=nullptr,1) ||
+        !check(seat.count<=seat.routes.size(),"route_count",seat.count,unsigned(seat.routes.size())) ||
+        !check(seat.identity.entry!=0,"entry_present",seat.identity.entry) ||
+        !check(seat.player!=0,"player_present",seat.player) || !check(seat.identity.router!=0,"router_present",seat.identity.router)) return {};
+    const bool routePresent=std::find(seat.routes.begin(),seat.routes.begin()+seat.count,VehicleRoute{17,42}) !=
+        seat.routes.begin()+seat.count;
+    if(d){d->routeChecked=true;d->routePresent=routePresent;}
+    if(!check(routePresent,"route_17_42",routePresent,1))return {};
+    bool ok=true,lastReadSuccess=false;
+    const auto read=[&](std::uint64_t at,void* dst,unsigned size) {
+        const bool called=at>=0x10000 && at+size<=UINT32_MAX;
+        lastReadSuccess=called && m.read(m.context,unsigned(at),dst,size);
+        if(!lastReadSuccess)ok=false;
+        if(d){++d->reads;if(!lastReadSuccess){
+            d->Check(false,called?"memory_read":"read_address");
+            if(!d->failedReadIndex){d->failedReadIndex=d->reads;d->failedReadAddress=at;
+                d->failedReadSize=size;d->failedReadCalled=called;}
+        }}
+    };
+    const auto save=[&](BindingField field,unsigned value) {
+        if(d && field!=BindingField::Count){const auto index=unsigned(field),bit=1u<<index;
+            d->readMask|=bit;d->successMask=(d->successMask&~bit)|(lastReadSuccess?bit:0);d->values[index]=value;}
+        return value;
+    };
+    const auto word=[&](unsigned base,unsigned offset=0,BindingField field=BindingField::Count) {
+        unsigned value{};read(std::uint64_t(base)+offset,&value,4);return save(field,value);
     };
     const auto ptr=[](unsigned address){return address>=0x10000 && !(address&3u);};
-    if (word(seat.player,0xc74)!=seat.identity.cache || word(seat.identity.entry,0x198)!=seat.identity.router) {
+    if (!equal(word(seat.player,0xc74,BindingField::PlayerCache),seat.identity.cache,"player_cache") ||
+        !equal(word(seat.identity.entry,0x198,BindingField::EntryRouter),seat.identity.router,"entry_router")) {
         Admit(false,ok?Gate::Owner:Gate::Binding,first);return {};
     }
-    if (!(word(seat.player,0x160)&(1u<<(17-11)))) {
+    const unsigned permission=word(seat.player,0x160,BindingField::Permission);
+    if (!check((permission&(1u<<(17-11)))!=0,"player_permission",permission,1u<<(17-11))) {
         Admit(false,ok?Gate::Permission:Gate::Binding,first);return {};
     }
     // The device tests each alternative's concept veto before polling it. Accept
     // the global allow flag or an empty suppression list; leave busier modes native.
     unsigned char unrestricted{};
     read(0x1570e9c,&unrestricted,1);
-    if (!unrestricted && word(0x1570ee0)!=word(0x1570ee4)) {
+    save(BindingField::Unrestricted,unrestricted);
+    if (!unrestricted && word(0x1570ee0,0,BindingField::SuppressionBegin)!=word(0x1570ee4,0,BindingField::SuppressionEnd)) {
+        if(d)d->Check(false,"concept_suppression",d->values[unsigned(BindingField::SuppressionBegin)],d->values[unsigned(BindingField::SuppressionEnd)]);
         Admit(false,ok?Gate::Permission:Gate::Binding,first);return {};
     }
     Binding b{};b.player=seat.player;b.router=seat.identity.router;
-    const unsigned buckets=word(b.router,0x14), count=word(b.router,0x18);
-    if (!ptr(buckets) || !count || count>256) return {};
-    const unsigned sentinel=word(buckets,count*4);
-    unsigned node=word(buckets,(17%count)*4);
-    for (unsigned n=0; n<50 && ptr(node) && node!=sentinel && word(node)!=17; ++n)
-        node=word(node,8);
-    if (!ptr(node) || node==sentinel || word(node)!=17 || word(node,4)!=42) return {};
-    b.device=word(b.router,4); b.map=word(b.router,8);
-    if (!ptr(b.device) || !ptr(b.map) || word(b.device)!=0x14196f8 || word(b.map)!=0x141ca1c) return {};
-    b.keyboard=word(b.device,8);
-    b.table=word(b.map,4); b.tableEnd=word(b.map,8);
-    if (!ptr(b.keyboard) || !ptr(b.table) || b.tableEnd<b.table ||
-        b.tableEnd-b.table!=76u*16 || word(b.device,0x20+4*42)!=0) return {};
+    const unsigned buckets=word(b.router,0x14,BindingField::Buckets), count=word(b.router,0x18,BindingField::BucketCount);
+    if (!check(ptr(buckets),"bucket_pointer",buckets) || !check(count!=0,"bucket_count_nonzero",count) ||
+        !check(count<=256,"bucket_count_limit",count,256)) return {};
+    const unsigned sentinel=word(buckets,count*4,BindingField::Sentinel);
+    unsigned node=word(buckets,(17%count)*4,BindingField::InitialNode);
+    if(d)d->terminalNode=node;
+    for (unsigned n=0; n<50 && ptr(node) && node!=sentinel && word(node,0,BindingField::NodeAction)!=17; ++n) {
+        node=word(node,8,BindingField::NodeNext);
+        if(d){++d->traversed;d->terminalNode=node;}
+    }
+    if (!check(ptr(node),"node_pointer",node) || !check(node!=sentinel,"node_sentinel",node,sentinel) ||
+        !equal(word(node,0,BindingField::NodeAction),17,"node_action") || !equal(word(node,4,BindingField::NodeConcept),42,"node_concept")) return {};
+    b.device=word(b.router,4,BindingField::Device); b.map=word(b.router,8,BindingField::Map);
+    if (!check(ptr(b.device),"device_pointer",b.device) || !check(ptr(b.map),"map_pointer",b.map) ||
+        !equal(word(b.device,0,BindingField::DeviceVtable),0x14196f8,"device_vtable") ||
+        !equal(word(b.map,0,BindingField::MapVtable),0x141ca1c,"map_vtable")) return {};
+    b.keyboard=word(b.device,8,BindingField::Keyboard);
+    b.table=word(b.map,4,BindingField::Table); b.tableEnd=word(b.map,8,BindingField::TableEnd);
+    if (!check(ptr(b.keyboard),"keyboard_pointer",b.keyboard) || !check(ptr(b.table),"table_pointer",b.table) ||
+        !check(b.tableEnd>=b.table,"table_end_order",b.tableEnd,b.table) ||
+        !equal(b.tableEnd-b.table,76u*16,"table_span") || !equal(word(b.device,0x20+4*42,BindingField::Override),0,"concept_override")) return {};
     const unsigned conceptRow=b.table+42*16;
-    b.actions=word(conceptRow); b.actionsEnd=word(conceptRow,4);
-    if (!ptr(b.actions) || b.actionsEnd<=b.actions || b.actionsEnd-b.actions>16*8 ||
-        (b.actionsEnd-b.actions)%8) return {};
+    b.actions=word(conceptRow,0,BindingField::Actions); b.actionsEnd=word(conceptRow,4,BindingField::ActionsEnd);
+    if (!check(ptr(b.actions),"actions_pointer",b.actions) || !check(b.actionsEnd>b.actions,"actions_end_order",b.actionsEnd,b.actions) ||
+        !check(b.actionsEnd-b.actions<=16*8,"actions_span_limit",b.actionsEnd-b.actions,16*8) ||
+        !equal((b.actionsEnd-b.actions)%8,0,"actions_stride")) return {};
     for (unsigned i=b.actions;i<b.actionsEnd;i+=8) {
-        const unsigned key=word(i);
-        if (!ptr(key) || word(i,4)!=42 || word(key)!=0x14656f8) continue;
+        auto* a=d?&d->alternatives[d->alternativeCount++]:nullptr;
+        if(a)a->row=i;
+        const auto alternativeWord=[&](unsigned base,unsigned offset,unsigned field) {
+            const auto value=word(base,offset);
+            if(a){a->values[field]=value;a->readMask|=1u<<field;if(lastReadSuccess)a->successMask|=1u<<field;}
+            return value;
+        };
+        const auto alternativeCheck=[&](bool accepted,const char* predicate,unsigned field=6,unsigned wanted=0) {
+            if(a && !accepted && !std::strcmp(a->refusal,"none")){
+                a->refusal=predicate;a->actual=field<a->values.size()?a->values[field]:0;a->expected=wanted;
+            }
+            return accepted;
+        };
+        const unsigned key=alternativeWord(i,0,0);
+        if (!alternativeCheck(ptr(key),"key_pointer",0) || !alternativeCheck(alternativeWord(i,4,1)==42,"row_concept",1,42) ||
+            !alternativeCheck(alternativeWord(key,0,2)==0x14656f8,"key_vtable",2,0x14656f8)) continue;
         unsigned char flags[2]{};
         read(std::uint64_t(key)+12,flags,2);
-        const auto scanCode=word(key,16);
-        if (ok && !flags[0] && !flags[1] && scanCode==59) {
+        if(a){a->readMask|=24;if(lastReadSuccess)a->successMask|=24;a->values[3]=flags[0];a->values[4]=flags[1];}
+        const auto scanCode=alternativeWord(key,16,5);
+        if (alternativeCheck(ok,"prior_read_failure") && alternativeCheck(!flags[0],"flags12",3) &&
+            alternativeCheck(!flags[1],"flags13",4) && alternativeCheck(scanCode==59,"scan16",5,59)) {
+            if(d)d->returned=true;
             b.row=i; b.key=key; return b;
         }
+    }
+    // Rejected alternatives are not a binding refusal if a later one succeeds.
+    // Once all fail, retain the first rejection unless an earlier read failed.
+    if(d && d->alternativeCount && !std::strcmp(d->refusal,"none")){
+        const auto& a=d->alternatives[0];d->Check(false,a.refusal,a.actual,a.expected);d->failedAlternativeRow=a.row;
     }
     return {};
 }

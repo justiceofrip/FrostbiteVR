@@ -2548,9 +2548,10 @@ void __fastcall GatherHook(void* self,void*,void* cache){
                 seatCycle::Admit(plan.status==VehicleInputPlanStatus::Ready,seatCycle::Gate::Plan,seatRefusal);
             const auto currentBinding=vehicleSeatButton.CheckBinding(input,canUse,[&]() -> seatCycle::Binding {
                 if(seatAttempt)seatAttempt->bindingChecked=true;
-                const auto current=seatCycle::ReadBinding(memory,seat,true,seatRefusal);
+                auto* bindingObservation=seatAttempt?&seatAttempt->binding:nullptr;
+                const auto current=seatCycle::ReadBinding(memory,seat,true,seatRefusal,bindingObservation);
                 if(seatCycle::Admit(bool(current),seatCycle::Gate::Binding,seatRefusal) &&
-                    seatCycle::Admit(seatCycle::ReadBinding(memory,seat,true,seatRefusal)==current,seatCycle::Gate::BindingChanged,seatRefusal) &&
+                    seatCycle::Admit(seatCycle::ReadBinding(memory,seat,true,seatRefusal,bindingObservation)==current,seatCycle::Gate::BindingChanged,seatRefusal) &&
                     seatCycle::Admit(Resolve(check)&&check==owner,seatCycle::Gate::Owner,seatRefusal))
                     return *current;
                 return {};

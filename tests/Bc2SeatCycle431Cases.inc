@@ -128,12 +128,14 @@ int SeatCycleRequiresCurrentMappedKeyboardAndPermission() {
     using namespace fvr::bc2::seatCycle;
     struct Memory {
         std::map<unsigned,unsigned char> bytes;
+        std::vector<std::pair<unsigned,unsigned>> reads;
         void word(unsigned at,unsigned value) {
             for (unsigned i=0;i<4;++i) bytes[at+i]=static_cast<unsigned char>(value>>(i*8));
         }
         VehicleRouteMemory access() {
             return {this,[](void* ctx,unsigned at,void* dst,std::size_t n){
                 auto& self=*static_cast<Memory*>(ctx);
+                self.reads.emplace_back(at,unsigned(n));
                 for (std::size_t i=0;i<n;++i) {
                     auto it=self.bytes.find(at+unsigned(i));if(it==self.bytes.end())return false;
                     static_cast<unsigned char*>(dst)[i]=it->second;
@@ -154,11 +156,40 @@ int SeatCycleRequiresCurrentMappedKeyboardAndPermission() {
     m.word(map+4,table);m.word(map+8,table+76*16);
     m.word(record,rows);m.word(record+4,rows+8);m.word(rows,key);m.word(rows+4,42);
     m.word(key,0x14656f8);m.word(key+12,0);m.word(key+16,59);
+    // Compare recorded/unrecorded results, gates and the complete callback order.
+    // The explicit baseline below also protects the pre-observation read schedule.
+    BindingObservation observed;
+    Gate observedGate=Gate::None;
+    const auto sameReads=[&](Memory& candidate,const VehicleRouteSnapshot& seat,bool proof=true) {
+        auto plain=candidate;plain.reads.clear();candidate.reads.clear();observed={};observedGate=Gate::None;
+        Gate plainGate=Gate::None;
+        const auto before=ReadBinding(plain.access(),seat,proof,&plainGate);
+        const auto after=ReadBinding(candidate.access(),seat,proof,&observedGate,&observed);
+        return before==after && plainGate==observedGate && plain.reads==candidate.reads;
+    };
+    const auto fieldRead=[&](BindingField field){return (observed.readMask&(1u<<unsigned(field)))!=0;};
+    const auto fieldSuccess=[&](BindingField field){return (observed.successMask&(1u<<unsigned(field)))!=0;};
+    const auto value=[&](BindingField field){return observed.values[unsigned(field)];};
+    const auto refused=[&](const char* predicate){return !std::strcmp(observed.refusal,predicate);};
+    CHECK(sameReads(m,s) && observed.returned && refused("none") && observed.calls==1 && observed.call==1);
+    std::vector<std::pair<unsigned,unsigned>> expectedReads{
+        {p+0xc74,4},{s.identity.entry+0x198,4},{p+0x160,4},{0x1570e9c,1},{0x1570ee0,4},{0x1570ee4,4},
+        {r+0x14,4},{r+0x18,4},{0x50000+31*4,4},{0x50000+17*4,4},{0x51000,4},{0x51000,4},{0x51004,4},
+        {r+4,4},{r+8,4},{device,4},{map,4},{device+8,4},{map+4,4},{map+8,4},{device+0x20+42*4,4},
+        {record,4},{record+4,4},{rows,4},{rows+4,4},{key,4},{key+12,2},{key+16,4}};
+    // C++ leaves the two operands of the existing suppression comparison unordered.
+    if(m.reads[4].first==0x1570ee4)std::swap(expectedReads[4],expectedReads[5]);
+    CHECK(m.reads==expectedReads && observed.reads==28 && observed.terminalNode==0x51000 && observed.traversed==0);
+    CHECK(observed.verified && observed.reader && observed.routeChecked && observed.routePresent && observed.routeCount==1);
+    CHECK(value(BindingField::PlayerCache)==s.identity.cache && value(BindingField::EntryRouter)==r);
+    CHECK(value(BindingField::Permission)==64 && value(BindingField::TableEnd)-value(BindingField::Table)==1216);
+    CHECK(!fieldRead(BindingField::NodeNext) && !observed.failedReadIndex && observed.alternativeCount==1);
+    CHECK(observed.alternatives[0].readMask==63 && observed.alternatives[0].successMask==63 && observed.alternatives[0].values[5]==59);
     CHECK(ReadBinding(m.access(),s,true));CHECK(!ReadBinding(m.access(),s,false));
     for (const auto [at,value]:{std::pair{p+0x160,0u},{p+0xc74,0u},{s.identity.entry+0x198,0u},
          {0x1570ee4u,4u},{map,0u},{device,0u},{device+8,0u},{device+0x20+42*4,1u},
          {0x51004u,76u},{record+4,rows},{record+4,rows+9},{rows+4,43u},{key,0u},{key+12,1u},{key+16,0u}}) {
-        auto changed=m;changed.word(at,value);CHECK(!ReadBinding(changed.access(),s,true));
+        auto changed=m;changed.word(at,value);CHECK(sameReads(changed,s) && !observed.returned);
     }
     auto missing=m;missing.bytes.erase(key+16);CHECK(!ReadBinding(missing.access(),s,true));
     auto denied=m;denied.word(p+0x160,0);Gate first=Gate::None;
@@ -169,6 +200,104 @@ int SeatCycleRequiresCurrentMappedKeyboardAndPermission() {
     CHECK(!ReadBinding(denied.access(),s,true,&first) && first==Gate::Permission);
     denied=m;denied.bytes.erase(p+0x160);first=Gate::None;
     CHECK(!ReadBinding(denied.access(),s,true,&first) && first==Gate::Binding);
+
+    CHECK(sameReads(m,s,false) && m.reads.empty() && refused("verified") && !observed.routeChecked);
+    auto malformed=s;malformed.count=unsigned(malformed.routes.size())+1;
+    CHECK(sameReads(m,malformed) && m.reads.empty() && refused("route_count") && observed.actual==51 && !observed.routeChecked);
+    malformed=s;malformed.routes[0]={17,76};
+    CHECK(sameReads(m,malformed) && m.reads.empty() && refused("route_17_42") && observed.routeChecked && !observed.routePresent);
+    denied=m;denied.word(p+0xc74,0);
+    CHECK(sameReads(denied,s) && refused("player_cache") && observed.actual==0 && observed.expected==s.identity.cache);
+    CHECK(denied.reads.size()==1 && !fieldRead(BindingField::EntryRouter) && observedGate==Gate::Owner);
+    denied=m;denied.bytes.erase(p+0xc74);
+    CHECK(sameReads(denied,s) && refused("memory_read") && observed.failedReadAddress==p+0xc74);
+    CHECK(observed.failedReadSize==4 && observed.failedReadIndex==1 && observed.failedReadCalled && !fieldSuccess(BindingField::PlayerCache));
+    CHECK(denied.reads.size()==1 && !fieldRead(BindingField::EntryRouter) && observedGate==Gate::Binding);
+    malformed=s;malformed.player=UINT32_MAX-0x100;
+    CHECK(sameReads(m,malformed) && refused("read_address") && m.reads.empty() && observed.failedReadIndex==1);
+    CHECK(observed.failedReadAddress==std::uint64_t(malformed.player)+0xc74 && !observed.failedReadCalled);
+    denied=m;denied.word(p+0x160,0);
+    CHECK(sameReads(denied,s) && refused("player_permission") && value(BindingField::Permission)==0);
+    CHECK(denied.reads.size()==3 && !fieldRead(BindingField::Unrestricted) && observedGate==Gate::Permission);
+    denied=m;denied.word(0x1570ee4,4);
+    CHECK(sameReads(denied,s) && refused("concept_suppression") && value(BindingField::SuppressionBegin)==0 && value(BindingField::SuppressionEnd)==4);
+    CHECK(denied.reads.size()==6 && !fieldRead(BindingField::Buckets) && observedGate==Gate::Permission);
+    auto unrestricted=m;unrestricted.word(0x1570e9c,1);
+    CHECK(sameReads(unrestricted,s) && observed.returned && !fieldRead(BindingField::SuppressionBegin) && !fieldRead(BindingField::SuppressionEnd));
+    auto unrestrictedReads=expectedReads;unrestrictedReads.erase(unrestrictedReads.begin()+4,unrestrictedReads.begin()+6);
+    CHECK(unrestricted.reads==unrestrictedReads);
+    denied=m;denied.word(r+0x18,257);
+    CHECK(sameReads(denied,s) && refused("bucket_count_limit") && observed.actual==257 && observed.expected==256);
+    CHECK(denied.reads.size()==8 && !fieldRead(BindingField::Sentinel));
+    denied=m;denied.bytes.erase(r+0x14);
+    CHECK(sameReads(denied,s) && refused("memory_read") && observed.failedReadAddress==r+0x14 && observed.failedReadIndex==7);
+    CHECK(denied.reads.size()==8 && fieldRead(BindingField::BucketCount) && !fieldRead(BindingField::Sentinel));
+    denied=m;denied.word(0x51004,76);
+    CHECK(sameReads(denied,s) && refused("node_concept") && observed.actual==76 && observed.expected==42);
+    CHECK(denied.reads.size()==13 && !fieldRead(BindingField::Device));
+    denied=m;denied.word(0x50000+31*4,0x53000);denied.word(0x50000+17*4,0x53000);
+    CHECK(sameReads(denied,s) && refused("node_sentinel") && observed.terminalNode==0x53000 && observed.actual==0x53000);
+    CHECK(denied.reads.size()==10 && !fieldRead(BindingField::NodeAction));
+    auto traversal=m;traversal.word(0x51000,16);traversal.word(0x51008,0x52000);traversal.word(0x52000,17);traversal.word(0x52004,42);
+    CHECK(sameReads(traversal,s) && observed.returned && observed.traversed==1 && observed.terminalNode==0x52000 && value(BindingField::NodeNext)==0x52000);
+    auto traversalReads=expectedReads;traversalReads.insert(traversalReads.begin()+11,{{0x51008,4},{0x52000,4}});
+    traversalReads[13]={0x52000,4};traversalReads[14]={0x52004,4};CHECK(traversal.reads==traversalReads);
+    denied=m;denied.word(0x51000,16);denied.word(0x51008,0x51000);
+    CHECK(sameReads(denied,s) && refused("node_action") && observed.actual==16 && observed.expected==17 && observed.traversed==50);
+    CHECK(denied.reads.size()==111 && !fieldRead(BindingField::NodeConcept));
+    denied=m;denied.word(device,0);
+    CHECK(sameReads(denied,s) && refused("device_vtable") && observed.actual==0 && observed.expected==0x14196f8);
+    CHECK(denied.reads.size()==16 && !fieldRead(BindingField::MapVtable));
+    denied=m;denied.word(map+8,table+75*16);
+    CHECK(sameReads(denied,s) && refused("table_span") && observed.actual==1200 && observed.expected==1216);
+    CHECK(denied.reads.size()==20 && !fieldRead(BindingField::Override) && !fieldRead(BindingField::Actions));
+    denied=m;denied.word(device+0x20+42*4,1);
+    CHECK(sameReads(denied,s) && refused("concept_override") && observed.actual==1 && !fieldRead(BindingField::Actions));
+    denied=m;denied.word(record+4,rows+9);
+    CHECK(sameReads(denied,s) && refused("actions_stride") && observed.actual==1 && observed.alternativeCount==0);
+    denied=m;denied.word(rows+4,43);
+    CHECK(sameReads(denied,s) && refused("row_concept") && observed.actual==43 && observed.expected==42 && observed.failedAlternativeRow==rows);
+    CHECK(observed.alternatives[0].readMask==3);
+    CHECK(!std::strcmp(observed.alternatives[0].refusal,"row_concept") && observed.alternatives[0].values[1]==43 && denied.reads.size()==25);
+    denied=m;denied.word(key+12,0x100);
+    CHECK(sameReads(denied,s) && refused("flags13") && observed.actual==1 && observed.expected==0 && observed.alternatives[0].values[4]==1);
+    CHECK(!std::strcmp(observed.alternatives[0].refusal,"flags13") && denied.reads==expectedReads);
+    denied=m;denied.word(key+16,60);
+    CHECK(sameReads(denied,s) && refused("scan16") && observed.actual==60 && observed.expected==59 && observed.alternatives[0].values[5]==60);
+    CHECK(!std::strcmp(observed.alternatives[0].refusal,"scan16") && denied.reads==expectedReads);
+    denied=m;denied.bytes.erase(key+16);
+    CHECK(sameReads(denied,s) && refused("memory_read") && observed.failedReadAddress==key+16 && observed.failedReadIndex==28);
+    CHECK(observed.alternatives[0].readMask==63 && observed.alternatives[0].successMask==31 && denied.reads==expectedReads);
+
+    // All sixteen existing alternatives remain bounded, and a rejected earlier
+    // alternative does not become a refusal when a later alternative succeeds.
+    auto alternatives=m;alternatives.word(record+4,rows+16*8);
+    for(unsigned n=0;n<16;++n)alternatives.word(rows+n*8,0);
+    CHECK(sameReads(alternatives,s) && refused("key_pointer") && observed.alternativeCount==16 && observed.failedAlternativeRow==rows);
+    for(unsigned n=0;n<16;++n)CHECK(observed.alternatives[n].row==rows+n*8 && observed.alternatives[n].readMask==1);
+    alternatives.word(rows+15*8,key);alternatives.word(rows+15*8+4,42);
+    CHECK(sameReads(alternatives,s) && observed.returned && refused("none") && observed.alternativeCount==16);
+    CHECK(observed.alternatives[15].readMask==63 && alternatives.reads.size()==expectedReads.size()+15);
+    // The second existing proof keeps its own failure and call index; no extra
+    // proof is requested, and publishing an attempt copies its diagnostic facts.
+    BindingObservation recheck;CHECK(ReadBinding(m.access(),s,true,nullptr,&recheck));
+    denied=m;denied.word(map+8,table+75*16);
+    CHECK(!ReadBinding(denied.access(),s,true,nullptr,&recheck));
+    CHECK(recheck.calls==2 && recheck.call==2 && !recheck.returned && !std::strcmp(recheck.refusal,"table_span"));
+    AttemptTrace journal;Attempt row;row.binding=recheck;journal.Publish(row);row.binding={};
+    CHECK(journal.Row(0).binding.call==2 && journal.Row(0).binding.actual==1200 && journal.Row(0).binding.expected==1216);
+    struct Output:std::streambuf {
+        std::string text;
+        int_type overflow(int_type c)override {
+            if(!traits_type::eq_int_type(c,traits_type::eof()))text.push_back(traits_type::to_char_type(c));
+            return traits_type::not_eof(c);
+        }
+    } output;
+    std::ostream report(&output);journal.Report(report);
+    CHECK(output.text.find("\"captured_call\":2")!=std::string::npos);
+    CHECK(output.text.find("\"first_failed_predicate\":\"table_span\",\"actual\":1200,\"expected\":1216")!=std::string::npos);
+    CHECK(output.text.find("\"concept_42_override\":{\"read\":0,\"success\":0,\"value\":0}")!=std::string::npos);
+    CHECK(output.text.find("\"table_end\":{\"read\":1,\"success\":1,\"value\":263344}")!=std::string::npos);
     s.routes[0]={17,76};CHECK(!ReadBinding(m.access(),s,true));
     return 0;
 }

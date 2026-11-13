@@ -16,7 +16,8 @@ the driver checks live simulator ownership/focus/tracking; ordinary native input
 freshness and Playing gates remain responsible for each consumed XR packet.
 An explicit passive navigation observation can admit on-foot input even without
 a weapon publication. Its original actor/route, input and menu leases remain
-independent of weapon validity; an explicit native refusal always stops admission.
+independent of weapon validity. Only a transient gather_pending observation may
+request a fresh response while ownership is proven neutral; it admits no input.
 Rows of 501..601 ms cannot fit two active pulses with full zero reserves and
 are refused before any input, as are rows of 300 ms or less.
 Optional action "jump" presses right Primary (A), while "use" presses left
@@ -153,6 +154,13 @@ def navigation_input(snapshot):
     """Use the exact native navigation frame without constructing a weapon frame."""
     return (snapshot["navigationObservation"]["input"] if "navigationObservation" in snapshot
             else snapshot["input"])
+
+
+def navigation_gather_pending(snapshot):
+    nav = snapshot.get("navigationObservation")
+    return (isinstance(nav, dict) and nav.get("observationOnly") is True
+            and nav.get("available") is False and nav.get("reason") == "gather_pending"
+            and "input" in nav and nav["input"] is None)
 
 
 def admit_navigation_observation(snapshot, now, nonce):
@@ -378,6 +386,11 @@ class NavigationDriver(t.Driver):
 
     def snapshot_usable(self, snapshot, now):
         if "navigationObservation" in snapshot:
+            if navigation_gather_pending(snapshot):
+                # BeginGather revokes the old publication before its successor
+                # is ready. The shared receiver must discard these bytes and
+                # run the neutral refresh gate, never admit their old identity.
+                return False
             # An explicit native refusal cannot be hidden by a still-valid old
             # firearm publication. Only this adapter admits the independent proof.
             # Validate original publication, then let the shared receive path
@@ -398,15 +411,45 @@ class NavigationDriver(t.Driver):
         if "navigationObservation" not in snapshot:
             return super().defer_invalid_snapshot(snapshot, now)
         # The shared receiver retained and checked this exact response, and
-        # snapshot_usable validated its original native publication. A neutral
-        # ACK can precede the next native input sample; these bytes supply no
-        # authority for another pulse. Wait only while neutral ownership holds.
-        require(self.previous_navigation is not None
-                and not self.new_navigation_input(snapshot["navigationObservation"])
-                and self.action_deadline is None and self.pending_sticks is None
+        # checked writer, nonce and the original response deadline. Neither a
+        # pending gather nor input predating a neutral ACK supplies authority.
+        pending = navigation_gather_pending(snapshot)
+        if pending:
+            require(snapshot["schema"] == "fvr.bc2.live-mechanism-snapshot.v1"
+                    and type(snapshot["valid"]) is bool
+                    and 0 < t.integer(snapshot["observed_ns"]) <= now,
+                    "pending navigation snapshot admission refused")
+            nav = snapshot["navigationObservation"]
+            owner = nav["owner"]
+            identity = [t.integer(owner[key]) for key in NAVIGATION_OWNER]
+            before = self.navigation_reference
+            if before is not None:
+                need_observation("navigationObservation" in before, "navigation observation route changed")
+                need_observation(owner == before["navigationObservation"]["owner"],
+                                 "navigation actor/control route lifetime changed")
+            # Before the first publication, native serialization has an empty
+            # identity. It cannot establish a reference: only a later fully
+            # admitted fresh frame can do that. A retained identity still may
+            # not contradict the on-foot/native gates.
+            uninitialized = before is None and all(value == 0 for value in identity)
+            need_observation(uninitialized or (all(value > 0 for value in identity)
+                             and owner["controlled"] == owner["soldier"]
+                             and nav["onFoot"] is True and nav["nativePlaying"] is True
+                             and nav["allowedRead"] is True
+                             and 0 <= t.integer(nav["allowedMask"]) <= 0xffffffff
+                             and t.integer(nav["allowedMask"]) & 0x103 == 0x103),
+                             "pending navigation actor/control route unavailable")
+        else:
+            require(self.previous_navigation is not None
+                    and not self.new_navigation_input(snapshot["navigationObservation"]),
+                    "navigation input refresh requires an unready original sample")
+        require(self.entry_admitted and self.action_deadline is None and self.pending_sticks is None
                 and not self.pending_command and not any(any(v) for v in self.sticks)
-                and self.action_button is None and not self.command_fault and not self.unsafe_owner,
+                and self.action_button is None and self.pending_action_button is None
+                and not self.releasing_sticks and not self.cleanup_mode
+                and not self.command_fault and not self.unsafe_owner,
                 "navigation input refresh requires settled neutral ownership")
+        self.pump()  # Rejoin live command owner, neutral controls, focus and tracking.
         if self.snapshot_refresh_started is None:
             self.snapshot_refresh_started = now
             self.snapshot_refresh_requests = 0
@@ -415,9 +458,9 @@ class NavigationDriver(t.Driver):
                          "navigation pulse requires a new original native input sample: refresh budget exhausted")
         self.snapshot_refresh_requests += 1
         self.artifacts.event(dict(type="snapshot_refresh_hold", nonce=snapshot["nonce"],
-            evaluatedNs=now, sourceDeadlineNs=self.snapshot_source_deadline(snapshot),
+            evaluatedNs=now, sourceDeadlineNs=None if pending else self.snapshot_source_deadline(snapshot),
             refreshRequest=self.snapshot_refresh_requests, lastCommandWrittenNs=self.last_write,
-            reason="navigation_input_not_new", commandAuthority=False))
+            reason="navigation_gather_pending" if pending else "navigation_input_not_new", commandAuthority=False))
         self.pending_nonce = None
         self.latest_snapshot = None
         self.pause_without_snapshot_until(self.last_request + t.SNAPSHOT_PERIOD)

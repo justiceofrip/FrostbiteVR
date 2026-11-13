@@ -12,14 +12,14 @@ Ownership/ready/blocked tasks: COORDINATOR-STATE.txt (local scheduling record).
 External worktrees remain untouched; finished25/26/33 source is integrated. Steam32 lacks its executable.
 
 INSTALLED RUNTIME
-Private0.1.94 installed and setup-validated; fallback0.1.93, earlier versions retained.
-Compiled sourcef8f20d94015d8b6ddf4fdc7366c433943c909ee5; nativeclosurede4ea69e5f42bdc8572497546e38edd72f3590082330280e6f37c5f78579ac98.
-Normal checks364x86/361x64 and focused navigation checks passed; unchanged hostWARP reused.
-Receipt: reports/coordinator-20261108-feedback721/normal94/run01/installation.json.
+Private0.1.95 installed and setup-validated; fallback0.1.94, earlier versions retained.
+Compiled sourcef0f561a0f0bcbd90fcec7368762466c70b7f620a; nativeclosureaa6d8fa0a47d033573858afd30eeeb82454fdf4dd019bd19ac563ee268b727ed.
+Normal checks364x86/361x64 and focused vehicle checks passed; unchanged hostWARP reused.
+Receipt: reports/coordinator-20261108-feedback721/normal95/run01/installation.json.
 Settings/cache/shortcut preserved. No public release or new physical-headset acceptance.
 
 CURRENT SOURCE
-Sourcef8f20d9 is pushed/remote-verified and installed94. Later seat-observation and navigation-tool corrections are staged, not installed.
+Sourcef0f561a is pushed/remote-verified and installed95. Seat-observation, cyclic-yaw comparison and command-phase timing changes are included.
 The navigation batch removes the developer tool's firearm-publication prerequisite for ordinary on-foot input, keeping original actor/input/menu deadlines and weapon admission unchanged.
 Handoff: handoff/integrations/coordinator-20261113-navigation/README.txt.
 
@@ -28,6 +28,7 @@ ACTUAL GAME EVIDENCE / NEXT
 93/02 completed boat exit, on-foot movement and shoulder weapon recovery; broader vehicle controls remain open.
 Reuse91/02 complete belt-feed reload and subsequent native shot,92/01 held-weapon swaps,87/08 complete opening-breech reload/fire/primary-return. Do not repeat passed routes for unrelated tool changes.
 94/01 resumed93/04 SP01 beach and moved water-to-shore with knife selected;888seconds/native retirement/exact restoration passed. C4objective not reached; diagnostic command expiry remains under investigation.
+95/01 one boat Ahold: nativeverified/freshinput/permissions/cache-readback passed; first refusal=binding, no seat request.183seconds/native retirement/exact restoration passed. Offline binding diagnosis is next; no unchanged retry.
 Bolt-rifle manual magazine route, front-loading underbarrel, C4 progression, broader vehicles, cutscenes/optics and headset performance remain open.
 Shared-mechanism/bulk-profile workflow; individual guns identify evidence samples, not separate implementation projects.
 Current exact evidence: handoff/integrations/coordinator-20261113-family-runtime/README.txt.
