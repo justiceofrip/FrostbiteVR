@@ -257,6 +257,135 @@ class SharedEntryTests(unittest.TestCase):
         d.request_path.write_bytes(d.request_bytes)
         return d
 
+    def neutral_approach_driver(self):
+        d = self.driver(snapshot(now=NOW-30_000_000))
+        d.reference = d.snapshot_readiness = None
+        d.neutral_snapshot_approach = False
+        d.capture_sequence = 0
+        d.state['controls'] = dict(gripL=0, gripR=0, trigL=0, trigR=0,
+                                   stickL=[0, 0], stickR=[0, 0])
+        commands = []
+
+        def acknowledged_send(lines, **kwargs):
+            d.validate_publication(lines, kwargs['expected'], False)
+            commands.append((copy.deepcopy(lines), kwargs['source_deadline']))
+            d.sequence += len(lines) + 1
+            d.commands += len(lines) + 1
+            d.sentinel = 'neutral-ack-' + str(d.sequence)
+            raw = ('\n'.join(lines + [d.sentinel])+'\n').encode('ascii')
+            d.command_path.write_bytes(raw)
+            d.command_hash = self.transport.digest(raw)
+            d.last_write = self.core.time.perf_counter_ns()
+            d.last_commit = d.last_write + 1_000_000
+            d.state.update(cmdSeq=d.sequence, lastCmd=d.sentinel)
+            d.state['handR'] = dict(followsHead=False, pos=kwargs['expected']['pose']['position'][:], ypr=[0, 0, 0])
+
+        d.send = acknowledged_send
+        pose = dict(position=[-.2, 1.48, .18], orientation=[0, 0, 0, 1])
+        with patch.object(self.core.time, 'perf_counter_ns', return_value=NOW):
+            d.command(d.latest_snapshot, pose, 0)
+        self.assertEqual(d.snapshot_readiness_scope(), 'neutral_approach')
+        d.request_path, d.snapshot_path = self.root/'neutral-request.txt', self.root/'neutral-response.json'
+        d.pending_nonce, d.snapshot_index = 93, 1
+        d.last_request = d.last_request_published = NOW+2_000_000
+        d.request_bytes = b'93\n'
+        d.request_path.write_bytes(d.request_bytes)
+        d.snapshot_path.write_text(json.dumps(d.latest_snapshot), encoding='utf-8')
+        return d, commands
+
+    def neutral_approach_response(self, d, observed, sequence):
+        response = snapshot(now=observed, nonce=d.pending_nonce, sequence=sequence)
+        for key in ('grip', 'aim'):
+            response['input']['hands'][1][key] = copy.deepcopy(d.right_pose)
+        return response
+
+    def test_neutral_stow_late_publication_is_discarded_before_fresh_command(self):
+        d, commands = self.neutral_approach_driver()
+        original = copy.deepcopy(d.latest_snapshot)
+        identity = d.command_identity()
+        limits = (d.deadline, d.stage_deadline, d.hard_deadline)
+        timeout = d.last_request + self.transport.SNAPSHOT_TIMEOUT + 476_000
+        with patch.object(self.core.time, 'perf_counter_ns', return_value=timeout):
+            self.assertIsNone(d.receive_snapshot())
+        self.assertIsNone(d.latest_snapshot)
+        self.assertEqual(d.snapshot_readiness['scope'], 'neutral_approach')
+        self.assertEqual(d.snapshot_readiness['deadlineNs'], limits[1])
+        late = self.neutral_approach_response(d, NOW+80_000_000, 12)
+        with patch.object(d, 'send', side_effect=AssertionError('late observation sent input')):
+            received, raw = self.receive_draw_response(d, late, timeout+1_000_000)
+        self.assertIsNone(received)
+        self.assertEqual(d.artifacts.saved['snapshot-001-late.json'], raw)
+        self.assertIsNone(d.latest_snapshot)
+        self.assertGreater(d.pending_nonce, 93)
+        self.assertEqual(d.holster_neutral_approach['source'], original)
+        self.assertNotEqual(original['input']['hands'][1]['grip'], late['input']['hands'][1]['grip'])
+        self.assertEqual(d.command_identity(), identity)
+        self.assertEqual(len(commands), 1)
+        with patch.object(self.core.time, 'perf_counter_ns', return_value=timeout+2_000_000):
+            with self.assertRaisesRegex(self.core.REFUSAL, 'latest fully admitted holster snapshot'):
+                d.validate_publication(['grip r 1'], None, False)
+        fresh_at = timeout+5_000_000
+        fresh = self.neutral_approach_response(d, fresh_at, 13)
+        received, _ = self.receive_draw_response(d, fresh, fresh_at)
+        self.assertEqual(received[0], fresh)
+        self.assertIsNone(d.snapshot_readiness)
+        self.assertEqual(d.latest_snapshot, fresh)
+        self.assertIs(d.latest_snapshot, received[0])
+        self.assertEqual((d.deadline, d.stage_deadline, d.hard_deadline), limits)
+        with patch.object(self.core.time, 'perf_counter_ns', return_value=fresh_at):
+            d.command(received[0], d.right_pose, 0)
+        self.assertEqual(len(commands), 2)
+        self.assertEqual(commands[-1][1], self.core.source_deadline(fresh))
+
+    def test_neutral_approach_scope_excludes_action_pending_held_and_changed_ack(self):
+        for key, value in (('phase', 'draw_wait'), ('phase', 'withdraw'), ('draw_armed', True),
+                           ('stow_ack', {'not': 'neutral'}), ('held_right', True), ('held_left', True),
+                           ('held_trigger', True), ('held_buttons', {'a'}), ('pending_command', True),
+                           ('unsafe_owner', True), ('last_commit', None), ('sequence', 1000)):
+            with self.subTest(key=key, value=value):
+                d, commands = self.neutral_approach_driver()
+                setattr(d, key, value)
+                self.assertIsNone(d.snapshot_readiness_scope())
+                with patch.object(self.core.time, 'perf_counter_ns', return_value=d.last_request+251_000_000):
+                    with self.assertRaises(self.core.REFUSAL):
+                        d.receive_snapshot()
+                self.assertEqual(len(commands), 1)
+        d, _ = self.neutral_approach_driver()
+        with patch.object(d, 'send', side_effect=self.core.REFUSAL('publication refused')):
+            with self.assertRaises(self.core.REFUSAL):
+                self.core.OrdinaryHolsterDriver.command(d, d.latest_snapshot, d.right_pose, 1)
+        self.assertFalse(d.neutral_snapshot_approach)
+        self.assertIsNone(d.holster_neutral_approach)
+
+    def test_neutral_approach_late_response_retains_native_pose_mapping_and_owner_checks(self):
+        for fault in ('owner', 'pose', 'head', 'left', 'input', 'mapping', 'before_move', 'writer'):
+            with self.subTest(fault=fault):
+                d, commands = self.neutral_approach_driver()
+                timeout = d.last_request+251_000_000
+                with patch.object(self.core.time, 'perf_counter_ns', return_value=timeout):
+                    self.assertIsNone(d.receive_snapshot())
+                response = self.neutral_approach_response(d, NOW+80_000_000, 12)
+                if fault == 'owner':
+                    response['owner']['actorGeneration'] += 1
+                elif fault == 'pose':
+                    response['input']['hands'][1]['grip']['position'][0] += .1
+                elif fault == 'head':
+                    response['input']['head']['position'][0] += .1
+                elif fault == 'left':
+                    response['input']['hands'][0]['trigger'] = .5
+                elif fault == 'input':
+                    response['input']['hands'][1]['trigger'] = .5
+                elif fault == 'mapping':
+                    response['bodyInventory']['cohort'] += 1
+                elif fault == 'before_move':
+                    response['input_evidence']['observedNs'] = d.last_write-1
+                else:
+                    d.command_path.write_bytes(b'foreign-writer\n')
+                with self.assertRaises(self.core.REFUSAL):
+                    self.receive_draw_response(d, response, timeout+1_000_000)
+                self.assertIsNone(d.latest_snapshot)
+                self.assertEqual(len(commands), 1)
+
     def draw_response(self, d, now, *, invalid=True):
         if invalid:
             return outer_snapshot(now, d.pending_nonce, 12, "invalid:" + DRAW_GAP)

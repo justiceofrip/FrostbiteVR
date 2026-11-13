@@ -291,6 +291,8 @@ class OrdinaryHolsterDriver(transport.Driver):
         require(frame.pose_error(actual, intended)[1] <= .001, "right orientation did not commit")
 
     def command(self, snapshot, pose, grip):
+        self.neutral_snapshot_approach = False
+        self.holster_neutral_approach = None
         require(grip in (0, 1), "invalid ordinary squeeze")
         numbers = [*pose["position"], *frame.quaternion_ypr(pose["orientation"])]
         require(all(math.isfinite(v) for v in numbers) and all(abs(v) <= 10 for v in numbers[:3]), "pose outside normal bounds")
@@ -299,8 +301,42 @@ class OrdinaryHolsterDriver(transport.Driver):
         self.publication_source = snapshot
         if self.motion_started is None:
             self.motion_started = time.perf_counter_ns()
+        previous_sequence, previous_write = self.sequence, self.last_write
         self.send(lines, expected=dict(pose=pose, grip=grip), source_deadline=source_deadline(snapshot))
         self.right_pose = pose
+        # Only an acknowledged pre-press neutral move can wait for publication.
+        # The source remains immutable history; a late reply is never reused.
+        if (grip == 0 and self.phase in ("stow_reach", "held_reach")
+                and not (self.pending_command or self.unsafe_owner or self.held_left
+                         or self.held_right or self.held_trigger or self.held_buttons
+                         or self.draw_armed or getattr(self, "stow_ack", None))
+                and self.sequence > previous_sequence and self.last_write > previous_write
+                and self.last_commit is not None
+                and self.last_commit >= self.last_write
+                and neutral(snapshot["input"]) and snapshot["bodyHolster"]["neutralTrackedInput"] is True):
+            self.holster_neutral_approach = dict(source=snapshot, pose=copy.deepcopy(pose),
+                phase=self.phase, command=(self.sequence, self.sentinel, self.command_hash,
+                                           self.last_write, self.last_commit, self.commands))
+            self.neutral_snapshot_approach = True
+
+    def check_neutral_approach_response(self, snapshot, now):
+        approach = self.holster_neutral_approach
+        source_identity(approach["source"], snapshot)
+        same_outer(approach["source"], snapshot)
+        self.require_held(snapshot)
+        require(neutral(snapshot["input"]) and snapshot["bodyHolster"]["neutralTrackedInput"] is True,
+                "neutral approach response contains active native input")
+        require(min(integer(snapshot["input_evidence"]["observedNs"]),
+                    integer(snapshot["bodyHolster"]["inputEvidence"]["observedNs"])) >= self.last_write,
+                "neutral approach response predates acknowledged move")
+        for key in ("grip", "aim"):
+            error = frame.pose_error(frame.from_pose(snapshot["input"]["hands"][1][key]),
+                                     frame.from_pose(approach["pose"]))
+            require(error[0] < .002 and error[1] < .005,
+                    "neutral approach response differs from acknowledged right pose")
+        # This is the unchanged observed native slot/configuration mapping,
+        # not the old right-hand pose or a manufactured updated snapshot.
+        revalidate_pair(snapshot, integer(snapshot["observed_ns"]), self.slot_binding)
 
     def save_observation(self, name, snapshot):
         # The complete immutable snapshot is already retained by transport.

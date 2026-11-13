@@ -17,6 +17,31 @@ def canonical_holster_snapshot_driver(base, transport):
                       "holster base and canonical snapshot transport differ")
 
     class HolsterDriver(base):
+        def snapshot_readiness_scope(self):
+            scope = super().snapshot_readiness_scope()
+            if scope != "neutral_approach":
+                return scope
+            approach = getattr(self, "holster_neutral_approach", None)
+            if (approach is None or self.phase != approach["phase"]
+                    or self.phase not in ("stow_reach", "held_reach")
+                    or self.draw_armed or getattr(self, "stow_ack", None)
+                    or self.command_identity() != approach["command"]
+                    or self.pending_command or self.unsafe_owner or self.held_left
+                    or self.held_right or self.held_trigger or self.held_buttons):
+                return None
+            return scope
+
+        def check_snapshot_readiness_response(self, snapshot, now):
+            if self.snapshot_readiness["scope"] != "neutral_approach":
+                return super().check_snapshot_readiness_response(snapshot, now)
+            self.check_snapshot_readiness_owner()
+            transport.require(self.last_request <= transport.integer(snapshot["observed_ns"]) <= now,
+                              "neutral snapshot response predates its request or is from the future")
+            # A neutral reach intentionally moved the right hand. Join the
+            # original native identity to that exact settled pose; generic
+            # feed readiness instead requires an unchanged right-hand pose.
+            self.check_neutral_approach_response(snapshot, now)
+
         def receive_native_snapshot(self):
             return transport.Driver.receive_snapshot(self)
 
