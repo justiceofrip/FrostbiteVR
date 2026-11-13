@@ -1,4 +1,7 @@
 #include "Bc2ContextInteractEvidence.h"
+#include "Bc2NavigationObservation.h"
+#include "Bc2HeldFireCadence.h"
+#include "Bc2LiveMechanismSnapshotBudget.h"
 #include "Bc2VehicleCommit.h"
 #include "Bc2VehicleRoutes.h"
 #include "Bc2HolsterInput.h"
@@ -9,8 +12,15 @@
 #include <bit>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <sstream>
 using namespace fvr;using namespace fvr::bc2;using namespace fvr::interaction;
+namespace fvr::bc2 {
+struct NavigationObservationTestAccess {
+ static bool Lock(NavigationObservationPublication& p){return !p.gate_.test_and_set(std::memory_order_acquire);}
+ static void Unlock(NavigationObservationPublication& p){p.gate_.clear(std::memory_order_release);}
+};
+}
 namespace {
 struct Input {
  InputFrame f;ControllerActions foot;VehicleControllerActions seated;InputOwner owner{1,1,true,true};
@@ -97,8 +107,91 @@ int JournalReportsDispatchWithoutInventingExit(){ContextInteractEvidence log;Con
  for(unsigned n=0;n<99;++n){++r.input;r.nowNs+=1000000;log.Observe(r);}std::ostringstream later;log.Report(later);CHECK(later.str().find("\"dropped\":38")!=std::string::npos);
  ++r.input;r.nowNs+=1000000;r.actionMask=(1u<<16)|(1u<<27);r.contextAliasVerified=true;r.routeFingerprint=99;log.Observe(r);std::ostringstream alias;log.Report(alias);
  CHECK(alias.str().find("\"context_alias_verified\":1,\"route_fingerprint\":99")!=std::string::npos&&alias.str().find("\"dropped\":39")!=std::string::npos);return 0;}
+struct NavigationFixture {
+ NavigationObservationPublication publication;GameplayInputLease lease;NavigationObservation sample;
+ std::int64_t now=1010000000;
+ NavigationFixture(){Input raw;raw.f.menu={InputMenuOwner::Gameplay,11,3,1080000000};raw.f.trackingBasisGeneration=4;
+  raw.f.hands[0].stickY=.5f;raw.f.hands[1].aim.position.x=.25f;
+  lease.Observe(ipc::ChannelResult::Ok,raw.f,1100000000);
+  sample.owner={1,2,3,4,3,5,6,7,8,9,10};sample.onFoot=sample.nativePlaying=sample.allowedRead=true;sample.allowedMask=0x103;
+  sample.gatherSequence=1;Source();}
+ void Source(){sample.input=lease.input;sample.inputDeadlineNs=lease.deadlineQpc;sample.inputObservedNs=lease.deadlineQpc-100000000;}
+ bool Publish(){return publication.Publish(publication.BeginGather(),sample,sample.owner,true,now);}
+ std::string Snapshot(bool valid=false,std::size_t padding=0){const auto value=publication.Read(now);
+  const auto section=",\"navigationObservation\":"+NavigationObservationJson(value);
+  std::string payload=std::string("{\"valid\":")+(valid?"true,\"invalid_reason\":null":"false,\"invalid_reason\":\"no_shot_publication\"")+
+   section+",\"diagnostics\":\""+std::string(padding,'x')+"\"}";
+  return CompleteNavigationSnapshot(payload,section,value,[&](const auto& v){return publication.Current(v,now);},77,now,
+   valid?"payload_limit":"no_shot_publication",live_snapshot::MaximumBytes);}
+};
+int NavigationWorksWithoutShotOrEquipmentAndStaysOptIn(){NavigationFixture p;
+ CHECK(!p.Publish());CHECK(p.publication.Read(p.now).reason==NavigationObservationReason::Disabled);
+ CHECK(p.publication.Enable());CHECK(p.Publish());auto read=p.publication.Read(p.now);CHECK(read.Available());
+ CHECK(read.owner==p.sample.owner&&read.input.generation==p.lease.input.generation&&read.input.hands[0].stickY==.5f);
+ CHECK(read.input.hands[1].aim.position.x==.25f&&read.input.menu==p.lease.input.menu);
+ CHECK(read.sampledNs==p.now&&read.validUntilNs==1080000000&&read.inputObservedNs==1000000000&&read.inputDeadlineNs==1100000000);
+ const auto missing=p.Snapshot();CHECK(missing.find("\"valid\":false,\"invalid_reason\":\"no_shot_publication\"")!=std::string::npos);
+ CHECK(missing.find("\"navigationObservation\":{\"observationOnly\":true,\"available\":true,\"reason\":null")!=std::string::npos);
+ CHECK(missing.find("\"trackingBasisGeneration\":4")!=std::string::npos&&missing.find("\"menu\":{\"owner\":1,\"sequence\":11,\"epoch\":3,\"deadlineNs\":1080000000}")!=std::string::npos);
+ CHECK(missing.find("\"weapon\"")==std::string::npos&&missing.find("physical_equipment_generation")==std::string::npos&&missing.find("\"mapping\"")==std::string::npos);
+ const auto withShot=p.Snapshot(true);CHECK(withShot.find("\"valid\":true,\"invalid_reason\":null")!=std::string::npos);
+ CHECK(withShot.find("\"navigationObservation\":{\"observationOnly\":true,\"available\":true")!=std::string::npos);return 0;}
+int NavigationRejectsCurrentOwnerMenuSeatAndTracking(){using R=NavigationObservationReason;
+ NavigationFixture p;CHECK(p.publication.Enable());CHECK(p.Publish());auto wrong=p.sample.owner;++wrong.player;
+ CHECK(!p.publication.Publish(p.publication.BeginGather(),p.sample,wrong,true,p.now));CHECK(p.publication.Read(p.now).reason==R::OwnerUnavailable);
+ CHECK(!p.publication.Publish(p.publication.BeginGather(),p.sample,p.sample.owner,false,p.now));CHECK(p.publication.Read(p.now).reason==R::OwnerUnavailable);
+ CHECK(p.Publish());p.sample.onFoot=false;p.sample.owner.controlled=90;CHECK(!p.Publish());CHECK(p.publication.Read(p.now).reason==R::NotOnFoot);
+ p.sample.onFoot=true;p.sample.owner.controlled=p.sample.owner.soldier;p.sample.allowedMask=3;CHECK(!p.Publish());CHECK(p.publication.Read(p.now).reason==R::NativeInactive);
+ p.sample.allowedMask=0x103;p.sample.allowedRead=false;CHECK(!p.Publish());CHECK(p.publication.Read(p.now).reason==R::NativeInactive);
+ p.sample.allowedRead=true;p.sample.nativePlaying=false;CHECK(!p.Publish());CHECK(p.publication.Read(p.now).reason==R::NativeInactive);
+ p.sample.nativePlaying=true;p.sample.input.menu.owner=InputMenuOwner::Menu;CHECK(!p.Publish());CHECK(p.publication.Read(p.now).reason==R::MenuUnavailable);
+ p.Source();p.sample.input.focused=false;CHECK(!p.Publish());CHECK(p.publication.Read(p.now).reason==R::FocusLoss);
+ p.Source();p.sample.input.headValid=false;CHECK(!p.Publish());CHECK(p.publication.Read(p.now).reason==R::HeadUntracked);
+ p.Source();p.sample.input.hands[1].aimTracked=false;CHECK(!p.Publish());CHECK(p.publication.Read(p.now).reason==R::HandsUntracked);
+ p.Source();p.sample.input.hands[0].stickX=std::numeric_limits<float>::quiet_NaN();CHECK(!p.Publish());CHECK(p.publication.Read(p.now).reason==R::InvalidInput);
+ CHECK(p.Snapshot().find("nan")==std::string::npos);p.Source();CHECK(p.Publish());
+ CHECK(p.publication.Read(1080000000).reason==R::MenuUnavailable);CHECK(p.publication.Read(1100000000).reason==R::StaleInput);
+ p.now=1100000000;CHECK(!p.Publish());CHECK(p.publication.Read(p.now).reason==R::StaleInput);return 0;}
+int NavigationRepeatsPreserveOriginalSourceAndMenuDeadlines(){using R=NavigationObservationReason;NavigationFixture p;
+ CHECK(p.publication.Enable());CHECK(p.Publish());const auto first=p.publication.Read(p.now);
+ p.lease.Observe(ipc::ChannelResult::Busy,{},9000000000);p.Source();p.now+=5000000;++p.sample.gatherSequence;CHECK(p.Publish());
+ const auto repeat=p.publication.Read(p.now);CHECK(repeat.gatherSequence>first.gatherSequence&&repeat.sampledNs>first.sampledNs);
+ CHECK(repeat.inputObservedNs==first.inputObservedNs&&repeat.inputDeadlineNs==first.inputDeadlineNs&&repeat.validUntilNs==first.validUntilNs&&repeat.input.menu==first.input.menu);
+ // Even an erroneously refreshed upstream deadline cannot renew this packet.
+ p.sample.inputObservedNs+=1000000;p.sample.inputDeadlineNs+=1000000;CHECK(!p.Publish());CHECK(p.publication.Read(p.now).reason==R::SourceClockChanged);
+ p.Source();CHECK(p.Publish());p.sample.input.menu.deadlineNs+=1000000;CHECK(!p.Publish());CHECK(p.publication.Read(p.now).reason==R::MenuClockChanged);
+ auto next=p.lease.input;++next.generation;next.predictedNs+=10000000;p.lease.Observe(ipc::ChannelResult::Ok,next,1110000000);p.Source();CHECK(p.Publish());
+ const auto newer=p.publication.Read(p.now);CHECK(newer.input.generation==2&&newer.inputDeadlineNs==1110000000&&newer.validUntilNs==first.validUntilNs);
+ p.now=first.validUntilNs;CHECK(p.publication.Read(p.now).reason==R::MenuUnavailable);return 0;}
+int NavigationLocalInvalidationsCannotResurrectCopies(){using R=NavigationObservationReason;NavigationFixture p;CHECK(p.publication.Enable());CHECK(p.Publish());
+ auto copy=p.publication.Read(p.now);p.publication.InvalidatePlayer(999,R::OwnerUnavailable);CHECK(p.publication.Current(copy,p.now)==R::Available);
+ p.publication.InvalidatePlayer(p.sample.owner.player,R::OwnerUnavailable);CHECK(!p.publication.Read(p.now).Available());CHECK(p.publication.Current(copy,p.now)==R::Changed);
+ CHECK(!p.publication.Publish(copy.serial,p.sample,p.sample.owner,true,p.now));CHECK(p.Publish());copy=p.publication.Read(p.now);
+ p.publication.Invalidate(R::RouteChanged);CHECK(p.publication.Read(p.now).reason==R::RouteChanged);CHECK(p.publication.Current(copy,p.now)==R::Changed);
+ ++p.sample.owner.actorGeneration;++p.sample.owner.movementEpoch;CHECK(p.Publish());copy=p.publication.Read(p.now);
+ p.publication.Invalidate(R::InputPause);CHECK(p.publication.Read(p.now).reason==R::InputPause);CHECK(p.publication.Current(copy,p.now)==R::Changed);
+ ++p.sample.owner.inputEpoch;++p.sample.owner.movementEpoch;CHECK(p.Publish());copy=p.publication.Read(p.now);
+ const auto section=",\"navigationObservation\":"+NavigationObservationJson(copy);
+ CHECK(NavigationObservationTestAccess::Lock(p.publication));CHECK(p.publication.Read(p.now).reason==R::Busy);
+ const auto dropped=p.publication.BeginGather();CHECK(!p.publication.Publish(dropped,p.sample,p.sample.owner,true,p.now));
+ NavigationObservationTestAccess::Unlock(p.publication);CHECK(p.publication.Read(p.now).reason==R::Busy);
+ CHECK(!p.publication.Publish(dropped,p.sample,p.sample.owner,true,p.now));CHECK(!p.publication.Read(p.now).Available());
+ auto serialized=CompleteNavigationSnapshot("{\"valid\":false"+section+"}",section,copy,[&](const auto& v){return p.publication.Current(v,p.now);},77,p.now,"no_shot_publication",live_snapshot::MaximumBytes);
+ CHECK(serialized.find("\"available\":true")==std::string::npos&&serialized.find("\"reason\":\"observation_changed\"")!=std::string::npos);
+ CHECK(p.Publish());copy=p.publication.Read(p.now);CHECK(NavigationObservationTestAccess::Lock(p.publication));p.publication.Stop();
+ NavigationObservationTestAccess::Unlock(p.publication);CHECK(p.publication.Read(p.now).reason==R::Stopped);
+ CHECK(p.publication.Current(copy,p.now)==R::Stopped);CHECK(!p.publication.Publish(copy.serial,p.sample,p.sample.owner,true,p.now));CHECK(!p.Publish());return 0;}
+int NavigationSurvivesBoundedPayloadFallback(){NavigationFixture p;CHECK(p.publication.Enable());CHECK(p.Publish());
+ for(const bool shot:{false,true}){const auto bounded=p.Snapshot(shot,live_snapshot::MaximumBytes);
+  CHECK(bounded.size()<=live_snapshot::MaximumBytes&&bounded.find("\"valid\":false")!=std::string::npos);
+  CHECK(bounded.find(shot?"\"invalid_reason\":\"payload_limit\"":"\"invalid_reason\":\"no_shot_publication\"")!=std::string::npos);
+  CHECK(bounded.find("\"navigationObservation\":{\"observationOnly\":true,\"available\":true")!=std::string::npos);
+  CHECK(bounded.find("\"inputDeadlineNs\":1100000000")!=std::string::npos&&bounded.find("\"validUntilNs\":1080000000")!=std::string::npos);
+  CHECK(bounded.find("\"diagnosticsOmitted\":\"payload_limit\"")!=std::string::npos);}
+ return 0;}
 }
 int main(){for(auto test:{XUsesNativeInteractAndKeepsReloadSeparate,VerifiedSharedConceptUsesOneFilteredHold,SharedConceptHonorsMenuReloadAndFocus,XExitsBoatThroughVerifiedProfileOnly,HeldEntryCannotImmediatelyExitOrReenter,
  MenuChordAndNativePauseSuppressBothContexts,ExpiredTrackingCannotReuseExitAndNeedsNeutral,ReloadOwnershipBlocksUseButEmptyHolsterSuppressionPreservesIt,
- JournalReportsDispatchWithoutInventingExit})if(test())return 1;
- std::cout<<"Context interact:9 controller/native-cache/menu/ownership/journal groups passed; actual vehicle transition unverified\n";}
+ JournalReportsDispatchWithoutInventingExit,NavigationWorksWithoutShotOrEquipmentAndStaysOptIn,NavigationRejectsCurrentOwnerMenuSeatAndTracking,
+ NavigationRepeatsPreserveOriginalSourceAndMenuDeadlines,NavigationLocalInvalidationsCannotResurrectCopies,NavigationSurvivesBoundedPayloadFallback})if(test())return 1;
+ std::cout<<"Context interact:14 controller/native-cache/menu/ownership/journal/navigation groups passed; actual vehicle transition unverified\n";}

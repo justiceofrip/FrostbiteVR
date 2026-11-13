@@ -3,6 +3,7 @@
 #include "Bc2ChestKnifeLiveObservation.h"
 #include "Bc2ChestKnifeCurrentHoldObservation.h"
 #include "Bc2ContextualToolProbeWitness.h"
+#include "Bc2NavigationObservation.h"
 #include "Bc2PumpReceiverGapProbe.h"
 #include "Bc2TwoGrenadeDeathWitness.h"
 #include "Bc2ShellFocusLossProbe.h"
@@ -59,6 +60,10 @@ bool EnableSmokeOriginCandidate(std::span<const std::byte>,const engine::PeImage
 // drains bounded transition records; no native reads or stream work in Gather.
 bool EnableFireRouteTelemetry()noexcept;
 void ReportFireRouteTelemetry(std::ostream&);
+// Existing mechanism-snapshot startup opt-in only; passive local Gather values.
+bool EnableNavigationObservation()noexcept;
+NavigationObservation ReadNavigationObservation()noexcept;
+NavigationObservationReason ReadNavigationObservationStatus(const NavigationObservation&)noexcept;
 // Explicit driver-only native head-aim/camera opt-in, after Install before Start.
 // Fire can remain disabled for the bounded signed-axis response diagnostic.
 bool EnableBoatHeadAim(bool enableFire=false)noexcept;

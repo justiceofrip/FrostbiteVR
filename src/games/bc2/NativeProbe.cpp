@@ -3915,7 +3915,10 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
                 data[0]=='1'&&data[1]=='\n';
             CloseHandle(file);return enabled;
         }();
-        if(mechanismSnapshotsEnabled)(void)fvr::bc2::reloadFlowRuntime::EnableFeedGuardTrace();
+        if(mechanismSnapshotsEnabled){
+            (void)fvr::bc2::reloadFlowRuntime::EnableFeedGuardTrace();
+            (void)fvr::bc2::gameplay::EnableNavigationObservation();
+        }
 
 #ifdef FVR_BC2_CAMPAIGN_PROVISIONING
         const bool campaignProvisioningRequested=[&]{

@@ -2820,10 +2820,18 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     WriteChestKnifeCurrentHoldDiagnostic(currentHoldDiagnostic,gameplay::ReadChestKnifeCurrentHoldDiagnostic());
     const auto knifeReturnSection=",\"chestKnifeReturn\":"+knifeReturn.str()+",\"chestKnifePublication\":"+knifePublication.str()+
         ",\"currentNonfiringHoldDiagnostic\":"+currentHoldDiagnostic.str();
+    // This coherent local-input copy exists independently of a firearm frame.
+    // Its original deadlines survive all valid/invalid and payload-limit paths.
+    const auto navigation=gameplay::ReadNavigationObservation();observed=ReloadNanos();
+    const auto navigationSection=",\"navigationObservation\":"+NavigationObservationJson(navigation);
+    const auto writePayload=[&](std::string payload,const char* reason){
+        out<<CompleteNavigationSnapshot(std::move(payload),navigationSection,navigation,
+            gameplay::ReadNavigationObservationStatus,nonce,observed,reason,snapshotLimit);
+    };
     const auto invalid=[&](const char* reason,bool observeOwnedKnife=false){
         std::ostringstream header;header.imbue(std::locale::classic());
         header<<"{\"schema\":\"fvr.bc2.live-mechanism-snapshot.v1\",\"nonce\":\""<<nonce
-            <<"\",\"valid\":false,\"invalid_reason\":\""<<reason<<"\",\"observed_ns\":"<<observed
+            <<"\",\"valid\":false,\"invalid_reason\":\""<<reason<<"\",\"observed_ns\":"<<observed<<navigationSection
             <<",\"bodyHolster\":{\"available\":false,\"reason\":\"snapshot_unavailable\"}"
             <<",\"bodyInventory\":{\"observationOnly\":true,\"available\":false,\"reason\":\"snapshot_unavailable\"}"
             <<",\"chestKnife\":";
@@ -2855,7 +2863,7 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
             payload=knifePrefix+"{\"observationOnly\":true,\"available\":false,\"reason\":\"payload_limit\"}"+
                 ",\"chestKnifeReturn\":{\"observationOnly\":true,\"available\":false,\"reason\":\"payload_limit\"}"+
                 compactFeedAdmission+fixedGateAdmission+feedGateAdmission+",\"diagnosticsOmitted\":\"payload_limit\"}\n";
-        out<<payload;
+        writePayload(std::move(payload),reason);
     };
     const auto candidate=shotPublication.load(std::memory_order_acquire);
     if(!candidate){invalid("no_shot_publication");return;}
@@ -3104,7 +3112,7 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
         json<<",\"hand\":"<<unsigned(token.hand)<<",\"kind\":"<<unsigned(token.kind)<<",\"item\":";key(token.item);
         json<<",\"contact\":";key(token.contact);json<<",\"prerequisiteClaim\":"<<token.prerequisiteClaim
             <<"},\"deadlineNs\":"<<value.deadlineNs<<",\"inputSequence\":"<<value.inputSequence<<'}';};
-    json<<"{\"schema\":\"fvr.bc2.live-mechanism-snapshot.v1\",\"nonce\":\""<<nonce<<"\",\"valid\":true,\"invalid_reason\":null,\"observed_ns\":"<<observed
+    json<<"{\"schema\":\"fvr.bc2.live-mechanism-snapshot.v1\",\"nonce\":\""<<nonce<<"\",\"valid\":true,\"invalid_reason\":null,\"observed_ns\":"<<observed<<navigationSection
         <<",\"valid_until_ns\":"<<until<<",\"shot_input_generation\":"<<frame->generation<<",\"native_deadline_qpc\":"<<frame->deadline
         <<",\"native_deadline_ns\":"<<ReloadNanos(frame->deadline)
         <<",\"weapon_actions_blocked\":"<<identity.weaponActionsBlocked<<",\"physical_equipment_generation\":"<<identity.equipmentGeneration<<",\"owner\":";owner(m.owner);
@@ -3502,7 +3510,7 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
            identity.soldier,identity.weak,identity.weapon,WeaponFrameUse::BodyObservation)){
         invalid("owner_changed_during_serialization");return;
     }
-    if(payload.size()>snapshotLimit){invalid("payload_limit");return;}out<<payload;
+    if(payload.size()>snapshotLimit){invalid("payload_limit");return;}writePayload(std::move(payload),"payload_limit");
 }
 void ReportLiveCounters(std::ostream& out){
     // Runs on the existing session-telemetry cadence. Read no mutable rig,

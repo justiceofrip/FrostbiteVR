@@ -1737,6 +1737,10 @@ class Driver:
         """
         return False
 
+    def snapshot_usable(self, snapshot, now):
+        """Default weapon admission stays strict; independent observers opt in."""
+        return snapshot.get("valid") is True
+
     @receive_timed("receive")
     def receive_snapshot(self):
         if self.pending_nonce is None:
@@ -1773,7 +1777,7 @@ class Driver:
             return None
         # Preserve every matching response, including expired and invalid ones.
         self.artifacts.save(f"snapshot-{self.snapshot_index:03}.json", raw)
-        if snapshot.get("valid") is not True:
+        if not self.snapshot_usable(snapshot, now):
             if self.defer_invalid_snapshot(snapshot, now):
                 return None
             raise REFUSAL("native snapshot refused: " + str(snapshot.get("invalid_reason")))

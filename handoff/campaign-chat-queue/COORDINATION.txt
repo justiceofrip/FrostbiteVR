@@ -1,5 +1,5 @@
 BC2 VR shared integration coordination
-Updated: November 12, 2026
+Updated: November13,2026
 Canonical repository: G:/Unity/VRMMO/FrostbiteVR
 Canonical integration branch: integrate/coordinator-20261101-feedback72
 Accepted remote ref: checkpoint/436-r56-equipment-rendering
@@ -8,38 +8,26 @@ Coordinator worktree: G:/Unity/VRMMO/bc2vr-task-worktrees/campaign-coordinator-2
 Coordinator branch: campaign/coordinator-20261028-r1
 ROOT alone owns Git, shared edits, builds, game input and installation.
 Exclusive lease: G:/Unity/VRMMO/bc2vr-task-worktrees/INTEGRATION.lock
-Ownership and ready/blocked tasks: COORDINATOR-STATE.txt (local scheduling record).
-External CHAT25/26/32 worktrees remain untouched; finished25/26 source is integrated.
+Ownership/ready/blocked tasks: COORDINATOR-STATE.txt (local scheduling record).
+External worktrees remain untouched; finished25/26/33 source is integrated. Steam32 lacks its executable.
 
 INSTALLED RUNTIME
-Normal0.1.87 is installed and Worker-validated; fallback0.1.86, earlier versions retained.
-Compiled native/launcher source:537b27d80a6f318a1037e940e9c8ea41b46985be.
-Normal checks passed364x86/361x64; frozen normal artifacts were used for delivery.
-Settings, asset cache and stable desktop shortcut are preserved.
-No public release or new headset acceptance. Shared x86 build outputs are private.
-Receipt: reports/coordinator-20261108-feedback721/normal87/run01/installation.json.
-Native82 custody-gap recovery and audio-worker shutdown fixes are included.
-Native83's additional passive lock diagnostic is not a player-facing reload fix.
+Private0.1.93 installed and setup-validated; fallback0.1.92, earlier versions retained.
+Compiled source988b557bfe351fae6d688bffcbabd6827d11673e; nativeclosured01b71132e79a9588b4643d96d9ee53fedd13ca5810f8eb0d0860612394b97c8.
+Normal checks364x86/361x64 and focused knife checks passed; unchanged hostWARP reused.
+Receipt: reports/coordinator-20261108-feedback721/normal93/run01/installation.json.
+Settings/cache/shortcut preserved. No public release or new physical-headset acceptance.
 
-CURRENT SOURCE BATCH
-Native86 includes the scoped snapshot1175 publication recovery. Shared metadata
-accounting and retained Close readiness are integrated; normal builds/WARP reused
-only at their matching source closures. Actual86/01 reached native completed reload
-step4 with1/6ammo and firing unblocked. The driver timed out before normal release;
-cleanup acknowledged, failed result preserved. Postreload firing remains open.
-The session retired normally and restored profiles/settings.
-Handoff: handoff/integrations/coordinator-20261112-underbarrel/README.txt.
-Source push: reports/coordinator-20261108-feedback721/normal87/run01/source-push.json.
-Later shared-tool source1393481 pushed/verified: reports/coordinator-20261108-feedback721/campaign-tools/source-push.json.
-Installed knife inspection lock-scope correction and genuineEmpty movement admission:
-handoff/integrations/coordinator-20261112-knife-inspection/README.txt. Both normal builds pass; actual87/03 knife Draw/Held/Return and stereo visibility confirmed. Jab/damage and complete movement remain pending.
+CURRENT SOURCE
+Source36be8e1 is pushed/remote-verified; later native navigation observation batch is pending checks/build/integration.
+The navigation batch removes the developer tool's firearm-publication prerequisite for ordinary on-foot input, keeping original actor/input/menu deadlines and weapon admission unchanged.
+Handoff: handoff/integrations/coordinator-20261113-navigation/README.txt.
 
-NEXT ACCEPTANCE
-Work by shared mechanism and bulk profiles; complete representative reload/fire/switch.
-Do not add per-run wrapper chains or repeat passed angle sweeps and native builds.
-Tool-only work corrects the complete-route driver budget and adds bounded ordinary
-campaign movement; these changes do not require native rebuilds or reinstallation.
-Knife jab/damage and real objective/vehicle access are next; retain passed87/03 Draw/Held/Return.
-Knife damage/visibility, C4 progression, vehicle routes, cutscenes/optics and FPS remain open.
-Steam32 lacks the executable; do not repeat that blocked investigation.
-Earlier evidence remains in linked integration handoffs and Git history.
+ACTUAL GAME EVIDENCE / NEXT
+93/03 completed native Draw/zero-trigger physical jab/Return; damage against target and headsetfeel remain open.
+93/02 completed boat exit, on-foot movement and shoulder weapon recovery; broader vehicle controls remain open.
+Reuse91/02 complete belt-feed reload and subsequent native shot,92/01 held-weapon swaps,87/08 complete opening-breech reload/fire/primary-return. Do not repeat passed routes for unrelated tool changes.
+93/04 retained SP01 beach checkpoint, closed normally and restored profiles/settings. Resume there after changed navigation validation; C4objective not reached.
+Bolt-rifle manual magazine route, front-loading underbarrel, C4 progression, broader vehicles, cutscenes/optics and headset performance remain open.
+Shared-mechanism/bulk-profile workflow; individual guns identify evidence samples, not separate implementation projects.
+Current exact evidence: handoff/integrations/coordinator-20261113-family-runtime/README.txt.

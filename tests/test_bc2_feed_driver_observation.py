@@ -469,6 +469,20 @@ class FeedDriverObservationTests(unittest.TestCase):
         self.assertEqual(h.driver.snapshot_index, 1)
         self.assertIn("snapshot-001.json", h.driver.artifacts.saved)
 
+    def test_navigation_observation_never_admits_an_invalid_weapon_snapshot(self):
+        h = Harness(self)
+        changed = copy.deepcopy(h.driver.reference)
+        changed.update(valid=False, invalid_reason="no_shot_publication",
+                       navigationObservation=dict(observationOnly=True, available=True, reason=None))
+        h.publish(changed)
+        with self.assertRaisesRegex(d.REFUSAL, "native snapshot refused: no_shot_publication"):
+            h.driver.send(["grip l 1"])
+        self.assertFalse(h.driver.snapshot_usable(changed, h.now))
+        self.assertFalse(changed["valid"])
+        self.assertEqual(h.command_writes, [])
+        self.assertEqual(h.driver.snapshot_index, 1)
+        self.assertIn("snapshot-001.json", h.driver.artifacts.saved)
+
     def test_expired_but_inadmissible_source_is_not_retried(self):
         h = Harness(self)
         changed = copy.deepcopy(h.driver.reference)

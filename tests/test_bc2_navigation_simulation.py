@@ -490,6 +490,27 @@ def recorded_empty_snapshot(now, nonce):
     return result
 
 
+def with_navigation_observation(snapshot, *, no_shot=True):
+    """Small passive native sample using the existing synthetic input geometry."""
+    inp = copy.deepcopy(snapshot["input"])
+    for hand in inp["hands"]:
+        hand.update(active=127, touchActive=1, touched=0)
+    observed = snapshot["input_evidence"]["observedNs"]
+    deadline = observed + 100_000_000
+    nav = dict(observationOnly=True, available=True, reason=None,
+        gatherSequence=inp["generation"], sampledNs=snapshot["observed_ns"]-1_000_000,
+        inputObservedNs=observed, inputDeadlineNs=deadline,
+        validUntilNs=min(deadline, inp["menu"]["deadlineNs"]),
+        owner=dict(manager=10, player=11, soldier=22, weak=33, controlled=22,
+                   entry=44, router=55, cache=66, actorGeneration=1, inputEpoch=2, movementEpoch=3),
+        onFoot=True, nativePlaying=True, allowedRead=True, allowedMask=0x103, input=inp)
+    if no_shot:
+        snapshot = {key: snapshot[key] for key in ("schema", "nonce", "observed_ns")}
+        snapshot.update(valid=False, invalid_reason="no_shot_publication")
+    snapshot["navigationObservation"] = nav
+    return snapshot
+
+
 class Clock:
     def __init__(self):
         self.now = 2_000_000_000
@@ -576,6 +597,7 @@ class NavigationTests(unittest.TestCase):
         self.held_owner_records = []
         self.bad_ack_once = False
         self.replay_empty = False
+        self.native_navigation = False
         self.response_delay = lambda driver: 0
         self.omit_response_from = None
         self.snapshot_read_delay = 0
@@ -612,6 +634,8 @@ class NavigationTests(unittest.TestCase):
             for hand, current in zip(h["input"]["hands"], s["input"]["hands"]):
                 hand.update({key: current[key] for key in hand})
             h["neutralTrackedInput"] = self.m.holster.neutral(h["input"])
+        if self.native_navigation:
+            s = with_navigation_observation(s, no_shot=self.native_navigation == "no_shot")
         if self.snapshot_mutation:
             self.snapshot_mutation(s, driver)
         self.samples.append(copy.deepcopy(s))
@@ -630,7 +654,8 @@ class NavigationTests(unittest.TestCase):
             if self.driver is not None and (any(any(v) for v in self.driver.sticks) or self.driver.action_button):
                 self.held_owner_records.append(json.loads(self.driver.owner_bytes(False)))
             sample = getattr(self.driver, "latest_snapshot", None)
-            if sample and self.clock.now >= sample["valid_until_ns"]:
+            if sample and self.clock.now >= (sample["navigationObservation"]["validUntilNs"]
+                                             if "navigationObservation" in sample else sample["valid_until_ns"]):
                 self.cached_expiry_phases.add(
                     "release" if self.driver.releasing_sticks else
                     "ack" if self.driver.pending_command else
@@ -759,6 +784,186 @@ class NavigationTests(unittest.TestCase):
         self.assertFalse(result["nativeAcceptance"])
         self.assertFalse(result["objectiveEntry"])
         self.assertEqual(len(result["episodes"]), 2)
+
+    def test_no_shot_navigation_uses_original_native_input_and_acknowledged_zero(self):
+        self.native_navigation = "no_shot"
+        self.rows += [dict(left=[0, .25], right=[0, 0], holdMs=400, action="jump"),
+                      dict(left=[0, 0], right=[0, 0], holdMs=400, action="use")]
+        def before_zero(sample, driver):
+            if driver.snapshot_index == 3:
+                nav = sample["navigationObservation"]
+                nav["inputObservedNs"] = driver.last_write - 1_000_000
+                nav["inputDeadlineNs"] = nav["inputObservedNs"] + self.m.t.SNAPSHOT_PERIOD
+                nav["validUntilNs"] = min(nav["inputDeadlineNs"], nav["input"]["menu"]["deadlineNs"])
+        self.snapshot_mutation = before_zero
+        code, result = self.assembled()
+        self.assertEqual((code, result.get("error")), (0, None))
+        self.assertEqual(len(result["episodes"]), 3)
+        self.assertEqual(self.calls[1::2], [self.m.ZERO, self.m.ZERO+["btn a up"], self.m.ZERO+["btn x up"]])
+        self.assertTrue(self.m.neutral_controls(self.state["controls"]))
+        self.assertFalse(result["normalStopRequired"])
+        self.assertTrue(all(sample["valid"] is False and sample["invalid_reason"] == "no_shot_publication"
+                            and not {"owner", "equipment", "mapping", "input", "physical_equipment_generation"} & sample.keys()
+                            for sample in self.samples))
+        saved = sorted(Path(result["artifactDirectory"]).glob("snapshot-*.json.gz"))
+        self.assertEqual([json.loads(gzip.decompress(path.read_bytes())) for path in saved], self.samples)
+        self.assertTrue(all(sample["navigationObservation"]["validUntilNs"]
+                            == min(sample["navigationObservation"]["inputDeadlineNs"],
+                                   sample["navigationObservation"]["input"]["menu"]["deadlineNs"])
+                            for sample in self.samples))
+        events = [json.loads(line) for line in
+                  (Path(result["artifactDirectory"]) / "events.jsonl").read_text().splitlines()]
+        refresh = [e for e in events if e.get("reason") == "navigation_input_not_new"]
+        self.assertTrue(refresh)
+        self.assertEqual(refresh[0]["nonce"], self.samples[2]["nonce"])
+        self.assertLess(self.samples[2]["navigationObservation"]["inputObservedNs"],
+                        refresh[0]["lastCommandWrittenNs"])
+        commits = [e for e in events if e["type"] == "command_commit"]
+        for index, episode in enumerate(result["episodes"]):
+            source = next(s for s in self.samples if s["nonce"] == episode["admissionNonce"])
+            if index:
+                self.assertGreaterEqual(source["navigationObservation"]["inputObservedNs"],
+                                        commits[index*2-1]["writtenNs"])
+            self.assertLess(commits[index*2]["writtenNs"], self.driver.snapshot_source_deadline(source))
+        self.assertTrue(all(request["actionDeadlineNs"] is None and not request["pendingCommand"]
+                            and request["sticks"] == [0, 0, 0, 0] for request in self.snapshot_requests))
+        self.assertEqual(self.driver.hard_deadline-self.driver.started, 10*self.m.t.NS)
+        self.assertFalse(result["nativeAcceptance"])
+
+    def test_no_shot_delayed_delivery_refreshes_without_stale_command_authority(self):
+        self.native_navigation = "no_shot"
+        delayed = []
+        def read_delay(path, driver):
+            if path == getattr(driver, "snapshot_path", None) and driver.snapshot_index == 1 and not delayed:
+                delayed.append(True)
+                return 80_000_000
+            return 0
+        self.read_delay = read_delay
+        code, result = self.assembled()
+        self.assertEqual((code, result.get("error")), (0, None))
+        self.assertTrue(delayed)
+        events = [json.loads(line) for line in
+                  (Path(result["artifactDirectory"]) / "events.jsonl").read_text().splitlines()]
+        refresh = [e for e in events if e["type"] == "snapshot_refresh_hold"]
+        self.assertEqual(len(refresh), 1)
+        self.assertEqual(refresh[0]["nonce"], self.samples[0]["nonce"])
+        self.assertGreaterEqual(refresh[0]["evaluatedNs"], refresh[0]["sourceDeadlineNs"])
+        self.assertEqual(refresh[0]["lastCommandWrittenNs"], 0)
+        self.assertGreater(self.publication_windows[0]["deadlineNs"], refresh[0]["sourceDeadlineNs"])
+        self.assertEqual(self.calls[-1], self.m.ZERO)
+        self.assertFalse(result["normalStopRequired"])
+
+    def test_passive_native_proof_rejects_stale_menu_vehicle_and_invalid_input_before_commands(self):
+        mutations = {
+            "stale": lambda n: n.update(inputObservedNs=self.clock.now-200_000_000,
+                                         inputDeadlineNs=self.clock.now-100_000_000,
+                                         validUntilNs=self.clock.now-100_000_000),
+            "renewed_source": lambda n: n.update(inputObservedNs=self.clock.now-200_000_000),
+            "extended_validity": lambda n: n.update(validUntilNs=n["validUntilNs"]+1),
+            "future_sample": lambda n: n.update(sampledNs=self.clock.now+10_000_000),
+            "menu": lambda n: n["input"]["menu"].update(owner=2),
+            "expired_menu": lambda n: (n["input"]["menu"].update(deadlineNs=self.clock.now-1),
+                                       n.update(validUntilNs=self.clock.now-1)),
+            "vehicle": lambda n: n["owner"].update(controlled=999),
+            "on_foot": lambda n: n.update(onFoot=False),
+            "playing": lambda n: n.update(nativePlaying=False),
+            "allowed_read": lambda n: n.update(allowedRead=False),
+            "allowed_mask": lambda n: n.update(allowedMask=0x102),
+            "focus": lambda n: n["input"].update(focused=False),
+            "tracking": lambda n: n["input"]["hands"][0].update(aimTracked=False),
+            "trigger": lambda n: n["input"]["hands"][1].update(trigger=.1),
+            "buttons": lambda n: n["input"]["hands"][0].update(held=8),
+        }
+        for index, (name, mutate) in enumerate(mutations.items()):
+            with self.subTest(name=name):
+                if index:
+                    self.setUp()
+                self.native_navigation = "no_shot"
+                self.snapshot_mutation = lambda sample, driver: mutate(sample["navigationObservation"])
+                code, result = self.assembled()
+                self.assertEqual(code, 2)
+                self.assertEqual(self.calls, [])
+                self.assertEqual(result["release"], "no navigation input published")
+                self.assertFalse(result["normalStopRequired"])
+
+    def test_explicit_native_lock_drop_stop_and_pause_cannot_fall_back_to_valid_weapon(self):
+        for index, reason in enumerate(("observation_busy", "stopped", "input_pause", "route_changed")):
+            with self.subTest(reason=reason):
+                if index:
+                    self.setUp()
+                self.native_navigation = "valid_weapon"
+                self.snapshot_mutation = lambda sample, driver: sample.update(
+                    navigationObservation=dict(observationOnly=True, available=False, reason=reason))
+                code, result = self.assembled()
+                self.assertEqual(code, 2)
+                self.assertIn(reason, result["error"])
+                self.assertEqual(self.calls, [])
+                self.assertTrue(self.samples[0]["valid"])
+
+    def test_passive_actor_route_tracking_and_menu_continuity_refuse_next_pulse(self):
+        for index, change in enumerate(("actorGeneration", "inputEpoch", "movementEpoch", "router", "cache", "entry",
+                                        "menu", "tracking", "missing")):
+            with self.subTest(change=change):
+                if index:
+                    self.setUp()
+                self.native_navigation = "no_shot"
+                self.rows = [dict(left=[0, 0], right=[0, 0], holdMs=1000, action="use")]
+                def mutation(sample, driver):
+                    if driver.snapshot_index >= 3:
+                        nav = sample["navigationObservation"]
+                        if change == "missing":
+                            del sample["navigationObservation"]
+                        elif change == "menu":
+                            nav["input"]["menu"]["epoch"] += 1
+                        elif change == "tracking":
+                            nav["input"]["trackingBasisGeneration"] += 1
+                        else:
+                            nav["owner"][change] += 1
+                self.snapshot_mutation = mutation
+                code, result = self.assembled()
+                self.assertEqual(code, 2)
+                self.assertEqual(len(result["episodes"]), 1)
+                self.assertEqual(self.calls, [self.m.ZERO+["btn x down"], self.m.ZERO+["btn x up"], self.m.ZERO])
+                self.assertFalse(result["normalStopRequired"])
+                self.assertTrue(self.m.neutral_controls(self.state["controls"]))
+
+    def test_passive_repeated_input_cannot_authorize_a_new_pulse(self):
+        self.native_navigation = "no_shot"
+        def repeat(sample, driver):
+            if self.samples:
+                previous = self.samples[-1]["navigationObservation"]
+                nav = sample["navigationObservation"]
+                nav["gatherSequence"] = previous["gatherSequence"]
+                nav["input"]["generation"] = previous["input"]["generation"]
+        self.snapshot_mutation = repeat
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertIn("new original native input sample", result["error"])
+        self.assertEqual(self.calls, [])
+        self.assertEqual(len(self.snapshot_requests), 2+self.m.t.MAX_SNAPSHOT_REFRESHES)
+        self.assertEqual(self.driver.snapshot_refresh_requests, self.m.t.MAX_SNAPSHOT_REFRESHES)
+        self.assertLess(self.clock.now, self.driver.hard_deadline)
+        self.assertTrue(self.m.neutral_controls(self.state["controls"]))
+
+    def test_passive_original_source_deadline_still_caps_atomic_publication(self):
+        self.native_navigation = "no_shot"
+        self.publication_delay = 80_000_000
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(result["release"], "no navigation input published")
+        self.assertLessEqual(self.publication_windows[0]["deadlineNs"],
+                             self.samples[-1]["navigationObservation"]["validUntilNs"])
+
+    def test_passive_stop_request_preserves_pending_custody_and_forbids_more_input(self):
+        self.native_navigation = "no_shot"
+        self.state_mutation = lambda state, driver: (self.folder / "stop.request").write_bytes(b"1\n")
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertIn("Stop already requested", result["error"])
+        self.assertEqual(len(self.calls), 1)
+        self.assertTrue(result["normalStopRequired"])
+        self.assertFalse(self.m.neutral_controls(self.state["controls"]))
 
     def test_explicit_root_and_reviewed_batch_required(self):
         args = self.argv()[:-1]

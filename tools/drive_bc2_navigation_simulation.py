@@ -14,6 +14,9 @@ include a separate zero reserve per pulse; they do not promise continuous input.
 Native diagnostics are requested only at neutral boundaries. During a pulse,
 the driver checks live simulator ownership/focus/tracking; ordinary native input
 freshness and Playing gates remain responsible for each consumed XR packet.
+An explicit passive navigation observation can admit on-foot input even without
+a weapon publication. Its original actor/route, input and menu leases remain
+independent of weapon validity; an explicit native refusal always stops admission.
 Rows of 501..601 ms cannot fit two active pulses with full zero reserves and
 are refused before any input, as are rows of 300 ms or less.
 Optional action "jump" presses right Primary (A), while "use" presses left
@@ -53,6 +56,8 @@ PERIOD = 25_000_000
 # publication and ACK together. Keep that complete window inside holdMs.
 COMMAND_WINDOW = 250_000_000
 RELEASE_RESERVE = COMMAND_WINDOW + 2 * PERIOD
+NAVIGATION_OWNER = ("manager", "player", "soldier", "weak", "controlled", "entry",
+                    "router", "cache", "actorGeneration", "inputEpoch", "movementEpoch")
 
 
 class ObservationLost(Refusal):
@@ -135,6 +140,60 @@ def empty_movement_admission(snapshot, now):
     return True
 
 
+def navigation_input(snapshot):
+    """Use the exact native navigation frame without constructing a weapon frame."""
+    return (snapshot["navigationObservation"]["input"] if "navigationObservation" in snapshot
+            else snapshot["input"])
+
+
+def admit_navigation_observation(snapshot, now, nonce):
+    require(snapshot["schema"] == "fvr.bc2.live-mechanism-snapshot.v1"
+            and type(snapshot["valid"]) is bool, "snapshot admission refused")
+    require(t.integer(snapshot["nonce"]) == nonce and nonce > 0, "snapshot request nonce mismatch")
+    nav = snapshot.get("navigationObservation")
+    need_observation(isinstance(nav, dict) and nav.get("observationOnly") is True
+                     and nav.get("available") is True and nav.get("reason") is None,
+                     "native navigation unavailable: " + str(nav.get("reason") if isinstance(nav, dict) else None))
+    owner, inp = nav["owner"], nav["input"]
+    need_observation(all(t.integer(owner[k]) > 0 for k in NAVIGATION_OWNER)
+                     and t.integer(owner["controlled"]) == t.integer(owner["soldier"]),
+                     "native navigation actor/control route unavailable")
+    allowed_mask = t.integer(nav["allowedMask"])
+    need_observation(nav["onFoot"] is True and nav["nativePlaying"] is True
+                     and nav["allowedRead"] is True and 0 <= allowed_mask <= 0xffffffff
+                     and allowed_mask & 0x103 == 0x103,
+                     "native navigation on-foot Playing input unavailable")
+    observed, deadline = t.integer(nav["inputObservedNs"]), t.integer(nav["inputDeadlineNs"])
+    sampled, valid_until = t.integer(nav["sampledNs"]), t.integer(nav["validUntilNs"])
+    menu_deadline = t.integer(inp["menu"]["deadlineNs"])
+    need_observation(t.integer(nav["gatherSequence"]) > 0
+                     and 0 < observed <= sampled <= t.integer(snapshot["observed_ns"]) <= now < valid_until
+                     and 0 < deadline-observed <= t.SNAPSHOT_PERIOD
+                     and valid_until == min(deadline, menu_deadline),
+                     "stale or invalid original navigation source/menu lease")
+    need_observation(t.integer(inp["generation"]) > 0 and t.integer(inp["spaceGeneration"]) > 0
+                     and t.integer(inp["trackingBasisGeneration"]) > 0 and t.integer(inp["predictedNs"]) > 0
+                     and inp["focused"] is True and inp["headValid"] is True,
+                     "native navigation focus/head/tracking unavailable")
+    # predictedNs belongs to XR's clock; source/menu authority uses native QPC.
+    need_observation(t.integer(inp["menu"]["owner"]) == 1, "fresh native Playing menu ownership unavailable")
+    require(type(inp["floorRelative"]) is bool and .01 <= p.finite(inp["worldUnitsPerMeter"]) <= 1000,
+            "invalid navigation tracking units/basis")
+    p.from_pose(inp["head"])
+    p.from_pose(inp["referenceHead"])
+    need_observation(isinstance(inp["hands"], list) and len(inp["hands"]) == 2
+                     and all(h["gripTracked"] is True and h["aimTracked"] is True for h in inp["hands"]),
+                     "native navigation controller tracking unavailable")
+    for hand in inp["hands"]:
+        p.from_pose(hand["grip"])
+        p.from_pose(hand["aim"])
+        require(all(t.integer(hand[k]) >= 0 for k in ("active", "held", "touchActive", "touched"))
+                and all(-1 <= p.finite(hand[k]) <= 1 for k in ("stickX", "stickY"))
+                and all(0 <= p.finite(hand[k]) <= 1 for k in ("trigger", "squeeze")),
+                "invalid navigation controller input")
+    return nav
+
+
 class NavigationArtifacts(t.Artifacts):
     """Lossless native responses within the unchanged shared 1 MiB disk cap."""
     def __init__(self, existing):
@@ -156,6 +215,7 @@ class NavigationArtifacts(t.Artifacts):
 class NavigationDriver(t.Driver):
     def __init__(self, args):
         self.navigation_reference = None
+        self.previous_navigation = None
         self.entry_admitted = False
         self.sticks = [[0, 0], [0, 0]]
         self.pending_sticks = None
@@ -307,7 +367,60 @@ class NavigationDriver(t.Driver):
         # Observation is never a license to extend a held pulse or its lease.
         return None
 
+    def snapshot_usable(self, snapshot, now):
+        if "navigationObservation" in snapshot:
+            # An explicit native refusal cannot be hidden by a still-valid old
+            # firearm publication. Only this adapter admits the independent proof.
+            # Validate original publication, then let the shared receive path
+            # refresh expired delivery without admitting stale command evidence.
+            self.admit_snapshot(snapshot, t.integer(snapshot["observed_ns"]),
+                                t.integer(snapshot["nonce"]))
+            return self.new_navigation_input(snapshot["navigationObservation"])
+        return super().snapshot_usable(snapshot, now)
+
+    def new_navigation_input(self, current):
+        before = self.previous_navigation
+        return before is None or (
+            t.integer(current["gatherSequence"]) > t.integer(before["gatherSequence"])
+            and t.integer(current["input"]["generation"]) > t.integer(before["input"]["generation"])
+            and t.integer(current["inputObservedNs"]) >= self.last_write)
+
+    def defer_invalid_snapshot(self, snapshot, now):
+        if "navigationObservation" not in snapshot:
+            return super().defer_invalid_snapshot(snapshot, now)
+        # The shared receiver retained and checked this exact response, and
+        # snapshot_usable validated its original native publication. A neutral
+        # ACK can precede the next native input sample; these bytes supply no
+        # authority for another pulse. Wait only while neutral ownership holds.
+        require(self.previous_navigation is not None
+                and not self.new_navigation_input(snapshot["navigationObservation"])
+                and self.action_deadline is None and self.pending_sticks is None
+                and not self.pending_command and not any(any(v) for v in self.sticks)
+                and self.action_button is None and not self.command_fault and not self.unsafe_owner,
+                "navigation input refresh requires settled neutral ownership")
+        if self.snapshot_refresh_started is None:
+            self.snapshot_refresh_started = now
+            self.snapshot_refresh_requests = 0
+        self.bounds(time.perf_counter_ns())
+        need_observation(self.snapshot_refresh_requests < t.MAX_SNAPSHOT_REFRESHES,
+                         "navigation pulse requires a new original native input sample: refresh budget exhausted")
+        self.snapshot_refresh_requests += 1
+        self.artifacts.event(dict(type="snapshot_refresh_hold", nonce=snapshot["nonce"],
+            evaluatedNs=now, sourceDeadlineNs=self.snapshot_source_deadline(snapshot),
+            refreshRequest=self.snapshot_refresh_requests, lastCommandWrittenNs=self.last_write,
+            reason="navigation_input_not_new", commandAuthority=False))
+        self.pending_nonce = None
+        self.latest_snapshot = None
+        self.pause_without_snapshot_until(self.last_request + t.SNAPSHOT_PERIOD)
+        self.request_snapshot()
+        return True
+
     def snapshot_source_deadline(self, snapshot):
+        if "navigationObservation" in snapshot:
+            nav = snapshot["navigationObservation"]
+            return min(t.integer(nav["validUntilNs"]), t.integer(nav["inputDeadlineNs"]),
+                       t.integer(nav["inputObservedNs"]) + t.SNAPSHOT_PERIOD,
+                       t.integer(nav["input"]["menu"]["deadlineNs"]))
         deadline = min(super().snapshot_source_deadline(snapshot),
                        t.integer(snapshot["native_deadline_ns"]),
                        t.integer(snapshot["input"]["menu"]["deadlineNs"]))
@@ -317,13 +430,16 @@ class NavigationDriver(t.Driver):
         return deadline
 
     def admit_snapshot(self, snapshot, now, nonce):
-        p.admit_frame(snapshot, now, nonce, mechanism_admission=empty_movement_admission)
-        inp = snapshot["input"]
+        native = "navigationObservation" in snapshot
+        if native:
+            admit_navigation_observation(snapshot, now, nonce)
+        else:
+            p.admit_frame(snapshot, now, nonce, mechanism_admission=empty_movement_admission)
+        inp = navigation_input(snapshot)
         menu = inp["menu"]
-        # Gameplay=1 is the native menu owner. Valid body/shot publication is
-        # revoked by Bc2Gameplay's !owner.foot and !nativePlaying branches.
-        # The original actor/rig/frame lease is the on-foot evidence; no new
-        # synthetic onFoot/Playing field or hand claim is manufactured here.
+        # Gameplay=1 is the native menu owner. The independent observation
+        # supplies explicit native on-foot/Playing proof. Legacy snapshots use
+        # their original body/shot lease, revoked at those same native gates.
         need_observation(menu["owner"] == 1 and t.integer(menu["sequence"]) > 0
                          and t.integer(menu["epoch"]) > 0
                          and now < t.integer(menu["deadlineNs"]) <= now + 100_000_000,
@@ -332,16 +448,22 @@ class NavigationDriver(t.Driver):
                          "navigation requires neutral native buttons/triggers/grips")
         before = self.navigation_reference
         if before is not None:
-            need_observation(snapshot["owner"] == before["owner"]
-                             and snapshot["physical_equipment_generation"] == before["physical_equipment_generation"],
-                             "navigation actor/equipment lifetime changed")
-            need_observation(all(inp[k] == before["input"][k] for k in
+            need_observation(native == ("navigationObservation" in before), "navigation observation route changed")
+            if native:
+                need_observation(snapshot["navigationObservation"]["owner"] == before["navigationObservation"]["owner"],
+                                 "navigation actor/control route lifetime changed")
+            else:
+                need_observation(snapshot["owner"] == before["owner"]
+                                 and snapshot["physical_equipment_generation"] == before["physical_equipment_generation"],
+                                 "navigation actor/equipment lifetime changed")
+            previous_input = navigation_input(before)
+            need_observation(all(inp[k] == previous_input[k] for k in
                                  ("spaceGeneration", "trackingBasisGeneration", "worldUnitsPerMeter", "floorRelative", "referenceHead"))
-                             and menu["epoch"] == before["input"]["menu"]["epoch"]
-                             and inp["head"]["position"] == before["input"]["head"]["position"],
+                             and menu["epoch"] == previous_input["menu"]["epoch"]
+                             and inp["head"]["position"] == previous_input["head"]["position"],
                              "navigation tracking/head/menu epoch changed")
             need_observation(all(p.preserved_pose_equal(h[k], old[k])
-                                 for h, old in zip(inp["hands"], before["input"]["hands"])
+                                 for h, old in zip(inp["hands"], previous_input["hands"])
                                  for k in ("grip", "aim")), "native controller pose changed")
         require(now < self.snapshot_source_deadline(snapshot), "original navigation source lease expired")
 
@@ -405,12 +527,12 @@ class NavigationDriver(t.Driver):
         if not self.releasing_sticks:
             return t.read_until(min(self.deadline, self.stage_deadline), super().pause_until, deadline)
         if not self.cleanup_mode:
-            return t.read_until(self.action_deadline - COMMAND_WINDOW, self.pause_release_until, deadline)
-        return self.pause_release_until(deadline)
+            return t.read_until(self.action_deadline - COMMAND_WINDOW, self.pause_without_snapshot_until, deadline)
+        return self.pause_without_snapshot_until(deadline)
 
-    def pause_release_until(self, deadline):
-        # Exact owned zeros need no native diagnostic. Preserve ordinary command
-        # spacing and this pulse's existing bounds even during failure cleanup.
+    def pause_without_snapshot_until(self, deadline):
+        # Exact owned zeros and neutral refresh spacing need no diagnostic.
+        # Pump preserves ownership and all existing stage/invocation bounds.
         for _ in range(6000):
             self.pump()
             if time.perf_counter_ns() >= deadline:
@@ -465,7 +587,8 @@ class NavigationDriver(t.Driver):
         self.artifacts.save("navigation-plan.json", self.navigation_schedule)
         self.fresh()
         self.navigation_reference = copy.deepcopy(self.latest_snapshot)
-        require(all(h["stickX"] == h["stickY"] == 0 for h in self.latest_snapshot["input"]["hands"]),
+        self.previous_navigation = self.latest_snapshot.get("navigationObservation")
+        require(all(h["stickX"] == h["stickY"] == 0 for h in navigation_input(self.latest_snapshot)["hands"]),
                 "native entry sticks are not neutral")
         for row in self.navigation_schedule:
             require(self.pending_sticks is None and not self.pending_command
@@ -473,7 +596,12 @@ class NavigationDriver(t.Driver):
                     "previous navigation episode lacks committed neutral")
             # Obtain a new original source before each episode, never restamp.
             self.fresh()
-            require(all(h["stickX"] == h["stickY"] == 0 for h in self.latest_snapshot["input"]["hands"]),
+            if self.previous_navigation is not None:
+                current = self.latest_snapshot["navigationObservation"]
+                need_observation(self.new_navigation_input(current),
+                                 "navigation pulse requires a new original native input sample")
+                self.previous_navigation = current
+            require(all(h["stickX"] == h["stickY"] == 0 for h in navigation_input(self.latest_snapshot)["hands"]),
                     "native continuation sticks are not neutral")
             admission_nonce = self.latest_snapshot["nonce"]
             lines = []

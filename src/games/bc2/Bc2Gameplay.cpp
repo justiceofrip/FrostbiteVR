@@ -572,6 +572,7 @@ interaction::VehicleControllerActions vehicleActions;
 seatCycle::Button vehicleSeatButton;
 bool vehicleSeatCycleVerified=false;
 ContextInteractEvidence contextInteractEvidence;
+NavigationObservationPublication navigationObservation;
 std::atomic<unsigned> vehicleRouteRejects=0,vehicleUnsupported=0,vehicleDriveCommits=0,vehicleCameraViews=0;
 std::atomic<unsigned> vehicleCameraWaits=0,vehicleCameraUnsupportedFrames=0;
 std::atomic<unsigned> vehicleSeatEntity=0,vehicleSeatEntry=0;
@@ -2244,8 +2245,15 @@ void __fastcall GatherHook(void* self,void*,void* cache){
 #ifdef FVR_BC2_CAMPAIGN_PROVISIONING
     provisionGather.OriginalReturned();
 #endif
-    if(!enabled.load(std::memory_order_acquire)||!scope||scope->used)return;
-    if(reinterpret_cast<unsigned>(self)!=scope->owner.router||reinterpret_cast<unsigned>(cache)!=scope->owner.cache){++mismatches;return;}
+    if(!enabled.load(std::memory_order_acquire)||!scope)return;
+    if(reinterpret_cast<unsigned>(self)!=scope->owner.router||reinterpret_cast<unsigned>(cache)!=scope->owner.cache){
+        if(reinterpret_cast<unsigned>(self)==scope->owner.router)navigationObservation.Invalidate(NavigationObservationReason::OwnerUnavailable);
+        if(!scope->used)++mismatches;return;
+    }
+    // Every verified local callback revokes the preceding value before any
+    // refusal. Unrelated routers/caches never invalidate local observation.
+    const auto navigationSerial=navigationObservation.BeginGather();
+    if(scope->used)return;
 #ifdef FVR_BC2_CAMPAIGN_PROVISIONING
     if(scope->provisionExcluded){
         // No gestures, physical policy, lifetime loss or cancellation during
@@ -2312,6 +2320,14 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     if(!fresh||!input.focused||vehicleShotSpace!=input.spaceGeneration){vehicleShotObserver.Invalidate();boatReticle.Invalidate();}
     vehicleShotSpace=input.spaceGeneration;
     const auto& owner=scope->owner;
+    std::optional<NavigationObservation> navigation;
+    if(navigationSerial){
+        navigation.emplace();auto& n=*navigation;n.gatherSequence=gatherSequence;
+        n.owner={owner.manager,owner.player,owner.soldier,owner.weak,owner.controlled,owner.entry,owner.router,owner.cache,rigEpoch,inputEpoch,movementEpoch};
+        n.onFoot=owner.foot;n.sampledNs=HandNanos(clock.QuadPart);
+        n.inputObservedNs=HandNanos(inputDeadline-handFrequency/10);n.inputDeadlineNs=HandNanos(inputDeadline);
+        n.input=input;n.validUntilNs=(std::min)(n.inputDeadlineNs,n.input.menu.deadlineNs);
+    }
     const auto asset=owner.equipment.Asset();
     const bool expackSelected=owner.foot&&asset=="Expack_US";
     std::optional<ExpackAttempt> charge;
@@ -2421,6 +2437,11 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     unsigned allowed=0;const bool allowedRead=Read(owner.cache+0x98,&allowed,sizeof(allowed));
     const bool vehicleInteraction=!owner.foot&&Type(owner.controlled,"ClientVehicleEntity")&&(allowed&0x11u)==0x11u;
     bool nativePlaying=owner.foot?(allowed&0x103u)==0x103u:vehicleInteraction;
+    if(navigation){
+        navigation->allowedRead=allowedRead;navigation->allowedMask=allowed;navigation->nativePlaying=nativePlaying;
+        const auto refusal=NavigationObservationRejection(*navigation,HandNanos(clock.QuadPart));
+        if(refusal!=NavigationObservationReason::Available){navigationObservation.Invalidate(refusal);navigation.reset();}
+    }
     if(!nativePlaying)fireTrace.record.reasons|=FireRouteNativeInactive;
     interact.playing=nativePlaying;
     if(charge&&allowedRead)charge->nativePlaying=nativePlaying;
@@ -2653,10 +2674,19 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     if(!out.active||out.owner!=owner.soldier){out={};out.owner=owner.soldier;}
     Owner check{};const bool ownerResolved=Resolve(check);
     if(!ownerResolved||check!=owner||!Writable(owner.cache,InputBytes)){
+        if(navigationSerial)navigationObservation.Invalidate(NavigationObservationReason::OwnerUnavailable);
         if(charge)charge->write="owner_or_cache_refused";
         fireTrace.record.reasons|=FireRouteOwnerUnavailable;
         ClearReloadOwner(ownerResolved&&check!=owner?ReloadOwnerLoss::LifetimeEnded:ReloadOwnerLoss::PresentationUnavailable);
         CancelSight();ResetSupportGrip("owner_unavailable");ResetHandOwnership("owner_unavailable",!ownerResolved||check==owner);rigPublication::PublishTracking({});return;}
+    if(navigation){
+        // The original raw packet was captured before fixtures or semantic
+        // filtering. Weapon aim/rig/shot publication has no part in admission.
+        LARGE_INTEGER sampled{};QueryPerformanceCounter(&sampled);
+        navigationObservation.Publish(navigationSerial,*navigation,
+            {check.manager,check.player,check.soldier,check.weak,check.controlled,check.entry,check.router,check.cache,rigEpoch,inputEpoch,movementEpoch},
+            true,HandNanos(sampled.QuadPart));
+    }
     const auto aimer=U32(owner.aim+8);
     float nativeYaw=0;const bool aimValid=owner.aim&&U32(U32(owner.aim)+0x28)==0&&Type(U32(aimer),"HaloAimerData")&&
         Read(aimer+12,&nativeYaw,4)&&std::isfinite(nativeYaw)&&std::abs(nativeYaw)<100&&Writable(aimer+12,8)&&Writable(owner.aim+12,8);
@@ -4345,10 +4375,10 @@ void __fastcall UpdateHook(void* self,void*,float dt){
     observed.player=local.owner.player;observed.soldier=local.owner.soldier;observed.weak=local.owner.weak;
     observed.controlled=local.owner.controlled;observed.manager=local.owner.manager;observed.entry=local.owner.entry;
     observed.inputThread=inputThread.load(std::memory_order_acquire);
-    if(!resolved){returnOriginal(SceneOwnerOutcome::Unresolved);return;}
-    if(local.owner.player!=reinterpret_cast<unsigned>(self)){returnOriginal(SceneOwnerOutcome::PlayerMismatch);return;}
+    if(!resolved){navigationObservation.InvalidatePlayer(reinterpret_cast<unsigned>(self),NavigationObservationReason::OwnerUnavailable);returnOriginal(SceneOwnerOutcome::Unresolved);return;}
+    if(local.owner.player!=reinterpret_cast<unsigned>(self)){navigationObservation.InvalidatePlayer(reinterpret_cast<unsigned>(self),NavigationObservationReason::OwnerUnavailable);returnOriginal(SceneOwnerOutcome::PlayerMismatch);return;}
     const auto thread=GetCurrentThreadId();unsigned expected=0;inputThread.compare_exchange_strong(expected,thread);
-    if(inputThread.load()!=thread){++mismatches;returnOriginal(SceneOwnerOutcome::WrongThread);return;}
+    if(inputThread.load()!=thread){navigationObservation.InvalidatePlayer(reinterpret_cast<unsigned>(self),NavigationObservationReason::OwnerUnavailable);++mismatches;returnOriginal(SceneOwnerOutcome::WrongThread);return;}
 #ifdef FVR_BC2_CAMPAIGN_PROVISIONING
     if(local.provisionExcluded){
         struct Current {Scope*& slot;~Current(){slot=nullptr;}} current{scope};scope=&local;
@@ -4405,8 +4435,10 @@ void __fastcall UpdateHook(void* self,void*,float dt){
     // Keep movement armed only on the same actor and complete native input route.
     const bool movementOwnerChanged=actorChanged||local.owner.router!=lastOwner.router||
         local.owner.cache!=lastOwner.cache||local.owner.foot!=lastOwner.foot||local.owner.role!=lastOwner.role;
+    if(movementOwnerChanged||inputPause)navigationObservation.Invalidate(movementOwnerChanged?
+        NavigationObservationReason::RouteChanged:NavigationObservationReason::InputPause);
     const auto advanced=AdvanceNativeInputEpochs(nativeEpochs,ownerChanged,inputPause,movementOwnerChanged);
-    if(!advanced){ClearReloadOwner();returnOriginal(SceneOwnerOutcome::Unresolved);return;}
+    if(!advanced){navigationObservation.Invalidate(NavigationObservationReason::OwnerUnavailable);ClearReloadOwner();returnOriginal(SceneOwnerOutcome::Unresolved);return;}
     nativeEpochs=*advanced;lastOwner=local.owner;lastTick=now;
 #ifdef FVR_BC2_ORDINARY_RESOURCE_PAUSE_PROBE
     if(pausedHere)nativeInputPauseProbe.after=nativeEpochs;
@@ -5502,6 +5534,15 @@ bool EnableFireRouteTelemetry()noexcept {
     if(enabled.load(std::memory_order_acquire)||!hooks[0])return false;
     fireRouteTelemetryEnabled=true;return true;
 }
+bool EnableNavigationObservation()noexcept {
+    return !enabled.load(std::memory_order_acquire)&&hooks[0]&&navigationObservation.Enable();
+}
+NavigationObservation ReadNavigationObservation()noexcept {
+    LARGE_INTEGER now{};QueryPerformanceCounter(&now);return navigationObservation.Read(HandNanos(now.QuadPart));
+}
+NavigationObservationReason ReadNavigationObservationStatus(const NavigationObservation& value)noexcept {
+    LARGE_INTEGER now{};QueryPerformanceCounter(&now);return navigationObservation.Current(value,HandNanos(now.QuadPart));
+}
 void ReportFireRouteTelemetry(std::ostream& out) {
     FireRouteTelemetryBatch batch;
     if(!fireRouteTelemetry.TryDrain(batch)){out<<"{\"schema\":1,\"snapshot_available\":false}";return;}
@@ -5522,6 +5563,7 @@ void Start()noexcept {
 #endif
 }
 bool PrepareSessionStop()noexcept {
+    navigationObservation.Stop();
 #ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
     mountedPrefire.Close();
 #endif
