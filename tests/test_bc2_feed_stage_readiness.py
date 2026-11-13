@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 from test_bc2_feed_driver_observation import Harness, MS, NS, d
-from test_bc2_feed_simulation_plan import synthetic_snapshot
+from test_bc2_feed_simulation_plan import synthetic_snapshot, add_synthetic_custody, set_wrist, emitted_wrist
 
 
 # Saved first driver snapshot, last state-12 changes, and all-copy idle return.
@@ -126,6 +126,54 @@ class FeedStageReadinessTests(unittest.TestCase):
                 v.stage("OpenCover")
         self.assertEqual(h.command_writes, [])
         self.assertIsNotNone(v.plans[0]["nonce"])
+
+    def test_real_stage_dispatches_opt_in_supply_approach_and_checks_actual_window(self):
+        # Real planner + Driver.stage with an explicit command transport stub.
+        # Synthetic post-pickup custody is not native acceptance.
+        for late in (False, True):
+            with self.subTest(late_ack=late):
+                h = self.harness(ready_at=FIRST_OBSERVATION_NS)
+                v, row = h.driver, self.profiles["profiles"][0]
+                v.args = type("Args", (), {"step_ms": 40, "pickup_approach": True})()
+                before = synthetic_snapshot(row, "SupplyPickup", now=h.now)
+                sent = []
+                def pause(due): h.now = max(h.now, due)
+                def send(lines, expected=None, source_deadline=None, **kwargs):
+                    self.assertEqual(lines, expected["commands"])
+                    if source_deadline is not None: self.assertLess(h.now, source_deadline)
+                    if expected["phase"] == "supply_press":
+                        self.assertLessEqual(v.stage_deadline, h.now + self.profiles["supplyConfig"]["gripApproach"]["windowNs"])
+                    sent.append(copy.deepcopy(expected))
+                    v.last_write = h.now
+                    h.now += 650 * MS if late and expected["phase"] == "supply_press" else 1 * MS
+                    v.last_commit = h.now
+                def fresh():
+                    after = synthetic_snapshot(row, "AttachContainer", now=h.now, sequence=102)
+                    after["feed"]["revision"] += 1
+                    set_wrist(after, emitted_wrist(before, sent[-1]))
+                    add_synthetic_custody(self.profiles, row, after)
+                    return after, d.json_bytes(after), h.now
+                deadlines = v.deadline, v.hard_deadline
+                with patch.object(v, "fresh_stage_ready", return_value=(before,d.json_bytes(before),h.now)), \
+                     patch.object(v, "pause_until", pause), patch.object(v, "send", send), \
+                     patch.object(v, "fresh", fresh), patch.object(v, "accept_snapshot"):
+                    if late:
+                        with self.assertRaisesRegex(d.REFUSAL, "original grip-approach window"):
+                            v.stage("SupplyPickup")
+                        self.assertEqual(sent[-1]["phase"], "supply_press")
+                    else:
+                        plan = v.stage("SupplyPickup")
+                        self.assertEqual(sent, plan["schedule"])
+                        self.assertTrue(v.plans[-1]["postPickupHeldSupply"])
+                        self.assertLess(v.plans[-1]["actualDurationNs"], 10*NS)
+                self.assertEqual((v.deadline,v.hard_deadline), deadlines)
+
+    def test_pickup_approach_rejects_invalid_cli_modes_before_opening_driver(self):
+        for mode in (("--capture","unused"),("--stage","OpenCover"),("--stage","AttachContainer")):
+            with self.subTest(mode=mode), patch.object(d.Driver,"__init__") as opened:
+                self.assertEqual(d.main(["--run","G:/unused","--profiles","G:/unused/profiles.json",
+                                         "--pickup-approach",*mode]),2)
+                opened.assert_not_called()
 
     def test_perpetual_nonidle_uses_existing_global_deadline_without_commands(self):
         h = self.harness(ready_at=None)

@@ -3,6 +3,7 @@
 #include "Bc2FeedEquipmentProfile.h"
 #include "Bc2FeedAmmoSupply.h"
 #include "fvr/interaction/BodyAnchors.h"
+#include "fvr/interaction/BodyGripApproach.h"
 #include <iomanip>
 #include <iostream>
 #include <locale>
@@ -50,6 +51,9 @@ void SupplyConfig() {
         << ",\"itemNamespace\":";Key(c.itemNamespace);
     std::cout << ",\"pouch\":{\"id\":";Key(c.pouch.id);
     std::cout << ",\"generation\":" << c.pouch.generation << "},\"maxSourceLifetimeNs\":" << c.maxSourceLifetimeNs;
+    std::cout << ",\"gripApproach\":{\"enabled\":" << (c.allowGripApproach?"true":"false")
+        << ",\"windowNs\":" << BodyGripApproach::WindowNs
+        << ",\"maxSampleGapNs\":" << BodyGripApproach::SampleGapNs << '}';
     std::cout << ",\"chest\":";contact({c.pouchCenterMeters,c.pouchRadiusMeters});
     std::cout << ",\"alternate\":";if(c.alternateContact)contact(*c.alternateContact);else std::cout << "null";
     const auto admitted=[](const std::array<float,3>& center) {

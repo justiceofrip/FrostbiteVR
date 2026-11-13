@@ -9,6 +9,7 @@
 #include "fvr/interaction/SupportGrip.h"
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <sstream>
 using namespace fvr;using namespace fvr::bc2;using namespace fvr::interaction;using namespace fvr::interaction::reload_insertion_detail;
 namespace {
@@ -27,7 +28,7 @@ struct Fixture {
  std::optional<ReloadMagazineNativeRequest> submitted;std::optional<ReloadMagazineAckEvidence> ack;
  std::optional<ReloadHoldIdentity> retiredIdentity;std::uint64_t retiredCycle=0;
  std::shared_ptr<SelectedMeshesSnapshot> meshes=std::make_shared<SelectedMeshesSnapshot>();
- std::optional<Bc2MagazinePhysicalReload> policy;MagazinePhysicalResult result;
+ std::unique_ptr<Bc2MagazinePhysicalReload> policy;MagazinePhysicalResult result;
  Fixture(bool enabled=true){
   reserve.identity.owner={0x10000,0x20000,0x30000,0x40000,5,3,7};reserve.identity.firing={0x50000,0x60000,0x70000};
   reserve.identity.serverPlayer=0x80000;reserve.identity.serverSoldier=0x90000;reserve.identity.serverItem=0xa0000;
@@ -75,7 +76,7 @@ struct Fixture {
    return ReloadMagazineLeaseObservation{ReloadMagazineObservationResult::Ready,f.api.lease(p,id,cycle)};
   };
 #endif
-  policy.emplace(enabled,api,AmmoSupplyConfig{InteractionHand::Left,1000,{1001,1},{0,0,0},.15f,200*Ms});
+  policy=std::make_unique<Bc2MagazinePhysicalReload>(enabled,api,AmmoSupplyConfig{InteractionHand::Left,1000,{1001,1},{0,0,0},.15f,200*Ms});
  }
  void Geometry(float z){const auto p=Xm8MagazineConfig().insertion;
   s.raw.rawLeftWristWorldMeters=Multiply(p.itemFromHand,Multiply(*InverseRigid(p.itemFromInsertion),Multiply(TravelPose(p,z),p.weaponFromEntry)));}

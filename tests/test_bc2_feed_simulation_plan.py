@@ -448,6 +448,49 @@ class FeedSimulationPlanTests(unittest.TestCase):
         mapped = p.multiply(p.from_pose(probe["grip"]), p.inverse(p.supply_body_frame(probe)))
         self.assert_pose(mapped, probe["productionBodyFromHand"], .00001, .0001)
 
+    def test_all24_real_outside_press_then_held_supply_reach(self):
+        for row in self.profiles["profiles"]:
+            for contact in ("chest", "alternate"):
+                with self.subTest(asset=row["asset"], contact=contact):
+                    before = synthetic_snapshot(row, "SupplyPickup")
+                    plan = p.plan_supply_pickup(self.profiles, before, NOW, before["nonce"],
+                        step_ns=40_000_000, contact=contact, pickup_approach=True)
+                    self.assert_schedule(plan, before)
+                    bounds, commands = plan["supplyApproach"], plan["schedule"]
+                    press = bounds["pressIndex"]
+                    self.assertTrue(all(t["grip"] == 0 for t in commands[:press]))
+                    self.assertTrue(all(t["grip"] == 1 for t in commands[press:]))
+                    self.assertEqual(commands[press]["phase"], "supply_press")
+                    self.assertEqual(commands[-1]["phase"], "acquire")
+                    self.assertEqual(commands[press-1]["positionMeters"], commands[press]["positionMeters"])
+                    self.assertNotIn("neutral_at_contact", [t["phase"] for t in commands])
+                    body = p.supply_body_frame(before["input"])
+                    absolute = p.from_pose(dict(position=commands[press]["positionMeters"],
+                        orientation=p.ypr_quaternion(commands[press]["yawPitchRollDegrees"])))
+                    position = p.multiply(absolute, p.inverse(body))[3][:3]
+                    for region in (self.profiles["supplyConfig"]["chest"], self.profiles["supplyConfig"]["alternate"]):
+                        if region is not None:
+                            self.assertGreater(math.dist(position, region["centerMeters"]), region["radiusMeters"])
+                    self.assertLess(bounds["nominalReachNs"], bounds["windowNs"])
+                    self.assertLess(40_000_000, bounds["maxSampleGapNs"])
+                    self.assertEqual(plan["sourceValidUntilNs"], before["valid_until_ns"])
+                    self.assertTrue(plan["requiresPostPickupReobservation"])
+
+    def test_supply_approach_refuses_stale_export_invalid_stage_and_unfittable_window(self):
+        row = self.profiles["profiles"][0]
+        before = synthetic_snapshot(row, "SupplyPickup")
+        for fault in ("missing", "disabled", "gap", "window"):
+            profiles = copy.deepcopy(self.profiles)
+            limits = profiles["supplyConfig"]["gripApproach"]
+            if fault == "missing": del profiles["supplyConfig"]["gripApproach"]
+            if fault == "disabled": limits["enabled"] = False
+            if fault == "gap": limits["maxSampleGapNs"] = 20_000_000
+            if fault == "window": limits.update(windowNs=30_000_000, maxSampleGapNs=25_000_000)
+            with self.subTest(fault=fault), self.assertRaises(p.Refusal):
+                p.plan_supply_pickup(profiles, before, NOW, before["nonce"], pickup_approach=True)
+        with self.assertRaisesRegex(p.Refusal, "only applies to SupplyPickup"):
+            p.plan(self.profiles, synthetic_snapshot(row), "OpenCover", NOW, 100, pickup_approach=True)
+
     def test_all24_chest_and_alternate_pickup_then_fresh_held_attachment(self):
         for row in self.profiles["profiles"]:
             for contact in ("chest", "alternate"):

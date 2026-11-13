@@ -1393,6 +1393,7 @@ class Driver:
         self.acquire_lock()
         self.artifacts = Artifacts(self.run)
         self.artifacts.save("invocation.json", {"stage": args.stage, "pickup_first": args.pickup_first,
+                            "pickup_approach": getattr(args, "pickup_approach", False),
                             "capture": args.capture, "menu_batches": str(args.menu_batches) if args.menu_batches else None,
                             "host": self.host, "startedNs": self.started, "maximumDurationNs": 10 * NS,
                             "maximumCommands": MAX_COMMANDS, "maximumArtifactBytes": MAX_BYTES,
@@ -2425,7 +2426,8 @@ class Driver:
         # planning. This is the real local QPC clock used by native snapshots.
         evaluated = time.perf_counter_ns()
         if name == "SupplyPickup":
-            plan = planner.plan_supply_pickup(self.profiles, snapshot, evaluated, integer(snapshot["nonce"]), step)
+            plan = planner.plan_supply_pickup(self.profiles, snapshot, evaluated, integer(snapshot["nonce"]), step,
+                                               pickup_approach=getattr(self.args, "pickup_approach", False))
         else:
             plan = planner.plan(self.profiles, snapshot, name, evaluated, integer(snapshot["nonce"]), step,
                                 held_cover_probe=getattr(self.args, "held_cover_probe", False),
@@ -2453,6 +2455,7 @@ class Driver:
         self.monitor = True
         last_time = -1
         acquisition_deadline = None
+        approach_deadline = None
         for target in plan["schedule"]:
             at = integer(target["atNs"])
             require(at > last_time and at <= maximum, "nonmonotonic or oversized plan")
@@ -2461,12 +2464,21 @@ class Driver:
             # acknowledgement took longer. Never catch up by compressing dwell.
             due = start + at if self.last_commit is None else max(start + at, self.last_write + step)
             self.pause_until(due)
+            if target["phase"] == "supply_press":
+                # Bound actual publication/acknowledgement time, not just the
+                # nominal plan. Never renew this deadline on later samples.
+                require(approach_deadline is None and name == "SupplyPickup", "duplicate or invalid supply press")
+                approach_deadline = time.perf_counter_ns() + integer(plan["supplyApproach"]["windowNs"])
+                self.stage_deadline = min(self.stage_deadline, approach_deadline)
+                self.plans[-1]["supplyApproachDeadlineNs"] = approach_deadline
             source_deadline = min(integer(plan["sourceValidUntilNs"]),
                                   integer(snapshot["input_evidence"]["observedNs"]) + SNAPSHOT_PERIOD)
             self.send(target["commands"], expected=target,
                       source_deadline=source_deadline if target is plan["schedule"][0] else acquisition_deadline,
                       final_release=name != "SupplyPickup" and target is plan["schedule"][-1])
             acquisition_deadline = None
+            if approach_deadline is not None:
+                require(time.perf_counter_ns() < approach_deadline, "actual supply reach exceeded original grip-approach window")
             if target["phase"] == "acquire" and plan["requiresPostAcquisitionReobservation"]:
                 acquisition_deadline = self.observe_acquisition(row, plan, self.last_write)
             elif target["phase"].startswith("held_probe_"):
@@ -2877,6 +2889,8 @@ def main(argv=None):
     parser.add_argument("--root-authorized-ordinary-input", action="store_true")
     parser.add_argument("--profiles", type=Path, help="production profile export copied inside exact run directory")
     parser.add_argument("--pickup-first", action="store_true", help="continuous fresh chest pickup then held AttachContainer")
+    parser.add_argument("--pickup-approach", action="store_true",
+                        help="SupplyPickup or --pickup-first only: real outside neutral/press then held reach")
     parser.add_argument("--held-cover-probe", action="store_true",
                         help="OpenCover only: held 3cm/20deg CONTROL/+EPS/-EPS/RESTORE with joint custody/lid observations")
     parser.add_argument("--step-ms", type=int, default=0, help="0 chooses min(60ms,maxInputGapNs/2) from production policy")
@@ -2885,6 +2899,9 @@ def main(argv=None):
     result = {"schema": "bc2vr.live-feed-driver.v1", "status": "refused", "nativeAcceptance": False,
               "headsetAcceptance": False, "evidence": "actual simulator commands; native receipts require separate review"}
     try:
+        require(not args.pickup_approach or args.stage == "SupplyPickup" or
+                (args.stage == "AttachContainer" and args.pickup_first),
+                "--pickup-approach requires SupplyPickup or AttachContainer --pickup-first")
         require(not (args.stage or args.post_reload_shot) or args.profiles is not None, "stage/shot requires --profiles inside run")
         require(not args.post_reload_shot or args.root_authorized_ordinary_input, "root ordinary-input authorization required")
         if args.audit_post_reload_shot:

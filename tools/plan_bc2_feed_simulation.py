@@ -545,9 +545,12 @@ def admit(profiles, snapshot, now, nonce):
 
 
 def plan(profiles, snapshot, stage, now_ns, expected_nonce, step_ns=20_000_000, pickup_plan=None, contact="chest",
-         held_cover_probe=False):
+         held_cover_probe=False, pickup_approach=False):
     """Return a geometric schedule. Native eligibility remains outside this tool."""
     supply_pickup = stage == "SupplyPickup"
+    require(type(pickup_approach) is bool and (not pickup_approach or supply_pickup),
+            "held pickup approach only applies to SupplyPickup")
+    supply_approach = None
     require(stage in STAGES or supply_pickup, "stage has no implemented measured trajectory")
     row = admit(profiles, snapshot, integer(now_ns), integer(expected_nonce))
     require(not held_cover_probe or (stage == "OpenCover"
@@ -598,6 +601,30 @@ def plan(profiles, snapshot, stage, now_ns, expected_nonce, step_ns=20_000_000, 
         pickup, use_actual_pickup = authored_start, False
         source_description = "production Bc2FeedSupplyConfig " + contact + "; BodyAnchorHandPose original controller frame"
         curve = lambda t: pickup
+        if pickup_approach:
+            limits = config.get("gripApproach")
+            require(isinstance(limits, dict) and limits.get("enabled") is True,
+                    "export enabled production grip-approach policy before planning this variant")
+            window, input_gap = integer(limits["windowNs"]), integer(limits["maxSampleGapNs"])
+            require(0 < step_ns < input_gap <= window <= maximum,
+                    "invalid production grip-approach bounds")
+            contacts = [c for c in (config["chest"], config["alternate"]) if c is not None]
+            center = [finite(v) for v in config[contact]["centerMeters"]]
+            # A real released point outside BOTH rendered supply contacts.
+            # Try fixed body-space axes, with 5cm clearance from this contact.
+            distance = finite(config[contact]["radiusMeters"]) + .05
+            outside = None
+            for axis, sign in ((0, -1), (0, 1), (2, -1), (2, 1), (1, -1), (1, 1)):
+                position = list(center);position[axis] += sign * distance
+                if all(math.dist(position, c["centerMeters"]) > finite(c["radiusMeters"]) + .001 for c in contacts):
+                    outside = [list(row) for row in body_grip];outside[3][:3] = position
+                    break
+            require(outside is not None, "no bounded released point outside both supply contacts")
+            outside_absolute = multiply(outside, body)
+            outside_local = multiply(multiply(multiply(calibration,
+                multiply(outside_absolute, inverse(reference))), b), inverse(w))
+            supply_approach = {"windowNs": window, "maxSampleGapNs": input_gap,
+                               "outsideBodyMeters": list(outside[3][:3]), "contact": contact}
     elif motion["kind"] == "Hinge":
         hinge, contact = rigid(motion["weaponFromMotion"]), rigid(motion["motionFromContact"])
         travel = finite(motion["travel"])
@@ -663,19 +690,38 @@ def plan(profiles, snapshot, stage, now_ns, expected_nonce, step_ns=20_000_000, 
             count *= 2
         raise Refusal("trajectory cannot meet displacement caps in bounded sample budget")
 
-    approach = lambda t: blend(current_local, pickup, t)
+    approach_target = outside_local if pickup_approach else pickup
+    approach = lambda t: blend(current_local, approach_target, t)
     approach_samples = subdivide([approach, lambda t: inverse_target(approach(t))])
     curves = [curve, lambda t: inverse_target(curve(t))]
     if object_curve is not None:
         curves.append(object_curve)
     motion_samples = subdivide(curves)
-    if continuation:
+    if pickup_approach:
+        local_schedule = [("neutral", 0, current_local)]
+        local_schedule += [("approach", 0, p) for p in approach_samples[1:]]
+        press_index = len(local_schedule)
+        local_schedule.append(("supply_press", 1, outside_local))
+        # Smoothstep the held reach using the existing anatomical/controller
+        # displacement caps; never insert another neutral while approaching.
+        reach = lambda t: blend(outside_local, pickup, t*t*(3-2*t))
+        held_samples = subdivide([reach, lambda t: inverse_target(reach(t))])
+        local_schedule += [("supply_approach", 1, value) for value in held_samples[1:-1]]
+        local_schedule.append(("acquire", 1, held_samples[-1]))
+        # The transport has an existing 25ms command-publication minimum.
+        # Refuse a schedule that cannot fit the original native press window.
+        reach_ns = (len(local_schedule)-1-press_index) * max(step_ns, 25_000_000)
+        require(reach_ns < supply_approach["windowNs"],
+                "held supply reach exceeds original grip-approach window")
+        supply_approach.update(pressIndex=press_index, arrivalIndex=len(local_schedule)-1,
+                               nominalReachNs=reach_ns)
+    elif continuation:
         local_schedule = [("continue_held", 1, current_local)]
     else:
         local_schedule = [("neutral", 0, current_local)]
         local_schedule += [("approach", 0, p) for p in approach_samples[1:]]
         local_schedule += [("neutral_at_contact", 0, pickup), ("acquire", 1, pickup)]
-    acquire_index = len(local_schedule)-1
+    acquire_index = press_index if pickup_approach else len(local_schedule)-1
     if not supply_pickup:
         local_schedule += [("move", 1, p) for p in motion_samples[1:]]
     endpoint_index = len(local_schedule)-1
@@ -736,6 +782,7 @@ def plan(profiles, snapshot, stage, now_ns, expected_nonce, step_ns=20_000_000, 
             "sourceFeedLifetime": feed["lifetime"] if feed else None,
             "sourceValidUntilNs": source_until, "owner": snapshot["owner"],
             "heldSupply": supply_object, "requiresPostPickupReobservation": supply_pickup,
+            **({"supplyApproach": supply_approach} if pickup_approach else {}),
             "heldCoverProbe": ({"translationMeters": .03, "wristRotationRadians": math.radians(20),
                                 "contract": "completed-held native cover; original acquisition gates retained"}
                                if held_cover_probe else None),
@@ -744,7 +791,8 @@ def plan(profiles, snapshot, stage, now_ns, expected_nonce, step_ns=20_000_000, 
                              "referenceAndGrips": "same original input generation and XR tracking/reference space",
                              "calibration": "F * inverse(B) * inverse(C(grip) * inverse(C(referenceHead))); checked against actual bind",
                              "motion": "production BuildBc2FeedMotion export", "start": source_description},
-            "calibration": calibration, "pickup": ("neutral approach to production supply contact" if supply_pickup else
+            "calibration": calibration, "pickup": ("real outside neutral/press then held reach" if pickup_approach else
+                "neutral approach to production supply contact" if supply_pickup else
                 "actual observed offset" if use_actual_pickup else "neutral approach to authored bone-local wrist"),
             "preserve": {"referenceHead": inp["referenceHead"], "head": inp["head"], "rightGrip": inp["hands"][1]["grip"],
                          "spaceGeneration": inp["spaceGeneration"], "trackingBasisGeneration": inp["trackingBasisGeneration"],
@@ -763,9 +811,10 @@ def plan(profiles, snapshot, stage, now_ns, expected_nonce, step_ns=20_000_000, 
             "profileSourceHashes": row["sourceHashes"], "schedule": schedule}
 
 
-def plan_supply_pickup(profiles, snapshot, now_ns, expected_nonce, step_ns=20_000_000, contact="chest"):
+def plan_supply_pickup(profiles, snapshot, now_ns, expected_nonce, step_ns=20_000_000, contact="chest", pickup_approach=False):
     """Plan neutral chest/belt pickup only; attachment requires fresh custody."""
-    return plan(profiles, snapshot, "SupplyPickup", now_ns, expected_nonce, step_ns, contact=contact)
+    return plan(profiles, snapshot, "SupplyPickup", now_ns, expected_nonce, step_ns,
+                contact=contact, pickup_approach=pickup_approach)
 
 
 def load_json(path, maximum):
@@ -788,6 +837,7 @@ def main(argv=None):
     parser.add_argument("--now-ns", type=int, help="explicit historical QPC nanoseconds; omitted uses local perf_counter_ns")
     parser.add_argument("--step-ms", type=int, default=20)
     parser.add_argument("--held-cover-probe", action="store_true", help="OpenCover held 3cm/20deg comparison")
+    parser.add_argument("--pickup-approach", action="store_true", help="SupplyPickup only: real outside neutral/press then held reach")
     args = parser.parse_args(argv)
     try:
         require(args.output.suffix.lower() == ".json" and args.output.name.lower() not in
@@ -799,7 +849,8 @@ def main(argv=None):
         pickup = load_json(args.pickup_plan, 8*1024*1024)[0] if args.pickup_plan else None
         require(pickup is None or args.stage == "AttachContainer", "pickup prerequisite only applies to AttachContainer")
         result = plan(profiles, snapshot, args.stage, evaluated, args.nonce, args.step_ms*1_000_000,
-                      pickup_plan=pickup, contact=args.supply_contact, held_cover_probe=args.held_cover_probe)
+                      pickup_plan=pickup, contact=args.supply_contact, held_cover_probe=args.held_cover_probe,
+                      pickup_approach=args.pickup_approach)
         result["evaluationClock"] = "explicit historical QPC nanoseconds" if args.now_ns is not None else "local QPC perf_counter_ns"
         result["sourceHashes"] = {"profilesJson": profile_hash, "snapshotJson": snapshot_hash,
                                   "planner": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
