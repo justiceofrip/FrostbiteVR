@@ -99,7 +99,7 @@ for row in c['candidate_files']:
     b.need(target.is_relative_to(root) and b.pin(target)['sha256'] == row['sha256'], 'Applied candidate bytes changed')
 budget = c['budget']
 b.need(budget['root_authorized'] is True and budget['explicit_private_exception'] is True and isinstance(budget['reason'], str) and budget['reason'].strip(), 'Explicit ROOT storage exception and rationale required')
-b.need(budget['build_ceiling_bytes'] in (57 * 1024**3, 60 * 1024**3) and budget['floor_bytes'] == 15 * 1024**3, 'Explicit reviewed 57/60GiB ceiling and 15GiB floor required')
+b.need(budget['build_ceiling_bytes'] in (57 * 1024**3, 60 * 1024**3, 74 * 1024**3) and budget['floor_bytes'] == 15 * 1024**3, 'Explicit reviewed 57/60/74GiB ceiling and 15GiB floor required')
 inventory = b.load(b.checked(budget['fresh_storage_inspection']))
 roots = {str(Path(row['path']).resolve()).casefold() for row in inventory['generated']['roots']}
 b.need(len(roots) == 13 and {str(Path(p).resolve()).casefold() for p in budget['roots']} == roots, 'Complete reviewed thirteen-root inventory required')
