@@ -55,6 +55,7 @@
 #include "Bc2BoatProfile.h"
 #include "Bc2CampaignVehicleProfile.h"
 #include "Bc2VehicleCameraPolicy.h"
+#include "Bc2VehicleFinalInputEvidence.h"
 #include "Bc2VehicleShotObserver.h"
 #include "Bc2BoatReticle.h"
 #ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
@@ -646,6 +647,9 @@ struct VehicleCameraRecord {
 };
 VehicleCameraEvidence<VehicleCameraRecord> vehicleCameraRecords;
 VehicleCameraPulseEvidence<VehicleCameraRecord> vehicleCameraPulses;
+VehicleFinalInputEvidence<> vehicleFinalInputs;
+std::atomic<unsigned> vehicleFinalInputDrops=0;
+std::uint64_t vehicleFinalUpdateSerial=0;
 std::atomic<bool> vehiclePulseInputLost=false;
 std::atomic<unsigned> vehiclePulseInputDrops=0;
 bool CameraEvidenceMatrix(const RenderViewCopy& copy,math::Matrix4& matrix)noexcept {
@@ -656,9 +660,9 @@ bool CameraEvidenceMatrix(const RenderViewCopy& copy,math::Matrix4& matrix)noexc
 void PublishVehicleView(const VehicleViewState& next,VehicleCameraMode mode=VehicleCameraMode::Unavailable)noexcept {
     std::lock_guard lock(vehicleViewMutex);
     if(PublishVehicleCameraMode(vehicleView,vehicleCameraMode,next,mode)){
-        vehicleCameraAnchor.Reset();vehicleCameraPulses.Invalidate();
+        vehicleCameraAnchor.Reset();vehicleCameraPulses.Invalidate(VehicleCameraInvalidationReason::ViewChanged);
     }
-    if(!next.live)vehicleCameraPulses.Invalidate();
+    if(!next.live)vehicleCameraPulses.Invalidate(VehicleCameraInvalidationReason::ViewUnavailable);
 }
 std::optional<VehicleSeatProfile> cachedVehicleProfile;
 CampaignVehicleBinding campaignVehicleBinding{};
@@ -955,6 +959,9 @@ bool Writable(unsigned at,unsigned n)noexcept {
 }
 struct Callback {Callback(){++active;}~Callback(){--active;}};
 struct Scope {Owner owner{};InputOverride patch;bool used=false;std::uint64_t nativeTick=0;
+    VehicleFinalInputCommit vehicleFinalCommit{};VehicleRouteSnapshot vehicleFinalRoute{};
+    std::optional<CampaignVehicleSnapshot> vehicleFinalDriver;
+    bool vehicleFinalPending=false,vehicleFinalNested=false;std::uint64_t vehicleFinalUpdate=0;
 #ifdef FVR_BC2_CAMPAIGN_PROVISIONING
     bool provisionExcluded=false; // Immutable admission for this entire Update.
 #endif
@@ -962,6 +969,50 @@ struct Scope {Owner owner{};InputOverride patch;bool used=false;std::uint64_t na
 Owner lastOwner{};NativeInputEpochs nativeEpochs{};
 auto& epoch=nativeEpochs.equipment;auto& inputEpoch=nativeEpochs.input;auto& movementEpoch=nativeEpochs.movement;
 std::uint64_t rigEpoch=0,renderEquipmentEpoch=0,nativeInputPauses=0;ULONGLONG lastTick=0;
+VehicleFinalInputStamp VehicleFinalStamp()noexcept {
+    LARGE_INTEGER now{};QueryPerformanceCounter(&now);return {now.QuadPart,GetTickCount64()};
+}
+VehicleFinalInputCheck ValidateVehicleFinalInput(const Scope& pending)noexcept {
+    const auto& c=pending.vehicleFinalCommit;Owner current{};
+    if(!Resolve(current)||current!=pending.owner||current.role!=OwnerRole::Vehicle||
+       rigEpoch!=c.actorGeneration||epoch!=c.seatGeneration||inputEpoch!=c.inputEpoch||movementEpoch!=c.movementEpoch||cachedInput.spaceGeneration!=c.space)
+        return VehicleFinalInputCheck::Owner;
+    const VehicleRouteMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t n){return Read(at,dst,n);},
+        [](void*,unsigned at,const char* name){return Type(at,name);}};
+    const VehicleRouteBinding binding{unsigned(image+profile.gameplay.managerVtable),unsigned(image+profile.gameplay.inputRouterVtable),unsigned(image+profile.cacheVtable),true};
+    const auto route=ReadVehicleRoutes(memory,binding,{current.manager,current.player,current.soldier,current.weak,rigEpoch,epoch});
+    const auto& expected=pending.vehicleFinalRoute;
+    if(route.status!=VehicleRouteStatus::Okay||route.snapshot.identity!=expected.identity||
+       route.snapshot.player!=expected.player||route.snapshot.weak!=expected.weak||route.snapshot.slot!=expected.slot||
+       route.snapshot.fingerprint!=expected.fingerprint||route.snapshot.count!=expected.count||route.snapshot.routes!=expected.routes)
+        return VehicleFinalInputCheck::Route;
+    if(!pending.vehicleFinalDriver||!c.driver||pending.vehicleFinalDriver->driver!=c.driver||
+       !Type(c.driver,"ClientVehicleComponent")||!RevalidateCampaignVehicleProfile(memory,*pending.vehicleFinalDriver,route.snapshot))
+        return VehicleFinalInputCheck::Driver;
+    return VehicleFinalInputCheck::Okay;
+}
+void FinishVehicleFinalInput(Scope& pending,bool unwind=false)noexcept {
+    if(!pending.vehicleFinalPending)return;
+    const auto error=GetLastError();pending.vehicleFinalPending=false;
+    // Capture return time before the passive identity/read bookends.
+    const auto returned=VehicleFinalStamp();
+    auto row=ObserveVehicleFinalInput(pending.vehicleFinalCommit,pending.vehicleFinalNested,unwind,
+        [&](){return ValidateVehicleFinalInput(pending);},[&](unsigned& throttle,unsigned& permissions){
+            const bool t=Read(pending.owner.cache+8,&throttle,4);
+            const bool p=Read(pending.owner.cache+0x98,&permissions,4);return t&&p;});
+    row.returned=returned;
+    {std::unique_lock lock(vehicleViewMutex,std::try_to_lock);
+        if(lock)vehicleFinalInputs.Observe(row);else ++vehicleFinalInputDrops;}
+    SetLastError(error);
+}
+void VehicleFinalOriginalUpdate(void* self,float dt,Scope& pending){
+#if defined(_MSC_VER) && defined(_M_IX86)
+    __try {QueuePhaseOriginalUpdate(self,dt);}
+    __finally {if(AbnormalTermination())FinishVehicleFinalInput(pending,true);}
+#else
+    try {QueuePhaseOriginalUpdate(self,dt);}catch(...){FinishVehicleFinalInput(pending,true);throw;}
+#endif
+}
 #ifdef FVR_BC2_ORDINARY_RESOURCE_PAUSE_PROBE
 struct NativeInputPauseProbe {bool ran=false,sameOwner=false;ULONGLONG begin=0,end=0;
     NativeInputEpochs before{},after{};} nativeInputPauseProbe;
@@ -2938,13 +2989,36 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             readback&=read&&!std::memcmp(&record.observed[axis],&edit.after,4);
         }
         record.verified=record.mask&&readback;
+        // Same Update only. This value journal does not issue or renew input.
+        if(vehicleObservation.Enabled()&&(record.mask&1)&&record.actions[0]==0){
+            const auto error=GetLastError();auto& pending=*scope;
+            auto& c=pending.vehicleFinalCommit;c={};
+            c.manager=owner.manager;c.player=owner.player;c.actor=owner.soldier;c.weak=owner.weak;
+            c.vehicle=owner.controlled;c.entry=owner.entry;c.router=owner.router;c.cache=owner.cache;
+            c.actorGeneration=rigEpoch;c.seatGeneration=epoch;c.inputEpoch=inputEpoch;c.movementEpoch=movementEpoch;
+            c.space=input.spaceGeneration;c.routeFingerprint=seat.fingerprint;c.update=pending.vehicleFinalUpdate;
+            c.gather=gatherSequence;c.input=input.generation;c.stamp=VehicleFinalStamp();
+            std::memcpy(&c.throttle,&record.written[0],4);c.permissions=record.flagsWritten;
+            pending.vehicleFinalRoute=seat;
+            pending.vehicleFinalDriver=cachedCampaignVehicle?cachedCampaignVehicle:vehicleObservationConsumers;
+            c.driver=pending.vehicleFinalDriver?pending.vehicleFinalDriver->driver:0;
+            c.check=record.verified&&record.flagsVerified?ValidateVehicleFinalInput(pending):VehicleFinalInputCheck::Read;
+            if(c.check==VehicleFinalInputCheck::Okay){
+                unsigned throttle=0,permissions=0;
+                const bool t=Read(owner.cache+8,&throttle,4),p=Read(owner.cache+0x98,&permissions,4);
+                c.check=ValidateVehicleFinalInput(pending);
+                if(c.check==VehicleFinalInputCheck::Okay&&(!t||!p||throttle!=c.throttle||permissions!=c.permissions))
+                    c.check=VehicleFinalInputCheck::Read;
+            }
+            pending.vehicleFinalPending=true;SetLastError(error);
+        }
         // Opt-in readback/camera association only. A busy render copy drops this
         // diagnostic input rather than delaying the native input callback.
         if(vehicleObservation.Enabled()){
             std::unique_lock lock(vehicleViewMutex,std::try_to_lock);
             if(!lock){vehiclePulseInputLost.store(true,std::memory_order_release);++vehiclePulseInputDrops;}
             else {
-                if(vehiclePulseInputLost.exchange(false,std::memory_order_acq_rel))vehicleCameraPulses.Invalidate();
+                if(vehiclePulseInputLost.exchange(false,std::memory_order_acq_rel))vehicleCameraPulses.Invalidate(VehicleCameraInvalidationReason::InputLockDrop);
                 if(viewValid&&record.verified&&record.flagsVerified&&vehicleView.live&&
                    vehicleView.owner==seatOwner&&vehicleView.space==input.spaceGeneration){
                     VehicleCameraPulseInput sample;sample.owner=seatOwner;sample.space=record.space;
@@ -2952,7 +3026,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
                     sample.ms=record.ms;sample.observedNs=HandNanos(inputDeadline-handFrequency/10);sample.deadlineNs=HandNanos(inputDeadline);
                     sample.mask=record.mask&15u;for(unsigned n=0;n<4;++n)if(sample.mask&(1u<<n))sample.axes[n]=record.observed[n];
                     vehicleCameraPulses.Input(sample);
-                }else vehicleCameraPulses.Invalidate();
+                }else vehicleCameraPulses.Invalidate(VehicleCameraInvalidationReason::ReadbackUnavailable);
             }
         }
         if(!record.verified)++vehicleReadbackFailures;
@@ -3045,6 +3119,11 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     if(m95StockShotFixture&&actionInput.hands[1].trigger<.75f){out.held&=~interaction::Fire;out.pressed&=~interaction::Fire;}
     if(!fresh||!nativePlaying||!interaction::ValidInput(input)||!input.focused||!input.headValid){
         if(charge)charge->write="input_or_play_gate_refused";
+        // Scripted cameras may retain the same soldier and tracking space.
+        // Revoke the on-foot camera authority when native control ends so
+        // AdjustViewBase preserves their authored transform and tracked eyes.
+        // Persistent equipment/body heading are separate from this publication.
+        if(!nativePlaying)PublishAnchor(0,0,0,0,1);
         ClearReloadOwner(ReloadOwnerLoss::PresentationUnavailable);CancelSight();weaponModeHeld=true;ResetSupportGrip(!fresh?"stale_input":!nativePlaying?"native_inactive":!interaction::ValidInput(input)?"invalid_input":!input.focused?"focus_loss":"head_untracked");ResetHandOwnership("input_unavailable"); {std::lock_guard lock(shotPoseMutex);shotHistory.Reset();} rigPublication::PublishTracking({});roomscale.Suspend();
 #ifdef FVR_BC2_SHELL_FOCUS_LOSS_PROBE
         if(fresh&&!input.focused&&resourceInventoryFixture){
@@ -4797,7 +4876,7 @@ void UpdateHookBody(void* self,float dt){
     // Preserve original short-circuit order and exactly one owner read. These
     // diagnostics do not revoke publications, rebind threads or admit an actor.
     if(!enabled.load(std::memory_order_acquire)){returnOriginal(SceneOwnerOutcome::Disabled);return;}
-    if(scope){returnOriginal(SceneOwnerOutcome::Unknown);return;}
+    if(scope){if(vehicleObservation.Enabled())scope->vehicleFinalNested=true;returnOriginal(SceneOwnerOutcome::Unknown);return;}
     const bool resolved=Resolve(local.owner);
     observed.player=local.owner.player;observed.soldier=local.owner.soldier;observed.weak=local.owner.weak;
     observed.controlled=local.owner.controlled;observed.manager=local.owner.manager;observed.entry=local.owner.entry;
@@ -4874,6 +4953,7 @@ void UpdateHookBody(void* self,float dt){
     if(pausedHere)nativeInputPauseProbe.after=nativeEpochs;
 #endif
     struct Current {Scope*& slot;~Current(){slot=nullptr;}} current{scope};scope=&local;
+    if(vehicleObservation.Enabled())local.vehicleFinalUpdate=++vehicleFinalUpdateSerial;
     observed.actorGeneration=rigEpoch;observed.inputEpoch=inputEpoch;
     trace::Mark(localMilestone,SceneMilestoneStage::CallingOriginal,observed);
     trace::Mark(ownerTransition,SceneMilestoneStage::CallingOriginal,observed);
@@ -4886,7 +4966,8 @@ void UpdateHookBody(void* self,float dt){
 #endif
     QueuePhaseAccepted(thread,rigEpoch,inputEpoch);
     QueuePhaseOutcome(static_cast<unsigned>(SceneOwnerOutcome::Valid));
-    QueuePhaseOriginalUpdate(self,dt);
+    VehicleFinalOriginalUpdate(self,dt,local);
+    FinishVehicleFinalInput(local);
 #ifdef FVR_BC2_CAMPAIGN_PROVISIONING
     provisionInputRead.OriginalReturned();
 #endif
@@ -5842,7 +5923,7 @@ bool ObserveVehicleCameraPlan(unsigned frame,const runtime::TrackingFrame& track
     const bool baseline=vehicleCameraRecords.Due(record.key,record.ms);
     const bool pulseEnabled=vehicleObservation.Enabled();std::int64_t nowNs=0;
     if(pulseEnabled){
-        if(vehiclePulseInputLost.exchange(false,std::memory_order_acq_rel))vehicleCameraPulses.Invalidate();
+        if(vehiclePulseInputLost.exchange(false,std::memory_order_acq_rel))vehicleCameraPulses.Invalidate(VehicleCameraInvalidationReason::InputLockDrop);
         LARGE_INTEGER now{};QueryPerformanceCounter(&now);nowNs=HandNanos(now.QuadPart);
     }
     if(!baseline&&(!pulseEnabled||!vehicleCameraPulses.Due(record.key,record.ms,nowNs)))return false;
@@ -5886,20 +5967,54 @@ void ReportVehicleCameraEvidence(std::ostream& out){
             <<",\"ms\":"<<s.ms<<",\"observed_ns\":"<<s.observedNs<<",\"deadline_ns\":"<<s.deadlineNs<<",\"axis_mask\":"<<s.mask<<",\"axes\":[";
         for(unsigned i=0;i<4;++i){if(i)out<<',';out<<s.axes[i];}out<<"]}";
     };
+    const auto key=[&](const VehicleCameraEvidenceKey& k){
+        out<<"{\"actor\":"<<k.owner.actor<<",\"actor_generation\":"<<k.owner.generation<<",\"vehicle\":"<<k.owner.vehicle
+            <<",\"entry\":"<<k.owner.seat<<",\"frame\":"<<k.frame<<",\"space\":"<<k.space<<",\"tracking\":"<<k.tracking<<",\"predicted_ns\":"<<k.predictedNs<<'}';
+    };
     out<<",\"vehicle_camera_pulses\":[";
     for(std::size_t n=0;n<vehicleCameraPulses.Size();++n){const auto& pulse=vehicleCameraPulses.At(n);if(n)out<<',';
         out<<"{\"sequence\":"<<pulse.sequence<<",\"end\":"<<unsigned(pulse.end)<<",\"sample_mask\":"<<pulse.sampleMask<<",\"began\":";input(pulse.began);
-        out<<",\"last_active\":";input(pulse.lastActive);out<<",\"neutral\":";input(pulse.neutral);out<<",\"cameras\":[";bool comma=false;
+        out<<",\"last_active\":";input(pulse.lastActive);out<<",\"neutral\":";input(pulse.neutral);
+        const auto& pre=pulse.pre;const auto& ready=pre.latestBaseline;
+        out<<",\"pre_onset\":{\"reason\":"<<unsigned(pre.reason)<<",\"candidate_seen\":"<<(pre.candidateSeen?"true":"false")
+            <<",\"candidate_available\":"<<(pre.candidateAvailable?"true":"false")<<",\"candidate_ms\":"<<pre.ms<<",\"age_ms\":"<<pre.ageMs
+            <<",\"applied_mask\":"<<pre.appliedMask<<",\"key\":";key(pre.key);
+        out<<",\"latest_baseline_ready\":{\"observed\":"<<(ready.observed?"true":"false")<<",\"failures\":"<<ready.failures
+            <<",\"ms\":"<<ready.ms<<",\"now_ns\":"<<ready.nowNs<<",\"key\":";key(ready.key);out<<",\"input\":";input(ready.input);
+        out<<"},\"invalidation\":{\"reason\":"<<unsigned(pre.invalidation.reason)<<",\"sequence\":"<<pre.invalidation.sequence
+            <<",\"source\":";input(pre.invalidation.source);out<<"}},\"cameras\":[";bool comma=false;
         for(unsigned slot=0;slot<3;++slot)if(pulse.sampleMask&(1u<<slot)){if(comma)out<<',';comma=true;
             out<<"{\"slot\":"<<slot<<",\"camera\":";camera(pulse.samples[slot]);out<<'}';}out<<"]}";
     }
     out<<"],\"vehicle_camera_pulse_retention\":{\"policy\":\"verified_readback_pre_first_nonzero_first_zero\",\"native_consumption_claimed\":false"
         <<",\"sample_slots\":[\"pre\",\"first_after_nonzero_readback\",\"first_after_zero_readback\"]"
         <<",\"end_values\":[\"open\",\"neutral\",\"interrupted\",\"replaced\",\"timed_out\"]"
+        <<",\"pre_reason_values\":[\"no_candidate\",\"source\",\"future\",\"too_old\",\"accepted\"]"
+        <<",\"invalidation_values\":[\"none\",\"unspecified\",\"view_changed\",\"view_unavailable\",\"input_lock_drop\",\"source_changed\",\"invalid_input\",\"regressed_input\",\"readback_unavailable\"]"
+        <<",\"ready_failure_bits\":{\"no_input\":1,\"no_frame\":2,\"owner\":4,\"space\":8,\"tracking\":16,\"time\":32,\"before_source\":64,\"expired_source\":128,\"pulse_time\":256}"
         <<",\"capacity\":"<<vehicleCameraPulses.MaxPulses<<",\"maximum_pre_age_ms\":"<<vehicleCameraPulses.MaximumPreAgeMs
         <<",\"maximum_pulse_ms\":"<<vehicleCameraPulses.MaximumPulseMs<<",\"samples\":"<<vehicleCameraPulses.Samples()<<",\"retained\":"<<vehicleCameraPulses.Size()
         <<",\"omitted\":"<<vehicleCameraPulses.Omitted()<<",\"input_lock_drops\":"<<vehiclePulseInputDrops.load()<<",\"invalid_inputs\":"<<vehicleCameraPulses.InvalidInputs()
         <<",\"timed_out\":"<<vehicleCameraPulses.TimedOut()<<",\"duplicate_eye_updates\":"<<vehicleCameraPulses.DuplicateEyes()<<'}';
+    out<<",\"vehicle_final_input\":[";
+    for(std::size_t n=0;n<vehicleFinalInputs.Size();++n){const auto& r=vehicleFinalInputs.At(n);const auto& c=r.commit;if(n)out<<',';
+        out<<"{\"sequence\":"<<r.sequence<<",\"first_mask\":"<<r.firstMask<<",\"update\":"<<c.update<<",\"gather\":"<<c.gather<<",\"input\":"<<c.input
+            <<",\"manager\":"<<c.manager<<",\"player\":"<<c.player<<",\"actor\":"<<c.actor<<",\"weak\":"<<c.weak<<",\"vehicle\":"<<c.vehicle
+            <<",\"entry\":"<<c.entry<<",\"router\":"<<c.router<<",\"cache\":"<<c.cache<<",\"driver\":"<<c.driver
+            <<",\"actor_generation\":"<<c.actorGeneration<<",\"seat_generation\":"<<c.seatGeneration<<",\"input_epoch\":"<<c.inputEpoch
+            <<",\"movement_epoch\":"<<c.movementEpoch<<",\"space\":"<<c.space<<",\"route_fingerprint\":"<<c.routeFingerprint
+            <<",\"commit_qpc\":"<<c.stamp.qpc<<",\"commit_ms\":"<<c.stamp.ms<<",\"return_qpc\":"<<r.returned.qpc<<",\"return_ms\":"<<r.returned.ms
+            <<",\"commit_throttle_word\":"<<c.throttle<<",\"commit_permissions\":"<<c.permissions<<",\"final_throttle_word\":"<<r.throttle<<",\"final_permissions\":"<<r.permissions
+            <<",\"commit_check\":"<<unsigned(c.check)<<",\"before_check\":"<<unsigned(r.before)<<",\"after_check\":"<<unsigned(r.after)
+            <<",\"readable\":"<<(r.readable?"true":"false")<<",\"complete\":"<<(r.complete?"true":"false")
+            <<",\"throttle_changed\":"<<(r.throttleChanged?"true":"false")<<",\"permissions_changed\":"<<(r.permissionsChanged?"true":"false")<<'}';
+    }
+    out<<"],\"vehicle_final_input_retention\":{\"native_consumption_claimed\":false,\"policy\":\"first_active_changed_neutral_and_latest_attempts\""
+        <<",\"first_bits\":{\"active\":1,\"changed\":2,\"neutral_after_active\":4},\"check_values\":[\"okay\",\"owner\",\"route\",\"driver\",\"read\",\"nested\",\"unwind\"]"
+        <<",\"capacity\":"<<vehicleFinalInputs.MaxRecords<<",\"samples\":"<<vehicleFinalInputs.Samples()<<",\"retained\":"<<vehicleFinalInputs.Size()
+        <<",\"qpc_frequency\":"<<handFrequency
+        <<",\"omitted\":"<<vehicleFinalInputs.Omitted()<<",\"failures\":"<<vehicleFinalInputs.Failures()<<",\"omitted_failures\":"<<vehicleFinalInputs.OmittedFailures()
+        <<",\"lock_drops\":"<<vehicleFinalInputDrops.load()<<'}';
     out.precision(precision);
 }
 bool InstallProjectileTarget(std::span<const std::byte> bytes,const engine::PeImage& pe,

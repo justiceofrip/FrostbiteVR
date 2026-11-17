@@ -191,9 +191,70 @@ int PulseClocksAndOldBaseline(){
     CHECK(!pulses.Input(invalid)&&pulses.InvalidInputs()==2);
     return 0;
 }
+int PreOnsetCategoriesAndFrozenCandidate(){
+    VehicleCameraPulseEvidence<Row> empty;
+    CHECK(empty.Input(PulseInput(1,1000,.5f)));
+    CHECK(empty.At(0).pre.reason==VehicleCameraPreReason::NoCandidate&&!empty.At(0).pre.candidateSeen);
+    for(unsigned kind=0;kind<3;++kind){
+        VehicleCameraPulseEvidence<Row> pulses;auto pre=Sample(1,kind==0?1050:1000);
+        CHECK(pulses.Input(PulseInput(1,1000))&&pulses.Observe(pre,CameraNow(pre),true));
+        CHECK(pulses.Enrich(pre.key,Current(pre.key),0,[](Row&){}));
+        const auto onset=kind==0?1020:kind==1?1500:1501;
+        CHECK(pulses.Input(PulseInput(2,onset,.5f)));
+        const auto frozen=pulses.At(0).pre;
+        CHECK(frozen.reason==(kind==0?VehicleCameraPreReason::Future:kind==1?VehicleCameraPreReason::Accepted:VehicleCameraPreReason::TooOld));
+        CHECK(frozen.candidateSeen&&frozen.candidateAvailable&&frozen.key==pre.key&&frozen.ms==pre.ms&&frozen.appliedMask==1);
+        CHECK(frozen.ageMs==(kind==0?0:kind==1?500:501));
+        CHECK(frozen.latestBaseline.observed&&frozen.latestBaseline.failures==0);
+        CHECK((pulses.At(0).sampleMask&1)==(kind==1?1:0));
+        auto next=Sample(2,onset+1);pulses.Observe(next,CameraNow(next),true);
+        CHECK(pulses.At(0).pre.latestBaseline.key==frozen.latestBaseline.key&&pulses.At(0).pre.appliedMask==1);
+    }
+    return 0;
+}
+int PreSourceAndInvalidationReasons(){
+    for(auto reason:{VehicleCameraInvalidationReason::ViewChanged,VehicleCameraInvalidationReason::ViewUnavailable,
+        VehicleCameraInvalidationReason::InputLockDrop,VehicleCameraInvalidationReason::ReadbackUnavailable}){
+        VehicleCameraPulseEvidence<Row> pulses;auto pre=Sample(1,1000);const auto source=PulseInput(1,1000);
+        CHECK(pulses.Input(source)&&pulses.Observe(pre,CameraNow(pre),true));pulses.Invalidate(reason);
+        CHECK(pulses.Input(PulseInput(2,1020,.5f)));
+        const auto& onset=pulses.At(0).pre;
+        CHECK(onset.reason==VehicleCameraPreReason::Source&&onset.candidateSeen&&!onset.candidateAvailable);
+        CHECK(onset.key==pre.key&&onset.invalidation.reason==reason&&onset.invalidation.sequence==1&&onset.invalidation.source.input==source.input);
+    }
+    VehicleCameraPulseEvidence<Row> changed;auto pre=Sample(1,1000);
+    CHECK(changed.Input(PulseInput(1,1000))&&changed.Observe(pre,CameraNow(pre),true));
+    auto other=PulseInput(2,1020,.5f);++other.owner.generation;CHECK(changed.Input(other));
+    CHECK(changed.At(0).pre.reason==VehicleCameraPreReason::Source&&changed.At(0).pre.invalidation.reason==VehicleCameraInvalidationReason::SourceChanged);
+    CHECK(changed.At(0).pre.invalidation.source.owner==other.owner);
+    return 0;
+}
+int BaselineReadyFailureBits(){
+    const unsigned bits[]={CameraNoFrame,CameraOwner,CameraSpace,CameraTracking,CameraTime,CameraBeforeSource,CameraExpiredSource};
+    for(unsigned kind=0;kind<7;++kind){
+        VehicleCameraPulseEvidence<Row> pulses;CHECK(pulses.Input(PulseInput(1,1000)));
+        auto row=Sample(1,1000);auto now=CameraNow(row);
+        switch(kind){case 0:row.key.frame=0;break;case 1:++row.key.owner.actor;break;case 2:++row.key.space;break;
+        case 3:--row.key.tracking;break;case 4:--row.ms;break;case 5:now=999999999;break;default:now=1100000000;break;}
+        CHECK(!pulses.Observe(row,now,true));CHECK(pulses.Input(PulseInput(2,1020,.5f)));
+        const auto& ready=pulses.At(0).pre.latestBaseline;
+        CHECK(ready.observed&&ready.failures==bits[kind]&&ready.key==row.key&&ready.ms==row.ms&&ready.nowNs==now);
+        CHECK(ready.input.input==101&&ready.input.observedNs==1000000000&&ready.input.deadlineNs==1100000000);
+        CHECK(pulses.At(0).pre.reason==VehicleCameraPreReason::NoCandidate);
+    }
+    VehicleCameraPulseEvidence<Row> missing;auto row=Sample(1,1000);
+    CHECK(!missing.Observe(row,CameraNow(row),true)&&missing.Input(PulseInput(2,1020,.5f)));
+    CHECK(missing.At(0).pre.latestBaseline.failures&CameraNoInput);
+    VehicleCameraPulseEvidence<Row> overdue;CHECK(overdue.Input(PulseInput(1,1000,.5f)));
+    row=Sample(1,3001);CHECK(!overdue.Observe(row,1000000001,true));
+    CHECK(overdue.Input(PulseInput(2,1001))&&overdue.Input(PulseInput(3,1002,.5f)));
+    CHECK(overdue.At(1).pre.latestBaseline.failures==CameraPulseTime);
+    return 0;
+}
 }
 int main(){
     if(HeadMotionAndLongRide()||OwnerAndSpaceBoundaries()||ExactEyesAndIncompleteEviction()||CompletedEvictionAndClockEdges()||ChangedCurrentOwnerCannotCompleteOldPlan())return 1;
     if(ShortPulseSurvivesLongNeutralPeriod()||PulseMissingPhasesAndBoundedRollover()||PulseSourceBoundariesAndExactEyes()||PulseClocksAndOldBaseline())return 1;
+    if(PreOnsetCategoriesAndFrozenCandidate()||PreSourceAndInvalidationReasons()||BaselineReadyFailureBits())return 1;
     std::puts("Vehicle camera evidence: bounded ride/pulse retention, source boundaries and exact eye joins passed");
 }

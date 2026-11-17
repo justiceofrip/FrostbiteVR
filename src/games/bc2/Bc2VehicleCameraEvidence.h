@@ -91,6 +91,24 @@ struct VehicleCameraPulseInput {
     unsigned mask=0;std::array<float,4> axes{};
 };
 enum class VehicleCameraPulseEnd:unsigned {Open,Neutral,Interrupted,Replaced,TimedOut};
+enum class VehicleCameraPreReason:unsigned {NoCandidate,Source,Future,TooOld,Accepted};
+enum class VehicleCameraInvalidationReason:unsigned {None,Unspecified,ViewChanged,ViewUnavailable,InputLockDrop,SourceChanged,InvalidInput,RegressedInput,ReadbackUnavailable};
+enum VehicleCameraReadyFailure:unsigned {CameraNoInput=1,CameraNoFrame=2,CameraOwner=4,CameraSpace=8,
+    CameraTracking=16,CameraTime=32,CameraBeforeSource=64,CameraExpiredSource=128,CameraPulseTime=256};
+struct VehicleCameraReadyEvidence {
+    VehicleCameraEvidenceKey key{};VehicleCameraPulseInput input{};
+    std::uint64_t ms=0;std::int64_t nowNs=0;unsigned failures=0;bool observed=false;
+};
+struct VehicleCameraInvalidationEvidence {
+    VehicleCameraInvalidationReason reason=VehicleCameraInvalidationReason::None;
+    VehicleCameraPulseInput source{};std::uint64_t sequence=0;
+};
+struct VehicleCameraPreEvidence {
+    VehicleCameraPreReason reason=VehicleCameraPreReason::NoCandidate;
+    bool candidateSeen=false,candidateAvailable=false;VehicleCameraEvidenceKey key{};
+    std::uint64_t ms=0,ageMs=0;unsigned appliedMask=0;
+    VehicleCameraReadyEvidence latestBaseline{};VehicleCameraInvalidationEvidence invalidation{};
+};
 // Fixed first/pre, first-after-nonzero and first-after-zero samples. The idle
 // pre-sample follows the existing 500ms camera cadence; its age is explicit.
 // Completed episodes survive arbitrarily long neutral periods. Caller holds
@@ -104,18 +122,21 @@ public:
     struct Pulse {
         std::uint64_t sequence=0;VehicleCameraPulseInput began{},lastActive{},neutral{};
         VehicleCameraPulseEnd end=VehicleCameraPulseEnd::Open;
-        unsigned sampleMask=0;std::array<Record,3> samples{};
+        unsigned sampleMask=0;std::array<Record,3> samples{};VehicleCameraPreEvidence pre{};
     };
-    void Invalidate()noexcept {
+    void Invalidate(VehicleCameraInvalidationReason reason=VehicleCameraInvalidationReason::Unspecified,
+                    const VehicleCameraPulseInput* source=nullptr)noexcept {
+        invalidation_={reason,source?*source:input_,invalidation_.sequence+1};
+        if(havePre_)invalidatedPre_=true;
         if(open_){auto& pulse=Current();if(pulse.end==VehicleCameraPulseEnd::Open)pulse.end=VehicleCameraPulseEnd::Interrupted;}
         open_=haveInput_=havePre_=false;
     }
     bool Input(VehicleCameraPulseInput input)noexcept {
-        if(!Valid(input)){Invalidate();++invalidInputs_;return false;}
-        if(haveInput_&&!SameSource(input,input_))Invalidate();
+        if(!Valid(input)){Invalidate(VehicleCameraInvalidationReason::InvalidInput,&input);++invalidInputs_;return false;}
+        if(haveInput_&&!SameSource(input,input_))Invalidate(VehicleCameraInvalidationReason::SourceChanged,&input);
         if(haveInput_&&(input.input<input_.input||input.ms<input_.ms||
            (input.input==input_.input&&(input.observedNs!=input_.observedNs||input.deadlineNs!=input_.deadlineNs)))){
-            Invalidate();++invalidInputs_;return false;
+            Invalidate(VehicleCameraInvalidationReason::RegressedInput,&input);++invalidInputs_;return false;
         }
         const bool active=Active(input),wasActive=haveInput_&&Active(input_);
         if(active&&!wasActive){
@@ -123,8 +144,15 @@ public:
             const auto slot=(begin_+count_)%Capacity;
             if(count_==Capacity){begin_=(begin_+1)%Capacity;++omitted_;}else ++count_;
             auto& pulse=rows_[slot];pulse={};pulse.sequence=++samples_;pulse.began=pulse.lastActive=input;open_=true;
-            if(havePre_&&pre_.key.owner==input.owner&&pre_.key.space==input.space&&pre_.ms<=input.ms&&
-               input.ms-pre_.ms<=MaximumPreAgeMs){pulse.samples[0]=pre_;pulse.sampleMask=1;}
+            pulse.pre.candidateSeen=preSeen_;pulse.pre.candidateAvailable=havePre_;
+            pulse.pre.key=pre_.key;pulse.pre.ms=pre_.ms;pulse.pre.appliedMask=pre_.appliedMask;
+            pulse.pre.ageMs=preSeen_&&input.ms>=pre_.ms?input.ms-pre_.ms:0;
+            pulse.pre.latestBaseline=latestBaseline_;pulse.pre.invalidation=invalidation_;
+            pulse.pre.reason=!havePre_?(invalidatedPre_?VehicleCameraPreReason::Source:VehicleCameraPreReason::NoCandidate):
+                pre_.key.owner!=input.owner||pre_.key.space!=input.space?VehicleCameraPreReason::Source:
+                pre_.ms>input.ms?VehicleCameraPreReason::Future:
+                input.ms-pre_.ms>MaximumPreAgeMs?VehicleCameraPreReason::TooOld:VehicleCameraPreReason::Accepted;
+            if(pulse.pre.reason==VehicleCameraPreReason::Accepted){pulse.samples[0]=pre_;pulse.sampleMask=1;}
         }else if(active&&open_){
             auto& pulse=Current();pulse.lastActive=input;
             if(input.ms-pulse.began.ms>MaximumPulseMs){pulse.end=VehicleCameraPulseEnd::TimedOut;open_=false;++timedOut_;}
@@ -142,7 +170,9 @@ public:
         return !(pulse.sampleMask&(1u<<slot))&&(slot==1||pulse.end==VehicleCameraPulseEnd::Neutral);
     }
     bool Observe(const Record& record,std::int64_t nowNs,bool baseline)noexcept {
-        if(!Ready(record.key,record.ms,nowNs))return false;
+        const auto failures=ReadyFailures(record.key,record.ms,nowNs);
+        if(baseline)latestBaseline_={record.key,input_,record.ms,nowNs,failures,true};
+        if(failures)return false;
         bool retained=false;
         if(Due(record.key,record.ms,nowNs)){
             auto& pulse=Current();const unsigned slot=Active(input_)?1:2;
@@ -150,7 +180,7 @@ public:
             if(slot==2)open_=false;
         }
         if(baseline&&!Active(input_)){
-            pre_=record;pre_.appliedMask=0;havePre_=true;retained=true;
+            pre_=record;pre_.appliedMask=0;havePre_=preSeen_=true;invalidatedPre_=false;retained=true;
         }
         return retained;
     }
@@ -188,14 +218,27 @@ private:
         return true;
     }
     bool Ready(const VehicleCameraEvidenceKey& key,std::uint64_t ms,std::int64_t nowNs)const noexcept {
-        return haveInput_&&key.frame&&key.owner==input_.owner&&key.space==input_.space&&key.tracking>=input_.input&&
-            ms>=input_.ms&&nowNs>=input_.observedNs&&nowNs<input_.deadlineNs&&
-            (!open_||(ms>=Current().began.ms&&ms-Current().began.ms<=MaximumPulseMs));
+        return ReadyFailures(key,ms,nowNs)==0;
+    }
+    unsigned ReadyFailures(const VehicleCameraEvidenceKey& key,std::uint64_t ms,std::int64_t nowNs)const noexcept {
+        unsigned failed=0;
+        if(!haveInput_)failed|=CameraNoInput;
+        if(!key.frame)failed|=CameraNoFrame;
+        if(key.owner!=input_.owner)failed|=CameraOwner;
+        if(key.space!=input_.space)failed|=CameraSpace;
+        if(key.tracking<input_.input)failed|=CameraTracking;
+        if(ms<input_.ms)failed|=CameraTime;
+        if(nowNs<input_.observedNs)failed|=CameraBeforeSource;
+        if(nowNs>=input_.deadlineNs)failed|=CameraExpiredSource;
+        if(open_&&(ms<Current().began.ms||ms-Current().began.ms>MaximumPulseMs))failed|=CameraPulseTime;
+        return failed;
     }
     Pulse& Current()noexcept{return rows_[(begin_+count_-1)%Capacity];}
     const Pulse& Current()const noexcept{return rows_[(begin_+count_-1)%Capacity];}
     std::array<Pulse,Capacity> rows_{};std::size_t begin_=0,count_=0;
     VehicleCameraPulseInput input_{};Record pre_{};bool haveInput_=false,havePre_=false,open_=false;
+    bool preSeen_=false,invalidatedPre_=false;
+    VehicleCameraReadyEvidence latestBaseline_{};VehicleCameraInvalidationEvidence invalidation_{};
     std::uint64_t samples_=0,omitted_=0,invalidInputs_=0,timedOut_=0,duplicateEyes_=0;
 };
 }
