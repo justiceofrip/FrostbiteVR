@@ -17,6 +17,7 @@
 #include <bit>
 #include <cstring>
 #include <cstdio>
+#include <memory>
 using namespace fvr::bc2;using namespace fvr::interaction;
 namespace {
 template<std::size_t N,class T>void Put(std::array<std::byte,N>& bytes,unsigned at,T value){std::memcpy(bytes.data()+at,&value,sizeof(value));}
@@ -199,7 +200,8 @@ Bc2NativeCycleSelection FreshSelection(Fixture& f,Bc2NativeCycleMode mode,std::u
 }
 int RetainedBankAllowsOtherPumpAndBoltThenExactReturn(){
     for(bool bolt:{false,true}){
-        Bc2NativeCycleBank bank;CHECK(bank.EnableRecovery());CHECK(bank.EnableConcurrentBolt());
+        const auto storage=std::make_unique<Bc2NativeCycleBank>();auto& bank=*storage;
+        CHECK(bank.EnableRecovery());CHECK(bank.EnableConcurrentBolt());
         ConcurrentBoltFixture a;a.selected=&bank.Selected();CHECK(a.Cycle().Configure(Bc2NativeCycleMode::Bolt));
         CHECK(a.Advance());CHECK(a.Start());a.Rounds();
         const auto original=bank.View(a.clock);const auto oldRoute=bank.Route(a.clock);const auto oldSlot=bank.SelectedSlot();
@@ -248,7 +250,8 @@ int RetainedBankAllowsOtherPumpAndBoltThenExactReturn(){
     return 0;
 }
 int FullRetainedBankRefusesWithoutEvictionAndRetiresEveryOldActor(){
-    Bc2NativeCycleBank bank;CHECK(bank.EnableRecovery());CHECK(bank.EnableConcurrentBolt());
+    const auto storage=std::make_unique<Bc2NativeCycleBank>();auto& bank=*storage;
+    CHECK(bank.EnableRecovery());CHECK(bank.EnableConcurrentBolt());
     std::array<Bc2NativeCycleSlot,8> handles{};std::array<Bc2NativeCycleView,8> owed{};
     ConcurrentBoltFixture source;source.selected=&bank.Selected();CHECK(source.Cycle().Configure(Bc2NativeCycleMode::Bolt));
     CHECK(source.Advance());CHECK(source.Start());source.Rounds();handles[0]=bank.SelectedSlot();owed[0]=bank.View(source.clock);

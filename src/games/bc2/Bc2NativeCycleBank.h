@@ -17,6 +17,10 @@ public:
     explicit Bc2NativeCycleBank(std::uint64_t generation=1)noexcept: generation_(generation) {
         slots_[0].generation=generation;
     }
+    Bc2NativeCycleBank(const Bc2NativeCycleBank&)=delete;
+    Bc2NativeCycleBank& operator=(const Bc2NativeCycleBank&)=delete;
+    Bc2NativeCycleBank(Bc2NativeCycleBank&&)=delete;
+    Bc2NativeCycleBank& operator=(Bc2NativeCycleBank&&)=delete;
     Bc2NativeCycleService& Selected()noexcept{return slots_[selected_].service;}
     const Bc2NativeCycleService& Selected()const noexcept{return slots_[selected_].service;}
     Bc2NativeCycleSlot SelectedSlot()const noexcept{return {selected_,slots_[selected_].generation};}
@@ -100,7 +104,7 @@ public:
         if(target==Capacity)for(unsigned n=0;n<Capacity;++n)
             if(slots_[n].service.Reclaimable(now)){target=n;break;}
         if(target==Capacity)return false;
-        auto incoming=slots_[target].service;
+        auto& incoming=scratch_[0];incoming=slots_[target].service;
         const auto incomingView=incoming.View(now);
         const Bc2NativeCycleActorDrain incomingDrain{incomingView.native,incomingView.cycle,incomingView.shot,
             drain.callbackRevision,drain.observedNs,drain.deadlineNs,drain.callbacksDrained};
@@ -109,7 +113,7 @@ public:
             if(!incoming.ReturnSelection(source,incomingDrain))return false;
         }else if(!incoming.Reclaimable(now)||!incoming.Select(source))return false;
         if(target!=selected_){
-            auto outgoing=Selected();const auto old=outgoing.View(now);
+            auto& outgoing=scratch_[1];outgoing=Selected();const auto old=outgoing.View(now);
             if(outgoing.NativeScope().identity.owner.weapon&&!old.selectionParked){
                 // Unfinished pump parking is deliberately unsupported. An owed
                 // bolt must pass the existing exact observed-away policy.
@@ -143,7 +147,7 @@ private:
         if(!generation_||generation_==UINT64_MAX||!Drain(Selected(),drain,now))return false;
         bool any=false;
         for(unsigned n=0;n<Capacity;++n){const auto& slot=slots_[n];if(!slot.service.NativeScope().identity.owner.weapon)continue;
-            auto candidate=slot.service;const auto v=candidate.View(now);
+            auto& candidate=scratch_[0];candidate=slot.service;const auto v=candidate.View(now);
             auto proof=drain;proof.expected=v.native;proof.cycle=v.cycle;proof.shot=v.shot;
             if(selection&&n==selected_){if(!candidate.SelectReplacementActor(*selection,proof))return false;}
             else if(!candidate.RetireForReplacementActor(reserve,now,proof))return false;
@@ -178,5 +182,10 @@ private:
     }
     struct Slot {Bc2NativeCycleService service{};std::uint64_t generation=0;std::optional<Bc2NativeCycleDeparture> departure;};
     std::array<Slot,Capacity> slots_{};unsigned selected_=0;std::uint64_t generation_=1;
+    // Services contain substantial fixed receipt storage. Stage into bank-owned
+    // memory under the same single policy gate, never onto a native callback's
+    // stack or into callback-time heap allocations. Scratch has no routing
+    // identity and is overwritten before use; rejected work cannot reach slots.
+    std::array<Bc2NativeCycleService,2> scratch_{};
 };
 }
