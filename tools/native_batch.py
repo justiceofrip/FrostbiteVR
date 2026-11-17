@@ -18,6 +18,7 @@ sys.dont_write_bytecode = True
 PRIVATE = 'FVR_BC2_CAMPAIGN_PROVISIONING'
 LEGACY_HOST_ROOTS = ('src/xr/OpenXrHost.cpp',)
 HOST_ROOTS = LEGACY_HOST_ROOTS + ('src/ipc/RemoteFrameProvider.cpp',)
+AUXILIARY_ROOTS = ('src/games/bc2/Bc2ResolutionBootstrap.cpp',)
 ARTIFACTS = (
     ('probe', 'x86', 'BC2NativeProbe.dll'),
     ('trace', 'x86', 'BC2NativeTrace.exe'),
@@ -148,6 +149,33 @@ def verify_updated_host_binary(c, baseline, binary):
         checked(installed)
         need(binary['sha256'] not in (old['sha256'], installed['sha256']),
              'Changed host source requires a freshly built host binary')
+
+
+def verify_auxiliary_source(c, proof, root):
+    """Optional packaged-DLL provenance, separate from native capability and host closures."""
+    if 'auxiliary_source_receipt' not in c:
+        return None
+    auxiliary = load(checked(c['auxiliary_source_receipt']))
+    need(auxiliary.get('roots') == list(AUXILIARY_ROOTS), 'Unsupported auxiliary dependency roots')
+    need(auxiliary == proof.source_receipt(root, roots=AUXILIARY_ROOTS),
+         'Auxiliary dependency closure changed')
+    return auxiliary
+
+
+def verify_candidate_files(c, baseline, root, operation, host, auxiliary):
+    need(c['candidate_files'], 'Explicit applied candidate file review required')
+    changed = set(git(root, 'diff', '--name-only', baseline['built_source_commit'], c['source_commit']).splitlines())
+    paths = {row['relative_path'] for row in c['candidate_files']}
+    need(changed <= paths, 'Applied review omits changed tracked files: ' + ', '.join(sorted(changed - paths)))
+    covered = {row['path'] for row in operation['files']} | {row['path'] for row in host['files']}
+    if auxiliary is not None:
+        covered.update(row['path'] for row in auxiliary['files'])
+    for row in c['candidate_files']:
+        target = root / row['relative_path']
+        need(target.resolve().is_relative_to(root), 'Candidate path escapes repository')
+        need(pin(target)['sha256'] == row['sha256'], 'Applied candidate bytes changed')
+        if row['relative_path'].startswith(('src/', 'include/')):
+            need(row['relative_path'] in covered, 'Candidate missing from native/host/auxiliary source closures')
 
 
 def verify_owner_release(c, now=None):
@@ -283,17 +311,8 @@ def context(path, digest):
          'Source recipe must be the final repository recipe')
     operation = proof.verify_source(root, checked(c['source_receipt']), c['source_sha256'], header)
     host = verify_host_source(c, baseline, proof, root)
-    need(c['candidate_files'], 'Explicit applied candidate file review required')
-    changed = set(git(root, 'diff', '--name-only', baseline['built_source_commit'], c['source_commit']).splitlines())
-    paths = {row['relative_path'] for row in c['candidate_files']}
-    need(changed <= paths, 'Applied review omits changed tracked files: ' + ', '.join(sorted(changed - paths)))
-    covered = {row['path'] for row in operation['files']} | {row['path'] for row in host['files']}
-    for row in c['candidate_files']:
-        target = root / row['relative_path']
-        need(target.resolve().is_relative_to(root), 'Candidate path escapes repository')
-        need(pin(target)['sha256'] == row['sha256'], 'Applied candidate bytes changed')
-        if row['relative_path'].startswith(('src/', 'include/')):
-            need(row['relative_path'] in covered, 'Candidate missing from native/host source closures')
+    auxiliary = verify_auxiliary_source(c, proof, root)
+    verify_candidate_files(c, baseline, root, operation, host, auxiliary)
     need(c['private_targets'] == ['BC2NativeProbe', 'Bc2CampaignProvisioningCommand'], 'Only reviewed private targets allowed')
     need(c['private_tests'] == [], 'Core/source-wait checks must execute in normal CTest, once per architecture')
     expected_private = {'Bc2CampaignProvisioningTests', 'Bc2CampaignProvisioningSourceTests'}

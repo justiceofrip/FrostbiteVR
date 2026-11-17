@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 import unittest
+from unittest import mock
 import tempfile
 
 spec = importlib.util.spec_from_file_location('batch', Path(__file__).resolve().parents[1] / 'tools/native_batch.py')
@@ -101,6 +102,134 @@ class FrozenEvidenceTests(unittest.TestCase):
         self.binary.write_bytes(b'private')
         receipt = batch.verified_receipt(self.receipt, self.config)
         self.assertEqual(receipt['files'], [batch.pin(self.log)])
+
+
+class AuxiliarySourceTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.proof = batch.module('auxiliary_recipe',
+            Path(__file__).resolve().parents[1] / 'tools/bc2_native_operation_receipts.py')
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.bootstrap = batch.AUXILIARY_ROOTS[0]
+        self.cleanup = 'src/games/bc2/Bc2ResolutionCleanup.h'
+        self.support = 'include/fvr/ResolutionSupport.h'
+        self.implementation = 'src/runtime/ResolutionSupport.cpp'
+        self.native = 'src/games/bc2/NativeProbe.cpp'
+        self.host = batch.HOST_ROOTS[0]
+        for name, source in (
+            (self.bootstrap, '#include "Bc2ResolutionCleanup.h"\n'),
+            (self.cleanup, '#include "fvr/ResolutionSupport.h"\n'),
+            (self.support, '// transitive project header\n'),
+            (self.implementation, '// matching implementation\n'),
+            (self.native, '// native operation source\n'),
+            (self.host, '// host source\n'),
+            ('src/Unrelated.cpp', '// not a bootstrap dependency\n'),
+        ):
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(source, encoding='utf-8')
+        self.config = dict(source_commit='a' * 40)
+        self.receipt = self.root / 'auxiliary-source.json'
+        self.recorded = self.proof.source_receipt(self.root, roots=batch.AUXILIARY_ROOTS)
+        self.bind()
+
+    def bind(self):
+        self.receipt.write_text(json.dumps(self.recorded), encoding='utf-8')
+        self.config['auxiliary_source_receipt'] = batch.pin(self.receipt)
+
+    def verify(self):
+        return batch.verify_auxiliary_source(self.config, self.proof, self.root)
+
+    def verify_candidates(self, names, changed=None):
+        self.config['candidate_files'] = [dict(relative_path=name,
+            sha256=batch.pin(self.root / name)['sha256']) for name in names]
+        with mock.patch.object(batch, 'git', return_value='\n'.join(names if changed is None else changed)):
+            batch.verify_candidate_files(self.config, dict(built_source_commit='b' * 40), self.root,
+                dict(files=[dict(path=self.native)]), dict(files=[dict(path=self.host)]), self.verify())
+
+    def test_exact_packaged_closure_covers_root_and_transitive_dependencies(self):
+        expected = {self.bootstrap, self.cleanup, self.support, self.implementation}
+        self.assertEqual({row['path'] for row in self.verify()['files']}, expected)
+        self.assertFalse(self.verify()['native_admission_granted'])
+        self.verify_candidates(sorted(expected))
+
+    def test_changed_receipt_pin_refuses(self):
+        self.receipt.write_bytes(self.receipt.read_bytes() + b'\n')
+        with self.assertRaisesRegex(ValueError, 'Pinned file changed'):
+            self.verify()
+
+    def test_missing_receipt_refuses(self):
+        self.receipt.unlink()
+        with self.assertRaises(FileNotFoundError):
+            self.verify()
+
+    def test_missing_or_unapproved_declared_roots_refuse(self):
+        for roots in (None, [], [self.cleanup], [self.bootstrap, self.native], [self.bootstrap, self.bootstrap]):
+            with self.subTest(roots=roots):
+                if roots is None:
+                    self.recorded.pop('roots', None)
+                else:
+                    self.recorded['roots'] = roots
+                self.bind()
+                with self.assertRaisesRegex(ValueError, 'Unsupported auxiliary dependency roots'):
+                    self.verify()
+
+    def test_missing_actual_root_refuses(self):
+        (self.root / self.bootstrap).unlink()
+        with self.assertRaisesRegex(ValueError, 'source dependency missing'):
+            self.verify()
+
+    def test_changed_transitive_dependencies_refuse(self):
+        for name in (self.cleanup, self.support, self.implementation):
+            with self.subTest(dependency=name):
+                path = self.root / name
+                original = path.read_bytes()
+                path.write_bytes(original + b'// changed\n')
+                with self.assertRaisesRegex(ValueError, 'Auxiliary dependency closure changed'):
+                    self.verify()
+                path.write_bytes(original)
+
+    def test_missing_transitive_dependency_refuses(self):
+        (self.root / self.support).unlink()
+        with self.assertRaisesRegex(ValueError, 'missing project include'):
+            self.verify()
+
+    def test_repinned_incomplete_or_forged_receipt_refuses(self):
+        original = copy.deepcopy(self.recorded)
+        for field, value in (
+            ('files', [row for row in original['files'] if row['path'] != self.implementation]),
+            ('source_sha256', '0' * 64),
+            ('recipe_sha256', '0' * 64),
+            ('native_admission_granted', True),
+        ):
+            with self.subTest(field=field):
+                self.recorded = copy.deepcopy(original)
+                self.recorded[field] = value
+                self.bind()
+                with self.assertRaisesRegex(ValueError, 'Auxiliary dependency closure changed'):
+                    self.verify()
+
+    def test_old_config_keeps_existing_native_and_host_coverage(self):
+        del self.config['auxiliary_source_receipt']
+        self.assertIsNone(self.verify())
+        self.verify_candidates([self.native, self.host])
+
+    def test_old_config_cannot_cover_auxiliary_source(self):
+        del self.config['auxiliary_source_receipt']
+        with self.assertRaisesRegex(ValueError, 'Candidate missing from'):
+            self.verify_candidates([self.bootstrap, self.cleanup])
+
+    def test_auxiliary_receipt_cannot_cover_unrelated_source(self):
+        with self.assertRaisesRegex(ValueError, 'Candidate missing from'):
+            self.verify_candidates([self.bootstrap, 'src/Unrelated.cpp'])
+
+    def test_auxiliary_receipt_does_not_replace_candidate_review(self):
+        with self.assertRaisesRegex(ValueError, 'Applied review omits changed tracked files'):
+            self.verify_candidates([self.bootstrap], changed=[self.bootstrap, self.cleanup])
 
 
 class ClosedResourceReleaseTests(unittest.TestCase):
