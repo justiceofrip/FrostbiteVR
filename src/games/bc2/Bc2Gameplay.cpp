@@ -9,6 +9,7 @@
 #include "Bc2NativeInputEpochs.h"
 #include "Bc2HeldFireCadence.h"
 #include "Bc2SceneMilestones.h"
+#include "Bc2MenuRuntime.h"
 #include "Bc2ViewBasisEvidence.h"
 #include <Windows.h>
 #include <intrin.h>
@@ -263,6 +264,7 @@ void PublishTwoGrenadeDeathReadiness(const std::optional<private_grenade::Native
 #endif
 SelectedMeshesObservation selectedMeshes;
 std::atomic<std::shared_ptr<const AmmoCounterOwner>> ammoCounterOwner;
+AmmoCounterHudLifetime ammoCounterHudLifetime;
 std::uint64_t mechanismAudioActor=0,mechanismAudioGeneration=0;
 std::uint64_t shellAudioActor=0,shellAudioGeneration=0;
 void PublishShellReloadAudio(const ReloadStateOwner& native,const interaction::HandInteractionSample& input,
@@ -4990,6 +4992,9 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             if(fireTrace.observing){LARGE_INTEGER stamp{};QueryPerformanceCounter(&stamp);
                 ObserveFireRouteAmmo(fireTrace.record,observedAmmo.lease,HandNanos(stamp.QuadPart));}
         }
+        const auto hudScene=menu::CurrentPresentation();
+        LARGE_INTEGER hudNow{};QueryPerformanceCounter(&hudNow);
+        ammoCounterHudLifetime.Bind(hud,hudScene.get(),HandNanos(hudNow.QuadPart));
         try{ammoCounterOwner.store(std::make_shared<const AmmoCounterOwner>(hud),std::memory_order_release);}
         catch(...){ammoCounterOwner.store({},std::memory_order_release);}
 #if defined(FVR_BC2_ORDINARY_GRENADE_PROBE) || defined(FVR_BC2_PLAYER_GRENADE)
@@ -5755,10 +5760,11 @@ graphics::AmmoCounterSample ReadAmmoCounter()noexcept {
     for(unsigned attempt=0;attempt<3;++attempt){
         const auto current=ammoCounterOwner.load(std::memory_order_acquire);
         if(!current)return {};
-        const auto sample=ReadAmmoCounterHostSample(*current,
-            []{return reloadFlowRuntime::ReadPublishedReserve();},
-            []{LARGE_INTEGER stamp{};return QueryPerformanceCounter(&stamp)?HandNanos(stamp.QuadPart):0;});
-        if(ammoCounterOwner.load(std::memory_order_acquire)==current)return sample;
+        const auto scene=menu::CurrentPresentation();if(!scene)return {};
+        const auto ammo=reloadFlowRuntime::ReadPublishedReserve();
+        LARGE_INTEGER stamp{};const auto now=QueryPerformanceCounter(&stamp)?HandNanos(stamp.QuadPart):0;
+        const auto sample=SceneAmmoCounterHostSample(ammo,*current,scene.get(),now);
+        if(ammoCounterOwner.load(std::memory_order_acquire)==current&&menu::CurrentPresentation()==scene)return sample;
     }return {};
 }
 bool BodyDisplayNativeCurrent(const BodyInventoryDisplay& d)noexcept {

@@ -1,5 +1,6 @@
 #pragma once
 #include "Bc2AmmoReserve.h"
+#include "Bc2MenuState.h"
 #include "fvr/graphics/AmmoCounter.h"
 #include <algorithm>
 #include <optional>
@@ -10,6 +11,24 @@ struct AmmoCounterOwner {
     ReloadStateOwner owner{};
     std::int64_t observedNs=0,deadlineNs=0;
     bool alive=false,onFoot=false,held=false;
+    std::uint64_t sceneOwnerEpoch=0,sceneEpoch=0,hudGeneration=0;
+};
+// Separate presentation lifetime: never increments a native equipment epoch
+// and never changes a reserve, reload, hand claim or input decision.
+class AmmoCounterHudLifetime {
+public:
+    void Bind(AmmoCounterOwner& current,const MenuPresentationSnapshot* scene,std::int64_t now)noexcept {
+        current.sceneOwnerEpoch=current.sceneEpoch=current.hudGeneration=0;
+        if(!scene||!MenuPresentationFresh(*scene,now)||scene->observation.state!=MenuPresentationState::Playing||
+           !current.alive||!current.onFoot||!current.held||current.observedNs<=0||
+           current.observedNs>now||current.deadlineNs<=now){bound_=false;return;}
+        if(!bound_||lastOwner_!=current.owner||ownerEpoch_!=scene->ownerEpoch||sceneEpoch_!=scene->sceneEpoch)++generation_;
+        bound_=true;lastOwner_=current.owner;ownerEpoch_=scene->ownerEpoch;sceneEpoch_=scene->sceneEpoch;
+        current.sceneOwnerEpoch=ownerEpoch_;current.sceneEpoch=sceneEpoch_;current.hudGeneration=generation_;
+        current.deadlineNs=(std::min)(current.deadlineNs,scene->deadlineNs);
+    }
+private:
+    ReloadStateOwner lastOwner_{};std::uint64_t ownerEpoch_=0,sceneEpoch_=0,generation_=0;bool bound_=false;
 };
 inline graphics::AmmoCounterSample AmmoCounterHostSample(const std::optional<Bc2AmmoReserveLease>& ammo,
     const AmmoCounterOwner& current,std::int64_t now)noexcept {
@@ -34,6 +53,16 @@ inline graphics::AmmoCounterSample AmmoCounterHostSample(const std::optional<Bc2
     graphics::AmmoCounterSample result{a.sequence,a.observedNs,deadline,o.actorGeneration,o.equipGeneration,o.space,
                                       a.loaded,a.reserve,a.capacity};
     return graphics::AmmoCounterFresh(result,now)?result:ownerOnly;
+}
+inline graphics::AmmoCounterSample SceneAmmoCounterHostSample(const std::optional<Bc2AmmoReserveLease>& ammo,
+    const AmmoCounterOwner& current,const MenuPresentationSnapshot* scene,std::int64_t now)noexcept {
+    if(!scene||!MenuPresentationFresh(*scene,now)||scene->observation.state!=MenuPresentationState::Playing||
+       !current.hudGeneration||current.sceneOwnerEpoch!=scene->ownerEpoch||current.sceneEpoch!=scene->sceneEpoch)return {};
+    // Validate the EXACT native owner before translating only the HUD wire ID.
+    auto sample=AmmoCounterHostSample(ammo,current,now);
+    if(!graphics::AmmoCounterFresh(sample,now)&&!graphics::AmmoCounterOwnerOnlyFresh(sample,now))return {};
+    sample.equipmentGeneration=current.hudGeneration;
+    sample.deadlineNs=(std::min)(sample.deadlineNs,scene->deadlineNs);return sample;
 }
 // The reserve reader may perform fresh native reads. Capture validation time
 // afterward: a timestamp taken by the caller before read() makes every new

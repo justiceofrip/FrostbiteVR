@@ -133,6 +133,81 @@ std::optional<MenuStateSnapshot> ReadMenuState(const MenuMemory& m,const MenuSta
 }
 
 namespace {
+constexpr MenuPresentationCandidates PresentationBinding{0x15a4ca8,0x1040830,0x1040804,0x102b7a0};
+struct PresentationProof {MenuStateCodeSpan span;const char* hex;};
+// Feedback1477 exact consumer, gates, complete setter and committed getter;
+// retained1474 constructor publication and reflected MenuId names. These
+// bytes belong to PE SHA256 3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258.
+constexpr PresentationProof PresentationProofs[]{
+    {{0x5559de,5},"e87db26400"},
+    {{0x5559e3,6},"8dbef82a0800"},
+    {{0x555a18,6},"c70630084401"},
+    {{0x555a28,6},"c70704084401"},
+    {{0x1040808,4},"d0409600"},
+    {{0x5640d0,46},"558bec83e4f08b450881ec64010000535683c0fe83f82c578bf10f87f91000000fb68010529600ff2485f4519600"},
+    {{0x5651f4,28},"08519600804a96008d459600fe409600374f9600994f9600e9519600"},
+    {{0x565210,45},"000606060606060606060606060606060606060606060606060106060606060206060603060606060604060605"},
+    {{0x564a80,29},"8b450c83c0ee83f8260f875a0700000fb69024539600ff2495e4529600"},
+    {{0x5652e4,64},"544b96009b4b9600d74b9600a64c96009d4a9600084b9600dc4d9600ea4d96000a4e9600584e9600234e9600db4e9600fb4e96001e4f9600384e9600e9519600"},
+    {{0x565324,39},"000f0f0f0f0f0f0f0f0f0f0f0f01020f03040f0f0f050f0f0f0f060f0708090f0a0b0f0f0c0d0e"},
+    {{0x564b54,71},"8b7d108b5f408d542448528bcfe8ca38fbff508d442458508bcfe86d38fbff50538d8e08d5f7ffe88035fdff8d4c2454e8e7c8a9ff8d4c2448e8dec8a9ff5f5e5b8be55dc21000"},
+    {{0x53811a,6},"898610400c00"},
+    {{0x559af7,103},"80bec12c080000745e6a0068c8684d0157c686c12c080000897c2420c744242851c45401ffd36a008bc768c8684d015789442430c60000897c2438c744244051c45401ffd383c4188d542414528d442424c607008b8e10400c0050518bce897c2430e8a2e5fdff"},
+    {{0x3636d0,41},"ca3576001c36760015367600de357600e7357600233676000005010505050502050305050504050501"},
+    {{0x363553,6},"89bea0720200"},
+    {{0x331660,7},"8b81a0720200c3"},
+    {{0x33f070,276},"5153568bf18b86a072020083c0fe32db83f8100f87db0000000fb68090f17300ff248584f173008b0da84c9a016a1fe8fcb483008bc8e8b5cf8300889e20750200381d740857017424a1a84c9a01d9e88898e42a08008b0df8d456018b118b422451d91c24881d74085701ffd05e5b59c38b0da84c9a016a1fe8b2b483008bc8e86bcf8300c68620750200008b0da84c9a01b0018881e42a08008b0d602a57018b11a2740857018b8294000000ffd0dd05c8a74201dff1ddd876b28b0df8d456018b318b0d602a57018b118b8294000000ffd0dc3dc8a742018b5624518b0df8d45601d95c240cd944240cd91c24ffd25e5b59c38b0da84c9a016a1fe82fb483008bc8e8e8ce8300c6862075020001e92dffffff"},
+    {{0x33f184,29},"97f07300e1f0730064f173000002020202020202020000010102020200"},
+    {{0x33f104,6},"8881e42a0800"},
+    {{0x538100,103},"83ec1c568bf180bec12c080000578bbe202b080074128b442428898610400c005f5e83c41cc20c0085ff743b80bfbc7202000074328b54243083ec0c8bcc52e85cceaeff8b44243883ec0c8bcc50e84dceaeff8b4c2440518bcfe891b2e2ff5f5e83c41cc20c00"},
+    {{0x3633f0,733},"81ecf400000056578bbc240001000083ff118bf1c74424080000000075578b8c240c0100008b8424040100002bc883f9017e0d85c0740950e88384cbff83c4048b9424180100008b8424100100002bd083fa010f8e7902000085c00f847102000050e85984cbff83c4045f5e81c4f4000000c21c0053e8f5bb09008b403885c07406807824007526a1a84c9a0105b08a0c00508d4c2414c744241001000000e89c9be8ff80bc24de00000000750983ff067504b301eb0232dbf644240c0174098d4c2410e8b79ee8ff84db0f84ac000000e89abb09008b482ce832a508008bf885ff74198bcfe885a3080085c0740e8bcfe87aa308008bc8e8f3bc0800bf020000003bbea072020074788d8ea47202008d8424080100003bc1558bac240c010000740e8b9424100100005255e88f10ccff8b9c24180100008d8eb07202008d8424180100003bc1740e8b94241c0100005253e86910ccff8b0da84c9a018d47fe83f81089bea07202000f87c40000000fb680e8367600ff2485d036760083ff0875808b8424080100008b8c24100100002bc883f9017e0d85c0740950e81f83cbff83c4048b94241c0100008b8424140100002bd083fa010f8e1401000085c00f840c01000050e8f582cbff83c4045b5f5e81c4f4000000c21c006a26e88f5b1b008d8e34720200e824b11900eb3e8bcee8fbc1fdffeb3c8bcee872eafcff84c0743180bea07d020000750e8bcec686a07d020001e817b9ffffc786a07202000b000000eb0ec686a07d020000c686a07d0200008b86a072020083f804743183f80b742ce828ba09008b482ce8c0a308008bf885ff74198bcfe813a2080085c0740e8bcfe808a208008bc8e881bb08008bcee80abafdff8b0da84c9a0168c8b24201e8fa631c0083bea072020004750b8d8e10730200e8665cffff8b8c24140100002bcd83f9017e0d85ed740955e80e82cbff83c4048b9424200100002bd383fa015d7e0d85db740953e8f281cbff83c4045b5f5e81c4f4000000c21c00"},
+    {{0xba0c71,6},"c7060cf34a01"},
+    {{0xba0f23,6},"8935a84c9a01"},
+    {{0x1837030,24},"642f47010000000000000000000000000d00000000000000"},
+    {{0x1836f70,24},"dc2f47010000000000000000000000000400000000000000"},
+    {{0x1072f64,13},"4d69654c6574746572426f7800"},
+    {{0x1072fdc,11},"4d6965506c6179696e6700"},
+};
+}
+std::span<const MenuStateCodeSpan> MenuPresentationCodeSpans()noexcept {
+    static constexpr auto spans=[] {std::array<MenuStateCodeSpan,std::size(PresentationProofs)> out{};
+        for(std::size_t n=0;n<out.size();++n)out[n]=PresentationProofs[n].span;return out;}();
+    return spans;
+}
+std::optional<MenuPresentationCandidates> DiscoverMenuPresentation(std::span<const std::byte> bytes,const engine::PeImage& pe){
+    if(!DiscoverMenuState(bytes,pe))return {};
+    const auto nibble=[](char c){return c<='9'?c-'0':c-'a'+10;};
+    for(const auto& proof:PresentationProofs){
+        const auto at=At(bytes,pe,PreferredBase+proof.span.rva,proof.span.size);if(!at)return {};
+        for(std::size_t n=0;n<proof.span.size;++n)
+            if(std::to_integer<unsigned char>(bytes[*at+n])!=((nibble(proof.hex[n*2])<<4)|nibble(proof.hex[n*2+1])))return {};
+    }
+    return PresentationBinding;
+}
+std::optional<MenuPresentationObservation> ReadMenuPresentation(const MenuMemory& memory,const MenuPresentationCandidates& binding,
+    const MenuStateCandidates& states,std::uint32_t base,const MenuStateSnapshot& boundaryOwner){
+    if(binding!=PresentationBinding||!Candidates(states)||boundaryOwner.frontEnd||base<0x10000||
+       std::uint64_t(base)+binding.managerGlobal+4>UINT32_MAX)return {};
+    struct Sample {MenuPresentationObservation presentation;unsigned char active=0;bool operator==(const Sample&)const=default;};
+    const auto one=[&]()->std::optional<Sample>{
+        const auto state=ReadMenuState(memory,states,base);if(!state||*state!=boundaryOwner)return {};
+        std::uint32_t manager=0,primary=0,notification=0,owner=0,ownerType=0,id=0;
+        unsigned char deferred=0,active=0;
+        if(!Read(memory,std::uint64_t(base)+binding.managerGlobal,&manager,4)||manager!=state->manager||
+           !Read(memory,manager,&primary,4)||primary!=std::uint64_t(base)+binding.managerVtable||
+           !Read(memory,std::uint64_t(manager)+0x82af8,&notification,4)||notification!=std::uint64_t(base)+binding.notificationVtable||
+           !Read(memory,std::uint64_t(manager)+0x82b20,&owner,4)||owner!=state->owner||
+           !Read(memory,owner,&ownerType,4)||ownerType!=std::uint64_t(base)+binding.ownerVtable||
+           !Read(memory,std::uint64_t(manager)+0x82cc1,&deferred,1)||deferred||
+           !Read(memory,std::uint64_t(owner)+0x272bc,&active,1)||!active||
+           !Read(memory,std::uint64_t(owner)+0x272a0,&id,4)||(id!=4&&id!=13))return {};
+        const auto after=ReadMenuState(memory,states,base);if(!after||*after!=*state)return {};
+        return Sample{{*state,id==4?MenuPresentationState::Playing:MenuPresentationState::LetterBox},active};
+    };
+    const auto first=one(),last=one();if(!first||!last||*first!=*last)return {};return first->presentation;
+}
+
+namespace {
 bool ValidCommand(const MenuVisibilityCommand& c,const MenuVisibilityGuard& g){
     return g.nativeUiThread&&g.liveCodeVerified&&g.focused&&g.tracked&&g.menuEpoch&&g.menuEpoch==c.menuEpoch&&
         (c.action==MenuCloseAction::Back||c.action==MenuCloseAction::MenuToggle)&&c.generation&&g.nowNs>0&&c.deadlineNs>g.nowNs&&c.deadlineNs-g.nowNs<=2'000'000'000;

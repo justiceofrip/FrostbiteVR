@@ -14,6 +14,72 @@ Bc2AmmoReserveLease Reserve(){Bc2AmmoReserveLease a;
 }
 AmmoCounterOwner Owner(){return {Reserve().identity.owner,Now,Now+200000000,true,true,true};}
 AmmoCounterSample Sample(){return AmmoCounterHostSample(Reserve(),Owner(),Now);}
+int CommittedSceneHudLifetime(){
+    MenuPresentationLifetime scenes;MenuPresentationObservation observation;
+    observation.owner={0x11000,0x22000,0x2202c,0x22030};observation.state=MenuPresentationState::Playing;
+    auto scene=scenes.Observe(observation,Now);AmmoCounterHudLifetime lifetime;auto owner=Owner();
+    const auto native=Reserve();const auto nativeOwner=owner.owner;
+    lifetime.Bind(owner,&scene,Now);const auto original=SceneAmmoCounterHostSample(native,owner,&scene,Now);
+    CHECK(AmmoCounterFresh(original,Now)&&original.equipmentGeneration==owner.hudGeneration);
+    CHECK(owner.owner==nativeOwner&&native.identity.owner==nativeOwner&&original.observedNs==native.observedNs);
+    CHECK(original.deadlineNs==Now+AmmoCounterMaxAgeNs);
+    AmmoCounterPresentation hud;CHECK(hud.Receive(original,original,30,Now));
+    // Ongoing Playing observations renew their own lease; count gaps preserve
+    // digits without changing native sequence/observation/deadline/cadence.
+    auto now=Now;
+    for(unsigned n=0;n<6;++n){now+=100000000;scene=scenes.Observe(observation,now);
+        owner.observedNs=now;owner.deadlineNs=now+200000000;lifetime.Bind(owner,&scene,now);
+        const auto gap=SceneAmmoCounterHostSample(native,owner,&scene,now);
+        CHECK(AmmoCounterOwnerOnlyFresh(gap,now)&&SameAmmoCounterOwner(original,gap));
+        CHECK(hud.Receive(gap,gap,30,now)&&*hud.Select(30,now)==original);
+        CHECK(native.observedNs==Now&&native.deadlineNs==Now+200000000&&native.sequence==1);
+    }
+    observation.state=MenuPresentationState::LetterBox;const auto letterbox=scenes.Observe(observation,++now);
+    const auto hidden=SceneAmmoCounterHostSample(native,owner,&letterbox,now);
+    CHECK(!hidden.actorGeneration&&!hud.Receive(hidden,hidden,30,now)&&!hud.Select(30,now));
+    // No new Gather is needed to revoke the old publication at a scene change.
+    const auto unknown=scenes.Observe({},++now);CHECK(!SceneAmmoCounterHostSample(native,owner,&unknown,now).actorGeneration);
+    observation.state=MenuPresentationState::Playing;scene=scenes.Observe(observation,++now);
+    CHECK(!SceneAmmoCounterHostSample(native,owner,&scene,now).actorGeneration);
+    owner.observedNs=now;owner.deadlineNs=now+200000000;lifetime.Bind(owner,&scene,now);
+    CHECK(owner.owner==nativeOwner&&owner.hudGeneration!=original.equipmentGeneration);
+    const auto returnedOwner=SceneAmmoCounterHostSample(native,owner,&scene,now);
+    CHECK(AmmoCounterOwnerOnlyFresh(returnedOwner,now));
+    CHECK(!hud.Receive(returnedOwner,returnedOwner,30,now)&&!hud.Select(30,now)); // Cannot resurrect pre-cinematic digits.
+    auto fresh=native;++fresh.sequence;fresh.observedNs=now;fresh.deadlineNs=now+200000000;--fresh.loaded;
+    const auto returned=SceneAmmoCounterHostSample(fresh,owner,&scene,now);CHECK(AmmoCounterFresh(returned,now));
+    CHECK(hud.Receive(returned,returned,30,now));
+    auto oldEye=returned;oldEye.equipmentGeneration=original.equipmentGeneration;
+    CHECK(!hud.Receive(oldEye,returned,30,now)&&!hud.Select(30,now));
+    auto oldOwner=owner;const auto expired=scenes.Observe(observation,scene.deadlineNs);now=expired.observedNs;
+    CHECK(!SceneAmmoCounterHostSample(fresh,oldOwner,&expired,now).actorGeneration);
+    CHECK(!SceneAmmoCounterHostSample(fresh,owner,&scene,scene.deadlineNs).actorGeneration);
+    CHECK(!SceneAmmoCounterHostSample(fresh,owner,nullptr,now).actorGeneration);
+    return 0;
+}
+int SceneEquipmentAndPublicationDeadlines(){
+    MenuPresentationLifetime scenes;MenuPresentationObservation observation;
+    observation.owner={0x11000,0x22000,0x2202c,0x22030};observation.state=MenuPresentationState::Playing;
+    auto scene=scenes.Observe(observation,Now);scene.deadlineNs=Now+5000000;
+    AmmoCounterHudLifetime lifetime;auto owner=Owner();lifetime.Bind(owner,&scene,Now);
+    auto sample=SceneAmmoCounterHostSample(Reserve(),owner,&scene,Now);
+    CHECK(sample.deadlineNs==scene.deadlineNs&&sample.observedNs==Now);
+    auto left=sample,right=sample;auto current=sample;current.deadlineNs=Now+2000000;
+    CHECK(RetainAmmoCounterPairOwner(left,right,current,Now));CHECK(left.deadlineNs==current.deadlineNs&&right.deadlineNs==current.deadlineNs);
+    for(unsigned fault=0;fault<5;++fault){left=right=sample;current=sample;auto time=Now;
+        if(fault==0)++current.equipmentGeneration;if(fault==1)current={};if(fault==2)++right.equipmentGeneration;
+        if(fault==3)time=current.deadlineNs;if(fault==4)++current.actorGeneration;
+        CHECK(!RetainAmmoCounterPairOwner(left,right,current,time));CHECK(!left.actorGeneration&&!right.actorGeneration);
+    }
+    const auto old=owner;auto ammo=Reserve();++owner.owner.equipGeneration;ammo.identity.owner=owner.owner;
+    owner.deadlineNs=Now+200000000;lifetime.Bind(owner,&scene,Now);
+    CHECK(owner.hudGeneration!=old.hudGeneration&&owner.owner.equipGeneration==old.owner.equipGeneration+1);
+    CHECK(!SceneAmmoCounterHostSample(Reserve(),owner,&scene,Now).sequence); // Wrong native owner cannot supply counts.
+    CHECK(SceneAmmoCounterHostSample(ammo,owner,&scene,Now).sequence);
+    owner.held=false;lifetime.Bind(owner,&scene,Now);CHECK(!owner.hudGeneration);
+    owner.held=true;lifetime.Bind(owner,&scene,Now);CHECK(owner.hudGeneration!=old.hudGeneration);
+    return 0;
+}
 int NativeReadOnlyAdmission(){const auto a=Reserve();const auto o=Owner();auto sample=AmmoCounterHostSample(a,o,Now);
     CHECK(sample.loaded==20&&sample.reserve==180&&sample.capacity==30);CHECK(sample.deadlineNs==Now+100000000);
     auto owner=o;owner.deadlineNs=Now+3000000;CHECK(AmmoCounterHostSample(a,owner,Now).deadlineNs==owner.deadlineNs);
@@ -288,7 +354,7 @@ int BitmapContents(){
     return 0;
 }
 }
-int main(){if(NativeReadOnlyAdmission()||NativeReadClockOrdering()||PublishedReserveIsPassiveAndBounded()||PairAndFreshness()||
+int main(){if(CommittedSceneHudLifetime()||SceneEquipmentAndPublicationDeadlines()||NativeReadOnlyAdmission()||NativeReadClockOrdering()||PublishedReserveIsPassiveAndBounded()||PairAndFreshness()||
     DisplaySurvivesAmmoGapsWithCurrentOwner()||RejectedCountsCannotRenewOwnership()||DisplayOwnerLifetimeAndDuplicatePackets()||OwnerMarkersCannotAdmitCounts()||
     CountsChangingBetweenEyes()||WeaponSidePlacement()||BitmapContents())return 1;
     std::cout<<"AmmoCounter: strict native samples, retained same-owner display, paired telemetry and bitmap checks passed; no native acceptance\n";

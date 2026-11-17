@@ -33,6 +33,32 @@ int TypedAmmoPoseAndHud(){PairFixture f;BodyPropPair pair;const auto left=pair.B
     CHECK(a.deadlineNs<=f.a.ammo->prop.source.input.deadlineNs);CHECK((*result)[0].view.values!=(*result)[1].view.values);
     CHECK((*result)[0].ammo==Eye().ammo&&(*result)[1].ammo==Eye(1).ammo);return 0;
 }
+int SceneTransitionClearsOnlyHud(){
+    for(unsigned transition=0;transition<5;++transition){
+        PairFixture f;BodyPropPair pair;const auto key=pair.Begin(f.key,0,f.a);CHECK(key);
+        auto left=Eye(),right=Eye(1);const auto now=f.Now();
+        left.ammo=right.ammo={9,now,now+100000000,10,20,f.key.space,27,83,30};
+        CHECK(!pair.End(key,f.key,0,f.a,f.a,left,now));
+        if(transition==1)++right.ammo.equipmentGeneration; // Playing lifetime changed between eyes.
+        auto completed=pair.End(key,f.key,1,f.b,f.b,right,now);CHECK(completed);
+        CHECK((*completed)[0].count==1&&(*completed)[1].count==1);
+        const auto before=*completed;auto current=right.ammo;auto publicationTime=now;
+        if(transition==2)++current.equipmentGeneration; // Completed pair waited for native restoration.
+        if(transition==3)current={}; // LetterBox/Unknown never supplies current HUD ownership.
+        if(transition==4)publicationTime=current.deadlineNs;
+        const auto retained=RetainAmmoCounterPairOwner((*completed)[0].ammo,(*completed)[1].ammo,current,publicationTime);
+        CHECK(retained==(transition==0));
+        for(unsigned eye=0;eye<2;++eye){
+            const auto& actual=(*completed)[eye];CHECK(actual.count==before[eye].count);
+            CHECK(actual.view.values==before[eye].view.values&&actual.projection.values==before[eye].projection.values);
+            CHECK(SameBodyPropSource(actual.instances[0],before[eye].instances[0]));
+            CHECK(actual.instances[0].world.values==before[eye].instances[0].world.values);
+            CHECK(actual.instances[0].deadlineNs==before[eye].instances[0].deadlineNs);
+            CHECK(bool(actual.ammo.sequence)==(transition==0));
+        }
+        CHECK(f.native.starts==0&&f.native.submits==0&&f.native.cancels==0);
+    }return 0;
+}
 int CoherentLoadedCountTransitionPair(){
     // Fixture snapshots only: no native firing or headset acceptance is implied.
     for(const auto counts:{std::array{30,29,83},std::array{29,28,83},
@@ -138,5 +164,5 @@ int VehicleRayFrozenAndRevoked(){
     CHECK(missing&&!(*missing)[0].count&&!(*missing)[1].count);return 0;
 }
 }
-int main(){for(auto test:{TypedAmmoPoseAndHud,CoherentLoadedCountTransitionPair,MissingAndRevokedSources,DenseSlotIntersection,ExpiryAndWorldMismatch,KeyResetAndFirstEyeRequired,BeforeLeaseAndInvalidView,VehicleRayFrozenAndRevoked})if(test())return 1;
-    std::cout<<"BodyPropPair: 8 typed-source/stereo-slot/lifetime groups passed; no native/GPU run\n";}
+int main(){for(auto test:{TypedAmmoPoseAndHud,SceneTransitionClearsOnlyHud,CoherentLoadedCountTransitionPair,MissingAndRevokedSources,DenseSlotIntersection,ExpiryAndWorldMismatch,KeyResetAndFirstEyeRequired,BeforeLeaseAndInvalidView,VehicleRayFrozenAndRevoked})if(test())return 1;
+    std::cout<<"BodyPropPair: 9 typed-source/stereo-slot/lifetime groups passed; no native/GPU run\n";}

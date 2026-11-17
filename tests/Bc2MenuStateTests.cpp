@@ -16,9 +16,11 @@ struct Fixture {
     std::array<std::uint32_t,4> arguments{};
     unsigned calls=0,rootReads=0,inputCalls=0,failInputAt=0;std::vector<std::uint32_t> functions,actions;
     bool replaceOnPress=false,leaveOnPress=false,suppressPress=false;bool unstable=false,callSucceeds=true;
+    std::uint32_t faultAddress=0,replacement=0;unsigned faultAfter=1,faultReads=0;bool failRead=false;
     Fixture(){words={{base+binding.managerGlobal,manager},{manager+0x82b20,owner},{manager+0x82b24,0},
         {owner,base+binding.ownerVtable},{owner+0x2c,base+binding.eventVtable},{owner+0x30,base+binding.controllerVtable},{owner+0x94,base+binding.inputVtable},
-        {owner+0xac,0},{manager+0xc3f2a,0},
+        {owner+0xac,0},{manager+0xc3f2a,0},{manager,base+0x1040830},{manager+0x82af8,base+0x1040804},
+        {manager+0x82cc1,0},{owner+0x272bc,1},{owner+0x272a0,4},
         {base+pointer.inputEnabled,1},{base+pointer.inputBlocked,0},
         {manager+0x14,ui},{ui+4,target},{target+0x18,queue},{queue+8,8},{queue+0x28,0},{queue+0x2c,buffer},
         {buffer,0},{buffer+28,0},{base+0x1170f7c,0},{manager+0x82434,modal},{manager+0x82438,0},
@@ -26,6 +28,7 @@ struct Fixture {
     bc2::MenuMemory Memory(){return {this,[](void* ctx,std::uint32_t at,void* out,std::size_t n){
         auto& f=*static_cast<Fixture*>(ctx);if(n!=1&&n!=4)return false;
         if(at==base+f.binding.managerGlobal&&f.unstable&&++f.rootReads>1)return false;
+        if(at==f.faultAddress&&++f.faultReads>=f.faultAfter){if(f.failRead)return false;std::memcpy(out,&f.replacement,n);return true;}
         const auto i=f.words.find(at);if(i==f.words.end())return false;std::memcpy(out,&i->second,n);return true;}};}
     bc2::MenuVisibilityCalls Calls(){return {this,[](void* ctx,std::uint32_t function,std::uint32_t self,const std::array<std::uint32_t,4>& args){
         auto& f=*static_cast<Fixture*>(ctx);++f.calls;f.arguments=args;
@@ -268,11 +271,68 @@ int MenuToggle(){
     CHECK(d.after.lastWord==0x025a0009);
     return 0;
 }
+int PresentationReader(){
+    constexpr bc2::MenuPresentationCandidates binding{0x15a4ca8,0x1040830,0x1040804,0x102b7a0};
+    Fixture f;const auto owner=bc2::ReadMenuState(f.Memory(),f.binding,f.base);CHECK(owner);
+    const auto read=[&]{return bc2::ReadMenuPresentation(f.Memory(),binding,f.binding,f.base,*owner);};
+    const auto playing=read();CHECK(playing&&playing->state==bc2::MenuPresentationState::Playing);
+    f.words[f.owner+0x272a0]=13;const auto letterbox=read();CHECK(letterbox&&letterbox->state==bc2::MenuPresentationState::LetterBox);
+    CHECK(bc2::ReadMenuState(f.Memory(),f.binding,f.base)==owner); // No change to input equality/admission.
+    for(auto id:{0u,8u,12u,14u,UINT32_MAX}){f.words[f.owner+0x272a0]=id;CHECK(!read());}
+    f.words[f.owner+0x272a0]=4;
+    // Every source field fails closed on either bookend; valid-looking state
+    // changes between scalar reads cannot be mistaken for a stable scene.
+    const std::array addresses{f.base+binding.managerGlobal,f.manager,f.manager+0x82af8,f.manager+0x82b20,
+        f.owner,f.owner+0x2c,f.owner+0x30,f.owner+0x94,f.manager+0x82cc1,f.owner+0x272bc,f.owner+0x272a0};
+    for(const auto address:addresses)for(unsigned pass:{1u,2u})for(bool failed:{false,true}){
+        Fixture g;g.faultAddress=address;g.faultAfter=pass;g.failRead=failed;
+        g.replacement=address==g.manager+0x82cc1?1:address==g.owner+0x272a0&&pass==2?13:0;
+        CHECK(!bc2::ReadMenuPresentation(g.Memory(),binding,g.binding,g.base,*owner));
+    }
+    auto bad=binding;++bad.managerVtable;CHECK(!bc2::ReadMenuPresentation(f.Memory(),bad,f.binding,f.base,*owner));
+    {Fixture g;g.faultAddress=g.owner+0x272bc;g.faultAfter=2;g.replacement=2;
+        CHECK(!bc2::ReadMenuPresentation(g.Memory(),binding,g.binding,g.base,*owner));}
+    auto changed=*owner;++changed.owner;CHECK(!bc2::ReadMenuPresentation(f.Memory(),binding,f.binding,f.base,changed));
+    f.words[f.manager+0x82cc1]=1;f.words[f.manager+0xc4010]=4;CHECK(!read()); // Requested ID is never committed proof.
+    f.words[f.manager+0x82cc1]=0;f.words[f.owner+0x272bc]=0;CHECK(!read());
+    CHECK(!bc2::ReadMenuPresentation(f.Memory(),binding,f.binding,UINT32_MAX,*owner));return 0;
+}
+int PresentationLifetimes(){
+    using S=bc2::MenuPresentationState;Fixture f;const auto owner=bc2::ReadMenuState(f.Memory(),f.binding,f.base);CHECK(owner);
+    bc2::MenuPresentationLifetime lifetime;bc2::MenuPresentationObservation observation{*owner,S::Playing};
+    constexpr std::int64_t now=1000000000;const auto first=lifetime.Observe(observation,now);
+    const auto repeated=lifetime.Observe(observation,now+1);
+    CHECK(bc2::SameMenuPresentationLifetime(first,repeated)&&repeated.sequence>first.sequence);
+    CHECK(first.observedNs==now&&first.deadlineNs==now+bc2::MenuPresentationMaxAgeNs);
+    CHECK(repeated.deadlineNs==first.deadlineNs+1);
+    observation.state=S::LetterBox;const auto cinematic=lifetime.Observe(observation,now+2);
+    CHECK(cinematic.ownerEpoch==first.ownerEpoch&&cinematic.sceneEpoch!=first.sceneEpoch);
+    const auto unknown=lifetime.Observe({},now+3);CHECK(!bc2::MenuPresentationFresh(unknown,now+3));
+    observation.state=S::Playing;const auto reused=lifetime.Observe(observation,now+4);
+    CHECK(reused.ownerEpoch!=first.ownerEpoch&&reused.sceneEpoch!=first.sceneEpoch); // Exact same addresses, new lifetime.
+    const auto afterGap=lifetime.Observe(observation,reused.deadlineNs);
+    CHECK(afterGap.ownerEpoch!=reused.ownerEpoch&&afterGap.sceneEpoch!=reused.sceneEpoch);
+    CHECK(!bc2::MenuPresentationFresh(reused,reused.deadlineNs));
+    ++observation.owner.owner;const auto replaced=lifetime.Observe(observation,afterGap.observedNs+1);
+    CHECK(replaced.ownerEpoch!=afterGap.ownerEpoch&&replaced.sceneEpoch!=afterGap.sceneEpoch);
+    CHECK(!bc2::MenuPresentationFresh(lifetime.Observe(observation,0),now));
+    CHECK(!bc2::MenuPresentationFresh(lifetime.Observe(observation,INT64_MAX),INT64_MAX));return 0;
+}
 int StaticEvidence(const char* path){
     std::ifstream in(path,std::ios::binary);CHECK(in);
     const std::vector<char> raw((std::istreambuf_iterator<char>(in)),{});std::vector<std::byte> bytes(raw.size());
     std::memcpy(bytes.data(),raw.data(),raw.size());const auto pe=engine::InspectPe(bytes);CHECK(pe.valid);
     const auto binding=bc2::DiscoverMenuState(bytes,pe.image);CHECK(binding);
+    CHECK(bc2::DiscoverMenuPresentation(bytes,pe.image));
+    // Mutate first/middle/final bytes of every optional proof extent, including
+    // routing tables, full committed setter, type links and enum names.
+    for(const auto span:bc2::MenuPresentationCodeSpans())for(const auto delta:{0u,span.size/2,span.size-1}){
+        const auto rva=span.rva+delta;bool touched=false;
+        for(const auto& s:pe.image.sections)if(rva>=s.rva&&rva-s.rva<s.rawSize){
+            const auto at=s.rawOffset+rva-s.rva;const auto old=bytes[at];bytes[at]^=std::byte{1};
+            CHECK(!bc2::DiscoverMenuPresentation(bytes,pe.image));bytes[at]=old;touched=true;break;
+        }CHECK(touched);
+    }
     CHECK(binding->notification==0x3875b0&&binding->enterSetter==0x33f9c0&&binding->managerGlobal==0x15a4ca8);
     // Independently disturb category/subtype routing, argument ABI, enterMenu
     // meaning, constructor owner publication and each reflected vtable linkage.
@@ -288,4 +348,4 @@ int StaticEvidence(const char* path){
     return 0;
 }
 }
-int main(int argc,char** argv){CHECK(Reader()==0);CHECK(FrontEnd()==0);CHECK(Dispatch()==0);CHECK(HeldCancel()==0);CHECK(CancelFailures()==0);CHECK(CancelLifetime()==0);CHECK(MenuToggle()==0);if(argc>1)CHECK(StaticEvidence(argv[1])==0);return 0;}
+int main(int argc,char** argv){CHECK(Reader()==0);CHECK(FrontEnd()==0);CHECK(Dispatch()==0);CHECK(HeldCancel()==0);CHECK(CancelFailures()==0);CHECK(CancelLifetime()==0);CHECK(MenuToggle()==0);CHECK(PresentationReader()==0);CHECK(PresentationLifetimes()==0);if(argc>1)CHECK(StaticEvidence(argv[1])==0);return 0;}

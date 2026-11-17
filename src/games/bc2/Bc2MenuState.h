@@ -1,6 +1,7 @@
 #pragma once
 #include "Bc2MenuBinding.h"
 #include <array>
+#include <limits>
 namespace fvr::bc2 {
 struct MenuStateCodeSpan {std::uint32_t rva=0,size=0;};
 struct MenuStateCandidates {
@@ -22,6 +23,53 @@ struct MenuStateSnapshot {
 // entered is the authoritative native enterMenu callback state, not proof that
 // an APT movie has finished drawing. Pause alone never grants menu ownership.
 std::optional<MenuStateSnapshot> ReadMenuState(const MenuMemory&,const MenuStateCandidates&,std::uint32_t imageBase);
+// Optional committed presentation observation. This is deliberately separate
+// from MenuStateSnapshot equality and every menu/input admission predicate.
+enum class MenuPresentationState : std::uint8_t {Unknown,Playing,LetterBox};
+struct MenuPresentationCandidates {
+    std::uint32_t managerGlobal=0,managerVtable=0,notificationVtable=0,ownerVtable=0;
+    bool operator==(const MenuPresentationCandidates&)const=default;
+};
+std::optional<MenuPresentationCandidates> DiscoverMenuPresentation(std::span<const std::byte>,const engine::PeImage&);
+std::span<const MenuStateCodeSpan> MenuPresentationCodeSpans()noexcept;
+struct MenuPresentationObservation {
+    MenuStateSnapshot owner{};
+    MenuPresentationState state=MenuPresentationState::Unknown;
+    bool operator==(const MenuPresentationObservation&)const=default;
+};
+std::optional<MenuPresentationObservation> ReadMenuPresentation(const MenuMemory&,const MenuPresentationCandidates&,
+    const MenuStateCandidates&,std::uint32_t imageBase,const MenuStateSnapshot& boundaryOwner);
+inline constexpr std::int64_t MenuPresentationMaxAgeNs=250000000;
+struct MenuPresentationSnapshot {
+    MenuPresentationObservation observation{};
+    std::uint64_t ownerEpoch=0,sceneEpoch=0,sequence=0;
+    std::int64_t observedNs=0,deadlineNs=0;
+};
+inline bool MenuPresentationFresh(const MenuPresentationSnapshot& s,std::int64_t now)noexcept {
+    return s.ownerEpoch&&s.sceneEpoch&&s.sequence&&s.observedNs>0&&s.observedNs<=now&&s.deadlineNs>now&&
+        s.deadlineNs-s.observedNs<=MenuPresentationMaxAgeNs&&
+        (s.observation.state==MenuPresentationState::Playing||s.observation.state==MenuPresentationState::LetterBox);
+}
+inline bool SameMenuPresentationLifetime(const MenuPresentationSnapshot& a,const MenuPresentationSnapshot& b)noexcept {
+    return a.ownerEpoch==b.ownerEpoch&&a.sceneEpoch==b.sceneEpoch;
+}
+// Serialized UI-boundary lifetime accounting; the runtime publishes immutable
+// copies. Unknown/gaps retire both lifetimes, even if addresses are reused.
+class MenuPresentationLifetime {
+public:
+    MenuPresentationSnapshot Observe(const std::optional<MenuPresentationObservation>& observed,std::int64_t now)noexcept {
+        const auto sequence=++sequence_;MenuPresentationSnapshot next;next.sequence=sequence;
+        if(!observed||(observed->state!=MenuPresentationState::Playing&&observed->state!=MenuPresentationState::LetterBox)||now<=0||
+           now>std::numeric_limits<std::int64_t>::max()-MenuPresentationMaxAgeNs){last_=next;return next;}
+        const auto& a=last_.observation.owner;const auto& b=observed->owner;
+        const bool sameOwner=MenuPresentationFresh(last_,now)&&a.manager==b.manager&&a.owner==b.owner&&
+            a.eventListener==b.eventListener&&a.inputController==b.inputController&&a.frontEnd==b.frontEnd;
+        next.observation=*observed;next.ownerEpoch=sameOwner?last_.ownerEpoch:sequence;
+        next.sceneEpoch=sameOwner&&last_.observation.state==observed->state?last_.sceneEpoch:sequence;
+        next.observedNs=now;next.deadlineNs=now+MenuPresentationMaxAgeNs;last_=next;return next;
+    }
+private:MenuPresentationSnapshot last_{};std::uint64_t sequence_=0;
+};
 // These are distinct native actions. Back can return to a parent submenu and
 // need not close the root pause menu. MenuToggle sends native ConceptMenu57.
 enum class MenuCloseAction : std::uint8_t {Back,MenuToggle};

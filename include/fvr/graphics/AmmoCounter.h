@@ -9,7 +9,9 @@
 #include <type_traits>
 namespace fvr::graphics {
 // Read-only presentation wire data. Identity consists of generations, never
-// native addresses. Times are original system-QPC nanoseconds, not XR time.
+// native addresses. equipmentGeneration is the HUD presentation lifetime, not
+// a native ammunition/equipment generation: BC2 binds equipment AND committed
+// scene lifetime into it. Times are original system-QPC nanoseconds, not XR time.
 struct alignas(8) AmmoCounterSample {
     std::uint64_t sequence=0;
     std::int64_t observedNs=0,deadlineNs=0;
@@ -41,6 +43,17 @@ inline bool SameAmmoCounterOwner(const AmmoCounterSample& a,const AmmoCounterSam
 }
 inline bool SameAmmoCounterCounts(const AmmoCounterSample& a,const AmmoCounterSample& b)noexcept {
     return a.loaded==b.loaded&&a.reserve==b.reserve&&a.capacity==b.capacity;
+}
+// Final restored-frame publication rechecks current presentation ownership.
+// Clearing these two samples leaves all body props and native frame data alone.
+inline bool RetainAmmoCounterPairOwner(AmmoCounterSample& a,AmmoCounterSample& b,
+    const AmmoCounterSample& current,std::int64_t now)noexcept {
+    const auto valid=[&](const AmmoCounterSample& s){return AmmoCounterFresh(s,now)||AmmoCounterOwnerOnlyFresh(s,now);};
+    if(!valid(a)||!valid(b)||!valid(current)||!SameAmmoCounterOwner(a,b)||!SameAmmoCounterOwner(a,current)){
+        a={};b={};return false;
+    }
+    const auto deadline=(std::min)({a.deadlineNs,b.deadlineNs,current.deadlineNs});
+    a.deadlineNs=b.deadlineNs=deadline;return true;
 }
 inline std::optional<AmmoCounterSample> AmmoCounterPair(const AmmoCounterSample& a,const AmmoCounterSample& b,
     std::uint64_t space,std::int64_t now)noexcept {

@@ -100,6 +100,26 @@ int Run(){
         CHECK(clockReads==2&&now==ownerDeadline);CHECK(PixelsMatch(3,0)==0);
         clockAdvanceAt=0;CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true));
         waitResult=XR_SUCCESS;CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(acquired==released);
+        // A cinematic/unknown scene clears both samples while an image is
+        // acquired. Cleanup must release it without uploading stale digits.
+        now+=1000000;
+        for(auto& e:frame.eyes)e.ammo={100,now,now+100000000,10,80,30,7,70,30};
+        hud.Receive(&frame,ticket,now);CHECK(hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(PixelsMatch(7,70)==0);
+        for(auto& e:frame.eyes){++e.ammo.sequence;e.ammo.loaded=6;}
+        hud.Receive(&frame,ticket,now);waitResult=XR_TIMEOUT_EXPIRED;
+        CHECK(hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(acquired==released+1);
+        for(auto& e:frame.eyes)e.ammo={};
+        const auto uploadsBeforeSceneClear=hud.Uploads();hud.Receive(&frame,ticket,now);
+        CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(acquired==released+1);
+        waitResult=XR_SUCCESS;CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true));
+        CHECK(acquired==released&&hud.Uploads()==uploadsBeforeSceneClear&&PixelsMatch(7,70)==0);
+        // Same native equipment returns under a new HUD scene generation.
+        // Owner-only Playing packets cannot resurrect the old released image.
+        for(auto& e:frame.eyes)e.ammo={0,now,now+100000000,10,81,30,0,0,0,graphics::AmmoCounterOwnerOnly};
+        hud.Receive(&frame,ticket,now);CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true));
+        for(auto& e:frame.eyes)e.ammo={102,now,now+100000000,10,81,30,5,70,30};
+        hud.Receive(&frame,ticket,now);CHECK(hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(PixelsMatch(5,70)==0);
+        CHECK(acquired==released&&hud.Errors()==0);
     }
     CHECK(destroyed==1);return 0;
 }

@@ -11,11 +11,18 @@
 #include <intrin.h>
 #include <cstring>
 #include <vector>
+#include <mutex>
 namespace fvr::bc2::menu {
 namespace {
 using PumpFn=void(__thiscall*)(void*,void*);PumpFn original=nullptr;void* hook=nullptr;
 ipc::MenuChannel channel;graphics::D3D11MenuProducer raster;
 MenuBindingCandidates binding{};MenuStateCandidates states{};unsigned base=0;
+MenuPresentationCandidates presentationBinding{};bool presentationVerified=false;
+MenuPresentationLifetime presentationLifetime;
+std::mutex presentationMutex;
+std::atomic<std::uint64_t> presentationRevision=0;
+std::atomic<std::shared_ptr<const MenuPresentationSnapshot>> presentation;
+std::atomic<std::uint64_t> presentationPlaying=0,presentationLetterBox=0,presentationUnknown=0;
 MenuLoadingCandidates loadingBinding{};bool loadingVerified=false;
 std::optional<MenuLoadingSnapshot> lastLoading;
 bool loadingUnknown=false;
@@ -60,6 +67,23 @@ std::int64_t frequency=0;
 std::int64_t Nanos(std::int64_t qpc){if(qpc<=0||frequency<=0)return 0;return (qpc/frequency)*1000000000+(qpc%frequency)*1000000000/frequency;}
 std::int64_t NowQpc(){LARGE_INTEGER n{};return QueryPerformanceCounter(&n)?n.QuadPart:0;}
 std::int64_t Now(){return Nanos(NowQpc());}
+void InvalidatePresentation()noexcept {
+    std::lock_guard lock(presentationMutex);++presentationRevision;
+    presentationLifetime.Observe({},0);presentation.store({},std::memory_order_release);++presentationUnknown;
+}
+void PublishPresentation(std::uint64_t revision,const MenuStateSnapshot& owner)noexcept {
+    const auto observed=presentationVerified?ReadMenuPresentation(memory,presentationBinding,states,base,owner):std::nullopt;
+    const auto now=Now();std::lock_guard lock(presentationMutex);
+    // An intervening failure/retirement wins over a read already in flight.
+    if(presentationRevision.load(std::memory_order_acquire)!=revision)return;
+    ++presentationRevision;
+    const auto next=presentationLifetime.Observe(observed,now);
+    if(next.observation.state==MenuPresentationState::Playing)++presentationPlaying;
+    else if(next.observation.state==MenuPresentationState::LetterBox)++presentationLetterBox;
+    else ++presentationUnknown;
+    try {presentation.store(std::make_shared<const MenuPresentationSnapshot>(next),std::memory_order_release);}
+    catch(...){presentationLifetime.Observe({},0);presentation.store({},std::memory_order_release);}
+}
 const MenuNativeCalls calls{nullptr,
     [](void*,unsigned fn,unsigned owner,std::int32_t x,std::int32_t y){reinterpret_cast<void(__thiscall*)(void*,int,int)>(fn)(reinterpret_cast<void*>(owner),x,y);return true;},
     [](void*,unsigned fn,unsigned owner,const std::array<unsigned,3>& event){reinterpret_cast<void(__thiscall*)(void*,const unsigned*)>(fn)(reinterpret_cast<void*>(owner),event.data());return true;},
@@ -82,6 +106,7 @@ LoadingDisplay RefreshLoadingDisplay()noexcept {
     ++loadingReads;
     const auto loading=ReadMenuLoading(memory,loadingBinding,base);
     if(!loading){
+        InvalidatePresentation();
         ++loadingMisses;
         if(lastLoading){lastLoading.reset();++loadingRetirements;}
         if(!loadingUnknown)RetireInputEpoch();
@@ -95,6 +120,7 @@ LoadingDisplay RefreshLoadingDisplay()noexcept {
     }
     loadingUnknown=false;
     if(loading&&loading->active){
+        InvalidatePresentation();
         if(!lastLoading||*lastLoading!=*loading){
             RetireInputEpoch();lastLoading=loading;++loadingEntries;
         }
@@ -105,6 +131,7 @@ LoadingDisplay RefreshLoadingDisplay()noexcept {
         return LoadingDisplay::Active;
     }
     if(lastLoading){
+        InvalidatePresentation();
         // Losing this owner retires its image immediately. Absence is not
         // evidence of gameplay: a verified UI callback establishes the next
         // interactive state independently.
@@ -140,20 +167,27 @@ void ReleaseCancel(bool retiring=false)noexcept {
 void __fastcall Pump(void* self,void*,void* input){
     struct Callback{Callback(){++callbacks;}~Callback(){--callbacks;}} callback;
     const auto caller=reinterpret_cast<unsigned>(_ReturnAddress());
+    const auto presentationTicket=presentationRevision.load(std::memory_order_acquire);
     original(self,input);
     if(!enabled.load(std::memory_order_acquire)&&!stopping.load(std::memory_order_acquire))return;
     const auto state=ReadMenuState(memory,states,base);
-    if(!state){connectionInputDeadline.store(0);displayState.store(MenuDisplayState::Unknown,std::memory_order_release);++stateMisses;return;}
+    if(!state){InvalidatePresentation();connectionInputDeadline.store(0);displayState.store(MenuDisplayState::Unknown,std::memory_order_release);++stateMisses;return;}
+    // An ignored callback or ordinary Present contention supplies no new
+    // scene evidence. Keep the prior observation until its original expiry.
     if(!IsMenuPumpBoundary(memory,binding,base,caller,reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(input),state->inputController)){++foreignBoundary;return;}
     if(pumping.test_and_set(std::memory_order_acquire)){++concurrentBoundary;return;}
     struct Boundary {Boundary(){nativeBoundary=true;}~Boundary(){nativeBoundary=false;pumping.clear(std::memory_order_release);}} boundary;
-    const auto thread=GetCurrentThreadId();const auto prior=uiThread.exchange(thread);if(prior&&prior!=thread)++threadChanges;
+    const auto thread=GetCurrentThreadId();const auto prior=uiThread.exchange(thread);if(prior&&prior!=thread){InvalidatePresentation();++threadChanges;}
     ++pumps;
-    if(stopping.load(std::memory_order_acquire)){ReleaseOwned();ReleaseCancel(true);return;}
+    if(stopping.load(std::memory_order_acquire)){InvalidatePresentation();ReleaseOwned();ReleaseCancel(true);return;}
     if(RefreshLoadingDisplay()!=LoadingDisplay::Inactive){
         connectionInputDeadline.store(0,std::memory_order_release);
         ReleaseOwned();ReleaseCancel(true);buttonArmed=false;return;
     }
+    // All exits sample after this pump's existing UI actions. Those actions
+    // keep their original admission/equality; changed bookends yield Unknown.
+    struct PresentationEnd {std::uint64_t revision;MenuStateSnapshot owner;
+        ~PresentationEnd(){PublishPresentation(revision,owner);}} presentationEnd{presentationTicket,*state};
     displayState.store(state->entered?MenuDisplayState::Menu:MenuDisplayState::Gameplay,std::memory_order_release);
     displayObservedAt.store(GetTickCount64(),std::memory_order_release);
     ReleaseCancel();
@@ -267,6 +301,11 @@ MenuDisplayState CurrentDisplayState()noexcept {
     if(passive&&now>=passive&&now-passive<=250)return MenuDisplayState::Passive;
     return observed&&now>=observed&&now-observed<=250?displayState.load(std::memory_order_acquire):MenuDisplayState::Unknown;
 }
+std::shared_ptr<const MenuPresentationSnapshot> CurrentPresentation()noexcept {
+    if(!enabled.load(std::memory_order_acquire))return {};
+    const auto current=presentation.load(std::memory_order_acquire);
+    return current&&MenuPresentationFresh(*current,Now())?current:nullptr;
+}
 bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uintptr_t image,const std::wstring& token){
     if(hook||image>UINT32_MAX||!channel.ConnectProducer(token))return false;
     base=unsigned(image);LARGE_INTEGER f{};if(!QueryPerformanceFrequency(&f)||f.QuadPart<=0){channel.Close();return false;}frequency=f.QuadPart;
@@ -275,6 +314,12 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
     for(const auto& span:MenuStateCodeSpans())if(!Same(bytes,pe,span.rva,span.size)){channel.Close();return false;}
     const auto spans=MenuBindingCodeSpans(bytes,pe,binding);if(!spans){channel.Close();return false;}
     for(const auto& span:*spans)if(!Same(bytes,pe,span.rva,span.size)){channel.Close();return false;}
+    if(const auto scene=DiscoverMenuPresentation(bytes,pe)){
+        presentationVerified=true;
+        for(const auto span:MenuPresentationCodeSpans())
+            if(!Same(bytes,pe,span.rva,span.size)){presentationVerified=false;break;}
+        if(presentationVerified)presentationBinding=*scene;
+    }
     // Loading presentation is optional on an unrecognized executable. Its
     // absence does not disable the independently verified interactive menu.
     if(const auto loading=DiscoverMenuLoading(bytes,pe)){
@@ -290,6 +335,7 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
 }
 void Start()noexcept {if(hook){enabled.store(true,std::memory_order_release);startup::Start();}}
 bool Stop()noexcept {
+    InvalidatePresentation();
     connectionInputDeadline.store(0,std::memory_order_release);
     passiveObservedAt.store(0,std::memory_order_release);
     displayState.store(MenuDisplayState::Unknown,std::memory_order_release);displayObservedAt.store(0,std::memory_order_release);
@@ -359,7 +405,10 @@ void Report(std::ostream& out){
         out<<"{\"sequence\":"<<e.sequence<<",\"space\":"<<e.space<<",\"toggle\":"<<e.toggle<<",\"cancel\":"<<e.cancel
            <<",\"read\":"<<unsigned(e.read)<<",\"toggle_edge\":"<<e.toggleEdge<<",\"cancel_edge\":"<<e.cancelEdge
            <<",\"entered\":"<<e.entered<<",\"pending\":"<<e.pending<<'}';}
-    out<<"],\"loading\":{\"verified\":"<<loadingVerified<<",\"reads\":"<<loadingReads.load()
+    out<<"],\"committed_presentation\":{\"verified\":"<<presentationVerified
+       <<",\"playing_observations\":"<<presentationPlaying.load()<<",\"letterbox_observations\":"<<presentationLetterBox.load()
+       <<",\"unknown_observations\":"<<presentationUnknown.load()<<",\"camera_authority\":false}"
+       <<",\"loading\":{\"verified\":"<<loadingVerified<<",\"reads\":"<<loadingReads.load()
        <<",\"misses\":"<<loadingMisses.load()<<",\"entries\":"<<loadingEntries.load()
        <<",\"retirements\":"<<loadingRetirements.load()<<",\"input_dispatch_enabled\":false},\"startup\":";
     startup::Report(out);out<<",\"headset_verified\":false}";

@@ -529,6 +529,8 @@ struct TrackedTransaction {
     fvr::bc2::RenderedViewEvidence renderedView;
     fvr::bc2::VehicleCameraEvidenceKey vehicleCameraEvidence{};
     fvr::bc2::BodyPropPair bodyPropPair;
+    struct CompletedBodyProps {fvr::bc2::BodyCarriedPairKey key;std::array<fvr::graphics::BodyPropEye,2> eyes;};
+    std::atomic<std::shared_ptr<const CompletedBodyProps>> completedBodyProps;
     std::array<float,16> savedAnchor{},writtenAnchor{};bool anchorWritten=false;
 } tracked;
 enum class TrackedFinishCallsite {RightEyeDraw,WorldReturn,UnwrittenCancellation};
@@ -1629,7 +1631,7 @@ void BeginTrackedFrame(unsigned incomingFrame)noexcept {
     if(tracked.restoreFailures.load()||contextRestoreFailures.load()||(stereoColorScalePair.counts.restoreFailures||stereoEffectPair.counts.restoreFailures||stereoPostProcessPair.RestoreFailed())){RecordStereoProgress(fvr::bc2::StereoProgressReason::BeginRestoreFailure,incomingFrame);return;}
     fvr::ipc::FrameLease lease{};if(!frameBridge.TryBegin({(std::uint64_t(e.world)<<32)|e.request,incomingFrame,1},lease)){RecordStereoProgress(fvr::bc2::StereoProgressReason::BridgeNoLease,incomingFrame);return;}
     weaponContextCount.store(0);weaponContextFailures.BeginFrame();derivedCount.store(0);derivedFrameFailed.store(false);for(auto& binding:derivedProjections)binding.frame.store(0);
-    tracked.lease=lease;tracked.renderedView={};tracked.bodyPropPair.Reset();stereoColorScalePair.Reset();stereoEffectPair.Reset();stereoPostProcessPair.Reset();tracked.capturesOkay=true;tracked.state.store(3,std::memory_order_release);
+    tracked.lease=lease;tracked.renderedView={};tracked.bodyPropPair.Reset();tracked.completedBodyProps.store({},std::memory_order_release);stereoColorScalePair.Reset();stereoEffectPair.Reset();stereoPostProcessPair.Reset();tracked.capturesOkay=true;tracked.state.store(3,std::memory_order_release);
     std::array<unsigned,4> viewport{};if(!Read(e.main+layout.viewportOffset,viewport.data(),16)){stereoRecovery.cancelUnwrittenRequest.store(lease.requestId,std::memory_order_release);RecordStereoProgress(fvr::bc2::StereoProgressReason::ViewportUnreadable,incomingFrame);return;}
     if(viewport[2]!=lease.requirements.width||viewport[3]!=lease.requirements.height){stereoRecovery.cancelUnwrittenRequest.store(lease.requestId,std::memory_order_release);RecordStereoProgress(fvr::bc2::StereoProgressReason::ViewportSizeChanged,incomingFrame);return;}
     // Acquire before native update, but apply after its per-view far/LOD edits.
@@ -1712,6 +1714,15 @@ void FinishTrackedFrame(bool completePair,TrackedFinishCallsite callsite)noexcep
     }
     // PublishRestored can emit Published synchronously or during a later
     // LegacyFenced pump. The complete sampled row must precede either event.
+    const auto completedProps=tracked.completedBodyProps.load(std::memory_order_acquire);
+    if(publicationEligible&&completedProps&&completedProps->key==fvr::bc2::CarriedPairKey(tracked.lease)){
+        auto props=completedProps->eyes;
+        const auto current=fvr::bc2::gameplay::ReadAmmoCounter();
+        fvr::graphics::RetainAmmoCounterPairOwner(props[0].ammo,props[1].ammo,current,ReloadDrawNowNs());
+        // BodyPropPair already joined the exact native frame/device/tracking
+        // lease. A scene transition revokes only the added ammo overlay.
+        frameBridge.SetBodyPropPair(tracked.lease,props);
+    }
     const bool published=publicationEligible&&check(7,frameBridge.PublishRestored(tracked.lease,&admission));
     if(tracked.renderedView.Sampled())fvr::bc2::gameplay::ObserveRenderedViewAccepted(tracked.lease,published);
     if(!published){
@@ -1721,6 +1732,7 @@ void FinishTrackedFrame(bool completePair,TrackedFinishCallsite callsite)noexcep
     if(weatherObservationEnabled)weatherGate.Finish(CurrentWeatherKey(),published);
     milestoneResult.outcome|=(restored?2u:0u)|(tracked.capturesOkay?4u:0u)|(published?8u:0u);
     tracked.bodyPropPair.Reset();
+    tracked.completedBodyProps.store({},std::memory_order_release);
     tracked.state.store(2,std::memory_order_release);
     sceneTrace::Mark(milestone,SceneMilestoneStage::Exit,milestoneResult);
 }
@@ -3083,7 +3095,9 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
         if(const auto pair=tracked.bodyPropPair.End(bodyPair,bodyPairKey,evidenceEye,bodySourcesBefore,bodySourcesAfter,props,ReloadDrawNowNs()))
             if(tracked.state.load(std::memory_order_acquire)==1&&fvr::bc2::CarriedPairKey(tracked.lease)==bodyPairKey&&
                U32(stereoExperiment.world+0x88)==stereoExperiment.frame&&U32(address+0x70)==stereoExperiment.request){
-                frameBridge.SetBodyPropPair(tracked.lease,*pair);
+                try {tracked.completedBodyProps.store(std::make_shared<const TrackedTransaction::CompletedBodyProps>(
+                    TrackedTransaction::CompletedBodyProps{bodyPairKey,*pair}),std::memory_order_release);}
+                catch(...){tracked.completedBodyProps.store({},std::memory_order_release);}
             }
     }
     if(renderedEyeCurrent){
