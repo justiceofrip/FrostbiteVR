@@ -56,6 +56,7 @@
 #include "Bc2CampaignVehicleProfile.h"
 #include "Bc2VehicleCameraPolicy.h"
 #include "Bc2VehicleFinalInputEvidence.h"
+#include "Bc2VehicleConsumerEvidence.h"
 #include "Bc2VehicleShotObserver.h"
 #include "Bc2BoatReticle.h"
 #ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
@@ -156,7 +157,7 @@ std::optional<MuzzleEventSource> muzzleHistorySource;
 std::atomic<unsigned> clientOriginWrites=0,serverOriginWrites=0,originWriteFailures=0,shotSourceChanges=0,originFallbacks=0,originWritesAfterLogFull=0;
 std::atomic<unsigned> clientShotCalls=0,clientShotCopies=0,clientShotRejected=0;
 AimCandidates aimingProfile{};InputBindingCandidates profile{};std::uintptr_t image=0;unsigned imageSize=0;
-InputReader readInput=nullptr;std::array<void*,20> hooks{};
+InputReader readInput=nullptr;std::array<void*,21> hooks{};
 // Slot17, journal and original are immutable/process-retained after install.
 using QueueConsumerFn=unsigned(__thiscall*)(void*,unsigned,unsigned,unsigned);
 QueueConsumerFn queueConsumerOriginal=nullptr;
@@ -181,6 +182,18 @@ bool selectionRequested=false,selectionInstalled=false,selectionDisabled=false,s
 const char* selectionStatus="not_requested";std::int64_t selectionFrequency=0;
 void SelectionUpdateEnter(void*)noexcept;
 void SelectionUpdateReturned(void*)noexcept;
+// Slot20 is an opt-in, process-retained forwarding observer, never an input hook.
+namespace vehicleConsumer=vehicleConsumerEvidence;
+using VehicleConsumerFn=void(__thiscall*)(void*,unsigned);
+VehicleConsumerFn vehicleConsumerOriginal=nullptr;vehicleConsumer::Journal<>* vehicleConsumerJournal=nullptr;
+vehicleConsumer::ProducerClock vehicleConsumerClock;std::mutex vehicleConsumerMutex;
+thread_local vehicleConsumer::UpdateToken* vehicleConsumerUpdate=nullptr;
+thread_local unsigned vehicleConsumerDepth=0;
+std::atomic<unsigned> vehicleConsumerCallbacks=0,vehicleConsumerDrops=0,vehicleConsumerForeign=0;
+std::atomic<std::uint64_t> vehicleConsumerInvocations=0,vehicleConsumerOutside=0;
+std::atomic<std::int64_t> vehicleConsumerDeadline=0;
+bool vehicleConsumerRequested=false,vehicleConsumerInstalled=false,vehicleConsumerDisabled=false,vehicleConsumerDrained=false;
+const char* vehicleConsumerStatus="not_requested";std::int64_t vehicleConsumerFrequency=0;
 
 projectile_entry::Helper ReceiverEntryOriginal=nullptr;ProjectileLaunchBinding projectileLaunchBinding{};
 // Install-time executable section bounds, immutable while callbacks are active.
@@ -1022,6 +1035,132 @@ VehicleFinalInputCheck ValidateVehicleFinalInput(const Scope& pending)noexcept {
         return VehicleFinalInputCheck::Driver;
     return VehicleFinalInputCheck::Okay;
 }
+struct VehicleConsumerContext {
+    Owner owner{};VehicleRouteSnapshot route{};CampaignVehicleSnapshot driver{};
+    vehicleConsumer::Identity identity{};bool valid=false;
+} vehicleConsumerContext;
+std::int64_t HandNanos(std::int64_t ticks)noexcept;
+bool VehicleConsumerWindow(std::int64_t now)noexcept {
+    const auto until=vehicleConsumerDeadline.load(std::memory_order_acquire);
+    return vehicleConsumerJournal&&vehicleConsumerClock.Enabled()&&now>0&&until>0&&now<=until;
+}
+void PrepareVehicleConsumer(const Scope& pending)noexcept {
+    if(!vehicleConsumerJournal||!vehicleConsumerClock.Enabled()||!pending.vehicleFinalDriver)return;
+    const auto& c=pending.vehicleFinalCommit;
+    if((c.throttle&0x7fffffffu)&&c.stamp.qpc>0&&vehicleConsumerFrequency>0&&c.stamp.qpc<=INT64_MAX-20*vehicleConsumerFrequency){
+        std::int64_t empty=0;vehicleConsumerDeadline.compare_exchange_strong(empty,c.stamp.qpc+20*vehicleConsumerFrequency);
+    }
+    if(!VehicleConsumerWindow(c.stamp.qpc))return;
+    std::unique_lock lock(vehicleConsumerMutex,std::try_to_lock);if(!lock){++vehicleConsumerDrops;return;}
+    vehicleConsumerContext.owner=pending.owner;vehicleConsumerContext.route=pending.vehicleFinalRoute;
+    vehicleConsumerContext.driver=*pending.vehicleFinalDriver;vehicleConsumerContext.identity=vehicleConsumer::Copy(c);
+    vehicleConsumerContext.valid=c.check==VehicleFinalInputCheck::Okay&&vehicleConsumer::Valid(vehicleConsumerContext.identity);
+}
+unsigned ValidateVehicleConsumerContext(const VehicleConsumerContext& context,vehicleConsumer::View& view,bool& nativeCurrent)noexcept {
+    nativeCurrent=false;
+    Owner current{};
+    if(!context.valid||!Resolve(current)||current.role!=OwnerRole::Vehicle||current!=context.owner)return vehicleConsumer::Owner;
+    const VehicleRouteMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t n){return Read(at,dst,n);},
+        [](void*,unsigned at,const char* name){return Type(at,name);}};
+    const VehicleRouteBinding binding{unsigned(image+profile.gameplay.managerVtable),unsigned(image+profile.gameplay.inputRouterVtable),unsigned(image+profile.cacheVtable),true};
+    const auto& i=context.identity;
+    const auto route=ReadVehicleRoutes(memory,binding,{current.manager,current.player,current.soldier,current.weak,i.actorGeneration,i.seatGeneration});
+    const auto& expected=context.route;
+    if(route.status!=VehicleRouteStatus::Okay||route.snapshot.identity!=expected.identity||route.snapshot.player!=expected.player||
+       route.snapshot.weak!=expected.weak||route.snapshot.slot!=expected.slot||route.snapshot.fingerprint!=expected.fingerprint||
+       route.snapshot.count!=expected.count||route.snapshot.routes!=expected.routes)return vehicleConsumer::Owner;
+    if(context.driver.driver!=i.driver||!Type(i.driver,"ClientVehicleComponent")||
+       !RevalidateCampaignVehicleProfile(memory,context.driver,route.snapshot))return vehicleConsumer::Owner;
+    nativeCurrent=true;
+    // Published generations have their own coherent reader. Never read the
+    // input-thread's non-atomic rigEpoch/nativeEpochs/cachedInput here.
+    const auto now=HandNanos(SelectionNow());const auto observed=vehicleObservation.Read(now);
+    view.observationSerial=observed.serial;
+    view.generationsCurrent=vehicleObservation.Current(observed,now)==VehicleObservationReason::Available;
+    if(!view.generationsCurrent)return vehicleConsumer::Owner;
+    const auto& o=observed.owner;
+    view.owner={o.manager,o.player,o.soldier,o.weak,o.controlled,o.entry,o.router,observed.driver,
+        o.actorGeneration,o.seatGeneration,o.inputEpoch,o.movementEpoch,observed.input.spaceGeneration,observed.routeFingerprint};
+    return view.owner==context.identity?0:vehicleConsumer::Owner;
+}
+unsigned ReadVehicleConsumerView(const VehicleConsumerContext& context,unsigned actualPair,
+    vehicleConsumer::View& view,bool& readable)noexcept {
+    readable=false;view.owner=context.identity;bool nativeCurrent=false;
+    unsigned checks=ValidateVehicleConsumerContext(context,view,nativeCurrent);if(!nativeCurrent)return checks;
+    unsigned root=0,current=0,previous=0,a=0,b=0;unsigned char inhibit=0;
+    if(!SelectionReadWord(context.owner.player,0xc70,root))return checks|vehicleConsumer::Read;
+    view.pair=actualPair?actualPair:root;
+    if(view.pair!=root)checks|=vehicleConsumer::Pair;
+    // Actual argument is observed only if it has the verified two-cache layout.
+    if(!SelectionReadWord(view.pair,0x1a0,current)||!SelectionReadWord(view.pair,0x1a4,previous))return checks|vehicleConsumer::Read;
+    view.current=current;view.previous=previous;
+    if(view.pair>UINT32_MAX-0xd0||!((current==view.pair&&previous==view.pair+0xd0)||
+       (current==view.pair+0xd0&&previous==view.pair))||!SelectionReadWord(view.pair,0,a)||
+       !SelectionReadWord(view.pair,0xd0,b)||a!=image+profile.cacheVtable||a!=b)return checks|vehicleConsumer::Read;
+    constexpr unsigned offsets[]{8,16,0x98,0x9c};
+    for(unsigned n=0;n<4;++n)if(!SelectionReadWord(current,offsets[n],view.words[n]))checks|=vehicleConsumer::Read;
+    if(!SelectionReadWord(context.identity.driver,0xd4,view.physics)||!SelectionReadWord(view.physics,0,view.physicsVtable)||
+       !InImage(view.physicsVtable,0x64)||context.identity.driver>UINT32_MAX-0xdd||
+       !Read(context.identity.driver+0xdc,&inhibit,1))checks|=vehicleConsumer::Read;
+    view.zeroControls=inhibit;
+    unsigned rootAfter=0,currentAfter=0,previousAfter=0,physicsAfter=0,vtableAfter=0;unsigned char inhibitAfter=0;
+    std::array<unsigned,4> wordsAfter{};
+    bool same=SelectionReadWord(context.owner.player,0xc70,rootAfter)&&SelectionReadWord(view.pair,0x1a0,currentAfter)&&
+        SelectionReadWord(view.pair,0x1a4,previousAfter)&&SelectionReadWord(context.identity.driver,0xd4,physicsAfter)&&
+        SelectionReadWord(physicsAfter,0,vtableAfter)&&Read(context.identity.driver+0xdc,&inhibitAfter,1);
+    for(unsigned n=0;n<4;++n)same=SelectionReadWord(current,offsets[n],wordsAfter[n])&&same;
+    if(!same)checks|=vehicleConsumer::Read;
+    if(root!=rootAfter||current!=currentAfter||previous!=previousAfter)checks|=vehicleConsumer::Pair;
+    if(wordsAfter!=view.words||inhibitAfter!=inhibit)checks|=vehicleConsumer::Words;
+    if(physicsAfter!=view.physics||vtableAfter!=view.physicsVtable)checks|=vehicleConsumer::Physics;
+    vehicleConsumer::View last{};last.owner=context.identity;bool nativeAfter=false;
+    checks|=ValidateVehicleConsumerContext(context,last,nativeAfter);
+    if(view.owner!=last.owner||view.observationSerial!=last.observationSerial||!last.generationsCurrent)checks|=vehicleConsumer::Owner;
+    readable=nativeCurrent&&nativeAfter&&!(checks&vehicleConsumer::Read);return checks;
+}
+void PublishVehicleConsumer(const Scope& pending,const VehicleFinalInputRecord& final)noexcept {
+    if(!VehicleConsumerWindow(final.returned.qpc)||!vehicleConsumerUpdate||!vehicleConsumerUpdate->active||!pending.vehicleFinalDriver)return;
+    VehicleConsumerContext context;context.owner=pending.owner;context.route=pending.vehicleFinalRoute;context.driver=*pending.vehicleFinalDriver;
+    context.identity=vehicleConsumer::Copy(pending.vehicleFinalCommit);context.valid=true;
+    const auto first=vehicleConsumerClock.Sample();vehicleConsumer::View view{};bool readable=false;
+    unsigned checks=final.complete?0:vehicleConsumer::Commit;
+    checks|=ReadVehicleConsumerView(context,0,view,readable);if(!readable)checks|=vehicleConsumer::Read;
+    const auto last=vehicleConsumerClock.Sample();
+    const auto publication=vehicleConsumer::MakePublication(pending.vehicleFinalCommit,view,first,last,
+        vehicleConsumerUpdate->revision,final.returned.qpc,checks);
+    std::unique_lock lock(vehicleConsumerMutex,std::try_to_lock);if(lock)vehicleConsumerJournal->Publish(publication);else ++vehicleConsumerDrops;
+}
+struct VehicleConsumerToken {vehicleConsumer::Record row{};VehicleConsumerContext context{};bool active=false;};
+static_assert(std::is_trivially_destructible_v<VehicleConsumerToken> && sizeof(VehicleConsumerToken)<16*1024);
+VehicleConsumerToken BeginVehicleConsumer(void* self,unsigned argument,unsigned caller)noexcept {
+    VehicleConsumerToken token{};const auto now=SelectionNow();if(!VehicleConsumerWindow(now)){++vehicleConsumerOutside;return token;}
+    auto& row=token.row;row.invocation=++vehicleConsumerInvocations;row.receiver=reinterpret_cast<unsigned>(self);
+    row.argument=argument;row.caller=caller>=image?caller-unsigned(image):caller;row.thread=GetCurrentThreadId();row.beginQpc=now;
+    row.entry=vehicleConsumerClock.Sample();
+    {std::unique_lock lock(vehicleConsumerMutex,std::try_to_lock);if(!lock){++vehicleConsumerDrops;return token;}
+        token.context=vehicleConsumerContext;row.publication=vehicleConsumerJournal->Latest();}
+    if(!token.context.identity.driver||token.context.identity.driver>UINT32_MAX-0xc0||row.receiver!=token.context.identity.driver+0xc0){++vehicleConsumerForeign;return token;}
+    token.active=true;if(vehicleConsumerDepth>1)row.reasons|=vehicleConsumer::Nested;
+    row.reasons|=ReadVehicleConsumerView(token.context,argument,row.before,row.beforeReadable);
+    if(row.entry!=vehicleConsumerClock.Sample())row.reasons|=vehicleConsumer::Overlap;
+    return token;
+}
+void EndVehicleConsumer(VehicleConsumerToken& token,bool normal)noexcept {
+    if(!token.active)return;auto& row=token.row;row.normal=normal;row.endQpc=SelectionNow();
+    if(normal)row.reasons|=ReadVehicleConsumerView(token.context,row.argument,row.after,row.afterReadable);
+    row.returned=vehicleConsumerClock.Sample();
+    std::unique_lock lock(vehicleConsumerMutex,std::try_to_lock);if(!lock){++vehicleConsumerDrops;return;}
+    row.returnPublication=vehicleConsumerJournal->Latest().generation;vehicleConsumerJournal->Observe(row);
+}
+#if defined(_MSC_VER) && defined(_M_IX86)
+void __fastcall VehicleConsumerHook(void* self,void*,unsigned argument){
+    const auto incoming=GetLastError();++vehicleConsumerCallbacks;++vehicleConsumerDepth;
+    auto token=BeginVehicleConsumer(self,argument,reinterpret_cast<unsigned>(_ReturnAddress()));SetLastError(incoming);
+    __try {vehicleConsumerOriginal(self,argument);}
+    __finally {const auto returned=GetLastError();EndVehicleConsumer(token,!AbnormalTermination());
+        --vehicleConsumerDepth;--vehicleConsumerCallbacks;SetLastError(returned);}
+}
+#endif
 void FinishVehicleFinalInput(Scope& pending,bool unwind=false)noexcept {
     if(!pending.vehicleFinalPending)return;
     const auto error=GetLastError();pending.vehicleFinalPending=false;
@@ -1034,6 +1173,7 @@ void FinishVehicleFinalInput(Scope& pending,bool unwind=false)noexcept {
     row.returned=returned;
     {std::unique_lock lock(vehicleViewMutex,std::try_to_lock);
         if(lock)vehicleFinalInputs.Observe(row);else ++vehicleFinalInputDrops;}
+    if(!unwind)PublishVehicleConsumer(pending,row);
     SetLastError(error);
 }
 void VehicleFinalOriginalUpdate(void* self,float dt,Scope& pending){
@@ -3041,7 +3181,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
                 if(c.check==VehicleFinalInputCheck::Okay&&(!t||!p||throttle!=c.throttle||permissions!=c.permissions))
                     c.check=VehicleFinalInputCheck::Read;
             }
-            pending.vehicleFinalPending=true;SetLastError(error);
+            pending.vehicleFinalPending=true;PrepareVehicleConsumer(pending);SetLastError(error);
         }
         // Opt-in readback/camera association only. A busy render copy drops this
         // diagnostic input rather than delaying the native input callback.
@@ -5031,8 +5171,9 @@ void UpdateHookBody(void* self,float dt){
 }
 void __fastcall UpdateHook(void* self,void*,float dt){
 #if defined(_MSC_VER) && defined(_M_IX86)
-    if(!queuePhaseJournal&&!selectionJournal){UpdateHookBody(self,dt);return;}
+    if(!queuePhaseJournal&&!selectionJournal&&!vehicleConsumerJournal){UpdateHookBody(self,dt);return;}
     const auto incoming=GetLastError();++queuePhaseCallbacks;
+    auto produced=vehicleConsumerClock.Begin();auto* previousProduced=vehicleConsumerUpdate;vehicleConsumerUpdate=&produced;
     if(selectionJournal)++selectionCallbacks;
     auto selected=selectionJournal?selectionJournal->Begin(selectionObservation::Kind::Update,selectionThread,
         SelectionNow(),GetCurrentThreadId(),reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(_ReturnAddress())):selectionObservation::Token{};
@@ -5048,6 +5189,7 @@ void __fastcall UpdateHook(void* self,void*,float dt){
                 SelectionOutcome(selected.row.issue,selectionObservation::Kind::Refused);
             selectionJournal->End(selected,selectionThread,SelectionNow(),!AbnormalTermination());--selectionCallbacks;
         }
+        vehicleConsumerClock.End(produced);vehicleConsumerUpdate=previousProduced;
         selectionUpdate=previousSelection;queuePhaseInput=previous;--queuePhaseCallbacks;SetLastError(returned);
     }
 #else
@@ -5986,6 +6128,50 @@ void ReportBoatAimEvidence(std::ostream& out){
         out<<"{\"ms\":"<<r.ms<<",\"sequence\":"<<r.sequence<<",\"yaw_command\":"<<r.yaw<<",\"pitch_command\":"<<r.pitch<<",\"yaw_error\":"<<r.yawError<<",\"pitch_error\":"<<r.pitchError<<",\"native_yaw\":"<<r.jointYaw<<",\"native_pitch\":"<<r.jointPitch<<",\"fire\":"<<r.fire<<'}';}
     out<<']';
 }
+void ReportVehicleConsumerEvidence(std::ostream& out){
+    std::lock_guard lock(vehicleConsumerMutex);const auto until=vehicleConsumerDeadline.load();const auto now=SelectionNow();
+    out<<",\"vehicle_consumer_evidence\":{\"schema\":1,\"requested\":"<<(vehicleConsumerRequested?"true":"false")
+       <<",\"installed\":"<<(vehicleConsumerInstalled?"true":"false")<<",\"install_status\":\""<<vehicleConsumerStatus
+       <<"\",\"hooks_disabled\":"<<(vehicleConsumerDisabled?"true":"false")<<",\"drained\":"<<(vehicleConsumerDrained?"true":"false")
+       <<",\"activation_qpc\":"<<(until?until-20*vehicleConsumerFrequency:0)<<",\"deadline_qpc\":"<<until
+       <<",\"qpc_frequency\":"<<vehicleConsumerFrequency<<",\"expired\":"<<(until&&now>until?"true":"false")
+       <<",\"window_seconds\":20,\"capacity\":"<<vehicleConsumer::Journal<>::MaxRecords
+       <<",\"invocations_in_window\":"<<vehicleConsumerInvocations.load()<<",\"outside_window\":"<<vehicleConsumerOutside.load()
+       <<",\"foreign_receivers\":"<<vehicleConsumerForeign.load()<<",\"lock_drops\":"<<vehicleConsumerDrops.load()
+       <<",\"boundary_only\":true,\"setter_or_simulation_success_claimed\":false,\"native_authority\":false"
+       <<",\"reason_bits\":{\"no_publication\":1,\"publication_changed\":2,\"owner\":4,\"pair\":8,\"words\":16,\"clock\":32,\"overlap\":64,\"caller\":128,\"receiver\":256,\"read\":512,\"unwind\":1024,\"nested\":2048,\"physics\":4096,\"commit\":8192}"
+       <<",\"first_bits\":{\"active\":1,\"neutral_after_active\":2,\"mismatch\":4,\"zero_controls\":8,\"braking\":16,\"active_mismatch\":32}"
+       <<",\"publication_first_bits\":{\"active\":1,\"neutral_after_active\":2,\"mismatch\":4}"
+       <<",\"word_order\":[\"action0\",\"action2\",\"permissions98\",\"permissions9c\"]";
+    const auto epochOut=[&](const vehicleConsumer::Epoch& e){out<<'['<<e.revision<<','<<e.active<<']';};
+    const auto view=[&](const vehicleConsumer::View& v){const auto& i=v.owner;
+        out<<"{\"owner\":["<<i.manager<<','<<i.player<<','<<i.actor<<','<<i.weak<<','<<i.vehicle<<','<<i.entry<<','<<i.router<<','<<i.driver
+           <<"],\"generations\":["<<i.actorGeneration<<','<<i.seatGeneration<<','<<i.inputEpoch<<','<<i.movementEpoch<<','<<i.space
+           <<"],\"route\":"<<i.route<<",\"pair\":["<<v.pair<<','<<v.current<<','<<v.previous<<"],\"words\":[";
+        for(unsigned n=0;n<4;++n){if(n)out<<',';out<<v.words[n];}
+        out<<"],\"physics\":"<<v.physics<<",\"physics_vtable\":"<<v.physicsVtable<<",\"zero_controls\":"<<v.zeroControls
+           <<",\"observation_serial\":"<<v.observationSerial<<",\"generations_current\":"<<(v.generationsCurrent?"true":"false")<<'}';};
+    const auto publication=[&](const vehicleConsumer::Publication& p){
+        out<<"{\"generation\":"<<p.generation<<",\"update\":"<<p.update<<",\"gather\":"<<p.gather<<",\"input\":"<<p.input
+           <<",\"cache\":"<<p.cache<<",\"committed_throttle\":"<<p.committedThrottle<<",\"committed_permissions\":"<<p.committedPermissions
+           <<",\"qpc\":"<<p.qpc<<",\"reasons\":"<<p.reasons<<",\"first_mask\":"<<p.firstMask<<",\"complete\":"<<(p.complete?"true":"false")
+           <<",\"first_epoch\":";epochOut(p.first);out<<",\"last_epoch\":";epochOut(p.last);out<<",\"view\":";view(p.view);out<<'}';};
+    const auto* j=vehicleConsumerJournal;
+    out<<",\"samples\":"<<(j?j->Samples():0)<<",\"omitted\":"<<(j?j->Omitted():0)<<",\"failures\":"<<(j?j->Failures():0)
+       <<",\"publication_samples\":"<<(j?j->Publications():0)<<",\"publication_omitted\":"<<(j?j->PublicationOmitted():0)
+       <<",\"publication_failures\":"<<(j?j->PublicationFailures():0)<<",\"publications\":[";
+    if(j)for(std::size_t n=0;n<j->PublicationSize();++n){if(n)out<<',';publication(j->PublicationAt(n));}
+    out<<"],\"events\":[";
+    if(j)for(std::size_t n=0;n<j->Size();++n){const auto& r=j->At(n);if(n)out<<',';
+        out<<"{\"invocation\":"<<r.invocation<<",\"sequence\":"<<r.sequence<<",\"first_mask\":"<<r.firstMask
+           <<",\"thread\":"<<r.thread<<",\"receiver\":"<<r.receiver<<",\"argument\":"<<r.argument<<",\"caller_rva\":"<<r.caller
+           <<",\"begin_qpc\":"<<r.beginQpc<<",\"end_qpc\":"<<r.endQpc<<",\"entry_epoch\":";epochOut(r.entry);
+        out<<",\"return_epoch\":";epochOut(r.returned);out<<",\"return_publication\":"<<r.returnPublication
+           <<",\"reasons\":"<<r.reasons<<",\"normal\":"<<(r.normal?"true":"false")<<",\"joined\":"<<(r.joined?"true":"false")
+           <<",\"before_readable\":"<<(r.beforeReadable?"true":"false")<<",\"after_readable\":"<<(r.afterReadable?"true":"false")
+           <<",\"publication\":";publication(r.publication);out<<",\"before\":";view(r.before);out<<",\"after\":";view(r.after);out<<'}';}
+    out<<"]}";
+}
 void ReportVehicleCameraEvidence(std::ostream& out){
     std::lock_guard lock(vehicleViewMutex);const auto precision=out.precision();out.precision(9);out<<",\"vehicle_camera_evidence\":[";
     const auto matrix=[&](const math::Matrix4& m){out<<'[';for(unsigned r=0;r<4;++r)for(unsigned c=0;c<4;++c){if(r||c)out<<',';out<<m.values[r][c];}out<<']';};
@@ -6054,7 +6240,7 @@ void ReportVehicleCameraEvidence(std::ostream& out){
         <<",\"qpc_frequency\":"<<handFrequency
         <<",\"omitted\":"<<vehicleFinalInputs.Omitted()<<",\"failures\":"<<vehicleFinalInputs.Failures()<<",\"omitted_failures\":"<<vehicleFinalInputs.OmittedFailures()
         <<",\"lock_drops\":"<<vehicleFinalInputDrops.load()<<'}';
-    out.precision(precision);
+    out.precision(precision);ReportVehicleConsumerEvidence(out);
 }
 bool InstallProjectileTarget(std::span<const std::byte> bytes,const engine::PeImage& pe,
     std::uintptr_t base,bool observe,bool originRequest,bool processRetainedProbe,bool smokeRequest=false)noexcept {
@@ -6227,9 +6413,57 @@ bool EnableQueuePhaseObservation(std::span<const std::byte> bytes,const engine::
     (void)bytes;(void)pe;(void)base;(void)processRetainedProbe;return false;
 #endif
 }
+bool EnableVehicleConsumerObservation(std::span<const std::byte> bytes,const engine::PeImage& pe,
+    std::uintptr_t base,bool processRetainedProbe)noexcept {
+    if(vehicleConsumerRequested)return false;vehicleConsumerRequested=true;vehicleConsumerStatus="unsupported_abi";
+#if defined(_MSC_VER) && defined(_M_IX86)
+    vehicleConsumerStatus="prerequisites_refused";
+    if(!processRetainedProbe||enabled.load(std::memory_order_acquire)||!hooks[0]||!hooks[1]||hooks[20]||
+       vehicleConsumerOriginal||!campaignVehicleBinding.verified||base!=0x400000||base!=image||pe.machine!=0x14c)return false;
+    const auto digest=[](std::span<const std::byte> data,std::string_view expected)noexcept {
+        if(data.empty()||data.size()>ULONG_MAX||expected.size()!=64)return false;std::array<unsigned char,32> hash{};
+        if(BCryptHash(BCRYPT_SHA256_ALG_HANDLE,nullptr,0,reinterpret_cast<PUCHAR>(const_cast<std::byte*>(data.data())),
+            ULONG(data.size()),hash.data(),ULONG(hash.size()))<0)return false;
+        constexpr char hex[]="0123456789abcdef";for(unsigned n=0;n<hash.size();++n)
+            if(hex[hash[n]>>4]!=expected[2*n]||hex[hash[n]&15]!=expected[2*n+1])return false;return true;
+    };
+    vehicleConsumerStatus="signature_refused";if(!digest(bytes,vehicleConsumer::ExecutableHash))return false;
+    const auto verify=[&](unsigned rva,unsigned size,const char* hash)noexcept {
+        const auto offset=Offset(pe,rva,size);bool executable=false;
+        for(const auto& section:pe.sections)if((section.flags&0x20000000)&&rva>=section.rva&&
+            rva-section.rva<=section.virtualSize&&size<=section.virtualSize-(rva-section.rva))executable=true;
+        if(!executable||!offset||*offset>bytes.size()||size>bytes.size()-*offset)return false;
+        const auto file=bytes.subspan(*offset,size);if(!digest(file,hash))return false;
+        std::array<std::byte,vehicleConsumer::TargetSize> live{};
+        return size<=live.size()&&Read(base+rva,live.data(),size)&&std::equal(file.begin(),file.end(),live.begin());
+    };
+    // Includes the whole generic body through C2 04 00, its exact client caller,
+    // both forwarding bodies and the current-buffer scalar getter bridge.
+    if(!verify(vehicleConsumer::TargetRva,vehicleConsumer::TargetSize,vehicleConsumer::TargetHash)||
+       !verify(0x3bee70,63,"ca371b6cb0bf39e1f8e7092a84968aad2782fd5420b70b7d0cfe7fced9f22e8b")||
+       !verify(0x473b60,106,"a55d1869c18865e9cfbd5197f8d06b1e567919b2dbbd87e15f52c222c9f9a839")||
+       !verify(0x3c77c0,14,"e50c3321e1393087e7363bd251af6a4d5a9acc5aa465962e7a5f26d2585d5050")||
+       !verify(0x21c3e0,11,"8a2f48046de044b4ec405eaccdbb59f47191daa271f6f1b26549ab234521f02b"))return false;
+    LARGE_INTEGER frequency{};vehicleConsumerStatus="clock_unavailable";
+    if(!QueryPerformanceFrequency(&frequency)||frequency.QuadPart<=0||frequency.QuadPart>INT64_MAX/20)return false;
+    vehicleConsumerStatus="allocation_failed";auto* journal=new(std::nothrow) vehicleConsumer::Journal<>;
+    if(!journal)return false;
+    auto* target=reinterpret_cast<void*>(base+vehicleConsumer::TargetRva);vehicleConsumerStatus="hook_create_failed";
+    if(MH_CreateHook(target,VehicleConsumerHook,reinterpret_cast<void**>(&vehicleConsumerOriginal))!=MH_OK){delete journal;return false;}
+    // Retain trampoline and data even after disable/drain, for a caller paused
+    // before callback registration. No new action capability is granted.
+    vehicleConsumerFrequency=frequency.QuadPart;vehicleConsumerJournal=journal;hooks[20]=target;
+    vehicleConsumerInstalled=true;vehicleConsumerStatus="installed";return true;
+#else
+    (void)bytes;(void)pe;(void)base;(void)processRetainedProbe;return false;
+#endif
+}
 bool EnableNativeCycleSelectionObservation(std::span<const std::byte> bytes,const engine::PeImage& pe,
     std::uintptr_t base,bool explicitRequest,bool processRetainedProbe)noexcept {
     if(!explicitRequest||selectionRequested)return false;
+    // The existing explicit mechanism-snapshot request owns both passive
+    // recorders; each retains its own installation/refusal status.
+    (void)EnableVehicleConsumerObservation(bytes,pe,base,processRetainedProbe);
     selectionRequested=true;selectionStatus="unsupported_abi";
 #if defined(_MSC_VER) && defined(_M_IX86)
     selectionStatus="prerequisites_refused";
@@ -6294,6 +6528,7 @@ void ReportFireRouteTelemetry(std::ostream& out) {
 void Start()noexcept {
     if(queuePhaseJournal)(void)queuePhaseJournal->Start();
     if(selectionInstalled)(void)selectionJournal->Start();
+    if(vehicleConsumerInstalled)vehicleConsumerClock.Start();
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
     if(chestKnife)chestKnifeNative::Start();
     selectedKnife::Start();
@@ -6308,6 +6543,7 @@ void Start()noexcept {
 #endif
 }
 bool PrepareSessionStop()noexcept {
+    vehicleConsumerClock.Close();
     if(queuePhaseJournal)queuePhaseJournal->Close(QueuePhaseNow());
     if(selectionJournal)selectionJournal->Close();
     navigationObservation.Stop();
@@ -6361,6 +6597,7 @@ bool Stop()noexcept {
     if(chestKnife)okay=chestKnifeNative::Stop()&&okay;
 #endif
     if(selectionJournal)selectionDisabled=true;
+    if(vehicleConsumerJournal)vehicleConsumerDisabled=true;
     for(unsigned slot=0;slot<hooks.size();++slot)if(const auto entry=hooks[slot]){
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
         if(slot==14){okay=projectileTargetLife.Disable()&&okay;continue;}
@@ -6368,6 +6605,7 @@ bool Stop()noexcept {
         const auto r=MH_DisableHook(entry);const bool disabled=r==MH_OK||r==MH_ERROR_DISABLED;okay&=disabled;
         if(slot==17)queuePhaseDisabled=disabled;
         if(selectionJournal&&(slot==0||slot==18||slot==19))selectionDisabled&=disabled;
+        if(vehicleConsumerJournal&&(slot==0||slot==20))vehicleConsumerDisabled&=disabled;
     }
     const auto targetActive=[]()noexcept {
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
@@ -6380,7 +6618,7 @@ bool Stop()noexcept {
         return false;
 #endif
     };
-    const auto until=GetTickCount64()+2000;while((active.load()||queuePhaseCallbacks.load()||selectionCallbacks.load()||targetActive())&&GetTickCount64()<until)Sleep(1);
+    const auto until=GetTickCount64()+2000;while((active.load()||queuePhaseCallbacks.load()||selectionCallbacks.load()||vehicleConsumerCallbacks.load()||targetActive())&&GetTickCount64()<until)Sleep(1);
     if(queuePhaseJournal){
         queuePhaseDrained=queuePhaseJournal->Drained(queuePhaseDisabled,queuePhaseCallbacks.load());
         okay=queuePhaseDrained&&okay;
@@ -6394,6 +6632,10 @@ bool Stop()noexcept {
     if(selectionJournal){
         selectionDrained=selectionJournal->Drained(selectionDisabled,selectionCallbacks.load());
         okay=selectionDrained&&okay;
+    }
+    if(vehicleConsumerJournal){
+        vehicleConsumerDrained=vehicleConsumerDisabled&&!vehicleConsumerCallbacks.load()&&!vehicleConsumerClock.Sample().active;
+        okay=vehicleConsumerDrained&&okay;
     }
     // Selection slots18/19, journal and originals are never removed/reset.
     // This candidate observer owns no game state. Remove its trampoline only
@@ -6416,12 +6658,14 @@ bool Stop()noexcept {
     selectedMeshes.Clear();if(bodyInventory&&!active.load())bodyInventory->Cancel();
     if(!active.load()&&weaponVisibilityProbe){LARGE_INTEGER now{};QueryPerformanceCounter(&now);weaponVisibilityProbe->Cancel(9,HandNanos(now.QuadPart));
         rigPublication::PublishWeaponVisibility({});weaponVisibilitySample.store({},std::memory_order_release);}
-    return okay&&!active.load()&&!queuePhaseCallbacks.load()&&!selectionCallbacks.load()&&!targetActive();
+    return okay&&!active.load()&&!queuePhaseCallbacks.load()&&!selectionCallbacks.load()&&!vehicleConsumerCallbacks.load()&&
+        !vehicleConsumerClock.Sample().active&&!targetActive();
 }
 void ReportNativeCycleSelection(std::ostream& out){
     namespace so=selectionObservation;
     // Report runs after native stop. Heap allocation/formatting are confined here.
-    auto snapshot=std::make_unique<so::Snapshot>(selectionJournal?selectionJournal->Capture():so::Snapshot{});
+    auto snapshot=std::make_unique<so::Snapshot>();
+    if(selectionJournal)selectionJournal->Capture(*snapshot);
     const auto joined=so::Analyze(*snapshot);
     const bool drained=selectionJournal&&selectionDrained&&selectionJournal->Drained(selectionDisabled,selectionCallbacks.load());
     constexpr const char* results[]={"not_started","attempted","refused","pending_publication","pending_consumer","pending_neutral_publications","pending_selected_owner","joined_diagnostic_only","rejected"};

@@ -219,6 +219,10 @@ class Journal {
     std::atomic<bool> started_{false},closed_{false},capped_{false},expired_{false};
     std::atomic<std::int64_t> activation_{0};std::int64_t duration_=0;
     std::uint64_t publication_=0;Row lastPublication_{};
+    // The journal is allocated once before hooks are enabled. Reuse this fixed
+    // buffer for the optional completion join instead of putting a full capture
+    // on the game's stack or allocating during an active callback.
+    Snapshot analysis_{};std::atomic_flag analysisGate_=ATOMIC_FLAG_INIT;
 public:
     bool Configure(std::int64_t frequency)noexcept {if(duration_||frequency<=0||frequency>INT64_MAX/20)return false;duration_=frequency*20;return true;}
     bool Start()noexcept {if(!duration_||closed_.load())return false;return !started_.exchange(true);}
@@ -284,10 +288,10 @@ public:
         if(index>=Capacity||!rows_[index].ready.load(std::memory_order_acquire))return false;
         out=rows_[index].row;return true;
     }
-    Snapshot Capture()const noexcept {
-        Snapshot s{};s.dropped=dropped_.load();s.capped=capped_.load();s.closed=closed_.load();s.expired=expired_.load();
+    void Capture(Snapshot& s)const noexcept {
+        s.count=0;s.dropped=dropped_.load();s.capped=capped_.load();s.closed=closed_.load();s.expired=expired_.load();
         s.active=Active();s.revision=Revision();s.activation=activation_.load();s.deadline=s.activation?s.activation+duration_:0;
-        const auto n=count_.load();for(unsigned i=0;i<n;++i)if(Read(i,s.rows[s.count]))++s.count;return s;
+        const auto n=count_.load();for(unsigned i=0;i<n;++i)if(Read(i,s.rows[s.count]))++s.count;
     }
     void End(Token& t,ThreadState& thread,std::int64_t now,bool normal)noexcept {
         if(!t.active)return;auto& r=t.row;const auto k=unsigned(r.kind);
@@ -306,9 +310,12 @@ public:
         thread=t.previous;--active_[k];t.active=false;
         // Closing a complete diagnostic changes no native work or future input.
         // Process-retained callbacks/originals remain callable after this point.
-        if(activation_.load()&&!closed_.load()&&Active()==std::array<unsigned,3>{}){
-            const auto revision=Revision();const auto s=Capture();const auto result=Analyze(s);
+        // Contention skips only this optional join, never recording or expiry;
+        // the revision/active bookends still decide whether closure is valid.
+        if(activation_.load()&&!closed_.load()&&Active()==std::array<unsigned,3>{}&&!analysisGate_.test_and_set()){
+            const auto revision=Revision();Capture(analysis_);const auto result=Analyze(analysis_);
             if((result.result==Result::Joined||result.result==Result::Refused)&&revision==Revision()&&Active()==std::array<unsigned,3>{})Close();
+            analysisGate_.clear();
         }
     }
     bool Drained(bool disabled,unsigned callbacks)const noexcept{return closed_.load()&&disabled&&!callbacks&&Active()==std::array<unsigned,3>{};}

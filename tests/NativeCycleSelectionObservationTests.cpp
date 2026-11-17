@@ -8,6 +8,9 @@
 using namespace fvr::bc2;
 namespace so=fvr::bc2::cycleSelectionObservation;
 namespace {
+std::unique_ptr<so::Snapshot> Capture(const so::Journal& journal){
+    auto snapshot=std::make_unique<so::Snapshot>();journal.Capture(*snapshot);return snapshot;
+}
 struct Fixture {
     std::unique_ptr<so::Journal> journal=std::make_unique<so::Journal>();so::ThreadState thread{};
     so::Owner old{0x10000,0x20000,0x30000,0x20000,0x40000,0,0x50000,0x60000,{0x70000,0x71000,11,{}}};
@@ -62,7 +65,7 @@ struct Fixture {
         v.row.selected={0x90000,1,0,1};
         journal->End(v,thread,22,true);
     }
-    std::unique_ptr<so::Snapshot> Complete(){Issue();Consumer();Neutral();return std::make_unique<so::Snapshot>(journal->Capture());}
+    std::unique_ptr<so::Snapshot> Complete(){Issue();Consumer();Neutral();return Capture(*journal);}
 };
 so::Row* Find(so::Snapshot& s,so::Kind kind,unsigned which=0){for(unsigned n=0;n<s.count;++n)if(s.rows[n].kind==kind){if(!which--)return &s.rows[n];}return nullptr;}
 int CompleteJoin(){
@@ -87,14 +90,14 @@ int ExactGenerations(){
     return 0;
 }
 int RefusedAndMissing(){
-    Fixture f;f.Issue(false,true);auto s=std::make_unique<so::Snapshot>(f.journal->Capture());
+    Fixture f;f.Issue(false,true);auto s=Capture(*f.journal);
     CHECK(so::Analyze(*s).result==so::Result::Refused&&s->closed);
     CHECK(!Find(*s,so::Kind::Committed));
-    Fixture g;g.Issue(false,false);auto a=std::make_unique<so::Snapshot>(g.journal->Capture());
+    Fixture g;g.Issue(false,false);auto a=Capture(*g.journal);
     CHECK(so::Analyze(*a).result==so::Result::Attempted);
-    Fixture h;h.Issue();h.Consumer(false);h.Neutral();auto b=std::make_unique<so::Snapshot>(h.journal->Capture());
+    Fixture h;h.Issue();h.Consumer(false);h.Neutral();auto b=Capture(*h.journal);
     CHECK(so::Analyze(*b).result==so::Result::Rejected);
-    Fixture i;i.Issue();i.Consumer(true,false);i.Neutral();auto c=std::make_unique<so::Snapshot>(i.journal->Capture());
+    Fixture i;i.Issue();i.Consumer(true,false);i.Neutral();auto c=Capture(*i.journal);
     CHECK(so::Analyze(*c).result==so::Result::Rejected&&(so::Analyze(*c).reasons&so::Abnormal));return 0;
 }
 int OwnerPairAndSlot(){
@@ -119,7 +122,7 @@ int SelectedPending(){
         CHECK(so::Analyze(*s).result==so::Result::Joined&&!so::Analyze(*s).selectedBank);
     }
     Fixture plain;plain.Issue();plain.Consumer();plain.Neutral(false);
-    auto a=std::make_unique<so::Snapshot>(plain.journal->Capture());
+    auto a=Capture(*plain.journal);
     CHECK(so::Analyze(*a).result==so::Result::Joined&&!so::Analyze(*a).selectedBank);
     Fixture stale;auto b=stale.Complete();Find(*b,so::Kind::Update,2)->selected.current=0;
     CHECK(so::Analyze(*b).result==so::Result::PendingSelected);
@@ -133,23 +136,23 @@ int Publications(){
     Fixture f;f.Issue();f.Consumer();
     auto u=f.journal->Begin(so::Kind::Update,f.thread,18,1,f.old.player,0);
     u.row.before=u.row.after=f.next;u.row.pairBefore=u.row.pairAfter=f.second;u.row.returned=true;
-    f.journal->End(u,f.thread,20,true);auto s=std::make_unique<so::Snapshot>(f.journal->Capture());
+    f.journal->End(u,f.thread,20,true);auto s=Capture(*f.journal);
     CHECK(so::Analyze(*s).result==so::Result::Rejected&&(so::Analyze(*s).reasons&so::NotSwapped));
     Fixture g;g.Issue();auto v=g.journal->Begin(so::Kind::Update,g.thread,18,1,g.old.player,0);
     v.row.before=v.row.after=g.next;v.row.before.pair+=0x1000;v.row.after.pair=v.row.before.pair;
     v.row.pairBefore=g.second;v.row.pairAfter=g.first;v.row.returned=true;g.journal->End(v,g.thread,20,true);
-    auto a=std::make_unique<so::Snapshot>(g.journal->Capture());CHECK(so::Analyze(*a).result==so::Result::Rejected);
+    auto a=Capture(*g.journal);CHECK(so::Analyze(*a).result==so::Result::Rejected);
     Fixture duplicate;auto b=duplicate.Complete();Find(*b,so::Kind::Update,1)->publication=1;
     CHECK(so::Analyze(*b).result==so::Result::Rejected);return 0;
 }
 int MultiSlotAndForeign(){
     Fixture f;f.Issue();f.Consumer(true,true,2);f.Neutral(false);
-    auto s=std::make_unique<so::Snapshot>(f.journal->Capture());CHECK(so::Analyze(*s).result==so::Result::Joined);
+    auto s=Capture(*f.journal);CHECK(so::Analyze(*s).result==so::Result::Joined);
     CHECK(Find(*s,so::Kind::Outer)->childCount==3);
     Fixture g;g.Issue();
     auto foreign=g.journal->Begin(so::Kind::Outer,g.thread,13,2,0xb0000,0);
     foreign.row.relevant=false;foreign.row.returned=true;g.journal->End(foreign,g.thread,13,true);
-    g.Consumer();g.Neutral(false);auto a=std::make_unique<so::Snapshot>(g.journal->Capture());
+    g.Consumer();g.Neutral(false);auto a=Capture(*g.journal);
     CHECK(so::Analyze(*a).result==so::Result::Joined);
     // A second child claiming the local slot cannot masquerade as one reader.
     auto* child=Find(*s,so::Kind::Inner,1);child->matchingSlot=true;child->slot=0;child->actualR=f.old.pair;
@@ -161,18 +164,18 @@ int OverlapAndCap(){
     so::ThreadState other{};auto concurrent=f.journal->Begin(so::Kind::Update,other,15,2,f.old.player,0);
     concurrent.row.returned=true;f.journal->End(concurrent,other,16,true);
     o.row.returned=true;f.journal->End(o,f.thread,17,true);
-    auto s=std::make_unique<so::Snapshot>(f.journal->Capture());CHECK(so::Analyze(*s).result==so::Result::Rejected);
+    auto s=Capture(*f.journal);CHECK(so::Analyze(*s).result==so::Result::Rejected);
     CHECK(so::Analyze(*s).reasons&so::Overlap);
     Fixture g;g.Issue();for(unsigned n=0;n<so::Capacity;++n){so::Row r{};r.kind=so::Kind::Selected;g.journal->Append(r);}
-    auto a=std::make_unique<so::Snapshot>(g.journal->Capture());CHECK(a->capped&&a->dropped&&a->closed&&so::Analyze(*a).result==so::Result::Rejected);
-    Fixture h;h.Issue();CHECK(!h.journal->Capturing(20011));auto b=std::make_unique<so::Snapshot>(h.journal->Capture());CHECK(b->expired&&b->closed);
+    auto a=Capture(*g.journal);CHECK(a->capped&&a->dropped&&a->closed&&so::Analyze(*a).result==so::Result::Rejected);
+    Fixture h;h.Issue();CHECK(!h.journal->Capturing(20011));auto b=Capture(*h.journal);CHECK(b->expired&&b->closed);
     return 0;
 }
 int Eligibility(){
     Fixture f;auto u=f.journal->Begin(so::Kind::Update,f.thread,10,1,f.old.player,0);auto r=f.AttemptRow(u.row.id);
     r.cycle.slot={};CHECK(!f.journal->Attempt(r,11));
     r.cycle=f.origin;r.cycle.native.owner.weapon+=4;CHECK(!f.journal->Attempt(r,11));
-    CHECK(!f.journal->Issue()&&f.journal->Capture().activation==0);
+    CHECK(!f.journal->Issue()&&Capture(*f.journal)->activation==0);
     r.cycle=f.origin;CHECK(f.journal->Attempt(r,11));CHECK(!f.journal->Attempt(r,12));
     u.row.returned=true;f.journal->End(u,f.thread,13,true);return 0;
 }
@@ -267,9 +270,9 @@ int RealIdleCancellation(){
         if(cancel){CHECK(live.native==ReloadHoldIdentity{}&&live.slot==before.slot);
             // Taking the origin after the real Cancel reproduces late admission failure.
             Fixture late;late.Adopt(live,f.owner);late.Issue(false,false);
-            CHECK(!late.journal->Issue()&&!late.journal->Capture().activation);}
+            CHECK(!late.journal->Issue()&&!Capture(*late.journal)->activation);}
         f.Issue(true,false,live);CHECK(f.issue);f.Consumer();f.Neutral(false);
-        const auto snapshot=std::make_unique<so::Snapshot>(f.journal->Capture());CHECK(so::Analyze(*snapshot).result==so::Result::Joined);
+        const auto snapshot=Capture(*f.journal);CHECK(so::Analyze(*snapshot).result==so::Result::Joined);
         const auto* attempted=Find(*snapshot,so::Kind::Attempted);const auto* committed=Find(*snapshot,so::Kind::Committed);
         CHECK(attempted&&committed&&attempted->origin.cycle==before&&attempted->cycle==live&&committed->commitLive==live);
         CHECK(committed->origin==attempted->origin&&native.bank->View(native.now).native==live.native);
@@ -297,7 +300,7 @@ int OriginAndIssueNegatives(){
         case 31:r.origin={};break;case 32:r.origin.cycle.slot.index=Bc2NativeCycleBank::Capacity;break;
         case 33:r.origin.qpc=12;break;case 34:r.cycle.held=true;break;case 35:r.cycle.retainedDebt=true;break;
         }
-        CHECK(!f.journal->Attempt(r,11)&&!f.journal->Issue()&&!f.journal->Capture().activation);
+        CHECK(!f.journal->Attempt(r,11)&&!f.journal->Issue()&&!Capture(*f.journal)->activation);
         u.row.returned=true;f.journal->End(u,f.thread,13,true);
     }
     // Unsafe origins cannot borrow a clean later bank view either.
@@ -315,7 +318,7 @@ int CommittedLiveAndOriginCannotDrift(){
     for(unsigned test=0;test<17;++test){NativeFixture native(test%2!=0);CHECK(native.Select());
         Fixture f;f.Adopt(so::Copy(native.bank->View(native.now)),native.source.reserve.identity.owner);
         native.bank->Selected().Cancel(Bc2NativeCycleFailure::Control);f.Issue(true,false,so::Copy(native.bank->View(native.now)));f.Consumer();f.Neutral(false);
-        auto s=std::make_unique<so::Snapshot>(f.journal->Capture());auto* r=Find(*s,so::Kind::Committed);CHECK(r);
+        auto s=Capture(*f.journal);auto* r=Find(*s,so::Kind::Committed);CHECK(r);
         switch(test){case 0:++r->origin.cycle.shot;break;case 1:++r->origin.qpc;break;
         case 2:++r->cycle.slot.generation;break;case 3:r->commitLive.present=false;break;
         case 4:++r->commitLive.slot.generation;break;case 5:++r->commitLive.cycle;break;
@@ -341,7 +344,7 @@ int RealDebtKeepsOriginalBank(){
         if(stage==1)CHECK(original.debt&&original.retainedDebtOrigin);
         if(stage==2)CHECK(original.ready&&original.releasePending);
         Fixture f;f.Adopt(so::Copy(original),original.native.owner);f.Issue(false,true);
-        CHECK(so::Analyze(f.journal->Capture()).result==so::Result::Refused);
+        CHECK(so::Analyze(*Capture(*f.journal)).result==so::Result::Refused);
         const auto refused=native.bank->View(native.now);
         CHECK(refused.native==original.native&&refused.debt==original.debt&&sameReady(refused.ready,original.ready));
         native.bank->Selected().Cancel(Bc2NativeCycleFailure::Control);const auto after=native.bank->View(native.now);
@@ -352,14 +355,14 @@ int RealDebtKeepsOriginalBank(){
         CHECK(!so::IssueLiveMatches(f.AttemptRow(1).origin,so::Copy(after))||so::Copy(after)==so::Copy(original));
         // Even an invented successful dispatch of unchanged owed state cannot join.
         Fixture forged;forged.Adopt(so::Copy(original),original.native.owner);forged.Issue();forged.Consumer();forged.Neutral(false);
-        CHECK(so::Analyze(forged.journal->Capture()).result==so::Result::Rejected);
+        CHECK(so::Analyze(*Capture(*forged.journal)).result==so::Result::Rejected);
     }return 0;
 }
 int NoIssuedEdgeCannotCommit(){
     for(bool bolt:{false,true}){NativeFixture native(bolt);CHECK(native.Select());
         Fixture noEdge;noEdge.Adopt(so::Copy(native.bank->View(native.now)),native.source.reserve.identity.owner);
         const auto prepared=noEdge.AttemptRow(1).origin;CHECK(so::Valid(prepared));
-        CHECK(!noEdge.journal->Issue()&&!noEdge.journal->Capture().activation);
+        CHECK(!noEdge.journal->Issue()&&!Capture(*noEdge.journal)->activation);
         // Run the same real cache overrides as the dispatcher: a refused patch
         // or committed holster suppression cannot produce the issued edge.
         for(unsigned path=0;path<2;++path){Fixture f;f.Adopt(prepared.cycle,prepared.nativeOwner);
@@ -378,7 +381,7 @@ int NoIssuedEdgeCannotCommit(){
                 const auto receipt=suppression.Commit();CHECK(receipt&&HolsterSuppressionCurrent(*receipt,request));patch.Commit();
                 std::memcpy(&value,cache.data()+8+4*7,4);CHECK(value==0);
             }
-            f.Consumer();f.Neutral(false);const auto s=std::make_unique<so::Snapshot>(f.journal->Capture());
+            f.Consumer();f.Neutral(false);const auto s=Capture(*f.journal);
             CHECK(!Find(*s,so::Kind::Committed)&&so::Analyze(*s).result==so::Result::Attempted);}
     }return 0;
 }
