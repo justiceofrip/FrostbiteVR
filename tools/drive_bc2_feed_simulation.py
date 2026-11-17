@@ -702,6 +702,7 @@ class ReceiveTiming:
     def __init__(self, requested_ns, published_ns, nonce, now):
         self.name, self.at = "before_first_poll", requested_ns
         self.frozen = False
+        self.command_ack = None
         self.reset(requested_ns, published_ns, nonce, now, initial=True)
 
     def reset(self, requested_ns, published_ns, nonce, now, initial=False):
@@ -740,6 +741,32 @@ class ReceiveTiming:
         if not self.frozen:
             self.transient_read_retries[self.name] = self.transient_read_retries.get(self.name, 0) + 1
 
+    def begin_ack(self, sequence, published_ns, deadline_ns, before_end_frames):
+        if not self.frozen:
+            # Keep this command's original boundary across native snapshot refreshes.
+            self.command_ack = dict(sequence=sequence, publishedNs=published_ns,
+                originalDeadlineNs=deadline_ns, beforeEndFrames=before_end_frames,
+                polls=0, firstApplied=None, firstMatchingAck=None,
+                firstLaterFrame=None, lastPoll=None)
+
+    def ack_poll(self, state, ack, matching_ack=False):
+        if self.frozen or self.command_ack is None:
+            return
+        observed = dict(atNs=time.perf_counter_ns(), sequence=state["cmdSeq"],
+            frame=state["frame"], endFrames=state["endFrames"], ackFrame=ack[0] if ack else None)
+        row = self.command_ack
+        row["polls"] += not matching_ack
+        row["lastPoll"] = observed
+        applied = observed["sequence"] == row["sequence"]
+        if applied and row["firstApplied"] is None:
+            row["firstApplied"] = observed
+        if ack and row["firstMatchingAck"] is None:
+            row["firstMatchingAck"] = observed
+        if (applied and ack and observed["frame"] > ack[0]
+                and observed["endFrames"] > row["beforeEndFrames"]
+                and row["firstLaterFrame"] is None):
+            row["firstLaterFrame"] = observed
+
     def error(self, error):
         if not self.frozen and self.last_error is None:
             # First phase error since this request; it may be a tolerated partial
@@ -763,6 +790,7 @@ class ReceiveTiming:
                     timeoutEvaluatedNs=self.timeout_evaluated_ns,
                     frozenNs=self.at, pendingCommand=self.pending_command, sequence=self.sequence,
                     lastObservedResponseNonce=self.last_nonce, firstPhaseError=self.last_error,
+                    commandAcknowledgement=self.command_ack,
                     spanCount=self.count, droppedSpans=self.count-len(rows),
                     phaseNs=self.phase_ns, transientReadRetries=self.transient_read_retries, spans=rows)
 
@@ -2156,6 +2184,7 @@ class Driver:
         trace = getattr(self, "_receive_timing", None)
         if trace is not None:
             trace.phase("ack_gap", published)
+            trace.begin_ack(target, published, until, integer(before["endFrames"]))
         # A neutral approach has already published its only authorized pose.
         # Settle that exact batch before observing a late snapshot: an OS read
         # may consume the response window while the independent original ACK
@@ -2187,6 +2216,8 @@ class Driver:
                     == self.command_hash, "concurrent command writer")
             seq = integer(state["cmdSeq"])
             require(seq in (target - len(batch), target), "unexpected command sequence advancement")
+            if trace is not None:
+                trace.ack_poll(state, ack)
             if seq == target:
                 require(state["lastCmd"] == sentinel, "unique command sentinel mismatch")
                 if self.receive_timing_call("ack_exists", self.ack_path.exists):
@@ -2195,6 +2226,8 @@ class Driver:
                     if match and int(match[1]) == target:
                         require(match[3] == " | ".join(batch), "acknowledgement batch text mismatch")
                         ack = (int(match[2]), ack_raw)
+                        if trace is not None:
+                            trace.ack_poll(state, ack, matching_ack=True)
                 if ack and integer(state["frame"]) > ack[0] and integer(state["endFrames"]) > integer(before["endFrames"]):
                     if timed:
                         self.check_timed_trigger_state(state)

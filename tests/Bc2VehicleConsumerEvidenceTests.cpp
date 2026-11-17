@@ -3,6 +3,7 @@
 #include <cstring>
 #include <map>
 #include <utility>
+#include <vector>
 using namespace fvr::bc2;
 namespace v=vehicleConsumerEvidence;
 namespace {
@@ -221,9 +222,137 @@ int DestinationBoundaries(){
     }
     return 0;
 }
+namespace s=v::state;
+struct StateMemory {
+    static constexpr unsigned Image=DestinationMemory::Image,ImageSize=DestinationMemory::ImageSize,
+        Driver=DestinationMemory::Driver,Physics=DestinationMemory::Physics,Config=0x70000;
+    std::map<unsigned,unsigned> words{{Driver+0xd4,Physics},{Physics,Image+d::VtableRva},
+        {Image+d::VtableRva+0x1c,Image+s::UpdateRva},{Image+d::VtableRva+0x34,Image+s::SetterRva},
+        {Physics+0x08,Config},{Physics+0x80,3},{Config+0x84,1}};
+    std::map<unsigned,std::vector<unsigned char>> bodies{
+        {Image+s::ConstructorRva,{s::ConstructorBody.begin(),s::ConstructorBody.end()}},
+        {Image+s::OriginRva,{s::OriginBody.begin(),s::OriginBody.end()}},
+        {Image+s::SetterRva,{s::SetterBody.begin(),s::SetterBody.end()}},
+        {Image+s::TransitionRva,{s::TransitionBody.begin(),s::TransitionBody.end()}},
+        {Image+s::UpdateRva,{s::UpdateBody.begin(),s::UpdateBody.end()}}};
+    unsigned calls=0,failAt=0,changeAt=0,changeAddress=0,changeWord=0,changeCode=0;
+    bool Read(unsigned address,void* destination,std::size_t size){
+        ++calls;
+        if(calls==changeAt){if(changeCode)bodies.at(changeCode).back()^=1;else words[changeAddress]=changeWord;}
+        if(calls==failAt)return false;
+        const auto body=bodies.find(address);
+        if(body!=bodies.end()){
+            if(size!=body->second.size())return false;std::memcpy(destination,body->second.data(),size);return true;
+        }
+        const auto word=words.find(address);if(size!=sizeof(unsigned)||word==words.end())return false;
+        std::memcpy(destination,&word->second,size);return true;
+    }
+    s::Snapshot Capture(unsigned physics=Physics){return s::Read(Image,ImageSize,Driver,physics,Image+d::VtableRva,
+        [&](unsigned at,void* destination,std::size_t size){return Read(at,destination,size);});}
+};
+int StateReads(){
+    StateMemory memory;const auto initial=memory.Capture();
+    CHECK(!initial.reasons&&initial.attempted==s::AllFields&&initial.read==s::AllFields&&memory.calls==24);
+    CHECK(initial.live==3&&initial.initial==1&&initial.liveAgain==3&&initial.initialAgain==1);
+    CHECK(initial.config==StateMemory::Config&&s::SameObject(initial,initial));
+    // Initial-state provenance is not a live-state invariant. Even unknown raw
+    // states remain observable without inventing an enum or a gameplay result.
+    memory.words[StateMemory::Physics+0x80]=UINT32_MAX;const auto unknown=memory.Capture();
+    CHECK(!unknown.reasons&&unknown.live==UINT32_MAX&&s::SameObject(initial,unknown));
+    for(unsigned step=1;step<=24;++step){StateMemory failed;failed.failAt=step;const auto sample=failed.Capture();
+        CHECK((sample.reasons&s::ReadFailed)&&(sample.attempted&(1u<<(step-1)))&&!(sample.read&(1u<<(step-1))));
+        CHECK(!s::SameObject(sample,initial));
+        if(step==10)CHECK(!(sample.reasons&s::Null)&&!(sample.attempted&s::Initial)&&sample.live==3);
+    }
+    for(unsigned fault=0;fault<4;++fault){StateMemory wrong;
+        if(fault==0)wrong.words[StateMemory::Driver+0xd4]+=4;
+        if(fault==1)wrong.words[StateMemory::Physics]+=4;
+        if(fault==2)wrong.words[StateMemory::Image+d::VtableRva+0x1c]+=4;
+        if(fault==3)wrong.words[StateMemory::Image+d::VtableRva+0x34]+=4;
+        // Give a replacement physics pointer a readable but incorrect vtable.
+        wrong.words[StateMemory::Physics+4]=StateMemory::Image+d::VtableRva;
+        const auto sample=wrong.Capture();CHECK((sample.reasons&s::Type)&&!(sample.attempted&s::Config));
+    }
+    for(const auto rva:{s::ConstructorRva,s::OriginRva,s::SetterRva,s::TransitionRva,s::UpdateRva}){
+        StateMemory wrong;wrong.bodies.at(StateMemory::Image+rva).back()^=1;const auto sample=wrong.Capture();
+        CHECK((sample.reasons&s::Code)&&!(sample.attempted&(s::Config|s::Live|s::Initial)));
+    }
+    StateMemory nullConfig;nullConfig.words[StateMemory::Physics+8]=0;const auto null=nullConfig.Capture();
+    CHECK((null.reasons&s::Null)&&null.live==3&&!(null.read&s::Initial));
+    StateMemory nullPhysics;nullPhysics.words[StateMemory::Driver+0xd4]=0;
+    CHECK(nullPhysics.Capture().reasons&s::Null);
+    StateMemory overflowConfig;overflowConfig.words[StateMemory::Physics+8]=UINT32_MAX-0x80;
+    CHECK(overflowConfig.Capture().reasons&s::Overflow);
+    StateMemory overflowPhysics;constexpr unsigned highPhysics=UINT32_MAX-0x40;
+    overflowPhysics.words[StateMemory::Driver+0xd4]=highPhysics;
+    overflowPhysics.words[highPhysics]=StateMemory::Image+d::VtableRva;
+    overflowPhysics.words[highPhysics+8]=StateMemory::Config;
+    CHECK(overflowPhysics.Capture(highPhysics).reasons&s::Overflow);
+    unsigned reads=0;const auto reader=[&](unsigned,void*,std::size_t){++reads;return true;};
+    CHECK(s::Read(0xff000000,StateMemory::ImageSize,StateMemory::Driver,StateMemory::Physics,0,reader).reasons&s::Overflow);
+    CHECK(s::Read(StateMemory::Image,StateMemory::ImageSize,UINT32_MAX-0x80,StateMemory::Physics,0,reader).reasons&s::Overflow);
+    CHECK(s::Read(StateMemory::Image,StateMemory::ImageSize,0,StateMemory::Physics,0,reader).reasons&s::Null);
+    CHECK(s::Read(StateMemory::Image,StateMemory::ImageSize,1,StateMemory::Physics,0,reader).reasons&s::Type);
+    CHECK(reads==0);return 0;
+}
+int StateBookends(){
+    for(unsigned fault=0;fault<7;++fault){StateMemory memory;
+        switch(fault){
+        case 0:memory.changeAt=13;memory.changeAddress=StateMemory::Physics+0x80;memory.changeWord=4;break;
+        case 1:memory.changeAt=14;memory.changeAddress=StateMemory::Config+0x84;memory.changeWord=2;break;
+        case 2:memory.changeAt=15;memory.changeAddress=StateMemory::Physics+8;memory.changeWord=0x71000;break;
+        case 3:memory.changeAt=16;memory.changeAddress=StateMemory::Driver+0xd4;memory.changeWord=0x41000;break;
+        case 4:memory.changeAt=17;memory.changeAddress=StateMemory::Physics;memory.changeWord=StateMemory::Image+d::VtableRva+4;break;
+        case 5:memory.changeAt=18;memory.changeAddress=StateMemory::Image+d::VtableRva+0x1c;memory.changeWord=0;break;
+        case 6:memory.changeAt=19;memory.changeAddress=StateMemory::Image+d::VtableRva+0x34;memory.changeWord=0;break;
+        }
+        const auto sample=memory.Capture();CHECK(sample.read==s::AllFields&&(sample.reasons&(fault<2?s::Values:s::Identity)));
+        if(fault==0)CHECK(sample.live==3&&sample.liveAgain==4);
+        if(fault==1)CHECK(sample.initial==1&&sample.initialAgain==2);
+        if(fault==2)CHECK(sample.config==StateMemory::Config&&sample.configAgain==0x71000);
+    }
+    unsigned step=20;
+    for(const auto rva:{s::ConstructorRva,s::OriginRva,s::SetterRva,s::TransitionRva,s::UpdateRva}){
+        StateMemory memory;memory.changeAt=step++;memory.changeCode=StateMemory::Image+rva;const auto sample=memory.Capture();
+        CHECK(sample.read==s::AllFields&&(sample.reasons&s::Code)&&sample.live==sample.liveAgain);
+    }
+    return 0;
+}
+int StateBoundaries(){
+    StateMemory memory;const auto before=memory.Capture();memory.words[StateMemory::Physics+0x80]=4;
+    const auto after=memory.Capture();DestinationMemory destination;const auto delivered=destination.Capture();
+    auto p=Publication();p.view.physicsVtable=StateMemory::Image+d::VtableRva;
+    v::Journal<> journal;journal.Publish(p);auto row=Record(journal.Latest());
+    row.before.destination=row.after.destination=delivered;row.before.state=before;row.after.state=after;v::Complete(row);
+    CHECK(row.joined&&!row.reasons&&row.destinationComparable&&!row.destinationReasons&&row.stateComparable&&!row.stateReasons);
+    CHECK(row.before.state.live==3&&row.after.state.live==4&&row.after.state.initial==1);
+    // Every new read failure leaves the already-valid18-read destination and
+    // original publication join unchanged. Preserve refusal and raw state.
+    for(unsigned step=1;step<=24;++step){StateMemory failed;failed.failAt=step;auto broken=row;
+        broken.after.state=failed.Capture();v::Complete(broken);
+        CHECK(broken.joined&&broken.reasons==row.reasons&&broken.destinationComparable&&broken.destinationReasons==row.destinationReasons);
+        CHECK(!broken.stateComparable&&(broken.stateReasons&s::ReadFailed)&&broken.before.state==before);
+    }
+    for(unsigned fault=0;fault<9;++fault){auto broken=row;
+        switch(fault){case 0:broken.after.state.config+=4;break;case 1:broken.after.state.reasons=s::Code;break;
+        case 2:broken.after.state.reasons=s::Type;break;case 3:broken.after.state.reasons=s::Values;break;
+        case 4:broken.after.state.read^=s::Live;break;case 5:broken.after.state.physics+=4;break;
+        case 6:broken.after.state.vtable+=4;break;case 7:broken.after.state.reasons=s::Context;break;
+        case 8:broken.after.state={};break;}
+        v::Complete(broken);CHECK(broken.joined&&!broken.reasons&&broken.destinationComparable&&!broken.destinationReasons);
+        CHECK(!broken.stateComparable&&broken.stateReasons);
+    }
+    for(unsigned fault=0;fault<5;++fault){auto broken=row;
+        switch(fault){case 0:broken.publication.complete=false;break;case 1:++broken.after.current;break;
+        case 2:++broken.after.owner.seatGeneration;break;case 3:++broken.returned.revision;break;case 4:broken.normal=false;break;}
+        v::Complete(broken);CHECK(!broken.joined&&!broken.stateComparable&&(broken.stateReasons&s::Context));
+        CHECK(broken.before.state==before&&broken.after.state==after);
+    }
+    return 0;
+}
 }
 int main(){
     if(PublicationIdentity()||PublicationRefusals()||ConsumerRefusals()||Retention()||
-       DestinationReads()||DestinationBookends()||DestinationBoundaries())return 1;
-    std::puts("Vehicle consumer evidence: publication identity, slot reuse, boundary refusals and bounded retention passed");
+       DestinationReads()||DestinationBookends()||DestinationBoundaries()||StateReads()||StateBookends()||StateBoundaries())return 1;
+    std::puts("Vehicle consumer evidence: publication identity, bounded destination/state views, boundary refusals and retention passed");
 }

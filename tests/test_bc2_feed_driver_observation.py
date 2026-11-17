@@ -271,6 +271,83 @@ class Harness:
 
 
 class FeedDriverObservationTests(unittest.TestCase):
+    def test_ack_trace_distinguishes_applied_command_from_missing_later_frame(self):
+        h = Harness(self, ack_ms=10)
+        v = h.driver
+        v.monitor = False
+        v.stage_deadline = h.now + 40 * MS
+        original_read = v.read_state
+
+        def same_frame():
+            state = original_read()
+            if state["cmdSeq"] != 10:
+                state["frame"] = 101  # Exact ACK exists; its subsequent frame does not.
+            return state
+
+        with patch.object(v, "read_state", side_effect=same_frame), \
+                self.assertRaisesRegex(d.REFUSAL, "actual stage exceeded maximumGestureNs"):
+            v.send(["grip l 1"])
+        self.assertTrue(v.pending_command)
+        self.assertEqual(len(h.command_writes), 1)
+        trace = v._receive_timing
+        trace.freeze(v.pending_command, v.sequence)
+        saved = copy.deepcopy(trace.report())
+        ack = saved["commandAcknowledgement"]
+        self.assertEqual(ack["originalDeadlineNs"], v.stage_deadline)
+        self.assertEqual(ack["firstApplied"]["sequence"], v.sequence)
+        self.assertEqual(ack["firstMatchingAck"]["ackFrame"], 101)
+        self.assertIsNone(ack["firstLaterFrame"])
+        self.assertLess(ack["lastPoll"]["atNs"], v.stage_deadline)
+        trace.begin_ack(999, h.now, h.now + NS, 0)
+        trace.ack_poll(dict(cmdSeq=999, frame=999, endFrames=999), (1, ""))
+        self.assertEqual(trace.report(), saved)  # Cleanup cannot overwrite the failure.
+
+    def test_ack_trace_retains_original_command_across_native_request_refresh(self):
+        h = Harness(self, ack_ms=10)
+        v = h.driver
+        v.monitor = False
+        requested = h.now
+        original_read = v.read_state
+        refreshed = False
+
+        def refresh_during_ack():
+            nonlocal refreshed
+            if v.pending_command and h.command_writes and not refreshed:
+                v._receive_timing.reset(h.now, h.now, 99, h.now)
+                refreshed = True
+            return original_read()
+
+        with patch.object(v, "read_state", side_effect=refresh_during_ack):
+            v.send(["grip l 1"])
+        self.assertTrue(refreshed)
+        self.assertFalse(v.pending_command)
+        ack = v._receive_timing.command_ack
+        self.assertEqual(ack["originalDeadlineNs"], requested + 250 * MS)
+        self.assertEqual(ack["firstLaterFrame"]["ackFrame"], 101)
+        self.assertEqual(ack["firstLaterFrame"]["frame"], 103)
+        self.assertEqual(len(h.command_writes), 1)
+
+    def test_ack_read_timeout_keeps_the_preceding_applied_state(self):
+        h = Harness(self, ack_ms=10)
+        v = h.driver
+        v.monitor = False
+        v.stage_deadline = h.now + 40 * MS
+
+        def delayed_ack_read(path, maximum):
+            if path == v.ack_path:
+                h.now = v.stage_deadline
+            return h.files[path]
+
+        with patch.object(d, "read_bytes", side_effect=delayed_ack_read), \
+                self.assertRaises(d.ReadDeadlineExceeded):
+            v.send(["grip l 1"])
+        self.assertTrue(v.pending_command)
+        ack = v._receive_timing.command_ack
+        self.assertEqual(ack["firstApplied"]["sequence"], v.sequence)
+        self.assertIsNone(ack["firstMatchingAck"])
+        self.assertIsNone(ack["firstLaterFrame"])
+        self.assertEqual(len(h.command_writes), 1)
+
     def test_prepublication_state_stall_is_observed_without_extra_operations(self):
         h = Harness(self)
         v = h.driver

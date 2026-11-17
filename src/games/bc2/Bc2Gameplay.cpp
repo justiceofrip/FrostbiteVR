@@ -1104,7 +1104,7 @@ unsigned ValidateVehicleConsumerContext(const VehicleConsumerContext& context,ve
     return view.owner==context.identity?0:vehicleConsumer::Owner;
 }
 unsigned ReadVehicleConsumerView(const VehicleConsumerContext& context,unsigned actualPair,
-    vehicleConsumer::View& view,bool& readable)noexcept {
+    vehicleConsumer::View& view,bool& readable,bool captureState=false)noexcept {
     readable=false;view.owner=context.identity;bool nativeCurrent=false;
     unsigned checks=ValidateVehicleConsumerContext(context,view,nativeCurrent);if(!nativeCurrent)return checks;
     unsigned root=0,current=0,previous=0,a=0,b=0;unsigned char inhibit=0;
@@ -1126,7 +1126,12 @@ unsigned ReadVehicleConsumerView(const VehicleConsumerContext& context,unsigned 
     if(!(checks&(vehicleConsumer::Owner|vehicleConsumer::Read))&&view.generationsCurrent){
         view.destination=vehicleConsumer::destination::Read(unsigned(image),unsigned(imageSize),context.identity.driver,
             view.physics,view.physicsVtable,[](unsigned at,void* dst,std::size_t n){return Read(at,dst,n);});
-    }else view.destination.reasons|=vehicleConsumer::destination::Context;
+        if(captureState)view.state=vehicleConsumer::state::Read(unsigned(image),unsigned(imageSize),context.identity.driver,
+            view.physics,view.physicsVtable,[](unsigned at,void* dst,std::size_t n){return Read(at,dst,n);});
+    }else {
+        view.destination.reasons|=vehicleConsumer::destination::Context;
+        if(captureState)view.state.reasons|=vehicleConsumer::state::Context;
+    }
     unsigned rootAfter=0,currentAfter=0,previousAfter=0,physicsAfter=0,vtableAfter=0;unsigned char inhibitAfter=0;
     std::array<unsigned,4> wordsAfter{};
     bool same=SelectionReadWord(context.owner.player,0xc70,rootAfter)&&SelectionReadWord(view.pair,0x1a0,currentAfter)&&
@@ -1140,8 +1145,10 @@ unsigned ReadVehicleConsumerView(const VehicleConsumerContext& context,unsigned 
     vehicleConsumer::View last{};last.owner=context.identity;bool nativeAfter=false;
     checks|=ValidateVehicleConsumerContext(context,last,nativeAfter);
     if(view.owner!=last.owner||view.observationSerial!=last.observationSerial||!last.generationsCurrent)checks|=vehicleConsumer::Owner;
-    if(checks&(vehicleConsumer::Owner|vehicleConsumer::Read|vehicleConsumer::Physics|vehicleConsumer::Words))
+    if(checks&(vehicleConsumer::Owner|vehicleConsumer::Read|vehicleConsumer::Physics|vehicleConsumer::Words)){
         view.destination.reasons|=vehicleConsumer::destination::Context;
+        if(captureState)view.state.reasons|=vehicleConsumer::state::Context;
+    }
     readable=nativeCurrent&&nativeAfter&&!(checks&vehicleConsumer::Read);return checks;
 }
 void PublishVehicleConsumer(const Scope& pending,const VehicleFinalInputRecord& final)noexcept {
@@ -1167,13 +1174,13 @@ VehicleConsumerToken BeginVehicleConsumer(void* self,unsigned argument,unsigned 
         token.context=vehicleConsumerContext;row.publication=vehicleConsumerJournal->Latest();}
     if(!token.context.identity.driver||token.context.identity.driver>UINT32_MAX-0xc0||row.receiver!=token.context.identity.driver+0xc0){++vehicleConsumerForeign;return token;}
     token.active=true;if(vehicleConsumerDepth>1)row.reasons|=vehicleConsumer::Nested;
-    row.reasons|=ReadVehicleConsumerView(token.context,argument,row.before,row.beforeReadable);
+    row.reasons|=ReadVehicleConsumerView(token.context,argument,row.before,row.beforeReadable,true);
     if(row.entry!=vehicleConsumerClock.Sample())row.reasons|=vehicleConsumer::Overlap;
     return token;
 }
 void EndVehicleConsumer(VehicleConsumerToken& token,bool normal)noexcept {
     if(!token.active)return;auto& row=token.row;row.normal=normal;row.endQpc=SelectionNow();
-    if(normal)row.reasons|=ReadVehicleConsumerView(token.context,row.argument,row.after,row.afterReadable);
+    if(normal)row.reasons|=ReadVehicleConsumerView(token.context,row.argument,row.after,row.afterReadable,true);
     row.returned=vehicleConsumerClock.Sample();
     std::unique_lock lock(vehicleConsumerMutex,std::try_to_lock);if(!lock){++vehicleConsumerDrops;return;}
     row.returnPublication=vehicleConsumerJournal->Latest().generation;vehicleConsumerJournal->Observe(row);
@@ -6156,7 +6163,7 @@ void ReportBoatAimEvidence(std::ostream& out){
 }
 void ReportVehicleConsumerEvidence(std::ostream& out){
     std::lock_guard lock(vehicleConsumerMutex);const auto until=vehicleConsumerDeadline.load();const auto now=SelectionNow();
-    out<<",\"vehicle_consumer_evidence\":{\"schema\":2,\"requested\":"<<(vehicleConsumerRequested?"true":"false")
+    out<<",\"vehicle_consumer_evidence\":{\"schema\":3,\"requested\":"<<(vehicleConsumerRequested?"true":"false")
        <<",\"installed\":"<<(vehicleConsumerInstalled?"true":"false")<<",\"install_status\":\""<<vehicleConsumerStatus
        <<"\",\"hooks_disabled\":"<<(vehicleConsumerDisabled?"true":"false")<<",\"drained\":"<<(vehicleConsumerDrained?"true":"false")
        <<",\"activation_qpc\":"<<(until?until-20*vehicleConsumerFrequency:0)<<",\"deadline_qpc\":"<<until
@@ -6173,6 +6180,15 @@ void ReportVehicleConsumerEvidence(std::ostream& out){
        <<",\"destination_proof\":{\"vtable_rva\":"<<vehicleConsumer::destination::VtableRva
        <<",\"throttle_rva\":"<<vehicleConsumer::destination::ThrottleRva<<",\"brake_rva\":"<<vehicleConsumer::destination::BrakeRva
        <<",\"setter_bytes\":17,\"control_offset\":12,\"throttle_offset\":32,\"brake_offset\":40,\"word_order\":[\"throttle\",\"brake\"],\"comparison_requires_existing_join\":true}"
+       <<",\"state_reason_bits\":{\"not_observed\":1,\"read\":2,\"type\":4,\"code\":8,\"identity\":16,\"values\":32,\"context\":64,\"null\":128,\"overflow\":256}"
+       <<",\"state_read_bits\":{\"driver_physics\":1,\"physics_vtable\":2,\"update_target\":4,\"setter_target\":8,\"constructor_code\":16,\"origin_code\":32,\"setter_code\":64,\"transition_code\":128,\"update_code\":256,\"config\":512,\"live\":1024,\"initial\":2048,\"live_again\":4096,\"initial_again\":8192,\"config_again\":16384,\"driver_physics_again\":32768,\"physics_vtable_again\":65536,\"update_target_again\":131072,\"setter_target_again\":262144,\"constructor_code_again\":524288,\"origin_code_again\":1048576,\"setter_code_again\":2097152,\"transition_code_again\":4194304,\"update_code_again\":8388608}"
+       <<",\"state_proof\":{\"vtable_rva\":"<<vehicleConsumer::destination::VtableRva
+       <<",\"update_rva\":"<<vehicleConsumer::state::UpdateRva<<",\"setter_rva\":"<<vehicleConsumer::state::SetterRva
+       <<",\"constructor_rva\":"<<vehicleConsumer::state::ConstructorRva<<",\"origin_rva\":"<<vehicleConsumer::state::OriginRva
+       <<",\"transition_rva\":"<<vehicleConsumer::state::TransitionRva
+       <<",\"update_slot\":28,\"setter_slot\":52,\"config_offset\":8,\"live_offset\":128,\"initial_offset\":132"
+       <<",\"update_bytes\":482,\"constructor_bytes\":38,\"origin_bytes\":15,\"setter_bytes\":13,\"transition_bytes\":146"
+       <<",\"read_limit\":24,\"initial_is_live_constraint\":false,\"between_view_state_changes_allowed\":true,\"comparison_requires_existing_join\":true}"
        <<",\"word_order\":[\"action0\",\"action2\",\"permissions98\",\"permissions9c\"]";
     const auto epochOut=[&](const vehicleConsumer::Epoch& e){out<<'['<<e.revision<<','<<e.active<<']';};
     const auto destination=[&](const vehicleConsumer::destination::Snapshot& d){
@@ -6181,6 +6197,12 @@ void ReportVehicleConsumerEvidence(std::ostream& out){
            <<"],\"physics_again\":"<<d.physicsAgain<<",\"vtable_again\":"<<d.vtableAgain<<",\"control_again\":"<<d.controlAgain
            <<",\"targets_again\":["<<d.targetsAgain[0]<<','<<d.targetsAgain[1]<<"],\"words_again\":["<<d.wordsAgain[0]<<','<<d.wordsAgain[1]
            <<"],\"attempted\":"<<d.attempted<<",\"read\":"<<d.read<<",\"reasons\":"<<d.reasons<<'}';};
+    const auto state=[&](const vehicleConsumer::state::Snapshot& s){
+        out<<"{\"physics\":"<<s.physics<<",\"vtable\":"<<s.vtable<<",\"config\":"<<s.config
+           <<",\"live\":"<<s.live<<",\"initial\":"<<s.initial<<",\"targets\":["<<s.targets[0]<<','<<s.targets[1]
+           <<"],\"physics_again\":"<<s.physicsAgain<<",\"vtable_again\":"<<s.vtableAgain<<",\"config_again\":"<<s.configAgain
+           <<",\"live_again\":"<<s.liveAgain<<",\"initial_again\":"<<s.initialAgain<<",\"targets_again\":["<<s.targetsAgain[0]<<','<<s.targetsAgain[1]
+           <<"],\"attempted\":"<<s.attempted<<",\"read\":"<<s.read<<",\"reasons\":"<<s.reasons<<'}';};
     const auto view=[&](const vehicleConsumer::View& v){const auto& i=v.owner;
         out<<"{\"owner\":["<<i.manager<<','<<i.player<<','<<i.actor<<','<<i.weak<<','<<i.vehicle<<','<<i.entry<<','<<i.router<<','<<i.driver
            <<"],\"generations\":["<<i.actorGeneration<<','<<i.seatGeneration<<','<<i.inputEpoch<<','<<i.movementEpoch<<','<<i.space
@@ -6188,7 +6210,7 @@ void ReportVehicleConsumerEvidence(std::ostream& out){
         for(unsigned n=0;n<4;++n){if(n)out<<',';out<<v.words[n];}
         out<<"],\"physics\":"<<v.physics<<",\"physics_vtable\":"<<v.physicsVtable<<",\"zero_controls\":"<<v.zeroControls
            <<",\"observation_serial\":"<<v.observationSerial<<",\"generations_current\":"<<(v.generationsCurrent?"true":"false")
-           <<",\"destination\":";destination(v.destination);out<<'}';};
+           <<",\"destination\":";destination(v.destination);out<<",\"state\":";state(v.state);out<<'}';};
     const auto publication=[&](const vehicleConsumer::Publication& p){
         out<<"{\"generation\":"<<p.generation<<",\"update\":"<<p.update<<",\"gather\":"<<p.gather<<",\"input\":"<<p.input
            <<",\"cache\":"<<p.cache<<",\"committed_throttle\":"<<p.committedThrottle<<",\"committed_permissions\":"<<p.committedPermissions
@@ -6207,6 +6229,7 @@ void ReportVehicleConsumerEvidence(std::ostream& out){
         out<<",\"return_epoch\":";epochOut(r.returned);out<<",\"return_publication\":"<<r.returnPublication
            <<",\"reasons\":"<<r.reasons<<",\"normal\":"<<(r.normal?"true":"false")<<",\"joined\":"<<(r.joined?"true":"false")
            <<",\"destination_reasons\":"<<r.destinationReasons<<",\"destination_comparable\":"<<(r.destinationComparable?"true":"false")
+           <<",\"state_reasons\":"<<r.stateReasons<<",\"state_comparable\":"<<(r.stateComparable?"true":"false")
            <<",\"before_readable\":"<<(r.beforeReadable?"true":"false")<<",\"after_readable\":"<<(r.afterReadable?"true":"false")
            <<",\"publication\":";publication(r.publication);out<<",\"before\":";view(r.before);out<<",\"after\":";view(r.after);out<<'}';}
     out<<"]}";
