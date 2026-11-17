@@ -309,6 +309,72 @@ def verify_owner_release(c, now=None):
             checked(row)
 
 
+def verify_output_expectations(c, baseline, root):
+    """Retain every output check, except one explicitly reviewed success-text replacement."""
+    update = c.get('output_expectation_update')
+    binding = None
+    if 'output_expectation_update' in c:
+        fields = {'schema', 'root_accepted', 'recording_only', 'test_source', 'test_main_binding',
+                  'suite', 'before', 'after', 'changed_build_source', 'repeated_build', 'repeated_tests', 'reason'}
+        need(isinstance(update, dict) and set(update) == fields,
+             'Exact output expectation update review required')
+        need(update['schema'] == 'fvr.native-output-expectation-update.v1' and
+             update['root_accepted'] is True and update['recording_only'] is True and
+             all(update[field] is False for field in ('changed_build_source', 'repeated_build', 'repeated_tests')) and
+             isinstance(update['reason'], str) and update['reason'].strip(),
+             'Explicit ROOT recording-only output expectation review required')
+        before, after = update['before'], update['after']
+        need(all(isinstance(text, str) and text and text == text.strip() and
+                 all(ord(char) >= 32 for char in text) for text in (before, after)) and before != after,
+             'Distinct exact single-line output strings required')
+        binding = update['test_main_binding']
+        need(isinstance(binding, dict) and
+             set(binding) == {'suite', 'path', 'entry_call', 'architectures',
+                              'behavior_assertions_root_reviewed', 'applied_sha256'} and
+             isinstance(update['suite'], str) and update['suite'] and binding['suite'] == update['suite'] and
+             c['test_main_bindings'].count(binding) == 1 and binding['behavior_assertions_root_reviewed'] is True,
+             'Exact current reviewed test-main binding required for output update')
+        architectures = binding['architectures']
+        need(isinstance(architectures, list) and architectures and
+             all(arch in ('x86', 'x64') for arch in architectures) and len(set(architectures)) == len(architectures),
+             'Exact output update architectures required')
+        need(isinstance(binding['path'], str) and not Path(binding['path']).is_absolute(),
+             'Repository test source path required for output update')
+        source = (root / binding['path']).resolve()
+        need(source.is_relative_to(root / 'tests') and source == checked(update['test_source']) and
+             update['test_source']['sha256'] == binding['applied_sha256'],
+             'Output update must pin the exact current bound test source')
+        text = source.read_text(encoding='utf-8-sig')
+        need(isinstance(binding['entry_call'], str) and binding['entry_call'] and binding['entry_call'] in text,
+             'Output update retained test-main call missing')
+        # A substring of a longer success message must not become a weaker check.
+        need(before not in text and text.count(after) == 1 and
+             any(quote + after + quote in text for quote in ('"', "'")),
+             'Output update requires one exact current success literal and no old marker')
+    for arch in ('x86', 'x64'):
+        old = next(row for row in baseline['validation'] if row['architecture'] == arch)
+        expected = list(old['reviewed_output_checks'])
+        current = c['output_expectations'][arch]
+        if binding is not None and arch in binding['architectures']:
+            retained = [row for row in old['diagnostic_test_mains']
+                        if (row['suite'], row['path'], row['entry_call']) ==
+                        (binding['suite'], binding['path'], binding['entry_call'])]
+            need(len(retained) == 1 and dict(retained[0], applied_sha256=binding['applied_sha256']) == binding,
+                 'Output update must retain the same suite and test-main review')
+            rows = [row for row in expected if row['suite'] == binding['suite'] and update['before'] in row['contains']]
+            need(len(rows) == 1 and rows[0]['contains'].count(update['before']) == 1 and
+                 not any(update['after'] in row['contains'] for row in expected if row['suite'] == binding['suite']),
+                 'Output update must replace exactly one retained marker')
+            replacement = dict(rows[0], contains=[update['after'] if value == update['before'] else value
+                                                  for value in rows[0]['contains']])
+            expected[expected.index(rows[0])] = replacement
+            need(current.count(replacement) == 1 and
+                 sum(row['contains'].count(update['after']) for row in current if row['suite'] == binding['suite']) == 1 and
+                 not any(update['before'] in row['contains'] for row in current if row['suite'] == binding['suite']),
+                 'Output update requires the exact single replacement check')
+        need(all(row in current for row in expected), 'Retained output checks omitted')
+
+
 def context(path, digest):
     need(pin(path)['sha256'] == digest, 'Configuration hash differs')
     c = load(path)
@@ -380,6 +446,7 @@ def context(path, digest):
     need(c['required_new_normal_suites'], 'Explicit final core/source-wait suite list required')
     need(c['runtime_marker'] == dict(name='campaign-provision.enable', content='campaign-provision-v1\n', default_enabled=False),
          'Exact default-OFF report-local runtime request required')
+    verify_output_expectations(c, baseline, root)
     for arch in ('x86', 'x64'):
         old = next(row for row in baseline['validation'] if row['architecture'] == arch)
         need(set(c['required_new_normal_suites']) <= set(c['test_additions'][arch]),
@@ -387,7 +454,6 @@ def context(path, digest):
         need(set(c['required_new_normal_suites']) <= set(c['focused_suites'][arch]),
              'New core/source-wait tests need focused normal coverage')
         need(set(c['focused_suites'][arch]) >= set(old['focused_suites_once']), 'Retained focused suites omitted')
-        need(all(row in c['output_expectations'][arch] for row in old['reviewed_output_checks']), 'Retained output checks omitted')
         tuples = {(row['suite'], row['path'], row['entry_call']) for row in c['test_main_bindings']}
         need(all((row['suite'], row['path'], row['entry_call']) in tuples for row in old['diagnostic_test_mains']),
              'Retained test-main call omitted; update applied hashes, never drop old calls')

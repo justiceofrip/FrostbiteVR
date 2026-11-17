@@ -69,6 +69,145 @@ class ScheduleTests(unittest.TestCase):
             batch.verify_flag_text(batch.PRIVATE + ':BOOL=OFF\nFVR_EXTRA_PROBE:BOOL=ON\n', {batch.PRIVATE: dict(type='BOOL', value='OFF')})
 
 
+class OutputExpectationUpdateTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.source = self.root / 'tests/CameraTests.cpp'
+        self.source.parent.mkdir()
+        self.before, self.after = 'Old camera checks passed', 'Current camera checks passed'
+        self.source.write_text('int main(){RetainedChecks();AddedChecks();puts("' + self.after + '");}\n', encoding='utf-8')
+        self.binding = dict(suite='Camera', path='tests/CameraTests.cpp', entry_call='RetainedChecks();',
+            architectures=['x86', 'x64'], behavior_assertions_root_reviewed=True,
+            applied_sha256=batch.pin(self.source)['sha256'])
+        self.old_checks = [dict(suite='Camera', contains=[self.before, 'retained companion']),
+                           dict(suite='Other', contains=['other checks passed'])]
+        self.baseline = dict(validation=[dict(architecture=arch, reviewed_output_checks=copy.deepcopy(self.old_checks),
+            diagnostic_test_mains=[dict(self.binding, applied_sha256='0' * 64)]) for arch in ('x86', 'x64')])
+        self.update = dict(schema='fvr.native-output-expectation-update.v1', root_accepted=True,
+            recording_only=True, test_source=batch.pin(self.source), test_main_binding=copy.deepcopy(self.binding),
+            suite='Camera', before=self.before, after=self.after, changed_build_source=False,
+            repeated_build=False, repeated_tests=False, reason='ROOT reviewed retained and added camera checks.')
+        self.config = dict(test_main_bindings=[copy.deepcopy(self.binding)], output_expectation_update=self.update,
+            output_expectations={arch: [dict(suite='Camera', contains=[self.after, 'retained companion']),
+                                       copy.deepcopy(self.old_checks[1])] for arch in ('x86', 'x64')})
+
+    def verify(self):
+        batch.verify_output_expectations(self.config, self.baseline, self.root)
+
+    def test_reviewed_exact_replacement_preserves_checks_and_raw_evidence(self):
+        log = self.root / 'LastTest.log'
+        log.write_text('1/2 Testing: Camera\n' + self.after + '\nretained companion\nTest Passed.\n'
+                       '2/2 Testing: Other\nother checks passed\nTest Passed.\n', encoding='utf-8')
+        original = (copy.deepcopy(self.config), copy.deepcopy(self.baseline), batch.pin(self.source), batch.pin(log))
+        self.verify()
+        batch.verify_schedule(dict(tests=[dict(name=name) for name in ('Camera', 'Other')]),
+            '1/2 Test #1: Camera .... Passed 0.01 sec\n2/2 Test #2: Other .... Passed 0.01 sec\n'
+            '100% tests passed, 0 tests failed out of 2\n', log.read_text(encoding='utf-8'),
+            dict(tests=[dict(name=name) for name in ('Camera', 'Other')]), [], ['Camera'],
+            self.config['output_expectations']['x86'])
+        self.assertEqual(original, (self.config, self.baseline, batch.pin(self.source), batch.pin(log)))
+
+    def test_without_review_only_unchanged_output_checks_pass(self):
+        del self.config['output_expectation_update']
+        with self.assertRaisesRegex(ValueError, 'Retained output checks omitted'):
+            self.verify()
+        self.config['output_expectations'] = {arch: copy.deepcopy(self.old_checks) for arch in ('x86', 'x64')}
+        self.verify()
+
+    def test_missing_malformed_or_unreviewed_update_refuses(self):
+        original = copy.deepcopy(self.update)
+        for field, value in (('schema', 'unknown'), ('root_accepted', False), ('root_accepted', 1),
+                ('recording_only', False), ('changed_build_source', True), ('repeated_build', True),
+                ('repeated_tests', True), ('reason', ''), ('before', ''), ('after', self.before),
+                ('after', ['list']), ('after', 'line\nbreak'), ('before', ' padded ')):
+            with self.subTest(field=field, value=value):
+                self.config['output_expectation_update'] = dict(original, **{field: value})
+                with self.assertRaises(ValueError):
+                    self.verify()
+        for value in (None, {}, dict(original, unexpected=True)):
+            self.config['output_expectation_update'] = value
+            with self.assertRaises(ValueError):
+                self.verify()
+        for field in original:
+            self.config['output_expectation_update'] = {key: value for key, value in original.items() if key != field}
+            with self.assertRaises(ValueError):
+                self.verify()
+
+    def test_other_output_rows_and_companion_strings_cannot_be_dropped(self):
+        original = copy.deepcopy(self.config['output_expectations'])
+        for arch in ('x86', 'x64'):
+            for change in ('other row', 'companion', 'other suite'):
+                with self.subTest(architecture=arch, change=change):
+                    self.config['output_expectations'] = copy.deepcopy(original)
+                    rows = self.config['output_expectations'][arch]
+                    if change == 'other row':
+                        rows.pop()
+                    elif change == 'companion':
+                        rows[0]['contains'].pop()
+                    else:
+                        rows[0]['suite'] = 'Other'
+                    with self.assertRaises(ValueError):
+                        self.verify()
+
+    def test_current_source_pin_and_reviewed_binding_must_match(self):
+        original = copy.deepcopy(self.update)
+        for field, value in (('suite', 'Other'), ('path', 'tests/Other.cpp'), ('entry_call', 'AddedChecks();'),
+                ('applied_sha256', '1' * 64), ('behavior_assertions_root_reviewed', False),
+                ('architectures', ['x86']), ('architectures', []), ('architectures', ['x86', 'x86'])):
+            with self.subTest(field=field):
+                self.config['output_expectation_update'] = copy.deepcopy(original)
+                self.config['output_expectation_update']['test_main_binding'][field] = value
+                with self.assertRaises(ValueError):
+                    self.verify()
+        self.config['output_expectation_update'] = original
+        self.source.write_bytes(self.source.read_bytes() + b'// changed\n')
+        with self.assertRaisesRegex(ValueError, 'Pinned file changed'):
+            self.verify()
+
+    def test_retained_suite_and_main_call_review_cannot_change(self):
+        for field, value in (('suite', 'Other'), ('entry_call', 'RemovedChecks();'), ('architectures', ['x86']),
+                             ('behavior_assertions_root_reviewed', False)):
+            with self.subTest(field=field):
+                old = self.baseline['validation'][1]['diagnostic_test_mains'][0]
+                original = copy.deepcopy(old)
+                old[field] = value
+                with self.assertRaisesRegex(ValueError, 'same suite and test-main review'):
+                    self.verify()
+                self.baseline['validation'][1]['diagnostic_test_mains'][0] = original
+
+    def test_missing_or_ambiguous_markers_refuse(self):
+        for target in ('old marker', 'duplicate old', 'duplicate new', 'missing new', 'old still required'):
+            with self.subTest(target=target):
+                old, current = copy.deepcopy(self.baseline), copy.deepcopy(self.config)
+                if target == 'old marker':
+                    self.baseline['validation'][0]['reviewed_output_checks'][0]['contains'][0] = 'Different old marker'
+                elif target == 'duplicate old':
+                    self.baseline['validation'][0]['reviewed_output_checks'].append(copy.deepcopy(self.old_checks[0]))
+                elif target == 'duplicate new':
+                    self.config['output_expectations']['x86'].append(copy.deepcopy(self.config['output_expectations']['x86'][0]))
+                elif target == 'missing new':
+                    self.config['output_expectations']['x64'][0]['contains'][0] = self.before
+                else:
+                    self.config['output_expectations']['x64'].append(copy.deepcopy(self.old_checks[0]))
+                with self.assertRaises(ValueError):
+                    self.verify()
+                self.baseline, self.config = old, current
+
+    def test_repinned_source_requires_exact_unique_success_literal_and_retained_call(self):
+        original = self.source.read_text(encoding='utf-8')
+        for text in (original.replace('RetainedChecks();', ''), original.replace(self.after, 'Longer ' + self.after),
+                     original + '// ' + self.after, original + '// ' + self.before, original.replace(self.after, 'Missing')):
+            with self.subTest(source=text):
+                self.source.write_text(text, encoding='utf-8')
+                self.update['test_source'] = batch.pin(self.source)
+                self.update['test_main_binding']['applied_sha256'] = self.update['test_source']['sha256']
+                self.config['test_main_bindings'] = [copy.deepcopy(self.update['test_main_binding'])]
+                with self.assertRaises(ValueError):
+                    self.verify()
+
+
 class FrozenEvidenceTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
