@@ -816,6 +816,15 @@ std::int64_t SelectionNanos(std::int64_t now)noexcept {
 bool SelectionReadWord(unsigned base,unsigned offset,unsigned& value)noexcept {
     return base>=0x10000&&base<=UINT32_MAX-offset-4&&Read(base+offset,&value,4);
 }
+bool SelectionCopySelected(const Owner& owner,selectionObservation::Selected& selected)noexcept {
+    const WeaponModeMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t n){return Read(at,dst,n);},
+        [](void*,unsigned at,const char* name){return Type(at,name);}};
+    const selectionObservation::Owner native{owner.player,owner.soldier,owner.weak,owner.controlled,
+        owner.entry,0,owner.cache,0,owner.equipment};
+    return SelectionReadWord(owner.entry,0xd8,selected.address)&&SelectionReadWord(selected.address,0,selected.current)&&
+        SelectionReadWord(selected.address,4,selected.previous)&&SelectionReadWord(owner.player,0x150,selected.playerIndex)&&
+        selectionObservation::ReadInventorySelection(memory,native,selected.inventory);
+}
 bool SelectionCopyOwner(selectionObservation::Owner& out,selectionObservation::Pair& pair,
                         selectionObservation::Selected* selected=nullptr)noexcept {
     Owner before{},after{};unsigned slot=0,r=0,cache=0,entryPlayer=0,pairType=0,otherType=0;
@@ -826,17 +835,14 @@ bool SelectionCopyOwner(selectionObservation::Owner& out,selectionObservation::P
        !SelectionReadWord(before.entry,0x1c4,entryPlayer)||entryPlayer!=before.player||
        !SelectionReadWord(r,0,pairType)||!SelectionReadWord(r,0xd0,otherType)||
        pairType!=image+profile.cacheVtable||otherType!=pairType)return false;
-    if(selected&&(!SelectionReadWord(before.entry,0xd8,selected->address)||
-        !SelectionReadWord(selected->address,0,selected->current)||!SelectionReadWord(selected->address,4,selected->previous)||
-        !SelectionReadWord(before.player,0x150,selected->playerIndex)))return false;
+    if(selected&&!SelectionCopySelected(before,*selected))return false;
     unsigned r2=0,cache2=0,slot2=0;selectionObservation::Pair last{};
     if(!Resolve(after)||after!=before||!SelectionReadWord(after.player,0xc70,r2)||r2!=r||
        !SelectionReadWord(after.player,0xc74,cache2)||cache2!=cache||!SelectionReadWord(after.player,0xc6c,slot2)||slot2!=slot||
        !SelectionReadWord(r,0x1a0,last.current)||!SelectionReadWord(r,0x1a4,last.previous)||last!=pair||
        !SelectionReadWord(after.entry,0x1c4,entryPlayer)||entryPlayer!=after.player)return false;
     if(selected){selectionObservation::Selected second{};
-        if(!SelectionReadWord(after.entry,0xd8,second.address)||!SelectionReadWord(second.address,0,second.current)||
-           !SelectionReadWord(second.address,4,second.previous)||!SelectionReadWord(after.player,0x150,second.playerIndex)||second!=*selected)return false;
+        if(!SelectionCopySelected(after,second)||second!=*selected)return false;
     }
     out={before.player,before.soldier,before.weak,before.controlled,before.entry,slot,cache,r,before.equipment};return true;
 }
@@ -857,7 +863,12 @@ void SelectionUpdateEnter(void* self)noexcept {
 void SelectionUpdateReturned(void* self)noexcept {
     if(!selectionUpdate||!selectionUpdate->active)return;
     const auto error=GetLastError();auto& r=selectionUpdate->row;r.returned=true;
-    if(r.relevant&&SelectionWatching()){
+    if(SelectionWatching()&&!r.relevant){
+        if(!SelectionCopyOwner(r.after,r.pairAfter))r.reasons|=selectionObservation::Memory;
+        else if(r.after!=r.before||r.pairAfter!=r.pairBefore||r.after.player==reinterpret_cast<unsigned>(self))
+            r.reasons|=selectionObservation::PairChanged;
+        else r.foreign=true;
+    }else if(r.relevant&&SelectionWatching()){
         selectionObservation::Row issue{};if(selectionJournal->IssueRow(issue))r.action=issue.action;
         if(!SelectionCopyOwner(r.after,r.pairAfter,&r.selected)||r.after.player!=reinterpret_cast<unsigned>(self)||
            !SelectionValue(r.pairAfter.current,r.action,r.currentValue)||
@@ -940,10 +951,12 @@ void SelectionObserveView(const Owner& owner,const ReloadStateOwner& current,
 }
 void SelectionConsumerBegin(selectionObservation::Token& t)noexcept {
     if(!t.active||!SelectionWatching())return;auto& r=t.row;
-    if(r.kind==selectionObservation::Kind::Inner&&selectionOuter&&!selectionOuter->row.relevant){r.relevant=false;return;}
     if(!SelectionCopyOwner(r.before,r.pairBefore)){r.reasons|=selectionObservation::Memory;return;}
+    if(r.kind==selectionObservation::Kind::Inner&&(!selectionOuter||r.parent!=selectionOuter->row.id||r.self!=selectionOuter->row.self))
+        r.reasons|=selectionObservation::Parent;
     if(r.self!=r.before.controlled){r.relevant=false;return;}
-    if(!SelectionReadWord(r.self,0x108,r.queue))r.reasons|=selectionObservation::Memory;
+    r.queueBeforeRead=SelectionReadWord(r.self,0x108,r.queue);
+    if(!r.queueBeforeRead)r.reasons|=selectionObservation::Memory;
     if(r.queue)r.reasons|=selectionObservation::Queue;
     if(r.kind==selectionObservation::Kind::Inner){
         r.matchingSlot=r.slot==r.before.entrySlot;
@@ -954,10 +967,17 @@ void SelectionConsumerBegin(selectionObservation::Token& t)noexcept {
     if(r.kind==selectionObservation::Kind::Outer||r.matchingSlot)selectionJournal->PairIds(r);
 }
 void SelectionConsumerReturned(selectionObservation::Token& t)noexcept {
-    t.row.returned=true;if(!t.active||!t.row.relevant||!SelectionWatching())return;auto& r=t.row;unsigned queue=0;
-    if(!SelectionCopyOwner(r.after,r.pairAfter,r.kind==selectionObservation::Kind::Outer?&r.selected:nullptr)||
-       !SelectionReadWord(r.self,0x108,queue))r.reasons|=selectionObservation::Memory;
-    if(queue)r.reasons|=selectionObservation::Queue;
+    t.row.returned=true;if(!t.active||!SelectionWatching())return;auto& r=t.row;
+    if(!r.relevant){
+        if(!SelectionCopyOwner(r.after,r.pairAfter))r.reasons|=selectionObservation::Memory;
+        else if(r.after!=r.before||r.pairAfter!=r.pairBefore||r.after.controlled==r.self)r.reasons|=selectionObservation::PairChanged;
+        else r.foreign=true;
+        return;
+    }
+    const bool ownerCopied=SelectionCopyOwner(r.after,r.pairAfter,r.kind==selectionObservation::Kind::Outer?&r.selected:nullptr);
+    r.queueAfterRead=SelectionReadWord(r.self,0x108,r.queueAfter);
+    if(!ownerCopied||!r.queueAfterRead)r.reasons|=selectionObservation::Memory;
+    if(r.queueAfter)r.reasons|=selectionObservation::Queue;
     if(!selectionObservation::SamePair(r.before,r.after)||r.pairBefore!=r.pairAfter)r.reasons|=selectionObservation::PairChanged;
 }
 #if defined(_MSC_VER) && defined(_M_IX86)
@@ -1103,6 +1123,10 @@ unsigned ReadVehicleConsumerView(const VehicleConsumerContext& context,unsigned 
        !InImage(view.physicsVtable,0x64)||context.identity.driver>UINT32_MAX-0xdd||
        !Read(context.identity.driver+0xdc,&inhibit,1))checks|=vehicleConsumer::Read;
     view.zeroControls=inhibit;
+    if(!(checks&(vehicleConsumer::Owner|vehicleConsumer::Read))&&view.generationsCurrent){
+        view.destination=vehicleConsumer::destination::Read(unsigned(image),unsigned(imageSize),context.identity.driver,
+            view.physics,view.physicsVtable,[](unsigned at,void* dst,std::size_t n){return Read(at,dst,n);});
+    }else view.destination.reasons|=vehicleConsumer::destination::Context;
     unsigned rootAfter=0,currentAfter=0,previousAfter=0,physicsAfter=0,vtableAfter=0;unsigned char inhibitAfter=0;
     std::array<unsigned,4> wordsAfter{};
     bool same=SelectionReadWord(context.owner.player,0xc70,rootAfter)&&SelectionReadWord(view.pair,0x1a0,currentAfter)&&
@@ -1116,6 +1140,8 @@ unsigned ReadVehicleConsumerView(const VehicleConsumerContext& context,unsigned 
     vehicleConsumer::View last{};last.owner=context.identity;bool nativeAfter=false;
     checks|=ValidateVehicleConsumerContext(context,last,nativeAfter);
     if(view.owner!=last.owner||view.observationSerial!=last.observationSerial||!last.generationsCurrent)checks|=vehicleConsumer::Owner;
+    if(checks&(vehicleConsumer::Owner|vehicleConsumer::Read|vehicleConsumer::Physics|vehicleConsumer::Words))
+        view.destination.reasons|=vehicleConsumer::destination::Context;
     readable=nativeCurrent&&nativeAfter&&!(checks&vehicleConsumer::Read);return checks;
 }
 void PublishVehicleConsumer(const Scope& pending,const VehicleFinalInputRecord& final)noexcept {
@@ -6130,7 +6156,7 @@ void ReportBoatAimEvidence(std::ostream& out){
 }
 void ReportVehicleConsumerEvidence(std::ostream& out){
     std::lock_guard lock(vehicleConsumerMutex);const auto until=vehicleConsumerDeadline.load();const auto now=SelectionNow();
-    out<<",\"vehicle_consumer_evidence\":{\"schema\":1,\"requested\":"<<(vehicleConsumerRequested?"true":"false")
+    out<<",\"vehicle_consumer_evidence\":{\"schema\":2,\"requested\":"<<(vehicleConsumerRequested?"true":"false")
        <<",\"installed\":"<<(vehicleConsumerInstalled?"true":"false")<<",\"install_status\":\""<<vehicleConsumerStatus
        <<"\",\"hooks_disabled\":"<<(vehicleConsumerDisabled?"true":"false")<<",\"drained\":"<<(vehicleConsumerDrained?"true":"false")
        <<",\"activation_qpc\":"<<(until?until-20*vehicleConsumerFrequency:0)<<",\"deadline_qpc\":"<<until
@@ -6142,15 +6168,27 @@ void ReportVehicleConsumerEvidence(std::ostream& out){
        <<",\"reason_bits\":{\"no_publication\":1,\"publication_changed\":2,\"owner\":4,\"pair\":8,\"words\":16,\"clock\":32,\"overlap\":64,\"caller\":128,\"receiver\":256,\"read\":512,\"unwind\":1024,\"nested\":2048,\"physics\":4096,\"commit\":8192}"
        <<",\"first_bits\":{\"active\":1,\"neutral_after_active\":2,\"mismatch\":4,\"zero_controls\":8,\"braking\":16,\"active_mismatch\":32}"
        <<",\"publication_first_bits\":{\"active\":1,\"neutral_after_active\":2,\"mismatch\":4}"
+       <<",\"destination_reason_bits\":{\"not_observed\":1,\"read\":2,\"type\":4,\"code\":8,\"identity\":16,\"values\":32,\"context\":64}"
+       <<",\"destination_read_bits\":{\"driver_physics\":1,\"physics_vtable\":2,\"throttle_target\":4,\"brake_target\":8,\"throttle_code\":16,\"brake_code\":32,\"control\":64,\"throttle\":128,\"brake\":256,\"throttle_again\":512,\"brake_again\":1024,\"control_again\":2048,\"driver_physics_again\":4096,\"physics_vtable_again\":8192,\"throttle_target_again\":16384,\"brake_target_again\":32768,\"throttle_code_again\":65536,\"brake_code_again\":131072}"
+       <<",\"destination_proof\":{\"vtable_rva\":"<<vehicleConsumer::destination::VtableRva
+       <<",\"throttle_rva\":"<<vehicleConsumer::destination::ThrottleRva<<",\"brake_rva\":"<<vehicleConsumer::destination::BrakeRva
+       <<",\"setter_bytes\":17,\"control_offset\":12,\"throttle_offset\":32,\"brake_offset\":40,\"word_order\":[\"throttle\",\"brake\"],\"comparison_requires_existing_join\":true}"
        <<",\"word_order\":[\"action0\",\"action2\",\"permissions98\",\"permissions9c\"]";
     const auto epochOut=[&](const vehicleConsumer::Epoch& e){out<<'['<<e.revision<<','<<e.active<<']';};
+    const auto destination=[&](const vehicleConsumer::destination::Snapshot& d){
+        out<<"{\"physics\":"<<d.physics<<",\"vtable\":"<<d.vtable<<",\"control\":"<<d.control
+           <<",\"targets\":["<<d.targets[0]<<','<<d.targets[1]<<"],\"words\":["<<d.words[0]<<','<<d.words[1]
+           <<"],\"physics_again\":"<<d.physicsAgain<<",\"vtable_again\":"<<d.vtableAgain<<",\"control_again\":"<<d.controlAgain
+           <<",\"targets_again\":["<<d.targetsAgain[0]<<','<<d.targetsAgain[1]<<"],\"words_again\":["<<d.wordsAgain[0]<<','<<d.wordsAgain[1]
+           <<"],\"attempted\":"<<d.attempted<<",\"read\":"<<d.read<<",\"reasons\":"<<d.reasons<<'}';};
     const auto view=[&](const vehicleConsumer::View& v){const auto& i=v.owner;
         out<<"{\"owner\":["<<i.manager<<','<<i.player<<','<<i.actor<<','<<i.weak<<','<<i.vehicle<<','<<i.entry<<','<<i.router<<','<<i.driver
            <<"],\"generations\":["<<i.actorGeneration<<','<<i.seatGeneration<<','<<i.inputEpoch<<','<<i.movementEpoch<<','<<i.space
            <<"],\"route\":"<<i.route<<",\"pair\":["<<v.pair<<','<<v.current<<','<<v.previous<<"],\"words\":[";
         for(unsigned n=0;n<4;++n){if(n)out<<',';out<<v.words[n];}
         out<<"],\"physics\":"<<v.physics<<",\"physics_vtable\":"<<v.physicsVtable<<",\"zero_controls\":"<<v.zeroControls
-           <<",\"observation_serial\":"<<v.observationSerial<<",\"generations_current\":"<<(v.generationsCurrent?"true":"false")<<'}';};
+           <<",\"observation_serial\":"<<v.observationSerial<<",\"generations_current\":"<<(v.generationsCurrent?"true":"false")
+           <<",\"destination\":";destination(v.destination);out<<'}';};
     const auto publication=[&](const vehicleConsumer::Publication& p){
         out<<"{\"generation\":"<<p.generation<<",\"update\":"<<p.update<<",\"gather\":"<<p.gather<<",\"input\":"<<p.input
            <<",\"cache\":"<<p.cache<<",\"committed_throttle\":"<<p.committedThrottle<<",\"committed_permissions\":"<<p.committedPermissions
@@ -6168,6 +6206,7 @@ void ReportVehicleConsumerEvidence(std::ostream& out){
            <<",\"begin_qpc\":"<<r.beginQpc<<",\"end_qpc\":"<<r.endQpc<<",\"entry_epoch\":";epochOut(r.entry);
         out<<",\"return_epoch\":";epochOut(r.returned);out<<",\"return_publication\":"<<r.returnPublication
            <<",\"reasons\":"<<r.reasons<<",\"normal\":"<<(r.normal?"true":"false")<<",\"joined\":"<<(r.joined?"true":"false")
+           <<",\"destination_reasons\":"<<r.destinationReasons<<",\"destination_comparable\":"<<(r.destinationComparable?"true":"false")
            <<",\"before_readable\":"<<(r.beforeReadable?"true":"false")<<",\"after_readable\":"<<(r.afterReadable?"true":"false")
            <<",\"publication\":";publication(r.publication);out<<",\"before\":";view(r.before);out<<",\"after\":";view(r.after);out<<'}';}
     out<<"]}";
@@ -6687,14 +6726,18 @@ void ReportNativeCycleSelection(std::ostream& out){
     const auto command=[&](const so::Command& c){out<<"{\"action\":"<<c.action<<",\"target_weapon\":"<<c.targetWeapon
         <<",\"target_slot\":"<<c.targetSlot<<",\"inventory\":"<<c.inventory<<",\"persistent\":"<<c.persistent<<",\"primary_action\":"<<c.primaryAction
         <<",\"family_identity\":"<<c.family<<",\"selected_secondary\":"<<c.selectedSecondary<<'}';};
-    out<<",\"native_cycle_selection_observation\":{\"schema\":2,\"requested\":"<<(selectionRequested?"true":"false")
+    out<<",\"native_cycle_selection_observation\":{\"schema\":3,\"requested\":"<<(selectionRequested?"true":"false")
        <<",\"installed\":"<<(selectionInstalled?"true":"false")<<",\"install_status\":\""<<selectionStatus<<"\",\"result\":\""<<results[unsigned(joined.result)]
        <<"\",\"reasons\":"<<joined.reasons<<",\"closed\":"<<(snapshot->closed?"true":"false")<<",\"expired\":"<<(snapshot->expired?"true":"false")
        <<",\"hooks_disabled\":"<<(selectionDisabled?"true":"false")<<",\"drained\":"<<(drained?"true":"false")
+       <<",\"observed_chain_complete\":"<<(drained&&joined.observedChainComplete?"true":"false")
        <<",\"joined\":"<<(drained&&joined.result==so::Result::Joined?"true":"false")<<",\"capacity\":"<<so::Capacity
        <<",\"records\":"<<snapshot->count<<",\"dropped\":"<<snapshot->dropped<<",\"capped\":"<<(snapshot->capped?"true":"false")
        <<",\"frequency\":"<<selectionFrequency<<",\"activation_qpc\":"<<snapshot->activation<<",\"deadline_qpc\":"<<snapshot->deadline
        <<",\"active_callbacks\":"<<selectionCallbacks.load()<<",\"active\":";three(snapshot->active);out<<",\"revision\":";three(snapshot->revision);
+    out<<",\"completed_callbacks_in_window\":";three(snapshot->completedCallbacks);
+    out<<",\"foreign_callbacks_suppressed\":";three(snapshot->foreignSuppressed);
+    out<<",\"foreign_suppression_scope\":\"normal_fault_free_callbacks_with_fresh_equal_local_owner_and_pair_bookends_only_not_complete_callback_rows_or_exclusion_proof\"";
     out<<",\"join\":{\"issue\":"<<joined.issue<<",\"g\":"<<joined.generation<<",\"outer\":"<<joined.outer<<",\"inner\":"<<joined.inner
        <<",\"g_previous_publication\":"<<joined.previousPublication<<",\"g_absent_publication\":"<<joined.absentPublication<<",\"selected\":"<<joined.selected
        <<",\"optional_selected_bank_view\":"<<joined.selectedBank
@@ -6706,15 +6749,24 @@ void ReportNativeCycleSelection(std::ostream& out){
         out<<"{\"kind\":\""<<kinds[unsigned(r.kind)]<<"\",\"id\":"<<r.id<<",\"parent\":"<<r.parent<<",\"update\":"<<r.update<<",\"issue\":"<<r.issue
            <<",\"publication\":"<<r.publication<<",\"current_id\":"<<r.currentId<<",\"previous_id\":"<<r.previousId<<",\"input_sequence\":"<<r.inputSequence
            <<",\"begin\":"<<r.begin<<",\"end\":"<<r.end<<",\"thread\":"<<r.thread<<",\"depth\":"<<r.depth<<",\"self\":"<<r.self<<",\"caller\":"<<r.caller
-           <<",\"slot\":"<<r.slot<<",\"actual_R\":"<<r.actualR<<",\"queue\":"<<r.queue<<",\"args\":["<<r.args[0]<<','<<r.args[1]<<','<<r.args[2]<<','<<r.args[3]<<']'
+           <<",\"slot\":"<<r.slot<<",\"actual_R\":"<<r.actualR<<",\"queue\":"<<r.queue<<",\"queue_after\":"<<r.queueAfter
+           <<",\"queue_before_read\":"<<(r.queueBeforeRead?"true":"false")<<",\"queue_after_read\":"<<(r.queueAfterRead?"true":"false")
+           <<",\"args\":["<<r.args[0]<<','<<r.args[1]<<','<<r.args[2]<<','<<r.args[3]<<']'
            <<",\"result\":"<<r.result<<",\"reasons\":"<<r.reasons<<",\"normal_return\":"<<(r.returned?"true":"false")
-           <<",\"relevant\":"<<(r.relevant?"true":"false")<<",\"matching_slot\":"<<(r.matchingSlot?"true":"false")<<",\"child_count\":"<<r.childCount
+           <<",\"relevant\":"<<(r.relevant?"true":"false")<<",\"proven_foreign_bookends\":"<<(r.foreign?"true":"false")
+           <<",\"matching_slot\":"<<(r.matchingSlot?"true":"false")<<",\"child_count\":"<<r.childCount
            <<",\"action\":"<<r.action<<",\"value\":"<<r.value<<",\"current_value\":"<<r.currentValue<<",\"previous_value\":"<<r.previousValue
            <<",\"target_weapon\":"<<r.targetWeapon<<",\"target_slot\":"<<r.targetSlot<<",\"begin_active\":";three(r.beginActive);out<<",\"end_active\":";three(r.endActive);
         out<<",\"begin_revision\":";three(r.beginRevision);out<<",\"end_revision\":";three(r.endRevision);
         out<<",\"before\":";owner(r.before);out<<",\"after\":";owner(r.after);
         out<<",\"pair_before\":["<<r.pairBefore.current<<','<<r.pairBefore.previous<<"],\"pair_after\":["<<r.pairAfter.current<<','<<r.pairAfter.previous
-           <<"],\"selected_indices\":["<<r.selected.address<<','<<r.selected.current<<','<<r.selected.previous<<','<<r.selected.playerIndex<<"],\"observed_native_owner\":";nativeOwner(r.nativeOwner);
+           <<"],\"entry_routing_indices\":["<<r.selected.address<<','<<r.selected.current<<','<<r.selected.previous<<','<<r.selected.playerIndex
+           <<"],\"inventory_selection\":{\"inventory\":"<<r.selected.inventory.inventory<<",\"index\":"<<r.selected.inventory.index
+           <<",\"begin\":"<<r.selected.inventory.begin<<",\"end\":"<<r.selected.inventory.end<<",\"weapon\":"<<r.selected.inventory.weapon
+           <<",\"equipment_weapon\":"<<r.selected.inventory.equipment.weapon<<",\"data\":"<<r.selected.inventory.equipment.data
+           <<",\"persistence\":"<<r.selected.inventory.equipment.persistence<<",\"asset_bytes\":[";
+        for(unsigned i=0;i<r.selected.inventory.equipment.asset.size();++i){if(i)out<<',';out<<unsigned(static_cast<unsigned char>(r.selected.inventory.equipment.asset[i]));}
+        out<<"]},\"observed_native_owner\":";nativeOwner(r.nativeOwner);
         out<<",\"cycle\":";cycle(r.cycle);
         if(r.kind==so::Kind::Attempted||r.kind==so::Kind::Committed||r.kind==so::Kind::Refused){
             out<<",\"origin\":{\"qpc\":"<<r.origin.qpc<<",\"update\":"<<r.origin.update<<",\"thread\":"<<r.origin.thread

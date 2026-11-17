@@ -5,6 +5,7 @@
 #include <cstring>
 #include <memory>
 #include <thread>
+#include <vector>
 using namespace fvr::bc2;
 namespace so=fvr::bc2::cycleSelectionObservation;
 namespace {
@@ -19,6 +20,9 @@ struct Fixture {
     so::Cycle origin{{2,9},{owner,{0x72000,0x73000,0x74000},0x75000,0x76000,0x77000},5,6,7,true};
     std::uint64_t issue=0;
     Fixture(){next.equipment={0x80000,0x81000,12,{}};journal->Configure(1000);journal->Start();}
+    so::Selected TargetSelection()const {
+        return {0x90000,0,0,0,{0x82000,1,0x83000,0x83008,next.equipment.weapon,next.equipment}};
+    }
     void Adopt(const so::Cycle& c,const ReloadStateOwner& nativeOwner){
         origin=c;owner=nativeOwner;old.player=owner.player;old.soldier=old.controlled=owner.soldier;old.weak=owner.weak;
         old.equipment.weapon=owner.weapon;next=old;next.equipment={0x80000,0x81000,12,{}};
@@ -38,31 +42,35 @@ struct Fixture {
         u.row.issue=issue;u.row.action=7;u.row.before=u.row.after=old;u.row.pairBefore=first;u.row.pairAfter=second;
         u.row.currentValue=committed?0x3f800000:0;u.row.returned=true;journal->End(u,thread,13,true);
     }
-    void Consumer(bool child=true,bool childNormal=true,unsigned otherSlots=0){
+    void Consumer(bool child=true,bool childNormal=true,unsigned otherSlots=0,unsigned queueBefore=0,unsigned queueAfter=0){
         auto o=journal->Begin(so::Kind::Outer,thread,14,1,old.controlled,0);
+        o.row.queueBeforeRead=o.row.queueAfterRead=true;
+        o.row.queue=queueBefore;o.row.queueAfter=queueAfter;
         o.row.before=old;o.row.after=next;o.row.pairBefore=o.row.pairAfter=second;journal->PairIds(o.row);
         if(child){auto i=journal->Begin(so::Kind::Inner,thread,15,1,old.controlled,0x400000+so::InnerCallerRva);++o.childCount;
+            i.row.queueBeforeRead=i.row.queueAfterRead=true;
             i.row.before=old;i.row.after=next;i.row.pairBefore=i.row.pairAfter=second;i.row.actualR=old.pair;i.row.slot=old.entrySlot;
             journal->PairIds(i.row);i.row.returned=childNormal;journal->End(i,thread,16,childNormal);}
         for(unsigned n=0;n<otherSlots;++n){
             auto i=journal->Begin(so::Kind::Inner,thread,16,1,old.controlled,0x400000+so::InnerCallerRva);++o.childCount;
+            i.row.queueBeforeRead=i.row.queueAfterRead=true;
             i.row.before=old;i.row.after=next;i.row.pairBefore=i.row.pairAfter=second;i.row.actualR=0xa0000+n*0x1000;
             i.row.slot=n+1;i.row.matchingSlot=false;i.row.returned=true;journal->End(i,thread,16,true);
         }
-        o.row.returned=true;o.row.selected={0x90000,1,0,1};journal->End(o,thread,17,true);
+        o.row.returned=true;o.row.selected=TargetSelection();journal->End(o,thread,17,true);
     }
     void Neutral(bool selected=true){
         auto u=journal->Begin(so::Kind::Update,thread,18,1,old.player,0);
-        if(selected){so::Row r{};r.kind=so::Kind::Selected;r.begin=r.end=19;r.after=next;r.selected={0x90000,1,0,1};
+        if(selected){so::Row r{};r.kind=so::Kind::Selected;r.begin=r.end=19;r.after=next;r.selected=TargetSelection();
             r.nativeOwner=owner;r.nativeOwner.weapon=next.equipment.weapon;++r.nativeOwner.equipGeneration;
             r.cycle=origin;r.cycle.native.owner=r.nativeOwner;r.cycle.slot={3,1};r.cycle.cycle=1;r.cycle.shot=0;r.cycle.guardEpoch=0;
             journal->Append(r);}
         u.row.before=u.row.after=next;u.row.pairBefore=second;u.row.pairAfter=first;u.row.action=7;
-        u.row.selected={0x90000,1,0,1};
+        u.row.selected=TargetSelection();
         u.row.previousValue=0x3f800000;u.row.returned=true;journal->End(u,thread,20,true);
         auto v=journal->Begin(so::Kind::Update,thread,21,1,old.player,0);
         v.row.before=v.row.after=next;v.row.pairBefore=first;v.row.pairAfter=second;v.row.action=7;v.row.returned=true;
-        v.row.selected={0x90000,1,0,1};
+        v.row.selected=TargetSelection();
         journal->End(v,thread,22,true);
     }
     std::unique_ptr<so::Snapshot> Complete(){Issue();Consumer();Neutral();return Capture(*journal);}
@@ -70,7 +78,7 @@ struct Fixture {
 so::Row* Find(so::Snapshot& s,so::Kind kind,unsigned which=0){for(unsigned n=0;n<s.count;++n)if(s.rows[n].kind==kind){if(!which--)return &s.rows[n];}return nullptr;}
 int CompleteJoin(){
     Fixture f;auto s=f.Complete();const auto result=so::Analyze(*s);
-    CHECK(result.result==so::Result::Joined&&result.issue==f.issue&&result.generation==1);
+    CHECK(result.result==so::Result::Joined&&result.observedChainComplete&&result.issue==f.issue&&result.generation==1);
     CHECK(result.outer&&result.inner&&result.selected&&result.selectedBank&&result.previousPublication==2&&result.absentPublication==3);
     CHECK(s->closed&&s->count==8&&!s->dropped&&!s->capped);
     CHECK(f.journal->Drained(true,0)&&!f.journal->Drained(false,0)&&!f.journal->Drained(true,1));
@@ -118,18 +126,19 @@ int OwnerPairAndSlot(){
 int SelectedPending(){
     for(unsigned test=0;test<5;++test){Fixture f;auto s=f.Complete();auto* r=Find(*s,so::Kind::Selected);
         switch(test){case 0:r->cycle.present=false;break;case 1:r->cycle.native.owner.weapon+=4;break;
-        case 2:r->after.equipment.persistence+=1;break;case 3:r->selected.current=0;break;case 4:r->begin=16;break;}
+        case 2:r->after.equipment.persistence+=1;break;case 3:r->selected.current=1;break;case 4:r->begin=16;break;}
         CHECK(so::Analyze(*s).result==so::Result::Joined&&!so::Analyze(*s).selectedBank);
     }
     Fixture plain;plain.Issue();plain.Consumer();plain.Neutral(false);
     auto a=Capture(*plain.journal);
     CHECK(so::Analyze(*a).result==so::Result::Joined&&!so::Analyze(*a).selectedBank);
-    Fixture stale;auto b=stale.Complete();Find(*b,so::Kind::Update,2)->selected.current=0;
+    Fixture stale;auto b=stale.Complete();Find(*b,so::Kind::Update,2)->selected.current=1;
     CHECK(so::Analyze(*b).result==so::Result::PendingSelected);
     Fixture replaced;auto c=replaced.Complete();Find(*c,so::Kind::Update,2)->after.equipment.persistence+=1;
     CHECK(so::Analyze(*c).result==so::Result::PendingSelected);
     Fixture delayed;auto d=delayed.Complete();Find(*d,so::Kind::Outer)->after=delayed.old;
-    CHECK(so::Analyze(*d).result==so::Result::Joined);
+    // An index alone cannot override a different freshly resolved weapon.
+    CHECK(so::Analyze(*d).result==so::Result::PendingConsumer);
     return 0;
 }
 int Publications(){
@@ -151,7 +160,8 @@ int MultiSlotAndForeign(){
     CHECK(Find(*s,so::Kind::Outer)->childCount==3);
     Fixture g;g.Issue();
     auto foreign=g.journal->Begin(so::Kind::Outer,g.thread,13,2,0xb0000,0);
-    foreign.row.relevant=false;foreign.row.returned=true;g.journal->End(foreign,g.thread,13,true);
+    foreign.row.before=foreign.row.after=g.old;foreign.row.pairBefore=foreign.row.pairAfter=g.second;
+    foreign.row.foreign=true;foreign.row.relevant=false;foreign.row.returned=true;g.journal->End(foreign,g.thread,13,true);
     g.Consumer();g.Neutral(false);auto a=Capture(*g.journal);
     CHECK(so::Analyze(*a).result==so::Result::Joined);
     // A second child claiming the local slot cannot masquerade as one reader.
@@ -169,6 +179,120 @@ int OverlapAndCap(){
     Fixture g;g.Issue();for(unsigned n=0;n<so::Capacity;++n){so::Row r{};r.kind=so::Kind::Selected;g.journal->Append(r);}
     auto a=Capture(*g.journal);CHECK(a->capped&&a->dropped&&a->closed&&so::Analyze(*a).result==so::Result::Rejected);
     Fixture h;h.Issue();CHECK(!h.journal->Capturing(20011));auto b=Capture(*h.journal);CHECK(b->expired&&b->closed);
+    return 0;
+}
+int InventoryNamespace(){
+    Fixture different;auto a=different.Complete();
+    CHECK(Find(*a,so::Kind::Outer)->selected.current==0&&Find(*a,so::Kind::Attempted)->targetSlot==1);
+    CHECK(so::Analyze(*a).result==so::Result::Joined);
+    // Coincident entry index1 cannot qualify an inventory weapon at slot0.
+    Fixture coincident;auto b=coincident.Complete();
+    for(unsigned n=0;n<b->count;++n){b->rows[n].selected.current=1;b->rows[n].selected.inventory.index=0;}
+    CHECK(so::Analyze(*b).result==so::Result::PendingConsumer&&!so::Analyze(*b).observedChainComplete);
+    for(unsigned where=0;where<2;++where)for(unsigned fault=0;fault<10;++fault){Fixture f;auto s=f.Complete();
+        auto& v=(where?Find(*s,so::Kind::Update,2):Find(*s,so::Kind::Outer))->selected.inventory;
+        switch(fault){
+        case 0:v.inventory+=4;break;case 1:v.index=0;break;case 2:v.weapon+=4;break;
+        case 3:v.equipment.weapon+=4;break;case 4:v.equipment.data+=4;break;case 5:++v.equipment.persistence;break;
+        case 6:v.end=v.begin;break;case 7:v.end=v.begin+129;break;case 8:v.index=2;break;case 9:v.begin=4;break;
+        }
+        CHECK(so::Analyze(*s).result==(where?so::Result::PendingSelected:so::Result::PendingConsumer));
+        CHECK(!so::Analyze(*s).observedChainComplete);
+    }
+    return 0;
+}
+struct InventoryMemory {
+    std::vector<std::byte> bytes=std::vector<std::byte>(0xa0000);unsigned failedAddress=0;
+    void Word(unsigned at,unsigned value){std::memcpy(bytes.data()+at,&value,4);}
+    explicit InventoryMemory(const so::Owner& owner){
+        Word(owner.soldier+0x248,0x82000);Word(owner.soldier+0x24c,0x82000);Word(0x82000+0x14c,1);
+        Word(owner.soldier+0x260,0x83000);Word(owner.soldier+0x264,0x83008);Word(0x83004,owner.equipment.weapon);
+        Word(owner.equipment.weapon+4,owner.equipment.data);Word(owner.equipment.data+0x64,owner.equipment.persistence);
+        Word(owner.equipment.data+0xc,0x84000);std::memcpy(bytes.data()+0x84000,owner.equipment.asset.data(),owner.equipment.asset.size());
+    }
+    WeaponModeMemory Memory(){return {this,[](void* context,unsigned at,void* dst,std::size_t n){
+        auto& m=*static_cast<InventoryMemory*>(context);
+        if(at==m.failedAddress||std::uint64_t(at)+n>m.bytes.size())return false;
+        std::memcpy(dst,m.bytes.data()+at,n);return true;
+    },[](void*,unsigned at,const char* type){return at==0x81000&&!std::strcmp(type,"SoldierWeaponData");}};}
+};
+int InventoryReads(){
+    Fixture f;std::memcpy(f.next.equipment.asset.data(),"XM8_sp_s",9);
+    for(unsigned path=0;path<2;++path){InventoryMemory m(f.next);m.bytes[f.next.soldier+0x114]=std::byte(path);
+        so::InventorySelection read{};CHECK(so::ReadInventorySelection(m.Memory(),f.next,read));
+        CHECK(read==f.TargetSelection().inventory);
+    }
+    for(unsigned fault=0;fault<13;++fault){InventoryMemory m(f.next);auto owner=f.next;so::InventorySelection out{};
+        switch(fault){
+        case 0:m.Word(0x8214c,2);break;case 1:m.Word(owner.soldier+0x264,0x83000);break;
+        case 2:m.Word(owner.soldier+0x264,0x83084);break;case 3:m.Word(owner.soldier+0x264,0x83009);break;
+        case 4:m.Word(0x83004,0x70000);break;case 5:m.Word(owner.soldier+0x248,UINT32_MAX-4);break;
+        case 6:m.failedAddress=owner.soldier+0x114;break;case 7:m.failedAddress=0x8214c;break;
+        case 8:m.failedAddress=0x83004;break;case 9:m.failedAddress=0x81064;break;
+        case 10:++owner.equipment.persistence;break;case 11:owner.controlled+=4;break;
+        case 12:m.Word(owner.soldier+0x260,4);break;
+        }
+        CHECK(!so::ReadInventorySelection(m.Memory(),owner,out));CHECK(out==so::InventorySelection{});
+    }
+    return 0;
+}
+int QueueCompletion(){
+    for(unsigned phase=0;phase<3;++phase){Fixture f;f.Issue();f.Consumer(true,true,0,phase!=1?0xb0000:0,phase?0xb0000:0);
+        auto partial=Capture(*f.journal);const auto pending=so::Analyze(*partial);
+        CHECK(pending.result==so::Result::Rejected&&pending.reasons==so::Queue&&!pending.observedChainComplete&&!partial->closed);
+        f.Neutral();auto s=Capture(*f.journal);const auto done=so::Analyze(*s);
+        CHECK(done.result==so::Result::Rejected&&done.reasons==so::Queue&&done.observedChainComplete&&s->closed);
+        CHECK(done.issue&&done.outer&&done.inner&&done.previousPublication==2&&done.absentPublication==3&&done.selected);
+        const auto* outer=Find(*s,so::Kind::Outer);
+        CHECK(outer->queueBeforeRead&&outer->queueAfterRead&&outer->queue==(phase!=1?0xb0000u:0u)&&outer->queueAfter==(phase?0xb0000u:0u));
+        for(unsigned fault=0;fault<10;++fault){auto bad=std::make_unique<so::Snapshot>(*s);
+            switch(fault){
+            case 0:bad->dropped=1;break;case 1:bad->capped=true;break;case 2:bad->active[2]=1;break;
+            case 3:Find(*bad,so::Kind::Committed)->kind=so::Kind::Selected;break;
+            case 4:Find(*bad,so::Kind::Update,2)->previousId=1;break;
+            case 5:Find(*bad,so::Kind::Inner)->reasons|=so::Overlap;break;
+            case 6:Find(*bad,so::Kind::Outer)->queueAfterRead=false;break;
+            case 7:bad->rows[bad->count++].relevant=false;break;
+            case 8:Find(*bad,so::Kind::Outer)->selected.inventory.weapon+=4;break;
+            case 9:bad->expired=true;break;
+            }
+            CHECK(so::Analyze(*bad).result==so::Result::Rejected&&!so::Analyze(*bad).observedChainComplete);
+        }
+    }
+    return 0;
+}
+void Foreign(so::Token& token,const Fixture& f){
+    token.row.before=token.row.after=f.old;token.row.pairBefore=token.row.pairAfter=f.second;
+    token.row.foreign=true;token.row.relevant=false;token.row.returned=true;
+}
+int ForeignBounded(){
+    Fixture f;f.Issue();constexpr unsigned flood=400;
+    for(unsigned n=0;n<flood;++n){
+        auto u=f.journal->Begin(so::Kind::Update,f.thread,13,2,0xb0000,0);Foreign(u,f);f.journal->End(u,f.thread,13,true);
+        auto o=f.journal->Begin(so::Kind::Outer,f.thread,13,2,0xb0000,0);Foreign(o,f);
+        auto i=f.journal->Begin(so::Kind::Inner,f.thread,13,2,0xb0000,0);Foreign(i,f);++o.childCount;
+        f.journal->End(i,f.thread,13,true);f.journal->End(o,f.thread,13,true);
+    }
+    f.Consumer();f.Neutral(false);auto s=Capture(*f.journal);
+    CHECK(so::Analyze(*s).result==so::Result::Joined&&s->closed&&s->count==7&&!s->capped&&!s->dropped);
+    CHECK((s->foreignSuppressed==std::array<unsigned,3>{flood,flood,flood}));
+    CHECK((s->completedCallbacks==std::array<unsigned,3>{flood+3,flood+1,flood+1}));
+    CHECK((s->revision==std::array<std::uint64_t,3>{flood+3,flood+1,flood+1}));
+    for(unsigned fault=0;fault<5;++fault){Fixture g;g.Issue();
+        auto o=g.journal->Begin(so::Kind::Outer,g.thread,13,2,0xb0000,0);Foreign(o,g);
+        switch(fault){case 0:o.row.foreign=false;break;case 1:o.row.after.player+=4;break;
+        case 2:o.row.returned=false;break;case 3:o.row.reasons|=so::Memory;break;case 4:o.row.self=g.old.controlled;break;}
+        g.journal->End(o,g.thread,13,true);g.Consumer();g.Neutral(false);auto bad=Capture(*g.journal);
+        CHECK(bad->foreignSuppressed[1]==0&&bad->count==8&&Find(*bad,so::Kind::Outer)->reasons);
+        CHECK(so::Analyze(*bad).result==so::Result::Rejected&&!so::Analyze(*bad).observedChainComplete);
+    }
+    Fixture crossed;crossed.Issue();so::ThreadState other{};
+    auto local=crossed.journal->Begin(so::Kind::Outer,crossed.thread,14,1,crossed.old.controlled,0);
+    auto foreign=crossed.journal->Begin(so::Kind::Outer,other,15,2,0xb0000,0);Foreign(foreign,crossed);
+    crossed.journal->End(foreign,other,16,true);local.row.returned=true;crossed.journal->End(local,crossed.thread,17,true);
+    auto overlap=Capture(*crossed.journal);
+    CHECK(overlap->foreignSuppressed[1]==0&&(so::Analyze(*overlap).reasons&so::Overlap));
+    CHECK(!so::Analyze(*overlap).observedChainComplete);
     return 0;
 }
 int Eligibility(){
@@ -387,5 +511,5 @@ int NoIssuedEdgeCannotCommit(){
 }
 }
 int main(){if(CompleteJoin()||ExactGenerations()||RefusedAndMissing()||OwnerPairAndSlot()||SelectedPending()||
-    Publications()||MultiSlotAndForeign()||OverlapAndCap()||Eligibility()||RealIdleCancellation()||OriginAndIssueNegatives()||
+    Publications()||MultiSlotAndForeign()||OverlapAndCap()||InventoryNamespace()||InventoryReads()||QueueCompletion()||ForeignBounded()||Eligibility()||RealIdleCancellation()||OriginAndIssueNegatives()||
     CommittedLiveAndOriginCannotDrift()||RealDebtKeepsOriginalBank()||NoIssuedEdgeCannotCommit())return 1;return 0;}

@@ -11,6 +11,79 @@ namespace fvr::bc2::vehicleConsumerEvidence {
 inline constexpr unsigned TargetRva=0x38f660,TargetSize=681,CallerRva=0x473ba7;
 inline constexpr const char* TargetHash="201d4f389e3f3972bab9bcad1fad65d35863258ba6f3ae474b853cb1c24de2cc";
 inline constexpr const char* ExecutableHash="3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258";
+
+// Exact receiver/table/setter proof from the supported executable. These are
+// read-only boundary observations, never a setter invocation or physics result.
+namespace destination {
+inline constexpr unsigned VtableRva=0x1056550,ThrottleRva=0x6db220,BrakeRva=0x6db250;
+inline constexpr std::array<unsigned char,17> ThrottleBody{
+    0x8b,0x41,0x0c,0xf3,0x0f,0x10,0x44,0x24,0x04,0xf3,0x0f,0x11,0x40,0x20,0xc2,0x04,0x00};
+inline constexpr std::array<unsigned char,17> BrakeBody{
+    0x8b,0x41,0x0c,0xf3,0x0f,0x10,0x44,0x24,0x04,0xf3,0x0f,0x11,0x40,0x28,0xc2,0x04,0x00};
+enum Reason:unsigned {None=0,NotObserved=1,ReadFailed=2,Type=4,Code=8,Identity=16,Values=32,Context=64};
+enum Field:unsigned {DriverPhysics=1,PhysicsVtable=2,ThrottleTarget=4,BrakeTarget=8,
+    ThrottleCode=16,BrakeCode=32,Control=64,Throttle=128,Brake=256,
+    ThrottleAgain=512,BrakeAgain=1024,ControlAgain=2048,DriverPhysicsAgain=4096,
+    PhysicsVtableAgain=8192,ThrottleTargetAgain=16384,BrakeTargetAgain=32768,
+    ThrottleCodeAgain=65536,BrakeCodeAgain=131072};
+inline constexpr unsigned AllFields=262143;
+struct Snapshot {
+    unsigned physics=0,vtable=0,control=0;
+    std::array<unsigned,2> targets{},words{};
+    unsigned physicsAgain=0,vtableAgain=0,controlAgain=0;
+    std::array<unsigned,2> targetsAgain{},wordsAgain{};
+    unsigned attempted=0,read=0,reasons=NotObserved;
+    bool operator==(const Snapshot&)const=default;
+};
+template<class Reader> Snapshot Read(unsigned image,unsigned imageSize,unsigned driver,
+    unsigned expectedPhysics,unsigned expectedVtable,Reader&& read)noexcept {
+    Snapshot out;out.reasons=None;
+    const auto inImage=[&](unsigned at,unsigned size){return at>=image&&
+        std::uint64_t(at)+size<=std::uint64_t(image)+imageSize;};
+    const auto word=[&](unsigned base,unsigned offset,unsigned& value,unsigned field){
+        out.attempted|=field;
+        if(base<0x10000||base>UINT32_MAX-offset-4||!read(base+offset,&value,sizeof(value))){out.reasons|=ReadFailed;return false;}
+        out.read|=field;return true;
+    };
+    const auto code=[&](unsigned at,const auto& expected,unsigned field){
+        out.attempted|=field;std::array<unsigned char,17> actual{};
+        if(!inImage(at,unsigned(actual.size()))||!read(at,actual.data(),actual.size())){out.reasons|=ReadFailed;return false;}
+        out.read|=field;if(actual!=expected){out.reasons|=Code;return false;}return true;
+    };
+    if(!image||std::uint64_t(image)+VtableRva+0x5c>UINT32_MAX||
+       !inImage(image+VtableRva,0x5c)||!inImage(image+ThrottleRva,17)||!inImage(image+BrakeRva,17)){
+        out.reasons|=Type;return out;
+    }
+    if(!word(driver,0xd4,out.physics,DriverPhysics)||!word(out.physics,0,out.vtable,PhysicsVtable))return out;
+    if(!expectedPhysics||out.physics!=expectedPhysics||out.vtable!=expectedVtable||out.vtable!=image+VtableRva){
+        out.reasons|=Type;return out;
+    }
+    const bool throttleTarget=word(out.vtable,0x50,out.targets[0],ThrottleTarget);
+    const bool brakeTarget=word(out.vtable,0x58,out.targets[1],BrakeTarget);
+    if(!throttleTarget||!brakeTarget)return out;
+    if(out.targets[0]!=image+ThrottleRva||out.targets[1]!=image+BrakeRva){out.reasons|=Type;return out;}
+    const bool throttleCode=code(out.targets[0],ThrottleBody,ThrottleCode);
+    const bool brakeCode=code(out.targets[1],BrakeBody,BrakeCode);
+    if(!throttleCode||!brakeCode)return out;
+    if(!word(out.physics,0x0c,out.control,Control))return out;
+    // Repeated reads bookend each bounded view. Retain both raw words even on
+    // refusal; a changed pointer/value does not become a coherent snapshot.
+    word(out.control,0x20,out.words[0],Throttle);word(out.control,0x28,out.words[1],Brake);
+    word(out.control,0x20,out.wordsAgain[0],ThrottleAgain);word(out.control,0x28,out.wordsAgain[1],BrakeAgain);
+    word(out.physics,0x0c,out.controlAgain,ControlAgain);
+    word(driver,0xd4,out.physicsAgain,DriverPhysicsAgain);word(out.physics,0,out.vtableAgain,PhysicsVtableAgain);
+    word(out.vtable,0x50,out.targetsAgain[0],ThrottleTargetAgain);word(out.vtable,0x58,out.targetsAgain[1],BrakeTargetAgain);
+    code(out.targets[0],ThrottleBody,ThrottleCodeAgain);code(out.targets[1],BrakeBody,BrakeCodeAgain);
+    if(out.physics!=out.physicsAgain||out.vtable!=out.vtableAgain||out.control!=out.controlAgain||
+       out.targets!=out.targetsAgain)out.reasons|=Identity;
+    if(out.words!=out.wordsAgain)out.reasons|=Values;
+    return out;
+}
+inline bool SameObject(const Snapshot& a,const Snapshot& b)noexcept {
+    return !a.reasons&&!b.reasons&&a.read==AllFields&&b.read==AllFields&&
+        a.physics==b.physics&&a.vtable==b.vtable&&a.control==b.control&&a.targets==b.targets;
+}
+}
 enum Reason:unsigned {None=0,NoPublication=1,PublicationChanged=2,Owner=4,Pair=8,Words=16,
     Clock=32,Overlap=64,Caller=128,Receiver=256,Read=512,Unwind=1024,Nested=2048,Physics=4096,Commit=8192};
 struct Identity {
@@ -30,6 +103,7 @@ struct View {
     Identity owner{};unsigned pair=0,current=0,previous=0;
     // Current-buffer words: action0, action2, permissions98, permissions9c.
     std::array<unsigned,4> words{};unsigned physics=0,physicsVtable=0,zeroControls=0;
+    destination::Snapshot destination{};
     std::uint64_t observationSerial=0;bool generationsCurrent=false;
     bool operator==(const View&)const=default;
 };
@@ -82,7 +156,8 @@ struct Record {
     Publication publication{};View before{},after{};Epoch entry{},returned{};
     std::uint64_t invocation=0,sequence=0,returnPublication=0;std::int64_t beginQpc=0,endQpc=0;
     unsigned thread=0,receiver=0,argument=0,caller=0,reasons=0,firstMask=0;
-    bool beforeReadable=false,afterReadable=false,normal=false,joined=false;
+    unsigned destinationReasons=destination::NotObserved;
+    bool beforeReadable=false,afterReadable=false,normal=false,joined=false,destinationComparable=false;
 };
 inline unsigned PublicationMatch(const Publication& p,const View& v,Epoch epoch)noexcept {
     unsigned reasons=0;
@@ -109,6 +184,15 @@ inline void Complete(Record& r)noexcept {
     if(r.before.pair!=r.after.pair||r.before.current!=r.after.current||r.before.previous!=r.after.previous)r.reasons|=Pair;
     if(r.before.words!=r.after.words||r.before.zeroControls!=r.after.zeroControls)r.reasons|=Words;
     r.joined=!r.reasons;
+    r.destinationReasons=r.before.destination.reasons|r.after.destination.reasons;
+    if(!destination::SameObject(r.before.destination,r.after.destination)||
+       r.before.destination.physics!=r.before.physics||r.after.destination.physics!=r.after.physics||
+       r.before.destination.vtable!=r.before.physicsVtable||r.after.destination.vtable!=r.after.physicsVtable)
+        r.destinationReasons|=destination::Identity;
+    // Keep the existing strict publication/context qualification. Raw readable
+    // destination words remain available when Pair/NoPublication refuses it.
+    if(!r.joined)r.destinationReasons|=destination::Context;
+    r.destinationComparable=!r.destinationReasons;
 }
 // Caller holds its own try-lock. No allocation, I/O, native access, or waits.
 // Six first-event anchors leave rolling capacity even at the minimum size.

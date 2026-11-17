@@ -82,11 +82,44 @@ inline bool IssueLiveMatches(const Origin& o,const Cycle& live)noexcept {
        o.cycle.selectedOwner!=o.nativeOwner||live.native!=ReloadHoldIdentity{})return false;
     auto cleared=o.cycle;cleared.native={};return live==cleared;
 }
-struct Selected {unsigned address=0,current=0,previous=0,playerIndex=0;bool operator==(const Selected&)const=default;};
+// Entry routing indices are a different namespace from inventory weapon slots.
+// Keep both; only the bounded inventory chain can match a draw command target.
+struct InventorySelection {
+    unsigned inventory=0,index=0,begin=0,end=0,weapon=0;
+    WeaponEquipmentIdentity equipment{};
+    bool operator==(const InventorySelection&)const=default;
+};
+inline bool Valid(const InventorySelection& s)noexcept {
+    return s.inventory>=0x10000&&s.inventory<=UINT32_MAX-0x150&&s.begin>=0x10000&&s.end>s.begin&&
+        s.end-s.begin<=32*4&&!((s.end-s.begin)%4)&&s.index<(s.end-s.begin)/4&&
+        s.weapon>=0x10000&&s.equipment.weapon==s.weapon&&s.equipment.data>=0x10000;
+}
+inline bool ReadInventorySelection(const WeaponModeMemory& m,const Owner& owner,InventorySelection& out)noexcept {
+    if(!m.read||!m.type||owner.controlled!=owner.soldier)return false;
+    const auto read=[&](unsigned base,unsigned offset,void* dst,std::size_t bytes){
+        return base>=0x10000&&std::uint64_t(base)+offset+bytes<=UINT32_MAX&&m.read(m.context,base+offset,dst,bytes);};
+    InventorySelection s{};unsigned char flags=0;
+    if(!read(owner.soldier,0x114,&flags,1)||!read(owner.soldier,(flags&1)?0x24c:0x248,&s.inventory,4)||
+       !read(s.inventory,0x14c,&s.index,4)||!read(owner.soldier,0x260,&s.begin,4)||!read(owner.soldier,0x264,&s.end,4)||
+       s.begin<0x10000||s.end<=s.begin||s.end-s.begin>32*4||(s.end-s.begin)%4||s.index>=(s.end-s.begin)/4||
+       !read(s.begin,s.index*4,&s.weapon,4))return false;
+    const auto equipment=ReadWeaponEquipmentIdentity(m,s.weapon);
+    if(!equipment||*equipment!=owner.equipment)return false;s.equipment=*equipment;
+    if(!Valid(s))return false;out=s;return true;
+}
+struct Selected {
+    unsigned address=0,current=0,previous=0,playerIndex=0;
+    InventorySelection inventory{};bool operator==(const Selected&)const=default;
+};
+inline bool SelectedTarget(const Selected& s,const Owner& owner,const Command& command)noexcept {
+    return Valid(s.inventory)&&s.inventory.inventory==command.inventory&&s.inventory.index==command.targetSlot&&
+        s.inventory.weapon==command.targetWeapon&&s.inventory.equipment==owner.equipment&&
+        s.inventory.equipment.persistence==command.persistent;
+}
 struct Row {
     Kind kind{};std::uint64_t id=0,parent=0,update=0,issue=0,publication=0,currentId=0,previousId=0;
     std::uint64_t inputSequence=0;std::int64_t begin=0,end=0;
-    unsigned thread=0,depth=0,self=0,caller=0,slot=0,actualR=0,queue=0;
+    unsigned thread=0,depth=0,self=0,caller=0,slot=0,actualR=0,queue=0,queueAfter=0;
     unsigned action=0,value=0,currentValue=0,previousValue=0,targetWeapon=0,targetSlot=0;
     std::array<unsigned,4> args{};unsigned result=0,reasons=0,childCount=0;
     std::array<unsigned,3> beginActive{},endActive{};
@@ -94,8 +127,14 @@ struct Row {
     Owner before{},after{};Pair pairBefore{},pairAfter{};Selected selected{};
     ReloadStateOwner nativeOwner{};Cycle cycle{};
     Origin origin{};Command command{};Cycle commitLive{};unsigned cacheValue=0;
-    bool returned=false,relevant=true,matchingSlot=true;
+    bool returned=false,relevant=true,matchingSlot=true,foreign=false,queueBeforeRead=false,queueAfterRead=false;
 };
+inline bool ProvenForeign(const Row& r)noexcept {
+    if(unsigned(r.kind)>unsigned(Kind::Inner)||!r.foreign||r.relevant||!r.returned||r.reasons||
+       r.before!=r.after||!SamePair(r.before,r.after)||r.pairBefore!=r.pairAfter||
+       !r.pairBefore.current||!r.pairBefore.previous||r.pairBefore.current==r.pairBefore.previous||r.self<0x10000)return false;
+    return r.self!=(r.kind==Kind::Update?r.before.player:r.before.controlled);
+}
 inline bool Eligible(const Row& r)noexcept {
     return IssueLiveMatches(r.origin,r.cycle)&&r.update==r.origin.update&&r.thread==r.origin.thread&&
         r.inputSequence==r.origin.inputSequence&&r.nativeOwner==r.origin.nativeOwner&&
@@ -109,16 +148,21 @@ static_assert(std::is_trivially_destructible_v<Token>);
 struct Summary {
     Result result=Result::NotStarted;unsigned reasons=0;std::uint64_t issue=0,generation=0,outer=0,inner=0,
         previousPublication=0,absentPublication=0,selected=0,selectedBank=0;
+    // Ordinary observed-chain completion only. Queue still rejects the result;
+    // this can end capture, never grant selection/debt/consumer authority.
+    bool observedChainComplete=false;
 };
 struct Snapshot {
     std::array<Row,Capacity> rows{};unsigned count=0,dropped=0;bool capped=false,closed=false,expired=false;
     std::array<unsigned,3> active{};std::array<std::uint64_t,3> revision{};
+    std::array<unsigned,3> foreignSuppressed{},completedCallbacks{};
     std::int64_t activation=0,deadline=0;
 };
 // Deterministic join over the one retained issue. IDs refer to actual immutable
 // publications; matching addresses or a newer generation alone never suffices.
 inline Summary Analyze(const Snapshot& s)noexcept {
     Summary out{};const Row* issue=nullptr;const Row* commit=nullptr;const Row* publication=nullptr;bool refused=false;
+    const auto finish=[&]()noexcept {if(out.reasons)out.result=Result::Rejected;return out;};
     std::uint64_t lastPublication=0;
     for(unsigned n=0;n<s.count;++n){const auto& r=s.rows[n];
         if(r.kind==Kind::Attempted){if(issue){out.reasons|=Missing;}else issue=&r;}
@@ -126,11 +170,17 @@ inline Summary Analyze(const Snapshot& s)noexcept {
             if(r.publication<=lastPublication||r.currentId!=r.publication)out.reasons|=Missing;
             lastPublication=r.publication;
         }
-        if(r.relevant)out.reasons|=r.reasons;
+        out.reasons|=r.reasons;
+        if(!r.relevant&&!ProvenForeign(r))out.reasons|=Memory;
+        if(r.relevant&&(r.kind==Kind::Outer||r.kind==Kind::Inner)){
+            if(!r.queueBeforeRead||!r.queueAfterRead)out.reasons|=Memory;
+            if(r.queue||r.queueAfter)out.reasons|=Queue;
+        }
     }
-    if(!issue){if(s.dropped||s.capped){out.result=Result::Rejected;out.reasons|=Missing;}return out;}
+    if(!issue){if(s.dropped||s.capped)out.reasons|=Missing;return finish();}
     out.issue=issue->issue;out.result=Result::Attempted;
     if(s.dropped||s.capped)out.reasons|=Missing;
+    if(s.expired)out.reasons|=Clock;
     if(!Eligible(*issue))out.reasons|=View;
     if(issue->begin<issue->origin.qpc)out.reasons|=Clock;
     for(unsigned n=0;n<s.count;++n){const auto& r=s.rows[n];if(r.issue!=out.issue)continue;
@@ -143,8 +193,8 @@ inline Summary Analyze(const Snapshot& s)noexcept {
         }
     }
     if(commit&&refused)out.reasons|=Missing;
-    if(out.reasons){out.result=Result::Rejected;return out;}
-    if(!commit||out.result==Result::Refused)return out;
+    if(out.reasons&~Queue)return finish();
+    if(!commit||out.result==Result::Refused)return finish();
     out.result=Result::PendingPublication;
     for(unsigned n=0;n<s.count;++n){const auto& r=s.rows[n];
         if(r.kind!=Kind::Update||r.issue!=out.issue||r.update!=commit->update)continue;
@@ -153,8 +203,8 @@ inline Summary Analyze(const Snapshot& s)noexcept {
            r.action!=issue->action||r.currentValue!=issue->value)out.reasons|=Value;
         publication=&r;
     }
-    if(out.reasons){out.result=Result::Rejected;return out;}
-    if(!publication)return out;
+    if(out.reasons&~Queue)return finish();
+    if(!publication)return finish();
     out.generation=publication->publication;out.result=Result::PendingConsumer;
     const Row* selectedOuter=nullptr;
     for(unsigned n=0;n<s.count;++n){const auto& outer=s.rows[n];
@@ -171,11 +221,11 @@ inline Summary Analyze(const Snapshot& s)noexcept {
            inner->slot!=outer.before.entrySlot||!SamePair(outer.before,issue->before)||
            !SamePair(inner->before,outer.before)||inner->currentId!=outer.currentId||
            inner->previousId!=outer.previousId){out.reasons|=Missing;continue;}
-        if(outer.selected.current!=issue->targetSlot)continue;
+        if(!SelectedTarget(outer.selected,outer.after,issue->command))continue;
         selectedOuter=&outer;out.outer=outer.id;out.inner=inner->id;
     }
-    if(out.reasons){out.result=Result::Rejected;return out;}
-    if(!selectedOuter)return out;
+    if(out.reasons&~Queue)return finish();
+    if(!selectedOuter)return finish();
     out.result=Result::PendingNeutral;
     const Row* previous=nullptr;const Row* absent=nullptr;
     for(unsigned n=0;n<s.count;++n){const auto& r=s.rows[n];
@@ -185,18 +235,16 @@ inline Summary Analyze(const Snapshot& s)noexcept {
         }else if(r.publication>previous->publication&&r.previousId==previous->currentId&&
                  r.currentId!=out.generation&&r.previousId!=out.generation&&r.currentValue==0&&r.previousValue==0){absent=&r;break;}
     }
-    if(!previous||!absent)return out;
+    if(!previous||!absent)return finish();
     out.previousPublication=previous->publication;out.absentPublication=absent->publication;
-    if(s.active[0]||s.active[1]||s.active[2])return out;
+    if(s.active[0]||s.active[1]||s.active[2])return finish();
     out.result=Result::PendingSelected;
     // Every target family has a fresh native Resolve/selected-index result.
     // A rifle need not have a mechanical service in the cycle bank. The later
     // bank view is optional corroboration, joined only under its exact owner.
     if(absent->begin<=selectedOuter->end||!SamePair(absent->after,selectedOuter->after)||
-       absent->after.equipment.weapon!=issue->targetWeapon||absent->selected!=selectedOuter->selected)return out;
-    if(selectedOuter->after.equipment.weapon==issue->targetWeapon){
-        if(absent->after.equipment!=selectedOuter->after.equipment)return out;
-    }else if(selectedOuter->after.equipment!=issue->before.equipment)return out;
+       !SelectedTarget(absent->selected,absent->after,issue->command)||absent->selected!=selectedOuter->selected)return finish();
+    if(absent->after.equipment!=selectedOuter->after.equipment)return finish();
     out.selected=absent->id;out.result=Result::Joined;
     for(unsigned n=0;n<s.count;++n){const auto& r=s.rows[n];
         if(r.kind!=Kind::Selected||r.begin<=selectedOuter->end)continue;
@@ -208,13 +256,14 @@ inline Summary Analyze(const Snapshot& s)noexcept {
            r.cycle.native!=issue->origin.cycle.native){out.reasons|=Slot;continue;}
         out.selectedBank=r.id;
     }
-    if(out.reasons)out.result=Result::Rejected;
-    return out;
+    out.observedChainComplete=!(out.reasons&~Queue);
+    return finish();
 }
 class Journal {
     struct Stored {Row row{};std::atomic<bool> ready{false};};
     std::array<Stored,Capacity> rows_{};std::atomic_flag gate_=ATOMIC_FLAG_INIT;
     std::array<std::atomic<unsigned>,3> active_{};std::array<std::atomic<std::uint64_t>,3> revision_{};
+    std::array<std::atomic<unsigned>,3> foreignSuppressed_{},completedCallbacks_{};
     std::atomic<std::uint64_t> serial_{0},issue_{0};std::atomic<unsigned> count_{0},dropped_{0};
     std::atomic<bool> started_{false},closed_{false},capped_{false},expired_{false};
     std::atomic<std::int64_t> activation_{0};std::int64_t duration_=0;
@@ -261,6 +310,10 @@ public:
         return Append(r);
     }
     bool Append(Row r)noexcept {
+        if(ProvenForeign(r)){++foreignSuppressed_[unsigned(r.kind)];return true;}
+        // A relevance hint without both fresh bookends is not proof of foreign
+        // ownership. Keep unknown/incomplete/faulted rows and their reasons.
+        if(!r.relevant&&!r.reasons)r.reasons|=Memory;
         if(gate_.test_and_set()){++dropped_;return false;}
         const auto release=[&](){gate_.clear();};const auto n=count_.load();
         if(n>=Capacity){capped_.store(true);++dropped_;Close();release();return false;}
@@ -291,10 +344,12 @@ public:
     void Capture(Snapshot& s)const noexcept {
         s.count=0;s.dropped=dropped_.load();s.capped=capped_.load();s.closed=closed_.load();s.expired=expired_.load();
         s.active=Active();s.revision=Revision();s.activation=activation_.load();s.deadline=s.activation?s.activation+duration_:0;
+        for(unsigned k=0;k<3;++k){s.foreignSuppressed[k]=foreignSuppressed_[k].load();s.completedCallbacks[k]=completedCallbacks_[k].load();}
         const auto n=count_.load();for(unsigned i=0;i<n;++i)if(Read(i,s.rows[s.count]))++s.count;
     }
     void End(Token& t,ThreadState& thread,std::int64_t now,bool normal)noexcept {
         if(!t.active)return;auto& r=t.row;const auto k=unsigned(r.kind);
+        bool retained=false;
         r.end=now;r.childCount=t.childCount;r.endActive=Active();r.endRevision=Revision();
         if(!normal||!r.returned)r.reasons|=Abnormal;
         if(now<=0||r.begin<=0||now<r.begin)r.reasons|=Clock;
@@ -304,7 +359,9 @@ public:
         if(r.kind==Kind::Outer&&(r.beginActive[0]||r.beginActive[1]!=1||r.beginActive[2]))r.reasons|=Overlap;
         if(r.kind==Kind::Inner&&(r.beginActive[0]||r.beginActive[1]!=1||r.beginActive[2]!=1||!r.parent))r.reasons|=Overlap;
         if(activation_.load()&&r.end>=activation_.load()){
+            ++completedCallbacks_[k];
             if(r.end-activation_.load()>=duration_){r.reasons|=Clock;expired_.store(true);Close();}
+            retained=!ProvenForeign(r);
             Append(r);
         }
         thread=t.previous;--active_[k];t.active=false;
@@ -312,9 +369,9 @@ public:
         // Process-retained callbacks/originals remain callable after this point.
         // Contention skips only this optional join, never recording or expiry;
         // the revision/active bookends still decide whether closure is valid.
-        if(activation_.load()&&!closed_.load()&&Active()==std::array<unsigned,3>{}&&!analysisGate_.test_and_set()){
+        if(retained&&activation_.load()&&!closed_.load()&&Active()==std::array<unsigned,3>{}&&!analysisGate_.test_and_set()){
             const auto revision=Revision();Capture(analysis_);const auto result=Analyze(analysis_);
-            if((result.result==Result::Joined||result.result==Result::Refused)&&revision==Revision()&&Active()==std::array<unsigned,3>{})Close();
+            if((result.observedChainComplete||result.result==Result::Refused)&&revision==Revision()&&Active()==std::array<unsigned,3>{})Close();
             analysisGate_.clear();
         }
     }

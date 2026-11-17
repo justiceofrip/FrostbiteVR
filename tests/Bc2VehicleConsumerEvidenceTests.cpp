@@ -1,5 +1,7 @@
 #include "Test.h"
 #include "Bc2VehicleConsumerEvidence.h"
+#include <cstring>
+#include <map>
 #include <utility>
 using namespace fvr::bc2;
 namespace v=vehicleConsumerEvidence;
@@ -113,8 +115,115 @@ int Retention(){
     unsigned masks=0;bool latest=false;for(unsigned n=0;n<journal.Size();++n){const auto& row=journal.At(n);masks|=row.firstMask;latest|=row.sequence==104;}
     CHECK(masks==63&&latest);return 0;
 }
+namespace d=v::destination;
+struct DestinationMemory {
+    static constexpr unsigned Image=0x400000,ImageSize=0x1200000,Driver=0x20000,Physics=0x40000,Control=0x60000;
+    std::map<unsigned,unsigned> words{{Driver+0xd4,Physics},{Physics,Image+d::VtableRva},
+        {Image+d::VtableRva+0x50,Image+d::ThrottleRva},{Image+d::VtableRva+0x58,Image+d::BrakeRva},
+        {Physics+0x0c,Control},{Control+0x20,0x3ec7ce0c},{Control+0x28,0}};
+    std::array<unsigned char,17> throttle=d::ThrottleBody,brake=d::BrakeBody;
+    unsigned calls=0,failAt=0,changeAt=0,changeAddress=0,changeWord=0;
+    bool changeCode=false;
+    bool Read(unsigned address,void* destination,std::size_t size){
+        ++calls;
+        if(calls==changeAt){if(changeCode)throttle[0]^=1;else words[changeAddress]=changeWord;}
+        if(calls==failAt)return false;
+        if(size==17){
+            const auto* bytes=address==Image+d::ThrottleRva?&throttle:address==Image+d::BrakeRva?&brake:nullptr;
+            if(!bytes)return false;std::memcpy(destination,bytes->data(),size);return true;
+        }
+        if(size!=sizeof(unsigned))return false;
+        const auto found=words.find(address);if(found==words.end())return false;
+        std::memcpy(destination,&found->second,size);return true;
+    }
+    d::Snapshot Capture(){return d::Read(Image,ImageSize,Driver,Physics,Image+d::VtableRva,
+        [&](unsigned at,void* destination,std::size_t size){return Read(at,destination,size);});}
+};
+int DestinationReads(){
+    DestinationMemory memory;const auto positive=memory.Capture();
+    CHECK(!positive.reasons&&positive.attempted==d::AllFields&&positive.read==d::AllFields&&memory.calls==18);
+    CHECK(positive.physics==DestinationMemory::Physics&&positive.control==DestinationMemory::Control);
+    CHECK(positive.words[0]==0x3ec7ce0c&&positive.words[1]==0&&positive.wordsAgain==positive.words);
+    CHECK(d::SameObject(positive,positive));
+    memory.words[DestinationMemory::Control+0x20]=0;
+    const auto neutral=memory.Capture();
+    CHECK(!neutral.reasons&&neutral.words[0]==0&&neutral.words[1]==0&&d::SameObject(positive,neutral));
+    // Every memory/code read has its own failed-read bit. Missing evidence is
+    // retained as a refusal and cannot qualify as a stable destination view.
+    for(unsigned step=1;step<=18;++step){DestinationMemory failed;failed.failAt=step;const auto sample=failed.Capture();
+        CHECK((sample.reasons&d::ReadFailed)&&(sample.attempted&(1u<<(step-1)))&&!(sample.read&(1u<<(step-1))));
+        CHECK(!d::SameObject(sample,positive));
+    }
+    for(unsigned fault=0;fault<5;++fault){DestinationMemory invalid;
+        if(fault==0)invalid.words[DestinationMemory::Physics]+=4;
+        if(fault==1)invalid.words[DestinationMemory::Image+d::VtableRva+0x50]+=4;
+        if(fault==2)invalid.words[DestinationMemory::Image+d::VtableRva+0x58]+=4;
+        if(fault==3)invalid.throttle[0]^=1;
+        if(fault==4)invalid.brake[0]^=1;
+        const auto sample=invalid.Capture();CHECK(sample.reasons&(fault<3?d::Type:d::Code));
+        CHECK(!(sample.attempted&d::Control));
+    }
+    DestinationMemory nullControl;nullControl.words[DestinationMemory::Physics+0xc]=0;
+    CHECK(nullControl.Capture().reasons&d::ReadFailed);
+    unsigned reads=0;
+    const auto wrapped=d::Read(0xff000000,0x1200000,DestinationMemory::Driver,DestinationMemory::Physics,0,
+        [&](unsigned,void*,std::size_t){++reads;return true;});
+    CHECK((wrapped.reasons&d::Type)&&reads==0);
+    return 0;
+}
+int DestinationBookends(){
+    for(unsigned fault=0;fault<7;++fault){DestinationMemory memory;
+        switch(fault){
+        case 0:memory.changeAt=10;memory.changeAddress=DestinationMemory::Control+0x20;memory.changeWord=0;break;
+        case 1:memory.changeAt=11;memory.changeAddress=DestinationMemory::Control+0x28;memory.changeWord=0x3f800000;break;
+        case 2:memory.changeAt=12;memory.changeAddress=DestinationMemory::Physics+0xc;memory.changeWord=0x70000;break;
+        case 3:memory.changeAt=13;memory.changeAddress=DestinationMemory::Driver+0xd4;memory.changeWord=0x50000;break;
+        case 4:memory.changeAt=14;memory.changeAddress=DestinationMemory::Physics;memory.changeWord=DestinationMemory::Image+d::VtableRva+4;break;
+        case 5:memory.changeAt=15;memory.changeAddress=DestinationMemory::Image+d::VtableRva+0x50;memory.changeWord=DestinationMemory::Image+d::BrakeRva;break;
+        case 6:memory.changeAt=17;memory.changeCode=true;break;
+        }
+        const auto sample=memory.Capture();
+        CHECK(sample.read==d::AllFields&&(sample.reasons&(fault<2?d::Values:fault<6?d::Identity:d::Code)));
+        if(fault<2)CHECK(sample.words!=sample.wordsAgain);
+        if(fault==2)CHECK(sample.control==DestinationMemory::Control&&sample.controlAgain==0x70000);
+    }
+    return 0;
+}
+int DestinationBoundaries(){
+    DestinationMemory memory;const auto positive=memory.Capture();memory.words[DestinationMemory::Control+0x20]=0;
+    const auto neutral=memory.Capture();
+    auto p=Publication();p.view.physicsVtable=DestinationMemory::Image+d::VtableRva;
+    v::Journal<> journal;journal.Publish(p);auto row=Record(journal.Latest());
+    row.before.destination=positive;row.after.destination=neutral;v::Complete(row);
+    CHECK(row.joined&&row.destinationComparable&&!row.destinationReasons);
+    CHECK(row.before.destination.words[0]&&!row.after.destination.words[0]);
+    // The destination may change across the original call. Equality of its
+    // values is neither required nor evidence that a setter was invoked.
+    for(unsigned fault=0;fault<7;++fault){auto broken=row;
+        switch(fault){
+        case 0:broken.after.destination.control=0x70000;break;
+        case 1:broken.after.destination.reasons=d::ReadFailed;break;
+        case 2:broken.after.destination.read^=d::Throttle;break;
+        case 3:broken.after.destination.physics+=4;break;
+        case 4:broken.after.destination.vtable+=4;break;
+        case 5:broken.after.destination.reasons=d::Context;break;
+        case 6:broken.after.destination={};break;
+        }
+        v::Complete(broken);CHECK(broken.joined&&!broken.destinationComparable&&broken.destinationReasons);
+    }
+    // An independently readable destination cannot erase strict publication,
+    // owner, producer overlap or unwind refusals from the original observer.
+    for(unsigned fault=0;fault<5;++fault){auto broken=row;
+        switch(fault){case 0:broken.publication.complete=false;break;case 1:++broken.after.current;break;
+        case 2:++broken.after.owner.seatGeneration;break;case 3:++broken.returned.revision;break;case 4:broken.normal=false;break;}
+        v::Complete(broken);CHECK(!broken.joined&&!broken.destinationComparable&&(broken.destinationReasons&d::Context));
+        CHECK(broken.before.destination.words[0]==0x3ec7ce0c&&broken.after.destination.words[0]==0);
+    }
+    return 0;
+}
 }
 int main(){
-    if(PublicationIdentity()||PublicationRefusals()||ConsumerRefusals()||Retention())return 1;
+    if(PublicationIdentity()||PublicationRefusals()||ConsumerRefusals()||Retention()||
+       DestinationReads()||DestinationBookends()||DestinationBoundaries())return 1;
     std::puts("Vehicle consumer evidence: publication identity, slot reuse, boundary refusals and bounded retention passed");
 }
