@@ -15,6 +15,7 @@ from pathlib import Path
 
 PERIOD = 25_000_000
 COMMAND_WINDOW = 250_000_000
+INITIAL_OBSERVATION_WINDOW = 500_000_000
 RELEASE_RESERVE = COMMAND_WINDOW + 2 * PERIOD
 OWNER = ("manager", "player", "soldier", "weak", "controlled", "entry", "router", "cache",
          "actorGeneration", "seatGeneration", "inputEpoch", "movementEpoch")
@@ -130,6 +131,8 @@ def driver_class(t):
             self.action_deadline = None
             self.authorized_lines = None
             self.attempted = False
+            self.initial_observation_waited = False
+            self.initial_discarded_snapshot = None
             super().__init__(args)
             require(self.manifest["version"] == args.vehicle_version
                     and self.manifest["source_sha256"] == args.vehicle_source_sha256,
@@ -233,6 +236,91 @@ def driver_class(t):
         def snapshot_readiness_scope(self):
             return None
 
+        def snapshot_timeout(self, now, response=None):
+            # Either neutral preflight may wait once for its original response.
+            # attempted marks method entry, not input publication; all motion
+            # and custody gates below must still be untouched.
+            if (not self.entry_admitted or self.vehicle_request is None
+                    or self.initial_observation_waited or self.motion_started is not None
+                    or self.last_write != 0 or self.commands != 0
+                    or self.action_deadline is not None or self.pending_command
+                    or self.pending_stick is not None or self.pending_target is not None
+                    or any(self.stick) or self.unsafe_owner or self.cleanup_mode
+                    or self.releasing or self.release_attempted
+                    or self.held_left or self.held_right or self.held_trigger or self.held_buttons
+                    or self.snapshot_refresh_started is not None):
+                return super().snapshot_timeout(now, response)
+            self.initial_observation_waited = True
+            wait_deadline = min(self.deadline, self.stage_deadline,
+                                self.last_request + INITIAL_OBSERVATION_WINDOW)
+            identity = (self.sequence, self.sentinel, self.command_hash, self.last_write, self.last_commit)
+            trace = getattr(self, "_receive_timing", None)
+            if trace is not None and not trace.frozen:
+                trace.timeout_evaluated_ns = now
+            if response is not None:
+                self.artifacts.save(f"snapshot-{self.snapshot_index:03}-at-timeout.json", response[1])
+            timeout_response_saved = response is not None
+            self.artifacts.event(dict(type="vehicle_initial_observation_hold",
+                nonce=self.pending_nonce, requestStartedNs=self.last_request,
+                originalResponseDeadlineNs=self.last_request + t.SNAPSHOT_TIMEOUT,
+                observationDeadlineNs=wait_deadline, evaluatedNs=now, commandAuthority=False))
+
+            def check_neutral_owner():
+                self.bounds(t.time.perf_counter_ns())
+                self.check_owner_record()
+                state = t.read_until(wait_deadline, self.read_state)
+                self.ownership(state)
+                self.check_input(state)
+                require((self.sequence, self.sentinel, self.command_hash, self.last_write, self.last_commit) == identity
+                        and n(state["captureSeq"]) == self.capture_sequence and neutral(state["controls"]),
+                        "initial vehicle observation lost neutral command ownership")
+                require(t.read_until(wait_deadline, t.read_bytes, self.request_path, 22) == self.request_bytes,
+                        "snapshot request changed by another writer")
+
+            while t.time.perf_counter_ns() < wait_deadline:
+                check_neutral_owner()
+                require(t.read_until(wait_deadline, self.snapshot_failure) is None,
+                        "native snapshot publication failed during initial vehicle observation")
+                if self.snapshot_path.exists():
+                    snapshot, raw = t.read_until(wait_deadline, self.receive_snapshot_json)
+                    if not timeout_response_saved:
+                        self.artifacts.save(f"snapshot-{self.snapshot_index:03}-at-timeout.json", raw)
+                        timeout_response_saved = True
+                    nonce = n(snapshot["nonce"])
+                    self.last_observed_response_nonce = nonce
+                    require(nonce <= self.pending_nonce,
+                            "snapshot response belongs to a later competing request")
+                    if nonce == self.pending_nonce:
+                        self.artifacts.save(f"snapshot-{self.snapshot_index:03}-late.json", raw)
+                        observed = n(snapshot["observed_ns"])
+                        # Vehicle sampling may follow the outer serializer clock.
+                        # Validate original clocks only as discarded evidence;
+                        # current-time admission remains mandatory for a successor.
+                        sampled = max(observed, n(snapshot["vehicleObservation"]["sampledNs"]))
+                        require(self.last_request <= observed <= sampled <= t.time.perf_counter_ns(),
+                                "initial vehicle response predates request or is from the future")
+                        self.check_vehicle_snapshot(snapshot, sampled, nonce)
+                        check_neutral_owner()
+                        require(t.time.perf_counter_ns() < wait_deadline,
+                                "initial vehicle observation deadline reached")
+                        self.artifacts.event(dict(type="vehicle_initial_late_response_discarded",
+                            nonce=nonce, observedNs=observed, observationDeadlineNs=wait_deadline,
+                            commandAuthority=False))
+                        require(t.time.perf_counter_ns() < wait_deadline,
+                                "initial vehicle observation deadline reached")
+                        self.initial_discarded_snapshot = copy.deepcopy(snapshot)
+                        self.latest_snapshot = None
+                        self.pending_nonce = None
+                        self.request_snapshot()
+                        return None
+                t.time.sleep(.001)
+            raise t.REFUSAL("initial vehicle observation deadline reached without a matching response")
+
+        def accept_snapshot(self, snapshot, raw, now):
+            result = super().accept_snapshot(snapshot, raw, now)
+            self.initial_discarded_snapshot = None
+            return result
+
         def snapshot_usable(self, snapshot, now):
             # Expired/missing/refused input fails here, before shared receive's
             # optional refresh branch. This mode never automatically retries.
@@ -243,12 +331,15 @@ def driver_class(t):
             # Shared receive may probe an expired response at observed_ns before
             # refreshing it. Vehicle admission always uses the current clock so
             # that historical probe refuses instead of authorizing a retry.
-            now = t.time.perf_counter_ns()
+            return self.check_vehicle_snapshot(snapshot, t.time.perf_counter_ns(), nonce)
+
+        def check_vehicle_snapshot(self, snapshot, now, nonce):
             value = admit(t, snapshot, now, nonce, self.vehicle_request["role"])
             require(n(snapshot["observed_ns"]) >= self.last_request,
                     "vehicle snapshot predates its nonce request")
-            before = self.vehicle_reference
-            if before is not None:
+            for before in (self.vehicle_reference, self.initial_discarded_snapshot):
+                if before is None:
+                    continue
                 require(n(snapshot["nonce"]) > n(before["nonce"]), "reused vehicle snapshot nonce")
                 old = before["vehicleObservation"]
                 require(all(value[k] == old[k] for k in ("owner", "routeFingerprint", "slot", "role", "consumers"))

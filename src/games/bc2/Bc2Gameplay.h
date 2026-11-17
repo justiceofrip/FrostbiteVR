@@ -67,6 +67,10 @@ bool EnableNavigationObservation()noexcept;
 // The NativeProbe host must retain journal/module/trampoline for process lifetime.
 bool EnableQueuePhaseObservation(std::span<const std::byte>,const engine::PeImage&,
     std::uintptr_t,bool explicitRequest=false,bool processRetainedProbe=false)noexcept;
+// Same marker, exact x86 profile; passive bounded issue/publication/consumer join.
+// No selector enablement or native operation authority. Retain for process lifetime.
+bool EnableNativeCycleSelectionObservation(std::span<const std::byte>,const engine::PeImage&,
+    std::uintptr_t,bool explicitRequest=false,bool processRetainedProbe=false)noexcept;
 NavigationObservation ReadNavigationObservation()noexcept;
 NavigationObservationReason ReadNavigationObservationStatus(const NavigationObservation&)noexcept;
 VehicleObservation ReadVehicleObservation()noexcept;

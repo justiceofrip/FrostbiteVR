@@ -173,6 +173,10 @@ class AssembledVehicleTests(unittest.TestCase):
         self.no_ack = self.no_later_frame = self.foreign_ack = False
         self.ack_delay = self.publication_delay = 0
         self.no_response = False
+        self.response_delay = lambda driver: 0
+        self.response_age = 0
+        self.omit_response_from = None
+        self.before_read = None
         self.cleanup_failure = False
         self.after_press = None
 
@@ -186,9 +190,10 @@ class AssembledVehicleTests(unittest.TestCase):
                 "--root-authorized-ordinary-input"]
 
     def assembled(self, argv=None):
-        current, pending_ack = b"note startup\n", None
+        current, pending_ack, pending_snapshot = b"note startup\n", None, None
         original_init, original_request = t.Driver.__init__, t.Driver.request_snapshot
         original_publish, original_send = t.publish_command, t.Driver.send
+        original_read = t.read_bytes
         test = self
 
         def simulate():
@@ -198,8 +203,9 @@ class AssembledVehicleTests(unittest.TestCase):
             if raw != current:
                 current = raw
                 batch = raw.decode("ascii").splitlines()
-                self.calls.append(batch[:-1])
-                self.owner_records.append(json.loads((self.run / "live-driver-owner.json").read_text()))
+                if batch[:-1]:
+                    self.calls.append(batch[:-1])
+                    self.owner_records.append(json.loads((self.run / "live-driver-owner.json").read_text()))
                 for line in batch[:-1]:
                     words = line.split()
                     if words[0] != "stick" or words[1] not in ("l", "r") or len(words) != 4:
@@ -232,16 +238,33 @@ class AssembledVehicleTests(unittest.TestCase):
             original_init(driver, args)
 
         def request(driver):
+            nonlocal pending_snapshot
             original_request(driver)
-            self.requests.append(dict(nonce=driver.pending_nonce, input=copy.deepcopy(self.state["controls"])))
-            if self.no_response:
+            self.requests.append(dict(nonce=driver.pending_nonce, input=copy.deepcopy(self.state["controls"]),
+                startedNs=driver.last_request, actionDeadlineNs=driver.action_deadline,
+                pendingCommand=driver.pending_command, motionStartedNs=driver.motion_started))
+            if self.no_response or (self.omit_response_from is not None and driver.snapshot_index >= self.omit_response_from):
                 return
-            now = self.clock.tick()
+            pending_snapshot = self.clock.now + self.response_delay(driver)
+            if pending_snapshot <= self.clock.now:
+                publish_snapshot(driver)
+
+        def publish_snapshot(driver):
+            nonlocal pending_snapshot
+            pending_snapshot = None
+            now = self.clock.tick() - (self.response_age(driver) if callable(self.response_age) else self.response_age)
             value = snapshot(now, driver.pending_nonce, driver.snapshot_index*100, self.request["role"], self.state)
             if self.snapshot_mutation:
                 self.snapshot_mutation(value, driver)
             self.samples.append(copy.deepcopy(value))
             self.write(driver.snapshot_path, value)
+
+        def read(path, *args):
+            if self.before_read and self.driver is not None:
+                self.before_read(path, self.driver)
+            if pending_snapshot is not None and self.clock.now >= pending_snapshot:
+                publish_snapshot(self.driver)
+            return original_read(path, *args)
 
         def publish(path, raw, deadline_ns, validate):
             self.windows.append(dict(until=deadline_ns, pulse=driver.action_deadline,
@@ -264,6 +287,7 @@ class AssembledVehicleTests(unittest.TestCase):
             stack.enter_context(patch.object(t.Driver, "acquire_lock", lambda driver: None))
             stack.enter_context(patch.object(t.Driver, "__init__", initialize))
             stack.enter_context(patch.object(t.Driver, "request_snapshot", request))
+            stack.enter_context(patch.object(t, "read_bytes", read))
             # Bind after driver construction through the test object.
             def publication(*args):
                 nonlocal driver
@@ -515,6 +539,184 @@ class AssembledVehicleTests(unittest.TestCase):
         self.assertEqual(code, 2, result)
         self.assertEqual(self.calls, [])
         self.assertEqual(len(self.requests), 1)
+
+    def test_either_initial_late_response_is_discarded_for_fresh_successor(self):
+        for delayed in (1, 2):
+            with self.subTest(delayed=delayed):
+                if delayed == 2:
+                    self.setUp()
+                self.response_delay = lambda d: 375_000_000 if d.snapshot_index == delayed else 0
+                code, result = self.assembled()
+                self.assertEqual(code, 0, result)
+                self.assertEqual(len(self.requests), 3)
+                self.assertEqual(self.calls, [["stick l 0.4 0.5"], ["stick l 0 0"]])
+                self.assertEqual(result["vehicleStimulus"]["admissionNonce"], self.samples[2]["nonce"])
+                self.assertNotEqual(result["vehicleStimulus"]["admissionNonce"], self.samples[delayed-1]["nonce"])
+                self.assertTrue(self.driver.attempted)
+                self.assertTrue(self.driver.initial_observation_waited)
+                self.assertIsNone(self.driver.initial_discarded_snapshot)
+                artifacts = Path(result["artifactDirectory"])
+                self.assertEqual(json.loads((artifacts / f"snapshot-{delayed:03}-late.json").read_text()),
+                                 self.samples[delayed-1])
+                if delayed == 2:
+                    self.assertEqual(self.driver.vehicle_reference, self.samples[0])
+                    self.assertEqual(json.loads((artifacts / "snapshot-002-at-timeout.json").read_text()),
+                                     self.samples[0])
+                events = [json.loads(line) for line in (artifacts / "events.jsonl").read_text().splitlines()]
+                hold = next(e for e in events if e["type"] == "vehicle_initial_observation_hold")
+                self.assertEqual(hold["originalResponseDeadlineNs"] - hold["requestStartedNs"], 250_000_000)
+                self.assertEqual(hold["observationDeadlineNs"] - hold["requestStartedNs"], 500_000_000)
+                self.assertFalse(hold["commandAuthority"])
+                self.assertEqual(self.driver.hard_deadline - self.driver.started, 10*t.NS)
+                self.assertTrue(all(v.neutral(r["input"]) and r["actionDeadlineNs"] is None
+                    and r["motionStartedNs"] is None and not r["pendingCommand"] for r in self.requests))
+                episode = result["vehicleStimulus"]
+                self.assertEqual(episode["originalDeadlineNs"] - episode["startedNs"], 400_000_000)
+                self.assertLess(episode["neutralCommittedNs"], episode["originalDeadlineNs"])
+                self.assertFalse(result["nativeAcceptance"])
+
+    def test_late_expired_source_is_only_discarded_and_successor_uses_original_clocks(self):
+        self.response_delay = lambda d: 375_000_000 if d.snapshot_index == 2 else 0
+        self.response_age = lambda driver: 100_000_000 if driver.snapshot_index == 2 else 0
+        code, result = self.assembled()
+        self.assertEqual(code, 0, result)
+        late = self.samples[1]
+        self.assertLess(late["vehicleObservation"]["validUntilNs"], self.requests[2]["startedNs"])
+        self.assertEqual(result["vehicleStimulus"]["admissionNonce"], self.samples[2]["nonce"])
+        artifacts = Path(result["artifactDirectory"])
+        self.assertEqual(json.loads((artifacts / "snapshot-002-late.json").read_text()), late)
+
+    def test_initial_wait_never_renews_invocation_or_stage_deadline(self):
+        for field in ("deadline", "stage_deadline"):
+            with self.subTest(field=field):
+                if field == "stage_deadline":
+                    self.setUp()
+                self.omit_response_from = 2
+                def shorten(path, driver):
+                    if driver.snapshot_index == 2:
+                        setattr(driver, field, min(getattr(driver, field), driver.last_request + 300_000_000))
+                self.before_read = shorten
+                code, result = self.assembled()
+                self.assertEqual(code, 2, result)
+                self.assertIn("deadline", result["error"])
+                self.assertEqual(self.calls, [])
+                self.assertEqual(len(self.requests), 2)
+                self.assertLess(self.clock.now - self.requests[1]["startedNs"], 310_000_000)
+
+    def test_second_preflight_without_response_stops_at_original_observation_bound(self):
+        self.omit_response_from = 2
+        code, result = self.assembled()
+        self.assertEqual(code, 2, result)
+        self.assertIn("initial vehicle observation deadline", result["error"])
+        self.assertEqual(self.calls, [])
+        self.assertEqual(len(self.requests), 2)
+        self.assertLess(self.clock.now - self.requests[1]["startedNs"], 510_000_000)
+
+    def test_late_successor_timeout_does_not_wait_again(self):
+        self.response_delay = lambda d: 375_000_000 if d.snapshot_index >= 2 else 0
+        code, result = self.assembled()
+        self.assertEqual(code, 2, result)
+        self.assertIn("snapshot response not received within request budget", result["error"])
+        self.assertEqual(self.calls, [])
+        self.assertEqual(len(self.requests), 3)
+        self.assertLess(self.clock.now - self.requests[2]["startedNs"], 260_000_000)
+
+    def test_late_and_successor_snapshots_preserve_exact_vehicle_identity_and_input(self):
+        faults = {
+            "owner": lambda s: s["vehicleObservation"]["owner"].update(seatGeneration=999),
+            "role": lambda s: s["vehicleObservation"].update(role="driver_gunner"),
+            "source": lambda s: s["vehicleObservation"]["capabilities"]["axes"][0]["mapping"].update(source="head_aim_yaw"),
+            "pose": lambda s: s["vehicleObservation"]["input"]["head"]["position"].__setitem__(0, 1),
+            "stick": lambda s: s["vehicleObservation"]["input"]["hands"][0].update(stickY=.5),
+            "future": lambda s: s.update(observed_ns=s["observed_ns"]+t.NS),
+            "stale": lambda s: s["vehicleObservation"].update(validUntilNs=s["observed_ns"]-1),
+            "gather": lambda s: s["vehicleObservation"].update(gatherSequence=100),
+            "input": lambda s: s["vehicleObservation"]["input"].update(generation=100),
+        }
+        for index in (2, 3):
+            for fault, corrupt in faults.items():
+                with self.subTest(index=index, fault=fault):
+                    self.setUp()
+                    self.response_delay = lambda d: 375_000_000 if d.snapshot_index == 2 else 0
+                    self.snapshot_mutation = lambda s, d: corrupt(s) if d.snapshot_index == index else None
+                    code, result = self.assembled()
+                    self.assertEqual(code, 2, result)
+                    self.assertEqual(self.calls, [])
+                    self.assertEqual(len(self.requests), index)
+
+    def test_successor_must_advance_beyond_discarded_input_not_only_first_sample(self):
+        for field in ("gatherSequence", "generation", "inputObservedNs"):
+            with self.subTest(field=field):
+                self.setUp()
+                self.response_delay = lambda d: 375_000_000 if d.snapshot_index == 2 else 0
+                def reuse(sample, driver):
+                    if driver.snapshot_index != 3:
+                        return
+                    new, old = sample["vehicleObservation"], self.samples[1]["vehicleObservation"]
+                    if field == "generation":
+                        new["input"][field] = old["input"][field]
+                    else:
+                        new[field] = old[field]
+                        if field == "inputObservedNs":
+                            new["inputDeadlineNs"] = old["inputDeadlineNs"]
+                            new["validUntilNs"] = min(new["inputDeadlineNs"], new["input"]["menu"]["deadlineNs"])
+                self.snapshot_mutation = reuse
+                code, result = self.assembled()
+                self.assertEqual(code, 2, result)
+                self.assertIn("reused vehicle Gather/input observation", result["error"])
+                self.assertEqual(self.calls, [])
+                self.assertEqual(len(self.requests), 3)
+
+    def test_initial_wait_refuses_external_source_owner_control_and_pose_changes(self):
+        for fault in ("source", "command", "owner_record", "request", "control", "pose"):
+            with self.subTest(fault=fault):
+                self.setUp()
+                self.response_delay = lambda d: 375_000_000 if d.snapshot_index == 2 else 0
+                altered = []
+                def change(path, driver):
+                    if not driver.initial_observation_waited or altered:
+                        return
+                    altered.append(True)
+                    if fault == "source":
+                        self.session["source_sha256"] = "b"*64
+                        self.write(self.folder / "session.json", self.session)
+                    elif fault == "command":
+                        (self.run / "sim/command.txt").write_bytes(b"note foreign-writer\n")
+                    elif fault == "owner_record":
+                        self.write(self.run / "live-driver-owner.json", dict(pending=True))
+                    elif fault == "request":
+                        driver.request_path.write_bytes(b"9\n")
+                    elif fault == "control":
+                        self.state["controls"]["trigR"] = .5
+                    else:
+                        self.state["head"]["pos"][0] = 1
+                self.before_read = change
+                code, result = self.assembled()
+                self.assertEqual(code, 2, result)
+                self.assertEqual(self.calls, [])
+                self.assertEqual(len(self.requests), 2)
+
+    def test_held_pending_or_attempted_action_cannot_enter_observation_wait(self):
+        faults = dict(held_left=True, held_right=True, held_trigger=True, held_buttons={"x"},
+            pending_command=True, pending_stick=[.4, .5], pending_target=3,
+            action_deadline=9_000_000_000, motion_started=2_000_000_000,
+            last_write=2_000_000_000, commands=1, stick=[.4, .5])
+        for field, value in faults.items():
+            with self.subTest(field=field):
+                self.setUp()
+                self.response_delay = lambda d: 375_000_000 if d.snapshot_index == 2 else 0
+                altered = []
+                def change(path, driver):
+                    if driver.snapshot_index == 2 and not altered:
+                        altered.append(True)
+                        setattr(driver, field, value)
+                self.before_read = change
+                code, result = self.assembled()
+                self.assertEqual(code, 2, result)
+                self.assertIn("snapshot response not received within request budget", result["error"])
+                self.assertFalse(self.driver.initial_observation_waited)
+                self.assertEqual(self.calls, [])
+                self.assertEqual(len(self.requests), 2)
 
     def test_menu_batches_still_refuse_vehicle_stick_commands(self):
         self.write(self.run / "menu.json", [dict(commands=["stick l 0 .5"], holdMs=0)])
