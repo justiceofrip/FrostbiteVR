@@ -1047,7 +1047,7 @@ endif()
 # Native-cycle evidence consumes the same Restore matcher as the runtime.
 # Match the existing reload-runtime test linkage instead of substituting a mock.
 if(BUILD_TESTING AND WIN32)
-  foreach(name Bc2BoltControllerProbe Bc2NativeCycleEvidence Bc2NativeCycleService Bc2NativeCycleBank Bc2NativeCycleRecoveryService Bc2NativeCycleExpiredControlProbe Bc2PumpControllerRecoveryProbe Bc2NativeCycleUpdateRoute)
+  foreach(name Bc2BoltControllerProbe Bc2NativeCycleEvidence Bc2NativeCycleService Bc2NativeCycleBank Bc2NativeCycleRecoveryService Bc2NativeCycleExpiredControlProbe Bc2PumpControllerRecoveryProbe Bc2NativeCycleUpdateRoute NativeCycleSelectionObservation)
     if(name STREQUAL "Bc2BoltControllerProbe")
       # FVR_BC2_MANUAL_BOLT_PROBE, added below, changes this copy's compilation.
       target_sources(${name}Tests PRIVATE src/games/bc2/Bc2ReloadFlowRuntime.cpp)

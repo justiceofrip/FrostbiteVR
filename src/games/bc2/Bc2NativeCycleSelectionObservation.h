@@ -1,6 +1,7 @@
 #pragma once
-#include "Bc2NativeCycleService.h"
+#include "Bc2NativeCycleBank.h"
 #include "Bc2EquipmentIdentity.h"
+#include "Bc2WeaponMode.h"
 #include <array>
 #include <atomic>
 #include <type_traits>
@@ -22,10 +23,15 @@ enum class Result:unsigned {NotStarted,Attempted,Refused,PendingPublication,Pend
 struct Cycle {
     Bc2NativeCycleSlot slot{};ReloadHoldIdentity native{};
     std::uint64_t cycle=0,shot=0,guardEpoch=0;bool present=false;
+    Bc2NativeCyclePhase phase=Bc2NativeCyclePhase::Watching;
+    ReloadStateOwner selectedOwner{};std::optional<Bc2NativeCycleMode> selectedMode;
+    bool debt=false,ready=false,release=false,blocked=false,parked=false,held=false,suspended=false,retainedDebt=false;
     bool operator==(const Cycle&)const=default;
 };
 inline Cycle Copy(const std::optional<Bc2NativeCycleView>& v)noexcept {
-    if(!v)return {};return {v->slot,v->native,v->cycle,v->shot,v->debt?v->debt->guardEpoch:0,true};
+    if(!v)return {};return {v->slot,v->native,v->cycle,v->shot,v->debt?v->debt->guardEpoch:0,true,
+        v->phase,v->selectedOwner,v->selectedMode,bool(v->debt),bool(v->ready),v->releasePending,
+        v->blocksFire,v->selectionParked,bool(v->held),v->heldSuspended,bool(v->retainedDebtOrigin)};
 }
 struct Owner {
     unsigned player=0,soldier=0,weak=0,controlled=0,entry=0,entrySlot=0,cache=0,pair=0;
@@ -40,6 +46,42 @@ inline bool Matches(const Owner& a,const ReloadStateOwner& b)noexcept {
     return a.player==b.player&&a.soldier==b.soldier&&a.weak==b.weak&&a.equipment.weapon==b.weapon;
 }
 struct Pair {unsigned current=0,previous=0;bool operator==(const Pair&)const=default;};
+// All command values, including the opaque family identity, are compared only.
+// No pointer or cached native address in an origin can grant action authority.
+struct Command {
+    unsigned action=0,targetWeapon=0,targetSlot=0,inventory=0,persistent=0,primaryAction=0;
+    std::uintptr_t family=0;bool selectedSecondary=false;
+    bool operator==(const Command&)const=default;
+};
+inline Command Copy(const WeaponModeCommand& c)noexcept {
+    return {c.action,c.targetWeapon,c.targetSlot,c.inventory,c.persistent,c.primaryAction,
+        reinterpret_cast<std::uintptr_t>(c.family),c.selectedSecondary};
+}
+struct Origin {
+    Cycle cycle{};Owner owner{};Pair pair{};ReloadStateOwner nativeOwner{};Command command{};
+    std::uint64_t update=0,inputSequence=0;unsigned thread=0;std::int64_t qpc=0;
+    bool operator==(const Origin&)const=default;
+};
+inline bool Idle(const Cycle& c)noexcept {
+    return c.present&&c.slot&&(c.phase==Bc2NativeCyclePhase::Watching||c.phase==Bc2NativeCyclePhase::Complete)&&
+        !c.debt&&!c.ready&&!c.release&&!c.blocked&&!c.parked&&!c.held&&!c.suspended&&!c.retainedDebt;
+}
+inline bool Valid(const Origin& o)noexcept {
+    return o.qpc>0&&o.update&&o.inputSequence&&o.thread&&o.cycle.present&&o.cycle.slot&&o.cycle.slot.index<Bc2NativeCycleBank::Capacity&&
+        o.cycle.native.owner==o.nativeOwner&&Matches(o.owner,o.nativeOwner)&&SamePair(o.owner,o.owner)&&
+        o.nativeOwner.actorGeneration&&o.nativeOwner.equipGeneration&&o.nativeOwner.space&&
+        o.pair.current&&o.pair.previous&&o.pair.current!=o.pair.previous&&o.command.targetWeapon&&
+        (o.command.action==7||o.command.action==25||o.command.action==33||o.command.action==36);
+}
+inline bool IssueLiveMatches(const Origin& o,const Cycle& live)noexcept {
+    if(!Valid(o)||!live.present||!live.slot)return false;
+    if(live==o.cycle)return true;
+    // The only admitted change is an idle identity clear in this exact bank
+    // lifetime. This observes a transition; it does not attribute a Cancel call.
+    if(!Idle(o.cycle)||!Idle(live)||!o.cycle.selectedMode||
+       o.cycle.selectedOwner!=o.nativeOwner||live.native!=ReloadHoldIdentity{})return false;
+    auto cleared=o.cycle;cleared.native={};return live==cleared;
+}
 struct Selected {unsigned address=0,current=0,previous=0,playerIndex=0;bool operator==(const Selected&)const=default;};
 struct Row {
     Kind kind{};std::uint64_t id=0,parent=0,update=0,issue=0,publication=0,currentId=0,previousId=0;
@@ -51,8 +93,16 @@ struct Row {
     std::array<std::uint64_t,3> beginRevision{},endRevision{};
     Owner before{},after{};Pair pairBefore{},pairAfter{};Selected selected{};
     ReloadStateOwner nativeOwner{};Cycle cycle{};
+    Origin origin{};Command command{};Cycle commitLive{};unsigned cacheValue=0;
     bool returned=false,relevant=true,matchingSlot=true;
 };
+inline bool Eligible(const Row& r)noexcept {
+    return IssueLiveMatches(r.origin,r.cycle)&&r.update==r.origin.update&&r.thread==r.origin.thread&&
+        r.inputSequence==r.origin.inputSequence&&r.nativeOwner==r.origin.nativeOwner&&
+        r.before==r.origin.owner&&r.pairBefore==r.origin.pair&&r.command==r.origin.command&&
+        r.action==r.command.action&&r.targetWeapon==r.command.targetWeapon&&r.targetSlot==r.command.targetSlot&&
+        r.value==(r.action==7?0x3f800000u:1u);
+}
 struct ThreadState {std::uint64_t update=0,outer=0;std::array<unsigned,3> depth{};};
 struct Token {Row row{};ThreadState previous{};unsigned childCount=0;bool active=false;};
 static_assert(std::is_trivially_destructible_v<Token>);
@@ -81,13 +131,14 @@ inline Summary Analyze(const Snapshot& s)noexcept {
     if(!issue){if(s.dropped||s.capped){out.result=Result::Rejected;out.reasons|=Missing;}return out;}
     out.issue=issue->issue;out.result=Result::Attempted;
     if(s.dropped||s.capped)out.reasons|=Missing;
-    if(!issue->cycle.present||!issue->cycle.slot||issue->cycle.native.owner!=issue->nativeOwner||
-       !Matches(issue->before,issue->nativeOwner))out.reasons|=View;
+    if(!Eligible(*issue))out.reasons|=View;
+    if(issue->begin<issue->origin.qpc)out.reasons|=Clock;
     for(unsigned n=0;n<s.count;++n){const auto& r=s.rows[n];if(r.issue!=out.issue)continue;
         if(r.kind==Kind::Refused){out.result=Result::Refused;refused=true;}
         if(r.kind==Kind::Committed){
-            if(commit||r.update!=issue->update||r.before!=issue->before||r.cycle!=issue->cycle||
-               r.action!=issue->action||r.value!=issue->value||r.inputSequence!=issue->inputSequence)out.reasons|=View;
+            if(commit||!Eligible(r)||!Idle(issue->origin.cycle)||!Idle(issue->cycle)||r.origin!=issue->origin||r.cycle!=issue->cycle||r.commitLive!=issue->cycle||
+               r.after!=issue->before||r.pairAfter!=issue->pairBefore||r.cacheValue!=issue->value)out.reasons|=View;
+            if(r.begin<issue->end)out.reasons|=Clock;
             commit=&r;
         }
     }
@@ -153,8 +204,8 @@ inline Summary Analyze(const Snapshot& s)noexcept {
            !r.cycle.slot||r.nativeOwner!=r.cycle.native.owner||!Matches(r.after,r.nativeOwner))continue;
         // Reusing the origin bank slot is only possible under a new generation;
         // an unchanged slot must still name the entire original native identity.
-        if(r.cycle.slot.index==issue->cycle.slot.index&&r.cycle.slot.generation<=issue->cycle.slot.generation&&
-           r.cycle.native!=issue->cycle.native){out.reasons|=Slot;continue;}
+        if(r.cycle.slot.index==issue->origin.cycle.slot.index&&r.cycle.slot.generation<=issue->origin.cycle.slot.generation&&
+           r.cycle.native!=issue->origin.cycle.native){out.reasons|=Slot;continue;}
         out.selectedBank=r.id;
     }
     if(out.reasons)out.result=Result::Rejected;
@@ -198,8 +249,7 @@ public:
         r.beginActive=Active();r.beginRevision=Revision();return t;
     }
     bool Attempt(Row r,std::int64_t now)noexcept {
-        if(!started_.load()||closed_.load()||now<=0||now>INT64_MAX-duration_||!r.cycle.present||!r.cycle.slot||
-           r.cycle.native.owner!=r.nativeOwner||!Matches(r.before,r.nativeOwner))return false;
+        if(!started_.load()||closed_.load()||now<=0||now>INT64_MAX-duration_||!Eligible(r)||now<r.origin.qpc)return false;
         std::uint64_t empty=0;r.id=++serial_;r.issue=r.id;r.kind=Kind::Attempted;r.begin=r.end=now;
         if(!issue_.compare_exchange_strong(empty,r.id))return false;
         activation_.store(now);

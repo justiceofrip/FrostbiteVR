@@ -855,29 +855,60 @@ void SelectionUpdateReturned(void* self)noexcept {
     }
     SetLastError(error);
 }
-std::uint64_t SelectionAttempt(const Owner& owner,const ReloadStateOwner& current,
+bool SelectionCopyState(selectionObservation::Owner& owner,selectionObservation::Pair& pair,
+    selectionObservation::Cycle& cycle,std::int64_t now)noexcept {
+    if(!SelectionCopyOwner(owner,pair))return false;
+    cycle=selectionObservation::Copy(reloadFlowRuntime::ReadNativeCycleView(SelectionNanos(now)));
+    selectionObservation::Owner bookend{};selectionObservation::Pair last{};
+    const auto repeated=selectionObservation::Copy(reloadFlowRuntime::ReadNativeCycleView(SelectionNanos(now)));
+    return cycle.present&&repeated==cycle&&SelectionCopyOwner(bookend,last)&&bookend==owner&&last==pair;
+}
+selectionObservation::Origin SelectionPrepareOrigin(const Owner& owner,const ReloadStateOwner& current,
     const WeaponModeCommand& command,std::uint64_t sequence)noexcept {
     if(!selectionJournal||!selectionUpdate||!selectionUpdate->active||selectionJournal->Issue()||
-       selectionUpdate->row.self!=owner.player)return 0;
+       selectionUpdate->row.self!=owner.player)return {};
+    const auto error=GetLastError();selectionObservation::Origin origin{};
+    origin.qpc=SelectionNow();origin.update=selectionUpdate->row.id;origin.thread=GetCurrentThreadId();
+    origin.inputSequence=sequence;origin.nativeOwner=current;origin.command=selectionObservation::Copy(command);
+    const auto revision=selectionJournal->Revision();
+    const bool copied=SelectionCopyState(origin.owner,origin.pair,origin.cycle,origin.qpc)&&
+        origin.owner.equipment==owner.equipment&&origin.owner.player==owner.player&&
+        revision==selectionJournal->Revision()&&selectionJournal->Active()==std::array<unsigned,3>{1,0,0}&&
+        selectionObservation::Valid(origin);
+    SetLastError(error);return copied?origin:selectionObservation::Origin{};
+}
+std::uint64_t SelectionAttempt(const selectionObservation::Origin& origin,const Owner& owner,const ReloadStateOwner& current,
+    const WeaponModeCommand& command,std::uint64_t sequence)noexcept {
+    if(!selectionJournal||!selectionUpdate||!selectionUpdate->active||selectionJournal->Issue()||
+       selectionUpdate->row.self!=owner.player||!selectionObservation::Valid(origin))return 0;
     const auto error=GetLastError();const auto now=SelectionNow();selectionObservation::Row r{};
-    r.cycle=selectionObservation::Copy(reloadFlowRuntime::ReadNativeCycleView(SelectionNanos(now)));
+    r.origin=origin;r.command=selectionObservation::Copy(command);
     r.nativeOwner=current;r.inputSequence=sequence;r.action=command.action;r.value=command.action==7?0x3f800000:1;
     r.targetWeapon=command.targetWeapon;r.targetSlot=command.targetSlot;r.update=selectionUpdate->row.id;
     r.parent=r.update;r.thread=GetCurrentThreadId();
-    if(!SelectionCopyOwner(r.before,r.pairBefore)||r.before.equipment!=owner.equipment||
+    const auto revision=selectionJournal->Revision();
+    if(!SelectionCopyState(r.before,r.pairBefore,r.cycle,now)||revision!=selectionJournal->Revision()||r.before.equipment!=owner.equipment||
        r.before.player!=owner.player||!selectionJournal->Attempt(r,now)){SetLastError(error);return 0;}
     auto& update=selectionUpdate->row;update.issue=selectionJournal->Issue();update.before=r.before;
     update.pairBefore=r.pairBefore;update.action=r.action;
     SetLastError(error);return update.issue;
 }
-void SelectionOutcome(std::uint64_t id,selectionObservation::Kind kind)noexcept {
+void SelectionOutcome(std::uint64_t id,selectionObservation::Kind kind,
+    const WeaponModeCommand* command=nullptr,const ReloadStateOwner& current={},std::uint64_t sequence=0)noexcept {
     if(!id||!selectionJournal)return;const auto error=GetLastError();selectionObservation::Row r{};
     if(selectionJournal->IssueRow(r)&&r.issue==id){r.kind=kind;r.id=0;r.begin=r.end=SelectionNow();
-        if(kind==selectionObservation::Kind::Committed){unsigned actual=0;selectionObservation::Owner fresh{};selectionObservation::Pair pair{};
-            const auto current=selectionObservation::Copy(reloadFlowRuntime::ReadNativeCycleView(SelectionNanos(r.begin)));
-            if(current!=r.cycle)r.reasons|=selectionObservation::View;
-            r.cycle=current;
-            if(!SelectionCopyOwner(fresh,pair)||fresh!=r.before||!SelectionValue(fresh.cache,r.action,actual)||actual!=r.value)r.reasons|=selectionObservation::Value;}
+        if(kind==selectionObservation::Kind::Committed){
+            const auto revision=selectionJournal->Revision();
+            r.update=selectionUpdate&&selectionUpdate->active?selectionUpdate->row.id:0;r.thread=GetCurrentThreadId();
+            r.nativeOwner=current;r.inputSequence=sequence;r.command=command?selectionObservation::Copy(*command):selectionObservation::Command{};
+            if(!SelectionCopyState(r.after,r.pairAfter,r.commitLive,r.begin)||r.commitLive!=r.cycle)r.reasons|=selectionObservation::View;
+            if(r.after!=r.before||r.pairAfter!=r.pairBefore||!SelectionValue(r.after.cache,r.action,r.cacheValue)||r.cacheValue!=r.value)
+                r.reasons|=selectionObservation::Value;
+            selectionObservation::Owner fresh{};selectionObservation::Pair pair{};selectionObservation::Cycle live{};
+            if(!SelectionCopyState(fresh,pair,live,r.begin)||fresh!=r.after||pair!=r.pairAfter||live!=r.commitLive)
+                r.reasons|=selectionObservation::View;
+            if(revision!=selectionJournal->Revision())r.reasons|=selectionObservation::Overlap;
+        }
         selectionJournal->Append(r);
     }SetLastError(error);
 }
@@ -3347,6 +3378,13 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     const bool ordinaryBodyPrepared=ordinaryManualCycles&&motionAim&&aimValid;
     if(ordinaryBodyPrepared)PrepareTrackedBodyAnchor(owner,input,out,nativeYaw);
     SelectOrdinaryCycle(owner,input);
+    // Capture only this queued ordinary Held draw, before either the early bolt
+    // hand preparation or the later pump tick can clear an idle native identity.
+    // This local value expires with this Update; it cannot authorize dispatch.
+    const auto selectionOrigin=ordinaryManualCycles&&bodyInventory&&bodyHolster&&
+        bodyHolster->Phase()==BodyHolsterPhase::Held&&holsterQueuedDraw?
+        SelectionPrepareOrigin(owner,{owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration},
+            *holsterQueuedDraw,input.generation):selectionObservation::Origin{};
     if(twoHandGrip){
         ObserveHandOwnership(owner,input,clock.QuadPart,aimValid,
             ((out.pressed|out.held)&(interaction::Use|interaction::NextWeapon|interaction::PreviousWeapon))!=0,familyBinding);
@@ -4493,7 +4531,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         bodyHolster->Phase()==BodyHolsterPhase::Held&&bodyDraw.command&&!holsterEquipment&&
         ((bodyDraw.command->action==7&&cycle.value_or(false))||
          (weaponMode&&unsigned(*weaponMode)==bodyDraw.command->action));
-    const auto selectionIssue=ordinarySelectionEdge?SelectionAttempt(owner,
+    const auto selectionIssue=ordinarySelectionEdge?SelectionAttempt(selectionOrigin,owner,
         {owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration},
         *bodyDraw.command,input.generation):0;
     if(ordinarySelectionEdge){
@@ -4557,7 +4595,8 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             (weaponMode&&unsigned(*weaponMode)==bodyDraw.command->action)))
         {
             bodyInventory->ObserveOrdinaryDrawIssued(*bodyDraw.command,*holsterBodySample);
-            SelectionOutcome(selectionIssue,selectionObservation::Kind::Committed);
+            SelectionOutcome(selectionIssue,selectionObservation::Kind::Committed,&*bodyDraw.command,
+                {owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration},input.generation);
         }
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
         // Input publication alone never settles this intent. The exact native
@@ -6393,7 +6432,18 @@ void ReportNativeCycleSelection(std::ostream& out){
         for(unsigned i=0;i<a.equipment.asset.size();++i){if(i)out<<',';out<<unsigned(static_cast<unsigned char>(a.equipment.asset[i]));}out<<"]}";};
     const auto nativeOwner=[&](const ReloadStateOwner& a){out<<'['<<a.player<<','<<a.soldier<<','<<a.weak<<','<<a.weapon<<','<<a.actorGeneration<<','<<a.equipGeneration<<','<<a.space<<']';};
     const auto three=[&](const auto& a){out<<'['<<a[0]<<','<<a[1]<<','<<a[2]<<']';};
-    out<<",\"native_cycle_selection_observation\":{\"schema\":1,\"requested\":"<<(selectionRequested?"true":"false")
+    const auto cycle=[&](const so::Cycle& c){
+        out<<"{\"present\":"<<(c.present?"true":"false")<<",\"slot\":"<<c.slot.index<<",\"generation\":"<<c.slot.generation
+           <<",\"cycle\":"<<c.cycle<<",\"shot\":"<<c.shot<<",\"guard_epoch\":"<<c.guardEpoch<<",\"owner\":";nativeOwner(c.native.owner);
+        out<<",\"firing\":";three(c.native.firing);out<<",\"server\":["<<c.native.serverPlayer<<','<<c.native.serverSoldier<<','<<c.native.serverItem
+           <<"],\"phase\":"<<unsigned(c.phase)<<",\"selected_owner\":";nativeOwner(c.selectedOwner);
+        out<<",\"selected_mode\":";if(c.selectedMode)out<<unsigned(*c.selectedMode);else out<<"null";
+        out<<",\"debt\":"<<c.debt<<",\"ready\":"<<c.ready<<",\"release\":"<<c.release<<",\"blocked\":"<<c.blocked
+           <<",\"parked\":"<<c.parked<<",\"held\":"<<c.held<<",\"suspended\":"<<c.suspended<<",\"retained_debt\":"<<c.retainedDebt<<'}';};
+    const auto command=[&](const so::Command& c){out<<"{\"action\":"<<c.action<<",\"target_weapon\":"<<c.targetWeapon
+        <<",\"target_slot\":"<<c.targetSlot<<",\"inventory\":"<<c.inventory<<",\"persistent\":"<<c.persistent<<",\"primary_action\":"<<c.primaryAction
+        <<",\"family_identity\":"<<c.family<<",\"selected_secondary\":"<<c.selectedSecondary<<'}';};
+    out<<",\"native_cycle_selection_observation\":{\"schema\":2,\"requested\":"<<(selectionRequested?"true":"false")
        <<",\"installed\":"<<(selectionInstalled?"true":"false")<<",\"install_status\":\""<<selectionStatus<<"\",\"result\":\""<<results[unsigned(joined.result)]
        <<"\",\"reasons\":"<<joined.reasons<<",\"closed\":"<<(snapshot->closed?"true":"false")<<",\"expired\":"<<(snapshot->expired?"true":"false")
        <<",\"hooks_disabled\":"<<(selectionDisabled?"true":"false")<<",\"drained\":"<<(drained?"true":"false")
@@ -6405,7 +6455,7 @@ void ReportNativeCycleSelection(std::ostream& out){
        <<",\"g_previous_publication\":"<<joined.previousPublication<<",\"g_absent_publication\":"<<joined.absentPublication<<",\"selected\":"<<joined.selected
        <<",\"optional_selected_bank_view\":"<<joined.selectedBank
        <<",\"selected_bank_status\":\""<<(joined.selectedBank?"exact_owner_match":"absent_or_unmatched_optional")<<'"'
-       <<"},\"eligibility\":\"first_ordinary_selection_edge_with_exact_current_native_cycle_owner_and_valid_bank_slot\""
+       <<"},\"eligibility\":\"first_ordinary_held_queued_draw_with_exact_pre_hand_origin_and_same_update_unchanged_or_verified_idle_clear_issue_view\""
        <<",\"evidence_scope\":\"bounded_join_of_observed_issue_publications_and_normal_outer_inner_only_no_all_consumer_exclusion_debt_retirement_or_selection_authority\""
        <<",\"native_authority\":false,\"events\":[";
     for(unsigned n=0;n<snapshot->count;++n){const auto& r=snapshot->rows[n];if(n)out<<',';
@@ -6421,9 +6471,15 @@ void ReportNativeCycleSelection(std::ostream& out){
         out<<",\"before\":";owner(r.before);out<<",\"after\":";owner(r.after);
         out<<",\"pair_before\":["<<r.pairBefore.current<<','<<r.pairBefore.previous<<"],\"pair_after\":["<<r.pairAfter.current<<','<<r.pairAfter.previous
            <<"],\"selected_indices\":["<<r.selected.address<<','<<r.selected.current<<','<<r.selected.previous<<','<<r.selected.playerIndex<<"],\"observed_native_owner\":";nativeOwner(r.nativeOwner);
-        out<<",\"cycle\":{\"present\":"<<(r.cycle.present?"true":"false")<<",\"slot\":"<<r.cycle.slot.index<<",\"generation\":"<<r.cycle.slot.generation
-           <<",\"cycle\":"<<r.cycle.cycle<<",\"shot\":"<<r.cycle.shot<<",\"guard_epoch\":"<<r.cycle.guardEpoch<<",\"owner\":";nativeOwner(r.cycle.native.owner);
-        out<<",\"firing\":";three(r.cycle.native.firing);out<<",\"server\":["<<r.cycle.native.serverPlayer<<','<<r.cycle.native.serverSoldier<<','<<r.cycle.native.serverItem<<"]}}";
+        out<<",\"cycle\":";cycle(r.cycle);
+        if(r.kind==so::Kind::Attempted||r.kind==so::Kind::Committed||r.kind==so::Kind::Refused){
+            out<<",\"origin\":{\"qpc\":"<<r.origin.qpc<<",\"update\":"<<r.origin.update<<",\"thread\":"<<r.origin.thread
+               <<",\"input_sequence\":"<<r.origin.inputSequence<<",\"owner\":";owner(r.origin.owner);
+            out<<",\"pair\":["<<r.origin.pair.current<<','<<r.origin.pair.previous<<"],\"native_owner\":";nativeOwner(r.origin.nativeOwner);
+            out<<",\"cycle\":";cycle(r.origin.cycle);out<<",\"command\":";command(r.origin.command);out<<'}';
+            out<<",\"issue_live\":";cycle(r.cycle);out<<",\"commit_live\":";cycle(r.commitLive);
+            out<<",\"command\":";command(r.command);out<<",\"committed_cache_value\":"<<r.cacheValue;
+        }out<<'}';
     }out<<"]}";
 }
 

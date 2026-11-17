@@ -77,12 +77,12 @@ def snapshot(now, nonce, generation, role="driver", state=None):
                 invalid_reason="no_shot_publication", observed_ns=now, vehicleObservation=obs)
 
 
-def pending_gather(sample):
+def pending_gather(sample, reason="gather_pending"):
     """Mirror WriteVehicleObservation's unavailable branch, not partial input."""
     value = sample["vehicleObservation"]
     for key in ("role", "consumers", "consumedControls", "playerPermissionMask"):
         value.pop(key)
-    value.update(available=False, reason="gather_pending", input=None, capabilities=None, neutralRearm=None)
+    value.update(available=False, reason=reason, input=None, capabilities=None, neutralRearm=None)
 
 
 # Exact vehicle section from private110/01's first refused response. Its outer
@@ -611,6 +611,42 @@ class AssembledVehicleTests(unittest.TestCase):
         self.assertEqual(len(self.requests), 3)
         self.assertEqual(self.driver.vehicle_reference, self.samples[0])
         self.assertEqual(result["vehicleStimulus"]["admissionNonce"], self.samples[2]["nonce"])
+
+    def test_changed_publication_reacquires_at_either_preflight(self):
+        for index in (1, 2):
+            with self.subTest(index=index):
+                self.setUp()
+                self.snapshot_mutation = lambda s, d: pending_gather(s, "observation_changed") if d.snapshot_index == index else None
+                code, result = self.assembled()
+                self.assertEqual(code, 0, result)
+                self.assertEqual(len(self.requests), 3)
+                self.assertEqual(self.calls, [["stick l 0.4 0.5"], ["stick l 0 0"]])
+                self.assertEqual(result["vehicleStimulus"]["admissionNonce"], self.samples[2]["nonce"])
+                self.assertEqual(self.driver.pending_observation_requests, 1)
+                events = [json.loads(line) for line in (self.driver.artifacts.directory / "events.jsonl").read_text().splitlines()]
+                event = next(e for e in events if e["type"] == "vehicle_gather_pending_discarded")
+                self.assertEqual(event["reason"], "observation_changed")
+                self.assertFalse(event["commandAuthority"])
+                self.assertEqual(event["observationDeadlineNs"] - self.requests[index-1]["startedNs"], 500_000_000)
+
+    def test_changed_publication_cannot_change_owner_or_extend_recovery(self):
+        for fault in ("owner", "turnover"):
+            with self.subTest(fault=fault):
+                self.setUp()
+                def mutate(s, d):
+                    if fault == "turnover" or d.snapshot_index == 1:
+                        pending_gather(s, "observation_changed" if d.snapshot_index % 2 else "gather_pending")
+                    elif d.snapshot_index == 2:
+                        s["vehicleObservation"]["owner"]["actorGeneration"] += 1
+                self.snapshot_mutation = mutate
+                code, result = self.assembled()
+                self.assertEqual(code, 2, result)
+                self.assertIn("cohort changed" if fault == "owner" else "request budget exhausted", result["error"])
+                self.assertEqual(len(self.requests), 2 if fault == "owner" else 3)
+                self.assertEqual(self.calls, [])
+                self.assertEqual(self.windows, [])
+                self.assertEqual(result["commands"], 0)
+                self.assertIsNone(self.driver.action_deadline)
 
     def test_second_pending_request_can_retain_original_diagnostic_clocks(self):
         def mutate(sample, driver):

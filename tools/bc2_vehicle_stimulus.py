@@ -17,6 +17,9 @@ PERIOD = 25_000_000
 COMMAND_WINDOW = 250_000_000
 INITIAL_OBSERVATION_WINDOW = 500_000_000
 MAX_PENDING_REACQUISITIONS = 2
+# BeginGather revokes a pending copy; Current reports Changed when the same
+# publication turns over after a complete copy. Both withhold input entirely.
+PENDING_REASONS = ("gather_pending", "observation_changed")
 RELEASE_RESERVE = COMMAND_WINDOW + 2 * PERIOD
 OWNER = ("manager", "player", "soldier", "weak", "controlled", "entry", "router", "cache",
          "actorGeneration", "seatGeneration", "inputEpoch", "movementEpoch")
@@ -335,7 +338,7 @@ def driver_class(t):
             if self.pending_observation is not None:
                 self.check_pending_observation_owner()
             value = snapshot.get("vehicleObservation")
-            if isinstance(value, dict) and value.get("available") is False and value.get("reason") == "gather_pending":
+            if isinstance(value, dict) and value.get("available") is False and value.get("reason") in PENDING_REASONS:
                 return False
             # Every other refusal still fails before shared receive's optional
             # expired-source refresh. No unavailable sample grants authority.
@@ -380,7 +383,7 @@ def driver_class(t):
                     or not self.initial_observation_waited), "pending vehicle recovery requires untouched neutral preflight")
             value = snapshot["vehicleObservation"]
             require(set(value) == PENDING_FIELDS and value["observationOnly"] is True
-                    and value["available"] is False and value["reason"] == "gather_pending"
+                    and value["available"] is False and value["reason"] in PENDING_REASONS
                     and all(value[k] is None for k in ("input", "capabilities", "neutralRearm")),
                     "unsupported pending vehicle observation shape")
             require(snapshot["schema"] == "fvr.bc2.live-mechanism-snapshot.v1"
@@ -419,6 +422,7 @@ def driver_class(t):
             self.pending_observation_requests += 1
             self.pending_observation["reference"] = copy.deepcopy(snapshot)
             self.artifacts.event(dict(type="vehicle_gather_pending_discarded", nonce=snapshot["nonce"],
+                reason=value["reason"],
                 commandAuthority=False, observationDeadlineNs=self.pending_observation["deadlineNs"],
                 freshRequest=self.pending_observation_requests, maximumFreshRequests=MAX_PENDING_REACQUISITIONS))
             self.latest_snapshot = None
