@@ -629,6 +629,9 @@ struct VehicleCameraRecord {
     std::array<math::Matrix4,2> planned{},applied{};
 };
 VehicleCameraEvidence<VehicleCameraRecord> vehicleCameraRecords;
+VehicleCameraPulseEvidence<VehicleCameraRecord> vehicleCameraPulses;
+std::atomic<bool> vehiclePulseInputLost=false;
+std::atomic<unsigned> vehiclePulseInputDrops=0;
 bool CameraEvidenceMatrix(const RenderViewCopy& copy,math::Matrix4& matrix)noexcept {
     engine::FrostbiteCameraInput source{};std::memcpy(&source.transform,copy.bytes.data()+0x50,64);
     std::memcpy(&source.nearPlane,copy.bytes.data()+0x1c,4);std::memcpy(&source.farPlane,copy.bytes.data()+0x20,4);source.worldUnitsPerMeter=1;
@@ -636,7 +639,10 @@ bool CameraEvidenceMatrix(const RenderViewCopy& copy,math::Matrix4& matrix)noexc
 }
 void PublishVehicleView(const VehicleViewState& next,VehicleCameraMode mode=VehicleCameraMode::Unavailable)noexcept {
     std::lock_guard lock(vehicleViewMutex);
-    if(PublishVehicleCameraMode(vehicleView,vehicleCameraMode,next,mode))vehicleCameraAnchor.Reset();
+    if(PublishVehicleCameraMode(vehicleView,vehicleCameraMode,next,mode)){
+        vehicleCameraAnchor.Reset();vehicleCameraPulses.Invalidate();
+    }
+    if(!next.live)vehicleCameraPulses.Invalidate();
 }
 std::optional<VehicleSeatProfile> cachedVehicleProfile;
 CampaignVehicleBinding campaignVehicleBinding{};
@@ -2766,6 +2772,23 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             readback&=read&&!std::memcmp(&record.observed[axis],&edit.after,4);
         }
         record.verified=record.mask&&readback;
+        // Opt-in readback/camera association only. A busy render copy drops this
+        // diagnostic input rather than delaying the native input callback.
+        if(vehicleObservation.Enabled()){
+            std::unique_lock lock(vehicleViewMutex,std::try_to_lock);
+            if(!lock){vehiclePulseInputLost.store(true,std::memory_order_release);++vehiclePulseInputDrops;}
+            else {
+                if(vehiclePulseInputLost.exchange(false,std::memory_order_acq_rel))vehicleCameraPulses.Invalidate();
+                if(viewValid&&record.verified&&record.flagsVerified&&vehicleView.live&&
+                   vehicleView.owner==seatOwner&&vehicleView.space==input.spaceGeneration){
+                    VehicleCameraPulseInput sample;sample.owner=seatOwner;sample.space=record.space;
+                    sample.seatGeneration=record.seatGeneration;sample.gather=gatherSequence;sample.input=record.inputSequence;
+                    sample.ms=record.ms;sample.observedNs=HandNanos(inputDeadline-handFrequency/10);sample.deadlineNs=HandNanos(inputDeadline);
+                    sample.mask=record.mask&15u;for(unsigned n=0;n<4;++n)if(sample.mask&(1u<<n))sample.axes[n]=record.observed[n];
+                    vehicleCameraPulses.Input(sample);
+                }else vehicleCameraPulses.Invalidate();
+            }
+        }
         if(!record.verified)++vehicleReadbackFailures;
         else {
             if((record.mask&1)&&std::abs(record.observed[0])>0){++vehicleThrottleNonzero;vehicleThrottleMaximum.store(std::max(vehicleThrottleMaximum.load(),std::abs(record.observed[0])));}
@@ -5636,16 +5659,25 @@ bool ObserveVehicleCameraPlan(unsigned frame,const runtime::TrackingFrame& track
     if(!vehicleView.live||vehicleView.space!=tracking.spaceGeneration||!frame)return false;
     VehicleCameraRecord record;record.key={vehicleView.owner,frame,tracking.spaceGeneration,tracking.generation,tracking.predictedNs};
     record.ms=GetTickCount64();
-    if(!vehicleCameraRecords.Due(record.key,record.ms))return false;
+    const bool baseline=vehicleCameraRecords.Due(record.key,record.ms);
+    const bool pulseEnabled=vehicleObservation.Enabled();std::int64_t nowNs=0;
+    if(pulseEnabled){
+        if(vehiclePulseInputLost.exchange(false,std::memory_order_acq_rel))vehicleCameraPulses.Invalidate();
+        LARGE_INTEGER now{};QueryPerformanceCounter(&now);nowNs=HandNanos(now.QuadPart);
+    }
+    if(!baseline&&(!pulseEnabled||!vehicleCameraPulses.Due(record.key,record.ms,nowNs)))return false;
     record.tracking=tracking;
     if(!CameraEvidenceMatrix(native,record.native)||!CameraEvidenceMatrix(adjusted,record.adjusted)||!CameraEvidenceMatrix(planned[0],record.planned[0])||!CameraEvidenceMatrix(planned[1],record.planned[1]))return false;
-    if(!vehicleCameraRecords.Observe(record))return false;
+    const bool baselineRetained=baseline&&vehicleCameraRecords.Observe(record);
+    const bool pulseRetained=pulseEnabled&&vehicleCameraPulses.Observe(record,nowNs,baselineRetained);
+    if(!baselineRetained&&!pulseRetained)return false;
     key=record.key;return true;
 }
 void ObserveVehicleCameraApplied(const VehicleCameraEvidenceKey& key,unsigned eye,const RenderViewCopy& actual)noexcept {
     if(eye>1)return;std::lock_guard lock(vehicleViewMutex);
     math::Matrix4 matrix{};if(!CameraEvidenceMatrix(actual,matrix))return;
-    vehicleCameraRecords.Enrich(key,vehicleView,eye,[&](VehicleCameraRecord& record){record.applied[eye]=matrix;});
+    if(vehicleCameraRecords.Contains(key))vehicleCameraRecords.Enrich(key,vehicleView,eye,[&](VehicleCameraRecord& record){record.applied[eye]=matrix;});
+    vehicleCameraPulses.Enrich(key,vehicleView,eye,[&](VehicleCameraRecord& record){record.applied[eye]=matrix;});
 }
 void ReportBoatAimEvidence(std::ostream& out){
     std::lock_guard lock(vehicleViewMutex);out<<",\"boat_head_aim\":"<<(boatHeadAim?"true":"false")<<",\"boat_head_fire\":"<<(boatHeadFire?"true":"false")
@@ -5658,15 +5690,36 @@ void ReportVehicleCameraEvidence(std::ostream& out){
     std::lock_guard lock(vehicleViewMutex);const auto precision=out.precision();out.precision(9);out<<",\"vehicle_camera_evidence\":[";
     const auto matrix=[&](const math::Matrix4& m){out<<'[';for(unsigned r=0;r<4;++r)for(unsigned c=0;c<4;++c){if(r||c)out<<',';out<<m.values[r][c];}out<<']';};
     const auto pose=[&](const math::Pose& p){out<<'['<<p.position.x<<','<<p.position.y<<','<<p.position.z<<','<<p.orientation.x<<','<<p.orientation.y<<','<<p.orientation.z<<','<<p.orientation.w<<']';};
-    for(std::size_t n=0;n<vehicleCameraRecords.Size();++n){const auto& r=vehicleCameraRecords.At(n);if(n)out<<',';
+    const auto camera=[&](const VehicleCameraRecord& r){
         out<<"{\"native_frame\":"<<r.key.frame<<",\"ms\":"<<r.ms<<",\"actor\":"<<r.key.owner.actor<<",\"actor_generation\":"<<r.key.owner.generation<<",\"vehicle\":"<<r.key.owner.vehicle<<",\"entry\":"<<r.key.owner.seat<<",\"tracking_sequence\":"<<r.tracking.generation<<",\"space\":"<<r.tracking.spaceGeneration<<",\"predicted_ns\":"<<r.tracking.predictedNs<<",\"units_per_metre\":"<<r.tracking.worldUnitsPerMeter<<",\"applied_mask\":"<<r.appliedMask<<",\"reference_pose\":";pose(r.tracking.referenceHead);
         out<<",\"head_pose\":";pose(r.tracking.head);out<<",\"eye_poses\":[";pose(r.tracking.eyes[0]);out<<',';pose(r.tracking.eyes[1]);out<<"],\"native_camera\":";matrix(r.native);out<<",\"adjusted_camera\":";matrix(r.adjusted);
         out<<",\"planned_eyes\":[";matrix(r.planned[0]);out<<',';matrix(r.planned[1]);out<<"],\"applied_eyes\":[";matrix(r.applied[0]);out<<',';matrix(r.applied[1]);out<<"]}";
-    }out<<']';
+    };
+    for(std::size_t n=0;n<vehicleCameraRecords.Size();++n){if(n)out<<',';camera(vehicleCameraRecords.At(n));}out<<']';
     out<<",\"vehicle_camera_evidence_retention\":{\"policy\":\"first_and_rolling_latest\",\"minimum_interval_ms\":"<<VehicleCameraEvidence<VehicleCameraRecord>::MinimumIntervalMs
         <<",\"capacity\":"<<VehicleCameraEvidence<VehicleCameraRecord>::MaxRecords<<",\"samples\":"<<vehicleCameraRecords.Samples()<<",\"retained\":"<<vehicleCameraRecords.Size()
         <<",\"omitted\":"<<vehicleCameraRecords.Omitted()<<",\"incomplete_pairs\":"<<vehicleCameraRecords.Incomplete()<<",\"retained_incomplete_pairs\":"<<vehicleCameraRecords.RetainedIncomplete()
         <<",\"omitted_incomplete_pairs\":"<<vehicleCameraRecords.OmittedIncomplete()<<",\"duplicate_eye_updates\":"<<vehicleCameraRecords.DuplicateEyes()<<",\"unmatched_eye_updates\":"<<vehicleCameraRecords.UnmatchedEyes()<<'}';
+    const auto input=[&](const VehicleCameraPulseInput& s){
+        out<<"{\"actor\":"<<s.owner.actor<<",\"actor_generation\":"<<s.owner.generation<<",\"vehicle\":"<<s.owner.vehicle<<",\"entry\":"<<s.owner.seat
+            <<",\"space\":"<<s.space<<",\"seat_generation\":"<<s.seatGeneration<<",\"gather_sequence\":"<<s.gather<<",\"input_sequence\":"<<s.input
+            <<",\"ms\":"<<s.ms<<",\"observed_ns\":"<<s.observedNs<<",\"deadline_ns\":"<<s.deadlineNs<<",\"axis_mask\":"<<s.mask<<",\"axes\":[";
+        for(unsigned i=0;i<4;++i){if(i)out<<',';out<<s.axes[i];}out<<"]}";
+    };
+    out<<",\"vehicle_camera_pulses\":[";
+    for(std::size_t n=0;n<vehicleCameraPulses.Size();++n){const auto& pulse=vehicleCameraPulses.At(n);if(n)out<<',';
+        out<<"{\"sequence\":"<<pulse.sequence<<",\"end\":"<<unsigned(pulse.end)<<",\"sample_mask\":"<<pulse.sampleMask<<",\"began\":";input(pulse.began);
+        out<<",\"last_active\":";input(pulse.lastActive);out<<",\"neutral\":";input(pulse.neutral);out<<",\"cameras\":[";bool comma=false;
+        for(unsigned slot=0;slot<3;++slot)if(pulse.sampleMask&(1u<<slot)){if(comma)out<<',';comma=true;
+            out<<"{\"slot\":"<<slot<<",\"camera\":";camera(pulse.samples[slot]);out<<'}';}out<<"]}";
+    }
+    out<<"],\"vehicle_camera_pulse_retention\":{\"policy\":\"verified_readback_pre_first_nonzero_first_zero\",\"native_consumption_claimed\":false"
+        <<",\"sample_slots\":[\"pre\",\"first_after_nonzero_readback\",\"first_after_zero_readback\"]"
+        <<",\"end_values\":[\"open\",\"neutral\",\"interrupted\",\"replaced\",\"timed_out\"]"
+        <<",\"capacity\":"<<vehicleCameraPulses.MaxPulses<<",\"maximum_pre_age_ms\":"<<vehicleCameraPulses.MaximumPreAgeMs
+        <<",\"maximum_pulse_ms\":"<<vehicleCameraPulses.MaximumPulseMs<<",\"samples\":"<<vehicleCameraPulses.Samples()<<",\"retained\":"<<vehicleCameraPulses.Size()
+        <<",\"omitted\":"<<vehicleCameraPulses.Omitted()<<",\"input_lock_drops\":"<<vehiclePulseInputDrops.load()<<",\"invalid_inputs\":"<<vehicleCameraPulses.InvalidInputs()
+        <<",\"timed_out\":"<<vehicleCameraPulses.TimedOut()<<",\"duplicate_eye_updates\":"<<vehicleCameraPulses.DuplicateEyes()<<'}';
     out.precision(precision);
 }
 bool InstallProjectileTarget(std::span<const std::byte> bytes,const engine::PeImage& pe,

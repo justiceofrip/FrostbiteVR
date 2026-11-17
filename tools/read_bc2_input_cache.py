@@ -16,6 +16,9 @@ MAX_SCALAR_READS, MAX_SCALAR_BYTES = 512, 16
 ENTRY_CACHE_GETTER = 0x007ed760
 ENTRY_CACHE_GETTER_BYTES = bytes.fromhex('8b81700c0000c3')
 EXPECTED_INPUT_CACHE_VTABLE = 0x01419350
+MAX_DESCRIPTOR_INDEX, MAX_DESCRIPTOR_CHILD_ROWS = 31, 8
+DESCRIPTOR_DISPATCH_TARGET = 0x007d3e60
+DESCRIPTOR_VIRTUAL_SLOTS = (0xf4, 0xf8, 0x10c)
 
 
 class ScalarReadJournal:
@@ -193,21 +196,124 @@ def resolve(memory, image, p, native_source):
     return dict(owner=owner, cache_snapshot=snapshot)
 
 
-def observe(memory, image, p, native_source):
+def descriptor_pointer(address, size, label):
+    require(0x10000 <= address <= 0x100000000-size and address % 4 == 0,
+            label+' pointer bounds/alignment')
+    return address
+
+
+def descriptor_selection(memory, entry):
+    """Read only the exact 007d3ec3 selection; caps are diagnostic limits."""
+    def select(obj):
+        descriptor_pointer(obj, 0x29, 'Descriptor entry')
+        table = memory.u32(obj+0x24)
+        selector = memory.read(obj+0x28, 1)[0]
+        require(selector <= MAX_DESCRIPTOR_INDEX, 'Descriptor selector exceeds observation cap')
+        descriptor_pointer(table, 16*(selector+1)+16, 'Descriptor table')
+        return table, selector
+    table, selector = select(entry)
+    base = table+16*selector
+    related = memory.read(base+0x1d, 1)[0]
+    relation = dict(entry=entry, table=table, selector=selector, related_index=related,
+                    related_entry=0, related_table=None, related_selector=None)
+    selected = base+0x10
+    if related != 0xff:
+        require(related <= MAX_DESCRIPTOR_INDEX, 'Related descriptor selector exceeds observation cap')
+        address = descriptor_pointer(table, 16*(related+1)+4, 'Related descriptor table')+16*(related+1)
+        related_entry = memory.u32(address)
+        relation['related_entry'] = related_entry
+        if related_entry:
+            other_table, other_selector = select(related_entry)
+            relation.update(related_table=other_table, related_selector=other_selector)
+            selected = other_table+16*(other_selector+1)
+    relation['selected_descriptor'] = descriptor_pointer(selected, 16, 'Selected descriptor')
+    return relation
+
+
+def descriptor_row(memory, image, address, child=False, maximum_descendants=None):
+    descriptor_pointer(address, 16, 'Descriptor row')
+    receiver, reference, flags = (memory.u32(address+offset) for offset in (0, 4, 8))
+    descendants = memory.read(address+0xe, 1)[0]
+    if maximum_descendants is not None:
+        require(descendants <= maximum_descendants, 'Child descriptor subtree exceeds parent extent')
+    eligible = bool(flags & 1) and (not child or reference == 0)
+    row = dict(address=address, receiver=receiver, reference=reference, flags=flags,
+               flattened_descendants=descendants, dispatch_eligible_at_read=eligible,
+               targets_observed=False, vtable=None, targets=[])
+    if eligible:
+        descriptor_pointer(receiver, 4, 'Descriptor receiver')
+        table = memory.u32(receiver)
+        descriptor_pointer(table, 0x110, 'Descriptor receiver vtable')
+        require(not image.section(table-image.base, 0x110)[4] & 0x20000000,
+                'Descriptor receiver vtable outside image data')
+        targets = []
+        for offset in DESCRIPTOR_VIRTUAL_SLOTS:
+            target = struct.unpack('<I', exact(memory, image, table+offset, 4))[0]
+            head = exact(memory, image, target, 16, True)
+            targets.append(dict(offset=offset, target=target, head_hex=head.hex()))
+        row.update(targets_observed=True, vtable=table, targets=targets)
+    return row
+
+
+def descriptor_targets(memory, image, entry):
+    # Exact immutable PE and live bytes establish these offsets, not a call.
+    exact(memory, image, 0x007d3ec3, 0x7a, True)
+    exact(memory, image, 0x007bcdc0, 0x1bf, True)
+    selection = descriptor_selection(memory, entry)
+    root = descriptor_row(memory, image, selection['selected_descriptor'])
+    count, children = root['flattened_descendants'], []
+    omission = None
+    if not root['dispatch_eligible_at_read']:
+        omission = 'parent dispatch gate inactive at read'
+    elif count > MAX_DESCRIPTOR_CHILD_ROWS:
+        omission = 'flattened child count exceeds observation cap'
+    else:
+        first = descriptor_pointer(root['address']+16, 16*count or 1, 'Descriptor children')
+        cursor, end = first, first+16*count
+        while cursor < end:
+            row = descriptor_row(memory, image, cursor, child=True,
+                                 maximum_descendants=(end-cursor)//16-1)
+            step = 16*(row['flattened_descendants']+1)
+            require(cursor+step <= end, 'Child descriptor subtree exceeds parent extent')
+            children.append(row)
+            cursor += step
+    # Only immediate sibling roots are visited. Descendant contents and actual
+    # invocation flags/virtual return values are deliberately not inferred.
+    identity = lambda row: {key: row[key] for key in
+        ('address', 'receiver', 'reference', 'flattened_descendants', 'targets_observed', 'vtable', 'targets')}
+    return dict(selection=selection, root=root, children=children,
+        child_omission=omission, recursive_descendants_observed=False,
+        invocation_observed=False, lifetime_retirement_proven=False,
+        allocation_extent_proven=False,
+        identity=dict(selection=selection, root=identity(root), children=[identity(row) for row in children],
+                      child_omission=omission))
+
+
+def observe(memory, image, p, native_source, with_descriptor_targets=False):
     before = resolve(memory, image, p, native_source)
     controlled = reflected(memory, image, before['owner']['controlled'], 0xfc)
     require(controlled['type'] == 'ClientSoldierEntity', 'Controlled/soldier reflection type')
     entry = reflected(memory, image, before['owner']['entry'], 0x154)
+    descriptors = None
+    if with_descriptor_targets:
+        require(entry['target'] == DESCRIPTOR_DISPATCH_TARGET, 'Unsupported descriptor dispatch target')
+        descriptors = descriptor_targets(memory, image, before['owner']['entry'])
     after = resolve(memory, image, p, native_source)
     require(before['owner'] == after['owner'], 'Resolve tuple changed around dispatch observation')
-    return dict(owner=before['owner'], controlled=controlled, entry=entry,
-                cache_snapshots=[before['cache_snapshot'], after['cache_snapshot']])
+    observation = dict(owner=before['owner'], controlled=controlled, entry=entry,
+                       cache_snapshots=[before['cache_snapshot'], after['cache_snapshot']])
+    if descriptors is not None:
+        observation.update(descriptor_snapshot=descriptors, descriptor_identity=descriptors['identity'])
+    return observation
 
 
 def stable_observation(observation):
     # Preserve the owner and reflection comparisons. Cache rotation is recorded
     # separately and cannot veto (or bypass) owner/reflection stability checks.
-    return {key: observation[key] for key in ('owner', 'controlled', 'entry')}
+    keys = ('owner', 'controlled', 'entry')
+    if 'descriptor_identity' in observation:
+        keys += ('descriptor_identity',)
+    return {key: observation[key] for key in keys}
 
 
 def compare_observations(first, second):
@@ -225,6 +331,8 @@ def main(argv=None):
     ap.add_argument('--session-dir', type=Path, required=True)
     ap.add_argument('--pins', type=Path, required=True)
     ap.add_argument('--output', type=Path, required=True)
+    ap.add_argument('--descriptor-targets', action='store_true',
+                    help='also observe bounded selected descriptor targets; no native calls or recursive walk')
     args = ap.parse_args(argv)
     require(0 < args.pid <= 0xffffffff, 'PID bounds')
     path = Path(__file__).resolve().parent / 'read_bc2_provision_target.py'
@@ -242,6 +350,10 @@ def main(argv=None):
                   entry_cache_getter=dict(address=ENTRY_CACHE_GETTER, bytes_hex=ENTRY_CACHE_GETTER_BYTES.hex()),
                   expected_input_cache_vtable=EXPECTED_INPUT_CACHE_VTABLE,
                   cache_snapshots=[],
+                  descriptor_targets_requested=args.descriptor_targets, descriptor_snapshots=[],
+                  descriptor_bounds=dict(maximum_selector=MAX_DESCRIPTOR_INDEX,
+                      maximum_flattened_child_rows=MAX_DESCRIPTOR_CHILD_ROWS,
+                      recursive_walk=False, scope='diagnostic caps, not native allocation bounds'),
                   scalar_read_journal=dict(entries=[], truncated=False,
                       max_entries=MAX_SCALAR_READS, max_entry_bytes=MAX_SCALAR_BYTES,
                       scope='returned reads requested at 1..16 bytes, in read order; larger reads omitted; no lifetime or authority proof'),
@@ -273,13 +385,17 @@ def main(argv=None):
             if name == 'gather':
                 continue
             exact(memory, image, image.base+rva, size, True)
-        first = observe(memory, image, p, before)
+        first = observe(memory, image, p, before, args.descriptor_targets)
         result['cache_snapshots'].extend(first['cache_snapshots'])
+        if args.descriptor_targets:
+            result['descriptor_snapshots'].append(first['descriptor_snapshot'])
         middle = source(provision, args.session_dir)
         same_source(before, middle)
         provision.verify_process(process, middle['identity'], EXPECTED, args.pid)
-        second = observe(memory, image, p, middle)
+        second = observe(memory, image, p, middle, args.descriptor_targets)
         result['cache_snapshots'].extend(second['cache_snapshots'])
+        if args.descriptor_targets:
+            result['descriptor_snapshots'].append(second['descriptor_snapshot'])
         compare_observations(first, second)
         require(provision.digest(Path(before['identity']['executable']).read_bytes()) == EXPECTED, 'PE changed during reads')
         after = source(provision, args.session_dir)
@@ -288,7 +404,8 @@ def main(argv=None):
         memory.check()
         result.update(diagnostic_complete=True, source_after=after, observation=stable_observation(second),
                       equal_newly_resolved_observations=2, executable_sha256=EXPECTED,
-                      equal_observations_scope='owner tuple and controlled/entry reflection')
+                      equal_observations_scope='owner tuple and controlled/entry reflection' +
+                          (' plus selected descriptor structural identity' if args.descriptor_targets else ''))
     except (OSError, ValueError, RuntimeError, KeyError) as error:
         result['refusal'] = str(error)[:512]
     finally:

@@ -111,8 +111,89 @@ int ChangedCurrentOwnerCannotCompleteOldPlan(){
     CHECK(journal.Incomplete()==1&&journal.At(0).appliedMask==1&&journal.At(1).appliedMask==3);
     return 0;
 }
+VehicleCameraPulseInput PulseInput(unsigned frame,std::uint64_t ms,float throttle=0){
+    const auto row=Sample(frame,ms);VehicleCameraPulseInput input;
+    input.owner=row.key.owner;input.space=row.key.space;input.seatGeneration=7;
+    input.gather=frame+200;input.input=row.key.tracking;input.ms=ms;
+    input.observedNs=std::int64_t(ms)*1000000;input.deadlineNs=input.observedNs+100000000;
+    input.mask=3;input.axes[0]=throttle;return input;
+}
+std::int64_t CameraNow(const Row& row){return std::int64_t(row.ms)*1000000+1;}
+int ShortPulseSurvivesLongNeutralPeriod(){
+    VehicleCameraPulseEvidence<Row> pulses;auto pre=Sample(1,1000);
+    CHECK(pulses.Input(PulseInput(1,1000))&&pulses.Observe(pre,CameraNow(pre),true));
+    for(unsigned eye=0;eye<2;++eye)CHECK(pulses.Enrich(pre.key,Current(pre.key),eye,[=](Row& r){r.applied[eye]=10+eye;}));
+    CHECK(pulses.Input(PulseInput(2,1020,.5f)));
+    auto active=Sample(2,1030);CHECK(pulses.Due(active.key,active.ms,CameraNow(active)));
+    CHECK(pulses.Observe(active,CameraNow(active),false));
+    CHECK(pulses.Input(PulseInput(3,1100,.5f)));
+    auto extra=Sample(3,1110);CHECK(!pulses.Due(extra.key,extra.ms,CameraNow(extra)));
+    CHECK(!pulses.Observe(extra,CameraNow(extra),false));
+    CHECK(pulses.Input(PulseInput(4,1220)));
+    auto post=Sample(4,1230);CHECK(pulses.Observe(post,CameraNow(post),false));
+    CHECK(pulses.Size()==1&&pulses.At(0).sampleMask==7&&pulses.At(0).end==VehicleCameraPulseEnd::Neutral);
+    CHECK(pulses.At(0).began.input==102&&pulses.At(0).lastActive.input==103&&pulses.At(0).neutral.input==104);
+    CHECK(pulses.At(0).samples[0].appliedMask==3&&pulses.At(0).samples[0].applied[1]==11);
+    for(unsigned frame=5;frame<100;++frame){const auto ms=1500+500*(frame-5);auto row=Sample(frame,ms);
+        CHECK(pulses.Input(PulseInput(frame,ms))&&pulses.Observe(row,CameraNow(row),true));}
+    CHECK(pulses.Size()==1&&pulses.Samples()==1&&pulses.Omitted()==0);
+    CHECK(pulses.At(0).samples[0].ms==1000&&pulses.At(0).samples[1].ms==1030&&pulses.At(0).samples[2].ms==1230);
+    return 0;
+}
+int PulseMissingPhasesAndBoundedRollover(){
+    VehicleCameraPulseEvidence<Row,2> pulses;
+    CHECK(pulses.Input(PulseInput(1,1000,.5f))&&pulses.Input(PulseInput(2,1100)));
+    auto post=Sample(2,1110);CHECK(pulses.Observe(post,CameraNow(post),false));
+    CHECK(pulses.At(0).sampleMask==4); // No baseline or rendered active frame was observed.
+    CHECK(pulses.Input(PulseInput(3,1200,.5f))&&pulses.Input(PulseInput(4,1300)));
+    CHECK(pulses.Input(PulseInput(5,1400,.5f))); // A new pulse cannot manufacture the missing post-frame.
+    CHECK(pulses.Size()==2&&pulses.Samples()==3&&pulses.Omitted()==1);
+    CHECK(pulses.At(0).sequence==2&&pulses.At(0).end==VehicleCameraPulseEnd::Replaced&&pulses.At(0).sampleMask==0);
+    CHECK(pulses.At(1).sequence==3&&pulses.At(1).end==VehicleCameraPulseEnd::Open);
+    CHECK(pulses.Input(PulseInput(6,3501,.5f)));
+    CHECK(pulses.TimedOut()==1&&pulses.At(1).end==VehicleCameraPulseEnd::TimedOut);
+    auto late=Sample(6,3510);CHECK(!pulses.Due(late.key,late.ms,CameraNow(late)));
+    return 0;
+}
+int PulseSourceBoundariesAndExactEyes(){
+    for(unsigned change=0;change<4;++change){
+        VehicleCameraPulseEvidence<Row> pulses;auto pre=Sample(1,1000),active=Sample(2,1030);
+        CHECK(pulses.Input(PulseInput(1,1000))&&pulses.Observe(pre,CameraNow(pre),true));
+        CHECK(pulses.Input(PulseInput(2,1020,.5f))&&pulses.Observe(active,CameraNow(active),false));
+        CHECK(pulses.Enrich(active.key,Current(active.key),0,[](Row& r){r.applied[0]=21;}));
+        CHECK(pulses.Enrich(active.key,Current(active.key),0,[](Row& r){r.applied[0]=99;}));
+        CHECK(pulses.DuplicateEyes()==1&&pulses.At(0).samples[1].applied[0]==21);
+        auto changed=PulseInput(3,1040,.5f);
+        switch(change){case 0:++changed.owner.generation;break;case 1:++changed.space;break;
+            case 2:++changed.seatGeneration;break;default:changed.mask=1;break;}
+        CHECK(pulses.Input(changed));
+        CHECK(pulses.Size()==2&&pulses.At(0).end==VehicleCameraPulseEnd::Interrupted&&pulses.At(1).sampleMask==0);
+        auto current=Current(active.key);current.owner=changed.owner;current.space=changed.space;
+        CHECK(!pulses.Enrich(active.key,current,1,[](Row& r){r.applied[1]=99;}));
+        CHECK(pulses.At(0).samples[1].appliedMask==1);
+    }
+    VehicleCameraPulseEvidence<Row> pulses;CHECK(pulses.Input(PulseInput(1,1000,.5f)));
+    pulses.Invalidate();CHECK(pulses.At(0).end==VehicleCameraPulseEnd::Interrupted);
+    auto row=Sample(1,1010);CHECK(!pulses.Due(row.key,row.ms,CameraNow(row)));
+    return 0;
+}
+int PulseClocksAndOldBaseline(){
+    VehicleCameraPulseEvidence<Row> pulses;auto pre=Sample(1,1000);
+    CHECK(pulses.Input(PulseInput(1,1000))&&pulses.Observe(pre,CameraNow(pre),true));
+    CHECK(pulses.Input(PulseInput(2,1501,.5f))&&pulses.At(0).sampleMask==0);
+    auto active=Sample(2,1510);const auto now=CameraNow(active);
+    CHECK(!pulses.Due(active.key,active.ms,1500999999)&&!pulses.Due(active.key,active.ms,1601000000));
+    auto old=active;old.key.tracking=101;CHECK(!pulses.Observe(old,now,false));
+    CHECK(pulses.Observe(active,now,false));
+    auto altered=PulseInput(2,1510,.5f); // Same transport generation cannot renew its source clock.
+    CHECK(!pulses.Input(altered)&&pulses.Size()==1&&pulses.At(0).end==VehicleCameraPulseEnd::Interrupted);
+    auto invalid=PulseInput(3,1520,.5f);invalid.deadlineNs=invalid.observedNs+100000001;
+    CHECK(!pulses.Input(invalid)&&pulses.InvalidInputs()==2);
+    return 0;
+}
 }
 int main(){
     if(HeadMotionAndLongRide()||OwnerAndSpaceBoundaries()||ExactEyesAndIncompleteEviction()||CompletedEvictionAndClockEdges()||ChangedCurrentOwnerCannotCompleteOldPlan())return 1;
-    std::puts("Vehicle camera evidence: bounded long-session retention, owner/space boundaries and exact eye joins passed");
+    if(ShortPulseSurvivesLongNeutralPeriod()||PulseMissingPhasesAndBoundedRollover()||PulseSourceBoundariesAndExactEyes()||PulseClocksAndOldBaseline())return 1;
+    std::puts("Vehicle camera evidence: bounded ride/pulse retention, source boundaries and exact eye joins passed");
 }

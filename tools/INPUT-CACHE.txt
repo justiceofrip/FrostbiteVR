@@ -19,6 +19,12 @@ current/previous cache pointers are at pair+0x1a0/+0x1a4. player+0xc74 is the
 separate Gather cache. Do not apply pair offsets to the Gather router or assume
 the pair is inline at a fixed player-relative offset.
 
+Optional --descriptor-targets also resolves the current entry's selected
+descriptor and its PE-verified +f4/+f8/+10c targets. It retains at most eight
+flattened child rows without recursive traversal. Partial coverage is explicit;
+two equal structural observations do not establish native invocation or lifetime.
+The original process access, dependency pins and read/time limits still apply.
+
 Aliases are non-atomic observations. A successful report does not establish
 producer ownership, cache-generation retirement, absence of deferred copies,
 native action authority, successful reloads or headset acceptance.

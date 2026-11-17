@@ -316,13 +316,18 @@ class CacheChecks(unittest.TestCase):
                         observer.source(fake, HERE)
 
     def test_read_functions_retain_reviewed_gates_and_read_order(self):
-        # Frozen AST fingerprint from the working observer, without requiring
-        # report archives or executing a second copy of the diagnostic.
+        # Keep the reviewed read primitives and source/owner gates frozen.
+        # Optional orchestration is covered by the behavioral checks above;
+        # adding an opt-in reader must not invalidate unrelated primitives.
         tree = ast.parse(TOOL.read_text(encoding='utf-8'))
+        unchanged = ('ScalarReadJournal', 'require', 'source', 'same_source',
+                     'profile', 'exact', 'reflected', 'resolve',
+                     'compare_observations', 'cache_variation')
         nodes = [node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.ClassDef))
-                 and node.name != 'main']
+                 and node.name in unchanged]
+        self.assertEqual(tuple(node.name for node in nodes), unchanged)
         fingerprint = hashlib.sha256('\n'.join(ast.dump(node) for node in nodes).encode()).hexdigest()
-        self.assertEqual(fingerprint, 'f68703a798805aa5e38e5da7e7107bc08ece6ad22ff4932ce8b6c7c43ff9bee7')
+        self.assertEqual(fingerprint, '7974066a8facbe576a68f3769fa40a3927fc821a402164fa5f93205b28f6810b')
         self.assertEqual((observer.MAX_BYTES, observer.MAX_SECONDS, observer.MAX_SCALAR_READS, observer.MAX_SCALAR_BYTES),
                          (65536, 5, 512, 16))
 
@@ -446,6 +451,130 @@ class CacheChecks(unittest.TestCase):
                     self.assertEqual(result['observation']['owner']['router'], self.router)
 
 
+class DescriptorChecks(unittest.TestCase):
+    def setUp(self):
+        self.process = FakeProcess()
+        self.entry, self.table, self.receiver = 0x24000000, 0x28000000, 0x29000000
+        self.vtable = 0x450000
+        self.root = self.table+16
+        self.process.word(self.entry+0x24, self.table)
+        self.process.data[self.entry+0x28] = 0
+        self.process.data[self.table+0x1d] = 0xff
+        self.row(self.root, self.receiver, flags=3, descendants=0)
+        self.process.word(self.receiver, self.vtable)
+        ranges = [(0x007d3ec3, 0x7a, True), (0x007bcdc0, 0x1bf, True),
+                  (self.vtable, 0x110, False), (0x420000, 48, True)]
+        for address, size, _ in ranges:
+            for index in range(size):
+                self.process.data[address+index] = 0x90
+        for index, offset in enumerate(observer.DESCRIPTOR_VIRTUAL_SLOTS):
+            self.process.word(self.vtable+offset, 0x420000+16*index)
+        immutable = dict(self.process.data)
+        class Image:
+            base = 0x400000
+            def section(_, rva, size=1):
+                address = _.base+rva
+                for start, length, code in ranges:
+                    if start <= address and address+size <= start+length:
+                        return (start-_.base, length, 0, length, 0x20000000 if code else 0x40000000)
+                raise ValueError('Synthetic PE section bounds')
+            def read(_, rva, size):
+                _.section(rva, size)
+                return bytes(immutable[_.base+rva+index] for index in range(size))
+        self.image = Image()
+        self.journal = dict(entries=[], truncated=False)
+        self.memory = provision.BudgetedProcess(observer.ScalarReadJournal(self.process, self.journal),
+                                              None, observer.MAX_BYTES, observer.MAX_SECONDS)
+
+    def row(self, address, receiver, flags=1, descendants=0, reference=0):
+        for offset, value in ((0, receiver), (4, reference), (8, flags)):
+            self.process.word(address+offset, value)
+        self.process.data[address+0xe] = descendants
+
+    def observe(self):
+        return observer.descriptor_targets(self.memory, self.image, self.entry)
+
+    def test_selected_receiver_is_read_from_descriptor_not_entry_vtable(self):
+        result = self.observe()
+        self.assertEqual(result['root']['receiver'], self.receiver)
+        self.assertEqual(result['root']['vtable'], self.vtable)
+        self.assertEqual([row['offset'] for row in result['root']['targets']], [0xf4, 0xf8, 0x10c])
+        self.assertNotIn((self.entry, 4), self.process.reads)
+        self.assertFalse(result['invocation_observed'])
+        self.assertFalse(result['lifetime_retirement_proven'])
+        self.assertFalse(result['allocation_extent_proven'])
+
+    def test_related_entry_uses_its_own_selector_and_table(self):
+        other_entry, other_table = 0x2a000000, 0x2b000000
+        self.process.data[self.table+0x1d] = 0
+        self.process.word(self.table+16, other_entry)
+        self.process.word(other_entry+0x24, other_table)
+        self.process.data[other_entry+0x28] = 2
+        self.row(other_table+48, self.receiver)
+        result = self.observe()
+        self.assertEqual(result['selection']['related_entry'], other_entry)
+        self.assertEqual(result['root']['address'], other_table+48)
+
+    def test_selector_and_address_caps_precede_table_indirection(self):
+        for address, value, message in ((self.entry+0x28, 255, 'Descriptor selector'),
+                                        (self.table+0x1d, 254, 'Related descriptor selector')):
+            with self.subTest(address=address):
+                self.setUp()
+                self.process.data[address] = value
+                with self.assertRaisesRegex(ValueError, message):
+                    self.observe()
+                self.assertNotIn((self.receiver, 4), self.process.reads)
+        self.setUp()
+        self.process.word(self.entry+0x24, 0xfffffff0)
+        with self.assertRaisesRegex(ValueError, 'Descriptor table pointer bounds'):
+            self.observe()
+        self.assertNotIn((0x10000000d, 1), self.process.reads)
+
+    def test_child_walk_skips_flattened_subtrees_and_never_recurses(self):
+        self.process.data[self.root+0xe] = 3
+        self.row(self.root+16, self.receiver, descendants=1)
+        # The grandchild at+32 is deliberately unmapped.
+        self.row(self.root+48, 0, flags=0)
+        result = self.observe()
+        self.assertEqual([row['address'] for row in result['children']], [self.root+16, self.root+48])
+        self.assertFalse(result['recursive_descendants_observed'])
+        self.assertFalse(result['children'][1]['targets_observed'])
+        self.assertNotIn((self.root+32, 4), self.process.reads)
+
+    def test_large_count_is_partial_and_malformed_subtree_refuses_before_receiver_read(self):
+        self.process.data[self.root+0xe] = 255
+        result = self.observe()
+        self.assertEqual(result['children'], [])
+        self.assertIn('cap', result['child_omission'])
+        self.assertNotIn((self.root+16, 4), self.process.reads)
+        self.setUp()
+        self.process.data[self.root+0xe] = 1
+        foreign = 0x2e000000
+        self.row(self.root+16, foreign, descendants=255)
+        with self.assertRaisesRegex(ValueError, 'Child descriptor subtree exceeds parent extent'):
+            self.observe()
+        self.assertNotIn((foreign, 4), self.process.reads)
+
+    def test_foreign_or_changed_virtual_table_refuses(self):
+        self.process.word(self.receiver, 0x2e000000)
+        with self.assertRaisesRegex(ValueError, 'Synthetic PE section bounds'):
+            self.observe()
+        self.setUp()
+        self.process.word(self.vtable+0xf4, 0x430000)
+        with self.assertRaisesRegex(ValueError, 'Live PE bytes differ'):
+            self.observe()
+        self.assertNotIn((0x430000, 16), self.process.reads)
+
+    def test_descriptor_identity_participates_in_original_two_pass_check(self):
+        descriptor = self.observe()
+        first = dict(owner={}, controlled={}, entry={}, descriptor_identity=descriptor['identity'])
+        second = copy.deepcopy(first)
+        observer.compare_observations(first, second)
+        second['descriptor_identity']['root']['receiver'] += 4
+        with self.assertRaisesRegex(ValueError, 'Two newly resolved observations differ'):
+            observer.compare_observations(first, second)
+
+
 class CommandChecks(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='input-cache-test-')
@@ -514,6 +643,17 @@ class CommandChecks(unittest.TestCase):
         self.assertIn('Pinned dependency changed: fixture_17', result.stderr)
         self.assertFalse(self.import_marker.exists())
         self.assertFalse(self.output.exists())
+
+    def test_descriptor_opt_in_keeps_dependency_and_source_admission(self):
+        self.write_pins()
+        result = self.command('--descriptor-targets')
+        self.assertEqual(result.returncode, 3, result.stderr)
+        report = json.loads(self.output.read_text(encoding='utf-8'))
+        self.assertTrue(report['descriptor_targets_requested'])
+        self.assertEqual(report['descriptor_snapshots'], [])
+        self.assertEqual(report['descriptor_bounds']['maximum_flattened_child_rows'], 8)
+        self.assertIn('Read source file', report['refusal'])
+        self.assertFalse(report['native_authority'])
 
     def test_missing_manifest_fails_before_source_or_process(self):
         result = self.command()
