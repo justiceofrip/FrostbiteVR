@@ -77,6 +77,27 @@ def snapshot(now, nonce, generation, role="driver", state=None):
                 invalid_reason="no_shot_publication", observed_ns=now, vehicleObservation=obs)
 
 
+def pending_gather(sample):
+    """Mirror WriteVehicleObservation's unavailable branch, not partial input."""
+    value = sample["vehicleObservation"]
+    for key in ("role", "consumers", "consumedControls", "playerPermissionMask"):
+        value.pop(key)
+    value.update(available=False, reason="gather_pending", input=None, capabilities=None, neutralRearm=None)
+
+
+# Exact vehicle section from private110/01's first refused response. Its outer
+# observed_ns was 344160891538100; tests shift clocks together, never renew them.
+LIVE110_PENDING = dict(observationOnly=True, available=False, reason="gather_pending",
+    gatherSequence=6457, sampledNs=344160888395900, inputObservedNs=344160872208900,
+    inputDeadlineNs=344160972208900, validUntilNs=344160968778700,
+    owner=dict(manager=134873920, player=1179031776, soldier=1157039184, weak=135212712,
+        controlled=1182689648, entry=1182700288, router=108212896, cache=119058928,
+        actorGeneration=1, seatGeneration=1, inputEpoch=1, movementEpoch=1),
+    routeFingerprint=3637031354888992177, slot=0, allowedRead=True, allowedMask=1909,
+    nativePlaying=True, routesVerified=True, profileVerified=True, consumersVerified=True,
+    input=None, capabilities=None, neutralRearm=None)
+
+
 class AdmissionTests(unittest.TestCase):
     def test_frozen_driver_gunner_and_combined_axis_schema(self):
         for role in ("driver", "gunner", "driver_gunner"):
@@ -539,6 +560,267 @@ class AssembledVehicleTests(unittest.TestCase):
         self.assertEqual(code, 2, result)
         self.assertEqual(self.calls, [])
         self.assertEqual(len(self.requests), 1)
+
+    def test_live110_pending_shape_reacquires_two_fully_admitted_samples(self):
+        def sample(value, driver):
+            obs = value["vehicleObservation"]
+            if driver.snapshot_index == 1:
+                obs = copy.deepcopy(LIVE110_PENDING)
+                shift = value["observed_ns"] - 344160891538100
+                for key in ("sampledNs", "inputObservedNs", "inputDeadlineNs", "validUntilNs"):
+                    obs[key] += shift
+                value["vehicleObservation"] = obs
+            else:
+                for key in v.PENDING_COHORT:
+                    obs[key] = copy.deepcopy(LIVE110_PENDING[key])
+                obs["gatherSequence"] += LIVE110_PENDING["gatherSequence"]
+                # The retained native mask permits action 2, not synthetic 1.
+                obs["capabilities"]["axes"][1]["mapping"]["action"] = 2
+        self.snapshot_mutation = sample
+        self.response_delay = lambda d: 100_000_000 if d.snapshot_index == 1 else 5_000_000
+        code, result = self.assembled()
+        self.assertEqual(code, 0, result)
+        self.assertEqual(len(self.requests), 3)
+        self.assertEqual(self.calls, [["stick l 0.4 0.5"], ["stick l 0 0"]])
+        self.assertEqual(self.driver.vehicle_reference, self.samples[1])
+        self.assertEqual(result["vehicleStimulus"]["admissionNonce"], self.samples[2]["nonce"])
+        self.assertEqual(self.driver.pending_observation_requests, 1)
+        self.assertIsNone(self.driver.pending_observation)
+        artifacts = Path(result["artifactDirectory"])
+        self.assertEqual(json.loads((artifacts / "snapshot-001.json").read_text()), self.samples[0])
+        events = [json.loads(line) for line in (artifacts / "events.jsonl").read_text().splitlines()]
+        discarded = next(e for e in events if e["type"] == "vehicle_gather_pending_discarded")
+        self.assertFalse(discarded["commandAuthority"])
+        self.assertEqual(discarded["observationDeadlineNs"] - self.requests[0]["startedNs"], 500_000_000)
+        self.assertLess(result["vehicleStimulus"]["startedNs"], discarded["observationDeadlineNs"])
+        self.assertEqual(self.driver.hard_deadline - self.driver.started, 10*t.NS)
+        self.assertEqual(result["vehicleStimulus"]["originalDeadlineNs"] - result["vehicleStimulus"]["startedNs"],
+                         400_000_000)
+        self.assertTrue(all(v.neutral(r["input"]) and r["actionDeadlineNs"] is None
+            and r["motionStartedNs"] is None and not r["pendingCommand"] for r in self.requests))
+        for index in range(1, 4):
+            timing = json.loads((artifacts / f"request-{index:03}-timing.json").read_text())
+            self.assertEqual(timing["responseDeadlineNs"] - timing["requestStartedNs"], 250_000_000)
+        self.assertLess(result["vehicleStimulus"]["neutralCommittedNs"], result["vehicleStimulus"]["originalDeadlineNs"])
+        self.assertFalse(result["nativeAcceptance"])
+
+    def test_second_preflight_pending_preserves_first_admitted_reference(self):
+        self.snapshot_mutation = lambda s, d: pending_gather(s) if d.snapshot_index == 2 else None
+        code, result = self.assembled()
+        self.assertEqual(code, 0, result)
+        self.assertEqual(len(self.requests), 3)
+        self.assertEqual(self.driver.vehicle_reference, self.samples[0])
+        self.assertEqual(result["vehicleStimulus"]["admissionNonce"], self.samples[2]["nonce"])
+
+    def test_second_pending_request_can_retain_original_diagnostic_clocks(self):
+        def mutate(sample, driver):
+            if driver.snapshot_index == 1:
+                pending_gather(sample)
+            elif driver.snapshot_index == 2:
+                sample["vehicleObservation"] = copy.deepcopy(self.samples[0]["vehicleObservation"])
+        self.snapshot_mutation = mutate
+        code, result = self.assembled()
+        self.assertEqual(code, 0, result)
+        self.assertEqual(len(self.requests), 4)
+        self.assertEqual(self.driver.pending_observation_requests, 2)
+        self.assertEqual(self.driver.vehicle_reference, self.samples[2])
+        self.assertEqual(result["vehicleStimulus"]["admissionNonce"], self.samples[3]["nonce"])
+        self.assertEqual(self.samples[0]["vehicleObservation"], self.samples[1]["vehicleObservation"])
+
+    def test_pending_exhaustion_has_finite_fresh_requests_and_no_commands(self):
+        self.snapshot_mutation = lambda s, d: pending_gather(s)
+        code, result = self.assembled()
+        self.assertEqual(code, 2, result)
+        self.assertIn("pending vehicle reacquisition request budget exhausted", result["error"])
+        self.assertEqual(len(self.requests), 1 + v.MAX_PENDING_REACQUISITIONS)
+        self.assertEqual(self.calls, [])
+        self.assertIsNone(self.driver.latest_snapshot)
+        self.assertEqual(result["commands"], 0)
+        self.assertFalse(result["pendingCommand"])
+        self.assertFalse(result["normalStopRequired"])
+        self.assertEqual(result["release"], "no owned vehicle stick remains active")
+        for index, value in enumerate(self.samples, 1):
+            self.assertEqual(json.loads((self.driver.artifacts.directory / f"snapshot-{index:03}.json").read_text()), value)
+
+    def test_pending_recovery_never_renews_original_observation_or_invocation_bound(self):
+        for field in ("observation", "deadline", "stage_deadline"):
+            with self.subTest(field=field):
+                self.setUp()
+                self.snapshot_mutation = lambda s, d: pending_gather(s) if d.snapshot_index <= 2 else None
+                self.response_delay = lambda d: 150_000_000 if d.snapshot_index <= 2 else 240_000_000
+                def shorten(path, driver):
+                    if field != "observation" and driver.pending_observation is not None:
+                        setattr(driver, field, min(getattr(driver, field), self.requests[0]["startedNs"] + 400_000_000))
+                self.before_read = shorten
+                code, result = self.assembled()
+                self.assertEqual(code, 2, result)
+                self.assertIn("deadline" if field != "stage_deadline" else "maximumGestureNs", result["error"])
+                self.assertEqual(len(self.requests), 3)
+                self.assertEqual(self.calls, [])
+                self.assertLess(self.clock.now - self.requests[0]["startedNs"],
+                                510_000_000 if field == "observation" else 410_000_000)
+
+    def test_pending_and_late_response_recovery_cannot_chain(self):
+        for first in ("pending", "late"):
+            with self.subTest(first=first):
+                self.setUp()
+                self.snapshot_mutation = lambda s, d: pending_gather(s) if d.snapshot_index == (1 if first == "pending" else 2) else None
+                self.response_delay = lambda d: 375_000_000 if d.snapshot_index == (2 if first == "pending" else 1) else 0
+                code, result = self.assembled()
+                self.assertEqual(code, 2, result)
+                self.assertEqual(len(self.requests), 2)
+                self.assertEqual(self.calls, [])
+                self.assertIn("snapshot response not received within request budget" if first == "pending"
+                    else "untouched neutral preflight", result["error"])
+
+    def test_pending_cohort_and_successor_nonce_cannot_change(self):
+        faults = {
+            "nonce": lambda s: s.update(nonce=str(int(s["nonce"])+1)),
+            "seat": lambda s: s["vehicleObservation"]["owner"].update(seatGeneration=999),
+            "actor": lambda s: s["vehicleObservation"]["owner"].update(controlled=999),
+            "route": lambda s: s["vehicleObservation"].update(routeFingerprint=999),
+            "slot": lambda s: s["vehicleObservation"].update(slot=1),
+            "permission": lambda s: s["vehicleObservation"].update(allowedMask=99),
+            "gather": lambda s: s["vehicleObservation"].update(gatherSequence=100),
+            "input": lambda s: s["vehicleObservation"].update(inputObservedNs=self.samples[0]["vehicleObservation"]["inputObservedNs"]),
+        }
+        for pending_successor in (False, True):
+            for fault, corrupt in faults.items():
+                with self.subTest(pending_successor=pending_successor, fault=fault):
+                    self.setUp()
+                    def mutate(s, d):
+                        if d.snapshot_index == 1 or pending_successor:
+                            pending_gather(s)
+                        if d.snapshot_index == 2:
+                            corrupt(s)
+                    self.snapshot_mutation = mutate
+                    code, result = self.assembled()
+                    self.assertEqual(code, 2, result)
+                    self.assertEqual(self.calls, [])
+                    self.assertEqual(len(self.requests), 2)
+
+    def test_pending_shape_clocks_and_refusal_reasons_remain_strict(self):
+        faults = {
+            "unsupported": lambda s: s["vehicleObservation"].update(reason="profile_unavailable"),
+            "consumer": lambda s: s["vehicleObservation"].update(consumersVerified=False),
+            "focus": lambda s: s["vehicleObservation"].update(reason="focus_loss"),
+            "clock_reason": lambda s: s["vehicleObservation"].update(reason="source_clock_changed"),
+            "onfoot": lambda s: s["vehicleObservation"]["owner"].update(controlled=s["vehicleObservation"]["owner"]["soldier"]),
+            "future": lambda s: s["vehicleObservation"].update(sampledNs=s["observed_ns"]+t.NS),
+            "expired": lambda s: s["vehicleObservation"].update(validUntilNs=s["observed_ns"]-1),
+            "extended": lambda s: s["vehicleObservation"].update(inputDeadlineNs=s["observed_ns"]+t.NS),
+            "input": lambda s: s["vehicleObservation"].update(input={}),
+        }
+        for fault, corrupt in faults.items():
+            with self.subTest(fault=fault):
+                self.setUp()
+                def mutate(s, d):
+                    pending_gather(s)
+                    corrupt(s)
+                self.snapshot_mutation = mutate
+                code, result = self.assembled()
+                self.assertEqual(code, 2, result)
+                self.assertEqual(self.calls, [])
+                self.assertEqual(len(self.requests), 1)
+
+    def test_pending_successor_requires_full_current_admission(self):
+        faults = {
+            "focus": lambda o: o["input"].update(focused=False),
+            "expired": lambda o: o.update(validUntilNs=o["sampledNs"]),
+            "consumer": lambda o: o["consumers"].update(driver=0),
+            "nonzero": lambda o: o["input"]["hands"][0].update(stickX=.5),
+            "rearm": lambda o: o["neutralRearm"].update(armedLeft=False),
+        }
+        for fault, corrupt in faults.items():
+            with self.subTest(fault=fault):
+                self.setUp()
+                def mutate(s, d):
+                    if d.snapshot_index == 1:
+                        pending_gather(s)
+                    else:
+                        corrupt(s["vehicleObservation"])
+                self.snapshot_mutation = mutate
+                code, result = self.assembled()
+                self.assertEqual(code, 2, result)
+                self.assertEqual(self.calls, [])
+                self.assertEqual(len(self.requests), 2)
+
+    def test_pending_reacquisition_refuses_input_or_action_start(self):
+        faults = dict(held_left=True, held_right=True, held_trigger=True, held_buttons={"x"},
+            pending_command=True, pending_stick=[.4, .5], pending_target=3,
+            action_deadline=9_000_000_000, motion_started=2_000_000_000,
+            last_write=2_000_000_000, commands=1, stick=[.4, .5],
+            cleanup_mode=True, releasing=True, release_attempted=True)
+        for index in (1, 2):
+            for field, value in faults.items():
+                with self.subTest(index=index, field=field):
+                    self.setUp()
+                    def mutate(s, d):
+                        if d.snapshot_index == 1:
+                            pending_gather(s)
+                        if d.snapshot_index == index:
+                            setattr(d, field, copy.deepcopy(value))
+                            if field == "releasing":
+                                # Normal release retains the original action deadline.
+                                d.action_deadline = d.last_request + self.request["holdMs"] * 1_000_000
+                    self.snapshot_mutation = mutate
+                    code, result = self.assembled()
+                    self.assertEqual(code, 2, result)
+                    self.assertIn("untouched neutral preflight", result["error"])
+                    self.assertEqual(self.calls, [])
+                    self.assertEqual(len(self.requests), index)
+
+    def test_pending_reacquisition_refuses_external_ownership_or_simulator_changes(self):
+        faults = {
+            "source": (1, "vehicle session ownership/source/version changed"),
+            "command": (1, "command file replaced by another writer"),
+            "owner_record": (2, "vehicle command owner record changed"),
+            "request": (1, "snapshot request changed by another writer"),
+            "control": (2, "unowned vehicle controller input changed"),
+            "pose": (2, "vehicle simulator tracked poses changed"),
+            "focus": (2, "vehicle simulator focus/tracking lost"),
+        }
+        for fault, (request_count, refusal) in faults.items():
+            with self.subTest(fault=fault):
+                self.setUp()
+                self.snapshot_mutation = lambda s, d: pending_gather(s) if d.snapshot_index == 1 else None
+                altered = []
+                def change(path, driver):
+                    if driver.pending_observation is None or altered:
+                        return
+                    # This hook runs on the session read, after the owner-record
+                    # check and simulator state publication. A later change can
+                    # allow one snapshot request, never command authority.
+                    altered.append(path)
+                    if fault == "source":
+                        self.session["source_sha256"] = "b"*64
+                        self.write(self.folder / "session.json", self.session)
+                    elif fault == "command":
+                        (self.run / "sim/command.txt").write_bytes(b"note foreign-writer\n")
+                    elif fault == "owner_record":
+                        self.write(self.run / "live-driver-owner.json", dict(pending=True))
+                    elif fault == "request":
+                        driver.request_path.write_bytes(b"9\n")
+                    elif fault == "control":
+                        self.state["controls"]["trigR"] = .5
+                    elif fault == "pose":
+                        self.state["head"]["pos"][0] = 1
+                    else:
+                        self.state["sessionState"] = "VISIBLE"
+                self.before_read = change
+                code, result = self.assembled()
+                self.assertEqual(code, 2, result)
+                self.assertIn(refusal, result["error"])
+                self.assertEqual(altered, [self.driver.session_path])
+                self.assertEqual(self.calls, [])
+                self.assertEqual(self.windows, [])
+                self.assertEqual(result["commands"], 0)
+                self.assertFalse(result["pendingCommand"])
+                self.assertIsNone(self.driver.latest_snapshot)
+                self.assertEqual(len(self.requests), request_count)
+                self.assertEqual(self.driver.pending_observation_requests, request_count - 1)
+                self.assertTrue(all(r["actionDeadlineNs"] is None and r["motionStartedNs"] is None
+                                    and not r["pendingCommand"] for r in self.requests))
 
     def test_either_initial_late_response_is_discarded_for_fresh_successor(self):
         for delayed in (1, 2):

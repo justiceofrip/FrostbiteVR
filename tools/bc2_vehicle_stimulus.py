@@ -16,11 +16,16 @@ from pathlib import Path
 PERIOD = 25_000_000
 COMMAND_WINDOW = 250_000_000
 INITIAL_OBSERVATION_WINDOW = 500_000_000
+MAX_PENDING_REACQUISITIONS = 2
 RELEASE_RESERVE = COMMAND_WINDOW + 2 * PERIOD
 OWNER = ("manager", "player", "soldier", "weak", "controlled", "entry", "router", "cache",
          "actorGeneration", "seatGeneration", "inputEpoch", "movementEpoch")
 AXES = (("throttle", "left_stick_y", 0), ("steer", "left_stick_x", 1),
         ("lookYaw", "right_stick_x", 8), ("lookPitch", "right_stick_y", 7))
+PENDING_COHORT = ("owner", "routeFingerprint", "slot", "allowedMask", "allowedRead",
+                  "nativePlaying", "routesVerified", "profileVerified", "consumersVerified")
+PENDING_FIELDS = set(PENDING_COHORT) | {"observationOnly", "available", "reason", "gatherSequence",
+    "sampledNs", "inputObservedNs", "inputDeadlineNs", "validUntilNs", "input", "capabilities", "neutralRearm"}
 
 
 def neutral(controls):
@@ -133,6 +138,8 @@ def driver_class(t):
             self.attempted = False
             self.initial_observation_waited = False
             self.initial_discarded_snapshot = None
+            self.pending_observation = None
+            self.pending_observation_requests = 0
             super().__init__(args)
             require(self.manifest["version"] == args.vehicle_version
                     and self.manifest["source_sha256"] == args.vehicle_source_sha256,
@@ -236,19 +243,22 @@ def driver_class(t):
         def snapshot_readiness_scope(self):
             return None
 
-        def snapshot_timeout(self, now, response=None):
-            # Either neutral preflight may wait once for its original response.
-            # attempted marks method entry, not input publication; all motion
-            # and custody gates below must still be untouched.
-            if (not self.entry_admitted or self.vehicle_request is None
-                    or self.initial_observation_waited or self.motion_started is not None
+        def neutral_preflight(self):
+            # attempted marks method entry, not input publication.
+            return not (not self.entry_admitted or self.vehicle_request is None
+                    or self.motion_started is not None
                     or self.last_write != 0 or self.commands != 0
                     or self.action_deadline is not None or self.pending_command
                     or self.pending_stick is not None or self.pending_target is not None
                     or any(self.stick) or self.unsafe_owner or self.cleanup_mode
                     or self.releasing or self.release_attempted
                     or self.held_left or self.held_right or self.held_trigger or self.held_buttons
-                    or self.snapshot_refresh_started is not None):
+                    or self.snapshot_refresh_started is not None)
+
+        def snapshot_timeout(self, now, response=None):
+            # Pending-Gather and late-response recovery share one allowance;
+            # neither can chain into the other or retry an attempted pulse.
+            if self.initial_observation_waited or not self.neutral_preflight():
                 return super().snapshot_timeout(now, response)
             self.initial_observation_waited = True
             wait_deadline = min(self.deadline, self.stage_deadline,
@@ -322,9 +332,99 @@ def driver_class(t):
             return result
 
         def snapshot_usable(self, snapshot, now):
-            # Expired/missing/refused input fails here, before shared receive's
-            # optional refresh branch. This mode never automatically retries.
+            if self.pending_observation is not None:
+                self.check_pending_observation_owner()
+            value = snapshot.get("vehicleObservation")
+            if isinstance(value, dict) and value.get("available") is False and value.get("reason") == "gather_pending":
+                return False
+            # Every other refusal still fails before shared receive's optional
+            # expired-source refresh. No unavailable sample grants authority.
             self.admit_snapshot(snapshot, now, n(snapshot["nonce"]))
+            return True
+
+        def check_pending_cohort(self, snapshot, before, *, available):
+            value, old = snapshot["vehicleObservation"], before["vehicleObservation"]
+            require(n(snapshot["nonce"]) > n(before["nonce"]), "reused vehicle snapshot nonce")
+            require(all(value[k] == old[k] for k in PENDING_COHORT),
+                    "pending vehicle owner/seat/route/permission cohort changed")
+            require(n(value["gatherSequence"]) >= n(old["gatherSequence"])
+                    and n(value["inputObservedNs"]) >= n(old["inputObservedNs"])
+                    and n(value["sampledNs"]) >= n(old["sampledNs"]),
+                    "pending vehicle Gather/input observation regressed")
+            if available:
+                require(n(value["gatherSequence"]) > n(old["gatherSequence"])
+                        and n(value["inputObservedNs"]) > n(old["inputObservedNs"]),
+                        "reused pending vehicle Gather/input observation")
+            elif n(value["gatherSequence"]) == n(old["gatherSequence"]):
+                require(all(value[k] == old[k] for k in
+                    ("sampledNs", "inputObservedNs", "inputDeadlineNs", "validUntilNs")),
+                    "original pending vehicle clocks changed")
+
+        def check_pending_observation_owner(self):
+            observation = self.pending_observation
+            self.bounds(t.time.perf_counter_ns())
+            self.check_owner_record()
+            state = t.read_until(observation["deadlineNs"], self.read_state)
+            self.ownership(state)
+            self.check_input(state)
+            require(n(state["captureSeq"]) == self.capture_sequence and neutral(state["controls"]),
+                    "pending vehicle observation lost neutral command ownership")
+            require(t.read_until(observation["deadlineNs"], t.read_bytes, self.request_path, 22) == self.request_bytes,
+                    "snapshot request changed by another writer")
+            self.bounds(t.time.perf_counter_ns())
+
+        def defer_invalid_snapshot(self, snapshot, now):
+            # The native serializer withholds role, consumers and all input on
+            # revocation. Retained labels constrain a successor, never admit it.
+            require(self.neutral_preflight() and (self.pending_observation is not None
+                    or not self.initial_observation_waited), "pending vehicle recovery requires untouched neutral preflight")
+            value = snapshot["vehicleObservation"]
+            require(set(value) == PENDING_FIELDS and value["observationOnly"] is True
+                    and value["available"] is False and value["reason"] == "gather_pending"
+                    and all(value[k] is None for k in ("input", "capabilities", "neutralRearm")),
+                    "unsupported pending vehicle observation shape")
+            require(snapshot["schema"] == "fvr.bc2.live-mechanism-snapshot.v1"
+                    and type(snapshot["valid"]) is bool and n(snapshot["nonce"]) == self.pending_nonce
+                    and self.last_request <= n(snapshot["observed_ns"]) <= now,
+                    "pending vehicle snapshot schema/nonce/publication clock invalid")
+            owner = value["owner"]
+            require(set(owner) == set(OWNER) and all(n(owner[k]) > 0 for k in OWNER)
+                    and n(owner["controlled"]) != n(owner["soldier"])
+                    and all(value[k] is True for k in PENDING_COHORT[4:])
+                    and n(value["routeFingerprint"]) > 0 and n(value["slot"]) >= 0
+                    and 0 < n(value["allowedMask"]) <= 0xffffffff,
+                    "pending vehicle seated owner/route/consumer proof unavailable")
+            observed, sampled, deadline, until = (n(value[k]) for k in
+                ("inputObservedNs", "sampledNs", "inputDeadlineNs", "validUntilNs"))
+            require(n(value["gatherSequence"]) > 0 and 0 < observed <= sampled <= now < until <= deadline
+                    and 0 < deadline - observed <= t.SNAPSHOT_PERIOD,
+                    "expired/invalid original pending vehicle clocks")
+            if self.vehicle_reference is not None:
+                self.check_pending_cohort(snapshot, self.vehicle_reference, available=False)
+            if self.pending_observation is None:
+                self.initial_observation_waited = True
+                self.pending_observation = dict(deadlineNs=min(self.deadline, self.stage_deadline,
+                    self.last_request + INITIAL_OBSERVATION_WINDOW),
+                    commandIdentity=(self.sequence, self.sentinel, self.command_hash, self.last_write, self.last_commit),
+                    reference=copy.deepcopy(snapshot))
+            else:
+                self.check_pending_cohort(snapshot, self.pending_observation["reference"], available=False)
+            self.check_pending_observation_owner()
+            evaluated = t.time.perf_counter_ns()
+            require(evaluated < until, "expired/invalid original pending vehicle clocks")
+            require(evaluated - self.last_request <= t.SNAPSHOT_TIMEOUT,
+                    "pending vehicle response exceeded original response deadline")
+            require(self.pending_observation_requests < MAX_PENDING_REACQUISITIONS,
+                    "pending vehicle reacquisition request budget exhausted")
+            self.pending_observation_requests += 1
+            self.pending_observation["reference"] = copy.deepcopy(snapshot)
+            self.artifacts.event(dict(type="vehicle_gather_pending_discarded", nonce=snapshot["nonce"],
+                commandAuthority=False, observationDeadlineNs=self.pending_observation["deadlineNs"],
+                freshRequest=self.pending_observation_requests, maximumFreshRequests=MAX_PENDING_REACQUISITIONS))
+            self.latest_snapshot = None
+            self.pending_nonce = None
+            self.request_snapshot()
+            self.bounds(t.time.perf_counter_ns())
             return True
 
         def admit_snapshot(self, snapshot, now, nonce):
@@ -337,6 +437,9 @@ def driver_class(t):
             value = admit(t, snapshot, now, nonce, self.vehicle_request["role"])
             require(n(snapshot["observed_ns"]) >= self.last_request,
                     "vehicle snapshot predates its nonce request")
+            if self.pending_observation is not None:
+                self.bounds(t.time.perf_counter_ns())
+                self.check_pending_cohort(snapshot, self.pending_observation["reference"], available=True)
             for before in (self.vehicle_reference, self.initial_discarded_snapshot):
                 if before is None:
                     continue
@@ -390,6 +493,12 @@ def driver_class(t):
 
         def bounds(self, now):
             super().bounds(now)
+            if self.pending_observation is not None:
+                require(now < self.pending_observation["deadlineNs"], "original pending vehicle observation deadline reached")
+                require(self.neutral_preflight() and
+                        (self.sequence, self.sentinel, self.command_hash, self.last_write, self.last_commit)
+                        == self.pending_observation["commandIdentity"],
+                        "pending vehicle recovery requires untouched neutral preflight")
             if self.releasing and not self.cleanup_mode and not self.pending_command:
                 require(now + COMMAND_WINDOW <= self.action_deadline,
                         "vehicle zero lost its full original publication/ACK reserve")
@@ -444,6 +553,9 @@ def driver_class(t):
             self.fresh()
             self.vehicle_reference = copy.deepcopy(self.latest_snapshot)
             self.fresh()
+            if self.pending_observation is not None:
+                self.check_pending_observation_owner()
+                self.pending_observation = None
             started = t.time.perf_counter_ns()
             previous_stage = self.stage_deadline
             self.action_deadline = min(previous_stage, self.deadline - RELEASE_RESERVE,
