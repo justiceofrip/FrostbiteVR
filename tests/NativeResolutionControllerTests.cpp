@@ -1,6 +1,9 @@
 #include "Test.h"
 #include "../src/platform/windows/NativeResolutionControllerPolicy.h"
+#include "../src/games/bc2/Bc2ResolutionCleanup.h"
+#include <atomic>
 #include <cstring>
+#include <thread>
 using namespace fvr::bc2;
 namespace policy=fvr::bc2::resolutionController;
 namespace {
@@ -47,6 +50,99 @@ int Receipts(){
         case 4:r.guardDrained=0;break;case 5:r.guardReleased=0;break;case 6:r.guardNeverInstalled=1;break;case 7:r.guardInstalled=0;break;case 8:r.hookRestored=0;break;case 9:r.callbacksDrained=0;break;}CHECK(!policy::ReleaseComplete(r));}
     return 0;
 }
+struct CleanupEvent {
+    std::mutex mutex;std::condition_variable changed;bool signaled=false;
+    void Signal(){std::lock_guard lock(mutex);signaled=true;changed.notify_all();}
+    bool Wait(const ResolutionCleanupDeadline& deadline){
+        std::unique_lock lock(mutex);return changed.wait_until(lock,deadline.End(),[this]{return signaled;});
+    }
+};
+int CleanupContention(bool disableSucceeds){
+    // Hold the watchdog inside native disable until the explicit release has
+    // actually reached the occupied gate. Neither scheduling nor a sleep is
+    // used to guess that the two cleanup calls overlap.
+    ResolutionCleanup cleanup;CleanupEvent disabling,releaseContended,releaseDraining,callbacksEnded;
+    const ResolutionCleanupDeadline watchdogDeadline(std::chrono::milliseconds(2000)),releaseDeadline(std::chrono::milliseconds(2000));
+    std::atomic<unsigned> disableCalls=0,drainCalls=0;std::atomic<bool> synchronized=true,physicallyDisabled=false;
+    ResolutionCleanupResult watchdog{};
+    std::thread worker([&]{watchdog=cleanup.Complete(watchdogDeadline,[](const auto&){return true;},[&]{
+        ++disableCalls;disabling.Signal();
+        if(!releaseContended.Wait(watchdogDeadline))synchronized=false;
+        physicallyDisabled=disableSucceeds;return ResolutionDisableResult{disableSucceeds,true,disableSucceeds?0:5};
+    },[&](const auto& until){++drainCalls;return callbacksEnded.Wait(until);});});
+    const bool entered=disabling.Wait(releaseDeadline);
+    std::thread callback([&]{
+        if(disableSucceeds){if(!releaseDraining.Wait(releaseDeadline))synchronized=false;callbacksEnded.Signal();}
+    });
+    const auto released=cleanup.Complete(releaseDeadline,[](const auto&){return true;},[&]{
+        ++disableCalls;return ResolutionDisableResult{true,true,0};
+    },[&](const auto& until){
+        ++drainCalls;if(!physicallyDisabled.load()||until.End()!=releaseDeadline.End())synchronized=false;
+        releaseDraining.Signal();return callbacksEnded.Wait(until);
+    },[&]{releaseContended.Signal();});
+    worker.join();callback.join();
+    CHECK(entered&&synchronized&&released.contended&&released.disableCompleted&&disableCalls==1);
+    CHECK(released.Complete()==disableSucceeds&&watchdog.Complete()==disableSucceeds);
+    CHECK(released.disable.status==(disableSucceeds?0:5));
+    CHECK(disableSucceeds?drainCalls==2:drainCalls==0);
+    // In particular, a real failed disable must remain failed. A later caller
+    // cannot silently rerun it and turn this episode into a successful receipt.
+    const auto repeated=cleanup.Complete(releaseDeadline,[](const auto&){return true;},[&]{
+        ++disableCalls;return ResolutionDisableResult{true,true,0};
+    },[&](const auto& until){++drainCalls;return callbacksEnded.Wait(until);});
+    CHECK(repeated.Complete()==disableSucceeds&&repeated.disable.status==released.disable.status&&disableCalls==1);
+    return 0;
+}
+int CleanupTimeouts(){
+    ResolutionCleanup cleanup;CleanupEvent disabling,finishDisable;
+    const ResolutionCleanupDeadline watchdogDeadline(std::chrono::milliseconds(2000));
+    std::atomic<unsigned> disableCalls=0,drainCalls=0;std::atomic<bool> synchronized=true;
+    ResolutionCleanupResult watchdog{};
+    std::thread worker([&]{watchdog=cleanup.Complete(watchdogDeadline,[](const auto&){return true;},[&]{
+        ++disableCalls;disabling.Signal();if(!finishDisable.Wait(watchdogDeadline))synchronized=false;
+        return ResolutionDisableResult{true,true,0};
+    },[](const auto&){return true;});});
+    const bool entered=disabling.Wait(watchdogDeadline);
+    const ResolutionCleanupDeadline releaseDeadline(std::chrono::milliseconds(20));
+    const auto timedOut=cleanup.Complete(releaseDeadline,[](const auto&){return true;},[&]{
+        ++disableCalls;return ResolutionDisableResult{true,true,0};
+    },[&](const auto&){++drainCalls;return true;});
+    // A timeout leaves the owner's native call alive and unpublished. Let it
+    // finish normally, then accept fresh physical completion without a retry.
+    finishDisable.Signal();worker.join();
+    CHECK(entered&&synchronized&&timedOut.contended&&timedOut.timedOut&&!timedOut.disableCompleted&&!timedOut.Complete());
+    CHECK(!releaseDeadline.RemainingMs()&&drainCalls==0&&watchdog.Complete());
+    const auto later=cleanup.Complete(ResolutionCleanupDeadline(std::chrono::milliseconds(100)),[](const auto&){return true;},[&]{
+        ++disableCalls;return ResolutionDisableResult{false,true,5};
+    },[](const auto&){return true;});
+    CHECK(later.Complete()&&disableCalls==1);
+
+    ResolutionCleanup configuring;CleanupEvent never;
+    const ResolutionCleanupDeadline configurationDeadline(std::chrono::milliseconds(20));
+    const auto configurationTimeout=configuring.Complete(configurationDeadline,[&](const auto& until){
+        // Configuration becomes ready at the budget boundary. It cannot grant
+        // a fresh cleanup budget or begin a native disable after expiry.
+        never.Wait(until);return true;
+    },[&]{++disableCalls;return ResolutionDisableResult{true,true,0};},[](const auto&){return true;});
+    CHECK(configurationTimeout.configurationReady&&configurationTimeout.timedOut&&!configurationTimeout.disableCompleted&&disableCalls==1);
+
+    ResolutionCleanup draining;CleanupEvent callbacks;
+    const ResolutionCleanupDeadline drainDeadline(std::chrono::milliseconds(20));
+    bool sameDeadline=true;
+    const auto drainTimeout=draining.Complete(drainDeadline,[&](const auto& until){
+        sameDeadline=until.End()==drainDeadline.End();return true;
+    },[&]{++disableCalls;return ResolutionDisableResult{true,true,0};},[&](const auto& until){
+        sameDeadline=sameDeadline&&until.End()==drainDeadline.End();return callbacks.Wait(until);
+    });
+    CHECK(sameDeadline&&drainTimeout.disableCompleted&&drainTimeout.disable.disabled&&drainTimeout.timedOut&&!drainTimeout.Complete());
+    CHECK(!drainDeadline.RemainingMs());
+    callbacks.Signal();
+    const auto drained=draining.Complete(ResolutionCleanupDeadline(std::chrono::milliseconds(100)),[](const auto&){return true;},[&]{
+        ++disableCalls;return ResolutionDisableResult{false,true,5};
+    },[&](const auto& until){return callbacks.Wait(until);});
+    CHECK(drained.Complete()&&disableCalls==2);
+    return 0;
+}
 int Images(){
     const auto file=Image();const auto normal=policy::Plan(file,0x10000000),relocated=policy::Plan(file,0x11000000);
     CHECK(normal&&relocated);CHECK(normal->imageSize==0x3000&&normal->timestamp==1234&&normal->executable.size()==1);
@@ -70,4 +166,6 @@ int Images(){
     CHECK(!policy::Plan(file,0));CHECK(!policy::Plan(file,0xfffff000));return 0;
 }
 }
-int main(){if(const auto n=Identity())return n;if(const auto n=Receipts())return n;return Images();}
+int main(){if(const auto n=Identity())return n;if(const auto n=Receipts())return n;
+    if(const auto n=CleanupContention(true))return n;if(const auto n=CleanupContention(false))return n;
+    if(const auto n=CleanupTimeouts())return n;return Images();}

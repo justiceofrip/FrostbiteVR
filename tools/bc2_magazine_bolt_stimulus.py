@@ -726,14 +726,26 @@ def owed(snapshot, now):
     held = b["held"] or b["native"]["held"]
     wait_for(held is not None, "actual ordinary shot has not produced an owed bolt")
     window(held, now)
-    require(held["held"] is True and b["blocksFire"] is True
+    generation = integer(b["input"]["owner"]["equipGeneration"])
+    require(b["blocksFire"] is True
             and held["owner"] == b["input"]["owner"]
-            and integer(held["item"]["id"]) == integer(snapshot["owner"]["weapon"]),
+            and held["item"] == dict(id=integer(snapshot["owner"]["weapon"]), generation=generation)
+            and held["mechanism"] == dict(id=integer(b["calibration"]["profile"]), generation=generation),
             "owed bolt does not belong to the current physical gun")
     advancing = held.get("advancing")
+    # WeaponCycleLease::held means a frozen native boundary, not GunHold.
+    # The native advancing authority owes the same stroke under a three-copy
+    # guard instead. WeaponCycle::Lease requires exactly one of these forms.
+    require(type(held["held"]) is bool and held["held"] != (advancing is not None)
+            and integer(held["cycle"]) > 0 and integer(held["sequence"]) > 0,
+            "owed bolt requires exactly one frozen or guarded advancing lease")
     if advancing is not None:
-        require(integer(advancing["guardEpoch"]) > 0 and len(advancing["updates"]) == 3
-                and all(integer(v) > 0 for v in advancing["updates"]), "guarded three-copy debt evidence missing")
+        require(isinstance(advancing, dict), "guarded three-copy debt evidence missing")
+        updates = [integer(v) for v in advancing["updates"]]
+        c = counts(advancing["counts"])
+        require(integer(held["shot"]) > 0 and integer(advancing["guardEpoch"]) > 0
+                and len(updates) == len(set(updates)) == 3 and all(v > 0 for v in updates)
+                and c["loaded"] < c["capacity"], "guarded three-copy debt evidence missing")
     return dict(debt=debt_key(held), identity=copy.deepcopy(b["native"]["identity"]),
                 counts=counts(advancing["counts"] if advancing else b["native"]["counts"]), acquiredNs=now,
                 acquiredInputSequence=integer(b["input"]["sequence"]),

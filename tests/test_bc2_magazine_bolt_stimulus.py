@@ -129,7 +129,7 @@ def owed(s, now=NOW):
     b = s["bolt"]
     held = dict(owner=b["input"]["owner"], item=s["magazine"]["weapon"], mechanism=dict(id=113, generation=8),
         cycle=41, shot=42, sequence=43, observedNs=now-10_000_000, deadlineNs=now+80_000_000,
-        held=True, advancing=dict(guardEpoch=44, updates=[45, 46, 47], counts=dict(loaded=2, reserve=30, capacity=7)))
+        held=False, advancing=dict(guardEpoch=44, updates=[45, 46, 47], counts=dict(loaded=2, reserve=30, capacity=7)))
     b.update(held=copy.deepcopy(held), blocksFire=True)
     b["native"].update(held=held, cycle=41, shot=42, counts=dict(loaded=2, reserve=30, capacity=7))
     return g.owed(s, now)
@@ -249,7 +249,99 @@ class SavedMagazineBoltAdmissionTests(unittest.TestCase):
                 g.control(s, "magazine", 0, path[0], now)
 
 
+class SavedMagazineBoltDebtTests(unittest.TestCase):
+    """Optional boundary replay of the unmodified actual106/02 preparation."""
+    @classmethod
+    def setUpClass(cls):
+        path = os.environ.get("BC2_MAGAZINE_BOLT_SAVED_DEBT")
+        if not path:
+            raise unittest.SkipTest("set BC2_MAGAZINE_BOLT_SAVED_DEBT to the retained preparation directory")
+        cls.snapshots = [json.loads(gzip.decompress((Path(path)/f"snapshot-{index:03}.json.gz").read_bytes()))
+                         for index in range(1, 6)]
+        cls.result = json.loads((Path(path)/"result.json").read_bytes())
+
+    def test_retained_guarded_debt_preserves_original_clocks_and_ordinary_gun(self):
+        original = copy.deepcopy(self.snapshots)
+        initial, baseline, *postshot = self.snapshots
+        self.assertFalse(initial["bolt"]["available"])
+        base = g.preparation_baseline(baseline, baseline["observed_ns"])
+        self.assertEqual([s["bolt"]["native"]["phase"] for s in postshot], [1, 2, 8])
+        self.assertEqual(base["owner"]["physical_equipment_generation"], 3)
+        self.assertEqual(base["identity"]["owner"]["equipGeneration"], 5)
+        self.assertEqual(base["context"]["resource"]["weaponGeneration"], 7)
+        driver = d.MagazineBoltDriver.__new__(d.MagazineBoltDriver)
+        driver.family, driver.preparation_mode = "bolt", True
+        driver.anchor, driver.preserved = g.owner_key(baseline), copy.deepcopy(baseline["input"])
+        driver.boundaries, driver.artifacts = [], mock.Mock()
+        driver.last_write = self.result["pulse"]["pressWrittenNs"]
+        driver.deadline = driver.stage_deadline = postshot[-1]["observed_ns"]+g.NS
+        driver.shot_gun = base["gun"]
+        clock, remaining = [baseline["observed_ns"]], iter(postshot)
+
+        def fresh():
+            s = next(remaining)
+            clock[0] = s["observed_ns"]
+            driver.admit_snapshot(s, clock[0], g.integer(s["nonce"]))
+            return s, b"", clock[0]
+
+        driver.fresh = fresh
+        with mock.patch.object(d.time, "perf_counter_ns", side_effect=lambda: clock[0]):
+            current, now, driver.debt = driver.boundary("preparation_shot_created_owed_bolt", g.owed)
+        driver.check_shot_gun(current, now)
+        self.assertIs(current, postshot[-1])
+        self.assertFalse(current["bolt"]["held"]["held"])
+        self.assertEqual(driver.debt["updates"], [50804, 50802, 50801])
+        self.assertEqual(driver.debt["counts"], dict(loaded=4, reserve=45, capacity=5))
+        self.assertEqual(g.retained_debt_identity(driver.debt), current["bolt"]["native"]["retainedDebtOrigin"])
+        self.assertEqual(driver.boundaries[-1]["inputSequence"], 12211)
+        self.assertIsNone(current["magazine"]["resource"])
+        self.assertFalse(self.result["preparationCompleted"])
+        self.assertEqual(self.snapshots, original)
+
+
 class MagazineBoltTests(unittest.TestCase):
+    def test_owed_frozen_and_guarded_lease_forms_are_mutually_exclusive(self):
+        s = fixture()
+        guarded = owed(s)
+        self.assertTrue(guarded["countsFreshnessAvailable"])
+        self.assertEqual(guarded["guardEpoch"], 44)
+        for lease in (s["bolt"]["held"], s["bolt"]["native"]["held"]):
+            lease.update(held=True, advancing=None)
+        frozen = g.owed(s, NOW)
+        self.assertEqual(frozen["debt"], guarded["debt"])
+        self.assertFalse(frozen["countsFreshnessAvailable"])
+        self.assertIsNone(frozen["guardEpoch"])
+
+    def test_owed_guarded_lease_rejects_missing_conflicting_or_foreign_authority(self):
+        changes = (
+            lambda h: h.update(held=True),
+            lambda h: h.update(held=0),
+            lambda h: h.update(advancing=None),
+            lambda h: h.update(advancing=False),
+            lambda h: h.update(cycle=0),
+            lambda h: h.update(shot=0),
+            lambda h: h.update(sequence=0),
+            lambda h: h.update(deadlineNs=NOW),
+            lambda h: h["owner"].update(equipGeneration=9),
+            lambda h: h["item"].update(id=99),
+            lambda h: h["item"].update(generation=9),
+            lambda h: h["mechanism"].update(id=99),
+            lambda h: h["mechanism"].update(generation=9),
+            lambda h: h["advancing"].update(guardEpoch=0),
+            lambda h: h["advancing"].update(updates=[45, 45, 47]),
+            lambda h: h["advancing"].update(updates=[45, 46]),
+            lambda h: h["advancing"].update(updates=[45, 46, 0]),
+            lambda h: h["advancing"]["counts"].update(loaded=7),
+            lambda h: h["advancing"]["counts"].update(reserve=-1),
+        )
+        for index, change in enumerate(changes):
+            with self.subTest(index=index):
+                s = fixture()
+                owed(s)
+                change(s["bolt"]["held"])
+                with self.assertRaises(g.Refusal):
+                    g.owed(s, NOW)
+
     def test_experimental_review_covers_all_seventeen_rows_without_granting_preserved_native_only_row(self):
         sources = g.magazine_geometry_sources()
         self.assertEqual(len(sources), 17)
@@ -393,7 +485,10 @@ class MagazineBoltTests(unittest.TestCase):
             self.assertEqual(episode["published"], ["grip r 1"])
 
     def test_preparation_uses_runtime_timer_and_retains_exact_gun_claim(self):
-        with tempfile.TemporaryDirectory() as folder, held_bootstrap_episode(Path(folder), complete_shot=True) as episode:
+        # Retained106/02 first saw native phases1,2 without a lease, then an
+        # advancing phase8 lease with held=false and the original right GunHold.
+        with tempfile.TemporaryDirectory() as folder, held_bootstrap_episode(
+                Path(folder), complete_shot=True, postshot_phases=(1, 2, 8)) as episode:
             self.assertTrue(episode["cli"]("prepare-hold")["holdPrepared"])
             episode["capture"]()
             clearance = episode["record"]()
@@ -401,6 +496,11 @@ class MagazineBoltTests(unittest.TestCase):
             self.assertEqual(driver.boundaries[-1]["name"], "preparation_shot_counts")
             self.assertEqual(driver.boundaries[-1]["result"]["counts"]["loaded"], 6)
             self.assertEqual(driver.shot_gun, driver.preparation["gun"])
+            postshot = [s["bolt"] for s in episode["observations"] if s["bolt"].get("blocksFire")]
+            self.assertEqual([b["native"]["phase"] for b in postshot[:3]], [1, 2, 8])
+            self.assertTrue(all(b["held"] is None for b in postshot[:2]))
+            self.assertFalse(postshot[2]["held"]["held"])
+            self.assertEqual(len(set(driver.debt["updates"])), 3)
             self.assertEqual(driver.shot_pulse["pulseTransport"]["runtimeSha256"], d.transport.TIMED_TRIGGER_RUNTIME_SHA256)
             self.assertIsNone(driver.shot_pulse["releaseWrittenNs"])
             self.assertIsNone(driver.shot_pulse["pulseTransport"]["physicalDurationNs"])
@@ -1473,7 +1573,8 @@ def magazine_capture_episode(run, failure=None):
 
 
 @contextlib.contextmanager
-def held_bootstrap_episode(run, failure=None, full=True, body_sequence_delta=0, complete_shot=False):
+def held_bootstrap_episode(run, failure=None, full=True, body_sequence_delta=0, complete_shot=False,
+                           postshot_phases=(8,)):
     """Compose actual entry/transport/recorder consumers with synthetic producers.
 
     Requests, immutable response reads, nonce/source deadlines, full geometry
@@ -1485,6 +1586,7 @@ def held_bootstrap_episode(run, failure=None, full=True, body_sequence_delta=0, 
     with magazine_capture_episode(run) as episode:
         clock, folder, write = episode["clock"], episode["folder"], episode["write"]
         published, observations, drivers = episode["published"], [], []
+        postshot_count = 0
         state = d.transport.read_json(run / "sim/state.json")[0]
         state["controls"]["gripR"] = 0
         episode["write_state"](state)
@@ -1511,6 +1613,7 @@ def held_bootstrap_episode(run, failure=None, full=True, body_sequence_delta=0, 
             drivers.append(driver)
 
         def response(nonce):
+            nonlocal postshot_count
             s = fixture()
             now, seq = clock[0], 21+len(observations)
             pressed = bool(d.transport.read_json(run / "sim/state.json")[0]["controls"]["gripR"])
@@ -1630,6 +1733,11 @@ def held_bootstrap_episode(run, failure=None, full=True, body_sequence_delta=0, 
                 b["native"]["counts"] = after
                 b["held"]["advancing"]["counts"] = after
                 b["native"]["held"]["advancing"]["counts"] = after
+                phase = postshot_phases[min(postshot_count, len(postshot_phases)-1)]
+                postshot_count += 1
+                b["native"].update(phase=phase, blocksFire=True)
+                if phase in (1, 2):
+                    b["held"] = b["native"]["held"] = None
             if failure == "writer" or pressed and failure == "cleanup_writer":
                 (run / "sim/command.txt").write_bytes(b"note foreign writer\n")
             observations.append(copy.deepcopy(s))

@@ -752,6 +752,9 @@ class RetainedDebtEntryTests(unittest.TestCase):
         substitutions = [(template["owner"], s["owner"]),
                          (template["input_evidence"], s["input_evidence"]),
                          (template["input_evidence"]["owner"], s["input_evidence"]["owner"]),
+                         (template["bolt"]["held"]["mechanism"],
+                          dict(id=template["bolt"]["calibration"]["profile"],
+                               generation=s["input_evidence"]["owner"]["equipGeneration"])),
                          (template["magazine"]["weapon"], s["bodyHolster"]["physicalGun"])]
         def convert(value):
             for old, new in substitutions:

@@ -1,9 +1,11 @@
 #include "Bc2ResolutionBinding.h"
+#include "Bc2ResolutionCleanup.h"
 #include "Bc2ResolutionRequest.h"
 #include <Windows.h>
 #include <dxgi.h>
 #include <MinHook.h>
 #include <atomic>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -31,7 +33,8 @@ std::atomic<bool> leasePublished=false,configurationDone=false,releaseRequested=
 std::atomic<bool> configurationDeferred=false;
 std::atomic<ResolutionGuardPhase> guardPhase=ResolutionGuardPhase::Inactive;
 std::atomic<unsigned> guardCallbacks=0,blockedEvents=0,passedEvents=0,ownerMismatches=0,releaseReason=0;
-std::atomic_flag requestGate=ATOMIC_FLAG_INIT,guardCleanupGate=ATOMIC_FLAG_INIT;
+std::atomic_flag requestGate=ATOMIC_FLAG_INIT;
+ResolutionCleanup guardCleanup;
 // Retain these three handles with the pinned helper for the game lifetime. A
 // callback paused before entry may still observe them after a drained release.
 HANDLE ownerProcess=nullptr,releaseEvent=nullptr,configurationEvent=nullptr;
@@ -96,21 +99,31 @@ void __fastcall DispatchHook(void* self,void*,const char* event,const char* payl
     const auto outgoingError=GetLastError();
     SetLastError(outgoingError);
 }
-void DisableGuard()noexcept {
+ResolutionCleanupResult DisableGuard(const ResolutionCleanupDeadline& deadline)noexcept {
     // The configure worker is the sole hook installer. Never disable while it
     // could still enable the dispatcher or complete a native resize/rollback.
-    if(!configurationDone.load(std::memory_order_acquire)||guardCleanupGate.test_and_set(std::memory_order_acquire))return;
-    struct Unlock{~Unlock(){guardCleanupGate.clear(std::memory_order_release);}} unlock;
-    if(guardEnabled.load(std::memory_order_acquire)){
-        const auto status=MH_DisableHook(reinterpret_cast<void*>(Base+binding.dispatcher));
-        if(status==MH_OK||status==MH_ERROR_DISABLED)guardEnabled.store(false,std::memory_order_release);
-    }
-    const auto limit=GetTickCount64()+2000;
-    while(guardCallbacks.load(std::memory_order_acquire)&&GetTickCount64()<limit)Sleep(1);
-    if(!guardEnabled.load(std::memory_order_acquire)&&!guardCallbacks.load(std::memory_order_acquire))
-        guardPhase.store(ResolutionGuardPhase::Released,std::memory_order_release);
     // Never RemoveHook/Uninitialize/FreeLibrary: a thread may be paused before
     // incrementing its callback count. Released callbacks pass through safely.
+    return guardCleanup.Complete(deadline,[](const auto& until){
+        if(!configurationDone.load(std::memory_order_acquire)&&configurationEvent)
+            WaitForSingleObject(configurationEvent,until.RemainingMs());
+        return configurationDone.load(std::memory_order_acquire);
+    },[]{
+        if(!guardEnabled.load(std::memory_order_acquire))return ResolutionDisableResult{true,false,0};
+        const auto status=MH_DisableHook(reinterpret_cast<void*>(Base+binding.dispatcher));
+        const bool disabled=status==MH_OK||status==MH_ERROR_DISABLED;
+        if(disabled)guardEnabled.store(false,std::memory_order_release);
+        return ResolutionDisableResult{disabled,true,int(status)};
+    },[](const auto& until){
+        while(guardCallbacks.load(std::memory_order_acquire)&&until.RemainingMs())Sleep(1);
+        if(guardCallbacks.load(std::memory_order_acquire))return false;
+        guardPhase.store(ResolutionGuardPhase::Released,std::memory_order_release);return true;
+    });
+}
+void DisableGuard()noexcept {
+    // Deferred configuration is completed by the original callback, not by
+    // waiting again on the configure worker's own incomplete cleanup.
+    if(configurationDone.load(std::memory_order_acquire))DisableGuard(ResolutionCleanupDeadline(std::chrono::milliseconds(2000)));
 }
 void GuardProof(ResolutionRequest& out)noexcept {
     const auto phase=guardPhase.load(std::memory_order_acquire);
@@ -364,6 +377,9 @@ extern "C" __declspec(dllexport) DWORD WINAPI FvrConfigureResolution(void* argum
     return result.passed?0:result.error?result.error:1;
 }
 extern "C" __declspec(dllexport) DWORD WINAPI FvrReleaseResolution(void* argument){
+    // Reserve one second for dispatch/receipt overhead within the controller's
+    // existing 6000 ms remote-call limit. No stage renews this budget.
+    const ResolutionCleanupDeadline cleanupDeadline(std::chrono::milliseconds(5000));
     ResolutionRequest input{};
     if(!Copy(unsigned(reinterpret_cast<std::uintptr_t>(argument)),&input,sizeof(input))||
        input.magic!=0x52565246||input.version!=2||!CurrentGame(input.lease))return 2;
@@ -383,10 +399,14 @@ extern "C" __declspec(dllexport) DWORD WINAPI FvrReleaseResolution(void* argumen
     out.width=leaseWidth;out.height=leaseHeight;
     requestGate.clear(std::memory_order_release);
     RequestRelease(1);
-    if(!configurationDone.load(std::memory_order_acquire)&&configurationEvent)WaitForSingleObject(configurationEvent,2000);
-    DisableGuard();
+    const auto cleanup=DisableGuard(cleanupDeadline);
+    char trace[256]{};
+    std::snprintf(trace,sizeof(trace),"FVR resolution release: configured=%u contended=%u disable_completed=%u disable_attempted=%u disable_status=%d disabled=%u drained=%u timed_out=%u remaining_ms=%u\n",
+        unsigned(cleanup.configurationReady),unsigned(cleanup.contended),unsigned(cleanup.disableCompleted),unsigned(cleanup.disable.attempted),
+        cleanup.disable.status,unsigned(cleanup.disable.disabled),unsigned(cleanup.drained),unsigned(cleanup.timedOut),cleanupDeadline.RemainingMs());
+    OutputDebugStringA(trace);
     out.hookRestored=cleanupRestored.load();out.callbacksDrained=cleanupDrained.load();GuardProof(out);
-    out.passed=!out.guardActive&&!out.guardCleanupPending&&out.hookRestored&&out.callbacksDrained&&
+    out.passed=cleanup.Complete()&&!out.guardActive&&!out.guardCleanupPending&&out.hookRestored&&out.callbacksDrained&&
         (out.guardReleased||out.guardNeverInstalled);
     out.error=out.passed?0:16;
     if(!Store(argument,out))return 4;
