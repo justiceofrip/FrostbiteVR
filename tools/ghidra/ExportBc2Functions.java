@@ -23,6 +23,8 @@ import ghidra.framework.Application;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressOutOfBoundsException;
 import ghidra.program.model.listing.Function;
+import ghidra.program.model.listing.Instruction;
+import ghidra.program.model.listing.InstructionIterator;
 import ghidra.program.model.symbol.Reference;
 import ghidra.program.model.symbol.ReferenceIterator;
 
@@ -31,6 +33,9 @@ public class ExportBc2Functions extends HeadlessScript {
     private static final int MAX_REFERENCES = 256;
     private static final int MAX_C_CHARACTERS = 1_000_000;
     private static final int DECOMPILE_SECONDS = 60;
+    private static final int MAX_INSTRUCTIONS = 4096;
+    private static final int MAX_OBJECTS = 64;
+    private static final int MAX_INSTRUCTION_TEXT = 1024;
 
     @Override
     public void run() throws Exception {
@@ -83,6 +88,13 @@ public class ExportBc2Functions extends HeadlessScript {
         result.addProperty("reference_limit_per_function", MAX_REFERENCES);
         result.addProperty("decompile_timeout_seconds", DECOMPILE_SECONDS);
         result.addProperty("c_character_limit_per_function", MAX_C_CHARACTERS);
+        boolean exportInstructions = request.has("export_instructions") &&
+            request.get("export_instructions").getAsBoolean();
+        result.addProperty("instructions_requested", exportInstructions);
+        if (exportInstructions) {
+            result.addProperty("instruction_limit_per_function", MAX_INSTRUCTIONS);
+            result.addProperty("instruction_scope", "existing instructions in the resolved function body; no disassembly, analysis or register dataflow inference");
+        }
         result.add("invocation", request);
         JsonArray functions = new JsonArray();
         DecompInterface decompiler = new DecompInterface();
@@ -92,7 +104,7 @@ public class ExportBc2Functions extends HeadlessScript {
             boolean opened = decompiler.openProgram(currentProgram);
             for (var item : addresses) {
                 monitor.checkCancelled();
-                functions.add(exportFunction(item.getAsString(), decompiler, opened));
+                functions.add(exportFunction(item.getAsString(), decompiler, opened, exportInstructions));
             }
         } finally {
             decompiler.dispose();
@@ -106,7 +118,8 @@ public class ExportBc2Functions extends HeadlessScript {
         println("Exported " + functions.size() + " requested function records to " + output);
     }
 
-    private JsonObject exportFunction(String requested, DecompInterface decompiler, boolean opened)
+    private JsonObject exportFunction(String requested, DecompInterface decompiler, boolean opened,
+            boolean exportInstructions)
             throws Exception {
         JsonObject row = new JsonObject();
         row.addProperty("requested_address", requested);
@@ -133,6 +146,9 @@ public class ExportBc2Functions extends HeadlessScript {
         row.addProperty("body_address_count", function.getBody().getNumAddresses());
         row.addProperty("is_thunk", function.isThunk());
         row.addProperty("is_external", function.isExternal());
+        if (exportInstructions) {
+            exportInstructions(function, row);
+        }
 
         JsonArray references = new JsonArray();
         JsonArray callers = new JsonArray();
@@ -183,5 +199,46 @@ public class ExportBc2Functions extends HeadlessScript {
             }
         }
         return row;
+    }
+
+    private void exportInstructions(Function function, JsonObject row) throws Exception {
+        JsonArray instructions = new JsonArray();
+        InstructionIterator iterator = currentProgram.getListing().getInstructions(function.getBody(), true);
+        int count = 0;
+        while (count < MAX_INSTRUCTIONS && iterator.hasNext()) {
+            monitor.checkCancelled();
+            Instruction instruction = iterator.next();
+            JsonObject item = new JsonObject();
+            item.addProperty("address", instruction.getAddress().toString());
+            item.addProperty("length", instruction.getLength());
+            StringBuilder bytes = new StringBuilder();
+            for (byte value : instruction.getBytes()) {
+                bytes.append(String.format("%02x", value & 0xff));
+            }
+            item.addProperty("bytes", bytes.toString());
+            String text = instruction.toString();
+            item.addProperty("text", text.substring(0, Math.min(text.length(), MAX_INSTRUCTION_TEXT)));
+            item.addProperty("text_truncated", text.length() > MAX_INSTRUCTION_TEXT);
+            item.addProperty("flow_type", instruction.getFlowType().toString());
+            objects(item, "inputs", instruction.getInputObjects());
+            objects(item, "results", instruction.getResultObjects());
+            instructions.add(item);
+            count++;
+        }
+        row.add("instructions", instructions);
+        row.addProperty("instructions_truncated", iterator.hasNext());
+        row.addProperty("instruction_count", count);
+    }
+
+    private void objects(JsonObject row, String name, Object[] objects) {
+        JsonArray result = new JsonArray();
+        boolean truncated = objects.length > MAX_OBJECTS;
+        for (int index = 0; index < Math.min(objects.length, MAX_OBJECTS); index++) {
+            String text = String.valueOf(objects[index]);
+            truncated |= text.length() > MAX_INSTRUCTION_TEXT;
+            result.add(text.substring(0, Math.min(text.length(), MAX_INSTRUCTION_TEXT)));
+        }
+        row.add(name, result);
+        row.addProperty(name + "_truncated", truncated);
     }
 }

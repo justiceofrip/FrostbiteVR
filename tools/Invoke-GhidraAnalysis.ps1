@@ -4,6 +4,7 @@
 param(
     [Parameter(Mandatory)][string]$Executable,
     [Parameter(Mandatory,ParameterSetName='Functions')][ValidateCount(1,16)][string[]]$Addresses,
+    [Parameter(ParameterSetName='Functions')][switch]$ExportInstructions,
     [Parameter(Mandatory,ParameterSetName='Members')][ValidateCount(1,4)][string[]]$MemberOffsets,
     [Parameter(Mandatory,ParameterSetName='Members')][string]$SearchStartAddress,
     [Parameter(Mandatory,ParameterSetName='Members')][string]$SearchEndAddress,
@@ -173,6 +174,7 @@ try{
         java_executable=$java;java_arguments=$javaArguments;headless_arguments=$headlessArguments
         storage_admission=$admission
     }
+    if($ExportInstructions){$request.export_instructions=$true}
     if($memberSearch){
         $request.schema='bc2.ghidra-member-invocation.v1';$request.tool_version='1.1'
         $request.mode='cached_readonly_member_search'
@@ -213,6 +215,21 @@ try{
            $result.instructions_examined -gt $MaxInstructions){throw "Incomplete or mismatched member search result: $OutputPath"}
     }elseif($result.schema -ne 'bc2.ghidra-functions.v1' -or $result.status -ne 'export_complete' -or
        @($result.functions).Count -ne $normalized.Count){throw "Incomplete or mismatched Ghidra result: $OutputPath"}
+    if($ExportInstructions){
+        if($result.instructions_requested -ne $true -or $result.instruction_limit_per_function -ne 4096){
+            throw "Missing or mismatched instruction export: $OutputPath"
+        }
+        foreach($function in $result.functions){
+            if($function.PSObject.Properties['function_address']){
+                if(-not $function.PSObject.Properties['instructions'] -or
+                   -not $function.PSObject.Properties['instructions_truncated'] -or
+                   @($function.instructions).Count -ne $function.instruction_count -or
+                   $function.instruction_count -gt 4096){
+                    throw "Incomplete or oversized instruction record: $OutputPath"
+                }
+            }
+        }
+    }
     if(-not $cached){
         if(-not (Test-Path -LiteralPath $projectFile)){throw 'Ghidra did not save the analyzed project.'}
         Write-NewJson $manifestPath @{schema='bc2.ghidra-analysis.v1';executable_sha256=$sha;
