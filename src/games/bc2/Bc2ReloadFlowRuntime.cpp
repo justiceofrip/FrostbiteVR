@@ -934,7 +934,8 @@ template<class F>bool WithNativeCycle(NativeCycleAccess access,F&& fn,const Relo
         nativeCycleFirstFailure.Capture({NativeCycle().View(now),previousPhase,NativeCycle().Mode(),
             NativeCycle().LastControlInput(),now,NativeCycleCancelEpoch().load(std::memory_order_acquire),
             nativeCycleContention.load(std::memory_order_relaxed),GetCurrentThreadId(),unsigned(access)},triggeringEvent,
-            policyBefore?&*policyBefore:nullptr,&policyAfter);
+            policyBefore?&*policyBefore:nullptr,&policyAfter,
+            NativeCycle().FirstAdmissionRejection()?&*NativeCycle().FirstAdmissionRejection():nullptr);
     }
     const auto previous=nativeCycleCompletionId.load(std::memory_order_acquire);
     nativeCycleCompletionId.store(NativeCycle().ObservationAuthority(previous,Now()),std::memory_order_release);return true;
@@ -1615,10 +1616,17 @@ std::optional<PistolAfterFeedOwnUpdate> PistolOwnRow(const ReloadFlowRecord& com
     return row;
 }
 #endif
-std::optional<int> Capacity(unsigned firing,int authored)noexcept {
+std::optional<int> Capacity(unsigned firing,int authored,NativeCycleRecoverySourceDiagnostic* diagnostic=nullptr)noexcept {
     float multiplier=0,again=0;int overrideValue=0,overrideAgain=0;
-    if(!memory.read||!memory.read(memory.context,firing+0x74,&multiplier,4)||!memory.read(memory.context,firing+0x98,&overrideValue,4)||
-       !memory.read(memory.context,firing+0x74,&again,4)||!memory.read(memory.context,firing+0x98,&overrideAgain,4)||
+    const auto read=[&](unsigned index,unsigned address,void* output)noexcept {
+        const bool result=memory.read(memory.context,address,output,4);
+        if(diagnostic){diagnostic->capacityAttempted|=1u<<index;
+            if(result){diagnostic->capacityRead|=1u<<index;std::memcpy(&diagnostic->capacityWords[index],output,4);}}
+        return result;
+    };
+    if(diagnostic)diagnostic->memoryReadAvailable=memory.read!=nullptr;
+    if(!memory.read||!read(0,firing+0x74,&multiplier)||!read(1,firing+0x98,&overrideValue)||
+       !read(2,firing+0x74,&again)||!read(3,firing+0x98,&overrideAgain)||
        multiplier!=again||overrideValue!=overrideAgain||!std::isfinite(multiplier)||multiplier<0||multiplier>1024||overrideValue< -1||overrideValue>1000000)return {};
     if(overrideValue>=0)return overrideValue;const double value=double(authored)*multiplier;
     if(authored<0||value>1000000||value!=std::floor(value))return {};return int(value);
@@ -2667,15 +2675,28 @@ void UpdateAfterObservation(void* self,void* context,unsigned extra,unsigned fir
         // cached Recovering flag. Already-issued holds retain their drain path.
         const auto cycleCancelEpoch=NativeCycleCancelEpoch().load(std::memory_order_acquire);
         std::optional<NativeCycleRecoveryScope> recoveryScope;
+        std::optional<NativeCycleRecoveryScope> observedRecoveryScope;
+        NativeCycleRecoverySourceDiagnostic recoverySource;
         int recoveryCapacity=0;std::int64_t recoveryDeadline=0;
-        if(nativeCycleRecoveryEnabled){
+        using SourcePredicate=NativeCycleSourcePredicate;
+        if(recoverySource.Test(SourcePredicate::Enabled,nativeCycleRecoveryEnabled)){
             ULONG_PTR low=0,high=0;GetCurrentThreadStackLimits(&low,&high);
-            const auto capacity=observation.lease?Capacity(firing,observation.lease->snapshot.config.baseCapacity):std::nullopt;
-            const bool source=observation.lease&&capacity&&cycleCallback.Isolated()&&holdCodeVerified&&
-                caller==base+binding.code[1].rva+0x2f&&unsigned(context)>=low&&std::uint64_t(unsigned(context))+0x30<=high&&
-                !(unsigned(context)&3)&&observation.entry.contextCopied&&IsCurrent(*observation.lease,Now())&&
-                (nativeBoltCandidate?ReadManualBoltConfig(memory,observation.lease->snapshot.config):
-                    ReadManualPumpConfig(memory,observation.lease->snapshot.config));
+            const auto capacity=observation.lease?Capacity(firing,observation.lease->snapshot.config.baseCapacity,&recoverySource):std::nullopt;
+            recoverySource.stackLow=low;recoverySource.stackHigh=high;recoverySource.caller=caller;
+            recoverySource.expectedCaller=base+binding.code[1].rva+0x2f;recoverySource.context=unsigned(context);
+            recoverySource.capacity=capacity.value_or(0);recoverySource.bolt=nativeBoltCandidate;
+            if(observation.lease){const auto& lease=*observation.lease;
+                observedRecoveryScope=NativeCycleRecoveryScope{RoundIdentity(lease),lease.snapshot.config};
+                recoverySource.baseCapacity=lease.snapshot.config.baseCapacity;recoverySource.leaseObservedNs=lease.snapshot.observedNs;
+                recoverySource.leaseDeadlineNs=lease.deadline;recoverySource.leaseRevision=lease.revision;
+                recoverySource.completionCycle=lease.completionCycle;recoverySource.cleanupEpoch=lease.cleanupEpoch;}
+            const auto current=[&]()noexcept{FixedGateCurrent observed;recoverySource.currentNowNs=Now();
+                const bool result=IsCurrentObserved(*observation.lease,recoverySource.currentNowNs,&observed);
+                recoverySource.currentEnabled=observed.enabled;recoverySource.currentRevisionRead=observed.revisionRead;
+                recoverySource.currentRevision=observed.currentRevision;return result;};
+            const bool source=EvaluateNativeCycleRecoverySource(recoverySource,observation.lease.has_value(),capacity.has_value(),
+                holdCodeVerified,observation.entry.contextCopied,[&]{return cycleCallback.Isolated();},current,[&]{
+                    return ReadNativeCycleRecoveryConfig(memory,observation.lease->snapshot.config,nativeBoltCandidate,recoverySource);});
             if(source){recoveryScope=NativeCycleRecoveryScope{RoundIdentity(*observation.lease),observation.lease->snapshot.config};
                 recoveryCapacity=*capacity;recoveryDeadline=std::min(observation.lease->deadline,observation.entry.nowNs+100000000);}
         }
@@ -2700,15 +2721,18 @@ void UpdateAfterObservation(void* self,void* context,unsigned extra,unsigned fir
 #endif
         Bc2NativeCycleUpdateRoute route;bool resourceRoute=false;
         WithNativeCycle(NativeCycleAccess::NativeUpdate,[&]{
-            if(!cycleCallback.Isolated()){NativeCycle().Missing(firing,cycleInvocation);return;}
+            if(!cycleCallback.Isolated()){NativeCycle().MissingRecovery(firing,cycleInvocation,NativeCycleAdmissionReason::CallbackNotIsolated,
+                &recoverySource,observedRecoveryScope?&*observedRecoveryScope:nullptr,recoveryCapacity,recoveryDeadline);return;}
             if(nativeCycleReload.Active()){
                 resourceRoute=route.recovering=true;
                 if(recoveryScope)route.recovery=nativeCycleReload.Evaluate(*recoveryScope,observation.entry,recoveryCapacity,recoveryDeadline);
-                if(!route.recovery)NativeCycle().Missing(firing,cycleInvocation);
+                if(!route.recovery)NativeCycle().MissingRecovery(firing,cycleInvocation,NativeCycleAdmissionReason::ReloadRoute,
+                    &recoverySource,observedRecoveryScope?&*observedRecoveryScope:nullptr,recoveryCapacity,recoveryDeadline);
                 return;
             }
             route=EvaluateNativeCycleUpdateRoute(NativeCycle(),{ready?&input:nullptr,
-                recoveryScope?&*recoveryScope:nullptr,&observation.entry,firing,cycleInvocation,recoveryCapacity,recoveryDeadline});
+                recoveryScope?&*recoveryScope:nullptr,&observation.entry,firing,cycleInvocation,recoveryCapacity,recoveryDeadline,
+                &recoverySource,observedRecoveryScope?&*observedRecoveryScope:nullptr});
         },&observation.frame.invocation.Record());
         if(route.recovering){
             const auto& decision=route.recovery;

@@ -9,6 +9,51 @@ struct NativeCycleRecoveryScope {
     ReloadHoldIdentity identity{};ReloadObservedConfig config{};
     bool operator==(const NativeCycleRecoveryScope&)const noexcept=default;
 };
+// First rejected predicate, in the original short-circuit order. Diagnostic
+// values never participate in admission, and are copied before LoseGuard.
+enum class NativeCycleAdmissionReason:unsigned {
+    None,MissingRecoverySource,MissingRecoveryEntry,CallbackNotIsolated,ReloadRoute,
+    PaidRecoveryDrain,Inactive,Uncertain,Scope,Branch,OpenUpdate,InvocationZero,
+    InvocationOrder,EventKind,Depth,Parent,UpdateInvocation,Began,AcknowledgedFloor,
+    ContextNotCopied,ContextDecode,Delta,MultiplierLow,MultiplierHigh,ContextFlag26,
+    Firing,Owner,Loaded,Reserve,Capacity,ConvergencePhase,DeadlineExpired,DeadlineSpan
+};
+enum class NativeCycleSourcePredicate:unsigned {
+    None,Enabled,Lease,Capacity,Isolated,HoldCode,Caller,StackLow,StackHigh,Alignment,
+    ContextCopied,Current,ManualConfig
+};
+struct NativeCycleRecoverySourceDiagnostic {
+    NativeCycleSourcePredicate firstFailed=NativeCycleSourcePredicate::None;
+    unsigned evaluated=0,passed=0;
+    std::uint64_t stackLow=0,stackHigh=0;
+    std::uint32_t caller=0,expectedCaller=0,context=0;
+    int capacity=0,baseCapacity=0;
+    std::int64_t currentNowNs=0,leaseObservedNs=0,leaseDeadlineNs=0;
+    std::uint64_t leaseRevision=0,completionCycle=0,cleanupEpoch=0,currentRevision=0;
+    bool currentEnabled=false,currentRevisionRead=false,bolt=false;
+    unsigned capacityAttempted=0,capacityRead=0,configAttempted=0,configRead=0;
+    std::array<std::uint32_t,4> capacityWords{}; // multiplier, override, multiplier again, override again
+    std::array<std::uint32_t,26> configWords{}; // ReadNativeCycleProfile's 12+12 words, then two flag pairs
+    bool memoryReadAvailable=false;
+    // Evaluated/pass masks preserve short-circuiting: an unvisited native read
+    // is not reported as a failed read and is never retried for diagnostics.
+    bool Test(NativeCycleSourcePredicate predicate,bool value)noexcept {
+        const auto bit=1u<<unsigned(predicate);evaluated|=bit;if(value)passed|=bit;
+        else if(firstFailed==NativeCycleSourcePredicate::None)firstFailed=predicate;
+        return value;
+    }
+};
+struct NativeCycleRecoveryAdmissionDiagnostic {
+    NativeCycleAdmissionReason reason=NativeCycleAdmissionReason::None;
+    std::uint64_t invocation=0,paidRecoveryDrain=0;
+    NativeCycleRecoveryScope supplied{},expected{};
+    NativeCycleRecoverySourceDiagnostic source{};
+    std::array<std::uint64_t,3> open{},last{};
+    std::int64_t deadlineNs=0,beganNs=0,acknowledgedAtNs=0,paidNativeFloorNs=0;
+    int capacity=0,expectedLoaded=0,expectedReserve=0,expectedCapacity=0;
+    NativeCycleConvergenceProfile profile{};
+    bool active=false,uncertain=false,acknowledged=false,reloadCommand=false,scopePresent=false,sourcePresent=false;
+};
 struct NativeCycleRecoveryDecision {
     std::uint64_t invocation=0,epoch=0;unsigned branch=3;
     int capacity=0;std::int64_t deadlineNs=0;
@@ -37,22 +82,33 @@ public:
         open_[branch]=0;return policy_.RestoreHold(scope_,branch,invocation,end,exact);
     }
     NativeCycleRecoveryDecision Evaluate(const NativeCycleRecoveryScope& scope,const ReloadFlowEventInput& entry,
-        int capacity,std::int64_t deadline)noexcept {
+        int capacity,std::int64_t deadline,NativeCycleRecoveryAdmissionDiagnostic* rejection=nullptr)noexcept {
         NativeCycleRecoveryDecision out;
         // The dispatched ammunition observer owns these callbacks exclusively.
         // Old counts are deliberately not compared during a partial transfer.
         if(policy_.ReloadCommand())return out;
         const auto branch=entry.boundary.branch;const auto decoded=DecodeReloadUpdateContext(entry.copiedContext);
-        if(!active_||Uncertain()||scope!=scope_||branch>=3||open_[branch]||!entry.nativeInvocation||
-           entry.nativeInvocation<=last_[branch]||entry.kind!=ReloadFlowEvent::Update||entry.depth!=1||
-           entry.nativeParent||entry.nativeUpdate!=entry.nativeInvocation||entry.nowNs<began_||
-           (policy_.Acknowledged()&&entry.nowNs<std::max(acknowledgedAt_,paidNativeFloor_))||
-           !entry.contextCopied||!decoded||!ValidManualReloadDelta(decoded->deltaSeconds)||
-           decoded->reloadTimeMultiplier<=0||decoded->reloadTimeMultiplier>4||decoded->flags24Through28[2]||
-           entry.boundary.firing!=scope_.identity.firing[branch]||entry.boundary.owner!=scope_.identity.owner||
-           entry.boundary.loaded!=debt_.loaded||entry.boundary.reserve!=debt_.reserve||capacity!=debt_.capacity||
-           !CycleConvergencePhase(entry.boundary.current,entry.boundary.next,entry.boundary.timer,profile_)||
-           deadline<=entry.nowNs||deadline-entry.nowNs>Policy::MaximumFreshNs){LoseGuard();return out;}
+        using R=NativeCycleAdmissionReason;
+        // Same predicates and evaluation order as the original rejection gate.
+        const auto reason=!active_?R::Inactive:Uncertain()?R::Uncertain:scope!=scope_?R::Scope:
+            branch>=3?R::Branch:open_[branch]?R::OpenUpdate:!entry.nativeInvocation?R::InvocationZero:
+            entry.nativeInvocation<=last_[branch]?R::InvocationOrder:entry.kind!=ReloadFlowEvent::Update?R::EventKind:
+            entry.depth!=1?R::Depth:entry.nativeParent?R::Parent:entry.nativeUpdate!=entry.nativeInvocation?R::UpdateInvocation:
+            entry.nowNs<began_?R::Began:
+            (policy_.Acknowledged()&&entry.nowNs<std::max(acknowledgedAt_,paidNativeFloor_))?R::AcknowledgedFloor:
+            !entry.contextCopied?R::ContextNotCopied:!decoded?R::ContextDecode:
+            !ValidManualReloadDelta(decoded->deltaSeconds)?R::Delta:
+            decoded->reloadTimeMultiplier<=0?R::MultiplierLow:decoded->reloadTimeMultiplier>4?R::MultiplierHigh:
+            decoded->flags24Through28[2]?R::ContextFlag26:
+            entry.boundary.firing!=scope_.identity.firing[branch]?R::Firing:
+            entry.boundary.owner!=scope_.identity.owner?R::Owner:entry.boundary.loaded!=debt_.loaded?R::Loaded:
+            entry.boundary.reserve!=debt_.reserve?R::Reserve:capacity!=debt_.capacity?R::Capacity:
+            !CycleConvergencePhase(entry.boundary.current,entry.boundary.next,entry.boundary.timer,profile_)?R::ConvergencePhase:
+            deadline<=entry.nowNs?R::DeadlineExpired:deadline-entry.nowNs>Policy::MaximumFreshNs?R::DeadlineSpan:R::None;
+        if(reason!=R::None){
+            if(rejection)*rejection=AdmissionDiagnostic(reason,&scope,entry.nativeInvocation,capacity,deadline);
+            LoseGuard();return out;
+        }
         open_[branch]=last_[branch]=entry.nativeInvocation;
         return {entry.nativeInvocation,debt_.guardEpoch,branch,capacity,deadline};
     }
@@ -265,6 +321,15 @@ public:
     std::uint64_t Epoch()const noexcept{return debt_.guardEpoch;}
     std::int64_t Began()const noexcept{return began_;}
     const NativeCycleRecoveryScope& Scope()const noexcept{return scope_;}
+    NativeCycleRecoveryAdmissionDiagnostic AdmissionDiagnostic(NativeCycleAdmissionReason reason,
+        const NativeCycleRecoveryScope* supplied,std::uint64_t invocation,int capacity,std::int64_t deadline)const noexcept {
+        NativeCycleRecoveryAdmissionDiagnostic d;d.reason=reason;d.invocation=invocation;
+        if(supplied){d.supplied=*supplied;d.scopePresent=true;}d.expected=scope_;d.open=open_;d.last=last_;
+        d.deadlineNs=deadline;d.beganNs=began_;d.acknowledgedAtNs=acknowledgedAt_;d.paidNativeFloorNs=paidNativeFloor_;
+        d.capacity=capacity;d.expectedLoaded=debt_.loaded;d.expectedReserve=debt_.reserve;d.expectedCapacity=debt_.capacity;
+        d.profile=profile_;d.active=active_;d.uncertain=Uncertain();d.acknowledged=policy_.Acknowledged();
+        d.reloadCommand=policy_.ReloadCommand().has_value();return d;
+    }
     std::uint64_t GuardedUpdates()const noexcept{return guardedUpdates_;}
     std::uint64_t GuardedSteps()const noexcept{return guardedSteps_;}
 private:

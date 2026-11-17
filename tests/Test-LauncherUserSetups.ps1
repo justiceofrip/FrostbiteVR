@@ -1,6 +1,6 @@
 #requires -Version 7.5
 # Exercises the real installer and packaged Worker -> Entry path. Only external
-# process/network/registry boundaries are replaced in hash-verified fixture copies.
+# process/network/registry and capacity metadata are replaced in verified copies.
 # No game, native helper, headset, network, shortcut, or system setting is used.
 # Python 3.11+ is required only for Entry's real version check; select it with
 # -Python, FVR_PYTHON, or PATH. All generated files stay on this checkout's G: drive.
@@ -36,7 +36,7 @@ $relativeSources=@('launcher/Install-BC2VRLauncher.ps1','launcher/Start-Launcher
     'launcher/Launcher.ps1','launcher/Worker.ps1','launcher/Launcher.Core.ps1',
     'launcher/Launcher.Feedback.ps1','launcher/Launcher.Storage.ps1','launcher/Launcher.Settings.ps1',
     'launcher/runtime/Entry.ps1','launcher/runtime/Runtime.Core.ps1','launcher/runtime/Startup.ps1','launcher/runtime/Resolution.ps1',
-    'launcher/runtime/Dependencies.ps1','config/ffmpeg-download.json','tools/StorageBudget.ps1')
+    'launcher/runtime/Dependencies.ps1','launcher/runtime/GraphicsSettings.ps1','config/ffmpeg-download.json','tools/StorageBudget.ps1')
 $sourceFiles=@(foreach($relative in $relativeSources){
     $path=Join-Path $repo $relative;AssertNoLinks $path
     @{relative=$relative;path=$path;sha256=(Sha $path)}
@@ -93,8 +93,8 @@ function AssertBound {
     # Reserve one MiB for the final receipt/failure evidence within the32MiB cap.
     if([long]($files|Measure-Object Length -Sum).Sum -gt 31MB){throw 'Fixture exceeded31MiB plus oneMiB receipt reserve'}
 }
-# Only OS/process/network boundaries are replaced. All package verification,
-# storage, settings, install/update/rollback and Worker/Entry policy stays real.
+# Only OS/process/network boundaries and explicit capacity metadata are replaced.
+# Package verification, storage policy, settings and Worker/Entry stay real.
 $boundaries=@'
 function Write-CompatibilityBoundary([string]$Kind,$Value) {
     if(-not $env:FVR_COMPAT_OUTPUT -or [IO.Path]::GetFullPath($env:FVR_COMPAT_OUTPUT) -cne $script:CompatibilityFixtureRoot){throw 'Exact fixture boundary root unavailable'}
@@ -118,6 +118,17 @@ function Receive-FvrFile {throw 'Download is forbidden in this fixture'}
 # alone cannot redirect their journals elsewhere.
 $boundaries="`n`$script:CompatibilityFixtureRoot='"+$OutputPath.Replace("'","''")+"'`n"+$boundaries
 $runtimeBoundary=@'
+function Get-ChildItem {
+    [CmdletBinding()]
+    param([string]$LiteralPath,[switch]$File,[switch]$Recurse,[switch]$Force,[switch]$Directory)
+    if($env:FVR_COMPAT_RUNTIME_BYTES -and $LiteralPath -ceq $script:CompatibilityRuntimeRoot -and $File -and $Recurse){
+        [long]$bytes=$env:FVR_COMPAT_RUNTIME_BYTES
+        if($bytes -notin @([long]3.5GB,[long](4GB+1))){throw 'Unexpected runtime capacity fixture'}
+        Write-CompatibilityBoundary 'runtime_capacity_metadata' @{bytes=$bytes;path=$LiteralPath}
+        return [pscustomobject]@{Length=$bytes;Attributes=[IO.FileAttributes]::Normal}
+    }
+    Microsoft.PowerShell.Management\Get-ChildItem @PSBoundParameters
+}
 function Start-Bc2Child([string]$File,[string[]]$Arguments,[string]$Folder,[string]$LogName,[hashtable]$Environment=@{}) {
     Write-CompatibilityBoundary 'child_intercept' @{file=$File;arguments=$Arguments;environment=$Environment}
     if([IO.Path]::GetFileName($File) -cne 'BC2XrHost.exe' -or $LogName -cne 'xr-preflight' -or $Arguments[0] -cne '--probe'){throw 'Unexpected child request; no game/native helper may run'}
@@ -128,7 +139,7 @@ function Start-Bc2Child([string]$File,[string[]]$Arguments,[string]$Folder,[stri
 $registryBoundary=@'
 function Get-Bc2RegisteredOpenXrRuntime {throw 'Explicit runtime must not consult registry in this fixture'}
 '@
-function InvokeFixture([string]$Script,[string[]]$Arguments,[string]$Label) {
+function InvokeFixture([string]$Script,[string[]]$Arguments,[string]$Label,[long]$RuntimeBytes=-1) {
     AssertBound
     $Script=[IO.Path]::GetFullPath($Script)
     if(-not $Script.StartsWith(($OutputPath+'\'),[StringComparison]::OrdinalIgnoreCase) -or [IO.Path]::GetExtension($Script) -ine '.ps1'){throw 'Only this run''s copied PowerShell fixture may execute'}
@@ -141,6 +152,8 @@ function InvokeFixture([string]$Script,[string[]]$Arguments,[string]$Label) {
     $start.Environment['FVR_COMPAT_OUTPUT']=$OutputPath
     $start.Environment['FVR_PYTHON']=$pins.python.path
     $start.Environment['XR_RUNTIME_JSON']=$script:xrManifest
+    $null=$start.Environment.Remove('FVR_COMPAT_RUNTIME_BYTES')
+    if($RuntimeBytes -ge 0){$start.Environment['FVR_COMPAT_RUNTIME_BYTES']=$RuntimeBytes.ToString([Globalization.CultureInfo]::InvariantCulture)}
     $child=[Diagnostics.Process]::Start($start)
     $out=$child.StandardOutput.ReadToEndAsync();$err=$child.StandardError.ReadToEndAsync()
     try {
@@ -158,11 +171,12 @@ function Package([string]$Version) {
     foreach($name in 'Launcher.ps1','Worker.ps1','Launcher.Core.ps1','Launcher.Feedback.ps1','Launcher.Storage.ps1','Launcher.Settings.ps1'){
         CopySource ('launcher/'+$name) (Join-Path $folder ('app/'+$name))
     }
-    foreach($name in 'Entry.ps1','Runtime.Core.ps1','Startup.ps1','Dependencies.ps1','Resolution.ps1'){
+    foreach($name in 'Entry.ps1','Runtime.Core.ps1','Startup.ps1','Dependencies.ps1','Resolution.ps1','GraphicsSettings.ps1'){
         CopySource ('launcher/runtime/'+$name) (Join-Path $folder ('runtime/'+$name))
     }
     [IO.File]::AppendAllText((Join-Path $folder 'app/Launcher.Core.ps1'),"`n"+$boundaries)
-    [IO.File]::AppendAllText((Join-Path $folder 'runtime/Runtime.Core.ps1'),"`n"+$runtimeBoundary)
+    $runtimeRoot="`n`$script:CompatibilityRuntimeRoot='"+(Join-Path $script:install 'data/runtime').Replace("'","''")+"'`n"
+    [IO.File]::AppendAllText((Join-Path $folder 'runtime/Runtime.Core.ps1'),$runtimeRoot+$runtimeBoundary)
     [IO.File]::AppendAllText((Join-Path $folder 'runtime/Startup.ps1'),"`n"+$registryBoundary)
     CopySource 'config/ffmpeg-download.json' (Join-Path $folder 'runtime/config/ffmpeg-download.json')
     $runtime=Join-Path $folder 'runtime'
@@ -179,8 +193,8 @@ function Package([string]$Version) {
     Check ((Sha (Join-Path $folder 'runtime/Entry.ps1')) -ceq (Sha (Source 'launcher/runtime/Entry.ps1'))) ('packaged Entry remains byte-exact '+$Version)
     return @{zip=$zip;manifest=$manifest}
 }
-function RunWorker([string]$Version,[string]$Action,[string]$Label){
-    return InvokeFixture (Join-Path $script:install ('versions/'+$Version+'/app/Worker.ps1')) @('-InstallRoot',$script:install,'-Action',$Action) $Label
+function RunWorker([string]$Version,[string]$Action,[string]$Label,[long]$RuntimeBytes=-1){
+    return InvokeFixture (Join-Path $script:install ('versions/'+$Version+'/app/Worker.ps1')) @('-InstallRoot',$script:install,'-Action',$Action) $Label $RuntimeBytes
 }
 try {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -226,6 +240,20 @@ Save-FvrGameFolder -InstallRoot $Root -Selection $Selection|ConvertTo-Json -Dept
         Check ($xr.source -ceq 'XR_RUNTIME_JSON override' -and $xr.manifest -ceq $script:xrManifest -and $xr.label -ceq 'VDXR explicit fixture') ('selected VDXR path remains exact '+$n)
     }
     Check (-not(Test-Path -LiteralPath (Join-Path $script:install 'data/runtime/tools'))) 'cold Validate does not download or create decoder cache'
+    foreach($case in @(
+        @{action='Validate';bytes=[long]3.5GB;pass=$true},
+        @{action='Launch';bytes=[long]3.5GB;pass=$false},
+        @{action='Validate';bytes=[long](4GB+1);pass=$false},
+        @{action='Launch';bytes=[long](4GB+1);pass=$false})){
+        $label='capacity-'+$case.action+'-'+$case.bytes
+        $r=RunWorker '0.0.1' $case.action $label $case.bytes
+        $status=Load (Join-Path $script:install 'data/operation.json')
+        if($case.pass){Check ($r.code -eq 0 -and $status.state -eq 'done' -and $r.stdout.Contains('"validated": true')) 'Worker to Entry Validate admits 3.5 GiB without launch reservation'}
+        else{Check ($r.code -ne 0 -and $status.state -eq 'error' -and $status.message.Contains('4 GiB cap')) ('Worker to Entry refuses '+$label)}
+    }
+    foreach($folder in 'tools','cache','sessions'){
+        Check (-not(Test-Path -LiteralPath (Join-Path $script:install ('data/runtime/'+$folder)))) ('Validate and capacity refusals do not create '+$folder)
+    }
     $r=RunWorker '0.0.1' Launch 'launch-headset-unavailable'
     $status=Load (Join-Path $script:install 'data/operation.json')
     Check ($r.code -ne 0 -and $status.state -eq 'error' -and $status.message.Contains('Fixture XR_ERROR_FORM_FACTOR_UNAVAILABLE')) 'real Worker and Entry preserve intercepted headset failure without Steam or game startup'
@@ -243,6 +271,7 @@ Save-FvrGameFolder -InstallRoot $Root -Selection $Selection|ConvertTo-Json -Dept
     $r=RunWorker '0.0.1' Validate 'validate-rollback';Check ($r.code -eq 0) 'rolled-back packaged Entry validates'
     $events=@(Get-Content -LiteralPath (Join-Path $OutputPath 'boundary-events.jsonl')|ForEach-Object {$_|ConvertFrom-Json -AsHashtable})
     $children=@($events|Where-Object {$_.kind -ceq 'child_intercept'})
+    Check (@($events|Where-Object {$_.kind -ceq 'runtime_capacity_metadata'}).Count -eq 4) 'all four capacity cases exercise the real guard with mocked logical bytes'
     Check ($children.Count -eq 1 -and $children[0].value.environment.XR_RUNTIME_JSON -ceq $script:xrManifest) 'only intercepted generic OpenXR probe requested, using exact explicit runtime'
     Check (@($events|Where-Object {$_.kind -ceq 'process_query' -and @($_.value.names|Where-Object {$_ -match 'steam|vrserver'}).Count}).Count -eq 0) 'packaged flow never queries Steam process'
     foreach($pin in $pins.files){if((Sha $pin.path) -cne $pin.sha256){throw ('Source changed during run: '+$pin.relative)}}
@@ -265,7 +294,7 @@ finally {
         } catch {$failure='Fixture cleanup failed; remaining evidence retained: '+$_.Exception.Message}
     }
     $elevated=([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    Save (Join-Path $runRoot 'result.json') @{schema='fvr.user-setup-matrix.v1';passed=($null -eq $failure);error=$failure;checks=$results.ToArray();source_pins=$SourcePins;source_pins_sha256=$SourcePinsSha256;runner_sha256=(Sha $PSCommandPath);seconds=$clock.Elapsed.TotalSeconds;fixture_bytes_before_cleanup=$bytes;fixtures_cleaned=$cleaned;artifacts_retained=(-not $cleaned);child_powershell_calls=$calls;python_version_probe_real=$true;elevated_process=$elevated;boundaries_mocked=@('process table','Steam registry rejection','network transport rejection','OpenXR child launch','OpenXR registry rejection');game_started=$false;headset_tested=$false;native_compatibility_verified=$false;steam_edition_verified=$false;ea_edition_verified=$false;standard_user_permissions_verified=$false;c_drive_writes=$false;downloads=$false;source_modified=$false;published=$false}
+    Save (Join-Path $runRoot 'result.json') @{schema='fvr.user-setup-matrix.v1';passed=($null -eq $failure);error=$failure;checks=$results.ToArray();source_pins=$SourcePins;source_pins_sha256=$SourcePinsSha256;runner_sha256=(Sha $PSCommandPath);seconds=$clock.Elapsed.TotalSeconds;fixture_bytes_before_cleanup=$bytes;fixtures_cleaned=$cleaned;artifacts_retained=(-not $cleaned);child_powershell_calls=$calls;python_version_probe_real=$true;elevated_process=$elevated;boundaries_mocked=@('process table','Steam registry rejection','network transport rejection','OpenXR child launch','OpenXR registry rejection','runtime logical file-size metadata');game_started=$false;headset_tested=$false;native_compatibility_verified=$false;steam_edition_verified=$false;ea_edition_verified=$false;standard_user_permissions_verified=$false;c_drive_writes=$false;downloads=$false;source_modified=$false;published=$false}
 }
 if($failure){throw ($failure+'; evidence: '+$runRoot)}
 Write-Output ('Setup matrix passed '+$results.Count+' checks; no game, headset, network or source edits. Receipt: '+(Join-Path $runRoot 'result.json'))

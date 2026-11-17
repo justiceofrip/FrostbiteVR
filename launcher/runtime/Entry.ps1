@@ -64,7 +64,7 @@ if($LASTEXITCODE){throw 'Python 3.11 or newer is required.'}
 $cacheRoot=Get-FvrChild $StateRoot 'cache'
 $cache=Get-FvrChild $cacheRoot $config.asset_recipe_sha256
 $cached=Test-Bc2AssetCache $cache $config.asset_recipe_sha256 $gameHash
-Assert-Bc2RuntimeSpace $StateRoot
+Assert-Bc2RuntimeSpace $StateRoot -Action $Action
 if($Action -eq 'Validate'){
     $null=Get-Bc2PreparationFfmpeg $StateRoot (Join-Path $PSScriptRoot 'config/ffmpeg-download.json') $cached Validate
     @{validated=$true;version=$config.version;source_sha256=$config.source_sha256;assets_ready=$cached;openxr_runtime=$xr.label;headset_checked=$false;game_started=$false}|ConvertTo-Json;return

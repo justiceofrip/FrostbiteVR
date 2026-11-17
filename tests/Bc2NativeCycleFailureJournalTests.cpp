@@ -102,6 +102,53 @@ int RejectedAndIncompleteEventsRemainDiagnostic(){
     CHECK(partialJson.find("\"boundary\":null")!=std::string::npos);
     CHECK(partialJson.find("\"copied\":false,\"hex\":null,\"fnv1a64\":null")!=std::string::npos);return 0;
 }
+int FirstAdmissionKeepsOriginalScopeGuardsAndSourceReads(){
+    Bc2NativeCycleView original;original.phase=Bc2NativeCyclePhase::Cancelled;original.failure=Bc2NativeCycleFailure::Owner;
+    original.native.owner={0x10000,0x20000,0x30000,0x40000,2,3,4};original.native.firing={0x50000,0x60000,0x70000};
+    original.loaded=4;original.reserve=45;original.capacity=5;original.cycle=1;original.shot=2;
+    original.failureInvocation=60843;original.blocksFire=true;const NativeCycleFailureOutcome outcome=original;
+    CHECK(outcome.phase==original.phase&&outcome.failure==original.failure&&outcome.native==original.native);
+    CHECK(outcome.loaded==4&&outcome.reserve==45&&outcome.capacity==5&&outcome.cycle==1&&outcome.shot==2);
+    CHECK(outcome.failureInvocation==60843&&outcome.blocksFire);
+    NativeCycleFailureJournal journal;auto first=Failure(60843);first.previousPhase=Bc2NativeCyclePhase::Advancing;
+    auto event=RestoreEvent(60843);event.entry.kind=ReloadFlowEvent::Update;event.entry.nativeUpdate=60843;
+    event.entry.contextCopied=true;event.entry.copiedContext[0x26]=std::byte{1};event.finished=false;
+    NativeCycleRecoveryAdmissionDiagnostic d;d.reason=NativeCycleAdmissionReason::InvocationOrder;d.invocation=60843;
+    d.scopePresent=d.sourcePresent=d.active=true;d.expected.identity=first.view.native;
+    d.expected.config.assetName[0]='M';d.expected.config.assetPath[191]='Z';d.expected.config.baseCapacity=5;
+    d.expected.config.boltTime=std::bit_cast<float>(std::uint32_t{0x7fc01234});
+    d.supplied=d.expected;d.supplied.identity.owner.equipGeneration=9;d.supplied.config.assetPath[191]='Y';
+    d.open={0,17,0};d.last={51290,51288,60843};d.deadlineNs=329026095433300;
+    d.beganNs=329010524499900;d.paidNativeFloorNs=329025995434100;d.acknowledgedAtNs=329025995434000;
+    d.capacity=6;d.expectedCapacity=5;d.expectedLoaded=4;d.expectedReserve=45;d.paidRecoveryDrain=60840;
+    d.profile={true,false,0,2.3f};auto& s=d.source;s.firstFailed=NativeCycleSourcePredicate::Current;
+    s.evaluated=(1u<<12)-2;s.passed=(1u<<11)-2;s.caller=0x6ec72f;s.expectedCaller=0x6ec72f;
+    s.context=0x24000;s.stackLow=0x20000;s.stackHigh=0x30000;s.capacity=5;s.baseCapacity=5;
+    s.currentNowNs=329025995434200;s.leaseObservedNs=329025910361900;s.leaseDeadlineNs=329026095433300;
+    s.leaseRevision=17;s.currentRevision=18;s.currentRevisionRead=s.currentEnabled=s.memoryReadAvailable=true;
+    s.capacityAttempted=s.capacityRead=15;s.capacityWords={0x3f800000,0xffffffff,0x3f800000,0xffffffff};
+    s.configAttempted=7;s.configRead=3;s.configWords[0]=0x11223344;s.configWords[1]=0xaabbccdd;
+    CHECK(journal.Capture(first,&event,nullptr,nullptr,&d));d={};event.entry.copiedContext={};
+    CHECK(!journal.Capture(Failure(70000),nullptr,nullptr,nullptr,&d));const auto kept=journal.Read();
+    CHECK(kept&&kept->admission&&kept->triggeringEvent);const auto& saved=*kept->admission;
+    CHECK(saved.reason==NativeCycleAdmissionReason::InvocationOrder&&saved.invocation==60843);
+    CHECK(saved.open[1]==17&&saved.last[2]==60843&&saved.paidRecoveryDrain==60840);
+    CHECK(saved.supplied.config.assetPath[191]=='Y'&&saved.expected.config.assetPath[191]=='Z');
+    CHECK(saved.supplied.identity.owner.equipGeneration==9&&saved.expected.config.baseCapacity==5);
+    CHECK(std::bit_cast<std::uint32_t>(saved.expected.config.boltTime)==0x7fc01234);
+    CHECK(saved.source.currentRevision==18&&saved.source.leaseRevision==17&&saved.source.configRead==3);
+    CHECK(saved.source.configWords[0]==0x11223344&&saved.source.configWords[1]==0xaabbccdd);
+    CHECK(kept->triggeringEvent->entry.copiedContext[0x26]==std::byte{1});
+    std::ostringstream output;NativeCycleFailureJournal::WriteJson(output,*kept);const auto json=output.str();
+    CHECK(json.find("\"reason\":\"invocation_order\",\"invocation\":60843")!=std::string::npos);
+    CHECK(json.find("\"open\":[0,17,0],\"last\":[51290,51288,60843]")!=std::string::npos);
+    CHECK(json.find("\"capacity\":6,\"expected_loaded\":4,\"expected_reserve\":45,\"expected_capacity\":5")!=std::string::npos);
+    CHECK(json.find("\"first_failed\":\"current\"")!=std::string::npos);
+    CHECK(json.find("\"current_now_ns\":329025995434200")!=std::string::npos);
+    CHECK(json.find("\"config_words\":[287454020,2864434397,0")!=std::string::npos);
+    CHECK(json.find("nan")==std::string::npos&&json.size()<16384&&json.ends_with("}\n"));
+    return 0;
+}
 int ConcurrentPublicationHasNoPartialValue(){
     for(unsigned round=0;round<30;++round){
         NativeCycleFailureJournal journal;std::barrier start(9);std::vector<std::jthread> writers;
@@ -152,5 +199,5 @@ int BusyReadAndUndispatchedControlPreserveDebt(){
     CHECK(recovered.Held()&&recovered.Evidence().contended&&epoch==4);return 0;
 }
 int main(){if(FirstCauseSurvivesTeardown()||FirstEventIsAnIndependentValueCopy()||RejectedAndIncompleteEventsRemainDiagnostic()||
-    ConcurrentPublicationHasNoPartialValue()||BusyReadAndUndispatchedControlPreserveDebt())return 1;
+    FirstAdmissionKeepsOriginalScopeGuardsAndSourceReads()||ConcurrentPublicationHasNoPartialValue()||BusyReadAndUndispatchedControlPreserveDebt())return 1;
     std::puts("First native-cycle failure retained; concurrent readers observe an immutable complete value.");return 0;}

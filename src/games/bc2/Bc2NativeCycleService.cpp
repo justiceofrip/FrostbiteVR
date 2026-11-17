@@ -102,13 +102,37 @@ bool Bc2NativeCycleService::ReleaseSupersededByRecovery(const Bc2NativeCycleCont
         std::find(issued_.begin(),issued_.end(),lease)!=issued_.end();
 }
 NativeCycleRecoveryDecision Bc2NativeCycleService::EvaluateRecovery(const NativeCycleRecoveryScope& scope,
-    const ReloadFlowEventInput& entry,int capacity,std::int64_t deadline)noexcept {
+    const ReloadFlowEventInput& entry,int capacity,std::int64_t deadline,const NativeCycleRecoverySourceDiagnostic* source)noexcept {
     lastEvent_=entry.nativeInvocation;
     if(entry.boundary.branch<3)paidOrdinaryIdle_[entry.boundary.branch]={};
     if(!Recovering()||recovery_.ReloadCommand())return {};
-    if(entry.boundary.branch<3&&paidRecoveryDrain_[entry.boundary.branch]){Cancel(Bc2NativeCycleFailure::Owner);return {};}
-    const auto result=recovery_.Evaluate(scope,entry,capacity,deadline);
-    if(!result)Cancel(Bc2NativeCycleFailure::Owner);return result;
+    if(entry.boundary.branch<3&&paidRecoveryDrain_[entry.boundary.branch]){
+        if(!firstAdmissionRejection_){
+            firstAdmissionRejection_=recovery_.AdmissionDiagnostic(NativeCycleAdmissionReason::PaidRecoveryDrain,
+                &scope,entry.nativeInvocation,capacity,deadline);
+            firstAdmissionRejection_->paidRecoveryDrain=paidRecoveryDrain_[entry.boundary.branch];
+            if(source){firstAdmissionRejection_->source=*source;firstAdmissionRejection_->sourcePresent=true;}
+        }
+        Cancel(Bc2NativeCycleFailure::Owner);return {};
+    }
+    NativeCycleRecoveryAdmissionDiagnostic rejected;
+    const auto result=recovery_.Evaluate(scope,entry,capacity,deadline,firstAdmissionRejection_?nullptr:&rejected);
+    if(!result){
+        if(!firstAdmissionRejection_){firstAdmissionRejection_=rejected;
+            if(source){firstAdmissionRejection_->source=*source;firstAdmissionRejection_->sourcePresent=true;}}
+        Cancel(Bc2NativeCycleFailure::Owner);
+    }return result;
+}
+void Bc2NativeCycleService::MissingRecovery(std::uint32_t firing,std::uint64_t invocation,NativeCycleAdmissionReason reason,
+    const NativeCycleRecoverySourceDiagnostic* source,const NativeCycleRecoveryScope* supplied,int capacity,std::int64_t deadline)noexcept {
+    // Missing keeps its existing target/active checks. Save only the first
+    // cancellation, before it revokes the recovery state and paid drain.
+    if(!firstAdmissionRejection_&&phase_!=Bc2NativeCyclePhase::Cancelled&&Active(phase_)&&
+       std::find(native_.firing.begin(),native_.firing.end(),firing)!=native_.firing.end()){
+        firstAdmissionRejection_=recovery_.AdmissionDiagnostic(reason,supplied,invocation,capacity,deadline);
+        if(source){firstAdmissionRejection_->source=*source;firstAdmissionRejection_->sourcePresent=true;}
+    }
+    Missing(firing,invocation);
 }
 bool Bc2NativeCycleService::DrainingHeldInvocation(const Bc2NativeCycleDecision& d,std::uint32_t firing,std::int64_t now)const noexcept {
     return Recovering()&&d.tracked&&d.hold&&d.branch<3&&d.invocation&&d.cycle==cycle_&&

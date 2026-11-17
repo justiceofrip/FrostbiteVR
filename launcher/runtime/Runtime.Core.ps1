@@ -148,14 +148,16 @@ function Get-Bc2SessionRecord($Active) {
         return $record
     } catch {return $null}
 }
-function Assert-Bc2RuntimeSpace([string]$StateRoot) {
+function Assert-Bc2RuntimeSpace([string]$StateRoot,[ValidateSet('Validate','Launch')][string]$Action='Launch') {
+    # Validate prepares no assets or session; retain its selected-drive floor.
+    [long]$reservation=if($Action -eq 'Validate'){0}else{768MB}
     Assert-FvrNoLinks $StateRoot
-    Assert-FvrFreeSpace $StateRoot 768MB
+    Assert-FvrFreeSpace $StateRoot $reservation
     # No silent deletion of failure evidence. Internal session accumulation is
     # capped; the launcher explains what to remove before starting more work.
     [long]$used=0
     if(Test-Path -LiteralPath $StateRoot){foreach($f in Get-ChildItem -LiteralPath $StateRoot -File -Recurse){if($f.Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Linked runtime evidence refused.'};$used+=$f.Length}}
-    if($used+768MB -gt 4GB){throw 'BC2 VR runtime evidence reached its 4 GiB cap. Keep wanted feedback logs, then remove old folders under data/runtime/sessions before launching again.'}
+    if($used+$reservation -gt 4GB){throw 'BC2 VR runtime evidence reached its 4 GiB cap. Keep wanted feedback logs, then remove old folders under data/runtime/sessions before launching again.'}
 }
 function Get-Bc2AudioEnvironment([string]$Cache) {
     # This map is supplied only to the fresh game process. Keep the validated

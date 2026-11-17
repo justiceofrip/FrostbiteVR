@@ -155,7 +155,12 @@ public:
     bool DrainingHeldInvocation(const Bc2NativeCycleDecision&,std::uint32_t firing,std::int64_t now)const noexcept;
     bool DrainingPaidOrdinaryInvocation(const Bc2NativeCycleDecision&,std::uint32_t firing,std::int64_t now)const noexcept;
     bool Recovering()const noexcept{return phase_==Bc2NativeCyclePhase::Converging||phase_==Bc2NativeCyclePhase::Advancing;}
-    NativeCycleRecoveryDecision EvaluateRecovery(const NativeCycleRecoveryScope&,const ReloadFlowEventInput&,int capacity,std::int64_t deadline)noexcept;
+    NativeCycleRecoveryDecision EvaluateRecovery(const NativeCycleRecoveryScope&,const ReloadFlowEventInput&,int capacity,std::int64_t deadline,
+        const NativeCycleRecoverySourceDiagnostic* source=nullptr)noexcept;
+    const auto& FirstAdmissionRejection()const noexcept{return firstAdmissionRejection_;}
+    void MissingRecovery(std::uint32_t firing,std::uint64_t invocation,NativeCycleAdmissionReason,
+        const NativeCycleRecoverySourceDiagnostic* source=nullptr,const NativeCycleRecoveryScope* supplied=nullptr,
+        int capacity=0,std::int64_t deadline=0)noexcept;
     void FinishRecovery(const NativeCycleRecoveryDecision&,const ReloadFlowRecord&,const NativeCycleInputGuard&,unsigned steps,unsigned rejected)noexcept;
     std::optional<Bc2NativeCycleRecoveryView> RecoveryView(std::int64_t now)noexcept{return concurrentCycle_?std::nullopt:recovery_.View(now);}
     bool SubmitRecovery(const interaction::WeaponCycleIdleDebtRelease&,const interaction::HandInteractionSample&)noexcept;
@@ -277,6 +282,7 @@ private:
     Bc2NativeCyclePhase phase_=Bc2NativeCyclePhase::Watching;
     Bc2NativeCycleFailure failure_=Bc2NativeCycleFailure::None;
     std::optional<Bc2NativeCycleInputRejection> firstInputRejection_;
+    std::optional<NativeCycleRecoveryAdmissionDiagnostic> firstAdmissionRejection_;
     std::array<std::uint64_t,3> lastInvocation_{},openUpdate_{};
     std::array<std::int64_t,3> contexts_{},heldAt_{},finishedAt_{};
     // Only exact post-shot client Restore receipts qualify repeated previous7.

@@ -740,6 +740,15 @@ def bolt(snapshot, now, expected=None, raw=True):
             "bolt native identity lacks three distinct copies")
     if expected is not None:
         require(n["identity"] == expected["identity"], "bolt native firing copies changed")
+        if n.get("phase") == 6:
+            # Bc2NativeCycleService.h: Cancelled and Bc2NativeCycleFailure.
+            # This diagnoses a native refusal; native.debt remains historical
+            # and must never substitute for one of the live candidates below.
+            failure = integer(n["failure"])
+            names = {0: "None", 1: "Control", 2: "Owner", 3: "Input", 4: "State",
+                     5: "Shot", 6: "Hold", 7: "Restore", 8: "Expired", 9: "Completion"}
+            raise Refusal(f"native bolt cycle cancelled (phase=6 Cancelled, "
+                          f"failure={failure} {names.get(failure, 'Unknown')})")
         candidates = [b.get("held"), b.get("recovery"), n.get("held")]
         completed = completed_event(b, expected)
         candidates += [(v.get("release") or {}).get("cycle") for v in

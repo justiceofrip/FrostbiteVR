@@ -5,6 +5,7 @@
 #include "Bc2M95StockShotConfig.h"
 #include "Bc2M95PhysicalBoltDiagnostic.h"
 #include "Bc2NativeCycleEvidence.h"
+#include "Bc2NativeCycleUpdateRoute.h"
 #include "M95ForwardRestore239Fixture.h"
 #include "M95SnapshotProgression241Fixture.h"
 #include "Bc2PhysicalPump.h"
@@ -959,6 +960,166 @@ int PaidRecoveryReplayReblocksUntilTwoFreshRounds(){
         CHECK(next.cycle==paid.cycle+1&&next.shot==paid.shot+1&&next.loaded==paid.loaded-1&&next.reserve==paid.reserve);
     }return 0;
 }
+int RecoveryAdmissionNamesOriginalPredicateBeforeCancellation(){
+    using R=NativeCycleAdmissionReason;
+    constexpr R cases[]{R::Scope,R::Branch,R::OpenUpdate,R::InvocationZero,R::InvocationOrder,R::EventKind,
+        R::Depth,R::Parent,R::UpdateInvocation,R::Began,R::ContextNotCopied,R::ContextDecode,R::Delta,
+        R::MultiplierLow,R::MultiplierHigh,R::ContextFlag26,R::Firing,R::Owner,R::Loaded,R::Reserve,
+        R::Capacity,R::ConvergencePhase,R::DeadlineExpired,R::DeadlineSpan};
+    for(const auto reason:cases){
+        ConcurrentBoltFixture f;CHECK(f.Start());const auto before=f.service.View(f.clock);const auto last=f.event;
+        CHECK(before.phase==Bc2NativeCyclePhase::Advancing&&before.loaded==4&&before.reserve==45);
+        f.Begin(2);auto entry=f.update.entry;NativeCycleRecoveryScope scope{f.input.identity,f.input.config};
+        const auto originalScope=scope;int capacity=5;auto deadline=entry.nowNs+90000000;
+        if(reason==R::Scope)++scope.config.assetPath[17]; // Exact config identity, not just owner or ammo.
+        if(reason==R::Branch)entry.boundary.branch=3;
+        if(reason==R::OpenUpdate){CHECK(f.service.EvaluateRecovery(scope,entry,capacity,deadline));
+            ++entry.nativeInvocation;entry.nativeUpdate=entry.nativeInvocation;}
+        if(reason==R::InvocationZero)entry.nativeInvocation=entry.nativeUpdate=0;
+        if(reason==R::InvocationOrder)entry.nativeInvocation=entry.nativeUpdate=last;
+        if(reason==R::EventKind)entry.kind=ReloadFlowEvent::Restore;
+        if(reason==R::Depth)entry.depth=2;
+        if(reason==R::Parent)entry.nativeParent=last;
+        if(reason==R::UpdateInvocation)++entry.nativeUpdate;
+        if(reason==R::Began)entry.nowNs=f.service.Diagnostic().beganNs-1;
+        if(reason==R::ContextNotCopied)entry.contextCopied=false;
+        if(reason==R::ContextDecode)entry.copiedContext[0x24]=std::byte{2};
+        if(reason==R::Delta)Put(entry.copiedContext,0x18,.100001f);
+        if(reason==R::MultiplierLow)Put(entry.copiedContext,0x20,0.f);
+        if(reason==R::MultiplierHigh)Put(entry.copiedContext,0x20,4.1f);
+        if(reason==R::ContextFlag26)entry.copiedContext[0x26]=std::byte{1};
+        if(reason==R::Firing)++entry.boundary.firing;
+        if(reason==R::Owner)++entry.boundary.owner.equipGeneration;
+        if(reason==R::Loaded)++entry.boundary.loaded;
+        if(reason==R::Reserve)++entry.boundary.reserve;
+        if(reason==R::Capacity)++capacity;
+        if(reason==R::ConvergencePhase)entry.boundary.current=99;
+        if(reason==R::DeadlineExpired)deadline=entry.nowNs;
+        if(reason==R::DeadlineSpan)deadline=entry.nowNs+Bc2NativeCycleRecoveryState::Policy::MaximumFreshNs+1;
+        NativeCycleRecoverySourceDiagnostic source;source.currentNowNs=entry.nowNs+700;source.leaseRevision=71;
+        const auto route=EvaluateNativeCycleUpdateRoute(f.service,{nullptr,&scope,&entry,f.input.identity.firing[2],
+            entry.nativeInvocation,capacity,deadline,&source,&scope});
+        CHECK(route.recovering&&!route.recovery);
+        const auto after=f.service.View(f.clock);const auto saved=f.service.FirstAdmissionRejection();
+        CHECK(saved&&saved->reason==reason&&saved->invocation==entry.nativeInvocation);
+        CHECK(saved->active&&!saved->uncertain&&!saved->acknowledged&&!saved->reloadCommand);
+        CHECK(saved->scopePresent&&saved->supplied==scope&&saved->expected==originalScope);
+        CHECK(saved->capacity==capacity&&saved->deadlineNs==deadline&&saved->expectedCapacity==5);
+        CHECK(saved->expectedLoaded==4&&saved->expectedReserve==45&&saved->profile.bolt);
+        CHECK(saved->sourcePresent&&saved->source.currentNowNs==entry.nowNs+700&&saved->source.leaseRevision==71);
+        CHECK(after.phase==Bc2NativeCyclePhase::Cancelled&&after.failure==Bc2NativeCycleFailure::Owner&&after.blocksFire);
+        CHECK(after.native==before.native&&after.cycle==before.cycle&&after.shot==before.shot&&
+            after.loaded==before.loaded&&after.reserve==before.reserve&&after.capacity==before.capacity);
+        CHECK(!after.held&&!after.ready&&!after.retainedDebtOrigin);
+        if(reason==R::OpenUpdate)CHECK(saved->open[2]==f.update.entry.nativeInvocation&&saved->last[2]==saved->open[2]);
+        if(reason==R::InvocationOrder)CHECK(saved->open[2]==0&&saved->last[2]==last);
+        // A later missing observation must not relabel the first rejection or renew its operands.
+        source.currentNowNs=0;f.service.MissingRecovery(f.input.identity.firing[2],999999,R::MissingRecoverySource,&source);
+        f.service.Cancel(Bc2NativeCycleFailure::Control);
+        CHECK(f.service.FirstAdmissionRejection()->reason==reason&&f.service.FirstAdmissionRejection()->invocation==saved->invocation);
+        CHECK(f.service.FirstAdmissionRejection()->source.currentNowNs==saved->source.currentNowNs);
+    }
+    // Direct state callers retain the inactive/uncertain distinction too.
+    ConcurrentBoltFixture f;CHECK(f.Start());f.Begin(2);const auto scope=f.service.NativeScope();
+    for(bool uncertain:{false,true}){
+        Bc2NativeCycleRecoveryState state;const auto debt=f.service.View(f.clock).debt;CHECK(debt);
+        if(uncertain){CHECK(state.Begin(scope,*debt,f.service.Diagnostic().beganNs,true,false));state.LoseGuard();}
+        NativeCycleRecoveryAdmissionDiagnostic rejection;
+        CHECK(!state.Evaluate(scope,f.update.entry,5,f.clock+90000000,&rejection));
+        CHECK(rejection.reason==(uncertain?R::Uncertain:R::Inactive)&&rejection.uncertain==uncertain);
+    }
+    return 0;
+}
+int RecoveryAdmissionRecordsPaidOverlapAndAcknowledgedFloor(){
+    using R=NativeCycleAdmissionReason;
+    for(bool overlap:{false,true}){
+        RecoveryFixture f;CHECK(PayRecovery(f));const auto acknowledged=f.service.Diagnostic().acknowledgedAtNs;
+        CHECK(acknowledged&&f.Advance());Bc2NativeCycleDecision original;
+        if(overlap)original=f.Begin(1);
+        f.service.ObserveRestore(PaidRecoveryTail(f,0));CHECK(f.service.Recovering());
+        if(!overlap)f.Begin(2);
+        auto entry=f.update.entry;entry.nativeInvocation=entry.nativeUpdate=++f.event;
+        if(!overlap)entry.nowNs=acknowledged-1;
+        const auto scope=f.service.NativeScope();
+        CHECK(!f.service.EvaluateRecovery(scope,entry,8,entry.nowNs+90000000));
+        const auto saved=f.service.FirstAdmissionRejection();CHECK(saved&&saved->acknowledged&&!saved->uncertain);
+        CHECK(saved->reason==(overlap?R::PaidRecoveryDrain:R::AcknowledgedFloor));
+        CHECK(saved->acknowledgedAtNs==acknowledged);
+        if(overlap)CHECK(saved->paidRecoveryDrain==original.invocation);
+        CHECK(f.service.Phase()==Bc2NativeCyclePhase::Cancelled&&f.service.View(f.clock).blocksFire);
+    }return 0;
+}
+int RecoverySourceFailureIsLazyAndReachesTheFirstCancellation(){
+    using P=NativeCycleSourcePredicate;
+    for(unsigned value=unsigned(P::Enabled);value<=unsigned(P::ManualConfig);++value){
+        const auto failed=P(value);NativeCycleRecoverySourceDiagnostic source;
+        source.caller=source.expectedCaller=0x6ec72f;source.context=0x24000;source.stackLow=0x20000;source.stackHigh=0x30000;
+        source.leaseObservedNs=100;source.leaseDeadlineNs=200;source.leaseRevision=7;
+        if(failed==P::Caller)++source.caller;
+        if(failed==P::StackLow)source.stackLow=source.context+4;
+        if(failed==P::StackHigh)source.stackHigh=source.context+0x2f;
+        if(failed==P::Alignment)++source.context;
+        unsigned isolatedCalls=0,currentCalls=0,configCalls=0;
+        const bool accepted=source.Test(P::Enabled,failed!=P::Enabled)&&
+            EvaluateNativeCycleRecoverySource(source,failed!=P::Lease,failed!=P::Capacity,failed!=P::HoldCode,
+                failed!=P::ContextCopied,[&]{++isolatedCalls;return failed!=P::Isolated;},[&]{++currentCalls;
+                    source.currentNowNs=201;source.currentRevision=7;source.currentEnabled=true;
+                    source.currentRevisionRead=true;return failed!=P::Current;},[&]{++configCalls;return failed!=P::ManualConfig;});
+        CHECK(!accepted&&source.firstFailed==failed);
+        CHECK(source.evaluated==((1u<<(value+1))-2)&&source.passed==((1u<<value)-2));
+        CHECK(isolatedCalls==(value>=unsigned(P::Isolated)?1u:0u));
+        CHECK(currentCalls==(value>=unsigned(P::Current)?1u:0u)&&configCalls==(failed==P::ManualConfig?1u:0u));
+        ConcurrentBoltFixture f;CHECK(f.Start());f.Begin(2);const auto before=f.service.View(f.clock);
+        auto observedScope=f.service.NativeScope();
+        const auto route=EvaluateNativeCycleUpdateRoute(f.service,{nullptr,nullptr,&f.update.entry,f.input.identity.firing[2],
+            f.event,0,0,&source,&observedScope});
+        CHECK(route.recovering&&!route.recovery&&f.service.Phase()==Bc2NativeCyclePhase::Cancelled);
+        const auto saved=f.service.FirstAdmissionRejection();CHECK(saved&&saved->reason==NativeCycleAdmissionReason::MissingRecoverySource);
+        CHECK(saved->source.firstFailed==failed&&saved->source.evaluated==source.evaluated&&saved->supplied==observedScope);
+        CHECK(saved->source.currentNowNs==source.currentNowNs&&saved->source.leaseDeadlineNs==200);
+        CHECK(f.service.View(f.clock).native==before.native&&f.service.View(f.clock).loaded==4&&f.service.View(f.clock).reserve==45);
+    }
+    // Present source but missing original entry has a distinct reason.
+    ConcurrentBoltFixture f;CHECK(f.Start());const auto scope=f.service.NativeScope();
+    const auto route=EvaluateNativeCycleUpdateRoute(f.service,{nullptr,&scope,nullptr,f.input.identity.firing[2],++f.event,5,f.clock+90000000});
+    CHECK(route.recovering&&!route.recovery&&f.service.FirstAdmissionRejection());
+    CHECK(f.service.FirstAdmissionRejection()->reason==NativeCycleAdmissionReason::MissingRecoveryEntry);return 0;
+}
+int RecoveryConfigCaptureForwardsExactlyTheOriginalReads(){
+    struct Memory {
+        std::uint32_t base=0;std::array<std::byte,0x188> bytes{};
+        unsigned calls=0,fail=UINT32_MAX,change=UINT32_MAX,readMask=0;
+        std::array<std::uint32_t,26> words{};
+        static bool Read(void* context,std::uint32_t at,void* out,std::size_t count)noexcept {
+            auto& m=*static_cast<Memory*>(context);const auto call=m.calls++;
+            if(call==m.fail||at<m.base||std::uint64_t(at-m.base)+count>m.bytes.size())return false;
+            std::memcpy(out,m.bytes.data()+at-m.base,count);
+            if(call==m.change)*static_cast<unsigned char*>(out)^=2;
+            if(call<m.words.size()){m.readMask|=1u<<call;std::memcpy(&m.words[call],out,count);}return true;
+        }
+    };
+    for(bool bolt:{false,true}){
+        Fixture f(bolt);const auto& c=f.input.config;Memory native;native.base=c.primaryFire;
+        Put(native.bytes,0xc,c.postReloadTime);Put(native.bytes,0x10,c.reloadThreshold);Put(native.bytes,0x14,c.reloadDelay);
+        Put(native.bytes,0x18,c.reloadTime);Put(native.bytes,0x20,c.reloadType);Put(native.bytes,0x24,c.fireLogicType);
+        Put(native.bytes,0x4c,c.fireInputAction);Put(native.bytes,0x50,c.boltTime);Put(native.bytes,0x54,c.boltDelay);
+        Put(native.bytes,0x8c,c.reloadInputAction);Put(native.bytes,0x180,c.numberOfMagazines);Put(native.bytes,0x184,c.baseCapacity);
+        native.bytes[0x58]=std::byte(c.holdBoltUntilZoomRelease);native.bytes[0x59]=std::byte(c.holdBoltUntilFireRelease);
+        // Baseline, failed read, and changed native word at every actual read.
+        for(unsigned mutation=0;mutation<53;++mutation){
+            auto ordinary=native,captured=native;
+            if(mutation&&mutation<=26)ordinary.fail=captured.fail=mutation-1;
+            if(mutation>26)ordinary.change=captured.change=mutation-27;
+            ReloadStateMemory first{&ordinary,Memory::Read},second{&captured,Memory::Read};
+            const bool expected=bolt?ReadManualBoltConfig(first,c):ReadManualPumpConfig(first,c);
+            NativeCycleRecoverySourceDiagnostic diagnostic;
+            CHECK(ReadNativeCycleRecoveryConfig(second,c,bolt,diagnostic)==expected&&expected==(mutation==0));
+            CHECK(ordinary.calls==captured.calls&&ordinary.calls<=26);
+            CHECK(diagnostic.configAttempted==((1u<<ordinary.calls)-1)&&diagnostic.configRead==ordinary.readMask);
+            CHECK(diagnostic.configWords==ordinary.words&&diagnostic.memoryReadAvailable);
+        }
+    }return 0;
+}
 int PaidConcurrentBoltReplayDoesNotPublishSecondReady(){
     ConcurrentBoltFixture f;CHECK(f.Start()&&f.Release());f.Rounds();const auto receipt=f.service.View(f.clock).ready;
     CHECK(receipt&&f.service.AcknowledgeReady(*receipt,f.clock));SetPaidFixtureIdle(f);
@@ -1194,5 +1355,9 @@ int PaidRecoveryPumpDoesNotRepeatPhysicalWork(){
 }
 }
 int main(){CHECK(!PaidRecoverySiblingIdleCompletesBeforeRestoreDelivery());CHECK(!PaidRecoverySiblingReceiptCannotHideChangedOrNewerWork());CHECK(!PaidRecoveryReplayReblocksUntilTwoFreshRounds());CHECK(!PaidConcurrentBoltReplayDoesNotPublishSecondReady());CHECK(!PaidRecoveryRejectsStaleOrChangedReplay());CHECK(!PaidRecoveryPauseRequiresFreshNativeEvidenceNotAnotherGesture());CHECK(!PaidRecoveryDrainsOriginalIdleOverlapWithoutBorrowingVotes());CHECK(!PaidRecoveryRejectsContradictoryOverlapOrStaleNormalEvidence());CHECK(!PaidRecoveryPumpDoesNotRepeatPhysicalWork());CHECK(!RecoveryConversionDefinitivelyRejectsOnlyTheUndeliveredHeldRelease());CHECK(!RecoveryReleaseDenialCannotBeBorrowedOrHideAcceptedWork());CHECK(!InputRejectionCapturesExactCauseOnceAndSurvivesActorRetirement());CHECK(!FreshControllerLossRetainsDebtWithoutAdmittingThePacket());CHECK(!ControllerLossCannotHideInvalidOwnerOrForgedRelease());CHECK(!ControllerExpiryAtAdmissionRetainsNativeDebt());CHECK(!ConcurrentBoltRequiresFullGestureDespiteNativeIdle());CHECK(!ConcurrentReleaseWaitsForEveryFreshNativeBranch());CHECK(!ConcurrentAuthorityCannotBeForgedOrRefreshedByIdleTime());CHECK(!ConcurrentInterruptionReturnsToNeutralRecoveryWithoutForgivingDebt());CHECK(!ConcurrentGuardFailureNeverPermitsFire());CHECK(!RecenterFromUnsuspendedHoldCreatesFreshObservation());CHECK(!RecenterPreservesShotAndInvalidatesOldAuthority());CHECK(!RecenterRejectsOtherOwnersOpenCallbacksAndPendingOutcomes());CHECK(!PumpRecenterNeedsNewNeutralAndFullStroke());CHECK(!QueuedNeutralAfterSameTickNativeUpdatesArmsWithoutRestamping());CHECK(!EmptyShotRecoveryRetainsZeroAndStillRequiresGesture());CHECK(!GuardedCommitsRequireOwnOpenParentAndConservedProjection());CHECK(!RestoreNeverVotesAndBusyRewindsRevokeOnlyUnsubmittedAuthority());CHECK(!ExactGuardedIdleRecordMutations());CHECK(!RealPumpAdapterTrackingLossRegrabThroughNativeService());CHECK(!NativeIdleRequiresActualGesture());CHECK(!LongTrackingLossRetainsDebt());CHECK(!MissingGuardAndConservationNeverRecover());
+    CHECK(!RecoveryAdmissionNamesOriginalPredicateBeforeCancellation());
+    CHECK(!RecoveryAdmissionRecordsPaidOverlapAndAcknowledgedFloor());
+    CHECK(!RecoverySourceFailureIsLazyAndReachesTheFirstCancellation());
+    CHECK(!RecoveryConfigCaptureForwardsExactlyTheOriginalReads());
     CHECK(!RetainedDebtOriginRequiresActualRecoveryAndCannotAuthorizeSelection());
     CHECK(!NativeBusyRevokesGrantButNotSubmittedReceipt());CHECK(!ExistingHoldDrainsBeforeConvergence());CHECK(!NoConversionOfNormalPendingOrStaleHold());return 0;}

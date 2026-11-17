@@ -299,7 +299,71 @@ class SavedMagazineBoltDebtTests(unittest.TestCase):
         self.assertEqual(self.snapshots, original)
 
 
+class SavedMagazineBoltCancellationTests(unittest.TestCase):
+    """Replay actual107/03's intact identity and native Cancelled(Owner)."""
+    @classmethod
+    def setUpClass(cls):
+        path = os.environ.get("BC2_MAGAZINE_BOLT_SAVED_CANCELLED")
+        if not path:
+            raise unittest.SkipTest("set BC2_MAGAZINE_BOLT_SAVED_CANCELLED to the retained actual107/03 bolt directory")
+        cls.snapshots = [json.loads(gzip.decompress((Path(path)/f"snapshot-{index:03}.json.gz").read_bytes()))
+                         for index in (2, 3, 4)]
+
+    def test_actual107_03_reports_native_cancellation_before_generic_debt_loss(self):
+        original = copy.deepcopy(self.snapshots)
+        before, advancing, cancelled = self.snapshots
+        expected = g.owed(before, before["observed_ns"])
+        for snapshot in (before, advancing):
+            self.assertEqual(g.bolt(snapshot, snapshot["observed_ns"], expected)["native"]["phase"], 8)
+        native = cancelled["bolt"]["native"]
+        self.assertEqual((native["phase"], native["failure"]), (6, 2))
+        self.assertEqual(native["identity"], expected["identity"])
+        self.assertEqual(native["debt"], expected["debt"])
+        self.assertIsNone(native["held"])
+        self.assertIsNone(cancelled["bolt"]["held"])
+        self.assertIsNone(cancelled["bolt"]["recovery"])
+        with self.assertRaisesRegex(g.Refusal, r"^native bolt cycle cancelled \(phase=6 Cancelled, failure=2 Owner\)$"):
+            g.bolt(cancelled, cancelled["observed_ns"], expected)
+        self.assertEqual(self.snapshots, original)
+
+    def test_cancelled_native_cycle_preserves_prior_observation_and_identity_checks(self):
+        before, _, cancelled = self.snapshots
+        expected = g.owed(before, before["observed_ns"])
+        changes = (
+            (lambda b: b["owner"].update(space=b["owner"]["space"]+1), "owner/input join differs"),
+            (lambda b: b["raw"].update(current=False), "raw contact is not current"),
+            (lambda b: b["calibration"].update(nativeJoined=False), "mismatched normal bolt calibration"),
+            (lambda b: b["native"]["identity"]["firing"].__setitem__(0, 1), "native firing copies changed"),
+        )
+        for change, diagnostic in changes:
+            with self.subTest(diagnostic=diagnostic):
+                snapshot = copy.deepcopy(cancelled)
+                change(snapshot["bolt"])
+                with self.assertRaisesRegex(g.Refusal, diagnostic):
+                    g.bolt(snapshot, snapshot["observed_ns"], expected)
+
+    def test_matching_historical_native_debt_never_replaces_lost_live_authority(self):
+        before, _, cancelled = self.snapshots
+        expected = g.owed(before, before["observed_ns"])
+        snapshot = copy.deepcopy(cancelled)
+        snapshot["bolt"]["native"].update(phase=8, failure=0)
+        self.assertEqual(snapshot["bolt"]["native"]["debt"], expected["debt"])
+        with self.assertRaisesRegex(g.Refusal, "old owed owner/cycle/shot was lost or replaced"):
+            g.bolt(snapshot, snapshot["observed_ns"], expected)
+
+
 class MagazineBoltTests(unittest.TestCase):
+    def test_cancelled_native_failure_names_do_not_imply_a_live_owed_cycle(self):
+        for failure, name in ((2, "Owner"), (3, "Input"), (8, "Expired"), (10, "Unknown")):
+            with self.subTest(failure=failure):
+                snapshot = fixture()
+                expected = owed(snapshot)
+                bolt = snapshot["bolt"]
+                bolt.update(held=None, recovery=None)
+                bolt["native"].update(held=None, phase=6, failure=failure, debt=copy.deepcopy(expected["debt"]))
+                with self.assertRaisesRegex(g.Refusal, f"native bolt cycle cancelled .*failure={failure} {name}"):
+                    g.bolt(snapshot, NOW, expected)
+
     def test_owed_frozen_and_guarded_lease_forms_are_mutually_exclusive(self):
         s = fixture()
         guarded = owed(s)

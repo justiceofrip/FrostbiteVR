@@ -10,6 +10,38 @@ function Check([bool]$Value,[string]$Name){if(-not $Value){throw "FAILED: $Name"
 function Reject([scriptblock]$Work,[string]$Name){$bad=$false;try{& $Work|Out-Null}catch{$bad=$true};Check $bad $Name}
 try {
     $null=Set-FvrLauncherStorage $root
+    # Mock only file metadata and drive capacity, as in Test-LauncherStorage.
+    # The real runtime cap, link rejection and selected-drive floor still run;
+    # no multi-GiB file is allocated and mocks remain inside this child scope.
+    & {
+        $spaceRoot=Join-Path $root 'space';$null=[IO.Directory]::CreateDirectory($spaceRoot)
+        $capacity=@{used=[long]3.5GB;free=[long]1GB;attributes=[IO.FileAttributes]::Normal;drive=''}
+        function Get-ChildItem([string]$LiteralPath,[switch]$File,[switch]$Recurse) {
+            if($LiteralPath -cne $spaceRoot -or -not $File -or -not $Recurse){throw 'Unexpected capacity fixture enumeration'}
+            [pscustomobject]@{Length=$capacity.used;Attributes=$capacity.attributes}
+        }
+        function Get-FvrDriveInfo([string]$DriveRoot) {
+            $capacity.drive=$DriveRoot
+            [pscustomobject]@{Name=$DriveRoot;IsReady=$true;DriveType=[IO.DriveType]::Fixed;AvailableFreeSpace=$capacity.free}
+        }
+        Assert-Bc2RuntimeSpace $spaceRoot -Action Validate
+        Check ($capacity.drive -ceq [IO.Path]::GetPathRoot($spaceRoot)) '3.5 GiB Validate passes with selected-drive check'
+        Reject {Assert-Bc2RuntimeSpace $spaceRoot -Action Launch} '3.5 GiB Launch retains 768 MiB reservation'
+        Reject {Assert-Bc2RuntimeSpace $spaceRoot} 'omitted action retains Launch reservation'
+        $capacity.used=4GB
+        Assert-Bc2RuntimeSpace $spaceRoot -Action Validate
+        Check $true 'Validate accepts exactly the 4 GiB logical cap'
+        $capacity.used=4GB+1
+        foreach($action in 'Validate','Launch'){Reject {Assert-Bc2RuntimeSpace $spaceRoot -Action $action} ($action+' refuses logical evidence above 4 GiB')}
+        $capacity.used=0;$capacity.free=512MB
+        Assert-Bc2RuntimeSpace $spaceRoot -Action Validate
+        Check $true 'Validate retains the 512 MiB selected-drive minimum'
+        Reject {Assert-Bc2RuntimeSpace $spaceRoot -Action Launch} 'Launch retains additional selected-drive working space'
+        $capacity.free=512MB-1
+        Reject {Assert-Bc2RuntimeSpace $spaceRoot -Action Validate} 'Validate refuses below the selected-drive minimum'
+        $capacity.free=1GB;$capacity.attributes=[IO.FileAttributes]::ReparsePoint
+        foreach($action in 'Validate','Launch'){Reject {Assert-Bc2RuntimeSpace $spaceRoot -Action $action} ($action+' refuses linked runtime evidence')}
+    }
     foreach($file in @(Get-ChildItem (Join-Path $repo 'launcher/runtime') -Filter '*.ps1')+@(Get-Item (Join-Path $repo 'launcher/Bootstrap.ps1'))+@(Get-Item (Join-Path $repo 'tools/Prepare-DesktopRuntime.ps1'))){
         $errors=$null;$tokens=$null;$null=[Management.Automation.Language.Parser]::ParseFile($file.FullName,[ref]$tokens,[ref]$errors)
         Check ($errors.Count -eq 0) ('parse '+$file.Name+': '+($errors -join '; '))
