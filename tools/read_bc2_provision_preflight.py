@@ -7,6 +7,7 @@ import argparse
 import importlib.util
 import json
 from pathlib import Path
+import re
 import struct
 
 
@@ -32,6 +33,8 @@ COUNTER_LIMIT = 65535
 PREFLIGHT_SIZE = 1496
 DETAILS_OFFSET = 1216
 PREFLIGHT_REQUIRED = 8
+REFUSAL_MARKER = "fvr.provision-command-refusal.v1"
+REFUSAL_REASONS = {"WaitForFreshSource": "TimedOut", "ArmRequest": "Rejected", "CanPublishRequest": "Rejected"}
 
 
 def _require(okay, message):
@@ -163,6 +166,80 @@ def inspect(control=None, request=None, receipt=None, admission=None, preflight=
         result["reason"] = str(error)
         return result
     result["state"] = "KNOWN"
+    return result
+
+
+def _command_refusal(command_log, expected_identity, job, nonce, operation):
+    """Accept one current v1 marker; absent/foreign/malformed markers explain no subbranch."""
+    if not isinstance(command_log, str):
+        return None
+    lines = [line for line in command_log.splitlines() if "fvr.provision-command-refusal" in line]
+    if len(lines) != 1:
+        return None
+    try:
+        prefix, *tokens = lines[0].split()
+        pairs = [token.split("=") for token in tokens]
+        _require(prefix == REFUSAL_MARKER and all(len(pair) == 2 for pair in pairs), "marker shape")
+        fields = dict(pairs)
+        unsigned = ("pid", "job", "nonce", "operation", "sample_pid", "creation", "session", "source_sequence")
+        signed = ("source_observed_ns", "issued_ns", "deadline_ns", "now_ns")
+        _require(len(fields) == len(pairs) and set(fields) == set(unsigned + signed + ("stage", "reason", "image")),
+                 "marker fields")
+        _require(fields["stage"] in REFUSAL_REASONS and REFUSAL_REASONS[fields["stage"]] == fields["reason"], "marker branch")
+        for name in unsigned + signed:
+            _require(re.fullmatch(r"[0-9]+" if name in unsigned else r"-?[0-9]+", fields[name]), "marker number")
+            fields[name] = int(fields[name])
+            _require(0 <= fields[name] < 2**64 if name in unsigned else -2**63 <= fields[name] < 2**63,
+                     "marker number range")
+        _require((fields["pid"], fields["job"], fields["nonce"], fields["operation"]) ==
+                 (expected_identity["pid"], job, nonce, OPERATIONS.index(operation)), "marker request differs")
+        _require((fields["sample_pid"], fields["creation"], fields["session"], fields["image"]) ==
+                 (expected_identity["pid"], expected_identity["creation"], expected_identity["session"],
+                  expected_identity["executable_sha256"]), "marker process differs")
+        _require(re.fullmatch(r"[0-9a-f]{64}", fields["image"]), "marker image")
+        return fields
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+def classify_command_outcome(command_exit, *, command_pinned, expected_identity, job, nonce, operation,
+                             command_log=None, timed_out=False, control=None, request=None, receipt=None,
+                             admission=None, preflight=None):
+    """Classify a saved invocation; never retry, write, or validate native success.
+
+    command_pinned must be True only after the caller verifies the executable
+    against its accepted binding. Only that pinned command's exit 4 guarantees
+    no publication. exact_terminal still requires the caller's successful-receipt
+    validator before claiming success. A marker cannot override an exit/timeout.
+    """
+    result = dict(classification="outcome_unknown", status="outcome_unknown_no_retry", stage="unknown_subbranch",
+                  reason=None, request_submitted=None, native_assignment_requested=None,
+                  diagnostic=None, terminal=None, prior_terminal=None, prior_preflight=None)
+    evidence = inspect(control, request, receipt, admission, preflight)
+    terminal = evidence["terminal"]
+    if (terminal and terminal["identity"] == expected_identity and terminal["job"] == job
+            and terminal["nonce"] < nonce):
+        result.update(prior_terminal=terminal, prior_preflight=evidence["preflight"])
+    if timed_out or command_exit == 7:
+        result["reason"] = "process_timeout" if timed_out else "terminal_wait_timeout"
+    elif command_pinned is not True:
+        result["reason"] = "command_not_pinned"
+    elif command_exit == 4:
+        diagnostic = _command_refusal(command_log, expected_identity, job, nonce, operation)
+        result.update(classification="known_not_published", status="not_submitted_no_retry",
+                      reason="command_prepublication_refusal", request_submitted=False,
+                      native_assignment_requested=False, diagnostic=diagnostic,
+                      stage=diagnostic["stage"] if diagnostic else "unknown_subbranch")
+    elif command_exit in (0, 6):
+        exact = (terminal and terminal["identity"] == expected_identity and terminal["job"] == job
+                 and terminal["nonce"] == nonce and terminal["operation"] == operation)
+        if exact and ((command_exit == 0) == (terminal["status"] in (1, 6, 8))):
+            result.update(classification="exact_terminal", status="terminal_capture", reason=None,
+                          request_submitted=True, native_assignment_requested=operation != "observe", terminal=terminal)
+        else:
+            result["reason"] = "terminal_binding_or_exit_mismatch" if terminal else evidence["reason"]
+    else:
+        result["reason"] = "unclassified_command_exit"
     return result
 
 

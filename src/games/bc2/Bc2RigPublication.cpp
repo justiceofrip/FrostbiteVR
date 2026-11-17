@@ -2827,14 +2827,16 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     // Its original deadlines survive all valid/invalid and payload-limit paths.
     const auto navigation=gameplay::ReadNavigationObservation();observed=ReloadNanos();
     const auto navigationSection=",\"navigationObservation\":"+NavigationObservationJson(navigation);
+    const auto vehicle=gameplay::ReadVehicleObservation();
+    const auto vehicleSection=",\"vehicleObservation\":"+VehicleObservationJson(vehicle);
     const auto writePayload=[&](std::string payload,const char* reason){
-        out<<CompleteNavigationSnapshot(std::move(payload),navigationSection,navigation,
-            gameplay::ReadNavigationObservationStatus,nonce,observed,reason,snapshotLimit);
+        out<<CompleteVehicleNavigationSnapshot(std::move(payload),navigationSection,navigation,vehicleSection,vehicle,
+            gameplay::ReadNavigationObservationStatus,gameplay::ReadVehicleObservationStatus,nonce,observed,reason,snapshotLimit);
     };
     const auto invalid=[&](const char* reason,bool observeOwnedKnife=false){
         std::ostringstream header;header.imbue(std::locale::classic());
         header<<"{\"schema\":\"fvr.bc2.live-mechanism-snapshot.v1\",\"nonce\":\""<<nonce
-            <<"\",\"valid\":false,\"invalid_reason\":\""<<reason<<"\",\"observed_ns\":"<<observed<<navigationSection
+            <<"\",\"valid\":false,\"invalid_reason\":\""<<reason<<"\",\"observed_ns\":"<<observed<<navigationSection<<vehicleSection
             <<",\"bodyHolster\":{\"available\":false,\"reason\":\"snapshot_unavailable\"}"
             <<",\"bodyInventory\":{\"observationOnly\":true,\"available\":false,\"reason\":\"snapshot_unavailable\"}"
             <<",\"chestKnife\":";
@@ -3115,7 +3117,7 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
         json<<",\"hand\":"<<unsigned(token.hand)<<",\"kind\":"<<unsigned(token.kind)<<",\"item\":";key(token.item);
         json<<",\"contact\":";key(token.contact);json<<",\"prerequisiteClaim\":"<<token.prerequisiteClaim
             <<"},\"deadlineNs\":"<<value.deadlineNs<<",\"inputSequence\":"<<value.inputSequence<<'}';};
-    json<<"{\"schema\":\"fvr.bc2.live-mechanism-snapshot.v1\",\"nonce\":\""<<nonce<<"\",\"valid\":true,\"invalid_reason\":null,\"observed_ns\":"<<observed<<navigationSection
+    json<<"{\"schema\":\"fvr.bc2.live-mechanism-snapshot.v1\",\"nonce\":\""<<nonce<<"\",\"valid\":true,\"invalid_reason\":null,\"observed_ns\":"<<observed<<navigationSection<<vehicleSection
         <<",\"valid_until_ns\":"<<until<<",\"shot_input_generation\":"<<frame->generation<<",\"native_deadline_qpc\":"<<frame->deadline
         <<",\"native_deadline_ns\":"<<ReloadNanos(frame->deadline)
         <<",\"weapon_actions_blocked\":"<<identity.weaponActionsBlocked<<",\"physical_equipment_generation\":"<<identity.equipmentGeneration<<",\"owner\":";owner(m.owner);

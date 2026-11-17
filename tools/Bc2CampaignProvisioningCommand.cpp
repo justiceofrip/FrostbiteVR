@@ -23,6 +23,17 @@ std::uint64_t Number(const wchar_t* value){
     std::size_t length=0;const auto out=std::stoull(value,&length,0);
     if(length!=std::wcslen(value)||value[0]==L'-')throw 1;return out;
 }
+void Refusal(const char* stage,const char* reason,std::uint64_t pid,const cp::Request& arguments,
+             const cp::Request& sample,std::int64_t now){
+    std::fprintf(stderr,"fvr.provision-command-refusal.v1 stage=%s reason=%s pid=%llu job=%llu nonce=%llu operation=%u "
+        "sample_pid=%u creation=%llu session=%llu image=",stage,reason,static_cast<unsigned long long>(pid),
+        static_cast<unsigned long long>(arguments.job),static_cast<unsigned long long>(arguments.nonce),unsigned(arguments.operation),
+        sample.process.pid,static_cast<unsigned long long>(sample.process.creation),static_cast<unsigned long long>(sample.process.session));
+    for(const auto byte:sample.process.image)std::fprintf(stderr,"%02x",unsigned(byte));
+    std::fprintf(stderr," source_sequence=%llu source_observed_ns=%lld issued_ns=%lld deadline_ns=%lld now_ns=%lld\n",
+        static_cast<unsigned long long>(sample.sourceSequence),static_cast<long long>(sample.sourceObservedNs),
+        static_cast<long long>(sample.issuedNs),static_cast<long long>(sample.deadlineNs),static_cast<long long>(now));
+}
 }
 // Only report-directory IPC. Never opens BC2, injects a DLL, installs a hook,
 // sends gameplay input, changes a launch profile or mounts a game bundle.
@@ -41,13 +52,17 @@ int wmain(int argc,wchar_t** argv){
         }else if(operation==L"observe"&&argc==6)arguments.operation=cp::Operation::Observe;
         else if(operation==L"restore"&&argc==6)arguments.operation=cp::Operation::Restore;
         else return 2;
-        cp::Request request{};
+        cp::Request request{},lastSample{};std::int64_t lastNow=0;
         const auto fresh=cp::command::WaitForFreshSource(pid,request,
-            [&](cp::Request& source){return Read(directory/L"campaign-provision-source.bin",source);},
-            Now,[](unsigned milliseconds){Sleep(milliseconds);});
-        if(fresh!=cp::command::SourceResult::Fresh)return fresh==cp::command::SourceResult::TimedOut?4:3;
+            [&](cp::Request& source){const bool okay=Read(directory/L"campaign-provision-source.bin",source);if(okay)lastSample=source;return okay;},
+            [&](){lastNow=Now();return lastNow;},[](unsigned milliseconds){Sleep(milliseconds);});
+        if(fresh!=cp::command::SourceResult::Fresh){
+            if(fresh==cp::command::SourceResult::TimedOut){Refusal("WaitForFreshSource","TimedOut",pid,arguments,lastSample,lastNow);return 4;}
+            return 3;
+        }
         // Start the original two-second arm once, only after source acquisition.
-        if(!cp::command::ArmRequest(request,Now()))return 4;
+        const auto armNow=Now();
+        if(!cp::command::ArmRequest(request,armNow)){Refusal("ArmRequest","Rejected",pid,arguments,request,armNow);return 4;}
         request.job=arguments.job;request.nonce=arguments.nonce;request.operation=arguments.operation;
         request.variant=arguments.variant;request.targetAsset=arguments.targetAsset;request.targetData=arguments.targetData;
         const auto pending=directory/L"campaign-provision-request.bin.pending",target=directory/L"campaign-provision-request.bin";
@@ -58,7 +73,10 @@ int wmain(int argc,wchar_t** argv){
         const auto attributes=GetFileAttributesW(target.c_str());
         if(attributes!=INVALID_FILE_ATTRIBUTES&&(attributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT)))return 5;
         // A delayed write cannot renew the source lease or the original arm.
-        if(!cp::command::CanPublishRequest(request,Now())){DeleteFileW(pending.c_str());return 4;}
+        const auto publishNow=Now();
+        if(!cp::command::CanPublishRequest(request,publishNow)){
+            DeleteFileW(pending.c_str());Refusal("CanPublishRequest","Rejected",pid,arguments,request,publishNow);return 4;
+        }
         if(!MoveFileExW(pending.c_str(),target.c_str(),MOVEFILE_REPLACE_EXISTING))return 5;
         while(Now()<request.deadlineNs+500000000){
             cp::WireReceipt receipt{};

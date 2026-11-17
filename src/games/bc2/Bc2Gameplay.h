@@ -4,6 +4,7 @@
 #include "Bc2ChestKnifeCurrentHoldObservation.h"
 #include "Bc2ContextualToolProbeWitness.h"
 #include "Bc2NavigationObservation.h"
+#include "Bc2VehicleObservation.h"
 #include "Bc2PumpReceiverGapProbe.h"
 #include "Bc2TwoGrenadeDeathWitness.h"
 #include "Bc2ShellFocusLossProbe.h"
@@ -68,6 +69,8 @@ bool EnableQueuePhaseObservation(std::span<const std::byte>,const engine::PeImag
     std::uintptr_t,bool explicitRequest=false,bool processRetainedProbe=false)noexcept;
 NavigationObservation ReadNavigationObservation()noexcept;
 NavigationObservationReason ReadNavigationObservationStatus(const NavigationObservation&)noexcept;
+VehicleObservation ReadVehicleObservation()noexcept;
+VehicleObservationReason ReadVehicleObservationStatus(const VehicleObservation&)noexcept;
 // Explicit driver-only native head-aim/camera opt-in, after Install before Start.
 // Fire can remain disabled for the bounded signed-axis response diagnostic.
 bool EnableBoatHeadAim(bool enableFire=false)noexcept;

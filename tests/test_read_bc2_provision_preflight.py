@@ -2,6 +2,8 @@
 
 BC2_PROVISION_PREFLIGHT_REPLAY optionally selects the retained actual104/01
 provision-observe directory for the pinned Expired 5/8 receipt regression.
+BC2_PROVISION_PREFLIGHT_REPLAY105 selects actual105/01 provision-equip for the
+pinned exit-4/prior-Observe regression; neither replay changes saved evidence.
 """
 import hashlib
 import importlib.util
@@ -202,6 +204,162 @@ class PreflightReaderTests(unittest.TestCase):
         self.assertFalse(terminal["input_excluded"])
         attempt = json.loads((root / "attempt.json").read_text(encoding="utf-8"))
         self.assertEqual(terminal["identity"], attempt["source_identity"])
+
+
+class CommandOutcomeTests(unittest.TestCase):
+    def classify(self, command_exit=4, blobs=None, **overrides):
+        blobs = fixture() if blobs is None else blobs
+        identity = reader._control._identity(blobs[1][16:1096])
+        args = dict(command_pinned=True, expected_identity=identity, job=77, nonce=2, operation="observe")
+        args.update(zip(("control", "request", "receipt", "admission", "preflight"), blobs))
+        args.update(overrides)
+        return reader.classify_command_outcome(command_exit, **args)
+
+    def marker(self, stage="ArmRequest", **overrides):
+        fields = dict(stage=stage, reason=reader.REFUSAL_REASONS[stage], pid=123, job=77, nonce=2, operation=0,
+                      sample_pid=123, creation=456, session=456, image=bytes(range(32)).hex(), source_sequence=500,
+                      source_observed_ns=100, issued_ns=0, deadline_ns=0, now_ns=200)
+        fields.update(overrides)
+        return reader.REFUSAL_MARKER + " " + " ".join(f"{key}={value}" for key, value in fields.items()) + "\n"
+
+    def test_each_current_marker_identifies_only_its_existing_prepublication_gate(self):
+        for stage in reader.REFUSAL_REASONS:
+            with self.subTest(stage=stage):
+                result = self.classify(command_log=self.marker(stage))
+                self.assertEqual((result["classification"], result["status"], result["stage"]),
+                                 ("known_not_published", "not_submitted_no_retry", stage))
+                self.assertFalse(result["request_submitted"])
+                self.assertFalse(result["native_assignment_requested"])
+                self.assertIsNone(result["terminal"])
+                self.assertEqual(result["diagnostic"]["now_ns"], 200)
+
+    def test_absent_malformed_incompatible_or_foreign_marker_cannot_invent_a_subbranch(self):
+        invalid = (None, "", b"binary", "other log\n", self.marker() + self.marker(),
+                   self.marker().replace(".v1 ", ".v2 "), self.marker().replace("reason=Rejected", "reason=TimedOut"),
+                   self.marker().replace(" pid=123", " pid=123 pid=123"), self.marker(job=78), self.marker(nonce=1),
+                   self.marker(pid=124), self.marker(sample_pid=124), self.marker(creation=457),
+                   self.marker(session=457), self.marker(image="0" * 64), self.marker(operation=1),
+                   self.marker(now_ns="invalid"), self.marker(now_ns=2**63), self.marker(source_sequence=-1),
+                   self.marker(extra=1), self.marker().replace(" stage=ArmRequest", " stage=Unknown"))
+        for log in invalid:
+            with self.subTest(log=log):
+                result = self.classify(command_log=log)
+                self.assertEqual((result["classification"], result["stage"]), ("known_not_published", "unknown_subbranch"))
+                self.assertIsNone(result["diagnostic"])
+                self.assertIsNone(result["terminal"])
+
+    def test_exit7_and_process_timeout_stay_unknown_even_with_matching_marker_and_terminal(self):
+        for command_exit, timed_out in ((7, False), (None, True), (4, True), (0, True)):
+            result = self.classify(command_exit, command_log=self.marker(), timed_out=timed_out)
+            self.assertEqual(result["classification"], "outcome_unknown")
+            self.assertEqual(result["status"], "outcome_unknown_no_retry")
+            self.assertIsNone(result["request_submitted"])
+            self.assertIsNone(result["native_assignment_requested"])
+            self.assertIsNone(result["terminal"])
+
+    def test_unpinned_exit4_never_uses_the_marker_as_publication_proof(self):
+        for pinned in (False, None, 1, "true"):
+            result = self.classify(command_pinned=pinned, command_log=self.marker())
+            self.assertEqual(result["classification"], "outcome_unknown")
+            self.assertIsNone(result["request_submitted"])
+
+    def test_exact_success_or_expired_terminal_keeps_strict_request_binding(self):
+        for command_exit, status, name in ((0, 1, "Ready"), (6, 10, "Expired")):
+            blobs = fixture(status=status, preflight=8 if status == 1 else 5)
+            result = self.classify(command_exit, blobs)
+            self.assertEqual(result["classification"], "exact_terminal")
+            self.assertEqual(result["terminal"]["status_name"], name)
+            self.assertTrue(result["request_submitted"])
+            self.assertIsNone(result["prior_terminal"])
+            for changed in (dict(job=78), dict(nonce=3), dict(operation="equip"),
+                            dict(expected_identity={"pid": 999})):
+                result = self.classify(command_exit, blobs, **changed)
+                self.assertEqual(result["classification"], "outcome_unknown")
+                self.assertIsNone(result["terminal"])
+            result = self.classify(6 if command_exit == 0 else 0, blobs)
+            self.assertEqual(result["classification"], "outcome_unknown")
+        # A descriptive terminal is not the successful receipt validator.
+        blobs = fixture(status=1, preflight=8)
+        reader._control.decode_receipt(blobs[2], reader._control._identity(blobs[1][16:1096]), 77, 2, "observe")
+
+    def test_prior_observe_never_becomes_requested_equip_terminal(self):
+        blobs = fixture(status=1, preflight=8)
+        before = [bytes(blob) for blob in blobs]
+        for command_exit in (4, 7, 0, 6):
+            result = self.classify(command_exit, blobs, nonce=3, operation="equip")
+            self.assertEqual(result["classification"], "known_not_published" if command_exit == 4 else "outcome_unknown")
+            self.assertIsNone(result["terminal"])
+            self.assertEqual((result["prior_terminal"]["nonce"], result["prior_terminal"]["operation"]), (2, "observe"))
+        self.assertEqual([bytes(blob) for blob in blobs], before)
+
+    def test_current_equipped_success_and_expired_equip_remain_distinct(self):
+        for status, command_exit in ((6, 0), (10, 6)):
+            blobs = fixture(status=status, preflight=8 if status == 6 else 5)
+            struct.pack_into("<I", blobs[1], 12, 1)
+            struct.pack_into("<I", blobs[3], 12, 1)
+            blobs[0][16:1216] = blobs[4][16:1216] = blobs[3]
+            if status == 6:
+                struct.pack_into("<2Q", blobs[2], 1120, 1, 555)
+                struct.pack_into("<q", blobs[2], 1144, 185)
+                struct.pack_into("<4I3Q", blobs[2], 1192, 1, 2, 3, 4, 5, 6, 7)
+                struct.pack_into("<10I", blobs[2], 1232, 3, 1, 99, 100, 0, 1, 1, 0, 1, 0)
+                reader._control.decode_receipt(blobs[2], reader._control._identity(blobs[1][16:1096]), 77, 2, "equip")
+            result = self.classify(command_exit, blobs, operation="equip")
+            self.assertEqual(result["classification"], "exact_terminal")
+            self.assertEqual(result["terminal"]["status_name"], "Equipped" if status == 6 else "Expired")
+            self.assertTrue(result["native_assignment_requested"])
+            result = self.classify(command_exit, blobs, operation="equip", receipt=None)
+            self.assertEqual(result["classification"], "outcome_unknown")
+            self.assertIsNone(result["terminal"])
+
+    def test_missing_or_invalid_saved_packets_do_not_affect_pinned_exit4_proof(self):
+        for index in range(5):
+            for invalid in (None, b"bad"):
+                blobs = list(fixture())
+                blobs[index] = invalid
+                # Supply the attempt identity independently of the saved request.
+                identity = reader._control._identity(fixture()[1][16:1096])
+                result = reader.classify_command_outcome(4, command_pinned=True, expected_identity=identity,
+                    job=77, nonce=3, operation="equip", **dict(zip(
+                        ("control", "request", "receipt", "admission", "preflight"), blobs)))
+                self.assertEqual(result["classification"], "known_not_published")
+                self.assertIsNone(result["terminal"])
+
+    @unittest.skipUnless(os.environ.get("BC2_PROVISION_PREFLIGHT_REPLAY105"), "retained actual105/01 Equip capture required")
+    def test_retained_actual105_exit4_preserves_prior_observe_and_unknown_subbranch(self):
+        root = Path(os.environ["BC2_PROVISION_PREFLIGHT_REPLAY105"])
+        pins = {
+            "control.bin": "4f28eb8c85746c4fedf9b696ded3f571c80e11eac0dc7a7d983f44306a9204af",
+            "request.bin": "73507f8b538c04a093d8067446e25c1d799332b6e91f5e92de61ec3735b1ef50",
+            "receipt.bin": "8d86369856c51509e178afb24f167d6d2fcd87d5e19502261bd815f5285e087f",
+            "admission.bin": "324a274ab4ccceaf52a782e8a1221f74fecf3df52d11bb555e38fede4b5a5afb",
+        }
+        saved = {name: (root / name).read_bytes() for name in (*pins, "command.log", "attempt.json", "result.json")}
+        for name, expected in pins.items():
+            self.assertEqual(hashlib.sha256(saved[name]).hexdigest(), expected)
+        self.assertEqual(saved["command.log"], b"")
+        attempt = json.loads(saved["attempt.json"])
+        original = json.loads(saved["result.json"])
+        self.assertEqual(original["command_exit"], 4)
+        self.assertEqual((attempt["job"], attempt["nonce"]), (1303001, 2))
+        args = dict(command_pinned=True, expected_identity=attempt["source_identity"], job=attempt["job"],
+                    nonce=attempt["nonce"], operation="equip", command_log=saved["command.log"].decode(),
+                    **{name.removesuffix(".bin"): saved[name] for name in pins})
+        result = reader.classify_command_outcome(original["command_exit"], **args)
+        self.assertEqual((result["classification"], result["stage"]), ("known_not_published", "unknown_subbranch"))
+        self.assertFalse(result["request_submitted"])
+        self.assertFalse(result["native_assignment_requested"])
+        self.assertIsNone(result["terminal"])
+        prior = result["prior_terminal"]
+        self.assertEqual((prior["job"], prior["nonce"], prior["operation"], prior["status_name"], prior["native_calls"]),
+                         (1303001, 1, "observe", "Ready", 0))
+        self.assertIsNone(result["prior_preflight"])
+        for command_exit, timed_out in ((7, False), (None, True), (0, False), (6, False)):
+            result = reader.classify_command_outcome(command_exit, timed_out=timed_out, **args)
+            self.assertEqual(result["classification"], "outcome_unknown")
+            self.assertIsNone(result["terminal"])
+        for name, original_bytes in saved.items():
+            self.assertEqual((root / name).read_bytes(), original_bytes)
 
 
 if __name__ == "__main__":

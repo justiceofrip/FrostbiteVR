@@ -9,6 +9,8 @@ Use --stage AttachContainer --pickup-first for a continuous chest pickup/attach.
 --capture NAME is explicit and consumes the runner's pre-admitted capture budget.
 --menu-batches FILE accepts [{"commands":[...],"holdMs":0}] for bounded right-hand
 menu input only. No process launch, desktop input, native writes or clock rewrites.
+--vehicle-stimulus FILE accepts one reviewed driver/gunner stick pulse; see
+bc2_vehicle_stimulus.py. It requires independent current vehicle observation.
 Plans and simulator acknowledgements never establish native reload acceptance.
 """
 
@@ -2904,12 +2906,16 @@ def main(argv=None):
     mode.add_argument("--stage", choices=[*planner.STAGES, "SupplyPickup"])
     mode.add_argument("--capture", help="one explicit named composition within runner budget")
     mode.add_argument("--menu-batches", type=Path, help="bounded JSON batches inside exact run directory")
+    mode.add_argument("--vehicle-stimulus", type=Path,
+                      help="one vehicle stick pulse JSON inside --run; explicit ROOT authorization required")
     mode.add_argument("--post-reload-shot", type=Path,
                       help="preceding completed result.json from drive_bc2_reload_stimulus.py "
                            "(feed CloseCover or supported fixed reload); this driver's --stage result is not accepted; "
                            "one pulse, native proof pending")
     mode.add_argument("--audit-post-reload-shot", type=Path, help="saved post-reload-shot.json; read-only drained native audit")
     parser.add_argument("--root-authorized-ordinary-input", action="store_true")
+    parser.add_argument("--vehicle-version", help="ROOT-reviewed exact session version for vehicle stimulus")
+    parser.add_argument("--vehicle-source-sha256", help="ROOT-reviewed exact session source for vehicle stimulus")
     parser.add_argument("--profiles", type=Path, help="production profile export copied inside exact run directory")
     parser.add_argument("--pickup-first", action="store_true", help="continuous fresh chest pickup then held AttachContainer")
     parser.add_argument("--pickup-approach", action="store_true",
@@ -2927,6 +2933,11 @@ def main(argv=None):
                 "--pickup-approach requires SupplyPickup or AttachContainer --pickup-first")
         require(not (args.stage or args.post_reload_shot) or args.profiles is not None, "stage/shot requires --profiles inside run")
         require(not args.post_reload_shot or args.root_authorized_ordinary_input, "root ordinary-input authorization required")
+        require(not args.vehicle_stimulus or (args.root_authorized_ordinary_input
+                and args.vehicle_version and re.fullmatch(r"[0-9a-f]{64}", args.vehicle_source_sha256 or "")),
+                "vehicle stimulus requires ROOT ordinary-input authorization and exact version/source")
+        require(args.vehicle_stimulus or not (args.vehicle_version or args.vehicle_source_sha256),
+                "vehicle source/version pins require --vehicle-stimulus")
         if args.audit_post_reload_shot:
             run = local_path(args.run)
             boundary_path = child(run, args.audit_post_reload_shot)
@@ -2955,9 +2966,18 @@ def main(argv=None):
         require(0 <= args.step_ms <= 100, "invalid command period")
         # Keep a partially initialized instance available for handle cleanup and
         # a refusal artifact if admission fails after creating the output folder.
-        driver = Driver.__new__(Driver)
+        driver_type = Driver
+        if args.vehicle_stimulus:
+            vehicle_spec = importlib.util.spec_from_file_location(
+                "bc2_vehicle_stimulus", Path(__file__).with_name("bc2_vehicle_stimulus.py"))
+            vehicle = importlib.util.module_from_spec(vehicle_spec)
+            vehicle_spec.loader.exec_module(vehicle)
+            driver_type = vehicle.driver_class(globals())
+        driver = driver_type.__new__(driver_type)
         driver.__init__(args)
-        if args.post_reload_shot:
+        if args.vehicle_stimulus:
+            result["vehicleStimulus"] = driver.stimulate(args.vehicle_stimulus)
+        elif args.post_reload_shot:
             result["postReloadShot"] = driver.post_reload_shot(args.post_reload_shot)
         elif args.stage:
             pickup = driver.stage("SupplyPickup") if args.pickup_first else None
@@ -2989,6 +3009,10 @@ def main(argv=None):
                                "timedTriggerPending": getattr(driver, "timed_trigger", None) is not None,
                                "captureSequence": getattr(driver, "capture_sequence", None),
                                "artifactDirectory": str(driver.artifacts.directory)})
+                if args.vehicle_stimulus:
+                    result.update(vehicleStick=getattr(driver, "stick", None),
+                                  pendingVehicleStick=getattr(driver, "pending_stick", None),
+                                  normalStopRequired=getattr(driver, "normal_stop_required", False))
                 try:
                     driver.artifacts.save("result.json", result, final=True)
                 except (REFUSAL, OSError) as error:
