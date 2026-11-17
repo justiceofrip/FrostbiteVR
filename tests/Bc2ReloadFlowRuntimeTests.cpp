@@ -68,16 +68,28 @@ int CallbackContentionKeepsItsEntryCancellationRoute(){
     return 0;
 }
 int ReloadRoutingKeepsItsOriginalSlotAndResource(){
-    Bc2CycleReloadRouting routing;NativeCycleRecoveryScope scope;
+    using namespace fvr::interaction;
+    constexpr std::int64_t Ms=1000000;
+    AmmoResourceService ammunition;Bc2CycleReloadRouting routing;NativeCycleRecoveryScope scope;
     scope.identity.owner={0x10000,0x20000,0x30000,0x40000,1,2,7};
     scope.identity.firing={0x50000,0x60000,0x70000};
-    fvr::interaction::WeaponCycleReloadCommand command;command.permit.debt.guardEpoch=9;
-    command.command.operation=fvr::interaction::AmmunitionOperation::RemoveMagazine;
+    scope.identity.serverPlayer=0x80000;scope.identity.serverSoldier=0x90000;scope.identity.serverItem=0xa0000;
+    // Use the same accepted magazine-command fixture as Bc2CycleReloadRoutingTests.
+    const AmmoResourceBinding binding{scope.identity.owner,{{0x20000,1,0x40000,19},2,7},
+        0xb0000,0xc0000,0xd0000,0xe0000,1000*Ms,1100*Ms};
+    const AmmunitionSnapshot sample{binding.context,100,1000*Ms,1100*Ms,{4,20,5},true};
+    CHECK(ammunition.Select(binding,scope.identity,sample,sample.observedNs));
+    const AmmoResourceRequest request{binding,{binding.context,1,sample.observedNs,sample.deadlineNs,AmmunitionOperation::RemoveMagazine}};
+    const auto accepted=ammunition.Accept(request,sample.observedNs);CHECK(accepted);
+    WeaponCycleReloadCommand command;command.command=*accepted;command.permit.resource=binding.context;
+    command.permit.debt.guardEpoch=9;command.permit.debt.loaded=4;command.permit.debt.reserve=20;command.permit.debt.capacity=5;
+    command.permit.second={91,92,93};command.drain={4,sample.observedNs};
     const Bc2NativeCycleSlot a{1,7},b{2,8},returned{1,9};
     CHECK(routing.Begin(scope,command,a));CHECK(routing.Owns(a,scope));
     CHECK(!routing.Owns(b,scope)&&!routing.Owns(returned,scope));
     auto wrong=scope;++wrong.identity.firing[2];CHECK(!routing.Owns(a,wrong));
     CHECK(!routing.Begin(wrong,command,b));CHECK(routing.Owns(a,scope));
+    CHECK(routing.Command()&&*routing.Command()==command);
     routing.Applied();CHECK(!routing.Owns(a,scope)&&!routing.Active());
     CHECK(routing.Begin(wrong,command,b));CHECK(routing.Owns(b,wrong)&&!routing.Owns(a,scope));return 0;
 }
