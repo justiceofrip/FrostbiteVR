@@ -1,0 +1,24 @@
+BC2 read-only input-cache observation
+
+read_bc2_input_cache.py is the maintained observer for the on-foot entry,
+ordinary dispatch cache pair and separate Gather cache. It complements offline
+Ghidra analysis; it does not call game functions, write memory or send input.
+
+ROOT runs it once inside an already StorageBudget-admitted private session:
+  python -B tools/read_bc2_input_cache.py --pid <current-game-pid> --session-dir <current-session-folder> --pins <current-provision-reader-pins.json> --output <new-report.json>
+
+Use the current session's PID and existing reviewed dependency manifest.
+The observer verifies the executable, process lifetime, source freshness,
+owner generations and two independently resolved entry/type observations.
+It limits process reads to64KiB/5seconds and output to128KiB. The first512
+returned scalar reads of at most16bytes are retained even on a later refusal.
+Output must be new. A refusal does not authorize an unchanged automatic retry.
+
+entry+0x198 is the Gather router. player+0xc70 supplies a separate pair whose
+current/previous cache pointers are at pair+0x1a0/+0x1a4. player+0xc74 is the
+separate Gather cache. Do not apply pair offsets to the Gather router or assume
+the pair is inline at a fixed player-relative offset.
+
+Aliases are non-atomic observations. A successful report does not establish
+producer ownership, cache-generation retirement, absence of deferred copies,
+native action authority, successful reloads or headset acceptance.
