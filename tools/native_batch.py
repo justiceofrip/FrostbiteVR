@@ -178,6 +178,47 @@ def verify_candidate_files(c, baseline, root, operation, host, auxiliary):
             need(row['relative_path'] in covered, 'Candidate missing from native/host/auxiliary source closures')
 
 
+def verify_post_session_installation(release, originals, session_path):
+    """Verify one recorded activation change after the session's original restoration."""
+    transition = release['post_session_installation']
+    need(isinstance(transition, dict) and set(transition) == {'installation', 'before', 'after', 'runtime'},
+         'Exact pinned post-session installation transition required')
+    active_rows = [row for row in originals['launcher'] if Path(row['original']['path']).name == 'active.json']
+    need(len(active_rows) == 1 and transition['before'] == active_rows[0]['original'],
+         'Post-session before pin must match the exact original activation')
+    active = active_rows[0]
+    before = transition['before']
+    active_path = Path(before['path'])
+    need(active_path.is_absolute(), 'Absolute original activation path required')
+    backup_path = checked(active['backup'])
+    need(backup_path == session_path.parent / 'launcher-before/active.json' and
+         active['backup']['bytes'] == before['bytes'] and active['backup']['sha256'] == before['sha256'],
+         'Exact same-session original activation backup required')
+    previous = load(backup_path)
+    installation = load(checked(transition['installation']))
+    need(all(installation.get(field) is True for field in ('installed', 'validated', 'settings_preserved')) and
+         installation.get('game_started') is False and type(installation.get('validation_exit')) is int and
+         installation['validation_exit'] == 0, 'Successful validated game-free installation receipt required')
+    version = installation.get('version')
+    need(isinstance(version, str) and re.fullmatch(r'\d+\.\d+\.\d+', version) is not None and
+         isinstance(previous, dict) and isinstance(previous.get('current'), str) and
+         installation.get('previous') == previous['current'] and version != previous['current'],
+         'Installation must replace the exact original current activation')
+    after_path = checked(transition['after'])
+    need(after_path == active_path and load(after_path) ==
+         dict(current=version, previous=installation['previous']), 'Exact post-installation activation required')
+    runtime_path = checked(transition['runtime'])
+    need(runtime_path == active_path.parent / 'versions' / version / 'runtime/runtime.json' and
+         transition['runtime']['sha256'] == installation.get('runtime_config_sha256'),
+         'Exact installed runtime manifest receipt binding required')
+    settings = [row['original'] for row in originals['launcher']
+                if Path(row['original']['path']) == active_path.parent / 'data/settings.json']
+    need(len(settings) == 1 and settings[0]['sha256'] == installation.get('settings_sha256'),
+         'Installation receipt must preserve the exact original settings')
+    checked(settings[0])
+    return before
+
+
 def verify_owner_release(c, now=None):
     """Offline resource release preserves the session outcome; it is not gameplay acceptance."""
     need(c['owners_relinquished'] is True, 'ROOT must verify shared owners relinquished')
@@ -261,8 +302,11 @@ def verify_owner_release(c, now=None):
     expected_files = [row['original'] for key in ('profiles', 'launcher') for row in originals[key]]
     need(len({row['path'] for row in expected_files}) == 5 and release['restoration'] == expected_files,
          'Exact original profile/settings restoration pins required')
+    transitioned = (verify_post_session_installation(release, originals, session_path)
+                    if 'post_session_installation' in release else None)
     for row in release['restoration']:
-        checked(row)
+        if row != transitioned:
+            checked(row)
 
 
 def context(path, digest):

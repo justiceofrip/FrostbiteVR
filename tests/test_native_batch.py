@@ -255,8 +255,14 @@ class ClosedResourceReleaseTests(unittest.TestCase):
             for name in names:
                 path = self.root / kind / name
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(b'installed84 original')
-                originals[kind].append(dict(original=batch.pin(path)))
+                if name == 'active.json':
+                    path.write_text(json.dumps(dict(current='0.1.84', previous='0.1.83')), encoding='utf-8')
+                    backup = self.json('normal84/xr-game02/launcher-before/active.json', batch.load(path))
+                    originals[kind].append(dict(original=batch.pin(path), backup=backup))
+                else:
+                    path.write_bytes(b'installed84 original')
+                    originals[kind].append(dict(original=batch.pin(path)))
+        self.originals = originals
         self.observation = dict(checked_utc=self.now.isoformat(), all_owned_processes_absent=True,
             shared_build_processes_absent=True, processes=[dict(name=row['name'],
                 identity=copy.deepcopy(row['identity']), absent=True, replacement_process=None,
@@ -285,6 +291,188 @@ class ClosedResourceReleaseTests(unittest.TestCase):
 
     def verify(self):
         batch.verify_owner_release(self.config, self.now)
+
+    def install(self):
+        runtime = self.json('launcher/versions/0.1.85/runtime/runtime.json', dict(version='0.1.85'))
+        self.installation = dict(installed=True, validated=True, validation_exit=0,
+            settings_preserved=True, game_started=False, version='0.1.85', previous='0.1.84',
+            runtime_config_sha256=runtime['sha256'],
+            settings_sha256=self.originals['launcher'][1]['original']['sha256'])
+        self.release['post_session_installation'] = dict(
+            before=copy.deepcopy(self.originals['launcher'][0]['original']),
+            after=self.json('launcher/active.json', dict(current='0.1.85', previous='0.1.84')),
+            runtime=runtime)
+        self.bind_installation()
+
+    def bind_installation(self):
+        self.release['post_session_installation']['installation'] = self.json('installation.json', self.installation)
+        self.bind()
+
+    def test_post_session_installation_preserves_original_restoration_and_outcome(self):
+        restoration = copy.deepcopy(self.release['restoration'])
+        self.install()
+        paths = [Path(row['path']) for row in restoration]
+        paths += [Path(self.release[field]['path']) for field in ('last_session', 'session_originals')]
+        files = {path: path.read_bytes() for path in paths}
+        recorded = copy.deepcopy(self.release)
+        self.verify()
+        self.assertEqual(self.release, recorded)
+        self.assertEqual(self.release['restoration'], restoration)
+        self.assertEqual({path: path.read_bytes() for path in paths}, files)
+        self.assertEqual(batch.load(self.release['last_session']['path']), self.session)
+        self.assertFalse(self.release['gameplay_accepted'])
+        self.assertFalse(self.release['headset_accepted'])
+
+    def test_post_installation_tampered_or_missing_pinned_files_refuse(self):
+        self.install()
+        transition = self.release['post_session_installation']
+        pins = [transition[field] for field in ('installation', 'after', 'runtime')]
+        pins.append(self.originals['launcher'][0]['backup'])
+        for row in pins:
+            with self.subTest(path=row['path']):
+                path = Path(row['path'])
+                original = path.read_bytes()
+                path.write_bytes(original + b'\n')
+                with self.assertRaisesRegex(ValueError, 'Pinned file changed'):
+                    self.verify()
+                path.unlink()
+                with self.assertRaises(FileNotFoundError):
+                    self.verify()
+                path.write_bytes(original)
+
+    def test_post_installation_missing_transition_or_failed_receipt_refuses(self):
+        self.install()
+        transition = self.release['post_session_installation']
+        for field in tuple(transition):
+            with self.subTest(missing_pin=field):
+                saved = transition.pop(field)
+                self.bind()
+                with self.assertRaisesRegex(ValueError, 'Exact pinned post-session'):
+                    self.verify()
+                transition[field] = saved
+        for field, value in (('installed', False), ('validated', False), ('settings_preserved', False),
+                             ('game_started', True), ('validation_exit', 1), ('validation_exit', False)):
+            with self.subTest(field=field, value=value):
+                saved = self.installation[field]
+                self.installation[field] = value
+                self.bind_installation()
+                with self.assertRaisesRegex(ValueError, 'Successful validated game-free installation'):
+                    self.verify()
+                del self.installation[field]
+                self.bind_installation()
+                with self.assertRaisesRegex(ValueError, 'Successful validated game-free installation'):
+                    self.verify()
+                self.installation[field] = saved
+        del self.release['post_session_installation']
+        self.bind()
+        with self.assertRaisesRegex(ValueError, 'Pinned file changed'):
+            self.verify()
+
+    def test_post_installation_requires_exact_original_activation_chain(self):
+        self.install()
+        transition = self.release['post_session_installation']
+        before = transition['before']
+        transition['before'] = transition['after']
+        self.bind()
+        with self.assertRaisesRegex(ValueError, 'exact original activation'):
+            self.verify()
+        transition['before'] = before
+        for previous in ('0.1.83', None):
+            with self.subTest(previous=previous):
+                self.installation['previous'] = previous
+                self.bind_installation()
+                with self.assertRaisesRegex(ValueError, 'replace the exact original current'):
+                    self.verify()
+        self.installation['previous'] = '0.1.84'
+        for version in ('0.1.84', '../0.1.85', None):
+            with self.subTest(version=version):
+                self.installation['version'] = version
+                self.bind_installation()
+                with self.assertRaisesRegex(ValueError, 'replace the exact original current'):
+                    self.verify()
+        self.installation['version'] = '0.1.85'
+        for name, value in (('launcher/active.json', dict(current='0.1.85', previous='0.1.83')),
+                            ('launcher/active.json', dict(current='0.1.86', previous='0.1.84')),
+                            ('other/active.json', dict(current='0.1.85', previous='0.1.84'))):
+            with self.subTest(name=name, value=value):
+                transition['after'] = self.json(name, value)
+                self.bind_installation()
+                with self.assertRaisesRegex(ValueError, 'Exact post-installation activation'):
+                    self.verify()
+
+    def test_post_installation_requires_same_session_backup_matching_original(self):
+        self.install()
+        active = self.originals['launcher'][0]
+        backup = active['backup']
+        for name, value in (('normal84/xr-game02/launcher-before/active.json',
+                             dict(current='0.1.83', previous='0.1.82')),
+                            ('other/active.json', dict(current='0.1.84', previous='0.1.83'))):
+            with self.subTest(name=name):
+                active['backup'] = self.json(name, value)
+                self.release['session_originals'] = self.json('normal84/xr-game02/originals.json', self.originals)
+                self.bind()
+                with self.assertRaisesRegex(ValueError, 'Exact same-session original activation backup'):
+                    self.verify()
+        active['backup'] = backup
+
+    def test_post_installation_runtime_and_settings_must_match_receipt(self):
+        self.install()
+        transition = self.release['post_session_installation']
+        runtime = transition['runtime']
+        for name, value in (('launcher/versions/0.1.85/runtime/runtime.json', dict(version='changed')),
+                            ('launcher/versions/0.1.86/runtime/runtime.json', dict(version='0.1.85'))):
+            with self.subTest(name=name):
+                transition['runtime'] = self.json(name, value)
+                self.bind()
+                with self.assertRaisesRegex(ValueError, 'Exact installed runtime manifest'):
+                    self.verify()
+        transition['runtime'] = self.json('launcher/versions/0.1.85/runtime/runtime.json', dict(version='0.1.85'))
+        self.assertEqual(transition['runtime'], runtime)
+        for field, message in (('runtime_config_sha256', 'Exact installed runtime manifest'),
+                               ('settings_sha256', 'preserve the exact original settings')):
+            with self.subTest(field=field):
+                saved = self.installation[field]
+                self.installation[field] = '0' * 64
+                self.bind_installation()
+                with self.assertRaisesRegex(ValueError, message):
+                    self.verify()
+                self.installation[field] = saved
+
+    def test_post_installation_cannot_rewrite_restoration_or_change_other_files(self):
+        self.install()
+        restoration = copy.deepcopy(self.release['restoration'])
+        self.release['restoration'][3] = self.release['post_session_installation']['after']
+        self.bind()
+        with self.assertRaisesRegex(ValueError, 'Exact original profile/settings restoration pins'):
+            self.verify()
+        self.release['restoration'] = restoration
+        self.bind()
+        for row in restoration:
+            if Path(row['path']).name == 'active.json':
+                continue
+            with self.subTest(path=row['path']):
+                path = Path(row['path'])
+                original = path.read_bytes()
+                path.write_bytes(original + b'changed')
+                with self.assertRaisesRegex(ValueError, 'Pinned file changed'):
+                    self.verify()
+                path.write_bytes(original)
+
+    def test_post_installation_retains_process_freshness_source_leases_and_outcome_guards(self):
+        self.install()
+        for target, field, value, message in (
+                (self.observation['processes'][0], 'absent', False, 'has not released resources'),
+                (self.release, 'expires_utc', self.now.isoformat(), 'Fresh ROOT offline release'),
+                (self.release, 'source_commit', 'b' * 40, 'source/run/leases differ'),
+                (self.release, 'root_leases', {}, 'source/run/leases differ'),
+                (self.release, 'status', 'failed', 'relabels session outcome')):
+            with self.subTest(field=field):
+                saved = target[field]
+                target[field] = value
+                self.bind()
+                with self.assertRaisesRegex(ValueError, message):
+                    self.verify()
+                target[field] = saved
 
     def test_normal84_closed_resource_release_preserves_gameplay_limits(self):
         self.verify()
