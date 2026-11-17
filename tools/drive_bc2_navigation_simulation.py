@@ -58,6 +58,11 @@ PERIOD = 25_000_000
 # publication and ACK together. Keep that complete window inside holdMs.
 COMMAND_WINDOW = 250_000_000
 RELEASE_RESERVE = COMMAND_WINDOW + 2 * PERIOD
+# Only the first pulse's still-neutral admission may wait for a late response.
+# The late response is discarded; its successor retains the shared 250 ms
+# response budget and every native source deadline. This spends, never renews,
+# the original invocation clock.
+INITIAL_OBSERVATION_WINDOW = 500_000_000
 NAVIGATION_OWNER = ("manager", "player", "soldier", "weak", "controlled", "entry",
                     "router", "cache", "actorGeneration", "inputEpoch", "movementEpoch")
 
@@ -249,6 +254,8 @@ class NavigationDriver(t.Driver):
         self.normal_stop_required = False
         self.episodes = []
         self.navigation_schedule = []
+        self.initial_observation_waited = False
+        self.initial_discarded_input = None
         args.stage = args.profiles = args.capture = args.menu_batches = None
         args.pickup_first = False
         super().__init__(args)
@@ -385,6 +392,90 @@ class NavigationDriver(t.Driver):
     def snapshot_readiness_scope(self):
         # Observation is never a license to extend a held pulse or its lease.
         return None
+
+    def snapshot_timeout(self, now, response=None):
+        # Shared neutral readiness assumes a valid firearm publication. This
+        # adapter instead owns an independent navigation source, including
+        # genuine Empty/no-shot frames. Do not widen shared response deadlines.
+        if (self.navigation_reference is None or self.initial_observation_waited
+                or self.motion_started is not None or self.last_write != 0
+                or self.action_deadline is not None or self.pending_command
+                or self.pending_sticks is not None or self.action_button is not None
+                or self.pending_action_button is not None or self.unsafe_owner
+                or self.command_fault or self.cleanup_mode or self.release_attempted
+                or self.held_left or self.held_right or self.held_trigger or self.held_buttons
+                or self.snapshot_refresh_started is not None):
+            return super().snapshot_timeout(now, response)
+        self.initial_observation_waited = True
+        wait_deadline = min(self.deadline, self.stage_deadline,
+                            self.last_request + INITIAL_OBSERVATION_WINDOW)
+        command_identity = (self.sequence, self.sentinel, self.command_hash)
+        trace = getattr(self, "_receive_timing", None)
+        if trace is not None and not trace.frozen:
+            trace.timeout_evaluated_ns = now
+        if response is not None:
+            self.artifacts.save(f"snapshot-{self.snapshot_index:03}-at-timeout.json", response[1])
+        timeout_response_saved = response is not None
+        self.artifacts.event(dict(type="navigation_initial_observation_hold",
+            nonce=self.pending_nonce, requestStartedNs=self.last_request,
+            originalResponseDeadlineNs=self.last_request + t.SNAPSHOT_TIMEOUT,
+            observationDeadlineNs=wait_deadline, evaluatedNs=now,
+            commandAuthority=False))
+        while time.perf_counter_ns() < wait_deadline:
+            self.bounds(time.perf_counter_ns())
+            self.check_owner_record()
+            state = t.read_until(wait_deadline, self.read_state)
+            self.ownership(state)
+            self.check_observation_state(state)
+            require((self.sequence, self.sentinel, self.command_hash) == command_identity
+                    and t.integer(state["captureSeq"]) == self.capture_sequence
+                    and neutral_controls(state["controls"]),
+                    "initial navigation observation lost neutral command ownership")
+            require(t.read_until(wait_deadline, t.read_bytes, self.request_path, 22)
+                    == self.request_bytes, "snapshot request changed by another writer")
+            failure = t.read_until(wait_deadline, self.snapshot_failure)
+            require(failure is None, "native snapshot publication failed during initial navigation observation")
+            if self.snapshot_path.exists():
+                snapshot, raw = t.read_until(wait_deadline, self.receive_snapshot_json)
+                if not timeout_response_saved:
+                    self.artifacts.save(f"snapshot-{self.snapshot_index:03}-at-timeout.json", raw)
+                    timeout_response_saved = True
+                nonce = t.integer(snapshot["nonce"])
+                require(nonce <= self.pending_nonce,
+                        "snapshot response belongs to a later competing request")
+                if nonce == self.pending_nonce:
+                    self.artifacts.save(f"snapshot-{self.snapshot_index:03}-late.json", raw)
+                    observed = t.integer(snapshot["observed_ns"])
+                    require(self.last_request <= observed <= time.perf_counter_ns(),
+                            "initial navigation response predates request or is from the future")
+                    self.admit_snapshot(snapshot, observed, nonce)
+                    inp = navigation_input(snapshot)
+                    require(all(h["stickX"] == h["stickY"] == 0 for h in inp["hands"]),
+                            "initial navigation response contains active input")
+                    self.initial_discarded_input = t.integer(inp["generation"])
+                    if "navigationObservation" in snapshot:
+                        self.previous_navigation = snapshot["navigationObservation"]
+                    require(time.perf_counter_ns() < wait_deadline,
+                            "initial navigation observation deadline reached")
+                    self.artifacts.event(dict(type="navigation_initial_late_response_discarded",
+                        nonce=nonce, observedNs=observed, observationDeadlineNs=wait_deadline,
+                        commandAuthority=False))
+                    require(time.perf_counter_ns() < wait_deadline,
+                            "initial navigation observation deadline reached")
+                    self.latest_snapshot = None
+                    self.pending_nonce = None
+                    self.request_snapshot()
+                    return None
+            time.sleep(.001)
+        raise Refusal("initial navigation observation deadline reached without a matching response")
+
+    def accept_snapshot(self, snapshot, raw, now):
+        if self.initial_discarded_input is not None:
+            require(t.integer(navigation_input(snapshot)["generation"]) > self.initial_discarded_input,
+                    "initial navigation reacquisition requires new native input")
+        result = super().accept_snapshot(snapshot, raw, now)
+        self.initial_discarded_input = None
+        return result
 
     def snapshot_usable(self, snapshot, now):
         if "navigationObservation" in snapshot:

@@ -77,6 +77,12 @@ RECORDED_DIAGNOSTIC_TIMING = dict(
     sourceDeadlineNs=654246300738200, menuDeadlineNs=654246293957900,
     neutralCommittedNs=654246267229200, commandAckNs=45_489_100)
 
+# Actual108/03 d9c3da30c3b543afafc4f3ea1b53d29d and108/04
+# 72fea1bc02d14d7c90ced96030597e12 timed out on request2 before any command.
+# Both timeout artifacts still contained request1's response. Arrival after
+# those retained failures is unknown; the late successors below are synthetic.
+RECORDED_INITIAL_TIMEOUTS = (250_337_000, 250_710_300)
+
 
 # Actual95/02 52e6a7e6e9374590970eddacec0e980b, snapshot-002.json.gz
 # SHA256 eab226f1c32fb5d6d5ea5e1aa3bcd1b88d8e9da7a97afb64325af7b4175cec4f.
@@ -1714,6 +1720,118 @@ class NavigationTests(unittest.TestCase):
         self.assertEqual(self.calls[-1], self.m.ZERO)
         self.assertEqual(result["sticks"], [[0, 0], [0, 0]])
         self.assertFalse(result["normalStopRequired"])
+
+    def test_initial_late_response_is_discarded_before_fresh_native_admission(self):
+        for route in (False, "valid_weapon", "no_shot"):
+            with self.subTest(route=route):
+                if route:
+                    self.setUp()
+                self.native_navigation = route
+                self.response_delay = lambda driver: 375_000_000 if driver.snapshot_index == 2 else 0
+                code, result = self.assembled()
+                self.assertEqual((code, result.get("error")), (0, None))
+                self.assertEqual(len(self.snapshot_requests), 3)
+                self.assertEqual(len(self.calls), 2)
+                self.assertEqual(result["episodes"][0]["admissionNonce"], self.samples[2]["nonce"])
+                self.assertNotEqual(result["episodes"][0]["admissionNonce"], self.samples[1]["nonce"])
+                artifacts = Path(result["artifactDirectory"])
+                late = json.loads(gzip.decompress((artifacts / "snapshot-002-late.json.gz").read_bytes()))
+                self.assertEqual(late, self.samples[1])
+                events = [json.loads(line) for line in (artifacts / "events.jsonl").read_text().splitlines()]
+                hold = next(e for e in events if e["type"] == "navigation_initial_observation_hold")
+                self.assertEqual(hold["originalResponseDeadlineNs"] - hold["requestStartedNs"], 250_000_000)
+                self.assertEqual(hold["observationDeadlineNs"] - hold["requestStartedNs"], 500_000_000)
+                self.assertFalse(hold["commandAuthority"])
+                self.assertTrue(all(request["actionDeadlineNs"] is None and not request["pendingCommand"]
+                                    and request["sticks"] == [0, 0, 0, 0] for request in self.snapshot_requests))
+                self.assertEqual(self.driver.hard_deadline - self.driver.started, 10 * self.m.t.NS)
+                self.assertLess(result["episodes"][0]["completedElapsedNs"], 400_000_000)
+                self.assertFalse(result["nativeAcceptance"])
+
+    def test_initial_timeout_without_a_matching_response_has_one_bounded_wait(self):
+        self.native_navigation = "no_shot"
+        self.omit_response_from = 2
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertIn("initial navigation observation deadline", result["error"])
+        self.assertEqual(self.calls, [])
+        self.assertEqual(len(self.snapshot_requests), 2)
+        self.assertEqual(result["release"], "no navigation input published")
+        self.assertFalse(result["normalStopRequired"])
+        self.assertLess(self.clock.now - self.driver.last_request, 510_000_000)
+        self.assertTrue(all(value > self.m.t.SNAPSHOT_TIMEOUT for value in RECORDED_INITIAL_TIMEOUTS))
+
+    def test_initial_observation_never_renews_the_invocation_deadline(self):
+        self.omit_response_from = 2
+        def shorten_original_clock(path, driver):
+            if driver.snapshot_index == 2:
+                driver.deadline = min(driver.deadline, driver.last_request + 300_000_000)
+            return 0
+        self.read_delay = shorten_original_clock
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertRegex(result["error"], "deadline")
+        self.assertEqual(self.calls, [])
+        self.assertEqual(len(self.snapshot_requests), 2)
+        self.assertLess(self.clock.now - self.driver.last_request, 310_000_000)
+
+    def test_initial_observation_requires_existing_native_identity(self):
+        self.omit_response_from = 1
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertIn("snapshot response not received within request budget", result["error"])
+        self.assertEqual(len(self.snapshot_requests), 1)
+        self.assertFalse(self.driver.initial_observation_waited)
+        self.assertEqual(self.calls, [])
+
+    def test_initial_observation_does_not_wait_again_for_a_late_successor(self):
+        self.response_delay = lambda driver: 375_000_000 if driver.snapshot_index >= 2 else 0
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertIn("snapshot response not received within request budget", result["error"])
+        self.assertEqual(len(self.snapshot_requests), 3)
+        self.assertEqual(self.calls, [])
+
+    def test_initial_observation_rejects_owner_input_and_timestamp_changes(self):
+        for fault in ("owner", "stick", "future", "stale"):
+            with self.subTest(fault=fault):
+                if fault != "owner":
+                    self.setUp()
+                self.native_navigation = "no_shot"
+                self.response_delay = lambda driver: 375_000_000 if driver.snapshot_index == 2 else 0
+                def corrupt(sample, driver):
+                    if driver.snapshot_index != 2:
+                        return
+                    nav = sample["navigationObservation"]
+                    if fault == "owner":
+                        nav["owner"]["actorGeneration"] += 1
+                    elif fault == "stick":
+                        nav["input"]["hands"][0]["stickY"] = .5
+                    elif fault == "future":
+                        sample["observed_ns"] += self.m.t.NS
+                    else:
+                        nav["validUntilNs"] = sample["observed_ns"] - 1
+                self.snapshot_mutation = corrupt
+                code, result = self.assembled()
+                self.assertEqual(code, 2)
+                self.assertEqual(self.calls, [])
+                self.assertEqual(len(self.snapshot_requests), 2)
+                self.assertFalse(result["normalStopRequired"])
+
+    def test_initial_observation_refuses_changed_command_file_before_fresh_request(self):
+        self.response_delay = lambda driver: 375_000_000 if driver.snapshot_index == 2 else 0
+        altered = []
+        def replace(path, driver):
+            if driver.initial_observation_waited and not altered:
+                altered.append(True)
+                (self.run / "sim/command.txt").write_bytes(b"note foreign-writer\n")
+            return 0
+        self.read_delay = replace
+        code, result = self.assembled()
+        self.assertEqual(code, 2)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(len(self.snapshot_requests), 2)
+        self.assertTrue(result["normalStopRequired"])
 
     def test_subpulse_partition_preserves_budget_and_refuses_unusable_tail_before_input(self):
         for duration in (602, 750, 999, 1001, 1501, 1999, 2000):
