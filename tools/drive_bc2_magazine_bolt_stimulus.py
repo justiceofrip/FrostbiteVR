@@ -62,6 +62,7 @@ class MagazineBoltDriver(transport.Driver):
         self.debt = None
         self.gun_root = None
         self.preparation = None
+        self.shot_baseline = None
         self.preparation_mode = args.mode == "prep-shot-bolt"
         self.motion_reference = None
         self.handoff_guard = None
@@ -127,7 +128,7 @@ class MagazineBoltDriver(transport.Driver):
         deadline = min(super().snapshot_source_deadline(snapshot), geometry.source_deadline(snapshot, self.family))
         if getattr(self, "bootstrap_phase", None) is not None:
             deadline = min(deadline, geometry.held_entry_deadline(snapshot))
-        if getattr(self, "preparation_mode", False):
+        if getattr(self, "preparation_mode", False) or getattr(getattr(self, "args", None), "mode", None) == "shot-bolt":
             deadline = min(deadline, geometry.source_deadline(snapshot, "magazine"))
         return deadline
 
@@ -506,6 +507,7 @@ class MagazineBoltDriver(transport.Driver):
                 "prep-shot-bolt requires ROOT corridor review and does not consume a magazine result")
         self.ensure_gun_hold()
         s, now, self.preparation = self.boundary("before_preparation_shot", geometry.preparation_baseline)
+        self.shot_baseline = self.preparation
         # One attempt per exact host/owner/native shot identity, including a
         # refused clearance or uncertain publication. This is evidence only.
         key = dict(host=self.host, owner=self.preparation["owner"], identity=self.preparation["identity"],
@@ -532,6 +534,10 @@ class MagazineBoltDriver(transport.Driver):
     def finish_preparation(self):
         self.boundary("preparation_completed", lambda s, n:
                       geometry.preparation_complete(s, n, self.preparation, self.debt))
+
+    def finish_shot(self):
+        self.boundary("shot_completed", lambda s, n:
+                      geometry.shot_complete(s, n, self.shot_baseline, self.debt))
 
     def run_shot(self):
         require(self.args.magazine_result is not None and self.args.fire_clearance is not None,
@@ -566,16 +572,15 @@ class MagazineBoltDriver(transport.Driver):
                     and m["resource"]["receipt"] == closure["receipt"]
                     and m["resource"]["receiptJoined"] is True
                     and counts_of(m) == closure["receipt"]["after"], "post-refill native closure changed")
-            return dict(identity=b["native"]["identity"], shot=b["native"]["shot"])
-        s, now, initial = self.boundary("before_ordinary_shot", before)
+            return geometry.shot_baseline(s, n)
+        s, now, self.shot_baseline = self.boundary("before_ordinary_shot", before)
         pulse = geometry.fire_clearance(self.fire_permission, s, self.state, self.host, time.perf_counter_ns(), self.deadline)
-        self.fire_pulse(s, pulse)
+        self.shot_baseline["pressedNs"] = self.fire_pulse(s, pulse)["pressWrittenNs"]
         self.stage_deadline = self.deadline
         s, now, self.debt = self.boundary("shot_created_owed_bolt", geometry.owed)
         self.check_shot_gun(s, now)
-        require(self.debt["identity"] == initial["identity"]
-                and integer(self.debt["debt"]["shot"]) > integer(initial["shot"]),
-                "ordinary trigger did not produce a new same-owner bolt debt")
+        self.boundary("shot_guarded_counts", lambda s, n:
+                      geometry.shot_debt(s, n, self.shot_baseline, self.debt))
 
     def run_bolt(self):
         if self.debt is None:
@@ -590,7 +595,9 @@ class MagazineBoltDriver(transport.Driver):
             else:
                 s, now, self.debt = self.boundary("existing_owed_bolt", geometry.owed)
         else:
-            s, now, _ = self.boundary("same_owed_bolt", lambda s, n: geometry.bolt(s, n, self.debt)["custody"])
+            s, now, _ = self.boundary("same_owed_bolt", lambda s, n:
+                geometry.shot_debt(s, n, self.shot_baseline, self.debt)
+                if getattr(self, "shot_baseline", None) is not None else geometry.bolt(s, n, self.debt)["custody"])
         b = geometry.bolt(s, now, self.debt)
         references = b.get("originalGripReferences")
         require(references is not None and references["geometryOnly"] is True
@@ -891,6 +898,8 @@ def main(argv=None):
                 driver.run_bolt()
                 if args.mode == "prep-shot-bolt":
                     driver.finish_preparation()
+                elif args.mode == "shot-bolt":
+                    driver.finish_shot()
                 if args.neutral_handoff:
                     driver.run_neutral_handoff()
         result.update(status="ordinary_hold_prepared" if args.mode == "prepare-hold" else

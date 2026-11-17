@@ -384,13 +384,24 @@ def counts(value):
     return c
 
 
-def magazine(snapshot, now, raw=False, idle=False):
+def magazine_observation(snapshot, now, raw=False):
+    """Current family/contact evidence, independent of resource publication."""
     x = observation(snapshot, "magazine", now, raw)
-    p, f, r = x["profile"], x["family"], x["resource"]
+    f = x["family"]
     magazine_geometry_evidence(snapshot)
     require(f["current"] is True and f["verified"] is True and f["owner"] == x["owner"]
             and f["weapon"] == x["weapon"], "magazine family owner differs")
     window(f, now)
+    if raw:
+        require(x["raw"]["originalHandEvidence"] is not None
+                and same_input(x["raw"]["input"], x["raw"]["originalHandEvidence"]),
+                "original magazine hand evidence differs")
+    return x
+
+
+def magazine(snapshot, now, raw=False, idle=False):
+    x = magazine_observation(snapshot, now, raw)
+    r = x["resource"]
     require(x["resourceBackend"] is True and isinstance(r, dict) and r["current"] is True,
             "normal ammunition resource backend unavailable")
     require(r["binding"]["owner"] == r["identity"]["owner"] == x["owner"]
@@ -406,10 +417,6 @@ def magazine(snapshot, now, raw=False, idle=False):
                 "native ammunition transaction was rejected, uncertain or retired")
         wait_for(r["snapshot"]["coherentIdleVerified"] is True and integer(r["phase"]) == 1
                  and x["requestPending"] is False, "native ammunition transaction is not settled")
-    if raw:
-        require(x["raw"]["originalHandEvidence"] is not None
-                and same_input(x["raw"]["input"], x["raw"]["originalHandEvidence"]),
-                "original magazine hand evidence differs")
     return x
 
 
@@ -438,20 +445,26 @@ def preparation_magazine(snapshot, now):
     return x
 
 
+def attached_magazine_observation(x):
+    require(x["resourceBackend"] is True and x["raw"]["nativeMagazineAttached"] is True
+            and integer(x["phase"]) == 0 and integer(x["cycle"]) == 0
+            and x["reloadHeld"] is False and x["ownsLeftHand"] is False
+            and x["requestPending"] is False
+            and all(x[k] is None for k in ("pendingRequest", "submittedSeat", "carriedReplacement", "reservation"))
+            and integer(x["seatedRequest"]) == 0 and x["blocksWeaponActions"] is False,
+            "preparation requires an attached magazine without held ammunition or pending transfer")
+
+
 def preparation_attached_magazine(x, now):
     """Validate attached state after the caller's full magazine admission.
 
     ResourceReload publishes an OriginalMagazine descriptor even while attached.
     It describes the current original; it is not a held item or removal receipt.
     """
+    attached_magazine_observation(x)
     r = x["resource"]
-    require(x["resource"]["wellEmpty"] is False and x["raw"]["nativeMagazineAttached"] is True
-            and integer(x["phase"]) == 0 and integer(x["cycle"]) == 0
-            and x["reloadHeld"] is False and x["ownsLeftHand"] is False
-            and x["resource"]["command"] is None
-            and integer(x["resource"]["originalState"]) in (0, 2, 3)
-            and all(x[k] is None for k in ("pendingRequest", "submittedSeat", "carriedReplacement", "reservation"))
-            and integer(x["seatedRequest"]) == 0 and x["blocksWeaponActions"] is False,
+    require(r["wellEmpty"] is False and r["command"] is None
+            and integer(r["originalState"]) in (0, 2, 3),
             "preparation requires an attached magazine without held ammunition or pending transfer")
     original = x["originalPhysical"]
     if original is not None:
@@ -481,12 +494,11 @@ def preparation_references(b):
         rigid(wrist)
 
 
-def preparation_baseline(snapshot, now):
+def shot_baseline(snapshot, now):
     x, b = preparation_magazine(snapshot, now), bolt(snapshot, now)
     r, n = x["resource"], b["native"]
     c = counts(r["snapshot"]["counts"])
-    require(c["loaded"] == c["capacity"] > 1 and c["reserve"] >= c["capacity"],
-            "preparation requires a freshly observed full magazine and complete reserve replacement")
+    require(c["loaded"] > 0, "ordinary shot requires a loaded attached magazine")
     require(n["identity"] == r["identity"] and b["held"] is None and b["recovery"] is None
             and n["held"] is None and n["ready"] is None and integer(n["phase"]) in (0, 5)
             and integer(n["failure"]) == 0 and n["heldSuspended"] is False
@@ -501,17 +513,25 @@ def preparation_baseline(snapshot, now):
     else:
         support = claim(x, 0, 2, now, x["weapon"])
         require(support["prerequisiteClaim"] == gun["id"], "preparation support belongs to another gun")
+    return copy.deepcopy(dict(owner=owner_key(snapshot), identity=r["identity"],
+        context=r["binding"]["context"], counts=c, gun=gun, request=integer(r["request"]),
+        sequence=integer(r["snapshot"]["sequence"]), original=r["original"],
+        originalState=r["originalState"], cycle=integer(n["cycle"]), shot=integer(n["shot"]),
+        startedNs=now))
+
+
+def preparation_baseline(snapshot, now):
+    base = shot_baseline(snapshot, now)
+    c, b = base["counts"], snapshot["bolt"]
+    require(c["loaded"] == c["capacity"] > 1 and c["reserve"] >= c["capacity"],
+            "preparation requires a freshly observed full magazine and complete reserve replacement")
     p = b["calibration"]
     preparation_references(b)
     bolt_cycle_budget(p)
     require(0 < frame.finite(p["maxStepMeters"]), "preparation bolt step policy is not bounded")
     for travel, angle in ((0, 0), (p["strokeMeters"], p["unlockRadians"])):
         bolt_pose(p, travel, angle)
-    return copy.deepcopy(dict(owner=owner_key(snapshot), identity=r["identity"],
-        context=r["binding"]["context"], counts=c, gun=gun, request=integer(r["request"]),
-        sequence=integer(r["snapshot"]["sequence"]), original=r["original"],
-        originalState=r["originalState"], cycle=integer(n["cycle"]), shot=integer(n["shot"]),
-        startedNs=now))
+    return base
 
 
 def preparation_counts(snapshot, now, base):
@@ -531,34 +551,69 @@ def preparation_counts(snapshot, now, base):
     return after
 
 
-def preparation_debt(snapshot, now, base, debt):
-    after = preparation_counts(snapshot, now, base)
+def shot_debt(snapshot, now, base, debt):
+    """Prove the shot from a live guarded lease before moving the owed bolt.
+
+    IdleBoltMagazine intentionally stops publishing resources during this debt.
+    Native counts alone and any cached magazine resource cannot authorize it.
+    """
+    after = dict(base["counts"], loaded=base["counts"]["loaded"]-1)
     b = bolt(snapshot, now, debt)
-    require(debt["identity"] == base["identity"]
+    current = owed(snapshot, now)
+    require(owner_key(snapshot) == base["owner"]
+            and current["identity"] == debt["identity"] == base["identity"]
+            and current["debt"] == debt["debt"]
             and integer(debt["debt"]["shot"]) > base["shot"]
             and integer(debt["debt"]["cycle"]) > base["cycle"]
-            and debt["countsFreshnessAvailable"] is True and debt["counts"] == after
-            and debt["guardEpoch"] is not None and integer(debt["guardEpoch"]) > 0
-            and len(debt["updates"]) == 3 and all(integer(v) > 0 for v in debt["updates"])
+            and current["countsFreshnessAvailable"] is debt["countsFreshnessAvailable"] is True
+            and current["counts"] == debt["counts"] == after
+            and current["guardEpoch"] == debt["guardEpoch"] and integer(current["guardEpoch"]) > 0
+            and isinstance(debt["updates"], list) and len(debt["updates"]) == len(set(debt["updates"])) == 3
+            and all(integer(a) >= integer(z) > 0 for a, z in zip(current["updates"], debt["updates"]))
             and counts(b["native"]["counts"]) == after,
             "preparation requires a new same-owner guarded three-copy owed shot with unchanged reserve")
+    lease = b["held"] or b["native"]["held"]
+    require(integer(lease["observedNs"]) >= base["pressedNs"]
+            and integer(b["input"]["observedNs"]) >= base["pressedNs"],
+            "guarded ammunition observation predates its ordinary shot")
     require(claim(b, 1, 1, now, base["gun"]["item"]) == base["gun"],
             "preparation shot changed its gun custody root")
+    if snapshot.get("magazine", {}).get("available") is True:
+        attached_magazine_observation(magazine_observation(snapshot, now, raw=True))
     return copy.deepcopy(dict(counts=after, guardedDebt=debt, coherentThreeCopyCounts=True,
                               shotAllThreeCopiesVerified=False))
 
 
-def preparation_complete(snapshot, now, base, debt):
-    after = preparation_counts(snapshot, now, base)
+def preparation_debt(snapshot, now, base, debt):
+    return shot_debt(snapshot, now, base, debt)
+
+
+def shot_complete(snapshot, now, base, debt):
     b = bolt(snapshot, now, debt)
+    require(owner_key(snapshot) == base["owner"] and b["native"]["identity"] == base["identity"],
+            "returned shot owner/native copies changed")
     require(b["blocksFire"] is False and snapshot["weapon_actions_blocked"] is False,
             "preparation bolt return is not ready")
+    settled = ready(snapshot, now, debt)
     root = custody(snapshot, now, debt, 1)
     support = claim(b, 0, 2, now, root["item"])
-    require(support["prerequisiteClaim"] == root["id"] and debt["counts"] == after,
+    require(support["prerequisiteClaim"] == root["id"],
             "preparation did not return the same gun and support with unchanged ammunition")
-    return dict(preparationOnly=True, counts=after, ready=ready(snapshot, now, debt),
+    # Only independent ready/return evidence permits observation-only waiting
+    # for resource publication. The enclosing boundary retains its action clock.
+    x = magazine_observation(snapshot, now, raw=True)
+    attached_magazine_observation(x)
+    require(x["resourceBackend"] is True, "normal ammunition resource backend unavailable")
+    wait_for(isinstance(x["resource"], dict) and x["resource"]["current"] is True,
+             "ready bolt ammunition resource publication pending")
+    after = preparation_counts(snapshot, now, base)
+    require(debt["counts"] == after, "returned bolt ammunition differs from its guarded shot")
+    return dict(counts=after, ready=settled,
                 coherentThreeCopyCounts=True, shotAllThreeCopiesVerified=False)
+
+
+def preparation_complete(snapshot, now, base, debt):
+    return dict(shot_complete(snapshot, now, base, debt), preparationOnly=True)
 
 
 def bolt_cycle_budget(profile):

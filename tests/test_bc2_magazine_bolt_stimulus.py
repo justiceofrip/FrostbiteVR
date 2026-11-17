@@ -496,8 +496,10 @@ class MagazineBoltTests(unittest.TestCase):
             self.assertEqual(driver.boundaries[-1]["name"], "preparation_shot_counts")
             self.assertEqual(driver.boundaries[-1]["result"]["counts"]["loaded"], 6)
             self.assertEqual(driver.shot_gun, driver.preparation["gun"])
-            postshot = [s["bolt"] for s in episode["observations"] if s["bolt"].get("blocksFire")]
+            shot_observations = [s for s in episode["observations"] if s["bolt"].get("blocksFire")]
+            postshot = [s["bolt"] for s in shot_observations]
             self.assertEqual([b["native"]["phase"] for b in postshot[:3]], [1, 2, 8])
+            self.assertTrue(all(s["magazine"]["resource"] is None for s in shot_observations))
             self.assertTrue(all(b["held"] is None for b in postshot[:2]))
             self.assertFalse(postshot[2]["held"]["held"])
             self.assertEqual(len(set(driver.debt["updates"])), 3)
@@ -598,7 +600,9 @@ class MagazineBoltTests(unittest.TestCase):
                 self.assertEqual((Path(folder) / "live-driver-owner.json").read_bytes(), owner_before)
                 shot = episode["shot"](result_path, clearance)
                 shot.run_shot()
-                self.assertEqual(shot.boundaries[-1]["name"], "shot_created_owed_bolt")
+                self.assertEqual(shot.boundaries[-1]["name"], "shot_guarded_counts")
+                self.assertEqual(shot.boundaries[-1]["result"]["counts"], dict(loaded=6, reserve=23, capacity=7))
+                self.assertIsNone(shot.latest_snapshot["magazine"]["resource"])
                 self.assertFalse(shot.pending_command)
                 self.assertEqual(episode["published"], ["shot after-magazine", d.transport.TIMED_TRIGGER_COMMAND])
                 self.assertEqual(shot.shot_pulse["pulseTransport"]["expectedNeutralControls"]["gripR"], 1)
@@ -1418,6 +1422,8 @@ def magazine_capture_episode(run, failure=None):
     resource["snapshot"]["counts"] = after
     native["bolt"]["native"]["counts"] = after
     closure = g.receipt(native, clock[0], refill_base, 2, empty, after)
+    attached_original(native)
+    native["bolt"]["native"].update(phase=0, failure=0, heldSuspended=False, blocksFire=False)
     fired = [False]
 
     def initialize(driver, args):
@@ -1450,13 +1456,19 @@ def magazine_capture_episode(run, failure=None):
         driver.timed_trigger, driver.timed_trigger_supported = None, failure != "runtime"
         driver.handoff_phase = driver.handoff_guard = None
         driver.neutral_handoff_completed = driver.bolt_cycle_completed = driver.preparation_mode = False
-        driver.post_magazine_capture = driver.gun_root = driver.debt = None
+        driver.post_magazine_capture = driver.gun_root = driver.debt = driver.shot_baseline = None
         driver.boundaries = []
 
     def fresh(driver):
         current = copy.deepcopy(native)
         if fired[0]:
-            owed(current)
+            owed(current, clock[0])
+            shot_counts = dict(after, loaded=after["loaded"]-1)
+            b = current["bolt"]
+            b["native"].update(counts=shot_counts, phase=8, blocksFire=True)
+            for held in (b["held"], b["native"]["held"]):
+                held["advancing"]["counts"] = copy.deepcopy(shot_counts)
+            current["magazine"]["resource"] = None
         # Simulate a new producer/input observation after each acknowledged
         # command. Preserve all original resource/transaction/receipt clocks.
         now, sequence = clock[0], 21+len(published)
@@ -1738,6 +1750,9 @@ def held_bootstrap_episode(run, failure=None, full=True, body_sequence_delta=0, 
                 b["native"].update(phase=phase, blocksFire=True)
                 if phase in (1, 2):
                     b["held"] = b["native"]["held"] = None
+                # IdleBoltMagazine does not publish while this unpaused debt
+                # is active; phase1/2/8 never grants post-shot resource counts.
+                x["resource"] = None
             if failure == "writer" or pressed and failure == "cleanup_writer":
                 (run / "sim/command.txt").write_bytes(b"note foreign writer\n")
             observations.append(copy.deepcopy(s))

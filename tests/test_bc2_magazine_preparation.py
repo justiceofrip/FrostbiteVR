@@ -47,7 +47,7 @@ def fixture():
     return s
 
 
-def postshot(s, base):
+def postshot(s, base, resource=False):
     s = copy.deepcopy(s)
     old.owed(s)
     counts = dict(base["counts"], loaded=base["counts"]["loaded"]-1)
@@ -55,8 +55,29 @@ def postshot(s, base):
     b["native"]["counts"] = copy.deepcopy(counts)
     for held in (b["held"], b["native"]["held"]):
         held["advancing"]["counts"] = copy.deepcopy(counts)
+        held["observedNs"] = base["pressedNs"]
+    s["input_evidence"]["observedNs"] = base["pressedNs"]
+    for family in ("magazine", "bolt"):
+        s[family]["capturedNs"] = base["pressedNs"]
     r["snapshot"].update(counts=counts, sequence=base["sequence"]+1, observedNs=NOW+1)
+    if not resource:
+        s["magazine"]["resource"] = None
     return s
+
+
+def returned(s, debt):
+    b = s["bolt"]
+    event = dict(release=dict(cycle=copy.deepcopy(b["held"]), request=51, inputSequence=21,
+                             observedNs=NOW+3, deadlineNs=NOW+50_000_000),
+                 sequence=52, observedNs=NOW+4, deadlineNs=NOW+50_000_000,
+                 nativeReady=True, unchangedAmmunition=True)
+    debt["readyReceipt"] = event
+    b.update(held=None, custodyCurrent=True, custody=3, blocksFire=False, gunClaim=b["rightClaim"])
+    b["native"].update(held=None, phase=5)
+    s["input_evidence"]["released"][0] = False
+    support = dict(b["rightClaim"]["token"], id=92, hand=0, kind=2, prerequisiteClaim=91)
+    b["leftClaim"] = dict(token=support, inputSequence=21, deadlineNs=NOW+70_000_000)
+    s["magazine"]["leftClaim"] = copy.deepcopy(b["leftClaim"])
 
 
 def permission(s, state, folder):
@@ -109,7 +130,8 @@ def driver_fixture(folder, mutation=None, clearance_mutation=None):
         driver.last_write = NOW-25_000_000
 
         def fresh():
-            current = copy.deepcopy(s) if driver.preparation is None else postshot(s, driver.preparation)
+            current = (copy.deepcopy(s) if driver.preparation is None or "pressedNs" not in driver.preparation
+                       else postshot(s, driver.preparation))
             # A new producer observation follows natural timer release; original
             # source/claim deadlines remain unchanged throughout this short pulse.
             sequence = 21+driver.commands
@@ -236,47 +258,66 @@ class PreparationTests(unittest.TestCase):
                 g.preparation_debt(s, NOW+2, base, changed)
         for path, value in (("reserve", 29), ("loaded", 5), ("capacity", 8)):
             changed = copy.deepcopy(s)
-            changed["magazine"]["resource"]["snapshot"]["counts"][path] = value
-            with self.assertRaisesRegex(g.Refusal, "exactly one round"):
+            changed["bolt"]["native"]["counts"][path] = value
+            with self.assertRaisesRegex(g.Refusal, "guarded three-copy"):
                 g.preparation_debt(changed, NOW+2, base, debt)
         for field in ("shot", "cycle"):
             previous = dict(base, **{field: debt["debt"][field]})
             with self.assertRaisesRegex(g.Refusal, "new same-owner"):
                 g.preparation_debt(s, NOW+2, previous, debt)
 
-    def test_postshot_freshness_transaction_and_owner_are_pinned(self):
+    def test_pre_stroke_uses_current_guard_not_cached_or_missing_resource(self):
         s = fixture()
         base = g.preparation_baseline(s, NOW)
         base["pressedNs"] = NOW
-        s = postshot(s, base)
+        changed = postshot(s, base)
+        debt = g.owed(changed, NOW+2)
+        for resource in (None, copy.deepcopy(s["magazine"]["resource"]), {"current": False}):
+            changed["magazine"]["resource"] = resource
+            self.assertEqual(g.shot_debt(changed, NOW+2, base, debt)["counts"], debt["counts"])
+        for mutation in (
+                lambda s: s["bolt"]["held"].update(observedNs=NOW-1),
+                lambda s: s["bolt"]["held"].update(deadlineNs=NOW+2),
+                lambda s: s["bolt"]["held"]["advancing"].update(updates=[45, 45, 47]),
+                lambda s: s["bolt"]["held"]["advancing"].update(updates=[44, 46, 47]),
+                lambda s: s["bolt"]["held"]["advancing"]["counts"].update(loaded=5),
+                lambda s: s["bolt"]["rightClaim"]["token"].update(id=99),
+                lambda s: s["magazine"]["raw"].update(current=False),
+                lambda s: s["magazine"]["raw"].update(nativeMagazineAttached=False),
+                lambda s: s["magazine"]["family"].update(current=False),
+                lambda s: s["magazine"].update(resourceBackend=False),
+                lambda s: s["magazine"].update(requestPending=True)):
+            invalid = postshot(s, base)
+            mutation(invalid)
+            with self.assertRaises(g.Refusal):
+                g.shot_debt(invalid, NOW+2, base, debt)
+
+    def test_final_resource_freshness_transaction_and_owner_are_pinned(self):
+        s = fixture()
+        base = g.preparation_baseline(s, NOW)
+        base["pressedNs"] = NOW
+        s = postshot(s, base, resource=True)
         debt = g.owed(s, NOW+2)
+        returned(s, debt)
         for change in (lambda s: s["magazine"]["resource"].update(request=11),
+                       lambda s: s["magazine"]["resource"].update(original={"id": 999}),
+                       lambda s: s["magazine"]["resource"].update(originalState=2),
+                       lambda s: s["magazine"]["resource"]["binding"]["context"].update(space=99),
                        lambda s: s["magazine"]["resource"]["snapshot"].update(observedNs=NOW-1),
                        lambda s: s["magazine"]["resource"]["snapshot"].update(sequence=base["sequence"]),
                        lambda s: s["selected"].update(selectedSlot=1)):
             changed = copy.deepcopy(s)
             change(changed)
             with self.assertRaises(g.Refusal):
-                g.preparation_debt(changed, NOW+2, base, debt)
+                g.preparation_complete(changed, NOW+5, base, debt)
 
     def test_completion_requires_same_debt_ready_return_and_coherent_unchanged_counts(self):
         s = fixture()
         base = g.preparation_baseline(s, NOW)
         base["pressedNs"] = NOW
-        s = postshot(s, base)
+        s = postshot(s, base, resource=True)
         debt = g.owed(s, NOW+2)
-        b = s["bolt"]
-        event = dict(release=dict(cycle=copy.deepcopy(b["held"]), request=51, inputSequence=21,
-                                 observedNs=NOW+3, deadlineNs=NOW+50_000_000),
-                     sequence=52, observedNs=NOW+4, deadlineNs=NOW+50_000_000,
-                     nativeReady=True, unchangedAmmunition=True)
-        debt["readyReceipt"] = event
-        b.update(held=None, custodyCurrent=True, custody=3, blocksFire=False, gunClaim=b["rightClaim"])
-        b["native"].update(held=None, phase=5)
-        s["input_evidence"]["released"][0] = False
-        support = dict(b["rightClaim"]["token"], id=92, hand=0, kind=2, prerequisiteClaim=91)
-        b["leftClaim"] = dict(token=support, inputSequence=21, deadlineNs=NOW+70_000_000)
-        s["magazine"]["leftClaim"] = copy.deepcopy(b["leftClaim"])
+        returned(s, debt)
         result = g.preparation_complete(s, NOW+5, base, debt)
         self.assertTrue(result["preparationOnly"])
         self.assertEqual(result["counts"], dict(loaded=6, reserve=30, capacity=7))
@@ -288,6 +329,68 @@ class PreparationTests(unittest.TestCase):
             mutation(changed)
             with self.assertRaises(g.Refusal):
                 g.preparation_complete(changed, NOW+5, base, debt)
+
+    def test_resource_wait_requires_independent_ready_and_original_boundary_deadline(self):
+        s = fixture()
+        base = g.preparation_baseline(s, NOW)
+        base["pressedNs"] = NOW
+        s = postshot(s, base, resource=True)
+        debt = g.owed(s, NOW+2)
+        resource = copy.deepcopy(s["magazine"]["resource"])
+        s["magazine"]["resource"] = None
+        with self.assertRaisesRegex(g.Refusal, "not ready"):
+            g.shot_complete(s, NOW+5, base, debt)
+        returned(s, debt)
+        ready_before = copy.deepcopy(debt["readyReceipt"])
+        with self.assertRaisesRegex(g.Pending, "resource publication pending"):
+            g.shot_complete(s, NOW+5, base, debt)
+        s["magazine"]["resource"] = dict(resource, current=False)
+        with self.assertRaisesRegex(g.Pending, "resource publication pending"):
+            g.shot_complete(s, NOW+5, base, debt)
+        s["magazine"]["resource"] = None
+        driver = d.MagazineBoltDriver.__new__(d.MagazineBoltDriver)
+        driver.deadline = driver.stage_deadline = NOW+20
+        driver.last_write = NOW
+        driver.anchor, driver.boundaries, driver.artifacts = base["owner"], [], mock.Mock()
+        clock, calls = [NOW+5], []
+        def fresh():
+            calls.append(clock[0])
+            clock[0] += 5
+            return s, b"", clock[0]
+        driver.fresh = fresh
+        driver.snapshot_source_deadline = lambda s: g.source_deadline(s, "bolt")
+        with mock.patch.object(d.time, "perf_counter_ns", side_effect=lambda: clock[0]), \
+                self.assertRaisesRegex(g.Refusal, "evidence absent"):
+            driver.boundary("shot_completed", lambda s, n: g.shot_complete(s, n, base, debt))
+        self.assertEqual(driver.deadline, NOW+20)
+        self.assertEqual(driver.stage_deadline, NOW+20)
+        self.assertEqual(debt["readyReceipt"], ready_before)
+        self.assertEqual(driver.boundaries, [])
+        self.assertEqual(len(calls), 3)
+        s["magazine"]["resource"] = resource
+        self.assertEqual(g.shot_complete(s, NOW+21, base, debt)["counts"], debt["counts"])
+        with self.assertRaises(g.Refusal):
+            g.magazine(dict(s, magazine=dict(s["magazine"], resource=None)), NOW+21)
+
+    def test_reacquired_debt_is_checked_before_first_bolt_motion(self):
+        with tempfile.TemporaryDirectory() as folder, driver_fixture(Path(folder)) as (driver, s, runtime):
+            driver.run_preparation_shot()
+            driver.move = mock.Mock(side_effect=StopIteration("first ordinary bolt motion"))
+            with self.assertRaisesRegex(StopIteration, "first ordinary bolt motion"):
+                driver.run_bolt()
+            self.assertIsNone(driver.latest_snapshot["magazine"]["resource"])
+            self.assertEqual(driver.boundaries[-1]["name"], "same_owed_bolt")
+            self.assertEqual(driver.boundaries[-1]["result"]["counts"], driver.debt["counts"])
+            driver.move.reset_mock()
+            original = driver.fresh
+            def changed():
+                current, raw, now = original()
+                current["bolt"]["held"]["advancing"]["guardEpoch"] += 1
+                return current, raw, now
+            driver.fresh = changed
+            with self.assertRaisesRegex(g.Refusal, "guarded bolt"):
+                driver.run_bolt()
+            driver.move.assert_not_called()
 
     def test_one_pulse_uses_production_command_publication_and_actual_debt(self):
         with tempfile.TemporaryDirectory() as folder, driver_fixture(Path(folder)) as (driver, s, runtime):
@@ -411,6 +514,24 @@ class PreparationTests(unittest.TestCase):
         self.assertEqual(result["status"], "ordinary_preparation_completed")
         self.assertTrue(result["preparationOnly"] and result["preparationCompleted"])
         self.assertFalse(result["shotAllThreeCopiesVerified"] or result["nativeAcceptance"])
+
+    def test_regular_shot_cli_requires_final_resource_check_after_bolt(self):
+        calls = []
+        class Fake:
+            def __init__(self, args):
+                self.args = args
+            def run_shot(self):
+                calls.append("shot")
+            def run_bolt(self):
+                calls.append("bolt")
+            def finish_shot(self):
+                calls.append("complete")
+            def close(self):
+                pass
+        with mock.patch.object(d, "MagazineBoltDriver", Fake), mock.patch("sys.stdout", io.StringIO()):
+            code = d.main(["--run", ".", "--mode", "shot-bolt", "--root-authorized-ordinary-input"])
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, ["shot", "bolt", "complete"])
 
     def test_existing_shot_still_requires_immediate_completed_magazine_receipt(self):
         driver = d.MagazineBoltDriver.__new__(d.MagazineBoltDriver)
