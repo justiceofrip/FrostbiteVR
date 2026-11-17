@@ -27,6 +27,20 @@
 #include <memory>
 #include <ostream>
 namespace fvr::bc2 {
+// A generation identifies one activation of an owned service slot. It is not
+// a native equip epoch and must never be inferred from a weapon address.
+struct Bc2NativeCycleSlot {
+    unsigned index=0;std::uint64_t generation=0;
+    explicit operator bool()const noexcept{return generation!=0;}
+    bool operator==(const Bc2NativeCycleSlot&)const noexcept=default;
+};
+struct Bc2NativeCycleDeparture {
+    Bc2NativeCycleSlot slot{};
+    ReloadHoldIdentity previous{},selected{};
+    std::uint64_t cycle=0,shot=0,guardEpoch=0,callbackRevision=0;
+    std::int64_t observedNs=0;
+    bool operator==(const Bc2NativeCycleDeparture&)const noexcept=default;
+};
 enum class ReloadFlowEvent : std::uint8_t { Update,Commit,Transfer,Restore };
 struct ReloadFlowBoundary {
     ReloadStateOwner owner{};std::uint64_t snapshotSequence=0;
@@ -396,6 +410,9 @@ bool PublishOwner(const ReloadStateSnapshot&,std::int64_t deadlineNs)noexcept;
 // Pure current-owner policy: an unpaid cycle stays usable while its departure
 // waits. No parking or inferred selection-pulse cancellation is authorized.
 bool NativeCycleSelectionAllowed(const ReloadStateOwner&)noexcept;
+// Historical proof of an actual different selection and drained callbacks.
+// It permits presentation suspension only, never a selection input pulse.
+std::optional<Bc2NativeCycleDeparture> ReadNativeCycleDeparture(const ReloadStateOwner&)noexcept;
 // Only a proved replacement native actor plus excluded/drained callbacks may
 // retire an old resource domain. Same-actor changes and input loss do nothing.
 bool RetireAmmoForReplacementActor(const ReloadStateOwner&)noexcept;

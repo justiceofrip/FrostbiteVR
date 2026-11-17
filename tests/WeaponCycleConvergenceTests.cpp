@@ -90,6 +90,15 @@ bool ParkedSelectionInvalidatesEveryOldAuthority(){
     CHECK(f.policy.Parked()&&f.policy.BlocksFire()&&!f.policy.Recovery(200*Ms));
     CHECK(!f.policy.BeginHold(f.scope,0,1000,201*Ms,250*Ms));
     CHECK(!f.policy.SubmitRecovered(f.scope,{*old,2,101,201*Ms,old->deadlineNs},202*Ms));
+    // Another independently owned mechanism can finish while this original
+    // debt remains parked. Its paid outcome has no authority over the first.
+    const auto retained=f.policy.Debt();Fixture other;
+    other.policy={};++other.scope.owners[0];++other.debt.item.id;++other.debt.mechanism.id;
+    CHECK(other.policy.Begin(other.scope,other.debt,Ms));
+    CHECK(other.policy.Submit(other.scope,other.Release(),other.now));
+    CHECK(other.Round(120*Ms)&&other.Round(140*Ms));CHECK(other.policy.Outcome());
+    const auto paid=*other.policy.Outcome();CHECK(other.policy.Acknowledge(paid));
+    CHECK(!f.policy.Acknowledge(paid)&&f.policy.Debt()==retained&&f.policy.Parked()&&f.policy.BlocksFire());
     auto nextScope=f.scope;++nextScope.owners[0];
     auto owner=f.debt.owner;++owner.equipGeneration;auto item=f.debt.item;item.generation=owner.equipGeneration;
     auto mechanism=f.debt.mechanism;mechanism.generation=owner.equipGeneration;
@@ -100,6 +109,7 @@ bool ParkedSelectionInvalidatesEveryOldAuthority(){
     CHECK(f.policy.Debt().cycle==original.cycle&&f.policy.Debt().shot==original.shot&&
           f.policy.Debt().guardEpoch==original.guardEpoch&&f.policy.Debt().loaded==original.loaded);
     CHECK(!f.policy.RecoveryAuthority(nextScope,*grant,60000*Ms)&&!f.policy.Outcome());
+    CHECK(!f.policy.SubmitRecovered(nextScope,{*old,3,102,60000*Ms,60020*Ms},60000*Ms));
     f.scope=nextScope;f.debt=f.policy.Debt();
     CHECK(f.Round(60010*Ms));CHECK(f.Round(60030*Ms));
     const auto fresh=f.policy.ArmRecovery(f.scope,f.Neutral());CHECK(fresh&&fresh->nonce>grant->nonce);

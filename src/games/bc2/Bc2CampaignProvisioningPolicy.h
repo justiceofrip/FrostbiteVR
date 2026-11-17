@@ -117,6 +117,13 @@ inline std::optional<Resource> SelectProvisioningResource(const Memory& m,std::u
     return r;
 }
 enum class BoundaryFailure:std::uint8_t {None,ThreadConflict,Owner,FreshOwner,Thread,ServerAge,Actor,Caller,NativeDepth,EntryDepth,Code,Seat,Idle,Count};
+enum class ServerObservation:std::uint8_t {Advanced,Invalid,Conflict,NotAdvanced};
+enum class PreflightResult:std::uint8_t {Accepted,Phase,Boundary,SeatSequence,Owner,ServerSequence};
+struct PreflightDiagnosis {
+    PreflightResult result=PreflightResult::Accepted;
+    BoundaryFailure boundary=BoundaryFailure::None;
+    bool boundaryChecked=false;
+};
 enum class ProvisionPhase:std::uint8_t {Preflight,Armed,AwaitingReplication,Equipped,RestoreArmed,AwaitingRestore,Restored,Indeterminate,Cancelled};
 struct ProvisionReceipt {
     ProvisionPhase phase=ProvisionPhase::Preflight;
@@ -129,20 +136,31 @@ public:
     // Observe only from the actual original server firing Update boundary with
     // an owner-qualified server actor. This records thread affinity; it never
     // dispatches a grant. Seat preflight requires a preceding observation.
-    void ObserveServerUpdate(const Owner& o,std::uint32_t thread,std::uint64_t sequence,std::int64_t now)noexcept {
-        if(!thread||!sequence||now<=0)return;
-        if(serverThread_&&(serverThread_!=thread||!provision_detail::SameActor(observed_,o))){threadConflict_=true;return;}
-        if(sequence<=serverSequence_)return;
+    ServerObservation ObserveServerUpdate(const Owner& o,std::uint32_t thread,std::uint64_t sequence,std::int64_t now)noexcept {
+        if(!thread||!sequence||now<=0)return ServerObservation::Invalid;
+        if(serverThread_&&(serverThread_!=thread||!provision_detail::SameActor(observed_,o))){threadConflict_=true;return ServerObservation::Conflict;}
+        if(sequence<=serverSequence_)return ServerObservation::NotAdvanced;
         observed_=o;serverThread_=thread;serverSequence_=sequence;serverNs_=now;
+        return ServerObservation::Advanced;
     }
     bool Preflight(const Memory& m,const Host& host,const Boundary& b)noexcept {
-        if(receipt_.phase!=ProvisionPhase::Preflight||!Valid(m,host,b)||b.sequence<=lastSeat_)return false;
-        if(preflightCount_&&(!provision_detail::SameActor(preflightOwner_,b.owner)||b.owner.data!=preflightOwner_.data))return false;
+        return PreflightWithDiagnosis(m,host,b).result==PreflightResult::Accepted;
+    }
+    // Return the cause from the actual checks, without repeating native reads.
+    // Keep their order and the lastSeat_ write before the server-sequence check.
+    PreflightDiagnosis PreflightWithDiagnosis(const Memory& m,const Host& host,const Boundary& b)noexcept {
+        if(receipt_.phase!=ProvisionPhase::Preflight)return {PreflightResult::Phase};
+        const auto boundary=Diagnose(m,host,b);
+        if(boundary!=BoundaryFailure::None)return {PreflightResult::Boundary,boundary,true};
+        if(b.sequence<=lastSeat_)return {PreflightResult::SeatSequence,boundary,true};
+        if(preflightCount_&&(!provision_detail::SameActor(preflightOwner_,b.owner)||b.owner.data!=preflightOwner_.data))
+            return {PreflightResult::Owner,boundary,true};
         preflightOwner_=b.owner;lastSeat_=b.sequence;
         // Distinct seat invocations also need distinct actual server Updates.
-        if(serverSequence_<=preflightServer_)return false;
-        preflightServer_=serverSequence_;++preflightCount_;return true;
+        if(serverSequence_<=preflightServer_)return {PreflightResult::ServerSequence,boundary,true};
+        preflightServer_=serverSequence_;++preflightCount_;return {PreflightResult::Accepted,boundary,true};
     }
+    std::uint64_t ServerSequence()const noexcept{return serverSequence_;}
     bool Arm(const Memory& m,const Host& host,const Boundary& b,const Resource& target,std::int64_t deadline)noexcept {
         if(receipt_.phase!=ProvisionPhase::Preflight||preflightCount_<2||!Valid(m,host,b)||
            !provision_detail::SameActor(preflightOwner_,b.owner)||b.owner.data!=preflightOwner_.data||

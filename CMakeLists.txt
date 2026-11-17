@@ -1020,7 +1020,7 @@ if(BUILD_TESTING)
   add_executable(FrameBridgePresentServiceTests tests/FrameBridgePresentServiceTests.cpp)
   target_include_directories(FrameBridgePresentServiceTests PRIVATE include)
   add_test(NAME FrameBridgePresentService COMMAND FrameBridgePresentServiceTests)
-  foreach(name Bc2PhysicalBolt Bc2BoltControllerProbe WeaponCycle WeaponActionGate BoltWeaponCustody PhysicalWeaponCycle Bc2PhysicalPump Bc2PhysicalPumpRecovery Bc2PhysicalBoltRecovery WeaponCycleConvergence Bc2NativeCycleInputGuard Bc2NativeCycleRecoveryService Bc2NativeCycleExpiredControlProbe Bc2PumpControllerRecoveryProbe Bc2NativeCycleUpdateRoute Bc2PumpPart Bc2PumpCapture Bc2PumpVisualObservation Bc2NativeCycleEvidence Bc2NativeCycleService Bc2MagazineAmmoMove Bc2MagazineAmmoProbe Bc2NativeAmmoRefill AmmunitionLedger AmmunitionInventory Bc2AmmoResourceEvidence Bc2AmmoPublisherObservation Bc2AmmoResourceService Bc2MagazineResource Bc2MagazineResourceProbe Bc2MagazineBoltObservation)
+  foreach(name Bc2PhysicalBolt Bc2BoltControllerProbe WeaponCycle WeaponActionGate BoltWeaponCustody PhysicalWeaponCycle Bc2PhysicalPump Bc2PhysicalPumpRecovery Bc2PhysicalBoltRecovery WeaponCycleConvergence Bc2NativeCycleInputGuard Bc2NativeCycleRecoveryService Bc2NativeCycleExpiredControlProbe Bc2PumpControllerRecoveryProbe Bc2NativeCycleUpdateRoute Bc2PumpPart Bc2PumpCapture Bc2PumpVisualObservation Bc2NativeCycleEvidence Bc2NativeCycleService Bc2NativeCycleBank Bc2MagazineAmmoMove Bc2MagazineAmmoProbe Bc2NativeAmmoRefill AmmunitionLedger AmmunitionInventory Bc2AmmoResourceEvidence Bc2AmmoPublisherObservation Bc2AmmoResourceService Bc2MagazineResource Bc2MagazineResourceProbe Bc2MagazineBoltObservation)
     # Its real-consumer cases require the generated AEK magazine geometry.
     if(name STREQUAL "Bc2MagazineResourceProbe" AND NOT BC2_EXPERIMENTAL_MAGAZINE_HEADER)
       continue()
@@ -1044,7 +1044,7 @@ endif()
 # Native-cycle evidence consumes the same Restore matcher as the runtime.
 # Match the existing reload-runtime test linkage instead of substituting a mock.
 if(BUILD_TESTING AND WIN32)
-  foreach(name Bc2BoltControllerProbe Bc2NativeCycleEvidence Bc2NativeCycleService Bc2NativeCycleRecoveryService Bc2NativeCycleExpiredControlProbe Bc2PumpControllerRecoveryProbe Bc2NativeCycleUpdateRoute)
+  foreach(name Bc2BoltControllerProbe Bc2NativeCycleEvidence Bc2NativeCycleService Bc2NativeCycleBank Bc2NativeCycleRecoveryService Bc2NativeCycleExpiredControlProbe Bc2PumpControllerRecoveryProbe Bc2NativeCycleUpdateRoute)
     if(name STREQUAL "Bc2BoltControllerProbe")
       # FVR_BC2_MANUAL_BOLT_PROBE, added below, changes this copy's compilation.
       target_sources(${name}Tests PRIVATE src/games/bc2/Bc2ReloadFlowRuntime.cpp)

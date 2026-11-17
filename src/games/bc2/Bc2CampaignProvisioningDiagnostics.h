@@ -1,7 +1,9 @@
 #pragma once
 #include <array>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
+#include <type_traits>
 
 namespace fvr::bc2::campaignProvisioning {
 enum class AdmissionEvent:std::uint32_t {
@@ -58,5 +60,79 @@ private:
     std::atomic<std::uint64_t> state_{Frozen};
     std::atomic<std::int64_t> accepted_{0},deadline_{0};
     unsigned scopes_=0;
+};
+
+enum class PreflightOutcome:std::uint32_t {
+    Accepted,SnapshotMismatch,RequestMismatch,BoundaryRejected,RevalidationRejected,
+    PolicyPhase,SeatSequence,OwnerChanged,ServerSequence,NestedDepth,Count
+};
+enum class PreflightServerEvent:std::uint32_t {Advanced,Invalid,Conflict,NotAdvanced,WrongFiring,OwnerRejected,Count};
+struct PreflightSequenceProgress {
+    // lastSequence starts at the policy's sequence at Submit. firstSequence is
+    // the first nonzero sequence sampled by this track, not the first advance.
+    std::uint64_t firstSequence=0,lastSequence=0;
+    // Advancing, repeated, regressing, unavailable (zero), relative to the
+    // previous sample (or Submit baseline). No sequence-gap size is a count.
+    std::array<std::uint32_t,4> counts{};
+};
+struct PreflightDetails {
+    // Saturation bits: outcomes 0..9, initial boundary 10..22, second boundary
+    // 23..35, depths 36..39, server events 40..45, seat progression 46..49,
+    // depth-zero top-level seat progression 50..53. 65535 is a lower bound.
+    std::uint64_t saturatedMask=0,serverSequenceAtSubmit=0,serverSequenceLatest=0;
+    PreflightSequenceProgress seats{},zeroDepthSeats{};
+    std::uint32_t maximumNativeDepth=0,reserved=0;
+    std::array<std::uint32_t,10> outcomes{};
+    // BoundaryFailure values, including None. Count only checks actually run;
+    // revalidation is the existing second validation inside policy Preflight.
+    std::array<std::uint32_t,13> boundary{},revalidatedBoundary{};
+    // Exact depth 0, 1, 2, and >=3, for all in-window preflight SeatEntry calls.
+    std::array<std::uint32_t,4> nativeDepth{};
+    std::array<std::uint32_t,6> serverEvents{};
+};
+static_assert(std::is_trivially_copyable_v<PreflightDetails>);
+static_assert(sizeof(PreflightSequenceProgress)==32&&sizeof(PreflightDetails)==280);
+static_assert(offsetof(PreflightDetails,outcomes)==96&&offsetof(PreflightDetails,serverEvents)==256);
+
+// Serialized solely by the existing runtime gate. Service owns the exact arm
+// window and terminal freeze. No native reads, clocks, allocation, locks, or
+// callback IO; every update has fixed work independent of callback count.
+class PreflightDiagnostics {
+public:
+    static constexpr std::uint32_t Limit=65535;
+    void Begin(std::uint64_t sequence)noexcept{
+        details_={};details_.serverSequenceAtSubmit=details_.serverSequenceLatest=sequence;
+        details_.seats.lastSequence=details_.zeroDepthSeats.lastSequence=sequence;
+    }
+    void Seat(std::uint64_t sequence,std::uint32_t nativeDepth,std::uint32_t seatDepth)noexcept{
+        const auto bucket=nativeDepth<3?nativeDepth:3;
+        Increment(details_.nativeDepth[bucket],36+bucket);
+        if(nativeDepth>details_.maximumNativeDepth)details_.maximumNativeDepth=nativeDepth;
+        Sequence(details_.seats,sequence,46);
+        if(!nativeDepth&&seatDepth==1)Sequence(details_.zeroDepthSeats,sequence,50);
+    }
+    void Outcome(PreflightOutcome outcome)noexcept{
+        const auto index=unsigned(outcome);if(index<details_.outcomes.size())Increment(details_.outcomes[index],index);
+    }
+    void Boundary(unsigned boundary,bool revalidated=false)noexcept{
+        auto& counts=revalidated?details_.revalidatedBoundary:details_.boundary;
+        if(boundary<counts.size())Increment(counts[boundary],(revalidated?23:10)+boundary);
+    }
+    void Server(PreflightServerEvent event,std::uint64_t sequence)noexcept{
+        details_.serverSequenceLatest=sequence;const auto index=unsigned(event);
+        if(index<details_.serverEvents.size())Increment(details_.serverEvents[index],40+index);
+    }
+    const PreflightDetails& Read()const noexcept{return details_;}
+private:
+    void Increment(std::uint32_t& count,unsigned bit)noexcept{
+        if(count<Limit)++count;
+        if(count==Limit)details_.saturatedMask|=std::uint64_t(1)<<bit;
+    }
+    void Sequence(PreflightSequenceProgress& progress,std::uint64_t sequence,unsigned bit)noexcept{
+        const unsigned kind=!sequence?3:sequence>progress.lastSequence?0:sequence==progress.lastSequence?1:2;
+        Increment(progress.counts[kind],bit+kind);
+        if(sequence){if(!progress.firstSequence)progress.firstSequence=sequence;progress.lastSequence=sequence;}
+    }
+    PreflightDetails details_{};
 };
 }

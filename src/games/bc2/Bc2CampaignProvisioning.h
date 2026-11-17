@@ -85,6 +85,17 @@ struct InputHoldReceipt {
     InputHoldAttempt attempt{};
 };
 static_assert(std::is_trivially_copyable_v<InputHoldReceipt>&&sizeof(InputHoldReceipt)==1616);
+// BPF1: separate private preflight-cause sidecar. Existing wire layouts and
+// reserved-zero fields remain unchanged. All snapshots share the exact arm
+// identity/window/status/freeze join embedded here; missing files are unknown.
+struct PreflightReceipt {
+    std::uint32_t magic=0x31465042,version=1,bytes=0,reserved=0;
+    AdmissionReceipt admission{};
+    PreflightDetails details{};
+};
+static_assert(std::is_trivially_copyable_v<PreflightReceipt>&&sizeof(PreflightReceipt)==1496);
+static_assert(offsetof(PreflightReceipt,admission)==16&&offsetof(PreflightReceipt,details)==1216);
+static_assert(unsigned(policy::BoundaryFailure::Count)==13&&unsigned(PreflightOutcome::Count)==10&&unsigned(PreflightServerEvent::Count)==6);
 struct LifetimeHost {
     enum class Exclusion:std::uint32_t {Refused,Pending,Ready};
     void* context=nullptr;
@@ -125,7 +136,9 @@ public:
     ControlRefusalReceipt ReadControlRefusals()const noexcept;
     bool WantsInputHold(std::uint64_t token,const policy::Boundary&)const noexcept;
     InputHoldReceipt ReadInputHold()const noexcept;
+    PreflightReceipt ReadPreflight()const noexcept; // existing runtime gate held
 private:
+    bool PreflightDiagnosticWindow(std::int64_t now)const noexcept;
     bool Source(const Request&,const ReloadServerSnapshot&,const policy::Boundary&)const noexcept;
     void Quarantine(std::int64_t now)noexcept;
     void FreezeAdmission(std::int64_t now)noexcept;
@@ -134,6 +147,7 @@ private:
     policy::WeaponProvisioner policy_{};Receipt receipt_{};
     AdmissionCounters admission_;AdmissionReceipt admissionReceipt_{};ControlRefusalDiagnostics controlRefusals_;
     InputHoldAttempt inputHold_{};bool inputHoldCaptured_=false;
+    PreflightDiagnostics preflightDiagnostics_;
     bool admissionTerminal_=true; // Metadata remains available after counter-scope exhaustion.
     std::optional<Request> request_;std::optional<policy::Resource> target_;
     std::optional<ReloadServerSnapshot> retiredSource_;

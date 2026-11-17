@@ -1,6 +1,7 @@
 #include "Test.h"
 #include "Bc2ReloadDeferredCompletionTests.h"
 #include "Bc2ReloadFlowRuntime.h"
+#include "Bc2NativeCycleRuntime.h"
 #include "Bc2ReloadInvocationEntry.h"
 #include "Bc2ReloadPhaseRetry.h"
 #include "Bc2ReloadPolicyLock.h"
@@ -13,6 +14,73 @@
 #include <vector>
 using namespace fvr::bc2;
 namespace {
+int CallbackContentionKeepsItsEntryCancellationRoute(){
+    // The selector's last quiet scan precedes A's rejected callback entry.
+    // Publish B from the real bounded policy wait, including paid-slot reuse.
+    for(unsigned reuse=0;reuse<2;++reuse){
+        NativeCycleCancellationRouting routing;
+        std::array<std::atomic<std::uint64_t>,2> epochs{};epochs[0]=11;epochs[1]=21;
+        std::atomic_flag policyGate{},entryGate{};
+        std::atomic<unsigned> active=1;std::atomic<std::uint64_t> revision=1;
+        ReloadInvocationExclusion entry(entryGate,active,revision);CHECK(entry.Quiet());
+        const auto callbackRoute=routing.Capture();const Bc2NativeCycleSlot a{0,1},b{reuse?0u:1u,2};
+        CHECK(callbackRoute==a);
+        CHECK(!EnterReloadInvocation(active,revision,entryGate));CHECK(!entry.Quiet());
+        policyGate.test_and_set();std::int64_t now=100;bool published=false,captureRefused=false;
+        {
+            NativeCycleRoutedPolicyAccess missing(policyGate,epochs[callbackRoute.index],routing,callbackRoute,
+                NativeCycleAccess::NativeMissing,[&]{return now;},[&]{
+                    NativeCycleCancellationRouting::Publication publication(routing);
+                    if(publication.Held()){
+                        captureRefused=!routing.Capture();publication.Publish(b);published=true;
+                    }
+                    now+=ReloadPolicyLock::WaitNs;
+                });
+            CHECK(!missing.Held()&&missing.Evidence().failure==ReloadPolicyLockFailure::Deadline);
+            CHECK(missing.Before()==11&&missing.After()==11);
+        }
+        CHECK(published&&captureRefused&&routing.Capture()==b);
+        CHECK(epochs[0].load()==11&&epochs[1].load()==21);
+        // A may also reach WithNativeCycle only after B has published.
+        {
+            NativeCycleRoutedPolicyAccess delayed(policyGate,epochs[callbackRoute.index],routing,callbackRoute,
+                NativeCycleAccess::NativeMissing,[&]{return now;},[&]{now+=ReloadPolicyLock::WaitNs;});
+            CHECK(!delayed.Held()&&delayed.Before()==delayed.After());
+        }
+        CHECK(epochs[0].load()==11&&epochs[1].load()==21);
+        // A matching route still charges exactly its own real runtime epoch.
+        const auto before=epochs[b.index].load();
+        {
+            NativeCycleRoutedPolicyAccess current(policyGate,epochs[b.index],routing,b,
+                NativeCycleAccess::NativeMissing,[&]{return now;},[&]{now+=ReloadPolicyLock::WaitNs;});
+            CHECK(!current.Held()&&current.Before()==before&&current.After()==before+1);
+        }
+        CHECK(epochs[b.index].load()==before+1);
+        // Even a current route refuses its charge while publication owns it.
+        {
+            NativeCycleCancellationRouting::Publication publication(routing);CHECK(publication.Held());
+            NativeCycleRoutedPolicyAccess busy(policyGate,epochs[b.index],routing,b,
+                NativeCycleAccess::NativeMissing,[&]{return now;},[&]{now+=ReloadPolicyLock::WaitNs;});
+            CHECK(!busy.Held()&&busy.Before()==before+1&&busy.After()==before+1);
+        }
+        policyGate.clear();ExitReloadInvocation(active,revision);
+    }
+    return 0;
+}
+int ReloadRoutingKeepsItsOriginalSlotAndResource(){
+    Bc2CycleReloadRouting routing;NativeCycleRecoveryScope scope;
+    scope.identity.owner={0x10000,0x20000,0x30000,0x40000,1,2,7};
+    scope.identity.firing={0x50000,0x60000,0x70000};
+    fvr::interaction::WeaponCycleReloadCommand command;command.permit.debt.guardEpoch=9;
+    command.command.operation=fvr::interaction::AmmunitionOperation::RemoveMagazine;
+    const Bc2NativeCycleSlot a{1,7},b{2,8},returned{1,9};
+    CHECK(routing.Begin(scope,command,a));CHECK(routing.Owns(a,scope));
+    CHECK(!routing.Owns(b,scope)&&!routing.Owns(returned,scope));
+    auto wrong=scope;++wrong.identity.firing[2];CHECK(!routing.Owns(a,wrong));
+    CHECK(!routing.Begin(wrong,command,b));CHECK(routing.Owns(a,scope));
+    routing.Applied();CHECK(!routing.Owns(a,scope)&&!routing.Active());
+    CHECK(routing.Begin(wrong,command,b));CHECK(routing.Owns(b,wrong)&&!routing.Owns(a,scope));return 0;
+}
 int NativeReadinessRequiresAllThreeCoherentInputStates(){
     ReloadHoldIdentity id;id.owner={0x10000,0x20000,0x30000,0x40000,1,2,7};
     id.firing={0x50000,0x60000,0x70000};id.serverPlayer=0x80000;id.serverSoldier=0x90000;id.serverItem=0xa0000;
@@ -427,6 +495,8 @@ int SyntheticAbi(){
 }
 #endif
 int main(){
+    if(CallbackContentionKeepsItsEntryCancellationRoute())return 1;
+    if(ReloadRoutingKeepsItsOriginalSlotAndResource())return 1;
     if(completion_journal_tests::Run())return 1;
     if(NativeReadinessRequiresAllThreeCoherentInputStates())return 1;
     if(CohortRetryReconstructsAfterRealOverlap()||CohortRetryRejectsOtherFailures()||CohortRetryNeverRenewsOrLoops())return 1;
@@ -436,5 +506,5 @@ int main(){
 #if defined(_M_IX86)
     if(SyntheticAbi())return 1;
 #endif
-    std::printf("Twenty reload-flow-runtime deterministic groups passed. No game process used.\n");return 0;
+    std::printf("Reload-flow-runtime deterministic groups, including owned cycle routing, passed. No game process used.\n");return 0;
 }

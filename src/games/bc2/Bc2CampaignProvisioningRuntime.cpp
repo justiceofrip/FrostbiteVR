@@ -182,15 +182,16 @@ void ServiceTransport(const std::filesystem::path& directory)noexcept {
     if(const auto source=SourceRequest())write(directory/L"campaign-provision-source.bin",*source);
     // Join both value-only outputs under the existing gate. Files are separate
     // publications; consumers must match full process identity + nonce + job.
-    WireReceipt receipt;AdmissionReceipt admission;ControlRefusalReceipt control;InputHoldReceipt hold;
+    WireReceipt receipt;AdmissionReceipt admission;ControlRefusalReceipt control;InputHoldReceipt hold;PreflightReceipt preflight;
     {std::lock_guard lock(gate);service.Expire(Now());receipt=ToWire(service.Read());admission=service.ReadAdmission();
-        control=service.ReadControlRefusals();hold=service.ReadInputHold();}
+        control=service.ReadControlRefusals();hold=service.ReadInputHold();preflight=service.ReadPreflight();}
     write(directory/L"campaign-provision-receipt.bin",receipt);
     if(admission.nonce){
         write(directory/L"campaign-provision-admission.bin",admission);
         write(directory/L"campaign-provision-control.bin",control);
         // One immutable first-refusal payload; passive worker publication only.
         write(directory/L"campaign-provision-input-hold.bin",hold);
+        write(directory/L"campaign-provision-preflight.bin",preflight);
     }
 }
 }

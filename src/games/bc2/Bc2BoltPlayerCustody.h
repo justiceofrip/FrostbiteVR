@@ -25,6 +25,10 @@ public:
     explicit Bc2BoltPlayerCustody(std::shared_ptr<const Bc2BoltCalibration> calibration)noexcept:calibration_(std::move(calibration)){}
     std::optional<Bc2PhysicalBoltSample> Prepare(const Bc2BoltPlayerInput&,const interaction::HandInteraction&,std::uint64_t& intent)noexcept;
     void Observe(const Bc2PhysicalBoltResult&)noexcept;
+    // Releases exact old hand claims after the native bank accepted a distinct
+    // observed selection. No native Cancel, Ready or debt payment is issued.
+    bool SuspendForDeparture(const Bc2NativeCycleDeparture&,const Bc2NativeCycleView& selected,
+        const interaction::HandInteractionSample&,interaction::HandInteraction&)noexcept;
     bool ReferencesReady()const noexcept{return references_.has_value();}
     bool BlocksFire()const noexcept{return debt_||retirementRequired_;}
     bool NeedsOwnerRetirement()const noexcept{return retirementRequired_;}

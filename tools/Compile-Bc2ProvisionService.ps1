@@ -1,4 +1,4 @@
-# ROOT-only deterministic Service34 checks. One fresh pwsh -NoProfile -File process per architecture.
+# ROOT-only deterministic provisioning checks. One fresh pwsh -NoProfile -File process per architecture.
 # The config's retained Service receipts seed dependencies, not current-source acceptance.
 # Replace those receipts with result.json/checks.log after both fresh runs; Source63 is separate.
 [CmdletBinding()]
@@ -8,6 +8,7 @@ param(
     [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$ConfigSha256,
     [Parameter(Mandatory)][string]$OutputPath,
     [Parameter(Mandatory)][string]$Python,
+    [ValidateSet('Service','Source')][string]$Check='Service',
     [string]$VsDevShell='C:/Program Files/Microsoft Visual Studio/18/Community/Common7/Tools/Launch-VsDevShell.ps1'
 )
 $ErrorActionPreference='Stop'
@@ -16,7 +17,14 @@ $utf8=[Text.UTF8Encoding]::new($false)
 $output=[IO.Path]::GetFullPath($OutputPath)
 $checker=Join-Path $PSScriptRoot 'native_batch.py'
 $suite='Bc2CampaignProvisioningTests'
-$banner='PASS 34 campaign provisioning groups; real service/policy, native assignment fixture; no native acceptance'
+$banner='PASS 40 campaign provisioning groups; real service/policy, native assignment fixture; no native acceptance'
+$expectedCases=40
+if($Check -eq 'Source'){
+    if($Architecture -ne 'x86'){throw 'Source fixture is the existing x86-only check'}
+    $suite='Bc2CampaignProvisioningSourceTests'
+    $banner='PASS 63 provisioning source cases (deterministic only)'
+    $expectedCases=63
+}
 
 function File-Pin([string]$Path){
     $file=Get-Item -LiteralPath $Path -ErrorAction Stop
@@ -204,8 +212,11 @@ $old=Read-Json $retained[0].result.path
 $oldArch=if($old.architecture -eq 'amd64'){'x64'}else{$old.architecture}
 if($old.suite -cne $suite -or $oldArch -cne $receiptArch -or $old.compile_exit -ne 0 -or $old.test_exit -ne 0 -or $old.evidence_valid -ne $true -or -not $old.source_files){throw 'Retained Service compiler/dependency receipt differs'}
 $expectedPattern='(?m)^'+[regex]::Escape($banner)+'\r?$'
-if(-not ([IO.File]::ReadAllText($retained[0].output_proof.path) -match $expectedPattern)){throw 'Retained Service34 output differs'}
+$retainedPattern='(?m)^PASS (?:34|40) campaign provisioning groups; real service/policy, native assignment fixture; no native acceptance\r?$'
+if($Check -eq 'Source'){$retainedPattern=$expectedPattern}
+if(-not ([IO.File]::ReadAllText($retained[0].output_proof.path) -match $retainedPattern)){throw 'Retained provisioning output differs'}
 $rel=@('tests/Bc2CampaignProvisioningTests.cpp','src/games/bc2/Bc2CampaignProvisioning.cpp','src/games/bc2/Bc2CampaignProvisioningAssignment.cpp','src/games/bc2/Bc2HolsterInput.cpp')
+if($Check -eq 'Source'){$rel=@('tests/Bc2CampaignProvisioningSourceTests.cpp')}
 $requiredDependencies=@(@($old.source_files | ForEach-Object {Relative-Source $_.path})+@('src/games/bc2/Bc2CampaignProvisioning.h','src/games/bc2/Bc2CampaignProvisioningInputHoldDiagnostics.h','src/games/bc2/Bc2CampaignProvisioningControlDiagnostics.h','include/fvr/interaction/HandInteraction.h','include/fvr/interaction/FeedInteraction.h','src/games/bc2/Bc2AmmoResourceService.h') | Sort-Object -Unique)
 $sources=@($rel | ForEach-Object {Join-Path $wt $_})
 $includes=@('src/games/bc2','tools','include' | ForEach-Object {Join-Path $wt $_})
@@ -227,7 +238,7 @@ Assert-Review
 Assert-Pins $sourcePins
 $null=New-Item -ItemType Directory -Path $output -ErrorAction Stop
 Save-Json 'storage.json' $admission
-Save-Json 'inputs.json' ([ordered]@{config=$configPin;source_commit=$c.source_commit;check='Service';suite=$suite;source_files=$sourcePins;input_pins=$inputPins;retained_dependencies=$requiredDependencies;wire_abi='Request1264/WireReceipt1272';reviewed_build_ceiling_bytes=$ceiling;planned_bytes=128MB;min_free_bytes=15GB})
+Save-Json 'inputs.json' ([ordered]@{config=$configPin;source_commit=$c.source_commit;check=$Check;suite=$suite;source_files=$sourcePins;input_pins=$inputPins;retained_dependencies=$requiredDependencies;wire_abi='Request1264/WireReceipt1272';reviewed_build_ceiling_bytes=$ceiling;planned_bytes=128MB;min_free_bytes=15GB})
 $compile=$null;$test=$null;$failure=$null;$compilerPin=$null;$linkerPin=$null;$binaryPin=$null;$outputPin=$null;$machine=$null
 try{
     $scratch=Join-Path $output 'scratch'
@@ -265,7 +276,7 @@ try{
             & $binaryPin.path *> (Join-Path $output 'checks.log')
             $test=$LASTEXITCODE
             $outputPin=File-Pin (Join-Path $output 'checks.log')
-            if($test -eq 0 -and -not ([IO.File]::ReadAllText($outputPin.path) -match $expectedPattern)){throw 'Expected complete authentic Service34 output missing'}
+            if($test -eq 0 -and -not ([IO.File]::ReadAllText($outputPin.path) -match $expectedPattern)){throw 'Expected complete authentic provisioning output missing'}
         }
     }finally{Pop-Location}
     Assert-Review
@@ -273,7 +284,7 @@ try{
     if($binaryPin){Assert-Pins @($binaryPin)}
     if($outputPin){Assert-Pins @($outputPin)}
 }catch{$failure=$_.Exception.Message}
-$result=[ordered]@{schema='fvr.focused-provision-service-result.v1';evidence_level='deterministic tests only';check='Service';suite=$suite;architecture=$Architecture;source_commit=$c.source_commit;compile_exit=$compile;test_exit=$test;source_files=$sourcePins;draft_only=$true;native_calls=$false;game_launched=$false;config=$configPin;input_pins=$inputPins;compiler=$compilerPin;linker=$linkerPin;test_binary=$binaryPin;pe_machine=$machine;output_proof=$outputPin;expected_cases=34;wire_abi='Request1264/WireReceipt1272';reviewed_build_ceiling_bytes=$ceiling;failure=$failure;evidence_valid=($null -eq $failure -and $compile -eq 0 -and $test -eq 0)}
+$result=[ordered]@{schema='fvr.focused-provision-service-result.v1';evidence_level='deterministic tests only';check=$Check;suite=$suite;architecture=$Architecture;source_commit=$c.source_commit;compile_exit=$compile;test_exit=$test;source_files=$sourcePins;draft_only=$true;native_calls=$false;game_launched=$false;config=$configPin;input_pins=$inputPins;compiler=$compilerPin;linker=$linkerPin;test_binary=$binaryPin;pe_machine=$machine;output_proof=$outputPin;expected_cases=$expectedCases;wire_abi='Request1264/WireReceipt1272';reviewed_build_ceiling_bytes=$ceiling;failure=$failure;evidence_valid=($null -eq $failure -and $compile -eq 0 -and $test -eq 0)}
 # A post-build owner/pin/banner failure must never look like passing evidence to native_batch.
 if($failure -and $result.compile_exit -eq 0 -and $result.test_exit -eq 0){$result.test_exit=$null}
 Save-Json 'result.json' $result
@@ -281,4 +292,4 @@ if($failure){throw $failure}
 if($compile -ne 0){Get-Content -LiteralPath (Join-Path $output 'compile.log') -Tail 45;exit $compile}
 Get-Content -LiteralPath (Join-Path $output 'checks.log')
 if($test -ne 0){exit $test}
-Write-Output "PROVISION_SERVICE_${Architecture}_PASS"
+Write-Output "PROVISION_${Check}_${Architecture}_PASS"

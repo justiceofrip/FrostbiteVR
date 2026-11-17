@@ -46,7 +46,8 @@ bool Service::Submit(const Request& request,std::int64_t now)noexcept {
     admissionReceipt_.operation=std::uint32_t(request.operation);admissionReceipt_.acceptedNs=now;
     admissionReceipt_.issuedNs=request.issuedNs;admissionReceipt_.deadlineNs=request.deadlineNs;
     admissionReceipt_.status=std::uint32_t(receipt_.status);admissionTerminal_=false;
-    admission_.Begin(now,request.deadlineNs);controlRefusals_.Reset();inputHold_={};inputHoldCaptured_=false;return true;
+    admission_.Begin(now,request.deadlineNs);controlRefusals_.Reset();inputHold_={};inputHoldCaptured_=false;
+    preflightDiagnostics_.Begin(policy_.ServerSequence());return true;
 }
 AdmissionReceipt Service::ReadAdmission()const noexcept {
     auto out=admissionReceipt_;const auto counters=admission_.Read();
@@ -78,6 +79,13 @@ InputHoldReceipt Service::ReadInputHold()const noexcept {
     InputHoldReceipt out;out.bytes=sizeof(out);out.captured=inputHoldCaptured_;
     out.control=ReadControlRefusals();out.attempt=inputHold_;return out;
 }
+PreflightReceipt Service::ReadPreflight()const noexcept {
+    PreflightReceipt out;out.bytes=sizeof(out);out.admission=ReadAdmission();out.details=preflightDiagnostics_.Read();return out;
+}
+bool Service::PreflightDiagnosticWindow(std::int64_t now)const noexcept {
+    return !admissionTerminal_&&now>=admissionReceipt_.acceptedNs&&now<admissionReceipt_.deadlineNs&&
+        policy_.Receipt().phase==policy::ProvisionPhase::Preflight;
+}
 void Service::FreezeAdmission(std::int64_t now)noexcept {
     admission_.Freeze();
     if(!admissionTerminal_){admissionTerminal_=true;
@@ -85,11 +93,25 @@ void Service::FreezeAdmission(std::int64_t now)noexcept {
 }
 void Service::ObserveServer(const ReloadServerSnapshot& source,std::uint32_t firing,std::uint32_t thread,
                             std::uint64_t sequence,std::int64_t now)noexcept {
-    if(!configured_||stopped_||receipt_.status==Status::Quarantined||firing!=source.links.firing||
+    if(!configured_||stopped_||receipt_.status==Status::Quarantined||
        (!request_&&policy_.Receipt().phase==policy::ProvisionPhase::Preflight))return;
+    const bool diagnostic=PreflightDiagnosticWindow(now);
+    if(firing!=source.links.firing){
+        if(diagnostic)preflightDiagnostics_.Server(PreflightServerEvent::WrongFiring,policy_.ServerSequence());
+        return;
+    }
     const auto owner=ProvisionOwner(source,process_.session);
-    if(!host_.owner(host_.context,owner,now))return;
-    policy_.ObserveServerUpdate(owner,thread,sequence,now);
+    if(!host_.owner(host_.context,owner,now)){
+        if(diagnostic)preflightDiagnostics_.Server(PreflightServerEvent::OwnerRejected,policy_.ServerSequence());
+        return;
+    }
+    const auto observation=policy_.ObserveServerUpdate(owner,thread,sequence,now);
+    if(diagnostic){
+        const auto event=observation==policy::ServerObservation::Advanced?PreflightServerEvent::Advanced:
+            observation==policy::ServerObservation::Invalid?PreflightServerEvent::Invalid:
+            observation==policy::ServerObservation::Conflict?PreflightServerEvent::Conflict:PreflightServerEvent::NotAdvanced;
+        preflightDiagnostics_.Server(event,policy_.ServerSequence());
+    }
 }
 bool Service::Source(const Request& request,const ReloadServerSnapshot& source,const policy::Boundary& b)const noexcept {
     return b.owner==ProvisionOwner(source,process_.session)&&b.owner==request.source&&source.client.owner==request.client&&
@@ -110,14 +132,19 @@ void Service::SeatEntry(const ReloadServerSnapshot& source,const policy::Boundar
     // A completed request owns an immutable receipt until a fresh Submit.
     // In particular, a later SeatEntry cannot overwrite Expired current/age.
     if(!configured_||stopped_||receipt_.status==Status::Quarantined||!request_)return;
+    const bool diagnostic=PreflightDiagnosticWindow(b.nowNs);
+    if(diagnostic)preflightDiagnostics_.Seat(policy_.ServerSequence(),b.nativeFiringDepth,b.seatDepth);
     admission_.Record(admission_.Token(),b.seatDepth==1?AdmissionEvent::ServiceEntered:AdmissionEvent::NestedDepth,b.nowNs);
-    if(b.seatDepth!=1)return;
+    if(b.seatDepth!=1){if(diagnostic)preflightDiagnostics_.Outcome(PreflightOutcome::NestedDepth);return;}
     receipt_.observedNs=b.nowNs;receipt_.current=source.client.owner;
     // Seat callbacks enforce the same terminal deadline as worker expiry.
     // In particular, late convergence cannot reopen excluded input.
     if(request_&&b.nowNs>=request_->deadlineNs){Expire(b.nowNs);return;}
-    if(b.owner!=ProvisionOwner(source,process_.session)||b.ownerObservedNs!=source.client.observedNs)return;
+    if(b.owner!=ProvisionOwner(source,process_.session)||b.ownerObservedNs!=source.client.observedNs){
+        if(diagnostic)preflightDiagnostics_.Outcome(PreflightOutcome::SnapshotMismatch);return;
+    }
     receipt_.boundary=policy_.Diagnose(memory_,host_,b);
+    if(diagnostic)preflightDiagnostics_.Boundary(unsigned(receipt_.boundary));
     const auto phase=policy_.Receipt().phase;
     if(phase==policy::ProvisionPhase::AwaitingReplication||phase==policy::ProvisionPhase::AwaitingRestore){
         if(policy_.ObserveConvergence(memory_,host_,b)){
@@ -129,10 +156,25 @@ void Service::SeatEntry(const ReloadServerSnapshot& source,const policy::Boundar
         return;
     }
     if(!request_)return;
-    if(!Source(*request_,source,b)){FinishUnsent(Status::Refused,b.nowNs,&source);return;}
-    if(receipt_.boundary!=policy::BoundaryFailure::None)return;
+    if(!Source(*request_,source,b)){
+        if(diagnostic)preflightDiagnostics_.Outcome(PreflightOutcome::RequestMismatch);
+        FinishUnsent(Status::Refused,b.nowNs,&source);return;
+    }
+    if(receipt_.boundary!=policy::BoundaryFailure::None){
+        if(diagnostic)preflightDiagnostics_.Outcome(PreflightOutcome::BoundaryRejected);return;
+    }
     if(phase==policy::ProvisionPhase::Preflight){
-        if(policy_.Preflight(memory_,host_,b))++receipt_.preflight;
+        const auto preflight=policy_.PreflightWithDiagnosis(memory_,host_,b);
+        if(diagnostic){
+            if(preflight.boundaryChecked)preflightDiagnostics_.Boundary(unsigned(preflight.boundary),true);
+            const auto outcome=preflight.result==policy::PreflightResult::Accepted?PreflightOutcome::Accepted:
+                preflight.result==policy::PreflightResult::Phase?PreflightOutcome::PolicyPhase:
+                preflight.result==policy::PreflightResult::Boundary?PreflightOutcome::RevalidationRejected:
+                preflight.result==policy::PreflightResult::SeatSequence?PreflightOutcome::SeatSequence:
+                preflight.result==policy::PreflightResult::Owner?PreflightOutcome::OwnerChanged:PreflightOutcome::ServerSequence;
+            preflightDiagnostics_.Outcome(outcome);
+        }
+        if(preflight.result==policy::PreflightResult::Accepted)++receipt_.preflight;
         if(receipt_.preflight<8)return; // Retained bench requirement, not policy's lower minimum.
         if(request_->operation==Operation::Observe){receipt_.status=Status::Ready;request_.reset();FreezeAdmission(b.nowNs);return;}
         target_=policy::SelectExactProvisionResource(memory_,request_->targetData,request_->targetAsset,request_->variant);

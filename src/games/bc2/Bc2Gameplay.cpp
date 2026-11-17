@@ -1128,7 +1128,7 @@ void SelectOrdinaryCycle(const Owner& owner,const interaction::InputFrame& input
             }
         }
     }
-    if(ordinarySelectionReady)return;
+    if(ordinarySelectionReady&&ordinaryAdapterOwner==current)return;
     // The native selector also refuses debt/Ready/open calls. Physical custody
     // must have completed its own return before that native handoff is asked.
     const bool replacementActor=NativeCycleClientActorReplaced(ordinaryAdapterOwner,current);
@@ -1137,16 +1137,26 @@ void SelectOrdinaryCycle(const Owner& owner,const interaction::InputFrame& input
     const bool retainedReturn=boltEquipment&&view&&view->selectionParked&&view->retainedDebtOrigin&&
         !view->releasePending&&!view->ready&&returnedOwner==view->native.owner&&
         current.equipGeneration>=view->native.owner.equipGeneration;
-    if(!replacementActor&&!retainedReturn&&((ordinaryBoltPlayer&&(ordinaryBoltPlayer->BlocksFire()||ordinaryBoltPlayer->OwnsGunCustody()))||
+    const auto departure=reloadFlowRuntime::ReadNativeCycleDeparture(ordinaryAdapterOwner);
+    const bool retainedDeparture=departure&&departure->previous.owner==ordinaryAdapterOwner&&
+        departure->selected.owner==current&&ordinaryBoltPlayer;
+    if(!replacementActor&&!retainedReturn&&!retainedDeparture&&((ordinaryBoltPlayer&&(ordinaryBoltPlayer->BlocksFire()||ordinaryBoltPlayer->OwnsGunCustody()))||
        (physicalPump&&physicalPump->BlocksFire())))return;
     // A resolved replacement actor may request retirement despite old physical
     // debt. Native selection still requires fresh all-branch ownership plus an
     // excluded/drained callback boundary. No physical state changes on rejection.
-    if(!reloadFlowRuntime::SelectNativeCycleMode(mode,current))return;
+    if(!ordinarySelectionReady&&!reloadFlowRuntime::SelectNativeCycleMode(mode,current))return;
+    if(retainedDeparture){
+        const auto selected=reloadFlowRuntime::ReadNativeCycleView(HandNanos(stamp.QuadPart));
+        if(!selected||!ordinaryBoltPlayer->SuspendForDeparture(*departure,*selected,handSample,handOwnership))return;
+        // The exact old slot retains its unfinished native action. Release only
+        // its presentation; Cancel would address the newly selected service.
+        physicalBolt.reset();ordinaryBoltPlayer.reset();
+    }
     ordinaryCycleSelection.Selected(mode,current);
     ordinarySelectionReady=true;
     if(ordinaryAdapterOwner!=current||retainedReturn){
-        // Selection succeeded only after exact old native/physical retirement.
+        // Selection either retired the old lifetime or parked its exact debt.
         // New native item lifetime gets new physical references, never old grips.
         ordinaryShotgunEquipment=shotgunEquipment;
         if(boltEquipment){

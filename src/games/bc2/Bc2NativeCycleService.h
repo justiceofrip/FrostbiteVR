@@ -89,6 +89,7 @@ struct Bc2NativeCycleView {
     bool releasePending=false;
     bool selectionParked=false;
     std::optional<Bc2NativeCycleSelectionReturn> selectionReturn;
+    Bc2NativeCycleSlot slot{};
 };
 // Until an issued selector has a verified retirement receipt, keep the current
 // unpaid cycle usable and refuse only its departure. This grants no authority.
@@ -182,6 +183,19 @@ public:
         const Bc2AmmoReserveLease&,std::int64_t now,const Bc2NativeCycleActorDrain&)noexcept;
     const auto& LastActorRetirement()const noexcept{return actorRetirement_;}
     Bc2NativeCycleMode Mode()const noexcept{return mode_;}
+    NativeCycleRecoveryScope NativeScope()const noexcept {
+        return selection_?NativeCycleRecoveryScope{selection_->reserve.identity,selection_->config}:
+            NativeCycleRecoveryScope{native_,config_};
+    }
+    bool CallbacksDrained()const noexcept {
+        return recovery_.Drained()&&std::none_of(openUpdate_.begin(),openUpdate_.end(),[](auto id){return id!=0;});
+    }
+    // A retained service can only yield once physical acknowledgement and any
+    // paid native replay have both reconciled. No timeout is a payment.
+    bool Reclaimable(std::int64_t now)const noexcept {
+        return CallbacksDrained()&&!ActiveObligation()&&!ready_&&!recovery_.ReloadPause()&&!recovery_.ReloadCommand()&&
+            (!recovery_.Active()||recovery_.PaidConverged(now));
+    }
     Bc2NativeCyclePhase Phase()const noexcept{return phase_;}
     const auto& FirstInputRejection()const noexcept{return firstInputRejection_;}
     Bc2NativeCycleDiagnostic Diagnostic()const noexcept {
@@ -232,6 +246,7 @@ public:
     void Cancel(Bc2NativeCycleFailure)noexcept;
     Bc2NativeCycleView View(std::int64_t now)const noexcept;
 private:
+    bool ActiveObligation()const noexcept;
     bool ReserveValid(const Bc2AmmoReserveLease&,std::int64_t now)const noexcept;
     bool SelectionValid(const Bc2NativeCycleSelection&)const noexcept;
     void ApplySelection(const Bc2NativeCycleSelection&)noexcept;

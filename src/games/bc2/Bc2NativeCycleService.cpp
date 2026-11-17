@@ -412,6 +412,9 @@ bool Bc2NativeCycleService::YieldForReload()noexcept {
     phase_=Bc2NativeCyclePhase::Watching;firedMask_=heldMask_=readyMask_=0;
     release_.reset();releaseSubmittedNs_=0;forwardReadyAt_={};selection_.reset();recovery_={};concurrentCycle_=false;return true;
 }
+bool Bc2NativeCycleService::ActiveObligation()const noexcept {
+    return Active(phase_)||retainedDebtOrigin_.has_value();
+}
 bool Bc2NativeCycleService::PrepareReload(const NativeCycleRecoveryScope& scope,const WeaponCycleReloadPause& pause,
     const AmmoResourceContext& resource,const WeaponCycleReloadDrain& drain,std::int64_t now)noexcept {
     if(mode_!=Bc2NativeCycleMode::Bolt||scope!=NativeCycleRecoveryScope{native_,config_}||release_||ready_||

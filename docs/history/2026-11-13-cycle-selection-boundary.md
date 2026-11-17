@@ -8,10 +8,14 @@ stroke in its result. Its optional switch continuation requires typed blocker an
 native-origin evidence; it cannot treat equal ammunition counts as continuity.
 The four affected Python suites pass 108 tests with one optional saved-run skip.
 
-Native debt parking/return components now retain identity, ammunition and guard
-history while requiring fresh hand references and a full new gesture. These
-components have new deterministic cases; execution and native acceptance remain
-pending. They do not establish simultaneous debt on two manual-cycle weapons.
+The fixed eight-slot native cycle bank retains each service's identity, ammunition
+and guard history. An observed and drained departure can park a bolt obligation
+while another pump or bolt weapon operates; exact return requires fresh hands and
+a full new gesture. Slot generations bind queued work to its original service.
+Only fully settled services may be reclaimed; unfinished debts are never evicted.
+Deterministic cases exercise independent B operation and exact A return;
+actual-game acceptance remains open.
+Parking an unfinished pump action is not enabled by this change.
 
 Production ordinary selection refuses departure while its current stroke is owed,
 before parking or removing authority, so the player can still finish that stroke.

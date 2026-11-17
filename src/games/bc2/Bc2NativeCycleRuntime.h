@@ -1,22 +1,74 @@
 #pragma once
 #include "Bc2NativeCycleService.h"
+#include "Bc2NativeCycleDispatch.h"
 #include <cstring>
 namespace fvr::bc2 {
+// Callback entry captures one slot/generation. Publication and timeout charges
+// share a nonblocking guard so a retired route cannot charge a reused slot.
+class NativeCycleCancellationRouting {
+    std::atomic_flag gate_=ATOMIC_FLAG_INIT;
+    Bc2NativeCycleSlot selected_{0,1};
+public:
+    class Publication {
+        NativeCycleCancellationRouting& owner_;
+        bool held_;
+    public:
+        explicit Publication(NativeCycleCancellationRouting& owner)noexcept:
+            owner_(owner),held_(!owner.gate_.test_and_set(std::memory_order_acquire)){}
+        ~Publication(){if(held_)owner_.gate_.clear(std::memory_order_release);}
+        Publication(const Publication&)=delete;
+        Publication& operator=(const Publication&)=delete;
+        bool Held()const noexcept{return held_;}
+        Bc2NativeCycleSlot Slot()const noexcept{return held_?owner_.selected_:Bc2NativeCycleSlot{};}
+        void Publish(Bc2NativeCycleSlot slot)noexcept{if(held_)owner_.selected_=slot;}
+    };
+    Bc2NativeCycleSlot Capture()noexcept{Publication lock(*this);return lock.Slot();}
+    bool Current(Bc2NativeCycleSlot slot)noexcept{return slot&&Capture()==slot;}
+    std::uint64_t Cancel(Bc2NativeCycleSlot slot,std::atomic<std::uint64_t>& epoch)noexcept {
+        Publication lock(*this);
+        if(!slot||lock.Slot()!=slot)return epoch.load(std::memory_order_acquire);
+        return epoch.fetch_add(1,std::memory_order_acq_rel)+1;
+    }
+};
+class NativeCycleRoutedPolicyAccess {
+    // Retain the common bounded wait, but defer its epoch mutation until the
+    // captured route is validated under the publication guard.
+    NativeCyclePolicyAccess lock_;
+    std::uint64_t after_=0;
+public:
+    template<class Clock,class Pause>
+    NativeCycleRoutedPolicyAccess(std::atomic_flag& gate,std::atomic<std::uint64_t>& cancellation,
+        NativeCycleCancellationRouting& routing,Bc2NativeCycleSlot slot,NativeCycleAccess access,
+        Clock&& clock,Pause&& pause)noexcept:
+        lock_(gate,cancellation,NativeCycleAccess::Observation,std::forward<Clock>(clock),std::forward<Pause>(pause)),
+        after_(lock_.After()) {
+        if(!lock_.Held()&&NativeCycleAccessRequiresCancellation(access))after_=routing.Cancel(slot,cancellation);
+    }
+    bool Held()const noexcept{return lock_.Held();}
+    const ReloadPolicyLockEvidence& Evidence()const noexcept{return lock_.Evidence();}
+    std::uint64_t Before()const noexcept{return lock_.Before();}
+    std::uint64_t After()const noexcept{return after_;}
+};
 // Native adapter journal for the interval owned by the ammunition observer.
 // It retains genuine guarded own-Update rows, never constructs a receipt from
 // matching counts, and never changes the inventory's accounting.
 class Bc2CycleReloadRouting {
 public:
-    bool Begin(const NativeCycleRecoveryScope& scope,const interaction::WeaponCycleReloadCommand& command)noexcept {
+    bool Begin(const NativeCycleRecoveryScope& scope,const interaction::WeaponCycleReloadCommand& command,
+        Bc2NativeCycleSlot slot={})noexcept {
         if(command_||!command.permit.debt.guardEpoch||!interaction::weapon_cycle_detail::MagazineCommand(command.command)||
            command.command.context!=command.permit.resource)return false;
-        scope_=scope;command_=command;failed_=false;open_={};last_=command.permit.second;rows_={};receipt_.reset();return true;
+        slot_=slot;scope_=scope;command_=command;failed_=false;open_={};last_=command.permit.second;rows_={};receipt_.reset();return true;
     }
     bool Active()const noexcept{return command_.has_value();}
     bool Failed()const noexcept{return failed_;}
     bool Drained()const noexcept{return std::none_of(open_.begin(),open_.end(),[](auto id){return id!=0;});}
     const auto& Command()const noexcept{return command_;}
     const auto& Scope()const noexcept{return scope_;}
+    Bc2NativeCycleSlot Slot()const noexcept{return slot_;}
+    bool Owns(Bc2NativeCycleSlot slot,const NativeCycleRecoveryScope& scope)const noexcept {
+        return Active()&&slot&&slot_==slot&&scope_==scope;
+    }
     NativeCycleRecoveryDecision Evaluate(const NativeCycleRecoveryScope& scope,const ReloadFlowEventInput& entry,
         int capacity,std::int64_t deadline)noexcept {
         const auto b=entry.boundary.branch;const auto c=DecodeReloadUpdateContext(entry.copiedContext);
@@ -77,7 +129,7 @@ public:
         for(unsigned b=0;b<3;++b){if(!rows_[b])return {};result.ownUpdates[b]=*rows_[b];}
         return result;
     }
-    void Applied()noexcept {command_.reset();receipt_.reset();rows_={};open_={};}
+    void Applied()noexcept {command_.reset();receipt_.reset();rows_={};open_={};slot_={};}
 private:
     bool Boundary(const ReloadFlowBoundary& b,unsigned branch)const noexcept {
         if(!command_||b.branch!=branch||b.owner!=scope_.identity.owner||b.firing!=scope_.identity.firing[branch]||
@@ -90,6 +142,7 @@ private:
             (b.loaded==c.after.loaded&&b.reserve==c.after.reserve);
     }
     NativeCycleRecoveryScope scope_{};
+    Bc2NativeCycleSlot slot_{};
     std::optional<interaction::WeaponCycleReloadCommand> command_;
     std::optional<interaction::AmmunitionReceipt> receipt_;
     std::array<std::optional<interaction::WeaponCycleIdleUpdate>,3> rows_{};
@@ -128,4 +181,6 @@ Bc2NativeCycleSubmitResult ResumeNativeCycleReload(const Bc2NativeCycleControl&,
 std::optional<Bc2NativeCycleView> ReadNativeCycleView(std::int64_t now)noexcept;
 bool AcknowledgeNativeCycleReady(const interaction::WeaponCycleReady&)noexcept;
 void CancelNativeCycle(bool lifetimeEnded=false)noexcept;
+// Used by delayed physical owners. An old A packet must never cancel B.
+void CancelNativeCycleForOwner(const ReloadStateOwner&,bool lifetimeEnded=false)noexcept;
 }

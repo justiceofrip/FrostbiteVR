@@ -1,6 +1,30 @@
 #include "Bc2BoltPlayerCustody.h"
 namespace fvr::bc2 {
 using namespace interaction;
+bool Bc2BoltPlayerCustody::SuspendForDeparture(const Bc2NativeCycleDeparture& departure,
+    const Bc2NativeCycleView& selected,const HandInteractionSample& input,HandInteraction& hands)noexcept {
+    const auto& old=departure.previous.owner;
+    if(!departure.slot||!selected.slot||departure.slot==selected.slot||selected.native!=departure.selected||
+       !departure.callbackRevision||!departure.cycle||!departure.shot||!departure.guardEpoch||
+       old.weapon==selected.native.owner.weapon||(owner_.player&&owner_!=old)||
+       (debtLease_&&(debtLease_->cycle!=departure.cycle||debtLease_->shot!=departure.shot)))return false;
+    // Claim identity includes the hand namespace. Native equip generation is
+    // intentionally not substituted for the hand arbiter's independent epoch.
+    const auto owns=[&](const HandClaim& claim){return claim.token.owner.actor==
+        ((std::uint64_t(old.weak)<<32)|old.soldier)&&claim.token.owner.actorGeneration==old.actorGeneration&&
+        claim.token.owner.space==old.space&&claim.token.item.id==old.weapon&&
+        (!item_.generation||claim.token.item==item_);};
+    for(const auto hand:{InteractionHand::Left,InteractionHand::Right}){
+        const auto claim=hands.Current(hand);if(claim&&owns(*claim))hands.Release(input,claim->token);
+    }
+    for(const auto hand:{InteractionHand::Left,InteractionHand::Right}){
+        const auto claim=hands.Current(hand);if(claim&&owns(*claim))return false;
+    }
+    Invalidate();recoveryReferences_.reset();debtLease_.reset();leftCustody_.reset();selectionReturn_.reset();
+    custody_=BoltCustodyPhase::Idle;mechanismPhase_=WeaponCyclePhase::Idle;
+    // The bank retains the obligation; this adapter is now presentation only.
+    debt_=ready_=retirementRequired_=false;owner_={};item_={};submitted_=0;return true;
+}
 void Bc2BoltPlayerCustody::Invalidate()noexcept {
     if(debt_&&references_)recoveryReferences_=references_;
     references_.reset();candidate_.reset();lastContact_.reset();wristMapping_.reset();mappedCustody_.reset();stableAt_=0;lastRaw_=0;previous_={};returnPress_=0;neutral_=0;rightArmed_=rightHeld_=false;

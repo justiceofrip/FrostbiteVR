@@ -10,14 +10,15 @@ using namespace fvr::bc2::provisioning_candidate;
 struct Fixture {
     std::map<std::uint32_t,unsigned char> bytes;
     std::map<std::uint32_t,std::string> types;
-    WeaponProvisioner service;Boundary b{};unsigned calls=0;bool allowOwner=true,assignOkay=true,wrongItem=false;
+    WeaponProvisioner service;Boundary b{};unsigned calls=0,ownerChecks=0,rejectOwnerCheck=0;bool allowOwner=true,assignOkay=true,wrongItem=false;
     std::function<void()> duringAssignment;
     static bool Read(void* p,std::uint32_t at,void* output,std::size_t n){
         auto& self=*static_cast<Fixture*>(p);auto* dest=static_cast<unsigned char*>(output);
         for(std::size_t k=0;k<n;++k){const auto found=self.bytes.find(at+std::uint32_t(k));if(found==self.bytes.end())return false;dest[k]=found->second;}return true;
     }
     static bool Type(void* p,std::uint32_t at,const char* type){return static_cast<Fixture*>(p)->types[at]==type;}
-    static bool OwnerOkay(void* p,const Owner& o,std::int64_t){auto& f=*static_cast<Fixture*>(p);return f.allowOwner&&o==f.b.owner;}
+    static bool OwnerOkay(void* p,const Owner& o,std::int64_t){auto& f=*static_cast<Fixture*>(p);
+        ++f.ownerChecks;return f.allowOwner&&f.ownerChecks!=f.rejectOwnerCheck&&o==f.b.owner;}
     static bool Assign(void* p,std::uint32_t actor,std::uint32_t data,std::uint32_t slot,std::uint32_t& item){
         auto& f=*static_cast<Fixture*>(p);CHECK(actor==f.b.owner.actor&&slot==f.b.owner.slot);++f.calls;
         // Nested same hook cannot consume another call once submission started.
@@ -345,7 +346,111 @@ unsigned TestAdmissionDiagnostics(){unsigned groups=0;
     return groups;
 }
 
-int main(){unsigned groups=TestInputGate()+TestAdmissionDiagnostics();
+unsigned TestPreflightDiagnostics(){unsigned groups=0;
+    {CampaignFixture f;f.Configure();const auto request=f.Request(cp::Operation::Observe);
+        CHECK(f.campaign.Submit(request,f.b.nowNs));
+        for(unsigned n=0;n<5;++n)f.Step();
+        f.campaign.SeatEntry(f.source,f.b); // Same seat, same server observation.
+        ++f.b.sequence;f.b.nowNs+=10000000;f.b.ownerObservedNs=f.b.nowNs;f.Sync();
+        f.campaign.SeatEntry(f.source,f.b); // New seat, no new server observation.
+        f.campaign.SeatEntry(f.source,f.b); // Failed server check still consumed lastSeat_.
+        f.b.nativeFiringDepth=2;for(unsigned n=0;n<40;++n)f.Step();
+        auto nested=f.b;nested.seatDepth=2;f.campaign.SeatEntry(f.source,nested);
+        f.b.nativeFiringDepth=0;auto stale=f.source;--stale.client.observedNs;
+        f.campaign.SeatEntry(stale,f.b);
+        const auto live=f.campaign.ReadPreflight();const auto& d=live.details;
+        CHECK(live.magic==0x31465042&&live.version==1&&live.bytes==1496&&!live.reserved);
+        CHECK(live.admission.process==request.process&&live.admission.nonce==request.nonce&&live.admission.job==request.job);
+        CHECK(live.admission.acceptedNs==request.issuedNs&&live.admission.deadlineNs==request.deadlineNs&&!live.admission.frozen);
+        CHECK(d.outcomes[unsigned(cp::PreflightOutcome::Accepted)]==5);
+        CHECK(d.outcomes[unsigned(cp::PreflightOutcome::SeatSequence)]==2);
+        CHECK(d.outcomes[unsigned(cp::PreflightOutcome::ServerSequence)]==1);
+        CHECK(d.outcomes[unsigned(cp::PreflightOutcome::BoundaryRejected)]==40);
+        CHECK(d.outcomes[unsigned(cp::PreflightOutcome::SnapshotMismatch)]==1);
+        CHECK(d.outcomes[unsigned(cp::PreflightOutcome::NestedDepth)]==1);
+        CHECK(d.boundary[unsigned(BoundaryFailure::None)]==8&&d.boundary[unsigned(BoundaryFailure::NativeDepth)]==40);
+        CHECK(d.revalidatedBoundary[unsigned(BoundaryFailure::None)]==8);
+        CHECK(d.nativeDepth[0]==9&&d.nativeDepth[1]==0&&d.nativeDepth[2]==41&&d.nativeDepth[3]==0&&d.maximumNativeDepth==2);
+        CHECK(d.serverEvents[unsigned(cp::PreflightServerEvent::Advanced)]==45);
+        CHECK(!d.serverSequenceAtSubmit&&d.serverSequenceLatest==f.b.sequence);
+        CHECK(d.seats.firstSequence==2&&d.seats.lastSequence==f.b.sequence&&d.seats.counts[0]==45&&d.seats.counts[1]==5);
+        CHECK(d.zeroDepthSeats.firstSequence==2&&d.zeroDepthSeats.lastSequence==f.b.sequence);
+        CHECK(d.zeroDepthSeats.counts[0]==6&&d.zeroDepthSeats.counts[1]==3&&!d.saturatedMask);
+        CHECK(live.admission.counts[unsigned(cp::AdmissionEvent::ServiceEntered)]==31&&f.campaign.Read().preflight==5);
+        f.b.nowNs=request.deadlineNs;f.b.ownerObservedNs=f.b.nowNs;f.Sync();
+        f.campaign.ObserveServer(f.source,f.b.owner.firing[2],f.b.thread,++f.b.sequence,f.b.nowNs);
+        f.campaign.SeatEntry(f.source,f.b);const auto terminal=f.campaign.ReadPreflight();
+        CHECK(f.campaign.Read().status==cp::Status::Expired&&terminal.admission.frozen&&terminal.admission.frozenNs==request.deadlineNs);
+        CHECK(std::memcmp(&d,&terminal.details,sizeof(d))==0); // Deadline samples excluded.
+        f.Step();f.campaign.Expire(f.b.nowNs);const auto unchanged=f.campaign.ReadPreflight();
+        CHECK(std::memcmp(&terminal,&unchanged,sizeof(terminal))==0);
+        const auto next=f.Request(cp::Operation::Observe,2);CHECK(f.campaign.Submit(next,f.b.nowNs));
+        const auto reset=f.campaign.ReadPreflight();CHECK(reset.admission.nonce==2&&!reset.admission.frozen);
+        for(const auto count:reset.details.outcomes)CHECK(!count);
+        CHECK(reset.details.serverSequenceAtSubmit>terminal.details.serverSequenceLatest);
+        f.Step();CHECK(f.campaign.ReadPreflight().details.outcomes[unsigned(cp::PreflightOutcome::Accepted)]==1);
+        CHECK(!f.calls&&!f.excluded&&!f.retired&&!f.resumed&&!f.campaign.BlocksInput());++groups;
+    }
+    {CampaignFixture f;f.Configure();CHECK(f.campaign.Submit(f.Request(cp::Operation::Observe),f.b.nowNs));
+        // ObserveServer owner check and initial boundary pass; the retained
+        // second boundary check alone loses ownership. Never add a third read.
+        f.rejectOwnerCheck=f.ownerChecks+3;f.Step();const auto second=f.campaign.ReadPreflight();
+        CHECK(f.ownerChecks==f.rejectOwnerCheck&&f.campaign.Read().boundary==BoundaryFailure::None&&!f.campaign.Read().preflight);
+        CHECK(second.details.outcomes[unsigned(cp::PreflightOutcome::RevalidationRejected)]==1);
+        CHECK(second.details.boundary[unsigned(BoundaryFailure::None)]==1);
+        CHECK(second.details.revalidatedBoundary[unsigned(BoundaryFailure::Owner)]==1);
+        f.allowOwner=false;f.Step();const auto first=f.campaign.ReadPreflight();
+        CHECK(first.details.outcomes[unsigned(cp::PreflightOutcome::BoundaryRejected)]==1);
+        CHECK(first.details.boundary[unsigned(BoundaryFailure::Owner)]==1);
+        CHECK(first.details.serverEvents[unsigned(cp::PreflightServerEvent::OwnerRejected)]==1);
+        f.allowOwner=true;f.Step();CHECK(f.campaign.Read().preflight==1&&!f.calls);++groups;
+    }
+    {CampaignFixture f;f.Configure();CHECK(f.campaign.Submit(f.Request(cp::Operation::Observe),f.b.nowNs));
+        ++f.source.client.owner.equipGeneration;f.Step();const auto terminal=f.campaign.ReadPreflight();
+        CHECK(f.campaign.Read().status==cp::Status::Refused&&terminal.admission.status==unsigned(cp::Status::Refused));
+        CHECK(terminal.details.outcomes[unsigned(cp::PreflightOutcome::RequestMismatch)]==1);
+        CHECK(terminal.details.boundary[unsigned(BoundaryFailure::None)]==1&&terminal.details.revalidatedBoundary[0]==0);
+        f.Step();f.campaign.Stop();const auto after=f.campaign.ReadPreflight();
+        CHECK(std::memcmp(&terminal,&after,sizeof(terminal))==0&&!f.calls);++groups;
+    }
+    {CampaignFixture f;f.Configure();const auto request=f.Request(cp::Operation::Observe);CHECK(f.campaign.Submit(request,f.b.nowNs));
+        f.campaign.ObserveServer(f.source,0,f.b.thread,1,f.b.nowNs);
+        f.allowOwner=false;f.campaign.ObserveServer(f.source,f.b.owner.firing[2],f.b.thread,1,f.b.nowNs);f.allowOwner=true;
+        f.campaign.ObserveServer(f.source,f.b.owner.firing[2],0,1,f.b.nowNs);
+        f.campaign.ObserveServer(f.source,f.b.owner.firing[2],f.b.thread,1,f.b.nowNs);
+        f.campaign.ObserveServer(f.source,f.b.owner.firing[2],f.b.thread,1,f.b.nowNs);
+        f.campaign.ObserveServer(f.source,f.b.owner.firing[2],f.b.thread+1,2,f.b.nowNs);
+        const auto live=f.campaign.ReadPreflight();for(const auto count:live.details.serverEvents)CHECK(count==1);
+        CHECK(live.details.serverSequenceLatest==1&&!live.details.serverSequenceAtSubmit);
+        f.campaign.Stop();const auto stopped=f.campaign.ReadPreflight();
+        CHECK(stopped.admission.status==unsigned(cp::Status::Stopped)&&stopped.admission.frozen&&!stopped.admission.frozenNs);
+        f.campaign.ObserveServer(f.source,f.b.owner.firing[2],f.b.thread,3,f.b.nowNs);f.campaign.SeatEntry(f.source,f.b);
+        const auto after=f.campaign.ReadPreflight();CHECK(std::memcmp(&stopped,&after,sizeof(stopped))==0&&!f.calls);++groups;
+    }
+    {Fixture f;CHECK(f.service.Preflight(f.memory(),f.host(),f.b));
+        ++f.b.owner.data;f.tick();const auto changed=f.service.PreflightWithDiagnosis(f.memory(),f.host(),f.b);
+        CHECK(changed.result==PreflightResult::Owner&&changed.boundaryChecked&&changed.boundary==BoundaryFailure::None);
+        Fixture armed;armed.prepare();const auto phase=armed.service.PreflightWithDiagnosis(armed.memory(),armed.host(),armed.b);
+        CHECK(phase.result==PreflightResult::Phase&&!phase.boundaryChecked);++groups;
+    }
+    {cp::PreflightDiagnostics diagnostic;diagnostic.Begin(10);
+        diagnostic.Seat(0,0,1);diagnostic.Seat(9,1,1);diagnostic.Seat(12,2,1);
+        for(unsigned n=0;n<cp::PreflightDiagnostics::Limit+3;++n){
+            diagnostic.Outcome(cp::PreflightOutcome::BoundaryRejected);
+            diagnostic.Boundary(unsigned(BoundaryFailure::NativeDepth));diagnostic.Seat(12,7,1);
+        }
+        const auto d=diagnostic.Read();CHECK(d.outcomes[3]==cp::PreflightDiagnostics::Limit&&d.boundary[8]==cp::PreflightDiagnostics::Limit);
+        CHECK(d.nativeDepth[3]==cp::PreflightDiagnostics::Limit&&d.maximumNativeDepth==7);
+        CHECK(d.seats.firstSequence==9&&d.seats.lastSequence==12&&d.seats.counts[0]==1&&d.seats.counts[1]==cp::PreflightDiagnostics::Limit);
+        CHECK(d.seats.counts[2]==1&&d.seats.counts[3]==1&&d.zeroDepthSeats.counts[3]==1);
+        CHECK(d.saturatedMask==((std::uint64_t(1)<<3)|(std::uint64_t(1)<<18)|(std::uint64_t(1)<<39)|(std::uint64_t(1)<<47)));
+        diagnostic.Begin(20);const auto reset=diagnostic.Read();CHECK(!reset.saturatedMask&&!reset.maximumNativeDepth);
+        CHECK(reset.serverSequenceAtSubmit==20&&reset.serverSequenceLatest==20&&reset.seats.lastSequence==20&&reset.zeroDepthSeats.lastSequence==20);++groups;
+    }
+    return groups;
+}
+
+int main(){unsigned groups=TestInputGate()+TestAdmissionDiagnostics()+TestPreflightDiagnostics();
     {CampaignFixture f;f.Begin();
         f.duringAssignment=[&]{
             auto nested=f.b;nested.seatDepth=2;nested.nowNs+=3000000000ll;

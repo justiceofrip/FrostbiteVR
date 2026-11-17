@@ -238,7 +238,32 @@ int ReturnedDebtRequiresNewVerifiedReferences(){
     }
     return 0;
 }
+int ObservedDepartureDropsOnlyItsExactPhysicalOwner(){
+    for(unsigned mutation=0;mutation<6;++mutation){Setup f;
+        auto calibration=std::make_shared<Bc2BoltCalibration>(M95AuthoredBoltCalibration(1));
+        Bc2BoltPlayerCustody player(calibration);HandInteraction hands;hands.Update(f.safety);
+        const HandInteractionKey item{f.owner.weapon,3},other{f.owner.weapon+0x1000,3};
+        const auto owned=hands.Acquire(f.safety,{f.safety.owner,left,HandClaimKind::GunHold,item,
+            {{1,3},f.safety.sequence,f.safety.deadlineNs,true},1,0});CHECK(owned.claim);
+        const auto unrelated=hands.Acquire(f.safety,{f.safety.owner,right,HandClaimKind::GunHold,other,
+            {{2,3},f.safety.sequence,f.safety.deadlineNs,true},2,0});CHECK(unrelated.claim);
+        Bc2PhysicalBoltResult physical;physical.tracking.enabled=true;physical.tracking.custody=BoltCustodyPhase::Manipulating;
+        physical.tracking.held=WeaponCycleLease{f.safety.owner,item,{calibration->profile.id,3},7,8,1,
+            f.safety.observedNs,f.safety.deadlineNs,true};physical.tracking.gun=owned.claim;player.Observe(physical);
+        Bc2NativeCycleDeparture departure;departure.slot={1,20};departure.previous.owner=f.owner;
+        departure.selected.owner=f.owner;departure.selected.owner.weapon=std::uint32_t(other.id);++departure.selected.owner.equipGeneration;
+        departure.cycle=7;departure.shot=8;departure.guardEpoch=9;departure.callbackRevision=100;departure.observedNs=f.safety.nowNs;
+        Bc2NativeCycleView selected;selected.slot={2,21};selected.native=departure.selected;
+        switch(mutation){case 1:selected.slot=departure.slot;break;case 2:++selected.native.owner.weapon;break;
+        case 3:departure.guardEpoch=0;break;case 4:++departure.cycle;break;case 5:departure.callbackRevision=0;break;}
+        CHECK(player.SuspendForDeparture(departure,selected,f.safety,hands)==(mutation==0));
+        CHECK(bool(hands.Current(left))==(mutation!=0));CHECK(hands.Current(right)->token==unrelated.claim->token);
+        CHECK(player.BlocksFire()==(mutation!=0));CHECK(!player.ReferencesReady());
+    }
+    return 0;
+}
 int StableReferencesFreezeAndRecenterInvalidates(){
+    CHECK(!ObservedDepartureDropsOnlyItsExactPhysicalOwner());
     CHECK(!ReturnedDebtRequiresNewVerifiedReferences());
     Setup f;auto calibration=std::make_shared<Bc2BoltCalibration>(M95AuthoredBoltCalibration(1));calibration->nativeJoined=true;calibration->rigFingerprint=17;
     f.raw.nativePartInWeapon=calibration->profile.closedContact;

@@ -1,4 +1,4 @@
-#include "Bc2NativeCycleService.h"
+#include "Bc2NativeCycleBank.h"
 #include "Bc2NativeCycleCallbacks.h"
 #include "Bc2NativeCycleDispatch.h"
 #include "Bc2ReloadInvocationEntry.h"
@@ -22,7 +22,9 @@ namespace {
 template<std::size_t N,class T>void Put(std::array<std::byte,N>& bytes,unsigned at,T value){std::memcpy(bytes.data()+at,&value,sizeof(value));}
 fvr::math::Matrix4 Pose(){fvr::math::Matrix4 m{};for(unsigned n=0;n<4;++n)m.values[n][n]=1;return m;}
 struct Fixture {
-    Bc2NativeCycleService service;Bc2NativeCycleControl control{};ReloadHoldInput input{};
+    Bc2NativeCycleService service;Bc2NativeCycleService* selected=nullptr;
+    Bc2NativeCycleService& Cycle()noexcept{return selected?*selected:service;}
+    Bc2NativeCycleControl control{};ReloadHoldInput input{};
     HandInteraction hands;PhysicalWeaponCycle physical;WeaponCycleProfile profile{};HandClaimToken gun{};
     std::uint64_t event=0,intent=0;std::int64_t clock=1000000000;
     Bc2NativeCycleDecision decision{};ReloadFlowRecord update{};unsigned sent=0;bool begun=false;
@@ -44,7 +46,7 @@ struct Fixture {
         profile.rearTolerance=profile.frontTolerance=.003f;profile.contactRadius=.06f;profile.lateralTolerance=.03f;
         profile.maxStepMeters=.03f;profile.rotationTolerance=.15f;profile.endpointDwellNs=10000000;profile.maximumCycleNs=2000000000;
         if(m95){
-            service.Configure(Bc2NativeCycleMode::M95);c.assetName={};c.assetPath={};
+            Cycle().Configure(Bc2NativeCycleMode::M95);c.assetName={};c.assetPath={};
             const char name[]="M95_sp",path[]="Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95";
             std::memcpy(c.assetName.data(),name,sizeof(name));std::memcpy(c.assetPath.data(),path,sizeof(path));
             c.reloadType=1;c.baseCapacity=c.numberOfMagazines=5;c.reloadDelay=0;c.reloadTime=6.9f;c.reloadThreshold=.67f;
@@ -55,7 +57,7 @@ struct Fixture {
     }
     bool Advance(bool grip=true){
         clock+=10000000;auto& s=control.input;++s.sequence;s.observedNs=s.nowNs=clock;s.deadlineNs=clock+100000000;
-        s.focused=true;s.tracked={true,true};s.released={false,false};s.released[0]=!grip;control.release.reset();return service.Control(control);
+        s.focused=true;s.tracked={true,true};s.released={false,false};s.released[0]=!grip;control.release.reset();return Cycle().Control(control);
     }
     ReloadFlowBoundary Boundary(unsigned branch)const {
         ReloadFlowBoundary b;const auto& source=input.branches[branch];b.owner=input.identity.owner;b.snapshotSequence=20;
@@ -65,7 +67,7 @@ struct Fixture {
     }
     Bc2NativeCycleDecision Begin(unsigned branch){
         input.branch=branch;input.contextObservedNs=input.nowNs=++clock;input.leaseDeadlineNs=clock+100000000;
-        decision=service.Evaluate(input,++event);update={};update.id=event;auto& a=update.entry;
+        decision=Cycle().Evaluate(input,++event);update={};update.id=event;auto& a=update.entry;
         a.kind=ReloadFlowEvent::Update;a.nativeInvocation=a.nativeUpdate=a.update=event;a.thread=7;a.depth=1;a.caller=0x6e90b0;a.context=0x24000;
         a.nowNs=clock;a.contextCopied=true;a.boundary=Boundary(branch);Put(a.copiedContext,0x18,input.context.deltaSeconds);Put(a.copiedContext,0x20,1.f);
         a.copiedContext[0x24]=std::byte{1};Put(a.copiedContext,0x2c,input.context.inputFlags);
@@ -74,7 +76,7 @@ struct Fixture {
     }
     void Finish(){
         if(decision.hold){update.exit.holdRequested=true;update.exit.hold={std::bit_cast<unsigned>(input.context.deltaSeconds),0,true,true,false};}
-        service.Finish(decision,update);
+        Cycle().Finish(decision,update);
     }
     void Shot(unsigned branch,int beforeLoaded=8){
         // A newly selected owner starts its next synthetic shot from ready.
@@ -86,7 +88,7 @@ struct Fixture {
     }
     bool Hold(){for(unsigned branch=0;branch<3;++branch)Shot(branch);
         for(unsigned pass=0;pass<2;++pass){Advance();for(unsigned branch=0;branch<3;++branch){Begin(branch);Finish();}}
-        return service.View(clock).held.has_value();}
+        return Cycle().View(clock).held.has_value();}
     ReloadFlowRecord Restore(unsigned branch){
         auto r=update;r.id=++event;auto& a=r.entry;a.kind=ReloadFlowEvent::Restore;a.depth=1;
         a.parent=a.nativeParent=a.update=a.nativeUpdate=0;a.nativeInvocation=r.id;a.nowNs=++clock;a.boundary=Boundary(branch);
@@ -101,16 +103,16 @@ struct Fixture {
         auto r=update;r.id=++event;auto& a=r.entry;a.kind=ReloadFlowEvent::Commit;a.depth=2;a.parent=a.nativeParent=update.id;
         a.update=a.nativeUpdate=update.id;a.nativeInvocation=r.id;a.nowNs=++clock;a.boundary.current=from;a.boundary.previous=from-1;a.boundary.next=to;a.boundary.timer=0;
         r.exit.nowNs=++clock;r.exit.boundary=a.boundary;r.exit.boundary->current=to;r.exit.boundary->previous=from;
-        service.Commit(r);
+        Cycle().Commit(r);
     }
     void Resume(unsigned branch,bool skip=false){Begin(branch);if(!skip)Commit(branch,7,8);Commit(branch,8,1);Commit(branch,1,2);
         update.exit.nowNs=++clock;update.exit.boundary->current=2;update.exit.boundary->previous=1;update.exit.boundary->next=2;update.exit.boundary->timer=0;
         Finish();auto& b=input.branches[branch];b.currentState=2;b.previousState=1;b.nextState=2;b.phaseTimer=0;}
-    bool Release(){const auto view=service.View(clock);if(!view.held)return false;
-        control.input.nowNs=clock;control.release=WeaponCycleRelease{*view.held,1,control.input.sequence,clock,view.held->deadlineNs};return service.Control(control);}
+    bool Release(){const auto view=Cycle().View(clock);if(!view.held)return false;
+        control.input.nowNs=clock;control.release=WeaponCycleRelease{*view.held,1,control.input.sequence,clock,view.held->deadlineNs};return Cycle().Control(control);}
     PhysicalWeaponCycleResult Physical(float travel,bool grip=true){
         Advance(grip);for(unsigned branch=0;branch<3;++branch){Begin(branch);Finish();}
-        control.input.nowNs=++clock;const auto view=service.View(clock);
+        control.input.nowNs=++clock;const auto view=Cycle().View(clock);
         hands.Update(control.input);const auto current=hands.Current(InteractionHand::Right);
         if(current){hands.Renew(control.input,current->token,{{1,99},control.input.sequence,control.input.deadlineNs,true});gun=current->token;}
         else {const auto got=hands.Acquire(control.input,{control.input.owner,InteractionHand::Right,HandClaimKind::GunHold,control.item,
@@ -119,67 +121,161 @@ struct Fixture {
         if(!begun){begun=physical.Begin(profile,*view.held,clock);}
         PhysicalWeaponCycleSample sample;sample.source=control.input;sample.lease=*view.held;sample.gun=gun;sample.grip=grip;
         sample.rawContact=weapon_cycle_detail::Target(profile,travel,0);sample.contact={control.mechanism,sample.source.sequence,sample.source.deadlineNs,true};sample.acquireIntent=++intent;
-        const auto out=physical.Update(sample,hands);if(out.release){++sent;control.release=out.release;service.Control(control);}return out;
+        const auto out=physical.Update(sample,hands);if(out.release){++sent;control.release=out.release;Cycle().Control(control);}return out;
     }
     bool FullStroke(){Physical(0,false);Physical(0);
         for(float t:{.02f,.04f,.06f,.08f,profile.stroke,profile.stroke,.075f,.055f,.035f,.015f,0.f,0.f})Physical(t);
-        return sent==1&&service.View(clock).phase==Bc2NativeCyclePhase::Releasing;}
+        return sent==1&&Cycle().View(clock).phase==Bc2NativeCyclePhase::Releasing;}
 };
 
 struct RecoveryFixture:Fixture {
     RecoveryFixture(bool m95=false):Fixture(m95){
         // Configure is a pre-control capability; restart the fixture service
         // before its first actual selected shot, then re-admit the same source.
-        service={};if(m95)service.Configure(Bc2NativeCycleMode::M95);
-        service.EnableRecovery();service.Control(control);
+        service={};if(m95)Cycle().Configure(Bc2NativeCycleMode::M95);
+        Cycle().EnableRecovery();Cycle().Control(control);
     }
-    bool Held(){if(service.Mode()==Bc2NativeCycleMode::Spas)return Hold();
+    bool Held(){if(Cycle().Mode()==Bc2NativeCycleMode::Spas)return Hold();
         for(unsigned b=0;b<3;++b)Shot(b,5);
         for(unsigned pass=0;pass<2;++pass){Advance();for(unsigned b=0;b<3;++b){Begin(b);Finish();}}
-        return service.View(clock).held.has_value();
+        return Cycle().View(clock).held.has_value();
     }
     void Idle(unsigned branch,bool busy=false,unsigned rejected=0){
         clock+=1000000;const auto d0=Begin(branch);(void)d0; // Recovering normal Evaluate deliberately issues nothing.
         // SPAS waits in7 before its zero-duration state8; a positive state8
         // timer belongs to the bolt family and is invalid for this pump Config.
-        const bool bolt=service.Mode()==Bc2NativeCycleMode::M95;
+        const bool bolt=Cycle().Mode()==Bc2NativeCycleMode::M95;
         auto& a=update.entry.boundary;a.current=busy?(bolt?8:7):2;
         a.previous=busy?(bolt?7:6):1;a.next=busy?(bolt?1:8):2;a.timer=busy?.1f:0;
         update.exit.boundary=a;update.exit.nowNs=++clock;
-        const auto d=service.EvaluateRecovery({input.identity,input.config},update.entry,input.capacities[branch],clock+99000000);
+        const auto d=Cycle().EvaluateRecovery({input.identity,input.config},update.entry,input.capacities[branch],clock+99000000);
         NativeCycleInputGuard g;g.requested=g.applied=g.restored=true;g.original={0,0};g.effective=g.beforeRestore={1,0};
         update.exit.cycleGuard=g;update.exit.cycleGuardEpoch=d.epoch;update.exit.cycleGuardSteps=1;update.exit.cycleGuardRejected=rejected;
-        service.FinishRecovery(d,update,g,1,rejected);
+        Cycle().FinishRecovery(d,update,g,1,rejected);
     }
     void Rounds(){for(unsigned p=0;p<2;++p)for(unsigned b=0;b<3;++b)Idle(b);}
-    bool Grant(){Rounds();Advance(false);if(service.Mode()==Bc2NativeCycleMode::M95){control.input.released={false,true};service.Control(control);}
-        Rounds();return service.RecoveryView(clock)->authority.has_value();}
+    bool Grant(){Rounds();Advance(false);if(Cycle().Mode()==Bc2NativeCycleMode::M95){control.input.released={false,true};Cycle().Control(control);}
+        Rounds();return Cycle().RecoveryView(clock)->authority.has_value();}
 };
 struct ConcurrentBoltFixture:RecoveryFixture {
     ConcurrentBoltFixture():RecoveryFixture(true){
-        service={};service.Configure(Bc2NativeCycleMode::M95);service.EnableRecovery();service.EnableConcurrentBolt();
-        profile=M95AuthoredBoltCalibration(280).profile;control.mechanism={profile.id,99};service.Control(control);
+        service={};Cycle().Configure(Bc2NativeCycleMode::M95);Cycle().EnableRecovery();Cycle().EnableConcurrentBolt();
+        profile=M95AuthoredBoltCalibration(280).profile;control.mechanism={profile.id,99};Cycle().Control(control);
     }
     bool Start(bool empty=false){
         if(empty)for(auto& b:input.branches){b.loaded=0;b.currentState=6;b.previousState=5;b.nextState=1;b.phaseTimer=.1166f;}
         for(unsigned b=0;b<3;++b)Shot(b,empty?1:5);
-        for(unsigned pass=0;pass<3&&!service.Recovering();++pass){Advance();for(unsigned b=0;b<3;++b){Begin(b);Finish();}}
-        if(service.Phase()!=Bc2NativeCyclePhase::Advancing)return false;
+        for(unsigned pass=0;pass<3&&!Cycle().Recovering();++pass){Advance();for(unsigned b=0;b<3;++b){Begin(b);Finish();}}
+        if(Cycle().Phase()!=Bc2NativeCyclePhase::Advancing)return false;
         Advance();for(unsigned b=0;b<3;++b)Idle(b,!empty);
-        const auto v=service.View(clock);return v.held&&v.held->advancing&&!v.held->held&&!v.ready&&v.blocksFire;
+        const auto v=Cycle().View(clock);return v.held&&v.held->advancing&&!v.held->held&&!v.ready&&v.blocksFire;
     }
     void Progress(bool busy){Advance();for(unsigned b=0;b<3;++b)Idle(b,busy);}
 };
 Bc2NativeCycleSelection SelectionFor(ConcurrentBoltFixture& f,std::uint64_t sequence=100){
-    const auto v=f.service.View(f.clock);Bc2AmmoReserveLease r;
+    const auto v=f.Cycle().View(f.clock);Bc2AmmoReserveLease r;
     r.identity=f.input.identity;r.sequence=sequence;r.observedNs=f.clock;r.deadlineNs=f.clock+50000000;
     r.loaded=v.loaded;r.reserve=v.reserve;r.capacity=v.capacity;r.verified=r.allThreeIdle=true;
     return {Bc2NativeCycleMode::Bolt,r,f.input.config,f.clock};
 }
 Bc2NativeCycleActorDrain SelectionDrain(ConcurrentBoltFixture& f,std::uint64_t revision){
-    const auto v=f.service.View(f.clock);return {v.native,v.cycle,v.shot,revision,f.clock,f.clock+50000000,true};
+    const auto v=f.Cycle().View(f.clock);return {v.native,v.cycle,v.shot,revision,f.clock,f.clock+50000000,true};
+}
+Bc2NativeCycleActorDrain BankDrain(const Bc2NativeCycleBank& bank,std::int64_t now,std::uint64_t revision){
+    const auto v=bank.View(now);return {v.native,v.cycle,v.shot,revision,now,now+50000000,true};
+}
+void DifferentResource(Fixture& f,unsigned index){
+    auto& n=f.input.identity;n.owner.weapon+=index*0x10000;n.owner.equipGeneration+=index;
+    n.serverItem+=index*0x10000;for(unsigned b=0;b<3;++b){n.firing[b]+=index*0x10000;f.input.branches[b].address=n.firing[b];}
+    auto& c=f.input.config;c.weaponData+=index*0x10000;c.firingData+=index*0x10000;
+    c.primaryFire+=index*0x10000;c.ammoAddress+=index*0x10000;
+    f.control.nativeOwner=n.owner;f.control.item.id=n.owner.weapon;
+    f.control.input.owner.equipGeneration+=index;f.control.item.generation+=index;f.control.mechanism.generation+=index;
+}
+Bc2NativeCycleSelection FreshSelection(Fixture& f,Bc2NativeCycleMode mode,std::uint64_t sequence,int loaded){
+    Bc2AmmoReserveLease r;r.identity=f.input.identity;r.sequence=sequence;r.observedNs=f.clock;r.deadlineNs=f.clock+50000000;
+    r.loaded=loaded;r.reserve=f.input.branches[0].reserve;r.capacity=f.input.capacities[0];r.verified=r.allThreeIdle=true;
+    return {mode,r,f.input.config,f.clock};
+}
+int RetainedBankAllowsOtherPumpAndBoltThenExactReturn(){
+    for(bool bolt:{false,true}){
+        Bc2NativeCycleBank bank;CHECK(bank.EnableRecovery());CHECK(bank.EnableConcurrentBolt());
+        ConcurrentBoltFixture a;a.selected=&bank.Selected();CHECK(a.Cycle().Configure(Bc2NativeCycleMode::Bolt));
+        CHECK(a.Advance());CHECK(a.Start());a.Rounds();
+        const auto original=bank.View(a.clock);const auto oldRoute=bank.Route(a.clock);const auto oldSlot=bank.SelectedSlot();
+        CHECK(original.retainedDebtOrigin&&original.debt&&!NativeCycleSelectionAllowed(original,original.native.owner));
+        ConcurrentBoltFixture secondBolt;RecoveryFixture secondPump;
+        auto& b=bolt?static_cast<RecoveryFixture&>(secondBolt):secondPump;DifferentResource(b,1);b.clock=a.clock+1;
+        const auto source=FreshSelection(b,bolt?Bc2NativeCycleMode::Bolt:Bc2NativeCycleMode::Pump,100,bolt?5:8);
+        CHECK(bank.ObserveDeparture({source.reserve.identity,source.config},BankDrain(bank,b.clock,100),b.clock));
+        CHECK(bank.View(b.clock).selectionParked&&!bank.Selected().ObservationWatch(b.clock));
+        CHECK(bank.SelectObserved(source,BankDrain(bank,b.clock,102)));CHECK(bank.Owned()==2);
+        const auto departure=bank.Departure(original.native.owner);CHECK(departure&&departure->selected==source.reserve.identity);
+        CHECK(bank.SelectedSlot()!=oldSlot);b.selected=&bank.Selected();b.event=a.event;
+        CHECK(b.Advance());CHECK(bolt?secondBolt.Start():b.Held());
+        const auto bRoute=bank.Route(b.clock);bool staleRan=false;
+        CHECK(!bank.Apply(oldRoute,b.clock,[&](auto& service){staleRan=true;service.Cancel(Bc2NativeCycleFailure::Control);return true;}));
+        CHECK(!staleRan&&bank.Current(bRoute,b.clock));
+        CHECK(b.Release());
+        // A submitted B outcome cannot yield, even for exact A return.
+        auto returned=SelectionFor(a,101);returned.reserve.identity.owner.equipGeneration+=2;
+        returned.nowNs=returned.reserve.observedNs=b.clock;returned.reserve.deadlineNs=b.clock+50000000;
+        CHECK(!bank.SelectObserved(returned,BankDrain(bank,b.clock,104)));
+        if(bolt)b.Rounds();else {b.Advance();for(unsigned branch=0;branch<3;++branch)b.Resume(branch);}
+        const auto bReady=bank.View(b.clock).ready;CHECK(bReady);
+        returned.nowNs=returned.reserve.observedNs=b.clock;returned.reserve.deadlineNs=b.clock+50000000;
+        CHECK(!bank.SelectObserved(returned,BankDrain(bank,b.clock,106)));
+        CHECK(bank.Selected().AcknowledgeReady(*bReady,b.clock));CHECK(!bank.View(b.clock).blocksFire);
+        const auto retained=bank.Find(oldSlot);CHECK(retained);
+        const auto stillA=retained->View(b.clock);
+        CHECK(stillA.retainedDebtOrigin==original.retainedDebtOrigin&&stillA.debt==original.debt&&
+            stillA.cycle==original.cycle&&stillA.shot==original.shot&&stillA.loaded==original.loaded&&
+            stillA.reserve==original.reserve&&stillA.capacity==original.capacity&&stillA.selectionParked);
+        a.clock=b.clock;returned.nowNs=returned.reserve.observedNs=a.clock;returned.reserve.deadlineNs=a.clock+50000000;
+        CHECK(bank.SelectObserved(returned,BankDrain(bank,a.clock,108)));
+        CHECK(!bank.Find(oldSlot)&&!bank.Departure(original.native.owner));
+        const auto pending=bank.View(a.clock);CHECK(pending.selectionReturn&&!pending.selectionReturn->handBound);
+        CHECK(!pending.held&&pending.retainedDebtOrigin==original.retainedDebtOrigin);
+        CHECK(!bank.Apply(bRoute,a.clock,[&](auto&){staleRan=true;return true;}));CHECK(!staleRan);
+        a.selected=&bank.Selected();CHECK(!a.Cycle().Control(a.control));
+        a.control.nativeOwner=returned.reserve.identity.owner;a.input.identity=returned.reserve.identity;
+        a.control.input.owner.equipGeneration+=2;a.control.item.generation+=2;a.control.mechanism.generation+=2;
+        a.event=b.event;CHECK(a.Advance());CHECK(!bank.View(a.clock).held);a.Rounds();
+        CHECK(bank.View(a.clock).held&&bank.View(a.clock).debt->guardEpoch==original.debt->guardEpoch);
+        CHECK(a.Release());a.Rounds();const auto ready=bank.View(a.clock).ready;CHECK(ready);
+        CHECK(bank.Selected().AcknowledgeReady(*ready,a.clock));CHECK(!bank.View(a.clock).blocksFire);
+    }
+    return 0;
+}
+int FullRetainedBankRefusesWithoutEvictionAndRetiresEveryOldActor(){
+    Bc2NativeCycleBank bank;CHECK(bank.EnableRecovery());CHECK(bank.EnableConcurrentBolt());
+    std::array<Bc2NativeCycleSlot,8> handles{};std::array<Bc2NativeCycleView,8> owed{};
+    ConcurrentBoltFixture source;source.selected=&bank.Selected();CHECK(source.Cycle().Configure(Bc2NativeCycleMode::Bolt));
+    CHECK(source.Advance());CHECK(source.Start());source.Rounds();handles[0]=bank.SelectedSlot();owed[0]=bank.View(source.clock);
+    for(unsigned n=1;n<8;++n){
+        ConcurrentBoltFixture next;DifferentResource(next,n);next.clock=source.clock+1;next.event=source.event;
+        const auto selection=FreshSelection(next,Bc2NativeCycleMode::Bolt,100+n,5);
+        CHECK(bank.SelectObserved(selection,BankDrain(bank,next.clock,100+2*n)));
+        next.selected=&bank.Selected();CHECK(next.Advance());CHECK(next.Start());next.Rounds();
+        handles[n]=bank.SelectedSlot();owed[n]=bank.View(next.clock);source.clock=next.clock;source.event=next.event;
+    }
+    CHECK(bank.Owned()==8);ConcurrentBoltFixture ninth;DifferentResource(ninth,8);ninth.clock=source.clock+1;
+    const auto rejected=FreshSelection(ninth,Bc2NativeCycleMode::Bolt,200,5);
+    CHECK(!bank.ObserveDeparture({rejected.reserve.identity,rejected.config},BankDrain(bank,ninth.clock,200),ninth.clock));
+    CHECK(!bank.SelectObserved(rejected,BankDrain(bank,ninth.clock,202)));
+    for(unsigned n=0;n<8;++n){const auto* retained=bank.Find(handles[n]);CHECK(retained);
+        CHECK(retained->View(ninth.clock).retainedDebtOrigin==owed[n].retainedDebtOrigin);}
+    auto replacement=rejected;auto& id=replacement.reserve.identity;
+    ++id.owner.actorGeneration;id.owner.soldier+=0x1000;id.owner.weak+=0x1000;id.serverSoldier+=0x1000;
+    auto invalid=replacement;invalid.reserve.identity.serverSoldier=owed[0].native.serverSoldier;
+    CHECK(!bank.SelectReplacementActor(invalid,BankDrain(bank,ninth.clock,204)));CHECK(bank.Owned()==8);
+    CHECK(bank.SelectReplacementActor(replacement,BankDrain(bank,ninth.clock,206)));CHECK(bank.Owned()==1);
+    for(const auto handle:handles)CHECK(!bank.Find(handle));
+    CHECK(!bank.View(ninth.clock).blocksFire&&bank.Selected().LastActorRetirement());return 0;
 }
 int SelectionReturnRetainsDebt(){
+    CHECK(!RetainedBankAllowsOtherPumpAndBoltThenExactReturn());
+    CHECK(!FullRetainedBankRefusesWithoutEvictionAndRetiresEveryOldActor());
     for(bool empty:{false,true}){
         ConcurrentBoltFixture f;CHECK(f.Start(empty));f.Rounds();
         const auto before=f.service.View(f.clock);const auto stale=*before.held;
