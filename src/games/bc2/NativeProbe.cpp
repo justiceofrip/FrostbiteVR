@@ -4242,7 +4242,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
                 p.serializedNs=p.completedNs=0;p.attempts=0;p.error=p.firstError=p.cleanupError=p.failureRecordError=0;
                 p.status="serializing";p.stage=p.firstStage="none";
                 std::ostringstream snapshot;
-                fvr::bc2::rigPublication::WriteLiveMechanismSnapshot(snapshot,nonce);
+                fvr::bc2::rigPublication::WriteLiveMechanismSnapshot(snapshot,nonce,p.acceptedNs);
                 p.payload=snapshot.str();p.serializedNs=mechanismSnapshotNow();
                 if(p.payload.empty()||p.payload.size()>fvr::bc2::rigPublication::LiveMechanismSnapshotLimit){
                     failMechanismSnapshot("payload_size",0);return;

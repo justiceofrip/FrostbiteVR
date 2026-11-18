@@ -53,6 +53,17 @@ struct Fixture {
             [](const auto& v){return v.reason;},[&](const auto& v){return publication.Current(v,now);},77,now,
             firearm?"payload_limit":"no_shot_publication",live_snapshot::MaximumBytes);
     }
+    template<class Read,class Clock,class Pause,class NavigationCurrent>
+    std::string Reacquire(std::int64_t acceptedNs,Read read,Clock clock,Pause pause,NavigationCurrent navigationCurrent,
+        std::size_t padding=0){
+        NavigationObservation navigation;navigation.reason=NavigationObservationReason::NotOnFoot;
+        const auto vehicle=publication.Read(now);
+        const auto ns=",\"navigationObservation\":"+NavigationObservationJson(navigation);
+        const auto vs=",\"vehicleObservation\":"+VehicleObservationJson(vehicle);
+        return CompleteVehicleNavigationSnapshot("{\"valid\":false"+ns+vs+",\"diagnostics\":\""+std::string(padding,'x')+"\"}",
+            ns,navigation,vs,vehicle,navigationCurrent,[&](const auto& v){return publication.Current(v,clock());},
+            77,now,"no_shot_publication",live_snapshot::MaximumBytes,acceptedNs,read,clock,pause);
+    }
 };
 int NeutralSeatExistsWithoutFirearmAndRemainsOptIn(){
     Fixture p;CHECK(!p.Publish());CHECK(p.publication.Read(p.now).reason==R::Disabled);
@@ -193,10 +204,183 @@ int CombinedFallbackAndFinalBookendRetainBothIndependentSections(){
     }
     return 0;
 }
+int WorkerReacquisitionReplacesCompleteDriverAndGunnerCopies(){
+    for(bool gunner:{false,true})for(bool fallback:{false,true}){
+        Fixture p;
+        if(gunner){
+            p.profile.role=VehicleSeatRole::Gunner;p.profile.axes[0].reset();p.profile.axes[1].reset();
+            p.profile.axes[2]=static_cast<EntryAction>(6);p.profile.axes[3]=EntryAction::Pitch;
+            p.routes.snapshot.routes[0]={6,8};p.routes.snapshot.routes[1]={5,7};p.seed.allowedMask=(1u<<6)|(1u<<5);
+            p.consumers.profile=p.profile;p.consumers.driver=0;p.consumers.weapons=1;
+        }
+        CHECK(p.publication.Enable());CHECK(p.Publish());const auto anchor=p.publication.Read(p.now);
+        const auto serial=p.publication.BeginGather();const auto accepted=p.now;unsigned reads=0,pauses=0;bool published=false;
+        const auto json=p.Reacquire(accepted,[&]{++reads;return p.publication.Read(p.now);},[&]{return p.now;},[&]{
+            ++pauses;p.now+=1000000;++p.seed.gatherSequence;++p.seed.input.generation;
+            p.seed.inputObservedNs=p.now;p.seed.inputDeadlineNs=p.now+100000000;
+            ++p.seed.input.menu.sequence;p.seed.input.menu.deadlineNs=p.now+80000000;
+            p.seed.input.hands[gunner?1:0].stickX=.5f;p.seed.controls.active=true;
+            p.seed.controls.axes.steer=gunner?0:.5f;p.seed.controls.axes.lookYaw=gunner?.5f:0;
+            published=p.publication.Publish(serial,p.Assemble(),p.seed.owner,true,p.now);
+        },[](const auto& v){return v.reason;},fallback?live_snapshot::MaximumBytes:0);
+        CHECK(published&&reads==2&&pauses==1);
+        CHECK(json.find("\"vehicleObservation\":{\"observationOnly\":true,\"available\":true")!=std::string::npos);
+        CHECK(json.find("\"gatherSequence\":2,\"sampledNs\":1011000000,\"inputObservedNs\":1011000000")!=std::string::npos);
+        CHECK(json.find("\"inputDeadlineNs\":1111000000,\"validUntilNs\":1091000000")!=std::string::npos);
+        CHECK(json.find("\"generation\":2,\"spaceGeneration\":1")!=std::string::npos);
+        CHECK(json.find(gunner?"\"role\":\"gunner\"":"\"role\":\"driver\"")!=std::string::npos);
+        CHECK(json.find(gunner?"\"lookYaw\":0.5":"\"steer\":0.5")!=std::string::npos);
+        CHECK(json.find("\"inputDeadlineNs\":"+std::to_string(anchor.inputDeadlineNs))==std::string::npos);
+        CHECK(json.size()<=live_snapshot::MaximumBytes);
+    }
+    return 0;
+}
+int WorkerReacquisitionRetriesChangeDuringSerialization(){
+    Fixture p;CHECK(p.publication.Enable());CHECK(p.Publish());const auto accepted=p.now;
+    unsigned reads=0,pauses=0,bookends=0;std::uint64_t serial=0;bool published=false;
+    const auto json=p.Reacquire(accepted,[&]{++reads;return p.publication.Read(p.now);},[&]{return p.now;},[&]{
+        ++pauses;++p.now;++p.seed.gatherSequence;published=p.publication.Publish(serial,p.Assemble(),p.seed.owner,true,p.now);
+    },[&](const auto& v){if(++bookends==1)serial=p.publication.BeginGather();return v.reason;});
+    CHECK(published&&reads==2&&pauses==1&&bookends==2);
+    CHECK(json.find("\"vehicleObservation\":{\"observationOnly\":true,\"available\":true")!=std::string::npos);
+    CHECK(json.find("\"gatherSequence\":2")!=std::string::npos);
+    CHECK(json.find("\"inputObservedNs\":1000000000,\"inputDeadlineNs\":1100000000,\"validUntilNs\":1080000000")!=std::string::npos);
+    return 0;
+}
+int WorkerReacquisitionRejectsOwnerRouteEpochClockAndStopChanges(){
+    for(unsigned kind=0;kind<8;++kind){
+        Fixture p;CHECK(p.publication.Enable());CHECK(p.Publish());unsigned pauses=0,reads=0;
+        const auto json=p.Reacquire(p.now,[&]{
+            ++reads;if(kind==6)p.publication.Stop();auto next=p.publication.Read(p.now);
+            if(kind==0)++next.owner.seatGeneration;
+            if(kind==1)++next.routeFingerprint;
+            if(kind==2)++next.input.menu.epoch;
+            if(kind==3)++next.input.trackingBasisGeneration;
+            if(kind==4)++next.inputDeadlineNs;
+            if(kind==5)++next.input.menu.deadlineNs;
+            if(kind==7)next.serial=0;
+            return next;
+        },[&]{return p.now;},[&]{++pauses;},[](const auto& v){return v.reason;});
+        constexpr const char* reasons[]={"owner_unavailable","route_changed","owner_unavailable","owner_unavailable",
+            "source_clock_changed","menu_clock_changed","stopped","owner_unavailable"};
+        CHECK(reads==1&&!pauses&&json.find(std::string("\"reason\":\"")+reasons[kind]+"\"")!=std::string::npos);
+        CHECK(json.find("\"input\":null,\"capabilities\":null,\"neutralRearm\":null")!=std::string::npos);
+        CHECK(json.find("\"available\":true")==std::string::npos);
+    }
+    return 0;
+}
+int WorkerReacquisitionBoundsBusyPendingAndNeverRestartsBudget(){
+    for(unsigned kind=0;kind<3;++kind){
+        Fixture p;CHECK(p.publication.Enable());CHECK(p.Publish());const auto accepted=p.now;
+        p.publication.BeginGather();unsigned reads=0,pauses=0;
+        const auto json=p.Reacquire(accepted,[&]{
+            ++reads;if(kind==0){VehicleObservation busy;busy.reason=R::Busy;return busy;}
+            return p.publication.Read(p.now);
+        },[&]{return p.now;},[&]{++pauses;if(kind==1)p.now+=5000000;if(kind==2)p.publication.Stop();},
+            [](const auto& v){return v.reason;});
+        CHECK(json.find("\"available\":true")==std::string::npos);
+        CHECK(json.find("\"input\":null,\"capabilities\":null")!=std::string::npos);
+        if(kind==0){CHECK(reads==25&&pauses==24);CHECK(json.find("\"reason\":\"observation_busy\"")!=std::string::npos);}
+        if(kind==1){CHECK(reads==5&&pauses==5&&p.now==accepted+25000000);}
+        if(kind==2){CHECK(reads==2&&pauses==1);CHECK(json.find("\"reason\":\"stopped\"")!=std::string::npos);}
+    }
+    // Generic serialization/cold preparation has already spent this request's
+    // local budget. It cannot start a second budget at final capture.
+    Fixture p;CHECK(p.publication.Enable());CHECK(p.Publish());p.publication.BeginGather();unsigned reads=0,pauses=0;
+    for(const auto accepted:{std::int64_t(0),p.now-25000000}){
+        const auto json=p.Reacquire(accepted,[&]{++reads;return p.publication.Read(p.now);},[&]{return p.now;},[&]{++pauses;},
+            [](const auto& v){return v.reason;});
+        CHECK(!reads&&!pauses&&json.find("\"available\":true")==std::string::npos);
+    }
+    return 0;
+}
+int WorkerReacquisitionRefusesOversleepAndSerializationDeadline(){
+    for(bool sourceBound:{false,true})for(bool duringSerialization:{false,true}){
+        Fixture p;CHECK(p.publication.Enable());CHECK(p.Publish());const auto accepted=p.now;
+        if(sourceBound){p.seed.input.menu.deadlineNs=p.now+5000000;++p.seed.input.menu.sequence;CHECK(p.Publish());}
+        const auto anchor=p.publication.Read(p.now);const auto deadline=sourceBound?anchor.validUntilNs:accepted+25000000;
+        unsigned reads=0,pauses=0;std::uint64_t serial=0;bool published=false;
+        if(!duringSerialization)serial=p.publication.BeginGather();
+        const auto json=p.Reacquire(accepted,[&]{++reads;return p.publication.Read(p.now);},[&]{return p.now;},[&]{
+            ++pauses;p.now=deadline;++p.seed.input.generation;p.seed.inputObservedNs=p.now;p.seed.inputDeadlineNs=p.now+100000000;
+            ++p.seed.input.menu.sequence;p.seed.input.menu.deadlineNs=p.now+80000000;++p.seed.gatherSequence;
+            published=p.publication.Publish(serial,p.Assemble(),p.seed.owner,true,p.now);
+        },[&](const auto& v){if(duringSerialization)p.now=deadline;return v.reason;});
+        CHECK(reads==1&&json.find("\"available\":true")==std::string::npos);
+        CHECK(json.find("\"input\":null,\"capabilities\":null")!=std::string::npos);
+        CHECK(duringSerialization?!pauses:(pauses==1&&published));
+        CHECK(json.find("\"inputDeadlineNs\":"+std::to_string(anchor.inputDeadlineNs))!=std::string::npos);
+    }
+    return 0;
+}
+int Actual004TimingSeparatesNativeRecoveryFromCallerAcceptance(){
+    constexpr std::int64_t accepted=378414040059500,firstRead=378414040181300;
+    constexpr std::int64_t callerDeadline=378414062644300,actualRefusal=378414051513400;
+    constexpr std::int64_t observedDeliveryCost=actualRefusal-firstRead;
+    CHECK(callerDeadline-actualRefusal==11130900);
+    CHECK(accepted+25000000>callerDeadline);
+    // These two completion times are hypothetical schedules. The recording
+    // does not contain Gather004 completion timing. Replay only demonstrates
+    // why a native success must still pass the unchanged client deadline.
+    for(bool late:{false,true}){
+        Fixture p;p.now=378414035432000;p.seed.inputObservedNs=378414028751800;
+        p.seed.inputDeadlineNs=378414128751800;p.seed.input.menu.deadlineNs=378414127649100;
+        p.seed.gatherSequence=6451;CHECK(p.publication.Enable());CHECK(p.Publish());
+        const auto serial=p.publication.BeginGather();p.now=firstRead;unsigned pauses=0;bool published=false;
+        const auto completed=late?actualRefusal+1000000:firstRead+1000000;
+        const auto json=p.Reacquire(accepted,[&]{return p.publication.Read(p.now);},[&]{return p.now;},[&]{
+            ++pauses;p.now=completed;++p.seed.gatherSequence;
+            published=p.publication.Publish(serial,p.Assemble(),p.seed.owner,true,p.now);
+        },[](const auto& v){return v.reason;});
+        CHECK(published&&pauses==1&&completed<accepted+25000000);
+        CHECK(json.find("\"vehicleObservation\":{\"observationOnly\":true,\"available\":true")!=std::string::npos);
+        CHECK(json.find("\"gatherSequence\":6452")!=std::string::npos);
+        CHECK(json.find("\"inputObservedNs\":378414028751800,\"inputDeadlineNs\":378414128751800,\"validUntilNs\":378414127649100")!=std::string::npos);
+        const auto received=completed+observedDeliveryCost;
+        CHECK((received<callerDeadline)==!late);
+    }
+    return 0;
+}
+int WorkerExhaustionRechecksIndependentNavigationAfterLastPause(){
+    for(bool revoke:{false,true})for(bool fallback:{false,true}){
+        Fixture p;CHECK(p.publication.Enable());CHECK(p.Publish());p.publication.BeginGather();
+        const auto accepted=p.now,deadline=accepted+25000000;
+        NavigationObservationPublication navigationPublication;CHECK(navigationPublication.Enable());
+        NavigationObservation seed;const auto& o=p.seed.owner;
+        seed.owner={o.manager,o.player,o.soldier,o.weak,o.soldier,o.entry,o.router,o.cache,o.actorGeneration,o.inputEpoch,o.movementEpoch};
+        seed.gatherSequence=1;seed.onFoot=seed.nativePlaying=seed.allowedRead=true;seed.allowedMask=0x103;
+        seed.input=p.seed.input;seed.inputObservedNs=p.seed.inputObservedNs;seed.inputDeadlineNs=p.seed.inputDeadlineNs;
+        if(!revoke)seed.input.menu.deadlineNs=deadline;
+        CHECK(navigationPublication.Publish(navigationPublication.BeginGather(),seed,seed.owner,true,p.now));
+        const auto navigation=navigationPublication.Read(p.now);CHECK(navigation.Available());
+        const auto vehicle=p.publication.Read(p.now);
+        const auto ns=",\"navigationObservation\":"+NavigationObservationJson(navigation);
+        const auto vs=",\"vehicleObservation\":"+VehicleObservationJson(vehicle);
+        unsigned reads=0,pauses=0,bookends=0;
+        const auto json=CompleteVehicleNavigationSnapshot("{\"valid\":false"+ns+vs+",\"padding\":\""+
+            std::string(fallback?live_snapshot::MaximumBytes:0,'x')+"\"}",ns,navigation,vs,vehicle,
+            [&](const auto& v){++bookends;return navigationPublication.Current(v,p.now);},
+            [&](const auto& v){return p.publication.Current(v,p.now);},77,accepted,"no_shot_publication",live_snapshot::MaximumBytes,
+            accepted,[&]{++reads;return p.publication.Read(p.now);},[&]{return p.now;},[&]{
+                ++pauses;p.now=deadline;if(revoke)navigationPublication.BeginGather();
+            });
+        CHECK(reads==1&&pauses==1&&bookends==2&&p.now==deadline);
+        CHECK(json.find("\"navigationObservation\":{\"observationOnly\":true,\"available\":false")!=std::string::npos);
+        CHECK(json.find(revoke?"\"reason\":\"observation_changed\"":"\"reason\":\"menu_unavailable\"")!=std::string::npos);
+        CHECK(json.find("\"vehicleObservation\":{\"observationOnly\":true,\"available\":false,\"reason\":\"gather_pending\"")!=std::string::npos);
+        CHECK(json.find("\"available\":true")==std::string::npos&&json.size()<=live_snapshot::MaximumBytes);
+        CHECK(json.find("\"inputObservedNs\":1000000000,\"inputDeadlineNs\":1100000000")!=std::string::npos);
+    }
+    return 0;
+}
 }
 int main(){
     for(auto test:{NeutralSeatExistsWithoutFirearmAndRemainsOptIn,TypedAssemblyRejectsMismatchedOwnerRoutesAndConsumers,
         ExpiryTrackingAndOwnerGatesPreserveOriginalClocks,ReentrancyTransitionsAndBusyPublicationRevokeOldValues,
-        PassiveNeutralBindingReadsCurrentPermissionWithoutMutatingInput,CombinedFallbackAndFinalBookendRetainBothIndependentSections})if(test())return 1;
+        PassiveNeutralBindingReadsCurrentPermissionWithoutMutatingInput,CombinedFallbackAndFinalBookendRetainBothIndependentSections,
+        WorkerReacquisitionReplacesCompleteDriverAndGunnerCopies,WorkerReacquisitionRetriesChangeDuringSerialization,
+        WorkerReacquisitionRejectsOwnerRouteEpochClockAndStopChanges,WorkerReacquisitionBoundsBusyPendingAndNeverRestartsBudget,
+        WorkerReacquisitionRefusesOversleepAndSerializationDeadline,Actual004TimingSeparatesNativeRecoveryFromCallerAcceptance,
+        WorkerExhaustionRechecksIndependentNavigationAfterLastPause})if(test())return 1;
     std::cout<<"Vehicle observation cases passed: typed seat, neutral permission, original deadlines and combined snapshot\n";return 0;
 }

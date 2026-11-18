@@ -2778,7 +2778,7 @@ bool WeaponModeObservationRequested(std::int64_t nowNs)noexcept {
 bool FixedContainerObservationRequested(std::int64_t nowNs)noexcept {
     return ShellPumpObservationRequested(nowNs);
 }
-void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
+void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce,std::int64_t acceptedNs){
     // This runs only on an explicit worker request. ReadWeaponFrame is the same
     // BodyObservation admission used by ReadBodyWeaponFrame: immutable atomic
     // publications plus bounded ReadProcessMemory equipment bookends. It never
@@ -2831,7 +2831,8 @@ void WriteLiveMechanismSnapshot(std::ostream& out,std::uint64_t nonce){
     const auto vehicleSection=",\"vehicleObservation\":"+VehicleObservationJson(vehicle);
     const auto writePayload=[&](std::string payload,const char* reason){
         out<<CompleteVehicleNavigationSnapshot(std::move(payload),navigationSection,navigation,vehicleSection,vehicle,
-            gameplay::ReadNavigationObservationStatus,gameplay::ReadVehicleObservationStatus,nonce,observed,reason,snapshotLimit);
+            gameplay::ReadNavigationObservationStatus,gameplay::ReadVehicleObservationStatus,nonce,observed,reason,snapshotLimit,
+            acceptedNs,gameplay::ReadVehicleObservation,[](){return ReloadNanos();},[](){Sleep(1);});
     };
     const auto invalid=[&](const char* reason,bool observeOwnedKnife=false){
         std::ostringstream header;header.imbue(std::locale::classic());

@@ -253,4 +253,79 @@ std::string CompleteVehicleNavigationSnapshot(std::string payload,const std::str
         <<",\"vehicleObservation\":"<<VehicleObservationJson(vehicle)<<",\"diagnosticsOmitted\":\"payload_limit\"}\n";
     return fallback.str();
 }
+// Explicit snapshot worker only. Reacquire the complete value at the final
+// serialization boundary, never restore authority on a retained partial copy.
+// The local work budget starts at request acceptance; it is not the caller's
+// response deadline or its predecessor lease. Both remain independently enforced.
+template<class NavigationCurrent,class VehicleCurrent,class VehicleRead,class Clock,class Pause>
+std::string CompleteVehicleNavigationSnapshot(std::string payload,const std::string& navigationSection,NavigationObservation navigation,
+    const std::string& vehicleSection,VehicleObservation anchor,NavigationCurrent navigationCurrent,VehicleCurrent vehicleCurrent,
+    std::uint64_t nonce,std::int64_t observed,const char* invalidReason,std::size_t limit,std::int64_t acceptedNs,
+    VehicleRead read,Clock clock,Pause pause){
+    using R=VehicleObservationReason;
+    const auto finish=[&](std::string bytes,const std::string& section,VehicleObservation value,auto current){
+        return CompleteVehicleNavigationSnapshot(std::move(bytes),navigationSection,navigation,section,value,
+            navigationCurrent,current,nonce,observed,invalidReason,limit);
+    };
+    const auto original=[&]{return finish(payload,vehicleSection,anchor,vehicleCurrent);};
+    const auto retryable=[](R reason){return reason==R::GatherPending||reason==R::Busy||reason==R::Changed;};
+    constexpr std::int64_t workBudgetNs=25000000;
+    const auto started=clock();
+    if(acceptedNs<=0||acceptedNs>INT64_MAX-workBudgetNs||started<acceptedNs||
+       (!anchor.Available()&&!retryable(anchor.reason))||!anchor.serial||
+       VehicleObservationRejection(anchor,started)!=R::Available)return original();
+    const auto deadline=(std::min)(acceptedNs+workBudgetNs,anchor.validUntilNs);
+    if(started>=deadline)return original();
+    const auto at=payload.find(vehicleSection);if(at==std::string::npos)return original();
+    std::string result;auto previous=started;auto refused=anchor;
+    // An attempt cap also bounds injected/faulty clocks. Sleep/yield belongs
+    // only to this worker; no game callback polls, waits or performs file IO.
+    for(unsigned attempt=0;attempt<25;++attempt){
+        const auto before=clock();
+        if(before<previous||before>=deadline)break;
+        previous=before;
+        auto value=read();
+        if(value.Available()||retryable(value.reason)){
+            // Busy reads may contain no copy. Keep only diagnostic labels in
+            // that case, with all actionable sections still withheld.
+            if(!value.serial){const auto reason=retryable(value.reason)?value.reason:R::OwnerUnavailable;value=anchor;value.reason=reason;}
+            else if(value.owner!=anchor.owner||value.input.spaceGeneration!=anchor.input.spaceGeneration||
+                    value.input.trackingBasisGeneration!=anchor.input.trackingBasisGeneration||
+                    value.input.menu.epoch!=anchor.input.menu.epoch)value.reason=R::OwnerUnavailable;
+            else if(value.routeFingerprint!=anchor.routeFingerprint||value.slot!=anchor.slot||value.role!=anchor.role||
+                    value.allowedMask!=anchor.allowedMask||value.driver!=anchor.driver||value.camera!=anchor.camera||
+                    value.weaponConsumerCount!=anchor.weaponConsumerCount)value.reason=R::RouteChanged;
+            else if(value.input.generation<anchor.input.generation||value.inputObservedNs<anchor.inputObservedNs||
+                    (value.input.generation==anchor.input.generation&&
+                     (value.inputObservedNs!=anchor.inputObservedNs||value.inputDeadlineNs!=anchor.inputDeadlineNs)))
+                value.reason=R::SourceClockChanged;
+            else if(value.input.menu.sequence<anchor.input.menu.sequence||
+                    (value.input.menu.sequence==anchor.input.menu.sequence&&value.input.menu.deadlineNs!=anchor.input.menu.deadlineNs))
+                value.reason=R::MenuClockChanged;
+        }
+        const auto section=std::string(",\"vehicleObservation\":")+VehicleObservationJson(value);
+        auto bytes=payload;bytes.replace(at,vehicleSection.size(),section);
+        auto finalReason=value.reason;bool windowEnded=false;
+        result=finish(std::move(bytes),section,value,[&](const auto& captured){
+            finalReason=vehicleCurrent(captured);const auto after=clock();
+            // Serialization or scheduling can overrun either frozen bound.
+            // A late complete copy is refused, even when its own lease is new.
+            windowEnded=after<before||after>=deadline;
+            if(finalReason==R::Available&&windowEnded)finalReason=R::Changed;
+            previous=after;return finalReason;
+        });
+        if(windowEnded||finalReason==R::Available||!retryable(finalReason))return result;
+        refused=value;refused.reason=finalReason;
+        const auto after=clock();
+        if(after<previous||after>=deadline||attempt==24)break;
+        previous=after;pause();
+    }
+    if(result.empty())return original();
+    // A final pause may have expired or revoked the independent navigation
+    // copy. Rebuild from the original payload and recheck both bookends, with
+    // the last vehicle refusal retained and no new read, wait or budget.
+    const auto section=std::string(",\"vehicleObservation\":")+VehicleObservationJson(refused);
+    payload.replace(at,vehicleSection.size(),section);
+    return finish(std::move(payload),section,refused,vehicleCurrent);
+}
 }

@@ -356,6 +356,8 @@ bool WeaponModeObservationRequested(std::int64_t nowNs)noexcept;
 bool FixedContainerObservationRequested(std::int64_t nowNs)noexcept;
 // Shared with the complete magazine/bolt composition budget and Python reader.
 inline constexpr std::size_t LiveMechanismSnapshotLimit=live_snapshot::MaximumBytes;
-void WriteLiveMechanismSnapshot(std::ostream&,std::uint64_t nonce);
+// acceptedNs is the original worker acceptance clock, never a source renewal.
+// Callers omitting it retain the single-copy behavior with no reacquisition wait.
+void WriteLiveMechanismSnapshot(std::ostream&,std::uint64_t nonce,std::int64_t acceptedNs=0);
 void Report(std::ostream&);
 }

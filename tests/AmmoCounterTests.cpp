@@ -483,6 +483,51 @@ int HostDisplayCaptured4273ExpiredRetransmission(){
     CHECK(display.SelectForDisplay(2,373933466507400,true,next,true,false).kind==AmmoCounterDisplayKind::CurrentOwner);
     return 0;
 }
+int HostDisplayCaptured6137PublicationDeadlineRetransmission(){
+    // Normal109's first gap precedes the marked 32-omission window. Receive56
+    // repeats every admitted field except a 6.3604 ms later wire deadline.
+    AmmoCounterSample admitted;admitted.sequence=176;admitted.observedNs=377209788717000;
+    admitted.deadlineNs=377209882356600;admitted.actorGeneration=1;
+    admitted.equipmentGeneration=admitted.spaceGeneration=2;admitted.loaded=21;admitted.reserve=210;admitted.capacity=30;
+    const AmmoCounterDisplaySource source{{130,28,0,128,0,0,0,0,130,13,0,192,0,0,0,0},2};
+    constexpr std::int64_t received=377209829438100,repeat=377209892005700;
+    const auto image=admitted;auto wire=admitted;wire.deadlineNs=377209888717000;
+    AmmoCounterPresentation strict;AmmoCounterHostDisplay display;
+    CHECK(strict.Receive(admitted,admitted,2,received));
+    CHECK(display.Receive(admitted,admitted,2,received,source));
+    CHECK(display.SelectForDisplay(2,377209860654000,true,image,true,false).kind==AmmoCounterDisplayKind::CurrentOwner);
+    CHECK(wire.deadlineNs-admitted.deadlineNs==6360400);
+    CHECK(AmmoCounterFresh(wire,wire.observedNs)&&!AmmoCounterFresh(wire,repeat));
+    CHECK(!strict.Receive(wire,wire,2,repeat)&&!strict.Select(2,repeat));
+    CHECK(!display.Receive(wire,wire,2,repeat,source));
+    for(const auto at:{377209892058000LL,377209907002600LL,377209922704900LL}){
+        const auto shown=display.SelectForDisplay(2,at,true,image,true,false);
+        CHECK(shown.sample&&*shown.sample==admitted&&shown.kind==AmmoCounterDisplayKind::StaleUploadedImage);
+        CHECK(display.CountEvidence()==admitted&&display.OwnerEvidence()==admitted&&image==admitted);
+        CHECK(!AmmoCounterFresh(admitted,at)&&!strict.Select(2,at));
+    }
+    const auto bound=admitted.deadlineNs+AmmoCounterHostDisplayGraceNs;
+    CHECK(!display.Receive(wire,wire,2,bound-1,source));
+    CHECK(display.SelectForDisplay(2,bound-1,true,image,true,false).sample);
+    CHECK(!display.SelectForDisplay(2,bound,true,image,true,false).sample);
+    CHECK(!display.Receive(wire,wire,2,bound,source));
+    CHECK(!display.CountEvidence().sequence&&!display.OwnerEvidence().actorGeneration);
+    // Additional deadline shapes must not broaden the coherent retransmission
+    // exception. Existing tests cover all non-deadline owner/count/source vetoes.
+    for(unsigned fault=0;fault<3;++fault){
+        AmmoCounterHostDisplay rejected;CHECK(rejected.Receive(admitted,admitted,2,received,source));
+        auto left=wire,right=wire;
+        if(fault==0)left.deadlineNs=right.deadlineNs=admitted.deadlineNs-1;
+        if(fault==1)--right.deadlineNs;
+        if(fault==2){++left.deadlineNs;++right.deadlineNs;} // Exceeds the 100 ms wire age limit.
+        CHECK(!rejected.Receive(left,right,2,repeat,source));
+        CHECK(!rejected.SelectForDisplay(2,repeat,true,image,true,false).sample);
+    }
+    auto next=admitted;next.sequence=181;next.observedNs=377209892495100;next.deadlineNs=377209991983500;
+    CHECK(display.Receive(next,next,2,377209938560900,source));
+    CHECK(display.SelectForDisplay(2,377209938615600,true,next,true,false).kind==AmmoCounterDisplayKind::CurrentOwner);
+    return 0;
+}
 int HostDisplayExpiredRetransmissionVetoes(){
     const auto admitted=Sample(),image=admitted;const auto source=DisplaySource();
     const auto at=admitted.deadlineNs+1;
@@ -667,6 +712,7 @@ int BitmapContents(){
 int main(){if(SameLifetimePublicationHandoff()||CommittedSceneHudLifetime()||SceneEquipmentAndPublicationDeadlines()||NativeReadOnlyAdmission()||NativeReadClockOrdering()||PublishedReserveIsPassiveAndBounded()||PairAndFreshness()||
     DisplaySurvivesAmmoGapsWithCurrentOwner()||ExpiredSameOwnerCountsPreserveIndependentLease()||RejectedCountsCannotRenewOwnership()||DisplayOwnerLifetimeAndDuplicatePackets()||OwnerMarkersCannotAdmitCounts()||
     CountsChangingBetweenEyes()||HostDisplayCaptured4508Boundary()||HostDisplayCaptured4273ExpiredRetransmission()||
+    HostDisplayCaptured6137PublicationDeadlineRetransmission()||
     HostDisplayExpiredRetransmissionVetoes()||HostDisplayGraceDoesNotRenewOrUpload()||
     HostDisplaySourceVetoBeforeReceive()||HostDisplayRetirementAndClockFailures()||WeaponSidePlacement()||BitmapContents())return 1;
     std::cout<<"AmmoCounter: strict native samples, retained same-owner display, paired telemetry and bitmap checks passed; no native acceptance\n";
