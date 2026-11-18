@@ -162,7 +162,7 @@ std::optional<MuzzleEventSource> muzzleHistorySource;
 std::atomic<unsigned> clientOriginWrites=0,serverOriginWrites=0,originWriteFailures=0,shotSourceChanges=0,originFallbacks=0,originWritesAfterLogFull=0;
 std::atomic<unsigned> clientShotCalls=0,clientShotCopies=0,clientShotRejected=0;
 AimCandidates aimingProfile{};InputBindingCandidates profile{};std::uintptr_t image=0;unsigned imageSize=0;
-InputReader readInput=nullptr;std::array<void*,26> hooks{};
+InputReader readInput=nullptr;std::array<void*,27> hooks{};
 // Slot17, journal and original are immutable/process-retained after install.
 using QueueConsumerFn=unsigned(__thiscall*)(void*,unsigned,unsigned,unsigned);
 QueueConsumerFn queueConsumerOriginal=nullptr;
@@ -1159,29 +1159,30 @@ unsigned ReadVehicleConsumerView(const VehicleConsumerContext& context,unsigned 
     }
     readable=nativeCurrent&&nativeAfter&&!(checks&vehicleConsumer::Read);return checks;
 }
-// Private five-boundary vehicle observer; no input/physics writes or engine calls.
+// Private six-boundary vehicle observer; no input/physics writes or engine calls.
 std::optional<std::size_t> Offset(const engine::PeImage&,unsigned,unsigned);
 namespace vehiclePhysics=vehiclePhysicsEvidence;
 vehiclePhysics::Journal<>* vehiclePhysicsJournal=nullptr;
 VehicleConsumerContext vehiclePhysicsContext{}; // Immutable after one-shot arm.
-std::array<std::array<std::byte,838>,vehiclePhysics::Proofs.size()> vehiclePhysicsExpected{};
-std::array<std::array<std::byte,71>,vehiclePhysics::PredicateDependencies.size()> vehiclePredicateExpected{};
+std::array<std::array<std::byte,vehiclePhysics::MaxProofBytes>,vehiclePhysics::Proofs.size()> vehiclePhysicsExpected{};
+std::array<std::array<std::byte,71>,vehiclePhysics::Dependencies.size()> vehiclePhysicsDependencyExpected{};
 std::atomic<bool> vehiclePhysicsStarted{false};
-std::atomic<unsigned> vehiclePhysicsCallbacks{0},vehiclePhysicsUpdatesActive{0};
+std::atomic<unsigned> vehiclePhysicsCallbacks{0},vehiclePhysicsRootsActive{0};
 thread_local vehiclePhysics::Record* vehiclePhysicsUpdate=nullptr;
 thread_local vehiclePhysics::Record* vehiclePhysicsSimulation=nullptr;
+thread_local vehiclePhysics::Record* vehiclePhysicsActiveForce=nullptr;
 bool vehiclePhysicsRequested=false,vehiclePhysicsInstalled=false,vehiclePhysicsDisabled=false,vehiclePhysicsDrained=false;
 const char* vehiclePhysicsStatus="not_requested";
 
 bool VehiclePhysicsCodeCurrent()noexcept {
     if(!vehiclePhysicsInstalled)return false;
-    std::array<std::byte,838> actual{};
+    std::array<std::byte,vehiclePhysics::MaxProofBytes> actual{};
     for(unsigned n=0;n<vehiclePhysics::Proofs.size();++n){const auto& proof=vehiclePhysics::Proofs[n];
         if(!Read(image+proof.rva,actual.data(),proof.size)||
            !std::equal(actual.begin(),actual.begin()+proof.size,vehiclePhysicsExpected[n].begin()))return false;}
-    for(unsigned n=0;n<vehiclePhysics::PredicateDependencies.size();++n){const auto& proof=vehiclePhysics::PredicateDependencies[n];
+    for(unsigned n=0;n<vehiclePhysics::Dependencies.size();++n){const auto& proof=vehiclePhysics::Dependencies[n];
         if(!Read(image+proof.rva,actual.data(),proof.size)||
-           !std::equal(actual.begin(),actual.begin()+proof.size,vehiclePredicateExpected[n].begin()))return false;}
+           !std::equal(actual.begin(),actual.begin()+proof.size,vehiclePhysicsDependencyExpected[n].begin()))return false;}
     unsigned zero=1;if(!Read(image+0x10d9410,&zero,sizeof(zero))||zero)return false;
     std::array<unsigned char,12> getter{};
     if(!Read(image+vehiclePhysics::TransformGetterRva,getter.data(),getter.size())||getter!=vehiclePhysics::TransformGetter)return false;
@@ -1254,7 +1255,7 @@ vehiclePhysics::PredicateSample ReadVehiclePredicateSample(const vehiclePhysics:
         if(base>=0x10000&&std::uint64_t(base)+offset<=UINT32_MAX&&Read(base+offset,&value,1)){
             out=value;result.readMask|=mask;return true;}
         result.reasons|=ReadFailed;return false;};
-    if(!word(owner.associatedVtable,0x7c,result.target7c,1)||result.target7c!=image+PredicateDependencies[1].rva){
+    if(!word(owner.associatedVtable,0x7c,result.target7c,1)||result.target7c!=image+Dependencies[1].rva){
         result.reasons|=Identity;return result;}
     if(!word(result.body,0xb8,result.subobject,2))return result;
     if(result.subobject&&!byte(result.subobject,0x26,result.subobjectFlags,4))return result;
@@ -1275,39 +1276,47 @@ void __cdecl DispatchVehiclePhysics(vehiclePhysics::native::Frame* frame){
     using namespace vehiclePhysics;
     auto* journal=vehiclePhysicsJournal;Slot* slot=nullptr;Record* row=nullptr;
     auto* previousUpdate=vehiclePhysicsUpdate;auto* previousSimulation=vehiclePhysicsSimulation;
+    auto* previousActiveForce=vehiclePhysicsActiveForce;
     const auto kind=BoundaryKind(frame->kind);const auto self=frame->entry->registers.ecx;
-    bool normal=false,countedUpdate=false;auto outputScope=native::OutputScope::Refused;Word outputThread=0;
+    bool normal=false,countedRoot=false;auto outputScope=native::OutputScope::Refused;Word outputThread=0;
     ++vehiclePhysicsCallbacks;
     // Even a foreign nested update/sim hides the outer scope from its children.
-    if(kind==Kind::Update){vehiclePhysicsUpdate=nullptr;vehiclePhysicsSimulation=nullptr;}
+    if(kind==Kind::Update||kind==Kind::ActiveForce){vehiclePhysicsUpdate=nullptr;vehiclePhysicsSimulation=nullptr;}
     if(kind==Kind::Simulation)vehiclePhysicsSimulation=nullptr;
     __try {
         const auto now=SelectionNow();
         if(journal&&vehiclePhysicsStarted.load(std::memory_order_acquire)&&journal->InWindow(now)){
             unsigned expectedPhysics=0;
-            const bool updateReceiver=kind!=Kind::Update||
-                (SelectionReadWord(vehiclePhysicsContext.identity.driver,0xd4,expectedPhysics)&&self==expectedPhysics);
-            // The same method is called earlier via +84 too. Only the direct
-            // eligibility call returning to00aea018 answers this investigation.
-            const bool predicateCaller=kind!=Kind::Associated94||frame->entry->caller==image+Associated94CallerRva;
-            if(!updateReceiver)++journal->foreign;
-            else if(!predicateCaller)++journal->predicateOtherCaller;
-            else if(kind!=Kind::Update&&!previousUpdate)++journal->unscoped;
+            if((kind==Kind::Update||kind==Kind::ActiveForce)&&
+               !SelectionReadWord(vehiclePhysicsContext.identity.driver,0xd4,expectedPhysics))expectedPhysics=0;
+            const auto caller=frame->entry->caller>=image?frame->entry->caller-unsigned(image):frame->entry->caller;
+            const auto admission=Admission(kind,self,expectedPhysics,caller,previousUpdate!=nullptr);
+            if(admission==Owner)++journal->foreign;
+            else if(admission==Caller){
+                if(kind==Kind::ActiveForce)++journal->activeForceOtherCaller;else ++journal->predicateOtherCaller;
+            }else if(admission==NoParent)++journal->unscoped;
             else {
                 slot=journal->Claim(kind,now);
                 if(slot){
                     row=&slot->row;row->thread=GetCurrentThreadId();row->receiver=self;
-                    row->caller=frame->entry->caller>=image?frame->entry->caller-unsigned(image):frame->entry->caller;
+                    row->caller=caller;
                     for(unsigned n=0;n<Proofs[frame->kind].args;++n)row->arguments[n]=frame->entry->args[n];
-                    row->parentUpdate=previousUpdate?previousUpdate->sequence:0;
-                    row->parentSimulation=previousSimulation?previousSimulation->sequence:0;
-                    if(kind==Kind::Update){countedUpdate=true;
-                        if(vehiclePhysicsUpdatesActive.fetch_add(1)){row->reasons|=Overlap;++journal->overlap;}}
+                    // The active callback is its own root, even if reentrant
+                    // on an Update thread; timestamp correlation is not nesting.
+                    row->parentUpdate=kind!=Kind::ActiveForce&&previousUpdate?previousUpdate->sequence:0;
+                    row->parentSimulation=kind!=Kind::ActiveForce&&previousSimulation?previousSimulation->sequence:0;
+                    if(kind==Kind::Update||kind==Kind::ActiveForce){countedRoot=true;
+                        if(vehiclePhysicsRootsActive.fetch_add(1)){row->reasons|=Overlap;++journal->overlap;}}
                     row->before=ReadVehiclePhysicsSample();
                     if(kind==Kind::Update){
                         if(self!=row->before.physics)row->reasons|=Identity;
                         if(previousUpdate)row->reasons|=Nested;
                         vehiclePhysicsUpdate=row;
+                    }else if(kind==Kind::ActiveForce){
+                        row->actionBefore=ReadActionSample(row->before,self,unsigned(image),SelectionReadWord);
+                        if(previousUpdate||previousSimulation||previousActiveForce)row->reasons|=Nested;
+                        vehiclePhysicsActiveForce=row;
+                        // No Output scope: this callback's output callers are unproved.
                     }else if(kind==Kind::Filter){
                         if(row->caller!=FilterCallerRva)row->reasons|=Caller;
                         if(self!=row->before.control||row->arguments[1]!=row->before.physics)row->reasons|=Identity;
@@ -1341,6 +1350,7 @@ void __cdecl DispatchVehiclePhysics(vehiclePhysics::native::Frame* frame){
             row->normal=normal;row->end=SelectionNow();
             if(normal){
                 row->after=ReadVehiclePhysicsSample();
+                if(kind==Kind::ActiveForce)row->actionAfter=ReadActionSample(row->after,self,unsigned(image),SelectionReadWord);
                 if(kind==Kind::Associated94){
                     // Returned EAX was saved by the gateway before any observer.
                     row->predicateReturnEax=frame->result.eax;row->predicateReturned=true;
@@ -1351,13 +1361,13 @@ void __cdecl DispatchVehiclePhysics(vehiclePhysics::native::Frame* frame){
                     if(row->outputBody!=row->outputBodyAgain)row->reasons|=Identity;
                 }
             }else row->reasons|=Unwind;
-            if(vehiclePhysicsUpdatesActive.load()>1)row->reasons|=Overlap;
+            if(vehiclePhysicsRootsActive.load()>1)row->reasons|=Overlap;
             // Finish entry/return record before its release publication.
             slot->complete.store(true,std::memory_order_release);
         }
-        if(countedUpdate)--vehiclePhysicsUpdatesActive;
+        if(countedRoot)--vehiclePhysicsRootsActive;
         native::LeaveOutputScope(outputThread,outputScope);
-        vehiclePhysicsUpdate=previousUpdate;vehiclePhysicsSimulation=previousSimulation;
+        vehiclePhysicsUpdate=previousUpdate;vehiclePhysicsSimulation=previousSimulation;vehiclePhysicsActiveForce=previousActiveForce;
         --vehiclePhysicsCallbacks;
     }
 }
@@ -1401,14 +1411,14 @@ bool EnableVehiclePhysics(std::span<const std::byte> bytes,const engine::PeImage
             !Read(base+p.rva,vehiclePhysicsExpected[n].data(),p.size)||
             !std::equal(file.begin(),file.end(),vehiclePhysicsExpected[n].begin()))return false;
     }
-    for(unsigned n=0;n<vehiclePhysics::PredicateDependencies.size();++n){
-        const auto& p=vehiclePhysics::PredicateDependencies[n];const auto offset=Offset(pe,p.rva,p.size);bool executable=false;
+    for(unsigned n=0;n<vehiclePhysics::Dependencies.size();++n){
+        const auto& p=vehiclePhysics::Dependencies[n];const auto offset=Offset(pe,p.rva,p.size);bool executable=false;
         for(const auto& section:pe.sections)if((section.flags&0x20000000)&&p.rva>=section.rva&&
             p.rva-section.rva<=section.virtualSize&&p.size<=section.virtualSize-(p.rva-section.rva))executable=true;
         if(!executable||!offset||*offset>bytes.size()||p.size>bytes.size()-*offset)return false;
         const auto file=bytes.subspan(*offset,p.size);
-        if(!digest(file,p.hash)||!Read(base+p.rva,vehiclePredicateExpected[n].data(),p.size)||
-            !std::equal(file.begin(),file.end(),vehiclePredicateExpected[n].begin()))return false;
+        if(!digest(file,p.hash)||!Read(base+p.rva,vehiclePhysicsDependencyExpected[n].data(),p.size)||
+            !std::equal(file.begin(),file.end(),vehiclePhysicsDependencyExpected[n].begin()))return false;
     }
     auto* journal=new(std::nothrow) vehiclePhysics::Journal<>;
     vehiclePhysicsStatus="allocation_failed";if(!journal)return false;
@@ -1440,18 +1450,20 @@ bool EnableVehiclePhysics(std::span<const std::byte> bytes,const engine::PeImage
     vehiclePhysicsJournal=journal;vehiclePhysicsInstalled=true;vehiclePhysicsStatus="installed";return true;
 }
 void ReportVehiclePhysics(std::ostream& out){
-    out<<",\"vehicle_physics_evidence\":{\"schema\":2,\"requested\":"<<(vehiclePhysicsRequested?"true":"false")
+    out<<",\"vehicle_physics_evidence\":{\"schema\":3,\"requested\":"<<(vehiclePhysicsRequested?"true":"false")
        <<",\"installed\":"<<(vehiclePhysicsInstalled?"true":"false")<<",\"status\":\""<<vehiclePhysicsStatus
        <<"\",\"hooks_disabled\":"<<(vehiclePhysicsDisabled?"true":"false")<<",\"drained\":"<<(vehiclePhysicsDrained?"true":"false")
        <<",\"window_seconds\":2,\"qpc_frequency\":"<<vehicleConsumerFrequency
        <<",\"interior_branches_observed\":false,\"associated94_return_capture_supported\":true,\"predicate_operands_are_boundary_snapshots\":true,\"all_output_methods_observed\":false"
+       <<",\"active_force_kind\":6,\"active_force_independent_root\":true,\"active_force_inputs_are_boundary_snapshots\":true"
+       <<",\"all_world_simulation_observed\":false,\"active_force_outputs_observed\":false"
        <<",\"old_state_update_code_proof_expected_refused_while_detoured\":true";
     auto* j=vehiclePhysicsJournal;if(!j){out<<",\"records\":[]}";return;}
     const auto state=j->state.load(std::memory_order_acquire);const auto count=j->claimed.load(std::memory_order_acquire);
     out<<",\"state\":"<<state<<",\"claimed\":"<<count<<",\"capacity\":"<<vehiclePhysics::Journal<>::MaxRecords
        <<",\"overflow\":"<<j->overflow.load()<<",\"update_limit\":"<<j->updateLimit.load()<<",\"overlap\":"<<j->overlap.load()
        <<",\"foreign\":"<<j->foreign.load()<<",\"unscoped\":"<<j->unscoped.load()<<",\"outside\":"<<j->outside.load()
-       <<",\"predicate_other_caller\":"<<j->predicateOtherCaller.load();
+       <<",\"predicate_other_caller\":"<<j->predicateOtherCaller.load()<<",\"active_force_other_caller\":"<<j->activeForceOtherCaller.load();
     if(j->published.load(std::memory_order_acquire)){const auto& i=vehiclePhysicsContext.identity;
         out<<",\"arm_qpc\":"<<j->begin<<",\"deadline_qpc\":"<<j->deadline<<",\"driver\":"<<i.driver
            <<",\"vehicle\":"<<i.vehicle<<",\"actor_generation\":"<<i.actorGeneration<<",\"seat_generation\":"<<i.seatGeneration
@@ -1462,8 +1474,13 @@ void ReportVehiclePhysics(std::ostream& out){
            <<",\"associated\":"<<s.associated<<",\"associated_vtable\":"<<s.associatedVtable<<",\"body\":"<<s.body
            <<",\"target94\":"<<s.target94<<",\"state\":"<<s.state<<",\"gate7c\":"<<s.gate7c<<",\"filter_flag\":"<<s.filterFlag
            <<",\"nested\":"<<s.nested<<",\"nested_flag\":"<<s.nestedFlag<<",\"reasons\":"<<s.reasons<<",\"controls\":";words(s.controls);
+        out<<",\"control20_f32_bits\":"<<s.controls[7]<<",\"control28_f32_bits\":"<<s.controls[9];
         out<<",\"controls_again\":";words(s.controlsAgain);out<<",\"config\":";words(s.config);
         out<<",\"transform\":";words(s.transform);out<<",\"transform_again\":";words(s.transformAgain);out<<'}';
+    };
+    const auto action=[&](const vehiclePhysics::ActionSample& a){
+        out<<"{\"action\":"<<a.action<<",\"vtable\":"<<a.vtable<<",\"physics\":"<<a.physics
+           <<",\"target\":"<<a.target<<",\"reasons\":"<<a.reasons<<'}';
     };
     const auto predicate=[&](const vehiclePhysics::PredicateSample& p){
         out<<"{\"body\":"<<p.body<<",\"subobject\":"<<p.subobject<<",\"subobject_flags\":"<<p.subobjectFlags
@@ -1482,6 +1499,10 @@ void ReportVehiclePhysics(std::ostream& out){
         words(r.arguments);out<<",\"output_body\":"<<r.outputBody<<",\"output_body_again\":"<<r.outputBodyAgain
             <<",\"output_read_mask\":"<<r.outputReadMask<<",\"output0\":";words(r.output0);out<<",\"output1\":";words(r.output1);
         out<<",\"before\":";sample(r.before);out<<",\"after\":";sample(r.after);
+        if(r.kind==vehiclePhysics::Kind::ActiveForce){
+            out<<",\"independent_root_sequence\":"<<r.sequence<<",\"dt_f32_bits\":"<<r.arguments[0]
+               <<",\"action_before\":";action(r.actionBefore);out<<",\"action_after\":";action(r.actionAfter);
+        }
         out<<",\"predicate_return_observed\":"<<(r.predicateReturned?"true":"false")
            <<",\"predicate_return_eax\":"<<r.predicateReturnEax<<",\"predicate_return_al\":"<<(r.predicateReturnEax&255u)
            <<",\"predicate_operands_stable\":"<<(r.predicateReturned&&r.predicateBefore==r.predicateAfter?"true":"false")

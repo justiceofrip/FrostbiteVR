@@ -138,10 +138,46 @@ NATIVE_FIXTURE(NativeFilter,13,12,1,0a1493001h)
 NATIVE_FIXTURE(NativeSimulation,11,4,2,0a1493001h)
 NATIVE_FIXTURE(NativeOutput,13,12,3,0a1493001h)
 NATIVE_FIXTURE(NativeAssociated94,10,0,4,0a1493000h)
+NATIVE_FIXTURE(NativeActiveForce,11,4,5,0a1493001h)
+// Exact action thunk shape: call return is entry+0x17, one f32 dt from step+8.
+__declspec(naked) static void __cdecl NativeActionCallback(){
+    __asm {mov ecx,[ecx+20h]} __asm {test ecx,ecx} __asm {jz short done}
+    __asm {mov eax,[esp+4]} __asm {fld dword ptr [eax+8]}
+    __asm {push ecx} __asm {fstp dword ptr [esp]}
+    __asm {call NativeActiveForce}
+    __asm {done: ret 4}
+}
 #undef NATIVE_FIXTURE
+// Use the production admission/action readers through the real hook. Inputs
+// below represent an independent worker callback with no Update/Output scope.
+static p::Journal<16>* activeJournal=nullptr;
+static p::Sample activeOwner{};
+static unsigned activeImage=0,activePhysics=0,activeAdmission=0;
+static std::array<unsigned,4> activeTable{};
+static std::int64_t activeNow=101;
+static bool activeParent=false;
+static p::ActionSample activeAction{};
+static bool FixtureReadWord(unsigned base,unsigned offset,unsigned& value){
+    if(base==activeImage+p::ActionVtableRva&&offset==0xc){value=activeTable[3];return true;}
+    if(!base)return false;std::memcpy(&value,reinterpret_cast<void*>(base+offset),sizeof(value));return true;
+}
 static void __cdecl FixtureDispatch(n::Frame* frame){
-    ++observerCalls;++observerActive;bool normal=false;
+    ++observerCalls;++observerActive;bool normal=false;p::Slot* activeSlot=nullptr;
     __try {
+        if(activeJournal){
+            const auto kind=p::BoundaryKind(frame->kind);
+            activeAdmission=p::Admission(kind,frame->entry->registers.ecx,activePhysics,frame->entry->caller-activeImage,activeParent);
+            if(!activeAdmission){
+                auto* slot=activeJournal->Claim(kind,activeNow);activeSlot=slot;
+                if(slot){
+                    slot->row.receiver=frame->entry->registers.ecx;slot->row.thread=GetCurrentThreadId();
+                    slot->row.arguments[0]=frame->entry->args[0];
+                    slot->row.caller=frame->entry->caller-activeImage;slot->row.before=activeOwner;
+                    activeAction=p::ReadActionSample(activeOwner,slot->row.receiver,activeImage,FixtureReadWord);
+                    slot->row.actionBefore=activeAction;
+                }
+            }
+        }
         DirtyObserver();n::Forwards[frame->kind](frame);normal=true;
         Check(seenKind==frame->kind,"exact native boundary forwards to its own original");
         Check(SameFx(seenFx,frame->incoming),"observer cannot change incoming x87/SSE state");
@@ -154,7 +190,15 @@ static void __cdecl FixtureDispatch(n::Frame* frame){
         Check(seenEntry.registers.ecx==frame->entry->registers.ecx,"exact ECX receiver");
         for(unsigned k=0;k<p::Proofs[frame->kind].args;++k)Check(seenEntry.args[k]==frame->entry->args[k],"exact raw stack argument bits");
         DirtyObserver();
-    }__finally {--observerActive;}
+    }__finally {
+        if(activeSlot){
+            auto& row=activeSlot->row;row.normal=normal;
+            if(normal){row.after=activeOwner;row.actionAfter=p::ReadActionSample(activeOwner,row.receiver,activeImage,FixtureReadWord);}
+            else row.reasons|=p::Unwind;
+            activeSlot->complete.store(true,std::memory_order_release);
+        }
+        --observerActive;
+    }
 }
 static void __fastcall ThrowUpdate(void*,void*,unsigned){RaiseException(0xe1493001,0,0,nullptr);}
 static void __fastcall ThrowAssociated94(void*,void*){RaiseException(0xe1493001,0,0,nullptr);}
@@ -167,6 +211,11 @@ static bool CatchForward(n::Frame* frame){
     __try {FixtureDispatch(frame);return false;}
     __except(GetExceptionCode()==0xe1493001?EXCEPTION_EXECUTE_HANDLER:EXCEPTION_CONTINUE_SEARCH){return true;}
 }
+static bool CatchActiveForceThunk(){
+    using One=unsigned(__thiscall*)(void*,unsigned);
+    __try {reinterpret_cast<One>(n::ActiveForceThunk)(reinterpret_cast<void*>(0x14930000),0);return false;}
+    __except(GetExceptionCode()==0xe1493001?EXCEPTION_EXECUTE_HANDLER:EXCEPTION_CONTINUE_SEARCH){return true;}
+}
 static bool CatchThunk(){
     using One=unsigned(__thiscall*)(void*,unsigned);
     __try {reinterpret_cast<One>(n::UpdateThunk)(reinterpret_cast<void*>(0x14930000),0);return false;}
@@ -174,7 +223,7 @@ static bool CatchThunk(){
 }
 static void AbiChecks(){
     MakeFx(returnFx,0x59);n::Observe=FixtureDispatch;
-    const n::MachineEntry functions[]{NativeUpdate,NativeFilter,NativeSimulation,NativeOutput,NativeAssociated94};
+    const n::MachineEntry functions[]{NativeUpdate,NativeFilter,NativeSimulation,NativeOutput,NativeAssociated94,NativeActiveForce};
     // Exercise the same assembled forwarders used by the gameplay dispatcher,
     // including raw non-float bit patterns and a nondefault incoming FP state.
     for(unsigned k=0;k<p::Proofs.size();++k){
@@ -186,7 +235,7 @@ static void AbiChecks(){
     }
     // Literal per-boundary markers above prevent identical-code folding.
     for(unsigned a=0;a<p::Proofs.size();++a)for(unsigned b=0;b<a;++b)
-        Check(functions[a]!=functions[b],"five distinct native fixture entry points");
+        Check(functions[a]!=functions[b],"six distinct native fixture entry points");
     Check(MH_Initialize()==MH_OK,"MinHook fixture initialize");
     for(unsigned k=0;k<p::Proofs.size();++k)Check(MH_CreateHook(functions[k],n::Thunks[k],reinterpret_cast<void**>(n::Originals[k]))==MH_OK,"create actual boundary adapter");
     Check(MH_EnableHook(MH_ALL_HOOKS)==MH_OK,"enable fixture adapters");
@@ -202,6 +251,48 @@ static void AbiChecks(){
         Check(SameFx(userFx,returnFx),"native returned FP state reaches actual caller after observer dirties FP");
         Check(nativeCalls==before+1&&observerCalls==observed+1&&!observerActive,"real hook performs exactly one original");ResetFp();
     }
+    // A real separately scheduled hook reaches the same admission and ownership
+    // helpers used by gameplay, even without any local Update/output thread.
+    std::array<unsigned,64> physics{};std::array<unsigned,9> action{};std::array<unsigned,3> step{0,0,0x3c888889};
+    const auto receiver=reinterpret_cast<unsigned>(physics.data());
+    activeImage=reinterpret_cast<unsigned>(NativeActionCallback)-p::ActionCallbackRva;
+    physics[0xc0/4]=reinterpret_cast<unsigned>(action.data());action[0]=activeImage+p::ActionVtableRva;action[0x20/4]=receiver;
+    activeTable[3]=reinterpret_cast<unsigned>(NativeActionCallback);
+    activeOwner={};activeOwner.physics=receiver;activeOwner.control=0x14931000;activeOwner.body=0x14932000;
+    activePhysics=receiver;activeParent=false;activeNow=101;
+    p::Journal<16> journal;journal.ReserveArm();journal.PublishArm(100,1000);activeJournal=&journal;
+    n::AdmittedPhysics=receiver;n::OutputThread=0;
+    One volatile force=reinterpret_cast<One>(functions[5]);One volatile callback=reinterpret_cast<One>(NativeActionCallback);
+    auto before=nativeCalls,observedForce=observerCalls;
+    std::thread worker([&]{Check(callback(action.data(),reinterpret_cast<unsigned>(step.data()))==ReturnEax,"independent active callback return");ResetFp();});
+    worker.join();
+    Check(nativeCalls==before+1&&observerCalls==observedForce+1&&!activeAdmission&&journal.claimed==1,
+        "active root admitted on worker without Update parent/output thread and original exactly once");
+    Check(journal.rows[0].row.kind==p::Kind::ActiveForce&&journal.rows[0].row.thread!=GetCurrentThreadId()&&
+        !journal.rows[0].row.parentUpdate&&!journal.rows[0].row.parentSimulation&&journal.rows[0].row.arguments[0]==0x3c888889&&
+        journal.rows[0].row.caller==p::ActiveForceCallerRva&&journal.rows[0].complete&&p::Comparable(journal.rows[0].row)&&
+        !activeAction.reasons&&activeAction.physics==receiver,"completed standalone root keeps dt, real caller, thread and exact action owner");
+    auto callForce=[&]{const auto calls=nativeCalls;Check(callback(action.data(),reinterpret_cast<unsigned>(step.data()))==ReturnEax&&nativeCalls==calls+1,
+        "all active admission outcomes preserve one original");ResetFp();};
+    before=nativeCalls;force(reinterpret_cast<void*>(receiver),0);ResetFp();
+    Check(nativeCalls==before+1&&activeAdmission==p::Caller&&journal.claimed==1,"real foreign callback caller refused");
+    activePhysics=receiver+4;callForce();Check(activeAdmission==p::Owner&&journal.claimed==1,"changed current driver physics refused");
+    activePhysics=receiver;activeTable[3]+=4;callForce();Check(activeAction.reasons&p::Identity,"callback slot mismatch retained unqualified");activeTable[3]-=4;
+    // The running action may differ from the physics object's published action.
+    auto otherAction=action;otherAction[0x20/4]=receiver+4;physics[0xc0/4]=reinterpret_cast<unsigned>(otherAction.data());
+    callForce();Check(activeAction.reasons&p::Identity,"callback backpointer mismatch retained unqualified");physics[0xc0/4]=reinterpret_cast<unsigned>(action.data());
+    activeOwner.reasons=p::Owner;callForce();Check(activeAction.reasons&p::Owner,"current lifetime refusal survives callback bookend");activeOwner.reasons=0;
+    const auto claimed=journal.claimed.load();activeNow=2101;callForce();Check(journal.claimed==claimed&&journal.outside==1,"active root keeps original two-second deadline");
+    activeNow=101;n::AdmittedControl=receiver;
+    Three volatile filter=reinterpret_cast<Three>(functions[1]);before=nativeCalls;
+    filter(reinterpret_cast<void*>(receiver),0,receiver,0);ResetFp();
+    Check(nativeCalls==before+1&&activeAdmission==p::NoParent&&journal.claimed==claimed,"Filter cannot become independent root");
+    activeJournal=nullptr;observedForce=observerCalls;before=nativeCalls;
+    force(reinterpret_cast<void*>(receiver+4),0);ResetFp();
+    Check(nativeCalls==before+1&&observerCalls==observedForce,"foreign active receiver bypasses gateway");
+    n::CloseCapture();force(reinterpret_cast<void*>(receiver),0);ResetFp();
+    Check(nativeCalls==before+2&&observerCalls==observedForce,"closed active capture bypasses gateway");
+    n::CaptureEnabled=1;n::AdmittedPhysics=0x14930000;
     // Unadmitted and closed paths must bypass the entire observer/FX gateway.
     One volatile update=reinterpret_cast<One>(functions[0]);auto observed=observerCalls;
     Check(update(reinterpret_cast<void*>(0x14939999),123)==ReturnEax&&observerCalls==observed,"foreign receiver cheap passthrough");ResetFp();
@@ -216,6 +307,8 @@ static void AbiChecks(){
     Check(CatchThunk()&&!observerActive,"SEH traverses actual entry/forward adapters with finally cleanup");ResetFp();
     n::Associated94Original=reinterpret_cast<n::MachineEntry>(ThrowAssociated94);
     Check(CatchAssociated94Thunk()&&!observerActive,"zero-argument predicate preserves SEH propagation/finally drain");ResetFp();
+    n::ActiveForceOriginal=reinterpret_cast<n::MachineEntry>(ThrowUpdate);
+    Check(CatchActiveForceThunk()&&!observerActive,"active force preserves SEH propagation/finally drain");ResetFp();
 }
 #endif
 int main(){NativeOwnerChecks();JournalChecks();
