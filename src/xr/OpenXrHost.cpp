@@ -535,6 +535,7 @@ struct Host {
                     accepted=(count==1||((count==2||count==3)&&provider->ReadSourceSlot(ticket,source)))&&
                         sourceImports.Select(count,source,descriptor,ticket,import);
                     if(accepted){
+                        if(ammoHud)ammoHud->ObserveSource(ticket);
                         if(import.resetPresentation){retained.Reset();sceneDepth.ResetSources();sceneDepthSeen=false;if(ammoHud)ammoHud->Reset();}
                         if(import.resetAll)for(auto& entry:consumers)entry.Reset();
                         auto& consumer=consumers[import.index];

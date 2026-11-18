@@ -127,6 +127,73 @@ public:
     }
 private:AmmoCounterSample last_{},owner_{};
 };
+// Host display policy only. This does not admit counts, prove current native
+// ownership, or make the strict presentation/observation helpers fresh.
+struct AmmoCounterDisplaySource {
+    std::array<std::uint8_t,16> session{};
+    std::uint64_t resourceEpoch=0;
+    bool Valid()const noexcept {
+        return resourceEpoch&&std::any_of(session.begin(),session.end(),[](auto b){return b!=0;});
+    }
+    bool operator==(const AmmoCounterDisplaySource&)const=default;
+};
+enum class AmmoCounterDisplayKind {None,CurrentOwner,StaleUploadedImage};
+struct AmmoCounterDisplaySelection {
+    const AmmoCounterSample* sample=nullptr;
+    AmmoCounterDisplayKind kind=AmmoCounterDisplayKind::None;
+};
+inline constexpr std::int64_t AmmoCounterHostDisplayGraceNs=50000000;
+class AmmoCounterHostDisplay {
+public:
+    void Reset()noexcept {presentation_.Reset();source_={};graceSource_={};lastClockNs_=0;}
+    const AmmoCounterSample& CountEvidence()const noexcept {return presentation_.CountEvidence();}
+    const AmmoCounterSample& OwnerEvidence()const noexcept {return presentation_.OwnerEvidence();}
+    // An imported source can change before its body props reach Receive. Veto
+    // grace immediately, without changing normal fresh-owner presentation.
+    // Switching away and back cannot restore grace without an accepted count.
+    void ObserveSource(const AmmoCounterDisplaySource& source)noexcept {
+        if(source_!=source||!source.Valid())graceSource_={};
+        source_=source;
+    }
+    bool Receive(const AmmoCounterSample& a,const AmmoCounterSample& b,std::uint64_t space,
+        std::int64_t now,const AmmoCounterDisplaySource& source)noexcept {
+        ObserveSource(source);
+        if(!source.Valid()||!AdvanceClock(now)){Reset();return false;}
+        const bool accepted=presentation_.Receive(a,b,space,now);
+        // Keep existing expired-arrival/independent-owner handling, but no
+        // rejected packet may grant the additional stale-display privilege.
+        if(!accepted)graceSource_={};
+        else if(AmmoCounterFresh(a,now)||AmmoCounterFresh(b,now))graceSource_=source_;
+        return accepted;
+    }
+    AmmoCounterDisplaySelection SelectForDisplay(std::uint64_t space,std::int64_t now,bool active,
+        const AmmoCounterSample& image,bool hasImage,bool pending)noexcept {
+        const auto& count=CountEvidence();const auto& owner=OwnerEvidence();
+        if(!active||!space||(count.sequence&&count.spaceGeneration!=space)||!AdvanceClock(now)){
+            Reset();return {};
+        }
+        if(const auto* sample=presentation_.Select(space,now))return {sample,AmmoCounterDisplayKind::CurrentOwner};
+        // Reuse only already released, unchanged pixels. The deadline remains
+        // the ORIGINAL owner deadline, with an exclusive 50 ms upper bound.
+        // No new count/upload, lease renewal, or unobserved-owner proof follows.
+        if(!source_.Valid()||source_!=graceSource_||!hasImage||pending||
+           !AmmoCounterFresh(count,count.observedNs)||
+           (!AmmoCounterFresh(owner,owner.observedNs)&&!AmmoCounterOwnerOnlyFresh(owner,owner.observedNs))||
+           !AmmoCounterFresh(image,image.observedNs)||!SameAmmoCounterOwner(count,owner)||
+           !SameAmmoCounterOwner(count,image)||!SameAmmoCounterCounts(count,image)||
+           count.observedNs>now||owner.observedNs>now||image.observedNs>now||
+           now<owner.deadlineNs||now-owner.deadlineNs>=AmmoCounterHostDisplayGraceNs)return {};
+        return {&count,AmmoCounterDisplayKind::StaleUploadedImage};
+    }
+private:
+    bool AdvanceClock(std::int64_t now)noexcept {
+        if(now<=0||now<lastClockNs_)return false;
+        lastClockNs_=now;return true;
+    }
+    AmmoCounterPresentation presentation_;
+    AmmoCounterDisplaySource source_{},graceSource_{};
+    std::int64_t lastClockNs_=0;
+};
 struct AmmoCounterText {std::array<char,24> data{};std::size_t size=0;};
 inline AmmoCounterText FormatAmmoCounter(std::int32_t loaded,std::int32_t reserve)noexcept {
     AmmoCounterText text;if(loaded<0||loaded>1000000||reserve<0||reserve>1000000)return text;

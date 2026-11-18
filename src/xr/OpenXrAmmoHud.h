@@ -20,6 +20,9 @@ class OpenXrAmmoHud {
 public:
     ~OpenXrAmmoHud();
     bool Initialize(XrInstance,XrSession,PFN_xrGetInstanceProcAddr,ID3D11Device*,std::int64_t format)noexcept;
+    void ObserveSource(const graphics::PairTicket& ticket)noexcept {
+        presentation_.ObserveSource({ticket.session,ticket.resourceEpoch});
+    }
     void Receive(const graphics::BodyPropFrame*,const graphics::PairTicket&,std::int64_t now)noexcept;
     void Reset()noexcept {presentation_.Reset();}
     const XrCompositionLayerQuad* Layer(XrSpace localSpace,const interaction::InputFrame& input,
@@ -34,7 +37,7 @@ private:
     XrSwapchain chain_=XR_NULL_HANDLE;
     std::vector<XrSwapchainImageD3D11KHR> images_;
     Microsoft::WRL::ComPtr<ID3D11DeviceContext> context_;
-    graphics::AmmoCounterPresentation presentation_;
+    graphics::AmmoCounterHostDisplay presentation_;
     HostAmmoHudObservation diagnostic_{};
     graphics::AmmoCounterSample imageSample_{};
     graphics::AmmoCounterBitmap bitmap_;

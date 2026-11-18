@@ -34,9 +34,10 @@ void OpenXrAmmoHud::Receive(const graphics::BodyPropFrame* frame,const graphics:
     diagnostic_.sourceMatches=frame&&graphics::BodyPropFrameMatches(*frame,ticket);
     diagnostic_.receiveAccepted=false;
     if(!diagnostic_.sourceMatches){
-        ++invalidSamples_;presentation_.Receive({},{},ticket.spaceGeneration,now);return;
+        ++invalidSamples_;Reset();return;
     }
-    diagnostic_.receiveAccepted=presentation_.Receive(frame->eyes[0].ammo,frame->eyes[1].ammo,frame->spaceGeneration,now);
+    diagnostic_.receiveAccepted=presentation_.Receive(frame->eyes[0].ammo,frame->eyes[1].ammo,frame->spaceGeneration,now,
+        {ticket.session,ticket.resourceEpoch});
     if(diagnostic_.receiveAccepted)++validSamples_;
     else ++invalidSamples_;
 }
@@ -74,28 +75,32 @@ const XrCompositionLayerQuad* OpenXrAmmoHud::Layer(XrSpace localSpace,const inte
     diagnostic_.selectNs=diagnostic_.finalNs=0;
     if(!chain_)return result(HostAmmoHudDecision::Unavailable);
     if(failed_)return result(HostAmmoHudDecision::Failed);
-    if(!clockNs)return result(HostAmmoHudDecision::NoClock);
+    if(!clockNs){Reset();return result(HostAmmoHudDecision::NoClock);}
     const auto& right=input.hands[1];
     const bool tracked=active&&localSpace&&interaction::ValidInput(input)&&input.focused&&input.headValid&&
         right.gripTracked&&right.aimTracked;
-    if(!tracked)presentation_.Reset();
+    if(!tracked)Reset();
     const auto placement=tracked?graphics::AmmoCounterBesideGun(input.head,right.grip,right.aim):std::nullopt;
     diagnostic_.selectNs=placement?clockNs():0;
-    const auto* sample=placement?presentation_.Select(input.spaceGeneration,diagnostic_.selectNs):nullptr;
+    const auto selected=placement?presentation_.SelectForDisplay(input.spaceGeneration,diagnostic_.selectNs,true,
+        imageSample_,hasImage_,pending_):graphics::AmmoCounterDisplaySelection{};
+    const auto* sample=selected.sample;
     if(!sample){if(pending_)Upload(nullptr);return result(!active?HostAmmoHudDecision::Inactive:
         !tracked?HostAmmoHudDecision::Tracking:!placement?HostAmmoHudDecision::Placement:HostAmmoHudDecision::NoSample);}
-    // Presentation owns the current-owner lease separately from count age.
-    // Keep the released same-owner digits through ammo gaps or a zero-wait
-    // upload retry; no saved ammunition observation is made fresh by reuse.
-    if(hasImage_&&graphics::SameAmmoCounterOwner(imageSample_,*sample)&&
-       graphics::SameAmmoCounterCounts(imageSample_,*sample))imageSample_=*sample;
-    if(pending_||!hasImage_||!graphics::SameAmmoCounterOwner(imageSample_,*sample)||
-       loaded_!=sample->loaded||reserve_!=sample->reserve){
-        if(!Upload(sample)&&(!pending_||failed_||!hasImage_||
-           !graphics::SameAmmoCounterOwner(imageSample_,*sample)))return result(HostAmmoHudDecision::Upload);
+    if(selected.kind==graphics::AmmoCounterDisplayKind::CurrentOwner){
+        // Only strict current-owner selection can update/upload image evidence.
+        // The stale result reuses released pixels without changing any sample.
+        if(hasImage_&&graphics::SameAmmoCounterOwner(imageSample_,*sample)&&
+           graphics::SameAmmoCounterCounts(imageSample_,*sample))imageSample_=*sample;
+        if(pending_||!hasImage_||!graphics::SameAmmoCounterOwner(imageSample_,*sample)||
+           loaded_!=sample->loaded||reserve_!=sample->reserve){
+            if(!Upload(sample)&&(!pending_||failed_||!hasImage_||
+               !graphics::SameAmmoCounterOwner(imageSample_,*sample)))return result(HostAmmoHudDecision::Upload);
+        }
     }
     const auto finalNow=clockNs();diagnostic_.finalNs=finalNow;
-    const auto* current=presentation_.Select(input.spaceGeneration,finalNow);
+    const auto final=presentation_.SelectForDisplay(input.spaceGeneration,finalNow,true,imageSample_,hasImage_,pending_);
+    const auto* current=final.sample;
     if(!current)return result(HostAmmoHudDecision::FinalNoSample);
     if(!graphics::SameAmmoCounterOwner(imageSample_,*current))return result(HostAmmoHudDecision::ImageOwner);
     layer_={XR_TYPE_COMPOSITION_LAYER_QUAD};layer_.space=localSpace;

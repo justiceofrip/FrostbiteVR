@@ -421,6 +421,142 @@ int CountsChangingBetweenEyes(){
     CHECK(!AmmoCounterPair(left,reload,30,left.deadlineNs));
     return 0;
 }
+AmmoCounterDisplaySource DisplaySource(){return {{66,90,0,128,0,0,0,0,194,42,0,192,0,0,0,0},2};}
+int HostDisplayCaptured4508Boundary(){
+    // Saved normal107 first gap: accepted 21/210, with an unchanged released
+    // image, expired 1.1803 ms before first Select. No claim about frame 8869.
+    AmmoCounterSample admitted;admitted.sequence=109;admitted.observedNs=368733226793800;
+    admitted.deadlineNs=368733326793800;admitted.actorGeneration=1;
+    admitted.equipmentGeneration=admitted.spaceGeneration=2;admitted.loaded=21;admitted.reserve=210;admitted.capacity=30;
+    constexpr std::int64_t received=368733296205500,frame4507=368733312434000,frame4508=368733327974100;
+    const auto image=admitted;AmmoCounterPresentation strict;AmmoCounterHostDisplay display;
+    CHECK(strict.Receive(admitted,admitted,2,received));
+    CHECK(display.Receive(admitted,admitted,2,received,DisplaySource()));
+    auto shown=display.SelectForDisplay(2,frame4507,true,image,true,false);
+    CHECK(shown.sample&&shown.kind==AmmoCounterDisplayKind::CurrentOwner);
+    CHECK(!strict.Select(2,frame4508)&&!AmmoCounterFresh(admitted,frame4508));
+    shown=display.SelectForDisplay(2,frame4508,true,image,true,false);
+    CHECK(shown.sample&&*shown.sample==admitted&&shown.kind==AmmoCounterDisplayKind::StaleUploadedImage);
+    CHECK(frame4508-admitted.deadlineNs==1180300);
+    for(const auto at:{frame4508,admitted.deadlineNs+25000000,admitted.deadlineNs+AmmoCounterHostDisplayGraceNs-1}){
+        shown=display.SelectForDisplay(2,at,true,image,true,false);
+        CHECK(shown.sample&&shown.kind==AmmoCounterDisplayKind::StaleUploadedImage);
+        CHECK(display.CountEvidence()==admitted&&display.OwnerEvidence()==admitted&&image==admitted);
+        CHECK(!strict.Select(2,at));
+    }
+    CHECK(!display.SelectForDisplay(2,admitted.deadlineNs+AmmoCounterHostDisplayGraceNs,true,image,true,false).sample);
+    CHECK(!display.SelectForDisplay(2,admitted.deadlineNs+AmmoCounterHostDisplayGraceNs+1,true,image,true,false).sample);
+    CHECK(display.CountEvidence()==admitted&&display.OwnerEvidence()==admitted);
+    return 0;
+}
+int HostDisplayGraceDoesNotRenewOrUpload(){
+    const auto admitted=Sample(),image=admitted;const auto source=DisplaySource();
+    AmmoCounterHostDisplay display;CHECK(display.Receive(admitted,admitted,30,Now,source));
+    // Shorten the original observation so a later, still well-formed duplicate
+    // can attempt a deadline extension; admission must retain the short lease.
+    auto shortLease=admitted;shortLease.deadlineNs=Now+50000000;
+    display.Reset();CHECK(display.Receive(shortLease,shortLease,30,Now,source));
+    CHECK(display.Receive(admitted,admitted,30,Now+1,source));
+    CHECK(display.CountEvidence()==shortLease&&display.OwnerEvidence()==shortLease);
+    CHECK(display.SelectForDisplay(30,shortLease.deadlineNs,true,image,true,false).kind==AmmoCounterDisplayKind::StaleUploadedImage);
+    CHECK(display.SelectForDisplay(30,shortLease.deadlineNs+AmmoCounterHostDisplayGraceNs-1,true,image,true,false).sample);
+    CHECK(!display.SelectForDisplay(30,shortLease.deadlineNs+AmmoCounterHostDisplayGraceNs,true,image,true,false).sample);
+    // Grace has no authority to create an image, wait for a pending upload, or
+    // display a differing owner/count/capacity already in the released image.
+    for(unsigned fault=0;fault<9;++fault){
+        display.Reset();CHECK(display.Receive(admitted,admitted,30,Now,source));auto wrong=image;
+        if(fault==2)++wrong.actorGeneration;if(fault==3)++wrong.equipmentGeneration;
+        if(fault==4)++wrong.spaceGeneration;if(fault==5)--wrong.loaded;
+        if(fault==6)--wrong.reserve;if(fault==7)++wrong.capacity;if(fault==8)wrong.sequence=0;
+        const auto shown=display.SelectForDisplay(30,admitted.deadlineNs,true,wrong,fault!=0,fault==1);
+        CHECK(!shown.sample&&shown.kind==AmmoCounterDisplayKind::None);
+        CHECK(display.CountEvidence()==admitted&&display.OwnerEvidence()==admitted);
+    }
+    // A separate original owner deadline is the bound, even when count age is
+    // much older. Neither retained digits nor repeated selection renews it.
+    display.Reset();CHECK(display.Receive(admitted,admitted,30,Now,source));auto current=Owner();
+    current.observedNs=Now+10000000;current.deadlineNs=Now+240000000;
+    const auto ownerOnly=AmmoCounterHostSample({},current,current.observedNs);
+    CHECK(display.Receive(ownerOnly,ownerOnly,30,current.observedNs,source));
+    CHECK(display.SelectForDisplay(30,current.deadlineNs-1,true,image,true,false).kind==AmmoCounterDisplayKind::CurrentOwner);
+    CHECK(display.SelectForDisplay(30,current.deadlineNs,true,image,true,false).kind==AmmoCounterDisplayKind::StaleUploadedImage);
+    CHECK(display.CountEvidence()==admitted&&display.OwnerEvidence()==ownerOnly);
+    CHECK(!display.SelectForDisplay(30,current.deadlineNs+AmmoCounterHostDisplayGraceNs,true,image,true,false).sample);
+    // A genuinely newer count cannot reuse unchanged old digits during grace.
+    display.Reset();CHECK(display.Receive(admitted,admitted,30,Now,source));
+    auto next=admitted;++next.sequence;++next.observedNs;++next.deadlineNs;--next.loaded;
+    CHECK(display.Receive(next,next,30,next.observedNs,source));
+    CHECK(display.SelectForDisplay(30,next.deadlineNs-1,true,image,true,false).kind==AmmoCounterDisplayKind::CurrentOwner);
+    CHECK(!display.SelectForDisplay(30,next.deadlineNs,true,image,true,false).sample);
+    CHECK(display.CountEvidence()==next);
+    return 0;
+}
+int HostDisplaySourceVetoBeforeReceive(){
+    const auto admitted=Sample(),image=admitted;const auto source=DisplaySource();
+    for(unsigned changed=0;changed<2;++changed){
+        AmmoCounterHostDisplay display;CHECK(display.Receive(admitted,admitted,30,Now,source));
+        auto other=source;if(changed==0)++other.session[0];else ++other.resourceEpoch;
+        display.ObserveSource(other); // Host import changed before body-prop Receive.
+        CHECK(display.SelectForDisplay(30,admitted.deadlineNs-2,true,image,true,false).kind==AmmoCounterDisplayKind::CurrentOwner);
+        CHECK(display.CountEvidence()==admitted&&display.OwnerEvidence()==admitted); // Existing live-owner policy is intact.
+        display.ObserveSource(source); // Switching back alone cannot re-enable grace.
+        CHECK(!display.SelectForDisplay(30,admitted.deadlineNs,true,image,true,false).sample);
+        auto current=Owner();current.observedNs=admitted.deadlineNs+1;current.deadlineNs=current.observedNs+100000000;
+        const auto ownerOnly=AmmoCounterHostSample({},current,current.observedNs);
+        CHECK(display.Receive(ownerOnly,ownerOnly,30,current.observedNs,source));
+        CHECK(display.SelectForDisplay(30,current.deadlineNs-1,true,image,true,false).kind==AmmoCounterDisplayKind::CurrentOwner);
+        CHECK(!display.SelectForDisplay(30,current.deadlineNs,true,image,true,false).sample); // Owner-only cannot rebind source-count evidence.
+        auto next=admitted;++next.sequence;next.observedNs=current.deadlineNs+1;next.deadlineNs=next.observedNs+AmmoCounterMaxAgeNs;
+        CHECK(display.Receive(next,next,30,next.observedNs,source));
+        CHECK(display.SelectForDisplay(30,next.deadlineNs,true,image,true,false).kind==AmmoCounterDisplayKind::StaleUploadedImage);
+        CHECK(display.CountEvidence()==next&&display.OwnerEvidence()==next);
+    }
+    return 0;
+}
+int HostDisplayRetirementAndClockFailures(){
+    const auto admitted=Sample(),image=admitted;const auto source=DisplaySource();
+    // These are actual production helper transitions used by Receive/Layer,
+    // including the active=false path for focus/tracking/world retirement.
+    for(unsigned fault=0;fault<13;++fault){
+        AmmoCounterHostDisplay display;CHECK(display.Receive(admitted,admitted,30,Now,source));
+        CHECK(display.SelectForDisplay(30,admitted.deadlineNs,true,image,true,false).sample);
+        auto left=admitted,right=admitted;auto invalidSource=source;
+        const auto at=admitted.deadlineNs+1;
+        if(fault==0){CHECK(!display.SelectForDisplay(30,at,false,image,true,false).sample);}
+        else if(fault==1){CHECK(!display.SelectForDisplay(31,at,true,image,true,false).sample);}
+        else if(fault==2){CHECK(!display.SelectForDisplay(30,admitted.deadlineNs-1,true,image,true,false).sample);}
+        else if(fault==3){CHECK(!display.SelectForDisplay(30,0,true,image,true,false).sample);}
+        else if(fault==4)display.Reset(); // Includes the host resetPresentation hook.
+        else {
+            left.observedNs=right.observedNs=at;left.deadlineNs=right.deadlineNs=at+AmmoCounterMaxAgeNs;
+            if(fault==5)left=right={};
+            if(fault==6)left.loaded=left.capacity+1;
+            if(fault==7)++right.equipmentGeneration; // Received scene contradiction.
+            if(fault==8)++right.actorGeneration;
+            if(fault==9)++right.spaceGeneration;
+            if(fault==10)invalidSource.session={};
+            if(fault==11)invalidSource.resourceEpoch=0;
+            CHECK(!display.Receive(left,right,30,fault==12?Now:at,invalidSource));
+        }
+        CHECK(!display.SelectForDisplay(30,at+1,true,image,true,false).sample);
+        CHECK(!display.CountEvidence().sequence);
+    }
+    // An expired incoming count still retires with no independent owner lease.
+    AmmoCounterHostDisplay display;CHECK(display.Receive(admitted,admitted,30,Now,source));
+    CHECK(!display.Receive(admitted,admitted,30,admitted.deadlineNs,source));
+    CHECK(!display.SelectForDisplay(30,admitted.deadlineNs,true,image,true,false).sample);
+    // Existing independent-owner retention still works, but the rejected
+    // packet cannot grant an additional grace after that original owner lease.
+    display.Reset();CHECK(display.Receive(admitted,admitted,30,Now,source));auto current=Owner();
+    current.observedNs=Now+10000000;current.deadlineNs=Now+240000000;
+    const auto ownerOnly=AmmoCounterHostSample({},current,current.observedNs);
+    CHECK(display.Receive(ownerOnly,ownerOnly,30,current.observedNs,source));
+    CHECK(!display.Receive(admitted,admitted,30,admitted.deadlineNs,source));
+    CHECK(display.SelectForDisplay(30,admitted.deadlineNs,true,image,true,false).kind==AmmoCounterDisplayKind::CurrentOwner);
+    CHECK(display.CountEvidence()==admitted&&display.OwnerEvidence()==ownerOnly);
+    CHECK(!display.SelectForDisplay(30,current.deadlineNs,true,image,true,false).sample);
+    return 0;
+}
 int WeaponSidePlacement(){
     math::Pose head,grip,aim;head.position={0,1.7f,0};grip.position=aim.position={.2f,1.4f,-.45f};
     const auto initial=AmmoCounterBesideGun(head,grip,aim);CHECK(initial);
@@ -465,6 +601,7 @@ int BitmapContents(){
 }
 int main(){if(SameLifetimePublicationHandoff()||CommittedSceneHudLifetime()||SceneEquipmentAndPublicationDeadlines()||NativeReadOnlyAdmission()||NativeReadClockOrdering()||PublishedReserveIsPassiveAndBounded()||PairAndFreshness()||
     DisplaySurvivesAmmoGapsWithCurrentOwner()||ExpiredSameOwnerCountsPreserveIndependentLease()||RejectedCountsCannotRenewOwnership()||DisplayOwnerLifetimeAndDuplicatePackets()||OwnerMarkersCannotAdmitCounts()||
-    CountsChangingBetweenEyes()||WeaponSidePlacement()||BitmapContents())return 1;
+    CountsChangingBetweenEyes()||HostDisplayCaptured4508Boundary()||HostDisplayGraceDoesNotRenewOrUpload()||
+    HostDisplaySourceVetoBeforeReceive()||HostDisplayRetirementAndClockFailures()||WeaponSidePlacement()||BitmapContents())return 1;
     std::cout<<"AmmoCounter: strict native samples, retained same-owner display, paired telemetry and bitmap checks passed; no native acceptance\n";
 }
