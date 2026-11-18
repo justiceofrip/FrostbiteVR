@@ -449,6 +449,70 @@ int HostDisplayCaptured4508Boundary(){
     CHECK(display.CountEvidence()==admitted&&display.OwnerEvidence()==admitted);
     return 0;
 }
+int HostDisplayCaptured4273ExpiredRetransmission(){
+    // Normal108's retained first gap predates its later 66-omission audit.
+    // Receive76 repeats the exact accepted count, then clears count/owner in
+    // the original host. Only these three retained omissions are reproduced.
+    AmmoCounterSample admitted;admitted.sequence=234;admitted.observedNs=373933310355300;
+    admitted.deadlineNs=373933410355300;admitted.actorGeneration=1;
+    admitted.equipmentGeneration=admitted.spaceGeneration=2;admitted.loaded=21;admitted.reserve=210;admitted.capacity=30;
+    const AmmoCounterDisplaySource source{{130,26,0,128,0,0,0,0,130,94,0,192,0,0,0,0},2};
+    constexpr std::int64_t received=373933373812500,repeat=373933419870000;
+    const auto image=admitted;AmmoCounterPresentation strict;AmmoCounterHostDisplay display;
+    CHECK(strict.Receive(admitted,admitted,2,received));
+    CHECK(display.Receive(admitted,admitted,2,received,source));
+    CHECK(display.SelectForDisplay(2,373933404493900,true,image,true,false).kind==AmmoCounterDisplayKind::CurrentOwner);
+    CHECK(!strict.Receive(admitted,admitted,2,repeat)&&!strict.Select(2,repeat));
+    CHECK(!display.Receive(admitted,admitted,2,repeat,source));
+    CHECK(repeat-admitted.deadlineNs==9514700);
+    for(const auto at:{373933419930000LL,373933435961200LL,373933451063500LL}){
+        const auto shown=display.SelectForDisplay(2,at,true,image,true,false);
+        CHECK(shown.sample&&*shown.sample==admitted&&shown.kind==AmmoCounterDisplayKind::StaleUploadedImage);
+        CHECK(display.CountEvidence()==admitted&&display.OwnerEvidence()==admitted&&image==admitted);
+        CHECK(!AmmoCounterFresh(admitted,at)&&!strict.Select(2,at));
+    }
+    const auto bound=admitted.deadlineNs+AmmoCounterHostDisplayGraceNs;
+    CHECK(!display.Receive(admitted,admitted,2,bound-1,source));
+    CHECK(display.SelectForDisplay(2,bound-1,true,image,true,false).sample);
+    CHECK(!display.SelectForDisplay(2,bound,true,image,true,false).sample);
+    CHECK(!display.Receive(admitted,admitted,2,bound,source));
+    CHECK(!display.CountEvidence().sequence&&!display.OwnerEvidence().actorGeneration);
+    // The next saved receive admits a genuinely fresh sequence after the gap.
+    auto next=admitted;next.sequence=238;next.observedNs=373933422314400;next.deadlineNs=373933519847300;
+    CHECK(display.Receive(next,next,2,373933466449200,source));
+    CHECK(display.SelectForDisplay(2,373933466507400,true,next,true,false).kind==AmmoCounterDisplayKind::CurrentOwner);
+    return 0;
+}
+int HostDisplayExpiredRetransmissionVetoes(){
+    const auto admitted=Sample(),image=admitted;const auto source=DisplaySource();
+    const auto at=admitted.deadlineNs+1;
+    for(unsigned fault=0;fault<13;++fault){
+        AmmoCounterHostDisplay display;CHECK(display.Receive(admitted,admitted,30,Now,source));
+        auto left=admitted,right=admitted;auto incomingSource=source;std::uint64_t space=30;
+        if(fault==0)left=right={};
+        if(fault==1)++left.sequence;
+        if(fault==2)++left.actorGeneration;
+        if(fault==3)++left.equipmentGeneration;
+        if(fault==4)++left.spaceGeneration;
+        if(fault==5)--left.loaded;
+        if(fault==6)--left.reserve;
+        if(fault==7)--left.deadlineNs;
+        if(fault==8)++left.observedNs;
+        if(fault==9)++incomingSource.session[0];
+        if(fault==10)++incomingSource.resourceEpoch;
+        if(fault==11)++space;
+        if(fault==12){auto other=source;++other.resourceEpoch;display.ObserveSource(other);display.ObserveSource(source);}
+        CHECK(!display.Receive(left,right,space,at,incomingSource));
+        CHECK(!display.SelectForDisplay(30,at,true,image,true,false).sample);
+    }
+    // Keeping a rejected retransmission cannot create pixels or finish upload.
+    for(unsigned pending=0;pending<2;++pending){
+        AmmoCounterHostDisplay display;CHECK(display.Receive(admitted,admitted,30,Now,source));
+        CHECK(!display.Receive(admitted,admitted,30,at,source));
+        CHECK(!display.SelectForDisplay(30,at,true,image,pending!=0,pending!=0).sample);
+    }
+    return 0;
+}
 int HostDisplayGraceDoesNotRenewOrUpload(){
     const auto admitted=Sample(),image=admitted;const auto source=DisplaySource();
     AmmoCounterHostDisplay display;CHECK(display.Receive(admitted,admitted,30,Now,source));
@@ -541,9 +605,10 @@ int HostDisplayRetirementAndClockFailures(){
         CHECK(!display.SelectForDisplay(30,at+1,true,image,true,false).sample);
         CHECK(!display.CountEvidence().sequence);
     }
-    // An expired incoming count still retires with no independent owner lease.
+    // A different expired count still retires with no independent owner lease.
     AmmoCounterHostDisplay display;CHECK(display.Receive(admitted,admitted,30,Now,source));
-    CHECK(!display.Receive(admitted,admitted,30,admitted.deadlineNs,source));
+    auto different=admitted;++different.sequence;
+    CHECK(!display.Receive(different,different,30,admitted.deadlineNs,source));
     CHECK(!display.SelectForDisplay(30,admitted.deadlineNs,true,image,true,false).sample);
     // Existing independent-owner retention still works, but the rejected
     // packet cannot grant an additional grace after that original owner lease.
@@ -601,7 +666,8 @@ int BitmapContents(){
 }
 int main(){if(SameLifetimePublicationHandoff()||CommittedSceneHudLifetime()||SceneEquipmentAndPublicationDeadlines()||NativeReadOnlyAdmission()||NativeReadClockOrdering()||PublishedReserveIsPassiveAndBounded()||PairAndFreshness()||
     DisplaySurvivesAmmoGapsWithCurrentOwner()||ExpiredSameOwnerCountsPreserveIndependentLease()||RejectedCountsCannotRenewOwnership()||DisplayOwnerLifetimeAndDuplicatePackets()||OwnerMarkersCannotAdmitCounts()||
-    CountsChangingBetweenEyes()||HostDisplayCaptured4508Boundary()||HostDisplayGraceDoesNotRenewOrUpload()||
+    CountsChangingBetweenEyes()||HostDisplayCaptured4508Boundary()||HostDisplayCaptured4273ExpiredRetransmission()||
+    HostDisplayExpiredRetransmissionVetoes()||HostDisplayGraceDoesNotRenewOrUpload()||
     HostDisplaySourceVetoBeforeReceive()||HostDisplayRetirementAndClockFailures()||WeaponSidePlacement()||BitmapContents())return 1;
     std::cout<<"AmmoCounter: strict native samples, retained same-owner display, paired telemetry and bitmap checks passed; no native acceptance\n";
 }

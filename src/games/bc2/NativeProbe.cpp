@@ -4187,6 +4187,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
                     telemetry.flush();nextSample=now+1000;
                 }
         };
+        constexpr ULONGLONG mechanismSnapshotPollMs=25;
         std::uint64_t mechanismSnapshotNonce=0;ULONGLONG mechanismSnapshotNext=0;
         const auto failMechanismSnapshot=[&](const char* stage,DWORD error){
             auto& p=mechanismPublication;p.status="failed";p.stage=stage;p.error=error;p.completedNs=mechanismSnapshotNow();
@@ -4205,7 +4206,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         };
         const auto serviceMechanismSnapshot=[&]{
             if(!mechanismSnapshotsEnabled||mechanismPublication.failureFile==INVALID_HANDLE_VALUE)return;
-            const auto tick=GetTickCount64();if(tick<mechanismSnapshotNext)return;mechanismSnapshotNext=tick+100;
+            const auto tick=GetTickCount64();if(tick<mechanismSnapshotNext)return;mechanismSnapshotNext=tick+mechanismSnapshotPollMs;
             // Opt-in, fixed session-local paths. No callback file IO, polling
             // thread, native mutation, or continuous pose capture is introduced.
             const auto directory=output.parent_path();
@@ -4282,9 +4283,27 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             // unowned pre-existing pending file. All other outcomes are terminal.
             const bool replaceRetained=std::strcmp(failedStage,"replace_final")==0&&error==ERROR_UNABLE_TO_REMOVE_REPLACED;
             if(p.attempts==1&&!p.cleanupError&&(error==ERROR_SHARING_VIOLATION||error==ERROR_LOCK_VIOLATION||replaceRetained)){
+                // Preserve the original retry delay and immutable payload.
+                mechanismSnapshotNext=tick+100;
                 p.status="pending_retry";p.stage=failedStage;p.error=error;return;
             }
             failMechanismSnapshot(failedStage,error);
+        };
+        const auto waitWithMechanismSnapshots=[&](DWORD duration,ULONGLONG finiteDeadline){
+            if(!mechanismSnapshotsEnabled||mechanismPublication.failureFile==INVALID_HANDLE_VALUE){Sleep(duration);return;}
+            // Service only passive snapshots within the original worker wait
+            // and live worker scope. Other services retain their outer cadence.
+            const auto waitUntil=GetTickCount64()+duration;
+            for(;;){
+                const auto now=GetTickCount64();
+                if(now>=waitUntil||(!continuous&&now>=finiteDeadline)||(continuous&&hostLifetime.Ended()))return;
+                serviceMechanismSnapshot();
+                const auto after=GetTickCount64();
+                if(after>=waitUntil||(!continuous&&after>=finiteDeadline))return;
+                const auto next=std::min(waitUntil,mechanismSnapshotNext);
+                const auto bounded=continuous?next:std::min(next,finiteDeadline);
+                Sleep(DWORD(bounded>after?std::min(mechanismSnapshotPollMs,bounded-after):1));
+            }
         };
         unsigned destructionRequested=0,destructionCompleted=0,destructionFailed=0;
         const auto serviceDestructionRequest=[&]{
@@ -4319,7 +4338,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
 #if defined(FVR_BC2_ORDINARY_RESOURCE_SCENE_PROBE)
                 fvr::bc2::graphicsThreadObservation::Flush(output.parent_path()/L"graphics-threads.jsonl");
 #endif
-                Sleep(100);
+                waitWithMechanismSnapshots(100,0);
             }
         }else {
             const auto until=GetTickCount64()+config.durationMs;
@@ -4335,7 +4354,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
 #else
                 constexpr bool toolFixture=false;
 #endif
-Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4||config.chestKnifeProbe)?50:100,until-now)));
+                waitWithMechanismSnapshots(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4||config.chestKnifeProbe)?50:100,until-now)),until);
             }
         }
         if(std::strcmp(mechanismPublication.status,"pending_retry")==0)failMechanismSnapshot("worker_stopped_before_retry",0);

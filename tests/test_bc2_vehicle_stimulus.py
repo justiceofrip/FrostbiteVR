@@ -10,7 +10,9 @@ from contextlib import ExitStack, redirect_stdout
 import importlib.util
 import io
 import json
+import math
 from pathlib import Path
+import struct
 import sys
 import tempfile
 from types import SimpleNamespace
@@ -40,6 +42,10 @@ def snapshot(now, nonce, generation, role="driver", state=None):
                      if state else copy.deepcopy(pose))
         hands.append(dict(grip=hand_pose, aim=copy.deepcopy(hand_pose), gripTracked=True, aimTracked=True,
                           active=127, held=0, touchActive=1, touched=0, stickX=0, stickY=0, trigger=0, squeeze=0))
+        if state:
+            # Native InputFrame uses float; the serializer retains nine digits.
+            for field, x in zip(("stickX", "stickY"), state["controls"]["stickL" if side == 0 else "stickR"]):
+                hands[-1][field] = float(format(struct.unpack("f", struct.pack("f", x))[0], ".9g"))
     actions = (0, 1, 6, 5)
     axes = []
     for index, (semantic, source, concept) in enumerate(v.AXES):
@@ -73,6 +79,13 @@ def snapshot(now, nonce, generation, role="driver", state=None):
             focused=True, headValid=True, floorRelative=True, worldUnitsPerMeter=1,
             referenceHead=copy.deepcopy(pose), head=copy.deepcopy(pose), hands=hands,
             menu=dict(owner=1, sequence=generation, epoch=7, deadlineNs=now+70_000_000)))
+    def native_axis(x):
+        f32 = lambda value: struct.unpack("f", struct.pack("f", value))[0]
+        return 0 if abs(x) <= f32(.18) else float(format(
+            math.copysign(f32(f32(abs(x)-f32(.18))/f32(1-f32(.18))), x), ".9g"))
+    for name, side, field in (("throttle", 0, "stickY"), ("steer", 0, "stickX"),
+                              ("lookYaw", 1, "stickX"), ("lookPitch", 1, "stickY")):
+        obs["consumedControls"][name] = native_axis(hands[side][field])
     return dict(schema="fvr.bc2.live-mechanism-snapshot.v1", nonce=str(nonce), valid=False,
                 invalid_reason="no_shot_publication", observed_ns=now, vehicleObservation=obs)
 
@@ -141,6 +154,24 @@ class AdmissionTests(unittest.TestCase):
         for row in cases:
             with self.subTest(row=row), self.assertRaises(t.REFUSAL):
                 v.plan(row, t.require)
+
+    def test_sustained_is_explicit_closed_schema_with_separate_positive_limit(self):
+        ordinary = dict(role="driver", stick=[0, .5], holdMs=500)
+        self.assertEqual(v.plan(ordinary, t.require), ordinary)
+        sustained = dict(mode="sustained", role="driver", stick=[0, .5], positiveHoldMs=2000)
+        for hold in (1, 2000):
+            request = dict(sustained, positiveHoldMs=hold)
+            self.assertEqual(v.plan(request, t.require), request)
+            self.assertIsNot(v.plan(request, t.require)["stick"], request["stick"])
+        cases = [dict(ordinary, holdMs=501), dict(ordinary, holdMs=2300),
+                 dict(sustained, positiveHoldMs=0), dict(sustained, positiveHoldMs=2001),
+                 dict(sustained, positiveHoldMs=True), dict(sustained, positiveHoldMs=2000.0),
+                 dict(sustained, mode="ordinary"), dict(sustained, mode=True),
+                 dict(sustained, holdMs=500), dict(ordinary, mode="sustained"),
+                 {k: x for k, x in sustained.items() if k != "mode"}]
+        for request in cases:
+            with self.subTest(request=request), self.assertRaises(t.REFUSAL):
+                v.plan(request, t.require)
 
 
 class Clock:
@@ -357,6 +388,257 @@ class AssembledVehicleTests(unittest.TestCase):
         self.assertLess(episode["pulseCommittedNs"], episode["neutralCommittedNs"])
         self.assertLess(episode["neutralCommittedNs"], episode["originalDeadlineNs"])
         self.assertEqual(result["commands"], 4)
+
+    def sustained(self, role="driver"):
+        self.request = dict(mode="sustained", role=role, stick=[.4, .5], positiveHoldMs=2000)
+
+    def assert_owned_cancellation(self, result):
+        self.assertEqual(self.calls, [["stick l 0.4 0.5"], ["stick l 0 0"]])
+        self.assertEqual(result["vehicleStick"], [0, 0])
+        self.assertFalse(result["pendingCommand"])
+        self.assertFalse(result["normalStopRequired"])
+        self.assertNotIn("vehicleStimulus", result)
+        self.assertIn("zero ACK", result["release"])
+
+    def test_legacy_500ms_keeps_200ms_positive_budget_and_two_observations(self):
+        self.request["holdMs"] = 500
+        code, result = self.assembled()
+        self.assertEqual(code, 0, result)
+        episode = result["vehicleStimulus"]
+        self.assertEqual(episode["originalDeadlineNs"]-episode["startedNs"], 500_000_000)
+        self.assertEqual(len(self.requests), 2)
+        self.assertEqual(self.calls, [["stick l 0.4 0.5"], ["stick l 0 0"]])
+        self.assertLess(episode["neutralCommittedNs"]-episode["pulseCommittedNs"], 250_000_000)
+        self.assertNotIn("freshObservations", episode)
+
+    def test_sustained_two_second_positive_then_owned_neutral_with_continuous_authority(self):
+        for role in ("driver", "gunner"):
+            with self.subTest(role=role):
+                if role == "gunner":
+                    self.setUp()
+                self.sustained(role)
+                code, result = self.assembled()
+                self.assertEqual(code, 0, result)
+                hand = "l" if role == "driver" else "r"
+                self.assertEqual(self.calls, [[f"stick {hand} 0.4 0.5"], [f"stick {hand} 0 0"]])
+                episode = result["vehicleStimulus"]
+                self.assertEqual(episode["originalDeadlineNs"]-episode["startedNs"], 2_300_000_000)
+                self.assertEqual(episode["positiveBudgetNs"], 2_000_000_000)
+                self.assertEqual(episode["neutralReserveNs"], 300_000_000)
+                self.assertGreaterEqual(episode["freshObservations"], 40)
+                self.assertEqual(episode["admissionNonce"], self.samples[1]["nonce"])
+                self.assertEqual(episode["lastObservationNonce"], self.samples[1+episode["freshObservations"]]["nonce"])
+                self.assertGreater(episode["neutralCommittedNs"]-episode["pulseCommittedNs"], 1_900_000_000)
+                self.assertLess(episode["neutralCommittedNs"], episode["originalDeadlineNs"])
+                self.assertEqual(result["commands"], 4)
+                self.assertEqual(result["vehicleStick"], [0, 0])
+                self.assertFalse(result["pendingCommand"])
+                self.assertFalse(result["nativeAcceptance"])
+                self.assertFalse(result["headsetAcceptance"])
+                self.assertEqual(v.COMMAND_WINDOW, 250_000_000)
+                self.assertEqual(t.SNAPSHOT_TIMEOUT, 250_000_000)
+                self.assertEqual(t.SNAPSHOT_PERIOD, 100_000_000)
+                self.assertEqual(v.INITIAL_OBSERVATION_WINDOW, 500_000_000)
+                self.assertTrue(all(b["startedNs"]-a["startedNs"] >= 25_000_000
+                                    for a, b in zip(self.requests, self.requests[1:])))
+                self.assertTrue(all(request["input"]["stickL" if role == "driver" else "stickR"] == [.4, .5]
+                                    for request in self.requests[2:]))
+                events = [json.loads(line) for line in
+                          (self.driver.artifacts.directory / "events.jsonl").read_text().splitlines()]
+                observations = [event for event in events if event["type"] == "vehicle_sustained_observation"]
+                self.assertEqual(len(observations), episode["freshObservations"])
+                prior_deadline = t.integer(self.samples[1]["vehicleObservation"]["validUntilNs"])
+                for event in observations:
+                    self.assertLess(event["evaluatedNs"], prior_deadline)
+                    self.assertLess(event["evaluatedNs"], event["sourceDeadlineNs"])
+                    prior_deadline = event["sourceDeadlineNs"]
+                command_events = [event for event in events if event["type"] == "command_request"]
+                self.assertGreaterEqual(command_events[1]["atNs"], episode["startedNs"]+2_000_000_000)
+                self.assertLess(command_events[1]["atNs"], prior_deadline)
+                owner = json.loads((self.run / "live-driver-owner.json").read_text())
+                self.assertFalse(owner["pending"])
+                self.assertTrue(owner["vehicleStimulus"]["neutralCommitted"])
+
+    def test_sustained_context_change_midhold_cancels_without_positive_retry(self):
+        faults = {"owner_"+key: (lambda o, key=key: o["owner"].update({key: o["owner"][key]+1}))
+                  for key in v.OWNER}
+        faults.update(
+            permission=lambda o: o.update(allowedMask=7),
+            player_permission=lambda o: o.update(playerPermissionMask=32),
+            route=lambda o: o.update(routeFingerprint=999),
+            role=lambda o: o.update(role="gunner"),
+            playing=lambda o: o.update(nativePlaying=False),
+            focus=lambda o: o["input"].update(focused=False),
+            space=lambda o: o["input"].update(spaceGeneration=999),
+            head=lambda o: o["input"]["head"]["position"].__setitem__(0, 1),
+            hand=lambda o: o["input"]["hands"][0]["grip"]["position"].__setitem__(0, 1),
+            unowned_stick=lambda o: o["input"]["hands"][1].update(stickY=.5),
+            owned_stick=lambda o: o["input"]["hands"][0].update(stickY=.4),
+            button=lambda o: o["input"]["hands"][0].update(held=2),
+            consumed=lambda o: o["consumedControls"].update(throttle=0),
+            rearm=lambda o: o["neutralRearm"].update(armedLeft=False),
+            menu=lambda o: o["input"]["menu"].update(epoch=8))
+        for fault, corrupt in faults.items():
+            with self.subTest(fault=fault):
+                self.setUp()
+                self.sustained()
+                self.snapshot_mutation = lambda sample, d: corrupt(sample["vehicleObservation"]) if d.snapshot_index == 4 else None
+                code, result = self.assembled()
+                self.assertEqual(code, 2, result)
+                self.assert_owned_cancellation(result)
+                self.assertEqual(len(self.requests), 4)
+                self.assertEqual(self.driver.sustained_observations, 1)
+
+    def test_sustained_missing_or_expired_midhold_source_cancels_at_original_lease(self):
+        for fault in ("missing", "expired", "late"):
+            with self.subTest(fault=fault):
+                self.setUp()
+                self.sustained()
+                if fault == "missing":
+                    self.omit_response_from = 4
+                elif fault == "expired":
+                    self.response_age = lambda d: 100_000_000 if d.snapshot_index == 4 else 0
+                else:
+                    self.response_delay = lambda d: 80_000_000 if d.snapshot_index == 4 else 0
+                code, result = self.assembled()
+                self.assertEqual(code, 2, result)
+                self.assert_owned_cancellation(result)
+                self.assertEqual(len(self.requests), 4)
+                self.assertEqual(self.driver.sustained_observations, 1)
+                prior_until = self.samples[2]["vehicleObservation"]["validUntilNs"]
+                self.assertLess(self.driver.last_commit, prior_until+25_000_000)
+                self.assertIsNone(self.driver.snapshot_refresh_started)
+
+    def test_sustained_receive_cannot_replace_expired_previous_authority(self):
+        self.sustained()
+        delayed = []
+        def cross_lease(path, driver):
+            if driver.snapshot_index == 4 and path == driver.snapshot_path and not delayed:
+                delayed.append(True)
+                self.clock.now = driver.snapshot_source_deadline(driver.latest_snapshot)
+        self.before_read = cross_lease
+        code, result = self.assembled()
+        self.assertEqual(code, 2, result)
+        self.assertEqual(delayed, [True])
+        self.assert_owned_cancellation(result)
+        self.assertEqual(self.driver.sustained_observations, 1)
+        self.assertEqual(len(self.requests), 4)
+
+    def test_sustained_reused_last_observation_and_pending_gather_cannot_continue(self):
+        for fault in ("gather", "input", "clock", "gather_pending", "observation_changed"):
+            with self.subTest(fault=fault):
+                self.setUp()
+                self.sustained()
+                def corrupt(sample, driver):
+                    if driver.snapshot_index != 4:
+                        return
+                    new, old = sample["vehicleObservation"], self.samples[2]["vehicleObservation"]
+                    if fault in v.PENDING_REASONS:
+                        pending_gather(sample, fault)
+                    elif fault == "gather":
+                        new["gatherSequence"] = old["gatherSequence"]
+                    elif fault == "input":
+                        new["input"]["generation"] = old["input"]["generation"]
+                    else:
+                        new.update(inputObservedNs=old["inputObservedNs"], inputDeadlineNs=old["inputDeadlineNs"])
+                        new["validUntilNs"] = min(new["inputDeadlineNs"], new["input"]["menu"]["deadlineNs"])
+                self.snapshot_mutation = corrupt
+                code, result = self.assembled()
+                self.assertEqual(code, 2, result)
+                self.assert_owned_cancellation(result)
+                self.assertEqual(len(self.requests), 4)
+                self.assertEqual(self.driver.pending_observation_requests, 0)
+
+    def test_sustained_keyboard_interrupt_midhold_runs_owned_cleanup(self):
+        self.sustained()
+        cancelled = []
+        def interrupt(path, driver):
+            if driver.sustained_observations >= 3 and not cancelled:
+                cancelled.append(True)
+                raise KeyboardInterrupt("synthetic sustained cancellation")
+        self.before_read = interrupt
+        code, result = self.assembled()
+        self.assertEqual(code, 2, result)
+        self.assertEqual(cancelled, [True])
+        self.assert_owned_cancellation(result)
+        self.assertIn("synthetic sustained cancellation", result["error"])
+
+    def test_sustained_session_or_command_takeover_forbids_cleanup(self):
+        for fault in ("session_source", "session_version", "session_host", "command", "owner_record", "stop"):
+            with self.subTest(fault=fault):
+                self.setUp()
+                self.sustained()
+                changed = []
+                def takeover(path, driver):
+                    if driver.sustained_observations < 2 or changed:
+                        return
+                    changed.append(True)
+                    if fault.startswith("session_"):
+                        key = dict(session_source="source_sha256", session_version="version", session_host="host")[fault]
+                        self.session[key] = dict(pid=1010) if key == "host" else "b"*64
+                        self.write(self.folder / "session.json", self.session)
+                    elif fault == "command":
+                        (self.run / "sim/command.txt").write_bytes(b"note foreign\n")
+                    elif fault == "owner_record":
+                        self.write(self.run / "live-driver-owner.json", dict(foreign=True))
+                    else:
+                        (self.folder / "stop.request").write_bytes(b"1\n")
+                self.before_read = takeover
+                code, result = self.assembled()
+                self.assertEqual(code, 2, result)
+                self.assertEqual(changed, [True])
+                self.assertEqual(self.calls, [["stick l 0.4 0.5"]])
+                self.assertTrue(result["normalStopRequired"])
+                self.assertNotIn("vehicleStimulus", result)
+
+    def test_sustained_keeps_authorization_version_and_source_pins(self):
+        for fault in ("authorization", "version", "source"):
+            with self.subTest(fault=fault):
+                self.setUp()
+                self.sustained()
+                argv = self.argv()
+                if fault == "authorization":
+                    argv.remove("--root-authorized-ordinary-input")
+                else:
+                    key = "--vehicle-version" if fault == "version" else "--vehicle-source-sha256"
+                    argv[argv.index(key)+1] = "b"*64
+                code, result = self.assembled(argv)
+                self.assertEqual(code, 2, result)
+                self.assertEqual(self.calls, [])
+
+    def test_sustained_source_expiry_during_first_publication_cannot_send_input(self):
+        self.sustained()
+        self.publication_delay = 100_000_000
+        code, result = self.assembled()
+        self.assertEqual(code, 2, result)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(len(self.requests), 2)
+
+    def test_sustained_initial_ack_cannot_outlive_its_source_to_start_hold(self):
+        self.sustained()
+        self.ack_delay = 120_000_000
+        code, result = self.assembled()
+        self.assertEqual(code, 2, result)
+        self.assert_owned_cancellation(result)
+        self.assertEqual(len(self.requests), 2)
+        self.assertEqual(self.driver.sustained_observations, 0)
+
+    def test_sustained_final_read_cannot_borrow_neutral_reserve(self):
+        self.sustained()
+        crossed = []
+        def overrun(path, driver):
+            if not driver.sustained_monitor or driver.cleanup_mode or crossed:
+                return
+            positive_until = driver.action_deadline-v.RELEASE_RESERVE
+            if self.clock.now >= positive_until-5_000_000:
+                crossed.append(True)
+                self.clock.now = positive_until
+        self.before_read = overrun
+        code, result = self.assembled()
+        self.assertEqual(code, 2, result)
+        self.assertEqual(crossed, [True])
+        self.assert_owned_cancellation(result)
+        self.assertIn("original acknowledgement/read deadline", result["error"])
 
     def test_gunner_pulse_ack_and_only_owned_right_zero(self):
         self.request = dict(role="gunner", stick=[-.4, .3], holdMs=400)

@@ -4,6 +4,11 @@
 or {"role":"gunner","stick":[0.4,0],"holdMs":400}. Driver uses left stick;
 gunner uses right stick. holdMs (301..500) includes both acknowledgements and
 a 300 ms reserve for numeric zero. At most one pulse, no automatic retry.
+Optional diagnostic: {"mode":"sustained","role":"driver","stick":[0.4,0.5],
+"positiveHoldMs":2000}. This budgets 1..2000 ms for positive publication/ACK
+and holding, PLUS the same 300 ms zero/ACK reserve. It continuously requires
+fresh same-owner native observations; an authority gap cancels the hold.
+Neither mode guarantees a native hold duration or authorizes a retry.
 Requires --root-authorized-ordinary-input, --vehicle-version and
 --vehicle-source-sha256. No fire, exit, seat switch, pose, or button commands.
 Simulator ACKs are not evidence of native vehicle movement or headset behavior.
@@ -40,19 +45,42 @@ def neutral(controls):
 
 
 def plan(value, require):
-    require(isinstance(value, dict) and set(value) == {"role", "stick", "holdMs"},
-            "vehicle request needs exactly role, stick and holdMs; no fire/exit/seat actions")
+    require(isinstance(value, dict), "vehicle request must be an object")
+    sustained = value.get("mode") == "sustained"
+    require(set(value) == ({"mode", "role", "stick", "positiveHoldMs"} if sustained
+                          else {"role", "stick", "holdMs"}),
+            "vehicle request needs role/stick/holdMs or explicit sustained mode/role/stick/positiveHoldMs")
     require(value["role"] in ("driver", "gunner"), "vehicle role must be driver or gunner")
     stick = value["stick"]
     require(isinstance(stick, list) and len(stick) == 2
             and all(type(x) in (int, float) and math.isfinite(x) and abs(x) <= 1 for x in stick)
             and any(abs(x) > .18 for x in stick), "vehicle stick needs a bounded nonzero axis beyond deadzone")
-    require(type(value["holdMs"]) is int and 301 <= value["holdMs"] <= 500,
-            "vehicle pulse must be 301..500 ms including full zero/ACK reserve")
+    if sustained:
+        require(type(value["positiveHoldMs"]) is int and 1 <= value["positiveHoldMs"] <= 2000,
+                "sustained vehicle positive budget must be 1..2000 ms plus full zero/ACK reserve")
+    else:
+        require(type(value["holdMs"]) is int and 301 <= value["holdMs"] <= 500,
+                "vehicle pulse must be 301..500 ms including full zero/ACK reserve")
     return copy.deepcopy(value)
 
 
-def admit(t, snapshot, now, nonce, role):
+def axis(value):
+    """VehicleControllerActions' existing .18 deadzone; no native override."""
+    return 0 if abs(value) <= .18 else math.copysign((abs(value) - .18) / .82, value)
+
+
+def axis_matches(actual, expected):
+    # Native float/9-digit JSON readback only. Neutral remains exact zero.
+    return actual == 0 if expected == 0 else abs(actual - expected) <= 1e-7
+
+
+def hand_basis(hands, side):
+    result = copy.deepcopy(hands)
+    result[side]["stickX"] = result[side]["stickY"] = 0
+    return result
+
+
+def admit(t, snapshot, now, nonce, role, stick=None):
     """Join the actual passive serializer, including its firearm-invalid branch."""
     r, n, p = t.require, t.integer, t.planner
     r(snapshot["schema"] == "fvr.bc2.live-mechanism-snapshot.v1"
@@ -89,19 +117,25 @@ def admit(t, snapshot, now, nonce, role):
     p.from_pose(inp["head"])
     p.from_pose(inp["referenceHead"])
     r(isinstance(inp["hands"], list) and len(inp["hands"]) == 2, "vehicle needs two tracked hands")
-    for hand in inp["hands"]:
+    side = 0 if role == "driver" else 1
+    for index, hand in enumerate(inp["hands"]):
+        expected = stick if stick is not None and index == side else [0, 0]
         r(hand["gripTracked"] is True and hand["aimTracked"] is True
           and all(n(hand[k]) >= 0 for k in ("active", "held", "touchActive", "touched"))
-          and all(p.finite(hand[k]) == 0 for k in ("held", "stickX", "stickY", "trigger", "squeeze")),
-          "vehicle requires consumed neutral tracked controllers")
+          and all(p.finite(hand[k]) == 0 for k in ("held", "trigger", "squeeze"))
+          and all(axis_matches(p.finite(hand[k]), x) for k, x in zip(("stickX", "stickY"), expected)),
+          "vehicle requires tracked controllers with exactly owned stick and otherwise neutral input")
         p.from_pose(hand["grip"])
         p.from_pose(hand["aim"])
-    side = 0 if role == "driver" else 1
     r(n(inp["hands"][side]["active"]) & 1, "requested vehicle stick action is inactive")
     rearm, consumed = v["neutralRearm"], v["consumedControls"]
+    expected_axes = [0, 0, 0, 0]
+    if stick is not None:
+        expected_axes[side * 2:side * 2 + 2] = [axis(x) for x in (stick[::-1] if side == 0 else stick)]
     r(rearm["controlsActive"] is True and rearm["armedLeft" if side == 0 else "armedRight"] is True
-      and all(p.finite(consumed[k]) == 0 for k in ("throttle", "steer", "lookYaw", "lookPitch"))
-      and consumed["exitHeld"] is False, "vehicle neutral rearm/consumed zero unavailable")
+      and all(axis_matches(p.finite(consumed[k]), x) for k, x in
+              zip(("throttle", "steer", "lookYaw", "lookPitch"), expected_axes))
+      and consumed["exitHeld"] is False, "vehicle neutral rearm/exact consumed axes unavailable")
     capabilities = v["capabilities"]
     r(capabilities["fire"] is False and isinstance(capabilities["axes"], list)
       and len(capabilities["axes"]) == 4, "unknown vehicle axis capability schema")
@@ -109,9 +143,9 @@ def admit(t, snapshot, now, nonce, role):
     r(consumer > 0 and (side == 0 or n(v["consumers"]["weaponCount"]) > 0),
       "requested vehicle axis consumer unknown")
     for index in (range(2) if side == 0 else range(2, 4)):
-        axis, (semantic, source, concept) = capabilities["axes"][index], AXES[index]
-        mapping = axis["mapping"]
-        r(axis["semantic"] == semantic and axis["available"] is True and axis["reason"] is None
+        capability, (semantic, source, concept) = capabilities["axes"][index], AXES[index]
+        mapping = capability["mapping"]
+        r(capability["semantic"] == semantic and capability["available"] is True and capability["reason"] is None
           and isinstance(mapping, dict) and mapping["source"] == source
           and n(mapping["concept"]) == concept and n(mapping["consumer"]) == consumer
           and 0 <= n(mapping["action"]) <= 10 and allowed & (1 << n(mapping["action"])),
@@ -146,6 +180,9 @@ def driver_class(t):
             self.initial_discarded_snapshot = None
             self.pending_observation = None
             self.pending_observation_requests = 0
+            self.sustained_monitor = False
+            self.sustained_reference = None
+            self.sustained_observations = 0
             super().__init__(args)
             require(self.manifest["version"] == args.vehicle_version
                     and self.manifest["source_sha256"] == args.vehicle_source_sha256,
@@ -335,6 +372,11 @@ def driver_class(t):
         def accept_snapshot(self, snapshot, raw, now):
             result = super().accept_snapshot(snapshot, raw, now)
             self.initial_discarded_snapshot = None
+            if self.sustained_monitor:
+                self.sustained_reference = copy.deepcopy(snapshot)
+                self.sustained_observations += 1
+                self.artifacts.event(dict(type="vehicle_sustained_observation", nonce=snapshot["nonce"],
+                    evaluatedNs=now, sourceDeadlineNs=self.snapshot_source_deadline(snapshot)))
             return result
 
         def snapshot_usable(self, snapshot, now):
@@ -452,17 +494,22 @@ def driver_class(t):
             return self.check_vehicle_snapshot(snapshot, t.time.perf_counter_ns(), nonce)
 
         def check_vehicle_snapshot(self, snapshot, now, nonce):
-            value = admit(t, snapshot, now, nonce, self.vehicle_request["role"])
+            held = self.stick if self.sustained_monitor else None
+            value = admit(t, snapshot, now, nonce, self.vehicle_request["role"], held)
             require(n(snapshot["observed_ns"]) >= self.last_request,
                     "vehicle snapshot predates its nonce request")
             if self.pending_observation is not None:
                 self.bounds(t.time.perf_counter_ns())
                 self.check_pending_cohort(snapshot, self.pending_observation["reference"], available=True)
-            for before in (self.vehicle_reference, self.initial_discarded_snapshot):
+            for before in (self.vehicle_reference, self.initial_discarded_snapshot, self.sustained_reference):
                 if before is None:
                     continue
                 require(n(snapshot["nonce"]) > n(before["nonce"]), "reused vehicle snapshot nonce")
                 old = before["vehicleObservation"]
+                if self.vehicle_request.get("mode") == "sustained":
+                    require(all(value[k] == old[k] for k in PENDING_COHORT +
+                                ("playerPermissionMask", "neutralRearm", "capabilities")),
+                            "sustained vehicle owner/permission cohort changed")
                 require(all(value[k] == old[k] for k in ("owner", "routeFingerprint", "slot", "role", "consumers"))
                         and value["capabilities"]["axes"] == old["capabilities"]["axes"],
                         "vehicle owner/seat/route/consumer changed")
@@ -471,8 +518,13 @@ def driver_class(t):
                         and n(value["inputObservedNs"]) > n(old["inputObservedNs"]),
                         "reused vehicle Gather/input observation")
                 inp, prev = value["input"], old["input"]
+                hands, previous_hands = inp["hands"], prev["hands"]
+                if held is not None:
+                    side = 0 if self.vehicle_request["role"] == "driver" else 1
+                    hands, previous_hands = hand_basis(hands, side), hand_basis(previous_hands, side)
                 require(all(inp[k] == prev[k] for k in ("spaceGeneration", "trackingBasisGeneration",
-                            "worldUnitsPerMeter", "floorRelative", "referenceHead", "head", "hands"))
+                            "worldUnitsPerMeter", "floorRelative", "referenceHead", "head"))
+                        and hands == previous_hands
                         and inp["menu"]["epoch"] == prev["menu"]["epoch"],
                         "vehicle input/tracking/menu basis changed")
                 if n(inp["menu"]["sequence"]) == n(prev["menu"]["sequence"]):
@@ -488,6 +540,10 @@ def driver_class(t):
 
         def pump(self):
             until = min(self.deadline, self.stage_deadline)
+            if self.sustained_monitor and not (self.releasing or self.cleanup_mode):
+                # A successor must arrive before the PREVIOUS lease expires.
+                # Nested reads cannot use its newer clock to bridge a gap.
+                until = min(until, self.snapshot_source_deadline(self.latest_snapshot))
             return t.read_until(until, self.pump_owned)
 
         def pump_owned(self):
@@ -508,9 +564,20 @@ def driver_class(t):
                 self.ownership(state)
             if not self.releasing:
                 self.check_input(state)
+            if self.sustained_monitor and not (self.releasing or self.cleanup_mode):
+                received = self.receive_snapshot()
+                if received:
+                    self.accept_snapshot(*received)
+                now = t.time.perf_counter_ns()
+                self.bounds(now)
+                if self.pending_nonce is None and now - self.last_request >= PERIOD:
+                    self.request_snapshot()
 
         def bounds(self, now):
             super().bounds(now)
+            if self.sustained_monitor and not (self.releasing or self.cleanup_mode):
+                require(now < self.snapshot_source_deadline(self.latest_snapshot),
+                        "sustained vehicle original source lease expired")
             if self.pending_observation is not None:
                 require(now < self.pending_observation["deadlineNs"], "original pending vehicle observation deadline reached")
                 require(self.neutral_preflight() and
@@ -564,6 +631,7 @@ def driver_class(t):
             self.attempted = True
             value, raw = t.read_json(t.child(self.run, path), 4096)
             self.vehicle_request = plan(value, require)
+            sustained = self.vehicle_request.get("mode") == "sustained"
             self.artifacts.save("vehicle-request.json", raw)
             self.artifacts.save("vehicle-policy.json", dict(adapterSha256=t.digest(Path(__file__).read_bytes()),
                 sourceSha256=self.manifest["source_sha256"], version=self.manifest["version"],
@@ -575,28 +643,42 @@ def driver_class(t):
                 self.check_pending_observation_owner()
                 self.pending_observation = None
             started = t.time.perf_counter_ns()
+            admission = copy.deepcopy(self.latest_snapshot)
             previous_stage = self.stage_deadline
+            budget = (self.vehicle_request["positiveHoldMs"] * 1_000_000 + RELEASE_RESERVE if sustained
+                      else self.vehicle_request["holdMs"] * 1_000_000)
             self.action_deadline = min(previous_stage, self.deadline - RELEASE_RESERVE,
-                started + self.vehicle_request["holdMs"] * 1_000_000)
+                started + budget)
             active_until = self.action_deadline - RELEASE_RESERVE
             require(started < active_until, "vehicle pulse has no active budget")
             self.stage_deadline, self.motion_started = active_until, started
+            if sustained:
+                self.stage_deadline = min(active_until, self.snapshot_source_deadline(self.latest_snapshot))
             self.publish_stick(self.vehicle_request["stick"])
             press_committed = self.last_commit
             self.stage_deadline = self.action_deadline
+            if sustained:
+                self.sustained_reference = copy.deepcopy(self.latest_snapshot)
+                self.sustained_monitor = True
             while (now := t.time.perf_counter_ns()) < active_until:
-                t.read_until(min(now + PERIOD, active_until + PERIOD), self.pump)
+                # The optional positive budget is a cap, including the final
+                # read. An overrun cancels through the owned cleanup path.
+                t.read_until(min(now + PERIOD, active_until if sustained else active_until + PERIOD), self.pump)
                 remaining = active_until - t.time.perf_counter_ns()
                 if remaining > 0:
                     t.time.sleep(min(.001, remaining / t.NS))
             self.publish_stick([0, 0], release=True)
             require(neutral(self.state["controls"]), "vehicle zero ACK lacks committed neutral controls")
-            report = dict(request=self.vehicle_request, admissionNonce=self.latest_snapshot["nonce"],
-                owner=self.latest_snapshot["vehicleObservation"]["owner"],
-                routeFingerprint=self.latest_snapshot["vehicleObservation"]["routeFingerprint"],
+            report = dict(request=self.vehicle_request, admissionNonce=admission["nonce"],
+                owner=admission["vehicleObservation"]["owner"],
+                routeFingerprint=admission["vehicleObservation"]["routeFingerprint"],
                 startedNs=started, originalDeadlineNs=self.action_deadline,
                 pulseCommittedNs=press_committed, neutralCommittedNs=self.last_commit,
                 commandsAcknowledged=True, nativeAcceptance=False, headsetAcceptance=False)
+            if sustained:
+                report.update(positiveBudgetNs=active_until-started, neutralReserveNs=RELEASE_RESERVE,
+                    freshObservations=self.sustained_observations, lastObservationNonce=self.latest_snapshot["nonce"])
+                self.sustained_monitor = False
             self.action_deadline, self.stage_deadline = None, previous_stage
             self.artifacts.save("vehicle-stimulus.json", report)
             return report

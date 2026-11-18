@@ -159,6 +159,13 @@ public:
         std::int64_t now,const AmmoCounterDisplaySource& source)noexcept {
         ObserveSource(source);
         if(!source.Valid()||!AdvanceClock(now)){Reset();return false;}
+        // An exact retransmission can arrive after its original count/owner
+        // deadline. Reject it without erasing an already earned display grace.
+        // This grants no new count, owner evidence or time; Select still needs
+        // the matching released image within the same original display bound.
+        if(source_==graceSource_&&a==CountEvidence()&&b==a&&OwnerEvidence()==a&&
+           a.spaceGeneration==space&&AmmoCounterFresh(a,a.observedNs)&&
+           a.deadlineNs<=now&&now-a.deadlineNs<AmmoCounterHostDisplayGraceNs)return false;
         const bool accepted=presentation_.Receive(a,b,space,now);
         // Keep existing expired-arrival/independent-owner handling, but no
         // rejected packet may grant the additional stale-display privilege.
