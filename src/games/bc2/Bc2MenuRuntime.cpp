@@ -177,7 +177,11 @@ void __fastcall Pump(void* self,void*,void* input){
     if(!IsMenuPumpBoundary(memory,binding,base,caller,reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(input),state->inputController)){++foreignBoundary;return;}
     if(pumping.test_and_set(std::memory_order_acquire)){++concurrentBoundary;return;}
     struct Boundary {Boundary(){nativeBoundary=true;}~Boundary(){nativeBoundary=false;pumping.clear(std::memory_order_release);}} boundary;
-    const auto thread=GetCurrentThreadId();const auto prior=uiThread.exchange(thread);if(prior&&prior!=thread){InvalidatePresentation();++threadChanges;}
+    // The verified UI callback can migrate between native worker threads.
+    // Thread identity alone does not retire the native presentation owner;
+    // the serialized, exact owner/type/state bookends below still decide it.
+    const auto thread=GetCurrentThreadId();const auto prior=uiThread.exchange(thread);
+    if(prior&&prior!=thread)++threadChanges;
     ++pumps;
     if(stopping.load(std::memory_order_acquire)){InvalidatePresentation();ReleaseOwned();ReleaseCancel(true);return;}
     if(RefreshLoadingDisplay()!=LoadingDisplay::Inactive){

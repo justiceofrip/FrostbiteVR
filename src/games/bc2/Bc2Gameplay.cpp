@@ -10,6 +10,7 @@
 #include "Bc2HeldFireCadence.h"
 #include "Bc2SceneMilestones.h"
 #include "Bc2MenuRuntime.h"
+#include "Bc2PresentationCameraPolicy.h"
 #include "Bc2ViewBasisEvidence.h"
 #include <Windows.h>
 #include <intrin.h>
@@ -58,6 +59,9 @@
 #include "Bc2VehicleCameraPolicy.h"
 #include "Bc2VehicleFinalInputEvidence.h"
 #include "Bc2VehicleConsumerEvidence.h"
+#define FVR_BC2_VEHICLE_PHYSICS_GATEWAYS
+#include "Bc2VehiclePhysicsEvidence.h"
+#undef FVR_BC2_VEHICLE_PHYSICS_GATEWAYS
 #include "Bc2VehicleShotObserver.h"
 #include "Bc2BoatReticle.h"
 #ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
@@ -158,7 +162,7 @@ std::optional<MuzzleEventSource> muzzleHistorySource;
 std::atomic<unsigned> clientOriginWrites=0,serverOriginWrites=0,originWriteFailures=0,shotSourceChanges=0,originFallbacks=0,originWritesAfterLogFull=0;
 std::atomic<unsigned> clientShotCalls=0,clientShotCopies=0,clientShotRejected=0;
 AimCandidates aimingProfile{};InputBindingCandidates profile{};std::uintptr_t image=0;unsigned imageSize=0;
-InputReader readInput=nullptr;std::array<void*,21> hooks{};
+InputReader readInput=nullptr;std::array<void*,25> hooks{};
 // Slot17, journal and original are immutable/process-retained after install.
 using QueueConsumerFn=unsigned(__thiscall*)(void*,unsigned,unsigned,unsigned);
 QueueConsumerFn queueConsumerOriginal=nullptr;
@@ -1066,6 +1070,7 @@ bool VehicleConsumerWindow(std::int64_t now)noexcept {
     const auto until=vehicleConsumerDeadline.load(std::memory_order_acquire);
     return vehicleConsumerJournal&&vehicleConsumerClock.Enabled()&&now>0&&until>0&&now<=until;
 }
+void ArmVehiclePhysics(const VehicleConsumerContext&,std::int64_t,unsigned)noexcept;
 void PrepareVehicleConsumer(const Scope& pending)noexcept {
     if(!vehicleConsumerJournal||!vehicleConsumerClock.Enabled()||!pending.vehicleFinalDriver)return;
     const auto& c=pending.vehicleFinalCommit;
@@ -1077,6 +1082,7 @@ void PrepareVehicleConsumer(const Scope& pending)noexcept {
     vehicleConsumerContext.owner=pending.owner;vehicleConsumerContext.route=pending.vehicleFinalRoute;
     vehicleConsumerContext.driver=*pending.vehicleFinalDriver;vehicleConsumerContext.identity=vehicleConsumer::Copy(c);
     vehicleConsumerContext.valid=c.check==VehicleFinalInputCheck::Okay&&vehicleConsumer::Valid(vehicleConsumerContext.identity);
+    ArmVehiclePhysics(vehicleConsumerContext,c.stamp.qpc,c.throttle);
 }
 unsigned ValidateVehicleConsumerContext(const VehicleConsumerContext& context,vehicleConsumer::View& view,bool& nativeCurrent)noexcept {
     nativeCurrent=false;
@@ -1153,6 +1159,268 @@ unsigned ReadVehicleConsumerView(const VehicleConsumerContext& context,unsigned 
     }
     readable=nativeCurrent&&nativeAfter&&!(checks&vehicleConsumer::Read);return checks;
 }
+// Private four-boundary vehicle observer; no input/physics writes or engine calls.
+std::optional<std::size_t> Offset(const engine::PeImage&,unsigned,unsigned);
+namespace vehiclePhysics=vehiclePhysicsEvidence;
+vehiclePhysics::Journal<>* vehiclePhysicsJournal=nullptr;
+VehicleConsumerContext vehiclePhysicsContext{}; // Immutable after one-shot arm.
+std::array<std::array<std::byte,838>,4> vehiclePhysicsExpected{};
+std::atomic<bool> vehiclePhysicsStarted{false};
+std::atomic<unsigned> vehiclePhysicsCallbacks{0},vehiclePhysicsUpdatesActive{0};
+thread_local vehiclePhysics::Record* vehiclePhysicsUpdate=nullptr;
+thread_local vehiclePhysics::Record* vehiclePhysicsSimulation=nullptr;
+bool vehiclePhysicsRequested=false,vehiclePhysicsInstalled=false,vehiclePhysicsDisabled=false,vehiclePhysicsDrained=false;
+const char* vehiclePhysicsStatus="not_requested";
+
+bool VehiclePhysicsCodeCurrent()noexcept {
+    if(!vehiclePhysicsInstalled)return false;
+    std::array<std::byte,838> actual{};
+    for(unsigned n=0;n<4;++n){const auto& proof=vehiclePhysics::Proofs[n];
+        if(!Read(image+proof.rva,actual.data(),proof.size)||
+           !std::equal(actual.begin(),actual.begin()+proof.size,vehiclePhysicsExpected[n].begin()))return false;}
+    std::array<unsigned char,12> getter{};
+    if(!Read(image+vehiclePhysics::TransformGetterRva,getter.data(),getter.size())||getter!=vehiclePhysics::TransformGetter)return false;
+    return true;
+}
+void ArmVehiclePhysics(const VehicleConsumerContext& context,std::int64_t qpc,unsigned throttle)noexcept {
+    if(!vehiclePhysicsStarted.load(std::memory_order_acquire)||!vehiclePhysicsJournal||!context.valid||
+       !(throttle&0x7fffffffu)||qpc<=0||vehicleConsumerFrequency<=0||qpc>INT64_MAX-2*vehicleConsumerFrequency)return;
+    if(!vehiclePhysicsJournal->ReserveArm())return;
+    vehiclePhysicsContext=context;
+    unsigned physics=0,control=0,vtable=0;
+    if(!SelectionReadWord(context.identity.driver,0xd4,physics)||!SelectionReadWord(physics,0,vtable)||
+       vtable!=image+vehiclePhysics::PhysicsVtableRva||!SelectionReadWord(physics,0xc,control)){
+        vehiclePhysicsJournal->Close();return;
+    }
+    InterlockedExchange(reinterpret_cast<volatile LONG*>(&vehiclePhysics::native::AdmittedPhysics),LONG(physics));
+    InterlockedExchange(reinterpret_cast<volatile LONG*>(&vehiclePhysics::native::AdmittedControl),LONG(control));
+    vehiclePhysicsJournal->PublishArm(qpc,vehicleConsumerFrequency);
+    if(vehiclePhysicsJournal->InWindow(qpc)&&vehiclePhysicsStarted.load(std::memory_order_acquire))
+        (void)vehiclePhysics::native::TryOpenCapture();
+}
+vehiclePhysics::Sample ReadVehiclePhysicsSample()noexcept {
+    return vehiclePhysics::ReadNativeOwnedSample<vehicleConsumer::View>(
+        [](vehicleConsumer::View& view,bool& nativeCurrent)noexcept {
+            return ValidateVehicleConsumerContext(vehiclePhysicsContext,view,nativeCurrent);
+        },[](vehiclePhysics::Sample& s)noexcept {
+    if(!VehiclePhysicsCodeCurrent())s.reasons|=vehiclePhysics::Code;
+    const auto word=[&](unsigned base,unsigned offset,unsigned& out){
+        const bool okay=SelectionReadWord(base,offset,out);if(!okay)s.reasons|=vehiclePhysics::ReadFailed;return okay;};
+    const auto block=[&](unsigned base,unsigned offset,void* out,std::size_t size){
+        const bool okay=base>=0x10000&&std::uint64_t(base)+offset+size<=std::uint64_t(UINT32_MAX)+1&&Read(base+offset,out,size);
+        if(!okay)s.reasons|=vehiclePhysics::ReadFailed;return okay;};
+    if(!word(vehiclePhysicsContext.identity.driver,0xd4,s.physics)||!word(s.physics,0,s.vtable)||
+       s.vtable!=image+vehiclePhysics::PhysicsVtableRva){s.reasons|=vehiclePhysics::Identity;return;}
+    unsigned updateTarget=0;
+    if(!word(s.vtable,0x1c,updateTarget)||updateTarget!=image+vehiclePhysics::Proofs[0].rva)s.reasons|=vehiclePhysics::Identity;
+    if(!word(s.physics,0xc,s.control)||!word(s.control,0,s.controlConfig)||!word(s.physics,0x78,s.associated)||
+       !word(s.associated,0,s.associatedVtable)||!word(s.associated,0x8c,s.body))return;
+    if(s.physics!=vehiclePhysics::native::AdmittedPhysics||s.control!=vehiclePhysics::native::AdmittedControl)s.reasons|=vehiclePhysics::Identity;
+    word(s.associatedVtable,0x94,s.target94);word(s.physics,0x80,s.state);word(s.physics,0x7c,s.gate7c);
+    unsigned char flag=0;block(s.physics,0xa8,&flag,1);s.filterFlag=flag;
+    word(s.physics,0x10,s.nested);if(s.nested){flag=0;block(s.nested,0x2c,&flag,1);s.nestedFlag=flag;}
+    block(s.control,4,s.controls.data(),sizeof(s.controls));block(s.controlConfig,0,s.config.data(),sizeof(s.config));
+    // Getter00aa72e0 proves body+e0; retain all four padded rows, position at+30.
+    block(s.body,0xe0,s.transform.data(),sizeof(s.transform));
+    block(s.control,4,s.controlsAgain.data(),sizeof(s.controlsAgain));block(s.body,0xe0,s.transformAgain.data(),sizeof(s.transformAgain));
+    unsigned physics=0,vtable=0,control=0,config=0,associated=0,associatedVtable=0,body=0,target94=0,targetUpdate=0;
+    word(vehiclePhysicsContext.identity.driver,0xd4,physics);word(s.physics,0,vtable);word(s.physics,0xc,control);
+    word(s.control,0,config);word(s.physics,0x78,associated);word(s.associated,0,associatedVtable);
+    word(s.associated,0x8c,body);word(s.associatedVtable,0x94,target94);word(s.vtable,0x1c,targetUpdate);
+    if(physics!=s.physics||vtable!=s.vtable||control!=s.control||config!=s.controlConfig||associated!=s.associated||
+       associatedVtable!=s.associatedVtable||body!=s.body||target94!=s.target94||targetUpdate!=updateTarget)s.reasons|=vehiclePhysics::Identity;
+    if(s.controls!=s.controlsAgain||s.transform!=s.transformAgain)s.reasons|=vehiclePhysics::Torn;
+    });
+}
+
+void __cdecl DispatchVehiclePhysics(vehiclePhysics::native::Frame* frame){
+    using namespace vehiclePhysics;
+    auto* journal=vehiclePhysicsJournal;Slot* slot=nullptr;Record* row=nullptr;
+    auto* previousUpdate=vehiclePhysicsUpdate;auto* previousSimulation=vehiclePhysicsSimulation;
+    const auto kind=static_cast<Kind>(frame->kind);const auto self=frame->entry->registers.ecx;
+    bool normal=false,countedUpdate=false;auto outputScope=native::OutputScope::Refused;Word outputThread=0;
+    ++vehiclePhysicsCallbacks;
+    // Even a foreign nested update/sim hides the outer scope from its children.
+    if(kind==Kind::Update){vehiclePhysicsUpdate=nullptr;vehiclePhysicsSimulation=nullptr;}
+    if(kind==Kind::Simulation)vehiclePhysicsSimulation=nullptr;
+    __try {
+        const auto now=SelectionNow();
+        if(journal&&vehiclePhysicsStarted.load(std::memory_order_acquire)&&journal->InWindow(now)){
+            unsigned expectedPhysics=0;
+            const bool updateReceiver=kind!=Kind::Update||
+                (SelectionReadWord(vehiclePhysicsContext.identity.driver,0xd4,expectedPhysics)&&self==expectedPhysics);
+            if(!updateReceiver)++journal->foreign;
+            else if(kind!=Kind::Update&&!previousUpdate)++journal->unscoped;
+            else {
+                slot=journal->Claim(kind,now);
+                if(slot){
+                    row=&slot->row;row->thread=GetCurrentThreadId();row->receiver=self;
+                    row->caller=frame->entry->caller>=image?frame->entry->caller-unsigned(image):frame->entry->caller;
+                    for(unsigned n=0;n<Proofs[frame->kind].args;++n)row->arguments[n]=frame->entry->args[n];
+                    row->parentUpdate=previousUpdate?previousUpdate->sequence:0;
+                    row->parentSimulation=previousSimulation?previousSimulation->sequence:0;
+                    if(kind==Kind::Update){countedUpdate=true;
+                        if(vehiclePhysicsUpdatesActive.fetch_add(1)){row->reasons|=Overlap;++journal->overlap;}}
+                    row->before=ReadVehiclePhysicsSample();
+                    if(kind==Kind::Update){
+                        if(self!=row->before.physics)row->reasons|=Identity;
+                        if(previousUpdate)row->reasons|=Nested;
+                        vehiclePhysicsUpdate=row;
+                    }else if(kind==Kind::Filter){
+                        if(row->caller!=FilterCallerRva)row->reasons|=Caller;
+                        if(self!=row->before.control||row->arguments[1]!=row->before.physics)row->reasons|=Identity;
+                    }else if(kind==Kind::Simulation){
+                        if(row->caller!=SimulationCallerRva)row->reasons|=Caller;
+                        if(self!=row->before.physics)row->reasons|=Identity;
+                        vehiclePhysicsSimulation=row;
+                        outputThread=row->thread;outputScope=native::EnterOutputScope(outputThread);
+                        if(outputScope==native::OutputScope::Refused){row->reasons|=Overlap;++journal->overlap;}
+                        if(previousSimulation)row->reasons|=Nested;
+                    }else if(kind==Kind::Output){
+                        if(!previousSimulation)row->reasons|=NoParent;
+                        if(SelectionReadWord(self,0x8c,row->outputBody))row->outputReadMask|=1;else row->reasons|=ReadFailed;
+                        if(Read(row->arguments[1],row->output0.data(),sizeof(row->output0)))row->outputReadMask|=2;else row->reasons|=ReadFailed;
+                        if(Read(row->arguments[2],row->output1.data(),sizeof(row->output1)))row->outputReadMask|=4;else row->reasons|=ReadFailed;
+                        if(row->outputBody!=row->before.body)row->reasons|=OutputBody;
+                    }
+                }
+            }
+        }else if(journal){++journal->outside;
+            native::CloseCapture();}
+        // Native exactly once, even on unavailable evidence, foreign owner,
+        // malformed fields, overflow, nesting, code refusal or expired window.
+        native::Forwards[frame->kind](frame);
+        normal=true;
+    }__finally {
+        if(row){
+            row->normal=normal;row->end=SelectionNow();
+            if(normal){
+                row->after=ReadVehiclePhysicsSample();
+                if(kind==Kind::Output){
+                    if(!SelectionReadWord(self,0x8c,row->outputBodyAgain))row->reasons|=ReadFailed;
+                    if(row->outputBody!=row->outputBodyAgain)row->reasons|=Identity;
+                }
+            }else row->reasons|=Unwind;
+            if(vehiclePhysicsUpdatesActive.load()>1)row->reasons|=Overlap;
+            // Finish entry/return record before its release publication.
+            slot->complete.store(true,std::memory_order_release);
+        }
+        if(countedUpdate)--vehiclePhysicsUpdatesActive;
+        native::LeaveOutputScope(outputThread,outputScope);
+        vehiclePhysicsUpdate=previousUpdate;vehiclePhysicsSimulation=previousSimulation;
+        --vehiclePhysicsCallbacks;
+    }
+}
+void MirrorVehiclePhysicsConsumer(const vehicleConsumer::Record& consumer)noexcept {
+    auto* journal=vehiclePhysicsJournal;if(!journal||!journal->InWindow(consumer.beginQpc))return;
+    auto* slot=journal->Claim(vehiclePhysics::Kind::Consumer,consumer.beginQpc);if(!slot)return;
+    auto& row=slot->row;row.consumerInvocation=consumer.invocation;row.thread=consumer.thread;
+    row.receiver=consumer.receiver;row.caller=consumer.caller;row.arguments[0]=consumer.argument;
+    row.end=consumer.endQpc;row.normal=consumer.normal;row.consumerReasons=consumer.reasons;
+    row.reasons=vehiclePhysics::NoParent; // Correlation only; never a physics-boundary qualification.
+    const auto copy=[](vehiclePhysics::Sample& out,const vehicleConsumer::View& view){
+        out.physics=view.destination.physics;out.vtable=view.destination.vtable;out.control=view.destination.control;
+        out.controls[7]=view.destination.words[0];out.controls[9]=view.destination.words[1];
+        out.controlsAgain[7]=view.destination.wordsAgain[0];out.controlsAgain[9]=view.destination.wordsAgain[1];
+        out.reasons=view.destination.reasons;
+    };
+    copy(row.before,consumer.before);copy(row.after,consumer.after);slot->complete.store(true,std::memory_order_release);
+}
+bool EnableVehiclePhysics(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uintptr_t base,bool retained)noexcept {
+    if(vehiclePhysicsRequested)return false;vehiclePhysicsRequested=true;vehiclePhysicsStatus="prerequisites_refused";
+    if(!retained||enabled.load()||!vehicleConsumerInstalled||!vehicleConsumerFrequency||base!=0x400000||base!=image||pe.machine!=0x14c)return false;
+    int cpu[4]{};__cpuid(cpu,1);
+    if(!(cpu[3]&(1<<24))||!(cpu[3]&(1<<25))||!IsProcessorFeaturePresent(PF_XMMI64_INSTRUCTIONS_AVAILABLE))return false;
+    const auto digest=[](std::span<const std::byte> data,const char* expected)noexcept {
+        if(data.empty()||data.size()>ULONG_MAX)return false;std::array<unsigned char,32> hash{};
+        if(BCryptHash(BCRYPT_SHA256_ALG_HANDLE,nullptr,0,reinterpret_cast<PUCHAR>(const_cast<std::byte*>(data.data())),
+            ULONG(data.size()),hash.data(),ULONG(hash.size()))<0)return false;
+        constexpr char hex[]="0123456789abcdef";for(unsigned n=0;n<hash.size();++n)
+            if(hex[hash[n]>>4]!=expected[2*n]||hex[hash[n]&15]!=expected[2*n+1])return false;return true;
+    };
+    vehiclePhysicsStatus="signature_refused";if(!digest(bytes,vehicleConsumer::ExecutableHash))return false;
+    std::array<unsigned char,12> getter{};
+    if(!Read(base+vehiclePhysics::TransformGetterRva,getter.data(),getter.size())||getter!=vehiclePhysics::TransformGetter)return false;
+    for(unsigned n=0;n<4;++n){
+        const auto& p=vehiclePhysics::Proofs[n];if(hooks[21+n]||*vehiclePhysics::native::Originals[n])return false;
+        const auto offset=Offset(pe,p.rva,p.size);bool executable=false;
+        for(const auto& section:pe.sections)if((section.flags&0x20000000)&&p.rva>=section.rva&&
+            p.rva-section.rva<=section.virtualSize&&p.size<=section.virtualSize-(p.rva-section.rva))executable=true;
+        if(!executable||!offset||*offset>bytes.size()||p.size>bytes.size()-*offset)return false;
+        const auto file=bytes.subspan(*offset,p.size);if(!digest(file,p.hash)||
+            !Read(base+p.rva,vehiclePhysicsExpected[n].data(),p.size)||
+            !std::equal(file.begin(),file.end(),vehiclePhysicsExpected[n].begin()))return false;
+    }
+    auto* journal=new(std::nothrow) vehiclePhysics::Journal<>;
+    vehiclePhysicsStatus="allocation_failed";if(!journal)return false;
+    // All functions have at least five relocatable bytes before a branch.
+    // Installation is before global MH enable. A failed partial installation
+    // removes only these never-enabled hooks; no live trampoline is removed.
+    vehiclePhysics::native::Observe=DispatchVehiclePhysics;
+    unsigned created=0;vehiclePhysicsStatus="hook_create_failed";
+    for(;created<4;++created){
+        const auto target=reinterpret_cast<void*>(base+vehiclePhysics::Proofs[created].rva);
+        if(MH_CreateHook(target,vehiclePhysics::native::Thunks[created],reinterpret_cast<void**>(vehiclePhysics::native::Originals[created]))!=MH_OK)break;
+    }
+    if(created!=4){
+        // On a removal failure retain every dependency and own the remaining
+        // hook slots through disable/drain. Their closed gates only forward.
+        bool clean=true;for(unsigned n=0;n<created;++n){const auto target=reinterpret_cast<void*>(base+vehiclePhysics::Proofs[n].rva);
+            const bool removed=MH_RemoveHook(target)==MH_OK;clean&=removed;
+            if(removed)*vehiclePhysics::native::Originals[n]=nullptr;else hooks[21+n]=target;}
+        if(clean)delete journal;else {vehiclePhysicsJournal=journal;vehiclePhysicsStatus="partial_install_retained";}
+        return false;
+    }
+    for(unsigned n=0;n<4;++n){
+        hooks[21+n]=reinterpret_cast<void*>(base+vehiclePhysics::Proofs[n].rva);
+        vehiclePhysicsExpected[n][0]=std::byte{0xe9};
+        const unsigned displacement=reinterpret_cast<unsigned>(vehiclePhysics::native::Thunks[n])-
+            unsigned(base+vehiclePhysics::Proofs[n].rva+5);
+        std::memcpy(vehiclePhysicsExpected[n].data()+1,&displacement,4);
+    }
+    vehiclePhysicsJournal=journal;vehiclePhysicsInstalled=true;vehiclePhysicsStatus="installed";return true;
+}
+void ReportVehiclePhysics(std::ostream& out){
+    out<<",\"vehicle_physics_evidence\":{\"schema\":1,\"requested\":"<<(vehiclePhysicsRequested?"true":"false")
+       <<",\"installed\":"<<(vehiclePhysicsInstalled?"true":"false")<<",\"status\":\""<<vehiclePhysicsStatus
+       <<"\",\"hooks_disabled\":"<<(vehiclePhysicsDisabled?"true":"false")<<",\"drained\":"<<(vehiclePhysicsDrained?"true":"false")
+       <<",\"window_seconds\":2,\"qpc_frequency\":"<<vehicleConsumerFrequency
+       <<",\"interior_branches_observed\":false,\"associated94_return_observed\":false,\"all_output_methods_observed\":false"
+       <<",\"old_state_update_code_proof_expected_refused_while_detoured\":true";
+    auto* j=vehiclePhysicsJournal;if(!j){out<<",\"records\":[]}";return;}
+    const auto state=j->state.load(std::memory_order_acquire);const auto count=j->claimed.load(std::memory_order_acquire);
+    out<<",\"state\":"<<state<<",\"claimed\":"<<count<<",\"capacity\":"<<vehiclePhysics::Journal<>::MaxRecords
+       <<",\"overflow\":"<<j->overflow.load()<<",\"update_limit\":"<<j->updateLimit.load()<<",\"overlap\":"<<j->overlap.load()
+       <<",\"foreign\":"<<j->foreign.load()<<",\"unscoped\":"<<j->unscoped.load()<<",\"outside\":"<<j->outside.load();
+    if(j->published.load(std::memory_order_acquire)){const auto& i=vehiclePhysicsContext.identity;
+        out<<",\"arm_qpc\":"<<j->begin<<",\"deadline_qpc\":"<<j->deadline<<",\"driver\":"<<i.driver
+           <<",\"vehicle\":"<<i.vehicle<<",\"actor_generation\":"<<i.actorGeneration<<",\"seat_generation\":"<<i.seatGeneration
+           <<",\"input_epoch\":"<<i.inputEpoch<<",\"movement_epoch\":"<<i.movementEpoch<<",\"space\":"<<i.space<<",\"route\":"<<i.route;}
+    const auto words=[&](const auto& values){out<<'[';bool comma=false;for(auto value:values){if(comma)out<<',';comma=true;out<<value;}out<<']';};
+    const auto sample=[&](const vehiclePhysics::Sample& s){
+        out<<"{\"physics\":"<<s.physics<<",\"vtable\":"<<s.vtable<<",\"control\":"<<s.control<<",\"control_config\":"<<s.controlConfig
+           <<",\"associated\":"<<s.associated<<",\"associated_vtable\":"<<s.associatedVtable<<",\"body\":"<<s.body
+           <<",\"target94\":"<<s.target94<<",\"state\":"<<s.state<<",\"gate7c\":"<<s.gate7c<<",\"filter_flag\":"<<s.filterFlag
+           <<",\"nested\":"<<s.nested<<",\"nested_flag\":"<<s.nestedFlag<<",\"reasons\":"<<s.reasons<<",\"controls\":";words(s.controls);
+        out<<",\"controls_again\":";words(s.controlsAgain);out<<",\"config\":";words(s.config);
+        out<<",\"transform\":";words(s.transform);out<<",\"transform_again\":";words(s.transformAgain);out<<'}';
+    };
+    out<<",\"records\":[";bool comma=false;unsigned pending=0;
+    for(unsigned n=0;n<std::min<unsigned>(count,vehiclePhysics::Journal<>::MaxRecords);++n){
+        const auto& slot=j->rows[n];if(!slot.complete.load(std::memory_order_acquire)){++pending;continue;}
+        const auto& r=slot.row;if(comma)out<<',';comma=true;
+        out<<"{\"sequence\":"<<r.sequence<<",\"kind\":"<<unsigned(r.kind)<<",\"thread\":"<<r.thread<<",\"receiver\":"<<r.receiver
+           <<",\"caller_rva\":"<<r.caller<<",\"parent_update\":"<<r.parentUpdate<<",\"parent_simulation\":"<<r.parentSimulation
+           <<",\"consumer_invocation\":"<<r.consumerInvocation<<",\"consumer_reasons\":"<<r.consumerReasons
+           <<",\"begin_qpc\":"<<r.begin<<",\"end_qpc\":"<<r.end<<",\"normal\":"<<(r.normal?"true":"false")
+           <<",\"reasons\":"<<r.reasons<<",\"boundary_comparable\":"<<(vehiclePhysics::Comparable(r)?"true":"false")<<",\"arguments\":";
+        words(r.arguments);out<<",\"output_body\":"<<r.outputBody<<",\"output_body_again\":"<<r.outputBodyAgain
+            <<",\"output_read_mask\":"<<r.outputReadMask<<",\"output0\":";words(r.output0);out<<",\"output1\":";words(r.output1);
+        out<<",\"before\":";sample(r.before);out<<",\"after\":";sample(r.after);out<<'}';
+    }
+    out<<"],\"pending_records\":"<<pending<<'}';
+}
+
 void PublishVehicleConsumer(const Scope& pending,const VehicleFinalInputRecord& final)noexcept {
     if(!VehicleConsumerWindow(final.returned.qpc)||!vehicleConsumerUpdate||!vehicleConsumerUpdate->active||!pending.vehicleFinalDriver)return;
     VehicleConsumerContext context;context.owner=pending.owner;context.route=pending.vehicleFinalRoute;context.driver=*pending.vehicleFinalDriver;
@@ -1184,6 +1452,7 @@ void EndVehicleConsumer(VehicleConsumerToken& token,bool normal)noexcept {
     if(!token.active)return;auto& row=token.row;row.normal=normal;row.endQpc=SelectionNow();
     if(normal)row.reasons|=ReadVehicleConsumerView(token.context,row.argument,row.after,row.afterReadable,true);
     row.returned=vehicleConsumerClock.Sample();
+    MirrorVehiclePhysicsConsumer(row);
     std::unique_lock lock(vehicleConsumerMutex,std::try_to_lock);if(!lock){++vehicleConsumerDrops;return;}
     row.returnPublication=vehicleConsumerJournal->Latest().generation;vehicleConsumerJournal->Observe(row);
 }
@@ -6079,6 +6348,10 @@ bool AdjustViewBase(std::array<RenderViewCopy,2>& copies,const runtime::Tracking
         copies=changed;++vehicleCameraViews;if(renderAim)++boatAimCameraViews;return true;
     }
     if(!motionAim)return true;
+    // Presentation can change before Gather retires the same soldier's
+    // aim anchor. Preserve authored bases without changing that input state.
+    const auto presentation=menu::CurrentPresentation();
+    return ApplyOnFootViewBasePolicy(presentation.get(),HandNanos(SelectionNow()),[&]()noexcept {
     unsigned soldier=0,weak=0;std::uint64_t sourceSpace=0;float yaw=0,consumedX=0,consumedZ=0,units=1;bool captured=false;
     for(unsigned n=0;n<3;++n){const auto seq=anchor.sequence.load(std::memory_order_acquire);if(seq&1)continue;
         soldier=anchor.soldier.load();weak=anchor.weak.load();sourceSpace=anchor.space.load();yaw=anchor.yaw.load();consumedX=anchor.consumedX.load();consumedZ=anchor.consumedZ.load();units=anchor.units.load();
@@ -6114,6 +6387,7 @@ bool AdjustViewBase(std::array<RenderViewCopy,2>& copies,const runtime::Tracking
         else ++renderedViewLockDrops;
     }
     ++baseViews;return true;
+    });
 }
 void ObserveRenderedView(const RenderedViewEvidence& rendered)noexcept {
     if(!rendered.Sampled())return;
@@ -6308,7 +6582,7 @@ void ReportVehicleCameraEvidence(std::ostream& out){
         <<",\"qpc_frequency\":"<<handFrequency
         <<",\"omitted\":"<<vehicleFinalInputs.Omitted()<<",\"failures\":"<<vehicleFinalInputs.Failures()<<",\"omitted_failures\":"<<vehicleFinalInputs.OmittedFailures()
         <<",\"lock_drops\":"<<vehicleFinalInputDrops.load()<<'}';
-    out.precision(precision);ReportVehicleConsumerEvidence(out);
+    out.precision(precision);ReportVehicleConsumerEvidence(out);ReportVehiclePhysics(out);
 }
 bool InstallProjectileTarget(std::span<const std::byte> bytes,const engine::PeImage& pe,
     std::uintptr_t base,bool observe,bool originRequest,bool processRetainedProbe,bool smokeRequest=false)noexcept {
@@ -6532,6 +6806,7 @@ bool EnableNativeCycleSelectionObservation(std::span<const std::byte> bytes,cons
     // The existing explicit mechanism-snapshot request owns both passive
     // recorders; each retains its own installation/refusal status.
     (void)EnableVehicleConsumerObservation(bytes,pe,base,processRetainedProbe);
+    (void)EnableVehiclePhysics(bytes,pe,base,processRetainedProbe);
     selectionRequested=true;selectionStatus="unsupported_abi";
 #if defined(_MSC_VER) && defined(_M_IX86)
     selectionStatus="prerequisites_refused";
@@ -6597,6 +6872,7 @@ void Start()noexcept {
     if(queuePhaseJournal)(void)queuePhaseJournal->Start();
     if(selectionInstalled)(void)selectionJournal->Start();
     if(vehicleConsumerInstalled)vehicleConsumerClock.Start();
+    vehiclePhysicsStarted.store(vehiclePhysicsInstalled&&VehiclePhysicsCodeCurrent(),std::memory_order_release);
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
     if(chestKnife)chestKnifeNative::Start();
     selectedKnife::Start();
@@ -6612,6 +6888,7 @@ void Start()noexcept {
 }
 bool PrepareSessionStop()noexcept {
     vehicleConsumerClock.Close();
+    vehiclePhysicsStarted.store(false,std::memory_order_release);vehiclePhysics::native::CloseCapture();if(vehiclePhysicsJournal)vehiclePhysicsJournal->Close();
     if(queuePhaseJournal)queuePhaseJournal->Close(QueuePhaseNow());
     if(selectionJournal)selectionJournal->Close();
     navigationObservation.Stop();
@@ -6666,11 +6943,13 @@ bool Stop()noexcept {
 #endif
     if(selectionJournal)selectionDisabled=true;
     if(vehicleConsumerJournal)vehicleConsumerDisabled=true;
+    vehiclePhysicsDisabled=vehiclePhysicsJournal!=nullptr;
     for(unsigned slot=0;slot<hooks.size();++slot)if(const auto entry=hooks[slot]){
 #ifdef FVR_BC2_PROJECTILE_TARGET_OBSERVER
         if(slot==14){okay=projectileTargetLife.Disable()&&okay;continue;}
 #endif
         const auto r=MH_DisableHook(entry);const bool disabled=r==MH_OK||r==MH_ERROR_DISABLED;okay&=disabled;
+        if(slot>=21&&slot<=24)vehiclePhysicsDisabled&=disabled;
         if(slot==17)queuePhaseDisabled=disabled;
         if(selectionJournal&&(slot==0||slot==18||slot==19))selectionDisabled&=disabled;
         if(vehicleConsumerJournal&&(slot==0||slot==20))vehicleConsumerDisabled&=disabled;
@@ -6686,7 +6965,7 @@ bool Stop()noexcept {
         return false;
 #endif
     };
-    const auto until=GetTickCount64()+2000;while((active.load()||queuePhaseCallbacks.load()||selectionCallbacks.load()||vehicleConsumerCallbacks.load()||targetActive())&&GetTickCount64()<until)Sleep(1);
+    const auto until=GetTickCount64()+2000;while((active.load()||queuePhaseCallbacks.load()||selectionCallbacks.load()||vehicleConsumerCallbacks.load()||vehiclePhysicsCallbacks.load()||targetActive())&&GetTickCount64()<until)Sleep(1);
     if(queuePhaseJournal){
         queuePhaseDrained=queuePhaseJournal->Drained(queuePhaseDisabled,queuePhaseCallbacks.load());
         okay=queuePhaseDrained&&okay;
@@ -6705,6 +6984,9 @@ bool Stop()noexcept {
         vehicleConsumerDrained=vehicleConsumerDisabled&&!vehicleConsumerCallbacks.load()&&!vehicleConsumerClock.Sample().active;
         okay=vehicleConsumerDrained&&okay;
     }
+    vehiclePhysicsDrained=vehiclePhysicsJournal&&vehiclePhysicsDisabled&&!vehiclePhysicsCallbacks.load();
+    if(vehiclePhysicsJournal)okay=vehiclePhysicsDrained&&okay;
+    // Physics slots21..24, journal/context and originals are process-retained.
     // Selection slots18/19, journal and originals are never removed/reset.
     // This candidate observer owns no game state. Remove its trampoline only
     // after every gameplay callback has left; a failed drain preserves it.
@@ -6726,7 +7008,7 @@ bool Stop()noexcept {
     selectedMeshes.Clear();if(bodyInventory&&!active.load())bodyInventory->Cancel();
     if(!active.load()&&weaponVisibilityProbe){LARGE_INTEGER now{};QueryPerformanceCounter(&now);weaponVisibilityProbe->Cancel(9,HandNanos(now.QuadPart));
         rigPublication::PublishWeaponVisibility({});weaponVisibilitySample.store({},std::memory_order_release);}
-    return okay&&!active.load()&&!queuePhaseCallbacks.load()&&!selectionCallbacks.load()&&!vehicleConsumerCallbacks.load()&&
+    return okay&&!active.load()&&!queuePhaseCallbacks.load()&&!selectionCallbacks.load()&&!vehicleConsumerCallbacks.load()&&!vehiclePhysicsCallbacks.load()&&
         !vehicleConsumerClock.Sample().active&&!targetActive();
 }
 void ReportNativeCycleSelection(std::ostream& out){

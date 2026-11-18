@@ -1,5 +1,7 @@
 #include "Test.h"
 #include "Bc2Camera.h"
+#include "Bc2PresentationCameraPolicy.h"
+#include "Bc2TrackedViews.h"
 #include "fvr/interaction/TrackingMath.h"
 #include <cstring>
 using namespace fvr;
@@ -25,6 +27,71 @@ int main(){
     math::Matrix4 world{};world.values={{{1,0,0,0},{0,1,0,0},{0,0,1,0},{12,4,8,1}}};
     const math::FovTangents fov{-.7f,1.2f,.8f,-.6f};
     const auto copy=bc2::BuildRenderViewCopy(prototype,world,fov,.04f,2000);CHECK(copy);
+    {
+        // A live soldier anchor can outlast a presentation transition. The
+        // suppression seam must never enter its gameplay adjustment in LetterBox.
+        bc2::MenuPresentationLifetime lifetime;
+        bc2::MenuPresentationObservation observed;
+        observed.owner={0x10000,0x20000,0x2002c,0x20030,false,false,false};
+        observed.state=bc2::MenuPresentationState::Playing;
+        const auto playing=lifetime.Observe(observed,1'000'000'000);
+        observed.state=bc2::MenuPresentationState::LetterBox;
+        const auto cinematic=lifetime.Observe(observed,1'000'000'001);
+        CHECK(!bc2::SameMenuPresentationLifetime(playing,cinematic));
+        auto authoredWorld=world;
+        authoredWorld.values={{{0,0,-1,0},{-.6f,.8f,0,0},{.8f,.6f,0,0},{12,4,8,1}}};
+        const auto authored=bc2::BuildRenderViewCopy(prototype,authoredWorld,fov,.04f,2000);
+        CHECK(authored);
+        std::array<bc2::RenderViewCopy,2> source{*authored,*authored};
+        source[1].bytes[0x200]=std::byte{0x27};
+        const auto untouched=source;
+        unsigned gameplayCalls=0;
+        const auto gameplayAdjustment=[&]()noexcept {
+            ++gameplayCalls;source[0].bytes[0x200]=std::byte{0x11};
+            source[1].bytes[0x200]=std::byte{0x12};return false;
+        };
+        CHECK(bc2::ApplyOnFootViewBasePolicy(&cinematic,cinematic.observedNs,gameplayAdjustment));
+        CHECK(gameplayCalls==0);
+        for(unsigned camera=0;camera<2;++camera)CHECK(source[camera].bytes==untouched[camera].bytes);
+        // Keeping the authored basis does not freeze tracking or discard eye
+        // separation: the unchanged production stereo builder still composes it.
+        runtime::TrackingFrame tracking;
+        tracking.focused=tracking.headValid=true;
+        tracking.head.position={0,.08f,0};
+        tracking.eyes[0].position={-.032f,.08f,0};tracking.eyes[1].position={.032f,.08f,0};
+        tracking.fov={fov,fov};
+        const auto plan=bc2::BuildTrackedViews(source,tracking,1);CHECK(plan);
+        std::array<engine::FrostbiteCameraInput,2> eyes{};
+        for(unsigned side=0;side<2;++side){
+            std::memcpy(&eyes[side].transform,plan->camera[side][0].bytes.data()+0x50,64);
+            eyes[side].nearPlane=.04f;eyes[side].farPlane=2000;eyes[side].worldUnitsPerMeter=1;
+            const auto actual=engine::CanonicalCamera(eyes[side]);CHECK(actual);
+            for(unsigned row=0;row<3;++row)for(unsigned axis=0;axis<3;++axis)
+                CHECK(Near(actual->camera.values[row][axis],authoredWorld.values[row][axis]));
+            for(unsigned axis=0;axis<3;++axis)CHECK(Near(actual->camera.values[3][axis],
+                authoredWorld.values[3][axis]+.08f*authoredWorld.values[1][axis]+
+                (side?.032f:-.032f)*authoredWorld.values[0][axis]));
+            CHECK(plan->camera[side][1].bytes==plan->camera[0][1].bytes);
+            CHECK(source[side].bytes==untouched[side].bytes);
+        }
+        CHECK(!bc2::ApplyOnFootViewBasePolicy(&playing,playing.observedNs,gameplayAdjustment));
+        CHECK(gameplayCalls==1&&source[0].bytes[0x200]==std::byte{0x11}&&source[1].bytes[0x200]==std::byte{0x12});
+        // Unknown, future, original-deadline expiry and missing lifetime proof
+        // must not remember the earlier LetterBox decision or hide failures.
+        const auto unknown=lifetime.Observe({},1'000'000'002);
+        CHECK(!bc2::ApplyOnFootViewBasePolicy(&unknown,1'000'000'002,gameplayAdjustment));
+        CHECK(!bc2::ApplyOnFootViewBasePolicy(nullptr,1'000'000'002,gameplayAdjustment));
+        CHECK(!bc2::ApplyOnFootViewBasePolicy(&cinematic,cinematic.observedNs-1,gameplayAdjustment));
+        CHECK(!bc2::ApplyOnFootViewBasePolicy(&cinematic,cinematic.deadlineNs,gameplayAdjustment));
+        auto unowned=cinematic;unowned.sceneEpoch=0;
+        CHECK(!bc2::ApplyOnFootViewBasePolicy(&unowned,cinematic.observedNs,gameplayAdjustment));
+        observed.state=bc2::MenuPresentationState::Playing;
+        const auto resumed=lifetime.Observe(observed,1'000'000'003);
+        CHECK(!bc2::SameMenuPresentationLifetime(cinematic,resumed));
+        CHECK(!bc2::ApplyOnFootViewBasePolicy(&resumed,resumed.observedNs,gameplayAdjustment));
+        CHECK(gameplayCalls==7);
+        CHECK(bc2::ApplyOnFootViewBasePolicy(&resumed,resumed.observedNs,[]()noexcept{return true;}));
+    }
     {
         auto prior=*copy;View(prior.bytes.data());Projection(prior.bytes.data());Frustum(prior.bytes.data());
         const auto written=prior;LazyScaleGetter(prior.bytes.data());
