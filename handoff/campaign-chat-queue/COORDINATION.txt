@@ -1,5 +1,5 @@
 BC2 VR shared integration coordination
-Updated: November13,2026
+Updated: November18,2026
 Canonical repository: G:/Unity/VRMMO/FrostbiteVR
 Canonical integration branch: integrate/coordinator-20261101-feedback72
 Accepted remote ref: checkpoint/436-r56-equipment-rendering
@@ -12,18 +12,20 @@ Ownership/ready/blocked tasks: COORDINATOR-STATE.txt (local scheduling record).
 External worktrees remain untouched; finished25/26/33 source is integrated. Steam32 lacks its executable.
 
 INSTALLED RUNTIME
-Private0.1.100 installed and setup-validated; fallback0.1.99, earlier versions retained.
-Compiled source6e733ab510ccc6a127324e569d834913e95c4837; nativeclosure9dabaf9e6592a677f5e924627c3232e0668c10fa7ef99cf3d79115fe69c976a4.
-Normal checks364x86/361x64 and focused PhysicalFeed/FeedPresentation/BodyInventory/KnifeHeldInput checks passed; unchanged hostWARP reused.
-Receipt: reports/coordinator-20261108-feedback721/normal100/run01/installation.json.
-Settings/cache/shortcut and headset99 recording preserved. Public posting remains on hold;100 addresses the reported failures but awaits local headset acceptance.
+Local0.1.106 is installed and setup-validated; fallback0.1.104,103/105/102/101/99 retained.
+Compiled source2772ba3c8967ed36daeceb736a9871365763b01c; nativeclosuref1111f4a9fd2975cf2944f6bb445ad7dc231dcadf2a978e5fe0886adb7344501.
+Normal checks371x86/368x64 passed. Installed smoke showed21/210 in both eyes, with117 HUD gaps in1948 stationary frames; flicker is open.
+Receipt: reports/coordinator-20261108-feedback721/normal106/run01/installation.json.
+Settings/cache/shortcut and headset99 recording preserved. Public posting remains on hold for local headset acceptance and remaining campaign work.
 
 CURRENT SOURCE
-Source6e733ab is pushed and installed100. Shared LMG removal accepts measured outward clearance, empty discarded originals fall/hide, sole-Fire Empty presentation stays hidden, and chest-grip approach survives continuous current samples. Earlier bolt correction remains included; full bolt reload remains open. Headset99 and failed build attempts remain preserved. Handoff: handoff/integrations/coordinator-20261113-human-grabs/README.txt.
+Source7d5a9a683ff939929e118086019a354763a224c9 is pushed with371x86/368x64 passing checks; it is not installed. Same-lifetime HUD publication handling and a bounded vehicle recorder are included. Actual116 still shows HUD gaps; the vehicle branch observation does not establish a driving fix. Prior LMG removal/disposal/pickup, Empty presentation and chest-grip repairs remain included in installed106. Full bolt reload and comfortable headset acceptance remain open; prior failures are preserved.
 The navigation batch removes the developer tool's firearm-publication prerequisite for ordinary on-foot input, keeping original actor/input/menu deadlines and weapon admission unchanged.
 Handoffs: handoff/integrations/coordinator-20261113-weapon-acquisition/README.txt and coordinator-20261113-navigation/README.txt.
 
 ACTUAL GAME EVIDENCE / NEXT
+116/01 closed normally with native retirement and exact restoration. HUD2001/2118 submissions; all413 associated-body predicates returnedfalse, including39 positive-throttle updates. Slight body motion continued. Inspect saved evidence/field semantics before any further vehicle input; no global-freeze or propulsion claim.
+103/03 completed all five belt-feed stages including real belt pickup/attachment and0/687->200/487 in all three native copies. Shared offline checks cover24 feed profiles; do not repeat them for unrelated HUD work.
 93/03 completed native Draw/zero-trigger physical jab/Return; damage against target and headsetfeel remain open.
 93/02 completed boat exit, on-foot movement and shoulder weapon recovery; broader vehicle controls remain open.
 Reuse91/02 complete belt-feed reload and subsequent native shot,92/01 held-weapon swaps,87/08 complete opening-breech reload/fire/primary-return. Do not repeat passed routes for unrelated tool changes.

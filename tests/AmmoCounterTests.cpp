@@ -256,6 +256,58 @@ int DisplaySurvivesAmmoGapsWithCurrentOwner(){
     AmmoCounterPresentation unseen;CHECK(!unseen.Receive(missing,missing,30,now));CHECK(!unseen.Select(30,now));
     return 0;
 }
+int ExpiredSameOwnerCountsPreserveIndependentLease(){
+    auto admitted=Sample();admitted.sequence=10;
+    auto current=Owner();current.observedNs=Now+10000000;current.deadlineNs=Now+240000000;
+    const auto ownerOnly=AmmoCounterHostSample({},current,current.observedNs);
+    auto expired=admitted;++expired.sequence;expired.observedNs=Now+20000000;
+    expired.deadlineNs=Now+120000000;--expired.loaded;
+    const auto now=Now+150000000;
+    CHECK(AmmoCounterFresh(expired,expired.observedNs)&&!AmmoCounterFresh(expired,now));
+    AmmoCounterPresentation hud;
+    CHECK(hud.Receive(admitted,admitted,30,Now));
+    CHECK(hud.Receive(ownerOnly,ownerOnly,30,current.observedNs));
+    CHECK(!hud.Receive(expired,expired,30,now)); // Expired count is NOT accepted.
+    CHECK(hud.Select(30,now)&&*hud.Select(30,now)==admitted);
+    CHECK(!AmmoCounterFresh(*hud.Select(30,now),now)); // Original count time remains stale.
+    CHECK(!hud.Receive(expired,expired,30,current.deadlineNs-1));
+    CHECK(hud.Select(30,current.deadlineNs-1)&&*hud.Select(30,current.deadlineNs-1)==admitted);
+    CHECK(!hud.Select(30,current.deadlineNs)); // Exact original independent deadline.
+    CHECK(!hud.Receive(expired,expired,30,current.deadlineNs));
+    CHECK(!hud.Select(30,current.deadlineNs));
+    // An ordinary fresh same-owner update still changes both displayed digits.
+    hud.Reset();CHECK(hud.Receive(admitted,admitted,30,Now));
+    CHECK(hud.Receive(ownerOnly,ownerOnly,30,current.observedNs));
+    CHECK(!hud.Receive(expired,expired,30,now));
+    auto fresh=expired;++fresh.sequence;fresh.observedNs=now;fresh.deadlineNs=now+50000000;
+    CHECK(hud.Receive(fresh,fresh,30,now));CHECK(*hud.Select(30,now)==fresh);
+    // No independent owner-only marker: preserve existing rejection semantics.
+    hud.Reset();CHECK(hud.Receive(admitted,admitted,30,Now));
+    auto earlyExpired=expired;earlyExpired.deadlineNs=Now+40000000;
+    CHECK(!hud.Receive(earlyExpired,earlyExpired,30,Now+50000000));CHECK(!hud.Select(30,Now+50000000));
+    for(unsigned fault=0;fault<15;++fault){
+        hud.Reset();CHECK(hud.Receive(admitted,admitted,30,Now));
+        CHECK(hud.Receive(ownerOnly,ownerOnly,30,current.observedNs));
+        auto a=expired,b=expired;std::uint64_t space=30;
+        if(fault==0)a={};if(fault==1)b={};
+        if(fault==2)++a.actorGeneration,++b.actorGeneration;
+        if(fault==3)++a.equipmentGeneration,++b.equipmentGeneration; // HUD/scene lifetime.
+        if(fault==4)++a.spaceGeneration,++b.spaceGeneration;
+        if(fault==5)++space;
+        if(fault==6)a.loaded=a.capacity+1;
+        if(fault==7)a.reserved=AmmoCounterOwnerOnly;
+        if(fault==8)a.deadlineNs=a.observedNs;
+        if(fault==9)a.observedNs=now+1;
+        if(fault==10)--b.loaded; // Equal sequence with conflicting count.
+        if(fault==11){++b.sequence;--b.observedNs;--b.deadlineNs;} // Sequence/time inversion.
+        if(fault==12)a.sequence=b.sequence=admitted.sequence-1;
+        if(fault==13)a.sequence=b.sequence=admitted.sequence; // Changed metadata under old sequence.
+        if(fault==14){a=b=ownerOnly;a.deadlineNs=b.deadlineNs=now;} // Owner authority itself expired.
+        CHECK(!hud.Receive(a,b,space,now));CHECK(!hud.Select(30,now));
+        CHECK(!hud.Receive(ownerOnly,ownerOnly,30,now));CHECK(!hud.Select(30,now));
+    }
+    return 0;
+}
 int RejectedCountsCannotRenewOwnership(){
     auto admitted=Sample();admitted.sequence=10;
     for(unsigned fault=0;fault<4;++fault){
@@ -412,7 +464,7 @@ int BitmapContents(){
 }
 }
 int main(){if(SameLifetimePublicationHandoff()||CommittedSceneHudLifetime()||SceneEquipmentAndPublicationDeadlines()||NativeReadOnlyAdmission()||NativeReadClockOrdering()||PublishedReserveIsPassiveAndBounded()||PairAndFreshness()||
-    DisplaySurvivesAmmoGapsWithCurrentOwner()||RejectedCountsCannotRenewOwnership()||DisplayOwnerLifetimeAndDuplicatePackets()||OwnerMarkersCannotAdmitCounts()||
+    DisplaySurvivesAmmoGapsWithCurrentOwner()||ExpiredSameOwnerCountsPreserveIndependentLease()||RejectedCountsCannotRenewOwnership()||DisplayOwnerLifetimeAndDuplicatePackets()||OwnerMarkersCannotAdmitCounts()||
     CountsChangingBetweenEyes()||WeaponSidePlacement()||BitmapContents())return 1;
     std::cout<<"AmmoCounter: strict native samples, retained same-owner display, paired telemetry and bitmap checks passed; no native acceptance\n";
 }

@@ -1,5 +1,6 @@
 #pragma once
 #include "fvr/graphics/SharedTextureProtocol.h"
+#include "fvr/graphics/AmmoCounter.h"
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -80,7 +81,24 @@ struct HostCopyObservation {
         else AddHostDiagnosticSaturated(copyPollDropped,1);
     }
 };
+// These are the original host wire/presentation samples. equipmentGeneration
+// includes native HUD/scene lifetime. Separate native owner/scene timestamps
+// are NOT in this wire protocol and must not be inferred from these fields.
+enum class HostAmmoHudDecision : unsigned {NotCalled,Unavailable,Failed,NoClock,
+    Inactive,Tracking,Placement,NoSample,Upload,FinalNoSample,ImageOwner,Submitted};
+inline constexpr std::array<const char*,12> HostAmmoHudDecisionNames{
+    "not_called","unavailable","failed","no_clock","inactive","tracking",
+    "placement","no_sample","upload","final_no_sample","image_owner","submitted"};
+struct HostAmmoHudObservation {
+    HostAmmoHudDecision decision=HostAmmoHudDecision::NotCalled;
+    std::uint64_t receiveSerial=0;
+    std::int64_t receiveNs=0,selectNs=0,finalNs=0;
+    graphics::PairTicket sourceTicket{};
+    graphics::AmmoCounterSample left{},right{},countBeforeReceive{},ownerBeforeReceive{},count{},owner{},image{};
+    bool sourceMatches=false,receiveAccepted=false,pending=false,hasImage=false;
+};
 struct HostFrameObservation : HostCopyObservation {
+    HostAmmoHudDecision ammoHudDecision=HostAmmoHudDecision::NotCalled;
     std::uint64_t frame=0,wallMs=0,space=0,retainedGeneration=0,retainedSpace=0;
     std::int64_t startedNs=0,endedNs=0,predictedNs=0,retainedPredictedNs=0,retainedAgeNs=0,gapBeforeNs=0;
     std::uint64_t inputGeneration=0,lastInputSuccessGeneration=0;
@@ -133,12 +151,30 @@ inline std::uint32_t HostReasons(const HostFrameObservation& f)noexcept {
         if(f.retainedAgeNs>250000000)reasons|=HostRetainedAge;}
     return reasons;
 }
+// Full HUD wire/presentation samples live only in this lean first-gap capture,
+// never in the 256-row frame ring or its retained full-frame witnesses.
+struct HostHudGapObservation {
+    std::uint64_t frame=0,space=0,inputGeneration=0;
+    std::int64_t startedNs=0,endedNs=0,predictedNs=0;
+    std::uint32_t menuLayers=0;
+    bool worldLayer=false,endSucceeded=false,shouldRender=false,focused=false,present=false;
+    bool menu=false,headValid=false,viewsValid=false,trackingValid=false;
+    bool inputFocused=false,inputHeadValid=false,inputHandsTracked=false;
+    HostAmmoHudObservation ammoHud{};
+};
 // Diagnostics only. All times are host QPC nanoseconds except XR predicted
 // times/retained age and wall_ms. Neither input nor render leases are extended.
 struct HostFrameDiagnostics {
     static constexpr unsigned Capacity=256;
     static constexpr std::uint64_t SlowStageNs=20000000,SlowFrameNs=50000000;
     std::array<HostFrameObservation,Capacity> rows{};
+    // Freeze the prior successful HUD submission and the first 31 frames
+    // from a focused world omission. Menu/owner transitions can be intentional;
+    // this neutral observation window establishes neither cause nor defect.
+    static constexpr unsigned HudGapCapacity=32;
+    std::array<HostHudGapObservation,HudGapCapacity> firstHudGapRows{};
+    HostHudGapObservation lastHudVisible{};
+    unsigned firstHudGapCount=0;
     std::array<std::uint64_t,unsigned(HostStage::Count)> maxStageNs{};
     std::array<HostStageAggregate,unsigned(HostStage::Count)> stageAggregates{};
     // Keep a bounded summary of renderable non-menu frames while the user is
@@ -193,7 +229,31 @@ struct HostFrameDiagnostics {
             maxInputSuccessGapNs=(std::max)(maxInputSuccessGapNs,std::uint64_t(returnedNs-lastInputSuccessReturnedNs));
         ++inputSuccesses;lastInputSuccessGeneration=generation;lastInputSuccessReturnedNs=returnedNs;
     }
-    void Observe(HostFrameObservation f)noexcept {
+    static void CaptureHudGap(HostHudGapObservation& row,const HostFrameObservation& f,
+        const HostAmmoHudObservation* hud)noexcept {
+        row.frame=f.frame;row.space=f.space;row.inputGeneration=f.inputGeneration;
+        row.startedNs=f.startedNs;row.endedNs=f.endedNs;row.predictedNs=f.predictedNs;
+        row.menuLayers=f.menuLayers;row.worldLayer=f.worldLayer;row.endSucceeded=f.endSucceeded;
+        row.shouldRender=f.shouldRender;row.focused=f.focused;row.present=f.present;row.menu=f.menu;
+        row.headValid=f.headValid;row.viewsValid=f.viewsValid;row.trackingValid=f.trackingValid;
+        row.inputFocused=f.inputFocused;row.inputHeadValid=f.inputHeadValid;row.inputHandsTracked=f.inputHandsTracked;
+        row.ammoHud=hud?*hud:HostAmmoHudObservation{};
+    }
+    void ObserveHudGap(const HostFrameObservation& f,const HostAmmoHudObservation* hud)noexcept {
+        if(firstHudGapCount==HudGapCapacity)return;
+        const bool eligible=f.focused&&f.present&&f.shouldRender&&!f.menu&&f.worldLayer&&f.endSucceeded;
+        const bool shown=hud&&hud->decision==HostAmmoHudDecision::Submitted;
+        if(!firstHudGapCount){
+            if(eligible&&shown){CaptureHudGap(lastHudVisible,f,hud);return;}
+            if(!eligible||shown||!lastHudVisible.frame)return;
+            firstHudGapRows[firstHudGapCount++]=lastHudVisible;
+        }
+        // After the trigger preserve consecutive observations, including menus,
+        // tracking loss and failed submissions, instead of silently skipping them.
+        CaptureHudGap(firstHudGapRows[firstHudGapCount++],f,hud);
+    }
+    void Observe(HostFrameObservation f,const HostAmmoHudObservation* hud=nullptr)noexcept {
+        f.ammoHudDecision=hud?hud->decision:HostAmmoHudDecision::NotCalled;
         f.spaceChanged|=previousSpace&&previousSpace!=f.space;
         if(lastFrameEndedNs>0&&f.startedNs>=lastFrameEndedNs)f.gapBeforeNs=f.startedNs-lastFrameEndedNs;
         f.lastInputSuccessGeneration=lastInputSuccessGeneration;f.lastInputSuccessReturnedNs=lastInputSuccessReturnedNs;
@@ -260,6 +320,7 @@ struct HostFrameDiagnostics {
             if(gap>=FirstInputGapNs){firstInputSuccessGapNs=gap;firstInputSuccessGap=f;}
         }
         if(f.pairRejected&&!firstRejectedFrame.pairRejected)firstRejectedFrame=f;
+        ObserveHudGap(f,hud);
         if(f.endSucceeded){if(!f.worldLayer){++noWorldFrames;for(unsigned i=0;i<16;++i)if(f.reasons&(1u<<i))++noWorldReasonFrames[i];}
             if(!f.layers)++zeroLayerFrames;if(!f.worldLayer&&f.menuLayers)++menuOnlyFrames;}
         else ++failedFrames;
@@ -313,7 +374,12 @@ struct HostFrameDiagnostics {
         out<<"],\"stage_aggregates\":";WriteStageAggregates(out,focusedRenderStageAggregates);
         out<<",\"worst_frame\":";
         if(focusedRenderFrames)WriteFrame(out,worstFocusedRenderFrame);else out<<"null";
-        out<<"},\"rows\":[";
+        out<<"},\"first_hud_gap\":{\"capacity\":"<<HudGapCapacity
+           <<",\"scope\":\"prior successful HUD submission then first focused world omission and following frames; host wire times only\""
+           <<",\"interpretation\":\"observation only; menu and owner changes may be intentional; no cause or defect inferred\""
+           <<",\"frozen\":"<<(firstHudGapCount==HudGapCapacity)<<",\"rows\":[";
+        for(unsigned i=0;i<firstHudGapCount;++i){if(i)out<<',';WriteHudGap(out,firstHudGapRows[i],lastHudVisible.ammoHud.image);}
+        out<<"]},\"rows\":[";
         for(unsigned i=0;i<count;++i){if(i)out<<',';WriteFrame(out,Row(i));}
         out<<"],\"first_rejected_frame\":";
         if(firstRejectedFrame.pairRejected)WriteFrame(out,firstRejectedFrame);else out<<"null";
@@ -365,6 +431,47 @@ struct HostFrameDiagnostics {
             }
             out<<']';
     }
+    static void WriteAmmoSample(std::ostream& out,const graphics::AmmoCounterSample& s){
+        out<<"{\"sequence\":"<<s.sequence<<",\"observed_ns\":"<<s.observedNs<<",\"deadline_ns\":"<<s.deadlineNs
+           <<",\"actor_generation\":"<<s.actorGeneration<<",\"hud_scene_generation\":"<<s.equipmentGeneration
+           <<",\"space_generation\":"<<s.spaceGeneration<<",\"loaded\":"<<s.loaded<<",\"reserve\":"<<s.reserve
+           <<",\"capacity\":"<<s.capacity<<",\"tag\":"<<s.reserved<<'}';
+    }
+    static void WriteAmmoHud(std::ostream& out,const HostAmmoHudObservation& h){
+        out<<"{\"decision\":\""<<HostAmmoHudDecisionNames[unsigned(h.decision)]<<"\",\"receive_serial\":"<<h.receiveSerial
+           <<",\"receive_ns\":"<<h.receiveNs<<",\"select_ns\":"<<h.selectNs<<",\"final_ns\":"<<h.finalNs
+           <<",\"source_matches\":"<<h.sourceMatches<<",\"receive_accepted\":"<<h.receiveAccepted
+           <<",\"pending\":"<<h.pending<<",\"has_image\":"<<h.hasImage
+           <<",\"source_resource_epoch\":"<<h.sourceTicket.resourceEpoch<<",\"source_sequence\":"<<h.sourceTicket.sequence
+           <<",\"source_frame\":"<<h.sourceTicket.frameId<<",\"source_tracking\":"<<h.sourceTicket.trackingGeneration
+           <<",\"source_space\":"<<h.sourceTicket.spaceGeneration<<",\"source_predicted_ns\":"<<h.sourceTicket.predictedNs
+           <<",\"source_session\":[";
+        for(unsigned i=0;i<h.sourceTicket.session.size();++i){if(i)out<<',';out<<unsigned(h.sourceTicket.session[i]);}out<<']';
+        out<<",\"left\":";WriteAmmoSample(out,h.left);out<<",\"right\":";WriteAmmoSample(out,h.right);
+        out<<",\"count_before_receive\":";WriteAmmoSample(out,h.countBeforeReceive);
+        out<<",\"owner_before_receive\":";WriteAmmoSample(out,h.ownerBeforeReceive);
+        out<<",\"count\":";WriteAmmoSample(out,h.count);out<<",\"owner\":";WriteAmmoSample(out,h.owner);
+        out<<",\"image\":";WriteAmmoSample(out,h.image);out<<'}';
+    }
+    static void WriteHudGap(std::ostream& out,const HostHudGapObservation& f,
+        const graphics::AmmoCounterSample& priorVisible){
+        const auto& h=f.ammoHud;
+        const bool wireOwnerDiffers=h.sourceMatches&&h.left.actorGeneration&&h.right.actorGeneration&&
+            graphics::SameAmmoCounterOwner(h.left,h.right)&&!graphics::SameAmmoCounterOwner(h.left,priorVisible);
+        const char* context=f.menu||f.menuLayers?"menu":!f.endSucceeded?"end_not_successful":
+            !f.worldLayer?"no_world":!f.focused||!f.present||!f.shouldRender?"render_inactive":
+            !f.headValid||!f.viewsValid||!f.trackingValid||h.decision==HostAmmoHudDecision::Tracking?"tracking_unavailable":
+            h.decision==HostAmmoHudDecision::Submitted?"submitted":wireOwnerDiffers?"wire_owner_differs_from_prior_visible":
+            !h.owner.actorGeneration?"owner_evidence_missing":"hud_omitted";
+        out<<"{\"frame\":"<<f.frame<<",\"space\":"<<f.space<<",\"started_ns\":"<<f.startedNs
+           <<",\"ended_ns\":"<<f.endedNs<<",\"predicted_ns\":"<<f.predictedNs<<",\"input_generation\":"<<f.inputGeneration
+           <<",\"world_layer\":"<<f.worldLayer<<",\"end_succeeded\":"<<f.endSucceeded<<",\"should_render\":"<<f.shouldRender
+           <<",\"focused\":"<<f.focused<<",\"present\":"<<f.present<<",\"menu\":"<<f.menu<<",\"menu_layers\":"<<f.menuLayers
+           <<",\"head_valid\":"<<f.headValid<<",\"views_valid\":"<<f.viewsValid<<",\"tracking_valid\":"<<f.trackingValid
+           <<",\"input_focused\":"<<f.inputFocused<<",\"input_head_valid\":"<<f.inputHeadValid<<",\"input_hands_tracked\":"<<f.inputHandsTracked
+           <<",\"context\":\""<<context<<"\",\"wire_owner_differs_from_prior_visible\":"<<wireOwnerDiffers<<",\"ammo_hud\":";
+        WriteAmmoHud(out,h);out<<'}';
+    }
     static void WriteFrame(std::ostream& out,const HostFrameObservation& f){
             out<<"{\"frame\":"<<f.frame<<",\"wall_ms\":"<<f.wallMs<<",\"started_ns\":"<<f.startedNs<<",\"ended_ns\":"<<f.endedNs
                <<",\"wait_frame_attempted\":"<<f.waitFrameAttempted<<",\"wait_frame_started_ns\":"<<f.waitFrame.startedNs
@@ -383,6 +490,7 @@ struct HostFrameDiagnostics {
                <<",\"input_result\":"<<f.inputResult<<",\"last_input_success_generation\":"<<f.lastInputSuccessGeneration
                <<",\"prior_input_success_generation\":"<<f.priorInputSuccessGeneration<<",\"prior_input_success_returned_ns\":"<<f.priorInputSuccessReturnedNs
                <<",\"last_input_success_returned_ns\":"<<f.lastInputSuccessReturnedNs;
+            out<<",\"ammo_hud_decision\":\""<<HostAmmoHudDecisionNames[unsigned(f.ammoHudDecision)]<<'"';
             out<<',';WriteCopy(out,f);
             out<<",\"prior_copy\":";
             if(f.hasPriorCopy){out<<'{';WriteCopy(out,f.priorCopy);out<<'}';}else out<<"null";

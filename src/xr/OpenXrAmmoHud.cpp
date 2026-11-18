@@ -26,10 +26,18 @@ bool OpenXrAmmoHud::Initialize(XrInstance instance,XrSession session,PFN_xrGetIn
     }catch(...){return false;}
 }
 void OpenXrAmmoHud::Receive(const graphics::BodyPropFrame* frame,const graphics::PairTicket& ticket,std::int64_t now)noexcept {
-    if(!frame||!graphics::BodyPropFrameMatches(*frame,ticket)){
+    ++diagnostic_.receiveSerial;diagnostic_.receiveNs=now;diagnostic_.sourceTicket=ticket;
+    diagnostic_.left=frame?frame->eyes[0].ammo:graphics::AmmoCounterSample{};
+    diagnostic_.right=frame?frame->eyes[1].ammo:graphics::AmmoCounterSample{};
+    diagnostic_.countBeforeReceive=presentation_.CountEvidence();
+    diagnostic_.ownerBeforeReceive=presentation_.OwnerEvidence();
+    diagnostic_.sourceMatches=frame&&graphics::BodyPropFrameMatches(*frame,ticket);
+    diagnostic_.receiveAccepted=false;
+    if(!diagnostic_.sourceMatches){
         ++invalidSamples_;presentation_.Receive({},{},ticket.spaceGeneration,now);return;
     }
-    if(presentation_.Receive(frame->eyes[0].ammo,frame->eyes[1].ammo,frame->spaceGeneration,now))++validSamples_;
+    diagnostic_.receiveAccepted=presentation_.Receive(frame->eyes[0].ammo,frame->eyes[1].ammo,frame->spaceGeneration,now);
+    if(diagnostic_.receiveAccepted)++validSamples_;
     else ++invalidSamples_;
 }
 bool OpenXrAmmoHud::Upload(const graphics::AmmoCounterSample* sample)noexcept {
@@ -58,14 +66,24 @@ bool OpenXrAmmoHud::Upload(const graphics::AmmoCounterSample* sample)noexcept {
 }
 const XrCompositionLayerQuad* OpenXrAmmoHud::Layer(XrSpace localSpace,const interaction::InputFrame& input,
     std::int64_t (*clockNs)()noexcept,bool active)noexcept {
-    if(!chain_||failed_||!clockNs)return nullptr;
+    const auto result=[&](HostAmmoHudDecision reason,const XrCompositionLayerQuad* layer=nullptr){
+        diagnostic_.decision=reason;diagnostic_.count=presentation_.CountEvidence();
+        diagnostic_.owner=presentation_.OwnerEvidence();diagnostic_.image=imageSample_;
+        diagnostic_.pending=pending_;diagnostic_.hasImage=hasImage_;return layer;
+    };
+    diagnostic_.selectNs=diagnostic_.finalNs=0;
+    if(!chain_)return result(HostAmmoHudDecision::Unavailable);
+    if(failed_)return result(HostAmmoHudDecision::Failed);
+    if(!clockNs)return result(HostAmmoHudDecision::NoClock);
     const auto& right=input.hands[1];
     const bool tracked=active&&localSpace&&interaction::ValidInput(input)&&input.focused&&input.headValid&&
         right.gripTracked&&right.aimTracked;
     if(!tracked)presentation_.Reset();
     const auto placement=tracked?graphics::AmmoCounterBesideGun(input.head,right.grip,right.aim):std::nullopt;
-    const auto* sample=placement?presentation_.Select(input.spaceGeneration,clockNs()):nullptr;
-    if(!sample){if(pending_)Upload(nullptr);return nullptr;}
+    diagnostic_.selectNs=placement?clockNs():0;
+    const auto* sample=placement?presentation_.Select(input.spaceGeneration,diagnostic_.selectNs):nullptr;
+    if(!sample){if(pending_)Upload(nullptr);return result(!active?HostAmmoHudDecision::Inactive:
+        !tracked?HostAmmoHudDecision::Tracking:!placement?HostAmmoHudDecision::Placement:HostAmmoHudDecision::NoSample);}
     // Presentation owns the current-owner lease separately from count age.
     // Keep the released same-owner digits through ammo gaps or a zero-wait
     // upload retry; no saved ammunition observation is made fresh by reuse.
@@ -74,11 +92,12 @@ const XrCompositionLayerQuad* OpenXrAmmoHud::Layer(XrSpace localSpace,const inte
     if(pending_||!hasImage_||!graphics::SameAmmoCounterOwner(imageSample_,*sample)||
        loaded_!=sample->loaded||reserve_!=sample->reserve){
         if(!Upload(sample)&&(!pending_||failed_||!hasImage_||
-           !graphics::SameAmmoCounterOwner(imageSample_,*sample)))return nullptr;
+           !graphics::SameAmmoCounterOwner(imageSample_,*sample)))return result(HostAmmoHudDecision::Upload);
     }
-    const auto finalNow=clockNs();
+    const auto finalNow=clockNs();diagnostic_.finalNs=finalNow;
     const auto* current=presentation_.Select(input.spaceGeneration,finalNow);
-    if(!current||!graphics::SameAmmoCounterOwner(imageSample_,*current))return nullptr;
+    if(!current)return result(HostAmmoHudDecision::FinalNoSample);
+    if(!graphics::SameAmmoCounterOwner(imageSample_,*current))return result(HostAmmoHudDecision::ImageOwner);
     layer_={XR_TYPE_COMPOSITION_LAYER_QUAD};layer_.space=localSpace;
     layer_.layerFlags=XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
     layer_.eyeVisibility=XR_EYE_VISIBILITY_BOTH;
@@ -86,6 +105,6 @@ const XrCompositionLayerQuad* OpenXrAmmoHud::Layer(XrSpace localSpace,const inte
     layer_.subImage.imageRect.extent={std::int32_t(graphics::AmmoCounterBitmap::Width),std::int32_t(graphics::AmmoCounterBitmap::Height)};
     const auto& p=placement->position;const auto& q=placement->orientation;
     layer_.pose={{q.x,q.y,q.z,q.w},{p.x,p.y,p.z}};
-    layer_.size={graphics::AmmoCounterWidthMeters,graphics::AmmoCounterHeightMeters};return &layer_;
+    layer_.size={graphics::AmmoCounterWidthMeters,graphics::AmmoCounterHeightMeters};return result(HostAmmoHudDecision::Submitted,&layer_);
 }
 } // namespace fvr::xr

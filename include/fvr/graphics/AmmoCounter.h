@@ -75,10 +75,27 @@ inline std::optional<AmmoCounterSample> AmmoCounterPair(const AmmoCounterSample&
 class AmmoCounterPresentation {
 public:
     void Reset()noexcept {last_={};owner_={};}
+    // Passive diagnostics: original admitted evidence, never a renewed lease.
+    const AmmoCounterSample& CountEvidence()const noexcept {return last_;}
+    const AmmoCounterSample& OwnerEvidence()const noexcept {return owner_;}
     bool Receive(const AmmoCounterSample& a,const AmmoCounterSample& b,std::uint64_t space,std::int64_t now)noexcept {
         const bool countA=AmmoCounterFresh(a,now),countB=AmmoCounterFresh(b,now);
         if(!space||a.spaceGeneration!=space||!SameAmmoCounterOwner(a,b)||
-           (!countA&&!AmmoCounterOwnerOnlyFresh(a,now))||(!countB&&!AmmoCounterOwnerOnlyFresh(b,now))){Reset();return false;}
+           (!countA&&!AmmoCounterOwnerOnlyFresh(a,now))||(!countB&&!AmmoCounterOwnerOnlyFresh(b,now))){
+            // A coherent count pair can expire in transit while an independent
+            // owner-only lease already authorizes these exact displayed digits.
+            // Reject the expired count without erasing that ORIGINAL authority.
+            // Nil, owner-only expiry, malformed pairs and lifetime changes still
+            // retire. Neither the old count nor the owner lease is rewritten.
+            const auto pairTime=(std::max)(a.observedNs,b.observedNs);
+            const auto expiredPair=pairTime<=now?AmmoCounterPair(a,b,space,pairTime):std::nullopt;
+            if(AmmoCounterOwnerOnlyFresh(owner_,now)&&Select(space,now)&&expiredPair&&
+               expiredPair->deadlineNs<=now&&SameAmmoCounterOwner(*expiredPair,owner_)&&
+               expiredPair->sequence>=last_.sequence&&expiredPair->observedNs>=last_.observedNs&&
+               (expiredPair->sequence!=last_.sequence||
+                (expiredPair->observedNs==last_.observedNs&&SameAmmoCounterCounts(*expiredPair,last_))))return false;
+            Reset();return false;
+        }
         if(owner_.actorGeneration&&!SameAmmoCounterOwner(owner_,a))Reset();
         const auto renewOwner=[&](const AmmoCounterSample& left,const AmmoCounterSample& right)noexcept {
             auto owner=left.observedNs>=right.observedNs?left:right;

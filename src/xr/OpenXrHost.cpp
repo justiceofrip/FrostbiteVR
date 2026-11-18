@@ -445,8 +445,8 @@ struct Host {
         diagnostic.wallMs=GetTickCount64();diagnostic.startedNs=BodyPropClockNs();
         diagnostic.provider=provider!=nullptr;diagnostic.present=userPresent;
         diagnostic.focused=sessionState==XR_SESSION_STATE_FOCUSED;diagnostic.space=spaceGeneration;
-        struct Record {HostReport& report;HostFrameObservation& frame;~Record(){
-            frame.endedNs=BodyPropClockNs();report.frameDiagnostics.Observe(frame);
+        struct Record {HostReport& report;HostFrameObservation& frame;const HostAmmoHudObservation* hud=nullptr;~Record(){
+            frame.endedNs=BodyPropClockNs();report.frameDiagnostics.Observe(frame,hud);
         }} record{report,diagnostic};
         const auto timed=[&](HostStage stage,auto&& operation)->decltype(auto){
             HostStageTimer timer(diagnostic,stage,BodyPropClockNs);return operation();
@@ -816,6 +816,7 @@ struct Host {
         if(ammoHud){if(const auto* hud=ammoHud->Layer(local,hudInput,BodyPropClockNs,
             submit&&!menuActive&&tracking.focused&&tracking.headValid)){
                 layers.push_back(reinterpret_cast<const XrCompositionLayerBaseHeader*>(hud));++report.ammoCounterFrames;}
+            record.hud=&ammoHud->Diagnostic();
             report.ammoCounterUploads=ammoHud->Uploads();report.ammoCounterErrors=ammoHud->Errors();
             report.ammoCounterValidSamples=ammoHud->ValidSamples();report.ammoCounterInvalidSamples=ammoHud->InvalidSamples();
         }

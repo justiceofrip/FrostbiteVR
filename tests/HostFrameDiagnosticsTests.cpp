@@ -620,6 +620,100 @@ int FirstPublicationGapSurvivesOverwrite(){
 }
 
 }
+HostAmmoHudObservation HudObservation(HostAmmoHudDecision decision){
+    HostAmmoHudObservation h;h.decision=decision;h.receiveSerial=71;h.receiveNs=12000000;
+    h.selectNs=13000000;h.finalNs=14000000;h.sourceMatches=h.receiveAccepted=h.hasImage=true;
+    h.sourceTicket.resourceEpoch=72;h.sourceTicket.sequence=73;h.sourceTicket.frameId=74;
+    h.sourceTicket.spaceGeneration=1;h.sourceTicket.trackingGeneration=75;h.sourceTicket.predictedNs=76000000;
+    h.sourceTicket.session[0]=77;h.sourceTicket.session[15]=78;
+    h.left.sequence=79;h.left.observedNs=8000000;h.left.deadlineNs=90000000;
+    h.left.actorGeneration=80;h.left.equipmentGeneration=81;h.left.spaceGeneration=1;
+    h.left.loaded=8;h.left.reserve=24;h.left.capacity=8;h.right=h.left;
+    h.countBeforeReceive=h.ownerBeforeReceive=h.count=h.owner=h.image=h.left;
+    h.owner.reserved=fvr::graphics::AmmoCounterOwnerOnly;h.owner.sequence=0;
+    h.owner.loaded=h.owner.reserve=h.owner.capacity=0;h.owner.deadlineNs=200000000;
+    return h;
+}
+int FirstHudGapSurvivesOverwrite(){
+    auto storage=std::make_unique<HostFrameDiagnostics>();auto& d=*storage;
+    auto h=HudObservation(HostAmmoHudDecision::NoSample);d.Observe(Frame(),&h);
+    CHECK(!d.firstHudGapCount&&!d.lastHudVisible.frame); // No previously shown digits.
+    h.decision=HostAmmoHudDecision::Submitted;auto f=Frame(2);f.endSucceeded=false;d.Observe(f,&h);
+    h.decision=HostAmmoHudDecision::NoSample;d.Observe(Frame(3),&h);
+    CHECK(!d.firstHudGapCount&&!d.lastHudVisible.frame); // Failed EndFrame does not arm.
+    h.decision=HostAmmoHudDecision::Submitted;f=Frame(4);f.inputGeneration=82;
+    f.inputFocused=f.inputHeadValid=f.inputHandsTracked=true;d.Observe(f,&h);
+    const auto shown=h;
+    CHECK(!d.firstHudGapCount&&d.lastHudVisible.frame==4);
+    h.decision=HostAmmoHudDecision::FinalNoSample;h.finalNs=200000000;h.pending=true;
+    d.Observe(Frame(5),&h);
+    CHECK(d.firstHudGapCount==2&&d.firstHudGapRows[0].frame==4&&d.firstHudGapRows[1].frame==5);
+    CHECK(d.firstHudGapRows[0].ammoHud.decision==HostAmmoHudDecision::Submitted);
+    CHECK(d.firstHudGapRows[0].ammoHud.left==shown.left&&d.firstHudGapRows[0].ammoHud.owner==shown.owner);
+    CHECK(d.firstHudGapRows[0].ammoHud.countBeforeReceive==shown.countBeforeReceive);
+    CHECK(d.firstHudGapRows[0].ammoHud.ownerBeforeReceive==shown.ownerBeforeReceive);
+    CHECK(d.firstHudGapRows[0].ammoHud.sourceTicket.session==shown.sourceTicket.session);
+    CHECK(d.firstHudGapRows[0].startedNs==40000000&&d.firstHudGapRows[0].endedNs==41000000);
+    CHECK(d.firstHudGapRows[0].predictedNs==44000000&&d.firstHudGapRows[0].inputGeneration==82);
+    CHECK(d.firstHudGapRows[0].inputFocused&&d.firstHudGapRows[0].inputHeadValid&&d.firstHudGapRows[0].inputHandsTracked);
+    CHECK(d.firstHudGapRows[1].ammoHud.finalNs==200000000&&d.firstHudGapRows[1].ammoHud.pending);
+    std::ostringstream witness;HostFrameDiagnostics::WriteHudGap(witness,d.firstHudGapRows[1],shown.image);
+    // Mutate the caller and overwrite every ordinary ring slot after freezing.
+    h={};h.decision=HostAmmoHudDecision::Inactive;
+    for(unsigned n=6;n<336;++n){f=Frame(n);f.menu=true;f.worldLayer=false;f.menuLayers=f.layers=1;
+        f.endedNs=f.startedNs+HostFrameDiagnostics::SlowFrameNs;d.Observe(f,&h);}
+    CHECK(d.firstHudGapCount==HostFrameDiagnostics::HudGapCapacity);
+    CHECK(d.firstHudGapRows[2].frame==6&&d.firstHudGapRows[2].menu);
+    CHECK(d.firstHudGapRows.back().frame==35&&d.lastHudVisible.frame==4);
+    CHECK(d.count==HostFrameDiagnostics::Capacity&&d.dropped>0&&d.Row(0).frame>35);
+    CHECK(d.Row(0).ammoHudDecision==HostAmmoHudDecision::Inactive);
+    std::ostringstream retained;HostFrameDiagnostics::WriteHudGap(retained,d.firstHudGapRows[1],shown.image);
+    CHECK(retained.str()==witness.str());
+    std::ostringstream report;d.Write(report);
+    CHECK(report.str().find("\"first_hud_gap\":{\"capacity\":32")!=std::string::npos);
+    CHECK(report.str().find("\"frozen\":1,\"rows\":[")!=std::string::npos);
+    CHECK(report.str().find(witness.str())!=std::string::npos);
+    CHECK(report.str().find("\"source_space\":1,\"source_predicted_ns\":76000000")!=std::string::npos);
+    CHECK(report.str().find("\"decision\":\"final_no_sample\"")!=std::string::npos);
+    CHECK(sizeof(HostHudGapObservation)<768&&sizeof(HostFrameObservation)<1100);
+    CHECK(sizeof(HostFrameDiagnostics)<320*1024); // Existing total bound is unchanged.
+    return 0;
+}
+int HudGapMenuAndOwnerContext(){
+    auto storage=std::make_unique<HostFrameDiagnostics>();auto& d=*storage;
+    auto h=HudObservation(HostAmmoHudDecision::Submitted);d.Observe(Frame(),&h);
+    auto f=Frame(2);f.menu=true;f.worldLayer=false;f.menuLayers=f.layers=1;
+    h.decision=HostAmmoHudDecision::Inactive;h.count=h.owner={};d.Observe(f,&h);
+    CHECK(!d.firstHudGapCount); // Intentional menu is outside the trigger scope.
+    h.decision=HostAmmoHudDecision::NoSample;h.left.actorGeneration=h.right.actorGeneration=90;
+    d.Observe(Frame(3),&h); // New wire owner after menu can legitimately have no digits.
+    CHECK(d.firstHudGapCount==2&&d.firstHudGapRows[0].frame==1);
+    std::ostringstream owner;HostFrameDiagnostics::WriteHudGap(owner,d.firstHudGapRows[1],d.lastHudVisible.ammoHud.image);
+    CHECK(owner.str().find("\"context\":\"wire_owner_differs_from_prior_visible\"")!=std::string::npos);
+    // HUD/scene and reference-space identity differences get the same neutral label.
+    for(unsigned kind=0;kind<2;++kind){h=HudObservation(HostAmmoHudDecision::NoSample);
+        if(kind==0)++h.left.equipmentGeneration,++h.right.equipmentGeneration;
+        else ++h.left.spaceGeneration,++h.right.spaceGeneration;
+        d.Observe(Frame(4+kind),&h);
+        std::ostringstream changed;HostFrameDiagnostics::WriteHudGap(changed,d.firstHudGapRows[2+kind],d.lastHudVisible.ammoHud.image);
+        CHECK(changed.str().find("\"context\":\"wire_owner_differs_from_prior_visible\"")!=std::string::npos);}
+    f=Frame(6);f.menu=true;f.worldLayer=false;f.menuLayers=f.layers=1;
+    h.decision=HostAmmoHudDecision::Inactive;d.Observe(f,&h);
+    std::ostringstream menu;HostFrameDiagnostics::WriteHudGap(menu,d.firstHudGapRows[4],d.lastHudVisible.ammoHud.image);
+    CHECK(menu.str().find("\"context\":\"menu\"")!=std::string::npos);
+    CHECK(menu.str().find("\"decision\":\"inactive\"")!=std::string::npos);
+    f=Frame(7);f.trackingValid=false;h.decision=HostAmmoHudDecision::Tracking;d.Observe(f,&h);
+    std::ostringstream tracking;HostFrameDiagnostics::WriteHudGap(tracking,d.firstHudGapRows[5],d.lastHudVisible.ammoHud.image);
+    CHECK(tracking.str().find("\"context\":\"tracking_unavailable\"")!=std::string::npos);
+    // An early return with no Layer call must not inherit the preceding decision.
+    f=Frame(8);f.endSucceeded=false;d.Observe(f);
+    CHECK(d.firstHudGapRows[6].ammoHud.decision==HostAmmoHudDecision::NotCalled);
+    std::ostringstream report;d.Write(report);
+    CHECK(report.str().find("observation only; menu and owner changes may be intentional; no cause or defect inferred")!=std::string::npos);
+    CHECK(report.str().find("\"bug\"")==std::string::npos&&report.str().find("\"defect\"")==std::string::npos);
+    return 0;
+}
+
 int FocusedRenderEvidenceSurvivesIdleTail(){
     HostFrameDiagnostics d;
     std::ostringstream empty;d.Write(empty);
@@ -791,6 +885,8 @@ int main(int argc,char** argv){
     if(argc==2&&std::string(argv[1])=="--copy-poll-boundaries")return CopyPollBoundariesAcrossWait()||CopyPollTicketsOverflowAndRetention();
     if(argc==2&&std::string(argv[1])=="--first-input-gap")return FirstPublicationGapSurvivesOverwrite();
     if(argc==2&&std::string(argv[1])=="--focused-render")return FocusedRenderEvidenceSurvivesIdleTail();
+    if(argc==2&&std::string(argv[1])=="--first-hud-gap")return FirstHudGapSurvivesOverwrite()||HudGapMenuAndOwnerContext();
+    if(FirstHudGapSurvivesOverwrite()||HudGapMenuAndOwnerContext())return 1;
     if(FocusedRenderEvidenceSurvivesIdleTail())return 1;
     if(CopyPollBoundariesAcrossWait()||CopyPollTicketsOverflowAndRetention())return 1;
     if(SourceImportCacheCases()||ThreeSourceImportsKeepOneCopyAndDepthQuartet())return 1;

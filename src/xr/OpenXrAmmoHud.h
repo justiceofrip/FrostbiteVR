@@ -1,5 +1,6 @@
 #pragma once
 #include "fvr/graphics/BodyPropFrame.h"
+#include "fvr/xr/HostFrameDiagnostics.h"
 #include "fvr/interaction/ControllerInput.h"
 #include <Windows.h>
 #include <d3d11.h>
@@ -23,6 +24,7 @@ public:
     void Reset()noexcept {presentation_.Reset();}
     const XrCompositionLayerQuad* Layer(XrSpace localSpace,const interaction::InputFrame& input,
         std::int64_t (*clockNs)()noexcept,bool active)noexcept;
+    const HostAmmoHudObservation& Diagnostic()const noexcept{return diagnostic_;}
     std::uint64_t Uploads()const noexcept{return uploads_;}
     std::uint64_t Errors()const noexcept{return errors_;}
     std::uint64_t ValidSamples()const noexcept{return validSamples_;}
@@ -33,6 +35,7 @@ private:
     std::vector<XrSwapchainImageD3D11KHR> images_;
     Microsoft::WRL::ComPtr<ID3D11DeviceContext> context_;
     graphics::AmmoCounterPresentation presentation_;
+    HostAmmoHudObservation diagnostic_{};
     graphics::AmmoCounterSample imageSample_{};
     graphics::AmmoCounterBitmap bitmap_;
     XrCompositionLayerQuad layer_{XR_TYPE_COMPOSITION_LAYER_QUAD};
