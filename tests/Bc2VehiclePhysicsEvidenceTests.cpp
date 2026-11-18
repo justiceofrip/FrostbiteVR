@@ -105,7 +105,7 @@ static void GateChecks(){
 
 static n::FxState seenFx{},returnFx{};
 static n::Entry seenEntry{};
-static unsigned nativeCalls=0,observerCalls=0,observerActive=0,seenError=0;
+static unsigned nativeCalls=0,observerCalls=0,observerActive=0,seenError=0,seenKind=0;
 static constexpr unsigned NativeError=0x14930001,ReturnEax=0xa1493001;
 static const unsigned defaultMxcsr=0x1f80;
 static void ResetFp(){__asm {fninit} __asm {ldmxcsr defaultMxcsr} __asm {cld}}
@@ -124,24 +124,25 @@ static bool SameFx(const n::FxState& a,const n::FxState& b){
 static void DirtyObserver(){__asm {fninit} __asm {fldz} __asm {pxor xmm0,xmm0} __asm {pxor xmm7,xmm7} SetLastError(0xbad1493);}
 // The first instructions are real MinHook fixtures. Each original captures its
 // actual incoming machine state, then returns a different floating environment.
-#define NATIVE_FIXTURE(Name,Words,Pop) \
+#define NATIVE_FIXTURE(Name,Words,Pop,Kind) \
 __declspec(naked) static void __cdecl Name(){ \
     __asm {pushfd} __asm {pushad} __asm {fxsave seenFx} \
-    __asm {mov eax,fs:[34h]} __asm {mov seenError,eax} \
+    __asm {mov eax,fs:[34h]} __asm {mov seenError,eax} __asm {mov seenKind,Kind} \
     __asm {mov esi,esp} __asm {mov edi,offset seenEntry} __asm {mov ecx,Words} \
     __asm {cld} __asm {rep movsd} __asm {inc nativeCalls} \
     __asm {popad} __asm {popfd} __asm {fxrstor returnFx} \
     __asm {mov dword ptr fs:[34h],14930001h} __asm {mov eax,0a1493001h} __asm {ret Pop} \
 }
-NATIVE_FIXTURE(NativeUpdate,11,4)
-NATIVE_FIXTURE(NativeFilter,13,12)
-NATIVE_FIXTURE(NativeSimulation,11,4)
-NATIVE_FIXTURE(NativeOutput,13,12)
+NATIVE_FIXTURE(NativeUpdate,11,4,0)
+NATIVE_FIXTURE(NativeFilter,13,12,1)
+NATIVE_FIXTURE(NativeSimulation,11,4,2)
+NATIVE_FIXTURE(NativeOutput,13,12,3)
 #undef NATIVE_FIXTURE
 static void __cdecl FixtureDispatch(n::Frame* frame){
     ++observerCalls;++observerActive;bool normal=false;
     __try {
         DirtyObserver();n::Forwards[frame->kind](frame);normal=true;
+        Check(seenKind==frame->kind,"exact native boundary forwards to its own original");
         Check(SameFx(seenFx,frame->incoming),"observer cannot change incoming x87/SSE state");
         Check(SameFx(frame->returned,returnFx),"native returned x87/SSE state captured before observer");
         Check(seenError==frame->incomingLastError&&frame->returnedLastError==NativeError,"LastError preserved both ways");
@@ -176,6 +177,9 @@ static void AbiChecks(){
         const auto before=nativeCalls;FixtureDispatch(&frame);Check(nativeCalls==before+1&&!observerActive,"one original, drained normal path");ResetFp();
         *n::Originals[k]=nullptr;
     }
+    // Literal per-boundary markers above prevent identical-code folding.
+    for(unsigned a=0;a<4;++a)for(unsigned b=0;b<a;++b)
+        Check(functions[a]!=functions[b],"four distinct native fixture entry points");
     Check(MH_Initialize()==MH_OK,"MinHook fixture initialize");
     for(unsigned k=0;k<4;++k)Check(MH_CreateHook(functions[k],n::Thunks[k],reinterpret_cast<void**>(n::Originals[k]))==MH_OK,"create actual boundary adapter");
     Check(MH_EnableHook(MH_ALL_HOOKS)==MH_OK,"enable fixture adapters");
