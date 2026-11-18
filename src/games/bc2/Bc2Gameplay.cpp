@@ -1291,10 +1291,10 @@ void __cdecl DispatchVehiclePhysics(vehiclePhysics::native::Frame* frame){
                !SelectionReadWord(vehiclePhysicsContext.identity.driver,0xd4,expectedPhysics))expectedPhysics=0;
             const auto caller=frame->entry->caller>=image?frame->entry->caller-unsigned(image):frame->entry->caller;
             const auto admission=Admission(kind,self,expectedPhysics,caller,previousUpdate!=nullptr);
-            if(admission==Owner)++journal->foreign;
-            else if(admission==Caller){
+            if(admission==vehiclePhysics::Owner)++journal->foreign;
+            else if(admission==vehiclePhysics::Caller){
                 if(kind==Kind::ActiveForce)++journal->activeForceOtherCaller;else ++journal->predicateOtherCaller;
-            }else if(admission==NoParent)++journal->unscoped;
+            }else if(admission==vehiclePhysics::NoParent)++journal->unscoped;
             else {
                 slot=journal->Claim(kind,now);
                 if(slot){
