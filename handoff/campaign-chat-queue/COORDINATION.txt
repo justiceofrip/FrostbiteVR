@@ -12,14 +12,14 @@ Ownership/ready/blocked tasks: COORDINATOR-STATE.txt (local scheduling record).
 External worktrees remain untouched; finished25/26/33 source is integrated. Steam32 lacks its executable.
 
 INSTALLED RUNTIME
-Local0.1.106 is active after108 smoke rollback; previous108,107 and104/103/105/102/101/99 retained.
-Compiled source2772ba3c8967ed36daeceb736a9871365763b01c; nativeclosuref1111f4a9fd2975cf2944f6bb445ad7dc231dcadf2a978e5fe0886adb7344501.
-Normal checks371x86/368x64 passed. Installed smoke showed21/210 in both eyes, with117 HUD gaps in1948 stationary frames; flicker is open.
-Active106 receipt: reports/coordinator-20261108-feedback721/normal106/run01/installation.json.108 installed/setupPASS, but stationary HUD omitted66/5145frames despite final21/210 both eyes; normal108/xr-game01/smoke-rollback.json records completed106 restoration. All profiles/settings restored and failed evidence preserved.
-Settings/cache/shortcut and headset99 recording preserved. Public posting remains on hold for local headset acceptance and remaining campaign work.
+Local0.1.109 installed/setupPASS; previous106 and108/107/104/103/105/102/101/99 retained.
+Compiled sourcea8adc48ecd34b6f63b92cbd186a45c9467b56ee1; nativeclosureded3f48699a4a9d7b1a9e9f2b02c9730b5764766be0f5aee279d1eb1373449b6.
+Normal checks371x86/368x64 and focusedAmmoCounter passed. Installed HUD continuity/vehicle smoke pending; no headset/public acceptance.
+Receipt reports/coordinator-20261108-feedback721/normal109/run01/installation.json.108 HUD66/5145 omissions/rollback remainpreserved;106 retained as fallback, not a flicker acceptance baseline.
+Settings/cache/shortcut and headset99 recording preserved. Public posting remains on hold for local headset acceptance and campaign gaps.
 
 CURRENT SOURCE
-Native58/sourcef9968e5a648152ddcc95fcc113b9d28e8deba654 is built/pushed with371x86/368x64 passes;108 was rolled back. The next batch preserves host display grace across an exact expired duplicate without accepting new count/owner evidence or extending deadlines. Optional sustained vehicle tool62 isolated checks/peer review pass; actual106/03 refusal is preserved and diagnostic polling cadence correction is queued for combined native validation. Source/push/runtime identities remain separate in the local state. LMG belt pickup/attachment, Empty presentation and chest-grip repairs remain in106; full bolt reload and headset acceptance remain open.
+Native59/sourcea8adc48 is built/pushed and installed aslocal109. Exact expired HUD duplicate preservation and opt-in25ms diagnostic snapshot polling retain native/input freshness and shutdown boundaries. The later developer-tool-only pendingACK observation correction passes70 isolatedchecks/peerreview; it needsactualsustainedvehicleevidence and doesnotrequirea native rebuild. Source/push/runtime identities remain separate in localstate. LMG beltpickup/attachment, Empty presentation andchest-grip repairs remainincluded; fullbolt reload andheadsetacceptance remainopen.
 The navigation batch removes the developer tool's firearm-publication prerequisite for ordinary on-foot input, keeping original actor/input/menu deadlines and weapon admission unchanged.
 Handoffs: handoff/integrations/coordinator-20261113-weapon-acquisition/README.txt and coordinator-20261113-navigation/README.txt.
 

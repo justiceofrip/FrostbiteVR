@@ -32,6 +32,7 @@ def load(name, path):
 
 t = load("vehicle_test_transport", ROOT / "tools/drive_bc2_feed_simulation.py")
 v = load("vehicle_test_adapter", ROOT / "tools/bc2_vehicle_stimulus.py")
+LIVE106_REPLAY_RESULTS = []
 
 
 def snapshot(now, nonce, generation, role="driver", state=None):
@@ -249,6 +250,7 @@ class AssembledVehicleTests(unittest.TestCase):
         self.before_read = None
         self.cleanup_failure = False
         self.after_press = None
+        self.live106_timing = None
 
     def write(self, path, value):
         path.write_text(json.dumps(value), encoding="utf-8")
@@ -260,14 +262,14 @@ class AssembledVehicleTests(unittest.TestCase):
                 "--root-authorized-ordinary-input"]
 
     def assembled(self, argv=None):
-        current, pending_ack, pending_snapshot = b"note startup\n", None, None
+        current, pending_ack, pending_snapshot, pending_later, pending_apply = b"note startup\n", None, None, None, None
         original_init, original_request = t.Driver.__init__, t.Driver.request_snapshot
         original_publish, original_send = t.publish_command, t.Driver.send
         original_read = t.read_bytes
         test = self
 
         def simulate():
-            nonlocal current, pending_ack
+            nonlocal current, pending_ack, pending_later, pending_apply
             path = self.run / "sim/command.txt"
             raw = path.read_bytes()
             if raw != current:
@@ -276,6 +278,12 @@ class AssembledVehicleTests(unittest.TestCase):
                 if batch[:-1]:
                     self.calls.append(batch[:-1])
                     self.owner_records.append(json.loads((self.run / "live-driver-owner.json").read_text()))
+                pending_apply = (self.clock.now, batch)
+                if self.live106_timing and any(map(float, batch[0].split()[2:])):
+                    pending_apply = (self.live106_timing["outerNs"]+60_085_000, batch)
+            if pending_apply and self.clock.now >= pending_apply[0]:
+                _, batch = pending_apply
+                pending_apply = None
                 for line in batch[:-1]:
                     words = line.split()
                     if words[0] != "stick" or words[1] not in ("l", "r") or len(words) != 4:
@@ -283,14 +291,21 @@ class AssembledVehicleTests(unittest.TestCase):
                     self.state["controls"]["stickL" if words[1] == "l" else "stickR"] = list(map(float, words[2:]))
                 self.state.update(cmdSeq=self.state["cmdSeq"]+len(batch), lastCmd=batch[-1], frame=self.state["frame"]+1)
                 pending_ack = (self.clock.now+self.ack_delay, batch, self.state["frame"])
+                if self.live106_timing and any(self.state["controls"][self.driver.stick_key()]):
+                    pending_ack = (self.live106_timing["outerNs"]+60_666_800, batch, self.state["frame"])
             if pending_ack and self.clock.now >= pending_ack[0] and not self.no_ack:
                 _, batch, frame = pending_ack
                 joined = "foreign" if self.foreign_ack else " | ".join(batch)
                 (self.run / "sim/ack.txt").write_text(
                     f"seq={self.state['cmdSeq']} frame={frame} error=-\nlast={joined}\n", encoding="utf-8")
-                if not self.no_later_frame:
+                if self.live106_timing and any(self.state["controls"][self.driver.stick_key()]):
+                    pending_later = (self.live106_timing["outerNs"]+77_273_100, frame)
+                elif not self.no_later_frame:
                     self.state.update(frame=frame+1, endFrames=self.state["endFrames"]+1)
                 pending_ack = None
+            if pending_later and self.clock.now >= pending_later[0]:
+                self.state.update(frame=pending_later[1]+1, endFrames=self.state["endFrames"]+1)
+                pending_later = None
             if self.state_mutation and self.calls:
                 self.state_mutation(self.state, self.driver)
             self.write(self.run / "sim/state.json", self.state)
@@ -310,6 +325,8 @@ class AssembledVehicleTests(unittest.TestCase):
         def request(driver):
             nonlocal pending_snapshot
             original_request(driver)
+            if self.live106_timing and driver.snapshot_index >= 3:
+                self.clock.now += 3_154_800  # retained request002 publication elapsed
             self.requests.append(dict(nonce=driver.pending_nonce, input=copy.deepcopy(self.state["controls"]),
                 startedNs=driver.last_request, actionDeadlineNs=driver.action_deadline,
                 pendingCommand=driver.pending_command, motionStartedNs=driver.motion_started,
@@ -318,24 +335,57 @@ class AssembledVehicleTests(unittest.TestCase):
             if self.no_response or (self.omit_response_from is not None and driver.snapshot_index >= self.omit_response_from):
                 return
             pending_snapshot = self.clock.now + self.response_delay(driver)
+            if self.live106_timing and driver.snapshot_index >= 3:
+                period, phase = self.live106_timing["periodNs"], self.live106_timing["phaseNs"]
+                phase += self.live106_timing["outerNs"]
+                # Worker service is an independent fixed grid, never request-relative.
+                pending_snapshot = phase + ((self.clock.now-phase+period-1)//period)*period
             if pending_snapshot <= self.clock.now:
                 publish_snapshot(driver)
 
         def publish_snapshot(driver):
             nonlocal pending_snapshot
+            service_time = pending_snapshot
             pending_snapshot = None
             now = self.clock.tick() - (self.response_age(driver) if callable(self.response_age) else self.response_age)
-            value = snapshot(now, driver.pending_nonce, driver.snapshot_index*100, self.request["role"], self.state)
+            if self.live106_timing:
+                now = service_time
+            sampled_state = self.state
+            if (self.live106_timing and driver.snapshot_index >= 3
+                    and now-9_278_000 < self.live106_timing["outerNs"]+60_085_000):
+                sampled_state = copy.deepcopy(self.state)
+                sampled_state["controls"][driver.stick_key()] = [0, 0]
+            value = snapshot(now, driver.pending_nonce, driver.snapshot_index*100, self.request["role"], sampled_state)
+            if self.live106_timing:
+                # Actual106/03 snapshot002 source ages, with a single clock shift.
+                obs = value["vehicleObservation"]
+                obs.update(inputObservedNs=now-9_278_000, inputDeadlineNs=now+90_722_000,
+                           validUntilNs=now+86_644_100)
+                obs["input"]["menu"]["deadlineNs"] = now+86_644_100
+                if driver.snapshot_index == 2:
+                    self.live106_timing["outerNs"] = now
             if self.snapshot_mutation:
                 self.snapshot_mutation(value, driver)
             self.samples.append(copy.deepcopy(value))
             self.write(driver.snapshot_path, value)
 
         def read(path, *args):
+            if self.live106_timing and self.live106_timing.pop("postSendCostPending", False):
+                # Retained trace only labels this aggregate between_calls; do
+                # not attribute it to a particular real read or operating system.
+                self.clock.now += 5_711_500
             if self.before_read and self.driver is not None:
                 self.before_read(path, self.driver)
             if pending_snapshot is not None and self.clock.now >= pending_snapshot:
                 publish_snapshot(self.driver)
+            if (self.live106_timing and self.driver.snapshot_index >= 3
+                    and path == self.driver.snapshot_path
+                    and self.samples[-1]["nonce"] == str(self.driver.pending_nonce)
+                    and self.live106_timing.get("processedNonce") != self.driver.pending_nonce):
+                # outer704886800 -> completed receive717335400: original
+                # serialization/delivery/read/admission elapsed, charged once.
+                self.live106_timing["processedNonce"] = self.driver.pending_nonce
+                self.clock.now += 12_448_600
             return original_read(path, *args)
 
         def publish(path, raw, deadline_ns, validate):
@@ -344,10 +394,16 @@ class AssembledVehicleTests(unittest.TestCase):
             self.clock.now += self.publication_delay(driver) if callable(self.publication_delay) else self.publication_delay
             if self.cleanup_failure and driver.cleanup_mode:
                 raise OSError("synthetic zero publication failed")
-            return original_publish(path, raw, deadline_ns, validate)
+            result = original_publish(path, raw, deadline_ns, validate)
+            if self.live106_timing and not (driver.releasing or driver.cleanup_mode):
+                self.clock.now = max(self.clock.now, self.live106_timing["outerNs"]+27_786_600-20_000)
+            return result
 
         def send(driver, *args, **kwargs):
             result = original_send(driver, *args, **kwargs)
+            if self.live106_timing and any(driver.stick) and not (driver.releasing or driver.cleanup_mode):
+                self.clock.now = max(self.clock.now, driver.last_commit+3_533_700)
+                self.live106_timing["postSendCostPending"] = True
             if self.after_press and any(driver.stick):
                 self.after_press(driver)
             return result
@@ -391,6 +447,162 @@ class AssembledVehicleTests(unittest.TestCase):
 
     def sustained(self, role="driver"):
         self.request = dict(mode="sustained", role=role, stick=[.4, .5], positiveHoldMs=2000)
+
+    def configure_live106_replay(self, period=25_000_000, phase=0, role="driver"):
+        self.sustained(role)
+        self.request["positiveHoldMs"] = 250
+        self.live106_timing = dict(periodNs=period, phaseNs=phase)
+
+    def record_live106_replay(self, result):
+        outer = self.live106_timing["outerNs"]
+        events = [json.loads(line) for line in
+                  (self.driver.artifacts.directory / "events.jsonl").read_text().splitlines()]
+        commits = [event for event in events if event["type"] == "command_commit"]
+        observations = [event for event in events if event["type"] == "vehicle_sustained_observation"]
+        record = dict(periodNs=self.live106_timing["periodNs"], phaseNs=self.live106_timing["phaseNs"],
+            originalLeaseResidualNs=86_644_100, requestCount=len(self.requests),
+            pendingAckRequests=sum(r["pendingCommand"] for r in self.requests),
+            observations=[dict(evaluatedAfterOuterNs=e["evaluatedNs"]-outer,
+                               sourceDeadlineAfterOuterNs=e["sourceDeadlineNs"]-outer,
+                               pendingCommand=e.get("pendingCommand"), positiveConsumed=e.get("positiveConsumed"))
+                          for e in observations],
+            commits=[dict(writtenAfterOuterNs=e["writtenNs"]-outer,
+                          committedAfterOuterNs=e["committedNs"]-outer) for e in commits],
+            result=result)
+        LIVE106_REPLAY_RESULTS.append(record)
+        return record
+
+    def test_timing_live106_preparation_ack_and_independent_25ms_service(self):
+        for phase in range(0, 25_000_000, 1_000_000):
+            with self.subTest(phase=phase):
+                if phase:
+                    self.setUp()
+                self.configure_live106_replay(phase=phase)
+                code, result = self.assembled()
+                record = self.record_live106_replay(result)
+                self.assertEqual(code, 0, result)
+                self.assertGreater(record["pendingAckRequests"], 0)
+                self.assertTrue(any(e["pendingCommand"] and not e["positiveConsumed"] for e in record["observations"]))
+                self.assertTrue(any(e["positiveConsumed"] for e in record["observations"]))
+                self.assertEqual(record["commits"][0]["writtenAfterOuterNs"], 27_786_600)
+                self.assertGreaterEqual(record["commits"][0]["committedAfterOuterNs"], 77_273_100)
+                self.assertLess(record["commits"][0]["committedAfterOuterNs"], 250_000_000)
+                self.assertEqual(self.calls, [["stick l 0.4 0.5"], ["stick l 0 0"]])
+                previous = 86_644_100
+                for observation in record["observations"]:
+                    self.assertLess(observation["evaluatedAfterOuterNs"], previous)
+                    previous = observation["sourceDeadlineAfterOuterNs"]
+                self.assertEqual(t.SNAPSHOT_PERIOD, 100_000_000)
+                self.assertEqual(t.SNAPSHOT_TIMEOUT, 250_000_000)
+                self.assertEqual(v.INITIAL_OBSERVATION_WINDOW, 500_000_000)
+
+    def test_timing_live106_100ms_service_refuses_original_authority_gap(self):
+        self.configure_live106_replay(period=100_000_000)
+        code, result = self.assembled()
+        self.record_live106_replay(result)
+        self.assertNotEqual(code, 0)
+        self.assert_owned_cancellation(result)
+        self.assertEqual(self.driver.sustained_observations, 0)
+
+    def test_timing_live106_gunner_refresh_uses_only_its_owned_right_stick(self):
+        self.configure_live106_replay(phase=24_000_000, role="gunner")
+        code, result = self.assembled()
+        record = self.record_live106_replay(result)
+        self.assertEqual(code, 0, result)
+        self.assertGreater(record["pendingAckRequests"], 0)
+        self.assertEqual(self.calls, [["stick r 0.4 0.5"], ["stick r 0 0"]])
+        self.assertTrue(all(r["input"]["stickL"] == [0, 0] for r in self.requests))
+
+    def test_timing_pending_ack_refresh_keeps_exact_native_owner_and_input(self):
+        faults = {
+            "owner": lambda s: s["vehicleObservation"]["owner"].update(seatGeneration=999),
+            "focus": lambda s: s["vehicleObservation"]["input"].update(focused=False),
+            "permission": lambda s: s["vehicleObservation"].update(playerPermissionMask=0),
+            "unowned_axis": lambda s: s["vehicleObservation"]["input"]["hands"][1].update(stickX=.5),
+            "partial_owned_axis": lambda s: s["vehicleObservation"]["input"]["hands"][0].update(stickX=.2),
+            "consumed_axis": lambda s: s["vehicleObservation"]["consumedControls"].update(throttle=.2),
+            "pending_gather": pending_gather,
+        }
+        for index, (name, mutation) in enumerate(faults.items()):
+            with self.subTest(fault=name):
+                if index:
+                    self.setUp()
+                self.configure_live106_replay()
+                self.snapshot_mutation = lambda s, d: mutation(s) if d.snapshot_index == 3 else None
+                code, result = self.assembled()
+                self.assertEqual(code, 2, result)
+                self.assert_owned_cancellation(result)
+                self.assertEqual(self.driver.sustained_observations, 0)
+
+    def test_timing_pending_ack_takeover_never_grants_cleanup_custody(self):
+        for index, fault in enumerate(("sentinel", "capture", "command", "owner", "session")):
+            with self.subTest(fault=fault):
+                if index:
+                    self.setUp()
+                self.configure_live106_replay()
+                changed = []
+                def takeover(state, driver):
+                    if driver.snapshot_index < 3 or changed:
+                        return
+                    changed.append(True)
+                    if fault == "sentinel":
+                        state["lastCmd"] = "note foreign"
+                    elif fault == "capture":
+                        state["captureSeq"] += 1
+                    elif fault == "command":
+                        driver.command_path.write_bytes(b"note foreign\n")
+                    elif fault == "owner":
+                        (self.run / "live-driver-owner.json").write_bytes(b"{}\n")
+                    else:
+                        self.session["host"]["pid"] += 1
+                        self.write(self.folder / "session.json", self.session)
+                self.state_mutation = takeover
+                code, result = self.assembled()
+                self.assertEqual(code, 2, result)
+                self.assertEqual(changed, [True])
+                self.assertTrue(result["normalStopRequired"])
+                self.assertFalse(any(lines == ["stick l 0 0"] for lines in self.calls))
+                self.assertNotIn("vehicleStimulus", result)
+
+    def test_timing_pending_ack_successor_at_previous_deadline_cannot_bridge(self):
+        self.configure_live106_replay()
+        crossed = []
+        def expire(path, driver):
+            if driver.snapshot_index == 3 and path == driver.snapshot_path and not crossed:
+                crossed.append(True)
+                self.clock.now = driver.snapshot_source_deadline(driver.latest_snapshot)
+        self.before_read = expire
+        code, result = self.assembled()
+        self.assertEqual(code, 2, result)
+        self.assertEqual(crossed, [True])
+        self.assertEqual(self.driver.sustained_observations, 0)
+        self.assert_owned_cancellation(result)
+
+    def test_timing_pending_neutral_observation_never_qualifies_positive_hold(self):
+        self.configure_live106_replay()
+        def neutral_native(s, driver):
+            if driver.snapshot_index < 3:
+                return
+            obs = s["vehicleObservation"]
+            obs["input"]["hands"][0].update(stickX=0, stickY=0)
+            obs["consumedControls"].update(throttle=0, steer=0)
+        self.snapshot_mutation = neutral_native
+        code, result = self.assembled()
+        self.assertEqual(code, 2, result)
+        self.assert_owned_cancellation(result)
+        self.assertFalse(self.driver.sustained_positive)
+
+    def test_timing_pending_refresh_cannot_extend_original_ack_deadline(self):
+        self.configure_live106_replay()
+        self.request["positiveHoldMs"] = 500
+        self.no_ack = True
+        code, result = self.assembled()
+        self.assertEqual(code, 2, result)
+        self.assertGreater(self.driver.sustained_observations, 2)
+        self.assertIn("acknowledgement/commit deadline", result["error"])
+        self.assertNotIn("vehicleStimulus", result)
+        self.assertEqual(self.calls, [["stick l 0.4 0.5"]])
+        self.assertTrue(result["normalStopRequired"])
 
     def assert_owned_cancellation(self, result):
         self.assertEqual(self.calls, [["stick l 0.4 0.5"], ["stick l 0 0"]])
@@ -453,7 +665,8 @@ class AssembledVehicleTests(unittest.TestCase):
                     self.assertLess(event["evaluatedNs"], event["sourceDeadlineNs"])
                     prior_deadline = event["sourceDeadlineNs"]
                 command_events = [event for event in events if event["type"] == "command_request"]
-                self.assertGreaterEqual(command_events[1]["atNs"], episode["startedNs"]+2_000_000_000)
+                self.assertGreaterEqual(command_events[1]["atNs"], episode["startedNs"]+2_000_000_000-v.PERIOD)
+                self.assertLess(command_events[1]["atNs"], episode["startedNs"]+2_000_000_000)
                 self.assertLess(command_events[1]["atNs"], prior_deadline)
                 owner = json.loads((self.run / "live-driver-owner.json").read_text())
                 self.assertFalse(owner["pending"])
@@ -617,10 +830,11 @@ class AssembledVehicleTests(unittest.TestCase):
     def test_sustained_initial_ack_cannot_outlive_its_source_to_start_hold(self):
         self.sustained()
         self.ack_delay = 120_000_000
+        self.omit_response_from = 3
         code, result = self.assembled()
         self.assertEqual(code, 2, result)
         self.assert_owned_cancellation(result)
-        self.assertEqual(len(self.requests), 2)
+        self.assertEqual(len(self.requests), 3)
         self.assertEqual(self.driver.sustained_observations, 0)
 
     def test_sustained_final_read_cannot_borrow_neutral_reserve(self):
@@ -630,7 +844,7 @@ class AssembledVehicleTests(unittest.TestCase):
             if not driver.sustained_monitor or driver.cleanup_mode or crossed:
                 return
             positive_until = driver.action_deadline-v.RELEASE_RESERVE
-            if self.clock.now >= positive_until-5_000_000:
+            if self.clock.now >= positive_until-v.PERIOD-5_000_000:
                 crossed.append(True)
                 self.clock.now = positive_until
         self.before_read = overrun

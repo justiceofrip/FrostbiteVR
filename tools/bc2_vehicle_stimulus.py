@@ -183,6 +183,7 @@ def driver_class(t):
             self.sustained_monitor = False
             self.sustained_reference = None
             self.sustained_observations = 0
+            self.sustained_positive = False
             super().__init__(args)
             require(self.manifest["version"] == args.vehicle_version
                     and self.manifest["source_sha256"] == args.vehicle_source_sha256,
@@ -370,13 +371,16 @@ def driver_class(t):
             raise t.REFUSAL("initial vehicle observation deadline reached without a matching response")
 
         def accept_snapshot(self, snapshot, raw, now):
+            observed_stick = self.observation_stick(snapshot)
             result = super().accept_snapshot(snapshot, raw, now)
             self.initial_discarded_snapshot = None
             if self.sustained_monitor:
                 self.sustained_reference = copy.deepcopy(snapshot)
                 self.sustained_observations += 1
+                self.sustained_positive = observed_stick == self.vehicle_request["stick"]
                 self.artifacts.event(dict(type="vehicle_sustained_observation", nonce=snapshot["nonce"],
-                    evaluatedNs=now, sourceDeadlineNs=self.snapshot_source_deadline(snapshot)))
+                    evaluatedNs=now, sourceDeadlineNs=self.snapshot_source_deadline(snapshot),
+                    pendingCommand=self.pending_command, positiveConsumed=self.sustained_positive))
             return result
 
         def snapshot_usable(self, snapshot, now):
@@ -493,8 +497,24 @@ def driver_class(t):
             # that historical probe refuses instead of authorizing a retry.
             return self.check_vehicle_snapshot(snapshot, t.time.perf_counter_ns(), nonce)
 
+        def observation_stick(self, snapshot):
+            if not self.sustained_monitor:
+                return None
+            if self.pending_command and self.pending_stick is not None and not self.releasing:
+                side = 0 if self.vehicle_request["role"] == "driver" else 1
+                value = snapshot["vehicleObservation"]
+                if value.get("available") is not True or not isinstance(value.get("input"), dict):
+                    return self.stick
+                hand = value["input"]["hands"][side]
+                if all(axis_matches(hand[k], x) for k, x in zip(("stickX", "stickY"), self.pending_stick)):
+                    return self.pending_stick
+                # The exact prior neutral packet can refresh owner observation
+                # while this one command is pending. Full admission below still
+                # requires matching consumed axes; this never proves the press.
+            return self.stick
+
         def check_vehicle_snapshot(self, snapshot, now, nonce):
-            held = self.stick if self.sustained_monitor else None
+            held = self.observation_stick(snapshot)
             value = admit(t, snapshot, now, nonce, self.vehicle_request["role"], held)
             require(n(snapshot["observed_ns"]) >= self.last_request,
                     "vehicle snapshot predates its nonce request")
@@ -540,7 +560,9 @@ def driver_class(t):
 
         def pump(self):
             until = min(self.deadline, self.stage_deadline)
-            if self.sustained_monitor and not (self.releasing or self.cleanup_mode):
+            if (self.sustained_monitor or (self.pending_command and self.last_write > 0
+                    and self.vehicle_request.get("mode") == "sustained"
+                    and self.pending_stick == self.vehicle_request["stick"])) and not (self.releasing or self.cleanup_mode):
                 # A successor must arrive before the PREVIOUS lease expires.
                 # Nested reads cannot use its newer clock to bridge a gap.
                 until = min(until, self.snapshot_source_deadline(self.latest_snapshot))
@@ -553,7 +575,10 @@ def driver_class(t):
             if self.pending_command:
                 try:
                     require(t.digest(t.read_bytes(self.command_path, 4096)) == self.command_hash
-                            and n(state["cmdSeq"]) in (self.sequence - len(self.pending_batch), self.sequence),
+                            and n(state["cmdSeq"]) in (self.sequence - len(self.pending_batch), self.sequence)
+                            and n(state["captureSeq"]) == self.capture_sequence
+                            and state["lastCmd"] == (self.sentinel if n(state["cmdSeq"]) == self.sequence
+                                                     else self.pending_before["lastCmd"]),
                             "vehicle pending command ownership changed")
                 except t.ReadDeadlineExceeded:
                     raise
@@ -564,6 +589,14 @@ def driver_class(t):
                 self.ownership(state)
             if not self.releasing:
                 self.check_input(state)
+            if (not self.sustained_monitor and self.pending_command and self.last_write > 0
+                    and self.vehicle_request.get("mode") == "sustained"
+                    and self.pending_stick == self.vehicle_request["stick"]
+                    and not (self.releasing or self.cleanup_mode)):
+                # Only the exact already-published pending command may observe
+                # its prior neutral or requested positive state before ACK.
+                self.sustained_reference = copy.deepcopy(self.latest_snapshot)
+                self.sustained_monitor = True
             if self.sustained_monitor and not (self.releasing or self.cleanup_mode):
                 received = self.receive_snapshot()
                 if received:
@@ -652,15 +685,21 @@ def driver_class(t):
             active_until = self.action_deadline - RELEASE_RESERVE
             require(started < active_until, "vehicle pulse has no active budget")
             self.stage_deadline, self.motion_started = active_until, started
-            if sustained:
-                self.stage_deadline = min(active_until, self.snapshot_source_deadline(self.latest_snapshot))
             self.publish_stick(self.vehicle_request["stick"])
             press_committed = self.last_commit
             self.stage_deadline = self.action_deadline
             if sustained:
-                self.sustained_reference = copy.deepcopy(self.latest_snapshot)
-                self.sustained_monitor = True
+                # ACK only settles simulator custody. A pending neutral sample
+                # cannot establish positive native consumption for the hold.
+                while not self.sustained_positive:
+                    t.read_until(active_until, self.pump)
+                    if not self.sustained_positive:
+                        t.time.sleep(.001)
             while (now := t.time.perf_counter_ns()) < active_until:
+                if sustained and active_until - now <= PERIOD:
+                    # Leave one existing read period before the positive cap;
+                    # an independently phased response may consume that period.
+                    break
                 # The optional positive budget is a cap, including the final
                 # read. An overrun cancels through the owned cleanup path.
                 t.read_until(min(now + PERIOD, active_until if sustained else active_until + PERIOD), self.pump)
