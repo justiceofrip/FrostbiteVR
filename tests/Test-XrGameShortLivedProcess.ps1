@@ -1,6 +1,9 @@
 #requires -Version 7.5
 [CmdletBinding()]
-param([string]$RepositoryRoot=(Split-Path $PSScriptRoot -Parent))
+param(
+    [string]$RepositoryRoot=(Split-Path $PSScriptRoot -Parent),
+    [string]$RunnerPath=(Join-Path $RepositoryRoot 'tools/Invoke-Bc2XrGameSimulation.ps1')
+)
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 
@@ -8,7 +11,7 @@ Set-StrictMode -Version Latest
 # process lookup, kernel identity query and parent lookup are the only seams;
 # this test never starts a child, game, input, or launcher session.
 $tokens=$null;$parseErrors=$null
-$runner=[Management.Automation.Language.Parser]::ParseFile((Join-Path $RepositoryRoot 'tools/Invoke-Bc2XrGameSimulation.ps1'),[ref]$tokens,[ref]$parseErrors)
+$runner=[Management.Automation.Language.Parser]::ParseFile($RunnerPath,[ref]$tokens,[ref]$parseErrors)
 if($parseErrors.Count){throw 'Runner parse failed.'}
 $runtime=[Management.Automation.Language.Parser]::ParseFile((Join-Path $RepositoryRoot 'launcher/runtime/Runtime.Core.ps1'),[ref]$tokens,[ref]$parseErrors)
 if($parseErrors.Count){throw 'Runtime parse failed.'}
@@ -17,9 +20,13 @@ $parentType=Add-Type -TypeDefinition @"
 namespace $namespace {
     public static class ParentFixture {
         public static int Calls, ExpectedPid=42, Parent=7;
+        public static System.Exception Failure;
+        public static System.Action BeforeLookup;
         public static int ParentPid(int pid) {
             Calls++;
             if(pid!=ExpectedPid)throw new System.InvalidOperationException("Wrong parent lookup PID");
+            BeforeLookup();
+            if(Failure!=null)throw Failure;
             return Parent;
         }
     }
@@ -62,6 +69,11 @@ function NewFailure([string]$Kind){
         wrong_pid {return [InvalidOperationException]::new('Retained process PID differs')}
         wrong_birth {return [InvalidOperationException]::new('Retained process creation time differs')}
         wrong_handle {return [InvalidOperationException]::new('Retained process handle is unavailable')}
+        parent_absent {return [IO.IOException]::new('Launch process was absent from the process snapshot')}
+        parent_wrong_class {return [InvalidOperationException]::new('Launch process was absent from the process snapshot')}
+        parent_other_io {return [IO.IOException]::new('Other parent snapshot failure')}
+        parent_snapshot_error {return [ComponentModel.Win32Exception]::new(5,'Cannot verify launch process parent')}
+        parent_enumeration_error {return [ComponentModel.Win32Exception]::new(5,'Cannot enumerate launch process parent')}
         none {return $null}
         default {throw 'Unknown fixture exception'}
     }
@@ -76,7 +88,9 @@ function RunCase([string]$Case,[string]$Name,[string]$Failure,[bool]$Exited,[str
     }
     $process|Add-Member ScriptMethod Dispose {$this.DisposeCalls++}
     $script:f=@{identity=$identity;firstIdentity=$identity.Clone();secondIdentity=$identity.Clone();process=$process;lookups=0;identityReads=0;failure=(NewFailure $Failure);exitOnFailure=$Exited;saved=@{}}
-    $parentType::Calls=0;$parentType::Parent=7
+    $parentType::Calls=0;$parentType::Parent=7;$parentType::Failure=$null
+    $parentType::BeforeLookup={if($script:f.failure -and $script:f.failure -eq $parentType::Failure){$script:f.process.Exited=$script:f.exitOnFailure}}
+    if($Failure.StartsWith('parent_')){$parentType::Failure=$script:f.failure}
     $owned=@{};$launchUtc=[DateTime]::Parse('2026-11-12T20:25:44.0000000Z').ToUniversalTime()
     $expectedPath=$identity.path
     & $Change $script:f
@@ -84,6 +98,16 @@ function RunCase([string]$Case,[string]$Name,[string]$Failure,[bool]$Exited,[str
     try{Bind $Name $identity $expectedPath 7}catch{$caught=$_.Exception}
     $bound=$owned.ContainsKey($Name)
     switch($Outcome){
+        snapshot_skipped {
+            Check ($null -eq $caught -and -not $bound -and $process.DisposeCalls -eq 1) "$Case skips and disposes the proven exited handle"
+            Check ($script:f.lookups -eq 1 -and $script:f.identityReads -eq 1 -and $parentType::Calls -eq 1 -and $process.ExitReads -eq 1) "$Case preserves Find's exact identity and checks exit only after parent snapshot loss"
+            $saved=$script:f.saved[$Name+'-binding-exit.json']
+            Check ($saved.parent_query_error -ceq 'Launch process was absent from the process snapshot' -and $saved.parent_query_error_type -ceq 'System.IO.IOException') "$Case retains the exact parent snapshot failure"
+            Check ($saved.expected_parent_pid -eq 7 -and -not $saved.parent_verified -and $null -eq $saved.observed_parent_pid) "$Case cannot claim an observed parent"
+            Check ($saved.exact_handle_exit_observed -and -not $saved.live_authority_granted) "$Case records exit without granting live authority"
+            SameIdentity $saved.identity $identity
+            Check ($script:f.saved.Count -eq 1 -and -not $script:f.saved.ContainsKey($Name+'-identity.json')) "$Case grants no live ownership"
+        }
         skipped {
             Check ($null -eq $caught -and -not $bound -and $process.DisposeCalls -eq 1) "$Case skips and disposes the proven exited handle"
             Check ($script:f.lookups -eq 1 -and $script:f.identityReads -eq 2 -and $parentType::Calls -eq 1 -and $process.ExitReads -eq 1) "$Case preserves prior identity and parent proof without reopening"
@@ -105,6 +129,12 @@ function RunCase([string]$Case,[string]$Name,[string]$Failure,[bool]$Exited,[str
                 $cause=$caught;while($cause.InnerException){$cause=$cause.InnerException}
                 Check ($cause -is [ComponentModel.Win32Exception] -and $cause.NativeErrorCode -eq 5) "$Case preserves the original live query error"
             }
+            if($Failure.StartsWith('parent_') -and $parentType::Calls -eq 1 -and -not $process.ThrowOnExitRead){
+                $cause=$caught;while($cause.InnerException){$cause=$cause.InnerException}
+                Check ([object]::ReferenceEquals($cause,$script:f.failure)) "$Case preserves the original parent error"
+                Check ($script:f.identityReads -eq 1 -and $parentType::Calls -eq 1) "$Case never retries the parent or identity lookup"
+            }
+            if($script:f.lookups -eq 0){Check ($script:f.identityReads -eq 0 -and $parentType::Calls -eq 0) "$Case refuses before any process or parent lookup"}
         }
         not_found {
             Check ($null -eq $caught -and -not $bound -and $script:f.saved.Count -eq 0) "$Case cannot supply ownership"
@@ -116,6 +146,9 @@ function RunCase([string]$Case,[string]$Name,[string]$Failure,[bool]$Exited,[str
     Write-Output ('PASS '+$Case)
 }
 foreach($name in 'resolution_helper','resolution_release_helper'){
+    RunCase ($name+' exits after Find before parent snapshot') $name parent_absent $true snapshot_skipped
+    RunCase ($name+' missing from snapshot while live') $name parent_absent $false refused
+    RunCase ($name+' wrong parent even if exited') $name none $true refused {param($f) $parentType::Parent=8;$f.process.Exited=$true}
     RunCase ($name+' query then proven exit') $name query $true skipped
     RunCase ($name+' known exit') $name exited $true skipped
     RunCase ($name+' live query failure') $name query $false refused
@@ -123,12 +156,22 @@ foreach($name in 'resolution_helper','resolution_release_helper'){
 RunCase 'matching live helper' resolution_helper none $false bound
 foreach($name in 'game','host','trace','supervisor','setup_helper'){
     RunCase ($name+' cannot use helper exception') $name query $true refused
+    RunCase ($name+' cannot use parent snapshot exception') $name parent_absent $true refused
 }
+foreach($failure in 'parent_wrong_class','parent_other_io','parent_snapshot_error','parent_enumeration_error'){
+    RunCase ('unrelated '+$failure+' even if exited') resolution_release_helper $failure $true refused
+}
+RunCase 'parent snapshot absence with unprovable exit' resolution_release_helper parent_absent $true refused {param($f) $f.process.ThrowOnExitRead=$true}
+RunCase 'snapshot exception cannot bypass expected path' resolution_release_helper parent_absent $true refused {param($f) $f.identity.path='G:\other\BC2NativeResolution.exe'}
+RunCase 'snapshot exception cannot bypass launch lifetime' resolution_release_helper parent_absent $true refused {param($f) $f.identity.start_utc='2026-11-11T20:25:51.0005529Z'}
+RunCase 'snapshot exception cannot bypass exact PID' resolution_release_helper parent_absent $true not_found {param($f) $f.firstIdentity.pid=43}
+RunCase 'snapshot exception cannot bypass PID birth' resolution_release_helper parent_absent $true not_found {param($f) $f.firstIdentity.start_utc='2026-11-12T20:25:52.0005529Z'}
+RunCase 'snapshot exception cannot bypass exact image' resolution_release_helper parent_absent $true not_found {param($f) $f.firstIdentity.path='G:\other\helper.exe'}
 foreach($failure in 'other_win32','wrong_class','wrong_pid','wrong_birth','wrong_handle'){
     RunCase ('unrelated '+$failure) resolution_helper $failure $true refused
 }
 RunCase 'unprovable exit' resolution_helper query $true refused {param($f) $f.process.ThrowOnExitRead=$true}
-RunCase 'wrong parent even if exited' resolution_helper query $true refused {$parentType::Parent=8}
+RunCase 'wrong parent even if exited' resolution_helper query $true refused {param($f) $parentType::Parent=8;$f.process.Exited=$true}
 RunCase 'unexpected session path' resolution_helper query $true refused {param($f) $f.identity.path='G:\other\BC2NativeResolution.exe'}
 RunCase 'session predates launch' resolution_helper query $true refused {param($f) $f.identity.start_utc='2026-11-11T20:25:51.0005529Z'}
 RunCase 'Find rejects different PID' resolution_helper query $true not_found {param($f) $f.firstIdentity.pid=43}

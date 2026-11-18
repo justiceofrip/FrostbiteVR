@@ -12,14 +12,14 @@ Ownership/ready/blocked tasks: COORDINATOR-STATE.txt (local scheduling record).
 External worktrees remain untouched; finished25/26/33 source is integrated. Steam32 lacks its executable.
 
 INSTALLED RUNTIME
-Local0.1.109 installed/setupPASS; previous106 and108/107/104/103/105/102/101/99 retained.
-Compiled sourcea8adc48ecd34b6f63b92cbd186a45c9467b56ee1; nativeclosureded3f48699a4a9d7b1a9e9f2b02c9730b5764766be0f5aee279d1eb1373449b6.
-Normal checks371x86/368x64 and focusedAmmoCounter passed. Installed HUD continuity/vehicle smoke pending; no headset/public acceptance.
-Receipt reports/coordinator-20261108-feedback721/normal109/run01/installation.json.108 HUD66/5145 omissions/rollback remainpreserved;106 retained as fallback, not a flicker acceptance baseline.
-Settings/cache/shortcut and headset99 recording preserved. Public posting remains on hold for local headset acceptance and campaign gaps.
+Local0.1.106 is active; previous109 and108/107/104/103/105/102/101/99 are retained.
+Version109 compiled sourcea8adc48ecd34b6f63b92cbd186a45c9467b56ee1; closure ded3f48699a4a9d7b1a9e9f2b02c9730b5764766be0f5aee279d1eb1373449b6.
+Normal371x86/368x64 and focusedAmmoCounter checks passed.109 installed/setupPASS, then stationary HUD smoke failed32/4385 frames over73.0748406s; rollback to106 completed. No headset/public acceptance.
+Receipts: reports/coordinator-20261108-feedback721/normal109/run01/installation.json and normal109/xr-game01/smoke-rollback.json. Settings/cache/shortcut and human feedback are preserved.
+Independent vehicle109/03 stopped before XR host startup on a short-lived resolution-helper ParentPid observation race. All four tracked processes exited; game closed, profiles/settings restored, default106 restored. Native retirement was not established; no vehicle command ran. The exact helper-exit observation repair passes356 short-lived and123 cleanup checks; actual retry is pending.
 
 CURRENT SOURCE
-Native59/sourcea8adc48 is built/pushed and installed aslocal109. Exact expired HUD duplicate preservation and opt-in25ms diagnostic snapshot polling retain native/input freshness and shutdown boundaries. The later developer-tool-only pendingACK observation correction passes70 isolatedchecks/peerreview; it needsactualsustainedvehicleevidence and doesnotrequirea native rebuild. Source/push/runtime identities remain separate in localstate. LMG beltpickup/attachment, Empty presentation andchest-grip repairs remainincluded; fullbolt reload andheadsetacceptance remainopen.
+Native59/sourcea8adc48 is built/pushed; its109 installation failed HUD continuity and was rolled back. The next reviewed HUD candidate handles coherent retransmissions whose publication deadline differs while preserving original evidence/deadline; it is not built/applied yet. Developer tool6a8907d passes70 checks/peer review, but actual sustained driving remains unproved. Source updates and local activation are separate; no native rebuild is needed for developer-tool-only changes. LMG belt pickup/attachment, Empty presentation and chest-grip repairs remain included. Full bolt reload and headset acceptance remain open.
 The navigation batch removes the developer tool's firearm-publication prerequisite for ordinary on-foot input, keeping original actor/input/menu deadlines and weapon admission unchanged.
 Handoffs: handoff/integrations/coordinator-20261113-weapon-acquisition/README.txt and coordinator-20261113-navigation/README.txt.
 

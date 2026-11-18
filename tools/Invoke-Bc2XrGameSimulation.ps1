@@ -223,7 +223,21 @@ function Bind([string]$Name,$Identity,[string]$ExpectedPath,[int]$ParentId){
     if(-not $process){return} # Preserve failed/short-lived identities in session.json; never select by name.
     $retained=$false
     try{
-        Require ([FvrStorage.NativeSize]::ParentPid($process.Id) -eq $ParentId) "Unexpected $Name process parent."
+        try{$observedParentId=[FvrStorage.NativeSize]::ParentPid($process.Id)}
+        catch{
+            $cause=$_.Exception;while($cause.InnerException){$cause=$cause.InnerException}
+            # Find proved this retained handle's exact PID, birth and path.
+            # A brief helper can exit before the separate parent snapshot.
+            # Preserve the missing parent evidence; grant no live ownership.
+            if($Name -in @('resolution_helper','resolution_release_helper') -and
+               $cause -is [IO.IOException] -and $cause.Message -ceq 'Launch process was absent from the process snapshot' -and
+               $process.HasExited){
+                Save ($Name+'-binding-exit.json') @{identity=$Identity;expected_parent_pid=$ParentId;observed_parent_pid=$null;parent_verified=$false;parent_query_error_type=$cause.GetType().FullName;parent_query_error=$cause.Message;exact_handle_exit_observed=$true;live_authority_granted=$false}
+                return
+            }
+            throw
+        }
+        Require ($observedParentId -eq $ParentId) "Unexpected $Name process parent."
         try{$observed=Get-Bc2ProcessIdentity $process -RequireLive $true}
         catch{
             $cause=$_.Exception;while($cause.InnerException){$cause=$cause.InnerException}

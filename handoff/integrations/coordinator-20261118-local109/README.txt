@@ -4,9 +4,11 @@ Changes: preserve already-earned host HUD grace across an exact expired duplicat
 Focused AmmoCounter and normal371x86/368x64 passed. Config87/run59 normal freeze; no extra private build.
 Source pushed to both coordinator/integration refs. Sourcepush1574 and runtime installation are separate receipts.
 Package ZIP65241bb95dedbca33442fae3884a2cd0c239ee5a6e6e316927a70e3ff90dffc6; build receiptf9d70009ef4b2851a0e74b69af5a6eebfc51cafa6a7b43d3243b4842492806cb.
-Local109 installed/setup-validated; previous106 and108/107/104/103/105/102/101/99/settings/cache/shortcut preserved.
-Installed smoke/headset acceptance pending. Prior108 HUD66/5145 omission failure and rollback retained; the prewindow duplicate diagnosis does not establish every later omission cause.
+Local109 installed/setup-validated, then failed HUD smoke and was rolled back to106. All candidates/settings/cache/shortcut are preserved.
+Actual109/01:32/4385 HUD omissions over73.0748406s; both captures21/210.232.8556395s, all6exit0, native retirement and exact restoration.109/xr-game01/smoke-rollback.json records106 restoration; headset acceptance remains open. Prior108 failure remains retained.
 Developer-only pendingACK source observation patch: exact prior-neutral/requested-positive sample retains custody; positive native evidence and independent ACK are required for continued hold. Original100ms source/250msACK limits remain.
 Tool candidate70/70 checks160.137s,25independent25ms phase cases/gunner,100ms service refusal; peer1577PASS. No new native build for this latertool-only change; actualdriving unproved.
 Exact receipts: reports/coordinator-20261108-feedback721/normal109/run01; batch84/run59; batch84/source-push1574.json; batch84/vehicle-ack-peer1577.json.
 No public release, fullcampaign, headset performance or allweaponreliability claim.
+Actual109/03 independent vehicle attempt failed before XR host startup: resolution-helper ParentPid snapshot absence. All4 tracked processes exited, game closed and profiles/settings/default106 restored. No vehicle command or native-retirement acceptance. Preserve failure; repair the specific tool race before retry.
+Developer runner repair: only the exact ParentPid snapshot-absence exception on either previously validated resolution-helper handle may retire when that same handle proves exited; parent evidence stays unknown and no live authority is granted. Foreign-parent/identity/error checks remain fatal. Original regression fails; candidate356 and existing cleanup123 checks pass. Native binaries unchanged.
