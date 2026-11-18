@@ -311,5 +311,226 @@ class TimingAnalysisTests(unittest.TestCase):
                 timing.load_report(p, 1000)
 
 
+# Synthetic saved wire fixture, deliberately using a count deadline older than
+# its independent owner lease. No native owner/scene clocks are present.
+HUD_SAVED_REPORT = r'''
+{"frame_diagnostics":{"schema":1,"clock":"host_qpc_ns; predicted/retained age are xr_time",
+ "first_hud_gap":{"capacity":32,"frozen":false,"scope":"prior submission and first omission",
+ "rows":[
+  {"frame":600,"space":2,"started_ns":1000000000,"ended_ns":1010000000,
+   "predicted_ns":9000000000000000,"world_layer":true,"end_succeeded":true,
+   "should_render":true,"focused":true,"present":true,"menu":false,"menu_layers":0,
+   "context":"submitted","wire_owner_differs_from_prior_visible":false,
+   "ammo_hud":{"decision":"submitted","receive_serial":70,"receive_ns":1001000000,
+    "select_ns":1002000000,"final_ns":1003000000,"source_matches":true,
+    "receive_accepted":true,"pending":false,"has_image":true,"source_space":2,
+    "left":{"sequence":41,"observed_ns":990000000,"deadline_ns":1020000000,"actor_generation":7,"hud_scene_generation":9,"space_generation":2,"loaded":8,"reserve":24,"capacity":8,"tag":0},
+    "right":{"sequence":41,"observed_ns":990000000,"deadline_ns":1020000000,"actor_generation":7,"hud_scene_generation":9,"space_generation":2,"loaded":8,"reserve":24,"capacity":8,"tag":0},
+    "count_before_receive":{"sequence":41,"observed_ns":990000000,"deadline_ns":1020000000,"actor_generation":7,"hud_scene_generation":9,"space_generation":2,"loaded":8,"reserve":24,"capacity":8,"tag":0},
+    "owner_before_receive":{"sequence":0,"observed_ns":1000000000,"deadline_ns":1200000000,"actor_generation":7,"hud_scene_generation":9,"space_generation":2,"loaded":0,"reserve":0,"capacity":0,"tag":1},
+    "count":{"sequence":41,"observed_ns":990000000,"deadline_ns":1020000000,"actor_generation":7,"hud_scene_generation":9,"space_generation":2,"loaded":8,"reserve":24,"capacity":8,"tag":0},
+    "owner":{"sequence":0,"observed_ns":1000000000,"deadline_ns":1200000000,"actor_generation":7,"hud_scene_generation":9,"space_generation":2,"loaded":0,"reserve":0,"capacity":0,"tag":1},
+    "image":{"sequence":41,"observed_ns":990000000,"deadline_ns":1020000000,"actor_generation":7,"hud_scene_generation":9,"space_generation":2,"loaded":8,"reserve":24,"capacity":8,"tag":0}}},
+  {"frame":601,"space":2,"started_ns":1110000000,"ended_ns":1220000000,
+   "predicted_ns":9000000000000001,"world_layer":true,"end_succeeded":true,
+   "should_render":true,"focused":true,"present":true,"menu":false,"menu_layers":0,
+   "context":"hud_omitted","wire_owner_differs_from_prior_visible":false,
+   "ammo_hud":{"decision":"no_sample","receive_serial":71,"receive_ns":1115000000,
+    "select_ns":1210000000,"final_ns":0,"source_matches":true,
+    "receive_accepted":false,"pending":false,"has_image":true,"source_space":2,
+    "left":{"sequence":42,"observed_ns":1010000000,"deadline_ns":1100000000,"actor_generation":7,"hud_scene_generation":9,"space_generation":2,"loaded":7,"reserve":24,"capacity":8,"tag":0},
+    "right":{"sequence":42,"observed_ns":1010000000,"deadline_ns":1100000000,"actor_generation":7,"hud_scene_generation":9,"space_generation":2,"loaded":7,"reserve":24,"capacity":8,"tag":0},
+    "count_before_receive":{"sequence":41,"observed_ns":990000000,"deadline_ns":1020000000,"actor_generation":7,"hud_scene_generation":9,"space_generation":2,"loaded":8,"reserve":24,"capacity":8,"tag":0},
+    "owner_before_receive":{"sequence":0,"observed_ns":1000000000,"deadline_ns":1200000000,"actor_generation":7,"hud_scene_generation":9,"space_generation":2,"loaded":0,"reserve":0,"capacity":0,"tag":1},
+    "count":{"sequence":41,"observed_ns":990000000,"deadline_ns":1020000000,"actor_generation":7,"hud_scene_generation":9,"space_generation":2,"loaded":8,"reserve":24,"capacity":8,"tag":0},
+    "owner":{"sequence":0,"observed_ns":1000000000,"deadline_ns":1200000000,"actor_generation":7,"hud_scene_generation":9,"space_generation":2,"loaded":0,"reserve":0,"capacity":0,"tag":1},
+    "image":{"sequence":41,"observed_ns":990000000,"deadline_ns":1020000000,"actor_generation":7,"hud_scene_generation":9,"space_generation":2,"loaded":8,"reserve":24,"capacity":8,"tag":0}}}
+ ]}}}
+'''
+
+
+class HudAnalysisTests(unittest.TestCase):
+    def setUp(self):
+        self.report = json.loads(HUD_SAVED_REPORT)
+        self.rows = self.report["frame_diagnostics"]["first_hud_gap"]["rows"]
+        self.hud = self.rows[1]["ammo_hud"]
+
+    def saved_analysis(self):
+        # Exercise the real CLI/load/hash path against an isolated saved report.
+        with scratch_directory() as folder:
+            host, output = Path(folder) / "host.json", Path(folder) / "hud.json"
+            host.write_text(json.dumps(self.report), encoding="utf-8")
+            self.assertEqual(timing.main(["--hud-only", "--host", str(host), "--output", str(output)]), 0)
+            return json.loads(output.read_text(encoding="utf-8"))
+
+    def test_stale_wire_count_does_not_expire_independent_owner(self):
+        self.hud.update(decision="submitted", select_ns=1120000000, final_ns=1125000000)
+        result = self.saved_analysis()
+        row = result["rows"][1]
+        self.assertEqual(row["gate"], "submitted")
+        self.assertIn("wire_deadlines_elapsed_while_prior_owner_window_open", row["facts"])
+        self.assertIn("retained_count_and_owner_unchanged_since_receive", row["facts"])
+        self.assertNotIn("owner_deadline_elapsed_at_first_select", row["facts"])
+        self.assertEqual(row["clock_checks"]["first_select"]["count"]["state"], "deadline_elapsed")
+        self.assertEqual(row["clock_checks"]["first_select"]["owner"]["state"], "within_recorded_window")
+        self.assertEqual(row["recorded"], self.rows[1])
+        self.assertEqual(set(result["inputs"]), {"host"})
+        self.assertEqual(len(result["inputs"]["host"]["sha256"]), 64)
+        self.assertNotIn("cohorts", result)
+
+    def test_owner_deadline_expiry_is_at_recorded_first_select(self):
+        row = self.saved_analysis()["rows"][1]
+        self.assertEqual(row["gate"], "first_select_no_sample")
+        self.assertIn("owner_deadline_elapsed_at_first_select", row["facts"])
+        self.assertIn("wire_deadlines_elapsed_while_prior_owner_window_open", row["facts"])
+        self.assertEqual(row["clock_checks"]["first_select"]["owner"],
+                         {"state": "deadline_elapsed", "observed_ns": 1000000000,
+                          "deadline_ns": 1200000000, "at_ns": 1210000000})
+        self.assertEqual(row["clock_checks"]["final_select"]["owner"]["state"], "clock_unavailable")
+
+    def test_owner_expiring_exactly_at_final_select_is_distinct(self):
+        self.hud.update(decision="final_no_sample", select_ns=1199999999, final_ns=1200000000)
+        row = self.saved_analysis()["rows"][1]
+        self.assertEqual(row["gate"], "final_select_no_sample")
+        self.assertNotIn("owner_deadline_elapsed_at_first_select", row["facts"])
+        self.assertIn("owner_deadline_elapsed_at_final_select", row["facts"])
+
+    def test_nil_packet_and_missing_eye_never_become_owner_change(self):
+        nil = dict.fromkeys(self.hud["left"], 0)
+        for right in (nil, None):
+            with self.subTest(right=right):
+                self.hud.update(left=nil, right=right, source_matches=False, count=nil, owner=nil)
+                row = self.saved_analysis()["rows"][1]
+                self.assertIn("wire_left_nil_sample", row["facts"])
+                self.assertIn("wire_source_did_not_match", row["facts"])
+                self.assertIn("wire_right_nil_sample" if right else "wire_right_missing_or_invalid_sample_fields", row["facts"])
+                self.assertEqual(row["owner_relations"]["wire_owner_vs_prior_visible"], "not_comparable")
+                self.assertNotIn("owner_transition", row["context"])
+                self.assertNotIn("owner_deadline_elapsed_at_first_select", row["facts"])
+
+    def test_actual_paired_owner_change_is_separate_from_missing_evidence(self):
+        for name in ("left", "right"):
+            self.hud[name]["hud_scene_generation"] = 10
+        self.rows[1]["wire_owner_differs_from_prior_visible"] = True
+        row = self.saved_analysis()["rows"][1]
+        self.assertEqual(row["owner_relations"]["wire_owner_vs_prior_visible"], "different")
+        self.assertEqual(row["context"], "owner_transition_may_intentionally_suppress_hud")
+        self.assertIn("wire_owner_differs_from_prior_visible", row["facts"])
+        self.hud["source_matches"] = False
+        row = self.saved_analysis()["rows"][1]
+        self.assertEqual(row["owner_relations"]["wire_owner_vs_prior_visible"], "not_comparable")
+
+    def test_pair_and_space_mismatches_preserve_exact_fields(self):
+        self.hud["right"]["actor_generation"] = 8
+        self.hud["left"]["space_generation"] = 3
+        self.hud["owner"]["hud_scene_generation"] = 11
+        row = self.saved_analysis()["rows"][1]
+        self.assertIn("wire_pair_owner_mismatch", row["facts"])
+        self.assertIn("left_space_differs_from_host_frame", row["facts"])
+        self.assertIn("retained_count_owner_mismatch", row["facts"])
+        self.assertEqual(row["owner_relations"]["wire_owner_vs_prior_visible"], "not_comparable")
+
+    def test_menu_context_does_not_turn_into_unexpected_gameplay_omission(self):
+        for menu, layers in ((True, 0), (False, 1)):
+            with self.subTest(menu=menu, layers=layers):
+                self.rows[1].update(menu=menu, menu_layers=layers)
+                self.hud.update(decision="inactive", select_ns=0, final_ns=0)
+                row = self.saved_analysis()["rows"][1]
+                self.assertEqual(row["context"], "menu_may_intentionally_suppress_hud")
+                self.assertEqual(row["gate"], "inactive")
+                self.assertNotIn("owner_deadline_elapsed_at_first_select", row["facts"])
+
+    def test_tracking_and_placement_stop_before_select_without_claiming_expiry(self):
+        for decision in ("tracking", "placement"):
+            with self.subTest(decision=decision):
+                self.hud.update(decision=decision, select_ns=0, final_ns=0)
+                if decision == "tracking":
+                    self.rows[1]["tracking_valid"] = False
+                row = self.saved_analysis()["rows"][1]
+                self.assertEqual(row["gate"], decision)
+                self.assertEqual(row["clock_checks"]["first_select"]["owner"]["state"], "clock_unavailable")
+                self.assertNotIn("owner_deadline_elapsed_at_first_select", row["facts"])
+
+    def test_pending_upload_and_image_owner_gate_keep_distinct_evidence(self):
+        self.hud.update(decision="upload", select_ns=1120000000, final_ns=0, pending=True, has_image=False)
+        row = self.saved_analysis()["rows"][1]
+        self.assertEqual(row["gate"], "upload")
+        self.assertTrue(row["recorded"]["ammo_hud"]["pending"])
+        self.assertFalse(row["recorded"]["ammo_hud"]["has_image"])
+        self.assertEqual(row["clock_checks"]["first_select"]["owner"]["state"], "within_recorded_window")
+        self.hud.update(decision="image_owner", final_ns=1125000000, pending=False, has_image=True)
+        self.hud["image"]["actor_generation"] = 6
+        row = self.saved_analysis()["rows"][1]
+        self.assertEqual(row["gate"], "image_owner")
+        self.assertEqual(row["owner_relations"]["image_vs_owner"], "different")
+        self.assertNotIn("owner_deadline_elapsed_at_final_select", row["facts"])
+
+    def test_unavailable_failed_and_absent_clock_have_no_select_expiry_evidence(self):
+        for decision in ("unavailable", "failed", "no_clock"):
+            with self.subTest(decision=decision):
+                self.hud.update(decision=decision, select_ns=0, final_ns=0)
+                row = self.saved_analysis()["rows"][1]
+                self.assertEqual(row["decision"], decision)
+                self.assertEqual(row["clock_checks"]["first_select"]["owner"]["state"], "clock_unavailable")
+
+    def test_not_called_and_missing_evidence_are_explicit(self):
+        self.rows[1]["ammo_hud"] = {"decision": "not_called", "receive_ns": 0, "select_ns": 0, "final_ns": 0}
+        row = self.saved_analysis()["rows"][1]
+        self.assertEqual(row["gate"], "not_called")
+        self.assertEqual(row["owner_relations"]["wire_owner_vs_prior_visible"], "not_comparable")
+        self.assertEqual(row["receive_scope"], "clock_unavailable")
+        self.assertEqual(row["clock_checks"]["receive"]["left"]["state"], "missing_or_invalid_sample_fields")
+        self.rows[1].pop("ammo_hud")
+        self.assertEqual(self.saved_analysis()["rows"][1]["gate"], "unknown_recorded_gate")
+
+    def test_absent_and_empty_journal_do_not_establish_zero_session_gaps(self):
+        gap = self.report["frame_diagnostics"].pop("first_hud_gap")
+        self.assertEqual(self.saved_analysis()["status"], "no_hud_gap_journal")
+        gap["rows"] = []
+        self.report["frame_diagnostics"]["first_hud_gap"] = gap
+        result = self.saved_analysis()
+        self.assertEqual(result["status"], "no_captured_hud_gap")
+        self.assertEqual(result["decision_counts"], {})
+        self.assertNotIn("session_gap_count", result)
+
+    def test_repeat_receive_is_not_a_new_frame_packet(self):
+        self.hud["receive_ns"] = 1001000000
+        self.hud["receive_serial"] = 70
+        row = self.saved_analysis()["rows"][1]
+        self.assertEqual(row["receive_scope"], "predates_observing_frame")
+        self.assertEqual(row["clock_checks"]["receive"]["left"]["state"], "observation_in_future")
+
+    def test_hud_mode_preserves_input_and_window_guards(self):
+        with scratch_directory() as folder:
+            path = Path(folder) / "host.json"
+            path.write_text(HUD_SAVED_REPORT, encoding="utf-8")
+            argv = ["--hud-only", "--host", str(path)]
+            with contextlib.redirect_stderr(io.StringIO()):
+                for extra in (["--output", str(path)], ["--start-qpc-ns", "1"], ["--max-input-mib", "0"]):
+                    self.assertEqual(timing.main([*argv, *extra]), 2)
+                for extra in ([], ["--hud-only", "--native", str(path)]):
+                    with self.assertRaises(SystemExit) as raised:
+                        timing.main(["--host", str(path), *extra])
+                    self.assertEqual(raised.exception.code, 2)
+            self.assertEqual(path.read_text(encoding="utf-8"), HUD_SAVED_REPORT)
+
+    def test_capacity_and_clock_are_bounded_without_relaxing_native_contract(self):
+        for capacity in (0, 1, 33):
+            self.report["frame_diagnostics"]["first_hud_gap"]["capacity"] = capacity
+            with self.subTest(capacity=capacity), self.assertRaises(timing.EvidenceError):
+                timing.analyze_hud(self.report)
+        self.report["frame_diagnostics"]["clock"] = "xr_time"
+        with self.assertRaises(timing.EvidenceError):
+            timing.analyze_hud(self.report)
+        with self.assertRaises(timing.EvidenceError):
+            timing.analyze({}, json.loads(HUD_SAVED_REPORT))
+
+    def test_default_timing_output_ignores_separately_scoped_hud_journal(self):
+        native, host = reports()
+        expected = timing.analyze(native, host)
+        host["frame_diagnostics"]["first_hud_gap"] = self.report["frame_diagnostics"]["first_hud_gap"]
+        self.assertEqual(timing.analyze(native, host), expected)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -16,7 +16,10 @@ from pathlib import Path
 PERIOD = 25_000_000
 COMMAND_WINDOW = 250_000_000
 INITIAL_OBSERVATION_WINDOW = 500_000_000
-MAX_PENDING_REACQUISITIONS = 2
+# Pending-only requests are at least one ordinary pump period apart. Exactly
+# 19 fresh starts can fit strictly inside the original 500 ms window; the
+# response and source leases remain independent and are never extended.
+MAX_PENDING_REACQUISITIONS = (INITIAL_OBSERVATION_WINDOW - 1) // PERIOD
 # BeginGather revokes a pending copy; Current reports Changed when the same
 # publication turns over after a complete copy. Both withhold input entirely.
 PENDING_REASONS = ("gather_pending", "observation_changed")
@@ -413,6 +416,16 @@ def driver_class(t):
             else:
                 self.check_pending_cohort(snapshot, self.pending_observation["reference"], available=False)
             self.check_pending_observation_owner()
+            # Rapid pending publications must not burn a small count budget or
+            # create a tight request loop. Pace against the preceding request,
+            # with the same original deadline and neutral ownership throughout.
+            next_request = self.last_request + PERIOD
+            while t.time.perf_counter_ns() < next_request:
+                self.check_pending_observation_owner()
+                remaining = min(next_request, self.pending_observation["deadlineNs"]) - t.time.perf_counter_ns()
+                if remaining > 0:
+                    t.time.sleep(min(.001, remaining / t.NS))
+            self.check_pending_observation_owner()
             evaluated = t.time.perf_counter_ns()
             require(evaluated < until, "expired/invalid original pending vehicle clocks")
             require(evaluated - self.last_request <= t.SNAPSHOT_TIMEOUT,
@@ -424,6 +437,7 @@ def driver_class(t):
             self.artifacts.event(dict(type="vehicle_gather_pending_discarded", nonce=snapshot["nonce"],
                 reason=value["reason"],
                 commandAuthority=False, observationDeadlineNs=self.pending_observation["deadlineNs"],
+                minimumRequestIntervalNs=PERIOD, reacquisitionNotBeforeNs=next_request,
                 freshRequest=self.pending_observation_requests, maximumFreshRequests=MAX_PENDING_REACQUISITIONS))
             self.latest_snapshot = None
             self.pending_nonce = None

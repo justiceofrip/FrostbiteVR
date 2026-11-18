@@ -12,19 +12,19 @@ Ownership/ready/blocked tasks: COORDINATOR-STATE.txt (local scheduling record).
 External worktrees remain untouched; finished25/26/33 source is integrated. Steam32 lacks its executable.
 
 INSTALLED RUNTIME
-Local0.1.106 is installed and setup-validated; fallback0.1.104,103/105/102/101/99 retained.
+Local0.1.106 is active after107 smoke rollback; previous107 and104/103/105/102/101/99 retained.
 Compiled source2772ba3c8967ed36daeceb736a9871365763b01c; nativeclosuref1111f4a9fd2975cf2944f6bb445ad7dc231dcadf2a978e5fe0886adb7344501.
 Normal checks371x86/368x64 passed. Installed smoke showed21/210 in both eyes, with117 HUD gaps in1948 stationary frames; flicker is open.
-Receipt: reports/coordinator-20261108-feedback721/normal106/run01/installation.json.
+Active receipt: reports/coordinator-20261108-feedback721/normal106/run01/installation.json.107 setup succeeded but its final HUD screenshot failed; normal107/xr-game01/smoke-rollback.json records restoration to106. All profiles/settings restored and107 evidence preserved.
 Settings/cache/shortcut and headset99 recording preserved. Public posting remains on hold for local headset acceptance and remaining campaign work.
 
 CURRENT SOURCE
-Source7d5a9a683ff939929e118086019a354763a224c9 is pushed with371x86/368x64 passing checks; it is not installed. Same-lifetime HUD publication handling and a bounded vehicle recorder are included. Actual116 still shows HUD gaps; the vehicle branch observation does not establish a driving fix. Prior LMG removal/disposal/pickup, Empty presentation and chest-grip repairs remain included in installed106. Full bolt reload and comfortable headset acceptance remain open; prior failures are preserved.
+Native57/source05ec5e6fab5ecbf9106ca03668156bd67a0c94ad is built/pushed with371x86/368x64 passes; local107 was rolled back. Same-lifetime HUD continuity and independent ActiveForce observation are included. Current tool-only batch adds HUD-only analysis and bounded paced vehicle pending observations (43/49 isolated tests, independent reviews passed); no native rebuild for tool changes. Exact push state is in the local coordinator record. Prior LMG removal/disposal/pickup, Empty presentation and chest-grip repairs remain included in active106. Full bolt reload and comfortable headset acceptance remain open.
 The navigation batch removes the developer tool's firearm-publication prerequisite for ordinary on-foot input, keeping original actor/input/menu deadlines and weapon admission unchanged.
 Handoffs: handoff/integrations/coordinator-20261113-weapon-acquisition/README.txt and coordinator-20261113-navigation/README.txt.
 
 ACTUAL GAME EVIDENCE / NEXT
-116/01 closed normally with native retirement and exact restoration. HUD2001/2118 submissions; all413 associated-body predicates returnedfalse, including39 positive-throttle updates. Slight body motion continued. Inspect saved evidence/field semantics before any further vehicle input; no global-freeze or propulsion claim.
+117/01 and installed107/01 closed normally with native retirement and exact restoration.117 stationary HUD3382/3391; no throttle input or armed ActiveForce records.107 final capture8869 is projection-only within a three-frame omission; first gap4508 independently proves owner deadline expiry1.1803ms before Select. Preserve original evidence/strict authority; host-only display correction pending.116 predicatefalse is expected for an active island, not proof of frozen physics. No unchanged vehicle/session repeat.
 103/03 completed all five belt-feed stages including real belt pickup/attachment and0/687->200/487 in all three native copies. Shared offline checks cover24 feed profiles; do not repeat them for unrelated HUD work.
 93/03 completed native Draw/zero-trigger physical jab/Return; damage against target and headsetfeel remain open.
 93/02 completed boat exit, on-foot movement and shoulder weapon recovery; broader vehicle controls remain open.

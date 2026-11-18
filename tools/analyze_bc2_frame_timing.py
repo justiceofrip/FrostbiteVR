@@ -3,6 +3,8 @@
 
 Usage: python -B tools/analyze_bc2_frame_timing.py --native native-trace.json
        --host host.stdout.log --output timing.json
+       python -B tools/analyze_bc2_frame_timing.py --hud-only
+       --host host.stdout.log --output hud.json
 
 Inputs must be completed reports from ONE saved session on the same machine/boot.
 Only exact full PairTickets join. Native request and slot are recovered from the
@@ -10,6 +12,8 @@ unique matching native row, not from host frame number or request ordinal.
 The default window is the intersection of the two retained journal ranges.
 An explicit window uses --start-qpc-ns / --end-qpc-ns (both required).
 No archive discovery, runtime activity, third-party packages or FPS calculation.
+HUD-only mode audits the bounded first_hud_gap host snapshot separately; it
+requires neither native timing nor a ticket join and supplies no native cause.
 """
 
 from __future__ import annotations
@@ -61,6 +65,23 @@ LIMITS = [
     "Host input flags describe the observing host frame, not necessarily the native request; no tracked-WORLD or on-foot classification is inferred.",
     "Native begin is a bridge boundary, not a measured native admission timestamp or a complete CPU rendering interval.",
     "First-failure/worst-frame snapshots are audited separately and excluded from the retained-window distribution.",
+]
+HUD_GATES = {
+    "not_called": "not_called", "unavailable": "hud_unavailable", "failed": "hud_failed",
+    "no_clock": "clock_unavailable", "inactive": "inactive", "tracking": "tracking",
+    "placement": "placement", "no_sample": "first_select_no_sample", "upload": "upload",
+    "final_no_sample": "final_select_no_sample", "image_owner": "image_owner", "submitted": "submitted",
+}
+HUD_SAMPLE_FIELDS = ("sequence", "observed_ns", "deadline_ns", "actor_generation",
+                     "hud_scene_generation", "space_generation", "loaded", "reserve", "capacity", "tag")
+HUD_LIMITS = [
+    "Only first_hud_gap is analyzed: a prior successful HUD submission, first focused world omission, and following observations (at most 32 rows).",
+    "This selected snapshot cannot explain or count all session gaps, establish a fix, or measure FPS or headset visibility.",
+    "Decisions are recorded host gates, not inferred native causes. Native owner/scene timestamps are unavailable.",
+    "Deadline comparisons use original host-wire QPC ns only, never predicted XR time; an open window is not a complete sample-validity check.",
+    "Expired count evidence alone does not explain omission: a separate current-owner lease can retain the displayed digits.",
+    "Receive snapshots can predate the observing frame; repeated rows do not establish repeated receives.",
+    "Menu and actual owner/space transitions may intentionally suppress the HUD; missing evidence is not an owner transition.",
 ]
 
 
@@ -357,6 +378,132 @@ def analyze(native_report, host_report, start_ns=None, end_ns=None):
     }
 
 
+def hud_sample_state(sample):
+    if not isinstance(sample, dict) or not all(type(sample.get(k)) is int for k in HUD_SAMPLE_FIELDS):
+        return "missing_or_invalid_sample_fields"
+    return "nil_sample" if not any(sample[k] for k in HUD_SAMPLE_FIELDS) else "recorded_sample"
+
+
+def hud_owner(sample):
+    fields = ("actor_generation", "hud_scene_generation", "space_generation")
+    if isinstance(sample, dict) and all(integer(sample.get(k), 1) for k in fields):
+        return tuple(sample[k] for k in fields)
+    return None
+
+
+def hud_owner_relation(left, right):
+    a, b = hud_owner(left), hud_owner(right)
+    return "not_comparable" if a is None or b is None else "same" if a == b else "different"
+
+
+def hud_clock_check(sample, at_ns):
+    state = hud_sample_state(sample)
+    if state != "recorded_sample":
+        return {"state": state}
+    observed, deadline = sample["observed_ns"], sample["deadline_ns"]
+    state = ("clock_unavailable" if not integer(at_ns, 1) else
+             "sample_clock_unavailable" if observed <= 0 or deadline <= 0 else
+             "invalid_sample_interval" if deadline <= observed else
+             "observation_in_future" if observed > at_ns else
+             "deadline_elapsed" if deadline <= at_ns else "within_recorded_window")
+    return {"state": state, "observed_ns": observed, "deadline_ns": deadline, "at_ns": at_ns}
+
+
+def analyze_hud(host_report):
+    """Audit host observations without replaying admission or inventing native clocks."""
+    diagnostic = host_report.get("frame_diagnostics")
+    if not isinstance(diagnostic, dict) or diagnostic.get("schema") != 1 or diagnostic.get("clock") != HOST_CLOCK:
+        raise EvidenceError("unsupported or missing host frame_diagnostics schema/clock")
+    gap = diagnostic.get("first_hud_gap")
+    result = {"schema": "fvr.offline-hud-gap-analysis.v1",
+              "evidence_level": "saved_host_journal_analysis; input provenance supplied by caller",
+              "status": "no_hud_gap_journal", "clock": "host-wire QPC ns; no native owner/scene clocks",
+              "retained_rows": 0, "decision_counts": {}, "rows": [], "limits": HUD_LIMITS}
+    if gap is None:
+        return result
+    if not isinstance(gap, dict):
+        raise EvidenceError("first_hud_gap must be an object")
+    rows = require_rows(gap, "first_hud_gap")
+    capacity = gap.get("capacity")
+    if not integer(capacity, 1) or capacity > 32 or len(rows) > capacity:
+        raise EvidenceError("first_hud_gap exceeds supported bounded capacity (32)")
+    result.update(status="retained_hud_observations" if rows else "no_captured_hud_gap",
+                  retained_rows=len(rows), capacity=capacity, frozen=gap.get("frozen"),
+                  recorded_scope=gap.get("scope"))
+    prior = rows[0].get("ammo_hud") if rows else None
+    prior_image = (prior.get("image") if isinstance(prior, dict) and prior.get("decision") == "submitted"
+                   and rows[0].get("end_succeeded") is True else None)
+    decisions = Counter()
+    for index, row in enumerate(rows):
+        hud = row.get("ammo_hud")
+        hud = hud if isinstance(hud, dict) else {}
+        decision = hud.get("decision")
+        decision = decision if isinstance(decision, str) else "missing_decision"
+        decisions[decision] += 1
+        checks = {}
+        for boundary, clock, names in (
+                ("receive", "receive_ns", ("left", "right", "count_before_receive", "owner_before_receive")),
+                ("first_select", "select_ns", ("count", "owner", "image")),
+                ("final_select", "final_ns", ("count", "owner", "image"))):
+            checks[boundary] = {name: hud_clock_check(hud.get(name), hud.get(clock)) for name in names}
+        left, right = hud.get("left"), hud.get("right")
+        paired = hud_owner_relation(left, right)
+        wire_vs_prior = (hud_owner_relation(left, prior_image)
+                         if hud.get("source_matches") is True and paired == "same" else "not_comparable")
+        relations = {"wire_pair_owner": paired, "wire_owner_vs_prior_visible": wire_vs_prior,
+                     "count_vs_owner": hud_owner_relation(hud.get("count"), hud.get("owner")),
+                     "image_vs_owner": hud_owner_relation(hud.get("image"), hud.get("owner"))}
+        facts = []
+        for name in ("left", "right"):
+            state = hud_sample_state(hud.get(name))
+            if state != "recorded_sample":
+                facts.append(f"wire_{name}_{state}")
+        if hud.get("source_matches") is False:
+            facts.append("wire_source_did_not_match")
+        if paired == "different":
+            facts.append("wire_pair_owner_mismatch")
+        for name in ("left", "right", "count", "owner", "image"):
+            owner = hud_owner(hud.get(name))
+            if owner and integer(row.get("space"), 1) and owner[2] != row["space"]:
+                facts.append(f"{name}_space_differs_from_host_frame")
+        if relations["count_vs_owner"] == "different":
+            facts.append("retained_count_owner_mismatch")
+        if wire_vs_prior == "different":
+            facts.append("wire_owner_differs_from_prior_visible")
+        receive = checks["receive"]
+        if (all(receive[k]["state"] == "deadline_elapsed" for k in ("left", "right"))
+                and receive["owner_before_receive"]["state"] == "within_recorded_window"):
+            facts.append("wire_deadlines_elapsed_while_prior_owner_window_open")
+        if (hud_sample_state(hud.get("count_before_receive")) == "recorded_sample"
+                and hud_sample_state(hud.get("owner_before_receive")) == "recorded_sample"
+                and hud.get("count_before_receive") == hud.get("count")
+                and hud.get("owner_before_receive") == hud.get("owner")):
+            facts.append("retained_count_and_owner_unchanged_since_receive")
+        for boundary in ("first_select", "final_select"):
+            if checks[boundary]["owner"]["state"] == "deadline_elapsed":
+                facts.append(f"owner_deadline_elapsed_at_{boundary}")
+        menu_layers = row.get("menu_layers")
+        context = ("menu_may_intentionally_suppress_hud"
+                   if row.get("menu") is True or integer(menu_layers, 1) else
+                   "submission_failed" if row.get("end_succeeded") is False else
+                   "no_world_layer" if row.get("world_layer") is False else
+                   "render_inactive" if any(row.get(k) is False for k in ("focused", "present", "should_render")) else
+                   "owner_transition_may_intentionally_suppress_hud" if wire_vs_prior == "different" else
+                   "focused_world_observation" if all(row.get(k) is True for k in
+                       ("focused", "present", "should_render", "world_layer", "end_succeeded")) else
+                   "context_evidence_missing")
+        start, end, received = row.get("started_ns"), row.get("ended_ns"), hud.get("receive_ns")
+        receive_scope = ("clock_unavailable" if not all(integer(v, 1) for v in (start, end, received)) or end < start else
+                         "predates_observing_frame" if received < start else
+                         "after_observing_frame" if received > end else "within_observing_frame")
+        result["rows"].append({"row": index, "frame": row.get("frame"), "decision": decision,
+                               "gate": HUD_GATES.get(decision, "unknown_recorded_gate"),
+                               "context": context, "receive_scope": receive_scope, "facts": facts,
+                               "owner_relations": relations, "clock_checks": checks, "recorded": row})
+    result["decision_counts"] = dict(decisions)
+    return result
+
+
 def load_report(path, max_bytes):
     if path.stat().st_size > max_bytes:
         raise EvidenceError(f"{path}: exceeds input byte limit")
@@ -381,7 +528,9 @@ def load_report(path, max_bytes):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--native", type=Path, required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--native", type=Path)
+    mode.add_argument("--hud-only", action="store_true", help="audit only the bounded host first_hud_gap snapshot")
     parser.add_argument("--host", type=Path, required=True)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--start-qpc-ns", type=int)
@@ -391,12 +540,20 @@ def main(argv=None):
     try:
         if args.max_input_mib < 1:
             raise EvidenceError("max-input-mib must be positive")
-        if args.output and args.output.resolve() in (args.native.resolve(), args.host.resolve()):
+        inputs = [args.host] + ([args.native] if args.native else [])
+        if args.output and args.output.resolve() in (p.resolve() for p in inputs):
             raise EvidenceError("output must not overwrite an input report")
-        native, native_source = load_report(args.native, args.max_input_mib * 1024 * 1024)
-        host, host_source = load_report(args.host, args.max_input_mib * 1024 * 1024)
-        result = analyze(native, host, args.start_qpc_ns, args.end_qpc_ns)
-        result["inputs"] = {"native": native_source, "host": host_source}
+        if args.hud_only:
+            if args.start_qpc_ns is not None or args.end_qpc_ns is not None:
+                raise EvidenceError("HUD-only snapshot is separate from timing windows; omit window arguments")
+            host, host_source = load_report(args.host, args.max_input_mib * 1024 * 1024)
+            result = analyze_hud(host)
+            result["inputs"] = {"host": host_source}
+        else:
+            native, native_source = load_report(args.native, args.max_input_mib * 1024 * 1024)
+            host, host_source = load_report(args.host, args.max_input_mib * 1024 * 1024)
+            result = analyze(native, host, args.start_qpc_ns, args.end_qpc_ns)
+            result["inputs"] = {"native": native_source, "host": host_source}
         text = json.dumps(result, indent=2, allow_nan=False) + "\n"
         if args.output:
             args.output.write_text(text, encoding="utf-8")
