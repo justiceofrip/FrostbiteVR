@@ -572,12 +572,15 @@ class SinglePlayerSelectionTests(unittest.TestCase):
             ("sim/capture/menu.json", lambda c: c.update(name="different"), False),
             ("sim/capture/menu.json", lambda c: c.update(width=320, height=240), False),
         )
-        for driver_type in (r.SinglePlayerDriver, r.DropdownResumeDriver):
+        for driver_type, dropdown_hover in ((r.SinglePlayerDriver, False),
+                                            (r.DropdownResumeDriver, False),
+                                            (r.DropdownResumeDriver, True)):
             for relative, mutate, allowed in cases:
                 c = self.capture()
                 mutate(c)
                 args = SimpleNamespace(run=run, single_player_capture=Path(relative),
                                        dropdown_resume_capture=Path(relative), single_player_hover_only=False,
+                                       dropdown_resume_hover_only=dropdown_hover,
                                        max_clicks=3)
                 with self.subTest(driver=driver_type.__name__, relative=relative, capture=c), \
                      patch.object(d, "local_path", side_effect=lambda p: Path(p)), \
@@ -688,6 +691,153 @@ class DropdownResumeTests(unittest.TestCase):
             h.v.release_after_failure()
         self.assertEqual(h.writes, [])
         self.assertTrue(h.v.unsafe_owner)
+
+
+class DropdownResumeHoverTests(unittest.TestCase):
+    def harness(self, schedule=None):
+        h = SinglePlayerSelectionTests.harness(self, schedule, driver_type=r.DropdownResumeDriver)
+        h.v.args.dropdown_resume_hover_only = True
+        return h
+
+    def test_hover_exact_neutral_command_retains_calibrated_resume_aim_without_down(self):
+        h = self.harness()
+        deadlines = h.v.deadline, h.v.stage_deadline, h.v.hard_deadline
+        self.assertTrue(h.v.resume())
+        self.assertEqual([batch[:-1] for _, batch in h.writes], [[
+            "hand r follow off", "hand r aimtrim 0 0",
+            "hand r grip pose 0.2 1.3 -0.35 20.084579104 29.067720941 0", "trigger r 0"]])
+        self.assertEqual(h.downs(), [])
+        self.assertEqual((h.v.clicks, h.v.commands), (0, 5))
+        self.assertFalse(h.v.pending_command or h.v.held_trigger or h.v.held_buttons or h.v.world_progressed)
+        self.assertGreater(h.v.latest["sampleNs"], h.v.last_commit)
+        self.assertGreater(h.v.latest["menuInputs"], h.v.pre_event["menuInputs"])
+        self.assertGreater(h.v.latest["menuPublished"], h.v.pre_event["menuPublished"])
+        self.assertEqual(deadlines, (h.v.deadline, h.v.stage_deadline, h.v.hard_deadline))
+        self.assertLess(h.now, h.v.deadline)
+        before = [e for e in h.v.artifacts.events if e["type"] == "resume_event_before"]
+        self.assertEqual([e["event"] for e in before], ["dropdown-resume-neutral-ray"])
+        self.assertFalse(before[0]["nativeWidgetAcceptance"])
+
+    def test_hover_rejects_later_trigger_publication_even_when_ready(self):
+        h = self.harness()
+        self.assertTrue(h.v.resume())
+        with self.assertRaisesRegex(r.REFUSAL, "hover-only cannot press trigger"):
+            h.v.send(["trigger r 1"])
+        self.assertEqual(h.downs(), [])
+        self.assertEqual(len(h.writes), 1)
+
+    def test_hover_requires_neutral_caller_controls(self):
+        for key, value in (("trigR", 1), ("trigL", 1), ("gripR", 1), ("gripL", 1),
+                           ("a", True), ("menu", True), ("stickL", [1, 0]), ("stickR", [0, 1])):
+            with self.subTest(control=key):
+                h = self.harness()
+                h.state["controls"][key] = value
+                with self.assertRaisesRegex(r.REFUSAL, "requires neutral input"):
+                    h.v.resume()
+                self.assertEqual(h.writes, [])
+
+    def test_hover_initial_readiness_loss_refuses_without_publishing(self):
+        h = self.harness(lambda elapsed: (0, False))
+        with self.assertRaisesRegex(r.REFUSAL, "menu changed before initial input"):
+            h.v.resume()
+        self.assertEqual(h.writes, [])
+
+    def test_hover_readiness_loss_after_settle_is_delivery_for_review_only(self):
+        h = self.harness(lambda elapsed: (0, elapsed == 0))
+        self.assertTrue(h.v.resume())
+        self.assertEqual(h.v.input_stopped, "menu readiness lost; possible loading")
+        self.assertEqual(h.downs(), [])
+        self.assertEqual(len(h.writes), 1)
+        self.assertFalse(h.v.pending_command or h.v.held_trigger or h.v.world_progressed)
+
+    def test_hover_requires_both_native_menu_counters_after_neutral_commit(self):
+        for counter in ("input_samples", "published"):
+            with self.subTest(counter=counter):
+                h = self.harness(lambda elapsed: (0, elapsed == 0))
+                def native():
+                    row = h.native()
+                    row["menu_connection"][counter] = 100
+                    return row
+                h.v.tail.read = native
+                with self.assertRaisesRegex(r.REFUSAL, "menu changed before dropdown hover"):
+                    h.v.resume()
+                self.assertEqual(h.downs(), [])
+
+    def test_hover_never_labels_world_progress_as_a_menu_witness(self):
+        h = self.harness(lambda elapsed: (elapsed, elapsed == 0))
+        with self.assertRaisesRegex(r.REFUSAL, "menu-only progress"):
+            h.v.resume()
+        self.assertEqual(h.downs(), [])
+
+    def test_hover_refuses_graphics_failure_after_neutral_delivery(self):
+        h = self.harness(lambda elapsed: (0, elapsed == 0))
+        def native():
+            row = h.native()
+            if not row["menu_connection"]["ready"]:
+                row["menu_connection"]["graphics_failures"] = 1
+            return row
+        h.v.tail.read = native
+        with self.assertRaisesRegex(r.REFUSAL, "graphics failure"):
+            h.v.resume()
+        self.assertEqual(h.downs(), [])
+
+    def test_hover_refuses_competing_command_owner(self):
+        h = self.harness()
+        def interfere():
+            if h.writes and h.pending is None:
+                h.files[h.v.command_path] = b"competing writer\n"
+        h.on_sleep = interfere
+        with self.assertRaises(r.REFUSAL):
+            h.v.resume()
+        self.assertEqual(h.downs(), [])
+
+    def test_explicit_hover_requires_its_matching_reviewed_capture_before_driver_creation(self):
+        for options in ([], ["--single-player-capture", "sim/capture/menu.json"],
+                        ["--dropdown-resume-capture", "sim/capture/menu.json", "--single-player-hover-only"]):
+            with self.subTest(options=options), \
+                 patch.object(r.DropdownResumeDriver, "__init__") as dropdown, \
+                 patch.object(r.SinglePlayerDriver, "__init__") as tab, \
+                 patch.object(r.ResumeDriver, "__init__") as default:
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    code = r.main(["--run", "memory", "--dropdown-resume-hover-only", *options])
+                result = json.loads(output.getvalue())
+                self.assertEqual(code, 2)
+                self.assertEqual(result["status"], "refused")
+                self.assertIn("requires --", result["error"])
+                for constructor in (dropdown, tab, default):
+                    constructor.assert_not_called()
+
+    def test_hover_main_reports_review_only_and_uses_one_original_bounded_episode(self):
+        for loses_readiness, status in ((False, "hover_ready_for_review"),
+                                       (True, "hover_delivered_for_review")):
+            with self.subTest(loses_readiness=loses_readiness):
+                h = self.harness(lambda elapsed: (0, not loses_readiness or elapsed == 0))
+                made, saved = [], {}
+                def initialize(v, args):
+                    made.append(v)
+                    v.__dict__.update(h.v.__dict__)
+                    h.v, v.args = v, args
+                    v.manifest, v.link, v.startup = {}, {}, {}
+                    v.menu_capture_sha256 = d.digest(b"synthetic dropdown capture")
+                    v.artifacts.save = lambda name, value, **kwargs: saved.update({name: value})
+                output = io.StringIO()
+                with patch.object(r.DropdownResumeDriver, "__init__", initialize), \
+                     patch.object(r.DropdownResumeDriver, "close"), contextlib.redirect_stdout(output):
+                    code = r.main(["--run", "memory", "--dropdown-resume-capture", "sim/capture/menu.json",
+                                   "--dropdown-resume-hover-only"])
+                result = json.loads(output.getvalue())
+                self.assertEqual(code, 0, result)
+                self.assertEqual(result["schema"], "bc2vr.dropdown-resume-hover.v1")
+                self.assertEqual(result["status"], status)
+                self.assertEqual(result["native"]["worldCalls"], 0)
+                self.assertEqual((result["clicks"], result["commands"]), (0, 5))
+                self.assertFalse(result["nativeWidgetAcceptance"] or result["headsetAcceptance"])
+                self.assertFalse(result["pendingCommand"] or result["triggerHeld"])
+                self.assertEqual(saved["dropdown-resume-result.json"], result)
+                self.assertEqual(len(made), 1)
+                self.assertEqual(h.v.args.timeout_seconds, 10)
+                self.assertEqual(h.v.args.overall_deadline_ns, h.v.started + 10 * NS)
 
 
 class Review626Tests(unittest.TestCase):

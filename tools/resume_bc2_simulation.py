@@ -10,6 +10,8 @@ menu's Single Player tab once, then returns released for ROOT capture/review.
 --dropdown-resume-capture sim/capture/NAME.json selects the reviewed open Single
 Player dropdown's Resume Game item once, then waits for native world progression.
 ROOT must review both current dropdown images before invoking this option.
+--dropdown-resume-hover-only instead leaves that same Resume ray neutral for
+ROOT's separate capture/review; it never clicks or claims world progression.
 """
 import argparse
 import importlib.util
@@ -281,6 +283,10 @@ def dropdown_resume_geometry(capture):
 
 class ReviewedMenuDriver(ResumeDriver):
     """Share capture admission, full-quad pointing and owned-release guards."""
+    @property
+    def hover_only(self):
+        return getattr(self.args, self.hover_argument, False)
+
     def __init__(self, args, *, observation_only=False):
         self.observation_only = observation_only
         run = transport.local_path(args.run)
@@ -302,7 +308,7 @@ class ReviewedMenuDriver(ResumeDriver):
         require(self.menu_capture["width"] == self.capture_plan["width"]
                 and self.menu_capture["height"] == self.capture_plan["height"], "capture budget dimensions changed")
         self.artifacts.save(self.calibration_name, dict(geometry, capturePath=str(path),
-            captureSha256=transport.digest(raw), hoverOnly=args.single_player_hover_only,
+            captureSha256=transport.digest(raw), hoverOnly=getattr(args, self.hover_argument, False),
             evidence=self.capture_evidence))
 
     def neutral_commands(self):
@@ -332,6 +338,7 @@ class ReviewedMenuDriver(ResumeDriver):
 
     def validate_publication(self, lines, expected, cleanup):
         super().validate_publication(lines, expected, cleanup)
+        require(not self.hover_only or lines != ["trigger r 1"], "hover-only cannot press trigger")
         if lines == ["trigger r 0"]:
             return  # Preserve owned release even after head/menu/world changes.
         require(not getattr(self, "observation_only", False),
@@ -344,39 +351,45 @@ class ReviewedMenuDriver(ResumeDriver):
                 and state["handR"]["pos"] == [.2, 1.3, -.35]
                 and state["handR"]["followsHead"] is False, "captured pointing frame changed")
 
-
-class SinglePlayerDriver(ReviewedMenuDriver):
-    """One ordinary tab click; use the existing owner, native tail and transport."""
-    capture_argument = "single_player_capture"
-    geometry = staticmethod(single_player_geometry)
-    calibration_name = "single-player-calibration.json"
-    capture_evidence = "actual452 reviewed Main tab; projected pixel is geometry, not widget acceptance"
-
-    def resume(self):
+    def settle_neutral_ray(self, event, selection):
         controls = self.state["controls"]
         require(all(float(controls[k]) == 0 for k in ("trigR", "trigL", "gripR", "gripL"))
                 and not any(controls[k] for k in ("a", "b", "x", "y", "menu", "clickL", "clickR"))
-                and controls["stickL"] == controls["stickR"] == [0, 0], "tab selection requires neutral input")
+                and controls["stickL"] == controls["stickR"] == [0, 0], selection + " requires neutral input")
         self.wait_initial_menu_readiness()
-        self.event("single-player-neutral-ray", self.neutral_commands())
+        self.event(event, self.neutral_commands())
         neutral_ns, before = self.last_commit, self.pre_event
         while True:
             current = self.observe()
             progressed = (current["sampleNs"] > neutral_ns
                           and current["menuInputs"] > before["menuInputs"]
                           and current["menuPublished"] > before["menuPublished"])
-            if self.args.single_player_hover_only and progressed:
+            if self.hover_only and progressed:
                 # The neutral ray already settled. Readiness loss still latches
                 # every future input off; a separate image review needs no press.
                 require(current["worldCalls"] == 0 and current["menuGraphicsFailures"] == 0,
                         "hover review requires menu-only progress without graphics failure")
                 require(self.clicks == 0 and not self.pending_command and not self.held_trigger,
                         "hover review requires a settled neutral command")
-                return True
-            require(not self.input_stopped, "menu changed before tab selection; review required")
+                return
+            require(not self.input_stopped, "menu changed before " + selection + "; review required")
             if progressed:
-                break
+                return
             time.sleep(POLL_SECONDS)
+
+
+class SinglePlayerDriver(ReviewedMenuDriver):
+    """One ordinary tab click; use the existing owner, native tail and transport."""
+    capture_argument = "single_player_capture"
+    hover_argument = "single_player_hover_only"
+    geometry = staticmethod(single_player_geometry)
+    calibration_name = "single-player-calibration.json"
+    capture_evidence = "actual452 reviewed Main tab; projected pixel is geometry, not widget acceptance"
+
+    def resume(self):
+        self.settle_neutral_ray("single-player-neutral-ray", "tab selection")
+        if self.hover_only:
+            return True
         self.event("single-player-trigger-down", ["trigger r 1"])
         self.clicks += 1
         hold_until = self.last_commit + 200_000_000
@@ -397,6 +410,7 @@ class SinglePlayerDriver(ReviewedMenuDriver):
 class DropdownResumeDriver(ReviewedMenuDriver):
     """One reviewed dropdown click; inherit bounded native-world observation."""
     capture_argument = "dropdown_resume_capture"
+    hover_argument = "dropdown_resume_hover_only"
     geometry = staticmethod(dropdown_resume_geometry)
     calibration_name = "dropdown-resume-calibration.json"
     capture_evidence = "actual452 reviewed RESUME GAME dropdown item; geometry is not widget acceptance"
@@ -407,6 +421,12 @@ class DropdownResumeDriver(ReviewedMenuDriver):
     def __init__(self, args, *, observation_only=False):
         args.max_clicks = 1
         super().__init__(args, observation_only=observation_only)
+
+    def resume(self):
+        if self.hover_only:
+            self.settle_neutral_ray("dropdown-resume-neutral-ray", "dropdown hover")
+            return True
+        return super().resume()
 
 
 def main(argv=None):
@@ -421,11 +441,15 @@ def main(argv=None):
                         help="current open Single Player dropdown JSON; ROOT must review both images; one Resume click")
     parser.add_argument("--single-player-hover-only", action="store_true",
                         help="with --single-player-capture, leave a neutral ray for ROOT capture/review")
+    parser.add_argument("--dropdown-resume-hover-only", action="store_true",
+                        help="with --dropdown-resume-capture, leave the unchanged neutral Resume ray for ROOT capture/review")
     args = parser.parse_args(argv)
     if args.single_player_capture:
         args.max_clicks, args.timeout_seconds = 1, min(args.timeout_seconds, 10)
     elif args.dropdown_resume_capture:
         args.max_clicks = 1
+        if args.dropdown_resume_hover_only:
+            args.timeout_seconds = min(args.timeout_seconds, 10)
     started = time.perf_counter_ns()
     args.overall_deadline_ns = started + min(args.timeout_seconds, 35) * NS
     driver = None
@@ -437,6 +461,9 @@ def main(argv=None):
     elif args.dropdown_resume_capture:
         result.update(schema="bc2vr.dropdown-resume.v1",
                       evidence="one reviewed dropdown Resume click; success requires native world counter progression")
+        if args.dropdown_resume_hover_only:
+            result.update(schema="bc2vr.dropdown-resume-hover.v1",
+                          evidence="neutral Resume ray delivery only; ROOT must capture/review the highlighted widget before a separate click")
     code = 2
     carry = None
     identity = None
@@ -446,9 +473,11 @@ def main(argv=None):
     try:
         require(not args.single_player_hover_only or args.single_player_capture,
                 "hover-only requires --single-player-capture")
+        require(not args.dropdown_resume_hover_only or args.dropdown_resume_capture,
+                "dropdown hover-only requires --dropdown-resume-capture")
         driver_type = (SinglePlayerDriver if args.single_player_capture else
                        DropdownResumeDriver if args.dropdown_resume_capture else ResumeDriver)
-        for _ in range(1 if args.single_player_capture else 4):
+        for _ in range(1 if args.single_player_capture or args.dropdown_resume_hover_only else 4):
             require(time.perf_counter_ns() + 2 * NS < args.overall_deadline_ns,
                     "overall Resume observation budget exhausted without world progression")
             driver = driver_type.__new__(driver_type)
@@ -474,10 +503,10 @@ def main(argv=None):
             episodes.append(str(driver.artifacts.directory))
             completed = driver.resume()
             if completed:
-                result["status"] = ((
-                    ("hover_delivered_for_review" if driver.input_stopped else "hover_ready_for_review")
-                    if args.single_player_hover_only else "single_player_click_delivered")
-                                    if args.single_player_capture else "world_progressed")
+                if args.single_player_hover_only or args.dropdown_resume_hover_only:
+                    result["status"] = "hover_delivered_for_review" if driver.input_stopped else "hover_ready_for_review"
+                else:
+                    result["status"] = "single_player_click_delivered" if args.single_player_capture else "world_progressed"
                 code = 0
                 break
             carry = {key: getattr(driver, key) for key in (
