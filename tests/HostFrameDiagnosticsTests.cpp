@@ -159,7 +159,7 @@ int CopyPollTicketsOverflowAndRetention(){
     f.copyPending=false;f.copyCompleted=f.copyComposed=true;CHECK(f.PreserveCompletedCopy());
     CHECK(f.priorCopy.copyPollDropped==~std::uint64_t{0}&&f.copyPollDropped==0&&f.copyPollCount==0);
     d.Observe(f);CHECK(d.copyPollOverflowFrames==2);
-    CHECK(sizeof(HostCopyObservation)<=320&&sizeof(HostFrameDiagnostics)<320*1024);
+    CHECK(sizeof(HostCopyObservation)<=320&&sizeof(HostFrameDiagnostics)<384*1024);
     return 0;
 }
 int BoundedAndTimer(){
@@ -676,7 +676,7 @@ int FirstHudGapSurvivesOverwrite(){
     CHECK(report.str().find("\"source_space\":1,\"source_predicted_ns\":76000000")!=std::string::npos);
     CHECK(report.str().find("\"decision\":\"final_no_sample\"")!=std::string::npos);
     CHECK(sizeof(HostHudGapObservation)<768&&sizeof(HostFrameObservation)<1100);
-    CHECK(sizeof(HostFrameDiagnostics)<320*1024); // Existing total bound is unchanged.
+    CHECK(sizeof(HostFrameDiagnostics)<384*1024); // Includes the fixed recent-episode journal.
     return 0;
 }
 int HudGapMenuAndOwnerContext(){
@@ -711,6 +711,38 @@ int HudGapMenuAndOwnerContext(){
     std::ostringstream report;d.Write(report);
     CHECK(report.str().find("observation only; menu and owner changes may be intentional; no cause or defect inferred")!=std::string::npos);
     CHECK(report.str().find("\"bug\"")==std::string::npos&&report.str().find("\"defect\"")==std::string::npos);
+    return 0;
+}
+
+int RecentHudEpisodesSurviveAndWrap(){
+    auto storage=std::make_unique<HostFrameDiagnostics>();auto& d=*storage;
+    auto shown=HudObservation(HostAmmoHudDecision::Submitted);
+    auto omitted=HudObservation(HostAmmoHudDecision::NoSample);
+    d.Observe(Frame(1),&omitted);CHECK(!d.recentHudGapCount);
+    d.Observe(Frame(2),&shown);d.Observe(Frame(3),&omitted);
+    for(unsigned n=4;n<400;++n)d.Observe(Frame(n),&omitted);
+    CHECK(d.firstHudGapCount==32&&d.recentHudGapCount==1&&d.recentHudGapEpisodes==1);
+    CHECK(d.RecentHudGap(0).omittedFrames==397&&d.RecentHudGap(0).count==2);
+    CHECK(d.RecentHudGap(0).rows[1].frame==3&&d.RecentHudGap(0).lastOmittedFrame==399);
+    std::ostringstream first;HostFrameDiagnostics::WriteHudGap(first,d.firstHudGapRows[1],d.lastHudVisible.ammoHud.image);
+    // Noneligible menu/failure observations neither create nor recover episodes.
+    auto f=Frame(400);f.menu=true;d.Observe(f,&shown);
+    f=Frame(401);f.endSucceeded=false;d.Observe(f,&shown);CHECK(d.recentHudGapActive);
+    d.Observe(Frame(402),&shown);CHECK(!d.recentHudGapActive&&d.RecentHudGap(0).rows[2].frame==402);
+    const auto recoveryNs=Frame(402).endedNs;
+    for(unsigned n=0;n<32;++n){d.Observe(Frame(403+2*n),&omitted);d.Observe(Frame(404+2*n),&shown);}
+    CHECK(d.recentHudGapCount==32&&d.recentHudGapEpisodes==33&&d.recentHudGapOverwritten==1);
+    CHECK(d.recentHudOverwrittenThroughNs==recoveryNs&&d.RecentHudGap(0).rows[1].frame==403);
+    CHECK(d.RecentHudGap(31).rows[1].frame==465&&d.RecentHudGap(31).rows[2].frame==466);
+    CHECK(d.RecentHudGap(0).rows[0].frame==402&&d.RecentHudGap(1).rows[0].frame==404);
+    std::ostringstream retained;HostFrameDiagnostics::WriteHudGap(retained,d.firstHudGapRows[1],d.lastHudVisible.ammoHud.image);
+    CHECK(first.str()==retained.str()&&d.lastHudVisible.frame==2&&d.recentHudVisible.frame==466);
+    std::ostringstream json;d.WriteRecentHudGaps(json);
+    CHECK(json.str().find("\"overwritten\":1")!=std::string::npos);
+    CHECK(json.str().find("\"last_omitted_frame\":465")!=std::string::npos);
+    CHECK(json.str().size()<400*1024&&sizeof(HostFrameDiagnostics)<384*1024);
+    CHECK(sizeof(HostHudGapEpisode)*32+sizeof(HostHudGapObservation)<75*1024);
+    CHECK(d.recentHudClockValid&&d.recentHudObservedStartNs==Frame(1).startedNs&&d.recentHudObservedEndNs==Frame(466).endedNs);
     return 0;
 }
 
@@ -886,7 +918,9 @@ int main(int argc,char** argv){
     if(argc==2&&std::string(argv[1])=="--first-input-gap")return FirstPublicationGapSurvivesOverwrite();
     if(argc==2&&std::string(argv[1])=="--focused-render")return FocusedRenderEvidenceSurvivesIdleTail();
     if(argc==2&&std::string(argv[1])=="--first-hud-gap")return FirstHudGapSurvivesOverwrite()||HudGapMenuAndOwnerContext();
+    if(argc==2&&std::string(argv[1])=="--recent-hud-gaps")return RecentHudEpisodesSurviveAndWrap();
     if(FirstHudGapSurvivesOverwrite()||HudGapMenuAndOwnerContext())return 1;
+    if(RecentHudEpisodesSurviveAndWrap())return 1;
     if(FocusedRenderEvidenceSurvivesIdleTail())return 1;
     if(CopyPollBoundariesAcrossWait()||CopyPollTicketsOverflowAndRetention())return 1;
     if(SourceImportCacheCases()||ThreeSourceImportsKeepOneCopyAndDepthQuartet())return 1;

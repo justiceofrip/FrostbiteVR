@@ -601,6 +601,9 @@ def driver_class(t):
                 received = self.receive_snapshot()
                 if received:
                     self.accept_snapshot(*received)
+                    # Finish this pump's unchanged predecessor-lease check
+                    # before a new pump spends the successor on request work.
+                    return
                 now = t.time.perf_counter_ns()
                 self.bounds(now)
                 if self.pending_nonce is None and now - self.last_request >= PERIOD:

@@ -532,5 +532,97 @@ class HudAnalysisTests(unittest.TestCase):
         self.assertEqual(timing.analyze(native, host), expected)
 
 
+class RecentHudAnalysisTests(unittest.TestCase):
+    def setUp(self):
+        self.report = json.loads(HUD_SAVED_REPORT)
+        prior, omission = copy.deepcopy(self.report["frame_diagnostics"]["first_hud_gap"]["rows"])
+        recovery = copy.deepcopy(prior)
+        recovery.update(frame=602, started_ns=1230000000, ended_ns=1240000000)
+        self.episode = {"rows": [prior, omission, recovery], "omitted_frames": 1,
+                        "last_omitted_frame": 601, "last_omitted_ns": 1220000000, "recovered": True}
+        self.journal = {"schema": 1, "capacity": 32, "clock_valid": True,
+                        "observed_start_ns": 900000000, "observed_end_ns": 3000000000,
+                        "episodes_seen": 1, "overwritten": 0, "overwritten_through_ns": 0,
+                        "episodes": [self.episode]}
+        self.report["frame_diagnostics"]["recent_hud_gaps"] = self.journal
+
+    def analyze(self, start=1110000000, end=1220000000):
+        return timing.analyze_recent_hud(self.report, start, end)
+
+    def test_exact_qpc_bounds_select_omission_with_outside_context(self):
+        result = self.analyze()
+        self.assertEqual(result["in_window_omission_witnesses"], 1)
+        self.assertEqual(result["episodes"][0]["selection"], "in_window_omission_witness")
+        self.assertEqual([r["frame"] for r in result["episodes"][0]["rows"]], [600, 601, 602])
+        self.assertEqual(result["episodes"][0]["rows"][1]["gate"], "first_select_no_sample")
+        # XR predicted time is unrelated to the requested QPC bounds.
+        self.episode["rows"][1]["predicted_ns"] = 1
+        self.assertEqual(self.analyze()["in_window_omission_witnesses"], 1)
+        for start, end in ((1110000001, 1220000000), (1110000000, 1219999999)):
+            result = self.analyze(start, end)
+            self.assertEqual(result["in_window_omission_witnesses"], 0)
+            self.assertEqual(result["episodes"][0]["selection"], "overlap_without_in_window_omission_witness")
+
+    def test_pre_window_first_record_is_not_selected_in_recent_mode(self):
+        original = timing.analyze_hud(self.report)
+        self.journal["episodes"] = []
+        self.journal["episodes_seen"] = 0
+        self.assertEqual(self.analyze()["status"], "no_retained_in_window_omission_witness")
+        self.assertEqual(self.analyze()["episodes"], [])
+        self.assertEqual(timing.analyze_hud(self.report), original)
+
+    def test_prolonged_gap_overlap_is_metadata_not_interior_witness(self):
+        self.episode["rows"].pop()
+        self.episode.update(recovered=False, omitted_frames=400, last_omitted_frame=1000, last_omitted_ns=2500000000)
+        result = self.analyze(2000000000, 2600000000)
+        self.assertEqual(result["in_window_omission_witnesses"], 0)
+        self.assertEqual(result["episodes"][0]["omitted_frames_in_episode"], 400)
+        self.assertEqual(len(result["episodes"][0]["rows"]), 2)
+        self.assertNotIn("window_omission_count", result)
+
+    def test_overwritten_overlap_and_outside_range_are_explicit(self):
+        self.journal.update(overwritten=5, episodes_seen=6, overwritten_through_ns=1050000000)
+        result = self.analyze(950000000, 1060000000)
+        self.assertTrue(result["overwritten_overlap_possible"])
+        self.assertEqual(result["in_window_omission_witnesses"], 0)
+        self.assertFalse(self.analyze()["overwritten_overlap_possible"])
+        self.assertTrue(self.analyze(800000000, 3100000000)["window_outside_observed_range"])
+
+    def test_missing_journal_is_not_fallback_to_first_record(self):
+        self.report["frame_diagnostics"].pop("recent_hud_gaps")
+        self.assertEqual(self.analyze()["status"], "no_recent_hud_gap_journal")
+        self.assertEqual(self.analyze()["in_window_omission_witnesses"], 0)
+
+    def test_malformed_capacity_and_clocks_are_refused(self):
+        for field, value in (("capacity", 33), ("clock_valid", False), ("observed_end_ns", 1),
+                             ("overwritten", 1), ("episodes", [self.episode] * 33)):
+            with self.subTest(field=field):
+                journal = copy.deepcopy(self.journal)
+                self.journal[field] = value
+                with self.assertRaises(timing.EvidenceError):
+                    self.analyze()
+                self.journal.clear()
+                self.journal.update(journal)
+        for start, end in ((None, None), (1, None), (2, 1), (0, 1)):
+            with self.assertRaises(timing.EvidenceError):
+                self.analyze(start, end)
+
+    def test_explicit_recent_cli_preserves_default_mode_and_input(self):
+        with scratch_directory() as folder:
+            path = Path(folder) / "host.json"
+            original = json.dumps(self.report)
+            path.write_text(original, encoding="utf-8")
+            argv = ["--hud-recent", "--host", str(path)]
+            with contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(timing.main(argv), 2)
+                self.assertEqual(timing.main([*argv, "--start-qpc-ns", "1"]), 2)
+                self.assertEqual(timing.main([*argv, "--output", str(path)]), 2)
+            output = Path(folder) / "recent.json"
+            self.assertEqual(timing.main([*argv, "--start-qpc-ns", "1110000000", "--end-qpc-ns", "1220000000",
+                                          "--output", str(output)]), 0)
+            self.assertEqual(json.loads(output.read_text(encoding="utf-8"))["in_window_omission_witnesses"], 1)
+            self.assertEqual(path.read_text(encoding="utf-8"), original)
+
+
 if __name__ == "__main__":
     unittest.main()

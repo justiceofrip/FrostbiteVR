@@ -1,0 +1,9 @@
+Local110 normal delivery / November18,2026
+Native60 source4534dca0a8fad5aaa77f2ecb119c35adb57d36f3; closure14ad0fc88734c4ceb98287c0d3c26ca5ca4afa672cd8a947466188a0c1ae021e. Normal371x86/368x64, focused HUD/vehicle and freeze passed; source pushed. No private60 build.
+Changes preserve original HUD grace across deadline-only retransmissions and reacquire a complete final vehicle observation within frozen local/native bounds. Client deadlines remain unchanged.
+Local110 installed/setupvalidated; ZIPbe3548e197d763eb86f2d79c884b692cba8978835b4e5862a3f91449e8fdd475. All versions/settings/cache/shortcut preserved.
+Actual110/01 HUD smoke failed27/4946 frames over82.441128s; both reviewed gameplay captures21/210.222.271014s,all6exit0,native retirement/exactprofiles+settingsrestore. Rolled back to106;110 retained. Existing first-gap journal4461–4492 predates the marked interval and cannot explain its27 omissions. No unchanged HUD retry.
+Actual110/02 independent SP03 driving request refused310948100ns on the old predecessor source deadline after accepting coherent positive003 and unnecessarily publishing004 within that pump. ACK/response deadlines remained live. Ownedzero ACK/laterframe verified; no sustained-driving pass.210.5976865s,all6exit0,native retirement/exactrestoration; outerfinally restored106.
+Native final recapture execution/retries cannot be distinguished from an initially complete sample in that saved response. No unsupported recovery claim.
+Next supported work: bounded recent gap-episode journal/window analysis and immediate return after successor adoption, with a fresh pump for the next request. No arbitrary timeout enlargement.
+Exact receipts: reports/coordinator-20261108-feedback721/normal110/{run01,xr-game01,xr-game02}; batch84/source-push1589.json. Current default106/previous110. Public release and headset acceptance remain separate.

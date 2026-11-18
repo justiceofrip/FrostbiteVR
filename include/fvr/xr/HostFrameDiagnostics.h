@@ -151,7 +151,7 @@ inline std::uint32_t HostReasons(const HostFrameObservation& f)noexcept {
         if(f.retainedAgeNs>250000000)reasons|=HostRetainedAge;}
     return reasons;
 }
-// Full HUD wire/presentation samples live only in this lean first-gap capture,
+// Full HUD wire/presentation samples live only in these lean gap captures,
 // never in the 256-row frame ring or its retained full-frame witnesses.
 struct HostHudGapObservation {
     std::uint64_t frame=0,space=0,inputGeneration=0;
@@ -161,6 +161,13 @@ struct HostHudGapObservation {
     bool menu=false,headValid=false,viewsValid=false,trackingValid=false;
     bool inputFocused=false,inputHeadValid=false,inputHandsTracked=false;
     HostAmmoHudObservation ammoHud{};
+};
+struct HostHudGapEpisode {
+    // Prior successful submission, first omission, optional first recovery.
+    std::array<HostHudGapObservation,3> rows{};
+    std::uint64_t omittedFrames=0,lastOmittedFrame=0;
+    std::int64_t lastOmittedNs=0;
+    unsigned count=0;
 };
 // Diagnostics only. All times are host QPC nanoseconds except XR predicted
 // times/retained age and wall_ms. Neither input nor render leases are extended.
@@ -175,6 +182,13 @@ struct HostFrameDiagnostics {
     std::array<HostHudGapObservation,HudGapCapacity> firstHudGapRows{};
     HostHudGapObservation lastHudVisible{};
     unsigned firstHudGapCount=0;
+    static constexpr unsigned RecentHudGapCapacity=32;
+    std::array<HostHudGapEpisode,RecentHudGapCapacity> recentHudGaps{};
+    HostHudGapObservation recentHudVisible{};
+    unsigned recentHudGapCount=0,recentHudGapNext=0;
+    std::uint64_t recentHudGapEpisodes=0,recentHudGapOverwritten=0;
+    std::int64_t recentHudObservedStartNs=0,recentHudObservedEndNs=0,recentHudOverwrittenThroughNs=0;
+    bool recentHudGapActive=false,recentHudClockValid=true;
     std::array<std::uint64_t,unsigned(HostStage::Count)> maxStageNs{};
     std::array<HostStageAggregate,unsigned(HostStage::Count)> stageAggregates{};
     // Keep a bounded summary of renderable non-menu frames while the user is
@@ -252,6 +266,35 @@ struct HostFrameDiagnostics {
         // tracking loss and failed submissions, instead of silently skipping them.
         CaptureHudGap(firstHudGapRows[firstHudGapCount++],f,hud);
     }
+    const HostHudGapEpisode& RecentHudGap(unsigned i)const noexcept {
+        return recentHudGaps[(recentHudGapCount==RecentHudGapCapacity?recentHudGapNext+i:i)%RecentHudGapCapacity];
+    }
+    void ObserveRecentHudGaps(const HostFrameObservation& f,const HostAmmoHudObservation* hud)noexcept {
+        if(f.startedNs<=0||f.endedNs<f.startedNs||f.startedNs<recentHudObservedEndNs)recentHudClockValid=false;
+        if(!recentHudObservedStartNs)recentHudObservedStartNs=f.startedNs;
+        recentHudObservedEndNs=f.endedNs;
+        const bool eligible=f.focused&&f.present&&f.shouldRender&&!f.menu&&f.worldLayer&&f.endSucceeded;
+        if(!eligible)return;
+        const bool shown=hud&&hud->decision==HostAmmoHudDecision::Submitted;
+        if(shown){
+            if(recentHudGapActive){auto& episode=recentHudGaps[(recentHudGapNext+RecentHudGapCapacity-1)%RecentHudGapCapacity];
+                CaptureHudGap(episode.rows[2],f,hud);episode.count=3;recentHudGapActive=false;}
+            CaptureHudGap(recentHudVisible,f,hud);return;
+        }
+        if(!recentHudVisible.frame)return;
+        if(!recentHudGapActive){
+            auto& episode=recentHudGaps[recentHudGapNext];
+            if(recentHudGapCount==RecentHudGapCapacity){
+                AddHostDiagnosticSaturated(recentHudGapOverwritten,1);
+                recentHudOverwrittenThroughNs=(std::max)(recentHudOverwrittenThroughNs,episode.rows[2].endedNs);
+            }else ++recentHudGapCount;
+            episode={};episode.rows[0]=recentHudVisible;CaptureHudGap(episode.rows[1],f,hud);episode.count=2;
+            recentHudGapNext=(recentHudGapNext+1)%RecentHudGapCapacity;recentHudGapActive=true;
+            AddHostDiagnosticSaturated(recentHudGapEpisodes,1);
+        }
+        auto& episode=recentHudGaps[(recentHudGapNext+RecentHudGapCapacity-1)%RecentHudGapCapacity];
+        AddHostDiagnosticSaturated(episode.omittedFrames,1);episode.lastOmittedFrame=f.frame;episode.lastOmittedNs=f.endedNs;
+    }
     void Observe(HostFrameObservation f,const HostAmmoHudObservation* hud=nullptr)noexcept {
         f.ammoHudDecision=hud?hud->decision:HostAmmoHudDecision::NotCalled;
         f.spaceChanged|=previousSpace&&previousSpace!=f.space;
@@ -321,6 +364,7 @@ struct HostFrameDiagnostics {
         }
         if(f.pairRejected&&!firstRejectedFrame.pairRejected)firstRejectedFrame=f;
         ObserveHudGap(f,hud);
+        ObserveRecentHudGaps(f,hud);
         if(f.endSucceeded){if(!f.worldLayer){++noWorldFrames;for(unsigned i=0;i<16;++i)if(f.reasons&(1u<<i))++noWorldReasonFrames[i];}
             if(!f.layers)++zeroLayerFrames;if(!f.worldLayer&&f.menuLayers)++menuOnlyFrames;}
         else ++failedFrames;
@@ -379,7 +423,8 @@ struct HostFrameDiagnostics {
            <<",\"interpretation\":\"observation only; menu and owner changes may be intentional; no cause or defect inferred\""
            <<",\"frozen\":"<<(firstHudGapCount==HudGapCapacity)<<",\"rows\":[";
         for(unsigned i=0;i<firstHudGapCount;++i){if(i)out<<',';WriteHudGap(out,firstHudGapRows[i],lastHudVisible.ammoHud.image);}
-        out<<"]},\"rows\":[";
+        out<<"]},\"recent_hud_gaps\":";WriteRecentHudGaps(out);
+        out<<",\"rows\":[";
         for(unsigned i=0;i<count;++i){if(i)out<<',';WriteFrame(out,Row(i));}
         out<<"],\"first_rejected_frame\":";
         if(firstRejectedFrame.pairRejected)WriteFrame(out,firstRejectedFrame);else out<<"null";
@@ -387,6 +432,21 @@ struct HostFrameDiagnostics {
            <<",\"first_input_success_gap\":";
         if(firstInputSuccessGapNs)WriteFrame(out,firstInputSuccessGap);else out<<"null";
         out<<'}';
+    }
+    void WriteRecentHudGaps(std::ostream& out)const {
+        out<<"{\"schema\":1,\"capacity\":"<<RecentHudGapCapacity
+           <<",\"scope\":\"recent focused world omission episodes; prior submission, first omission, first recovery only\""
+           <<",\"episodes_seen\":"<<recentHudGapEpisodes<<",\"overwritten\":"<<recentHudGapOverwritten
+           <<",\"overwritten_through_ns\":"<<recentHudOverwrittenThroughNs
+           <<",\"observed_start_ns\":"<<recentHudObservedStartNs<<",\"observed_end_ns\":"<<recentHudObservedEndNs
+           <<",\"clock_valid\":"<<recentHudClockValid<<",\"episodes\":[";
+        for(unsigned i=0;i<recentHudGapCount;++i){if(i)out<<',';const auto& episode=RecentHudGap(i);
+            out<<"{\"omitted_frames\":"<<episode.omittedFrames<<",\"last_omitted_frame\":"<<episode.lastOmittedFrame
+               <<",\"last_omitted_ns\":"<<episode.lastOmittedNs<<",\"recovered\":"<<(episode.count==3)<<",\"rows\":[";
+            for(unsigned n=0;n<episode.count;++n){if(n)out<<',';WriteHudGap(out,episode.rows[n],episode.rows[0].ammoHud.image);}
+            out<<"]}";
+        }
+        out<<"]}";
     }
     static void WriteStageAggregates(std::ostream& out,
         const std::array<HostStageAggregate,unsigned(HostStage::Count)>& aggregates){

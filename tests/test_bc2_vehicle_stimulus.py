@@ -33,6 +33,7 @@ def load(name, path):
 t = load("vehicle_test_transport", ROOT / "tools/drive_bc2_feed_simulation.py")
 v = load("vehicle_test_adapter", ROOT / "tools/bc2_vehicle_stimulus.py")
 LIVE106_REPLAY_RESULTS = []
+LIVE110_HANDOFF_RESULTS = []
 
 
 def snapshot(now, nonce, generation, role="driver", state=None):
@@ -512,6 +513,152 @@ class AssembledVehicleTests(unittest.TestCase):
         self.assertGreater(record["pendingAckRequests"], 0)
         self.assertEqual(self.calls, [["stick r 0.4 0.5"], ["stick r 0 0"]])
         self.assertTrue(all(r["input"]["stickL"] == [0, 0] for r in self.requests))
+
+    def replay_live110_successor_handoff(self, *, late=False):
+        # Actual110/02 live-driver-d4f0287e9f414e2a92a00c967e2b1d32:
+        # replay only the diagnosed pump boundary in the existing transport.
+        # Geometry/owners remain synthetic; native clocks get one common shift.
+        self.sustained()
+        self.request.update(stick=[0, .5], positiveHoldMs=250)
+        self.response_delay = lambda d: 40_000_000 if d.snapshot_index == 3 else 0
+        replay = {}
+
+        def handoff(driver):
+            self.clock.now = max(self.clock.now, driver.last_request + v.PERIOD)
+            driver.pump()
+            self.assertEqual(driver.snapshot_index, 3)
+            self.assertIsNotNone(driver.pending_nonce)
+            self.assertFalse(driver.pending_command)
+            shift = self.clock.now - 381973580965400  # retained positive commit
+            predecessor = shift + 381973609131900
+            successor = shift + 381973686553200
+            accepted = shift + 381973605465600
+            driver.last_request = shift + 381973568849200
+            sample = snapshot(shift + 381973589428000, driver.pending_nonce, 300,
+                              self.request["role"], self.state)
+            for value, clocks in ((driver.latest_snapshot,
+                    (381973525184800, 381973523243800, 381973511037400,
+                     381973611037400, 381973609131900, 381973524467530)),
+                    (sample, (381973589428000, 381973591079100, 381973587846000,
+                              381973687846000, 381973686553200, 381973591134194))):
+                observed, sampled, input_observed, input_deadline, valid, predicted = clocks
+                value["observed_ns"] = shift + observed
+                obs = value["vehicleObservation"]
+                obs.update(sampledNs=shift + sampled, inputObservedNs=shift + input_observed,
+                           inputDeadlineNs=shift + input_deadline, validUntilNs=shift + valid)
+                obs["input"]["predictedNs"] = shift + predicted
+                obs["input"]["menu"]["deadlineNs"] = shift + valid
+            self.samples.append(copy.deepcopy(sample))
+            self.write(driver.snapshot_path, sample)
+            self.clock.now = accepted
+            replay.update(predecessor=predecessor, successor=successor, accepted=accepted)
+            original_request, original_atomic = t.Driver.request_snapshot, t.atomic
+            original_event = driver.artifacts.event
+
+            def request(current):
+                replay["requestBound"] = t._read_deadline_ns.get()
+                self.clock.now = max(self.clock.now, shift + 381973606229500)
+                result = original_request(current)
+                # Retained post-publication receipt/unwind/freeze aggregate;
+                # the individual write/exception timestamps are not recorded.
+                self.clock.now = shift + 381973611301100
+                replay["requestFinished"] = self.clock.now
+                return result
+
+            def atomic(path, raw, *args, **kwargs):
+                result = original_atomic(path, raw, *args, **kwargs)
+                if path == driver.request_path:
+                    self.clock.now = shift + 381973608682500
+                return result
+
+            def event(value, **kwargs):
+                result = original_event(value, **kwargs)
+                if late and value["type"] == "vehicle_sustained_observation":
+                    # Admission/receipt work crossing the old lease still fails
+                    # its unchanged read_until post-call check.
+                    self.clock.now = predecessor + 1
+                    replay["adoptionCompleted"] = self.clock.now
+                return result
+
+            with patch.object(t.time, "perf_counter_ns", lambda: self.clock.now), \
+                    patch.object(t.Driver, "request_snapshot", request), \
+                    patch.object(t, "atomic", atomic), \
+                    patch.object(driver.artifacts, "event", event):
+                driver.pump()
+                replay["adoptionReturned"] = self.clock.now
+                self.assertEqual(driver.snapshot_index, 3)
+                self.assertIsNone(driver.pending_nonce)
+                self.assertEqual(driver.latest_snapshot, sample)
+                self.assertTrue(driver.sustained_positive)
+                self.assertLess(self.clock.now, predecessor)
+                self.clock.now = shift + 381973606229500
+                driver.pump()
+                self.assertEqual(driver.snapshot_index, 4)
+                self.assertEqual(driver.last_request_published, shift + 381973608682500)
+                self.assertEqual(replay["requestBound"], successor)
+                self.assertGreater(self.clock.now, predecessor)
+                self.assertLess(self.clock.now, successor)
+
+        self.after_press = handoff
+        code, result = self.assembled()
+        LIVE110_HANDOFF_RESULTS.append(dict(late=late, code=code, result=result, clocks=replay.copy()))
+        return code, result, replay
+
+    def test_timing_live110_successor_returns_before_next_request_receipts(self):
+        code, result, replay = self.replay_live110_successor_handoff()
+        self.assertEqual(code, 0, result)
+        self.assertEqual(replay["predecessor"] - replay["adoptionReturned"], 3_666_300)
+        self.assertEqual(replay["successor"] - replay["accepted"], 81_087_600)
+        self.assertEqual(replay["requestFinished"] - replay["predecessor"], 2_169_200)
+        self.assertEqual(self.calls, [["stick l 0 0.5"], ["stick l 0 0"]])
+        self.assertEqual(result["vehicleStick"], [0, 0])
+
+    def test_timing_live110_late_adoption_cannot_skip_predecessor_postcheck(self):
+        code, result, replay = self.replay_live110_successor_handoff(late=True)
+        self.assertEqual(code, 2, result)
+        self.assertIn("original acknowledgement/read deadline exceeded", result["error"])
+        self.assertEqual(replay["adoptionCompleted"], replay["predecessor"] + 1)
+        self.assertNotIn("adoptionReturned", replay)
+        self.assertNotIn("requestBound", replay)
+        self.assertEqual(len(self.requests), 3)
+        self.assertEqual(self.calls, [["stick l 0 0.5"], ["stick l 0 0"]])
+        self.assertEqual(result["vehicleStick"], [0, 0])
+        self.assertFalse(result["pendingCommand"])
+        self.assertFalse(result["normalStopRequired"])
+        self.assertNotIn("vehicleStimulus", result)
+        self.assertIn("zero ACK", result["release"])
+
+    def test_timing_pending_ack_adoption_defers_request_to_successor_pump(self):
+        self.configure_live106_replay(phase=24_000_000)
+        original_read_until = t.read_until
+        handoffs, requests = [], []
+
+        def read_until(until, function, *args):
+            if (getattr(function, "__name__", "") != "pump_owned"
+                    or self.driver.latest_snapshot is None):
+                return original_read_until(until, function, *args)
+            driver = self.driver
+            before = (driver.snapshot_index, driver.sustained_observations,
+                      driver.pending_command, driver.snapshot_source_deadline(driver.latest_snapshot))
+            result = original_read_until(until, function, *args)
+            if driver.sustained_observations > before[1]:
+                self.assertEqual(driver.snapshot_index, before[0])
+                self.assertIsNone(driver.pending_nonce)
+                handoffs.append(before[2])
+            if driver.snapshot_index > before[0]:
+                self.assertEqual(driver.sustained_observations, before[1])
+                self.assertEqual(until, before[3])
+                requests.append(before[2])
+            return result
+
+        with patch.object(t, "read_until", read_until):
+            code, result = self.assembled()
+        self.assertEqual(code, 0, result)
+        self.assertIn(True, handoffs)
+        self.assertIn(True, requests)
+        self.assertIn(False, handoffs)
+        self.assertIn(False, requests)
+        self.assertEqual(self.calls, [["stick l 0.4 0.5"], ["stick l 0 0"]])
 
     def test_timing_pending_ack_refresh_keeps_exact_native_owner_and_input(self):
         faults = {

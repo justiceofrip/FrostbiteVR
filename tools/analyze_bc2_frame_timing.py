@@ -14,6 +14,7 @@ An explicit window uses --start-qpc-ns / --end-qpc-ns (both required).
 No archive discovery, runtime activity, third-party packages or FPS calculation.
 HUD-only mode audits the bounded first_hud_gap host snapshot separately; it
 requires neither native timing nor a ticket join and supplies no native cause.
+Use --hud-recent with explicit QPC bounds for retained later omission episodes.
 """
 
 from __future__ import annotations
@@ -504,6 +505,93 @@ def analyze_hud(host_report):
     return result
 
 
+def analyze_recent_hud(host_report, start_ns, end_ns):
+    """Select actual in-window witnesses; episode spans alone prove no interior gate."""
+    if not integer(start_ns, 1) or not integer(end_ns, 1) or end_ns <= start_ns:
+        raise EvidenceError("recent HUD mode requires increasing positive start/end QPC ns")
+    diagnostic = host_report.get("frame_diagnostics")
+    if not isinstance(diagnostic, dict) or diagnostic.get("schema") != 1 or diagnostic.get("clock") != HOST_CLOCK:
+        raise EvidenceError("unsupported or missing host frame_diagnostics schema/clock")
+    result = {"schema": "fvr.offline-recent-hud-gap-analysis.v1",
+              "evidence_level": "saved_host_journal_analysis; input provenance supplied by caller",
+              "status": "no_recent_hud_gap_journal", "window": {"start_ns": start_ns, "end_ns": end_ns},
+              "in_window_omission_witnesses": 0, "episodes": [],
+              "limits": ["At most 32 recent episodes retain prior submission, first omission and first recovery; intermediate frames have no full witness.",
+                         "Only omission witnesses wholly inside the requested QPC window are selected; prior/recovery rows are context and may be outside.",
+                         "Episode span overlap does not prove an omission or its gate throughout that span; this is not arbitrary-window completeness."] + HUD_LIMITS[1:]}
+    journal = diagnostic.get("recent_hud_gaps")
+    if journal is None:
+        return result
+    if not isinstance(journal, dict) or journal.get("schema") != 1:
+        raise EvidenceError("unsupported recent_hud_gaps schema")
+    capacity, episodes = journal.get("capacity"), journal.get("episodes")
+    if not integer(capacity, 1) or capacity > 32 or not isinstance(episodes, list) or len(episodes) > capacity:
+        raise EvidenceError("recent_hud_gaps exceeds supported bounded capacity (32 episodes)")
+    observed_start, observed_end = journal.get("observed_start_ns"), journal.get("observed_end_ns")
+    overwritten, through, seen = journal.get("overwritten"), journal.get("overwritten_through_ns"), journal.get("episodes_seen")
+    if (journal.get("clock_valid") is not True or not integer(observed_start, 1)
+            or not integer(observed_end, observed_start) or not integer(overwritten, 0)
+            or not integer(seen, len(episodes)) or not integer(through, 0)
+            or through > observed_end or (overwritten == 0) != (through == 0)):
+        raise EvidenceError("invalid recent HUD observation/overwrite clock metadata")
+    result.update(status="no_retained_in_window_omission_witness", capacity=capacity,
+                  retained_episodes=len(episodes), episodes_seen=seen, overwritten=overwritten,
+                  overwritten_through_ns=through,
+                  window_outside_observed_range=start_ns < observed_start or end_ns > observed_end,
+                  overwritten_overlap_possible=overwritten > 0 and start_ns <= through and end_ns >= observed_start)
+    previous_end = 0
+    for index, episode in enumerate(episodes):
+        if not isinstance(episode, dict):
+            raise EvidenceError("recent HUD episode must be an object")
+        rows = require_rows(episode, "recent HUD episode")
+        if len(rows) not in (2, 3) or episode.get("recovered") is not (len(rows) == 3):
+            raise EvidenceError("recent HUD episode requires prior/omission and optional recovery")
+        previous_frame, previous_ns = 0, 0
+        for row in rows:
+            frame, start, end = row.get("frame"), row.get("started_ns"), row.get("ended_ns")
+            if (not integer(frame, previous_frame + 1) or not integer(start, max(observed_start, previous_ns))
+                    or not integer(end, start) or end > observed_end):
+                raise EvidenceError("invalid recent HUD row frame/QPC order")
+            previous_frame, previous_ns = frame, end
+        prior, omission = rows[:2]
+        hud = omission.get("ammo_hud")
+        if (not isinstance(prior.get("ammo_hud"), dict) or prior["ammo_hud"].get("decision") != "submitted"
+                or prior.get("end_succeeded") is not True or not isinstance(hud, dict)
+                or hud.get("decision") not in HUD_GATES or hud["decision"] == "submitted"
+                or any(omission.get(k) is not True for k in ("focused", "present", "should_render", "world_layer", "end_succeeded"))
+                or omission.get("menu") is not False):
+            raise EvidenceError("invalid recent HUD prior/omission witness")
+        last_ns, last_frame = episode.get("last_omitted_ns"), episode.get("last_omitted_frame")
+        if (not integer(last_ns, omission["ended_ns"]) or last_ns > observed_end
+                or not integer(last_frame, omission["frame"]) or not integer(episode.get("omitted_frames"), 1)
+                or omission["started_ns"] < previous_end):
+            raise EvidenceError("invalid recent HUD episode omission span")
+        if len(rows) == 3:
+            recovery = rows[2]
+            if (recovery["started_ns"] < last_ns or recovery["frame"] <= last_frame
+                    or not isinstance(recovery.get("ammo_hud"), dict)
+                    or recovery["ammo_hud"].get("decision") != "submitted" or recovery.get("end_succeeded") is not True):
+                raise EvidenceError("invalid recent HUD recovery witness")
+        elif index != len(episodes) - 1:
+            raise EvidenceError("only the newest recent HUD episode may be unrecovered")
+        previous_end = rows[-1]["ended_ns"] if len(rows) == 3 else last_ns
+        if last_ns < start_ns or omission["started_ns"] > end_ns:
+            continue
+        inside = start_ns <= omission["started_ns"] and omission["ended_ns"] <= end_ns
+        # Reuse the exact original host-gate analysis with this episode's own prior.
+        audit = analyze_hud({"frame_diagnostics": {"schema": 1, "clock": HOST_CLOCK,
+                            "first_hud_gap": {"capacity": 3, "rows": rows}}})
+        result["episodes"].append({"retained_index": index,
+                                   "selection": "in_window_omission_witness" if inside else "overlap_without_in_window_omission_witness",
+                                   "omitted_frames_in_episode": episode["omitted_frames"],
+                                   "last_omitted_frame": last_frame, "last_omitted_ns": last_ns,
+                                   "recovered": episode["recovered"], "rows": audit["rows"]})
+        result["in_window_omission_witnesses"] += int(inside)
+    if result["in_window_omission_witnesses"]:
+        result["status"] = "retained_in_window_omission_witnesses"
+    return result
+
+
 def load_report(path, max_bytes):
     if path.stat().st_size > max_bytes:
         raise EvidenceError(f"{path}: exceeds input byte limit")
@@ -531,6 +619,7 @@ def main(argv=None):
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--native", type=Path)
     mode.add_argument("--hud-only", action="store_true", help="audit only the bounded host first_hud_gap snapshot")
+    mode.add_argument("--hud-recent", action="store_true", help="audit recent HUD episodes within explicit QPC bounds")
     parser.add_argument("--host", type=Path, required=True)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--start-qpc-ns", type=int)
@@ -543,7 +632,11 @@ def main(argv=None):
         inputs = [args.host] + ([args.native] if args.native else [])
         if args.output and args.output.resolve() in (p.resolve() for p in inputs):
             raise EvidenceError("output must not overwrite an input report")
-        if args.hud_only:
+        if args.hud_recent:
+            host, host_source = load_report(args.host, args.max_input_mib * 1024 * 1024)
+            result = analyze_recent_hud(host, args.start_qpc_ns, args.end_qpc_ns)
+            result["inputs"] = {"host": host_source}
+        elif args.hud_only:
             if args.start_qpc_ns is not None or args.end_qpc_ns is not None:
                 raise EvidenceError("HUD-only snapshot is separate from timing windows; omit window arguments")
             host, host_source = load_report(args.host, args.max_input_mib * 1024 * 1024)
