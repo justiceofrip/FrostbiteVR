@@ -106,7 +106,7 @@ static void GateChecks(){
 static n::FxState seenFx{},returnFx{};
 static n::Entry seenEntry{};
 static unsigned nativeCalls=0,observerCalls=0,observerActive=0,seenError=0,seenKind=0;
-static constexpr unsigned NativeError=0x14930001,ReturnEax=0xa1493001;
+static constexpr unsigned NativeError=0x14930001,ReturnEax=0xa1493001,PredicateEax=0xa1493000;
 static const unsigned defaultMxcsr=0x1f80;
 static void ResetFp(){__asm {fninit} __asm {ldmxcsr defaultMxcsr} __asm {cld}}
 static void MakeFx(n::FxState& f,unsigned seed){
@@ -124,19 +124,20 @@ static bool SameFx(const n::FxState& a,const n::FxState& b){
 static void DirtyObserver(){__asm {fninit} __asm {fldz} __asm {pxor xmm0,xmm0} __asm {pxor xmm7,xmm7} SetLastError(0xbad1493);}
 // The first instructions are real MinHook fixtures. Each original captures its
 // actual incoming machine state, then returns a different floating environment.
-#define NATIVE_FIXTURE(Name,Words,Pop,Kind) \
+#define NATIVE_FIXTURE(Name,Words,Pop,Kind,Result) \
 __declspec(naked) static void __cdecl Name(){ \
     __asm {pushfd} __asm {pushad} __asm {fxsave seenFx} \
     __asm {mov eax,fs:[34h]} __asm {mov seenError,eax} __asm {mov seenKind,Kind} \
     __asm {mov esi,esp} __asm {mov edi,offset seenEntry} __asm {mov ecx,Words} \
     __asm {cld} __asm {rep movsd} __asm {inc nativeCalls} \
     __asm {popad} __asm {popfd} __asm {fxrstor returnFx} \
-    __asm {mov dword ptr fs:[34h],14930001h} __asm {mov eax,0a1493001h} __asm {ret Pop} \
+    __asm {mov dword ptr fs:[34h],14930001h} __asm {mov eax,Result} __asm {ret Pop} \
 }
-NATIVE_FIXTURE(NativeUpdate,11,4,0)
-NATIVE_FIXTURE(NativeFilter,13,12,1)
-NATIVE_FIXTURE(NativeSimulation,11,4,2)
-NATIVE_FIXTURE(NativeOutput,13,12,3)
+NATIVE_FIXTURE(NativeUpdate,11,4,0,0a1493001h)
+NATIVE_FIXTURE(NativeFilter,13,12,1,0a1493001h)
+NATIVE_FIXTURE(NativeSimulation,11,4,2,0a1493001h)
+NATIVE_FIXTURE(NativeOutput,13,12,3,0a1493001h)
+NATIVE_FIXTURE(NativeAssociated94,10,0,4,0a1493000h)
 #undef NATIVE_FIXTURE
 static void __cdecl FixtureDispatch(n::Frame* frame){
     ++observerCalls;++observerActive;bool normal=false;
@@ -146,7 +147,7 @@ static void __cdecl FixtureDispatch(n::Frame* frame){
         Check(SameFx(seenFx,frame->incoming),"observer cannot change incoming x87/SSE state");
         Check(SameFx(frame->returned,returnFx),"native returned x87/SSE state captured before observer");
         Check(seenError==frame->incomingLastError&&frame->returnedLastError==NativeError,"LastError preserved both ways");
-        Check(frame->result.eax==ReturnEax,"native EAX survives observer");
+        Check(frame->result.eax==(frame->kind==4?PredicateEax:ReturnEax),"native EAX/zero AL survives observer");
         const auto& a=frame->entry->registers;const auto& b=frame->result;
         Check(a.edi==b.edi&&a.esi==b.esi&&a.ebp==b.ebp&&a.ebx==b.ebx&&a.edx==b.edx&&a.ecx==b.ecx&&
             ((a.flags^b.flags)&0xed5)==0,"native remaining GPRs and application flags survive observer");
@@ -156,6 +157,12 @@ static void __cdecl FixtureDispatch(n::Frame* frame){
     }__finally {--observerActive;}
 }
 static void __fastcall ThrowUpdate(void*,void*,unsigned){RaiseException(0xe1493001,0,0,nullptr);}
+static void __fastcall ThrowAssociated94(void*,void*){RaiseException(0xe1493001,0,0,nullptr);}
+static bool CatchAssociated94Thunk(){
+    using Zero=unsigned(__thiscall*)(void*);
+    __try {reinterpret_cast<Zero>(n::Associated94Thunk)(reinterpret_cast<void*>(0x14930000));return false;}
+    __except(GetExceptionCode()==0xe1493001?EXCEPTION_EXECUTE_HANDLER:EXCEPTION_CONTINUE_SEARCH){return true;}
+}
 static bool CatchForward(n::Frame* frame){
     __try {FixtureDispatch(frame);return false;}
     __except(GetExceptionCode()==0xe1493001?EXCEPTION_EXECUTE_HANDLER:EXCEPTION_CONTINUE_SEARCH){return true;}
@@ -167,10 +174,10 @@ static bool CatchThunk(){
 }
 static void AbiChecks(){
     MakeFx(returnFx,0x59);n::Observe=FixtureDispatch;
-    const n::MachineEntry functions[]{NativeUpdate,NativeFilter,NativeSimulation,NativeOutput};
+    const n::MachineEntry functions[]{NativeUpdate,NativeFilter,NativeSimulation,NativeOutput,NativeAssociated94};
     // Exercise the same assembled forwarders used by the gameplay dispatcher,
     // including raw non-float bit patterns and a nondefault incoming FP state.
-    for(unsigned k=0;k<4;++k){
+    for(unsigned k=0;k<p::Proofs.size();++k){
         *n::Originals[k]=functions[k];n::Entry entry{};entry.registers={0x1111,0x2222,0x3333,0,0x4444,0x5555,0x14930000,0x7777,0x246};
         entry.args[0]=0x80000000;entry.args[1]=0x7fc01234;entry.args[2]=0x3f800000;
         n::Frame frame{};frame.entry=&entry;frame.kind=k;frame.incomingLastError=0x14935555;MakeFx(frame.incoming,0);
@@ -178,17 +185,18 @@ static void AbiChecks(){
         *n::Originals[k]=nullptr;
     }
     // Literal per-boundary markers above prevent identical-code folding.
-    for(unsigned a=0;a<4;++a)for(unsigned b=0;b<a;++b)
-        Check(functions[a]!=functions[b],"four distinct native fixture entry points");
+    for(unsigned a=0;a<p::Proofs.size();++a)for(unsigned b=0;b<a;++b)
+        Check(functions[a]!=functions[b],"five distinct native fixture entry points");
     Check(MH_Initialize()==MH_OK,"MinHook fixture initialize");
-    for(unsigned k=0;k<4;++k)Check(MH_CreateHook(functions[k],n::Thunks[k],reinterpret_cast<void**>(n::Originals[k]))==MH_OK,"create actual boundary adapter");
+    for(unsigned k=0;k<p::Proofs.size();++k)Check(MH_CreateHook(functions[k],n::Thunks[k],reinterpret_cast<void**>(n::Originals[k]))==MH_OK,"create actual boundary adapter");
     Check(MH_EnableHook(MH_ALL_HOOKS)==MH_OK,"enable fixture adapters");
-    n::CaptureEnabled=1;n::AdmittedPhysics=0x14930000;n::AdmittedControl=0x14930000;n::OutputThread=GetCurrentThreadId();
-    using One=unsigned(__thiscall*)(void*,unsigned);using Three=unsigned(__thiscall*)(void*,unsigned,unsigned,unsigned);
-    for(unsigned k=0;k<4;++k){
+    n::CaptureEnabled=1;n::AdmittedPhysics=0x14930000;n::AdmittedControl=0x14930000;n::AdmittedAssociated=0x14930000;n::OutputThread=GetCurrentThreadId();
+    using Zero=unsigned(__thiscall*)(void*);using One=unsigned(__thiscall*)(void*,unsigned);using Three=unsigned(__thiscall*)(void*,unsigned,unsigned,unsigned);
+    for(unsigned k=0;k<p::Proofs.size();++k){
         const auto before=nativeCalls,observed=observerCalls;
         n::FxState userFx;auto* saved=&userFx;
-        if(p::Proofs[k].args==1){One volatile call=reinterpret_cast<One>(functions[k]);Check(call(reinterpret_cast<void*>(0x14930000),0x80000000)==ReturnEax,"one-word thunk return/stack");}
+        if(!p::Proofs[k].args){Zero volatile call=reinterpret_cast<Zero>(functions[k]);Check(call(reinterpret_cast<void*>(0x14930000))==PredicateEax,"zero-word thunk preserves false AL/stack");}
+        else if(p::Proofs[k].args==1){One volatile call=reinterpret_cast<One>(functions[k]);Check(call(reinterpret_cast<void*>(0x14930000),0x80000000)==ReturnEax,"one-word thunk return/stack");}
         else {Three volatile call=reinterpret_cast<Three>(functions[k]);Check(call(reinterpret_cast<void*>(0x14930000),0x80000000,0x7fc01234,0x3f800000)==ReturnEax,"three-word thunk return/stack");}
         __asm {mov eax,saved} __asm {fxsave [eax]}
         Check(SameFx(userFx,returnFx),"native returned FP state reaches actual caller after observer dirties FP");
@@ -206,6 +214,8 @@ static void AbiChecks(){
     Check(CatchForward(&frame)&&!observerActive,"SEH propagates and finally drains observer");ResetFp();
     n::CaptureEnabled=1;
     Check(CatchThunk()&&!observerActive,"SEH traverses actual entry/forward adapters with finally cleanup");ResetFp();
+    n::Associated94Original=reinterpret_cast<n::MachineEntry>(ThrowAssociated94);
+    Check(CatchAssociated94Thunk()&&!observerActive,"zero-argument predicate preserves SEH propagation/finally drain");ResetFp();
 }
 #endif
 int main(){NativeOwnerChecks();JournalChecks();

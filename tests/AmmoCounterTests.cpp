@@ -3,6 +3,7 @@
 #include "Bc2ReloadFlowRuntime.h"
 #include "Test.h"
 #include <iostream>
+#include <memory>
 #include <string_view>
 using namespace fvr;using namespace fvr::graphics;using namespace fvr::bc2;
 namespace {
@@ -78,6 +79,62 @@ int SceneEquipmentAndPublicationDeadlines(){
     CHECK(SceneAmmoCounterHostSample(ammo,owner,&scene,Now).sequence);
     owner.held=false;lifetime.Bind(owner,&scene,Now);CHECK(!owner.hudGeneration);
     owner.held=true;lifetime.Bind(owner,&scene,Now);CHECK(owner.hudGeneration!=old.hudGeneration);
+    return 0;
+}
+int SameLifetimePublicationHandoff(){
+    MenuPresentationLifetime scenes;MenuPresentationObservation observed;
+    observed.owner={0x11000,0x22000,0x2202c,0x22030};observed.state=MenuPresentationState::Playing;
+    auto scene=scenes.Observe(observed,Now);AmmoCounterHudLifetime lifetime;auto owner=Owner();
+    lifetime.Bind(owner,&scene,Now);const auto reserve=Reserve();
+    auto clock=Now;unsigned ownerReads=0,sceneReads=0,reserveReads=0;
+    const auto readOwner=[&]{++ownerReads;return std::make_shared<const AmmoCounterOwner>(owner);};
+    const auto readScene=[&]{++sceneReads;return std::make_shared<const MenuPresentationSnapshot>(scene);};
+    const auto readReserve=[&]{++reserveReads;return std::optional{reserve};};
+    const auto read=[&]{return ReadAmmoCounterPublication(readOwner,readScene,readReserve,[&]{return clock;});};
+    // Every load returns a DIFFERENT immutable allocation. The old pointer
+    // equality loop exhausts all three attempts despite unchanged lifetimes.
+    const auto first=read();CHECK(AmmoCounterFresh(first,clock));
+    CHECK(ownerReads==2&&sceneReads==2&&reserveReads==1);
+    CHECK(first.sequence==reserve.sequence&&first.observedNs==reserve.observedNs);
+    CHECK(first.deadlineNs==Now+AmmoCounterMaxAgeNs);
+    AmmoCounterPresentation hud;CHECK(hud.Receive(first,first,30,clock));
+    // Independent same-owner leases keep admitted digits across count expiry;
+    // neither the old count's observation nor its deadline changes.
+    clock+=150000000;scene=scenes.Observe(observed,clock);
+    owner.observedNs=clock;owner.deadlineNs=clock+200000000;lifetime.Bind(owner,&scene,clock);
+    const auto gap=read();CHECK(AmmoCounterOwnerOnlyFresh(gap,clock));
+    CHECK(hud.Receive(gap,gap,30,clock)&&*hud.Select(30,clock)==first);
+    CHECK(reserve.observedNs==Now&&reserve.deadlineNs==Now+200000000);
+    // A shorter successor lease caps publication; it cannot renew the count.
+    clock=Now+1;auto before=Owner();auto beforeScene=scenes.Observe(observed,Now);
+    AmmoCounterHudLifetime shortLifetime;shortLifetime.Bind(before,&beforeScene,Now);
+    auto after=before;after.observedNs=clock;after.deadlineNs=Now+50000000;
+    const auto raw=SceneAmmoCounterHostSample(reserve,before,&beforeScene,clock);
+    const auto capped=RevalidateAmmoCounterPublication(raw,before,beforeScene,after,beforeScene,clock);
+    CHECK(capped.sequence==raw.sequence&&capped.observedNs==raw.observedNs&&capped.deadlineNs==after.deadlineNs);
+    // Force a transition on EVERY second load. No retry can relabel an old
+    // count as the new owner, including address reuse with a new generation.
+    for(unsigned fault=0;fault<15;++fault){
+        unsigned owners=0,sceneCopies=0;auto badOwner=before;auto badScene=beforeScene;auto time=clock;
+        if(fault==0)++badOwner.owner.weapon;if(fault==1)++badOwner.owner.actorGeneration;
+        if(fault==2)++badOwner.owner.equipGeneration;if(fault==3)++badOwner.owner.space;
+        if(fault==4)++badOwner.hudGeneration;if(fault==5)badOwner.held=false;
+        if(fault==6)badOwner.alive=false;if(fault==7)badOwner.onFoot=false;
+        if(fault==8)badScene.observation.state=MenuPresentationState::LetterBox;
+        if(fault==9)++badScene.sceneEpoch;if(fault==10)++badScene.ownerEpoch;
+        if(fault==11)badOwner.deadlineNs=time;if(fault==12)badScene.deadlineNs=time;
+        if(fault==13)badOwner.observedNs=time+1;if(fault==14)badScene={};
+        const auto rejected=ReadAmmoCounterPublication(
+            [&]{return std::make_shared<const AmmoCounterOwner>((++owners%2)?before:badOwner);},
+            [&]{return std::make_shared<const MenuPresentationSnapshot>((++sceneCopies%2)?beforeScene:badScene);},
+            [&]{return std::optional{reserve};},[&]{return time;});
+        CHECK(rejected==AmmoCounterSample{});
+    }
+    unsigned reads=0;
+    CHECK(ReadAmmoCounterPublication([&]()->std::shared_ptr<const AmmoCounterOwner>{
+        return ++reads==1?std::make_shared<const AmmoCounterOwner>(before):nullptr;},
+        [&]{return std::make_shared<const MenuPresentationSnapshot>(beforeScene);},
+        [&]{return std::optional{reserve};},[&]{return clock;})==AmmoCounterSample{});
     return 0;
 }
 int NativeReadOnlyAdmission(){const auto a=Reserve();const auto o=Owner();auto sample=AmmoCounterHostSample(a,o,Now);
@@ -354,7 +411,7 @@ int BitmapContents(){
     return 0;
 }
 }
-int main(){if(CommittedSceneHudLifetime()||SceneEquipmentAndPublicationDeadlines()||NativeReadOnlyAdmission()||NativeReadClockOrdering()||PublishedReserveIsPassiveAndBounded()||PairAndFreshness()||
+int main(){if(SameLifetimePublicationHandoff()||CommittedSceneHudLifetime()||SceneEquipmentAndPublicationDeadlines()||NativeReadOnlyAdmission()||NativeReadClockOrdering()||PublishedReserveIsPassiveAndBounded()||PairAndFreshness()||
     DisplaySurvivesAmmoGapsWithCurrentOwner()||RejectedCountsCannotRenewOwnership()||DisplayOwnerLifetimeAndDuplicatePackets()||OwnerMarkersCannotAdmitCounts()||
     CountsChangingBetweenEyes()||WeaponSidePlacement()||BitmapContents())return 1;
     std::cout<<"AmmoCounter: strict native samples, retained same-owner display, paired telemetry and bitmap checks passed; no native acceptance\n";

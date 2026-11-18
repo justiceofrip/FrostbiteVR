@@ -162,7 +162,7 @@ std::optional<MuzzleEventSource> muzzleHistorySource;
 std::atomic<unsigned> clientOriginWrites=0,serverOriginWrites=0,originWriteFailures=0,shotSourceChanges=0,originFallbacks=0,originWritesAfterLogFull=0;
 std::atomic<unsigned> clientShotCalls=0,clientShotCopies=0,clientShotRejected=0;
 AimCandidates aimingProfile{};InputBindingCandidates profile{};std::uintptr_t image=0;unsigned imageSize=0;
-InputReader readInput=nullptr;std::array<void*,25> hooks{};
+InputReader readInput=nullptr;std::array<void*,26> hooks{};
 // Slot17, journal and original are immutable/process-retained after install.
 using QueueConsumerFn=unsigned(__thiscall*)(void*,unsigned,unsigned,unsigned);
 QueueConsumerFn queueConsumerOriginal=nullptr;
@@ -1159,12 +1159,13 @@ unsigned ReadVehicleConsumerView(const VehicleConsumerContext& context,unsigned 
     }
     readable=nativeCurrent&&nativeAfter&&!(checks&vehicleConsumer::Read);return checks;
 }
-// Private four-boundary vehicle observer; no input/physics writes or engine calls.
+// Private five-boundary vehicle observer; no input/physics writes or engine calls.
 std::optional<std::size_t> Offset(const engine::PeImage&,unsigned,unsigned);
 namespace vehiclePhysics=vehiclePhysicsEvidence;
 vehiclePhysics::Journal<>* vehiclePhysicsJournal=nullptr;
 VehicleConsumerContext vehiclePhysicsContext{}; // Immutable after one-shot arm.
-std::array<std::array<std::byte,838>,4> vehiclePhysicsExpected{};
+std::array<std::array<std::byte,838>,vehiclePhysics::Proofs.size()> vehiclePhysicsExpected{};
+std::array<std::array<std::byte,71>,vehiclePhysics::PredicateDependencies.size()> vehiclePredicateExpected{};
 std::atomic<bool> vehiclePhysicsStarted{false};
 std::atomic<unsigned> vehiclePhysicsCallbacks{0},vehiclePhysicsUpdatesActive{0};
 thread_local vehiclePhysics::Record* vehiclePhysicsUpdate=nullptr;
@@ -1175,9 +1176,13 @@ const char* vehiclePhysicsStatus="not_requested";
 bool VehiclePhysicsCodeCurrent()noexcept {
     if(!vehiclePhysicsInstalled)return false;
     std::array<std::byte,838> actual{};
-    for(unsigned n=0;n<4;++n){const auto& proof=vehiclePhysics::Proofs[n];
+    for(unsigned n=0;n<vehiclePhysics::Proofs.size();++n){const auto& proof=vehiclePhysics::Proofs[n];
         if(!Read(image+proof.rva,actual.data(),proof.size)||
            !std::equal(actual.begin(),actual.begin()+proof.size,vehiclePhysicsExpected[n].begin()))return false;}
+    for(unsigned n=0;n<vehiclePhysics::PredicateDependencies.size();++n){const auto& proof=vehiclePhysics::PredicateDependencies[n];
+        if(!Read(image+proof.rva,actual.data(),proof.size)||
+           !std::equal(actual.begin(),actual.begin()+proof.size,vehiclePredicateExpected[n].begin()))return false;}
+    unsigned zero=1;if(!Read(image+0x10d9410,&zero,sizeof(zero))||zero)return false;
     std::array<unsigned char,12> getter{};
     if(!Read(image+vehiclePhysics::TransformGetterRva,getter.data(),getter.size())||getter!=vehiclePhysics::TransformGetter)return false;
     return true;
@@ -1187,13 +1192,15 @@ void ArmVehiclePhysics(const VehicleConsumerContext& context,std::int64_t qpc,un
        !(throttle&0x7fffffffu)||qpc<=0||vehicleConsumerFrequency<=0||qpc>INT64_MAX-2*vehicleConsumerFrequency)return;
     if(!vehiclePhysicsJournal->ReserveArm())return;
     vehiclePhysicsContext=context;
-    unsigned physics=0,control=0,vtable=0;
+    unsigned physics=0,control=0,vtable=0,associated=0;
     if(!SelectionReadWord(context.identity.driver,0xd4,physics)||!SelectionReadWord(physics,0,vtable)||
-       vtable!=image+vehiclePhysics::PhysicsVtableRva||!SelectionReadWord(physics,0xc,control)){
+       vtable!=image+vehiclePhysics::PhysicsVtableRva||!SelectionReadWord(physics,0xc,control)||
+       !SelectionReadWord(physics,0x78,associated)){
         vehiclePhysicsJournal->Close();return;
     }
     InterlockedExchange(reinterpret_cast<volatile LONG*>(&vehiclePhysics::native::AdmittedPhysics),LONG(physics));
     InterlockedExchange(reinterpret_cast<volatile LONG*>(&vehiclePhysics::native::AdmittedControl),LONG(control));
+    InterlockedExchange(reinterpret_cast<volatile LONG*>(&vehiclePhysics::native::AdmittedAssociated),LONG(associated));
     vehiclePhysicsJournal->PublishArm(qpc,vehicleConsumerFrequency);
     if(vehiclePhysicsJournal->InWindow(qpc)&&vehiclePhysicsStarted.load(std::memory_order_acquire))
         (void)vehiclePhysics::native::TryOpenCapture();
@@ -1233,11 +1240,42 @@ vehiclePhysics::Sample ReadVehiclePhysicsSample()noexcept {
     });
 }
 
+vehiclePhysics::PredicateSample ReadVehiclePredicateSample(const vehiclePhysics::Sample& owner,unsigned receiver)noexcept {
+    using namespace vehiclePhysics;PredicateSample result{};
+    if(owner.reasons||receiver!=owner.associated||receiver!=native::AdmittedAssociated||
+       owner.associatedVtable!=image+AssociatedVtableRva||owner.target94!=image+Proofs[4].rva){
+        result.reasons=Identity;return result;}
+    result.body=owner.body;
+    const auto word=[&](unsigned base,unsigned offset,unsigned& out,unsigned mask){
+        if(SelectionReadWord(base,offset,out)){result.readMask|=mask;return true;}
+        result.reasons|=ReadFailed;return false;};
+    const auto byte=[&](unsigned base,unsigned offset,unsigned& out,unsigned mask){
+        unsigned char value=0;
+        if(base>=0x10000&&std::uint64_t(base)+offset<=UINT32_MAX&&Read(base+offset,&value,1)){
+            out=value;result.readMask|=mask;return true;}
+        result.reasons|=ReadFailed;return false;};
+    if(!word(owner.associatedVtable,0x7c,result.target7c,1)||result.target7c!=image+PredicateDependencies[1].rva){
+        result.reasons|=Identity;return result;}
+    if(!word(result.body,0xb8,result.subobject,2))return result;
+    if(result.subobject&&!byte(result.subobject,0x26,result.subobjectFlags,4))return result;
+    if(!byte(result.body,0xd8,result.bodyType,8))return result;
+    if((result.bodyType==6||result.bodyType==7)&&!word(result.body,0x1e8,result.alternate,16))return result;
+    // 00aa6ca8 ADD eax,0xd0 selects an INLINE fallback, never [body+0xd0].
+    if(result.alternate)result.selected=result.alternate;
+    else if(std::uint64_t(result.body)+0xd0<=UINT32_MAX)result.selected=result.body+0xd0;
+    else {result.reasons|=ReadFailed;return result;}
+    word(result.selected,0xcc,result.scalar,32);
+    unsigned body=0,vtable=0;
+    if(!SelectionReadWord(receiver,0x8c,body)||!SelectionReadWord(receiver,0,vtable))result.reasons|=ReadFailed;
+    if(body!=owner.body||vtable!=owner.associatedVtable)result.reasons|=Identity;
+    return result;
+}
+
 void __cdecl DispatchVehiclePhysics(vehiclePhysics::native::Frame* frame){
     using namespace vehiclePhysics;
     auto* journal=vehiclePhysicsJournal;Slot* slot=nullptr;Record* row=nullptr;
     auto* previousUpdate=vehiclePhysicsUpdate;auto* previousSimulation=vehiclePhysicsSimulation;
-    const auto kind=static_cast<Kind>(frame->kind);const auto self=frame->entry->registers.ecx;
+    const auto kind=BoundaryKind(frame->kind);const auto self=frame->entry->registers.ecx;
     bool normal=false,countedUpdate=false;auto outputScope=native::OutputScope::Refused;Word outputThread=0;
     ++vehiclePhysicsCallbacks;
     // Even a foreign nested update/sim hides the outer scope from its children.
@@ -1249,7 +1287,11 @@ void __cdecl DispatchVehiclePhysics(vehiclePhysics::native::Frame* frame){
             unsigned expectedPhysics=0;
             const bool updateReceiver=kind!=Kind::Update||
                 (SelectionReadWord(vehiclePhysicsContext.identity.driver,0xd4,expectedPhysics)&&self==expectedPhysics);
+            // The same method is called earlier via +84 too. Only the direct
+            // eligibility call returning to00aea018 answers this investigation.
+            const bool predicateCaller=kind!=Kind::Associated94||frame->entry->caller==image+Associated94CallerRva;
             if(!updateReceiver)++journal->foreign;
+            else if(!predicateCaller)++journal->predicateOtherCaller;
             else if(kind!=Kind::Update&&!previousUpdate)++journal->unscoped;
             else {
                 slot=journal->Claim(kind,now);
@@ -1276,6 +1318,9 @@ void __cdecl DispatchVehiclePhysics(vehiclePhysics::native::Frame* frame){
                         outputThread=row->thread;outputScope=native::EnterOutputScope(outputThread);
                         if(outputScope==native::OutputScope::Refused){row->reasons|=Overlap;++journal->overlap;}
                         if(previousSimulation)row->reasons|=Nested;
+                    }else if(kind==Kind::Associated94){
+                        if(self!=row->before.associated)row->reasons|=Identity;
+                        row->predicateBefore=ReadVehiclePredicateSample(row->before,self);
                     }else if(kind==Kind::Output){
                         if(!previousSimulation)row->reasons|=NoParent;
                         if(SelectionReadWord(self,0x8c,row->outputBody))row->outputReadMask|=1;else row->reasons|=ReadFailed;
@@ -1296,6 +1341,11 @@ void __cdecl DispatchVehiclePhysics(vehiclePhysics::native::Frame* frame){
             row->normal=normal;row->end=SelectionNow();
             if(normal){
                 row->after=ReadVehiclePhysicsSample();
+                if(kind==Kind::Associated94){
+                    // Returned EAX was saved by the gateway before any observer.
+                    row->predicateReturnEax=frame->result.eax;row->predicateReturned=true;
+                    row->predicateAfter=ReadVehiclePredicateSample(row->after,self);
+                }
                 if(kind==Kind::Output){
                     if(!SelectionReadWord(self,0x8c,row->outputBodyAgain))row->reasons|=ReadFailed;
                     if(row->outputBody!=row->outputBodyAgain)row->reasons|=Identity;
@@ -1341,7 +1391,7 @@ bool EnableVehiclePhysics(std::span<const std::byte> bytes,const engine::PeImage
     vehiclePhysicsStatus="signature_refused";if(!digest(bytes,vehicleConsumer::ExecutableHash))return false;
     std::array<unsigned char,12> getter{};
     if(!Read(base+vehiclePhysics::TransformGetterRva,getter.data(),getter.size())||getter!=vehiclePhysics::TransformGetter)return false;
-    for(unsigned n=0;n<4;++n){
+    for(unsigned n=0;n<vehiclePhysics::Proofs.size();++n){
         const auto& p=vehiclePhysics::Proofs[n];if(hooks[21+n]||*vehiclePhysics::native::Originals[n])return false;
         const auto offset=Offset(pe,p.rva,p.size);bool executable=false;
         for(const auto& section:pe.sections)if((section.flags&0x20000000)&&p.rva>=section.rva&&
@@ -1351,6 +1401,15 @@ bool EnableVehiclePhysics(std::span<const std::byte> bytes,const engine::PeImage
             !Read(base+p.rva,vehiclePhysicsExpected[n].data(),p.size)||
             !std::equal(file.begin(),file.end(),vehiclePhysicsExpected[n].begin()))return false;
     }
+    for(unsigned n=0;n<vehiclePhysics::PredicateDependencies.size();++n){
+        const auto& p=vehiclePhysics::PredicateDependencies[n];const auto offset=Offset(pe,p.rva,p.size);bool executable=false;
+        for(const auto& section:pe.sections)if((section.flags&0x20000000)&&p.rva>=section.rva&&
+            p.rva-section.rva<=section.virtualSize&&p.size<=section.virtualSize-(p.rva-section.rva))executable=true;
+        if(!executable||!offset||*offset>bytes.size()||p.size>bytes.size()-*offset)return false;
+        const auto file=bytes.subspan(*offset,p.size);
+        if(!digest(file,p.hash)||!Read(base+p.rva,vehiclePredicateExpected[n].data(),p.size)||
+            !std::equal(file.begin(),file.end(),vehiclePredicateExpected[n].begin()))return false;
+    }
     auto* journal=new(std::nothrow) vehiclePhysics::Journal<>;
     vehiclePhysicsStatus="allocation_failed";if(!journal)return false;
     // All functions have at least five relocatable bytes before a branch.
@@ -1358,11 +1417,11 @@ bool EnableVehiclePhysics(std::span<const std::byte> bytes,const engine::PeImage
     // removes only these never-enabled hooks; no live trampoline is removed.
     vehiclePhysics::native::Observe=DispatchVehiclePhysics;
     unsigned created=0;vehiclePhysicsStatus="hook_create_failed";
-    for(;created<4;++created){
+    for(;created<vehiclePhysics::Proofs.size();++created){
         const auto target=reinterpret_cast<void*>(base+vehiclePhysics::Proofs[created].rva);
         if(MH_CreateHook(target,vehiclePhysics::native::Thunks[created],reinterpret_cast<void**>(vehiclePhysics::native::Originals[created]))!=MH_OK)break;
     }
-    if(created!=4){
+    if(created!=vehiclePhysics::Proofs.size()){
         // On a removal failure retain every dependency and own the remaining
         // hook slots through disable/drain. Their closed gates only forward.
         bool clean=true;for(unsigned n=0;n<created;++n){const auto target=reinterpret_cast<void*>(base+vehiclePhysics::Proofs[n].rva);
@@ -1371,7 +1430,7 @@ bool EnableVehiclePhysics(std::span<const std::byte> bytes,const engine::PeImage
         if(clean)delete journal;else {vehiclePhysicsJournal=journal;vehiclePhysicsStatus="partial_install_retained";}
         return false;
     }
-    for(unsigned n=0;n<4;++n){
+    for(unsigned n=0;n<vehiclePhysics::Proofs.size();++n){
         hooks[21+n]=reinterpret_cast<void*>(base+vehiclePhysics::Proofs[n].rva);
         vehiclePhysicsExpected[n][0]=std::byte{0xe9};
         const unsigned displacement=reinterpret_cast<unsigned>(vehiclePhysics::native::Thunks[n])-
@@ -1381,17 +1440,18 @@ bool EnableVehiclePhysics(std::span<const std::byte> bytes,const engine::PeImage
     vehiclePhysicsJournal=journal;vehiclePhysicsInstalled=true;vehiclePhysicsStatus="installed";return true;
 }
 void ReportVehiclePhysics(std::ostream& out){
-    out<<",\"vehicle_physics_evidence\":{\"schema\":1,\"requested\":"<<(vehiclePhysicsRequested?"true":"false")
+    out<<",\"vehicle_physics_evidence\":{\"schema\":2,\"requested\":"<<(vehiclePhysicsRequested?"true":"false")
        <<",\"installed\":"<<(vehiclePhysicsInstalled?"true":"false")<<",\"status\":\""<<vehiclePhysicsStatus
        <<"\",\"hooks_disabled\":"<<(vehiclePhysicsDisabled?"true":"false")<<",\"drained\":"<<(vehiclePhysicsDrained?"true":"false")
        <<",\"window_seconds\":2,\"qpc_frequency\":"<<vehicleConsumerFrequency
-       <<",\"interior_branches_observed\":false,\"associated94_return_observed\":false,\"all_output_methods_observed\":false"
+       <<",\"interior_branches_observed\":false,\"associated94_return_capture_supported\":true,\"predicate_operands_are_boundary_snapshots\":true,\"all_output_methods_observed\":false"
        <<",\"old_state_update_code_proof_expected_refused_while_detoured\":true";
     auto* j=vehiclePhysicsJournal;if(!j){out<<",\"records\":[]}";return;}
     const auto state=j->state.load(std::memory_order_acquire);const auto count=j->claimed.load(std::memory_order_acquire);
     out<<",\"state\":"<<state<<",\"claimed\":"<<count<<",\"capacity\":"<<vehiclePhysics::Journal<>::MaxRecords
        <<",\"overflow\":"<<j->overflow.load()<<",\"update_limit\":"<<j->updateLimit.load()<<",\"overlap\":"<<j->overlap.load()
-       <<",\"foreign\":"<<j->foreign.load()<<",\"unscoped\":"<<j->unscoped.load()<<",\"outside\":"<<j->outside.load();
+       <<",\"foreign\":"<<j->foreign.load()<<",\"unscoped\":"<<j->unscoped.load()<<",\"outside\":"<<j->outside.load()
+       <<",\"predicate_other_caller\":"<<j->predicateOtherCaller.load();
     if(j->published.load(std::memory_order_acquire)){const auto& i=vehiclePhysicsContext.identity;
         out<<",\"arm_qpc\":"<<j->begin<<",\"deadline_qpc\":"<<j->deadline<<",\"driver\":"<<i.driver
            <<",\"vehicle\":"<<i.vehicle<<",\"actor_generation\":"<<i.actorGeneration<<",\"seat_generation\":"<<i.seatGeneration
@@ -1405,6 +1465,11 @@ void ReportVehiclePhysics(std::ostream& out){
         out<<",\"controls_again\":";words(s.controlsAgain);out<<",\"config\":";words(s.config);
         out<<",\"transform\":";words(s.transform);out<<",\"transform_again\":";words(s.transformAgain);out<<'}';
     };
+    const auto predicate=[&](const vehiclePhysics::PredicateSample& p){
+        out<<"{\"body\":"<<p.body<<",\"subobject\":"<<p.subobject<<",\"subobject_flags\":"<<p.subobjectFlags
+           <<",\"body_type\":"<<p.bodyType<<",\"alternate\":"<<p.alternate<<",\"selected\":"<<p.selected
+           <<",\"scalar_raw\":"<<p.scalar<<",\"target7c\":"<<p.target7c<<",\"read_mask\":"<<p.readMask<<",\"reasons\":"<<p.reasons<<'}';
+    };
     out<<",\"records\":[";bool comma=false;unsigned pending=0;
     for(unsigned n=0;n<std::min<unsigned>(count,vehiclePhysics::Journal<>::MaxRecords);++n){
         const auto& slot=j->rows[n];if(!slot.complete.load(std::memory_order_acquire)){++pending;continue;}
@@ -1416,7 +1481,11 @@ void ReportVehiclePhysics(std::ostream& out){
            <<",\"reasons\":"<<r.reasons<<",\"boundary_comparable\":"<<(vehiclePhysics::Comparable(r)?"true":"false")<<",\"arguments\":";
         words(r.arguments);out<<",\"output_body\":"<<r.outputBody<<",\"output_body_again\":"<<r.outputBodyAgain
             <<",\"output_read_mask\":"<<r.outputReadMask<<",\"output0\":";words(r.output0);out<<",\"output1\":";words(r.output1);
-        out<<",\"before\":";sample(r.before);out<<",\"after\":";sample(r.after);out<<'}';
+        out<<",\"before\":";sample(r.before);out<<",\"after\":";sample(r.after);
+        out<<",\"predicate_return_observed\":"<<(r.predicateReturned?"true":"false")
+           <<",\"predicate_return_eax\":"<<r.predicateReturnEax<<",\"predicate_return_al\":"<<(r.predicateReturnEax&255u)
+           <<",\"predicate_operands_stable\":"<<(r.predicateReturned&&r.predicateBefore==r.predicateAfter?"true":"false")
+           <<",\"predicate_before\":";predicate(r.predicateBefore);out<<",\"predicate_after\":";predicate(r.predicateAfter);out<<'}';
     }
     out<<"],\"pending_records\":"<<pending<<'}';
 }
@@ -6026,15 +6095,11 @@ void ReportFeedObservation(std::ostream& out){
 }
 graphics::AmmoCounterSample ReadAmmoCounter()noexcept {
     if(!enabled.load(std::memory_order_acquire))return {};
-    for(unsigned attempt=0;attempt<3;++attempt){
-        const auto current=ammoCounterOwner.load(std::memory_order_acquire);
-        if(!current)return {};
-        const auto scene=menu::CurrentPresentation();if(!scene)return {};
-        const auto ammo=reloadFlowRuntime::ReadPublishedReserve();
-        LARGE_INTEGER stamp{};const auto now=QueryPerformanceCounter(&stamp)?HandNanos(stamp.QuadPart):0;
-        const auto sample=SceneAmmoCounterHostSample(ammo,*current,scene.get(),now);
-        if(ammoCounterOwner.load(std::memory_order_acquire)==current&&menu::CurrentPresentation()==scene)return sample;
-    }return {};
+    return ReadAmmoCounterPublication(
+        []{return ammoCounterOwner.load(std::memory_order_acquire);},
+        []{return menu::CurrentPresentation();},
+        []{return reloadFlowRuntime::ReadPublishedReserve();},
+        []{LARGE_INTEGER stamp{};return QueryPerformanceCounter(&stamp)?HandNanos(stamp.QuadPart):0;});
 }
 bool BodyDisplayNativeCurrent(const BodyInventoryDisplay& d)noexcept {
     const WeaponModeMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t n){return Read(at,dst,n);},[](void*,unsigned at,const char* name){return Type(at,name);}};
@@ -6949,7 +7014,7 @@ bool Stop()noexcept {
         if(slot==14){okay=projectileTargetLife.Disable()&&okay;continue;}
 #endif
         const auto r=MH_DisableHook(entry);const bool disabled=r==MH_OK||r==MH_ERROR_DISABLED;okay&=disabled;
-        if(slot>=21&&slot<=24)vehiclePhysicsDisabled&=disabled;
+        if(slot>=21&&slot<21+vehiclePhysics::Proofs.size())vehiclePhysicsDisabled&=disabled;
         if(slot==17)queuePhaseDisabled=disabled;
         if(selectionJournal&&(slot==0||slot==18||slot==19))selectionDisabled&=disabled;
         if(vehicleConsumerJournal&&(slot==0||slot==20))vehicleConsumerDisabled&=disabled;

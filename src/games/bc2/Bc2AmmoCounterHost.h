@@ -64,6 +64,41 @@ inline graphics::AmmoCounterSample SceneAmmoCounterHostSample(const std::optiona
     sample.equipmentGeneration=current.hudGeneration;
     sample.deadlineNs=(std::min)(sample.deadlineNs,scene->deadlineNs);return sample;
 }
+// A publication can be replaced by another observation of the SAME lifetime
+// while the passive reserve is read. Shared-pointer identity is not ownership.
+// Validate both original leases at the final clock; never extend their times or
+// turn a rejected ammunition observation into a count.
+inline graphics::AmmoCounterSample RevalidateAmmoCounterPublication(graphics::AmmoCounterSample sample,
+    const AmmoCounterOwner& before,const MenuPresentationSnapshot& beforeScene,
+    const AmmoCounterOwner& after,const MenuPresentationSnapshot& afterScene,std::int64_t now)noexcept {
+    if(before.owner!=after.owner||before.hudGeneration!=after.hudGeneration||
+       before.sceneOwnerEpoch!=after.sceneOwnerEpoch||before.sceneEpoch!=after.sceneEpoch||
+       !MenuPresentationFresh(beforeScene,now)||!MenuPresentationFresh(afterScene,now)||
+       !SameMenuPresentationLifetime(beforeScene,afterScene)||beforeScene.observation!=afterScene.observation)return {};
+    const auto owner=SceneAmmoCounterHostSample({},after,&afterScene,now);
+    if(!graphics::AmmoCounterOwnerOnlyFresh(owner,now)||!graphics::SameAmmoCounterOwner(sample,owner)||
+       (!graphics::AmmoCounterFresh(sample,now)&&!graphics::AmmoCounterOwnerOnlyFresh(sample,now)))return {};
+    sample.deadlineNs=(std::min)(sample.deadlineNs,owner.deadlineNs);return sample;
+}
+// The production reader and forced-publication fixture use this same path.
+// A real owner/scene transition still retries at most three times; no lease is
+// retained across a missing publication and no source deadline is renewed.
+template<class OwnerRead,class SceneRead,class ReserveRead,class Clock>
+graphics::AmmoCounterSample ReadAmmoCounterPublication(OwnerRead&& ownerRead,SceneRead&& sceneRead,
+    ReserveRead&& reserveRead,Clock&& clock)noexcept {
+    for(unsigned attempt=0;attempt<3;++attempt){
+        const auto before=ownerRead();if(!before)return {};
+        const auto beforeScene=sceneRead();if(!beforeScene)return {};
+        const auto ammo=reserveRead();
+        const auto after=ownerRead();const auto afterScene=sceneRead();
+        const auto now=clock();
+        if(!after||!afterScene)return {};
+        const auto sample=SceneAmmoCounterHostSample(ammo,*before,beforeScene.get(),now);
+        const auto accepted=RevalidateAmmoCounterPublication(sample,*before,*beforeScene,*after,*afterScene,now);
+        if(graphics::AmmoCounterFresh(accepted,now)||graphics::AmmoCounterOwnerOnlyFresh(accepted,now))return accepted;
+        if(before==after&&beforeScene==afterScene)return {};
+    }return {};
+}
 // The reserve reader may perform fresh native reads. Capture validation time
 // afterward: a timestamp taken by the caller before read() makes every new
 // observation appear future-dated. Never change either source's original
